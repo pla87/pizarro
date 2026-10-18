@@ -62,12 +62,12 @@ export function swapTemplateBlock(text: string, previous: string, next: string, 
   if (prev) {
     const idx = where === "start" ? text.indexOf(prev) : text.lastIndexOf(prev);
     if (idx >= 0) {
-      let before = text.slice(0, idx);
-      let after = text.slice(idx + prev.length);
+      const before = text.slice(0, idx);
+      const after = text.slice(idx + prev.length);
       if (!nxt) {
         // Quitar también la línea en blanco que lo separaba del resto.
-        if (where === "start") after = after.replace(/^\s*\n/, "");
-        else before = before.replace(/\n\s*$/, "\n");
+        if (where === "start") return before + after.replace(/^\s*\n/, "");
+        return before.replace(/\s+$/, "") + after.replace(/^\s+/, "\n");
       }
       return before + nxt + after;
     }

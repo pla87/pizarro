@@ -171,7 +171,10 @@ Desde el menú «⋯» de cada columna:
 ### 3.5 Mover tarjetas
 
 - **Arrastrar y soltar** entre columnas o dentro de la misma.
-- **En móvil:** mantén pulsada la tarjeta un instante y arrástrala sobre la **pestaña** de otra columna. La vista cambia a esa columna y puedes soltarla en su sitio o sobre la propia pestaña (queda al final).
+- **En móvil:** mantén pulsada la tarjeta un instante y arrástrala sobre la **pestaña** de otra columna.
+  - Si la mantienes ahí medio segundo, la vista cambia a esa columna y puedes soltarla en su sitio.
+  - Si la sueltas sobre la propia pestaña, queda al final de esa columna.
+  - Pasar por encima de otras pestañas de camino no cambia nada.
 - **Selección múltiple:** marca la casilla de varias tarjetas. Aparece una barra con:
   - **Mover a Siguiente salto…** (la columna con ese rol);
   - **Mover a…** cualquier otra columna;

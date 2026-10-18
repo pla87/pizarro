@@ -30,7 +30,15 @@ const TAB_PREFIX = "tab:";
 /** Encima de una pestaña móvil manda el puntero; en el resto, la esquina más cercana. */
 const collisionDetection: CollisionDetection = (args) => {
   const tab = pointerWithin(args).find((c) => String(c.id).startsWith(TAB_PREFIX));
-  return tab ? [tab] : closestCorners(args);
+  if (tab) return [tab];
+  // Fuera de las pestañas: solo columnas y tarjetas visibles (las ocultas miden 0×0 y
+  // las pestañas, pequeñas y cercanas, «ganarían» el cálculo de esquinas).
+  return closestCorners({
+    ...args,
+    droppableContainers: args.droppableContainers.filter(
+      (c) => !String(c.id).startsWith(TAB_PREFIX) && (args.droppableRects.get(c.id)?.width ?? 0) > 0,
+    ),
+  });
 };
 
 function MobileTab({ id, active, dragging, onClick, children }: { id: string; active: boolean; dragging: boolean; onClick: () => void; children: React.ReactNode }) {
@@ -252,29 +260,59 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     setActiveId(id);
   };
 
-  const onDragOver = ({ active, over }: DragOverEvent) => {
-    if (!over || !dragItems) return;
-    const id = String(active.id);
-    const overId = String(over.id);
-    const from = findContainer(dragItems, id);
-    const to = findContainer(dragItems, overId);
-    // En móvil, pasar por una pestaña muestra esa columna para soltar la tarjeta en ella.
-    if (overId.startsWith(TAB_PREFIX) && to) setMobileColumn(to);
-    if (!from || !to || from === to) return;
+  /** Mueve la tarjeta arrastrada a otra columna en el estado temporal del arrastre. */
+  const moveActiveTo = (id: string, to: string, overId: string) =>
     setDragItems((prev) => {
       if (!prev) return prev;
+      const from = findContainer(prev, id);
+      if (!from || from === to) return prev;
       const target = prev[to]!;
       const overIndex = target.indexOf(overId);
-      const index = overIndex >= 0 ? overIndex : target.length;
+      // Volver a la columna de origen por su pestaña recupera la posición original.
+      const origin = dragOrigin.current;
+      const index =
+        overIndex >= 0 ? overIndex : overId.startsWith(TAB_PREFIX) && origin?.columnId === to ? Math.min(origin.index, target.length) : target.length;
       return {
         ...prev,
         [from]: prev[from]!.filter((x) => x !== id),
         [to]: [...target.slice(0, index), id, ...target.slice(index)],
       };
     });
+
+  // Pestaña móvil bajo la tarjeta: cambia de columna tras una breve pausa, para que
+  // cruzar la fila de pestañas de camino a la lista no cambie de columna sin querer.
+  const tabHover = useRef<{ id: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const clearTabHover = () => {
+    if (tabHover.current) clearTimeout(tabHover.current.timer);
+    tabHover.current = null;
+  };
+
+  const onDragOver = ({ active, over }: DragOverEvent) => {
+    if (!over || !dragItems) return;
+    const id = String(active.id);
+    const overId = String(over.id);
+    if (overId.startsWith(TAB_PREFIX)) {
+      if (tabHover.current?.id === overId) return;
+      clearTabHover();
+      const to = overId.slice(TAB_PREFIX.length);
+      tabHover.current = {
+        id: overId,
+        timer: setTimeout(() => {
+          setMobileColumn(to);
+          moveActiveTo(id, to, overId);
+        }, 350),
+      };
+      return;
+    }
+    clearTabHover();
+    const from = findContainer(dragItems, id);
+    const to = findContainer(dragItems, overId);
+    if (!from || !to || from === to) return;
+    moveActiveTo(id, to, overId);
   };
 
   const cancelDrag = () => {
+    clearTabHover();
     setDragItems(null);
     setActiveId(null);
     dragOrigin.current = null;
@@ -287,10 +325,17 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     cancelDrag();
     if (!over || !current || !origin) return;
     const id = String(active.id);
-    const col = findContainer(current, id);
+    const overId = String(over.id);
+    let col = findContainer(current, id);
     if (!col) return;
     let list = current[col]!;
-    const overId = String(over.id);
+    // Soltar directamente sobre una pestaña: al final de esa columna (o en su sitio si es la de origen).
+    if (overId.startsWith(TAB_PREFIX) && overId.slice(TAB_PREFIX.length) !== col) {
+      const to = overId.slice(TAB_PREFIX.length);
+      list = [...current[to]!.filter((x) => x !== id), id];
+      col = to;
+      setMobileColumn(to);
+    }
     if (findContainer(current, overId) === col && overId !== id && !overId.startsWith(COLUMN_PREFIX) && !overId.startsWith(TAB_PREFIX)) {
       list = arrayMove(list, list.indexOf(id), list.indexOf(overId));
     }

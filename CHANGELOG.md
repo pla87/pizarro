@@ -12,7 +12,7 @@ Tipos de tarea configurables, varias plantillas de release, app instalable en el
 - Varias cabeceras y pies de release por usuario, con nombre; se eligen en el diálogo de «Generar release» y se sustituyen en el texto ya editado.
 - Instalar Tablón como app en Android, iPhone y escritorio (pantalla de inicio, pantalla completa).
 - Preferencia de apariencia: tarjetas con franja de color o teñidas enteras de su color.
-- En móvil, arrastrar una tarjeta sobre la pestaña de otra columna la cambia de columna.
+- En móvil, arrastrar una tarjeta sobre la pestaña de otra columna (manteniéndola medio segundo) muestra esa columna para soltarla en su sitio; soltarla sobre la pestaña la deja al final.
 
 ### Mejoras
 

@@ -47,6 +47,7 @@ test("cambiar de cabecera o pie en un texto ya editado", () => {
   assert.equal(swapTemplateBlock(text, "PIE A", "PIE B", "end"), "CAB A\n\n## R\n\nnota mía\n\nPIE B\n");
   // Quitar la cabecera elimina también su línea en blanco.
   assert.equal(swapTemplateBlock(text, "CAB A", "", "start"), "## R\n\nnota mía\n\nPIE A\n");
+  assert.equal(swapTemplateBlock(text, "PIE A", "", "end"), "CAB A\n\n## R\n\nnota mía\n");
   // Si el bloque anterior ya no está (lo editó el usuario), el nuevo se añade.
   assert.equal(swapTemplateBlock("## R\n", "CAB A", "CAB B", "start"), "CAB B\n\n## R\n");
   assert.equal(swapTemplateBlock("## R\n", "", "PIE B", "end"), "## R\n\nPIE B\n");
