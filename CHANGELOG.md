@@ -2,6 +2,14 @@
 
 Historial de versiones de Tablón. Fuente: `changelog.json`.
 
+## v1.1.1 — 2026-10-18
+
+Compatibilidad del build Docker con Railway.
+
+### Cambios técnicos / DB
+
+- Dockerfile sin cachés de BuildKit (--mount=type=cache), que el builder de Railway rechaza si no llevan su identificador de servicio.
+
 ## v1.1.0 — 2026-10-18
 
 Informe PDF del proyecto, plazos y entregables, Google Docs/Sheets desde las tarjetas y menciones con avisos.

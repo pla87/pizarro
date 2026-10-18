@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.7
 # Imagen multi-stage de Tablón:
 #   deps → build (Next standalone + script de arranque) → migrator (Prisma CLI aislado) → runner
 ARG NODE_IMAGE=node:22-bookworm-slim
@@ -14,7 +13,7 @@ WORKDIR /app
 # --- 1. Dependencias completas (para compilar) ---------------------------------
 FROM base AS deps
 COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+RUN npm ci --no-audit --no-fund
 
 # --- 2. Build -----------------------------------------------------------------
 FROM base AS build
@@ -27,11 +26,11 @@ RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" npm run build
 FROM base AS migrator
 WORKDIR /app/migrator
 COPY package.json /tmp/app-package.json
-RUN --mount=type=cache,target=/root/.npm \
-    PRISMA_VERSION="$(node -p "require('/tmp/app-package.json').devDependencies.prisma")" \
+# Instala la misma versión de Prisma que el proyecto y descarga el motor de migraciones
+# durante el build (no en cada arranque).
+RUN PRISMA_VERSION="$(node -p "require('/tmp/app-package.json').devDependencies.prisma")" \
     && echo '{"name":"tablon-migrator","private":true,"type":"module"}' > package.json \
     && npm install --no-audit --no-fund --omit=dev "prisma@${PRISMA_VERSION}" \
-    # Descarga el motor de migraciones en el build (no en cada arranque).
     && DATABASE_URL="postgresql://x:x@localhost:5432/x" ./node_modules/.bin/prisma --version
 COPY prisma.config.ts ./
 COPY prisma ./prisma
