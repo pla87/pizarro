@@ -59,9 +59,9 @@ export function InstallApp() {
       >
         <Smartphone size={17} /> Instalar app
       </button>
-      <Modal open={help} onClose={() => setHelp(false)} title="Añadir Tablón a la pantalla de inicio" size="sm">
+      <Modal open={help} onClose={() => setHelp(false)} title="Añadir Pizarro a la pantalla de inicio" size="sm">
         <ol className="list-decimal space-y-2 pl-5 text-sm">
-          <li>Abre Tablón en <strong>Safari</strong>.</li>
+          <li>Abre Pizarro en <strong>Safari</strong>.</li>
           <li>
             Pulsa el botón <strong>Compartir</strong> <Share size={14} className="inline align-text-bottom" /> (abajo en iPhone, arriba en iPad).
           </li>

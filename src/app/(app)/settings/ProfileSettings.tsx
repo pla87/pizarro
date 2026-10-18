@@ -129,7 +129,7 @@ function GoogleSection({ google }: { google: Props["google"] }) {
       <h2 className="flex items-center gap-2 font-semibold"><Link2 size={17} /> Google Docs y Sheets</h2>
       <p className="mt-0.5 text-sm text-slate-500">
         Conecta tu cuenta para crear documentos y hojas de cálculo desde las tarjetas con <code>@docs</code> y <code>@sheets</code>.
-        Tablón solo puede acceder a los archivos que crea él mismo (permiso <code>drive.file</code>).
+        Pizarro solo puede acceder a los archivos que crea él mismo (permiso <code>drive.file</code>).
       </p>
       {google.message && (
         <p className={cn("mt-3 rounded-lg px-3 py-2 text-sm", google.message.ok ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300")}>

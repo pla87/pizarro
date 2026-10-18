@@ -20,7 +20,7 @@ const readJson = (f) => JSON.parse(readFileSync(f, "utf8"));
 const writeJson = (f, data) => writeFileSync(f, JSON.stringify(data, null, 2) + "\n");
 
 function renderMarkdown(changelog) {
-  const out = ["# Changelog", "", "Historial de versiones de Tablón. Fuente: `changelog.json`.", ""];
+  const out = ["# Changelog", "", "Historial de versiones de Pizarro. Fuente: `changelog.json`.", ""];
   for (const v of changelog.versions) {
     out.push(`## v${v.version} — ${v.date}`, "");
     if (v.summary) out.push(v.summary, "");

@@ -13,7 +13,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <div className="mb-6 flex items-center justify-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/icon.svg" alt="" width={36} height={36} />
-          <span className="text-2xl font-bold tracking-tight">Tablón</span>
+          <span className="text-2xl font-bold tracking-tight">Pizarro</span>
         </div>
         <div className="card p-6">
           <h1 className="mb-4 text-lg font-semibold">Iniciar sesión</h1>

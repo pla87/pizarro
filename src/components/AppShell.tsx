@@ -120,7 +120,7 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
       <div className="flex h-14 items-center gap-2 px-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/icon.svg" alt="" width={26} height={26} />
-        <span className="text-lg font-bold tracking-tight">Tablón</span>
+        <span className="text-lg font-bold tracking-tight">Pizarro</span>
       </div>
 
       <div className="px-3">

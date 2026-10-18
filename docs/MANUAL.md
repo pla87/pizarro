@@ -1,20 +1,20 @@
 ---
-title: "Tablón · Manual de operaciones"
+title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
 version: "v1.4.0"
 ---
 
-# Tablón — Manual de operaciones
+# Pizarro — Manual de operaciones
 
 **Versión de la aplicación:** v1.4.0
 
-Este manual describe la arquitectura de Tablón, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
+Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
 ---
 
 ## 1. Visión general
 
-Tablón es un tablero Kanban ligero para un equipo de hasta 5 personas. Su objetivo es cubrir un flujo concreto:
+Pizarro es un tablero Kanban ligero para un equipo de hasta 5 personas. Su objetivo es cubrir un flujo concreto:
 
 1. registrar tareas rápidamente, incluidas capturas de pantalla pegadas desde el portapapeles;
 2. moverlas por columnas hasta el **siguiente salto a producción**;
@@ -116,7 +116,7 @@ Además, `Task` tiene `dueDate` (fecha límite, solo día), `Column` tiene `isDo
 | Cabeceras | `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `HSTS`. |
 | Imágenes | Tamaño máximo configurable, límite de píxeles en sharp (protección frente a *decompression bombs*), reconversión siempre a WebP (se descarta cualquier contenido incrustado) y servido solo a usuarios con acceso. |
 | Contenedor | El proceso Node se ejecuta como el usuario sin privilegios `node`. |
-| Google | OAuth con permiso mínimo `drive.file`: solo da acceso a los archivos que crea Tablón. Parámetro `state` ligado a la sesión contra CSRF. Tokens cifrados en base de datos. Opcionalmente, restringido a un dominio de Workspace. |
+| Google | OAuth con permiso mínimo `drive.file`: solo da acceso a los archivos que crea Pizarro. Parámetro `state` ligado a la sesión contra CSRF. Tokens cifrados en base de datos. Opcionalmente, restringido a un dominio de Workspace. |
 | Avisos | Solo se avisa a usuarios activos con acceso al proyecto. El email y el WhatsApp no se repiten a la misma persona por la misma tarea en 10 minutos, y cada autor tiene un tope de envíos por hora. El contenido de los emails se escapa y los enlaces apuntan siempre a `APP_URL`. |
 
 ### 2.6 Rendimiento

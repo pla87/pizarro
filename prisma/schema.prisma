@@ -1,4 +1,4 @@
-// Esquema de datos de Tablón. Ver docs/MANUAL.md para el modelo completo.
+// Esquema de datos de Pizarro. Ver docs/MANUAL.md para el modelo completo.
 
 generator client {
   provider = "prisma-client"

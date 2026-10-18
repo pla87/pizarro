@@ -17,7 +17,7 @@ export function ProjectMenu({ className, textClassName }: { className?: string; 
   const { projects, currentId } = useContext(ProjectsContext);
   const [open, setOpen] = useState(false);
   const current = projects.find((p) => p.id === currentId);
-  if (!current) return <span className={cn("truncate font-semibold", textClassName)}>Tablón</span>;
+  if (!current) return <span className={cn("truncate font-semibold", textClassName)}>Pizarro</span>;
 
   return (
     <div className={cn("relative min-w-0", className)}>

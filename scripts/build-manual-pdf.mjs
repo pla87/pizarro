@@ -14,7 +14,7 @@ const version = JSON.parse(readFileSync("package.json", "utf8")).version;
 const body = marked.parse(source, { gfm: true });
 
 const html = `<!doctype html>
-<html lang="es"><head><meta charset="utf-8"><title>Tablón · Manual de operaciones</title>
+<html lang="es"><head><meta charset="utf-8"><title>Pizarro · Manual de operaciones</title>
 <style>
   @page { size: A4; margin: 18mm 16mm 20mm; }
   * { box-sizing: border-box; }
@@ -44,7 +44,7 @@ const html = `<!doctype html>
 <body>
   <section class="cover">
     <div class="logo"><span style="height:36px"></span><span style="height:24px;background:#c7d2fe"></span><span style="height:14px;background:#a5b4fc"></span></div>
-    <h1>Tablón</h1>
+    <h1>Pizarro</h1>
     <p>Manual de operaciones</p>
     <p>Arquitectura, guía de uso y procesos operativos</p>
     <div class="meta">Versión de la aplicación v${version}</div>
@@ -61,7 +61,7 @@ await page.pdf({
   printBackground: true,
   displayHeaderFooter: true,
   headerTemplate: "<span></span>",
-  footerTemplate: `<div style="width:100%;font-size:8px;color:#94a3b8;padding:0 16mm;display:flex;justify-content:space-between;font-family:system-ui,sans-serif"><span>Tablón · Manual de operaciones · v${version}</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
+  footerTemplate: `<div style="width:100%;font-size:8px;color:#94a3b8;padding:0 16mm;display:flex;justify-content:space-between;font-family:system-ui,sans-serif"><span>Pizarro · Manual de operaciones · v${version}</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
   margin: { top: "18mm", bottom: "20mm", left: "16mm", right: "16mm" },
 });
 await browser.close();

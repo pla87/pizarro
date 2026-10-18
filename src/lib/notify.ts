@@ -52,7 +52,7 @@ export function mentionEmail(m: MentionMessage) {
 <p><strong>${escapeHtml(m.actorName)}</strong> te ha mencionado en la tarea <strong>«${escapeHtml(m.taskTitle)}»</strong> · ${escapeHtml(m.projectName)}</p>
 <blockquote style="margin:12px 0;padding:8px 12px;border-left:4px solid #6366f1;background:#f8fafc;color:#334155">${escapeHtml(m.excerpt)}</blockquote>
 <p><a href="${escapeHtml(m.url)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">Abrir la tarea</a></p>
-<p style="color:#94a3b8;font-size:12px">Puedes desactivar estos avisos en «Mi perfil» de Tablón.</p></div>`;
+<p style="color:#94a3b8;font-size:12px">Puedes desactivar estos avisos en «Mi perfil» de Pizarro.</p></div>`;
   return { subject, text, html };
 }
 

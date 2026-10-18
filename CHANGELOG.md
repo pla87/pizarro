@@ -1,6 +1,6 @@
 # Changelog
 
-Historial de versiones de Tablón. Fuente: `changelog.json`.
+Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
 ## v1.4.0 — 2026-10-18
 
@@ -58,7 +58,7 @@ Tipos de tarea configurables, varias plantillas de release, app instalable en el
 
 - Tipos de tarea configurables por los administradores (nombre, color y orden); cada tipo es una sección de la release.
 - Varias cabeceras y pies de release por usuario, con nombre; se eligen en el diálogo de «Generar release» y se sustituyen en el texto ya editado.
-- Instalar Tablón como app en Android, iPhone y escritorio (pantalla de inicio, pantalla completa).
+- Instalar Pizarro como app en Android, iPhone y escritorio (pantalla de inicio, pantalla completa).
 - Preferencia de apariencia: tarjetas con franja de color o teñidas enteras de su color.
 - En móvil, arrastrar una tarjeta sobre la pestaña de otra columna (manteniéndola medio segundo) muestra esa columna para soltarla en su sitio; soltarla sobre la pestaña la deja al final.
 
@@ -120,7 +120,7 @@ Informe PDF del proyecto, plazos y entregables, Google Docs/Sheets desde las tar
 
 ## v1.0.0 — 2026-10-18
 
-Primera versión de Tablón: kanban multiproyecto y generador de release notes.
+Primera versión de Pizarro: kanban multiproyecto y generador de release notes.
 
 ### Nuevas funcionalidades
 
