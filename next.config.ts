@@ -20,7 +20,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   reactStrictMode: true,
-  serverExternalPackages: ["sharp"],
+  serverExternalPackages: ["sharp", "@react-pdf/renderer"],
   experimental: {
     // Las imágenes van por /api/tasks/[id]/attachments; las acciones solo mueven JSON.
     serverActions: { bodySizeLimit: "1mb" },

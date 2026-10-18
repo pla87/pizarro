@@ -4,6 +4,9 @@ import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
 import { TypeBadge } from "@/components/ui/TypeBadge";
+import { cn } from "@/components/ui/cn";
+import { appTimeZone } from "@/lib/board";
+import { dateToIso, dueStatus, formatDay, todayIso } from "@/lib/dates";
 
 export const metadata = { title: "Mis tareas" };
 
@@ -11,19 +14,21 @@ export default async function MyTasksPage() {
   const user = await requireUserPage();
   const tasks = await db.task.findMany({
     where: { assigneeId: user.id, archivedAt: null, project: visibleProjectsWhere(user) },
-    orderBy: [{ project: { position: "asc" } }, { column: { position: "asc" } }, { position: "asc" }],
+    orderBy: [{ project: { position: "asc" } }, { dueDate: { sort: "asc", nulls: "last" } }, { column: { position: "asc" } }, { position: "asc" }],
     select: {
       id: true,
       title: true,
       type: true,
       color: true,
       linkUrl: true,
+      dueDate: true,
       project: { select: { id: true, name: true } },
-      column: { select: { name: true, role: true } },
+      column: { select: { name: true, role: true, isDone: true } },
       subtasks: { select: { done: true } },
     },
   });
 
+  const today = todayIso(appTimeZone());
   const byProject = new Map<string, { name: string; tasks: typeof tasks }>();
   for (const t of tasks) {
     const group = byProject.get(t.project.id) ?? { name: t.project.name, tasks: [] };
@@ -57,6 +62,15 @@ export default async function MyTasksPage() {
                     <Link href={`/p/${projectId}?task=${t.id}`} className="min-w-0 flex-1 truncate text-sm font-medium hover:text-brand-600">
                       {t.title}
                     </Link>
+                    {t.dueDate && (() => {
+                      const iso = dateToIso(t.dueDate)!;
+                      const st = dueStatus(iso, t.column.isDone, today);
+                      return (
+                        <span className={cn("shrink-0 text-xs", st === "overdue" ? "font-semibold text-red-600" : st === "today" || st === "soon" ? "font-semibold text-amber-600" : "text-slate-500")}>
+                          {st === "today" ? "Hoy" : formatDay(iso, today)}
+                        </span>
+                      );
+                    })()}
                     {t.subtasks.length > 0 && <span className="text-xs text-slate-500">{done}/{t.subtasks.length}</span>}
                     <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                       {t.column.name}

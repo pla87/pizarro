@@ -1,0 +1,167 @@
+// Cálculo del informe de estado de un proyecto. Funciones puras (sin BD) para poder testearlas.
+import { TASK_TYPES, TASK_TYPE_META, type TaskTypeValue } from "./constants";
+import { daysBetween } from "./dates";
+
+export const UPCOMING_DAYS = 14;
+export const RISK_DAYS = 7;
+
+export interface ReportInput {
+  project: { name: string; description: string };
+  generatedBy: string;
+  today: string;
+  columns: { id: string; name: string; isDone: boolean }[];
+  tasks: {
+    id: string;
+    title: string;
+    type: TaskTypeValue;
+    columnId: string;
+    assigneeName: string | null;
+    dueDate: string | null;
+    deliverableId: string | null;
+    subtaskTotal: number;
+    subtaskDone: number;
+  }[];
+  deliverables: { id: string; name: string; description: string; dueDate: string | null }[];
+  releases: { title: string; deployedAt: string; taskCount: number }[];
+  archivedCount: number;
+}
+
+export type DeliverableStatus = "Completado" | "Retrasado" | "En riesgo" | "En plazo" | "Sin fecha" | "Sin tareas";
+
+export interface ReportTask {
+  title: string;
+  type: TaskTypeValue;
+  column: string;
+  assignee: string | null;
+  dueDate: string | null;
+  daysLeft: number | null;
+  checklist: string | null;
+  done: boolean;
+}
+
+export interface Report {
+  project: ReportInput["project"];
+  generatedBy: string;
+  today: string;
+  kpis: {
+    total: number;
+    done: number;
+    open: number;
+    progressPct: number;
+    overdue: number;
+    dueSoon: number;
+    unassignedOpen: number;
+    withoutDueOpen: number;
+    archived: number;
+  };
+  columns: { name: string; isDone: boolean; count: number; overdue: number; byType: { label: string; count: number }[]; tasks: ReportTask[] }[];
+  deliverables: { name: string; description: string; dueDate: string | null; daysLeft: number | null; total: number; done: number; pct: number; status: DeliverableStatus }[];
+  overdue: ReportTask[];
+  upcoming: ReportTask[];
+  people: { name: string; open: number; done: number; overdue: number }[];
+  types: { label: string; open: number; done: number }[];
+  releases: ReportInput["releases"];
+}
+
+const pct = (part: number, total: number) => (total ? Math.round((part / total) * 100) : 0);
+
+export function deliverableStatus(total: number, done: number, daysLeft: number | null): DeliverableStatus {
+  if (total === 0) return "Sin tareas";
+  if (done === total) return "Completado";
+  if (daysLeft === null) return "Sin fecha";
+  if (daysLeft < 0) return "Retrasado";
+  if (daysLeft <= RISK_DAYS && pct(done, total) < 75) return "En riesgo";
+  return "En plazo";
+}
+
+export function buildReport(input: ReportInput): Report {
+  const { today } = input;
+  const columnById = new Map(input.columns.map((c) => [c.id, c]));
+  const isDone = (t: ReportInput["tasks"][number]) => columnById.get(t.columnId)?.isDone ?? false;
+
+  const toReportTask = (t: ReportInput["tasks"][number]): ReportTask => ({
+    title: t.title,
+    type: t.type,
+    column: columnById.get(t.columnId)?.name ?? "—",
+    assignee: t.assigneeName,
+    dueDate: t.dueDate,
+    daysLeft: t.dueDate ? daysBetween(today, t.dueDate) : null,
+    checklist: t.subtaskTotal ? `${t.subtaskDone}/${t.subtaskTotal}` : null,
+    done: isDone(t),
+  });
+
+  const all = input.tasks.map(toReportTask);
+  const open = all.filter((t) => !t.done);
+  const done = all.length - open.length;
+  const overdue = open.filter((t) => t.daysLeft !== null && t.daysLeft < 0).sort((a, b) => a.daysLeft! - b.daysLeft!);
+  const upcoming = open
+    .filter((t) => t.daysLeft !== null && t.daysLeft >= 0 && t.daysLeft <= UPCOMING_DAYS)
+    .sort((a, b) => a.daysLeft! - b.daysLeft!);
+
+  const columns = input.columns.map((c) => {
+    const tasks = input.tasks.filter((t) => t.columnId === c.id).map(toReportTask);
+    return {
+      name: c.name,
+      isDone: c.isDone,
+      count: tasks.length,
+      overdue: tasks.filter((t) => !t.done && t.daysLeft !== null && t.daysLeft < 0).length,
+      byType: TASK_TYPES.map((type) => ({ label: TASK_TYPE_META[type].label, count: tasks.filter((t) => t.type === type).length })).filter((x) => x.count > 0),
+      // Pendientes primero por plazo; sin plazo al final.
+      tasks: tasks.sort((a, b) => (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity)),
+    };
+  });
+
+  const deliverables = input.deliverables.map((d) => {
+    const tasks = input.tasks.filter((t) => t.deliverableId === d.id);
+    const doneCount = tasks.filter(isDone).length;
+    const daysLeft = d.dueDate ? daysBetween(today, d.dueDate) : null;
+    return {
+      name: d.name,
+      description: d.description,
+      dueDate: d.dueDate,
+      daysLeft,
+      total: tasks.length,
+      done: doneCount,
+      pct: pct(doneCount, tasks.length),
+      status: deliverableStatus(tasks.length, doneCount, daysLeft),
+    };
+  });
+
+  const peopleMap = new Map<string, { name: string; open: number; done: number; overdue: number }>();
+  for (const t of all) {
+    const name = t.assignee ?? "Sin asignar";
+    const p = peopleMap.get(name) ?? { name, open: 0, done: 0, overdue: 0 };
+    if (t.done) p.done++;
+    else p.open++;
+    if (!t.done && t.daysLeft !== null && t.daysLeft < 0) p.overdue++;
+    peopleMap.set(name, p);
+  }
+
+  return {
+    project: input.project,
+    generatedBy: input.generatedBy,
+    today,
+    kpis: {
+      total: all.length,
+      done,
+      open: open.length,
+      progressPct: pct(done, all.length),
+      overdue: overdue.length,
+      dueSoon: open.filter((t) => t.daysLeft !== null && t.daysLeft >= 0 && t.daysLeft <= RISK_DAYS).length,
+      unassignedOpen: open.filter((t) => !t.assignee).length,
+      withoutDueOpen: open.filter((t) => !t.dueDate).length,
+      archived: input.archivedCount,
+    },
+    columns,
+    deliverables,
+    overdue,
+    upcoming,
+    people: [...peopleMap.values()].sort((a, b) => b.open - a.open || a.name.localeCompare(b.name)),
+    types: TASK_TYPES.map((type) => ({
+      label: TASK_TYPE_META[type].label,
+      open: open.filter((t) => t.type === type).length,
+      done: all.filter((t) => t.done && t.type === type).length,
+    })).filter((x) => x.open + x.done > 0),
+    releases: input.releases,
+  };
+}

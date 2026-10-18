@@ -20,12 +20,12 @@ export const COLUMN_ROLE_LABEL: Record<ColumnRoleValue, string> = {
   IN_PRODUCTION: "En producción (destino al desplegar)",
 };
 
-export const DEFAULT_COLUMNS: { name: string; role: ColumnRoleValue }[] = [
-  { name: "Backlog", role: "NONE" },
-  { name: "En progreso", role: "NONE" },
-  { name: "Siguiente salto a producción", role: "NEXT_RELEASE" },
-  { name: "En producción", role: "IN_PRODUCTION" },
-  { name: "Cerrado", role: "NONE" },
+export const DEFAULT_COLUMNS: { name: string; role: ColumnRoleValue; isDone: boolean }[] = [
+  { name: "Backlog", role: "NONE", isDone: false },
+  { name: "En progreso", role: "NONE", isDone: false },
+  { name: "Siguiente salto a producción", role: "NEXT_RELEASE", isDone: false },
+  { name: "En producción", role: "IN_PRODUCTION", isDone: true },
+  { name: "Cerrado", role: "NONE", isDone: true },
 ];
 
 /** Paleta de colores para tarjetas y etiquetas (hex). */

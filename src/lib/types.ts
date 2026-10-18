@@ -6,6 +6,7 @@ export interface BoardColumn {
   name: string;
   position: number;
   role: ColumnRoleValue;
+  isDone: boolean;
 }
 
 export interface BoardTask {
@@ -22,6 +23,17 @@ export interface BoardTask {
   subtaskDone: number;
   attachmentCount: number;
   hasDescription: boolean;
+  /** YYYY-MM-DD */
+  dueDate: string | null;
+  deliverableId: string | null;
+  commentCount: number;
+  linkCount: number;
+}
+
+export interface DeliverableOption {
+  id: string;
+  name: string;
+  dueDate: string | null;
 }
 
 export interface UserOption {
@@ -43,6 +55,25 @@ export interface BoardData {
   labels: LabelOption[];
   templates: { header: string; footer: string };
   currentUserId: string;
+  deliverables: DeliverableOption[];
+  google: { enabled: boolean; connected: boolean };
+  /** Hoy (YYYY-MM-DD) en la zona horaria de la app, para los avisos de plazo. */
+  today: string;
+}
+
+export interface TaskLinkInfo {
+  id: string;
+  kind: "GOOGLE_DOC" | "GOOGLE_SHEET";
+  title: string;
+  url: string;
+}
+
+export interface CommentInfo {
+  id: string;
+  body: string;
+  createdAt: string;
+  authorId: string | null;
+  authorName: string | null;
 }
 
 export interface AttachmentInfo {
@@ -66,4 +97,6 @@ export interface TaskDetail {
   createdByName: string | null;
   subtasks: SubtaskInfo[];
   attachments: AttachmentInfo[];
+  links: TaskLinkInfo[];
+  comments: CommentInfo[];
 }

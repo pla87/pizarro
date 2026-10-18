@@ -2,6 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { mentionsToMarkdown } from "@/lib/mentions";
 
 /** Markdown seguro: react-markdown no interpreta HTML y filtra URLs peligrosas. */
 export function Markdown({ children }: { children: string }) {
@@ -10,7 +11,14 @@ export function Markdown({ children }: { children: string }) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer nofollow" />,
+          a: ({ node: _node, href, children, ...props }) =>
+            href?.startsWith("#mention-") ? (
+              <span className="rounded bg-brand-50 px-1 font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-100">{children}</span>
+            ) : (
+              <a {...props} href={href} target="_blank" rel="noopener noreferrer nofollow">
+                {children}
+              </a>
+            ),
           img: ({ node: _node, alt, src }) =>
             typeof src === "string" && src.startsWith("/api/attachments/") ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -20,7 +28,7 @@ export function Markdown({ children }: { children: string }) {
             ),
         }}
       >
-        {children}
+        {mentionsToMarkdown(children)}
       </ReactMarkdown>
     </div>
   );

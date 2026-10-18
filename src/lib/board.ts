@@ -1,5 +1,6 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
+import { dateToIso } from "./dates";
 import { db } from "./db";
 import type { BoardTask } from "./types";
 
@@ -12,10 +13,12 @@ export const boardTaskSelect = {
   linkUrl: true,
   position: true,
   assigneeId: true,
+  dueDate: true,
+  deliverableId: true,
   description: true,
   labels: { select: { labelId: true } },
   subtasks: { select: { done: true } },
-  _count: { select: { attachments: true } },
+  _count: { select: { attachments: true, comments: true, links: true } },
 } satisfies Prisma.TaskSelect;
 
 type BoardTaskRow = Prisma.TaskGetPayload<{ select: typeof boardTaskSelect }>;
@@ -35,6 +38,10 @@ export function toBoardTask(t: BoardTaskRow): BoardTask {
     subtaskDone: t.subtasks.filter((s) => s.done).length,
     attachmentCount: t._count.attachments,
     hasDescription: t.description.trim().length > 0,
+    dueDate: dateToIso(t.dueDate),
+    deliverableId: t.deliverableId,
+    commentCount: t._count.comments,
+    linkCount: t._count.links,
   };
 }
 
@@ -51,4 +58,9 @@ export async function projectUsers(projectId: string, restricted: boolean) {
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });
+}
+
+/** Zona horaria de referencia para «hoy» en plazos e informes. */
+export function appTimeZone(): string {
+  return process.env.APP_TIMEZONE || "Europe/Madrid";
 }

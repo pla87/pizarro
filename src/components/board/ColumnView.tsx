@@ -2,9 +2,9 @@
 
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ArrowLeft, ArrowRight, MoreHorizontal, Pencil, Plus, Rocket, Tag, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, MoreHorizontal, Pencil, Plus, Rocket, Tag, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { deleteColumn, moveColumn, renameColumn, setColumnRole } from "@/actions/columns";
+import { deleteColumn, moveColumn, renameColumn, setColumnDone, setColumnRole } from "@/actions/columns";
 import { COLUMN_ROLE_LABEL, COLUMN_ROLES, type ColumnRoleValue } from "@/lib/constants";
 import type { BoardColumn } from "@/lib/types";
 import { cn } from "../ui/cn";
@@ -123,6 +123,12 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
         ),
     );
 
+  const toggleDone = () =>
+    run(
+      () => setColumnDone(column.id, !column.isDone),
+      () => setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, isDone: !c.isDone } : c))),
+    );
+
   const remove = () => {
     if (!empty) {
       setOpen(false);
@@ -158,6 +164,10 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
                 {column.role === r ? "● " : ""}{COLUMN_ROLE_LABEL[r]}
               </button>
             ))}
+            <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
+            <MenuItem icon={CheckCircle2} onClick={toggleDone}>
+              {column.isDone ? "✓ Cuenta como terminada" : "Contar como terminada"}
+            </MenuItem>
             <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
             <MenuItem icon={Trash2} onClick={remove} danger disabled={!empty}>
               {empty ? "Borrar columna" : "Borrar (debe estar vacía)"}

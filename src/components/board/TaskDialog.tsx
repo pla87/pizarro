@@ -1,19 +1,24 @@
 "use client";
 
-import { Archive, ExternalLink, ImagePlus, Loader2, Plus, Trash2, X } from "lucide-react";
+import { Archive, ExternalLink, FileSpreadsheet, FileText, ImagePlus, Loader2, Plus, Send, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
-  addSubtask, archiveTask, deleteAttachment, deleteSubtask, deleteTask, getTaskDetail, moveTask, updateSubtask, updateTask,
+  addComment, addSubtask, archiveTask, deleteAttachment, deleteComment, deleteSubtask, deleteTask, deleteTaskLink, getTaskDetail,
+  moveTask, updateSubtask, updateTask,
 } from "@/actions/tasks";
+import { dueStatus } from "@/lib/dates";
 import { TASK_TYPE_META, TASK_TYPES, type TaskTypeValue } from "@/lib/constants";
-import type { AttachmentInfo, BoardTask, SubtaskInfo, TaskDetail } from "@/lib/types";
+import type { AttachmentInfo, BoardTask, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
+import { Avatar } from "../ui/Avatar";
 import { ColorPicker } from "../ui/ColorPicker";
 import { cn } from "../ui/cn";
 import { Markdown } from "../ui/Markdown";
+import { MentionTextarea, type MentionCommand } from "../ui/MentionTextarea";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
+import { createAndOpenGoogleFile } from "./google";
 import { imageFilesFrom, uploadImage } from "./upload";
 
 export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => void }) {
@@ -103,6 +108,27 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
     toast("Tarea archivada");
   };
 
+  /** @docs / @sheets: crea el archivo, lo abre en otra pestaña y lo enlaza. Debe llamarse dentro de un clic o tecla. */
+  const createGoogle = async (kind: MentionCommand): Promise<TaskLinkInfo | null> => {
+    if (!board.google.enabled) {
+      toast("La integración con Google no está configurada en el servidor.", "error");
+      return null;
+    }
+    if (!board.google.connected) {
+      toast("Conecta tu cuenta de Google en «Mi perfil y plantillas» para crear documentos.", "error");
+      return null;
+    }
+    const res = await board.track(createAndOpenGoogleFile(task.id, kind, title.trim() || task.title));
+    if (!res.ok) {
+      toast(res.error, "error");
+      return null;
+    }
+    setDetail((d) => (d ? { ...d, links: [...d.links, res.link] } : d));
+    board.patchTask(task.id, (t) => ({ linkCount: t.linkCount + 1 }));
+    toast(kind === "GOOGLE_SHEET" ? "Hoja de cálculo creada" : "Documento creado");
+    return res.link;
+  };
+
   const commitTitle = () => {
     const value = title.trim();
     if (!value) return setTitle(task.title);
@@ -147,6 +173,8 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
         <div className="min-w-0 space-y-6">
           <DescriptionEditor
             key={detail ? "loaded" : "loading"}
+            users={board.users}
+            onGoogle={createGoogle}
             initial={detail?.description ?? null}
             onSave={(description) => {
               setDetail((d) => (d ? { ...d, description } : d));
@@ -196,6 +224,8 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
               <p className="text-xs text-slate-400">Sin adjuntos.</p>
             )}
           </section>
+          <GoogleLinks taskId={task.id} detail={detail} setDetail={setDetail} onCreate={createGoogle} />
+          <Comments taskId={task.id} detail={detail} setDetail={setDetail} users={board.users} onGoogle={createGoogle} />
         </div>
 
         <aside className="space-y-4 text-sm">
@@ -215,6 +245,35 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
             >
               <option value="">Sin asignar</option>
               {board.users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Fecha límite">
+            <div className="flex gap-1">
+              <input
+                type="date"
+                className={cn(
+                  "input",
+                  dueStatus(task.dueDate, board.columns.find((c) => c.id === task.columnId)?.isDone ?? false, board.today) === "overdue" &&
+                    "border-red-400 text-red-700 dark:text-red-300",
+                )}
+                value={task.dueDate ?? ""}
+                onChange={(e) => save({ dueDate: e.target.value || null }, { dueDate: e.target.value || null })}
+              />
+              {task.dueDate && (
+                <button className="btn-icon h-9 w-9 shrink-0" onClick={() => save({ dueDate: null }, { dueDate: null })} aria-label="Quitar fecha límite">
+                  <X size={15} />
+                </button>
+              )}
+            </div>
+          </Field>
+          <Field label="Entregable">
+            <select
+              className="input"
+              value={task.deliverableId ?? ""}
+              onChange={(e) => save({ deliverableId: e.target.value || null }, { deliverableId: e.target.value || null })}
+            >
+              <option value="">Sin entregable</option>
+              {board.deliverables.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </Field>
           <Field label="Color">
@@ -323,7 +382,12 @@ export function TypeSelector({ value, onChange }: { value: TaskTypeValue; onChan
   );
 }
 
-function DescriptionEditor({ initial, onSave }: { initial: string | null; onSave: (v: string) => void }) {
+function DescriptionEditor({ initial, onSave, users, onGoogle }: {
+  initial: string | null;
+  onSave: (v: string) => void;
+  users: UserOption[];
+  onGoogle: (kind: MentionCommand) => Promise<TaskLinkInfo | null>;
+}) {
   const [value, setValue] = useState(initial ?? "");
   const [editing, setEditing] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -344,13 +408,18 @@ function DescriptionEditor({ initial, onSave }: { initial: string | null; onSave
       </div>
       {editing ? (
         <div className="space-y-2">
-          <textarea
+          <MentionTextarea
             ref={ref}
             className="input field-sizing-content min-h-32 font-mono text-[13px]"
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onValueChange={setValue}
+            users={users}
+            onCommand={async (kind) => {
+              const link = await onGoogle(kind);
+              if (link) setValue((v) => `${v.trimEnd()}\n\n${kind === "GOOGLE_SHEET" ? "Hoja" : "Documento"}: [${link.title.replace(/[\[\]]/g, "")}](${link.url})\n`);
+            }}
             maxLength={20000}
-            placeholder="Admite Markdown: **negrita**, listas, `código`, [enlaces](https://…)"
+            placeholder="Markdown: **negrita**, listas, [enlaces](https://…). @persona menciona · @sheets / @docs crea un archivo de Google"
             onKeyDown={(e) => {
               if (e.key === "Escape") {
                 e.preventDefault();
@@ -457,6 +526,150 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
         <input className="input py-1.5" placeholder="Añadir elemento…" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} maxLength={200} disabled={!detail} />
         <button className="btn-secondary py-1.5" disabled={!newTitle.trim()} aria-label="Añadir subtarea"><Plus size={15} /></button>
       </form>
+    </section>
+  );
+}
+
+function GoogleLinks({ detail, setDetail, onCreate, taskId }: {
+  taskId: string;
+  detail: TaskDetail | null;
+  setDetail: React.Dispatch<React.SetStateAction<TaskDetail | null>>;
+  onCreate: (kind: MentionCommand) => Promise<TaskLinkInfo | null>;
+}) {
+  const board = useBoard();
+  const toast = useToast();
+  const links = detail?.links ?? [];
+  return (
+    <section>
+      <div className="mb-2 flex flex-wrap items-center gap-1">
+        <h3 className="mr-auto text-sm font-semibold">Documentos de Google</h3>
+        <button className="btn-ghost py-1 text-xs" onClick={() => onCreate("GOOGLE_DOC")} disabled={!detail}>
+          <FileText size={15} className="text-sky-600" /> Nuevo Doc
+        </button>
+        <button className="btn-ghost py-1 text-xs" onClick={() => onCreate("GOOGLE_SHEET")} disabled={!detail}>
+          <FileSpreadsheet size={15} className="text-emerald-600" /> Nuevo Sheet
+        </button>
+      </div>
+      {links.length === 0 ? (
+        <p className="text-xs text-slate-400">
+          Sin documentos. También puedes escribir <code>@docs</code> o <code>@sheets</code> en la descripción o en un comentario.
+        </p>
+      ) : (
+        <ul className="space-y-1">
+          {links.map((l) => (
+            <li key={l.id} className="group flex items-center gap-2 rounded-md px-1 py-1 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+              {l.kind === "GOOGLE_SHEET" ? <FileSpreadsheet size={17} className="text-emerald-600" /> : <FileText size={17} className="text-sky-600" />}
+              <a href={l.url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate text-sm font-medium hover:text-brand-600">
+                {l.title}
+              </a>
+              <button
+                className="btn-icon h-6 w-6 opacity-0 group-hover:opacity-100 max-md:opacity-100"
+                aria-label="Quitar enlace"
+                title="Quitar el enlace (el archivo sigue en Google Drive)"
+                onClick={async () => {
+                  if (!window.confirm("¿Quitar el enlace de la tarea? El archivo seguirá en Google Drive.")) return;
+                  const res = await board.track(deleteTaskLink(l.id));
+                  if (!res.ok) return toast(res.error, "error");
+                  setDetail((d) => (d ? { ...d, links: d.links.filter((x) => x.id !== l.id) } : d));
+                  board.patchTask(taskId, (t) => ({ linkCount: Math.max(0, t.linkCount - 1) }));
+                }}
+              >
+                <X size={14} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function Comments({ taskId, detail, setDetail, users, onGoogle }: {
+  taskId: string;
+  detail: TaskDetail | null;
+  setDetail: React.Dispatch<React.SetStateAction<TaskDetail | null>>;
+  users: UserOption[];
+  onGoogle: (kind: MentionCommand) => Promise<TaskLinkInfo | null>;
+}) {
+  const board = useBoard();
+  const toast = useToast();
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const comments = detail?.comments ?? [];
+
+  const send = async () => {
+    const body = text.trim();
+    if (!body || sending) return;
+    setSending(true);
+    const res = await board.track(addComment(taskId, body));
+    setSending(false);
+    if (!res.ok) return toast(res.error, "error");
+    setText("");
+    setDetail((d) => (d ? { ...d, comments: [...d.comments, res.data] } : d));
+    board.patchTask(taskId, (t) => ({ commentCount: t.commentCount + 1 }));
+  };
+
+  return (
+    <section>
+      <h3 className="mb-2 text-sm font-semibold">Comentarios {comments.length > 0 && <span className="font-normal text-slate-500">{comments.length}</span>}</h3>
+      <ul className="space-y-3">
+        {comments.map((c) => (
+          <li key={c.id} className="group flex gap-2">
+            {c.authorId ? <Avatar id={c.authorId} name={c.authorName ?? "?"} /> : <span className="h-6 w-6" />}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-2 text-xs">
+                <span className="font-semibold">{c.authorName ?? "Usuario eliminado"}</span>
+                <time className="text-slate-400">{new Date(c.createdAt).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" })}</time>
+                {(c.authorId === board.currentUserId) && (
+                  <button
+                    className="ml-auto text-slate-400 opacity-0 group-hover:opacity-100 hover:text-red-600 max-md:opacity-100"
+                    onClick={async () => {
+                      if (!window.confirm("¿Borrar este comentario?")) return;
+                      const res = await board.track(deleteComment(c.id));
+                      if (!res.ok) return toast(res.error, "error");
+                      setDetail((d) => (d ? { ...d, comments: d.comments.filter((x) => x.id !== c.id) } : d));
+                      board.patchTask(taskId, (t) => ({ commentCount: Math.max(0, t.commentCount - 1) }));
+                    }}
+                  >
+                    Borrar
+                  </button>
+                )}
+              </div>
+              <div className="mt-0.5 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
+                <Markdown>{c.body}</Markdown>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 space-y-2">
+        <MentionTextarea
+          className="input field-sizing-content min-h-16"
+          value={text}
+          onValueChange={setText}
+          users={users}
+          disabled={!detail}
+          placeholder="Escribe un comentario… @persona para avisar, @sheets / @docs para crear un archivo"
+          onCommand={async (kind) => {
+            const link = await onGoogle(kind);
+            if (link) setText((v) => `${v.trimEnd()} [${link.title.replace(/[\[\]]/g, "")}](${link.url}) `.trimStart());
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              send();
+            }
+          }}
+          maxLength={10000}
+          aria-label="Nuevo comentario"
+        />
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-400">Ctrl/⌘ + Enter para enviar. Las personas mencionadas reciben un aviso.</span>
+          <button className="btn-primary ml-auto py-1.5" onClick={send} disabled={sending || !text.trim()}>
+            {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Comentar
+          </button>
+        </div>
+      </div>
     </section>
   );
 }

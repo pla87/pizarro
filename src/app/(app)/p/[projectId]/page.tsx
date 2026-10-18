@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { visibleProjectsWhere } from "@/lib/access";
-import { boardTaskSelect, projectUsers, toBoardTask } from "@/lib/board";
+import { appTimeZone, boardTaskSelect, projectUsers, toBoardTask } from "@/lib/board";
+import { dateToIso, todayIso } from "@/lib/dates";
+import { googleEnabled } from "@/lib/google";
 import { db } from "@/lib/db";
 import { getCurrentUser, requireUserPage } from "@/lib/session";
 import type { BoardData } from "@/lib/types";
@@ -27,12 +29,16 @@ export default async function BoardPage({ params, searchParams }: Params) {
   if (!project) notFound();
 
   // Todas las consultas en paralelo: una sola ida y vuelta efectiva.
-  const [columns, tasks, users, labels, me] = await Promise.all([
-    db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true } }),
+  const [columns, tasks, users, labels, me, deliverables] = await Promise.all([
+    db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true } }),
     db.task.findMany({ where: { projectId, archivedAt: null }, orderBy: { position: "asc" }, select: boardTaskSelect }),
     projectUsers(projectId, project.restricted),
     db.label.findMany({ where: { projectId }, orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),
-    db.user.findUniqueOrThrow({ where: { id: user.id }, select: { releaseHeaderTemplate: true, releaseFooterTemplate: true } }),
+    db.user.findUniqueOrThrow({
+      where: { id: user.id },
+      select: { releaseHeaderTemplate: true, releaseFooterTemplate: true, googleAccount: { select: { id: true } } },
+    }),
+    db.deliverable.findMany({ where: { projectId }, orderBy: [{ position: "asc" }], select: { id: true, name: true, dueDate: true } }),
   ]);
 
   const data: BoardData = {
@@ -43,6 +49,9 @@ export default async function BoardPage({ params, searchParams }: Params) {
     labels,
     templates: { header: me.releaseHeaderTemplate, footer: me.releaseFooterTemplate },
     currentUserId: user.id,
+    deliverables: deliverables.map((d) => ({ id: d.id, name: d.name, dueDate: dateToIso(d.dueDate) })),
+    google: { enabled: googleEnabled(), connected: Boolean(me.googleAccount) },
+    today: todayIso(appTimeZone()),
   };
   const { task } = await searchParams;
   return <Board data={data} initialTaskId={typeof task === "string" ? task : null} />;

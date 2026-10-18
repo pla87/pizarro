@@ -1,9 +1,12 @@
 "use client";
 
-import { ArchiveRestore, Check, Lock, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
+import { ArchiveRestore, CalendarClock, Check, Lock, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { createLabel, deleteLabel, deleteProject, setProjectVisibility, updateLabel, updateProject } from "@/actions/projects";
+import {
+  createDeliverable, createLabel, deleteDeliverable, deleteLabel, deleteProject, setProjectVisibility, updateDeliverable, updateLabel, updateProject,
+} from "@/actions/projects";
+import { formatDay } from "@/lib/dates";
 import { restoreTask } from "@/actions/tasks";
 import { ColorPicker } from "@/components/ui/ColorPicker";
 import { cn } from "@/components/ui/cn";
@@ -16,6 +19,7 @@ interface Props {
   isAdmin: boolean;
   project: { id: string; name: string; description: string; restricted: boolean; memberIds: string[] };
   labels: LabelOption[];
+  deliverables: DeliverableRow[];
   archived: { id: string; title: string; type: TaskTypeValue; archivedAt: string }[];
   users: { id: string; name: string; role: "ADMIN" | "MEMBER" }[];
 }
@@ -30,7 +34,7 @@ function Section({ title, description, children, id }: { title: string; descript
   );
 }
 
-export function ProjectSettings({ isAdmin, project, labels: initialLabels, archived: initialArchived, users }: Props) {
+export function ProjectSettings({ isAdmin, project, deliverables, labels: initialLabels, archived: initialArchived, users }: Props) {
   const router = useRouter();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -123,6 +127,14 @@ export function ProjectSettings({ isAdmin, project, labels: initialLabels, archi
           </button>
         </Section>
       )}
+
+      <Section
+        id="deliverables"
+        title="Entregables"
+        description="Hitos con fecha objetivo que agrupan tarjetas. Se asignan desde el detalle de cada tarjeta y aparecen en el informe PDF."
+      >
+        <Deliverables projectId={project.id} initial={deliverables} />
+      </Section>
 
       <Section id="labels" title="Etiquetas" description="Etiquetas propias de este proyecto para clasificar tarjetas.">
         <ul className="space-y-1.5">
@@ -256,5 +268,101 @@ function NewLabel({ projectId, onCreated }: { projectId: string; onCreated: (l: 
       </div>
       <ColorPicker value={color} onChange={setColor} allowNone={false} />
     </form>
+  );
+}
+
+interface DeliverableRow {
+  id: string;
+  name: string;
+  description: string;
+  dueDate: string | null;
+  taskCount: number;
+}
+
+function Deliverables({ projectId, initial }: { projectId: string; initial: DeliverableRow[] }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [rows, setRows] = useState(initial);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [form, setForm] = useState({ name: "", description: "", dueDate: "" });
+  const [pending, start] = useTransition();
+
+  const reset = () => {
+    setEditing(null);
+    setForm({ name: "", description: "", dueDate: "" });
+  };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const input = { name: form.name, description: form.description, dueDate: form.dueDate || null };
+    start(async () => {
+      if (editing) {
+        const res = await updateDeliverable(editing, input);
+        if (!res.ok) return toast(res.error, "error");
+        setRows((r) => r.map((d) => (d.id === editing ? { ...d, ...input, name: input.name.trim() } : d)));
+        toast("Entregable actualizado");
+      } else {
+        const res = await createDeliverable(projectId, input);
+        if (!res.ok) return toast(res.error, "error");
+        setRows((r) => [...r, { ...res.data, taskCount: 0 }]);
+        toast("Entregable creado");
+      }
+      reset();
+      router.refresh();
+    });
+  };
+
+  return (
+    <div>
+      <ul className="divide-y divide-slate-200 dark:divide-slate-800">
+        {rows.map((d) => (
+          <li key={d.id} className="flex items-start gap-3 py-2">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium">{d.name}</div>
+              <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
+                <span className="inline-flex items-center gap-1"><CalendarClock size={12} /> {d.dueDate ? formatDay(d.dueDate) : "Sin fecha"}</span>
+                <span>{d.taskCount} tarjeta(s)</span>
+              </div>
+              {d.description && <p className="mt-0.5 text-xs text-slate-500">{d.description}</p>}
+            </div>
+            <button
+              className="btn-icon h-7 w-7"
+              aria-label="Editar entregable"
+              onClick={() => {
+                setEditing(d.id);
+                setForm({ name: d.name, description: d.description, dueDate: d.dueDate ?? "" });
+              }}
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              className="btn-icon h-7 w-7 hover:text-red-600"
+              aria-label="Borrar entregable"
+              onClick={async () => {
+                if (!window.confirm(`¿Borrar el entregable «${d.name}»? Sus tarjetas se conservan, sin entregable.`)) return;
+                const res = await deleteDeliverable(d.id);
+                if (!res.ok) return toast(res.error, "error");
+                setRows((r) => r.filter((x) => x.id !== d.id));
+                router.refresh();
+              }}
+            >
+              <Trash2 size={14} />
+            </button>
+          </li>
+        ))}
+        {rows.length === 0 && <li className="py-2 text-sm text-slate-500">No hay entregables.</li>}
+      </ul>
+      <form onSubmit={submit} className="mt-4 grid gap-2 border-t border-slate-200 pt-4 sm:grid-cols-[1fr_10rem] dark:border-slate-800">
+        <input className="input" placeholder={editing ? "Nombre" : "Nuevo entregable (p. ej. «Beta cerrada»)"} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={120} required />
+        <input className="input" type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} aria-label="Fecha objetivo" />
+        <input className="input sm:col-span-2" placeholder="Descripción (opcional)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} maxLength={2000} />
+        <div className="flex gap-2 sm:col-span-2">
+          <button className="btn-primary" disabled={pending || !form.name.trim()}>
+            {editing ? <><Check size={15} /> Guardar</> : <><Plus size={15} /> Añadir entregable</>}
+          </button>
+          {editing && <button type="button" className="btn-ghost" onClick={reset}>Cancelar</button>}
+        </div>
+      </form>
+    </div>
   );
 }
