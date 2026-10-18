@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+.github
+uploads
+src/generated
+.env
+.env.*
+!.env.example
+docs
+MANUAL.pdf
+*.md
+Dockerfile
+.dockerignore
+dist
+tests
+CHANGELOG.md
