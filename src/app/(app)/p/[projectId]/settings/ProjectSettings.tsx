@@ -14,12 +14,15 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
 import { PALETTE } from "@/lib/constants";
-import type { LabelOption } from "@/lib/types";
+import type { KindOption, LabelOption } from "@/lib/types";
+import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
 
 interface Props {
   isAdmin: boolean;
   project: { id: string; name: string; description: string; restricted: boolean; memberIds: string[] };
   labels: LabelOption[];
+  kinds: KindRow[];
+  generalKinds: KindOption[];
   deliverables: DeliverableRow[];
   archived: { id: string; title: string; kind: { name: string; color: string }; archivedAt: string }[];
   users: { id: string; name: string; role: "ADMIN" | "MEMBER" }[];
@@ -35,7 +38,7 @@ function Section({ title, description, children, id }: { title: string; descript
   );
 }
 
-export function ProjectSettings({ isAdmin, project, deliverables, labels: initialLabels, archived: initialArchived, users }: Props) {
+export function ProjectSettings({ isAdmin, project, deliverables, kinds, generalKinds, labels: initialLabels, archived: initialArchived, users }: Props) {
   const router = useRouter();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -135,6 +138,18 @@ export function ProjectSettings({ isAdmin, project, deliverables, labels: initia
         description="Hitos con fecha que agrupan tarjetas y salen en el informe PDF."
       >
         <Deliverables projectId={project.id} initial={deliverables} />
+      </Section>
+
+      <Section
+        id="kinds"
+        title="Tipos de tarea del proyecto"
+        description="Exclusivos de este proyecto. Se suman a los generales y van detrás en las releases."
+      >
+        <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+          Generales:
+          {generalKinds.map((k) => <TypeBadge key={k.id} kind={k} />)}
+        </div>
+        <KindsManager kinds={kinds} projectId={project.id} otherKinds={generalKinds} embedded />
       </Section>
 
       <Section id="labels" title="Etiquetas" description="Etiquetas propias de este proyecto para clasificar tarjetas.">

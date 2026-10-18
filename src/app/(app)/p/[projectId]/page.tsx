@@ -39,7 +39,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
       select: { cardStyle: true, googleAccount: { select: { id: true } } },
     }),
     db.deliverable.findMany({ where: { projectId }, orderBy: [{ position: "asc" }], select: { id: true, name: true, dueDate: true } }),
-    listKinds(),
+    listKinds(projectId),
     userTemplates(user.id),
   ]);
 

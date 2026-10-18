@@ -2,6 +2,22 @@
 
 Historial de versiones de Tablón. Fuente: `changelog.json`.
 
+## v1.4.0 — 2026-10-18
+
+Tipos de tarea exclusivos de cada proyecto.
+
+### Nuevas funcionalidades
+
+- Tipos de tarea exclusivos de un proyecto: se gestionan en Ajustes del proyecto (cualquiera con acceso) y se suman a los generales en los selectores, las releases y el informe PDF.
+
+### Mejoras
+
+- La página de admin pasa a llamarse «Tipos de tarea generales»; crear y editar tipos se hace en un modal.
+
+### Cambios técnicos / DB
+
+- Migración v1_4: TaskKind.projectId (opcional, se borra con el proyecto); el nombre deja de ser único global y pasa a serlo entre los generales y dentro de cada proyecto (índices parciales sin distinguir mayúsculas).
+
 ## v1.3.1 — 2026-10-18
 
 Ver la contraseña al escribirla y corrección en «Crear varias tareas».

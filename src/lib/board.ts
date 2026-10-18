@@ -65,8 +65,13 @@ export function appTimeZone(): string {
   return process.env.APP_TIMEZONE || "Europe/Madrid";
 }
 
-export function listKinds() {
-  return db.taskKind.findMany({ orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, color: true } });
+/** Tipos de tarea: sin proyecto, solo los generales; con proyecto, los generales y después los de ese proyecto. */
+export function listKinds(projectId?: string) {
+  return db.taskKind.findMany({
+    where: projectId ? { OR: [{ projectId: null }, { projectId }] } : { projectId: null },
+    orderBy: [{ projectId: { sort: "asc", nulls: "first" } }, { position: "asc" }, { createdAt: "asc" }],
+    select: { id: true, name: true, color: true },
+  });
 }
 
 export async function userTemplates(userId: string) {

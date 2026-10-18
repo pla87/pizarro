@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { visibleProjectsWhere } from "@/lib/access";
+import { listKinds } from "@/lib/board";
 import { dateToIso } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
@@ -20,6 +21,10 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
       restricted: true,
       members: { select: { userId: true } },
       labels: { orderBy: { name: "asc" }, select: { id: true, name: true, color: true } },
+      kinds: {
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+        select: { id: true, name: true, color: true, _count: { select: { tasks: true } } },
+      },
       deliverables: {
         orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { position: "asc" }],
         select: { id: true, name: true, description: true, dueDate: true, _count: { select: { tasks: { where: { archivedAt: null } } } } },
@@ -33,6 +38,7 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
     },
   });
   if (!project) notFound();
+  const generalKinds = await listKinds();
   const users = isAdmin
     ? await db.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, role: true } })
     : [];
@@ -48,6 +54,8 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
         memberIds: project.members.map((m) => m.userId),
       }}
       labels={project.labels}
+      kinds={project.kinds.map((k) => ({ id: k.id, name: k.name, color: k.color, taskCount: k._count.tasks }))}
+      generalKinds={generalKinds}
       deliverables={project.deliverables.map((d) => ({ id: d.id, name: d.name, description: d.description, dueDate: dateToIso(d.dueDate), taskCount: d._count.tasks }))}
       archived={project.tasks.map((t) => ({ id: t.id, title: t.title, kind: t.kind, archivedAt: t.archivedAt!.toISOString() }))}
       users={users}
