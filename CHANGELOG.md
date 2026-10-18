@@ -2,6 +2,18 @@
 
 Historial de versiones de Tablón. Fuente: `changelog.json`.
 
+## v1.3.1 — 2026-10-18
+
+Ver la contraseña al escribirla y corrección en «Crear varias tareas».
+
+### Mejoras
+
+- Icono de ojo en los campos de contraseña (inicio de sesión, cambio de contraseña y administración de usuarios) para ver lo que se escribe.
+
+### Correcciones
+
+- Crear varias tareas: «Tipo para todas» cambia ahora todas las líneas, también las que se habían cambiado a mano.
+
 ## v1.3.0 — 2026-10-18
 
 Crear varias tareas pegando una lista, formularios más compactos en móvil y entregables en un modal.

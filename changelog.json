@@ -1,6 +1,21 @@
 {
   "versions": [
     {
+      "version": "1.3.1",
+      "date": "2026-10-18",
+      "summary": "Ver la contraseña al escribirla y corrección en «Crear varias tareas».",
+      "changes": {
+        "nuevas": [],
+        "mejoras": [
+          "Icono de ojo en los campos de contraseña (inicio de sesión, cambio de contraseña y administración de usuarios) para ver lo que se escribe."
+        ],
+        "correcciones": [
+          "Crear varias tareas: «Tipo para todas» cambia ahora todas las líneas, también las que se habían cambiado a mano."
+        ],
+        "tecnicos": []
+      }
+    },
+    {
       "version": "1.3.0",
       "date": "2026-10-18",
       "summary": "Crear varias tareas pegando una lista, formularios más compactos en móvil y entregables en un modal.",

@@ -1,5 +1,6 @@
 "use client";
 
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Bell, Check, Eye, Link2, Palette, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -100,16 +101,16 @@ export function ProfileSettings(props: Props) {
           <input type="text" name="username" autoComplete="username" value={props.email} readOnly hidden />
           <div>
             <label className="label" htmlFor="pw-current">Contraseña actual</label>
-            <input id="pw-current" type="password" className="input" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
+            <PasswordInput id="pw-current" className="input" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="label" htmlFor="pw-new">Nueva contraseña (mín. 10)</label>
-              <input id="pw-new" type="password" className="input" autoComplete="new-password" minLength={10} value={next} onChange={(e) => setNext(e.target.value)} required />
+              <PasswordInput id="pw-new" className="input" autoComplete="new-password" minLength={10} value={next} onChange={(e) => setNext(e.target.value)} required />
             </div>
             <div>
               <label className="label" htmlFor="pw-repeat">Repite la nueva</label>
-              <input id="pw-repeat" type="password" className="input" autoComplete="new-password" minLength={10} value={repeat} onChange={(e) => setRepeat(e.target.value)} required />
+              <PasswordInput id="pw-repeat" className="input" autoComplete="new-password" minLength={10} value={repeat} onChange={(e) => setRepeat(e.target.value)} required />
             </div>
           </div>
           <button className="btn-primary" disabled={pending}>Cambiar contraseña</button>

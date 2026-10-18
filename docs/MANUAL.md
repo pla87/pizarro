@@ -1,12 +1,12 @@
 ---
 title: "Tablón · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.3.0"
+version: "v1.3.1"
 ---
 
 # Tablón — Manual de operaciones
 
-**Versión de la aplicación:** v1.3.0
+**Versión de la aplicación:** v1.3.1
 
 Este manual describe la arquitectura de Tablón, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -137,6 +137,7 @@ Además, `Task` tiene `dueDate` (fecha límite, solo día), `Column` tiene `isDo
 
 - Entra con tu email y contraseña. No hay registro público: un administrador te da de alta.
 - **Mi perfil y plantillas** permite cambiar el nombre visible y la contraseña. Al cambiarla se cierran tus sesiones en los demás dispositivos.
+- El icono del ojo junto a un campo de contraseña muestra u oculta lo que escribes.
 
 ### 3.2 Proyectos
 
@@ -163,7 +164,7 @@ Desde el menú «⋯» de cada columna:
 - **Crear:** botón *Nueva tarea*, el «+» de cada columna o el botón flotante en móvil. Solo el título y el tipo son obligatorios; asignarla a alguien es opcional.
 - **Crear varias a la vez:** botón **Varias tareas** (escritorio) o el botón flotante pequeño encima del «+» (móvil).
   - Elige la columna (por defecto, la que estás viendo) y pega una lista: **cada línea es una tarea** con ese título. Las líneas vacías se ignoran y se quitan viñetas como «-», «*», «1.» o «[ ]».
-  - Elige el **tipo para todas** y, si alguna es distinta, cámbialo en su línea.
+  - Elige el **tipo para todas** y, si alguna es distinta, cámbialo en su línea. Volver a pulsar un tipo común lo aplica a todas las líneas, también a las cambiadas a mano.
   - **Campos extra** (plegado): responsable, fecha límite, entregable y etiquetas comunes a todas.
   - Hasta 100 tareas de una vez; se añaden al final de la columna en el orden de la lista.
 - **Tipo:** por defecto *Funcionalidad* o *Corrección*. Los administradores pueden crear más (ver 3.14).
