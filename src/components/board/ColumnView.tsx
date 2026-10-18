@@ -30,6 +30,7 @@ export function ColumnView({ column, taskIds, index, total, droppableId, mobileH
 
   return (
     <section
+      ref={setNodeRef}
       className={cn(
         "flex w-full shrink-0 flex-col rounded-xl bg-slate-100/80 dark:bg-slate-900/60",
         // Con más de tres columnas, en escritorio se reparten el ancho de la ventana (mínimo 18 rem; si no caben, scroll).
@@ -80,7 +81,6 @@ export function ColumnView({ column, taskIds, index, total, droppableId, mobileH
       )}
       <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
         <div
-          ref={setNodeRef}
           className={cn(
             "flex min-h-20 flex-1 flex-col gap-2 overflow-y-auto rounded-b-xl px-2 pb-2 transition-colors",
             // Con selección, la barra inferior tapa el final de la lista: se deja hueco para llegar a las últimas.

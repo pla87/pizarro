@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  closestCorners, DndContext, type CollisionDetection, DragOverlay, KeyboardSensor, MeasuringStrategy, PointerSensor,
+  closestCorners, DndContext, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
   useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
@@ -9,6 +9,7 @@ import { Archive, FileDown, Plus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { archiveTasks, deleteTasks, moveTask, moveTasks } from "@/actions/tasks";
+import { createBoardCollisionDetection } from "@/lib/collision";
 import { positionBetween } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardTask, LabelOption } from "@/lib/types";
 import { ProjectMenu } from "../ProjectMenu";
@@ -30,12 +31,7 @@ const COLUMN_PREFIX = "col:";
 /** Entradas del historial que se guardan al cambiar de columna en móvil (atrás vuelve a ellas). */
 const MAX_COLUMN_HISTORY = 5;
 
-/** Solo columnas y tarjetas visibles: en móvil, las columnas ocultas miden 0×0. */
-const collisionDetection: CollisionDetection = (args) =>
-  closestCorners({
-    ...args,
-    droppableContainers: args.droppableContainers.filter((c) => (args.droppableRects.get(c.id)?.width ?? 0) > 0),
-  });
+const boardCollisionDetection = createBoardCollisionDetection({ closestCorners, pointerWithin });
 
 /** Pantalla táctil: las tarjetas se arrastran con su asa para que el resto de la tarjeta deje hacer scroll. */
 const COARSE_QUERY = "(pointer: coarse)";
@@ -426,7 +422,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
 
         <DndContext
           sensors={sensors}
-          collisionDetection={collisionDetection}
+          collisionDetection={boardCollisionDetection}
           measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
           onDragStart={onDragStart}
           onDragOver={onDragOver}
