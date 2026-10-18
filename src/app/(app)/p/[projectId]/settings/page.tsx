@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { visibleProjectsWhere } from "@/lib/access";
+import { dateToIso } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
 import { ProjectSettings } from "./ProjectSettings";
@@ -19,6 +20,10 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
       restricted: true,
       members: { select: { userId: true } },
       labels: { orderBy: { name: "asc" }, select: { id: true, name: true, color: true } },
+      deliverables: {
+        orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { position: "asc" }],
+        select: { id: true, name: true, description: true, dueDate: true, _count: { select: { tasks: { where: { archivedAt: null } } } } },
+      },
       tasks: {
         where: { archivedAt: { not: null } },
         orderBy: { archivedAt: "desc" },
@@ -43,6 +48,7 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
         memberIds: project.members.map((m) => m.userId),
       }}
       labels={project.labels}
+      deliverables={project.deliverables.map((d) => ({ id: d.id, name: d.name, description: d.description, dueDate: dateToIso(d.dueDate), taskCount: d._count.tasks }))}
       archived={project.tasks.map((t) => ({ id: t.id, title: t.title, type: t.type, archivedAt: t.archivedAt!.toISOString() }))}
       users={users}
     />

@@ -11,6 +11,7 @@ import { POSITION_STEP } from "@/lib/positions";
 import { requireAdmin, requireUser } from "@/lib/session";
 import { removeAttachmentFiles } from "@/lib/uploads";
 import * as v from "@/lib/validation";
+import { dateToIso, isoToDate } from "@/lib/dates";
 import type { LabelOption } from "@/lib/types";
 
 export async function createProject(name: string) {
@@ -111,5 +112,56 @@ export async function deleteLabel(labelId: string) {
   return runAction(async () => {
     const label = await findLabel(labelId);
     await db.label.delete({ where: { id: label.id } });
+  });
+}
+
+// --- Entregables ---------------------------------------------------------------
+
+const deliverableSchema = z.object({
+  name: v.name.max(120, "Máximo 120 caracteres."),
+  description: z.string().max(2000).default(""),
+  dueDate: v.dayIso.default(null),
+});
+
+export async function createDeliverable(projectId: string, input: z.input<typeof deliverableSchema>) {
+  return runAction(async () => {
+    const user = await requireUser();
+    await assertProjectAccess(user, v.id.parse(projectId));
+    const data = deliverableSchema.parse(input);
+    const last = await db.deliverable.findFirst({ where: { projectId }, orderBy: { position: "desc" }, select: { position: true } });
+    const d = await db.deliverable.create({
+      data: { projectId, name: data.name, description: data.description, dueDate: data.dueDate ? isoToDate(data.dueDate) : null, position: (last?.position ?? 0) + POSITION_STEP },
+      select: { id: true, name: true, description: true, dueDate: true },
+    });
+    return { ...d, dueDate: dateToIso(d.dueDate) };
+  });
+}
+
+async function findDeliverable(deliverableId: string) {
+  const user = await requireUser();
+  const d = await db.deliverable.findFirst({
+    where: { id: v.id.parse(deliverableId), project: visibleProjectsWhere(user) },
+    select: { id: true },
+  });
+  if (!d) throw notFound();
+  return d;
+}
+
+export async function updateDeliverable(deliverableId: string, input: z.input<typeof deliverableSchema>) {
+  return runAction(async () => {
+    const d = await findDeliverable(deliverableId);
+    const data = deliverableSchema.parse(input);
+    await db.deliverable.update({
+      where: { id: d.id },
+      data: { name: data.name, description: data.description, dueDate: data.dueDate ? isoToDate(data.dueDate) : null },
+    });
+  });
+}
+
+/** Las tarjetas del entregable no se borran: quedan sin entregable. */
+export async function deleteDeliverable(deliverableId: string) {
+  return runAction(async () => {
+    const d = await findDeliverable(deliverableId);
+    await db.deliverable.delete({ where: { id: d.id } });
   });
 }

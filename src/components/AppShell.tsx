@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  ChevronsUpDown, FolderKanban, History, LayoutDashboard, ListChecks, LogOut, Menu, Plus, Rocket,
+  Bell, ChevronsUpDown, FileDown, FolderKanban, History, LayoutDashboard, ListChecks, LogOut, Menu, Plus, Rocket,
   Settings, SlidersHorizontal, Users, X,
 } from "lucide-react";
 import Link from "next/link";
@@ -19,6 +19,7 @@ interface Props {
   user: CurrentUser;
   projects: { id: string; name: string }[];
   version: string;
+  unread: number;
   children: React.ReactNode;
 }
 
@@ -30,7 +31,7 @@ export function AppShell(props: Props) {
   );
 }
 
-function Shell({ user, projects, version, children }: Props) {
+function Shell({ user, projects, version, unread, children }: Props) {
   const pathname = usePathname();
   // El menú móvil se cierra solo al navegar: queda asociado a la ruta en que se abrió.
   const [drawerPath, setDrawerPath] = useState<string | null>(null);
@@ -45,7 +46,7 @@ function Shell({ user, projects, version, children }: Props) {
   }, [projectId]);
 
   const sidebar = (
-    <Sidebar user={user} projects={projects} current={current} version={version} pathname={pathname} />
+    <Sidebar user={user} projects={projects} current={current} version={version} pathname={pathname} unread={unread} />
   );
 
   return (
@@ -72,6 +73,11 @@ function Shell({ user, projects, version, children }: Props) {
             <Menu size={20} />
           </button>
           <span className="truncate font-semibold">{current?.name ?? "Tablón"}</span>
+          {unread > 0 && (
+            <Link href="/notifications" className="ml-auto flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white" aria-label={`${unread} avisos sin leer`}>
+              <Bell size={13} /> {unread}
+            </Link>
+          )}
         </header>
         <main className="min-h-0 flex-1 overflow-auto">{children}</main>
       </div>
@@ -96,7 +102,8 @@ function NavLink({ href, icon: Icon, children, active }: { href: string; icon: t
   );
 }
 
-function Sidebar({ user, projects, current, version, pathname }: {
+function Sidebar({ user, projects, current, version, pathname, unread }: {
+  unread: number;
   user: CurrentUser;
   projects: { id: string; name: string }[];
   current: { id: string; name: string } | null;
@@ -121,10 +128,24 @@ function Sidebar({ user, projects, current, version, pathname }: {
           <>
             <NavLink href={`/p/${current.id}`} icon={LayoutDashboard} active={pathname === `/p/${current.id}`}>Tablero</NavLink>
             <NavLink href={`/p/${current.id}/releases`} icon={Rocket} active={pathname.startsWith(`/p/${current.id}/releases`)}>Releases</NavLink>
+            <a
+              href={`/api/projects/${current.id}/report`}
+              target="_blank"
+              rel="noopener"
+              className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              <FileDown size={17} /> Informe PDF
+            </a>
             <NavLink href={`/p/${current.id}/settings`} icon={SlidersHorizontal} active={pathname.startsWith(`/p/${current.id}/settings`)}>Ajustes del proyecto</NavLink>
             <div className="my-3 border-t border-slate-200 dark:border-slate-800" />
           </>
         )}
+        <NavLink href="/notifications" icon={Bell} active={pathname === "/notifications"}>
+          <span className="flex-1">Avisos</span>
+          {unread > 0 && (
+            <span className="rounded-full bg-red-500 px-1.5 text-[11px] font-semibold text-white" aria-label={`${unread} sin leer`}>{unread > 99 ? "99+" : unread}</span>
+          )}
+        </NavLink>
         <NavLink href="/my-tasks" icon={ListChecks} active={pathname === "/my-tasks"}>Mis tareas asignadas</NavLink>
         <NavLink href="/changelog" icon={History} active={pathname === "/changelog"}>Historial de versiones</NavLink>
         <NavLink href="/settings" icon={Settings} active={pathname === "/settings"}>Mi perfil y plantillas</NavLink>

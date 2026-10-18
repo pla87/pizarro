@@ -1,0 +1,205 @@
+import "server-only";
+import { after } from "next/server";
+import nodemailer from "nodemailer";
+import { db } from "./db";
+import { excerpt as makeExcerpt } from "./mentions";
+import { rateLimit } from "./rate-limit";
+
+// Avisos de menciones: en la app (tabla Notification), por email (SMTP) y por
+// WhatsApp (Cloud API de Meta). Los envíos externos se hacen tras responder al
+// usuario (after), para que mencionar a alguien no añada espera.
+
+export function emailEnabled(): boolean {
+  return Boolean(process.env.SMTP_HOST && process.env.SMTP_FROM);
+}
+
+export function whatsappEnabled(): boolean {
+  return Boolean(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_TEMPLATE_NAME);
+}
+
+let transport: ReturnType<typeof nodemailer.createTransport> | null = null;
+function mailer() {
+  const port = Number(process.env.SMTP_PORT ?? 465);
+  transport ??= nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port,
+    secure: port === 465,
+    auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
+    connectionTimeout: 10_000,
+    socketTimeout: 15_000,
+  });
+  return transport;
+}
+
+function appUrl(): string {
+  return (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+}
+
+const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
+export interface MentionMessage {
+  actorName: string;
+  taskTitle: string;
+  projectName: string;
+  excerpt: string;
+  url: string;
+}
+
+export function mentionEmail(m: MentionMessage) {
+  const subject = `${m.actorName} te ha mencionado en «${m.taskTitle}»`;
+  const text = `${m.actorName} te ha mencionado en la tarea «${m.taskTitle}» (${m.projectName}):\n\n${m.excerpt}\n\nAbrir la tarea: ${m.url}\n`;
+  const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
+<p><strong>${escapeHtml(m.actorName)}</strong> te ha mencionado en la tarea <strong>«${escapeHtml(m.taskTitle)}»</strong> · ${escapeHtml(m.projectName)}</p>
+<blockquote style="margin:12px 0;padding:8px 12px;border-left:4px solid #6366f1;background:#f8fafc;color:#334155">${escapeHtml(m.excerpt)}</blockquote>
+<p><a href="${escapeHtml(m.url)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">Abrir la tarea</a></p>
+<p style="color:#94a3b8;font-size:12px">Puedes desactivar estos avisos en «Mi perfil» de Tablón.</p></div>`;
+  return { subject, text, html };
+}
+
+/** Cuerpo de la petición a la Cloud API: plantilla con 4 parámetros (ver README). */
+export function whatsappPayload(to: string, m: MentionMessage) {
+  const param = (text: string) => ({ type: "text", text: text.replace(/\s+/g, " ").slice(0, 300) });
+  return {
+    messaging_product: "whatsapp",
+    to: to.replace(/^\+/, ""),
+    type: "template",
+    template: {
+      name: process.env.WHATSAPP_TEMPLATE_NAME,
+      language: { code: process.env.WHATSAPP_TEMPLATE_LANG ?? "es" },
+      components: [
+        { type: "body", parameters: [param(m.actorName), param(m.taskTitle), param(m.projectName), param(m.url)] },
+      ],
+    },
+  };
+}
+
+async function sendWhatsapp(to: string, m: MentionMessage): Promise<void> {
+  const version = process.env.WHATSAPP_API_VERSION ?? "v23.0";
+  const res = await fetch(`https://graph.facebook.com/${version}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify(whatsappPayload(to, m)),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(`WhatsApp ${res.status}: ${json?.error?.message ?? "error"}`);
+  }
+}
+
+async function deliver(notificationIds: string[]): Promise<void> {
+  if (!notificationIds.length || (!emailEnabled() && !whatsappEnabled())) return;
+  const rows = await db.notification.findMany({
+    where: { id: { in: notificationIds } },
+    select: {
+      id: true,
+      excerpt: true,
+      user: { select: { email: true, active: true, notifyEmail: true, notifyWhatsapp: true, whatsappPhone: true } },
+      actor: { select: { name: true } },
+      task: { select: { id: true, title: true, project: { select: { id: true, name: true } } } },
+    },
+  });
+  for (const n of rows) {
+    if (!n.task || !n.user.active) continue;
+    const msg: MentionMessage = {
+      actorName: n.actor?.name ?? "Alguien",
+      taskTitle: n.task.title,
+      projectName: n.task.project.name,
+      excerpt: n.excerpt,
+      url: `${appUrl()}/p/${n.task.project.id}?task=${n.task.id}`,
+    };
+    const update: { emailSentAt?: Date; whatsappSentAt?: Date; deliveryError?: string } = {};
+    const errors: string[] = [];
+    if (emailEnabled() && n.user.notifyEmail) {
+      try {
+        await mailer().sendMail({ from: process.env.SMTP_FROM, to: n.user.email, ...mentionEmail(msg) });
+        update.emailSentAt = new Date();
+      } catch (err) {
+        errors.push(`email: ${(err as Error).message}`);
+      }
+    }
+    if (whatsappEnabled() && n.user.notifyWhatsapp && n.user.whatsappPhone) {
+      try {
+        await sendWhatsapp(n.user.whatsappPhone, msg);
+        update.whatsappSentAt = new Date();
+      } catch (err) {
+        errors.push((err as Error).message);
+      }
+    }
+    if (errors.length) {
+      update.deliveryError = errors.join(" | ").slice(0, 500);
+      console.error("[notify]", n.id, update.deliveryError);
+    }
+    if (Object.keys(update).length) await db.notification.update({ where: { id: n.id }, data: update });
+  }
+}
+
+/**
+ * Crea avisos de mención para los usuarios indicados que estén activos, no sean el autor
+ * y puedan ver el proyecto. Devuelve cuántos se han creado.
+ */
+export async function notifyMentions(opts: {
+  actorId: string;
+  taskId: string;
+  projectId: string;
+  recipientIds: string[];
+  text: string;
+}): Promise<number> {
+  const ids = opts.recipientIds.filter((id) => id !== opts.actorId);
+  if (!ids.length) return 0;
+  const project = await db.project.findUnique({ where: { id: opts.projectId }, select: { restricted: true } });
+  if (!project) return 0;
+  const recipients = await db.user.findMany({
+    where: {
+      id: { in: ids },
+      active: true,
+      ...(project.restricted ? { OR: [{ role: "ADMIN" }, { memberships: { some: { projectId: opts.projectId } } }] } : {}),
+    },
+    select: { id: true },
+  });
+  if (!recipients.length) return 0;
+  const excerpt = makeExcerpt(opts.text);
+  const created = await db.notification.createManyAndReturn({
+    data: recipients.map((r) => ({ userId: r.id, actorId: opts.actorId, taskId: opts.taskId, excerpt })),
+    select: { id: true },
+  });
+  const createdIds = created.map((c) => c.id);
+  const external = await externalAllowed(opts.actorId, opts.taskId, recipients.map((r) => r.id), createdIds);
+  const toDeliver = created.filter((_, i) => external.has(recipients[i]!.id)).map((c) => c.id);
+  if (toDeliver.length) after(() => deliver(toDeliver).catch((err) => console.error("[notify] envío", err)));
+  return createdIds.length;
+}
+
+/** Ventana en la que no se repite email/WhatsApp a la misma persona por la misma tarea. */
+const DEDUPE_MINUTES = 10;
+/** Máximo de envíos externos que puede provocar una misma persona por hora. */
+const MAX_EXTERNAL_PER_HOUR = 40;
+
+/**
+ * Los avisos en la app se crean siempre; el email y el WhatsApp (que pueden costar dinero)
+ * se limitan: uno por persona y tarea cada 10 minutos y un tope por autor y hora.
+ */
+async function externalAllowed(actorId: string, taskId: string, recipientIds: string[], newIds: string[]): Promise<Set<string>> {
+  const since = new Date(Date.now() - DEDUPE_MINUTES * 60_000);
+  const recent = await db.notification.findMany({
+    where: {
+      taskId,
+      userId: { in: recipientIds },
+      createdAt: { gte: since },
+      // Cualquier aviso previo reciente (enviado o en curso) basta: así dos comentarios seguidos no duplican.
+      id: { notIn: newIds },
+    },
+    select: { userId: true },
+  });
+  const skip = new Set(recent.map((r) => r.userId));
+  const allowed = new Set<string>();
+  for (const id of recipientIds) {
+    if (skip.has(id)) continue;
+    if (!rateLimit(`notify:${actorId}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000)) {
+      console.error("[notify] Límite de envíos externos alcanzado para", actorId);
+      break;
+    }
+    allowed.add(id);
+  }
+  return allowed;
+}

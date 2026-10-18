@@ -7,6 +7,7 @@ import { MAX_TEMPLATE } from "@/lib/constants";
 import { AppError } from "@/lib/errors";
 import { hashPassword, MIN_PASSWORD, verifyPassword } from "@/lib/password";
 import { createSession, requireUser } from "@/lib/session";
+import { disconnectGoogleAccount } from "@/lib/google";
 import { rateLimit } from "@/lib/rate-limit";
 import * as v from "@/lib/validation";
 
@@ -44,5 +45,23 @@ export async function changePassword(current: string, next: string) {
     ]);
     // Se cierran todas las sesiones y se abre una nueva en este dispositivo.
     await createSession(user.id);
+  });
+}
+
+export async function updateNotificationPrefs(input: { notifyEmail: boolean; notifyWhatsapp: boolean; whatsappPhone: string }) {
+  return runAction(async () => {
+    const user = await requireUser();
+    const data = z
+      .object({ notifyEmail: z.boolean(), notifyWhatsapp: z.boolean(), whatsappPhone: v.phoneE164 })
+      .parse(input);
+    if (data.notifyWhatsapp && !data.whatsappPhone) throw new AppError("Indica tu número de WhatsApp para activar los avisos.");
+    await db.user.update({ where: { id: user.id }, data });
+  });
+}
+
+export async function disconnectGoogle() {
+  return runAction(async () => {
+    const user = await requireUser();
+    await disconnectGoogleAccount(user.id);
   });
 }

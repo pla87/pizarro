@@ -62,13 +62,19 @@ export async function seed(db: PrismaClient, log: (msg: string) => void = consol
       select: { id: true, columns: { orderBy: { position: "asc" }, select: { id: true } } },
     });
     const [backlog, progress, next] = project.columns;
+    // Fechas relativas a hoy para que el ejemplo muestre plazos vencidos, próximos y futuros.
+    const inDays = (n: number) => new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate() + n));
+    const beta = await db.deliverable.create({
+      data: { projectId: project.id, name: "Beta cerrada", description: "Primera versión para un grupo reducido de usuarios.", dueDate: inDays(10), position: POSITION_STEP },
+      select: { id: true },
+    });
     const samples = [
-      { column: backlog, title: "Definir los criterios de aceptación del nuevo informe", type: "FEATURE" as const },
+      { column: backlog, title: "Definir los criterios de aceptación del nuevo informe", type: "FEATURE" as const, due: 21 },
       { column: backlog, title: "Actualizar dependencias del proyecto", type: "CHORE" as const },
-      { column: progress, title: "Pantalla de exportación de datos", type: "FEATURE" as const, assign: true },
-      { column: next, title: "Corregir el cálculo de totales en el resumen", type: "FIX" as const, link: "https://example.com/issues/1" },
-      { column: next, title: "Extraer el servicio de notificaciones", type: "REFACTOR" as const },
-      { column: next, title: "Añadir filtro por fecha en el listado", type: "FEATURE" as const },
+      { column: progress, title: "Pantalla de exportación de datos", type: "FEATURE" as const, assign: true, due: 3, beta: true },
+      { column: next, title: "Corregir el cálculo de totales en el resumen", type: "FIX" as const, link: "https://example.com/issues/1", due: -2, beta: true },
+      { column: next, title: "Extraer el servicio de notificaciones", type: "REFACTOR" as const, beta: true },
+      { column: next, title: "Añadir filtro por fecha en el listado", type: "FEATURE" as const, due: 7 },
     ];
     let pos = 0;
     for (const s of samples) {
@@ -80,6 +86,8 @@ export async function seed(db: PrismaClient, log: (msg: string) => void = consol
           title: s.title,
           type: s.type,
           linkUrl: s.link ?? null,
+          dueDate: s.due !== undefined ? inDays(s.due) : null,
+          deliverableId: s.beta ? beta.id : null,
           position: (pos += POSITION_STEP),
           assigneeId: s.assign ? admin?.id : null,
           createdById: admin?.id,

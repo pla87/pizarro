@@ -2,7 +2,8 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlignLeft, Check, CheckSquare, ExternalLink, Image as ImageIcon } from "lucide-react";
+import { AlignLeft, CalendarClock, Check, CheckSquare, ExternalLink, FileText, Image as ImageIcon, MessageSquare } from "lucide-react";
+import { dueStatus, formatDay } from "@/lib/dates";
 import { memo } from "react";
 import type { BoardTask } from "@/lib/types";
 import { Avatar } from "../ui/Avatar";
@@ -29,7 +30,9 @@ export function SortableTaskCard({ id }: { id: string }) {
 }
 
 export const TaskCard = memo(function TaskCard({ task, overlay = false }: { task: BoardTask; overlay?: boolean }) {
-  const { users, labels, openTask, selected, toggleSelected } = useBoard();
+  const { users, labels, openTask, selected, toggleSelected, columns, today } = useBoard();
+  const done = columns.find((c) => c.id === task.columnId)?.isDone ?? false;
+  const due = dueStatus(task.dueDate, done, today);
   const assignee = task.assigneeId ? users.find((u) => u.id === task.assigneeId) : null;
   const isSelected = selected.has(task.id);
   const taskLabels = task.labelIds.map((id) => labels.find((l) => l.id === id)).filter((l) => !!l);
@@ -85,12 +88,35 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false }: { task
         </div>
       )}
 
-      <div className="mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
         <TypeBadge type={task.type} />
+        {task.dueDate && (
+          <span
+            className={cn(
+              "inline-flex items-center gap-0.5 rounded px-1 font-medium",
+              due === "overdue" && "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+              (due === "today" || due === "soon") && "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
+              due === "done" && "text-emerald-600",
+            )}
+            title={due === "overdue" ? "Plazo vencido" : "Fecha límite"}
+          >
+            <CalendarClock size={12} /> {due === "today" ? "Hoy" : formatDay(task.dueDate, today)}
+          </span>
+        )}
         {task.hasDescription && <AlignLeft size={13} aria-label="Con descripción" />}
         {task.subtaskTotal > 0 && (
           <span className={cn("inline-flex items-center gap-0.5", task.subtaskDone === task.subtaskTotal && "text-emerald-600")}>
             <CheckSquare size={13} /> {task.subtaskDone}/{task.subtaskTotal}
+          </span>
+        )}
+        {task.commentCount > 0 && (
+          <span className="inline-flex items-center gap-0.5">
+            <MessageSquare size={13} /> {task.commentCount}
+          </span>
+        )}
+        {task.linkCount > 0 && (
+          <span className="inline-flex items-center gap-0.5" title="Documentos de Google">
+            <FileText size={13} /> {task.linkCount}
           </span>
         )}
         {task.attachmentCount > 0 && (

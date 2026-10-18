@@ -7,6 +7,7 @@ import type { TaskTypeValue } from "@/lib/constants";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
+import { MentionTextarea } from "../ui/MentionTextarea";
 import { TypeSelector } from "./TaskDialog";
 import { imageFilesFrom, uploadImage } from "./upload";
 
@@ -27,6 +28,8 @@ export function NewTaskDialog({ initialColumnId, initialFiles, onClose }: Props)
   const [type, setType] = useState<TaskTypeValue>("FEATURE");
   const [columnId, setColumnId] = useState(initialColumnId ?? board.columns[0]?.id ?? "");
   const [assigneeId, setAssigneeId] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [deliverableId, setDeliverableId] = useState("");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<File[]>(initialFiles ?? []);
   const [busy, setBusy] = useState(false);
@@ -46,7 +49,10 @@ export function NewTaskDialog({ initialColumnId, initialFiles, onClose }: Props)
     if (!title.trim() || !columnId) return;
     setBusy(true);
     const res = await board.track(
-      createTask({ projectId: board.project.id, columnId, title, type, description, assigneeId: assigneeId || null }),
+      createTask({
+        projectId: board.project.id, columnId, title, type, description,
+        assigneeId: assigneeId || null, dueDate: dueDate || null, deliverableId: deliverableId || null,
+      }),
     );
     if (!res.ok) {
       setBusy(false);
@@ -98,10 +104,21 @@ export function NewTaskDialog({ initialColumnId, initialFiles, onClose }: Props)
               {board.users.map((u) => <option key={u.id} value={u.id}>{u.id === board.currentUserId ? `${u.name} (yo)` : u.name}</option>)}
             </select>
           </div>
+          <div>
+            <label className="label" htmlFor="nt-due">Fecha límite (opcional)</label>
+            <input id="nt-due" type="date" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          </div>
+          <div>
+            <label className="label" htmlFor="nt-deliverable">Entregable (opcional)</label>
+            <select id="nt-deliverable" className="input" value={deliverableId} onChange={(e) => setDeliverableId(e.target.value)}>
+              <option value="">Sin entregable</option>
+              {board.deliverables.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
         </div>
         <div>
-          <label className="label" htmlFor="nt-desc">Descripción (Markdown, opcional)</label>
-          <textarea id="nt-desc" className="input field-sizing-content min-h-20" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={20000} />
+          <label className="label" htmlFor="nt-desc">Descripción (Markdown, opcional · @persona para avisar)</label>
+          <MentionTextarea id="nt-desc" className="input field-sizing-content min-h-20" value={description} onValueChange={setDescription} users={board.users} maxLength={20000} />
         </div>
         <div>
           <div className="label">Capturas</div>

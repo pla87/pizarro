@@ -5,7 +5,7 @@ import {
   useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { Plus } from "lucide-react";
+import { FileDown, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { moveTask, moveTasks } from "@/actions/tasks";
@@ -145,6 +145,9 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       currentUserId: data.currentUserId,
       columns: sortedColumns,
       labels,
+      deliverables: data.deliverables,
+      google: data.google,
+      today: data.today,
       setLabels,
       taskById,
       upsertTask: (task) =>
@@ -178,7 +181,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       track,
       refresh: () => router.refresh(),
     }),
-    [data.project, data.users, data.currentUserId, sortedColumns, labels, taskById, baseItems, selected, track, router, patchTask],
+    [data.project, data.users, data.currentUserId, data.deliverables, data.google, data.today, sortedColumns, labels, taskById, baseItems, selected, track, router, patchTask],
   );
 
   // --- Movimiento masivo ------------------------------------------------------
@@ -285,7 +288,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         <div className="flex items-center gap-3 px-4 pt-4 pb-2 max-lg:hidden">
           <h1 className="truncate text-lg font-semibold">{data.project.name}</h1>
           <span className="text-sm text-slate-500">{tasks.length} tarjetas</span>
-          <button className="btn-primary ml-auto" onClick={() => setNewTask({})}>
+          <a className="btn-secondary ml-auto" href={`/api/projects/${data.project.id}/report`} target="_blank" rel="noopener">
+            <FileDown size={16} /> Informe PDF
+          </a>
+          <button className="btn-primary" onClick={() => setNewTask({})}>
             <Plus size={16} /> Nueva tarea
           </button>
         </div>

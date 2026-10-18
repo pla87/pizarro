@@ -18,3 +18,23 @@ export const linkUrl = z
   .transform((v) => (v === "" ? null : v))
   .refine((v) => v === null || /^https?:\/\/[^\s]+$/i.test(v), "El enlace debe empezar por http:// o https://")
   .nullable();
+
+/** Fecha de día YYYY-MM-DD (o null para quitarla). */
+export const dayIso = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha no válida.")
+  // Ida y vuelta exacta: rechaza 2026-02-31 (que Date convertiría en 3 de marzo) y años absurdos.
+  .refine((v) => {
+    const d = new Date(`${v}T00:00:00Z`);
+    const year = Number(v.slice(0, 4));
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v && year >= 1900 && year <= 2999;
+  }, "Fecha no válida.")
+  .nullable();
+
+/** Teléfono en formato internacional E.164: +34600111222. */
+export const phoneE164 = z
+  .string()
+  .trim()
+  .transform((v) => v.replace(/[\s()-]/g, ""))
+  .refine((v) => v === "" || /^\+[1-9]\d{7,14}$/.test(v), "Usa el formato internacional, p. ej. +34600111222.")
+  .transform((v) => (v === "" ? null : v));

@@ -10,7 +10,7 @@ import { requireUser } from "@/lib/session";
 import * as v from "@/lib/validation";
 import type { BoardColumn } from "@/lib/types";
 
-const columnSelect = { id: true, name: true, position: true, role: true } as const;
+const columnSelect = { id: true, name: true, position: true, role: true, isDone: true } as const;
 
 async function findColumn(columnId: string) {
   const user = await requireUser();
@@ -54,6 +54,14 @@ export async function setColumnRole(columnId: string, role: string) {
       }
       await tx.column.update({ where: { id: columnId }, data: { role: value } });
     });
+  });
+}
+
+/** Marca si las tarjetas de la columna cuentan como terminadas (informe y plazos). */
+export async function setColumnDone(columnId: string, isDone: boolean) {
+  return runAction(async () => {
+    await findColumn(columnId);
+    await db.column.update({ where: { id: columnId }, data: { isDone: z.boolean().parse(isDone) } });
   });
 }
 
