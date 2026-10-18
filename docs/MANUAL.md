@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.5.0"
+version: "v1.6.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.5.0
+**Versión de la aplicación:** v1.6.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -179,7 +179,7 @@ Desde el menú «⋯» de cada columna:
 
 - **Escritorio (ratón):** arrastra la tarjeta para **reordenarla** dentro de su columna o para llevarla a otra.
 - **Móvil y pantallas táctiles:** cada tarjeta tiene un **asa** (⋮⋮) a la derecha. Arrastrándola se **reordena dentro de la columna**. El resto de la tarjeta sirve para hacer scroll y para abrirla con un toque. En móvil no se arrastra entre columnas: usa la selección múltiple o el selector *Columna* del detalle.
-- **Selección múltiple:** marca la casilla de varias tarjetas. Aparece una barra con:
+- **Selección múltiple:** marca la casilla de varias tarjetas, o la casilla junto al nombre de una columna para **marcar todas sus tarjetas** de una vez (vuelve a pulsarla para desmarcarlas). Aparece una barra («1 seleccionada», «3 seleccionadas») con:
   - **Mover a Siguiente salto…** (la columna con ese rol) y **Mover a…** cualquier otra columna, en la misma fila;
   - **Release con selección**;
   - **Borrar**: pide confirmación y borra las tareas seleccionadas con sus adjuntos.
@@ -189,12 +189,10 @@ Desde el menú «⋯» de cada columna:
 
 1. Prepara tus plantillas en **Mi perfil y plantillas → Plantillas de release notes**. Puedes tener **varias cabeceras** (por ejemplo, «Contexto para IA» o «Para negocio») y **varios pies** (por ejemplo, «Checklist de cierre»), cada uno con su nombre.
 2. En el tablero, pulsa **Generar Release** en la columna *Siguiente salto a producción*.
-3. **Paso 1:** revisa el título, elige la **cabecera** y el **pie** (o «Ninguna») y marca las tareas incluidas. Por defecto están todas las de la columna; si tenías tarjetas seleccionadas, solo esas.
-4. **Paso 2:** se genera el documento: primero el **título**, después la **cabecera**, **una sección por tipo de tarea** (generales y luego los del proyecto) y el **pie**:
+3. **Paso 1:** revisa el título, elige la **cabecera** y el **pie** (o «Ninguna») y marca las tareas incluidas. El título propuesto es `Release AAAA-MM-DD · Proyecto`; si ese día ya hubo releases en el proyecto, lleva el número tras la fecha: `Release AAAA-MM-DD (2) · Proyecto`, `(3)`… El título se guarda en el histórico pero **no forma parte del texto** que se copia o descarga. Por defecto están todas las de la columna; si tenías tarjetas seleccionadas, solo esas.
+4. **Paso 2:** se genera el documento: la **cabecera**, **una sección por tipo de tarea** (generales y luego los del proyecto) y el **pie**:
 
 ```markdown
-## Release 2026-10-18 · Proyecto
-
 <cabecera elegida>
 
 ### Funcionalidad
@@ -215,7 +213,7 @@ Desde el menú «⋯» de cada columna:
 
 5. Edita el texto libremente y alterna entre **Editar** y **Vista previa**. Si cambias la cabecera o el pie en este paso, se sustituyen en el texto sin perder lo que has escrito. Si ya habías modificado ese bloque, el nuevo se añade.
 6. Exporta con **Copiar todo**, **.md** o **.txt** (nombre `release-AAAA-MM-DD`).
-7. **Marcar como desplegado**: elige si las tarjetas pasan a la columna *En producción* o se archivan. El texto final editado queda guardado en el apartado **Releases** del proyecto.
+7. **Marcar como desplegado**: elige si las tarjetas pasan a la columna *En producción* o se archivan. El texto final editado queda guardado en el apartado **Releases** del proyecto, junto con una **copia reducida de los adjuntos** (máximo 960 px de ancho, WebP de calidad 55), con sus nombres de la release, que se conserva aunque luego se borren las tareas.
 
 Las secciones sin tareas se omiten.
 
@@ -262,8 +260,10 @@ Botón **Informe PDF** en la cabecera del tablero (o en el menú lateral). Se ab
 
 ### 3.11 Otras vistas
 
+El menú lateral muestra, debajo de las opciones del proyecto: **Avisos**, **Mis tareas asignadas**, **Mi perfil y plantillas**, **Administración** (solo admins), **Historial de versiones** e **Instalar app**.
+
 - **Mis tareas asignadas:** todas tus tarjetas activas en los proyectos a los que tienes acceso, agrupadas por proyecto y con su columna actual.
-- **Releases:** histórico del proyecto, con opción de copiar o descargar cada release.
+- **Releases:** histórico del proyecto, con opción de copiar o descargar cada release. Cada entrada indica cuántas tareas y adjuntos tiene; al abrirla se ven los nombres de los adjuntos y el botón **Descargar adjuntos** (ZIP).
 - **Historial de versiones:** versión actual de la app y cambios de cada versión.
 
 ### 3.12 Móvil
@@ -282,15 +282,15 @@ Botón **Informe PDF** en la cabecera del tablero (o en el menú lateral). Se ab
 
 ### 3.13 Apariencia
 
-En **Mi perfil y plantillas → Apariencia de las tarjetas**, cada persona elige cómo se ve el color de las tarjetas:
-- **Franja a la izquierda**, el modo por defecto;
-- **Tarjeta entera del color**, con un tono suave para que el texto se siga leyendo.
+En **Mi perfil y plantillas → Apariencia**, cada persona elige:
+- **Tema:** *Sistema* (sigue el modo claro u oscuro del dispositivo, por defecto), *Claro* u *Oscuro*. Se aplica al momento y se recuerda en todos tus dispositivos. Las barras de scroll usan los colores de Pizarro en ambos temas.
+- **Tarjetas:** *Franja a la izquierda* (por defecto) o *Tarjeta entera del color*, con un tono suave para que el texto se siga leyendo.
 
 ### 3.14 Tipos de tarea
 
 Hay dos clases de tipos. Cada tipo es una sección de las release notes.
 
-- **Generales** (solo admins): menú lateral **Tipos de tarea**. Están disponibles en todos los proyectos.
+- **Generales** (solo admins): **Administración → Tipos de tarea**. Están disponibles en todos los proyectos.
 - **Del proyecto** (cualquiera con acceso al proyecto): **Ajustes del proyecto → Tipos de tarea del proyecto**. Solo aparecen en ese proyecto.
 
 En ambos casos:
@@ -300,7 +300,9 @@ En ambos casos:
 - **Nombres:** un tipo de proyecto no puede llamarse igual que un general ni que otro de su proyecto. Dos proyectos sí pueden tener tipos con el mismo nombre. Un tipo general nuevo no puede repetir el nombre de ningún tipo de proyecto.
 - Al borrar un proyecto se borran también sus tipos.
 
-### 3.15 Administración de usuarios (admins)
+### 3.15 Administración (admins)
+
+La entrada **Administración** del menú lateral reúne dos pestañas: **Usuarios** y **Tipos de tarea** (ver 3.14).
 
 - **Usuarios → Nuevo usuario:** nombre, email, contraseña inicial (10 caracteres o más) y rol. Máximo de 5 usuarios activos (configurable con `MAX_USERS`).
 - **Editar:** nombre, email, rol y estado activo. Al desactivar a un usuario o cambiarle el rol se cierran sus sesiones. Un admin no puede quitarse a sí mismo el rol ni desactivarse.
@@ -331,7 +333,7 @@ Consulta la tabla completa en el `README.md`. Las imprescindibles son `DATABASE_
 
 | Situación | Acción |
 |---|---|
-| Alta de un miembro | *Usuarios → Nuevo usuario*. Comunica la contraseña inicial por un canal seguro y pide que la cambie. |
+| Alta de un miembro | *Administración → Usuarios → Nuevo usuario*. Comunica la contraseña inicial por un canal seguro y pide que la cambie. |
 | Baja | *Editar → desmarcar «Usuario activo»*. Sus tareas conservan el historial. |
 | Contraseña olvidada | Un admin usa *Restablecer contraseña*. |
 | Se pierde el acceso de todos los admins | Conéctate a la base de datos y promueve a un usuario existente: `UPDATE "User" SET role='ADMIN' WHERE email='persona@example.com';` |

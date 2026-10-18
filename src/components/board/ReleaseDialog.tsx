@@ -2,9 +2,9 @@
 
 import { ArrowLeft, Check, ClipboardCopy, Download, Eye, FileArchive, FileText, Loader2, Pencil, Rocket } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { deployRelease, getReleaseTaskDetails } from "@/actions/releases";
-import { buildReleaseMarkdown, computeReleaseCodes, isoDate, releaseFileName, swapTemplateBlock } from "@/lib/release";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { countReleasesOn, deployRelease, getReleaseTaskDetails } from "@/actions/releases";
+import { buildReleaseMarkdown, computeReleaseCodes, defaultReleaseTitle, isoDate, releaseFileName, swapTemplateBlock } from "@/lib/release";
 import type { BoardTask, TemplateOption } from "@/lib/types";
 import { copyText, downloadText } from "../ui/clipboard";
 import { cn } from "../ui/cn";
@@ -33,7 +33,9 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
   const toast = useToast();
   const [step, setStep] = useState<"select" | "edit">("select");
   const [chosen, setChosen] = useState<Set<string>>(new Set(preselected));
-  const [title, setTitle] = useState(`Release ${isoDate()} · ${board.project.name}`);
+  const [title, setTitle] = useState(() => defaultReleaseTitle(board.today, board.project.name));
+  /** Si el usuario ya tocó el título, no se sustituye por el ordinal del día. */
+  const titleEdited = useRef(false);
   const [content, setContent] = useState("");
   const [generated, setGenerated] = useState("");
   const [tab, setTab] = useState<"edit" | "preview">("edit");
@@ -85,6 +87,15 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
     </div>
   );
 
+  // Varias releases el mismo día: el título por defecto lleva el ordinal «(2)», «(3)»…
+  useEffect(() => {
+    // Mismo día que usa el servidor (zona horaria de la app) para contar las releases.
+    const day = board.today;
+    countReleasesOn({ projectId: board.project.id, dayIso: day }).then((res) => {
+      if (res.ok && !titleEdited.current) setTitle(defaultReleaseTitle(day, board.project.name, res.data));
+    });
+  }, [board.project.id, board.project.name, board.today]);
+
   const generate = async () => {
     // Descripción y adjuntos no viajan con el tablero: se piden al generar.
     setLoadingDetails(true);
@@ -107,7 +118,6 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
     const md = buildReleaseMarkdown({
       header: templateText(templates.headers, headerId),
       footer: templateText(templates.footers, footerId),
-      title,
       kinds: board.kinds,
       tasks: releaseTasks,
     });
@@ -159,7 +169,14 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
     if (!window.confirm(`Se guardará la release y ${selectedTasks.length} tarjeta(s) pasarán ${target}. ¿Continuar?`)) return;
     setBusy(true);
     const res = await board.track(
-      deployRelease({ projectId: board.project.id, title, content, taskIds: selectedTasks.map((t) => t.id), destination }),
+      deployRelease({
+        projectId: board.project.id,
+        title,
+        content,
+        taskIds: selectedTasks.map((t) => t.id),
+        destination,
+        attachments: zipItems.map(({ taskId, code }) => ({ taskId, code })),
+      }),
     );
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
@@ -217,7 +234,10 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
         <div className="space-y-3">
           <div>
             <label className="label" htmlFor="rel-title">Título de la release</label>
-            <input id="rel-title" className="input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} />
+            <input id="rel-title" className="input" value={title} onChange={(e) => {
+                titleEdited.current = true;
+                setTitle(e.target.value);
+              }} maxLength={200} />
           </div>
           {templatePickers}
           <div className="flex items-center justify-between">

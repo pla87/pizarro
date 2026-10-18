@@ -10,9 +10,73 @@
   --color-brand-700: #4338ca;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
+/*
+ * Tema por usuario: <html data-theme="light|dark">; sin atributo se sigue al sistema.
+ * - data-theme="dark"  -> dark
+ * - data-theme="light" -> claro
+ * - sin atributo       -> prefers-color-scheme
+ */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+}
+
+:root {
+  color-scheme: light dark;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/*
+ * Barras de desplazamiento con los colores de la app. Van en @layer base para que
+ * las utilidades (p. ej. no-scrollbar) las sobrescriban.
+ * Chrome/Safari usan ::-webkit-scrollbar (permite el hover en marca); Firefox, las
+ * propiedades estándar (solo donde no existe el pseudo-elemento, porque en Chrome
+ * scrollbar-color anularía los ::-webkit-scrollbar).
+ */
+@layer base {
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--color-slate-300) transparent;
+    }
+    @variant dark {
+      * {
+        scrollbar-color: var(--color-slate-700) transparent;
+      }
+    }
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--color-slate-300);
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-brand-500);
+  }
+  @variant dark {
+    *::-webkit-scrollbar-thumb {
+      background-color: var(--color-slate-700);
+    }
+    *::-webkit-scrollbar-thumb:hover {
+      background-color: var(--color-brand-500);
+    }
   }
 }
 

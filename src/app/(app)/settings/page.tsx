@@ -27,6 +27,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       name: true,
       email: true,
       cardStyle: true,
+      theme: true,
       notifyEmail: true,
       notifyWhatsapp: true,
       whatsappPhone: true,
@@ -40,6 +41,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       email={row.email}
       templates={await userTemplates(user.id)}
       cardStyle={row.cardStyle}
+      theme={row.theme}
       notifications={{
         notifyEmail: row.notifyEmail,
         notifyWhatsapp: row.notifyWhatsapp,

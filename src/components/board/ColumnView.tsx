@@ -2,7 +2,7 @@
 
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ArrowLeft, ArrowRight, CheckCircle2, MoreHorizontal, Pencil, Plus, Rocket, Tag, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, Minus, MoreHorizontal, Pencil, Plus, Rocket, Tag, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { deleteColumn, moveColumn, renameColumn, setColumnDone, setColumnRole } from "@/actions/columns";
 import { COLUMN_ROLE_LABEL, COLUMN_ROLES, type ColumnRoleValue } from "@/lib/constants";
@@ -22,7 +22,9 @@ interface Props {
 }
 
 export function ColumnView({ column, taskIds, index, total, droppableId, mobileHidden }: Props) {
-  const { openNewTask, openRelease } = useBoard();
+  const { openNewTask, openRelease, selected, setSelectedMany } = useBoard();
+  const selectedHere = taskIds.filter((id) => selected.has(id)).length;
+  const allSelected = taskIds.length > 0 && selectedHere === taskIds.length;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
   const isNextRelease = column.role === "NEXT_RELEASE";
 
@@ -36,6 +38,21 @@ export function ColumnView({ column, taskIds, index, total, droppableId, mobileH
       aria-label={column.name}
     >
       <header className="flex items-center gap-1.5 px-3 pt-2.5 pb-1.5">
+        {taskIds.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setSelectedMany(taskIds, !allSelected)}
+            className={cn(
+              "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+              allSelected || selectedHere ? "border-brand-600 bg-brand-600 text-white" : "border-slate-300 dark:border-slate-600",
+            )}
+            aria-label={allSelected ? `Quitar la selección de «${column.name}»` : `Seleccionar todas las tareas de «${column.name}»`}
+            title={allSelected ? "Quitar selección" : "Seleccionar todas"}
+            aria-pressed={allSelected ? true : selectedHere ? "mixed" : false}
+          >
+            {allSelected ? <Check size={12} strokeWidth={3} /> : selectedHere ? <Minus size={12} strokeWidth={3} /> : null}
+          </button>
+        )}
         <h2 className="min-w-0 truncate text-sm font-semibold" title={column.name}>{column.name}</h2>
         <span className="rounded-full bg-slate-200 px-1.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
           {taskIds.length}

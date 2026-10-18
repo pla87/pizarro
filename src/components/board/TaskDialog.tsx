@@ -148,8 +148,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
       onClose={onClose}
       size="xl"
       placement="top"
-      // Escritorio: altura definida para que cada columna haga scroll por dentro y el diálogo nunca supere el viewport.
-      panelClassName="md:h-[min(46rem,calc(100dvh-2rem))]"
+      // Escritorio: la altura se adapta al contenido (tope = viewport); solo hacen scroll las columnas si hay mucho contenido.
       header={
         <div className="flex items-start gap-2 border-b border-slate-200 px-5 py-3 dark:border-slate-800">
           <textarea
@@ -173,8 +172,8 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
         </div>
       }
     >
-      <div onPaste={onPaste} className="grid gap-6 md:h-full md:grid-cols-[1fr_15rem] md:grid-rows-[minmax(0,1fr)]">
-        <div className="min-w-0 space-y-6 md:min-h-0 md:overflow-y-auto md:pr-2">
+      <div onPaste={onPaste} className="grid gap-6 md:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="min-w-0 space-y-6 md:max-h-[calc(100dvh-9rem)] md:overflow-y-auto md:pr-2">
           <DescriptionEditor
             key={detail ? "loaded" : "loading"}
             users={board.users}
@@ -238,9 +237,9 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
           <Comments taskId={task.id} detail={detail} setDetail={setDetail} users={board.users} onGoogle={createGoogle} />
         </div>
 
-        <aside className="space-y-4 text-sm md:min-h-0 md:overflow-y-auto md:pr-1">
+        <aside className="flex flex-col gap-4 text-sm md:max-h-[calc(100dvh-9rem)] md:gap-2.5 md:overflow-y-auto md:pr-1">
           <Field label="Columna">
-            <select className="input" value={task.columnId} onChange={(e) => changeColumn(e.target.value)}>
+            <select className="input md:py-1.5" value={task.columnId} onChange={(e) => changeColumn(e.target.value)}>
               {board.columns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
@@ -249,7 +248,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
           </Field>
           <Field label="Asignada a (opcional)">
             <select
-              className="input"
+              className="input md:py-1.5"
               value={task.assigneeId ?? ""}
               onChange={(e) => save({ assigneeId: e.target.value || null }, { assigneeId: e.target.value || null })}
             >
@@ -262,7 +261,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
               <input
                 type="date"
                 className={cn(
-                  "input",
+                  "input md:py-1.5",
                   dueStatus(task.dueDate, board.columns.find((c) => c.id === task.columnId)?.isDone ?? false, board.today) === "overdue" &&
                     "border-red-400 text-red-700 dark:text-red-300",
                 )}
@@ -274,7 +273,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
                 }}
               />
               {task.dueDate && (
-                <button className="btn-icon h-9 w-9 shrink-0" onClick={() => save({ dueDate: null }, { dueDate: null })} aria-label="Quitar fecha límite">
+                <button className="btn-icon h-9 w-9 shrink-0 md:h-8 md:w-8" onClick={() => save({ dueDate: null }, { dueDate: null })} aria-label="Quitar fecha límite">
                   <X size={15} />
                 </button>
               )}
@@ -282,7 +281,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
           </Field>
           <Field label="Entregable">
             <select
-              className="input"
+              className="input md:py-1.5"
               value={task.deliverableId ?? ""}
               onChange={(e) => save({ deliverableId: e.target.value || null }, { deliverableId: e.target.value || null })}
             >
@@ -291,10 +290,13 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
             </select>
           </Field>
           <Field label="Color">
-            <ColorPicker value={task.color} onChange={(color) => save({ color: color as never }, { color })} />
+            {/* Escritorio: swatches más pequeños y juntos para que quepan en una sola fila. */}
+            <div className="md:[&>div]:gap-1 md:[&_button]:h-[22px] md:[&_button]:w-[22px]">
+              <ColorPicker value={task.color} onChange={(color) => save({ color: color as never }, { color })} />
+            </div>
           </Field>
           <Field label="Etiquetas">
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-1.5 md:gap-1">
               {board.labels.map((l) => {
                 const on = task.labelIds.includes(l.id);
                 return (
@@ -321,7 +323,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
           <Field label="Enlace externo (PR, commit, issue)">
             <div className="flex gap-1">
               <input
-                className="input"
+                className="input md:py-1.5"
                 type="url"
                 inputMode="url"
                 placeholder="https://…"
@@ -331,7 +333,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
                 onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
               />
               {task.linkUrl && (
-                <a href={task.linkUrl} target="_blank" rel="noopener noreferrer nofollow" className="btn-icon h-9 w-9 shrink-0" aria-label="Abrir enlace">
+                <a href={task.linkUrl} target="_blank" rel="noopener noreferrer nofollow" className="btn-icon h-9 w-9 shrink-0 md:h-8 md:w-8" aria-label="Abrir enlace">
                   <ExternalLink size={16} />
                 </a>
               )}
@@ -342,7 +344,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
               Creada {detail.createdByName ? `por ${detail.createdByName} ` : ""}el {new Date(detail.createdAt).toLocaleDateString("es-ES")}
             </p>
           )}
-          <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+          <div className="mt-auto flex flex-wrap gap-2 border-t border-slate-200 pt-4 md:gap-1 md:pt-2.5 dark:border-slate-800">
             <button className="btn-secondary py-1.5" onClick={archive}><Archive size={15} /> Archivar</button>
             <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> Borrar</button>
           </div>
@@ -368,7 +370,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="label">{label}</div>
+      <div className="label md:mb-0.5">{label}</div>
       {children}
     </div>
   );

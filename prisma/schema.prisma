@@ -31,6 +31,8 @@ model User {
   active         Boolean   @default(true)
   /// Aspecto de las tarjetas: franja de color a la izquierda o tarjeta entera teñida.
   cardStyle      CardStyle @default(STRIPE)
+  /// Tema de la interfaz: SYSTEM sigue al sistema operativo.
+  theme          Theme     @default(SYSTEM)
   /// Preferencias de aviso de menciones.
   notifyEmail    Boolean   @default(true)
   notifyWhatsapp Boolean   @default(false)
@@ -207,8 +209,23 @@ model Release {
   project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy   User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
   tasks       ReleaseTask[]
+  attachments ReleaseAttachment[]
 
   @@index([projectId, deployedAt])
+}
+
+/// Copia reducida de un adjunto incluido en una release, con su nombre ya renombrado
+/// (`F1_captura.webp`). Se guarda en UPLOAD_DIR/releases/<id>.webp y sobrevive al borrado de la tarea.
+model ReleaseAttachment {
+  id        String   @id @default(cuid())
+  releaseId String
+  fileName  String
+  size      Int
+  position  Int
+  createdAt DateTime @default(now())
+  release   Release  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+
+  @@index([releaseId])
 }
 
 /// Instantánea de cada tarea incluida en una release (se conserva aunque la tarea se borre).
@@ -343,6 +360,12 @@ model TaskKind {
 enum CardStyle {
   STRIPE
   FILLED
+}
+
+enum Theme {
+  SYSTEM
+  LIGHT
+  DARK
 }
 
 enum TemplateKind {

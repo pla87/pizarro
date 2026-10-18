@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
@@ -64,6 +65,16 @@ export async function updateCardStyle(style: "STRIPE" | "FILLED") {
   return runAction(async () => {
     const user = await requireUser();
     await db.user.update({ where: { id: user.id }, data: { cardStyle: z.enum(["STRIPE", "FILLED"]).parse(style) } });
+  });
+}
+
+/** Tema de color del usuario: SYSTEM sigue al sistema operativo. */
+export async function updateTheme(theme: "SYSTEM" | "LIGHT" | "DARK") {
+  return runAction(async () => {
+    const user = await requireUser();
+    await db.user.update({ where: { id: user.id }, data: { theme: z.enum(["SYSTEM", "LIGHT", "DARK"]).parse(theme) } });
+    // El atributo data-theme se pinta en el layout raíz.
+    revalidatePath("/", "layout");
   });
 }
 

@@ -29,6 +29,8 @@ export interface BoardApi {
   openRelease: (columnId: string) => void;
   selected: Set<string>;
   toggleSelected: (id: string) => void;
+  /** Marca (o desmarca) de golpe varias tareas, p. ej. todas las de una columna. */
+  setSelectedMany: (ids: string[], on: boolean) => void;
   /** Marca una mutación en curso (evita que un refresco pise el estado optimista). */
   track: <T>(p: Promise<T>) => Promise<T>;
   refresh: () => void;

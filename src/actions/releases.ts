@@ -1,13 +1,17 @@
 "use server";
 
+import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertProjectAccess } from "@/lib/access";
 import { MAX_RELEASE_CONTENT } from "@/lib/constants";
+import { appTimeZone } from "@/lib/board";
 import { AppError } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
+import { attachmentFileNames, zonedDayRange } from "@/lib/release";
 import { requireUser } from "@/lib/session";
+import { attachmentPath, compactImage, saveReleaseAttachmentFile } from "@/lib/uploads";
 import * as v from "@/lib/validation";
 
 const deploySchema = z.object({
@@ -16,6 +20,8 @@ const deploySchema = z.object({
   content: z.string().min(1, "El contenido está vacío.").max(MAX_RELEASE_CONTENT, "El contenido es demasiado largo."),
   taskIds: z.array(v.id).max(500),
   destination: z.enum(["IN_PRODUCTION", "ARCHIVE"]),
+  /** Tareas con adjuntos y su código en el texto (F1, C2…), en el orden del diálogo. */
+  attachments: z.array(z.object({ taskId: v.id, code: z.string().regex(/^[A-Z]{1,4}\d{1,4}$/) })).max(200).optional(),
 });
 
 /**
@@ -65,7 +71,57 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
       }
       return { releaseId: release.id, moved, archived: target ? [] : tasks.map((t) => t.id) };
     });
+    // Copias compactas de los adjuntos para el histórico; si algo falla se omite, el despliegue ya está hecho.
+    if (data.attachments?.length) {
+      await saveReleaseAttachments(result.releaseId, data.attachments, new Set(tasks.map((t) => t.id))).catch((err) =>
+        console.error("[releases] no se pudieron guardar los adjuntos", err),
+      );
+    }
     return result;
+  });
+}
+
+async function saveReleaseAttachments(releaseId: string, items: { taskId: string; code: string }[], allowed: Set<string>) {
+  const valid = items.filter((i) => allowed.has(i.taskId));
+  if (new Set(valid.map((i) => i.taskId)).size !== valid.length || new Set(valid.map((i) => i.code)).size !== valid.length) return;
+  const tasks = await db.task.findMany({
+    where: { id: { in: valid.map((i) => i.taskId) } },
+    select: { id: true, attachments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, originalName: true } } },
+  });
+  const byId = new Map(tasks.map((t) => [t.id, t.attachments]));
+  let position = 0;
+  for (const item of valid) {
+    const attachments = byId.get(item.taskId) ?? [];
+    const names = attachmentFileNames(item.code, attachments);
+    for (const [i, att] of attachments.entries()) {
+      let rowId: string | null = null;
+      try {
+        const data = await compactImage(await readFile(attachmentPath(att.id, "full")));
+        const row = await db.releaseAttachment.create({
+          data: { releaseId, fileName: names[i]!, size: data.length, position: position++ },
+          select: { id: true },
+        });
+        rowId = row.id;
+        await saveReleaseAttachmentFile(row.id, data);
+      } catch (err) {
+        // Fichero ausente o ilegible: se omite; si ya había fila, se retira para no dejarla sin fichero.
+        console.error("[releases] adjunto omitido", err);
+        if (rowId) await db.releaseAttachment.delete({ where: { id: rowId } }).catch(() => {});
+      }
+    }
+  }
+}
+
+const countSchema = z.object({ projectId: v.id, dayIso: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
+
+/** Releases desplegadas en el proyecto durante el día local indicado (zona horaria de la app). */
+export async function countReleasesOn(input: z.input<typeof countSchema>) {
+  return runAction(async (): Promise<number> => {
+    const user = await requireUser();
+    const data = countSchema.parse(input);
+    await assertProjectAccess(user, data.projectId);
+    const { start, end } = zonedDayRange(data.dayIso, appTimeZone());
+    return db.release.count({ where: { projectId: data.projectId, deployedAt: { gte: start, lt: end } } });
   });
 }
 

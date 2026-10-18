@@ -2,7 +2,7 @@
 
 import {
   Bell, ChevronsUpDown, FileDown, FolderKanban, History, LayoutDashboard, ListChecks, LogOut, Menu, Plus, Rocket,
-  Settings, SlidersHorizontal, Tags, Users, X,
+  Settings, Shield, SlidersHorizontal, X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -151,10 +151,9 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
           )}
         </NavLink>
         <NavLink href="/my-tasks" icon={ListChecks} active={pathname === "/my-tasks"}>Mis tareas asignadas</NavLink>
-        <NavLink href="/changelog" icon={History} active={pathname === "/changelog"}>Historial de versiones</NavLink>
         <NavLink href="/settings" icon={Settings} active={pathname === "/settings"}>Mi perfil y plantillas</NavLink>
-        {isAdmin && <NavLink href="/admin/users" icon={Users} active={pathname.startsWith("/admin/users")}>Usuarios</NavLink>}
-        {isAdmin && <NavLink href="/admin/types" icon={Tags} active={pathname.startsWith("/admin/types")}>Tipos de tarea</NavLink>}
+        {isAdmin && <NavLink href="/admin" icon={Shield} active={pathname.startsWith("/admin")}>Administración</NavLink>}
+        <NavLink href="/changelog" icon={History} active={pathname === "/changelog"}>Historial de versiones</NavLink>
         <InstallApp />
       </nav>
 

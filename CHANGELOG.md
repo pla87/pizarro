@@ -2,6 +2,33 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.6.0 — 2026-10-18
+
+Tema claro u oscuro por usuario, sección de Administración, marcar una columna entera, releases numeradas por día con adjuntos en el histórico y modal de tarea compacto.
+
+### Nuevas funcionalidades
+
+- Tema por usuario en Mi perfil → Apariencia: Sistema, Claro u Oscuro.
+- Marcar o desmarcar todas las tareas de una columna con la casilla junto a su nombre.
+- Histórico de releases con adjuntos: al desplegar se guarda una copia reducida (960 px, WebP 55) con los nombres de la release, descargable en ZIP desde Releases.
+
+### Mejoras
+
+- Sección única de Administración (Usuarios y Tipos de tarea) y nuevo orden del menú lateral: Avisos, Mis tareas asignadas, Mi perfil y plantillas, Administración, Historial de versiones, Instalar app.
+- Detalle de tarea en escritorio: se ve entero sin scroll, con la columna lateral más ancha y compacta y los botones Archivar y Borrar siempre visibles.
+- Releases del mismo día numeradas tras la fecha: «Release 2026-10-18 (2) · Proyecto».
+- Barras de scroll con los colores de Pizarro en ambos temas.
+
+### Correcciones
+
+- Barra de selección en escritorio en una sola línea; dice «1 seleccionada» / «N seleccionadas».
+- El título de la release ya no aparece en el texto para copiar; se guarda solo en el histórico.
+
+### Cambios técnicos / DB
+
+- Migración v1_6: User.theme (enum Theme) y tabla ReleaseAttachment (copias en UPLOAD_DIR/releases); al borrar un proyecto se borran también esos ficheros.
+- Variante dark de Tailwind por atributo data-theme con respaldo prefers-color-scheme.
+
 ## v1.5.0 — 2026-10-18
 
 Pizarro (nuevo nombre), releases con códigos, descripciones y adjuntos en ZIP, visor de imágenes, borrado en grupo, botón atrás y mejoras en móvil.

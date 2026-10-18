@@ -99,3 +99,35 @@ export async function removeAttachmentFiles(ids: string[]): Promise<void> {
     ids.flatMap((id) => [rm(attachmentPath(id, "full"), { force: true }), rm(attachmentPath(id, "thumb"), { force: true })]),
   ).catch((err) => console.error("[uploads] no se pudieron borrar ficheros", err));
 }
+
+// --- Copias compactas de adjuntos para el histórico de releases -----------------
+
+/** Los ids son cuid; ficheros en UPLOAD_DIR/releases/<id>.webp. */
+export function releaseAttachmentPath(id: string): string {
+  if (!/^[a-z0-9]+$/i.test(id)) throw new AppError("Identificador no válido.");
+  return path.join(/*turbopackIgnore: true*/ uploadDir(), "releases", `${id}.webp`);
+}
+
+/** Reduce un WebP ya guardado a 960px de ancho máximo, calidad ~55, sin metadatos. */
+export async function compactImage(input: Buffer): Promise<Buffer> {
+  await acquire();
+  try {
+    return await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS, animated: false })
+      .resize({ width: 960, withoutEnlargement: true })
+      .webp({ quality: 55, effort: 4 })
+      .toBuffer();
+  } finally {
+    release();
+  }
+}
+
+export async function saveReleaseAttachmentFile(id: string, data: Buffer): Promise<void> {
+  await mkdir(path.dirname(releaseAttachmentPath(id)), { recursive: true });
+  await writeAtomic(releaseAttachmentPath(id), data);
+}
+
+export async function removeReleaseAttachmentFiles(ids: string[]): Promise<void> {
+  await Promise.all(ids.map((id) => rm(releaseAttachmentPath(id), { force: true }))).catch((err) =>
+    console.error("[uploads] no se pudieron borrar ficheros de releases", err),
+  );
+}

@@ -26,10 +26,10 @@ export function UsersAdmin({ users, meId, maxUsers }: { users: UserRow[]; meId: 
   const activeCount = users.filter((u) => u.active).length;
 
   return (
-    <div className="mx-auto max-w-3xl p-4 md:p-6">
-      <div className="mb-6 flex flex-wrap items-center gap-3">
+    <div>
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Usuarios</h1>
+          <h2 className="text-lg font-semibold">Usuarios</h2>
           <p className="text-sm text-slate-500">{activeCount} de {maxUsers} usuarios activos. No hay registro público: solo un administrador puede dar de alta usuarios.</p>
         </div>
         <button className="btn-primary ml-auto" onClick={() => setCreating(true)} disabled={activeCount >= maxUsers}>
