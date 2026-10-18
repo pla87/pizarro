@@ -1,23 +1,26 @@
 "use client";
 
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { Bell, Check, Eye, Link2, Palette, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Bell, Check, Eye, Link2, Monitor, Moon, Palette, Pencil, Plus, Sun, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
   changePassword, createReleaseTemplate, deleteReleaseTemplate, disconnectGoogle, updateCardStyle, updateNotificationPrefs,
-  updateProfileName, updateReleaseTemplate,
+  updateProfileName, updateReleaseTemplate, updateTheme,
 } from "@/actions/profile";
 import { cn } from "@/components/ui/cn";
 import { Markdown } from "@/components/ui/Markdown";
 import { useToast } from "@/components/ui/Toast";
 import type { CardStyleValue, TemplateOption } from "@/lib/types";
 
+type ThemeValue = "SYSTEM" | "LIGHT" | "DARK";
+
 interface Props {
   name: string;
   email: string;
   templates: { headers: TemplateOption[]; footers: TemplateOption[] };
   cardStyle: CardStyleValue;
+  theme: ThemeValue;
   notifications: {
     notifyEmail: boolean;
     notifyWhatsapp: boolean;
@@ -50,7 +53,7 @@ export function ProfileSettings(props: Props) {
         <TemplateList kind="FOOTER" title="Pies" initial={props.templates.footers} placeholder={"Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción"} />
       </section>
 
-      <AppearanceSection initial={props.cardStyle} />
+      <AppearanceSection initial={props.cardStyle} initialTheme={props.theme} />
       <GoogleSection google={props.google} />
       <NotificationSection prefs={props.notifications} />
 
@@ -307,7 +310,14 @@ function TemplateList({ kind, title, initial, placeholder }: { kind: "HEADER" | 
   );
 }
 
-function AppearanceSection({ initial }: { initial: CardStyleValue }) {
+/** Aplica el tema al instante en <html>; el servidor lo vuelve a pintar tras revalidar. */
+function applyTheme(value: ThemeValue) {
+  const root = document.documentElement;
+  if (value === "SYSTEM") root.removeAttribute("data-theme");
+  else root.setAttribute("data-theme", value.toLowerCase());
+}
+
+function AppearanceSection({ initial, initialTheme }: { initial: CardStyleValue; initialTheme: ThemeValue }) {
   const router = useRouter();
   const toast = useToast();
   const [style, setStyle] = useState(initial);
@@ -320,10 +330,42 @@ function AppearanceSection({ initial }: { initial: CardStyleValue }) {
     }
     router.refresh();
   };
+  const [theme, setTheme] = useState(initialTheme);
+  const chooseTheme = async (value: ThemeValue) => {
+    const previous = theme;
+    setTheme(value);
+    applyTheme(value);
+    const res = await updateTheme(value);
+    if (!res.ok) {
+      setTheme(previous);
+      applyTheme(previous);
+      return toast(res.error, "error");
+    }
+    router.refresh();
+  };
   const sample = "#6366f1";
   return (
     <section className="card p-5">
-      <h2 className="flex items-center gap-2 font-semibold"><Palette size={17} /> Apariencia de las tarjetas</h2>
+      <h2 className="flex items-center gap-2 font-semibold"><Palette size={17} /> Apariencia</h2>
+      <h3 className="mt-4 text-sm font-semibold">Tema</h3>
+      <p className="mt-0.5 text-sm text-slate-500">«Sistema» sigue el modo claro u oscuro de tu dispositivo.</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        {([
+          ["SYSTEM", "Sistema", Monitor],
+          ["LIGHT", "Claro", Sun],
+          ["DARK", "Oscuro", Moon],
+        ] as const).map(([value, label, Icon]) => (
+          <button
+            key={value}
+            onClick={() => chooseTheme(value)}
+            className={cn("flex items-center gap-2 rounded-xl border-2 p-3 text-left text-sm", theme === value ? "border-brand-500" : "border-slate-200 dark:border-slate-700")}
+            aria-pressed={theme === value}
+          >
+            <Icon size={16} /> {label}
+          </button>
+        ))}
+      </div>
+      <h3 className="mt-6 text-sm font-semibold">Tarjetas</h3>
       <p className="mt-0.5 text-sm text-slate-500">Cómo se muestra el color de cada tarjeta en el tablero.</p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {([

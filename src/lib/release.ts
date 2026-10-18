@@ -26,7 +26,6 @@ export interface ReleaseTaskInput {
 export interface ReleaseInput {
   header: string;
   footer: string;
-  title: string;
   /** Tipos en el orden en que deben aparecer las secciones. */
   kinds: ReleaseKind[];
   tasks: ReleaseTaskInput[];
@@ -149,21 +148,21 @@ function buildSections(input: Pick<ReleaseInput, "kinds" | "tasks">): string[] {
   return parts;
 }
 
-/** Cuerpo de la release (título + una sección por tipo), sin cabecera ni pie. */
-export function buildReleaseBody(input: Omit<ReleaseInput, "header" | "footer">): string {
-  return [`## ${input.title.trim()}`, ...buildSections(input)].join("\n\n");
+/** Cuerpo de la release (una sección por tipo), sin cabecera ni pie. */
+export function buildReleaseBody(input: Pick<ReleaseInput, "kinds" | "tasks">): string {
+  return buildSections(input).join("\n\n");
 }
 
-/** Orden: título, cabecera, secciones, pie. */
+/** Orden: cabecera, secciones, pie. El título de la release no forma parte del texto. */
 export function buildReleaseMarkdown(input: ReleaseInput): string {
   const header = input.header.trim();
   const footer = input.footer.trim();
-  return [`## ${input.title.trim()}`, header, ...buildSections(input), footer].filter(Boolean).join("\n\n") + "\n";
+  return [header, ...buildSections(input), footer].filter(Boolean).join("\n\n") + "\n";
 }
 
 /**
  * Cambia la cabecera (o el pie) de un texto ya editado: si el bloque anterior sigue
- * intacto se sustituye; si no, el nuevo se añade justo después del título `## ` (o al final).
+ * intacto se sustituye; si no, el nuevo se añade al principio (cabecera) o al final (pie).
  */
 export function swapTemplateBlock(text: string, previous: string, next: string, where: "start" | "end"): string {
   const prev = previous.trim();
@@ -187,14 +186,51 @@ export function swapTemplateBlock(text: string, previous: string, next: string, 
   }
   if (!nxt) return text;
   if (where === "start") {
-    // Sin cabecera previa: va justo debajo del título (primera línea «## »).
-    const title = /^## .*$/m.exec(text);
-    if (!title) return `${nxt}\n\n${text.replace(/^\s+/, "")}`;
-    const end = title.index + title[0].length;
-    const rest = text.slice(end).replace(/^\s+/, "");
-    return `${text.slice(0, end)}\n\n${nxt}\n${rest ? `\n${rest}` : ""}`;
+    const rest = text.replace(/^\s+/, "");
+    return rest ? `${nxt}\n\n${rest}` : `${nxt}\n`;
   }
   return `${text.replace(/\s+$/, "")}\n\n${nxt}\n`;
+}
+
+/**
+ * Título por defecto: «Release 2026-10-18 · Proyecto». Si ya hay releases desplegadas ese día,
+ * se indica el ordinal tras la fecha: «Release 2026-10-18 (2) · Proyecto».
+ */
+export function defaultReleaseTitle(dayIso: string, projectName: string, releasesToday = 0): string {
+  const n = Math.max(0, Math.floor(releasesToday)) + 1;
+  return `Release ${dayIso}${n > 1 ? ` (${n})` : ""} · ${projectName}`;
+}
+
+/** Instantes UTC [inicio, fin) del día local `dayIso` (YYYY-MM-DD) en la zona horaria dada. */
+export function zonedDayRange(dayIso: string, timeZone: string): { start: Date; end: Date } {
+  const [y, m, d] = dayIso.split("-").map(Number) as [number, number, number];
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric",
+  });
+  const midnight = (yy: number, mm: number, dd: number) => {
+    const wall = Date.UTC(yy, mm - 1, dd);
+    // Se afina dos veces por si el desfase cambia (horario de verano) cerca de la medianoche.
+    let guess = wall;
+    for (let i = 0; i < 2; i++) {
+      const p = Object.fromEntries(fmt.formatToParts(new Date(guess)).map((x) => [x.type, Number(x.value)]));
+      const shown = Date.UTC(p.year!, p.month! - 1, p.day!, p.hour!, p.minute!, p.second!);
+      guess -= shown - wall;
+    }
+    return new Date(guess);
+  };
+  const next = new Date(Date.UTC(y, m - 1, d + 1));
+  return { start: midnight(y, m, d), end: midnight(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate()) };
+}
+
+/** Nombre del ZIP de adjuntos del histórico: título saneado + «-adjuntos.zip». */
+export function releaseZipName(title: string): string {
+  const base = title
+    .replace(/\s+/g, "_")
+    .replace(/[^\p{L}\p{N}._-]/gu, "_")
+    .replace(/_{2,}/g, "_")
+    .replace(/^[_.-]+|[_.-]+$/g, "")
+    .slice(0, 80);
+  return `${base || "release"}-adjuntos.zip`;
 }
 
 /** Fecha local en formato YYYY-MM-DD. */

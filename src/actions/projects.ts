@@ -9,7 +9,7 @@ import { DEFAULT_COLUMNS, PALETTE } from "@/lib/constants";
 import { AppError, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
 import { requireAdmin, requireUser } from "@/lib/session";
-import { removeAttachmentFiles } from "@/lib/uploads";
+import { removeAttachmentFiles, removeReleaseAttachmentFiles } from "@/lib/uploads";
 import * as v from "@/lib/validation";
 import { dateToIso, isoToDate } from "@/lib/dates";
 import type { LabelOption } from "@/lib/types";
@@ -64,11 +64,14 @@ export async function deleteProject(projectId: string, confirmName: string) {
     if (!project) throw notFound();
     if (project.name !== confirmName) throw new AppError("El nombre no coincide.");
     const attachments = await db.taskAttachment.findMany({ where: { task: { projectId } }, select: { id: true } });
+    // Las copias de los adjuntos de sus releases se borran en cascada: se leen antes sus ids.
+    const releaseAttachments = await db.releaseAttachment.findMany({ where: { release: { projectId } }, select: { id: true } });
     await db.$transaction([
       db.task.deleteMany({ where: { projectId } }),
       db.project.delete({ where: { id: projectId } }),
     ]);
     await removeAttachmentFiles(attachments.map((a) => a.id));
+    await removeReleaseAttachmentFiles(releaseAttachments.map((a) => a.id));
     revalidatePath("/", "layout");
   });
 }

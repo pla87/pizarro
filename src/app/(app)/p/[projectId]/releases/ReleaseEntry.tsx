@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ClipboardCopy, Download } from "lucide-react";
+import { ChevronDown, ClipboardCopy, Download, FileArchive } from "lucide-react";
 import { useState } from "react";
 import { copyText, downloadText } from "@/components/ui/clipboard";
 import { cn } from "@/components/ui/cn";
@@ -9,7 +9,7 @@ import { useToast } from "@/components/ui/Toast";
 import { releaseFileName } from "@/lib/release";
 
 interface Props {
-  release: { id: string; title: string; content: string; deployedAt: string; author: string | null; taskCount: number };
+  release: { id: string; title: string; content: string; deployedAt: string; author: string | null; taskCount: number; attachments: string[] };
 }
 
 export function ReleaseEntry({ release }: Props) {
@@ -23,7 +23,8 @@ export function ReleaseEntry({ release }: Props) {
           <h2 className="truncate font-medium">{release.title}</h2>
           <p className="text-xs text-slate-500">
             {date.toLocaleString("es-ES", { dateStyle: "medium", timeStyle: "short" })}
-            {release.author && ` · ${release.author}`} · {release.taskCount} tarea(s)
+            {release.author && ` · ${release.author}`} · {release.taskCount === 1 ? "1 tarea" : `${release.taskCount} tareas`}
+            {release.attachments.length > 0 && ` · ${release.attachments.length === 1 ? "1 adjunto" : `${release.attachments.length} adjuntos`}`}
           </p>
         </div>
         <ChevronDown size={18} className={cn("shrink-0 text-slate-400 transition-transform", open && "rotate-180")} />
@@ -41,6 +42,17 @@ export function ReleaseEntry({ release }: Props) {
               <Download size={15} /> .txt
             </button>
           </div>
+          {release.attachments.length > 0 && (
+            <div className="mb-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium">Adjuntos ({release.attachments.length})</span>
+                <a className="btn-secondary ml-auto py-1.5" href={`/api/releases/${release.id}/attachments`} download>
+                  <FileArchive size={15} /> Descargar adjuntos
+                </a>
+              </div>
+              <p className="mt-1 break-words text-xs text-slate-500">{release.attachments.join(", ")}</p>
+            </div>
+          )}
           <Markdown>{release.content}</Markdown>
         </div>
       )}

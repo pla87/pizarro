@@ -4,9 +4,12 @@ import {
   attachmentFileNames,
   buildReleaseMarkdown,
   computeReleaseCodes,
+  defaultReleaseTitle,
   formatReleaseLine,
   releaseFileName,
+  releaseZipName,
   swapTemplateBlock,
+  zonedDayRange,
 } from "../src/lib/release";
 
 const kinds = [
@@ -19,7 +22,6 @@ test("una sección por tipo, en el orden de los tipos, con cabecera y pie", () =
   const md = buildReleaseMarkdown({
     header: "CABECERA",
     footer: "PIE",
-    title: "Release X",
     kinds,
     tasks: [
       { id: "t1", title: "Fix 1", kindId: "k2" },
@@ -29,9 +31,9 @@ test("una sección por tipo, en el orden de los tipos, con cabecera y pie", () =
     ],
   });
   const lines = md.trim().split("\n");
-  // Orden: título, cabecera, secciones, pie.
-  assert.equal(lines[0], "## Release X");
-  assert.equal(lines[2], "CABECERA");
+  // Orden: cabecera, secciones, pie (sin título).
+  assert.equal(lines[0], "CABECERA");
+  assert.ok(!/^## /m.test(md));
   assert.equal(lines.at(-1), "PIE");
   const idx = (s: string) => lines.indexOf(s);
   assert.ok(idx("### Funcionalidad") < idx("### Corrección") && idx("### Corrección") < idx("### Infraestructura"));
@@ -40,10 +42,10 @@ test("una sección por tipo, en el orden de los tipos, con cabecera y pie", () =
 
 test("omite secciones vacías y plantillas vacías; tipos desconocidos van a «Otros»", () => {
   assert.equal(
-    buildReleaseMarkdown({ header: "  ", footer: "", title: "R", kinds, tasks: [{ id: "a", title: "Solo fix", kindId: "k2" }] }),
-    "## R\n\n### Corrección\n- **C1** · Solo fix\n",
+    buildReleaseMarkdown({ header: "  ", footer: "", kinds, tasks: [{ id: "a", title: "Solo fix", kindId: "k2" }] }),
+    "### Corrección\n- **C1** · Solo fix\n",
   );
-  assert.match(buildReleaseMarkdown({ header: "", footer: "", title: "R", kinds, tasks: [{ id: "a", title: "x", kindId: "borrado" }] }), /### Otros\n- \*\*O1\*\* · x/);
+  assert.match(buildReleaseMarkdown({ header: "", footer: "", kinds, tasks: [{ id: "a", title: "x", kindId: "borrado" }] }), /### Otros\n- \*\*O1\*\* · x/);
 });
 
 test("escapa corchetes y normaliza espacios del título", () => {
@@ -51,16 +53,40 @@ test("escapa corchetes y normaliza espacios del título", () => {
 });
 
 test("cambiar de cabecera o pie en un texto ya editado", () => {
-  const text = "## R\n\nCAB A\n\nnota mía\n\nPIE A\n";
-  assert.equal(swapTemplateBlock(text, "CAB A", "CAB B", "start"), "## R\n\nCAB B\n\nnota mía\n\nPIE A\n");
-  assert.equal(swapTemplateBlock(text, "PIE A", "PIE B", "end"), "## R\n\nCAB A\n\nnota mía\n\nPIE B\n");
-  // Quitar la cabecera deja exactamente una línea en blanco entre título y cuerpo.
-  assert.equal(swapTemplateBlock(text, "CAB A", "", "start"), "## R\n\nnota mía\n\nPIE A\n");
-  assert.equal(swapTemplateBlock(text, "PIE A", "", "end"), "## R\n\nCAB A\n\nnota mía\n");
-  // Si el bloque anterior ya no está (lo editó el usuario), el nuevo va justo bajo el título.
-  assert.equal(swapTemplateBlock("## R\n", "CAB A", "CAB B", "start"), "## R\n\nCAB B\n");
-  assert.equal(swapTemplateBlock("## R\n\n### Fun\n- x\n", "", "CAB B", "start"), "## R\n\nCAB B\n\n### Fun\n- x\n");
-  assert.equal(swapTemplateBlock("## R\n", "", "PIE B", "end"), "## R\n\nPIE B\n");
+  const text = "CAB A\n\nnota mía\n\nPIE A\n";
+  assert.equal(swapTemplateBlock(text, "CAB A", "CAB B", "start"), "CAB B\n\nnota mía\n\nPIE A\n");
+  assert.equal(swapTemplateBlock(text, "PIE A", "PIE B", "end"), "CAB A\n\nnota mía\n\nPIE B\n");
+  // Quitar la cabecera no deja líneas en blanco al principio.
+  assert.equal(swapTemplateBlock(text, "CAB A", "", "start"), "nota mía\n\nPIE A\n");
+  assert.equal(swapTemplateBlock(text, "PIE A", "", "end"), "CAB A\n\nnota mía\n");
+  // Si no hay cabecera previa (o el usuario la editó), la nueva va al principio del texto.
+  assert.equal(swapTemplateBlock("### Fun\n- x\n", "", "CAB B", "start"), "CAB B\n\n### Fun\n- x\n");
+  assert.equal(swapTemplateBlock("\n\n### Fun\n", "CAB A", "CAB B", "start"), "CAB B\n\n### Fun\n");
+  assert.equal(swapTemplateBlock("", "", "CAB B", "start"), "CAB B\n");
+  assert.equal(swapTemplateBlock("### Fun\n", "", "PIE B", "end"), "### Fun\n\nPIE B\n");
+});
+
+test("título por defecto con ordinal si ya hay releases ese día", () => {
+  assert.equal(defaultReleaseTitle("2026-10-18", "Proyecto"), "Release 2026-10-18 · Proyecto");
+  assert.equal(defaultReleaseTitle("2026-10-18", "Proyecto", 0), "Release 2026-10-18 · Proyecto");
+  assert.equal(defaultReleaseTitle("2026-10-18", "Proyecto", 1), "Release 2026-10-18 (2) · Proyecto");
+  assert.equal(defaultReleaseTitle("2026-10-18", "Proyecto", 2), "Release 2026-10-18 (3) · Proyecto");
+});
+
+test("rango del día local en una zona horaria", () => {
+  // Madrid en octubre: CEST (UTC+2).
+  const r = zonedDayRange("2026-10-18", "Europe/Madrid");
+  assert.equal(r.start.toISOString(), "2026-10-17T22:00:00.000Z");
+  assert.equal(r.end.toISOString(), "2026-10-18T22:00:00.000Z");
+  // Día del cambio a horario de invierno: dura 25 h.
+  const dst = zonedDayRange("2026-10-25", "Europe/Madrid");
+  assert.equal(dst.start.toISOString(), "2026-10-24T22:00:00.000Z");
+  assert.equal(dst.end.toISOString(), "2026-10-25T23:00:00.000Z");
+});
+
+test("nombre del ZIP del histórico", () => {
+  assert.equal(releaseZipName("Release 2026-10-18 (2) · Proyecto"), "Release_2026-10-18_2_Proyecto-adjuntos.zip");
+  assert.equal(releaseZipName("///"), "release-adjuntos.zip");
 });
 
 test("códigos: prefijo por tipo, colisiones y numeración por tipo", () => {
@@ -95,7 +121,6 @@ test("descripción sangrada con menciones y adjuntos renombrados", () => {
   const md = buildReleaseMarkdown({
     header: "",
     footer: "",
-    title: "R",
     kinds,
     tasks: [
       {
@@ -110,7 +135,7 @@ test("descripción sangrada con menciones y adjuntos renombrados", () => {
   });
   assert.equal(
     md,
-    "## R\n\n### Funcionalidad\n- **F1** · Feat\n  Adjuntos: F1_captura.webp, F1_captura-2.webp, F1_Vista_Árbol__1_.webp\n  Hola @Ana\n\n  - punto\n- **F2** · Sin nada\n",
+    "### Funcionalidad\n- **F1** · Feat\n  Adjuntos: F1_captura.webp, F1_captura-2.webp, F1_Vista_Árbol__1_.webp\n  Hola @Ana\n\n  - punto\n- **F2** · Sin nada\n",
   );
 });
 

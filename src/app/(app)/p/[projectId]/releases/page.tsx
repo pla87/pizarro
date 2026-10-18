@@ -24,6 +24,7 @@ export default async function ReleasesPage({ params }: { params: Promise<{ proje
           deployedAt: true,
           createdBy: { select: { name: true } },
           _count: { select: { tasks: true } },
+          attachments: { orderBy: { position: "asc" }, select: { fileName: true } },
         },
       },
     },
@@ -51,6 +52,7 @@ export default async function ReleasesPage({ params }: { params: Promise<{ proje
                 deployedAt: r.deployedAt.toISOString(),
                 author: r.createdBy?.name ?? null,
                 taskCount: r._count.tasks,
+                attachments: r.attachments.map((a) => a.fileName),
               }}
             />
           ))}

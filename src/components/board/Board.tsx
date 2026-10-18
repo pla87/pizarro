@@ -216,6 +216,15 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         setRelease({ taskIds: ids, preselected: pre.length ? pre : ids });
       },
       selected,
+      setSelectedMany: (ids, on) =>
+        setSelected((prev) => {
+          const next = new Set(prev);
+          for (const id of ids) {
+            if (on) next.add(id);
+            else next.delete(id);
+          }
+          return next;
+        }),
       toggleSelected: (id) =>
         setSelected((prev) => {
           const next = new Set(prev);
@@ -248,7 +257,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const server = new Map(res.data.moved.map((m) => [m.id, m.position]));
     setTasks((prev) => prev.map((t) => (server.has(t.id) ? { ...t, columnId, position: server.get(t.id)! } : t)));
     const name = sortedColumns.find((c) => c.id === columnId)?.name;
-    toast(`${res.data.moved.length} tarjeta(s) movidas a «${name}»`);
+    toast(`${res.data.moved.length === 1 ? "1 tarjeta movida" : `${res.data.moved.length} tarjetas movidas`} a «${name}»`);
   };
 
   const deleteSelected = async () => {
@@ -263,7 +272,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       setTasks(snapshot);
       return toast(res.error, "error");
     }
-    toast(`${res.data.deleted} tarea(s) borradas`);
+    toast(res.data.deleted === 1 ? "1 tarea borrada" : `${res.data.deleted} tareas borradas`);
   };
 
   // --- Columna visible en móvil e historial -----------------------------------

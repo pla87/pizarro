@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { getCurrentUser } from "@/lib/session";
 
 export const metadata: Metadata = {
   title: { default: "Pizarro", template: "%s · Pizarro" },
@@ -20,9 +21,12 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Sin sesión (p. ej. /login) o tema SYSTEM no hay atributo: se sigue al sistema operativo.
+  const user = await getCurrentUser();
+  const theme = user?.theme === "LIGHT" ? "light" : user?.theme === "DARK" ? "dark" : undefined;
   return (
-    <html lang="es">
+    <html lang="es" data-theme={theme}>
       <body>{children}</body>
     </html>
   );
