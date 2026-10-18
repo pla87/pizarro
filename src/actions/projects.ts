@@ -15,7 +15,7 @@ import { dateToIso, isoToDate } from "@/lib/dates";
 import type { LabelOption } from "@/lib/types";
 
 export async function createProject(name: string) {
-  return runAction(async () => {
+  return runAction({ name: "projects.createProject", args: [name] }, async () => {
     await requireAdmin();
     const last = await db.project.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
     const project = await db.project.create({
@@ -32,7 +32,7 @@ export async function createProject(name: string) {
 }
 
 export async function updateProject(projectId: string, input: { name: string; description: string }) {
-  return runAction(async () => {
+  return runAction({ name: "projects.updateProject", args: [projectId, input] }, async () => {
     await requireAdmin();
     const data = z.object({ name: v.name, description: z.string().max(2000) }).parse(input);
     await db.project.update({ where: { id: v.id.parse(projectId) }, data });
@@ -42,7 +42,7 @@ export async function updateProject(projectId: string, input: { name: string; de
 
 /** restricted=false: todos los usuarios ven el proyecto. true: solo admins y memberIds. */
 export async function setProjectVisibility(projectId: string, restricted: boolean, memberIds: string[]) {
-  return runAction(async () => {
+  return runAction({ name: "projects.setProjectVisibility", args: [projectId, restricted, memberIds] }, async () => {
     await requireAdmin();
     const id = v.id.parse(projectId);
     const ids = [...new Set(z.array(v.id).max(50).parse(memberIds))];
@@ -58,7 +58,7 @@ export async function setProjectVisibility(projectId: string, restricted: boolea
 }
 
 export async function deleteProject(projectId: string, confirmName: string) {
-  return runAction(async () => {
+  return runAction({ name: "projects.deleteProject", args: [projectId, confirmName] }, async () => {
     await requireAdmin();
     const project = await db.project.findUnique({ where: { id: v.id.parse(projectId) }, select: { name: true } });
     if (!project) throw notFound();
@@ -81,7 +81,7 @@ export async function deleteProject(projectId: string, confirmName: string) {
 const labelSchema = z.object({ name: v.name.max(40, "Máximo 40 caracteres."), color: z.enum(PALETTE) });
 
 export async function createLabel(projectId: string, input: { name: string; color: string }) {
-  return runAction(async (): Promise<LabelOption> => {
+  return runAction({ name: "projects.createLabel", args: [projectId, input] }, async (): Promise<LabelOption> => {
     const user = await requireUser();
     await assertProjectAccess(user, v.id.parse(projectId));
     const data = labelSchema.parse(input);
@@ -102,7 +102,7 @@ async function findLabel(labelId: string) {
 }
 
 export async function updateLabel(labelId: string, input: { name: string; color: string }) {
-  return runAction(async () => {
+  return runAction({ name: "projects.updateLabel", args: [labelId, input] }, async () => {
     const label = await findLabel(labelId);
     const data = labelSchema.parse(input);
     const dup = await db.label.count({ where: { projectId: label.projectId, name: data.name, id: { not: label.id } } });
@@ -112,7 +112,7 @@ export async function updateLabel(labelId: string, input: { name: string; color:
 }
 
 export async function deleteLabel(labelId: string) {
-  return runAction(async () => {
+  return runAction({ name: "projects.deleteLabel", args: [labelId] }, async () => {
     const label = await findLabel(labelId);
     await db.label.delete({ where: { id: label.id } });
   });
@@ -127,7 +127,7 @@ const deliverableSchema = z.object({
 });
 
 export async function createDeliverable(projectId: string, input: z.input<typeof deliverableSchema>) {
-  return runAction(async () => {
+  return runAction({ name: "projects.createDeliverable", args: [projectId, input] }, async () => {
     const user = await requireUser();
     await assertProjectAccess(user, v.id.parse(projectId));
     const data = deliverableSchema.parse(input);
@@ -151,7 +151,7 @@ async function findDeliverable(deliverableId: string) {
 }
 
 export async function updateDeliverable(deliverableId: string, input: z.input<typeof deliverableSchema>) {
-  return runAction(async () => {
+  return runAction({ name: "projects.updateDeliverable", args: [deliverableId, input] }, async () => {
     const d = await findDeliverable(deliverableId);
     const data = deliverableSchema.parse(input);
     await db.deliverable.update({
@@ -163,7 +163,7 @@ export async function updateDeliverable(deliverableId: string, input: z.input<ty
 
 /** Las tarjetas del entregable no se borran: quedan sin entregable. */
 export async function deleteDeliverable(deliverableId: string) {
-  return runAction(async () => {
+  return runAction({ name: "projects.deleteDeliverable", args: [deliverableId] }, async () => {
     const d = await findDeliverable(deliverableId);
     await db.deliverable.delete({ where: { id: d.id } });
   });

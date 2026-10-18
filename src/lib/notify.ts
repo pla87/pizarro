@@ -2,6 +2,7 @@ import "server-only";
 import { after } from "next/server";
 import nodemailer from "nodemailer";
 import { db } from "./db";
+import { logEvent } from "./log";
 import { excerpt as makeExcerpt } from "./mentions";
 import { rateLimit } from "./rate-limit";
 
@@ -94,7 +95,7 @@ async function deliver(notificationIds: string[]): Promise<void> {
     select: {
       id: true,
       excerpt: true,
-      user: { select: { email: true, active: true, notifyEmail: true, notifyWhatsapp: true, whatsappPhone: true } },
+      user: { select: { id: true, name: true, email: true, active: true, notifyEmail: true, notifyWhatsapp: true, whatsappPhone: true } },
       actor: { select: { name: true } },
       task: { select: { id: true, title: true, project: { select: { id: true, name: true } } } },
     },
@@ -110,20 +111,27 @@ async function deliver(notificationIds: string[]): Promise<void> {
     };
     const update: { emailSentAt?: Date; whatsappSentAt?: Date; deliveryError?: string } = {};
     const errors: string[] = [];
+    const base = { category: "notify", userId: n.user.id, userName: n.user.name, projectId: n.task.project.id };
     if (emailEnabled() && n.user.notifyEmail) {
+      const t0 = performance.now();
       try {
         await mailer().sendMail({ from: process.env.SMTP_FROM, to: n.user.email, ...mentionEmail(msg) });
         update.emailSentAt = new Date();
+        logEvent({ ...base, action: "notify.email", message: `Email de mención enviado a ${n.user.name}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId: n.task.id, to: n.user.email } });
       } catch (err) {
         errors.push(`email: ${(err as Error).message}`);
+        logEvent({ ...base, level: "error", action: "notify.emailFailed", message: `Fallo al enviar email a ${n.user.name}: ${(err as Error).message}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId: n.task.id, to: n.user.email } });
       }
     }
     if (whatsappEnabled() && n.user.notifyWhatsapp && n.user.whatsappPhone) {
+      const t0 = performance.now();
       try {
         await sendWhatsapp(n.user.whatsappPhone, msg);
         update.whatsappSentAt = new Date();
+        logEvent({ ...base, action: "notify.whatsapp", message: `WhatsApp de mención enviado a ${n.user.name}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId: n.task.id } });
       } catch (err) {
         errors.push((err as Error).message);
+        logEvent({ ...base, level: "error", action: "notify.whatsappFailed", message: `Fallo al enviar WhatsApp a ${n.user.name}: ${(err as Error).message}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId: n.task.id } });
       }
     }
     if (errors.length) {
@@ -165,6 +173,11 @@ export async function notifyMentions(opts: {
   });
   const createdIds = created.map((c) => c.id);
   const external = await externalAllowed(opts.actorId, opts.taskId, recipients.map((r) => r.id), createdIds);
+  logEvent({
+    category: "notify", action: "notify.mentions", message: `${createdIds.length} aviso(s) de mención creados (${external.size} con envío externo)`,
+    userId: opts.actorId, projectId: opts.projectId,
+    details: { taskId: opts.taskId, recipients: recipients.map((r) => r.id), externalRecipients: [...external] },
+  });
   const toDeliver = created.filter((_, i) => external.has(recipients[i]!.id)).map((c) => c.id);
   if (toDeliver.length) after(() => deliver(toDeliver).catch((err) => console.error("[notify] envío", err)));
   return createdIds.length;

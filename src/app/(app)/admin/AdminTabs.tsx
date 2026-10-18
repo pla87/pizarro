@@ -7,6 +7,7 @@ import { cn } from "@/components/ui/cn";
 const TABS = [
   { href: "/admin/users", label: "Usuarios" },
   { href: "/admin/types", label: "Tipos de tarea" },
+  { href: "/admin/logs", label: "Logs" },
 ];
 
 /** Pestañas de la sección de administración; la activa se deduce de la ruta. */

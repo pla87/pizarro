@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  Bell, ChevronsUpDown, FileDown, FolderKanban, History, LayoutDashboard, ListChecks, LogOut, Menu, Plus, Rocket,
+  Archive, Bell, ChevronsUpDown, FileDown, FolderKanban, History, LayoutDashboard, ListChecks, LogOut, Menu, Plus, Rocket,
   Settings, Shield, SlidersHorizontal, X,
 } from "lucide-react";
 import Link from "next/link";
@@ -141,6 +141,7 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
               <FileDown size={17} /> Informe PDF
             </a>
             <NavLink href={`/p/${current.id}/settings`} icon={SlidersHorizontal} active={pathname.startsWith(`/p/${current.id}/settings`)}>Ajustes del proyecto</NavLink>
+            <NavLink href={`/p/${current.id}?archivadas=1`} icon={Archive} active={false}>Archivadas</NavLink>
             <div className="my-3 border-t border-slate-200 dark:border-slate-800" />
           </>
         )}

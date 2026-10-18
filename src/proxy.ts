@@ -15,7 +15,14 @@ export function proxy(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  const res = NextResponse.next();
+  // El servidor no conoce la ruta de la petición: se la pasamos en una cabecera para los logs.
+  // Solo GET (las acciones POST re-renderizan la página pero no son visitas) y sin precargas.
+  const headers = new Headers(req.headers);
+  headers.delete("x-pz-path");
+  if (req.method === "GET" && !pathname.startsWith("/api/") && !req.headers.get("next-router-prefetch") && !req.headers.get("purpose")) {
+    headers.set("x-pz-path", pathname + search);
+  }
+  const res = NextResponse.next({ request: { headers } });
   if (req.method === "GET" && !pathname.startsWith("/api/")) {
     res.cookies.set(sessionCookieName(), token, sessionCookieOptions());
   }

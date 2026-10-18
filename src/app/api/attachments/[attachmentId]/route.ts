@@ -3,6 +3,8 @@ import { stat } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { db } from "@/lib/db";
 import { visibleProjectsWhere } from "@/lib/access";
+import { logEvent } from "@/lib/log";
+import { clientIp } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 import { attachmentPath } from "@/lib/uploads";
 
@@ -17,7 +19,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ attachmentId: s
 
   const attachment = await db.taskAttachment.findFirst({
     where: { id: attachmentId, task: { project: visibleProjectsWhere(user) } },
-    select: { id: true, originalName: true },
+    select: { id: true, originalName: true, taskId: true },
   });
   if (!attachment) return new Response("No encontrado", { status: 404 });
 
@@ -30,6 +32,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ attachmentId: s
     return new Response("Archivo no disponible", { status: 404 });
   }
   const download = new URL(req.url).searchParams.has("download");
+  // Las miniaturas son demasiadas: solo se registran las imágenes completas.
+  if (!thumb) {
+    logEvent({
+      category: "api", action: download ? "attachments.download" : "attachments.view", message: `${download ? "Descarga" : "Vista"} de «${attachment.originalName}»`,
+      userId: user.id, userName: user.name, path: new URL(req.url).pathname, ip: clientIp(req.headers), details: { attachmentId: attachment.id, taskId: attachment.taskId, size },
+    });
+  }
   const filename = encodeURIComponent(attachment.originalName.replace(/\.[^.]+$/, "") + ".webp");
   const stream = Readable.toWeb(createReadStream(file)) as ReadableStream;
   return new Response(stream, {

@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "./db";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { AppError } from "./errors";
+import { logEvent } from "./log";
 
 // Integración con Google Drive mediante OAuth por usuario.
 // Permiso mínimo: drive.file (solo los archivos que crea la propia app).
@@ -139,6 +140,7 @@ async function accessToken(userId: string): Promise<string> {
     // Permiso revocado o caducado: se elimina la conexión para que el usuario reconecte.
     if ((err as { googleError?: string }).googleError === "invalid_grant") {
       await db.googleAccount.delete({ where: { userId } }).catch(() => {});
+      logEvent({ level: "warn", category: "google", action: "google.tokenRevoked", message: "Permiso de Google revocado o caducado: conexión eliminada", userId });
       throw reconnectError();
     }
     throw err;
@@ -161,9 +163,11 @@ export async function createDriveFile(userId: string, kind: GoogleFileKind, name
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     console.error("[google] Error al crear archivo", res.status, json?.error?.message);
+    logEvent({ level: "error", category: "google", action: "google.createFileFailed", message: `Google Drive rechazó crear «${name}» (HTTP ${res.status})`, userId, details: { kind, status: res.status, error: json?.error?.message } });
     throw new AppError(res.status === 403 ? "Google ha denegado la creación del archivo (revisa que la API de Drive esté activada)." : "No se pudo crear el archivo en Google Drive.");
   }
   const file = { id: String(json.id), name: String(json.name), url: String(json.webViewLink) };
+  logEvent({ category: "google", action: "google.createFile", message: `Archivo de Google (${kind}) creado: «${file.name}»`, userId, details: { kind, fileId: file.id } });
   await shareFile(token, file.id);
   return file;
 }
@@ -184,7 +188,10 @@ async function shareFile(token: string, fileId: string): Promise<void> {
     signal: AbortSignal.timeout(10_000),
   }).catch(() => null);
   // Si la política del Workspace lo impide, el archivo sigue creado: solo se registra.
-  if (!res?.ok) console.error("[google] No se pudo compartir el archivo con el dominio", res?.status);
+  if (!res?.ok) {
+    console.error("[google] No se pudo compartir el archivo con el dominio", res?.status);
+    logEvent({ level: "warn", category: "google", action: "google.shareFailed", message: `No se pudo compartir el archivo con el dominio (HTTP ${res?.status ?? "sin respuesta"})`, details: { fileId, status: res?.status ?? null } });
+  }
 }
 
 export async function disconnectGoogleAccount(userId: string): Promise<void> {

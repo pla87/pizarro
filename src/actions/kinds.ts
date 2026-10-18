@@ -59,7 +59,7 @@ function revalidate(projectId: string | null) {
 
 /** Crea un tipo general (sin projectId, solo admins) o exclusivo del proyecto indicado. */
 export async function createKind(input: { name: string; color: string }, projectId?: string | null) {
-  return runAction(async () => {
+  return runAction({ name: "kinds.createKind", args: [input, projectId] }, async () => {
     const scope = projectId ? v.id.parse(projectId) : null;
     await authorize(scope);
     const data = kindSchema.parse(input);
@@ -76,7 +76,7 @@ export async function createKind(input: { name: string; color: string }, project
 }
 
 export async function updateKind(kindId: string, input: { name: string; color: string }) {
-  return runAction(async () => {
+  return runAction({ name: "kinds.updateKind", args: [kindId, input] }, async () => {
     const kind = await loadKind(kindId);
     const data = kindSchema.parse(input);
     await assertUniqueName(data.name, kind.projectId, kind.id);
@@ -87,7 +87,7 @@ export async function updateKind(kindId: string, input: { name: string; color: s
 
 /** Mueve el tipo una posición arriba (-1) o abajo (+1) dentro de su ámbito: cambia el orden de las secciones de la release. */
 export async function moveKind(kindId: string, direction: number) {
-  return runAction(async () => {
+  return runAction({ name: "kinds.moveKind", args: [kindId, direction] }, async () => {
     const kind = await loadKind(kindId);
     const dir = z.union([z.literal(-1), z.literal(1)]).parse(direction);
     const kinds = await db.taskKind.findMany({
@@ -109,7 +109,7 @@ export async function moveKind(kindId: string, direction: number) {
  * (siempre queda al menos uno); el de un tipo de proyecto, general o de ese mismo proyecto.
  */
 export async function deleteKind(kindId: string, replacementId: string) {
-  return runAction(async () => {
+  return runAction({ name: "kinds.deleteKind", args: [kindId, replacementId] }, async () => {
     const kind = await loadKind(kindId);
     const replacement = v.id.parse(replacementId);
     if (kind.id === replacement) throw new AppError("Elige otro tipo para las tareas.");

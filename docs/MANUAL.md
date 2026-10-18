@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.6.0"
+version: "v1.7.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.6.0
+**Versión de la aplicación:** v1.7.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -147,7 +147,6 @@ Además, `Task` tiene `dueDate` (fecha límite, solo día), `Column` tiene `isDo
   - nombre y descripción (admins);
   - **visibilidad** (admins): *Visible para todos* o *Solo los usuarios seleccionados*. Los administradores siempre ven todos los proyectos;
   - etiquetas;
-  - tarjetas archivadas, con opción de restaurarlas;
   - borrado del proyecto (admins; pide escribir el nombre para confirmar).
 
 ### 3.3 Columnas
@@ -172,7 +171,8 @@ Desde el menú «⋯» de cada columna:
 - **Editar:** haz clic en la tarjeta. Los cambios se guardan solos (título y enlace al salir del campo; tipo, color, responsable, etiquetas y columna al cambiarlos). La descripción admite Markdown (Ctrl/⌘+Enter guarda).
 - **Checklist:** añade elementos y márcalos. La tarjeta muestra el progreso (p. ej. `2/4`).
 - **Capturas:** pega con Ctrl/⌘+V dentro del diálogo, o usa *Añadir* para elegir un archivo. Al tocar o hacer clic en una imagen se ve **a pantalla completa**; se cierra con la **X**, tocando fuera de la imagen, con Escape o con el botón atrás. Con varias imágenes, las flechas pasan de una a otra. En móvil también tienes el botón **Cámara**, al crear la tarea y en el detalle de una tarea existente. Cada imagen se reduce a 1280 px de ancho como máximo y se guarda como WebP (calidad 75).
-- **Archivar** oculta la tarjeta del tablero (se puede restaurar). **Borrar** la elimina con sus adjuntos.
+- **Archivar** oculta la tarjeta del tablero (desde su detalle o, para varias, con **Archivar** en la barra de selección). **Borrar** la elimina con sus adjuntos.
+- **Archivadas:** botón en la cabecera del tablero (escritorio) o entrada **Archivadas** del menú lateral. Abre un listado con filtro de las tareas archivadas: tipo, fecha, columna de la que salieron y, si pasaron por una release, la etiqueta **En release: …**. **Recuperar** la devuelve al final de la columna en la que estaba; si esa columna ya no existe, a la primera columna del proyecto (Backlog).
 - En escritorio, el detalle de la tarjeta cabe entero en la pantalla: la columna principal y la lateral se desplazan cada una por su lado.
 
 ### 3.5 Mover tarjetas
@@ -263,7 +263,7 @@ Botón **Informe PDF** en la cabecera del tablero (o en el menú lateral). Se ab
 El menú lateral muestra, debajo de las opciones del proyecto: **Avisos**, **Mis tareas asignadas**, **Mi perfil y plantillas**, **Administración** (solo admins), **Historial de versiones** e **Instalar app**.
 
 - **Mis tareas asignadas:** todas tus tarjetas activas en los proyectos a los que tienes acceso, agrupadas por proyecto y con su columna actual.
-- **Releases:** histórico del proyecto, con opción de copiar o descargar cada release. Cada entrada indica cuántas tareas y adjuntos tiene; al abrirla se ven los nombres de los adjuntos y el botón **Descargar adjuntos** (ZIP).
+- **Releases:** histórico del proyecto, con opción de copiar o descargar cada release, y de **Borrar release** (la quita del histórico con sus adjuntos; las tareas no cambian) o **Borrar adjuntos** (conserva el texto). Ambas piden confirmación. Cada entrada indica cuántas tareas y adjuntos tiene; al abrirla se ven los nombres de los adjuntos y el botón **Descargar adjuntos** (ZIP).
 - **Historial de versiones:** versión actual de la app y cambios de cada versión.
 
 ### 3.12 Móvil
@@ -296,13 +296,21 @@ Hay dos clases de tipos. Cada tipo es una sección de las release notes.
 En ambos casos:
 - **Nuevo tipo:** nombre y color (de la paleta o cualquier otro con el selector de color).
 - Las flechas cambian el **orden**. En los selectores y en la release van primero los generales y después los del proyecto, cada grupo en su orden.
+- **Tipo especial «Respuesta»:** si existe un tipo llamado así (general o del proyecto), al elegirlo en una tarea el título pasa a ser «Respuesta» y la descripción empieza por «Respondo a las preguntas y lo que necesitas de mi:». No se aplica en *Varias tareas*.
 - **Borrar** un tipo pide a qué tipo pasan sus tareas. Un tipo general solo puede pasar a otro general, y siempre queda al menos uno. Un tipo de proyecto puede pasar a un general o a otro del mismo proyecto.
 - **Nombres:** un tipo de proyecto no puede llamarse igual que un general ni que otro de su proyecto. Dos proyectos sí pueden tener tipos con el mismo nombre. Un tipo general nuevo no puede repetir el nombre de ningún tipo de proyecto.
 - Al borrar un proyecto se borran también sus tipos.
 
 ### 3.15 Administración (admins)
 
-La entrada **Administración** del menú lateral reúne dos pestañas: **Usuarios** y **Tipos de tarea** (ver 3.14).
+La entrada **Administración** del menú lateral reúne tres pestañas: **Usuarios**, **Tipos de tarea** (ver 3.14) y **Logs**.
+
+**Logs:** registro detallado de la actividad de los últimos 7 días (configurable con `LOG_RETENTION_DAYS`):
+- páginas visitadas, inicios de sesión (también los fallidos, con el email probado y el motivo, nunca la contraseña) y cierres de sesión;
+- cada acción (crear, mover, editar, archivar, borrar, desplegar…) con quién, cuándo, desde qué página, cuánto tardó, el resultado y sus datos (sin contraseñas ni tokens);
+- subidas y descargas de adjuntos, informes PDF, ZIP de releases, conexiones con Google, envíos de email y WhatsApp, arranques de la app y errores del servidor.
+
+Se filtra por periodo (1 h, 24 h, 7 días), nivel (Info, Aviso, Error), categoría, usuario y texto. Cada fila se despliega para ver los detalles y la IP. **Descargar CSV** exporta el filtro actual (hasta 20 000 filas). Los registros antiguos se borran solos.
 
 - **Usuarios → Nuevo usuario:** nombre, email, contraseña inicial (10 caracteres o más) y rol. Máximo de 5 usuarios activos (configurable con `MAX_USERS`).
 - **Editar:** nombre, email, rol y estado activo. Al desactivar a un usuario o cambiarle el rol se cierran sus sesiones. Un admin no puede quitarse a sí mismo el rol ni desactivarse.
@@ -369,7 +377,8 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 ### 4.8 Monitorización
 
 - **Salud:** `GET /api/health` → `{"status":"ok"}` si la base de datos responde.
-- **Logs:** en Railway, *Deployments → View logs*. Los errores inesperados del servidor se registran con el prefijo `[action]`, `[upload]` o `[uploads]`.
+- **Logs de la app:** *Administración → Logs* (ver 3.15), con la duración de cada acción: es el primer sitio donde mirar si algo va lento o falla.
+- **Logs del contenedor:** en Railway, *Deployments → View logs*. Los errores inesperados también salen ahí con el prefijo `[action]`, `[upload]` o `[uploads]`.
 - **Uso del volumen:** visible en la pestaña del volumen. Como referencia, una captura típica ocupa entre 50 y 300 KB.
 
 ### 4.9 Resolución de problemas
@@ -389,6 +398,7 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 | «Tu conexión con Google ha caducado» | Permiso revocado o `SESSION_SECRET` rotado | Vuelve a conectar en *Mi perfil*. |
 | No llegan los emails | Credenciales SMTP o contraseña de aplicación incorrectas | Revisa los logs `[notify]` y la columna `deliveryError`. |
 | No llegan los WhatsApp | Plantilla sin aprobar, idioma distinto, token caducado o número no verificado (número de prueba) | Revisa los logs `[notify]`, el estado de la plantilla y `WHATSAPP_TEMPLATE_LANG`. |
+| Las páginas tardan en cargar a veces | Servicio en una región lejana, *App Sleeping* activado o conexiones a la base de datos frías | En Railway: pon la app y Postgres en la misma región cercana (p. ej. *EU West*) y desactiva *Serverless / App Sleeping*. Revisa en *Logs* la duración de las acciones. |
 | El informe no marca una tarjeta como hecha | Su columna no cuenta como terminada | Menú «⋯» de la columna → *Contar como terminada*. |
 
 ---

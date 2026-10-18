@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertAssignable, assertProjectAccess, assertTaskAccess, visibleProjectsWhere } from "@/lib/access";
@@ -15,7 +16,7 @@ import { isoToDate } from "@/lib/dates";
 import { createDriveFile, type GoogleFileKind } from "@/lib/google";
 import { extractMentionIds } from "@/lib/mentions";
 import { notifyMentions } from "@/lib/notify";
-import type { CommentInfo, SubtaskInfo, TaskDetail, TaskLinkInfo } from "@/lib/types";
+import type { ArchivedTask, CommentInfo, SubtaskInfo, TaskDetail, TaskLinkInfo } from "@/lib/types";
 
 async function assertColumnInProject(columnId: string, projectId: string) {
   const ok = await db.column.count({ where: { id: columnId, projectId } });
@@ -68,7 +69,7 @@ const createSchema = z.object({
 });
 
 export async function createTask(input: z.input<typeof createSchema>) {
-  return runAction(async () => {
+  return runAction({ name: "tasks.createTask", args: [input] }, async () => {
     const user = await requireUser();
     const data = createSchema.parse(input);
     await assertProjectAccess(user, data.projectId);
@@ -113,7 +114,7 @@ const createManySchema = z.object({
 
 /** Crea varias tareas a la vez (una por línea pegada), al final de la columna y en el orden recibido. */
 export async function createTasks(input: z.input<typeof createManySchema>) {
-  return runAction(async () => {
+  return runAction({ name: "tasks.createTasks", args: [input] }, async () => {
     const user = await requireUser();
     const data = createManySchema.parse(input);
     await assertProjectAccess(user, data.projectId);
@@ -166,7 +167,7 @@ const updateSchema = z.object({
 });
 
 export async function updateTask(taskId: string, patch: z.input<typeof updateSchema>) {
-  return runAction(async () => {
+  return runAction({ name: "tasks.updateTask", args: [taskId, patch] }, async () => {
     const user = await requireUser();
     const data = updateSchema.parse(patch);
     const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
@@ -212,7 +213,7 @@ async function neighbourPositions(columnId: string, prevId: string | null, nextI
 
 /** Mueve una tarjeta entre dos vecinas (por id) de la columna destino. */
 export async function moveTask(taskId: string, columnId: string, prevId: string | null, nextId: string | null) {
-  return runAction(async () => {
+  return runAction({ name: "tasks.moveTask", args: [taskId, columnId, prevId, nextId] }, async () => {
     const user = await requireUser();
     const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
     await assertColumnInProject(v.id.parse(columnId), projectId);
@@ -229,7 +230,7 @@ export async function moveTask(taskId: string, columnId: string, prevId: string 
 
 /** Mueve varias tarjetas al final de una columna, conservando su orden relativo. */
 export async function moveTasks(taskIds: string[], columnId: string) {
-  return runAction(async () => {
+  return runAction({ name: "tasks.moveTasks", args: [taskIds, columnId] }, async () => {
     const user = await requireUser();
     const ids = z.array(v.id).min(1).max(500).parse(taskIds);
     const column = await db.column.findFirst({
@@ -251,15 +252,59 @@ export async function moveTasks(taskIds: string[], columnId: string) {
 }
 
 export async function archiveTask(taskId: string) {
-  return runAction(async () => {
+  return runAction({ name: "tasks.archiveTask", args: [taskId] }, async () => {
     const user = await requireUser();
-    await assertTaskAccess(user, v.id.parse(taskId));
-    await db.task.update({ where: { id: taskId }, data: { archivedAt: new Date() } });
+    const { columnId } = await assertTaskAccess(user, v.id.parse(taskId));
+    await db.task.update({ where: { id: taskId }, data: { archivedAt: new Date(), archivedFromColumnId: columnId } });
   });
 }
 
+/** Archiva varias tareas (selección múltiple), recordando la columna de la que salen. */
+export async function archiveTasks(taskIds: string[]) {
+  return runAction({ name: "tasks.archiveTasks", args: [taskIds] }, async () => {
+    const user = await requireUser();
+    const ids = [...new Set(z.array(v.id).min(1).max(500).parse(taskIds))];
+    const tasks = await db.task.findMany({ where: { id: { in: ids }, project: visibleProjectsWhere(user) }, select: { id: true } });
+    if (tasks.length !== ids.length) throw notFound();
+    await db.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId" WHERE "id" IN (${Prisma.join(ids)}) AND "archivedAt" IS NULL`;
+    return { archived: ids.length };
+  });
+}
+
+/** Tareas archivadas del proyecto, las más recientes primero. */
+export async function getArchivedTasks(projectId: string) {
+  return runAction({ name: "tasks.getArchivedTasks", args: [projectId] }, async (): Promise<ArchivedTask[]> => {
+    const user = await requireUser();
+    await assertProjectAccess(user, v.id.parse(projectId));
+    const rows = await db.task.findMany({
+      where: { projectId, archivedAt: { not: null } },
+      orderBy: { archivedAt: "desc" },
+      take: 500,
+      select: {
+        id: true,
+        title: true,
+        kindId: true,
+        archivedAt: true,
+        archivedFromColumnId: true,
+        releases: { select: { release: { select: { id: true, title: true, deployedAt: true } } } },
+      },
+    });
+    const columns = await db.column.findMany({ where: { projectId }, select: { id: true, name: true } });
+    const names = new Map(columns.map((c) => [c.id, c.name]));
+    return rows.map((t) => ({
+      id: t.id,
+      title: t.title,
+      kindId: t.kindId,
+      archivedAt: t.archivedAt!.toISOString(),
+      columnName: (t.archivedFromColumnId && names.get(t.archivedFromColumnId)) || null,
+      releases: t.releases
+        .map((r) => ({ id: r.release.id, title: r.release.title, deployedAt: r.release.deployedAt.toISOString() }))
+        .sort((a, b) => b.deployedAt.localeCompare(a.deployedAt)),
+    }));
+  });
+}
 export async function deleteTask(taskId: string) {
-  return runAction(async () => {
+  return runAction({ name: "tasks.deleteTask", args: [taskId] }, async () => {
     const user = await requireUser();
     await assertTaskAccess(user, v.id.parse(taskId));
     const attachments = await db.taskAttachment.findMany({ where: { taskId }, select: { id: true } });
@@ -270,7 +315,7 @@ export async function deleteTask(taskId: string) {
 
 /** Borra varias tareas (selección múltiple) con sus adjuntos. Solo las que el usuario puede ver. */
 export async function deleteTasks(taskIds: string[]) {
-  return runAction(async () => {
+  return runAction({ name: "tasks.deleteTasks", args: [taskIds] }, async () => {
     const user = await requireUser();
     const ids = [...new Set(z.array(v.id).min(1).max(500).parse(taskIds))];
     const tasks = await db.task.findMany({ where: { id: { in: ids }, project: visibleProjectsWhere(user) }, select: { id: true } });
@@ -283,7 +328,7 @@ export async function deleteTasks(taskIds: string[]) {
 }
 
 export async function getTaskDetail(taskId: string) {
-  return runAction(async (): Promise<TaskDetail> => {
+  return runAction({ name: "tasks.getTaskDetail", args: [taskId] }, async (): Promise<TaskDetail> => {
     const user = await requireUser();
     await assertTaskAccess(user, v.id.parse(taskId));
     const task = await db.task.findUniqueOrThrow({
@@ -324,7 +369,7 @@ async function assertSubtaskAccess(subtaskId: string) {
 }
 
 export async function addSubtask(taskId: string, title: string) {
-  return runAction(async (): Promise<SubtaskInfo> => {
+  return runAction({ name: "tasks.addSubtask", args: [taskId, title] }, async (): Promise<SubtaskInfo> => {
     const user = await requireUser();
     await assertTaskAccess(user, v.id.parse(taskId));
     const last = await db.subtask.findFirst({ where: { taskId }, orderBy: { position: "desc" }, select: { position: true } });
@@ -336,7 +381,7 @@ export async function addSubtask(taskId: string, title: string) {
 }
 
 export async function updateSubtask(subtaskId: string, patch: { title?: string; done?: boolean }) {
-  return runAction(async () => {
+  return runAction({ name: "tasks.updateSubtask", args: [subtaskId, patch] }, async () => {
     await assertSubtaskAccess(subtaskId);
     const data = z.object({ title: v.title.optional(), done: z.boolean().optional() }).parse(patch);
     await db.subtask.update({ where: { id: subtaskId }, data });
@@ -344,7 +389,7 @@ export async function updateSubtask(subtaskId: string, patch: { title?: string; 
 }
 
 export async function deleteSubtask(subtaskId: string) {
-  return runAction(async () => {
+  return runAction({ name: "tasks.deleteSubtask", args: [subtaskId] }, async () => {
     await assertSubtaskAccess(subtaskId);
     await db.subtask.delete({ where: { id: subtaskId } });
   });
@@ -353,7 +398,7 @@ export async function deleteSubtask(subtaskId: string) {
 // --- Adjuntos ----------------------------------------------------------------
 
 export async function deleteAttachment(attachmentId: string) {
-  return runAction(async () => {
+  return runAction({ name: "tasks.deleteAttachment", args: [attachmentId] }, async () => {
     const user = await requireUser();
     const att = await db.taskAttachment.findFirst({
       where: { id: v.id.parse(attachmentId), task: { project: visibleProjectsWhere(user) } },
@@ -365,12 +410,20 @@ export async function deleteAttachment(attachmentId: string) {
   });
 }
 
+/** Recupera una tarea archivada: vuelve a su columna de origen (o al backlog si ya no existe), al final. */
 export async function restoreTask(taskId: string) {
-  return runAction(async () => {
+  return runAction({ name: "tasks.restoreTask", args: [taskId] }, async () => {
     const user = await requireUser();
-    const { columnId } = await assertTaskAccess(user, v.id.parse(taskId));
-    const position = positionBetween(await lastPosition(columnId), null);
-    await db.task.update({ where: { id: taskId }, data: { archivedAt: null, position } });
+    const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
+    const task = await db.task.findUniqueOrThrow({ where: { id: taskId }, select: { archivedFromColumnId: true } });
+    const origin = task.archivedFromColumnId
+      ? await db.column.findFirst({ where: { id: task.archivedFromColumnId, projectId }, select: { id: true, name: true } })
+      : null;
+    const column = origin ?? (await db.column.findFirst({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true } }));
+    if (!column) throw new AppError("El proyecto no tiene columnas.");
+    const position = positionBetween(await lastPosition(column.id), null);
+    await db.task.update({ where: { id: taskId }, data: { archivedAt: null, archivedFromColumnId: null, columnId: column.id, position } });
+    return { task: await loadBoardTask(taskId), columnName: column.name };
   });
 }
 
@@ -385,7 +438,7 @@ function toCommentInfo(c: { id: string; body: string; createdAt: Date; authorId:
 const commentBody = z.string().trim().min(1, "El comentario está vacío.").max(10_000, "El comentario es demasiado largo.");
 
 export async function addComment(taskId: string, body: string) {
-  return runAction(async (): Promise<CommentInfo> => {
+  return runAction({ name: "tasks.addComment", args: [taskId, body] }, async (): Promise<CommentInfo> => {
     const user = await requireUser();
     const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
     const text = commentBody.parse(body);
@@ -397,7 +450,7 @@ export async function addComment(taskId: string, body: string) {
 
 /** Solo el autor (o un admin) puede borrar un comentario. */
 export async function deleteComment(commentId: string) {
-  return runAction(async () => {
+  return runAction({ name: "tasks.deleteComment", args: [commentId] }, async () => {
     const user = await requireUser();
     const comment = await db.taskComment.findFirst({
       where: { id: v.id.parse(commentId), task: { project: visibleProjectsWhere(user) } },
@@ -415,7 +468,7 @@ const linkSelect = { id: true, kind: true, title: true, url: true } as const;
 
 /** Crea un Google Doc o Sheet en el Drive del usuario y lo enlaza a la tarea. */
 export async function createGoogleFile(taskId: string, kind: GoogleFileKind, title: string) {
-  return runAction(async (): Promise<TaskLinkInfo> => {
+  return runAction({ name: "tasks.createGoogleFile", args: [taskId, kind, title] }, async (): Promise<TaskLinkInfo> => {
     const user = await requireUser();
     await assertTaskAccess(user, v.id.parse(taskId));
     const fileKind = z.enum(["GOOGLE_DOC", "GOOGLE_SHEET"]).parse(kind);
@@ -431,7 +484,7 @@ export async function createGoogleFile(taskId: string, kind: GoogleFileKind, tit
 
 /** Quita el enlace de la tarea (el archivo sigue en Google Drive). */
 export async function deleteTaskLink(linkId: string) {
-  return runAction(async () => {
+  return runAction({ name: "tasks.deleteTaskLink", args: [linkId] }, async () => {
     const user = await requireUser();
     const link = await db.taskLink.findFirst({
       where: { id: v.id.parse(linkId), task: { project: visibleProjectsWhere(user) } },

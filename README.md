@@ -91,6 +91,7 @@ Para generar un `SESSION_SECRET`: `openssl rand -base64 48`.
 | `DATABASE_POOL_SIZE` | No | `10` | Conexiones del pool. |
 | `COOKIE_SECURE` | No | `true` / `false` | Fuerza el atributo `Secure` de la cookie. |
 | `APP_TIMEZONE` | No | `Europe/Madrid` | Zona horaria para calcular «hoy» en plazos e informes. |
+| `LOG_RETENTION_DAYS` | No | `7` | Días que se conservan los logs de *Administración → Logs* (máx. 90). |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Para Google Docs/Sheets | (de Google Cloud) | Cliente OAuth «Aplicación web». Ver [Google Docs y Sheets](#71-google-docs-y-sheets). |
 | `GOOGLE_WORKSPACE_DOMAIN` | Recomendada con Google | `tu-dominio.com` | Solo admite cuentas de ese dominio y comparte cada archivo nuevo con él, para que todo el equipo pueda abrirlo desde la tarjeta. |
 | `GOOGLE_SHARE_ROLE` | No | `writer` | Rol con el que se comparte con el dominio: `writer`, `commenter`, `reader` o `none` (no compartir). |

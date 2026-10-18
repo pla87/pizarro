@@ -2,9 +2,10 @@ import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
+import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
 import { attachmentFileNames, isoDate } from "@/lib/release";
-import { isSameOrigin } from "@/lib/request";
+import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 import { attachmentPath } from "@/lib/uploads";
 import * as v from "@/lib/validation";
@@ -24,6 +25,7 @@ const bodySchema = z.object({
  * Los nombres se recalculan aquí con el mismo helper que el texto de la release.
  */
 export async function POST(req: Request, ctx: { params: Promise<{ projectId: string }> }) {
+  const start = performance.now();
   if (!isSameOrigin(req)) return new Response("Origen no permitido", { status: 403 });
   const user = await getCurrentUser();
   if (!user) return new Response("No autorizado", { status: 401 });
@@ -62,7 +64,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   }
   if (files.length === 0) return new Response("No hay adjuntos disponibles", { status: 404 });
 
-  return new Response(new Uint8Array(buildZip(files)), {
+  const zip = buildZip(files);
+  logEvent({
+    category: "api", action: "release.zipDownload", message: `ZIP de adjuntos de release (${files.length} ficheros, ${Math.round(zip.length / 1024)} KB)`,
+    userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/release-attachments`, ip: clientIp(req.headers),
+    durationMs: performance.now() - start, details: { tasks: items.length, files: files.length, bytes: zip.length },
+  });
+  return new Response(new Uint8Array(zip), {
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="release-${isoDate()}-adjuntos.zip"`,

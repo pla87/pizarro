@@ -31,7 +31,9 @@ export function ColumnView({ column, taskIds, index, total, droppableId, mobileH
   return (
     <section
       className={cn(
-        "flex w-full shrink-0 flex-col rounded-xl bg-slate-100/80 md:w-72 dark:bg-slate-900/60",
+        "flex w-full shrink-0 flex-col rounded-xl bg-slate-100/80 dark:bg-slate-900/60",
+        // Con más de tres columnas, en escritorio se reparten el ancho de la ventana (mínimo 18 rem; si no caben, scroll).
+        total > 3 ? "md:min-w-72 md:flex-1" : "md:w-72",
         mobileHidden && "max-md:hidden",
         isNextRelease && "ring-1 ring-brand-500/30",
       )}
@@ -81,6 +83,8 @@ export function ColumnView({ column, taskIds, index, total, droppableId, mobileH
           ref={setNodeRef}
           className={cn(
             "flex min-h-20 flex-1 flex-col gap-2 overflow-y-auto rounded-b-xl px-2 pb-2 transition-colors",
+            // Con selección, la barra inferior tapa el final de la lista: se deja hueco para llegar a las últimas.
+            selected.size > 0 && "pb-44 md:pb-20",
             isOver && "bg-brand-50/60 dark:bg-brand-500/5",
           )}
         >

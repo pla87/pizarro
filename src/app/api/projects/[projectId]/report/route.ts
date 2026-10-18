@@ -4,13 +4,16 @@ import { dateToIso, todayIso } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { buildReport } from "@/lib/report";
 import { renderReportPdf } from "@/lib/report-pdf";
+import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
+import { clientIp } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 
 export const runtime = "nodejs";
 
 /** Informe PDF del estado del proyecto (columnas, entregables, plazos, personas y releases). */
 export async function GET(_req: Request, ctx: { params: Promise<{ projectId: string }> }) {
+  const start = performance.now();
   const user = await getCurrentUser();
   if (!user) return new Response("No autorizado", { status: 401 });
   if (!rateLimit(`report:${user.id}`, 20, 60_000)) return new Response("Demasiadas peticiones", { status: 429 });
@@ -67,7 +70,21 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
     archivedCount,
   });
 
-  const pdf = await renderReportPdf(report);
+  let pdf: Uint8Array;
+  try {
+    pdf = await renderReportPdf(report);
+  } catch (err) {
+    logEvent({
+      level: "error", category: "api", action: "report.pdfFailed", message: `Fallo al generar el informe PDF de «${project.name}»: ${err instanceof Error ? err.message : String(err)}`,
+      userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/report`, ip: clientIp(_req.headers), durationMs: performance.now() - start,
+    });
+    throw err;
+  }
+  logEvent({
+    category: "api", action: "report.pdf", message: `Informe PDF generado de «${project.name}» (${Math.round(pdf.length / 1024)} KB)`,
+    userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/report`, ip: clientIp(_req.headers), durationMs: performance.now() - start,
+    details: { tasks: tasks.length, bytes: pdf.length },
+  });
   const slug = project.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "proyecto";
   return new Response(new Uint8Array(pdf), {
     headers: {

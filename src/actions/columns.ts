@@ -23,7 +23,7 @@ async function findColumn(columnId: string) {
 }
 
 export async function createColumn(projectId: string, name: string) {
-  return runAction(async (): Promise<BoardColumn> => {
+  return runAction({ name: "columns.createColumn", args: [projectId, name] }, async (): Promise<BoardColumn> => {
     const user = await requireUser();
     await assertProjectAccess(user, v.id.parse(projectId));
     const count = await db.column.count({ where: { projectId } });
@@ -37,7 +37,7 @@ export async function createColumn(projectId: string, name: string) {
 }
 
 export async function renameColumn(columnId: string, name: string) {
-  return runAction(async () => {
+  return runAction({ name: "columns.renameColumn", args: [columnId, name] }, async () => {
     await findColumn(columnId);
     await db.column.update({ where: { id: columnId }, data: { name: v.name.parse(name) } });
   });
@@ -45,7 +45,7 @@ export async function renameColumn(columnId: string, name: string) {
 
 /** Asigna un rol funcional; si otra columna del proyecto lo tenía, pasa a NONE. */
 export async function setColumnRole(columnId: string, role: string) {
-  return runAction(async () => {
+  return runAction({ name: "columns.setColumnRole", args: [columnId, role] }, async () => {
     const column = await findColumn(columnId);
     const value = v.columnRole.parse(role);
     await db.$transaction(async (tx) => {
@@ -59,7 +59,7 @@ export async function setColumnRole(columnId: string, role: string) {
 
 /** Marca si las tarjetas de la columna cuentan como terminadas (informe y plazos). */
 export async function setColumnDone(columnId: string, isDone: boolean) {
-  return runAction(async () => {
+  return runAction({ name: "columns.setColumnDone", args: [columnId, isDone] }, async () => {
     await findColumn(columnId);
     await db.column.update({ where: { id: columnId }, data: { isDone: z.boolean().parse(isDone) } });
   });
@@ -67,7 +67,7 @@ export async function setColumnDone(columnId: string, isDone: boolean) {
 
 /** Mueve la columna una posición a la izquierda (-1) o derecha (+1). */
 export async function moveColumn(columnId: string, direction: number) {
-  return runAction(async () => {
+  return runAction({ name: "columns.moveColumn", args: [columnId, direction] }, async () => {
     const column = await findColumn(columnId);
     const dir = z.union([z.literal(-1), z.literal(1)]).parse(direction);
     const columns = await db.column.findMany({
@@ -87,7 +87,7 @@ export async function moveColumn(columnId: string, direction: number) {
 
 /** Solo se puede borrar una columna sin tarjetas visibles. Las archivadas se reubican. */
 export async function deleteColumn(columnId: string) {
-  return runAction(async () => {
+  return runAction({ name: "columns.deleteColumn", args: [columnId] }, async () => {
     const column = await findColumn(columnId);
     const other = await db.column.findFirst({
       where: { projectId: column.projectId, id: { not: columnId } },

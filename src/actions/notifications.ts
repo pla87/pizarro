@@ -6,14 +6,14 @@ import { requireUser } from "@/lib/session";
 import * as v from "@/lib/validation";
 
 export async function markNotificationRead(notificationId: string) {
-  return runAction(async () => {
+  return runAction({ name: "notifications.markNotificationRead", args: [notificationId] }, async () => {
     const user = await requireUser();
     await db.notification.updateMany({ where: { id: v.id.parse(notificationId), userId: user.id, readAt: null }, data: { readAt: new Date() } });
   });
 }
 
 export async function markAllNotificationsRead() {
-  return runAction(async () => {
+  return runAction({ name: "notifications.markAllNotificationsRead", args: [] }, async () => {
     const user = await requireUser();
     await db.notification.updateMany({ where: { userId: user.id, readAt: null }, data: { readAt: new Date() } });
   });
