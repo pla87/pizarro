@@ -1,3 +1,4 @@
+import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
 import { NotificationList } from "./NotificationList";
@@ -7,7 +8,8 @@ export const metadata = { title: "Avisos" };
 export default async function NotificationsPage() {
   const user = await requireUserPage();
   const rows = await db.notification.findMany({
-    where: { userId: user.id },
+    // Solo avisos de tareas que el usuario sigue pudiendo ver.
+    where: { userId: user.id, task: { project: visibleProjectsWhere(user) } },
     orderBy: { createdAt: "desc" },
     take: 100,
     select: {

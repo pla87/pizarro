@@ -1,7 +1,7 @@
 "use client";
 
 import { AtSign, FileSpreadsheet, FileText } from "lucide-react";
-import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { mentionToken } from "@/lib/mentions";
 import type { UserOption } from "@/lib/types";
 import { Avatar } from "./Avatar";
@@ -40,6 +40,15 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
   useImperativeHandle(ref, () => inner.current!);
   const [query, setQuery] = useState<{ start: number; text: string } | null>(null);
   const [active, setActive] = useState(0);
+  // Posición del cursor tras insertar una mención: se aplica en cuanto React pinta el nuevo
+  // valor (antes de la siguiente tecla); con requestAnimationFrame se desordenaba el texto.
+  const pendingCaret = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (pendingCaret.current !== null && inner.current) {
+      inner.current.setSelectionRange(pendingCaret.current, pendingCaret.current);
+      pendingCaret.current = null;
+    }
+  }, [value]);
 
   const options = useMemo<Option[]>(() => {
     if (!query) return [];
@@ -72,11 +81,8 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
     const next = value.slice(0, query.start) + insert + value.slice(end);
     onValueChange(next);
     setQuery(null);
-    const caret = query.start + insert.length;
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(caret, caret);
-    });
+    pendingCaret.current = query.start + insert.length;
+    el.focus();
     if (opt.kind === "command") onCommand?.(opt.id);
   };
 
@@ -99,7 +105,7 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
               setActive((i) => (i + (e.key === "ArrowDown" ? 1 : options.length - 1)) % options.length);
               return;
             }
-            if (e.key === "Enter" || e.key === "Tab") {
+            if ((e.key === "Enter" || e.key === "Tab") && !e.metaKey && !e.ctrlKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               choose(options[active]!);
               return;

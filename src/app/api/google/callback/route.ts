@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { AppError } from "@/lib/errors";
-import { connectGoogleAccount, googleEnabled } from "@/lib/google";
+import { connectGoogleAccount, GoogleConnectError, googleEnabled } from "@/lib/google";
 import { getCurrentUser } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -33,6 +33,8 @@ export async function GET(req: Request) {
     return settings(req, "connected");
   } catch (err) {
     console.error("[google] callback", err instanceof AppError ? err.message : err);
-    return settings(req, err instanceof AppError ? err.message : "error");
+
+    // Solo códigos fijos en la URL: nunca texto arbitrario.
+    return settings(req, err instanceof GoogleConnectError ? err.code : "error");
   }
 }

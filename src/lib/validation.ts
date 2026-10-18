@@ -23,7 +23,12 @@ export const linkUrl = z
 export const dayIso = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha no válida.")
-  .refine((v) => !Number.isNaN(new Date(`${v}T00:00:00Z`).getTime()), "Fecha no válida.")
+  // Ida y vuelta exacta: rechaza 2026-02-31 (que Date convertiría en 3 de marzo) y años absurdos.
+  .refine((v) => {
+    const d = new Date(`${v}T00:00:00Z`);
+    const year = Number(v.slice(0, 4));
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v && year >= 1900 && year <= 2999;
+  }, "Fecha no válida.")
   .nullable();
 
 /** Teléfono en formato internacional E.164: +34600111222. */

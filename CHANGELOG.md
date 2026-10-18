@@ -2,6 +2,31 @@
 
 Historial de versiones de Tablón. Fuente: `changelog.json`.
 
+## v1.1.0 — 2026-10-18
+
+Informe PDF del proyecto, plazos y entregables, Google Docs/Sheets desde las tarjetas y menciones con avisos.
+
+### Nuevas funcionalidades
+
+- Informe PDF del proyecto: resumen y avance, estado por columna, entregables, plazos vencidos y próximos, carga por persona, tipos, últimas releases y detalle de cada columna.
+- Fecha límite en las tarjetas, con aviso visual de plazo vencido, de hoy o próximo en el tablero y en «Mis tareas».
+- Entregables (hitos con fecha objetivo) que agrupan tarjetas, gestionables desde «Ajustes del proyecto».
+- Google Docs y Sheets: @docs o @sheets en una tarjeta crea el archivo en tu Drive, lo abre en otra pestaña y lo deja enlazado.
+- Comentarios en las tarjetas con menciones @persona y autocompletado.
+- Avisos de menciones en la app (campana con contador), por email y por WhatsApp.
+
+### Mejoras
+
+- Las columnas pueden marcarse como «terminadas» para calcular el avance y no avisar de plazos ya cumplidos.
+- Preferencias de aviso y conexión con Google en «Mi perfil y plantillas».
+
+### Cambios técnicos / DB
+
+- Migración v1_1: Task.dueDate y deliverableId, Column.isDone y tablas Deliverable, TaskLink, GoogleAccount, TaskComment y Notification.
+- OAuth de Google con permiso mínimo drive.file y tokens cifrados con AES-256-GCM.
+- Envío de avisos tras responder (after) para no añadir espera; SMTP con nodemailer y WhatsApp Cloud API con plantilla.
+- Nuevas variables opcionales: GOOGLE_*, SMTP_*, WHATSAPP_* y APP_TIMEZONE.
+
 ## v1.0.0 — 2026-10-18
 
 Primera versión de Tablón: kanban multiproyecto y generador de release notes.

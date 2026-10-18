@@ -30,7 +30,8 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/:path*",
+        // El informe PDF queda fuera de la CSP: el visor de PDF de Chrome se queda en blanco con object-src 'none'.
+        source: "/((?!api/projects/[^/]+/report).*)",
         headers: [
           { key: "Content-Security-Policy", value: csp },
           { key: "X-Content-Type-Options", value: "nosniff" },

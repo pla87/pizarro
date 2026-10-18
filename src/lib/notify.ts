@@ -3,6 +3,7 @@ import { after } from "next/server";
 import nodemailer from "nodemailer";
 import { db } from "./db";
 import { excerpt as makeExcerpt } from "./mentions";
+import { rateLimit } from "./rate-limit";
 
 // Avisos de menciones: en la app (tabla Notification), por email (SMTP) y por
 // WhatsApp (Cloud API de Meta). Los envíos externos se hacen tras responder al
@@ -163,6 +164,42 @@ export async function notifyMentions(opts: {
     select: { id: true },
   });
   const createdIds = created.map((c) => c.id);
-  after(() => deliver(createdIds).catch((err) => console.error("[notify] envío", err)));
+  const external = await externalAllowed(opts.actorId, opts.taskId, recipients.map((r) => r.id), createdIds);
+  const toDeliver = created.filter((_, i) => external.has(recipients[i]!.id)).map((c) => c.id);
+  if (toDeliver.length) after(() => deliver(toDeliver).catch((err) => console.error("[notify] envío", err)));
   return createdIds.length;
+}
+
+/** Ventana en la que no se repite email/WhatsApp a la misma persona por la misma tarea. */
+const DEDUPE_MINUTES = 10;
+/** Máximo de envíos externos que puede provocar una misma persona por hora. */
+const MAX_EXTERNAL_PER_HOUR = 40;
+
+/**
+ * Los avisos en la app se crean siempre; el email y el WhatsApp (que pueden costar dinero)
+ * se limitan: uno por persona y tarea cada 10 minutos y un tope por autor y hora.
+ */
+async function externalAllowed(actorId: string, taskId: string, recipientIds: string[], newIds: string[]): Promise<Set<string>> {
+  const since = new Date(Date.now() - DEDUPE_MINUTES * 60_000);
+  const recent = await db.notification.findMany({
+    where: {
+      taskId,
+      userId: { in: recipientIds },
+      createdAt: { gte: since },
+      // Cualquier aviso previo reciente (enviado o en curso) basta: así dos comentarios seguidos no duplican.
+      id: { notIn: newIds },
+    },
+    select: { userId: true },
+  });
+  const skip = new Set(recent.map((r) => r.userId));
+  const allowed = new Set<string>();
+  for (const id of recipientIds) {
+    if (skip.has(id)) continue;
+    if (!rateLimit(`notify:${actorId}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000)) {
+      console.error("[notify] Límite de envíos externos alcanzado para", actorId);
+      break;
+    }
+    allowed.add(id);
+  }
+  return allowed;
 }

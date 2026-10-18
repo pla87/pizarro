@@ -6,6 +6,13 @@ import { AppError } from "./errors";
 // Integración con Google Drive mediante OAuth por usuario.
 // Permiso mínimo: drive.file (solo los archivos que crea la propia app).
 
+/** Error de conexión con un código estable para mostrarlo en Ajustes (nunca texto libre en la URL). */
+export class GoogleConnectError extends AppError {
+  constructor(message: string, public readonly code: "scope" | "domain" | "token") {
+    super(message);
+  }
+}
+
 export const GOOGLE_SCOPES = ["openid", "email", "https://www.googleapis.com/auth/drive.file"];
 
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -85,16 +92,16 @@ function emailFromIdToken(idToken?: string): string {
 export async function connectGoogleAccount(userId: string, code: string): Promise<string> {
   const tokens = await tokenRequest({ code, grant_type: "authorization_code", redirect_uri: googleRedirectUri() });
   if (!tokens.scope.split(" ").includes("https://www.googleapis.com/auth/drive.file")) {
-    throw new AppError("No se concedió el permiso de Google Drive. Vuelve a intentarlo y acepta el permiso.");
+    throw new GoogleConnectError("No se concedió el permiso de Google Drive.", "scope");
   }
   const email = emailFromIdToken(tokens.id_token);
   const workspace = process.env.GOOGLE_WORKSPACE_DOMAIN;
   if (workspace && !email.toLowerCase().endsWith(`@${workspace.toLowerCase()}`)) {
-    throw new AppError(`Usa una cuenta de ${workspace}.`);
+    throw new GoogleConnectError(`Usa una cuenta de ${workspace}.`, "domain");
   }
   const existing = await db.googleAccount.findUnique({ where: { userId }, select: { refreshTokenEnc: true } });
   const refresh = tokens.refresh_token ? encryptSecret(tokens.refresh_token) : existing?.refreshTokenEnc;
-  if (!refresh) throw new AppError("Google no devolvió un token de acceso permanente. Vuelve a conectar.");
+  if (!refresh) throw new GoogleConnectError("Google no devolvió un token de acceso permanente.", "token");
   const data = {
     email,
     refreshTokenEnc: refresh,
@@ -106,20 +113,33 @@ export async function connectGoogleAccount(userId: string, code: string): Promis
   return email;
 }
 
+const reconnectError = () => new AppError("Tu conexión con Google ha caducado. Vuelve a conectarla en «Mi perfil».", 412);
+
+/** Descifra un token; si no se puede (p. ej. SESSION_SECRET rotado) borra la conexión y pide reconectar. */
+async function decryptOrReset(userId: string, value: string): Promise<string> {
+  try {
+    return decryptSecret(value);
+  } catch {
+    await db.googleAccount.delete({ where: { userId } }).catch(() => {});
+    throw reconnectError();
+  }
+}
+
 async function accessToken(userId: string): Promise<string> {
   const account = await db.googleAccount.findUnique({ where: { userId } });
   if (!account) throw new AppError("Conecta tu cuenta de Google en «Mi perfil» para crear documentos.", 412);
   if (account.accessTokenEnc && account.accessTokenExpiry && account.accessTokenExpiry > new Date()) {
-    return decryptSecret(account.accessTokenEnc);
+    return decryptOrReset(userId, account.accessTokenEnc);
   }
+  const refreshToken = await decryptOrReset(userId, account.refreshTokenEnc);
   let tokens: TokenResponse;
   try {
-    tokens = await tokenRequest({ refresh_token: decryptSecret(account.refreshTokenEnc), grant_type: "refresh_token" });
+    tokens = await tokenRequest({ refresh_token: refreshToken, grant_type: "refresh_token" });
   } catch (err) {
     // Permiso revocado o caducado: se elimina la conexión para que el usuario reconecte.
     if ((err as { googleError?: string }).googleError === "invalid_grant") {
       await db.googleAccount.delete({ where: { userId } }).catch(() => {});
-      throw new AppError("Tu conexión con Google ha caducado. Vuelve a conectarla en «Mi perfil».", 412);
+      throw reconnectError();
     }
     throw err;
   }
@@ -143,17 +163,43 @@ export async function createDriveFile(userId: string, kind: GoogleFileKind, name
     console.error("[google] Error al crear archivo", res.status, json?.error?.message);
     throw new AppError(res.status === 403 ? "Google ha denegado la creación del archivo (revisa que la API de Drive esté activada)." : "No se pudo crear el archivo en Google Drive.");
   }
-  return { id: String(json.id), name: String(json.name), url: String(json.webViewLink) };
+  const file = { id: String(json.id), name: String(json.name), url: String(json.webViewLink) };
+  await shareFile(token, file.id);
+  return file;
+}
+
+/**
+ * Con drive.file el archivo nace privado en el Drive de quien lo crea. Para que el resto del
+ * equipo pueda abrirlo desde la tarjeta, se comparte con el dominio de Workspace
+ * (GOOGLE_WORKSPACE_DOMAIN) con el rol GOOGLE_SHARE_ROLE (writer por defecto; "none" lo desactiva).
+ */
+async function shareFile(token: string, fileId: string): Promise<void> {
+  const domain = process.env.GOOGLE_WORKSPACE_DOMAIN;
+  const role = process.env.GOOGLE_SHARE_ROLE ?? "writer";
+  if (!domain || role === "none" || !["writer", "commenter", "reader"].includes(role)) return;
+  const res = await fetch(`${DRIVE_FILES_URL}/${encodeURIComponent(fileId)}/permissions?sendNotificationEmail=false&supportsAllDrives=true`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "domain", domain, role }),
+    signal: AbortSignal.timeout(10_000),
+  }).catch(() => null);
+  // Si la política del Workspace lo impide, el archivo sigue creado: solo se registra.
+  if (!res?.ok) console.error("[google] No se pudo compartir el archivo con el dominio", res?.status);
 }
 
 export async function disconnectGoogleAccount(userId: string): Promise<void> {
   const account = await db.googleAccount.findUnique({ where: { userId }, select: { refreshTokenEnc: true } });
   if (!account) return;
-  await fetch(REVOKE_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ token: decryptSecret(account.refreshTokenEnc) }),
-    signal: AbortSignal.timeout(10_000),
-  }).catch(() => {});
-  await db.googleAccount.delete({ where: { userId } });
+  // La revocación es de cortesía: aunque falle (o no se pueda descifrar), la conexión se borra.
+  try {
+    await fetch(REVOKE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token: decryptSecret(account.refreshTokenEnc) }),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    // ignorado
+  }
+  await db.googleAccount.deleteMany({ where: { userId } });
 }

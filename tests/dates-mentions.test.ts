@@ -23,3 +23,12 @@ test("menciones", () => {
   assert.deepEqual(extractMentionIds("@[Ana](user:../../x) @[B](javascript:1)"), []);
   assert.equal(excerpt("a".repeat(300)).length, 180);
 });
+
+test("fechas límite: solo días reales y años razonables", async () => {
+  const { dayIso } = await import("../src/lib/validation");
+  assert.equal(dayIso.parse("2026-02-28"), "2026-02-28");
+  for (const bad of ["2026-02-31", "2026-13-01", "0000-01-01", "0002-10-18", "26-10-18"]) {
+    assert.equal(dayIso.safeParse(bad).success, false, bad);
+  }
+  assert.equal(dayIso.parse(null), null);
+});

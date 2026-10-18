@@ -1,12 +1,12 @@
 ---
 title: "Tablón · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.0.0"
+version: "v1.1.0"
 ---
 
 # Tablón — Manual de operaciones
 
-**Versión de la aplicación:** v1.0.0
+**Versión de la aplicación:** v1.1.0
 
 Este manual describe la arquitectura de Tablón, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -27,6 +27,8 @@ Tablón es un tablero Kanban ligero para un equipo de hasta 5 personas. Su objet
 | Tarjeta / tarea | Unidad de trabajo con tipo, color, responsable, etiquetas, enlace, checklist, descripción y capturas. |
 | Release | Registro histórico de un despliegue: texto final editado y tareas incluidas. |
 | Plantillas | Cabecera y pie estándar de cada usuario, que se insertan en las releases que genera. |
+| Entregable | Hito del proyecto con fecha objetivo que agrupa tarjetas. Su avance aparece en el informe PDF. |
+| Aviso | Notificación que recibe una persona cuando la mencionan con `@`: en la app, por email y, si lo activa, por WhatsApp. |
 
 ---
 
@@ -44,6 +46,9 @@ Railway ── servicio "app" (contenedor Docker, un solo proceso Node.js)
    │         │    ├─ Server Actions     → mutaciones validadas con zod
    │         │    └─ Route Handlers     → subida/servido de imágenes, health
    │         ├─ sharp                   → redimensionado a WebP
+   │         ├─ @react-pdf/renderer     → informe PDF del proyecto
+   │         ├─ avisos (tras responder) → SMTP y WhatsApp Cloud API
+   │         ├─ OAuth de Google         → Google Drive API (Docs / Sheets)
    │         └─ /app/uploads  ◀──────── Volume persistente de Railway
    │
    └──────── servicio "Postgres" (PostgreSQL gestionado) ◀── Prisma 7 + driver pg
@@ -87,6 +92,13 @@ La aplicación es un **monolito en un único contenedor**. No hay colas, cachés
 | `TaskAttachment` | taskId, originalName, width, height, size | El fichero está en `UPLOAD_DIR/<id>.webp` (y `<id>.thumb.webp`). |
 | `Release` / `ReleaseTask` | content (Markdown final), deployedAt, autor · instantánea de título y tipo de cada tarea | La instantánea se conserva aunque la tarea se borre. |
 | `AppVersionLog` | version (única), releasedAt, summary, changes (JSON) | Se sincroniza desde `changelog.json` en cada arranque. |
+| `Deliverable` | projectId, name, description, dueDate, position | Las tareas lo referencian con `deliverableId`. Al borrarlo, quedan sin entregable. |
+| `TaskComment` | taskId, authorId, body | Las menciones se guardan como `@[Nombre](user:ID)`. |
+| `Notification` | userId, actorId, taskId, excerpt, readAt, emailSentAt, whatsappSentAt, deliveryError | Un aviso por persona mencionada, con el resultado de cada envío. |
+| `TaskLink` | taskId, kind (GOOGLE_DOC / GOOGLE_SHEET), title, url | Documentos de Google enlazados a la tarjeta. |
+| `GoogleAccount` | userId, email, refreshTokenEnc, accessTokenEnc, scope | Tokens OAuth cifrados con AES-256-GCM. |
+
+Además, `Task` tiene `dueDate` (fecha límite, solo día), `Column` tiene `isDone` (sus tarjetas cuentan como terminadas) y `User` tiene sus preferencias de aviso (`notifyEmail`, `notifyWhatsapp`, `whatsappPhone`).
 
 ### 2.5 Seguridad
 
@@ -102,6 +114,8 @@ La aplicación es un **monolito en un único contenedor**. No hay colas, cachés
 | Cabeceras | `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `HSTS`. |
 | Imágenes | Tamaño máximo configurable, límite de píxeles en sharp (protección frente a *decompression bombs*), reconversión siempre a WebP (se descarta cualquier contenido incrustado) y servido solo a usuarios con acceso. |
 | Contenedor | El proceso Node se ejecuta como el usuario sin privilegios `node`. |
+| Google | OAuth con permiso mínimo `drive.file`: solo da acceso a los archivos que crea Tablón. Parámetro `state` ligado a la sesión contra CSRF. Tokens cifrados en base de datos. Opcionalmente, restringido a un dominio de Workspace. |
+| Avisos | Solo se avisa a usuarios activos con acceso al proyecto. El email y el WhatsApp no se repiten a la misma persona por la misma tarea en 10 minutos, y cada autor tiene un tope de envíos por hora. El contenido de los emails se escapa y los enlaces apuntan siempre a `APP_URL`. |
 
 ### 2.6 Rendimiento
 
@@ -192,19 +206,60 @@ Desde el menú «⋯» de cada columna:
 
 Las secciones sin tareas se omiten. *Hotfix* va en *Fixes* (primero y marcado). *Refactor* va en *Chores / Infra*.
 
-### 3.7 Otras vistas
+### 3.7 Plazos y entregables
+
+- **Fecha límite:** en el detalle de la tarjeta (o al crearla). En el tablero, la tarjeta muestra la fecha con estos colores:
+  - **rojo** si está vencida;
+  - **ámbar** si vence hoy o en los próximos 3 días;
+  - **verde** si ya está en una columna terminada.
+- **Columnas terminadas:** en el menú «⋯» de una columna, **Contar como terminada**. Por defecto lo son *En producción* y *Cerrado*. Sus tarjetas cuentan como hechas en el avance y no generan avisos de plazo.
+- **Entregables:** se crean en **Ajustes del proyecto → Entregables** (nombre, fecha objetivo y descripción) y se asignan desde el detalle de cada tarjeta.
+
+### 3.8 Informe PDF del proyecto
+
+Botón **Informe PDF** en la cabecera del tablero (o en el menú lateral). Se abre en otra pestaña y contiene:
+
+- **Resumen:** avance global, pendientes, vencidas, que vencen en 7 días, sin responsable, sin plazo, terminadas y archivadas.
+- **Estado por columna:** número de tarjetas, peso, desglose por tipo y vencidas.
+- **Entregables:** fecha objetivo, avance y estado. Los estados posibles son *Completado*, *En plazo*, *En riesgo* (vence en 7 días o menos con menos del 75 % hecho), *Retrasado*, *Sin fecha* y *Sin tareas*.
+- **Plazos:** vencidos y próximos 14 días, con columna, responsable y checklist.
+- **Carga por persona** y **distribución por tipo**.
+- **Últimas releases.**
+- **Detalle de cada columna** con todas sus tarjetas.
+
+«Hoy» se calcula en la zona horaria `APP_TIMEZONE` (por defecto `Europe/Madrid`).
+
+### 3.9 Comentarios, menciones y avisos
+
+- En el detalle de la tarjeta, sección **Comentarios**. Escribe `@` y el principio de un nombre para elegir a una persona (↑↓ y Enter). También se puede mencionar en la descripción.
+- La persona mencionada recibe:
+  - un aviso en **Avisos** (campana con contador en el menú lateral; en móvil, en la barra superior);
+  - un **email**, si el servidor tiene SMTP y la persona no lo ha desactivado;
+  - un **WhatsApp**, si el servidor lo tiene configurado y la persona lo ha activado con su número.
+- Cada persona elige sus canales en **Mi perfil y plantillas → Avisos de menciones**.
+- Al hacer clic en un aviso se abre directamente la tarjeta.
+
+### 3.10 Google Docs y Sheets
+
+1. Una vez por persona: **Mi perfil y plantillas → Google Docs y Sheets → Conectar con Google**, y acepta el permiso.
+2. En una tarjeta, escribe `@sheets` o `@docs` en la descripción o en un comentario y elige *Crear Google Sheet* / *Crear Google Doc*. También puedes usar los botones **Nuevo Doc** / **Nuevo Sheet**.
+3. Se crea el archivo en tu Drive con el título de la tarjeta, se abre en otra pestaña y queda en **Documentos de Google** de la tarjeta. Si lo creaste desde el texto, también se inserta su enlace.
+4. Si el servidor tiene `GOOGLE_WORKSPACE_DOMAIN`, el archivo se comparte automáticamente con todo el dominio (por defecto como editor, según `GOOGLE_SHARE_ROLE`), y cualquiera del equipo puede abrirlo desde la tarjeta. Si no, compártelo desde Google como cualquier otro documento.
+5. Quitar el enlace de la tarjeta no borra el archivo de Drive.
+
+### 3.11 Otras vistas
 
 - **Mis tareas asignadas:** todas tus tarjetas activas en los proyectos a los que tienes acceso, agrupadas por proyecto y con su columna actual.
 - **Releases:** histórico del proyecto, con opción de copiar o descargar cada release.
 - **Historial de versiones:** versión actual de la app y cambios de cada versión.
 
-### 3.8 Móvil
+### 3.12 Móvil
 
 - El tablero muestra una columna cada vez. Cambias de columna con las pestañas superiores, que indican cuántas tarjetas tiene cada una.
 - El botón flotante **+** crea una tarea en la columna visible, con opción de **Cámara** o **Archivo**.
 - Para mover tarjetas entre columnas en móvil, usa el selector *Columna* del detalle o la selección múltiple.
 
-### 3.9 Administración de usuarios (admins)
+### 3.13 Administración de usuarios (admins)
 
 - **Usuarios → Nuevo usuario:** nombre, email, contraseña inicial (10 caracteres o más) y rol. Máximo de 5 usuarios activos (configurable con `MAX_USERS`).
 - **Editar:** nombre, email, rol y estado activo. Al desactivar a un usuario o cambiarle el rol se cierran sus sesiones. Un admin no puede quitarse a sí mismo el rol ni desactivarse.
@@ -242,7 +297,7 @@ Consulta la tabla completa en el `README.md`. Las imprescindibles son `DATABASE_
 
 ### 4.4 Rotar `SESSION_SECRET`
 
-Cambia la variable en Railway y redespliega. Todas las sesiones dejan de ser válidas y cada usuario tendrá que volver a entrar. Hazlo si sospechas que el secreto se ha filtrado.
+Cambia la variable en Railway y redespliega. Todas las sesiones dejan de ser válidas y cada usuario tendrá que volver a entrar. Las conexiones con Google también se invalidan (sus tokens se cifran con una clave derivada de este secreto): cada usuario tendrá que volver a conectarla. Hazlo si sospechas que el secreto se ha filtrado.
 
 ### 4.5 Copias de seguridad y restauración
 
@@ -256,13 +311,25 @@ Cambia la variable en Railway y redespliega. Todas las sesiones dejan de ser vá
 3. `npm run version:bump -- patch|minor|major`, rellena la entrada en `changelog.json` y ejecuta `npm run version:bump -- --render`.
 4. Haz commit y *push*. Railway despliega, aplica la migración y la nueva versión aparece en *Historial de versiones*.
 
-### 4.7 Monitorización
+### 4.7 Integraciones: Google, email y WhatsApp
+
+Son opcionales e independientes. La configuración paso a paso está en el `README.md`, sección *Integraciones opcionales*:
+
+| Integración | Variables | Qué hace cada usuario |
+|---|---|---|
+| Google Docs/Sheets | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_WORKSPACE_DOMAIN` (recomendada) y `GOOGLE_SHARE_ROLE` | Conectar su cuenta en *Mi perfil*. |
+| Email | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Nada (activado por defecto; se puede desactivar). |
+| WhatsApp | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANG` | Activarlo y escribir su número en *Mi perfil*. |
+
+El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `whatsappSentAt`, `deliveryError`) y en los logs con el prefijo `[notify]`.
+
+### 4.8 Monitorización
 
 - **Salud:** `GET /api/health` → `{"status":"ok"}` si la base de datos responde.
 - **Logs:** en Railway, *Deployments → View logs*. Los errores inesperados del servidor se registran con el prefijo `[action]`, `[upload]` o `[uploads]`.
 - **Uso del volumen:** visible en la pestaña del volumen. Como referencia, una captura típica ocupa entre 50 y 300 KB.
 
-### 4.8 Resolución de problemas
+### 4.9 Resolución de problemas
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
@@ -274,6 +341,12 @@ Cambia la variable en Railway y redespliega. Todas las sesiones dejan de ser vá
 | No aparece «Generar Release» | Ninguna columna tiene el rol *Siguiente salto* | Asígnalo desde el menú «⋯» de la columna. |
 | No se puede «Mover a En producción» | Ninguna columna tiene ese rol | Asígnalo, o elige *Archivar tarjetas* al desplegar. |
 | Un miembro no ve un proyecto | El proyecto está restringido | *Ajustes del proyecto → Visibilidad* → márcalo. |
+| «La integración con Google no está configurada» | Faltan `GOOGLE_CLIENT_ID`/`SECRET` o `APP_URL` | Configúralos y redespliega. |
+| Google devuelve `redirect_uri_mismatch` | La URI de redirección del cliente OAuth no coincide | Debe ser exactamente `APP_URL` + `/api/google/callback`. |
+| «Tu conexión con Google ha caducado» | Permiso revocado o `SESSION_SECRET` rotado | Vuelve a conectar en *Mi perfil*. |
+| No llegan los emails | Credenciales SMTP o contraseña de aplicación incorrectas | Revisa los logs `[notify]` y la columna `deliveryError`. |
+| No llegan los WhatsApp | Plantilla sin aprobar, idioma distinto, token caducado o número no verificado (número de prueba) | Revisa los logs `[notify]`, el estado de la plantilla y `WHATSAPP_TEMPLATE_LANG`. |
+| El informe no marca una tarjeta como hecha | Su columna no cuenta como terminada | Menú «⋯» de la columna → *Contar como terminada*. |
 
 ---
 
@@ -287,4 +360,7 @@ Cambia la variable en Railway y redespliega. Todas las sesiones dejan de ser vá
 | Roles de columna | Permiten renombrar y reordenar columnas sin romper el generador de releases. |
 | Generación de la release en el cliente | Respuesta instantánea y edición libre antes de guardar. |
 | `changelog.json` como fuente | Versionado con el código y legible en revisiones; la tabla `AppVersionLog` se reconstruye en cada arranque. |
+| Informe con `@react-pdf/renderer` | Genera el PDF en el servidor sin un navegador: la imagen no crece y el informe tarda milisegundos. |
+| OAuth por usuario con `drive.file` | Cada archivo pertenece a quien lo crea, sin cuentas de servicio ni permisos sobre el resto del Drive. |
+| Avisos con `after()` | El email y el WhatsApp se envían tras responder: mencionar a alguien no añade espera. |
 | Prisma CLI aislado en la imagen | La app usa la salida *standalone* (ligera) y las migraciones usan la CLI oficial sin descargas en el arranque. |

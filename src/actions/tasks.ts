@@ -111,21 +111,23 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
     if (data.assigneeId) await assertAssignable(projectId, data.assigneeId);
     if (data.labelIds) await assertLabelsInProject(data.labelIds, projectId);
     await assertDeliverableInProject(data.deliverableId, projectId);
-    // Menciones nuevas en la descripción (las que ya estaban no vuelven a avisar).
-    let newMentions: string[] = [];
-    if (data.description !== undefined) {
-      const before = await db.task.findUniqueOrThrow({ where: { id: taskId }, select: { description: true } });
-      const old = new Set(extractMentionIds(before.description));
-      newMentions = extractMentionIds(data.description).filter((id) => !old.has(id));
-    }
     const { labelIds, dueDate, ...rest } = data;
     const fields = { ...rest, ...(dueDate !== undefined ? { dueDate: dueDate ? isoToDate(dueDate) : null } : {}) };
-    await db.$transaction(async (tx) => {
+    const newMentions = await db.$transaction(async (tx) => {
+      // Menciones nuevas en la descripción (las que ya estaban no vuelven a avisar).
+      // Se lee la versión anterior con bloqueo de fila para que dos ediciones simultáneas no avisen dos veces.
+      let added: string[] = [];
+      if (data.description !== undefined) {
+        const [before] = await tx.$queryRaw<{ description: string }[]>`SELECT "description" FROM "Task" WHERE "id" = ${taskId} FOR UPDATE`;
+        const old = new Set(extractMentionIds(before?.description ?? ""));
+        added = extractMentionIds(data.description).filter((id) => !old.has(id));
+      }
       await tx.task.update({ where: { id: taskId }, data: fields });
       if (labelIds) {
         await tx.taskLabel.deleteMany({ where: { taskId } });
         await tx.taskLabel.createMany({ data: [...new Set(labelIds)].map((labelId) => ({ taskId, labelId })) });
       }
+      return added;
     });
     if (newMentions.length) {
       await notifyMentions({ actorId: user.id, taskId, projectId, recipientIds: newMentions, text: data.description ?? "" });

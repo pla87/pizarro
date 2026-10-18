@@ -257,7 +257,11 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
                     "border-red-400 text-red-700 dark:text-red-300",
                 )}
                 value={task.dueDate ?? ""}
-                onChange={(e) => save({ dueDate: e.target.value || null }, { dueDate: e.target.value || null })}
+                onChange={(e) => {
+                  // Al teclear el año, Chrome emite 0002, 0020… : solo se guarda una fecha completa y válida.
+                  const v = e.target.value;
+                  if (v === "" || v.slice(0, 4) >= "1900") save({ dueDate: v || null }, { dueDate: v || null });
+                }}
               />
               {task.dueDate && (
                 <button className="btn-icon h-9 w-9 shrink-0" onClick={() => save({ dueDate: null }, { dueDate: null })} aria-label="Quitar fecha límite">
