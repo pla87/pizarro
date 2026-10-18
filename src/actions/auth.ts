@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { dummyVerify, verifyPassword } from "@/lib/password";
 import { rateLimit, resetRateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
+import { safeNextPath } from "@/lib/redirect";
 import { createSession, destroySession } from "@/lib/session";
 
 export interface LoginState {
@@ -36,9 +37,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
 
   resetRateLimit(emailKey);
   await createSession(user.id);
-  const next = String(formData.get("next") ?? "");
-  // Solo rutas internas para evitar redirecciones abiertas.
-  redirect(next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/");
+  redirect(safeNextPath(String(formData.get("next") ?? "")));
 }
 
 export async function logout(): Promise<void> {

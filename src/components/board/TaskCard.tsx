@@ -40,7 +40,11 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false }: { task
       tabIndex={0}
       onClick={() => openTask(task.id)}
       onKeyDown={(e) => {
-        if (e.key === "Enter") openTask(task.id);
+        if (e.key === "Enter") {
+          // Evita que el KeyboardSensor de dnd-kit empiece además un arrastre.
+          e.stopPropagation();
+          openTask(task.id);
+        }
       }}
       className={cn(
         "group relative cursor-pointer overflow-hidden rounded-lg border bg-white p-2.5 pl-3 text-left shadow-sm transition-shadow select-none hover:shadow-md dark:bg-slate-900",

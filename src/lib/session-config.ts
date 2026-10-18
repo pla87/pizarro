@@ -5,7 +5,8 @@ export const SESSION_MAX_AGE_SECONDS = SESSION_MAX_AGE_DAYS * 24 * 60 * 60;
 
 export function cookieSecure(): boolean {
   if (process.env.COOKIE_SECURE) return process.env.COOKIE_SECURE === "true";
-  return (process.env.APP_URL ?? "").startsWith("https://");
+  if (process.env.APP_URL) return process.env.APP_URL.startsWith("https://");
+  return process.env.NODE_ENV === "production";
 }
 
 /** Con Secure se usa el prefijo __Host- (sin Domain, Path=/). */

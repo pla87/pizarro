@@ -13,6 +13,10 @@ export async function runAction<T>(fn: () => Promise<T>): Promise<ActionResult<T
     if (err instanceof z.ZodError) {
       return { ok: false, error: err.issues[0]?.message ?? "Datos no válidos." };
     }
+    // Clave foránea violada: otra persona cambió los datos a la vez.
+    if (err && typeof err === "object" && "code" in err && err.code === "P2003") {
+      return { ok: false, error: "Los datos han cambiado mientras tanto. Recarga e inténtalo de nuevo." };
+    }
     // Los errores de redirect()/notFound() de Next deben propagarse.
     if (err && typeof err === "object" && "digest" in err) throw err;
     console.error("[action]", err);

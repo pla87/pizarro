@@ -57,19 +57,45 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const dragOrigin = useRef<{ columnId: string; index: number } | null>(null);
 
   // Mutaciones en vuelo: mientras haya alguna no se sobrescribe el estado con datos del servidor.
+  // Si llegan datos en ese momento, se marcan como pendientes y se vuelven a pedir al terminar.
   const pending = useRef(0);
+  const staleRefresh = useRef(false);
+  const flushStale = useCallback(() => {
+    if (staleRefresh.current && pending.current === 0) {
+      staleRefresh.current = false;
+      router.refresh();
+    }
+  }, [router]);
   const track = useCallback(async <T,>(p: Promise<T>): Promise<T> => {
     pending.current++;
     try {
       return await p;
     } finally {
       pending.current--;
+      flushStale();
     }
+  }, [flushStale]);
+
+  const patchTask = useCallback((id: string, patch: Partial<BoardTask> | ((t: BoardTask) => Partial<BoardTask>)) => {
+    setTasks((prev) => {
+      let changed = false;
+      const next = prev.map((t) => {
+        if (t.id !== id) return t;
+        const values = typeof patch === "function" ? patch(t) : patch;
+        if (Object.entries(values).every(([k, v]) => t[k as keyof BoardTask] === v)) return t;
+        changed = true;
+        return { ...t, ...values };
+      });
+      return changed ? next : prev;
+    });
   }, []);
 
   // Sincroniza con el servidor cuando llegan datos nuevos (router.refresh).
   useEffect(() => {
-    if (pending.current > 0 || activeId) return;
+    if (pending.current > 0 || activeId) {
+      staleRefresh.current = true;
+      return;
+    }
     setColumns(data.columns);
     setTasks(data.tasks);
     setLabels(data.labels);
@@ -123,7 +149,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       taskById,
       upsertTask: (task) =>
         setTasks((prev) => (prev.some((t) => t.id === task.id) ? prev.map((t) => (t.id === task.id ? task : t)) : [...prev, task])),
-      patchTask: (id, patch) => setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t))),
+      patchTask,
       removeTask: (id) => {
         setTasks((prev) => prev.filter((t) => t.id !== id));
         setSelected((prev) => {
@@ -152,7 +178,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       track,
       refresh: () => router.refresh(),
     }),
-    [data.project, data.users, data.currentUserId, sortedColumns, labels, taskById, baseItems, selected, track, router],
+    [data.project, data.users, data.currentUserId, sortedColumns, labels, taskById, baseItems, selected, track, router, patchTask],
   );
 
   // --- Movimiento masivo ------------------------------------------------------
@@ -217,6 +243,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     setDragItems(null);
     setActiveId(null);
     dragOrigin.current = null;
+    flushStale();
   };
 
   const onDragEnd = async ({ active, over }: DragEndEvent) => {

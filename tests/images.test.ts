@@ -22,3 +22,9 @@ test("rechaza ficheros que no son imágenes", async () => {
   await assert.rejects(processImage(Buffer.from("<svg onload=alert(1)></svg>")), /imagen|Formato/);
   await assert.rejects(processImage(Buffer.from("hola")), /imagen/);
 });
+
+test("rechaza imágenes con demasiados píxeles (protección de memoria)", async () => {
+  const huge = await sharp({ create: { width: 8000, height: 8000, channels: 3, background: "#000" } }).png({ compressionLevel: 9 }).toBuffer();
+  assert.ok(huge.length < 2_000_000, "PNG pequeño en bytes pero enorme en píxeles");
+  await assert.rejects(processImage(huge), /imagen/);
+});

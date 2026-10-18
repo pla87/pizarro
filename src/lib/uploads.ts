@@ -30,20 +30,53 @@ export interface ProcessedImage {
 
 /** Redimensiona a 1280px de ancho máximo, WebP calidad 75, y genera una miniatura. */
 export async function processImage(input: Buffer): Promise<ProcessedImage> {
+  // Como máximo dos imágenes procesándose a la vez: acota la memoria del contenedor.
+  await acquire();
+  try {
+    return await processImageNow(input);
+  } finally {
+    release();
+  }
+}
+
+const MAX_CONCURRENT = 2;
+let running = 0;
+const queue: (() => void)[] = [];
+function acquire(): Promise<void> {
+  if (running < MAX_CONCURRENT) {
+    running++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => queue.push(resolve));
+}
+function release(): void {
+  const next = queue.shift();
+  if (next) next();
+  else running--;
+}
+
+const MAX_INPUT_PIXELS = 30_000_000;
+
+async function processImageNow(input: Buffer): Promise<ProcessedImage> {
   let meta: Awaited<ReturnType<ReturnType<typeof sharp>["metadata"]>>;
   try {
-    meta = await sharp(input, { limitInputPixels: 60_000_000 }).metadata();
+    meta = await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
   } catch {
     throw new AppError("El archivo no es una imagen válida.");
   }
   if (!meta.format || !INPUT_FORMATS.has(meta.format)) {
     throw new AppError("Formato no admitido. Usa PNG, JPEG, WebP, GIF o AVIF.");
   }
-  const base = sharp(input, { limitInputPixels: 60_000_000, animated: false }).rotate();
-  const [full, thumb] = await Promise.all([
-    base.clone().resize({ width: 1280, withoutEnlargement: true }).webp({ quality: 75 }).toBuffer({ resolveWithObject: true }),
-    base.clone().resize({ width: 480, height: 360, fit: "inside", withoutEnlargement: true }).webp({ quality: 70 }).toBuffer(),
-  ]);
+  // Se decodifica una sola vez; la miniatura sale de la imagen ya reducida.
+  const full = await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS, animated: false })
+    .rotate()
+    .resize({ width: 1280, withoutEnlargement: true })
+    .webp({ quality: 75 })
+    .toBuffer({ resolveWithObject: true })
+    .catch(() => {
+      throw new AppError("No se pudo procesar la imagen (¿es demasiado grande?).");
+    });
+  const thumb = await sharp(full.data).resize({ width: 480, height: 360, fit: "inside", withoutEnlargement: true }).webp({ quality: 70 }).toBuffer();
   return { full: full.data, thumb, width: full.info.width, height: full.info.height };
 }
 

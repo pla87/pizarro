@@ -81,17 +81,19 @@ export async function moveColumn(columnId: string, direction: number) {
 export async function deleteColumn(columnId: string) {
   return runAction(async () => {
     const column = await findColumn(columnId);
-    const active = await db.task.count({ where: { columnId, archivedAt: null } });
-    if (active > 0) throw new AppError("La columna todavía tiene tarjetas. Muévelas antes de borrarla.");
     const other = await db.column.findFirst({
       where: { projectId: column.projectId, id: { not: columnId } },
       orderBy: { position: "asc" },
       select: { id: true },
     });
     if (!other) throw new AppError("Un proyecto necesita al menos una columna.");
-    await db.$transaction([
-      db.task.updateMany({ where: { columnId }, data: { columnId: other.id } }),
-      db.column.delete({ where: { id: columnId } }),
-    ]);
+    await db.$transaction(async (tx) => {
+      const active = await tx.task.count({ where: { columnId, archivedAt: null } });
+      if (active > 0) throw new AppError("La columna todavía tiene tarjetas. Muévelas antes de borrarla.");
+      // Solo se reubican las archivadas. Si alguien suelta una tarjeta activa a la vez,
+      // la clave foránea (Restrict) hace fallar el borrado en lugar de moverla en silencio.
+      await tx.task.updateMany({ where: { columnId, archivedAt: { not: null } }, data: { columnId: other.id } });
+      await tx.column.delete({ where: { id: columnId } });
+    });
   });
 }

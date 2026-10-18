@@ -52,10 +52,11 @@ COPY --from=migrator --chown=node:node /app/migrator ./migrator
 COPY --chown=node:node changelog.json ./
 COPY --chown=node:node scripts/start.sh ./scripts/start.sh
 
-# Volumen persistente para las capturas (en Railway se monta un Volume en esta ruta).
-VOLUME /app/uploads
+# Las capturas se guardan en /app/uploads: en Railway se monta ahí un Volume desde
+# el panel (Railway no admite la instrucción VOLUME en el Dockerfile).
 
-USER node
+# El contenedor arranca como root solo para ajustar los permisos del volumen;
+# scripts/start.sh baja inmediatamente al usuario "node".
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \

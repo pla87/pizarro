@@ -69,7 +69,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
       try {
         const att = await board.track(uploadImage(task.id, file));
         setDetail((d) => (d ? { ...d, attachments: [...d.attachments, att] } : d));
-        board.patchTask(task.id, { attachmentCount: (board.taskById.get(task.id)?.attachmentCount ?? 0) + 1 });
+        board.patchTask(task.id, (t) => ({ attachmentCount: t.attachmentCount + 1 }));
       } catch (err) {
         toast((err as Error).message, "error");
       } finally {
@@ -179,7 +179,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
                       const res = await board.track(deleteAttachment(a.id));
                       if (!res.ok) return toast(res.error, "error");
                       setDetail((d) => (d ? { ...d, attachments: d.attachments.filter((x) => x.id !== a.id) } : d));
-                      board.patchTask(task.id, { attachmentCount: Math.max(0, (board.taskById.get(task.id)?.attachmentCount ?? 1) - 1) });
+                      board.patchTask(task.id, (t) => ({ attachmentCount: Math.max(0, t.attachmentCount - 1) }));
                     }}
                   >
                     <Trash2 size={14} />
@@ -387,13 +387,19 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
   const board = useBoard();
   const toast = useToast();
   const [newTitle, setNewTitle] = useState("");
-  const subtasks = detail?.subtasks ?? [];
-  const done = subtasks.filter((s) => s.done).length;
+  const subtasks = detail?.subtasks;
+  const list = subtasks ?? [];
+  const done = list.filter((s) => s.done).length;
+  const { patchTask } = board;
 
-  const sync = (list: SubtaskInfo[]) => {
-    setDetail((d) => (d ? { ...d, subtasks: list } : d));
-    board.patchTask(taskId, { subtaskTotal: list.length, subtaskDone: list.filter((s) => s.done).length });
-  };
+  // El contador de la tarjeta se deriva siempre de la lista actual.
+  useEffect(() => {
+    if (subtasks) patchTask(taskId, { subtaskTotal: subtasks.length, subtaskDone: subtasks.filter((s) => s.done).length });
+  }, [subtasks, taskId, patchTask]);
+
+  // Actualizaciones funcionales: varias acciones seguidas no se pisan entre sí.
+  const update = (fn: (list: SubtaskInfo[]) => SubtaskInfo[]) =>
+    setDetail((d) => (d ? { ...d, subtasks: fn(d.subtasks) } : d));
 
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -402,24 +408,25 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
     setNewTitle("");
     const res = await board.track(addSubtask(taskId, title));
     if (!res.ok) return toast(res.error, "error");
-    sync([...subtasks, res.data]);
+    update((l) => [...l, res.data]);
   };
 
+  const setDone = (id: string, value: boolean) => update((l) => l.map((x) => (x.id === id ? { ...x, done: value } : x)));
+
   const toggle = async (s: SubtaskInfo) => {
-    const list = subtasks.map((x) => (x.id === s.id ? { ...x, done: !x.done } : x));
-    sync(list);
+    setDone(s.id, !s.done);
     const res = await board.track(updateSubtask(s.id, { done: !s.done }));
     if (!res.ok) {
-      sync(subtasks);
+      setDone(s.id, s.done);
       toast(res.error, "error");
     }
   };
 
   const remove = async (s: SubtaskInfo) => {
-    sync(subtasks.filter((x) => x.id !== s.id));
+    update((l) => l.filter((x) => x.id !== s.id));
     const res = await board.track(deleteSubtask(s.id));
     if (!res.ok) {
-      sync(subtasks);
+      update((l) => [...l, s].sort((a, b) => a.position - b.position));
       toast(res.error, "error");
     }
   };
@@ -428,15 +435,15 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
     <section>
       <div className="mb-2 flex items-center gap-2">
         <h3 className="text-sm font-semibold">Checklist</h3>
-        {subtasks.length > 0 && <span className="text-xs text-slate-500">{done}/{subtasks.length}</span>}
+        {list.length > 0 && <span className="text-xs text-slate-500">{done}/{list.length}</span>}
       </div>
-      {subtasks.length > 0 && (
+      {list.length > 0 && (
         <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-          <div className="h-full bg-emerald-500 transition-all" style={{ width: `${(done / subtasks.length) * 100}%` }} />
+          <div className="h-full bg-emerald-500 transition-all" style={{ width: `${(done / list.length) * 100}%` }} />
         </div>
       )}
       <ul className="space-y-0.5">
-        {subtasks.map((s) => (
+        {list.map((s) => (
           <li key={s.id} className="group flex items-center gap-2 rounded-md px-1 py-1 hover:bg-slate-50 dark:hover:bg-slate-800/50">
             <input type="checkbox" checked={s.done} onChange={() => toggle(s)} className="h-4 w-4 accent-emerald-600" aria-label={s.title} />
             <span className={cn("flex-1 text-sm", s.done && "text-slate-400 line-through")}>{s.title}</span>

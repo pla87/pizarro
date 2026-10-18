@@ -12,7 +12,8 @@ export interface BoardApi {
   setLabels: React.Dispatch<React.SetStateAction<LabelOption[]>>;
   taskById: Map<string, BoardTask>;
   upsertTask: (task: BoardTask) => void;
-  patchTask: (id: string, patch: Partial<BoardTask>) => void;
+  /** Admite un parche o una función (para actualizaciones concurrentes sin perder cambios). */
+  patchTask: (id: string, patch: Partial<BoardTask> | ((task: BoardTask) => Partial<BoardTask>)) => void;
   removeTask: (id: string) => void;
   setColumns: React.Dispatch<React.SetStateAction<BoardColumn[]>>;
   openTask: (id: string) => void;
