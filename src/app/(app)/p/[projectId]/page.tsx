@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { visibleProjectsWhere } from "@/lib/access";
-import { appTimeZone, boardTaskSelect, projectUsers, toBoardTask } from "@/lib/board";
+import { appTimeZone, boardTaskSelect, listKinds, projectUsers, toBoardTask, userTemplates } from "@/lib/board";
 import { dateToIso, todayIso } from "@/lib/dates";
 import { googleEnabled } from "@/lib/google";
 import { db } from "@/lib/db";
@@ -29,16 +29,18 @@ export default async function BoardPage({ params, searchParams }: Params) {
   if (!project) notFound();
 
   // Todas las consultas en paralelo: una sola ida y vuelta efectiva.
-  const [columns, tasks, users, labels, me, deliverables] = await Promise.all([
+  const [columns, tasks, users, labels, me, deliverables, kinds, templates] = await Promise.all([
     db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true } }),
     db.task.findMany({ where: { projectId, archivedAt: null }, orderBy: { position: "asc" }, select: boardTaskSelect }),
     projectUsers(projectId, project.restricted),
     db.label.findMany({ where: { projectId }, orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),
     db.user.findUniqueOrThrow({
       where: { id: user.id },
-      select: { releaseHeaderTemplate: true, releaseFooterTemplate: true, googleAccount: { select: { id: true } } },
+      select: { cardStyle: true, googleAccount: { select: { id: true } } },
     }),
     db.deliverable.findMany({ where: { projectId }, orderBy: [{ position: "asc" }], select: { id: true, name: true, dueDate: true } }),
+    listKinds(),
+    userTemplates(user.id),
   ]);
 
   const data: BoardData = {
@@ -47,7 +49,9 @@ export default async function BoardPage({ params, searchParams }: Params) {
     tasks: tasks.map(toBoardTask),
     users,
     labels,
-    templates: { header: me.releaseHeaderTemplate, footer: me.releaseFooterTemplate },
+    kinds,
+    templates,
+    cardStyle: me.cardStyle,
     currentUserId: user.id,
     deliverables: deliverables.map((d) => ({ id: d.id, name: d.name, dueDate: dateToIso(d.dueDate) })),
     google: { enabled: googleEnabled(), connected: Boolean(me.googleAccount) },

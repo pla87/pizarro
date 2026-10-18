@@ -5,6 +5,9 @@ export const metadata: Metadata = {
   title: { default: "Tablón", template: "%s · Tablón" },
   description: "Kanban ligero y generador de release notes para equipos pequeños.",
   robots: { index: false, follow: false },
+  applicationName: "Tablón",
+  appleWebApp: { capable: true, title: "Tablón", statusBarStyle: "default" },
+  icons: { apple: "/apple-touch-icon.png" },
 };
 
 export const viewport: Viewport = {

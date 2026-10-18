@@ -3,7 +3,6 @@
 import { Camera, ImagePlus, Loader2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createTask } from "@/actions/tasks";
-import type { TaskTypeValue } from "@/lib/constants";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
@@ -25,7 +24,7 @@ export function NewTaskDialog({ initialColumnId, initialFiles, onClose }: Props)
   const board = useBoard();
   const toast = useToast();
   const [title, setTitle] = useState(() => (initialFiles?.length ? captureTitle() : ""));
-  const [type, setType] = useState<TaskTypeValue>("FEATURE");
+  const [kindId, setKindId] = useState(board.kinds[0]?.id ?? "");
   const [columnId, setColumnId] = useState(initialColumnId ?? board.columns[0]?.id ?? "");
   const [assigneeId, setAssigneeId] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -50,7 +49,7 @@ export function NewTaskDialog({ initialColumnId, initialFiles, onClose }: Props)
     setBusy(true);
     const res = await board.track(
       createTask({
-        projectId: board.project.id, columnId, title, type, description,
+        projectId: board.project.id, columnId, title, kindId, description,
         assigneeId: assigneeId || null, dueDate: dueDate || null, deliverableId: deliverableId || null,
       }),
     );
@@ -88,7 +87,7 @@ export function NewTaskDialog({ initialColumnId, initialFiles, onClose }: Props)
         </div>
         <div>
           <div className="label">Tipo</div>
-          <TypeSelector value={type} onChange={setType} />
+          <TypeSelector kinds={board.kinds} value={kindId} onChange={setKindId} />
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>

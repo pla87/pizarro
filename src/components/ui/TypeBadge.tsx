@@ -1,7 +1,10 @@
-import { TASK_TYPE_META, type TaskTypeValue } from "@/lib/constants";
-import { cn } from "./cn";
+import { kindBadgeStyle } from "@/lib/constants";
 
-export function TypeBadge({ type }: { type: TaskTypeValue }) {
-  const meta = TASK_TYPE_META[type];
-  return <span className={cn("badge", meta.badge)}>{meta.label}</span>;
+export function TypeBadge({ kind }: { kind: { name: string; color: string } | undefined | null }) {
+  if (!kind) return null;
+  return (
+    <span className="badge ring-0" style={kindBadgeStyle(kind.color)}>
+      {kind.name}
+    </span>
+  );
 }

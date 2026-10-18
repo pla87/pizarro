@@ -1,10 +1,14 @@
 // Generador de release notes. Función pura: se usa en el navegador (instantáneo)
 // y en los tests.
-import type { TaskTypeValue } from "./constants";
+
+export interface ReleaseKind {
+  id: string;
+  name: string;
+}
 
 export interface ReleaseTaskInput {
   title: string;
-  type: TaskTypeValue;
+  kindId: string;
   linkUrl?: string | null;
 }
 
@@ -12,45 +16,64 @@ export interface ReleaseInput {
   header: string;
   footer: string;
   title: string;
+  /** Tipos en el orden en que deben aparecer las secciones. */
+  kinds: ReleaseKind[];
   tasks: ReleaseTaskInput[];
 }
-
-export const RELEASE_SECTIONS: { heading: string; types: TaskTypeValue[] }[] = [
-  { heading: "### Features", types: ["FEATURE"] },
-  { heading: "### Fixes", types: ["HOTFIX", "FIX"] },
-  { heading: "### Chores / Infra", types: ["CHORE", "REFACTOR"] },
-];
 
 /** Escapa los caracteres que romperían el texto de un enlace Markdown. */
 function escapeLinkText(text: string): string {
   return text.replace(/([\[\]\\])/g, "\\$1");
 }
 
-export function formatReleaseLine(task: ReleaseTaskInput): string {
+export function formatReleaseLine(task: Pick<ReleaseTaskInput, "title" | "linkUrl">): string {
   const title = task.title.replace(/\s+/g, " ").trim();
-  const prefix = task.type === "HOTFIX" ? "**[HOTFIX]** " : task.type === "REFACTOR" ? "*(refactor)* " : "";
   const link = task.linkUrl ? ` ([enlace](<${task.linkUrl.replace(/[<>]/g, "")}>))` : "";
-  return `- ${prefix}${escapeLinkText(title)}${link}`;
+  return `- ${escapeLinkText(title)}${link}`;
+}
+
+/** Cuerpo de la release (título + una sección por tipo), sin cabecera ni pie. */
+export function buildReleaseBody(input: Omit<ReleaseInput, "header" | "footer">): string {
+  const parts = [`## ${input.title.trim()}`];
+  const known = new Set(input.kinds.map((k) => k.id));
+  for (const kind of input.kinds) {
+    const items = input.tasks.filter((t) => t.kindId === kind.id);
+    if (items.length) parts.push([`### ${kind.name}`, ...items.map(formatReleaseLine)].join("\n"));
+  }
+  const others = input.tasks.filter((t) => !known.has(t.kindId));
+  if (others.length) parts.push(["### Otros", ...others.map(formatReleaseLine)].join("\n"));
+  if (input.tasks.length === 0) parts.push("_Sin tareas seleccionadas._");
+  return parts.join("\n\n");
 }
 
 export function buildReleaseMarkdown(input: ReleaseInput): string {
-  const parts: string[] = [];
   const header = input.header.trim();
   const footer = input.footer.trim();
+  return [header, buildReleaseBody(input), footer].filter(Boolean).join("\n\n") + "\n";
+}
 
-  if (header) parts.push(header);
-  parts.push(`## ${input.title.trim()}`);
-
-  for (const section of RELEASE_SECTIONS) {
-    // Dentro de cada sección se respeta el orden recibido, con los tipos en el orden de la sección.
-    const items = section.types.flatMap((type) => input.tasks.filter((t) => t.type === type));
-    if (items.length === 0) continue;
-    parts.push([section.heading, ...items.map(formatReleaseLine)].join("\n"));
+/**
+ * Cambia la cabecera (o el pie) de un texto ya editado: si el bloque anterior sigue
+ * intacto se sustituye; si no, el nuevo se añade al principio (o al final).
+ */
+export function swapTemplateBlock(text: string, previous: string, next: string, where: "start" | "end"): string {
+  const prev = previous.trim();
+  const nxt = next.trim();
+  if (prev) {
+    const idx = where === "start" ? text.indexOf(prev) : text.lastIndexOf(prev);
+    if (idx >= 0) {
+      const before = text.slice(0, idx);
+      const after = text.slice(idx + prev.length);
+      if (!nxt) {
+        // Quitar también la línea en blanco que lo separaba del resto.
+        if (where === "start") return before + after.replace(/^\s*\n/, "");
+        return before.replace(/\s+$/, "") + after.replace(/^\s+/, "\n");
+      }
+      return before + nxt + after;
+    }
   }
-
-  if (input.tasks.length === 0) parts.push("_Sin tareas seleccionadas._");
-  if (footer) parts.push(footer);
-  return parts.join("\n\n") + "\n";
+  if (!nxt) return text;
+  return where === "start" ? `${nxt}\n\n${text.replace(/^\s+/, "")}` : `${text.replace(/\s+$/, "")}\n\n${nxt}\n`;
 }
 
 /** Fecha local en formato YYYY-MM-DD. */

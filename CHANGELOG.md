@@ -2,6 +2,33 @@
 
 Historial de versiones de Tablón. Fuente: `changelog.json`.
 
+## v1.2.0 — 2026-10-18
+
+Tipos de tarea configurables, varias plantillas de release, app instalable en el móvil y mejoras de uso en móvil y escritorio.
+
+### Nuevas funcionalidades
+
+- Tipos de tarea configurables por los administradores (nombre, color y orden); cada tipo es una sección de la release.
+- Varias cabeceras y pies de release por usuario, con nombre; se eligen en el diálogo de «Generar release» y se sustituyen en el texto ya editado.
+- Instalar Tablón como app en Android, iPhone y escritorio (pantalla de inicio, pantalla completa).
+- Preferencia de apariencia: tarjetas con franja de color o teñidas enteras de su color.
+- En móvil, arrastrar una tarjeta sobre la pestaña de otra columna (manteniéndola medio segundo) muestra esa columna para soltarla en su sitio; soltarla sobre la pestaña la deja al final.
+
+### Mejoras
+
+- Cambio rápido de proyecto desde el título del proyecto (desplegable en móvil y escritorio).
+- Botón «Cámara» también en el detalle de tareas existentes (móvil).
+- Añadir columna: barra vertical estrecha al final del tablero (escritorio) y botón redondo tras las pestañas (móvil).
+
+### Correcciones
+
+- Se añade favicon.ico (evitaba un 404 en cada carga).
+
+### Cambios técnicos / DB
+
+- Migración v1_2: tabla TaskKind (Feature/Chore/Refactor → Funcionalidad; Fix/Hotfix → Corrección), tabla ReleaseTemplate (migra las plantillas existentes) y User.cardStyle.
+- Manifiesto web, iconos PNG (incl. maskable y apple-touch-icon) y service worker mínimo sin caché; la imagen Docker incluye public/.
+
 ## v1.1.2 — 2026-10-18
 
 Mensaje claro en los logs si faltan variables de entorno al arrancar.

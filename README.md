@@ -15,14 +15,15 @@ Kanban ligero y generador de *release notes* para equipos pequeños (hasta 5 per
 | Acceso | Login con email y contraseña (bcrypt). Sesiones en base de datos con cookie `HttpOnly` y `SameSite=Lax`. Sin registro público. Roles `ADMIN` y `MEMBER`. Máximo de 5 usuarios activos. |
 | Proyectos | Selector en la barra lateral. Cada proyecto tiene sus columnas, tareas, etiquetas y releases. Por defecto son visibles para todos; un admin puede **restringir la visibilidad** a usuarios concretos. |
 | Tablero | Columnas configurables por proyecto: crear, renombrar, reordenar, asignar un rol y borrar si están vacías. Arrastrar y soltar entre columnas y dentro de cada una. Selección múltiple y movimiento en lote. |
-| Tarjetas | Tipo (`Feature`, `Fix`, `Chore`, `Refactor`, `Hotfix`), color, responsable, etiquetas, enlace externo, checklist, descripción en Markdown y capturas (pegar con Ctrl/⌘+V, archivo o cámara). Se pueden archivar y restaurar. |
-| Releases | Botón **Generar Release** en la columna con rol *Siguiente salto*. Inserta tu cabecera estándar, agrupa las tareas (Features / Fixes / Chores · Infra) y añade tu pie estándar. Editor con vista previa, **Copiar todo**, descarga `.md` / `.txt` y **Marcar como desplegado** (mueve las tarjetas a *En producción* o las archiva, y guarda el texto final en el histórico). |
+| Tarjetas | Tipo (por defecto *Funcionalidad* y *Corrección*; los admins crean más tipos con su color), color, responsable opcional, etiquetas, enlace externo, checklist, descripción en Markdown y capturas (pegar con Ctrl/⌘+V, archivo o cámara). Se pueden archivar y restaurar. |
+| Releases | Botón **Generar Release** en la columna con rol *Siguiente salto*. Eliges una de tus **cabeceras** y uno de tus **pies** (cada usuario puede tener varios). Las tareas se agrupan con una sección por tipo. Editor con vista previa, **Copiar todo**, descarga `.md` / `.txt` y **Marcar como desplegado** (mueve las tarjetas a *En producción* o las archiva, y guarda el texto final en el histórico *Releases*). |
 | Plazos y entregables | Fecha límite en cada tarjeta (avisos de vencida, hoy o próxima) y **entregables**: hitos con fecha objetivo que agrupan tarjetas. Las columnas pueden contar como «terminadas». |
 | Informe PDF | Botón **Informe PDF** en cada proyecto: resumen y avance, estado por columna, entregables, plazos vencidos y próximos, carga por persona, tipos, últimas releases y detalle de cada columna. |
 | Google Docs / Sheets | Escribe `@docs` o `@sheets` en la descripción o en un comentario, o pulsa *Nuevo Doc* / *Nuevo Sheet*. Se crea el archivo en tu Google Drive, se abre en otra pestaña y queda enlazado a la tarjeta. Cada usuario conecta su cuenta una vez (permiso mínimo `drive.file`). |
 | Comentarios y menciones | Comentarios en las tarjetas con `@persona` (autocompletado). La persona mencionada recibe un aviso en la app (campana con contador), por **email** y, si lo activa, por **WhatsApp**. |
 | Vistas | *Mis tareas asignadas*, *Avisos*, histórico de releases por proyecto, *Historial de versiones* de la propia app. |
-| Móvil | Pestañas por columna, botón flotante (+) para crear tareas o subir capturas, diálogos a pantalla completa. |
+| Móvil | **Instalable como app** (Android, iPhone y escritorio). Pestañas por columna (arrastra una tarjeta sobre otra pestaña para cambiarla de columna), botón flotante (+) para crear tareas o subir capturas, cámara en el detalle de la tarea, cambio rápido de proyecto desde el título. |
+| Personalización | Cada usuario elige el aspecto de las tarjetas: franja de color a la izquierda o tarjeta entera teñida. |
 
 ### Roles de columna
 
@@ -117,6 +118,8 @@ Las integraciones son **opcionales**: si faltan sus variables, la app funciona i
 3. En el servicio, **Settings → Source**: elige la rama que quieras desplegar (por ejemplo `main`).
 
 ### 3. Variables de entorno
+
+> Crea las variables **en el servicio de la app** (`tablon` → *Variables*), no como *Shared Variables* del proyecto. Las compartidas no llegan solas a los servicios: hay que enlazarlas en cada uno con `${{shared.NOMBRE}}`. Además, una variable compartida no puede apuntar a otra de un servicio, como `${{Postgres.DATABASE_URL}}`, y llega vacía. Tras crear o cambiar variables, pulsa **Deploy** para aplicar los cambios pendientes.
 
 En el servicio de la app → **Variables** → **Raw Editor**, pega lo siguiente (ajusta los valores):
 

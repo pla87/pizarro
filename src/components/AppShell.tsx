@@ -2,7 +2,7 @@
 
 import {
   Bell, ChevronsUpDown, FileDown, FolderKanban, History, LayoutDashboard, ListChecks, LogOut, Menu, Plus, Rocket,
-  Settings, SlidersHorizontal, Users, X,
+  Settings, SlidersHorizontal, Tags, Users, X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -10,6 +10,8 @@ import { useEffect, useState, useTransition } from "react";
 import { logout } from "@/actions/auth";
 import { createProject } from "@/actions/projects";
 import type { CurrentUser } from "@/lib/session";
+import { InstallApp } from "./InstallApp";
+import { ProjectMenu, ProjectsContext } from "./ProjectMenu";
 import { Avatar } from "./ui/Avatar";
 import { cn } from "./ui/cn";
 import { Modal } from "./ui/Modal";
@@ -50,6 +52,7 @@ function Shell({ user, projects, version, unread, children }: Props) {
   );
 
   return (
+    <ProjectsContext.Provider value={{ projects, currentId: current?.id ?? null }}>
     <div className="flex h-dvh overflow-hidden">
       <aside className="hidden w-60 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col dark:border-slate-800 dark:bg-slate-900">
         {sidebar}
@@ -72,7 +75,7 @@ function Shell({ user, projects, version, unread, children }: Props) {
           <button className="btn-icon" onClick={() => setDrawerOpen(true)} aria-label="Abrir menú">
             <Menu size={20} />
           </button>
-          <span className="truncate font-semibold">{current?.name ?? "Tablón"}</span>
+          <ProjectMenu className="flex-1" />
           {unread > 0 && (
             <Link href="/notifications" className="ml-auto flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white" aria-label={`${unread} avisos sin leer`}>
               <Bell size={13} /> {unread}
@@ -82,6 +85,7 @@ function Shell({ user, projects, version, unread, children }: Props) {
         <main className="min-h-0 flex-1 overflow-auto">{children}</main>
       </div>
     </div>
+    </ProjectsContext.Provider>
   );
 }
 
@@ -149,7 +153,9 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
         <NavLink href="/my-tasks" icon={ListChecks} active={pathname === "/my-tasks"}>Mis tareas asignadas</NavLink>
         <NavLink href="/changelog" icon={History} active={pathname === "/changelog"}>Historial de versiones</NavLink>
         <NavLink href="/settings" icon={Settings} active={pathname === "/settings"}>Mi perfil y plantillas</NavLink>
-        {isAdmin && <NavLink href="/admin/users" icon={Users} active={pathname.startsWith("/admin")}>Usuarios</NavLink>}
+        {isAdmin && <NavLink href="/admin/users" icon={Users} active={pathname.startsWith("/admin/users")}>Usuarios</NavLink>}
+        {isAdmin && <NavLink href="/admin/types" icon={Tags} active={pathname.startsWith("/admin/types")}>Tipos de tarea</NavLink>}
+        <InstallApp />
       </nav>
 
       <div className="border-t border-slate-200 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-slate-800">

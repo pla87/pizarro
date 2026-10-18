@@ -8,7 +8,7 @@ export const boardTaskSelect = {
   id: true,
   columnId: true,
   title: true,
-  type: true,
+  kindId: true,
   color: true,
   linkUrl: true,
   position: true,
@@ -28,7 +28,7 @@ export function toBoardTask(t: BoardTaskRow): BoardTask {
     id: t.id,
     columnId: t.columnId,
     title: t.title,
-    type: t.type,
+    kindId: t.kindId,
     color: t.color,
     linkUrl: t.linkUrl,
     position: t.position,
@@ -63,4 +63,18 @@ export async function projectUsers(projectId: string, restricted: boolean) {
 /** Zona horaria de referencia para «hoy» en plazos e informes. */
 export function appTimeZone(): string {
   return process.env.APP_TIMEZONE || "Europe/Madrid";
+}
+
+export function listKinds() {
+  return db.taskKind.findMany({ orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, color: true } });
+}
+
+export async function userTemplates(userId: string) {
+  const rows = await db.releaseTemplate.findMany({
+    where: { userId },
+    orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+    select: { id: true, kind: true, name: true, content: true },
+  });
+  const pick = (kind: "HEADER" | "FOOTER") => rows.filter((r) => r.kind === kind).map(({ id, name, content }) => ({ id, name, content }));
+  return { headers: pick("HEADER"), footers: pick("FOOTER") };
 }

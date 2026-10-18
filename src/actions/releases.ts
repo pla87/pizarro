@@ -31,7 +31,7 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     const tasks = await db.task.findMany({
       where: { id: { in: data.taskIds }, projectId: data.projectId, archivedAt: null },
       orderBy: [{ column: { position: "asc" } }, { position: "asc" }],
-      select: { id: true, title: true, type: true },
+      select: { id: true, title: true, kind: { select: { name: true } } },
     });
 
     let target: { id: string } | null = null;
@@ -47,7 +47,7 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
           title: data.title,
           content: data.content,
           createdById: user.id,
-          tasks: { create: tasks.map((t) => ({ taskId: t.id, title: t.title, type: t.type })) },
+          tasks: { create: tasks.map((t) => ({ taskId: t.id, title: t.title, kindName: t.kind.name })) },
         },
         select: { id: true },
       });

@@ -1,5 +1,5 @@
 // Tipos serializables que viajan del servidor al cliente.
-import type { ColumnRoleValue, TaskTypeValue } from "./constants";
+import type { ColumnRoleValue } from "./constants";
 
 export interface BoardColumn {
   id: string;
@@ -13,7 +13,7 @@ export interface BoardTask {
   id: string;
   columnId: string;
   title: string;
-  type: TaskTypeValue;
+  kindId: string;
   color: string | null;
   linkUrl: string | null;
   position: number;
@@ -29,6 +29,20 @@ export interface BoardTask {
   commentCount: number;
   linkCount: number;
 }
+
+export interface KindOption {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface TemplateOption {
+  id: string;
+  name: string;
+  content: string;
+}
+
+export type CardStyleValue = "STRIPE" | "FILLED";
 
 export interface DeliverableOption {
   id: string;
@@ -53,7 +67,9 @@ export interface BoardData {
   tasks: BoardTask[];
   users: UserOption[];
   labels: LabelOption[];
-  templates: { header: string; footer: string };
+  kinds: KindOption[];
+  templates: { headers: TemplateOption[]; footers: TemplateOption[] };
+  cardStyle: CardStyleValue;
   currentUserId: string;
   deliverables: DeliverableOption[];
   google: { enabled: boolean; connected: boolean };

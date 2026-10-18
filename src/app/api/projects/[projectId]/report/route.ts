@@ -1,5 +1,5 @@
 import { visibleProjectsWhere } from "@/lib/access";
-import { appTimeZone } from "@/lib/board";
+import { appTimeZone, listKinds } from "@/lib/board";
 import { dateToIso, todayIso } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { buildReport } from "@/lib/report";
@@ -21,7 +21,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
   });
   if (!project) return new Response("No encontrado", { status: 404 });
 
-  const [columns, tasks, deliverables, releases, archivedCount] = await Promise.all([
+  const [columns, tasks, deliverables, releases, archivedCount, kinds] = await Promise.all([
     db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, isDone: true } }),
     db.task.findMany({
       where: { projectId, archivedAt: null },
@@ -30,7 +30,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
       select: {
         id: true,
         title: true,
-        type: true,
+        kind: { select: { name: true } },
         columnId: true,
         dueDate: true,
         deliverableId: true,
@@ -41,6 +41,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
     db.deliverable.findMany({ where: { projectId }, orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { position: "asc" }], select: { id: true, name: true, description: true, dueDate: true } }),
     db.release.findMany({ where: { projectId }, orderBy: { deployedAt: "desc" }, take: 5, select: { title: true, deployedAt: true, _count: { select: { tasks: true } } } }),
     db.task.count({ where: { projectId, archivedAt: { not: null } } }),
+    listKinds(),
   ]);
 
   const today = todayIso(appTimeZone());
@@ -49,10 +50,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
     generatedBy: user.name,
     today,
     columns,
+    kinds: kinds.map((k) => k.name),
     tasks: tasks.map((t) => ({
       id: t.id,
       title: t.title,
-      type: t.type,
+      kind: t.kind.name,
       columnId: t.columnId,
       assigneeName: t.assignee?.name ?? null,
       dueDate: dateToIso(t.dueDate),

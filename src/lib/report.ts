@@ -1,5 +1,4 @@
 // Cálculo del informe de estado de un proyecto. Funciones puras (sin BD) para poder testearlas.
-import { TASK_TYPES, TASK_TYPE_META, type TaskTypeValue } from "./constants";
 import { daysBetween } from "./dates";
 
 export const UPCOMING_DAYS = 14;
@@ -10,10 +9,12 @@ export interface ReportInput {
   generatedBy: string;
   today: string;
   columns: { id: string; name: string; isDone: boolean }[];
+  /** Nombres de los tipos de tarea, en su orden. */
+  kinds: string[];
   tasks: {
     id: string;
     title: string;
-    type: TaskTypeValue;
+    kind: string;
     columnId: string;
     assigneeName: string | null;
     dueDate: string | null;
@@ -30,7 +31,7 @@ export type DeliverableStatus = "Completado" | "Retrasado" | "En riesgo" | "En p
 
 export interface ReportTask {
   title: string;
-  type: TaskTypeValue;
+  kind: string;
   column: string;
   assignee: string | null;
   dueDate: string | null;
@@ -81,7 +82,7 @@ export function buildReport(input: ReportInput): Report {
 
   const toReportTask = (t: ReportInput["tasks"][number]): ReportTask => ({
     title: t.title,
-    type: t.type,
+    kind: t.kind,
     column: columnById.get(t.columnId)?.name ?? "—",
     assignee: t.assigneeName,
     dueDate: t.dueDate,
@@ -91,6 +92,8 @@ export function buildReport(input: ReportInput): Report {
   });
 
   const all = input.tasks.map(toReportTask);
+  // Tipos configurados y, al final, cualquier otro que aparezca en las tareas.
+  const kindNames = [...new Set([...input.kinds, ...input.tasks.map((t) => t.kind)])];
   const open = all.filter((t) => !t.done);
   const done = all.length - open.length;
   const overdue = open.filter((t) => t.daysLeft !== null && t.daysLeft < 0).sort((a, b) => a.daysLeft! - b.daysLeft!);
@@ -105,7 +108,7 @@ export function buildReport(input: ReportInput): Report {
       isDone: c.isDone,
       count: tasks.length,
       overdue: tasks.filter((t) => !t.done && t.daysLeft !== null && t.daysLeft < 0).length,
-      byType: TASK_TYPES.map((type) => ({ label: TASK_TYPE_META[type].label, count: tasks.filter((t) => t.type === type).length })).filter((x) => x.count > 0),
+      byType: kindNames.map((kind) => ({ label: kind, count: tasks.filter((t) => t.kind === kind).length })).filter((x) => x.count > 0),
       // Pendientes primero por plazo; sin plazo al final.
       tasks: tasks.sort((a, b) => (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity)),
     };
@@ -157,10 +160,10 @@ export function buildReport(input: ReportInput): Report {
     overdue,
     upcoming,
     people: [...peopleMap.values()].sort((a, b) => b.open - a.open || a.name.localeCompare(b.name)),
-    types: TASK_TYPES.map((type) => ({
-      label: TASK_TYPE_META[type].label,
-      open: open.filter((t) => t.type === type).length,
-      done: all.filter((t) => t.done && t.type === type).length,
+    types: kindNames.map((kind) => ({
+      label: kind,
+      open: open.filter((t) => t.kind === kind).length,
+      done: all.filter((t) => t.done && t.kind === kind).length,
     })).filter((x) => x.open + x.done > 0),
     releases: input.releases,
   };

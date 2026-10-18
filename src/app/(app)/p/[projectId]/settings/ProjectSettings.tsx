@@ -12,7 +12,7 @@ import { ColorPicker } from "@/components/ui/ColorPicker";
 import { cn } from "@/components/ui/cn";
 import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
-import { PALETTE, type TaskTypeValue } from "@/lib/constants";
+import { PALETTE } from "@/lib/constants";
 import type { LabelOption } from "@/lib/types";
 
 interface Props {
@@ -20,7 +20,7 @@ interface Props {
   project: { id: string; name: string; description: string; restricted: boolean; memberIds: string[] };
   labels: LabelOption[];
   deliverables: DeliverableRow[];
-  archived: { id: string; title: string; type: TaskTypeValue; archivedAt: string }[];
+  archived: { id: string; title: string; kind: { name: string; color: string }; archivedAt: string }[];
   users: { id: string; name: string; role: "ADMIN" | "MEMBER" }[];
 }
 
@@ -161,7 +161,7 @@ export function ProjectSettings({ isAdmin, project, deliverables, labels: initia
         <ul className="divide-y divide-slate-200 dark:divide-slate-800">
           {archived.map((t) => (
             <li key={t.id} className="flex items-center gap-3 py-2">
-              <TypeBadge type={t.type} />
+              <TypeBadge kind={t.kind} />
               <span className="min-w-0 flex-1 truncate text-sm">{t.title}</span>
               <span className="text-xs text-slate-500 max-sm:hidden">{new Date(t.archivedAt).toLocaleDateString("es-ES")}</span>
               <button

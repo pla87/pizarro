@@ -4,8 +4,9 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { MAX_TEMPLATE } from "@/lib/constants";
-import { AppError } from "@/lib/errors";
+import { AppError, notFound } from "@/lib/errors";
 import { hashPassword, MIN_PASSWORD, verifyPassword } from "@/lib/password";
+import { POSITION_STEP } from "@/lib/positions";
 import { createSession, requireUser } from "@/lib/session";
 import { disconnectGoogleAccount } from "@/lib/google";
 import { rateLimit } from "@/lib/rate-limit";
@@ -18,15 +19,51 @@ export async function updateProfileName(name: string) {
   });
 }
 
-const templateText = z.string().max(MAX_TEMPLATE, "La plantilla es demasiado larga.");
+const templateSchema = z.object({
+  name: v.name.max(60, "Máximo 60 caracteres."),
+  content: z.string().max(MAX_TEMPLATE, "La plantilla es demasiado larga."),
+});
 
-export async function updateReleaseTemplates(header: string, footer: string) {
+/** Plantillas de cabecera y pie de release: cada usuario puede tener varias de cada tipo. */
+export async function createReleaseTemplate(kind: "HEADER" | "FOOTER", input: { name: string; content: string }) {
   return runAction(async () => {
     const user = await requireUser();
-    await db.user.update({
-      where: { id: user.id },
-      data: { releaseHeaderTemplate: templateText.parse(header), releaseFooterTemplate: templateText.parse(footer) },
+    const k = z.enum(["HEADER", "FOOTER"]).parse(kind);
+    const data = templateSchema.parse(input);
+    if ((await db.releaseTemplate.count({ where: { userId: user.id } })) >= 40) throw new AppError("Máximo 40 plantillas.");
+    const last = await db.releaseTemplate.findFirst({ where: { userId: user.id, kind: k }, orderBy: { position: "desc" }, select: { position: true } });
+    return db.releaseTemplate.create({
+      data: { userId: user.id, kind: k, ...data, position: (last?.position ?? 0) + POSITION_STEP },
+      select: { id: true, name: true, content: true },
     });
+  });
+}
+
+async function ownTemplate(templateId: string) {
+  const user = await requireUser();
+  const t = await db.releaseTemplate.findFirst({ where: { id: v.id.parse(templateId), userId: user.id }, select: { id: true } });
+  if (!t) throw notFound();
+  return t;
+}
+
+export async function updateReleaseTemplate(templateId: string, input: { name: string; content: string }) {
+  return runAction(async () => {
+    const t = await ownTemplate(templateId);
+    await db.releaseTemplate.update({ where: { id: t.id }, data: templateSchema.parse(input) });
+  });
+}
+
+export async function deleteReleaseTemplate(templateId: string) {
+  return runAction(async () => {
+    const t = await ownTemplate(templateId);
+    await db.releaseTemplate.delete({ where: { id: t.id } });
+  });
+}
+
+export async function updateCardStyle(style: "STRIPE" | "FILLED") {
+  return runAction(async () => {
+    const user = await requireUser();
+    await db.user.update({ where: { id: user.id }, data: { cardStyle: z.enum(["STRIPE", "FILLED"]).parse(style) } });
   });
 }
 

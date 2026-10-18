@@ -18,7 +18,7 @@ export default async function MyTasksPage() {
     select: {
       id: true,
       title: true,
-      type: true,
+      kind: { select: { name: true, color: true } },
       color: true,
       linkUrl: true,
       dueDate: true,
@@ -58,7 +58,7 @@ export default async function MyTasksPage() {
                 return (
                   <li key={t.id} className="relative flex items-center gap-3 px-4 py-2.5">
                     {t.color && <span className="absolute inset-y-1 left-0 w-1 rounded-r" style={{ backgroundColor: t.color }} aria-hidden />}
-                    <TypeBadge type={t.type} />
+                    <TypeBadge kind={t.kind} />
                     <Link href={`/p/${projectId}?task=${t.id}`} className="min-w-0 flex-1 truncate text-sm font-medium hover:text-brand-600">
                       {t.title}
                     </Link>
