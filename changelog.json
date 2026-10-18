@@ -1,6 +1,19 @@
 {
   "versions": [
     {
+      "version": "1.1.1",
+      "date": "2026-10-18",
+      "summary": "Compatibilidad del build Docker con Railway.",
+      "changes": {
+        "nuevas": [],
+        "mejoras": [],
+        "correcciones": [],
+        "tecnicos": [
+          "Dockerfile sin cachés de BuildKit (--mount=type=cache), que el builder de Railway rechaza si no llevan su identificador de servicio."
+        ]
+      }
+    },
+    {
       "version": "1.1.0",
       "date": "2026-10-18",
       "summary": "Informe PDF del proyecto, plazos y entregables, Google Docs/Sheets desde las tarjetas y menciones con avisos.",
