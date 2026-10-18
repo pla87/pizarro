@@ -123,7 +123,7 @@ function taskCols(today: string, withColumn: boolean): Col<ReportTask>[] {
 function ReportDocument({ r }: { r: Report }) {
   const generated = formatDay(r.today);
   return (
-    <Document title={`Informe · ${r.project.name}`} author="Tablón" creator="Tablón" producer="Tablón">
+    <Document title={`Informe · ${r.project.name}`} author="Pizarro" creator="Pizarro" producer="Pizarro">
       <Page size="A4" style={s.page}>
         <View style={s.header}>
           <Text style={s.eyebrow}>Informe de estado del proyecto</Text>

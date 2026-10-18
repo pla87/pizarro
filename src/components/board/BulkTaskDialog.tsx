@@ -76,6 +76,7 @@ export function BulkTaskDialog({ initialColumnId, onClose }: Props) {
       onClose={onClose}
       title="Crear varias tareas"
       size="md"
+      placement="top"
       footer={
         <>
           <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>

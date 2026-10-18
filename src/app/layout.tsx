@@ -2,11 +2,11 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "Tablón", template: "%s · Tablón" },
+  title: { default: "Pizarro", template: "%s · Pizarro" },
   description: "Kanban ligero y generador de release notes para equipos pequeños.",
   robots: { index: false, follow: false },
-  applicationName: "Tablón",
-  appleWebApp: { capable: true, title: "Tablón", statusBarStyle: "default" },
+  applicationName: "Pizarro",
+  appleWebApp: { capable: true, title: "Pizarro", statusBarStyle: "default" },
   icons: { apple: "/apple-touch-icon.png" },
 };
 

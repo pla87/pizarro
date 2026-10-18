@@ -9,12 +9,13 @@ import {
 } from "@/actions/tasks";
 import { dueStatus } from "@/lib/dates";
 import { kindBadgeStyle } from "@/lib/constants";
-import type { AttachmentInfo, BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
+import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
 import { Avatar } from "../ui/Avatar";
 import { ColorPicker } from "../ui/ColorPicker";
 import { cn } from "../ui/cn";
 import { Markdown } from "../ui/Markdown";
 import { MentionTextarea, type MentionCommand } from "../ui/MentionTextarea";
+import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
@@ -28,7 +29,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
   const [title, setTitle] = useState(task.title);
   const [link, setLink] = useState(task.linkUrl ?? "");
   const [uploading, setUploading] = useState(0);
-  const [lightbox, setLightbox] = useState<AttachmentInfo | null>(null);
+  const [lightbox, setLightbox] = useState<number | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -146,6 +147,9 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
       open
       onClose={onClose}
       size="xl"
+      placement="top"
+      // Escritorio: altura definida para que cada columna haga scroll por dentro y el diálogo nunca supere el viewport.
+      panelClassName="md:h-[min(46rem,calc(100dvh-2rem))]"
       header={
         <div className="flex items-start gap-2 border-b border-slate-200 px-5 py-3 dark:border-slate-800">
           <textarea
@@ -169,8 +173,8 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
         </div>
       }
     >
-      <div onPaste={onPaste} className="grid gap-6 md:grid-cols-[1fr_15rem]">
-        <div className="min-w-0 space-y-6">
+      <div onPaste={onPaste} className="grid gap-6 md:h-full md:grid-cols-[1fr_15rem] md:grid-rows-[minmax(0,1fr)]">
+        <div className="min-w-0 space-y-6 md:min-h-0 md:overflow-y-auto md:pr-2">
           <DescriptionEditor
             key={detail ? "loaded" : "loading"}
             users={board.users}
@@ -198,9 +202,9 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
             </div>
             <p className="mb-2 truncate text-xs text-slate-500 max-sm:hidden">Pega imágenes con Ctrl+V / ⌘+V.</p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {detail?.attachments.map((a) => (
+              {detail?.attachments.map((a, i) => (
                 <div key={a.id} className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
-                  <button type="button" onClick={() => setLightbox(a)} className="block w-full">
+                  <button type="button" onClick={() => setLightbox(i)} className="block w-full" aria-label={`Ver ${a.originalName}`}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={`/api/attachments/${a.id}?thumb=1`} alt={a.originalName} loading="lazy" className="aspect-video w-full object-cover" />
                   </button>
@@ -234,7 +238,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
           <Comments taskId={task.id} detail={detail} setDetail={setDetail} users={board.users} onGoogle={createGoogle} />
         </div>
 
-        <aside className="space-y-4 text-sm">
+        <aside className="space-y-4 text-sm md:min-h-0 md:overflow-y-auto md:pr-1">
           <Field label="Columna">
             <select className="input" value={task.columnId} onChange={(e) => changeColumn(e.target.value)}>
               {board.columns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -345,18 +349,17 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
         </aside>
       </div>
 
-      {lightbox && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-4" onClick={() => setLightbox(null)}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={`/api/attachments/${lightbox.id}`} alt={lightbox.originalName} className="max-h-full max-w-full rounded-lg" />
-          <a
-            href={`/api/attachments/${lightbox.id}?download=1`}
-            onClick={(e) => e.stopPropagation()}
-            className="btn-secondary absolute top-4 right-4"
-          >
-            Descargar
-          </a>
-        </div>
+      {lightbox !== null && detail && detail.attachments.length > 0 && (
+        <Lightbox
+          images={detail.attachments.map((a) => ({
+            src: `/api/attachments/${a.id}`,
+            alt: a.originalName,
+            downloadHref: `/api/attachments/${a.id}?download=1`,
+          }))}
+          index={Math.min(lightbox, detail.attachments.length - 1)}
+          onIndexChange={setLightbox}
+          onClose={() => setLightbox(null)}
+        />
       )}
     </Modal>
   );

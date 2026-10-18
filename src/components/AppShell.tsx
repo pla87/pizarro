@@ -120,7 +120,7 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
       <div className="flex h-14 items-center gap-2 px-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/icon.svg" alt="" width={26} height={26} />
-        <span className="text-lg font-bold tracking-tight">Tablón</span>
+        <span className="text-lg font-bold tracking-tight">Pizarro</span>
       </div>
 
       <div className="px-3">
@@ -237,12 +237,19 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
   const toast = useToast();
   const [name, setName] = useState("");
   const [pending, start] = useTransition();
+  const pathname = usePathname();
+  const [target, setTarget] = useState<string | null>(null);
+  // Se cierra al llegar al proyecto nuevo, no antes: cerrar retira su entrada del historial
+  // y eso cancelaría la navegación en curso.
+  useEffect(() => {
+    if (target && pathname === target) onClose();
+  }, [target, pathname, onClose]);
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     start(async () => {
       const res = await createProject(name);
       if (!res.ok) return toast(res.error, "error");
-      onClose();
+      setTarget(`/p/${res.data.id}`);
       router.push(`/p/${res.data.id}`);
     });
   };
@@ -256,7 +263,7 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
         </div>
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
-          <button type="submit" className="btn-primary" disabled={pending || !name.trim()}>Crear</button>
+          <button type="submit" className="btn-primary" disabled={pending || !!target || !name.trim()}>Crear</button>
         </div>
       </form>
     </Modal>

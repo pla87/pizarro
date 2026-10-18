@@ -1,4 +1,4 @@
-# Imagen multi-stage de Tablón:
+# Imagen multi-stage de Pizarro:
 #   deps → build (Next standalone + script de arranque) → migrator (Prisma CLI aislado) → runner
 ARG NODE_IMAGE=node:22-bookworm-slim
 

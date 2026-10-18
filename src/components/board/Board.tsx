@@ -1,14 +1,14 @@
 "use client";
 
 import {
-  closestCorners, DndContext, pointerWithin, useDroppable, type CollisionDetection, DragOverlay, KeyboardSensor, MeasuringStrategy, PointerSensor, TouchSensor,
+  closestCorners, DndContext, type CollisionDetection, DragOverlay, KeyboardSensor, MeasuringStrategy, PointerSensor,
   useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { FileDown, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { moveTask, moveTasks } from "@/actions/tasks";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { deleteTasks, moveTask, moveTasks } from "@/actions/tasks";
 import { positionBetween } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardTask, LabelOption } from "@/lib/types";
 import { ProjectMenu } from "../ProjectMenu";
@@ -26,33 +26,37 @@ import { TaskDialog } from "./TaskDialog";
 import { imageFilesFrom } from "./upload";
 
 const COLUMN_PREFIX = "col:";
-const TAB_PREFIX = "tab:";
+/** Entradas del historial que se guardan al cambiar de columna en móvil (atrás vuelve a ellas). */
+const MAX_COLUMN_HISTORY = 5;
 
-/** Encima de una pestaña móvil manda el puntero; en el resto, la esquina más cercana. */
-const collisionDetection: CollisionDetection = (args) => {
-  const tab = pointerWithin(args).find((c) => String(c.id).startsWith(TAB_PREFIX));
-  if (tab) return [tab];
-  // Fuera de las pestañas: solo columnas y tarjetas visibles (las ocultas miden 0×0 y
-  // las pestañas, pequeñas y cercanas, «ganarían» el cálculo de esquinas).
-  return closestCorners({
+/** Solo columnas y tarjetas visibles: en móvil, las columnas ocultas miden 0×0. */
+const collisionDetection: CollisionDetection = (args) =>
+  closestCorners({
     ...args,
-    droppableContainers: args.droppableContainers.filter(
-      (c) => !String(c.id).startsWith(TAB_PREFIX) && (args.droppableRects.get(c.id)?.width ?? 0) > 0,
-    ),
+    droppableContainers: args.droppableContainers.filter((c) => (args.droppableRects.get(c.id)?.width ?? 0) > 0),
   });
-};
 
-function MobileTab({ id, active, dragging, onClick, children }: { id: string; active: boolean; dragging: boolean; onClick: () => void; children: React.ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id });
+/** Pantalla táctil: las tarjetas se arrastran con su asa para que el resto de la tarjeta deje hacer scroll. */
+const COARSE_QUERY = "(pointer: coarse)";
+function useCoarsePointer(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia(COARSE_QUERY);
+      mq.addEventListener("change", cb);
+      return () => mq.removeEventListener("change", cb);
+    },
+    () => window.matchMedia(COARSE_QUERY).matches,
+    () => false,
+  );
+}
+
+function MobileTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
-      ref={setNodeRef}
       onClick={onClick}
       className={cn(
         "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors",
         active ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
-        dragging && !active && "ring-1 ring-brand-500/40",
-        isOver && "bg-brand-500 text-white ring-2 ring-brand-300",
       )}
     >
       {children}
@@ -71,7 +75,6 @@ function groupItems(columns: BoardColumn[], tasks: BoardTask[]): Items {
 
 function findContainer(items: Items, id: string): string | undefined {
   if (id.startsWith(COLUMN_PREFIX)) return id.slice(COLUMN_PREFIX.length);
-  if (id.startsWith(TAB_PREFIX)) return id.slice(TAB_PREFIX.length);
   return Object.keys(items).find((col) => items[col]!.includes(id));
 }
 
@@ -87,6 +90,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const [bulk, setBulk] = useState<{ columnId?: string } | null>(null);
   const [release, setRelease] = useState<{ taskIds: string[]; preselected: string[] } | null>(null);
   const [mobileColumn, setMobileColumn] = useState<string | null>(null);
+  const dragHandle = useCoarsePointer();
 
   // Estado temporal durante el arrastre.
   const [dragItems, setDragItems] = useState<Items | null>(null);
@@ -186,6 +190,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       kinds: data.kinds,
       kindById: new Map(data.kinds.map((k) => [k.id, k])),
       cardStyle: data.cardStyle,
+      dragHandle,
       google: data.google,
       today: data.today,
       setLabels,
@@ -221,7 +226,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       track,
       refresh: () => router.refresh(),
     }),
-    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, data.google, data.today, sortedColumns, labels, taskById, baseItems, selected, track, router, patchTask],
+    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, dragHandle, data.google, data.today, sortedColumns, labels, taskById, baseItems, selected, track, router, patchTask],
   );
 
   // --- Movimiento masivo ------------------------------------------------------
@@ -246,10 +251,46 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     toast(`${res.data.moved.length} tarjeta(s) movidas a «${name}»`);
   };
 
+  const deleteSelected = async () => {
+    const ids = [...selected];
+    if (!ids.length || !window.confirm(`¿Borrar definitivamente ${ids.length === 1 ? "la tarea seleccionada" : `las ${ids.length} tareas seleccionadas`} y sus adjuntos?`)) return;
+    const snapshot = tasks;
+    const gone = new Set(ids);
+    setTasks((prev) => prev.filter((t) => !gone.has(t.id)));
+    setSelected(new Set());
+    const res = await track(deleteTasks(ids));
+    if (!res.ok) {
+      setTasks(snapshot);
+      return toast(res.error, "error");
+    }
+    toast(`${res.data.deleted} tarea(s) borradas`);
+  };
+
+  // --- Columna visible en móvil e historial -----------------------------------
+  // Cada cambio de columna añade una entrada al historial (hasta MAX_COLUMN_HISTORY seguidas):
+  // el botón atrás devuelve a la columna anterior antes de salir del tablero.
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const col = (e.state as { pzColumn?: string } | null)?.pzColumn;
+      setMobileColumn(col ?? null);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const showMobileColumn = (columnId: string) => {
+    if (columnId === activeMobileColumn) return;
+    const state = (window.history.state ?? {}) as { pzColumn?: string; pzDepth?: number };
+    const depth = state.pzDepth ?? 0;
+    const next = { ...state, pzColumn: columnId, pzDepth: Math.min(depth + 1, MAX_COLUMN_HISTORY) };
+    if (depth < MAX_COLUMN_HISTORY) window.history.pushState(next, "");
+    else window.history.replaceState(next, "");
+    setMobileColumn(columnId);
+  };
+
   // --- Drag & drop --------------------------------------------------------------
   const sensors = useSensors(
+    // Con ratón, toda la tarjeta; en táctil, solo el asa (touch-action: none), así que basta con poca distancia.
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
@@ -263,58 +304,27 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   };
 
   /** Mueve la tarjeta arrastrada a otra columna en el estado temporal del arrastre. */
-  const moveActiveTo = (id: string, to: string, overId: string) =>
+  const onDragOver = ({ active, over }: DragOverEvent) => {
+    if (!over || !dragItems) return;
+    const id = String(active.id);
+    const overId = String(over.id);
     setDragItems((prev) => {
       if (!prev) return prev;
       const from = findContainer(prev, id);
-      if (!from || from === to) return prev;
+      const to = findContainer(prev, overId);
+      if (!from || !to || from === to) return prev;
       const target = prev[to]!;
       const overIndex = target.indexOf(overId);
-      // Volver a la columna de origen por su pestaña recupera la posición original.
-      const origin = dragOrigin.current;
-      const index =
-        overIndex >= 0 ? overIndex : overId.startsWith(TAB_PREFIX) && origin?.columnId === to ? Math.min(origin.index, target.length) : target.length;
+      const index = overIndex >= 0 ? overIndex : target.length;
       return {
         ...prev,
         [from]: prev[from]!.filter((x) => x !== id),
         [to]: [...target.slice(0, index), id, ...target.slice(index)],
       };
     });
-
-  // Pestaña móvil bajo la tarjeta: cambia de columna tras una breve pausa, para que
-  // cruzar la fila de pestañas de camino a la lista no cambie de columna sin querer.
-  const tabHover = useRef<{ id: string; timer: ReturnType<typeof setTimeout> } | null>(null);
-  const clearTabHover = () => {
-    if (tabHover.current) clearTimeout(tabHover.current.timer);
-    tabHover.current = null;
-  };
-
-  const onDragOver = ({ active, over }: DragOverEvent) => {
-    if (!over || !dragItems) return;
-    const id = String(active.id);
-    const overId = String(over.id);
-    if (overId.startsWith(TAB_PREFIX)) {
-      if (tabHover.current?.id === overId) return;
-      clearTabHover();
-      const to = overId.slice(TAB_PREFIX.length);
-      tabHover.current = {
-        id: overId,
-        timer: setTimeout(() => {
-          setMobileColumn(to);
-          moveActiveTo(id, to, overId);
-        }, 350),
-      };
-      return;
-    }
-    clearTabHover();
-    const from = findContainer(dragItems, id);
-    const to = findContainer(dragItems, overId);
-    if (!from || !to || from === to) return;
-    moveActiveTo(id, to, overId);
   };
 
   const cancelDrag = () => {
-    clearTabHover();
     setDragItems(null);
     setActiveId(null);
     dragOrigin.current = null;
@@ -328,17 +338,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (!over || !current || !origin) return;
     const id = String(active.id);
     const overId = String(over.id);
-    let col = findContainer(current, id);
+    const col = findContainer(current, id);
     if (!col) return;
     let list = current[col]!;
-    // Soltar directamente sobre una pestaña: al final de esa columna (o en su sitio si es la de origen).
-    if (overId.startsWith(TAB_PREFIX) && overId.slice(TAB_PREFIX.length) !== col) {
-      const to = overId.slice(TAB_PREFIX.length);
-      list = [...current[to]!.filter((x) => x !== id), id];
-      col = to;
-      setMobileColumn(to);
-    }
-    if (findContainer(current, overId) === col && overId !== id && !overId.startsWith(COLUMN_PREFIX) && !overId.startsWith(TAB_PREFIX)) {
+    if (findContainer(current, overId) === col && overId !== id && !overId.startsWith(COLUMN_PREFIX)) {
       list = arrayMove(list, list.indexOf(id), list.indexOf(overId));
     }
     const index = list.indexOf(id);
@@ -387,20 +390,14 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           onDragEnd={onDragEnd}
           onDragCancel={cancelDrag}
         >
-          {/* Pestañas de columnas en móvil: también aceptan tarjetas arrastradas */}
+          {/* Pestañas de columnas en móvil */}
           <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 md:hidden dark:border-slate-800 dark:bg-slate-900">
             {sortedColumns.map((c) => (
-              <MobileTab
-                key={c.id}
-                id={TAB_PREFIX + c.id}
-                active={c.id === activeMobileColumn}
-                dragging={!!activeId}
-                onClick={() => setMobileColumn(c.id)}
-              >
+              <MobileTab key={c.id} active={c.id === activeMobileColumn} onClick={() => showMobileColumn(c.id)}>
                 {c.name} <span className="opacity-70">{items[c.id]?.length ?? 0}</span>
               </MobileTab>
             ))}
-            <NewColumnButton variant="mobile" onCreated={setMobileColumn} />
+            <NewColumnButton variant="mobile" onCreated={showMobileColumn} />
           </div>
           <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-3 max-md:no-scrollbar pt-2 pb-24 md:px-4 md:pb-4">
             {sortedColumns.map((column, i) => (
@@ -442,6 +439,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             columns={sortedColumns}
             nextReleaseColumn={nextReleaseColumn}
             onMove={moveSelected}
+            onDelete={deleteSelected}
             onRelease={() => {
               const ids = sortedColumns.flatMap((c) => (baseItems[c.id] ?? []).filter((id) => selected.has(id)));
               setRelease({ taskIds: ids, preselected: ids });

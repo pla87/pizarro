@@ -3,6 +3,7 @@
 import { Camera, ImagePlus, Loader2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createTask } from "@/actions/tasks";
+import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
@@ -32,6 +33,7 @@ export function NewTaskDialog({ initialColumnId, initialFiles, onClose }: Props)
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<File[]>(initialFiles ?? []);
   const [busy, setBusy] = useState(false);
+  const [lightbox, setLightbox] = useState<number | null>(null);
 
   const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
   useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews]);
@@ -78,6 +80,7 @@ export function NewTaskDialog({ initialColumnId, initialFiles, onClose }: Props)
       onClose={onClose}
       title="Nueva tarea"
       size="md"
+      placement="top"
       footer={
         <>
           <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
@@ -101,6 +104,10 @@ export function NewTaskDialog({ initialColumnId, initialFiles, onClose }: Props)
         <div>
           <div className="label">Tipo</div>
           <TypeSelector kinds={board.kinds} value={kindId} onChange={setKindId} />
+        </div>
+        <div>
+          <label className="label" htmlFor="nt-desc">Descripción (opcional)</label>
+          <MentionTextarea id="nt-desc" className="input field-sizing-content min-h-14" value={description} onValueChange={setDescription} users={board.users} maxLength={20000} placeholder="Markdown · @persona para avisar" />
         </div>
         <div className="grid grid-cols-2 gap-x-3 gap-y-3">
           <div className="min-w-0">
@@ -129,16 +136,14 @@ export function NewTaskDialog({ initialColumnId, initialFiles, onClose }: Props)
           </div>
         </div>
         <div>
-          <label className="label" htmlFor="nt-desc">Descripción (opcional)</label>
-          <MentionTextarea id="nt-desc" className="input field-sizing-content min-h-14" value={description} onValueChange={setDescription} users={board.users} maxLength={20000} placeholder="Markdown · @persona para avisar" />
-        </div>
-        <div>
           <div className="label">Capturas</div>
           <div className="flex flex-wrap gap-2">
             {previews.map((src, i) => (
               <div key={src} className="relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={src} alt="" className="h-14 w-20 rounded-lg border border-slate-200 object-cover dark:border-slate-700" />
+                <button type="button" className="block" onClick={() => setLightbox(i)} aria-label="Ver imagen">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt="" className="h-14 w-20 rounded-lg border border-slate-200 object-cover dark:border-slate-700" />
+                </button>
                 <button type="button" className="absolute -top-1.5 -right-1.5 rounded-full bg-slate-900 p-0.5 text-white" onClick={() => setFiles((f) => f.filter((_, j) => j !== i))} aria-label="Quitar imagen">
                   <X size={13} />
                 </button>
@@ -156,6 +161,15 @@ export function NewTaskDialog({ initialColumnId, initialFiles, onClose }: Props)
           </div>
         </div>
       </form>
+
+      {lightbox !== null && (
+        <Lightbox
+          images={previews.map((src, i) => ({ src, alt: files[i]?.name }))}
+          index={Math.min(lightbox, previews.length - 1)}
+          onIndexChange={setLightbox}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </Modal>
   );
 }

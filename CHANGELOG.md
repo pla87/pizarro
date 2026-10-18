@@ -1,6 +1,36 @@
 # Changelog
 
-Historial de versiones de Tablón. Fuente: `changelog.json`.
+Historial de versiones de Pizarro. Fuente: `changelog.json`.
+
+## v1.5.0 — 2026-10-18
+
+Pizarro (nuevo nombre), releases con códigos, descripciones y adjuntos en ZIP, visor de imágenes, borrado en grupo, botón atrás y mejoras en móvil.
+
+### Nuevas funcionalidades
+
+- Releases: cada punto lleva un código por tipo (F1, C2…), su descripción y sus adjuntos renombrados `código_nombre.webp`; botón «Descargar adjuntos» con un ZIP de todos ellos.
+- Visor de imágenes: al tocar un adjunto se ve a pantalla completa; se cierra con la X, tocando fuera, con Escape o con atrás.
+- Borrar en grupo las tareas seleccionadas.
+- Botón atrás: cierra el modal abierto y, en móvil, vuelve a la columna anterior (hasta 5 pasos).
+- Reordenar tareas arrastrando dentro de su columna también en móvil, con un asa en cada tarjeta.
+
+### Mejoras
+
+- La aplicación pasa a llamarse Pizarro.
+- Nueva tarea: Título, Tipo y Descripción primero; en móvil el modal se abre arriba y sigue visible con el teclado.
+- El detalle de la tarea cabe entero en pantallas de escritorio.
+- Barra de selección en móvil: «Mover a Siguiente salto» y «Mover a…» en la misma línea.
+
+### Correcciones
+
+- Móvil: el scroll vertical de una columna con muchas tareas no funcionaba (el gesto iniciaba un arrastre). Se quita el arrastre entre columnas en móvil.
+- Release: el título va antes de la cabecera.
+- Release: se incluye la descripción de cada tarea.
+
+### Cambios técnicos / DB
+
+- Ruta POST /api/projects/[id]/release-attachments que genera el ZIP en el servidor (sin dependencias nuevas) y acciones getReleaseTaskDetails y deleteTasks.
+- Se mantienen los identificadores técnicos con el nombre anterior (cookies, base de datos y clave de cifrado) para no cerrar sesiones ni invalidar tokens guardados.
 
 ## v1.4.0 — 2026-10-18
 
@@ -58,7 +88,7 @@ Tipos de tarea configurables, varias plantillas de release, app instalable en el
 
 - Tipos de tarea configurables por los administradores (nombre, color y orden); cada tipo es una sección de la release.
 - Varias cabeceras y pies de release por usuario, con nombre; se eligen en el diálogo de «Generar release» y se sustituyen en el texto ya editado.
-- Instalar Tablón como app en Android, iPhone y escritorio (pantalla de inicio, pantalla completa).
+- Instalar Pizarro como app en Android, iPhone y escritorio (pantalla de inicio, pantalla completa).
 - Preferencia de apariencia: tarjetas con franja de color o teñidas enteras de su color.
 - En móvil, arrastrar una tarjeta sobre la pestaña de otra columna (manteniéndola medio segundo) muestra esa columna para soltarla en su sitio; soltarla sobre la pestaña la deja al final.
 
@@ -120,7 +150,7 @@ Informe PDF del proyecto, plazos y entregables, Google Docs/Sheets desde las tar
 
 ## v1.0.0 — 2026-10-18
 
-Primera versión de Tablón: kanban multiproyecto y generador de release notes.
+Primera versión de Pizarro: kanban multiproyecto y generador de release notes.
 
 ### Nuevas funcionalidades
 

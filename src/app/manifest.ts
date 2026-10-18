@@ -1,10 +1,10 @@
 import type { MetadataRoute } from "next";
 
-/** Manifiesto para instalar Tablón como app en Android, iPhone y escritorio. */
+/** Manifiesto para instalar Pizarro como app en Android, iPhone y escritorio. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Tablón",
-    short_name: "Tablón",
+    name: "Pizarro",
+    short_name: "Pizarro",
     description: "Kanban ligero y generador de release notes.",
     lang: "es",
     start_url: "/",

@@ -68,3 +68,28 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     return result;
   });
 }
+
+const detailsSchema = z.object({ projectId: v.id, taskIds: z.array(v.id).max(500) });
+
+export interface ReleaseTaskDetails {
+  id: string;
+  description: string;
+  attachments: { id: string; originalName: string }[];
+}
+
+/** Descripción y adjuntos de las tareas elegidas, para incluirlos en el texto de la release. */
+export async function getReleaseTaskDetails(input: z.input<typeof detailsSchema>) {
+  return runAction(async (): Promise<ReleaseTaskDetails[]> => {
+    const user = await requireUser();
+    const data = detailsSchema.parse(input);
+    await assertProjectAccess(user, data.projectId);
+    return db.task.findMany({
+      where: { id: { in: data.taskIds }, projectId: data.projectId },
+      select: {
+        id: true,
+        description: true,
+        attachments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, originalName: true } },
+      },
+    });
+  });
+}

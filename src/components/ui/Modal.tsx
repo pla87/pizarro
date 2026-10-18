@@ -1,9 +1,10 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "./cn";
+import { useBackToClose } from "./useBackToClose";
 
 interface ModalProps {
   open: boolean;
@@ -14,16 +15,34 @@ interface ModalProps {
   size?: "sm" | "md" | "lg" | "xl";
   /** Contenido que reemplaza la cabecera estándar. */
   header?: React.ReactNode;
+  /** En móvil: "bottom" (por defecto) es una hoja inferior; "top" ancla el panel arriba para que el teclado no lo tape. */
+  placement?: "bottom" | "top";
+  /** Clases extra para el panel (p. ej. una altura fija en escritorio). */
+  panelClassName?: string;
 }
 
 const SIZES = { sm: "sm:max-w-md", md: "sm:max-w-xl", lg: "sm:max-w-3xl", xl: "sm:max-w-5xl" };
 
-export function Modal({ open, onClose, title, children, footer, size = "md", header }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, size = "md", header, placement = "bottom", panelClassName }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   useEffect(() => {
     onCloseRef.current = onClose;
   });
+
+  useBackToClose(open, () => onCloseRef.current());
+
+  // Con placement "top", la altura sigue al viewport visual: se encoge al abrir el teclado.
+  const [viewportH, setViewportH] = useState<number | null>(null);
+  useEffect(() => {
+    if (!open || placement !== "top") return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const sync = () => setViewportH(Math.round(vv.height));
+    sync();
+    vv.addEventListener("resize", sync);
+    return () => vv.removeEventListener("resize", sync);
+  }, [open, placement]);
 
   useEffect(() => {
     if (!open) return;
@@ -46,18 +65,27 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
     };
   }, [open]);
 
+  const top = placement === "top";
   if (!open || typeof document === "undefined") return null;
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
+    <div
+      className={cn(
+        "fixed inset-0 z-50 flex justify-center sm:items-center sm:p-4",
+        top ? "items-start pt-[env(safe-area-inset-top)] sm:pt-4" : "items-end",
+      )}
+    >
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" onMouseDown={onClose} aria-hidden />
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
+        style={top && viewportH ? ({ "--vvh": `${viewportH}px` } as React.CSSProperties) : undefined}
         className={cn(
-          "relative flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-white shadow-2xl outline-none sm:rounded-2xl dark:bg-slate-900",
+          "relative flex w-full flex-col bg-white shadow-2xl outline-none sm:rounded-2xl dark:bg-slate-900",
+          top ? "max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top))] rounded-b-2xl sm:max-h-[calc(100dvh-2rem)]" : "max-h-[92dvh] rounded-t-2xl",
           SIZES[size],
+          panelClassName,
         )}
       >
         {header ?? (

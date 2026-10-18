@@ -1,4 +1,4 @@
-# Tablón
+# Pizarro
 
 Kanban ligero y generador de *release notes* para equipos pequeños (hasta 5 personas). Tiene tableros multiproyecto, capturas pegadas desde el portapapeles y exportación de releases agrupadas por tipo, con cabecera y pie personalizados por usuario.
 
@@ -16,7 +16,7 @@ Kanban ligero y generador de *release notes* para equipos pequeños (hasta 5 per
 | Proyectos | Selector en la barra lateral. Cada proyecto tiene sus columnas, tareas, etiquetas y releases. Por defecto son visibles para todos; un admin puede **restringir la visibilidad** a usuarios concretos. |
 | Tablero | Columnas configurables por proyecto: crear, renombrar, reordenar, asignar un rol y borrar si están vacías. Arrastrar y soltar entre columnas y dentro de cada una. Selección múltiple y movimiento en lote. |
 | Tarjetas | Tipo (por defecto *Funcionalidad* y *Corrección*; los admins crean más tipos generales y cada proyecto puede tener tipos propios, con su color), color, responsable opcional, etiquetas, enlace externo, checklist, descripción en Markdown y capturas (pegar con Ctrl/⌘+V, archivo o cámara). Se pueden archivar y restaurar. |
-| Releases | Botón **Generar Release** en la columna con rol *Siguiente salto*. Eliges una de tus **cabeceras** y uno de tus **pies** (cada usuario puede tener varios). Las tareas se agrupan con una sección por tipo. Editor con vista previa, **Copiar todo**, descarga `.md` / `.txt` y **Marcar como desplegado** (mueve las tarjetas a *En producción* o las archiva, y guarda el texto final en el histórico *Releases*). |
+| Releases | Botón **Generar Release** en la columna con rol *Siguiente salto*. Eliges una de tus **cabeceras** y uno de tus **pies** (cada usuario puede tener varios). Título, cabecera y una sección por tipo; cada punto lleva un código (F1, C2…), su descripción y sus adjuntos renombrados (`F1_nombre.webp`), descargables juntos en un ZIP. Editor con vista previa, **Copiar todo**, descarga `.md` / `.txt` y **Marcar como desplegado** (mueve las tarjetas a *En producción* o las archiva, y guarda el texto final en el histórico *Releases*). |
 | Plazos y entregables | Fecha límite en cada tarjeta (avisos de vencida, hoy o próxima) y **entregables**: hitos con fecha objetivo que agrupan tarjetas. Las columnas pueden contar como «terminadas». |
 | Informe PDF | Botón **Informe PDF** en cada proyecto: resumen y avance, estado por columna, entregables, plazos vencidos y próximos, carga por persona, tipos, últimas releases y detalle de cada columna. |
 | Google Docs / Sheets | Escribe `@docs` o `@sheets` en la descripción o en un comentario, o pulsa *Nuevo Doc* / *Nuevo Sheet*. Se crea el archivo en tu Google Drive, se abre en otra pestaña y queda enlazado a la tarjeta. Cada usuario conecta su cuenta una vez (permiso mínimo `drive.file`). |
@@ -188,12 +188,12 @@ Nota: `railway run` ejecuta el comando en tu máquina con las variables del serv
 
 #### 7.1 Google Docs y Sheets
 
-1. Entra en [console.cloud.google.com](https://console.cloud.google.com) con una cuenta de tu Google Workspace y crea un proyecto (por ejemplo, «Tablón»).
+1. Entra en [console.cloud.google.com](https://console.cloud.google.com) con una cuenta de tu Google Workspace y crea un proyecto (por ejemplo, «Pizarro»).
 2. **APIs y servicios → Biblioteca** → busca **Google Drive API** → **Habilitar**. Es la única API necesaria: los Docs y Sheets se crean a través de Drive.
 3. **Google Auth Platform** (antes «Pantalla de consentimiento de OAuth»):
-   - **Branding**: nombre de la app «Tablón» y email de soporte.
+   - **Branding**: nombre de la app «Pizarro» y email de soporte.
    - **Audience / Público**: tipo **Interno**. Solo podrán conectarse las cuentas de tu Workspace y no hace falta verificación de Google.
-   - **Data access / Acceso a datos**: añade los permisos `openid`, `email` y `https://www.googleapis.com/auth/drive.file`. `drive.file` solo da acceso a los archivos que crea Tablón, no al resto de tu Drive.
+   - **Data access / Acceso a datos**: añade los permisos `openid`, `email` y `https://www.googleapis.com/auth/drive.file`. `drive.file` solo da acceso a los archivos que crea Pizarro, no al resto de tu Drive.
 4. **Clients / Credenciales → Crear cliente → Aplicación web**:
    - **URI de redirección autorizados**: `https://<tu-dominio>.up.railway.app/api/google/callback`. Debe coincidir exactamente con `APP_URL` + `/api/google/callback`.
 5. Copia el **ID de cliente** y el **secreto** a Railway: `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`, y añade `GOOGLE_WORKSPACE_DOMAIN=tu-dominio.com`. Así, cada archivo creado se comparte automáticamente con tu dominio como editor (`GOOGLE_SHARE_ROLE`), y el resto del equipo puede abrirlo desde la tarjeta. Sin dominio, solo lo ve quien lo crea hasta que lo comparta a mano.
@@ -206,14 +206,14 @@ Nota: `railway run` ejecuta el comando en tu máquina con las variables del serv
 Con Google Workspace, lo más sencillo es enviar desde una cuenta dedicada (por ejemplo `avisos@tu-dominio.com`) con una **contraseña de aplicación**:
 
 1. En esa cuenta, activa la **verificación en dos pasos**. Tu administrador de Workspace debe permitirla.
-2. Ve a [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) y crea una contraseña de aplicación llamada «Tablón».
+2. Ve a [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) y crea una contraseña de aplicación llamada «Pizarro».
 3. En Railway:
    ```env
    SMTP_HOST=smtp.gmail.com
    SMTP_PORT=465
    SMTP_USER=avisos@tu-dominio.com
    SMTP_PASS=<contraseña de aplicación de 16 caracteres>
-   SMTP_FROM=Tablón <avisos@tu-dominio.com>
+   SMTP_FROM=Pizarro <avisos@tu-dominio.com>
    ```
 
 Sirve cualquier otro SMTP (Resend, Brevo, Mailgun…) con sus datos. Con el puerto `465` se usa TLS directo; con `587`, STARTTLS.
