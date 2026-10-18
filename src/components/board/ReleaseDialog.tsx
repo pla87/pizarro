@@ -1,10 +1,10 @@
 "use client";
 
-import { ArrowLeft, Check, ClipboardCopy, Download, Eye, FileText, Loader2, Pencil, Rocket } from "lucide-react";
+import { ArrowLeft, Check, ClipboardCopy, Download, Eye, FileArchive, FileText, Loader2, Pencil, Rocket } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { deployRelease } from "@/actions/releases";
-import { buildReleaseMarkdown, isoDate, releaseFileName, swapTemplateBlock } from "@/lib/release";
+import { deployRelease, getReleaseTaskDetails } from "@/actions/releases";
+import { buildReleaseMarkdown, computeReleaseCodes, isoDate, releaseFileName, swapTemplateBlock } from "@/lib/release";
 import type { BoardTask, TemplateOption } from "@/lib/types";
 import { copyText, downloadText } from "../ui/clipboard";
 import { cn } from "../ui/cn";
@@ -29,6 +29,7 @@ interface Props {
 
 export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeployed }: Props) {
   const board = useBoard();
+  const now = useMemo(() => new Date(), []);
   const toast = useToast();
   const [step, setStep] = useState<"select" | "edit">("select");
   const [chosen, setChosen] = useState<Set<string>>(new Set(preselected));
@@ -40,6 +41,10 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
   const inProduction = board.columns.find((c) => c.role === "IN_PRODUCTION");
   const [destination, setDestination] = useState<"IN_PRODUCTION" | "ARCHIVE">(inProduction ? "IN_PRODUCTION" : "ARCHIVE");
   const [busy, setBusy] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [zipping, setZipping] = useState(false);
+  /** Tareas con adjuntos de la release generada, con su código (para el ZIP). */
+  const [zipItems, setZipItems] = useState<{ taskId: string; code: string; count: number }[]>([]);
   const selectedTasks = useMemo(() => tasks.filter((t) => chosen.has(t.id)), [tasks, chosen]);
   const [headerId, setHeaderId] = useState(templates.headers[0]?.id ?? "");
   const [footerId, setFooterId] = useState(templates.footers[0]?.id ?? "");
@@ -80,13 +85,31 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
     </div>
   );
 
-  const generate = () => {
+  const generate = async () => {
+    // Descripción y adjuntos no viajan con el tablero: se piden al generar.
+    setLoadingDetails(true);
+    const res = await getReleaseTaskDetails({ projectId: board.project.id, taskIds: selectedTasks.map((t) => t.id) });
+    setLoadingDetails(false);
+    if (!res.ok) return toast(res.error, "error");
+    const details = new Map(res.data.map((d) => [d.id, d]));
+    const releaseTasks = selectedTasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      kindId: t.kindId,
+      linkUrl: t.linkUrl,
+      description: details.get(t.id)?.description ?? "",
+      attachments: details.get(t.id)?.attachments ?? [],
+    }));
+    const codes = computeReleaseCodes(board.kinds, releaseTasks);
+    setZipItems(
+      releaseTasks.filter((t) => t.attachments.length).map((t) => ({ taskId: t.id, code: codes.get(t.id)!, count: t.attachments.length })),
+    );
     const md = buildReleaseMarkdown({
       header: templateText(templates.headers, headerId),
       footer: templateText(templates.footers, footerId),
       title,
       kinds: board.kinds,
-      tasks: selectedTasks,
+      tasks: releaseTasks,
     });
     setContent(md);
     setGenerated(md);
@@ -107,6 +130,30 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
     } else toast("No se pudo copiar", "error");
   };
 
+  const attachmentTotal = zipItems.reduce((n, i) => n + i.count, 0);
+
+  const downloadAttachments = async () => {
+    setZipping(true);
+    try {
+      const res = await fetch(`/api/projects/${board.project.id}/release-attachments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: zipItems.map(({ taskId, code }) => ({ taskId, code })) }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `release-${isoDate(now)}-adjuntos.zip`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      toast("No se pudieron descargar los adjuntos", "error");
+    } finally {
+      setZipping(false);
+    }
+  };
+
   const deploy = async () => {
     const target = destination === "IN_PRODUCTION" ? `a «${inProduction?.name}»` : "al archivo";
     if (!window.confirm(`Se guardará la release y ${selectedTasks.length} tarjeta(s) pasarán ${target}. ¿Continuar?`)) return;
@@ -119,8 +166,6 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
     toast("Release registrada como desplegada");
     onDeployed(res.data);
   };
-
-  const now = new Date();
 
   return (
     <Modal
@@ -140,8 +185,8 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
               Cabecera y pie salen de <Link className="text-brand-600 hover:underline" href="/settings">tus plantillas</Link>.
             </span>
             <button className="btn-secondary" onClick={onClose}>Cancelar</button>
-            <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0}>
-              Generar con {selectedTasks.length} tarea(s)
+            <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || loadingDetails}>
+              {loadingDetails && <Loader2 size={15} className="animate-spin" />} Generar con {selectedTasks.length} tarea(s)
             </button>
           </>
         ) : (
@@ -156,6 +201,11 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
             <button className="btn-secondary" onClick={() => downloadText(content, releaseFileName(now, "txt"), "text/plain")}>
               <FileText size={15} /> .txt
             </button>
+            {attachmentTotal > 0 && (
+              <button className="btn-secondary" onClick={downloadAttachments} disabled={zipping}>
+                {zipping ? <Loader2 size={15} className="animate-spin" /> : <FileArchive size={15} />} Descargar adjuntos ({attachmentTotal})
+              </button>
+            )}
             <button className="btn-primary" onClick={deploy} disabled={busy || !content.trim() || (destination === "IN_PRODUCTION" && !inProduction)}>
               {busy ? <Loader2 size={15} className="animate-spin" /> : <Rocket size={15} />} Marcar como desplegado
             </button>

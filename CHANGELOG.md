@@ -2,6 +2,36 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.5.0 — 2026-10-18
+
+Pizarro (nuevo nombre), releases con códigos, descripciones y adjuntos en ZIP, visor de imágenes, borrado en grupo, botón atrás y mejoras en móvil.
+
+### Nuevas funcionalidades
+
+- Releases: cada punto lleva un código por tipo (F1, C2…), su descripción y sus adjuntos renombrados `código_nombre.webp`; botón «Descargar adjuntos» con un ZIP de todos ellos.
+- Visor de imágenes: al tocar un adjunto se ve a pantalla completa; se cierra con la X, tocando fuera, con Escape o con atrás.
+- Borrar en grupo las tareas seleccionadas.
+- Botón atrás: cierra el modal abierto y, en móvil, vuelve a la columna anterior (hasta 5 pasos).
+- Reordenar tareas arrastrando dentro de su columna también en móvil, con un asa en cada tarjeta.
+
+### Mejoras
+
+- La aplicación pasa a llamarse Pizarro.
+- Nueva tarea: Título, Tipo y Descripción primero; en móvil el modal se abre arriba y sigue visible con el teclado.
+- El detalle de la tarea cabe entero en pantallas de escritorio.
+- Barra de selección en móvil: «Mover a Siguiente salto» y «Mover a…» en la misma línea.
+
+### Correcciones
+
+- Móvil: el scroll vertical de una columna con muchas tareas no funcionaba (el gesto iniciaba un arrastre). Se quita el arrastre entre columnas en móvil.
+- Release: el título va antes de la cabecera.
+- Release: se incluye la descripción de cada tarea.
+
+### Cambios técnicos / DB
+
+- Ruta POST /api/projects/[id]/release-attachments que genera el ZIP en el servidor (sin dependencias nuevas) y acciones getReleaseTaskDetails y deleteTasks.
+- Se mantienen los identificadores técnicos con el nombre anterior (cookies, base de datos y clave de cifrado) para no cerrar sesiones ni invalidar tokens guardados.
+
 ## v1.4.0 — 2026-10-18
 
 Tipos de tarea exclusivos de cada proyecto.

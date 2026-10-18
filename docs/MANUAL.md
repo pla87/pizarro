@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.4.0"
+version: "v1.5.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.4.0
+**Versión de la aplicación:** v1.5.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -161,7 +161,7 @@ Desde el menú «⋯» de cada columna:
 
 ### 3.4 Tarjetas
 
-- **Crear:** botón *Nueva tarea*, el «+» de cada columna o el botón flotante en móvil. Solo el título y el tipo son obligatorios; asignarla a alguien es opcional.
+- **Crear:** botón *Nueva tarea*, el «+» de cada columna o el botón flotante en móvil. El formulario empieza por **Título, Tipo y Descripción**; en móvil se abre arriba de la pantalla para que esos campos se vean con el teclado abierto. Solo el título y el tipo son obligatorios; asignarla a alguien es opcional.
 - **Crear varias a la vez:** botón **Varias tareas** (escritorio) o el botón flotante pequeño encima del «+» (móvil).
   - Elige la columna (por defecto, la que estás viendo) y pega una lista: **cada línea es una tarea** con ese título. Las líneas vacías se ignoran y se quitan viñetas como «-», «*», «1.» o «[ ]».
   - Elige el **tipo para todas** y, si alguna es distinta, cámbialo en su línea. Volver a pulsar un tipo común lo aplica a todas las líneas, también a las cambiadas a mano.
@@ -171,20 +171,18 @@ Desde el menú «⋯» de cada columna:
 - **Atajo de captura:** pega una imagen (Ctrl/⌘+V) con el tablero en pantalla y se abre *Nueva tarea* con la captura adjunta.
 - **Editar:** haz clic en la tarjeta. Los cambios se guardan solos (título y enlace al salir del campo; tipo, color, responsable, etiquetas y columna al cambiarlos). La descripción admite Markdown (Ctrl/⌘+Enter guarda).
 - **Checklist:** añade elementos y márcalos. La tarjeta muestra el progreso (p. ej. `2/4`).
-- **Capturas:** pega con Ctrl/⌘+V dentro del diálogo, o usa *Añadir* para elegir un archivo. En móvil también tienes el botón **Cámara**, al crear la tarea y en el detalle de una tarea existente. Cada imagen se reduce a 1280 px de ancho como máximo y se guarda como WebP (calidad 75).
+- **Capturas:** pega con Ctrl/⌘+V dentro del diálogo, o usa *Añadir* para elegir un archivo. Al tocar o hacer clic en una imagen se ve **a pantalla completa**; se cierra con la **X**, tocando fuera de la imagen, con Escape o con el botón atrás. Con varias imágenes, las flechas pasan de una a otra. En móvil también tienes el botón **Cámara**, al crear la tarea y en el detalle de una tarea existente. Cada imagen se reduce a 1280 px de ancho como máximo y se guarda como WebP (calidad 75).
 - **Archivar** oculta la tarjeta del tablero (se puede restaurar). **Borrar** la elimina con sus adjuntos.
+- En escritorio, el detalle de la tarjeta cabe entero en la pantalla: la columna principal y la lateral se desplazan cada una por su lado.
 
 ### 3.5 Mover tarjetas
 
-- **Arrastrar y soltar** entre columnas o dentro de la misma.
-- **En móvil:** mantén pulsada la tarjeta un instante y arrástrala sobre la **pestaña** de otra columna.
-  - Si la mantienes ahí medio segundo, la vista cambia a esa columna y puedes soltarla en su sitio.
-  - Si la sueltas sobre la propia pestaña, queda al final de esa columna.
-  - Pasar por encima de otras pestañas de camino no cambia nada.
+- **Escritorio (ratón):** arrastra la tarjeta para **reordenarla** dentro de su columna o para llevarla a otra.
+- **Móvil y pantallas táctiles:** cada tarjeta tiene un **asa** (⋮⋮) a la derecha. Arrastrándola se **reordena dentro de la columna**. El resto de la tarjeta sirve para hacer scroll y para abrirla con un toque. En móvil no se arrastra entre columnas: usa la selección múltiple o el selector *Columna* del detalle.
 - **Selección múltiple:** marca la casilla de varias tarjetas. Aparece una barra con:
-  - **Mover a Siguiente salto…** (la columna con ese rol);
-  - **Mover a…** cualquier otra columna;
-  - **Release con selección**.
+  - **Mover a Siguiente salto…** (la columna con ese rol) y **Mover a…** cualquier otra columna, en la misma fila;
+  - **Release con selección**;
+  - **Borrar**: pide confirmación y borra las tareas seleccionadas con sus adjuntos.
 - También puedes cambiar la columna desde el detalle de la tarjeta.
 
 ### 3.6 Generar una release
@@ -192,22 +190,28 @@ Desde el menú «⋯» de cada columna:
 1. Prepara tus plantillas en **Mi perfil y plantillas → Plantillas de release notes**. Puedes tener **varias cabeceras** (por ejemplo, «Contexto para IA» o «Para negocio») y **varios pies** (por ejemplo, «Checklist de cierre»), cada uno con su nombre.
 2. En el tablero, pulsa **Generar Release** en la columna *Siguiente salto a producción*.
 3. **Paso 1:** revisa el título, elige la **cabecera** y el **pie** (o «Ninguna») y marca las tareas incluidas. Por defecto están todas las de la columna; si tenías tarjetas seleccionadas, solo esas.
-4. **Paso 2:** se genera el documento, con **una sección por tipo de tarea** en el orden definido por los administradores:
+4. **Paso 2:** se genera el documento: primero el **título**, después la **cabecera**, **una sección por tipo de tarea** (generales y luego los del proyecto) y el **pie**:
 
 ```markdown
-<cabecera elegida>
-
 ## Release 2026-10-18 · Proyecto
 
+<cabecera elegida>
+
 ### Funcionalidad
-- Nueva pantalla de exportación ([enlace](<https://example.com/pr/1>))
+- **F1** · Nueva pantalla de exportación ([enlace](<https://example.com/pr/1>))
+  Adjuntos: F1_captura.webp, F1_detalle.webp
+  Descripción de la tarea, sangrada bajo su punto.
 
 ### Corrección
-- Error al guardar
-- Corrección del cálculo de totales
+- **C1** · Error al guardar
+- **C2** · Corrección del cálculo de totales
 
 <pie elegido>
 ```
+
+   - **Códigos:** cada punto lleva un código con la inicial del tipo y un número por tipo (F1, F2… C1…). Si dos tipos empiezan por la misma letra, el segundo usa más letras (p. ej. D y DI).
+   - **Descripción:** la de cada tarea va debajo de su punto. Las menciones salen como `@Nombre`.
+   - **Adjuntos:** se nombran `código_nombre-original.webp` y se listan bajo su punto. Si alguna tarea tiene adjuntos, aparece el botón **Descargar adjuntos (N)**, que baja un ZIP (`release-AAAA-MM-DD-adjuntos.zip`) con todos los ficheros ya renombrados.
 
 5. Edita el texto libremente y alterna entre **Editar** y **Vista previa**. Si cambias la cabecera o el pie en este paso, se sustituyen en el texto sin perder lo que has escrito. Si ya habías modificado ese bloque, el nuevo se añade.
 6. Exporta con **Copiar todo**, **.md** o **.txt** (nombre `release-AAAA-MM-DD`).
@@ -267,7 +271,10 @@ Botón **Informe PDF** en la cabecera del tablero (o en el menú lateral). Se ab
 - El tablero muestra una columna cada vez. Cambias de columna con las pestañas superiores, que indican cuántas tarjetas tiene cada una.
 - El botón flotante **+** crea una tarea en la columna visible, con opción de **Cámara** o **Archivo**. El botón *Crear tarea* queda siempre visible abajo del formulario.
 - El botón flotante pequeño de encima crea **varias tareas** pegando una lista (ver 3.4).
-- Para mover tarjetas entre columnas en móvil, arrástralas sobre la pestaña de destino (ver 3.5), usa el selector *Columna* del detalle o la selección múltiple.
+- Para mover tarjetas entre columnas en móvil, usa la selección múltiple o el selector *Columna* del detalle. Para reordenar dentro de la columna, arrastra el asa ⋮⋮ (ver 3.5).
+- **Botón atrás** (del navegador o del móvil):
+  - si hay un modal abierto (tarea, nueva tarea, imagen ampliada…), lo cierra;
+  - si no, vuelve a la columna que estabas viendo antes; se recuerdan los últimos 5 cambios de columna, y después atrás sale del tablero como siempre.
 - **Instalar como app:** en el menú lateral, **Instalar app**.
   - **Android y Chrome de escritorio:** muestra el aviso de instalación.
   - **iPhone y iPad:** explica cómo hacerlo. En **Safari**, pulsa *Compartir → Añadir a pantalla de inicio*.

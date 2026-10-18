@@ -13,6 +13,8 @@ export interface BoardApi {
   kinds: KindOption[];
   kindById: Map<string, KindOption>;
   cardStyle: CardStyleValue;
+  /** Táctil: las tarjetas se arrastran solo desde su asa. */
+  dragHandle: boolean;
   google: { enabled: boolean; connected: boolean };
   today: string;
   setLabels: React.Dispatch<React.SetStateAction<LabelOption[]>>;

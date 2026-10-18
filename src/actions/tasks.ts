@@ -268,6 +268,20 @@ export async function deleteTask(taskId: string) {
   });
 }
 
+/** Borra varias tareas (selección múltiple) con sus adjuntos. Solo las que el usuario puede ver. */
+export async function deleteTasks(taskIds: string[]) {
+  return runAction(async () => {
+    const user = await requireUser();
+    const ids = [...new Set(z.array(v.id).min(1).max(500).parse(taskIds))];
+    const tasks = await db.task.findMany({ where: { id: { in: ids }, project: visibleProjectsWhere(user) }, select: { id: true } });
+    if (tasks.length !== ids.length) throw notFound();
+    const attachments = await db.taskAttachment.findMany({ where: { taskId: { in: ids } }, select: { id: true } });
+    await db.task.deleteMany({ where: { id: { in: ids } } });
+    await removeAttachmentFiles(attachments.map((a) => a.id));
+    return { deleted: ids.length };
+  });
+}
+
 export async function getTaskDetail(taskId: string) {
   return runAction(async (): Promise<TaskDetail> => {
     const user = await requireUser();

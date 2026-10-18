@@ -2,7 +2,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlignLeft, CalendarClock, Check, CheckSquare, ExternalLink, FileText, Image as ImageIcon, MessageSquare } from "lucide-react";
+import { AlignLeft, CalendarClock, Check, CheckSquare, ExternalLink, FileText, GripVertical, Image as ImageIcon, MessageSquare } from "lucide-react";
 import { dueStatus, formatDay } from "@/lib/dates";
 import { memo } from "react";
 import type { BoardTask } from "@/lib/types";
@@ -12,24 +12,39 @@ import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard } from "./context";
 
 export function SortableTaskCard({ id }: { id: string }) {
-  const { taskById } = useBoard();
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const { taskById, dragHandle } = useBoard();
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
   const task = taskById.get(id);
   if (!task) return null;
+  // En táctil solo arrastra el asa: el resto de la tarjeta deja hacer scroll y abrirla con un toque.
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={cn("touch-manipulation", isDragging && "opacity-40")}
-      {...attributes}
-      {...listeners}
+      {...(dragHandle ? {} : { ...attributes, ...listeners })}
     >
-      <TaskCard task={task} />
+      <TaskCard
+        task={task}
+        handle={dragHandle ? (
+          <button
+            type="button"
+            ref={setActivatorNodeRef}
+            {...attributes}
+            {...listeners}
+            onClick={(e) => e.stopPropagation()}
+            className="-my-1 -mr-1.5 flex h-8 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-slate-400 active:text-brand-600"
+            aria-label="Arrastrar para reordenar"
+          >
+            <GripVertical size={16} />
+          </button>
+        ) : null}
+      />
     </div>
   );
 }
 
-export const TaskCard = memo(function TaskCard({ task, overlay = false }: { task: BoardTask; overlay?: boolean }) {
+export const TaskCard = memo(function TaskCard({ task, overlay = false, handle = null }: { task: BoardTask; overlay?: boolean; handle?: React.ReactNode }) {
   const { users, labels, openTask, selected, toggleSelected, columns, today, kindById, cardStyle } = useBoard();
   const done = columns.find((c) => c.id === task.columnId)?.isDone ?? false;
   const due = dueStatus(task.dueDate, done, today);
@@ -79,6 +94,7 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false }: { task
           {isSelected && <Check size={12} strokeWidth={3} />}
         </button>
         <p className="min-w-0 flex-1 text-sm leading-snug font-medium break-words">{task.title}</p>
+        {handle}
       </div>
 
       {taskLabels.length > 0 && (
