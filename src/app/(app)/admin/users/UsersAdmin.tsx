@@ -1,5 +1,6 @@
 "use client";
 
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { KeyRound, Pencil, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -96,7 +97,7 @@ function UserForm({ user, isMe, onClose }: { user?: UserRow; isMe?: boolean; onC
         {!user && (
           <div>
             <label className="label" htmlFor="u-pass">Contraseña inicial (mín. 10)</label>
-            <input id="u-pass" type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} minLength={10} required autoComplete="new-password" />
+            <PasswordInput id="u-pass" className="input" value={password} onChange={(e) => setPassword(e.target.value)} minLength={10} required autoComplete="new-password" />
           </div>
         )}
         <div>
@@ -141,7 +142,7 @@ function ResetPassword({ user, onClose }: { user: UserRow; onClose: () => void }
       >
         <div>
           <label className="label" htmlFor="r-pass">Nueva contraseña (mín. 10)</label>
-          <input id="r-pass" type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} minLength={10} required autoComplete="new-password" data-autofocus />
+          <PasswordInput id="r-pass" className="input" value={password} onChange={(e) => setPassword(e.target.value)} minLength={10} required autoComplete="new-password" data-autofocus />
         </div>
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>

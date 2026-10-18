@@ -112,7 +112,15 @@ export function BulkTaskDialog({ initialColumnId, onClose }: Props) {
             </div>
             <div>
               <div className="label">Tipo para todas</div>
-              <TypeSelector kinds={board.kinds} value={kindId} onChange={setKindId} />
+              <TypeSelector
+                kinds={board.kinds}
+                value={kindId}
+                onChange={(id) => {
+                  // El tipo común se aplica a todas las líneas, también a las cambiadas a mano.
+                  setKindId(id);
+                  setOverrides({});
+                }}
+              />
             </div>
             <ul className="max-h-48 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-700">
               {lines.map((title, i) => {
