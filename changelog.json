@@ -1,6 +1,19 @@
 {
   "versions": [
     {
+      "version": "1.1.2",
+      "date": "2026-10-18",
+      "summary": "Mensaje claro en los logs si faltan variables de entorno al arrancar.",
+      "changes": {
+        "nuevas": [],
+        "mejoras": [
+          "Al arrancar se comprueban DATABASE_URL y SESSION_SECRET: si faltan, los logs indican cuál y cómo configurarla, en lugar de reiniciarse en bucle con un error de Prisma."
+        ],
+        "correcciones": [],
+        "tecnicos": []
+      }
+    },
+    {
       "version": "1.1.1",
       "date": "2026-10-18",
       "summary": "Compatibilidad del build Docker con Railway.",

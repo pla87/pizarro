@@ -14,6 +14,20 @@ fi
 
 mkdir -p "$UPLOAD_DIR"
 
+# Comprobación de variables imprescindibles, con un mensaje claro en los logs.
+missing=""
+[ -n "$DATABASE_URL" ] || missing="$missing DATABASE_URL"
+[ ${#SESSION_SECRET} -ge 32 ] || missing="$missing SESSION_SECRET(>=32)"
+if [ -n "$missing" ]; then
+  echo "[start] ERROR: faltan variables de entorno:$missing"
+  echo "[start] En Railway: servicio de la app -> Variables. DATABASE_URL debe ser \${{Postgres.DATABASE_URL}}"
+  echo "[start] (usa el nombre exacto de tu servicio de base de datos) y aplica los cambios con «Deploy»."
+  # Espera antes de salir para no reiniciar en bucle rápido.
+  sleep 20
+  exit 1
+fi
+[ -n "$APP_URL" ] || echo "[start] AVISO: APP_URL no está definida; los enlaces de los avisos y Google no funcionarán bien."
+
 echo "[start] Aplicando migraciones..."
 (cd migrator && ./node_modules/.bin/prisma migrate deploy)
 

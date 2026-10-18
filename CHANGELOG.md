@@ -2,6 +2,14 @@
 
 Historial de versiones de Tablón. Fuente: `changelog.json`.
 
+## v1.1.2 — 2026-10-18
+
+Mensaje claro en los logs si faltan variables de entorno al arrancar.
+
+### Mejoras
+
+- Al arrancar se comprueban DATABASE_URL y SESSION_SECRET: si faltan, los logs indican cuál y cómo configurarla, en lugar de reiniciarse en bucle con un error de Prisma.
+
 ## v1.1.1 — 2026-10-18
 
 Compatibilidad del build Docker con Railway.
