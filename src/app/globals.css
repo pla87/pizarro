@@ -78,3 +78,11 @@ body {
 .prose-md hr { @apply my-4 border-slate-200 dark:border-slate-800; }
 .prose-md input[type="checkbox"] { @apply mr-1.5 align-middle; }
 .prose-md > :first-child { @apply mt-0; }
+
+/* Scroll sin barra visible (pestañas de columnas en móvil). */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

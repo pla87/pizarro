@@ -196,7 +196,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
                 </label>
               </div>
             </div>
-            <p className="mb-2 text-xs text-slate-500">Pega una imagen con Ctrl+V / ⌘+V en cualquier parte de esta ventana.</p>
+            <p className="mb-2 truncate text-xs text-slate-500 max-sm:hidden">Pega imágenes con Ctrl+V / ⌘+V.</p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {detail?.attachments.map((a) => (
                 <div key={a.id} className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
@@ -243,7 +243,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
           <Field label="Tipo">
             <TypeSelector kinds={board.kinds} value={task.kindId} onChange={(kindId) => save({ kindId }, { kindId })} />
           </Field>
-          <Field label="Asignada a">
+          <Field label="Asignada a (opcional)">
             <select
               className="input"
               value={task.assigneeId ?? ""}
@@ -427,7 +427,7 @@ function DescriptionEditor({ initial, onSave, users, onGoogle }: {
               if (link) setValue((v) => `${v.trimEnd()}\n\n${kind === "GOOGLE_SHEET" ? "Hoja" : "Documento"}: [${link.title.replace(/[\[\]]/g, "")}](${link.url})\n`);
             }}
             maxLength={20000}
-            placeholder="Markdown: **negrita**, listas, [enlaces](https://…). @persona menciona · @sheets / @docs crea un archivo de Google"
+            placeholder="Markdown · @persona · @docs / @sheets"
             onKeyDown={(e) => {
               if (e.key === "Escape") {
                 e.preventDefault();
@@ -444,7 +444,7 @@ function DescriptionEditor({ initial, onSave, users, onGoogle }: {
           <div className="flex gap-2">
             <button className="btn-primary py-1.5" onClick={() => { setEditing(false); if (value !== initial) onSave(value); }}>Guardar</button>
             <button className="btn-ghost py-1.5" onClick={() => { setValue(initial); setEditing(false); }}>Cancelar</button>
-            <span className="ml-auto self-center text-xs text-slate-400">Ctrl/⌘ + Enter para guardar</span>
+            <span className="ml-auto self-center text-xs text-slate-400 max-sm:hidden">Ctrl+Enter para guardar</span>
           </div>
         </div>
       ) : value.trim() ? (
@@ -559,8 +559,8 @@ function GoogleLinks({ detail, setDetail, onCreate, taskId }: {
         </button>
       </div>
       {links.length === 0 ? (
-        <p className="text-xs text-slate-400">
-          Sin documentos. También puedes escribir <code>@docs</code> o <code>@sheets</code> en la descripción o en un comentario.
+        <p className="truncate text-xs text-slate-400">
+          Sin documentos · escribe <code>@docs</code> o <code>@sheets</code>
         </p>
       ) : (
         <ul className="space-y-1">
@@ -657,7 +657,7 @@ function Comments({ taskId, detail, setDetail, users, onGoogle }: {
           onValueChange={setText}
           users={users}
           disabled={!detail}
-          placeholder="Escribe un comentario… @persona para avisar, @sheets / @docs para crear un archivo"
+          placeholder="Comenta… (@persona, @docs, @sheets)"
           onCommand={async (kind) => {
             const link = await onGoogle(kind);
             if (link) setText((v) => `${v.trimEnd()} [${link.title.replace(/[\[\]]/g, "")}](${link.url}) `.trimStart());
@@ -672,7 +672,7 @@ function Comments({ taskId, detail, setDetail, users, onGoogle }: {
           aria-label="Nuevo comentario"
         />
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">Ctrl/⌘ + Enter para enviar. Las personas mencionadas reciben un aviso.</span>
+          <span className="truncate text-xs text-slate-400 max-sm:hidden">Ctrl+Enter para enviar</span>
           <button className="btn-primary ml-auto py-1.5" onClick={send} disabled={sending || !text.trim()}>
             {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Comentar
           </button>

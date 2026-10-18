@@ -1,6 +1,27 @@
 {
   "versions": [
     {
+      "version": "1.3.0",
+      "date": "2026-10-18",
+      "summary": "Crear varias tareas pegando una lista, formularios más compactos en móvil y entregables en un modal.",
+      "changes": {
+        "nuevas": [
+          "Crear varias tareas a la vez: pega una lista (una tarea por línea), elige el tipo para todas o línea a línea y, si quieres, asigna responsable, fecha límite, entregable y etiquetas comunes. Botón «Varias tareas» en escritorio y botón flotante pequeño sobre el «+» en móvil."
+        ],
+        "mejoras": [
+          "Nueva tarea: el botón «Crear tarea» queda fijo abajo y siempre visible; «Asignada a» y «Fecha límite» en la misma fila y descripción más baja.",
+          "«Asignada a» se indica como campo opcional.",
+          "Detalle de tarea: textos de ayuda acortados a una línea (y ocultos en móvil cuando hablan de atajos de teclado).",
+          "Entregables: el formulario se abre en un modal al pulsar «Añadir entregable» (y al editar uno).",
+          "En móvil, las pestañas de columnas ya no muestran barra de scroll horizontal."
+        ],
+        "correcciones": [],
+        "tecnicos": [
+          "Acción createTasks: alta en bloque en una transacción (createManyAndReturn), máximo 100 tareas."
+        ]
+      }
+    },
+    {
       "version": "1.2.0",
       "date": "2026-10-18",
       "summary": "Tipos de tarea configurables, varias plantillas de release, app instalable en el móvil y mejoras de uso en móvil y escritorio.",

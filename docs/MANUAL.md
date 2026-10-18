@@ -1,12 +1,12 @@
 ---
 title: "Tablón · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.2.0"
+version: "v1.3.0"
 ---
 
 # Tablón — Manual de operaciones
 
-**Versión de la aplicación:** v1.2.0
+**Versión de la aplicación:** v1.3.0
 
 Este manual describe la arquitectura de Tablón, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -161,6 +161,11 @@ Desde el menú «⋯» de cada columna:
 ### 3.4 Tarjetas
 
 - **Crear:** botón *Nueva tarea*, el «+» de cada columna o el botón flotante en móvil. Solo el título y el tipo son obligatorios; asignarla a alguien es opcional.
+- **Crear varias a la vez:** botón **Varias tareas** (escritorio) o el botón flotante pequeño encima del «+» (móvil).
+  - Elige la columna (por defecto, la que estás viendo) y pega una lista: **cada línea es una tarea** con ese título. Las líneas vacías se ignoran y se quitan viñetas como «-», «*», «1.» o «[ ]».
+  - Elige el **tipo para todas** y, si alguna es distinta, cámbialo en su línea.
+  - **Campos extra** (plegado): responsable, fecha límite, entregable y etiquetas comunes a todas.
+  - Hasta 100 tareas de una vez; se añaden al final de la columna en el orden de la lista.
 - **Tipo:** por defecto *Funcionalidad* o *Corrección*. Los administradores pueden crear más (ver 3.14).
 - **Atajo de captura:** pega una imagen (Ctrl/⌘+V) con el tablero en pantalla y se abre *Nueva tarea* con la captura adjunta.
 - **Editar:** haz clic en la tarjeta. Los cambios se guardan solos (título y enlace al salir del campo; tipo, color, responsable, etiquetas y columna al cambiarlos). La descripción admite Markdown (Ctrl/⌘+Enter guarda).
@@ -216,7 +221,7 @@ Las secciones sin tareas se omiten.
   - **ámbar** si vence hoy o en los próximos 3 días;
   - **verde** si ya está en una columna terminada.
 - **Columnas terminadas:** en el menú «⋯» de una columna, **Contar como terminada**. Por defecto lo son *En producción* y *Cerrado*. Sus tarjetas cuentan como hechas en el avance y no generan avisos de plazo.
-- **Entregables:** se crean en **Ajustes del proyecto → Entregables** (nombre, fecha objetivo y descripción) y se asignan desde el detalle de cada tarjeta.
+- **Entregables:** en **Ajustes del proyecto → Entregables**, el botón **Añadir entregable** abre un formulario (nombre, fecha objetivo y descripción). El lápiz de cada entregable abre el mismo formulario para editarlo. Se asignan desde el detalle de cada tarjeta.
 
 ### 3.8 Informe PDF del proyecto
 
@@ -259,7 +264,8 @@ Botón **Informe PDF** en la cabecera del tablero (o en el menú lateral). Se ab
 ### 3.12 Móvil
 
 - El tablero muestra una columna cada vez. Cambias de columna con las pestañas superiores, que indican cuántas tarjetas tiene cada una.
-- El botón flotante **+** crea una tarea en la columna visible, con opción de **Cámara** o **Archivo**.
+- El botón flotante **+** crea una tarea en la columna visible, con opción de **Cámara** o **Archivo**. El botón *Crear tarea* queda siempre visible abajo del formulario.
+- El botón flotante pequeño de encima crea **varias tareas** pegando una lista (ver 3.4).
 - Para mover tarjetas entre columnas en móvil, arrástralas sobre la pestaña de destino (ver 3.5), usa el selector *Columna* del detalle o la selección múltiple.
 - **Instalar como app:** en el menú lateral, **Instalar app**.
   - **Android y Chrome de escritorio:** muestra el aviso de instalación.

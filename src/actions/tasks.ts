@@ -4,7 +4,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertAssignable, assertProjectAccess, assertTaskAccess, visibleProjectsWhere } from "@/lib/access";
-import { loadBoardTask } from "@/lib/board";
+import { boardTaskSelect, loadBoardTask, toBoardTask } from "@/lib/board";
+import { MAX_BULK_TASKS } from "@/lib/bulk";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
 import { requireUser } from "@/lib/session";
@@ -94,6 +95,59 @@ export async function createTask(input: z.input<typeof createSchema>) {
     });
     await notifyMentions({ actorId: user.id, taskId: task.id, projectId: data.projectId, recipientIds: extractMentionIds(data.description), text: data.description });
     return loadBoardTask(task.id);
+  });
+}
+
+const createManySchema = z.object({
+  projectId: v.id,
+  columnId: v.id,
+  tasks: z.array(z.object({ title: v.title, kindId: v.id })).min(1, "No hay tareas que crear.").max(MAX_BULK_TASKS, `Máximo ${MAX_BULK_TASKS} tareas de una vez.`),
+  assigneeId: v.id.nullable().default(null),
+  labelIds: z.array(v.id).max(20).default([]),
+  dueDate: v.dayIso.default(null),
+  deliverableId: v.id.nullable().default(null),
+});
+
+/** Crea varias tareas a la vez (una por línea pegada), al final de la columna y en el orden recibido. */
+export async function createTasks(input: z.input<typeof createManySchema>) {
+  return runAction(async () => {
+    const user = await requireUser();
+    const data = createManySchema.parse(input);
+    await assertProjectAccess(user, data.projectId);
+    await assertColumnInProject(data.columnId, data.projectId);
+    await assertLabelsInProject(data.labelIds, data.projectId);
+    if (data.assigneeId) await assertAssignable(data.projectId, data.assigneeId);
+    await assertDeliverableInProject(data.deliverableId, data.projectId);
+    const kindIds = [...new Set(data.tasks.map((t) => t.kindId))];
+    if ((await db.taskKind.count({ where: { id: { in: kindIds } } })) !== kindIds.length) throw new AppError("El tipo de tarea no existe.");
+    const labelIds = [...new Set(data.labelIds)];
+    const dueDate = data.dueDate ? isoToDate(data.dueDate) : null;
+    const ids = await db.$transaction(async (tx) => {
+      let position = (await tx.task.findFirst({ where: { columnId: data.columnId }, orderBy: { position: "desc" }, select: { position: true } }))?.position ?? null;
+      const created = await tx.task.createManyAndReturn({
+        data: data.tasks.map((t) => {
+          position = positionBetween(position, null);
+          return {
+            projectId: data.projectId,
+            columnId: data.columnId,
+            title: t.title,
+            kindId: t.kindId,
+            assigneeId: data.assigneeId,
+            dueDate,
+            deliverableId: data.deliverableId,
+            position,
+            createdById: user.id,
+          };
+        }),
+        select: { id: true },
+      });
+      if (labelIds.length) {
+        await tx.taskLabel.createMany({ data: created.flatMap((t) => labelIds.map((labelId) => ({ taskId: t.id, labelId }))) });
+      }
+      return created.map((t) => t.id);
+    });
+    const rows = await db.task.findMany({ where: { id: { in: ids } }, orderBy: { position: "asc" }, select: boardTaskSelect });
+    return rows.map(toBoardTask);
   });
 }
 
