@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, ExternalLink, FileSpreadsheet, FileText, ImagePlus, Loader2, Plus, Send, Trash2, X } from "lucide-react";
+import { Archive, Camera, ExternalLink, FileSpreadsheet, FileText, ImagePlus, Loader2, Plus, Send, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -8,8 +8,8 @@ import {
   moveTask, updateSubtask, updateTask,
 } from "@/actions/tasks";
 import { dueStatus } from "@/lib/dates";
-import { TASK_TYPE_META, TASK_TYPES, type TaskTypeValue } from "@/lib/constants";
-import type { AttachmentInfo, BoardTask, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
+import { kindBadgeStyle } from "@/lib/constants";
+import type { AttachmentInfo, BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
 import { Avatar } from "../ui/Avatar";
 import { ColorPicker } from "../ui/ColorPicker";
 import { cn } from "../ui/cn";
@@ -185,10 +185,16 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
           <section>
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-sm font-semibold">Capturas y adjuntos</h3>
-              <label className="btn-ghost cursor-pointer py-1 text-xs">
-                <ImagePlus size={15} /> Añadir
-                <input type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { upload(imageFilesFrom(e.target.files)); e.target.value = ""; }} />
-              </label>
+              <div className="flex items-center gap-1">
+                <label className="btn-ghost cursor-pointer py-1 text-xs sm:hidden">
+                  <Camera size={15} /> Cámara
+                  <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { upload(imageFilesFrom(e.target.files)); e.target.value = ""; }} />
+                </label>
+                <label className="btn-ghost cursor-pointer py-1 text-xs">
+                  <ImagePlus size={15} /> Añadir
+                  <input type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { upload(imageFilesFrom(e.target.files)); e.target.value = ""; }} />
+                </label>
+              </div>
             </div>
             <p className="mb-2 text-xs text-slate-500">Pega una imagen con Ctrl+V / ⌘+V en cualquier parte de esta ventana.</p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -235,7 +241,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
             </select>
           </Field>
           <Field label="Tipo">
-            <TypeSelector value={task.type} onChange={(type) => save({ type }, { type })} />
+            <TypeSelector kinds={board.kinds} value={task.kindId} onChange={(kindId) => save({ kindId }, { kindId })} />
           </Field>
           <Field label="Asignada a">
             <select
@@ -365,21 +371,19 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-export function TypeSelector({ value, onChange }: { value: TaskTypeValue; onChange: (t: TaskTypeValue) => void }) {
+export function TypeSelector({ kinds, value, onChange }: { kinds: KindOption[]; value: string; onChange: (kindId: string) => void }) {
   return (
     <div className="flex flex-wrap gap-1">
-      {TASK_TYPES.map((t) => (
+      {kinds.map((k) => (
         <button
-          key={t}
+          key={k.id}
           type="button"
-          onClick={() => onChange(t)}
-          className={cn(
-            "badge cursor-pointer px-2 py-1 text-xs",
-            value === t ? TASK_TYPE_META[t].badge : "bg-transparent text-slate-500 ring-slate-300 dark:ring-slate-700",
-          )}
-          aria-pressed={value === t}
+          onClick={() => onChange(k.id)}
+          className={cn("badge cursor-pointer px-2 py-1 text-xs", value !== k.id && "bg-transparent text-slate-500 ring-slate-300 dark:ring-slate-700")}
+          style={value === k.id ? kindBadgeStyle(k.color) : undefined}
+          aria-pressed={value === k.id}
         >
-          {TASK_TYPE_META[t].label}
+          {k.name}
         </button>
       ))}
     </div>

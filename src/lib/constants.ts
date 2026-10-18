@@ -1,15 +1,11 @@
 // Constantes compartidas entre cliente y servidor (sin dependencias de Node).
 
-export const TASK_TYPES = ["FEATURE", "FIX", "CHORE", "REFACTOR", "HOTFIX"] as const;
-export type TaskTypeValue = (typeof TASK_TYPES)[number];
+/** Estilo del distintivo de un tipo de tarea a partir de su color (hex). */
+export function kindBadgeStyle(color: string): { backgroundColor: string; color: string; boxShadow: string } {
+  return { backgroundColor: `${color}22`, color, boxShadow: `inset 0 0 0 1px ${color}55` };
+}
 
-export const TASK_TYPE_META: Record<TaskTypeValue, { label: string; badge: string }> = {
-  FEATURE: { label: "Feature", badge: "bg-emerald-100 text-emerald-800 ring-emerald-600/20 dark:bg-emerald-500/15 dark:text-emerald-300" },
-  FIX: { label: "Fix", badge: "bg-amber-100 text-amber-800 ring-amber-600/20 dark:bg-amber-500/15 dark:text-amber-300" },
-  CHORE: { label: "Chore", badge: "bg-slate-100 text-slate-700 ring-slate-500/20 dark:bg-slate-500/20 dark:text-slate-300" },
-  REFACTOR: { label: "Refactor", badge: "bg-violet-100 text-violet-800 ring-violet-600/20 dark:bg-violet-500/15 dark:text-violet-300" },
-  HOTFIX: { label: "Hotfix", badge: "bg-red-100 text-red-800 ring-red-600/25 dark:bg-red-500/20 dark:text-red-300" },
-};
+export const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
 
 export const COLUMN_ROLES = ["NONE", "NEXT_RELEASE", "IN_PRODUCTION"] as const;
 export type ColumnRoleValue = (typeof COLUMN_ROLES)[number];

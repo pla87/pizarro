@@ -28,7 +28,7 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
         where: { archivedAt: { not: null } },
         orderBy: { archivedAt: "desc" },
         take: 100,
-        select: { id: true, title: true, type: true, archivedAt: true },
+        select: { id: true, title: true, kind: { select: { name: true, color: true } }, archivedAt: true },
       },
     },
   });
@@ -49,7 +49,7 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
       }}
       labels={project.labels}
       deliverables={project.deliverables.map((d) => ({ id: d.id, name: d.name, description: d.description, dueDate: dateToIso(d.dueDate), taskCount: d._count.tasks }))}
-      archived={project.tasks.map((t) => ({ id: t.id, title: t.title, type: t.type, archivedAt: t.archivedAt!.toISOString() }))}
+      archived={project.tasks.map((t) => ({ id: t.id, title: t.title, kind: t.kind, archivedAt: t.archivedAt!.toISOString() }))}
       users={users}
     />
   );

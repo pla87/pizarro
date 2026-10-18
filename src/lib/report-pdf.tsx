@@ -1,6 +1,5 @@
 import "server-only";
 import { Document, Font, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
-import { TASK_TYPE_META } from "./constants";
 import { formatDay } from "./dates";
 import type { DeliverableStatus, Report, ReportTask } from "./report";
 
@@ -113,7 +112,7 @@ function Table<T>({ cols, rows, empty }: { cols: Col<T>[]; rows: T[]; empty: str
 function taskCols(today: string, withColumn: boolean): Col<ReportTask>[] {
   return [
     { label: "Tarea", width: withColumn ? "34%" : "44%", render: (t) => <Text style={t.done ? { color: C.muted } : undefined}>{t.title}</Text> },
-    { label: "Tipo", width: "10%", render: (t) => TASK_TYPE_META[t.type].label },
+    { label: "Tipo", width: "10%", render: (t) => t.kind },
     ...(withColumn ? [{ label: "Columna", width: "17%", render: (t: ReportTask) => t.column }] : []),
     { label: "Responsable", width: withColumn ? "15%" : "17%", render: (t) => t.assignee ?? "—" },
     { label: "Plazo", width: withColumn ? "15%" : "19%", render: (t) => <Text style={{ color: dueColor(t) }}>{dueLabel(t, today)}</Text> },

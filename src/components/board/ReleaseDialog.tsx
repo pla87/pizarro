@@ -4,8 +4,8 @@ import { ArrowLeft, Check, ClipboardCopy, Download, Eye, FileText, Loader2, Penc
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { deployRelease } from "@/actions/releases";
-import { buildReleaseMarkdown, isoDate, releaseFileName } from "@/lib/release";
-import type { BoardTask } from "@/lib/types";
+import { buildReleaseMarkdown, isoDate, releaseFileName, swapTemplateBlock } from "@/lib/release";
+import type { BoardTask, TemplateOption } from "@/lib/types";
 import { copyText, downloadText } from "../ui/clipboard";
 import { cn } from "../ui/cn";
 import { Markdown } from "../ui/Markdown";
@@ -22,7 +22,7 @@ interface DeployResult {
 interface Props {
   tasks: BoardTask[];
   preselected: string[];
-  templates: { header: string; footer: string };
+  templates: { headers: TemplateOption[]; footers: TemplateOption[] };
   onClose: () => void;
   onDeployed: (result: DeployResult) => void;
 }
@@ -41,9 +41,53 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
   const [destination, setDestination] = useState<"IN_PRODUCTION" | "ARCHIVE">(inProduction ? "IN_PRODUCTION" : "ARCHIVE");
   const [busy, setBusy] = useState(false);
   const selectedTasks = useMemo(() => tasks.filter((t) => chosen.has(t.id)), [tasks, chosen]);
+  const [headerId, setHeaderId] = useState(templates.headers[0]?.id ?? "");
+  const [footerId, setFooterId] = useState(templates.footers[0]?.id ?? "");
+  const templateText = (list: TemplateOption[], id: string) => list.find((t) => t.id === id)?.content ?? "";
+
+  /** Cambia la cabecera o el pie; en el paso 2 se sustituye en el texto ya editado. */
+  const chooseTemplate = (which: "header" | "footer", id: string) => {
+    const list = which === "header" ? templates.headers : templates.footers;
+    const prevId = which === "header" ? headerId : footerId;
+    if (which === "header") setHeaderId(id);
+    else setFooterId(id);
+    if (step === "edit") {
+      const swap = (text: string) => swapTemplateBlock(text, templateText(list, prevId), templateText(list, id), which === "header" ? "start" : "end");
+      setContent(swap);
+      setGenerated(swap);
+    }
+  };
+
+  const templatePickers = (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {(["header", "footer"] as const).map((which) => {
+        const list = which === "header" ? templates.headers : templates.footers;
+        return (
+          <div key={which}>
+            <label className="label" htmlFor={`rel-${which}`}>{which === "header" ? "Cabecera" : "Pie"}</label>
+            <select
+              id={`rel-${which}`}
+              className="input"
+              value={which === "header" ? headerId : footerId}
+              onChange={(e) => chooseTemplate(which, e.target.value)}
+            >
+              <option value="">Ninguna</option>
+              {list.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   const generate = () => {
-    const md = buildReleaseMarkdown({ header: templates.header, footer: templates.footer, title, tasks: selectedTasks });
+    const md = buildReleaseMarkdown({
+      header: templateText(templates.headers, headerId),
+      footer: templateText(templates.footers, footerId),
+      title,
+      kinds: board.kinds,
+      tasks: selectedTasks,
+    });
     setContent(md);
     setGenerated(md);
     setTab("edit");
@@ -125,6 +169,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
             <label className="label" htmlFor="rel-title">Título de la release</label>
             <input id="rel-title" className="input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} />
           </div>
+          {templatePickers}
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">Tareas incluidas</span>
             <div className="flex gap-1">
@@ -149,7 +194,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
                       })
                     }
                   />
-                  <TypeBadge type={t.type} />
+                  <TypeBadge kind={board.kindById.get(t.kindId)} />
                   <span className="min-w-0 flex-1 truncate text-sm">{t.title}</span>
                 </label>
               </li>
@@ -159,6 +204,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
         </div>
       ) : (
         <div className="flex h-full flex-col gap-3">
+          {templatePickers}
           <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 text-sm dark:bg-slate-800">
             {(["edit", "preview"] as const).map((t) => (
               <button

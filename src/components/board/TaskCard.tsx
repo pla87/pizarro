@@ -30,11 +30,12 @@ export function SortableTaskCard({ id }: { id: string }) {
 }
 
 export const TaskCard = memo(function TaskCard({ task, overlay = false }: { task: BoardTask; overlay?: boolean }) {
-  const { users, labels, openTask, selected, toggleSelected, columns, today } = useBoard();
+  const { users, labels, openTask, selected, toggleSelected, columns, today, kindById, cardStyle } = useBoard();
   const done = columns.find((c) => c.id === task.columnId)?.isDone ?? false;
   const due = dueStatus(task.dueDate, done, today);
   const assignee = task.assigneeId ? users.find((u) => u.id === task.assigneeId) : null;
   const isSelected = selected.has(task.id);
+  const filled = cardStyle === "FILLED" && !!task.color;
   const taskLabels = task.labelIds.map((id) => labels.find((l) => l.id === id)).filter((l) => !!l);
 
   return (
@@ -54,8 +55,10 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false }: { task
         isSelected ? "border-brand-500 ring-2 ring-brand-500/30" : "border-slate-200 dark:border-slate-700/80",
         overlay && "rotate-2 shadow-xl",
       )}
+      // Estilo «tarjeta entera»: fondo teñido suave (legible en claro y oscuro) y borde del color.
+      style={filled && !isSelected ? { backgroundColor: `${task.color}26`, borderColor: `${task.color}80` } : filled ? { backgroundColor: `${task.color}26` } : undefined}
     >
-      {task.color && <span className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: task.color }} aria-hidden />}
+      {task.color && !filled && <span className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: task.color }} aria-hidden />}
       <div className="flex items-start gap-2">
         <button
           type="button"
@@ -89,7 +92,7 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false }: { task
       )}
 
       <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-        <TypeBadge type={task.type} />
+        <TypeBadge kind={kindById.get(task.kindId)} />
         {task.dueDate && (
           <span
             className={cn(

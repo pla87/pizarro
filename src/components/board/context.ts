@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { BoardColumn, BoardTask, DeliverableOption, LabelOption, UserOption } from "@/lib/types";
+import type { BoardColumn, BoardTask, CardStyleValue, DeliverableOption, KindOption, LabelOption, UserOption } from "@/lib/types";
 
 export interface BoardApi {
   project: { id: string; name: string };
@@ -10,6 +10,9 @@ export interface BoardApi {
   columns: BoardColumn[];
   labels: LabelOption[];
   deliverables: DeliverableOption[];
+  kinds: KindOption[];
+  kindById: Map<string, KindOption>;
+  cardStyle: CardStyleValue;
   google: { enabled: boolean; connected: boolean };
   today: string;
   setLabels: React.Dispatch<React.SetStateAction<LabelOption[]>>;

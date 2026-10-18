@@ -36,8 +36,12 @@ export async function seed(db: PrismaClient, log: (msg: string) => void = consol
         name,
         role: "ADMIN",
         passwordHash: await hashPassword(password),
-        releaseHeaderTemplate: DEFAULT_HEADER_TEMPLATE,
-        releaseFooterTemplate: DEFAULT_FOOTER_TEMPLATE,
+        releaseTemplates: {
+          create: [
+            { kind: "HEADER", name: "Contexto para IA", content: DEFAULT_HEADER_TEMPLATE, position: POSITION_STEP },
+            { kind: "FOOTER", name: "Checklist de cierre", content: DEFAULT_FOOTER_TEMPLATE, position: POSITION_STEP },
+          ],
+        },
       },
       select: { id: true },
     });
@@ -68,13 +72,17 @@ export async function seed(db: PrismaClient, log: (msg: string) => void = consol
       data: { projectId: project.id, name: "Beta cerrada", description: "Primera versión para un grupo reducido de usuarios.", dueDate: inDays(10), position: POSITION_STEP },
       select: { id: true },
     });
+    // Los tipos base los crea la migración; si un admin los cambió, se usan los dos primeros.
+    const kinds = await db.taskKind.findMany({ orderBy: { position: "asc" }, select: { id: true } });
+    const featureKind = kinds[0] ?? (await db.taskKind.create({ data: { name: "Funcionalidad", color: "#22c55e", position: POSITION_STEP }, select: { id: true } }));
+    const fixKind = kinds[1] ?? featureKind;
     const samples = [
-      { column: backlog, title: "Definir los criterios de aceptación del nuevo informe", type: "FEATURE" as const, due: 21 },
-      { column: backlog, title: "Actualizar dependencias del proyecto", type: "CHORE" as const },
-      { column: progress, title: "Pantalla de exportación de datos", type: "FEATURE" as const, assign: true, due: 3, beta: true },
-      { column: next, title: "Corregir el cálculo de totales en el resumen", type: "FIX" as const, link: "https://example.com/issues/1", due: -2, beta: true },
-      { column: next, title: "Extraer el servicio de notificaciones", type: "REFACTOR" as const, beta: true },
-      { column: next, title: "Añadir filtro por fecha en el listado", type: "FEATURE" as const, due: 7 },
+      { column: backlog, title: "Definir los criterios de aceptación del nuevo informe", fix: false, due: 21 },
+      { column: backlog, title: "Actualizar dependencias del proyecto", fix: false },
+      { column: progress, title: "Pantalla de exportación de datos", fix: false, assign: true, due: 3, beta: true },
+      { column: next, title: "Corregir el cálculo de totales en el resumen", fix: true, link: "https://example.com/issues/1", due: -2, beta: true },
+      { column: next, title: "Extraer el servicio de notificaciones", fix: false, beta: true },
+      { column: next, title: "Añadir filtro por fecha en el listado", fix: false, due: 7 },
     ];
     let pos = 0;
     for (const s of samples) {
@@ -84,7 +92,7 @@ export async function seed(db: PrismaClient, log: (msg: string) => void = consol
           projectId: project.id,
           columnId: s.column.id,
           title: s.title,
-          type: s.type,
+          kindId: (s.fix ? fixKind : featureKind).id,
           linkUrl: s.link ?? null,
           dueDate: s.due !== undefined ? inDays(s.due) : null,
           deliverableId: s.beta ? beta.id : null,

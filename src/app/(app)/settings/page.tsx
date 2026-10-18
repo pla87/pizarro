@@ -1,3 +1,4 @@
+import { userTemplates } from "@/lib/board";
 import { db } from "@/lib/db";
 import { googleEnabled } from "@/lib/google";
 import { emailEnabled, whatsappEnabled } from "@/lib/notify";
@@ -25,8 +26,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     select: {
       name: true,
       email: true,
-      releaseHeaderTemplate: true,
-      releaseFooterTemplate: true,
+      cardStyle: true,
       notifyEmail: true,
       notifyWhatsapp: true,
       whatsappPhone: true,
@@ -38,8 +38,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     <ProfileSettings
       name={row.name}
       email={row.email}
-      header={row.releaseHeaderTemplate}
-      footer={row.releaseFooterTemplate}
+      templates={await userTemplates(user.id)}
+      cardStyle={row.cardStyle}
       notifications={{
         notifyEmail: row.notifyEmail,
         notifyWhatsapp: row.notifyWhatsapp,

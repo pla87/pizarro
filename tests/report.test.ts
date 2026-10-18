@@ -10,11 +10,12 @@ const base: ReportInput = {
     { id: "todo", name: "Backlog", isDone: false },
     { id: "done", name: "Cerrado", isDone: true },
   ],
+  kinds: ["Funcionalidad", "Corrección"],
   tasks: [
-    { id: "a", title: "Vencida", type: "FIX", columnId: "todo", assigneeName: "Ana", dueDate: "2026-10-15", deliverableId: "d1", subtaskTotal: 2, subtaskDone: 1 },
-    { id: "b", title: "Próxima", type: "FEATURE", columnId: "todo", assigneeName: null, dueDate: "2026-10-20", deliverableId: "d1", subtaskTotal: 0, subtaskDone: 0 },
-    { id: "c", title: "Hecha vencida", type: "CHORE", columnId: "done", assigneeName: "Ana", dueDate: "2026-10-01", deliverableId: "d1", subtaskTotal: 0, subtaskDone: 0 },
-    { id: "d", title: "Sin plazo", type: "FEATURE", columnId: "todo", assigneeName: "Ana", dueDate: null, deliverableId: null, subtaskTotal: 0, subtaskDone: 0 },
+    { id: "a", title: "Vencida", kind: "Corrección", columnId: "todo", assigneeName: "Ana", dueDate: "2026-10-15", deliverableId: "d1", subtaskTotal: 2, subtaskDone: 1 },
+    { id: "b", title: "Próxima", kind: "Funcionalidad", columnId: "todo", assigneeName: null, dueDate: "2026-10-20", deliverableId: "d1", subtaskTotal: 0, subtaskDone: 0 },
+    { id: "c", title: "Hecha vencida", kind: "Funcionalidad", columnId: "done", assigneeName: "Ana", dueDate: "2026-10-01", deliverableId: "d1", subtaskTotal: 0, subtaskDone: 0 },
+    { id: "d", title: "Sin plazo", kind: "Funcionalidad", columnId: "todo", assigneeName: "Ana", dueDate: null, deliverableId: null, subtaskTotal: 0, subtaskDone: 0 },
   ],
   deliverables: [{ id: "d1", name: "Beta", description: "", dueDate: "2026-10-22" }],
   releases: [],
@@ -58,4 +59,9 @@ test("columnas y personas", () => {
   const ana = r.people.find((p) => p.name === "Ana")!;
   assert.deepEqual([ana.open, ana.done, ana.overdue], [2, 1, 1]);
   assert.ok(r.people.some((p) => p.name === "Sin asignar"));
+});
+
+test("desglose por tipo usa los nombres configurados", () => {
+  const r = buildReport(base);
+  assert.deepEqual(r.types.map((t) => [t.label, t.open, t.done]), [["Funcionalidad", 2, 1], ["Corrección", 1, 0]]);
 });

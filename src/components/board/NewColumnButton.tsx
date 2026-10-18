@@ -3,13 +3,19 @@
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { createColumn } from "@/actions/columns";
+import { cn } from "../ui/cn";
+import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
 
-export function NewColumnButton() {
+/**
+ * Añadir columna. En escritorio: barra vertical estrecha al final del tablero.
+ * En móvil: botón redondo al final de las pestañas de columnas.
+ */
+export function NewColumnButton({ variant, onCreated }: { variant: "desktop" | "mobile"; onCreated?: (columnId: string) => void }) {
   const { project, setColumns, track } = useBoard();
   const toast = useToast();
-  const [editing, setEditing] = useState(false);
+  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -22,34 +28,41 @@ export function NewColumnButton() {
     if (!res.ok) return toast(res.error, "error");
     setColumns((cols) => [...cols, res.data]);
     setName("");
-    setEditing(false);
+    setOpen(false);
+    onCreated?.(res.data.id);
   };
 
-  if (!editing) {
-    return (
-      <button
-        onClick={() => setEditing(true)}
-        className="flex h-11 w-72 shrink-0 items-center gap-2 rounded-xl border-2 border-dashed border-slate-300 px-3 text-sm font-medium text-slate-500 hover:border-brand-500 hover:text-brand-600 max-md:hidden dark:border-slate-700"
-      >
-        <Plus size={16} /> Añadir columna
-      </button>
-    );
-  }
   return (
-    <form onSubmit={submit} className="w-72 shrink-0 space-y-2 rounded-xl bg-slate-100 p-2 max-md:hidden dark:bg-slate-900/60">
-      <input
-        className="input"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Nombre de la columna"
-        maxLength={80}
-        autoFocus
-        onKeyDown={(e) => e.key === "Escape" && setEditing(false)}
-      />
-      <div className="flex gap-2">
-        <button className="btn-primary py-1.5" disabled={busy || !name.trim()}>Añadir</button>
-        <button type="button" className="btn-ghost py-1.5" onClick={() => setEditing(false)}>Cancelar</button>
-      </div>
-    </form>
+    <>
+      {variant === "desktop" ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="group flex w-10 shrink-0 items-start justify-center rounded-xl border-2 border-dashed border-slate-300 pt-2 hover:border-brand-500 max-md:hidden dark:border-slate-700"
+          aria-label="Añadir columna"
+          title="Añadir columna"
+        >
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-slate-600 group-hover:bg-brand-600 group-hover:text-white dark:bg-slate-800 dark:text-slate-300">
+            <Plus size={16} />
+          </span>
+        </button>
+      ) : (
+        <button
+          onClick={() => setOpen(true)}
+          className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300")}
+          aria-label="Añadir columna"
+        >
+          <Plus size={16} />
+        </button>
+      )}
+      <Modal open={open} onClose={() => setOpen(false)} title="Nueva columna" size="sm">
+        <form onSubmit={submit} className="space-y-4">
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre de la columna" maxLength={80} data-autofocus />
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-secondary" onClick={() => setOpen(false)}>Cancelar</button>
+            <button className="btn-primary" disabled={busy || !name.trim()}>Añadir</button>
+          </div>
+        </form>
+      </Modal>
+    </>
   );
 }

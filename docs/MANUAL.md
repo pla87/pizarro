@@ -1,12 +1,12 @@
 ---
 title: "Tablón · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.1.0"
+version: "v1.2.0"
 ---
 
 # Tablón — Manual de operaciones
 
-**Versión de la aplicación:** v1.1.0
+**Versión de la aplicación:** v1.2.0
 
 Este manual describe la arquitectura de Tablón, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -81,18 +81,20 @@ La aplicación es un **monolito en un único contenedor**. No hay colas, cachés
 
 | Tabla | Campos principales | Notas |
 |---|---|---|
-| `User` | email (único), name, passwordHash, role, active, `releaseHeaderTemplate`, `releaseFooterTemplate` | Los usuarios no se borran: se desactivan. |
+| `User` | email (único), name, passwordHash, role, active, cardStyle, preferencias de aviso | Los usuarios no se borran: se desactivan. |
 | `Session` | id = HMAC del token, userId, expiresAt | El token en claro solo vive en la cookie. |
 | `Project` | name, description, restricted, position | `restricted = false` → visible para todos. |
 | `ProjectMember` | projectId, userId | Usuarios con acceso a un proyecto restringido. |
 | `Column` | projectId, name, position, role | Índice único parcial: como máximo una columna por rol en cada proyecto. |
-| `Task` | projectId, columnId, title, description, type, color, linkUrl, position, assigneeId, archivedAt | Posición fraccionaria para reordenar actualizando una sola fila. |
+| `Task` | projectId, columnId, kindId, title, description, color, linkUrl, position, assigneeId, archivedAt | Posición fraccionaria para reordenar actualizando una sola fila. |
 | `Label` / `TaskLabel` | name, color | Etiquetas por proyecto. |
 | `Subtask` | taskId, title, done, position | Checklist. |
 | `TaskAttachment` | taskId, originalName, width, height, size | El fichero está en `UPLOAD_DIR/<id>.webp` (y `<id>.thumb.webp`). |
 | `Release` / `ReleaseTask` | content (Markdown final), deployedAt, autor · instantánea de título y tipo de cada tarea | La instantánea se conserva aunque la tarea se borre. |
 | `AppVersionLog` | version (única), releasedAt, summary, changes (JSON) | Se sincroniza desde `changelog.json` en cada arranque. |
 | `Deliverable` | projectId, name, description, dueDate, position | Las tareas lo referencian con `deliverableId`. Al borrarlo, quedan sin entregable. |
+| `TaskKind` | name (único), color, position | Tipos de tarea configurables; cada tarea tiene `kindId`. |
+| `ReleaseTemplate` | userId, kind (HEADER / FOOTER), name, content, position | Cabeceras y pies de release de cada usuario. |
 | `TaskComment` | taskId, authorId, body | Las menciones se guardan como `@[Nombre](user:ID)`. |
 | `Notification` | userId, actorId, taskId, excerpt, readAt, emailSentAt, whatsappSentAt, deliveryError | Un aviso por persona mencionada, con el resultado de cada envío. |
 | `TaskLink` | taskId, kind (GOOGLE_DOC / GOOGLE_SHEET), title, url | Documentos de Google enlazados a la tarjeta. |
@@ -138,7 +140,7 @@ Además, `Task` tiene `dueDate` (fecha límite, solo día), `Column` tiene `isDo
 
 ### 3.2 Proyectos
 
-- El **selector** de la barra lateral cambia de proyecto. La app recuerda el último que abriste.
+- Para cambiar de proyecto, pulsa el **nombre del proyecto** en la parte superior del tablero (o en la barra superior en móvil) y elige otro en el desplegable. También sirve el selector de la barra lateral. La app recuerda el último que abriste.
 - Los administradores crean proyectos desde el selector (**Nuevo proyecto**). Cada proyecto nuevo trae las columnas *Backlog*, *En progreso*, *Siguiente salto a producción*, *En producción* y *Cerrado*.
 - **Ajustes del proyecto** contiene:
   - nombre y descripción (admins);
@@ -154,20 +156,22 @@ Desde el menú «⋯» de cada columna:
 - **Renombrar**, **Mover a la izquierda o la derecha**.
 - **Rol de la columna**: *Sin rol*, *Siguiente salto* o *En producción*. Si asignas un rol que ya tenía otra columna, esa otra columna pasa a *Sin rol*.
 - **Borrar columna**: solo si no tiene tarjetas visibles. Si quedan tarjetas archivadas en ella, pasan a la primera columna del proyecto.
-- **Añadir columna**: botón al final del tablero (escritorio). No hay límite de 5; el máximo es 30 por proyecto.
+- **Añadir columna**: en escritorio, la barra vertical estrecha con un «+» al final del tablero; en móvil, el botón redondo «+» al final de las pestañas de columnas. No hay límite de 5; el máximo es 30 por proyecto.
 
 ### 3.4 Tarjetas
 
-- **Crear:** botón *Nueva tarea*, el «+» de cada columna o el botón flotante en móvil.
+- **Crear:** botón *Nueva tarea*, el «+» de cada columna o el botón flotante en móvil. Solo el título y el tipo son obligatorios; asignarla a alguien es opcional.
+- **Tipo:** por defecto *Funcionalidad* o *Corrección*. Los administradores pueden crear más (ver 3.14).
 - **Atajo de captura:** pega una imagen (Ctrl/⌘+V) con el tablero en pantalla y se abre *Nueva tarea* con la captura adjunta.
 - **Editar:** haz clic en la tarjeta. Los cambios se guardan solos (título y enlace al salir del campo; tipo, color, responsable, etiquetas y columna al cambiarlos). La descripción admite Markdown (Ctrl/⌘+Enter guarda).
 - **Checklist:** añade elementos y márcalos. La tarjeta muestra el progreso (p. ej. `2/4`).
-- **Capturas:** pega con Ctrl/⌘+V dentro del diálogo, o usa *Añadir* para elegir un archivo. En móvil también puedes usar la cámara. Cada imagen se reduce a 1280 px de ancho como máximo y se guarda como WebP (calidad 75).
+- **Capturas:** pega con Ctrl/⌘+V dentro del diálogo, o usa *Añadir* para elegir un archivo. En móvil también tienes el botón **Cámara**, al crear la tarea y en el detalle de una tarea existente. Cada imagen se reduce a 1280 px de ancho como máximo y se guarda como WebP (calidad 75).
 - **Archivar** oculta la tarjeta del tablero (se puede restaurar). **Borrar** la elimina con sus adjuntos.
 
 ### 3.5 Mover tarjetas
 
-- **Arrastrar y soltar** entre columnas o dentro de la misma. En móvil, mantén pulsado un instante antes de arrastrar.
+- **Arrastrar y soltar** entre columnas o dentro de la misma.
+- **En móvil:** mantén pulsada la tarjeta un instante y arrástrala sobre la **pestaña** de otra columna. La vista cambia a esa columna y puedes soltarla en su sitio o sobre la propia pestaña (queda al final).
 - **Selección múltiple:** marca la casilla de varias tarjetas. Aparece una barra con:
   - **Mover a Siguiente salto…** (la columna con ese rol);
   - **Mover a…** cualquier otra columna;
@@ -176,35 +180,31 @@ Desde el menú «⋯» de cada columna:
 
 ### 3.6 Generar una release
 
-1. Configura antes tus plantillas en **Mi perfil y plantillas**: *Cabecera estándar* (por ejemplo, instrucciones de contexto para una IA) y *Pie estándar* (por ejemplo, un checklist de cierre). La pestaña *Vista previa* muestra cómo quedarán.
+1. Prepara tus plantillas en **Mi perfil y plantillas → Plantillas de release notes**. Puedes tener **varias cabeceras** (por ejemplo, «Contexto para IA» o «Para negocio») y **varios pies** (por ejemplo, «Checklist de cierre»), cada uno con su nombre.
 2. En el tablero, pulsa **Generar Release** en la columna *Siguiente salto a producción*.
-3. **Paso 1:** revisa el título y las tareas incluidas. Por defecto están todas las de la columna; si tenías tarjetas seleccionadas, solo esas.
-4. **Paso 2:** se genera el documento:
+3. **Paso 1:** revisa el título, elige la **cabecera** y el **pie** (o «Ninguna») y marca las tareas incluidas. Por defecto están todas las de la columna; si tenías tarjetas seleccionadas, solo esas.
+4. **Paso 2:** se genera el documento, con **una sección por tipo de tarea** en el orden definido por los administradores:
 
 ```markdown
-<tu cabecera estándar>
+<cabecera elegida>
 
 ## Release 2026-10-18 · Proyecto
 
-### Features
+### Funcionalidad
 - Nueva pantalla de exportación ([enlace](<https://example.com/pr/1>))
 
-### Fixes
-- **[HOTFIX]** Error al guardar
+### Corrección
+- Error al guardar
 - Corrección del cálculo de totales
 
-### Chores / Infra
-- Actualización de dependencias
-- *(refactor)* Extracción del servicio de notificaciones
-
-<tu pie estándar>
+<pie elegido>
 ```
 
-5. Edita el texto libremente y alterna entre **Editar** y **Vista previa**.
+5. Edita el texto libremente y alterna entre **Editar** y **Vista previa**. Si cambias la cabecera o el pie en este paso, se sustituyen en el texto sin perder lo que has escrito. Si ya habías modificado ese bloque, el nuevo se añade.
 6. Exporta con **Copiar todo**, **.md** o **.txt** (nombre `release-AAAA-MM-DD`).
-7. **Marcar como desplegado**: elige si las tarjetas pasan a la columna *En producción* o se archivan. El texto final editado queda guardado en **Releases**.
+7. **Marcar como desplegado**: elige si las tarjetas pasan a la columna *En producción* o se archivan. El texto final editado queda guardado en el apartado **Releases** del proyecto.
 
-Las secciones sin tareas se omiten. *Hotfix* va en *Fixes* (primero y marcado). *Refactor* va en *Chores / Infra*.
+Las secciones sin tareas se omiten.
 
 ### 3.7 Plazos y entregables
 
@@ -257,9 +257,26 @@ Botón **Informe PDF** en la cabecera del tablero (o en el menú lateral). Se ab
 
 - El tablero muestra una columna cada vez. Cambias de columna con las pestañas superiores, que indican cuántas tarjetas tiene cada una.
 - El botón flotante **+** crea una tarea en la columna visible, con opción de **Cámara** o **Archivo**.
-- Para mover tarjetas entre columnas en móvil, usa el selector *Columna* del detalle o la selección múltiple.
+- Para mover tarjetas entre columnas en móvil, arrástralas sobre la pestaña de destino (ver 3.5), usa el selector *Columna* del detalle o la selección múltiple.
+- **Instalar como app:** en el menú lateral, **Instalar app**.
+  - **Android y Chrome de escritorio:** muestra el aviso de instalación.
+  - **iPhone y iPad:** explica cómo hacerlo. En **Safari**, pulsa *Compartir → Añadir a pantalla de inicio*.
+  - La app se abre a pantalla completa con su icono y mantiene la sesión.
 
-### 3.13 Administración de usuarios (admins)
+### 3.13 Apariencia
+
+En **Mi perfil y plantillas → Apariencia de las tarjetas**, cada persona elige cómo se ve el color de las tarjetas:
+- **Franja a la izquierda**, el modo por defecto;
+- **Tarjeta entera del color**, con un tono suave para que el texto se siga leyendo.
+
+### 3.14 Tipos de tarea (admins)
+
+- **Tipos de tarea** (menú lateral) lista los tipos con su color y su número de tareas.
+- **Nuevo tipo:** nombre y color (de la paleta o cualquier otro con el selector de color).
+- Las flechas cambian el **orden**, que es el de las secciones en las release notes.
+- **Borrar** un tipo pide a qué tipo pasan sus tareas. Siempre queda al menos uno.
+
+### 3.15 Administración de usuarios (admins)
 
 - **Usuarios → Nuevo usuario:** nombre, email, contraseña inicial (10 caracteres o más) y rol. Máximo de 5 usuarios activos (configurable con `MAX_USERS`).
 - **Editar:** nombre, email, rol y estado activo. Al desactivar a un usuario o cambiarle el rol se cierran sus sesiones. Un admin no puede quitarse a sí mismo el rol ni desactivarse.
@@ -362,5 +379,7 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 | `changelog.json` como fuente | Versionado con el código y legible en revisiones; la tabla `AppVersionLog` se reconstruye en cada arranque. |
 | Informe con `@react-pdf/renderer` | Genera el PDF en el servidor sin un navegador: la imagen no crece y el informe tarda milisegundos. |
 | OAuth por usuario con `drive.file` | Cada archivo pertenece a quien lo crea, sin cuentas de servicio ni permisos sobre el resto del Drive. |
+| Tipos de tarea en tabla | Cada equipo define sus categorías y su orden en la release sin tocar código. Las releases guardan el nombre del tipo como instantánea. |
+| App instalable (PWA) | Icono en la pantalla de inicio y pantalla completa sin publicar en tiendas. El service worker no guarda datos en caché, porque todo es privado. |
 | Avisos con `after()` | El email y el WhatsApp se envían tras responder: mencionar a alguien no añade espera. |
 | Prisma CLI aislado en la imagen | La app usa la salida *standalone* (ligera) y las migraciones usan la CLI oficial sin descargas en el arranque. |

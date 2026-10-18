@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  closestCorners, DndContext, DragOverlay, KeyboardSensor, MeasuringStrategy, PointerSensor, TouchSensor,
+  closestCorners, DndContext, pointerWithin, useDroppable, type CollisionDetection, DragOverlay, KeyboardSensor, MeasuringStrategy, PointerSensor, TouchSensor,
   useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { moveTask, moveTasks } from "@/actions/tasks";
 import { positionBetween } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardTask, LabelOption } from "@/lib/types";
+import { ProjectMenu } from "../ProjectMenu";
 import { useToast } from "../ui/Toast";
 import { cn } from "../ui/cn";
 import { BoardContext, type BoardApi } from "./context";
@@ -24,6 +25,31 @@ import { TaskDialog } from "./TaskDialog";
 import { imageFilesFrom } from "./upload";
 
 const COLUMN_PREFIX = "col:";
+const TAB_PREFIX = "tab:";
+
+/** Encima de una pestaña móvil manda el puntero; en el resto, la esquina más cercana. */
+const collisionDetection: CollisionDetection = (args) => {
+  const tab = pointerWithin(args).find((c) => String(c.id).startsWith(TAB_PREFIX));
+  return tab ? [tab] : closestCorners(args);
+};
+
+function MobileTab({ id, active, dragging, onClick, children }: { id: string; active: boolean; dragging: boolean; onClick: () => void; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <button
+      ref={setNodeRef}
+      onClick={onClick}
+      className={cn(
+        "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors",
+        active ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+        dragging && !active && "ring-1 ring-brand-500/40",
+        isOver && "bg-brand-500 text-white ring-2 ring-brand-300",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
 const REFRESH_MS = 30_000;
 
 type Items = Record<string, string[]>;
@@ -36,6 +62,7 @@ function groupItems(columns: BoardColumn[], tasks: BoardTask[]): Items {
 
 function findContainer(items: Items, id: string): string | undefined {
   if (id.startsWith(COLUMN_PREFIX)) return id.slice(COLUMN_PREFIX.length);
+  if (id.startsWith(TAB_PREFIX)) return id.slice(TAB_PREFIX.length);
   return Object.keys(items).find((col) => items[col]!.includes(id));
 }
 
@@ -146,6 +173,9 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       columns: sortedColumns,
       labels,
       deliverables: data.deliverables,
+      kinds: data.kinds,
+      kindById: new Map(data.kinds.map((k) => [k.id, k])),
+      cardStyle: data.cardStyle,
       google: data.google,
       today: data.today,
       setLabels,
@@ -181,7 +211,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       track,
       refresh: () => router.refresh(),
     }),
-    [data.project, data.users, data.currentUserId, data.deliverables, data.google, data.today, sortedColumns, labels, taskById, baseItems, selected, track, router, patchTask],
+    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, data.google, data.today, sortedColumns, labels, taskById, baseItems, selected, track, router, patchTask],
   );
 
   // --- Movimiento masivo ------------------------------------------------------
@@ -228,6 +258,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const overId = String(over.id);
     const from = findContainer(dragItems, id);
     const to = findContainer(dragItems, overId);
+    // En móvil, pasar por una pestaña muestra esa columna para soltar la tarjeta en ella.
+    if (overId.startsWith(TAB_PREFIX) && to) setMobileColumn(to);
     if (!from || !to || from === to) return;
     setDragItems((prev) => {
       if (!prev) return prev;
@@ -259,7 +291,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (!col) return;
     let list = current[col]!;
     const overId = String(over.id);
-    if (findContainer(current, overId) === col && overId !== id && !overId.startsWith(COLUMN_PREFIX)) {
+    if (findContainer(current, overId) === col && overId !== id && !overId.startsWith(COLUMN_PREFIX) && !overId.startsWith(TAB_PREFIX)) {
       list = arrayMove(list, list.indexOf(id), list.indexOf(overId));
     }
     const index = list.indexOf(id);
@@ -286,7 +318,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     <BoardContext.Provider value={api}>
       <div className="flex h-full flex-col">
         <div className="flex items-center gap-3 px-4 pt-4 pb-2 max-lg:hidden">
-          <h1 className="truncate text-lg font-semibold">{data.project.name}</h1>
+          <h1 className="min-w-0"><ProjectMenu textClassName="text-lg" /></h1>
           <span className="text-sm text-slate-500">{tasks.length} tarjetas</span>
           <a className="btn-secondary ml-auto" href={`/api/projects/${data.project.id}/report`} target="_blank" rel="noopener">
             <FileDown size={16} /> Informe PDF
@@ -296,33 +328,30 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           </button>
         </div>
 
-        {/* Pestañas de columnas en móvil */}
-        <div className="flex gap-1.5 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 md:hidden dark:border-slate-800 dark:bg-slate-900">
-          {sortedColumns.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setMobileColumn(c.id)}
-              className={cn(
-                "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap",
-                c.id === activeMobileColumn
-                  ? "bg-brand-600 text-white"
-                  : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
-              )}
-            >
-              {c.name} <span className="opacity-70">{items[c.id]?.length ?? 0}</span>
-            </button>
-          ))}
-        </div>
-
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={collisionDetection}
           measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
           onDragStart={onDragStart}
           onDragOver={onDragOver}
           onDragEnd={onDragEnd}
           onDragCancel={cancelDrag}
         >
+          {/* Pestañas de columnas en móvil: también aceptan tarjetas arrastradas */}
+          <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 md:hidden dark:border-slate-800 dark:bg-slate-900">
+            {sortedColumns.map((c) => (
+              <MobileTab
+                key={c.id}
+                id={TAB_PREFIX + c.id}
+                active={c.id === activeMobileColumn}
+                dragging={!!activeId}
+                onClick={() => setMobileColumn(c.id)}
+              >
+                {c.name} <span className="opacity-70">{items[c.id]?.length ?? 0}</span>
+              </MobileTab>
+            ))}
+            <NewColumnButton variant="mobile" onCreated={setMobileColumn} />
+          </div>
           <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-3 pt-2 pb-24 md:px-4 md:pb-4">
             {sortedColumns.map((column, i) => (
               <ColumnView
@@ -335,7 +364,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
                 mobileHidden={column.id !== activeMobileColumn}
               />
             ))}
-            <NewColumnButton />
+            <NewColumnButton variant="desktop" />
           </div>
           <DragOverlay dropAnimation={{ duration: 150, easing: "ease-out" }}>
             {activeTask ? <TaskCard task={activeTask} overlay /> : null}
