@@ -8,6 +8,7 @@ import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
 import { MentionTextarea } from "../ui/MentionTextarea";
+import { applyKindPreset } from "@/lib/kinds-special";
 import { TypeSelector } from "./TaskDialog";
 import { imageFilesFrom, uploadImage } from "./upload";
 
@@ -103,7 +104,15 @@ export function NewTaskDialog({ initialColumnId, initialFiles, onClose }: Props)
         </div>
         <div>
           <div className="label">Tipo</div>
-          <TypeSelector kinds={board.kinds} value={kindId} onChange={setKindId} />
+          <TypeSelector kinds={board.kinds} value={kindId} onChange={(id) => {
+            setKindId(id);
+            // Tipo especial «Respuesta»: título y primera línea de la descripción predefinidos.
+            const preset = applyKindPreset(board.kinds.find((k) => k.id === id)?.name ?? "", { title, description });
+            if (preset) {
+              setTitle(preset.title);
+              setDescription(preset.description);
+            }
+          }} />
         </div>
         <div>
           <label className="label" htmlFor="nt-desc">Descripción (opcional)</label>

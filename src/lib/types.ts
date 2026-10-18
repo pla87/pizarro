@@ -116,3 +116,14 @@ export interface TaskDetail {
   links: TaskLinkInfo[];
   comments: CommentInfo[];
 }
+
+/** Tarea archivada, con su columna de origen y las releases en las que entró. */
+export interface ArchivedTask {
+  id: string;
+  title: string;
+  kindId: string;
+  archivedAt: string;
+  /** Nombre de la columna de la que salió; null si ya no existe. */
+  columnName: string | null;
+  releases: { id: string; title: string; deployedAt: string }[];
+}

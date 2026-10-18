@@ -5,15 +5,16 @@ import {
   useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { FileDown, Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Archive, FileDown, Plus } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { deleteTasks, moveTask, moveTasks } from "@/actions/tasks";
+import { archiveTasks, deleteTasks, moveTask, moveTasks } from "@/actions/tasks";
 import { positionBetween } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardTask, LabelOption } from "@/lib/types";
 import { ProjectMenu } from "../ProjectMenu";
 import { useToast } from "../ui/Toast";
 import { cn } from "../ui/cn";
+import { ArchivedDialog } from "./ArchivedDialog";
 import { BoardContext, type BoardApi } from "./context";
 import { ColumnView } from "./ColumnView";
 import { NewColumnButton } from "./NewColumnButton";
@@ -81,6 +82,9 @@ function findContainer(items: Items, id: string): string | undefined {
 export function Board({ data, initialTaskId = null }: { data: BoardData; initialTaskId?: string | null }) {
   const router = useRouter();
   const toast = useToast();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [archivedOpen, setArchivedOpen] = useState(false);
   const [columns, setColumns] = useState(data.columns);
   const [tasks, setTasks] = useState(data.tasks);
   const [labels, setLabels] = useState<LabelOption[]>(data.labels);
@@ -260,6 +264,33 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     toast(`${res.data.moved.length === 1 ? "1 tarjeta movida" : `${res.data.moved.length} tarjetas movidas`} a «${name}»`);
   };
 
+  const archiveSelected = async () => {
+    const ids = [...selected];
+    if (!ids.length) return;
+    const snapshot = tasks;
+    const gone = new Set(ids);
+    setTasks((prev) => prev.filter((t) => !gone.has(t.id)));
+    setSelected(new Set());
+    const res = await track(archiveTasks(ids));
+    if (!res.ok) {
+      setTasks(snapshot);
+      return toast(res.error, "error");
+    }
+    toast(res.data.archived === 1 ? "1 tarea archivada" : `${res.data.archived} tareas archivadas`);
+  };
+
+  // «?archivadas=1» (enlace del menú lateral en móvil) abre el listado de archivadas.
+  const wantsArchived = searchParams.has("archivadas");
+  const closeArchived = () => {
+    setArchivedOpen(false);
+    if (searchParams.has("archivadas")) {
+      const rest = new URLSearchParams(searchParams);
+      rest.delete("archivadas");
+      const qs = rest.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    }
+  };
+
   const deleteSelected = async () => {
     const ids = [...selected];
     if (!ids.length || !window.confirm(`¿Borrar definitivamente ${ids.length === 1 ? "la tarea seleccionada" : `las ${ids.length} tareas seleccionadas`} y sus adjuntos?`)) return;
@@ -382,6 +413,9 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <a className="btn-secondary ml-auto" href={`/api/projects/${data.project.id}/report`} target="_blank" rel="noopener">
             <FileDown size={16} /> Informe PDF
           </a>
+          <button className="btn-secondary" onClick={() => setArchivedOpen(true)}>
+            <Archive size={16} /> Archivadas
+          </button>
           <button className="btn-secondary" onClick={() => setBulk({})} title="Crear varias tareas pegando una lista">
             <PlusStack size={16} /> Varias tareas
           </button>
@@ -448,6 +482,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             columns={sortedColumns}
             nextReleaseColumn={nextReleaseColumn}
             onMove={moveSelected}
+            onArchive={archiveSelected}
             onDelete={deleteSelected}
             onRelease={() => {
               const ids = sortedColumns.flatMap((c) => (baseItems[c.id] ?? []).filter((id) => selected.has(id)));
@@ -467,6 +502,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             onClose={() => setNewTask(null)}
           />
         )}
+        {(archivedOpen || wantsArchived) && <ArchivedDialog onClose={closeArchived} />}
         {bulk && <BulkTaskDialog initialColumnId={bulk.columnId} onClose={() => setBulk(null)} />}
         {release && (
           <ReleaseDialog

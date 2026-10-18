@@ -6,7 +6,14 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 function createClient() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error("DATABASE_URL no está definida");
-  const adapter = new PrismaPg({ connectionString, max: Number(process.env.DATABASE_POOL_SIZE ?? 10) });
+  const adapter = new PrismaPg({
+    connectionString,
+    max: Number(process.env.DATABASE_POOL_SIZE ?? 10),
+    // Por defecto pg cierra las conexiones inactivas a los 10 s y la siguiente petición paga
+    // abrir otra: con poco tráfico eso se notaba como cargas lentas «a veces».
+    idleTimeoutMillis: 10 * 60_000,
+    keepAlive: true,
+  });
   return new PrismaClient({ adapter });
 }
 

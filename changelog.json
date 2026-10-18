@@ -1,6 +1,32 @@
 {
   "versions": [
     {
+      "version": "1.7.0",
+      "date": "2026-10-18",
+      "summary": "Logs de administración, archivadas en un modal con recuperación a su columna, borrado de releases y adjuntos del histórico, tipo «Respuesta» y columnas que llenan la pantalla.",
+      "changes": {
+        "nuevas": [
+          "Administración → Logs: registro detallado de los últimos 7 días (visitas, inicios de sesión, cada acción con su duración y datos, adjuntos, informes, Google, emails, WhatsApp y errores), con filtros y descarga CSV.",
+          "Tareas archivadas en un modal («Archivadas» en el tablero y en el menú lateral) con filtro, columna de origen y releases por las que pasaron; «Recuperar» las devuelve a su columna o a la primera si ya no existe.",
+          "Archivar varias tareas desde la barra de selección.",
+          "Histórico de releases: «Borrar release» y «Borrar adjuntos», con confirmación.",
+          "Tipo especial «Respuesta»: al elegirlo, el título pasa a «Respuesta» y la descripción empieza por «Respondo a las preguntas y lo que necesitas de mi:»."
+        ],
+        "mejoras": [
+          "Escritorio: con más de tres columnas, se reparten el ancho de la ventana.",
+          "Cada página tiene su propio indicador de carga (antes Ajustes o Releases mostraban el esqueleto del tablero).",
+          "Con tareas seleccionadas, las columnas dejan hueco para que la barra no tape las últimas tarjetas."
+        ],
+        "correcciones": [
+          "Cargas lentas ocasionales: las conexiones a la base de datos ya no se cierran tras 10 s sin uso (se mantienen 10 min).",
+          "El círculo «sin color» ya no se corta en el detalle de la tarea."
+        ],
+        "tecnicos": [
+          "Migración v1_7: tabla AppLog y Task.archivedFromColumnId. Registro en lote (sin coste por petición) y purga automática (LOG_RETENTION_DAYS)."
+        ]
+      }
+    },
+    {
       "version": "1.6.0",
       "date": "2026-10-18",
       "summary": "Tema claro u oscuro por usuario, sección de Administración, marcar una columna entera, releases numeradas por día con adjuntos en el histórico y modal de tarea compacto.",

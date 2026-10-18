@@ -6,7 +6,8 @@ import { cn } from "./cn";
 
 export function ColorPicker({ value, onChange, allowNone = true }: { value: string | null; onChange: (c: string | null) => void; allowNone?: boolean }) {
   return (
-    <div className="flex flex-wrap gap-1.5">
+    // Margen interior para que el anillo de selección no se recorte en contenedores con scroll.
+    <div className="flex flex-wrap gap-1.5 p-[3px]">
       {allowNone && (
         <button
           type="button"

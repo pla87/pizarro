@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import { db } from "./db";
 import { AppError, forbidden } from "./errors";
+import { logEvent } from "./log";
+import { requestContext } from "./request-context";
 import { SESSION_MAX_AGE_SECONDS, sessionCookieName, sessionCookieOptions } from "./session-config";
 
 export interface CurrentUser {
@@ -73,8 +75,20 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 export async function requireUserPage(): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  await logPageView(user);
   return user;
 }
+
+/** Registra la visita de página una sola vez por petición (layout y página llaman a requireUserPage). */
+const logPageView = cache(async (user: CurrentUser): Promise<void> => {
+  try {
+    const { ip, path } = await requestContext();
+    if (!path) return;
+    logEvent({ category: "page", action: "page.view", message: `Visita a ${path}`, userId: user.id, userName: user.name, path, ip });
+  } catch {
+    // El registro nunca debe romper la página.
+  }
+});
 
 export async function requireAdminPage(): Promise<CurrentUser> {
   const user = await requireUserPage();

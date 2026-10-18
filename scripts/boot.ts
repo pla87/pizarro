@@ -5,6 +5,14 @@ import { syncChangelog } from "@/lib/changelog-sync";
 import { seed } from "@/lib/seed";
 
 async function main() {
+  try {
+    const { version } = (await import("../package.json")) as { version: string };
+    await db.appLog.create({
+      data: { level: "info", category: "system", action: "system.boot", message: `Arranque de Pizarro v${version}`, details: { version, node: process.version } },
+    });
+  } catch (err) {
+    console.error("[boot] No se pudo registrar el arranque:", err);
+  }
   const n = await syncChangelog(db);
   console.log(`[boot] Changelog sincronizado (${n} versiones).`);
   await seed(db, (m) => console.log(m.replace("[seed]", "[boot]")));

@@ -29,12 +29,6 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
         orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { position: "asc" }],
         select: { id: true, name: true, description: true, dueDate: true, _count: { select: { tasks: { where: { archivedAt: null } } } } },
       },
-      tasks: {
-        where: { archivedAt: { not: null } },
-        orderBy: { archivedAt: "desc" },
-        take: 100,
-        select: { id: true, title: true, kind: { select: { name: true, color: true } }, archivedAt: true },
-      },
     },
   });
   if (!project) notFound();
@@ -57,7 +51,6 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
       kinds={project.kinds.map((k) => ({ id: k.id, name: k.name, color: k.color, taskCount: k._count.tasks }))}
       generalKinds={generalKinds}
       deliverables={project.deliverables.map((d) => ({ id: d.id, name: d.name, description: d.description, dueDate: dateToIso(d.dueDate), taskCount: d._count.tasks }))}
-      archived={project.tasks.map((t) => ({ id: t.id, title: t.title, kind: t.kind, archivedAt: t.archivedAt!.toISOString() }))}
       users={users}
     />
   );

@@ -2,6 +2,7 @@
 
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
+import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertProjectAccess } from "@/lib/access";
@@ -11,7 +12,7 @@ import { AppError } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
 import { attachmentFileNames, zonedDayRange } from "@/lib/release";
 import { requireUser } from "@/lib/session";
-import { attachmentPath, compactImage, saveReleaseAttachmentFile } from "@/lib/uploads";
+import { attachmentPath, compactImage, removeReleaseAttachmentFiles, saveReleaseAttachmentFile } from "@/lib/uploads";
 import * as v from "@/lib/validation";
 
 const deploySchema = z.object({
@@ -29,7 +30,7 @@ const deploySchema = z.object({
  * a la columna "En producción" (o las archiva).
  */
 export async function deployRelease(input: z.input<typeof deploySchema>) {
-  return runAction(async () => {
+  return runAction({ name: "releases.deployRelease", args: [input] }, async () => {
     const user = await requireUser();
     const data = deploySchema.parse(input);
     await assertProjectAccess(user, data.projectId);
@@ -67,7 +68,8 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
           moved.push({ id: t.id, columnId: target.id, position: pos });
         }
       } else if (tasks.length) {
-        await tx.task.updateMany({ where: { id: { in: tasks.map((t) => t.id) } }, data: { archivedAt: new Date() } });
+        // Se recuerda la columna de cada tarea para poder restaurarla en su sitio.
+        await tx.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId" WHERE "id" IN (${Prisma.join(tasks.map((t) => t.id))})`;
       }
       return { releaseId: release.id, moved, archived: target ? [] : tasks.map((t) => t.id) };
     });
@@ -116,7 +118,7 @@ const countSchema = z.object({ projectId: v.id, dayIso: z.string().regex(/^\d{4}
 
 /** Releases desplegadas en el proyecto durante el día local indicado (zona horaria de la app). */
 export async function countReleasesOn(input: z.input<typeof countSchema>) {
-  return runAction(async (): Promise<number> => {
+  return runAction({ name: "releases.countReleasesOn", args: [input] }, async (): Promise<number> => {
     const user = await requireUser();
     const data = countSchema.parse(input);
     await assertProjectAccess(user, data.projectId);
@@ -135,7 +137,7 @@ export interface ReleaseTaskDetails {
 
 /** Descripción y adjuntos de las tareas elegidas, para incluirlos en el texto de la release. */
 export async function getReleaseTaskDetails(input: z.input<typeof detailsSchema>) {
-  return runAction(async (): Promise<ReleaseTaskDetails[]> => {
+  return runAction({ name: "releases.getReleaseTaskDetails", args: [input] }, async (): Promise<ReleaseTaskDetails[]> => {
     const user = await requireUser();
     const data = detailsSchema.parse(input);
     await assertProjectAccess(user, data.projectId);
@@ -147,5 +149,42 @@ export async function getReleaseTaskDetails(input: z.input<typeof detailsSchema>
         attachments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, originalName: true } },
       },
     });
+  });
+}
+
+const releaseIdSchema = z.object({ releaseId: v.id });
+
+/** Carga la release y comprueba que el usuario ve su proyecto. */
+async function loadAccessibleRelease(user: Awaited<ReturnType<typeof requireUser>>, releaseId: string) {
+  const release = await db.release.findUnique({ where: { id: releaseId }, select: { id: true, projectId: true } });
+  if (!release) throw new AppError("La release no existe.");
+  await assertProjectAccess(user, release.projectId);
+  return release;
+}
+
+/** Borra la release del histórico con sus adjuntos; las tareas no se tocan. */
+export async function deleteRelease(releaseId: string) {
+  return runAction({ name: "releases.deleteRelease", args: [releaseId] }, async () => {
+    const user = await requireUser();
+    const { releaseId: id } = releaseIdSchema.parse({ releaseId });
+    const release = await loadAccessibleRelease(user, id);
+    // Los ids se leen antes de borrar: las filas caen en cascada con la release.
+    const ids = (await db.releaseAttachment.findMany({ where: { releaseId: id }, select: { id: true } })).map((a) => a.id);
+    await db.release.delete({ where: { id } });
+    await removeReleaseAttachmentFiles(ids);
+    return { id: release.id };
+  });
+}
+
+/** Borra solo los adjuntos de la release (filas y ficheros); el texto se conserva. */
+export async function deleteReleaseAttachments(releaseId: string) {
+  return runAction({ name: "releases.deleteReleaseAttachments", args: [releaseId] }, async () => {
+    const user = await requireUser();
+    const { releaseId: id } = releaseIdSchema.parse({ releaseId });
+    await loadAccessibleRelease(user, id);
+    const ids = (await db.releaseAttachment.findMany({ where: { releaseId: id }, select: { id: true } })).map((a) => a.id);
+    await db.releaseAttachment.deleteMany({ where: { releaseId: id } });
+    await removeReleaseAttachmentFiles(ids);
+    return { id };
   });
 }

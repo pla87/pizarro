@@ -128,6 +128,8 @@ model Task {
   dueDate       DateTime? @db.Date
   deliverableId String?
   archivedAt    DateTime?
+  /// Columna en la que estaba al archivarse (sin clave foránea: la columna puede borrarse después).
+  archivedFromColumnId String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -320,6 +322,31 @@ model TaskComment {
 
 enum NotificationType {
   MENTION
+}
+
+/// Registro de actividad de la aplicación (se conserva LOG_RETENTION_DAYS días, 7 por defecto).
+model AppLog {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  /// info | warn | error
+  level      String
+  /// auth, page, action, api, notify, system…
+  category   String
+  /// Nombre del evento, p. ej. «tasks.createTask» o «auth.login».
+  action     String
+  message    String   @default("")
+  userId     String?
+  /// Nombre en el momento del evento (se conserva aunque el usuario cambie o se borre).
+  userName   String?
+  projectId  String?
+  path       String?
+  durationMs Int?
+  ip         String?
+  details    Json?
+
+  @@index([createdAt])
+  @@index([category, createdAt])
+  @@index([userId, createdAt])
 }
 
 model Notification {

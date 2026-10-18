@@ -20,7 +20,7 @@ const createSchema = z.object({
 });
 
 export async function createUser(input: z.input<typeof createSchema>) {
-  return runAction(async () => {
+  return runAction({ name: "users.createUser", args: [input] }, async () => {
     await requireAdmin();
     const data = createSchema.parse(input);
     const active = await db.user.count({ where: { active: true } });
@@ -41,7 +41,7 @@ const updateSchema = z.object({
 });
 
 export async function updateUser(userId: string, input: z.input<typeof updateSchema>) {
-  return runAction(async () => {
+  return runAction({ name: "users.updateUser", args: [userId, input] }, async () => {
     const admin = await requireAdmin();
     const data = updateSchema.parse(input);
     const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, role: true, active: true } });
@@ -66,7 +66,7 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
 }
 
 export async function resetUserPassword(userId: string, newPassword: string) {
-  return runAction(async () => {
+  return runAction({ name: "users.resetUserPassword", args: [userId, newPassword] }, async () => {
     await requireAdmin();
     const pw = password.parse(newPassword);
     const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true } });

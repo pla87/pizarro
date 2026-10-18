@@ -14,7 +14,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import * as v from "@/lib/validation";
 
 export async function updateProfileName(name: string) {
-  return runAction(async () => {
+  return runAction({ name: "profile.updateProfileName", args: [name] }, async () => {
     const user = await requireUser();
     await db.user.update({ where: { id: user.id }, data: { name: v.name.parse(name) } });
   });
@@ -27,7 +27,7 @@ const templateSchema = z.object({
 
 /** Plantillas de cabecera y pie de release: cada usuario puede tener varias de cada tipo. */
 export async function createReleaseTemplate(kind: "HEADER" | "FOOTER", input: { name: string; content: string }) {
-  return runAction(async () => {
+  return runAction({ name: "profile.createReleaseTemplate", args: [kind, input] }, async () => {
     const user = await requireUser();
     const k = z.enum(["HEADER", "FOOTER"]).parse(kind);
     const data = templateSchema.parse(input);
@@ -48,21 +48,21 @@ async function ownTemplate(templateId: string) {
 }
 
 export async function updateReleaseTemplate(templateId: string, input: { name: string; content: string }) {
-  return runAction(async () => {
+  return runAction({ name: "profile.updateReleaseTemplate", args: [templateId, input] }, async () => {
     const t = await ownTemplate(templateId);
     await db.releaseTemplate.update({ where: { id: t.id }, data: templateSchema.parse(input) });
   });
 }
 
 export async function deleteReleaseTemplate(templateId: string) {
-  return runAction(async () => {
+  return runAction({ name: "profile.deleteReleaseTemplate", args: [templateId] }, async () => {
     const t = await ownTemplate(templateId);
     await db.releaseTemplate.delete({ where: { id: t.id } });
   });
 }
 
 export async function updateCardStyle(style: "STRIPE" | "FILLED") {
-  return runAction(async () => {
+  return runAction({ name: "profile.updateCardStyle", args: [style] }, async () => {
     const user = await requireUser();
     await db.user.update({ where: { id: user.id }, data: { cardStyle: z.enum(["STRIPE", "FILLED"]).parse(style) } });
   });
@@ -70,7 +70,7 @@ export async function updateCardStyle(style: "STRIPE" | "FILLED") {
 
 /** Tema de color del usuario: SYSTEM sigue al sistema operativo. */
 export async function updateTheme(theme: "SYSTEM" | "LIGHT" | "DARK") {
-  return runAction(async () => {
+  return runAction({ name: "profile.updateTheme", args: [theme] }, async () => {
     const user = await requireUser();
     await db.user.update({ where: { id: user.id }, data: { theme: z.enum(["SYSTEM", "LIGHT", "DARK"]).parse(theme) } });
     // El atributo data-theme se pinta en el layout raíz.
@@ -79,7 +79,7 @@ export async function updateTheme(theme: "SYSTEM" | "LIGHT" | "DARK") {
 }
 
 export async function changePassword(current: string, next: string) {
-  return runAction(async () => {
+  return runAction({ name: "profile.changePassword", args: [current, next] }, async () => {
     const user = await requireUser();
     const pw = z.string().min(MIN_PASSWORD, `La nueva contraseña debe tener al menos ${MIN_PASSWORD} caracteres.`).max(200).parse(next);
     if (!rateLimit(`password:${user.id}`, 5, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
@@ -97,7 +97,7 @@ export async function changePassword(current: string, next: string) {
 }
 
 export async function updateNotificationPrefs(input: { notifyEmail: boolean; notifyWhatsapp: boolean; whatsappPhone: string }) {
-  return runAction(async () => {
+  return runAction({ name: "profile.updateNotificationPrefs", args: [input] }, async () => {
     const user = await requireUser();
     const data = z
       .object({ notifyEmail: z.boolean(), notifyWhatsapp: z.boolean(), whatsappPhone: v.phoneE164 })
@@ -108,7 +108,7 @@ export async function updateNotificationPrefs(input: { notifyEmail: boolean; not
 }
 
 export async function disconnectGoogle() {
-  return runAction(async () => {
+  return runAction({ name: "profile.disconnectGoogle", args: [] }, async () => {
     const user = await requireUser();
     await disconnectGoogleAccount(user.id);
   });

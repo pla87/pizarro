@@ -17,6 +17,7 @@ import { Markdown } from "../ui/Markdown";
 import { MentionTextarea, type MentionCommand } from "../ui/MentionTextarea";
 import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
+import { applyKindPreset } from "@/lib/kinds-special";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
 import { createAndOpenGoogleFile } from "./google";
@@ -27,6 +28,8 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
   const toast = useToast();
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [title, setTitle] = useState(task.title);
+  // Se incrementa al cambiar la descripción desde fuera del editor para que se remonte con el texto nuevo.
+  const [descVersion, setDescVersion] = useState(0);
   const [link, setLink] = useState(task.linkUrl ?? "");
   const [uploading, setUploading] = useState(0);
   const [lightbox, setLightbox] = useState<number | null>(null);
@@ -130,6 +133,19 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
     return res.link;
   };
 
+  /** Cambio de tipo; con «Respuesta» también se guardan título y descripción predefinidos. */
+  const changeKind = (kindId: string) => {
+    const preset = detail ? applyKindPreset(board.kinds.find((k) => k.id === kindId)?.name ?? "", { title, description: detail.description }) : null;
+    if (!preset) return save({ kindId }, { kindId });
+    setTitle(preset.title);
+    setDetail((d) => (d ? { ...d, description: preset.description } : d));
+    setDescVersion((n) => n + 1);
+    save(
+      { kindId, title: preset.title, description: preset.description },
+      { kindId, title: preset.title, hasDescription: preset.description.trim().length > 0 },
+    );
+  };
+
   const commitTitle = () => {
     const value = title.trim();
     if (!value) return setTitle(task.title);
@@ -175,7 +191,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
       <div onPaste={onPaste} className="grid gap-6 md:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-w-0 space-y-6 md:max-h-[calc(100dvh-9rem)] md:overflow-y-auto md:pr-2">
           <DescriptionEditor
-            key={detail ? "loaded" : "loading"}
+            key={detail ? `loaded-${descVersion}` : "loading"}
             users={board.users}
             onGoogle={createGoogle}
             initial={detail?.description ?? null}
@@ -244,7 +260,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
             </select>
           </Field>
           <Field label="Tipo">
-            <TypeSelector kinds={board.kinds} value={task.kindId} onChange={(kindId) => save({ kindId }, { kindId })} />
+            <TypeSelector kinds={board.kinds} value={task.kindId} onChange={changeKind} />
           </Field>
           <Field label="Asignada a (opcional)">
             <select

@@ -1,13 +1,12 @@
 "use client";
 
-import { ArchiveRestore, CalendarClock, Check, Loader2, Lock, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
+import { CalendarClock, Check, Loader2, Lock, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
   createDeliverable, createLabel, deleteDeliverable, deleteLabel, deleteProject, setProjectVisibility, updateDeliverable, updateLabel, updateProject,
 } from "@/actions/projects";
 import { formatDay } from "@/lib/dates";
-import { restoreTask } from "@/actions/tasks";
 import { ColorPicker } from "@/components/ui/ColorPicker";
 import { cn } from "@/components/ui/cn";
 import { Modal } from "@/components/ui/Modal";
@@ -24,7 +23,6 @@ interface Props {
   kinds: KindRow[];
   generalKinds: KindOption[];
   deliverables: DeliverableRow[];
-  archived: { id: string; title: string; kind: { name: string; color: string }; archivedAt: string }[];
   users: { id: string; name: string; role: "ADMIN" | "MEMBER" }[];
 }
 
@@ -38,7 +36,7 @@ function Section({ title, description, children, id }: { title: string; descript
   );
 }
 
-export function ProjectSettings({ isAdmin, project, deliverables, kinds, generalKinds, labels: initialLabels, archived: initialArchived, users }: Props) {
+export function ProjectSettings({ isAdmin, project, deliverables, kinds, generalKinds, labels: initialLabels, users }: Props) {
   const router = useRouter();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -47,7 +45,6 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
   const [restricted, setRestricted] = useState(project.restricted);
   const [members, setMembers] = useState(new Set(project.memberIds));
   const [labels, setLabels] = useState(initialLabels);
-  const [archived, setArchived] = useState(initialArchived);
   const [confirmName, setConfirmName] = useState("");
 
   const run = (fn: () => Promise<{ ok: true } | { ok: false; error: string }>, success: string, after?: () => void) =>
@@ -173,23 +170,8 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
         </p>
       </Section>
 
-      <Section title="Tarjetas archivadas" description="Las tarjetas archivadas no aparecen en el tablero. Puedes restaurarlas a su columna.">
-        <ul className="divide-y divide-slate-200 dark:divide-slate-800">
-          {archived.map((t) => (
-            <li key={t.id} className="flex items-center gap-3 py-2">
-              <TypeBadge kind={t.kind} />
-              <span className="min-w-0 flex-1 truncate text-sm">{t.title}</span>
-              <span className="text-xs text-slate-500 max-sm:hidden">{new Date(t.archivedAt).toLocaleDateString("es-ES")}</span>
-              <button
-                className="btn-ghost py-1 text-xs"
-                onClick={() => run(() => restoreTask(t.id), "Tarjeta restaurada", () => setArchived((a) => a.filter((x) => x.id !== t.id)))}
-              >
-                <ArchiveRestore size={14} /> Restaurar
-              </button>
-            </li>
-          ))}
-          {archived.length === 0 && <li className="py-2 text-sm text-slate-500">No hay tarjetas archivadas.</li>}
-        </ul>
+      <Section title="Tarjetas archivadas">
+        <p className="text-sm text-slate-500">Las tarjetas archivadas se consultan y recuperan desde el botón «Archivadas» del tablero.</p>
       </Section>
 
       {isAdmin && (
