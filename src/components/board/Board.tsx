@@ -17,6 +17,7 @@ import { cn } from "../ui/cn";
 import { BoardContext, type BoardApi } from "./context";
 import { ColumnView } from "./ColumnView";
 import { NewColumnButton } from "./NewColumnButton";
+import { BulkTaskDialog } from "./BulkTaskDialog";
 import { NewTaskDialog } from "./NewTaskDialog";
 import { ReleaseDialog } from "./ReleaseDialog";
 import { SelectionBar } from "./SelectionBar";
@@ -83,6 +84,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openTaskId, setOpenTaskId] = useState<string | null>(initialTaskId);
   const [newTask, setNewTask] = useState<{ columnId?: string; files?: File[] } | null>(null);
+  const [bulk, setBulk] = useState<{ columnId?: string } | null>(null);
   const [release, setRelease] = useState<{ taskIds: string[]; preselected: string[] } | null>(null);
   const [mobileColumn, setMobileColumn] = useState<string | null>(null);
 
@@ -368,6 +370,9 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <a className="btn-secondary ml-auto" href={`/api/projects/${data.project.id}/report`} target="_blank" rel="noopener">
             <FileDown size={16} /> Informe PDF
           </a>
+          <button className="btn-secondary" onClick={() => setBulk({})} title="Crear varias tareas pegando una lista">
+            <PlusStack size={16} /> Varias tareas
+          </button>
           <button className="btn-primary" onClick={() => setNewTask({})}>
             <Plus size={16} /> Nueva tarea
           </button>
@@ -383,7 +388,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           onDragCancel={cancelDrag}
         >
           {/* Pestañas de columnas en móvil: también aceptan tarjetas arrastradas */}
-          <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 md:hidden dark:border-slate-800 dark:bg-slate-900">
+          <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 md:hidden dark:border-slate-800 dark:bg-slate-900">
             {sortedColumns.map((c) => (
               <MobileTab
                 key={c.id}
@@ -397,7 +402,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             ))}
             <NewColumnButton variant="mobile" onCreated={setMobileColumn} />
           </div>
-          <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-3 pt-2 pb-24 md:px-4 md:pb-4">
+          <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-3 max-md:no-scrollbar pt-2 pb-24 md:px-4 md:pb-4">
             {sortedColumns.map((column, i) => (
               <ColumnView
                 key={column.id}
@@ -416,6 +421,13 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           </DragOverlay>
         </DndContext>
 
+        <button
+          onClick={() => setBulk({ columnId: activeMobileColumn })}
+          className="fixed right-[1.625rem] bottom-[calc(max(1.25rem,env(safe-area-inset-bottom))+4.25rem)] z-30 flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-brand-600 shadow-lg hover:bg-slate-50 active:scale-95 lg:hidden dark:border-slate-700 dark:bg-slate-800 dark:text-brand-300"
+          aria-label="Crear varias tareas"
+        >
+          <PlusStack size={22} />
+        </button>
         <button
           onClick={() => setNewTask({ columnId: activeMobileColumn })}
           className="fixed right-5 bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-30 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95 lg:hidden"
@@ -448,6 +460,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             onClose={() => setNewTask(null)}
           />
         )}
+        {bulk && <BulkTaskDialog initialColumnId={bulk.columnId} onClose={() => setBulk(null)} />}
         {release && (
           <ReleaseDialog
             tasks={release.taskIds.map((id) => taskById.get(id)).filter((t): t is BoardTask => !!t)}
@@ -469,5 +482,15 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         )}
       </div>
     </BoardContext.Provider>
+  );
+}
+
+/** Dos «+» superpuestos: crear varias tareas. */
+function PlusStack({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden>
+      <path d="M9 11v9M4.5 15.5h9" />
+      <path d="M16 3v8M12 7h8" />
+    </svg>
   );
 }

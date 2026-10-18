@@ -73,8 +73,21 @@ export function NewTaskDialog({ initialColumnId, initialFiles, onClose }: Props)
   };
 
   return (
-    <Modal open onClose={onClose} title="Nueva tarea" size="md">
-      <form id="new-task" onSubmit={submit} className="space-y-4" onPaste={(e) => {
+    <Modal
+      open
+      onClose={onClose}
+      title="Nueva tarea"
+      size="md"
+      footer={
+        <>
+          <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
+          <button type="submit" form="new-task" className="btn-primary" disabled={busy || !title.trim()}>
+            {busy && <Loader2 size={16} className="animate-spin" />} Crear tarea
+          </button>
+        </>
+      }
+    >
+      <form id="new-task" onSubmit={submit} className="space-y-3" onPaste={(e) => {
         const pasted = imageFilesFrom(e.clipboardData.items);
         if (pasted.length) {
           e.preventDefault();
@@ -89,35 +102,35 @@ export function NewTaskDialog({ initialColumnId, initialFiles, onClose }: Props)
           <div className="label">Tipo</div>
           <TypeSelector kinds={board.kinds} value={kindId} onChange={setKindId} />
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-3">
+          <div className="min-w-0">
             <label className="label" htmlFor="nt-column">Columna</label>
             <select id="nt-column" className="input" value={columnId} onChange={(e) => setColumnId(e.target.value)}>
               {board.columns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
-          <div>
-            <label className="label" htmlFor="nt-assignee">Asignada a</label>
-            <select id="nt-assignee" className="input" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
-              <option value="">Sin asignar</option>
-              {board.users.map((u) => <option key={u.id} value={u.id}>{u.id === board.currentUserId ? `${u.name} (yo)` : u.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="label" htmlFor="nt-due">Fecha límite (opcional)</label>
-            <input id="nt-due" type="date" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-          </div>
-          <div>
-            <label className="label" htmlFor="nt-deliverable">Entregable (opcional)</label>
+          <div className="min-w-0">
+            <label className="label truncate" htmlFor="nt-deliverable">Entregable (opcional)</label>
             <select id="nt-deliverable" className="input" value={deliverableId} onChange={(e) => setDeliverableId(e.target.value)}>
               <option value="">Sin entregable</option>
               {board.deliverables.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
+          <div className="min-w-0">
+            <label className="label truncate" htmlFor="nt-assignee">Asignada a (opcional)</label>
+            <select id="nt-assignee" className="input" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
+              <option value="">Sin asignar</option>
+              {board.users.map((u) => <option key={u.id} value={u.id}>{u.id === board.currentUserId ? `${u.name} (yo)` : u.name}</option>)}
+            </select>
+          </div>
+          <div className="min-w-0">
+            <label className="label truncate" htmlFor="nt-due">Fecha límite (opcional)</label>
+            <input id="nt-due" type="date" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          </div>
         </div>
         <div>
-          <label className="label" htmlFor="nt-desc">Descripción (Markdown, opcional · @persona para avisar)</label>
-          <MentionTextarea id="nt-desc" className="input field-sizing-content min-h-20" value={description} onValueChange={setDescription} users={board.users} maxLength={20000} />
+          <label className="label" htmlFor="nt-desc">Descripción (opcional)</label>
+          <MentionTextarea id="nt-desc" className="input field-sizing-content min-h-14" value={description} onValueChange={setDescription} users={board.users} maxLength={20000} placeholder="Markdown · @persona para avisar" />
         </div>
         <div>
           <div className="label">Capturas</div>
@@ -125,28 +138,22 @@ export function NewTaskDialog({ initialColumnId, initialFiles, onClose }: Props)
             {previews.map((src, i) => (
               <div key={src} className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={src} alt="" className="h-20 w-28 rounded-lg border border-slate-200 object-cover dark:border-slate-700" />
+                <img src={src} alt="" className="h-14 w-20 rounded-lg border border-slate-200 object-cover dark:border-slate-700" />
                 <button type="button" className="absolute -top-1.5 -right-1.5 rounded-full bg-slate-900 p-0.5 text-white" onClick={() => setFiles((f) => f.filter((_, j) => j !== i))} aria-label="Quitar imagen">
                   <X size={13} />
                 </button>
               </div>
             ))}
-            <label className="flex h-20 w-28 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-slate-300 text-xs text-slate-500 hover:border-brand-500 dark:border-slate-700">
-              <ImagePlus size={18} /> Archivo
+            <label className="flex h-14 w-20 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-slate-300 text-xs text-slate-500 hover:border-brand-500 dark:border-slate-700">
+              <ImagePlus size={16} /> Archivo
               <input type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { addFiles(imageFilesFrom(e.target.files)); e.target.value = ""; }} />
             </label>
-            <label className="flex h-20 w-28 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-slate-300 text-xs text-slate-500 hover:border-brand-500 sm:hidden dark:border-slate-700">
-              <Camera size={18} /> Cámara
+            <label className="flex h-14 w-20 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-slate-300 text-xs text-slate-500 hover:border-brand-500 sm:hidden dark:border-slate-700">
+              <Camera size={16} /> Cámara
               <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { addFiles(imageFilesFrom(e.target.files)); e.target.value = ""; }} />
             </label>
+            <p className="self-center text-xs text-slate-500 max-sm:hidden">o pega una captura con Ctrl+V / ⌘+V</p>
           </div>
-          <p className="mt-1 text-xs text-slate-500 max-sm:hidden">También puedes pegar una captura con Ctrl+V / ⌘+V.</p>
-        </div>
-        <div className="flex justify-end gap-2 pt-1">
-          <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
-          <button type="submit" className="btn-primary" disabled={busy || !title.trim()}>
-            {busy && <Loader2 size={16} className="animate-spin" />} Crear tarea
-          </button>
         </div>
       </form>
     </Modal>

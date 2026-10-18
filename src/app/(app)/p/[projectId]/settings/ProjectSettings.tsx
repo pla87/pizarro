@@ -1,6 +1,6 @@
 "use client";
 
-import { ArchiveRestore, CalendarClock, Check, Lock, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
+import { ArchiveRestore, CalendarClock, Check, Loader2, Lock, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
@@ -10,6 +10,7 @@ import { formatDay } from "@/lib/dates";
 import { restoreTask } from "@/actions/tasks";
 import { ColorPicker } from "@/components/ui/ColorPicker";
 import { cn } from "@/components/ui/cn";
+import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
 import { PALETTE } from "@/lib/constants";
@@ -131,7 +132,7 @@ export function ProjectSettings({ isAdmin, project, deliverables, labels: initia
       <Section
         id="deliverables"
         title="Entregables"
-        description="Hitos con fecha objetivo que agrupan tarjetas. Se asignan desde el detalle de cada tarjeta y aparecen en el informe PDF."
+        description="Hitos con fecha que agrupan tarjetas y salen en el informe PDF."
       >
         <Deliverables projectId={project.id} initial={deliverables} />
       </Section>
@@ -283,13 +284,14 @@ function Deliverables({ projectId, initial }: { projectId: string; initial: Deli
   const router = useRouter();
   const toast = useToast();
   const [rows, setRows] = useState(initial);
+  // null: modal cerrado; "": nuevo entregable; id: edición.
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", description: "", dueDate: "" });
   const [pending, start] = useTransition();
 
-  const reset = () => {
-    setEditing(null);
-    setForm({ name: "", description: "", dueDate: "" });
+  const open = (d?: DeliverableRow) => {
+    setEditing(d?.id ?? "");
+    setForm(d ? { name: d.name, description: d.description, dueDate: d.dueDate ?? "" } : { name: "", description: "", dueDate: "" });
   };
 
   const submit = (e: React.FormEvent) => {
@@ -307,7 +309,7 @@ function Deliverables({ projectId, initial }: { projectId: string; initial: Deli
         setRows((r) => [...r, { ...res.data, taskCount: 0 }]);
         toast("Entregable creado");
       }
-      reset();
+      setEditing(null);
       router.refresh();
     });
   };
@@ -325,14 +327,7 @@ function Deliverables({ projectId, initial }: { projectId: string; initial: Deli
               </div>
               {d.description && <p className="mt-0.5 text-xs text-slate-500">{d.description}</p>}
             </div>
-            <button
-              className="btn-icon h-7 w-7"
-              aria-label="Editar entregable"
-              onClick={() => {
-                setEditing(d.id);
-                setForm({ name: d.name, description: d.description, dueDate: d.dueDate ?? "" });
-              }}
-            >
+            <button className="btn-icon h-7 w-7" aria-label="Editar entregable" onClick={() => open(d)}>
               <Pencil size={14} />
             </button>
             <button
@@ -352,17 +347,38 @@ function Deliverables({ projectId, initial }: { projectId: string; initial: Deli
         ))}
         {rows.length === 0 && <li className="py-2 text-sm text-slate-500">No hay entregables.</li>}
       </ul>
-      <form onSubmit={submit} className="mt-4 grid gap-2 border-t border-slate-200 pt-4 sm:grid-cols-[1fr_10rem] dark:border-slate-800">
-        <input className="input" placeholder={editing ? "Nombre" : "Nuevo entregable (p. ej. «Beta cerrada»)"} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={120} required />
-        <input className="input" type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} aria-label="Fecha objetivo" />
-        <input className="input sm:col-span-2" placeholder="Descripción (opcional)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} maxLength={2000} />
-        <div className="flex gap-2 sm:col-span-2">
-          <button className="btn-primary" disabled={pending || !form.name.trim()}>
-            {editing ? <><Check size={15} /> Guardar</> : <><Plus size={15} /> Añadir entregable</>}
-          </button>
-          {editing && <button type="button" className="btn-ghost" onClick={reset}>Cancelar</button>}
-        </div>
-      </form>
+      <button className="btn-primary mt-3" onClick={() => open()}>
+        <Plus size={15} /> Añadir entregable
+      </button>
+      <Modal
+        open={editing !== null}
+        onClose={() => setEditing(null)}
+        title={editing ? "Editar entregable" : "Nuevo entregable"}
+        size="sm"
+        footer={
+          <>
+            <button type="button" className="btn-secondary" onClick={() => setEditing(null)}>Cancelar</button>
+            <button type="submit" form="deliverable-form" className="btn-primary" disabled={pending || !form.name.trim()}>
+              {pending ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} {editing ? "Guardar" : "Añadir"}
+            </button>
+          </>
+        }
+      >
+        <form id="deliverable-form" onSubmit={submit} className="space-y-3">
+          <div>
+            <label className="label" htmlFor="dl-name">Nombre</label>
+            <input id="dl-name" className="input" placeholder="p. ej. «Beta cerrada»" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={120} required data-autofocus />
+          </div>
+          <div>
+            <label className="label" htmlFor="dl-date">Fecha objetivo (opcional)</label>
+            <input id="dl-date" className="input" type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
+          </div>
+          <div>
+            <label className="label" htmlFor="dl-desc">Descripción (opcional)</label>
+            <textarea id="dl-desc" className="input field-sizing-content min-h-16" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} maxLength={2000} />
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

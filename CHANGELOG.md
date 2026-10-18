@@ -2,6 +2,26 @@
 
 Historial de versiones de Tablón. Fuente: `changelog.json`.
 
+## v1.3.0 — 2026-10-18
+
+Crear varias tareas pegando una lista, formularios más compactos en móvil y entregables en un modal.
+
+### Nuevas funcionalidades
+
+- Crear varias tareas a la vez: pega una lista (una tarea por línea), elige el tipo para todas o línea a línea y, si quieres, asigna responsable, fecha límite, entregable y etiquetas comunes. Botón «Varias tareas» en escritorio y botón flotante pequeño sobre el «+» en móvil.
+
+### Mejoras
+
+- Nueva tarea: el botón «Crear tarea» queda fijo abajo y siempre visible; «Asignada a» y «Fecha límite» en la misma fila y descripción más baja.
+- «Asignada a» se indica como campo opcional.
+- Detalle de tarea: textos de ayuda acortados a una línea (y ocultos en móvil cuando hablan de atajos de teclado).
+- Entregables: el formulario se abre en un modal al pulsar «Añadir entregable» (y al editar uno).
+- En móvil, las pestañas de columnas ya no muestran barra de scroll horizontal.
+
+### Cambios técnicos / DB
+
+- Acción createTasks: alta en bloque en una transacción (createManyAndReturn), máximo 100 tareas.
+
 ## v1.2.0 — 2026-10-18
 
 Tipos de tarea configurables, varias plantillas de release, app instalable en el móvil y mejoras de uso en móvil y escritorio.
