@@ -41,7 +41,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
     db.deliverable.findMany({ where: { projectId }, orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { position: "asc" }], select: { id: true, name: true, description: true, dueDate: true } }),
     db.release.findMany({ where: { projectId }, orderBy: { deployedAt: "desc" }, take: 5, select: { title: true, deployedAt: true, _count: { select: { tasks: true } } } }),
     db.task.count({ where: { projectId, archivedAt: { not: null } } }),
-    listKinds(),
+    listKinds(projectId),
   ]);
 
   const today = todayIso(appTimeZone());

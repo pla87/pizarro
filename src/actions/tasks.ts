@@ -28,9 +28,12 @@ async function assertDeliverableInProject(deliverableId: string | null | undefin
   if (!ok) throw new AppError("El entregable no existe.");
 }
 
-async function assertKindExists(kindId: string | undefined) {
-  if (!kindId) return;
-  if (!(await db.taskKind.count({ where: { id: kindId } }))) throw new AppError("El tipo de tarea no existe.");
+/** Los tipos deben ser generales o del propio proyecto. */
+async function assertKindsInProject(kindIds: (string | undefined)[], projectId: string) {
+  const ids = [...new Set(kindIds.filter((id): id is string => !!id))];
+  if (!ids.length) return;
+  const count = await db.taskKind.count({ where: { id: { in: ids }, OR: [{ projectId: null }, { projectId }] } });
+  if (count !== ids.length) throw new AppError("El tipo de tarea no existe.");
 }
 
 async function assertLabelsInProject(labelIds: string[], projectId: string) {
@@ -73,7 +76,7 @@ export async function createTask(input: z.input<typeof createSchema>) {
     await assertLabelsInProject(data.labelIds, data.projectId);
     if (data.assigneeId) await assertAssignable(data.projectId, data.assigneeId);
     await assertDeliverableInProject(data.deliverableId, data.projectId);
-    await assertKindExists(data.kindId);
+    await assertKindsInProject([data.kindId], data.projectId);
     const position = positionBetween(await lastPosition(data.columnId), null);
     const task = await db.task.create({
       data: {
@@ -118,8 +121,7 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
     await assertLabelsInProject(data.labelIds, data.projectId);
     if (data.assigneeId) await assertAssignable(data.projectId, data.assigneeId);
     await assertDeliverableInProject(data.deliverableId, data.projectId);
-    const kindIds = [...new Set(data.tasks.map((t) => t.kindId))];
-    if ((await db.taskKind.count({ where: { id: { in: kindIds } } })) !== kindIds.length) throw new AppError("El tipo de tarea no existe.");
+    await assertKindsInProject(data.tasks.map((t) => t.kindId), data.projectId);
     const labelIds = [...new Set(data.labelIds)];
     const dueDate = data.dueDate ? isoToDate(data.dueDate) : null;
     const ids = await db.$transaction(async (tx) => {
@@ -171,7 +173,7 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
     if (data.assigneeId) await assertAssignable(projectId, data.assigneeId);
     if (data.labelIds) await assertLabelsInProject(data.labelIds, projectId);
     await assertDeliverableInProject(data.deliverableId, projectId);
-    await assertKindExists(data.kindId);
+    await assertKindsInProject([data.kindId], projectId);
     const { labelIds, dueDate, ...rest } = data;
     const fields = { ...rest, ...(dueDate !== undefined ? { dueDate: dueDate ? isoToDate(dueDate) : null } : {}) };
     const newMentions = await db.$transaction(async (tx) => {

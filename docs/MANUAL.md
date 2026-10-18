@@ -1,12 +1,12 @@
 ---
 title: "Tablón · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.3.1"
+version: "v1.4.0"
 ---
 
 # Tablón — Manual de operaciones
 
-**Versión de la aplicación:** v1.3.1
+**Versión de la aplicación:** v1.4.0
 
 Este manual describe la arquitectura de Tablón, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -93,7 +93,7 @@ La aplicación es un **monolito en un único contenedor**. No hay colas, cachés
 | `Release` / `ReleaseTask` | content (Markdown final), deployedAt, autor · instantánea de título y tipo de cada tarea | La instantánea se conserva aunque la tarea se borre. |
 | `AppVersionLog` | version (única), releasedAt, summary, changes (JSON) | Se sincroniza desde `changelog.json` en cada arranque. |
 | `Deliverable` | projectId, name, description, dueDate, position | Las tareas lo referencian con `deliverableId`. Al borrarlo, quedan sin entregable. |
-| `TaskKind` | name (único), color, position | Tipos de tarea configurables; cada tarea tiene `kindId`. |
+| `TaskKind` | name, color, position, projectId (opcional) | Tipos de tarea configurables; sin `projectId` son generales, con él son exclusivos de ese proyecto. Nombre único entre los generales y dentro de cada proyecto. Cada tarea tiene `kindId`. |
 | `ReleaseTemplate` | userId, kind (HEADER / FOOTER), name, content, position | Cabeceras y pies de release de cada usuario. |
 | `TaskComment` | taskId, authorId, body | Las menciones se guardan como `@[Nombre](user:ID)`. |
 | `Notification` | userId, actorId, taskId, excerpt, readAt, emailSentAt, whatsappSentAt, deliveryError | Un aviso por persona mencionada, con el resultado de cada envío. |
@@ -167,7 +167,7 @@ Desde el menú «⋯» de cada columna:
   - Elige el **tipo para todas** y, si alguna es distinta, cámbialo en su línea. Volver a pulsar un tipo común lo aplica a todas las líneas, también a las cambiadas a mano.
   - **Campos extra** (plegado): responsable, fecha límite, entregable y etiquetas comunes a todas.
   - Hasta 100 tareas de una vez; se añaden al final de la columna en el orden de la lista.
-- **Tipo:** por defecto *Funcionalidad* o *Corrección*. Los administradores pueden crear más (ver 3.14).
+- **Tipo:** por defecto *Funcionalidad* o *Corrección*. Los administradores pueden crear más tipos generales, y cada proyecto puede tener los suyos (ver 3.14).
 - **Atajo de captura:** pega una imagen (Ctrl/⌘+V) con el tablero en pantalla y se abre *Nueva tarea* con la captura adjunta.
 - **Editar:** haz clic en la tarjeta. Los cambios se guardan solos (título y enlace al salir del campo; tipo, color, responsable, etiquetas y columna al cambiarlos). La descripción admite Markdown (Ctrl/⌘+Enter guarda).
 - **Checklist:** añade elementos y márcalos. La tarjeta muestra el progreso (p. ej. `2/4`).
@@ -279,12 +279,19 @@ En **Mi perfil y plantillas → Apariencia de las tarjetas**, cada persona elige
 - **Franja a la izquierda**, el modo por defecto;
 - **Tarjeta entera del color**, con un tono suave para que el texto se siga leyendo.
 
-### 3.14 Tipos de tarea (admins)
+### 3.14 Tipos de tarea
 
-- **Tipos de tarea** (menú lateral) lista los tipos con su color y su número de tareas.
+Hay dos clases de tipos. Cada tipo es una sección de las release notes.
+
+- **Generales** (solo admins): menú lateral **Tipos de tarea**. Están disponibles en todos los proyectos.
+- **Del proyecto** (cualquiera con acceso al proyecto): **Ajustes del proyecto → Tipos de tarea del proyecto**. Solo aparecen en ese proyecto.
+
+En ambos casos:
 - **Nuevo tipo:** nombre y color (de la paleta o cualquier otro con el selector de color).
-- Las flechas cambian el **orden**, que es el de las secciones en las release notes.
-- **Borrar** un tipo pide a qué tipo pasan sus tareas. Siempre queda al menos uno.
+- Las flechas cambian el **orden**. En los selectores y en la release van primero los generales y después los del proyecto, cada grupo en su orden.
+- **Borrar** un tipo pide a qué tipo pasan sus tareas. Un tipo general solo puede pasar a otro general, y siempre queda al menos uno. Un tipo de proyecto puede pasar a un general o a otro del mismo proyecto.
+- **Nombres:** un tipo de proyecto no puede llamarse igual que un general ni que otro de su proyecto. Dos proyectos sí pueden tener tipos con el mismo nombre. Un tipo general nuevo no puede repetir el nombre de ningún tipo de proyecto.
+- Al borrar un proyecto se borran también sus tipos.
 
 ### 3.15 Administración de usuarios (admins)
 

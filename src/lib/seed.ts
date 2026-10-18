@@ -73,7 +73,7 @@ export async function seed(db: PrismaClient, log: (msg: string) => void = consol
       select: { id: true },
     });
     // Los tipos base los crea la migración; si un admin los cambió, se usan los dos primeros.
-    const kinds = await db.taskKind.findMany({ orderBy: { position: "asc" }, select: { id: true } });
+    const kinds = await db.taskKind.findMany({ where: { projectId: null }, orderBy: { position: "asc" }, select: { id: true } });
     const featureKind = kinds[0] ?? (await db.taskKind.create({ data: { name: "Funcionalidad", color: "#22c55e", position: POSITION_STEP }, select: { id: true } }));
     const fixKind = kinds[1] ?? featureKind;
     const samples = [
