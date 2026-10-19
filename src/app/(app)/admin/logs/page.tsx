@@ -3,7 +3,7 @@ import { Download } from "lucide-react";
 import { appTimeZone } from "@/lib/board";
 import { db } from "@/lib/db";
 import { flushLogs, logRetentionDays } from "@/lib/log";
-import { LOG_RANGES, logQuery, logWhere, parseLogFilters } from "@/lib/log-query";
+import { isMaskedLog, LOG_RANGES, logQuery, logWhere, parseLogFilters } from "@/lib/log-query";
 import { requireAdminPage } from "@/lib/session";
 import { cn } from "@/components/ui/cn";
 
@@ -31,7 +31,7 @@ function formatTime(d: Date, tz: string): string {
 }
 
 export default async function LogsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  await requireAdminPage();
+  const viewer = await requireAdminPage();
   const sp = await searchParams;
   const filters = parseLogFilters(sp);
   const cursor = typeof sp.cursor === "string" && /^[a-z0-9]{1,40}$/i.test(sp.cursor) ? sp.cursor : null;
@@ -42,12 +42,12 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
 
   const [rows, levelCounts, categories, users] = await Promise.all([
     db.appLog.findMany({
-      where: logWhere(filters),
+      where: logWhere(filters, viewer.id),
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: PAGE_SIZE + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     }),
-    db.appLog.groupBy({ by: ["level"], where: logWhere(filters, false), _count: { _all: true } }),
+    db.appLog.groupBy({ by: ["level"], where: logWhere(filters, viewer.id, false), _count: { _all: true } }),
     db.appLog.groupBy({ by: ["category"], orderBy: { category: "asc" } }),
     db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
@@ -145,6 +145,16 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
       ) : (
         <ul className="divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
           {items.map((r) => {
+            // Proyecto privado de otra persona: solo hora y usuario.
+            if (isMaskedLog(r, viewer.id)) {
+              return (
+                <li key={r.id} className="flex flex-wrap items-center gap-x-2 px-3 py-2 text-sm text-slate-500">
+                  <span className="font-mono text-xs">{formatTime(r.createdAt, tz)}</span>
+                  {r.userName && <span className="text-xs">· {r.userName}</span>}
+                  <span className="italic">Actividad en un proyecto privado</span>
+                </li>
+              );
+            }
             const level = LEVELS.find((l) => l.value === r.level) ?? LEVELS[0];
             const hasDetails = r.details !== null && r.details !== undefined;
             return (

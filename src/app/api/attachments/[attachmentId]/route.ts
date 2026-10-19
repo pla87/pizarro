@@ -19,7 +19,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ attachmentId: s
 
   const attachment = await db.taskAttachment.findFirst({
     where: { id: attachmentId, task: { project: visibleProjectsWhere(user) } },
-    select: { id: true, originalName: true, taskId: true, isImage: true, mimeType: true },
+    select: { id: true, originalName: true, taskId: true, isImage: true, mimeType: true, task: { select: { projectId: true } } },
   });
   if (!attachment) return new Response("No encontrado", { status: 404 });
 
@@ -37,7 +37,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ attachmentId: s
   if (!thumb) {
     logEvent({
       category: "api", action: download ? "attachments.download" : "attachments.view", message: `${download ? "Descarga" : "Vista"} de «${attachment.originalName}»`,
-      userId: user.id, userName: user.name, path: new URL(req.url).pathname, ip: clientIp(req.headers), details: { attachmentId: attachment.id, taskId: attachment.taskId, size },
+      userId: user.id, userName: user.name, projectId: attachment.task.projectId, path: new URL(req.url).pathname, ip: clientIp(req.headers), details: { attachmentId: attachment.id, taskId: attachment.taskId, size },
     });
   }
   const filename = encodeURIComponent(attachment.isImage ? attachment.originalName.replace(/\.[^.]+$/, "") + ".webp" : attachment.originalName).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);

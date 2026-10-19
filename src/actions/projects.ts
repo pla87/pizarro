@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
+import { describeAction, noteProject } from "@/lib/action-context";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertProjectAccess, visibleProjectsWhere } from "@/lib/access";
@@ -49,6 +50,8 @@ export async function createProject(name: string, options?: { templateId?: strin
       if (template) await applyTemplate(tx, created.id, template);
       return created;
     });
+    describeAction(`Creó el proyecto «${projectName}»${options?.isPrivate ? " (privado)" : ""}${template ? ` con la plantilla «${templateRow!.name}»` : ""}`);
+    noteProject(project.id);
     revalidatePath("/", "layout");
     return project;
   });
@@ -86,6 +89,7 @@ export async function setProjectVisibility(projectId: string, mode: "PUBLIC" | "
       db.projectMember.deleteMany({ where: { projectId: id } }),
       db.projectMember.createMany({ data: ids.map((userId) => ({ projectId: id, userId })) }),
     ]);
+    describeAction(`Cambió la visibilidad del proyecto a ${visibility === "PUBLIC" ? "pública" : visibility === "RESTRICTED" ? "usuarios seleccionados" : "privada"}`);
     revalidatePath("/", "layout");
   });
 }

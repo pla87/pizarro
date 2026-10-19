@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.8.0"
+version: "v1.9.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.8.0
+**Versión de la aplicación:** v1.9.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -148,7 +148,7 @@ Además, `Task` tiene `dueDate` (fecha límite, solo día), `Column` tiene `isDo
   - **visibilidad** (admins), con tres opciones:
     - *Visible para todos*;
     - *Solo los usuarios seleccionados* (y los administradores);
-    - *Privado: solo tú*. Nadie más lo ve ni puede entrar, tampoco los demás administradores, y no aparece en sus listados, avisos ni asignaciones. Pide confirmación. También se puede elegir al crear el proyecto;
+    - *Privado: solo tú*. Nadie más lo ve ni puede entrar, tampoco los demás administradores, y no aparece en sus listados, avisos ni asignaciones. Pide confirmación. También se puede elegir al crear el proyecto. Si su dueño se desactiva o deja de ser administrador, el proyecto queda **bloqueado** (nadie lo ve); si en 30 días no vuelve a estar activo como administrador, el proyecto **se borra** automáticamente con todo su contenido;
   - etiquetas;
   - borrado del proyecto (admins; pide escribir el nombre para confirmar).
 
@@ -191,7 +191,7 @@ Desde el menú «⋯» de cada columna:
 
 ### 3.6 Generar una release
 
-**Tareas fijas («Siempre en la release»).** Al pie de la columna *Siguiente salto a producción* hay una sección plegable que indica cuántas tareas fijas tiene. Al abrirla, se despliega hacia arriba con esas tareas y el botón **+ Añadir**. Son tareas que se repiten en cada despliegue (por ejemplo, «Generar el PDF de la release»): entran preseleccionadas en cada release (con la marca *fija*), pero **no salen de la columna** al marcarla como desplegada. También se puede marcar o desmarcar una tarea existente de esa columna con *Fija en la release* en su detalle. Si se mueve a otra columna o se archiva, deja de ser fija.
+**Tareas fijas («Siempre en la release»).** Al pie de la columna *Siguiente salto a producción* hay una sección plegable que indica cuántas tareas fijas tiene. Al abrirla, se despliega hacia arriba con esas tareas y el botón **+ Añadir**. Son tareas que se repiten en cada despliegue (por ejemplo, «Generar el PDF de la release»): entran preseleccionadas en cada release (con la marca *fija*), pero **no salen de la columna** al marcarla como desplegada. Solo se añaden al usar **Generar Release** de esa columna, no con *Release con selección*. Para convertir una tarea en fija, arrástrala sobre la sección: si está cerrada se abre al mantenerla encima un momento. También se puede marcar o desmarcar una tarea existente de esa columna con *Fija en la release* en su detalle. Si se mueve a otra columna o se archiva, deja de ser fija.
 
 1. Prepara tus plantillas en **Mi perfil y plantillas → Plantillas de release notes**. Puedes tener **varias cabeceras** (por ejemplo, «Contexto para IA» o «Para negocio») y **varios pies** (por ejemplo, «Checklist de cierre»), cada uno con su nombre.
 2. En el tablero, pulsa **Generar Release** en la columna *Siguiente salto a producción*.
@@ -219,7 +219,7 @@ Desde el menú «⋯» de cada columna:
 
 5. Edita el texto libremente y alterna entre **Editar** y **Vista previa**. Si cambias la cabecera o el pie en este paso, se sustituyen en el texto sin perder lo que has escrito. Si ya habías modificado ese bloque, el nuevo se añade.
 6. Exporta con **Copiar todo**, **.md** o **.txt** (nombre `release-AAAA-MM-DD`).
-7. **Marcar como desplegado**: elige si las tarjetas pasan a la columna *En producción* o se archivan. El texto final editado queda guardado en el apartado **Releases** del proyecto, junto con una **copia reducida de los adjuntos** (máximo 960 px de ancho, WebP de calidad 55), con sus nombres de la release, que se conserva aunque luego se borren las tareas.
+7. **Marcar como desplegado**: elige si las tarjetas pasan a la columna *En producción* o se archivan. El texto final editado queda guardado en el apartado **Releases** del proyecto, junto con una **copia reducida de los adjuntos** (máximo 960 px de ancho, WebP de calidad 55), con sus nombres de la release, que se conserva aunque luego se borren las tareas. Las copias de archivos que no son imagen se guardan enteras y **se borran a los 7 días**; las de imágenes se conservan.
 
 Las secciones sin tareas se omiten.
 
@@ -269,7 +269,7 @@ Botón **Informe PDF** en la cabecera del tablero (o en el menú lateral). Se ab
 El menú lateral muestra, debajo de las opciones del proyecto: **Avisos**, **Mis tareas asignadas**, **Mi perfil y plantillas**, **Administración** (solo admins), **Historial de versiones** e **Instalar app**.
 
 - **Mis tareas asignadas:** todas tus tarjetas activas en los proyectos a los que tienes acceso, agrupadas por proyecto y con su columna actual.
-- **Releases:** histórico del proyecto, con **buscador** por texto (título y contenido), opción de copiar o descargar cada release, y de **Borrar release** (la quita del histórico con sus adjuntos; las tareas no cambian) o **Borrar adjuntos** (conserva el texto). Ambas piden confirmación. Cada entrada indica cuántas tareas y adjuntos tiene; al abrirla se ven los nombres de los adjuntos y el botón **Descargar adjuntos** (ZIP).
+- **Releases:** histórico del proyecto, con **buscador** por texto en todo el histórico (título y contenido, sin distinguir mayúsculas ni tildes); sin buscar se muestran las 50 últimas con *Cargar más*, opción de copiar o descargar cada release, y de **Borrar release** (la quita del histórico con sus adjuntos; las tareas no cambian) o **Borrar adjuntos** (conserva el texto). Ambas piden confirmación. Cada entrada indica cuántas tareas y adjuntos tiene; al abrirla se ven los nombres de los adjuntos y el botón **Descargar adjuntos** (ZIP).
 - **Historial de versiones:** versión actual de la app y cambios de cada versión, con **buscador** por texto.
 
 ### 3.12 Móvil
@@ -297,7 +297,7 @@ En **Mi perfil y plantillas → Apariencia**, cada persona elige:
 Hay dos clases de tipos. Cada tipo es una sección de las release notes.
 
 - **Generales** (solo admins): **Administración → Tipos de tarea**. Están disponibles en todos los proyectos.
-- **Del proyecto** (cualquiera con acceso al proyecto): **Ajustes del proyecto → Tipos de tarea del proyecto**. Solo aparecen en ese proyecto.
+- **Del proyecto** (cualquiera con acceso al proyecto): **Ajustes del proyecto → Tipos de tarea**. Solo aparecen en ese proyecto.
 - **Qué tipos generales usa cada proyecto:** en esa misma sección, la lista *Tipos generales que usa este proyecto*. Los desmarcados no aparecen en sus selectores ni en sus releases. Si un tipo tiene tareas en el proyecto, al desmarcarlo se pide a qué tipo pasan. Siempre queda al menos un tipo.
 
 En ambos casos:
@@ -319,6 +319,10 @@ La entrada **Administración** del menú lateral reúne cuatro pestañas: **Usua
 - páginas visitadas, inicios de sesión (también los fallidos, con el email probado y el motivo, nunca la contraseña) y cierres de sesión;
 - cada acción (crear, mover, editar, archivar, borrar, desplegar…) con quién, cuándo, desde qué página, cuánto tardó, el resultado y sus datos (sin contraseñas ni tokens);
 - subidas y descargas de adjuntos, informes PDF, ZIP de releases, conexiones con Google, envíos de email y WhatsApp, arranques de la app y errores del servidor.
+
+Cada acción se describe en lenguaje claro: «Creó la tarea «X» en «Backlog»», «Movió «X» de «Backlog» a «En progreso»», «Modificó «X»: tipo y responsable», «Desplegó la release «…» con 4 tareas», etc.
+
+**Proyectos privados en los logs:** la actividad de un proyecto privado solo la ve en detalle su dueño. El resto de administradores ve esas filas con la hora y el usuario y el texto «Actividad en un proyecto privado» (también en el CSV); los filtros de texto, nivel y categoría no las tienen en cuenta.
 
 Se filtra por periodo (1 h, 24 h, 7 días), nivel (Info, Aviso, Error), categoría, usuario y texto. Cada fila se despliega para ver los detalles y la IP. **Descargar CSV** exporta el filtro actual (hasta 20 000 filas). Los registros antiguos se borran solos.
 

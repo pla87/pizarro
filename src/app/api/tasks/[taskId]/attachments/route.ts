@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { assertTaskAccess } from "@/lib/access";
 import { AppError } from "@/lib/errors";
+import { actionContext } from "@/lib/action-context";
 import { logEvent } from "@/lib/log";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser, requireUser } from "@/lib/session";
@@ -11,7 +12,7 @@ import type { AttachmentInfo } from "@/lib/types";
 export const runtime = "nodejs";
 
 /** Sube un archivo cualquiera (imagen → WebP + miniatura; otros tal cual) (campo "file" de un multipart/form-data) a una tarea. */
-export async function POST(req: Request, ctx: { params: Promise<{ taskId: string }> }) {
+async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string }> }) {
   const start = performance.now();
   const ip = clientIp(req.headers);
   const taskIdForLog = (await ctx.params).taskId;
@@ -77,4 +78,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ taskId: string
     console.error("[upload]", err);
     return NextResponse.json({ error: "No se pudo procesar el archivo." }, { status: 500 });
   }
+}
+
+/** La comprobación de acceso anota el proyecto en el contexto: así el log de la subida lo lleva. */
+export async function POST(req: Request, ctx: { params: Promise<{ taskId: string }> }) {
+  return actionContext.run({}, () => handlePost(req, ctx));
 }

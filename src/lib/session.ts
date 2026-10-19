@@ -84,7 +84,8 @@ const logPageView = cache(async (user: CurrentUser): Promise<void> => {
   try {
     const { ip, path } = await requestContext();
     if (!path) return;
-    logEvent({ category: "page", action: "page.view", message: `Visita a ${path}`, userId: user.id, userName: user.name, path, ip });
+    const projectId = /^\/p\/([a-z0-9]+)/i.exec(path)?.[1] ?? null;
+    logEvent({ category: "page", action: "page.view", message: `Visita a ${path}`, userId: user.id, userName: user.name, projectId, path, ip });
   } catch {
     // El registro nunca debe romper la página.
   }

@@ -76,6 +76,8 @@ model Project {
   restricted  Boolean  @default(false)
   /// Proyecto privado: solo lo ve y lo usa este usuario (ni siquiera los demás administradores).
   privateOwnerId String?
+  /// Desde cuándo está bloqueado (su dueño se desactivó o dejó de ser admin). A los 30 días se borra.
+  privateBlockedAt DateTime?
   position    Float    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -234,6 +236,8 @@ model ReleaseAttachment {
   releaseId String
   fileName  String
   size      Int
+  /// Las copias de imágenes se conservan; las de otros ficheros se borran a los 7 días.
+  isImage   Boolean  @default(true)
   position  Int
   createdAt DateTime @default(now())
   release   Release  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
@@ -350,6 +354,8 @@ model AppLog {
   /// Nombre en el momento del evento (se conserva aunque el usuario cambie o se borre).
   userName   String?
   projectId  String?
+  /// Dueño del proyecto privado afectado (si lo es): el resto de admins solo ve hora y usuario.
+  privateOwnerId String?
   path       String?
   durationMs Int?
   ip         String?

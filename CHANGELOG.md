@@ -2,6 +2,32 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.9.0 — 2026-10-19
+
+Arrastrar tareas a la sección de fijas, logs con acciones legibles y privacidad de los proyectos privados, búsqueda en todo el histórico de releases, bloqueo y borrado de privados huérfanos y columnas hasta abajo en móvil.
+
+### Nuevas funcionalidades
+
+- Arrastrar una tarea sobre «Siempre en la release» la convierte en fija; si la sección está cerrada, se abre al pasar por encima.
+- Logs con acciones legibles: crear, modificar (qué campos), mover, reordenar, archivar, recuperar, borrar, comentar, desplegar releases, columnas y proyectos.
+- Proyectos privados huérfanos: si su dueño se desactiva o deja de ser admin, se bloquean (nadie los ve) y a los 30 días se borran solos.
+
+### Mejoras
+
+- En Logs, la actividad de los proyectos privados ajenos aparece solo con hora y usuario (también en el CSV y en los filtros).
+- La búsqueda del histórico de releases cubre todas las releases, sin distinguir mayúsculas ni tildes; sin buscar, se cargan de 50 en 50.
+- Las tareas fijas solo se añaden al generar la release desde su columna, no con «Release con selección».
+- Las copias de archivos que no son imagen guardadas al desplegar se borran a los 7 días.
+
+### Correcciones
+
+- Móvil: las columnas llegan hasta abajo y la barra de tareas fijas no queda tapada por los botones flotantes.
+- Texto de la sección de tipos de tarea de los ajustes del proyecto.
+
+### Cambios técnicos / DB
+
+- Migración v1_9: Project.privateBlockedAt, ReleaseAttachment.isImage y AppLog.privateOwnerId. Tarea de mantenimiento horaria (instrumentation register). Contexto por acción (AsyncLocalStorage) para el texto y el proyecto de cada log.
+
 ## v1.8.0 — 2026-10-19
 
 Proyectos privados, tipos generales por proyecto, plantillas de proyecto, tareas fijas en la release, adjuntos de cualquier tipo con arrastrar y soltar, buscadores, automatización de tipos y cambio de columna deslizando en móvil.

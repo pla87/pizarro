@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { describeAction, noteProject } from "@/lib/action-context";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertProjectAccess, visibleProjectsWhere } from "@/lib/access";
@@ -19,6 +20,7 @@ async function findColumn(columnId: string) {
     select: { ...columnSelect, projectId: true },
   });
   if (!column) throw notFound();
+  noteProject(column.projectId);
   return column;
 }
 
@@ -29,6 +31,7 @@ export async function createColumn(projectId: string, name: string) {
     const count = await db.column.count({ where: { projectId } });
     if (count >= 30) throw new AppError("Máximo 30 columnas por proyecto.");
     const last = await db.column.findFirst({ where: { projectId }, orderBy: { position: "desc" }, select: { position: true } });
+    describeAction(`Creó la columna «${v.name.parse(name)}»`);
     return db.column.create({
       data: { projectId, name: v.name.parse(name), position: (last?.position ?? 0) + POSITION_STEP },
       select: columnSelect,
@@ -38,8 +41,9 @@ export async function createColumn(projectId: string, name: string) {
 
 export async function renameColumn(columnId: string, name: string) {
   return runAction({ name: "columns.renameColumn", args: [columnId, name] }, async () => {
-    await findColumn(columnId);
+    const column = await findColumn(columnId);
     await db.column.update({ where: { id: columnId }, data: { name: v.name.parse(name) } });
+    describeAction(`Renombró la columna «${column.name}» a «${v.name.parse(name)}»`);
   });
 }
 
@@ -106,5 +110,6 @@ export async function deleteColumn(columnId: string) {
       await tx.task.updateMany({ where: { columnId, archivedAt: { not: null } }, data: { columnId: other.id } });
       await tx.column.delete({ where: { id: columnId } });
     });
+    describeAction(`Borró la columna «${column.name}»`);
   });
 }

@@ -176,9 +176,14 @@ export async function saveReleaseAttachmentFile(id: string, data: Buffer, kind: 
 }
 
 export async function removeReleaseAttachmentFiles(ids: string[]): Promise<void> {
+  // Cada id por separado: un id raro o un fallo no impide borrar los demás.
   await Promise.all(
-    ids.flatMap((id) => [rm(releaseAttachmentPath(id, "webp"), { force: true }), rm(releaseAttachmentPath(id, "bin"), { force: true })]),
-  ).catch((err) =>
-    console.error("[uploads] no se pudieron borrar ficheros de releases", err),
+    ids.map(async (id) => {
+      try {
+        await Promise.all([rm(releaseAttachmentPath(id, "webp"), { force: true }), rm(releaseAttachmentPath(id, "bin"), { force: true })]);
+      } catch (err) {
+        console.error("[uploads] no se pudieron borrar ficheros de releases", err);
+      }
+    }),
   );
 }

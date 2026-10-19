@@ -34,12 +34,22 @@ export function parseLogFilters(p: Params): LogFilters {
   };
 }
 
-/** Condición de Prisma para el filtro; `withLevel` false sirve para contar por nivel. */
-export function logWhere(f: LogFilters, withLevel = true): Prisma.AppLogWhereInput {
+/** Registros de proyectos privados de otra persona: el visor solo puede ver su hora y su usuario. */
+export function isMaskedLog(row: { privateOwnerId: string | null }, viewerId: string): boolean {
+  return !!row.privateOwnerId && row.privateOwnerId !== viewerId;
+}
+
+/**
+ * Condición de Prisma para el filtro; `withLevel` false sirve para contar por nivel. Los filtros
+ * por nivel, categoría y texto solo miran registros no ocultos (para no revelar su contenido).
+ */
+export function logWhere(f: LogFilters, viewerId: string, withLevel = true): Prisma.AppLogWhereInput {
   const hours = LOG_RANGES.find((r) => r.value === f.range)!.hours;
   const maxMs = logRetentionDays() * 86_400_000;
   const since = new Date(Date.now() - Math.min(hours * 3_600_000, maxMs));
   const and: Prisma.AppLogWhereInput[] = [{ createdAt: { gte: since } }];
+  const visible: Prisma.AppLogWhereInput = { OR: [{ privateOwnerId: null }, { privateOwnerId: viewerId }] };
+  if ((withLevel && f.level) || f.category || f.q || !withLevel) and.push(visible);
   if (withLevel && f.level) and.push({ level: f.level });
   if (f.category) and.push({ category: f.category });
   if (f.userId) and.push({ userId: f.userId });

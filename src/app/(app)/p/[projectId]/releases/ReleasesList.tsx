@@ -1,20 +1,41 @@
 "use client";
 
 import { Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { ReleaseEntry } from "./ReleaseEntry";
 
 type Release = React.ComponentProps<typeof ReleaseEntry>["release"];
 
-/** Minúsculas y sin acentos, para buscar sin distinguir ni mayúsculas ni tildes. */
-const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+/** Releases con buscador en el servidor (título y contenido, sobre todo el histórico) vía ?q=. */
+export function ReleasesList({
+  releases,
+  query,
+  resultCount,
+  moreHref,
+}: {
+  releases: Release[];
+  query: string;
+  resultCount: number | null;
+  moreHref: string | null;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [text, setText] = useState(query);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
-/** Releases con un buscador por título y contenido (se filtra en el cliente sobre todas las cargadas). */
-export function ReleasesList({ releases }: { releases: Release[] }) {
-  const [query, setQuery] = useState("");
-  const index = useMemo(() => releases.map((r) => ({ r, text: fold(`${r.title}\n${r.content}`) })), [releases]);
-  const q = fold(query.trim());
-  const shown = q ? index.filter((x) => x.text.includes(q)).map((x) => x.r) : releases;
+  function onChange(value: string) {
+    setText(value);
+    if (timer.current) clearTimeout(timer.current);
+    // Con debounce: el input responde al instante y la URL (y la consulta) se actualiza al parar de escribir.
+    timer.current = setTimeout(() => {
+      const q = value.trim();
+      if (q === query) return;
+      router.replace(q ? `${pathname}?q=${encodeURIComponent(q)}` : pathname, { scroll: false });
+    }, 350);
+  }
 
   return (
     <div>
@@ -25,18 +46,23 @@ export function ReleasesList({ releases }: { releases: Release[] }) {
             type="search"
             className="input pl-9"
             placeholder="Buscar en título y contenido…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            value={text}
+            onChange={(e) => onChange(e.target.value)}
             aria-label="Buscar releases"
           />
         </div>
-        {q && <p className="mt-1 text-xs text-slate-500" aria-live="polite">{shown.length} de {releases.length} releases</p>}
+        {resultCount !== null && <p className="mt-1 text-xs text-slate-500" aria-live="polite">{resultCount} resultados</p>}
       </div>
-      {shown.length === 0 ? (
-        <p className="card p-6 text-center text-sm text-slate-500">Ninguna release coincide con «{query.trim()}».</p>
+      {releases.length === 0 ? (
+        <p className="card p-6 text-center text-sm text-slate-500">Ninguna release coincide con «{query}».</p>
       ) : (
         <div className="space-y-3">
-          {shown.map((r) => <ReleaseEntry key={r.id} release={r} />)}
+          {releases.map((r) => <ReleaseEntry key={r.id} release={r} />)}
+        </div>
+      )}
+      {moreHref && (
+        <div className="mt-4 text-center">
+          <Link href={moreHref} scroll={false} className="btn-secondary">Cargar más</Link>
         </div>
       )}
     </div>

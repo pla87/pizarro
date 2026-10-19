@@ -16,3 +16,14 @@ export async function onRequestError(
     details: { digest: e?.digest, route: context.routePath, routeType: context.routeType, stack: e?.stack?.split("\n").slice(0, 6).join("\n") },
   });
 }
+
+// Arranque del servidor: lanza el mantenimiento periódico (solo runtime Node; imports dinámicos para no tocar el bundle edge).
+export async function register() {
+  if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  try {
+    const { startMaintenance } = await import("@/lib/maintenance");
+    startMaintenance();
+  } catch (err) {
+    console.error("[instrumentation] no se pudo iniciar el mantenimiento", err);
+  }
+}

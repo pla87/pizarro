@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { flushLogs } from "@/lib/log";
-import { logWhere, parseLogFilters } from "@/lib/log-query";
+import { isMaskedLog, logWhere, parseLogFilters } from "@/lib/log-query";
 import { appTimeZone } from "@/lib/board";
 import { getCurrentUser } from "@/lib/session";
 
@@ -24,7 +24,7 @@ export async function GET(req: Request) {
   await flushLogs();
   const filters = parseLogFilters(Object.fromEntries(new URL(req.url).searchParams));
   const rows = await db.appLog.findMany({
-    where: logWhere(filters),
+    where: logWhere(filters, user.id),
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: MAX_ROWS,
   });
@@ -33,6 +33,11 @@ export async function GET(req: Request) {
   const header = ["fecha", "nivel", "categoria", "accion", "usuario", "usuario_id", "proyecto_id", "mensaje", "duracion_ms", "ruta", "ip", "detalles"];
   const lines = [header.map(cell).join(",")];
   for (const r of rows) {
+    // Proyecto privado de otra persona: solo hora y usuario.
+    if (isMaskedLog(r, user.id)) {
+      lines.push([fmt.format(r.createdAt), "", "", "", r.userName, r.userId, "", "Actividad en un proyecto privado", "", "", "", ""].map(cell).join(","));
+      continue;
+    }
     lines.push(
       [fmt.format(r.createdAt), r.level, r.category, r.action, r.userName, r.userId, r.projectId, r.message, r.durationMs, r.path, r.ip, r.details]
         .map(cell)
