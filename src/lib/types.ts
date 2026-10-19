@@ -28,12 +28,18 @@ export interface BoardTask {
   deliverableId: string | null;
   commentCount: number;
   linkCount: number;
+  /** Tarea fija en la columna de la release (no se mueve ni se archiva al desplegar). */
+  evergreen: boolean;
 }
 
 export interface KindOption {
   id: string;
   name: string;
   color: string;
+  /** Automatización al elegir el tipo (vacío = nada). */
+  titleTemplate: string;
+  descriptionTemplate: string;
+  system: boolean;
 }
 
 export interface TemplateOption {
@@ -95,8 +101,12 @@ export interface CommentInfo {
 export interface AttachmentInfo {
   id: string;
   originalName: string;
-  width: number;
-  height: number;
+  mimeType: string;
+  isImage: boolean;
+  /** Bytes guardados. */
+  size: number;
+  width: number | null;
+  height: number | null;
 }
 
 export interface SubtaskInfo {

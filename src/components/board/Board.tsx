@@ -51,6 +51,7 @@ function MobileTab({ active, onClick, children }: { active: boolean; onClick: ()
   return (
     <button
       onClick={onClick}
+      data-active={active || undefined}
       className={cn(
         "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors",
         active ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
@@ -66,7 +67,7 @@ type Items = Record<string, string[]>;
 
 function groupItems(columns: BoardColumn[], tasks: BoardTask[]): Items {
   const items: Items = Object.fromEntries(columns.map((c) => [c.id, [] as string[]]));
-  for (const t of [...tasks].sort((a, b) => a.position - b.position)) items[t.columnId]?.push(t.id);
+  for (const t of [...tasks].sort((a, b) => a.position - b.position)) if (!t.evergreen) items[t.columnId]?.push(t.id);
   return items;
 }
 
@@ -86,7 +87,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const [labels, setLabels] = useState<LabelOption[]>(data.labels);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openTaskId, setOpenTaskId] = useState<string | null>(initialTaskId);
-  const [newTask, setNewTask] = useState<{ columnId?: string; files?: File[] } | null>(null);
+  const [newTask, setNewTask] = useState<{ columnId?: string; files?: File[]; evergreen?: boolean } | null>(null);
   const [bulk, setBulk] = useState<{ columnId?: string } | null>(null);
   const [release, setRelease] = useState<{ taskIds: string[]; preselected: string[] } | null>(null);
   const [mobileColumn, setMobileColumn] = useState<string | null>(null);
@@ -158,6 +159,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
 
   const baseItems = useMemo(() => groupItems(columns, tasks), [columns, tasks]);
   const items = dragItems ?? baseItems;
+  // Tareas evergreen por columna: fuera de la lista ordenable, se muestran en el pie de la columna de la release.
+  const evergreenByColumn = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const t of [...tasks].sort((a, b) => a.position - b.position)) if (t.evergreen) (map[t.columnId] ??= []).push(t.id);
+    return map;
+  }, [tasks]);
   const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
   const sortedColumns = useMemo(() => [...columns].sort((a, b) => a.position - b.position), [columns]);
   const nextReleaseColumn = sortedColumns.find((c) => c.role === "NEXT_RELEASE");
@@ -209,11 +216,13 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       },
       setColumns,
       openTask: setOpenTaskId,
-      openNewTask: (columnId) => setNewTask({ columnId }),
+      openNewTask: (columnId, evergreen) => setNewTask({ columnId, evergreen }),
       openRelease: (columnId) => {
-        const ids = (baseItems[columnId] ?? []);
+        // Las evergreen van siempre incluidas y preseleccionadas (se pueden desmarcar en el diálogo).
+        const fixed = evergreenByColumn[columnId] ?? [];
+        const ids = [...(baseItems[columnId] ?? []), ...fixed];
         const pre = ids.filter((id) => selected.has(id));
-        setRelease({ taskIds: ids, preselected: pre.length ? pre : ids });
+        setRelease({ taskIds: ids, preselected: pre.length ? [...new Set([...pre, ...fixed])] : ids });
       },
       selected,
       setSelectedMany: (ids, on) =>
@@ -235,7 +244,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       track,
       refresh: () => router.refresh(),
     }),
-    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, dragHandle, data.google, data.today, sortedColumns, labels, taskById, baseItems, selected, track, router, patchTask],
+    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, dragHandle, data.google, data.today, sortedColumns, labels, taskById, baseItems, evergreenByColumn, selected, track, router, patchTask],
   );
 
   // --- Movimiento masivo ------------------------------------------------------
@@ -247,7 +256,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     let pos = Math.max(0, ...tasks.filter((t) => t.columnId === columnId).map((t) => t.position));
     const ordered = sortedColumns.flatMap((c) => (baseItems[c.id] ?? []).filter((id) => selected.has(id) && c.id !== columnId));
     const optimistic = new Map(ordered.map((id) => [id, (pos += 1024)]));
-    setTasks((prev) => prev.map((t) => (optimistic.has(t.id) ? { ...t, columnId, position: optimistic.get(t.id)! } : t)));
+    setTasks((prev) => prev.map((t) => (optimistic.has(t.id) ? { ...t, columnId, position: optimistic.get(t.id)!, evergreen: false } : t)));
     setSelected(new Set());
     const res = await track(moveTasks(ids, columnId));
     if (!res.ok) {
@@ -255,7 +264,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       return toast(res.error, "error");
     }
     const server = new Map(res.data.moved.map((m) => [m.id, m.position]));
-    setTasks((prev) => prev.map((t) => (server.has(t.id) ? { ...t, columnId, position: server.get(t.id)! } : t)));
+    setTasks((prev) => prev.map((t) => (server.has(t.id) ? { ...t, columnId, position: server.get(t.id)!, evergreen: false } : t)));
     const name = sortedColumns.find((c) => c.id === columnId)?.name;
     toast(`${res.data.moved.length === 1 ? "1 tarjeta movida" : `${res.data.moved.length} tarjetas movidas`} a «${name}»`);
   };
@@ -323,6 +332,34 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     setMobileColumn(columnId);
   };
 
+  // Deslizar el dedo a los lados cambia de columna en móvil (no al arrastrar una tarjeta ni al hacer scroll vertical).
+  const swipe = useRef<{ x: number; y: number; t: number } | null>(null);
+  const onSwipeStart = (e: React.TouchEvent) => {
+    const target = e.target as HTMLElement;
+    if (e.touches.length !== 1 || activeId || target.closest("button[aria-label='Arrastrar para reordenar'], input, textarea, select")) {
+      swipe.current = null;
+      return;
+    }
+    swipe.current = { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY, t: Date.now() };
+  };
+  // La pestaña de la columna visible siempre a la vista (al deslizar puede quedar fuera).
+  useEffect(() => {
+    document.querySelector<HTMLElement>("[data-mobile-tabs] [data-active]")?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+  }, [activeMobileColumn]);
+  const onSwipeEnd = (e: React.TouchEvent) => {
+    const start = swipe.current;
+    swipe.current = null;
+    if (!start || activeId || !window.matchMedia("(max-width: 767px)").matches) return;
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Date.now() - start.t > 700 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const index = sortedColumns.findIndex((c) => c.id === activeMobileColumn);
+    const next = sortedColumns[index + (dx < 0 ? 1 : -1)];
+    if (next) showMobileColumn(next.id);
+  };
+
   // --- Drag & drop --------------------------------------------------------------
   const sensors = useSensors(
     // Con ratón, toda la tarjeta; en táctil, solo el asa (touch-action: none), así que basta con poca distancia.
@@ -387,7 +424,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const nextId = list[index + 1] ?? null;
     const position = positionBetween(prevId ? taskById.get(prevId)?.position : null, nextId ? taskById.get(nextId)?.position : null);
     const previous = taskById.get(id)!;
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, columnId: col, position } : t)));
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, columnId: col, position, evergreen: false } : t)));
 
     const res = await track(moveTask(id, col, prevId, nextId));
     if (!res.ok) {
@@ -430,7 +467,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           onDragCancel={cancelDrag}
         >
           {/* Pestañas de columnas en móvil */}
-          <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 md:hidden dark:border-slate-800 dark:bg-slate-900">
+          <div data-mobile-tabs className="no-scrollbar flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 md:hidden dark:border-slate-800 dark:bg-slate-900">
             {sortedColumns.map((c) => (
               <MobileTab key={c.id} active={c.id === activeMobileColumn} onClick={() => showMobileColumn(c.id)}>
                 {c.name} <span className="opacity-70">{items[c.id]?.length ?? 0}</span>
@@ -438,12 +475,17 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             ))}
             <NewColumnButton variant="mobile" onCreated={showMobileColumn} />
           </div>
-          <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-3 max-md:no-scrollbar pt-2 pb-24 md:px-4 md:pb-4">
+          <div
+            className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-3 max-md:no-scrollbar pt-2 pb-24 md:px-4 md:pb-4"
+            onTouchStart={onSwipeStart}
+            onTouchEnd={onSwipeEnd}
+          >
             {sortedColumns.map((column, i) => (
               <ColumnView
                 key={column.id}
                 column={column}
                 taskIds={items[column.id] ?? []}
+                evergreenIds={evergreenByColumn[column.id] ?? []}
                 index={i}
                 total={sortedColumns.length}
                 droppableId={COLUMN_PREFIX + column.id}
@@ -482,7 +524,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             onDelete={deleteSelected}
             onRelease={() => {
               const ids = sortedColumns.flatMap((c) => (baseItems[c.id] ?? []).filter((id) => selected.has(id)));
-              setRelease({ taskIds: ids, preselected: ids });
+              // Las evergreen de la columna de la release se añaden siempre.
+              const fixed = nextReleaseColumn ? (evergreenByColumn[nextReleaseColumn.id] ?? []) : [];
+              const all = [...ids, ...fixed];
+              setRelease({ taskIds: all, preselected: all });
             }}
             onClear={() => setSelected(new Set())}
           />
@@ -494,6 +539,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         {newTask && (
           <NewTaskDialog
             initialColumnId={newTask.columnId}
+            initialEvergreen={newTask.evergreen}
             initialFiles={newTask.files}
             onClose={() => setNewTask(null)}
           />

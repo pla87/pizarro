@@ -155,12 +155,14 @@ export async function notifyMentions(opts: {
 }): Promise<number> {
   const ids = opts.recipientIds.filter((id) => id !== opts.actorId);
   if (!ids.length) return 0;
-  const project = await db.project.findUnique({ where: { id: opts.projectId }, select: { restricted: true } });
+  const project = await db.project.findUnique({ where: { id: opts.projectId }, select: { restricted: true, privateOwnerId: true } });
   if (!project) return 0;
   const recipients = await db.user.findMany({
     where: {
       id: { in: ids },
       active: true,
+      // Proyecto privado: solo su dueño puede recibir avisos.
+      ...(project.privateOwnerId ? { id: project.privateOwnerId } : {}),
       ...(project.restricted ? { OR: [{ role: "ADMIN" }, { memberships: { some: { projectId: opts.projectId } } }] } : {}),
     },
     select: { id: true },

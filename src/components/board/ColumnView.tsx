@@ -10,18 +10,21 @@ import type { BoardColumn } from "@/lib/types";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
+import { EvergreenPanel } from "./EvergreenPanel";
 import { SortableTaskCard } from "./TaskCard";
 
 interface Props {
   column: BoardColumn;
   taskIds: string[];
+  /** Tareas evergreen de la columna (solo la de la release): fuera de la lista ordenable. */
+  evergreenIds?: string[];
   index: number;
   total: number;
   droppableId: string;
   mobileHidden: boolean;
 }
 
-export function ColumnView({ column, taskIds, index, total, droppableId, mobileHidden }: Props) {
+export function ColumnView({ column, taskIds, evergreenIds = [], index, total, droppableId, mobileHidden }: Props) {
   const { openNewTask, openRelease, selected, setSelectedMany } = useBoard();
   const selectedHere = taskIds.filter((id) => selected.has(id)).length;
   const allSelected = taskIds.length > 0 && selectedHere === taskIds.length;
@@ -64,7 +67,7 @@ export function ColumnView({ column, taskIds, index, total, droppableId, mobileH
           <button className="btn-icon h-7 w-7" onClick={() => openNewTask(column.id)} aria-label={`Añadir tarea en ${column.name}`}>
             <Plus size={16} />
           </button>
-          <ColumnMenu column={column} index={index} total={total} empty={taskIds.length === 0} />
+          <ColumnMenu column={column} index={index} total={total} empty={taskIds.length === 0 && evergreenIds.length === 0} />
         </div>
       </header>
       {isNextRelease && (
@@ -72,8 +75,8 @@ export function ColumnView({ column, taskIds, index, total, droppableId, mobileH
           <button
             className="btn-primary w-full py-1.5"
             onClick={() => openRelease(column.id)}
-            disabled={taskIds.length === 0}
-            title={taskIds.length === 0 ? "No hay tarjetas en esta columna" : undefined}
+            disabled={taskIds.length + evergreenIds.length === 0}
+            title={taskIds.length + evergreenIds.length === 0 ? "No hay tarjetas en esta columna" : undefined}
           >
             <Rocket size={15} /> Generar Release
           </button>
@@ -96,6 +99,7 @@ export function ColumnView({ column, taskIds, index, total, droppableId, mobileH
           )}
         </div>
       </SortableContext>
+      {isNextRelease && <EvergreenPanel columnId={column.id} taskIds={evergreenIds} />}
     </section>
   );
 }
@@ -135,9 +139,14 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
         }),
     );
 
+  // Cambiar el rol puede convertir tareas fijas en normales (lo hace el servidor): se recarga después.
   const setRole = (role: ColumnRoleValue) =>
     run(
-      () => setColumnRole(column.id, role),
+      async () => {
+        const res = await setColumnRole(column.id, role);
+        if (res.ok) refresh();
+        return res;
+      },
       () =>
         setColumns((cols) =>
           cols.map((c) => (c.id === column.id ? { ...c, role } : role !== "NONE" && c.role === role ? { ...c, role: "NONE" } : c)),

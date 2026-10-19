@@ -5,12 +5,12 @@ import { AppError } from "@/lib/errors";
 import { logEvent } from "@/lib/log";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser, requireUser } from "@/lib/session";
-import { MAX_UPLOAD_BYTES, processImage, removeAttachmentFiles, saveAttachmentFiles } from "@/lib/uploads";
+import { MAX_UPLOAD_BYTES, processImage, removeAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveRawAttachmentFile } from "@/lib/uploads";
 import type { AttachmentInfo } from "@/lib/types";
 
 export const runtime = "nodejs";
 
-/** Sube una imagen (campo "file" de un multipart/form-data) a una tarea. */
+/** Sube un archivo cualquiera (imagen → WebP + miniatura; otros tal cual) (campo "file" de un multipart/form-data) a una tarea. */
 export async function POST(req: Request, ctx: { params: Promise<{ taskId: string }> }) {
   const start = performance.now();
   const ip = clientIp(req.headers);
@@ -23,42 +23,58 @@ export async function POST(req: Request, ctx: { params: Promise<{ taskId: string
     await assertTaskAccess(user, taskId);
 
     const length = Number(req.headers.get("content-length") ?? 0);
-    if (length > MAX_UPLOAD_BYTES + 64 * 1024) throw new AppError("La imagen supera el tamaño máximo.", 413);
+    if (length > MAX_UPLOAD_BYTES + 64 * 1024) throw new AppError("El archivo supera el tamaño máximo.", 413);
     const form = await req.formData();
     const file = form.get("file");
-    if (!(file instanceof File)) throw new AppError("No se ha recibido ninguna imagen.");
+    if (!(file instanceof File)) throw new AppError("No se ha recibido ningún archivo.");
     fileInfo = { name: file.name, type: file.type, size: file.size };
-    if (file.size > MAX_UPLOAD_BYTES) throw new AppError("La imagen supera el tamaño máximo.", 413);
+    if (file.size > MAX_UPLOAD_BYTES) throw new AppError("El archivo supera el tamaño máximo.", 413);
+    if (file.size === 0) throw new AppError("El archivo está vacío.");
 
-    const image = await processImage(Buffer.from(await file.arrayBuffer()));
+    const buffer = Buffer.from(await file.arrayBuffer());
+    // Imágenes (salvo SVG, que puede llevar scripts): WebP + miniatura. Si sharp no puede
+    // procesarla (p. ej. HEIC sin soporte), se guarda como un archivo cualquiera.
+    let image: Awaited<ReturnType<typeof processImage>> | null = null;
+    if (/^image\//i.test(file.type) && !/svg/i.test(file.type)) {
+      image = await processImage(buffer).catch(() => null);
+    }
     const originalName = (file.name || "captura").replace(/[^\p{L}\p{N}._ -]/gu, "_").slice(0, 120) || "captura";
+    const mimeType = image ? "image/webp" : sanitizeMime(file.type);
+    const storedBytes = image ? image.full.length : buffer.length;
     const attachment = await db.taskAttachment.create({
-      data: { taskId, originalName, width: image.width, height: image.height, size: image.full.length, createdById: user.id },
-      select: { id: true, originalName: true, width: true, height: true },
+      data: {
+        taskId, originalName, mimeType, isImage: !!image, width: image?.width ?? null, height: image?.height ?? null,
+        size: storedBytes, createdById: user.id,
+      },
+      select: { id: true, originalName: true, mimeType: true, isImage: true, width: true, height: true, size: true },
     });
     try {
-      await saveAttachmentFiles(attachment.id, image);
+      if (image) await saveAttachmentFiles(attachment.id, image);
+      else await saveRawAttachmentFile(attachment.id, buffer);
     } catch (err) {
       await db.taskAttachment.delete({ where: { id: attachment.id } });
       await removeAttachmentFiles([attachment.id]);
       throw err;
     }
     logEvent({
-      category: "api", action: "attachments.upload", message: `Imagen «${attachment.originalName}» subida (${Math.round(image.full.length / 1024)} KB)`,
+      category: "api", action: "attachments.upload", message: `${image ? "Imagen" : "Archivo"} «${attachment.originalName}» subido (${Math.round(storedBytes / 1024)} KB)`,
       userId: user.id, userName: user.name, path: `/api/tasks/${taskId}/attachments`, ip, durationMs: performance.now() - start,
-      details: { taskId, attachmentId: attachment.id, original: fileInfo, storedBytes: image.full.length, width: image.width, height: image.height },
+      details: {
+        taskId, attachmentId: attachment.id, original: fileInfo, storedBytes, mime: mimeType, isImage: !!image,
+        width: image?.width ?? null, height: image?.height ?? null,
+      },
     });
     return NextResponse.json<AttachmentInfo>(attachment, { status: 201 });
   } catch (err) {
     const user = await getCurrentUser().catch(() => null);
     logEvent({
       level: err instanceof AppError ? "warn" : "error", category: "api", action: "attachments.uploadFailed",
-      message: `Fallo al subir imagen: ${err instanceof Error ? err.message : String(err)}`,
+      message: `Fallo al subir archivo: ${err instanceof Error ? err.message : String(err)}`,
       userId: user?.id ?? null, userName: user?.name ?? null, path: `/api/tasks/${taskIdForLog}/attachments`, ip, durationMs: performance.now() - start,
       details: { taskId: taskIdForLog, file: fileInfo, status: err instanceof AppError ? err.status : 500 },
     });
     if (err instanceof AppError) return NextResponse.json({ error: err.message }, { status: err.status });
     console.error("[upload]", err);
-    return NextResponse.json({ error: "No se pudo procesar la imagen." }, { status: 500 });
+    return NextResponse.json({ error: "No se pudo procesar el archivo." }, { status: 500 });
   }
 }

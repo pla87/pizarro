@@ -7,6 +7,7 @@ import { cn } from "@/components/ui/cn";
 const TABS = [
   { href: "/admin/users", label: "Usuarios" },
   { href: "/admin/types", label: "Tipos de tarea" },
+  { href: "/admin/templates", label: "Plantillas" },
   { href: "/admin/logs", label: "Logs" },
 ];
 

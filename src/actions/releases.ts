@@ -38,7 +38,7 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     const tasks = await db.task.findMany({
       where: { id: { in: data.taskIds }, projectId: data.projectId, archivedAt: null },
       orderBy: [{ column: { position: "asc" } }, { position: "asc" }],
-      select: { id: true, title: true, kind: { select: { name: true } } },
+      select: { id: true, title: true, evergreen: true, kind: { select: { name: true } } },
     });
 
     let target: { id: string } | null = null;
@@ -63,15 +63,16 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
         const last = await tx.task.findFirst({ where: { columnId: target.id }, orderBy: { position: "desc" }, select: { position: true } });
         let pos = last?.position ?? 0;
         for (const t of tasks) {
+          if (t.evergreen) continue; // las fijas se quedan en su columna
           pos += POSITION_STEP;
           await tx.task.update({ where: { id: t.id }, data: { columnId: target.id, position: pos } });
           moved.push({ id: t.id, columnId: target.id, position: pos });
         }
-      } else if (tasks.length) {
+      } else if (tasks.some((t) => !t.evergreen)) {
         // Se recuerda la columna de cada tarea para poder restaurarla en su sitio.
-        await tx.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId" WHERE "id" IN (${Prisma.join(tasks.map((t) => t.id))})`;
+        await tx.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId" WHERE "id" IN (${Prisma.join(tasks.filter((t) => !t.evergreen).map((t) => t.id))})`;
       }
-      return { releaseId: release.id, moved, archived: target ? [] : tasks.map((t) => t.id) };
+      return { releaseId: release.id, moved, archived: target ? [] : tasks.filter((t) => !t.evergreen).map((t) => t.id) };
     });
     // Copias compactas de los adjuntos para el histórico; si algo falla se omite, el despliegue ya está hecho.
     if (data.attachments?.length) {
@@ -88,7 +89,7 @@ async function saveReleaseAttachments(releaseId: string, items: { taskId: string
   if (new Set(valid.map((i) => i.taskId)).size !== valid.length || new Set(valid.map((i) => i.code)).size !== valid.length) return;
   const tasks = await db.task.findMany({
     where: { id: { in: valid.map((i) => i.taskId) } },
-    select: { id: true, attachments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, originalName: true } } },
+    select: { id: true, attachments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, originalName: true, isImage: true } } },
   });
   const byId = new Map(tasks.map((t) => [t.id, t.attachments]));
   let position = 0;
@@ -98,13 +99,14 @@ async function saveReleaseAttachments(releaseId: string, items: { taskId: string
     for (const [i, att] of attachments.entries()) {
       let rowId: string | null = null;
       try {
-        const data = await compactImage(await readFile(attachmentPath(att.id, "full")));
+        const raw = await readFile(attachmentPath(att.id, att.isImage ? "full" : "file"));
+        const data = att.isImage ? await compactImage(raw) : raw;
         const row = await db.releaseAttachment.create({
           data: { releaseId, fileName: names[i]!, size: data.length, position: position++ },
           select: { id: true },
         });
         rowId = row.id;
-        await saveReleaseAttachmentFile(row.id, data);
+        await saveReleaseAttachmentFile(row.id, data, att.isImage ? "webp" : "bin");
       } catch (err) {
         // Fichero ausente o ilegible: se omite; si ya había fila, se retira para no dejarla sin fichero.
         console.error("[releases] adjunto omitido", err);
@@ -132,7 +134,7 @@ const detailsSchema = z.object({ projectId: v.id, taskIds: z.array(v.id).max(500
 export interface ReleaseTaskDetails {
   id: string;
   description: string;
-  attachments: { id: string; originalName: string }[];
+  attachments: { id: string; originalName: string; isImage: boolean }[];
 }
 
 /** Descripción y adjuntos de las tareas elegidas, para incluirlos en el texto de la release. */
@@ -146,7 +148,7 @@ export async function getReleaseTaskDetails(input: z.input<typeof detailsSchema>
       select: {
         id: true,
         description: true,
-        attachments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, originalName: true } },
+        attachments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, originalName: true, isImage: true } },
       },
     });
   });

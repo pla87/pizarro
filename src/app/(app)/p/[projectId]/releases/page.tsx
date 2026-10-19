@@ -3,7 +3,7 @@ import { Rocket } from "lucide-react";
 import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
-import { ReleaseEntry } from "./ReleaseEntry";
+import { ReleasesList } from "./ReleasesList";
 
 export const metadata = { title: "Releases" };
 
@@ -41,22 +41,17 @@ export default async function ReleasesPage({ params }: { params: Promise<{ proje
           Aún no hay releases. Genera una desde la columna «Siguiente salto a producción» del tablero.
         </div>
       ) : (
-        <div className="space-y-3">
-          {project.releases.map((r) => (
-            <ReleaseEntry
-              key={r.id}
-              release={{
-                id: r.id,
-                title: r.title,
-                content: r.content,
-                deployedAt: r.deployedAt.toISOString(),
-                author: r.createdBy?.name ?? null,
-                taskCount: r._count.tasks,
-                attachments: r.attachments.map((a) => a.fileName),
-              }}
-            />
-          ))}
-        </div>
+        <ReleasesList
+          releases={project.releases.map((r) => ({
+            id: r.id,
+            title: r.title,
+            content: r.content,
+            deployedAt: r.deployedAt.toISOString(),
+            author: r.createdBy?.name ?? null,
+            taskCount: r._count.tasks,
+            attachments: r.attachments.map((a) => a.fileName),
+          }))}
+        />
       )}
     </div>
   );

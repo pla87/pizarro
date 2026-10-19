@@ -10,6 +10,8 @@ export interface ReleaseKind {
 
 export interface ReleaseAttachmentInput {
   originalName: string;
+  /** false = archivo no imagen: conserva su extensión original. Por defecto true (se guarda como .webp). */
+  isImage?: boolean;
 }
 
 export interface ReleaseTaskInput {
@@ -90,17 +92,21 @@ export function computeReleaseCodes(
 }
 
 /**
- * Nombres de fichero de los adjuntos de una tarea: `${código}_${nombre}.webp` (los ficheros
- * se guardan convertidos a WebP), saneados y con `-2`, `-3`… si se repiten. Mismo orden que la entrada.
+ * Nombres de fichero de los adjuntos de una tarea: `${código}_${nombre}.webp` (las imágenes
+ * se guardan convertidas a WebP; el resto conserva su extensión), saneados y con `-2`, `-3`… si se repiten. Mismo orden que la entrada.
  */
 export function attachmentFileNames(code: string, attachments: ReleaseAttachmentInput[]): string[] {
   const taken = new Set<string>();
   return attachments.map((a) => {
+    const isImage = a.isImage ?? true;
     const base = a.originalName.replace(/\.[^.]+$/, "");
     const clean = `${code}_${base}`.replace(/\s+/g, "_").replace(/[^\p{L}\p{N}._-]/gu, "_");
-    let name = `${clean}.webp`;
+    // Extensión original (saneada) para los no imagen; .webp para las imágenes.
+    const ext = isImage ? "webp" : (/\.([^.]+)$/.exec(a.originalName)?.[1] ?? "").replace(/[^\p{L}\p{N}]/gu, "").slice(0, 12);
+    const suffix = ext ? `.${ext}` : "";
+    let name = `${clean}${suffix}`;
     // Se compara sin distinguir mayúsculas: hay sistemas de ficheros que tampoco lo hacen.
-    for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${clean}-${n}.webp`;
+    for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${clean}-${n}${suffix}`;
     taken.add(name.toLowerCase());
     return name;
   });

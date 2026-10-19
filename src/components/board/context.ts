@@ -25,7 +25,8 @@ export interface BoardApi {
   removeTask: (id: string) => void;
   setColumns: React.Dispatch<React.SetStateAction<BoardColumn[]>>;
   openTask: (id: string) => void;
-  openNewTask: (columnId?: string) => void;
+  /** `evergreen`: crear la tarea como fija en la columna de la release. */
+  openNewTask: (columnId?: string, evergreen?: boolean) => void;
   openRelease: (columnId: string) => void;
   selected: Set<string>;
   toggleSelected: (id: string) => void;

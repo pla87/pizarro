@@ -24,7 +24,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
   const { projectId } = await params;
   const project = await db.project.findFirst({
     where: { id: projectId, ...visibleProjectsWhere(user) },
-    select: { id: true, name: true, restricted: true },
+    select: { id: true, name: true, restricted: true, privateOwnerId: true },
   });
   if (!project) notFound();
 
@@ -32,7 +32,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
   const [columns, tasks, users, labels, me, deliverables, kinds, templates] = await Promise.all([
     db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true } }),
     db.task.findMany({ where: { projectId, archivedAt: null }, orderBy: { position: "asc" }, select: boardTaskSelect }),
-    projectUsers(projectId, project.restricted),
+    projectUsers(projectId, project),
     db.label.findMany({ where: { projectId }, orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),
     db.user.findUniqueOrThrow({
       where: { id: user.id },

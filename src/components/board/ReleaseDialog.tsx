@@ -266,6 +266,9 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
                   />
                   <TypeBadge kind={board.kindById.get(t.kindId)} />
                   <span className="min-w-0 flex-1 truncate text-sm">{t.title}</span>
+                  {t.evergreen && (
+                    <span className="shrink-0 rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-500/20 dark:text-brand-300" title="Tarea fija en la release: se queda en su columna al desplegar">fija</span>
+                  )}
                 </label>
               </li>
             ))}

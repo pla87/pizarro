@@ -53,6 +53,9 @@ export async function setColumnRole(columnId: string, role: string) {
         await tx.column.updateMany({ where: { projectId: column.projectId, role: value }, data: { role: "NONE" } });
       }
       await tx.column.update({ where: { id: columnId }, data: { role: value } });
+      // Las tareas fijas solo existen en la columna de release: si deja de serlo, pasan a ser normales.
+      if (value !== "NEXT_RELEASE") await tx.task.updateMany({ where: { columnId, evergreen: true }, data: { evergreen: false } });
+      else await tx.task.updateMany({ where: { projectId: column.projectId, evergreen: true, columnId: { not: columnId } }, data: { evergreen: false } });
     });
   });
 }
