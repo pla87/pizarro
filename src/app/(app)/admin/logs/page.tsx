@@ -61,6 +61,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-slate-600 dark:text-slate-300">
           Se conservan {days} {days === 1 ? "día" : "días"} de actividad.
+          {!filters.reads && " Se muestran solo los cambios: marca «Incluir consultas» para ver también páginas vistas, tareas abiertas y descargas."}
         </p>
         <a
           href={`/api/admin/logs${logQuery(filters)}`}
@@ -117,6 +118,10 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
               <option key={u.id} value={u.id}>{u.name}</option>
             ))}
           </select>
+        </label>
+        <label className="col-span-2 flex items-center gap-2 self-center text-sm sm:col-span-1 sm:pb-1.5" title="Páginas vistas, tareas abiertas, informes y descargas">
+          <input type="checkbox" name="consultas" value="1" defaultChecked={filters.reads} />
+          Incluir consultas
         </label>
         <label className="col-span-2 flex flex-col gap-1 text-xs text-slate-500 sm:min-w-48 sm:flex-1">
           Buscar (acción, mensaje, ruta)

@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { actionContext } from "./action-context";
 import { db } from "./db";
+import { notePresence } from "./presence";
 
 // Registro de actividad (Administración → Logs). Los eventos se acumulan en memoria y se
 // escriben en lote cada pocos segundos: registrar nunca añade una consulta a la petición.
@@ -82,6 +83,9 @@ export function logEvent(e: LogEvent): void {
       ip: e.ip ?? null,
       details: e.details === undefined ? undefined : (sanitize(e.details) as Prisma.InputJsonValue),
     });
+    // Presencia en el tablero: cualquier acción, no las simples visitas (el tablero se refresca solo).
+    const projectId = state.queue[state.queue.length - 1]!.projectId;
+    if (projectId && e.userId && e.category !== "page") notePresence(projectId, e.userId, e.userName ?? "?");
     if (e.level === "error") console.error(`[${e.category}] ${e.action}: ${e.message ?? ""}`);
     if (state.queue.length >= MAX_QUEUE) void flushLogs();
     else state.timer ??= setTimeout(() => void flushLogs(), FLUSH_MS);

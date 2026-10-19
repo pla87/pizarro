@@ -4,10 +4,12 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
+import { describeAction } from "@/lib/action-context";
 import { logEvent } from "@/lib/log";
 import { AppError, notFound } from "@/lib/errors";
 import { MAX_USERS } from "@/lib/limits";
 import { hashPassword, MIN_PASSWORD } from "@/lib/password";
+import { purgeProject } from "@/lib/project-delete";
 import { requireAdmin } from "@/lib/session";
 import * as v from "@/lib/validation";
 
@@ -86,5 +88,31 @@ export async function resetUserPassword(userId: string, newPassword: string) {
       db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(pw) } }),
       db.session.deleteMany({ where: { userId: user.id } }),
     ]);
+  });
+}
+
+/**
+ * Borra un usuario. Sus proyectos privados se borran con él (con tareas, releases y adjuntos):
+ * si tiene alguno hay que confirmarlo expresamente. En los proyectos compartidos sus tareas y
+ * comentarios se conservan sin autor.
+ */
+export async function deleteUser(userId: string, confirmPrivate: boolean) {
+  return runAction({ name: "users.deleteUser", args: [userId, confirmPrivate] }, async () => {
+    const admin = await requireAdmin();
+    const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, name: true } });
+    if (!user) throw notFound();
+    if (user.id === admin.id) throw new AppError("No puedes borrarte a ti mismo.");
+    const privates = await db.project.findMany({ where: { privateOwnerId: user.id }, select: { id: true } });
+    if (privates.length > 0 && confirmPrivate !== true) {
+      throw new AppError(`${user.name} tiene ${privates.length === 1 ? "1 proyecto privado" : `${privates.length} proyectos privados`}: confirma que se borren.`);
+    }
+    for (const p of privates) await purgeProject(p.id);
+    await db.user.delete({ where: { id: user.id } });
+    describeAction(
+      privates.length
+        ? `Borró el usuario «${user.name}» y ${privates.length === 1 ? "su proyecto privado" : `sus ${privates.length} proyectos privados`}`
+        : `Borró el usuario «${user.name}»`,
+    );
+    revalidatePath("/", "layout");
   });
 }

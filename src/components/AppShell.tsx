@@ -54,7 +54,9 @@ function Shell({ user, projects, version, unread, children }: Props) {
 
   return (
     <ProjectsContext.Provider value={{ projects, currentId: current?.id ?? null }}>
-    <div className="flex h-dvh overflow-hidden">
+    {/* Fijo al viewport: nunca hay scroll del documento. En Android con la barra de gestos dibujada
+        encima (viewport-fit=cover) el contenido acaba justo antes de esa barra. */}
+    <div className="fixed inset-0 flex overflow-hidden">
       <aside className="hidden w-60 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col dark:border-slate-800 dark:bg-slate-900">
         {sidebar}
       </aside>
@@ -83,7 +85,7 @@ function Shell({ user, projects, version, unread, children }: Props) {
             </Link>
           )}
         </header>
-        <main className="min-h-0 flex-1 overflow-auto">{children}</main>
+        <main className="min-h-0 flex-1 overflow-auto max-lg:pb-[env(safe-area-inset-bottom)]">{children}</main>
       </div>
     </div>
     </ProjectsContext.Provider>

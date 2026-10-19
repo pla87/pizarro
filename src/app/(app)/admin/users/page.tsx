@@ -9,7 +9,9 @@ export default async function UsersPage() {
   const me = await requireAdminPage();
   const users = await db.user.findMany({
     orderBy: [{ active: "desc" }, { name: "asc" }],
-    select: { id: true, name: true, email: true, role: true, active: true },
+    select: { id: true, name: true, email: true, role: true, active: true, _count: { select: { privateProjects: true } } },
   });
-  return <UsersAdmin users={users} meId={me.id} maxUsers={MAX_USERS} />;
+  // De los proyectos privados ajenos solo se muestra cuántos hay (para avisar antes de borrar al usuario).
+  const rows = users.map(({ _count, ...u }) => ({ ...u, privateProjects: _count.privateProjects }));
+  return <UsersAdmin users={rows} meId={me.id} maxUsers={MAX_USERS} />;
 }

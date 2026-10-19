@@ -16,7 +16,20 @@ export interface LogFilters {
   category: string;
   userId: string;
   q: string;
+  /** Incluir las consultas (páginas vistas, aperturas, descargas); por defecto solo se ven los cambios. */
+  reads: boolean;
 }
+
+/** Acciones que solo consultan datos: se ocultan salvo que se pidan las consultas. */
+export const READ_ACTIONS = [
+  "tasks.getTaskDetail",
+  "tasks.getArchivedTasks",
+  "releases.getReleaseTaskDetails",
+  "releases.countReleasesOn",
+  "templates.listTemplates",
+  "report.pdf",
+  "release.zipDownload",
+];
 
 type Params = Record<string, string | string[] | undefined>;
 
@@ -31,6 +44,7 @@ export function parseLogFilters(p: Params): LogFilters {
     category: first(p.category).slice(0, 40),
     userId: first(p.user).slice(0, 40),
     q: first(p.q).trim().slice(0, 100),
+    reads: first(p.consultas) === "1",
   };
 }
 
@@ -52,6 +66,8 @@ export function logWhere(f: LogFilters, viewerId: string, withLevel = true): Pri
   if ((withLevel && f.level) || f.category || f.q || !withLevel) and.push(visible);
   if (withLevel && f.level) and.push({ level: f.level });
   if (f.category) and.push({ category: f.category });
+  // Solo cambios: fuera las consultas que fueron bien (los avisos y errores se ven siempre).
+  if (!f.reads) and.push({ NOT: { AND: [{ level: "info" }, { OR: [{ category: "page" }, { action: { in: READ_ACTIONS } }] }] } });
   if (f.userId) and.push({ userId: f.userId });
   if (f.q) {
     and.push({
@@ -73,6 +89,7 @@ export function logQuery(f: LogFilters, extra: Record<string, string> = {}): str
   if (f.category) sp.set("category", f.category);
   if (f.userId) sp.set("user", f.userId);
   if (f.q) sp.set("q", f.q);
+  if (f.reads) sp.set("consultas", "1");
   for (const [k, v] of Object.entries(extra)) sp.set(k, v);
   const s = sp.toString();
   return s ? `?${s}` : "";

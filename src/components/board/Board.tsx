@@ -22,6 +22,7 @@ import { EVERGREEN_DROPPABLE_PREFIX } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
 import { BulkTaskDialog } from "./BulkTaskDialog";
 import { NewTaskDialog } from "./NewTaskDialog";
+import { Presence } from "./Presence";
 import { ReleaseDialog } from "./ReleaseDialog";
 import { SelectionBar } from "./SelectionBar";
 import { TaskCard } from "./TaskCard";
@@ -29,6 +30,8 @@ import { TaskDialog } from "./TaskDialog";
 import { imageFilesFrom } from "./upload";
 
 const COLUMN_PREFIX = "col:";
+/** Contenedor virtual del arrastre de una tarea fija (evergreen): origen fuera de las listas ordenables. */
+const EVERGREEN_ORIGIN = "__evergreen__";
 /** Entradas del historial que se guardan al cambiar de columna en móvil (atrás vuelve a ellas). */
 const MAX_COLUMN_HISTORY = 5;
 
@@ -100,6 +103,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openTaskId, setOpenTaskId] = useState<string | null>(initialTaskId);
   const [newTask, setNewTask] = useState<{ columnId?: string; files?: File[]; evergreen?: boolean } | null>(null);
+  const [secondNew, setSecondNew] = useState<{ columnId?: string } | null>(null);
   const [bulk, setBulk] = useState<{ columnId?: string } | null>(null);
   const [release, setRelease] = useState<{ taskIds: string[]; preselected: string[] } | null>(null);
   const [mobileColumn, setMobileColumn] = useState<string | null>(null);
@@ -382,7 +386,14 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const onDragStart = ({ active }: DragStartEvent) => {
     const id = String(active.id);
     const col = findContainer(baseItems, id);
-    if (!col) return;
+    if (!col) {
+      // Tarea fija: no está en ninguna lista; se arrastra desde un contenedor virtual.
+      if (!taskById.get(id)?.evergreen) return;
+      dragOrigin.current = { columnId: EVERGREEN_ORIGIN, index: 0 };
+      setDragItems({ ...baseItems, [EVERGREEN_ORIGIN]: [id] });
+      setActiveId(id);
+      return;
+    }
     dragOrigin.current = { columnId: col, index: baseItems[col]!.indexOf(id) };
     setDragItems(baseItems);
     setActiveId(id);
@@ -396,8 +407,14 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     setDragItems((prev) => {
       if (!prev) return prev;
       const from = findContainer(prev, id);
+      if (!from) return prev;
+      // Tarea fija que vuelve sobre su panel: regresa al origen virtual.
+      if (overId.startsWith(EVERGREEN_DROPPABLE_PREFIX)) {
+        if (dragOrigin.current?.columnId !== EVERGREEN_ORIGIN || from === EVERGREEN_ORIGIN) return prev;
+        return { ...prev, [from]: prev[from]!.filter((x) => x !== id), [EVERGREEN_ORIGIN]: [id] };
+      }
       const to = findContainer(prev, overId);
-      if (!from || !to || from === to) return prev;
+      if (!to || from === to) return prev;
       const target = prev[to]!;
       const overIndex = target.indexOf(overId);
       const index = overIndex >= 0 ? overIndex : target.length;
@@ -437,9 +454,13 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (!over || !current || !origin) return;
     const id = String(active.id);
     const overId = String(over.id);
-    if (overId.startsWith(EVERGREEN_DROPPABLE_PREFIX)) return dropOnEvergreen(id, overId.slice(EVERGREEN_DROPPABLE_PREFIX.length));
+    if (overId.startsWith(EVERGREEN_DROPPABLE_PREFIX)) {
+      // Soltar una tarea fija en su propio panel no hace nada.
+      if (origin.columnId === EVERGREEN_ORIGIN) return;
+      return dropOnEvergreen(id, overId.slice(EVERGREEN_DROPPABLE_PREFIX.length));
+    }
     const col = findContainer(current, id);
-    if (!col) return;
+    if (!col || col === EVERGREEN_ORIGIN) return;
     let list = current[col]!;
     if (findContainer(current, overId) === col && overId !== id && !overId.startsWith(COLUMN_PREFIX)) {
       list = arrayMove(list, list.indexOf(id), list.indexOf(overId));
@@ -462,6 +483,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     }
   };
 
+  // Dos modales a la vez (escritorio): el «+» del abierto crea un segundo de nueva tarea (columna «Backlog» si existe, si no la primera; no hay rol BACKLOG).
+  const primaryOpen = !!newTask || (!!openTaskId && taskById.has(openTaskId));
+  const addSecond = () => setSecondNew({ columnId: (sortedColumns.find((c) => c.name.trim().toLowerCase() === "backlog") ?? sortedColumns[0])?.id });
+
   const activeTask = activeId ? taskById.get(activeId) : null;
 
   return (
@@ -470,7 +495,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         <div className="flex items-center gap-3 px-4 pt-4 pb-2 max-lg:hidden">
           <h1 className="min-w-0"><ProjectMenu textClassName="text-lg" /></h1>
           <span className="text-sm text-slate-500">{tasks.length} tarjetas</span>
-          <a className="btn-secondary ml-auto" href={`/api/projects/${data.project.id}/report`} target="_blank" rel="noopener">
+          <div className="ml-auto"><Presence projectId={data.project.id} /></div>
+          <a className="btn-secondary" href={`/api/projects/${data.project.id}/report`} target="_blank" rel="noopener">
             <FileDown size={16} /> Informe PDF
           </a>
           <button className="btn-secondary" onClick={() => setArchivedOpen(true)}>
@@ -528,14 +554,14 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
 
         <button
           onClick={() => setBulk({ columnId: activeMobileColumn })}
-          className="fixed right-[1.625rem] bottom-[calc(max(1.25rem,env(safe-area-inset-bottom))+4.25rem)] z-30 flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-brand-600 shadow-lg hover:bg-slate-50 active:scale-95 lg:hidden dark:border-slate-700 dark:bg-slate-800 dark:text-brand-300"
+          className="fixed right-[1.625rem] bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-30 flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-brand-600 shadow-lg hover:bg-slate-50 active:scale-95 lg:hidden dark:border-slate-700 dark:bg-slate-800 dark:text-brand-300"
           aria-label="Crear varias tareas"
         >
           <PlusStack size={22} />
         </button>
         <button
           onClick={() => setNewTask({ columnId: activeMobileColumn })}
-          className="fixed right-5 bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-30 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95 lg:hidden"
+          className="fixed right-5 bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] z-30 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95 lg:hidden"
           aria-label="Nueva tarea o captura"
         >
           <Plus size={26} />
@@ -559,14 +585,29 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         )}
 
         {openTaskId && taskById.has(openTaskId) && (
-          <TaskDialog key={openTaskId} task={taskById.get(openTaskId)!} onClose={() => setOpenTaskId(null)} />
+          <TaskDialog
+            key={openTaskId}
+            task={taskById.get(openTaskId)!}
+            onClose={() => setOpenTaskId(null)}
+            side={secondNew ? "left" : "center"}
+            onAddSecond={secondNew ? undefined : addSecond}
+          />
         )}
         {newTask && (
           <NewTaskDialog
+            side={secondNew ? "left" : "center"}
+            onAddSecond={secondNew ? undefined : addSecond}
             initialColumnId={newTask.columnId}
             initialEvergreen={newTask.evergreen}
             initialFiles={newTask.files}
             onClose={() => setNewTask(null)}
+          />
+        )}
+        {secondNew && (
+          <NewTaskDialog
+            initialColumnId={secondNew.columnId}
+            side={primaryOpen ? "right" : "center"}
+            onClose={() => setSecondNew(null)}
           />
         )}
         {(archivedOpen || wantsArchived) && <ArchivedDialog onClose={closeArchived} />}

@@ -23,7 +23,7 @@ import { useBoard } from "./context";
 import { createAndOpenGoogleFile } from "./google";
 import { filesFrom, formatBytes, uploadFile, useFileDrop } from "./upload";
 
-export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => void }) {
+export function TaskDialog({ task, onClose, side, onAddSecond }: { task: BoardTask; onClose: () => void; side?: "left" | "right" | "center"; onAddSecond?: () => void }) {
   const board = useBoard();
   const toast = useToast();
   const [detail, setDetail] = useState<TaskDetail | null>(null);
@@ -175,6 +175,8 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
     <Modal
       open
       onClose={onClose}
+      side={side}
+      onAddSecond={onAddSecond}
       size="xl"
       placement="top"
       // Escritorio: la altura se adapta al contenido (tope = viewport); solo hacen scroll las columnas si hay mucho contenido.
@@ -576,15 +578,23 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
 
   return (
     <section>
-      <div className="mb-2 flex items-center gap-2">
-        <h3 className="text-sm font-semibold">Checklist</h3>
-        {list.length > 0 && <span className="text-xs text-slate-500">{done}/{list.length}</span>}
-      </div>
-      {list.length > 0 && (
-        <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-          <div className="h-full bg-emerald-500 transition-all" style={{ width: `${(done / list.length) * 100}%` }} />
+      {/* Barra de progreso hasta el borde derecho: se llena según la proporción de subtareas hechas (no su orden). */}
+      <div className="mb-2 flex items-center gap-3">
+        <h3 className="text-sm font-semibold">Subtareas</h3>
+        <div
+          className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"
+          role="progressbar"
+          aria-label="Progreso de las subtareas"
+          aria-valuemin={0}
+          aria-valuemax={list.length}
+          aria-valuenow={done}
+        >
+          <div
+            className="h-full rounded-full bg-emerald-500 shadow-[0_0_6px] shadow-emerald-500/60 transition-[width] duration-300 dark:bg-emerald-400 dark:shadow-emerald-400/50"
+            style={{ width: list.length ? `${(done / list.length) * 100}%` : "0%" }}
+          />
         </div>
-      )}
+      </div>
       <ul className="space-y-0.5">
         {list.map((s) => (
           <li key={s.id} className="group flex items-center gap-2 rounded-md px-1 py-1 hover:bg-slate-50 dark:hover:bg-slate-800/50">
@@ -597,7 +607,7 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
         ))}
       </ul>
       <form onSubmit={add} className="mt-1 flex gap-2">
-        <input className="input py-1.5" placeholder="Añadir elemento…" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} maxLength={200} disabled={!detail} />
+        <input className="input py-1.5" placeholder="Añadir subtarea…" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} maxLength={200} disabled={!detail} />
         <button className="btn-secondary py-1.5" disabled={!newTitle.trim()} aria-label="Añadir subtarea"><Plus size={15} /></button>
       </form>
     </section>

@@ -1,7 +1,7 @@
 "use client";
 
 import { Camera, File as FileIcon, ImagePlus, Loader2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { createTask } from "@/actions/tasks";
 import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
@@ -18,13 +18,19 @@ interface Props {
   initialEvergreen?: boolean;
   initialFiles?: File[];
   onClose: () => void;
+  /** Escritorio: posición en pantalla cuando hay dos modales a la vez. */
+  side?: "left" | "right" | "center";
+  /** Escritorio: muestra el «+» para abrir un segundo modal de nueva tarea al lado. */
+  onAddSecond?: () => void;
 }
 
 function captureTitle(): string {
   return "Captura " + new Date().toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" });
 }
 
-export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles, onClose }: Props) {
+export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles, onClose, side, onAddSecond }: Props) {
+  const uid = useId();
+  const formId = `${uid}-new-task`;
   const board = useBoard();
   const toast = useToast();
   const [title, setTitle] = useState(() => (initialFiles?.length ? captureTitle() : ""));
@@ -56,7 +62,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !columnId) return;
+    if (busy || !title.trim() || !columnId) return;
     setBusy(true);
     const res = await board.track(
       createTask({
@@ -88,19 +94,27 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     <Modal
       open
       onClose={onClose}
+      side={side}
+      onAddSecond={onAddSecond}
       title="Nueva tarea"
       size="md"
       placement="top"
       footer={
         <>
           <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
-          <button type="submit" form="new-task" className="btn-primary" disabled={busy || !title.trim()}>
+          <button type="submit" form={formId} className="btn-primary" disabled={busy || !title.trim()}>
             {busy && <Loader2 size={16} className="animate-spin" />} Crear tarea
           </button>
         </>
       }
     >
-      <form id="new-task" onSubmit={submit} className="space-y-3" onPaste={(e) => {
+      <form id={formId} onSubmit={submit} className="space-y-3" onKeyDown={(e) => {
+        // Ctrl/Cmd+Enter en cualquier campo crea la tarea (como pulsar «Crear tarea»).
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) {
+          e.preventDefault();
+          e.currentTarget.requestSubmit();
+        }
+      }} onPaste={(e) => {
         const pasted = filesFrom(e.clipboardData.items);
         if (pasted.length) {
           e.preventDefault();
@@ -108,8 +122,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         }
       }}>
         <div>
-          <label className="label" htmlFor="nt-title">Título</label>
-          <input id="nt-title" className="input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} required data-autofocus />
+          <label className="label" htmlFor={`${uid}-title`}>Título</label>
+          <input id={`${uid}-title`} className="input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} required data-autofocus />
         </div>
         <div>
           <div className="label">Tipo</div>
@@ -125,33 +139,33 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
           }} />
         </div>
         <div>
-          <label className="label" htmlFor="nt-desc">Descripción (opcional)</label>
-          <MentionTextarea id="nt-desc" className="input field-sizing-content min-h-14" value={description} onValueChange={setDescription} users={board.users} maxLength={20000} placeholder="Markdown · @persona para avisar" />
+          <label className="label" htmlFor={`${uid}-desc`}>Descripción (opcional)</label>
+          <MentionTextarea id={`${uid}-desc`} className="input field-sizing-content min-h-14" value={description} onValueChange={setDescription} users={board.users} maxLength={20000} placeholder="Markdown · @persona para avisar" />
         </div>
         <div className="grid grid-cols-2 gap-x-3 gap-y-3">
           <div className="min-w-0">
-            <label className="label" htmlFor="nt-column">Columna</label>
-            <select id="nt-column" className="input" value={columnId} onChange={(e) => setColumnId(e.target.value)}>
+            <label className="label" htmlFor={`${uid}-column`}>Columna</label>
+            <select id={`${uid}-column`} className="input" value={columnId} onChange={(e) => setColumnId(e.target.value)}>
               {board.columns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div className="min-w-0">
-            <label className="label truncate" htmlFor="nt-deliverable">Entregable (opcional)</label>
-            <select id="nt-deliverable" className="input" value={deliverableId} onChange={(e) => setDeliverableId(e.target.value)}>
+            <label className="label truncate" htmlFor={`${uid}-deliverable`}>Entregable (opcional)</label>
+            <select id={`${uid}-deliverable`} className="input" value={deliverableId} onChange={(e) => setDeliverableId(e.target.value)}>
               <option value="">Sin entregable</option>
               {board.deliverables.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
           <div className="min-w-0">
-            <label className="label truncate" htmlFor="nt-assignee">Asignada a (opcional)</label>
-            <select id="nt-assignee" className="input" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
+            <label className="label truncate" htmlFor={`${uid}-assignee`}>Asignada a (opcional)</label>
+            <select id={`${uid}-assignee`} className="input" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
               <option value="">Sin asignar</option>
               {board.users.map((u) => <option key={u.id} value={u.id}>{u.id === board.currentUserId ? `${u.name} (yo)` : u.name}</option>)}
             </select>
           </div>
           <div className="min-w-0">
-            <label className="label truncate" htmlFor="nt-due">Fecha límite (opcional)</label>
-            <input id="nt-due" type="date" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            <label className="label truncate" htmlFor={`${uid}-due`}>Fecha límite (opcional)</label>
+            <input id={`${uid}-due`} type="date" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </div>
         </div>
         {isReleaseColumn && (

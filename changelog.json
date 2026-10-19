@@ -1,6 +1,31 @@
 {
   "versions": [
     {
+      "version": "1.10.0",
+      "date": "2026-10-19",
+      "summary": "Barra de progreso de subtareas, dos tareas a la vez en escritorio, Ctrl+Enter para crear, quién está activo en el tablero, sacar tareas de la sección de fijas, logs con solo cambios por defecto y borrado de usuarios.",
+      "changes": {
+        "nuevas": [
+          "Subtareas con barra de progreso verde junto al título, que se llena según la proporción de subtareas hechas. Las subtareas no pasan a las releases.",
+          "Escritorio: con una tarea abierta, el botón «+» de fuera del modal abre una tarea nueva a la derecha (en Backlog) y la abierta pasa a la izquierda.",
+          "Ctrl/⌘+Enter en cualquier campo de «Nueva tarea» la crea.",
+          "Círculos con las iniciales de quién ha hecho algo en el tablero en los últimos 5 minutos, junto a «Informe PDF».",
+          "Borrar usuarios: si tienen proyectos privados se avisa y se pide confirmación, y se borran con ellos."
+        ],
+        "mejoras": [
+          "Las tareas de «Siempre en la release» se pueden arrastrar a cualquier columna y posición (dejan de ser fijas).",
+          "Logs: por defecto solo cambios; «Incluir consultas» muestra también páginas vistas, tareas abiertas, informes y descargas.",
+          "Los proyectos privados de un dueño desactivado quedan bloqueados hasta que vuelva; ya no se borran solos a los 30 días."
+        ],
+        "correcciones": [
+          "Móvil: sin scroll vertical; las columnas acaban justo encima de la barra de gestos o navegación del sistema."
+        ],
+        "tecnicos": [
+          "Presencia en memoria alimentada por los logs (GET /api/projects/[id]/presence, sin registro). Pila de modales con Escape y fondo para el de más arriba. purgeProject compartido entre borrar proyecto y borrar usuario."
+        ]
+      }
+    },
+    {
       "version": "1.9.0",
       "date": "2026-10-19",
       "summary": "Arrastrar tareas a la sección de fijas, logs con acciones legibles y privacidad de los proyectos privados, búsqueda en todo el histórico de releases, bloqueo y borrado de privados huérfanos y columnas hasta abajo en móvil.",

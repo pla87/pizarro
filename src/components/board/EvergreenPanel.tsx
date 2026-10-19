@@ -1,7 +1,7 @@
 "use client";
 
-import { useDndContext, useDroppable } from "@dnd-kit/core";
-import { ChevronUp, Plus } from "lucide-react";
+import { useDndContext, useDraggable, useDroppable } from "@dnd-kit/core";
+import { ChevronUp, GripVertical, Plus } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { cn } from "../ui/cn";
 import { TypeBadge } from "../ui/TypeBadge";
@@ -24,7 +24,7 @@ const memory = new Map<string, boolean>();
  * Plegado es una barra con el contador; desplegado crece hacia arriba mostrando tarjetas compactas.
  */
 export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskIds: string[] }) {
-  const { project, taskById, kindById, openTask, openNewTask } = useBoard();
+  const { project, taskById, openNewTask } = useBoard();
   // Estado en localStorage leído como store externo (en servidor, plegado).
   const stored = useSyncExternalStore(
     (cb) => {
@@ -84,19 +84,8 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
       {open && (
         <div id={`evergreen-${columnId}`} className="max-h-56 space-y-1.5 overflow-y-auto px-2 pt-2 max-lg:pr-16">
           {taskIds.map((id) => {
-            const task = taskById.get(id);
-            if (!task) return null;
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => openTask(id)}
-                className="flex w-full items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-xs shadow-sm hover:shadow-md dark:border-slate-700/80 dark:bg-slate-900"
-              >
-                <span className="min-w-0 flex-1 truncate font-medium" title={task.title}>{task.title}</span>
-                <TypeBadge kind={kindById.get(task.kindId)} />
-              </button>
-            );
+            if (!taskById.has(id)) return null;
+            return <EvergreenCard key={id} id={id} />;
           })}
           {taskIds.length === 0 && <p className="py-2 text-center text-xs text-slate-400">Sin tareas fijas</p>}
           <button
@@ -120,5 +109,45 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
         <ChevronUp size={14} className={cn("lg:ml-auto transition-transform", open && "rotate-180")} />
       </button>
     </div>
+  );
+}
+
+/** Tarjeta compacta del panel: se puede arrastrar a cualquier columna (deja de ser fija al soltarla). */
+function EvergreenCard({ id }: { id: string }) {
+  const { taskById, kindById, openTask, dragHandle } = useBoard();
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({ id });
+  const task = taskById.get(id);
+  if (!task) return null;
+  // En táctil solo arrastra el asa (igual que las tarjetas normales).
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      {...(dragHandle ? {} : { ...attributes, ...listeners })}
+      onClick={() => openTask(id)}
+      onKeyDown={(e) => {
+        // Enter abre la tarea; evita que el KeyboardSensor empiece además un arrastre.
+        if (e.key === "Enter") e.stopPropagation();
+      }}
+      className={cn(
+        "flex w-full touch-manipulation items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-xs shadow-sm hover:shadow-md dark:border-slate-700/80 dark:bg-slate-900",
+        isDragging && "opacity-40",
+      )}
+    >
+      <span className="min-w-0 flex-1 truncate font-medium" title={task.title}>{task.title}</span>
+      <TypeBadge kind={kindById.get(task.kindId)} />
+      {dragHandle && (
+        <span
+          ref={setActivatorNodeRef}
+          {...attributes}
+          {...listeners}
+          onClick={(e) => e.stopPropagation()}
+          className="-my-1 -mr-1 flex h-7 w-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-slate-400 active:text-brand-600"
+          aria-label="Arrastrar para reordenar"
+        >
+          <GripVertical size={14} />
+        </span>
+      )}
+    </button>
   );
 }
