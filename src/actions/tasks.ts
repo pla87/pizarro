@@ -29,11 +29,13 @@ async function assertDeliverableInProject(deliverableId: string | null | undefin
   if (!ok) throw new AppError("El entregable no existe.");
 }
 
-/** Los tipos deben ser generales o del propio proyecto. */
+/** Los tipos deben ser generales (no ocultos en el proyecto) o del propio proyecto. */
 async function assertKindsInProject(kindIds: (string | undefined)[], projectId: string) {
   const ids = [...new Set(kindIds.filter((id): id is string => !!id))];
   if (!ids.length) return;
-  const count = await db.taskKind.count({ where: { id: { in: ids }, OR: [{ projectId: null }, { projectId }] } });
+  const count = await db.taskKind.count({
+    where: { id: { in: ids }, OR: [{ projectId: null, hiddenIn: { none: { projectId } } }, { projectId }] },
+  });
   if (count !== ids.length) throw new AppError("El tipo de tarea no existe.");
 }
 
@@ -66,6 +68,7 @@ const createSchema = z.object({
   labelIds: z.array(v.id).max(20).default([]),
   dueDate: v.dayIso.default(null),
   deliverableId: v.id.nullable().default(null),
+  evergreen: z.boolean().default(false),
 });
 
 export async function createTask(input: z.input<typeof createSchema>) {
@@ -78,6 +81,8 @@ export async function createTask(input: z.input<typeof createSchema>) {
     if (data.assigneeId) await assertAssignable(data.projectId, data.assigneeId);
     await assertDeliverableInProject(data.deliverableId, data.projectId);
     await assertKindsInProject([data.kindId], data.projectId);
+    // Solo se admite evergreen en la columna de la release.
+    const evergreen = data.evergreen && (await db.column.count({ where: { id: data.columnId, role: "NEXT_RELEASE" } })) > 0;
     const position = positionBetween(await lastPosition(data.columnId), null);
     const task = await db.task.create({
       data: {
@@ -91,6 +96,7 @@ export async function createTask(input: z.input<typeof createSchema>) {
         linkUrl: data.linkUrl,
         dueDate: data.dueDate ? isoToDate(data.dueDate) : null,
         deliverableId: data.deliverableId,
+        evergreen,
         position,
         createdById: user.id,
         labels: { create: [...new Set(data.labelIds)].map((labelId) => ({ labelId })) },
@@ -164,6 +170,7 @@ const updateSchema = z.object({
   labelIds: z.array(v.id).max(20).optional(),
   dueDate: v.dayIso.optional(),
   deliverableId: v.id.nullable().optional(),
+  evergreen: z.boolean().optional(),
 });
 
 export async function updateTask(taskId: string, patch: z.input<typeof updateSchema>) {
@@ -175,6 +182,11 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
     if (data.labelIds) await assertLabelsInProject(data.labelIds, projectId);
     await assertDeliverableInProject(data.deliverableId, projectId);
     await assertKindsInProject([data.kindId], projectId);
+    // Evergreen solo tiene sentido en la columna de la release.
+    if (data.evergreen) {
+      const ok = await db.task.count({ where: { id: taskId, column: { role: "NEXT_RELEASE" } } });
+      if (!ok) throw new AppError("Solo las tareas de la columna de la release pueden ser fijas.");
+    }
     const { labelIds, dueDate, ...rest } = data;
     const fields = { ...rest, ...(dueDate !== undefined ? { dueDate: dueDate ? isoToDate(dueDate) : null } : {}) };
     const newMentions = await db.$transaction(async (tx) => {
@@ -223,7 +235,7 @@ export async function moveTask(taskId: string, columnId: string, prevId: string 
       n = await neighbourPositions(columnId, prevId, nextId);
     }
     const position = n.stale ? positionBetween(await lastPosition(columnId), null) : positionBetween(n.prev, n.next);
-    await db.task.update({ where: { id: taskId }, data: { columnId, position } });
+    await db.task.update({ where: { id: taskId }, data: { columnId, position, evergreen: false } });
     return { position };
   });
 }
@@ -246,7 +258,7 @@ export async function moveTasks(taskIds: string[], columnId: string) {
     const toMove = tasks.filter((t) => t.columnId !== column.id);
     let pos = (await lastPosition(column.id)) ?? 0;
     const moved = toMove.map((t) => ({ id: t.id, position: (pos += POSITION_STEP) }));
-    await db.$transaction(moved.map((m) => db.task.update({ where: { id: m.id }, data: { columnId: column.id, position: m.position } })));
+    await db.$transaction(moved.map((m) => db.task.update({ where: { id: m.id }, data: { columnId: column.id, position: m.position, evergreen: false } })));
     return { columnId: column.id, moved };
   });
 }
@@ -255,7 +267,7 @@ export async function archiveTask(taskId: string) {
   return runAction({ name: "tasks.archiveTask", args: [taskId] }, async () => {
     const user = await requireUser();
     const { columnId } = await assertTaskAccess(user, v.id.parse(taskId));
-    await db.task.update({ where: { id: taskId }, data: { archivedAt: new Date(), archivedFromColumnId: columnId } });
+    await db.task.update({ where: { id: taskId }, data: { archivedAt: new Date(), archivedFromColumnId: columnId, evergreen: false } });
   });
 }
 
@@ -266,7 +278,7 @@ export async function archiveTasks(taskIds: string[]) {
     const ids = [...new Set(z.array(v.id).min(1).max(500).parse(taskIds))];
     const tasks = await db.task.findMany({ where: { id: { in: ids }, project: visibleProjectsWhere(user) }, select: { id: true } });
     if (tasks.length !== ids.length) throw notFound();
-    await db.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId" WHERE "id" IN (${Prisma.join(ids)}) AND "archivedAt" IS NULL`;
+    await db.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId", "evergreen" = false WHERE "id" IN (${Prisma.join(ids)}) AND "archivedAt" IS NULL`;
     return { archived: ids.length };
   });
 }
@@ -339,7 +351,7 @@ export async function getTaskDetail(taskId: string) {
         createdAt: true,
         createdBy: { select: { name: true } },
         subtasks: { orderBy: { position: "asc" }, select: { id: true, title: true, done: true, position: true } },
-        attachments: { orderBy: { createdAt: "asc" }, select: { id: true, originalName: true, width: true, height: true } },
+        attachments: { orderBy: { createdAt: "asc" }, select: { id: true, originalName: true, mimeType: true, isImage: true, size: true, width: true, height: true } },
         links: { orderBy: { createdAt: "asc" }, select: linkSelect },
         comments: { orderBy: { createdAt: "asc" }, take: 300, select: commentSelect },
       },

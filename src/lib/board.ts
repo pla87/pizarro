@@ -16,6 +16,7 @@ export const boardTaskSelect = {
   dueDate: true,
   deliverableId: true,
   description: true,
+  evergreen: true,
   labels: { select: { labelId: true } },
   subtasks: { select: { done: true } },
   _count: { select: { attachments: true, comments: true, links: true } },
@@ -42,6 +43,7 @@ export function toBoardTask(t: BoardTaskRow): BoardTask {
     deliverableId: t.deliverableId,
     commentCount: t._count.comments,
     linkCount: t._count.links,
+    evergreen: t.evergreen,
   };
 }
 
@@ -50,11 +52,13 @@ export async function loadBoardTask(id: string): Promise<BoardTask> {
 }
 
 /** Usuarios activos que pueden ver el proyecto (para el selector de asignación). */
-export async function projectUsers(projectId: string, restricted: boolean) {
+export async function projectUsers(projectId: string, project: { restricted: boolean; privateOwnerId: string | null }) {
   return db.user.findMany({
-    where: restricted
-      ? { active: true, OR: [{ role: "ADMIN" }, { memberships: { some: { projectId } } }] }
-      : { active: true },
+    where: project.privateOwnerId
+      ? { id: project.privateOwnerId, active: true }
+      : project.restricted
+        ? { active: true, OR: [{ role: "ADMIN" }, { memberships: { some: { projectId } } }] }
+        : { active: true },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });
@@ -66,11 +70,20 @@ export function appTimeZone(): string {
 }
 
 /** Tipos de tarea: sin proyecto, solo los generales; con proyecto, los generales y después los de ese proyecto. */
+/** Selección común de los tipos (con su automatización). */
+export const kindSelect = { id: true, name: true, color: true, titleTemplate: true, descriptionTemplate: true, system: true } as const;
+
+/**
+ * Tipos de tarea: sin proyecto, solo los generales; con proyecto, los generales que el proyecto
+ * usa (los que haya ocultado no aparecen) y después los propios del proyecto.
+ */
 export function listKinds(projectId?: string) {
   return db.taskKind.findMany({
-    where: projectId ? { OR: [{ projectId: null }, { projectId }] } : { projectId: null },
+    where: projectId
+      ? { OR: [{ projectId: null, hiddenIn: { none: { projectId } } }, { projectId }] }
+      : { projectId: null },
     orderBy: [{ projectId: { sort: "asc", nulls: "first" } }, { position: "asc" }, { createdAt: "asc" }],
-    select: { id: true, name: true, color: true },
+    select: kindSelect,
   });
 }
 

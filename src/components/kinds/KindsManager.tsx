@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Lock, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { createKind, deleteKind, moveKind, updateKind } from "@/actions/kinds";
@@ -9,14 +9,19 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
 import { PALETTE } from "@/lib/constants";
+import { describeKindAutomation } from "@/lib/kinds-special";
 
 export interface KindRow {
   id: string;
   name: string;
   color: string;
   taskCount: number;
+  titleTemplate: string;
+  descriptionTemplate: string;
+  system: boolean;
 }
 
+const EMPTY_FORM = { name: "", color: "#6366f1", titleTemplate: "", descriptionTemplate: "" };
 const COLORS = [...PALETTE, "#84cc16", "#06b6d4", "#d946ef", "#78716c"];
 
 function ColorField({ value, onChange }: { value: string; onChange: (c: string) => void }) {
@@ -54,7 +59,7 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
   const toast = useToast();
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState<string | "new" | null>(null);
-  const [form, setForm] = useState({ name: "", color: "#6366f1" });
+  const [form, setForm] = useState(EMPTY_FORM);
   const [deleting, setDeleting] = useState<KindRow | null>(null);
   const [replacement, setReplacement] = useState("");
   // Los generales no se pueden quedar a cero; los de proyecto sí.
@@ -76,18 +81,28 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
         <ul className={cn("divide-y divide-slate-200 dark:divide-slate-800", !embedded && "card")}>
           {kinds.map((k, i) => (
             <li key={k.id} className={cn("flex items-center gap-3", embedded ? "py-2" : "px-4 py-3")}>
-              <TypeBadge kind={k} />
-              <span className="text-xs text-slate-500">{k.taskCount} tarea(s)</span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <TypeBadge kind={k} />
+                  {k.system && (
+                    <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500 dark:bg-slate-800">
+                      <Lock size={11} /> Del sistema
+                    </span>
+                  )}
+                  <span className="text-xs text-slate-500">{k.taskCount} tarea(s)</span>
+                </div>
+                {describeKindAutomation(k) && <p className="mt-1 text-xs text-slate-500">{describeKindAutomation(k)}</p>}
+              </div>
               <div className="ml-auto flex items-center">
                 <button className="btn-icon" disabled={i === 0 || pending} onClick={() => run(() => moveKind(k.id, -1), "Orden actualizado")} aria-label="Subir"><ArrowUp size={15} /></button>
                 <button className="btn-icon" disabled={i === kinds.length - 1 || pending} onClick={() => run(() => moveKind(k.id, 1), "Orden actualizado")} aria-label="Bajar"><ArrowDown size={15} /></button>
-                <button className="btn-icon" onClick={() => { setEditing(k.id); setForm({ name: k.name, color: k.color }); }} aria-label={`Editar ${k.name}`}><Pencil size={15} /></button>
+                <button className="btn-icon" onClick={() => { setEditing(k.id); setForm({ name: k.name, color: k.color, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate }); }} aria-label={`Editar ${k.name}`}><Pencil size={15} /></button>
                 <button
                   className="btn-icon hover:text-red-600"
-                  disabled={!canDelete}
+                  disabled={!canDelete || k.system}
                   onClick={() => { setDeleting(k); setReplacement(targets(k)[0]?.id ?? ""); }}
                   aria-label={`Borrar ${k.name}`}
-                  title={canDelete ? undefined : "Debe quedar al menos un tipo"}
+                  title={k.system ? "Tipo del sistema: no se puede borrar" : canDelete ? undefined : "Debe quedar al menos un tipo"}
                 >
                   <Trash2 size={15} />
                 </button>
@@ -97,7 +112,7 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
         </ul>
       )}
 
-      <button className={cn("btn-primary", kinds.length > 0 && "mt-3")} onClick={() => { setEditing("new"); setForm({ name: "", color: "#6366f1" }); }}>
+      <button className={cn("btn-primary", kinds.length > 0 && "mt-3")} onClick={() => { setEditing("new"); setForm(EMPTY_FORM); }}>
         <Plus size={16} /> Nuevo tipo
       </button>
 
@@ -137,6 +152,18 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-500">Vista previa:</span>
               <TypeBadge kind={{ name: form.name || "Nombre", color: form.color }} />
+            </div>
+            <div className="space-y-3 border-t border-slate-200 pt-3 dark:border-slate-800">
+              <h3 className="text-sm font-semibold">Automatización (opcional)</h3>
+              <div>
+                <label className="label" htmlFor="kind-title-tpl">Título automático</label>
+                <input id="kind-title-tpl" className="input" value={form.titleTemplate} onChange={(e) => setForm({ ...form, titleTemplate: e.target.value })} maxLength={200} />
+              </div>
+              <div>
+                <label className="label" htmlFor="kind-desc-tpl">Texto inicial de la descripción</label>
+                <textarea id="kind-desc-tpl" className="input min-h-20" value={form.descriptionTemplate} onChange={(e) => setForm({ ...form, descriptionTemplate: e.target.value })} maxLength={2000} rows={3} />
+              </div>
+              <p className="text-xs text-slate-500">Al elegir este tipo en una tarea se rellenan solos el título y el comienzo de la descripción.</p>
             </div>
           </form>
         </Modal>

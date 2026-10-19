@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.7.0"
+version: "v1.8.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.7.0
+**Versión de la aplicación:** v1.8.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -142,10 +142,13 @@ Además, `Task` tiene `dueDate` (fecha límite, solo día), `Column` tiene `isDo
 ### 3.2 Proyectos
 
 - Para cambiar de proyecto, pulsa el **nombre del proyecto** en la parte superior del tablero (o en la barra superior en móvil) y elige otro en el desplegable. También sirve el selector de la barra lateral. La app recuerda el último que abriste.
-- Los administradores crean proyectos desde el selector (**Nuevo proyecto**). Cada proyecto nuevo trae las columnas *Backlog*, *En progreso*, *Siguiente salto a producción*, *En producción* y *Cerrado*.
+- Los administradores crean proyectos desde el selector (**Nuevo proyecto**). Pueden elegir una **plantilla** (ver 3.15) y marcarlo como **privado**. Sin plantilla, el proyecto trae las columnas *Backlog*, *En progreso*, *Siguiente salto a producción*, *En producción* y *Cerrado*.
 - **Ajustes del proyecto** contiene:
   - nombre y descripción (admins);
-  - **visibilidad** (admins): *Visible para todos* o *Solo los usuarios seleccionados*. Los administradores siempre ven todos los proyectos;
+  - **visibilidad** (admins), con tres opciones:
+    - *Visible para todos*;
+    - *Solo los usuarios seleccionados* (y los administradores);
+    - *Privado: solo tú*. Nadie más lo ve ni puede entrar, tampoco los demás administradores, y no aparece en sus listados, avisos ni asignaciones. Pide confirmación. También se puede elegir al crear el proyecto;
   - etiquetas;
   - borrado del proyecto (admins; pide escribir el nombre para confirmar).
 
@@ -170,7 +173,8 @@ Desde el menú «⋯» de cada columna:
 - **Atajo de captura:** pega una imagen (Ctrl/⌘+V) con el tablero en pantalla y se abre *Nueva tarea* con la captura adjunta.
 - **Editar:** haz clic en la tarjeta. Los cambios se guardan solos (título y enlace al salir del campo; tipo, color, responsable, etiquetas y columna al cambiarlos). La descripción admite Markdown (Ctrl/⌘+Enter guarda).
 - **Checklist:** añade elementos y márcalos. La tarjeta muestra el progreso (p. ej. `2/4`).
-- **Capturas:** pega con Ctrl/⌘+V dentro del diálogo, o usa *Añadir* para elegir un archivo. Al tocar o hacer clic en una imagen se ve **a pantalla completa**; se cierra con la **X**, tocando fuera de la imagen, con Escape o con el botón atrás. Con varias imágenes, las flechas pasan de una a otra. En móvil también tienes el botón **Cámara**, al crear la tarea y en el detalle de una tarea existente. Cada imagen se reduce a 1280 px de ancho como máximo y se guarda como WebP (calidad 75).
+- **Adjuntos:** cualquier tipo de archivo de hasta 10 MB. Pégalos con Ctrl/⌘+V, usa *Añadir* o **arrástralos** sobre la tarea abierta (aparece «Suelta para adjuntar»); también desde la ventana de descargas del navegador. Los que no son imagen se listan con su icono, nombre y tamaño, y se descargan (nunca se abren dentro de Pizarro, por seguridad).
+- **Capturas e imágenes:** al tocar o hacer clic en una imagen se ve **a pantalla completa**; se cierra con la **X**, tocando fuera de la imagen, con Escape o con el botón atrás. Con varias imágenes, las flechas pasan de una a otra. En móvil también tienes el botón **Cámara**, al crear la tarea y en el detalle de una tarea existente. Cada imagen se reduce a 1280 px de ancho como máximo y se guarda como WebP (calidad 75).
 - **Archivar** oculta la tarjeta del tablero (desde su detalle o, para varias, con **Archivar** en la barra de selección). **Borrar** la elimina con sus adjuntos.
 - **Archivadas:** botón en la cabecera del tablero (escritorio) o entrada **Archivadas** del menú lateral. Abre un listado con filtro de las tareas archivadas: tipo, fecha, columna de la que salieron y, si pasaron por una release, la etiqueta **En release: …**. **Recuperar** la devuelve al final de la columna en la que estaba; si esa columna ya no existe, a la primera columna del proyecto (Backlog).
 - En escritorio, el detalle de la tarjeta cabe entero en la pantalla: la columna principal y la lateral se desplazan cada una por su lado.
@@ -186,6 +190,8 @@ Desde el menú «⋯» de cada columna:
 - También puedes cambiar la columna desde el detalle de la tarjeta.
 
 ### 3.6 Generar una release
+
+**Tareas fijas («Siempre en la release»).** Al pie de la columna *Siguiente salto a producción* hay una sección plegable que indica cuántas tareas fijas tiene. Al abrirla, se despliega hacia arriba con esas tareas y el botón **+ Añadir**. Son tareas que se repiten en cada despliegue (por ejemplo, «Generar el PDF de la release»): entran preseleccionadas en cada release (con la marca *fija*), pero **no salen de la columna** al marcarla como desplegada. También se puede marcar o desmarcar una tarea existente de esa columna con *Fija en la release* en su detalle. Si se mueve a otra columna o se archiva, deja de ser fija.
 
 1. Prepara tus plantillas en **Mi perfil y plantillas → Plantillas de release notes**. Puedes tener **varias cabeceras** (por ejemplo, «Contexto para IA» o «Para negocio») y **varios pies** (por ejemplo, «Checklist de cierre»), cada uno con su nombre.
 2. En el tablero, pulsa **Generar Release** en la columna *Siguiente salto a producción*.
@@ -263,12 +269,12 @@ Botón **Informe PDF** en la cabecera del tablero (o en el menú lateral). Se ab
 El menú lateral muestra, debajo de las opciones del proyecto: **Avisos**, **Mis tareas asignadas**, **Mi perfil y plantillas**, **Administración** (solo admins), **Historial de versiones** e **Instalar app**.
 
 - **Mis tareas asignadas:** todas tus tarjetas activas en los proyectos a los que tienes acceso, agrupadas por proyecto y con su columna actual.
-- **Releases:** histórico del proyecto, con opción de copiar o descargar cada release, y de **Borrar release** (la quita del histórico con sus adjuntos; las tareas no cambian) o **Borrar adjuntos** (conserva el texto). Ambas piden confirmación. Cada entrada indica cuántas tareas y adjuntos tiene; al abrirla se ven los nombres de los adjuntos y el botón **Descargar adjuntos** (ZIP).
-- **Historial de versiones:** versión actual de la app y cambios de cada versión.
+- **Releases:** histórico del proyecto, con **buscador** por texto (título y contenido), opción de copiar o descargar cada release, y de **Borrar release** (la quita del histórico con sus adjuntos; las tareas no cambian) o **Borrar adjuntos** (conserva el texto). Ambas piden confirmación. Cada entrada indica cuántas tareas y adjuntos tiene; al abrirla se ven los nombres de los adjuntos y el botón **Descargar adjuntos** (ZIP).
+- **Historial de versiones:** versión actual de la app y cambios de cada versión, con **buscador** por texto.
 
 ### 3.12 Móvil
 
-- El tablero muestra una columna cada vez. Cambias de columna con las pestañas superiores, que indican cuántas tarjetas tiene cada una.
+- El tablero muestra una columna cada vez. Cambias de columna con las pestañas superiores, que indican cuántas tarjetas tiene cada una, o **deslizando el dedo a izquierda o derecha** sobre la columna.
 - El botón flotante **+** crea una tarea en la columna visible, con opción de **Cámara** o **Archivo**. El botón *Crear tarea* queda siempre visible abajo del formulario.
 - El botón flotante pequeño de encima crea **varias tareas** pegando una lista (ver 3.4).
 - Para mover tarjetas entre columnas en móvil, usa la selección múltiple o el selector *Columna* del detalle. Para reordenar dentro de la columna, arrastra el asa ⋮⋮ (ver 3.5).
@@ -292,18 +298,22 @@ Hay dos clases de tipos. Cada tipo es una sección de las release notes.
 
 - **Generales** (solo admins): **Administración → Tipos de tarea**. Están disponibles en todos los proyectos.
 - **Del proyecto** (cualquiera con acceso al proyecto): **Ajustes del proyecto → Tipos de tarea del proyecto**. Solo aparecen en ese proyecto.
+- **Qué tipos generales usa cada proyecto:** en esa misma sección, la lista *Tipos generales que usa este proyecto*. Los desmarcados no aparecen en sus selectores ni en sus releases. Si un tipo tiene tareas en el proyecto, al desmarcarlo se pide a qué tipo pasan. Siempre queda al menos un tipo.
 
 En ambos casos:
 - **Nuevo tipo:** nombre y color (de la paleta o cualquier otro con el selector de color).
 - Las flechas cambian el **orden**. En los selectores y en la release van primero los generales y después los del proyecto, cada grupo en su orden.
-- **Tipo especial «Respuesta»:** si existe un tipo llamado así (general o del proyecto), al elegirlo en una tarea el título pasa a ser «Respuesta» y la descripción empieza por «Respondo a las preguntas y lo que necesitas de mi:». No se aplica en *Varias tareas*.
+- **Automatización:** cada tipo puede tener un **título automático** y un **texto inicial de la descripción** (al crearlo o editarlo, sección *Automatización*). Al elegir ese tipo en una tarea nueva o existente, el título se sustituye y la descripción empieza por ese texto (sin repetirlo si ya está). La lista de tipos explica en una línea lo que hace cada uno. No se aplica en *Varias tareas*.
+- **Tipos del sistema:** **Respuesta** (título «Respuesta» y descripción que empieza por «Respondo a las preguntas y lo que necesitas de mi:») viene de serie, lleva la etiqueta *Del sistema* y **no se puede borrar**; sí se puede cambiar su nombre, color o automatización.
 - **Borrar** un tipo pide a qué tipo pasan sus tareas. Un tipo general solo puede pasar a otro general, y siempre queda al menos uno. Un tipo de proyecto puede pasar a un general o a otro del mismo proyecto.
 - **Nombres:** un tipo de proyecto no puede llamarse igual que un general ni que otro de su proyecto. Dos proyectos sí pueden tener tipos con el mismo nombre. Un tipo general nuevo no puede repetir el nombre de ningún tipo de proyecto.
 - Al borrar un proyecto se borran también sus tipos.
 
 ### 3.15 Administración (admins)
 
-La entrada **Administración** del menú lateral reúne tres pestañas: **Usuarios**, **Tipos de tarea** (ver 3.14) y **Logs**.
+La entrada **Administración** del menú lateral reúne cuatro pestañas: **Usuarios**, **Tipos de tarea** (ver 3.14), **Plantillas** y **Logs**.
+
+**Plantillas de proyecto:** definen las columnas (nombre, orden, rol especial *Siguiente salto* o *En producción* y si cuentan como terminadas), los tipos de tarea propios (con su automatización), qué tipos generales no usará el proyecto y las etiquetas. **Crear desde un proyecto…** rellena una plantilla a partir de un proyecto existente. Al crear un proyecto se elige la plantilla en *Nuevo proyecto*.
 
 **Logs:** registro detallado de la actividad de los últimos 7 días (configurable con `LOG_RETENTION_DAYS`):
 - páginas visitadas, inicios de sesión (también los fallidos, con el email probado y el motivo, nunca la contraseña) y cierres de sesión;
@@ -379,6 +389,7 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 - **Salud:** `GET /api/health` → `{"status":"ok"}` si la base de datos responde.
 - **Logs de la app:** *Administración → Logs* (ver 3.15), con la duración de cada acción: es el primer sitio donde mirar si algo va lento o falla.
 - **Logs del contenedor:** en Railway, *Deployments → View logs*. Los errores inesperados también salen ahí con el prefijo `[action]`, `[upload]` o `[uploads]`.
+- **Errores en el navegador:** la pantalla «Algo ha fallado» y cualquier excepción no capturada del navegador se registran en *Logs* (categoría *client*), con la página, el navegador y el código del error para cruzarlo con el del servidor.
 - **Uso del volumen:** visible en la pestaña del volumen. Como referencia, una captura típica ocupa entre 50 y 300 KB.
 
 ### 4.9 Resolución de problemas

@@ -10,7 +10,14 @@ import { POSITION_STEP } from "@/lib/positions";
 import { requireAdmin, requireUser } from "@/lib/session";
 import * as v from "@/lib/validation";
 
-const kindSchema = z.object({ name: v.name.max(40, "Máximo 40 caracteres."), color: v.hexColor });
+const kindSchema = z.object({
+  name: v.name.max(40, "Máximo 40 caracteres."),
+  color: v.hexColor,
+  // Automatización opcional al elegir el tipo (vacío = ninguna).
+  titleTemplate: z.string().trim().max(200, "Máximo 200 caracteres.").default(""),
+  descriptionTemplate: z.string().trim().max(2000, "Máximo 2000 caracteres.").default(""),
+});
+type KindInput = { name: string; color: string; titleTemplate?: string; descriptionTemplate?: string };
 const MAX_KINDS = 30;
 
 /**
@@ -27,7 +34,7 @@ async function authorize(projectId: string | null) {
 
 /** Un tipo, con su ámbito, tras comprobar que se puede gestionar. */
 async function loadKind(kindId: string) {
-  const kind = await db.taskKind.findUnique({ where: { id: v.id.parse(kindId) }, select: { id: true, projectId: true } });
+  const kind = await db.taskKind.findUnique({ where: { id: v.id.parse(kindId) }, select: { id: true, name: true, projectId: true, system: true } });
   if (!kind) throw notFound();
   await authorize(kind.projectId);
   return kind;
@@ -58,7 +65,7 @@ function revalidate(projectId: string | null) {
 }
 
 /** Crea un tipo general (sin projectId, solo admins) o exclusivo del proyecto indicado. */
-export async function createKind(input: { name: string; color: string }, projectId?: string | null) {
+export async function createKind(input: KindInput, projectId?: string | null) {
   return runAction({ name: "kinds.createKind", args: [input, projectId] }, async () => {
     const scope = projectId ? v.id.parse(projectId) : null;
     await authorize(scope);
@@ -68,14 +75,14 @@ export async function createKind(input: { name: string; color: string }, project
     const last = await db.taskKind.findFirst({ where: { projectId: scope }, orderBy: { position: "desc" }, select: { position: true } });
     const kind = await db.taskKind.create({
       data: { ...data, projectId: scope, position: (last?.position ?? 0) + POSITION_STEP },
-      select: { id: true, name: true, color: true },
+      select: { id: true, name: true, color: true, titleTemplate: true, descriptionTemplate: true, system: true },
     });
     revalidate(scope);
     return kind;
   });
 }
 
-export async function updateKind(kindId: string, input: { name: string; color: string }) {
+export async function updateKind(kindId: string, input: KindInput) {
   return runAction({ name: "kinds.updateKind", args: [kindId, input] }, async () => {
     const kind = await loadKind(kindId);
     const data = kindSchema.parse(input);
@@ -111,6 +118,7 @@ export async function moveKind(kindId: string, direction: number) {
 export async function deleteKind(kindId: string, replacementId: string) {
   return runAction({ name: "kinds.deleteKind", args: [kindId, replacementId] }, async () => {
     const kind = await loadKind(kindId);
+    if (kind.system) throw new AppError(`«${kind.name}» es un tipo del sistema y no se puede borrar.`);
     const replacement = v.id.parse(replacementId);
     if (kind.id === replacement) throw new AppError("Elige otro tipo para las tareas.");
     const target = await db.taskKind.findUnique({ where: { id: replacement }, select: { projectId: true } });

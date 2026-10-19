@@ -9,6 +9,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { logout } from "@/actions/auth";
 import { createProject } from "@/actions/projects";
+import { listTemplates } from "@/actions/templates";
 import type { CurrentUser } from "@/lib/session";
 import { InstallApp } from "./InstallApp";
 import { ProjectMenu, ProjectsContext } from "./ProjectMenu";
@@ -239,6 +240,17 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
   const [pending, start] = useTransition();
   const pathname = usePathname();
   const [target, setTarget] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<{ id: string; name: string; description: string }[]>([]);
+  const [templateId, setTemplateId] = useState("");
+  const [isPrivate, setIsPrivate] = useState(false);
+  // Las plantillas se piden al abrir el modal.
+  useEffect(() => {
+    let cancelled = false;
+    listTemplates().then((res) => {
+      if (!cancelled && res.ok) setTemplates(res.data);
+    });
+    return () => { cancelled = true; };
+  }, []);
   // Se cierra al llegar al proyecto nuevo, no antes: cerrar retira su entrada del historial
   // y eso cancelaría la navegación en curso.
   useEffect(() => {
@@ -247,7 +259,7 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     start(async () => {
-      const res = await createProject(name);
+      const res = await createProject(name, { templateId: templateId || null, isPrivate });
       if (!res.ok) return toast(res.error, "error");
       setTarget(`/p/${res.data.id}`);
       router.push(`/p/${res.data.id}`);
@@ -259,8 +271,22 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
         <div>
           <label className="label" htmlFor="project-name">Nombre</label>
           <input id="project-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required data-autofocus />
-          <p className="mt-1 text-xs text-slate-500">Se crea con las 5 columnas por defecto; luego puedes cambiarlas.</p>
+          <p className="mt-1 text-xs text-slate-500">Luego puedes cambiar las columnas, tipos y etiquetas.</p>
         </div>
+        <div>
+          <label className="label" htmlFor="project-template">Plantilla</label>
+          <select id="project-template" className="input" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+            <option value="">Columnas por defecto</option>
+            {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          {templates.find((t) => t.id === templateId)?.description && (
+            <p className="mt-1 text-xs text-slate-500">{templates.find((t) => t.id === templateId)?.description}</p>
+          )}
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
+          Proyecto privado (solo lo verás tú)
+        </label>
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
           <button type="submit" className="btn-primary" disabled={pending || !!target || !name.trim()}>Crear</button>

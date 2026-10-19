@@ -43,7 +43,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
     where: { id: { in: [...ids] }, projectId, project: visibleProjectsWhere(user) },
     select: {
       id: true,
-      attachments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, originalName: true } },
+      attachments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, originalName: true, isImage: true } },
     },
   });
   // Todas las tareas deben existir en este proyecto y ser visibles.
@@ -56,7 +56,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
     const names = attachmentFileNames(item.code, attachments);
     for (const [i, a] of attachments.entries()) {
       try {
-        files.push({ name: names[i]!, data: await readFile(attachmentPath(a.id, "full")) });
+        files.push({ name: names[i]!, data: await readFile(attachmentPath(a.id, a.isImage ? "full" : "file")) });
       } catch {
         // Fichero ausente en disco: se omite en lugar de romper toda la descarga.
       }

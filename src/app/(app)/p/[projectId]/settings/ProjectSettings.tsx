@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, Check, Loader2, Lock, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
+import { CalendarClock, Check, EyeOff, Loader2, Lock, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
@@ -15,13 +15,15 @@ import { TypeBadge } from "@/components/ui/TypeBadge";
 import { PALETTE } from "@/lib/constants";
 import type { KindOption, LabelOption } from "@/lib/types";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
+import { setGeneralKindEnabled } from "@/actions/project-kinds";
 
 interface Props {
   isAdmin: boolean;
-  project: { id: string; name: string; description: string; restricted: boolean; memberIds: string[] };
+  project: { id: string; name: string; description: string; visibility: "PUBLIC" | "RESTRICTED" | "PRIVATE"; memberIds: string[] };
   labels: LabelOption[];
   kinds: KindRow[];
-  generalKinds: KindOption[];
+  /** Todos los tipos generales, con si el proyecto los usa y cuántas tareas tienen aquí. */
+  generalKinds: (KindOption & { enabled: boolean; taskCount: number })[];
   deliverables: DeliverableRow[];
   users: { id: string; name: string; role: "ADMIN" | "MEMBER" }[];
 }
@@ -42,7 +44,7 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
   const [pending, start] = useTransition();
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description);
-  const [restricted, setRestricted] = useState(project.restricted);
+  const [visibility, setVisibility] = useState(project.visibility);
   const [members, setMembers] = useState(new Set(project.memberIds));
   const [labels, setLabels] = useState(initialLabels);
   const [confirmName, setConfirmName] = useState("");
@@ -82,18 +84,26 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
       )}
 
       {isAdmin && (
-        <Section title="Visibilidad" description="Por defecto todos los usuarios ven el proyecto. Puedes limitarlo a usuarios concretos (los administradores siempre lo ven).">
+        <Section title="Visibilidad" description="Por defecto todos los usuarios ven el proyecto. Puedes limitarlo a usuarios concretos o hacerlo privado.">
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-sm">
-              <input type="radio" checked={!restricted} onChange={() => setRestricted(false)} />
+              <input type="radio" checked={visibility === "PUBLIC"} onChange={() => setVisibility("PUBLIC")} />
               <UsersIcon size={15} /> Visible para todos los usuarios
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="radio" checked={restricted} onChange={() => setRestricted(true)} />
-              <Lock size={15} /> Solo los usuarios seleccionados
+              <input type="radio" checked={visibility === "RESTRICTED"} onChange={() => setVisibility("RESTRICTED")} />
+              <Lock size={15} /> Solo los usuarios seleccionados (y los administradores)
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="radio" className="mt-1" checked={visibility === "PRIVATE"} onChange={() => setVisibility("PRIVATE")} />
+              <EyeOff size={15} className="mt-0.5 shrink-0" />
+              <span>
+                Privado: solo tú
+                <span className="block text-xs text-slate-500">Nadie más lo ve ni puede entrar, tampoco el resto de administradores.</span>
+              </span>
             </label>
           </div>
-          {restricted && (
+          {visibility === "RESTRICTED" && (
             <ul className="mt-3 divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
               {users.map((u) => (
                 <li key={u.id}>
@@ -122,7 +132,10 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
           <button
             className="btn-primary mt-4"
             disabled={pending}
-            onClick={() => run(() => setProjectVisibility(project.id, restricted, [...members]), "Visibilidad actualizada", () => router.refresh())}
+            onClick={() => {
+              if (visibility === "PRIVATE" && project.visibility !== "PRIVATE" && !window.confirm("¿Hacer el proyecto privado? Dejará de verlo todo el mundo menos tú, incluidos los demás administradores.")) return;
+              run(() => setProjectVisibility(project.id, visibility, [...members]), "Visibilidad actualizada", () => router.refresh());
+            }}
           >
             Guardar visibilidad
           </button>
@@ -142,11 +155,9 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
         title="Tipos de tarea del proyecto"
         description="Exclusivos de este proyecto. Se suman a los generales y van detrás en las releases."
       >
-        <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-          Generales:
-          {generalKinds.map((k) => <TypeBadge key={k.id} kind={k} />)}
-        </div>
-        <KindsManager kinds={kinds} projectId={project.id} otherKinds={generalKinds} embedded />
+        <GeneralKinds projectId={project.id} generalKinds={generalKinds} projectKinds={kinds} />
+        <div className="mt-4 mb-2 text-xs font-medium text-slate-500">Tipos propios del proyecto</div>
+        <KindsManager kinds={kinds} projectId={project.id} otherKinds={generalKinds.filter((k) => k.enabled)} embedded />
       </Section>
 
       <Section id="labels" title="Etiquetas" description="Etiquetas propias de este proyecto para clasificar tarjetas.">
@@ -376,6 +387,78 @@ function Deliverables({ projectId, initial }: { projectId: string; initial: Deli
           </div>
         </form>
       </Modal>
+    </div>
+  );
+}
+
+/** Tipos generales que usa el proyecto: los desmarcados no aparecen en él. */
+function GeneralKinds({ projectId, generalKinds, projectKinds }: {
+  projectId: string;
+  generalKinds: (KindOption & { enabled: boolean; taskCount: number })[];
+  projectKinds: KindRow[];
+}) {
+  const router = useRouter();
+  const toast = useToast();
+  const [pending, start] = useTransition();
+  const [disabling, setDisabling] = useState<(KindOption & { taskCount: number }) | null>(null);
+  const [replacement, setReplacement] = useState("");
+
+  const apply = (kindId: string, enabled: boolean, replacementId: string | null) =>
+    start(async () => {
+      const res = await setGeneralKindEnabled(projectId, kindId, enabled, replacementId);
+      if (!res.ok) return toast(res.error, "error");
+      toast(enabled ? "Tipo activado en el proyecto" : "Tipo desactivado en el proyecto");
+      setDisabling(null);
+      router.refresh();
+    });
+
+  const targets = (kindId: string) => [
+    ...generalKinds.filter((k) => k.enabled && k.id !== kindId),
+    ...projectKinds,
+  ];
+
+  return (
+    <div>
+      <div className="mb-1.5 text-xs font-medium text-slate-500">Tipos generales que usa este proyecto</div>
+      <div className="flex flex-wrap gap-x-4 gap-y-2">
+        {generalKinds.map((k) => (
+          <label key={k.id} className={cn("flex items-center gap-1.5 text-sm", pending && "opacity-60")}>
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-brand-600"
+              checked={k.enabled}
+              disabled={pending}
+              onChange={() => {
+                if (k.enabled && k.taskCount > 0) {
+                  setDisabling(k);
+                  setReplacement(targets(k.id)[0]?.id ?? "");
+                } else apply(k.id, !k.enabled, null);
+              }}
+            />
+            <TypeBadge kind={k} />
+            {k.taskCount > 0 && <span className="text-xs text-slate-500">{k.taskCount}</span>}
+          </label>
+        ))}
+      </div>
+      <p className="mt-1 text-xs text-slate-500">Los desmarcados no aparecen en los selectores ni en las releases de este proyecto.</p>
+      {disabling && (
+        <Modal open onClose={() => setDisabling(null)} title={`Dejar de usar «${disabling.name}»`} size="sm">
+          <div className="space-y-3">
+            <p className="text-sm">
+              {disabling.taskCount === 1 ? "Su tarea en este proyecto pasará al tipo:" : `Sus ${disabling.taskCount} tareas en este proyecto pasarán al tipo:`}
+            </p>
+            <select className="input" value={replacement} onChange={(e) => setReplacement(e.target.value)} aria-label="Tipo de destino">
+              {targets(disabling.id).map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
+            </select>
+            <div className="flex justify-end gap-2">
+              <button className="btn-secondary" onClick={() => setDisabling(null)}>Cancelar</button>
+              <button className="btn-primary" disabled={pending || !replacement} onClick={() => apply(disabling.id, false, replacement)}>
+                Dejar de usarlo
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

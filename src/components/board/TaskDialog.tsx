@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, Camera, ExternalLink, FileSpreadsheet, FileText, ImagePlus, Loader2, Plus, Send, Trash2, X } from "lucide-react";
+import { Archive, Camera, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, ImagePlus, Loader2, Plus, Send, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -17,11 +17,11 @@ import { Markdown } from "../ui/Markdown";
 import { MentionTextarea, type MentionCommand } from "../ui/MentionTextarea";
 import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
-import { applyKindPreset } from "@/lib/kinds-special";
+import { applyKindTemplate } from "@/lib/kinds-special";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
 import { createAndOpenGoogleFile } from "./google";
-import { imageFilesFrom, uploadImage } from "./upload";
+import { filesFrom, formatBytes, uploadFile, useFileDrop } from "./upload";
 
 export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => void }) {
   const board = useBoard();
@@ -62,7 +62,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
     if (columnId === task.columnId) return;
     const before = board.taskById.get(task.id)!;
     const last = Math.max(0, ...[...board.taskById.values()].filter((t) => t.columnId === columnId).map((t) => t.position));
-    board.patchTask(task.id, { columnId, position: last + 1024 });
+    board.patchTask(task.id, { columnId, position: last + 1024, evergreen: false });
     const res = await board.track(moveTask(task.id, columnId, null, null));
     if (!res.ok) {
       board.upsertTask(before);
@@ -76,7 +76,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
     setUploading((n) => n + files.length);
     for (const file of files) {
       try {
-        const att = await board.track(uploadImage(task.id, file));
+        const att = await board.track(uploadFile(task.id, file));
         setDetail((d) => (d ? { ...d, attachments: [...d.attachments, att] } : d));
         board.patchTask(task.id, (t) => ({ attachmentCount: t.attachmentCount + 1 }));
       } catch (err) {
@@ -87,13 +87,25 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
     }
   };
 
+  const images = detail?.attachments.filter((a) => a.isImage) ?? [];
+  const files = detail?.attachments.filter((a) => !a.isImage) ?? [];
+
+  const removeAttachment = async (id: string, question: string) => {
+    if (!window.confirm(question)) return;
+    const res = await board.track(deleteAttachment(id));
+    if (!res.ok) return toast(res.error, "error");
+    setDetail((d) => (d ? { ...d, attachments: d.attachments.filter((x) => x.id !== id) } : d));
+    board.patchTask(task.id, (t) => ({ attachmentCount: Math.max(0, t.attachmentCount - 1) }));
+  };
+
   const onPaste = (e: React.ClipboardEvent) => {
-    const files = imageFilesFrom(e.clipboardData.items);
+    const files = filesFrom(e.clipboardData.items);
     if (files.length) {
       e.preventDefault();
       upload(files);
     }
   };
+  const dropping = useFileDrop(upload);
 
   const remove = async () => {
     if (!window.confirm("¿Borrar definitivamente esta tarea y sus adjuntos?")) return;
@@ -135,7 +147,8 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
 
   /** Cambio de tipo; con «Respuesta» también se guardan título y descripción predefinidos. */
   const changeKind = (kindId: string) => {
-    const preset = detail ? applyKindPreset(board.kinds.find((k) => k.id === kindId)?.name ?? "", { title, description: detail.description }) : null;
+    const kind = board.kindById.get(kindId);
+    const preset = detail && kind ? applyKindTemplate(kind, { title, description: detail.description }) : null;
     if (!preset) return save({ kindId }, { kindId });
     setTitle(preset.title);
     setDetail((d) => (d ? { ...d, description: preset.description } : d));
@@ -207,17 +220,17 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
               <div className="flex items-center gap-1">
                 <label className="btn-ghost cursor-pointer py-1 text-xs sm:hidden">
                   <Camera size={15} /> Cámara
-                  <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { upload(imageFilesFrom(e.target.files)); e.target.value = ""; }} />
+                  <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { upload(filesFrom(e.target.files)); e.target.value = ""; }} />
                 </label>
                 <label className="btn-ghost cursor-pointer py-1 text-xs">
                   <ImagePlus size={15} /> Añadir
-                  <input type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { upload(imageFilesFrom(e.target.files)); e.target.value = ""; }} />
+                  <input type="file" multiple className="sr-only" onChange={(e) => { upload(filesFrom(e.target.files)); e.target.value = ""; }} />
                 </label>
               </div>
             </div>
-            <p className="mb-2 truncate text-xs text-slate-500 max-sm:hidden">Pega imágenes con Ctrl+V / ⌘+V.</p>
+            <p className="mb-2 truncate text-xs text-slate-500 max-sm:hidden">Pega o arrastra archivos (máx. 10 MB)</p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {detail?.attachments.map((a, i) => (
+              {images.map((a, i) => (
                 <div key={a.id} className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
                   <button type="button" onClick={() => setLightbox(i)} className="block w-full" aria-label={`Ver ${a.originalName}`}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -227,13 +240,7 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
                     type="button"
                     className="absolute top-1 right-1 rounded-md bg-black/60 p-1 text-white opacity-0 group-hover:opacity-100 max-md:opacity-100"
                     aria-label="Borrar adjunto"
-                    onClick={async () => {
-                      if (!window.confirm("¿Borrar esta imagen?")) return;
-                      const res = await board.track(deleteAttachment(a.id));
-                      if (!res.ok) return toast(res.error, "error");
-                      setDetail((d) => (d ? { ...d, attachments: d.attachments.filter((x) => x.id !== a.id) } : d));
-                      board.patchTask(task.id, (t) => ({ attachmentCount: Math.max(0, t.attachmentCount - 1) }));
-                    }}
+                    onClick={() => removeAttachment(a.id, "¿Borrar esta imagen?")}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -245,6 +252,26 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
                 </div>
               )}
             </div>
+            {files.length > 0 && (
+              <ul className={cn("space-y-1.5", images.length > 0 && "mt-2")}>
+                {files.map((a) => {
+                  const Icon = fileIcon(a);
+                  return (
+                    <li key={a.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800">
+                      <Icon size={18} className="shrink-0 text-slate-500" />
+                      <span className="min-w-0 flex-1 truncate" title={a.originalName}>{a.originalName}</span>
+                      <span className="shrink-0 text-xs text-slate-500">{formatBytes(a.size)}</span>
+                      <a href={`/api/attachments/${a.id}?download=1`} download={a.originalName} className="btn-icon h-7 w-7 shrink-0" aria-label={`Descargar ${a.originalName}`} title="Descargar">
+                        <Download size={15} />
+                      </a>
+                      <button type="button" className="btn-icon h-7 w-7 shrink-0 text-red-600" aria-label="Borrar adjunto" onClick={() => removeAttachment(a.id, "¿Borrar este archivo?")}>
+                        <Trash2 size={15} />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
             {detail && detail.attachments.length === 0 && uploading === 0 && (
               <p className="text-xs text-slate-400">Sin adjuntos.</p>
             )}
@@ -259,6 +286,17 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
               {board.columns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
+          {board.columns.find((c) => c.id === task.columnId)?.role === "NEXT_RELEASE" && (
+            <label className="flex items-center gap-2" title="Se queda en la columna de la release al desplegar y se incluye siempre en el texto">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-brand-600"
+                checked={task.evergreen}
+                onChange={(e) => save({ evergreen: e.target.checked }, { evergreen: e.target.checked })}
+              />
+              Fija en la release (evergreen)
+            </label>
+          )}
           <Field label="Tipo">
             <TypeSelector kinds={board.kinds} value={task.kindId} onChange={changeKind} />
           </Field>
@@ -367,14 +405,21 @@ export function TaskDialog({ task, onClose }: { task: BoardTask; onClose: () => 
         </aside>
       </div>
 
-      {lightbox !== null && detail && detail.attachments.length > 0 && (
+      {dropping && (
+        <div className="pointer-events-none fixed inset-0 z-[70] flex items-center justify-center bg-brand-500/15 p-4 backdrop-blur-[1px]">
+          <div className="rounded-2xl border-2 border-dashed border-brand-500 bg-white/90 px-8 py-6 text-lg font-semibold text-brand-700 shadow-xl dark:bg-slate-900/90 dark:text-brand-300">
+            Suelta para adjuntar
+          </div>
+        </div>
+      )}
+      {lightbox !== null && images.length > 0 && (
         <Lightbox
-          images={detail.attachments.map((a) => ({
+          images={images.map((a) => ({
             src: `/api/attachments/${a.id}`,
             alt: a.originalName,
             downloadHref: `/api/attachments/${a.id}?download=1`,
           }))}
-          index={Math.min(lightbox, detail.attachments.length - 1)}
+          index={Math.min(lightbox, images.length - 1)}
           onIndexChange={setLightbox}
           onClose={() => setLightbox(null)}
         />
@@ -701,4 +746,16 @@ function Comments({ taskId, detail, setDetail, users, onGoogle }: {
       </div>
     </section>
   );
+}
+
+/** Icono según el tipo del archivo adjunto (MIME y, si hace falta, extensión). */
+function fileIcon(a: { mimeType: string; originalName: string }) {
+  const mime = a.mimeType;
+  const ext = a.originalName.split(".").pop()?.toLowerCase() ?? "";
+  if (mime.startsWith("audio/")) return FileAudio;
+  if (mime.startsWith("video/")) return FileVideo;
+  if (/zip|tar|gzip|rar|7z/.test(mime) || ["zip", "rar", "7z", "gz", "tar"].includes(ext)) return FileArchive;
+  if (/spreadsheet|excel|csv/.test(mime) || ["xls", "xlsx", "ods", "csv"].includes(ext)) return FileSpreadsheet;
+  if (mime === "application/pdf" || mime.startsWith("text/") || /word|document|rtf/.test(mime) || ["pdf", "doc", "docx", "txt", "odt", "rtf", "md"].includes(ext)) return FileText;
+  return FileIcon;
 }

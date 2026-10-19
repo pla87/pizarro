@@ -1,6 +1,33 @@
 {
   "versions": [
     {
+      "version": "1.8.0",
+      "date": "2026-10-19",
+      "summary": "Proyectos privados, tipos generales por proyecto, plantillas de proyecto, tareas fijas en la release, adjuntos de cualquier tipo con arrastrar y soltar, buscadores, automatización de tipos y cambio de columna deslizando en móvil.",
+      "changes": {
+        "nuevas": [
+          "Proyectos privados: solo los ve su dueño, ni siquiera el resto de administradores (Ajustes del proyecto → Visibilidad o al crearlo).",
+          "Cada proyecto elige qué tipos generales usa; los desmarcados no aparecen en él (al desmarcar uno con tareas se elige a qué tipo pasan).",
+          "Plantillas de proyecto (Administración → Plantillas): columnas y roles, tipos propios, tipos generales ocultos y etiquetas; se eligen al crear un proyecto.",
+          "Tareas fijas en la columna de release («Siempre en la release»): entran en cada release y no salen de la columna al desplegar.",
+          "Adjuntos de cualquier tipo hasta 10 MB y arrastrar archivos a la tarea abierta (también desde las descargas del navegador).",
+          "Buscadores en el histórico de releases y en el historial de versiones.",
+          "Automatización por tipo de tarea: título y texto inicial de la descripción, con su explicación en la lista de tipos.",
+          "Móvil: deslizar a los lados cambia de columna."
+        ],
+        "mejoras": [
+          "«Respuesta» es un tipo del sistema: viene de serie, explica lo que hace y no se puede borrar.",
+          "Los modales tienen un borde claro que los separa del fondo (sobre todo en tema oscuro)."
+        ],
+        "correcciones": [
+          "Los errores del navegador (pantalla «Algo ha fallado» y excepciones no capturadas) ahora quedan en Administración → Logs."
+        ],
+        "tecnicos": [
+          "Migración v1_8: Project.privateOwnerId, ProjectHiddenKind, ProjectTemplate, Task.evergreen, TaskKind (titleTemplate, descriptionTemplate, system) y TaskAttachment (mimeType, isImage, medidas opcionales). Los ficheros que no son imagen se guardan tal cual (<id>.bin) y se sirven siempre como descarga con tipo restringido."
+        ]
+      }
+    },
+    {
       "version": "1.7.0",
       "date": "2026-10-18",
       "summary": "Logs de administración, archivadas en un modal con recuperación a su columna, borrado de releases y adjuntos del histórico, tipo «Respuesta» y columnas que llenan la pantalla.",

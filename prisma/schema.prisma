@@ -43,6 +43,7 @@ model User {
 
   sessions          Session[]
   memberships       ProjectMember[]
+  privateProjects   Project[]         @relation("PrivateProjects")
   assignedTasks     Task[]            @relation("TaskAssignee")
   createdTasks      Task[]            @relation("TaskCreator")
   attachments       TaskAttachment[]
@@ -73,6 +74,8 @@ model Project {
   description String   @default("")
   /// false: visible para todos los usuarios. true: solo admins y miembros explícitos.
   restricted  Boolean  @default(false)
+  /// Proyecto privado: solo lo ve y lo usa este usuario (ni siquiera los demás administradores).
+  privateOwnerId String?
   position    Float    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -84,6 +87,8 @@ model Project {
   releases     Release[]
   deliverables Deliverable[]
   kinds        TaskKind[]
+  hiddenKinds  ProjectHiddenKind[]
+  privateOwner User?           @relation("PrivateProjects", fields: [privateOwnerId], references: [id], onDelete: SetNull)
 
   @@index([position])
 }
@@ -130,6 +135,8 @@ model Task {
   archivedAt    DateTime?
   /// Columna en la que estaba al archivarse (sin clave foránea: la columna puede borrarse después).
   archivedFromColumnId String?
+  /// Tarea fija de la columna «Siguiente salto»: se incluye en cada release y no sale de la columna al desplegar.
+  evergreen     Boolean   @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -190,8 +197,12 @@ model TaskAttachment {
   id           String   @id @default(cuid())
   taskId       String
   originalName String
-  width        Int
-  height       Int
+  /// Tipo MIME del fichero guardado (image/webp para las imágenes, que se convierten).
+  mimeType     String   @default("image/webp")
+  /// Las imágenes se convierten a WebP y tienen miniatura; el resto se guarda tal cual.
+  isImage      Boolean  @default(true)
+  width        Int?
+  height       Int?
   size         Int
   createdById  String?
   createdAt    DateTime @default(now())
@@ -379,9 +390,45 @@ model TaskKind {
   createdAt DateTime @default(now())
   projectId String?
   project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// Automatización: al elegir el tipo, la tarea toma este título (vacío = no cambia).
+  titleTemplate       String @default("")
+  /// Automatización: texto con el que empieza la descripción (vacío = no cambia).
+  descriptionTemplate String @default("")
+  /// Tipo del sistema (p. ej. «Respuesta»): no se puede borrar.
+  system    Boolean  @default(false)
   tasks     Task[]
+  hiddenIn  ProjectHiddenKind[]
 
   @@index([projectId])
+}
+
+/// Tipo general que un proyecto ha decidido no usar.
+model ProjectHiddenKind {
+  projectId String
+  kindId    String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind      TaskKind @relation(fields: [kindId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, kindId])
+  @@index([kindId])
+}
+
+/// Plantilla para crear proyectos (la definen los administradores).
+model ProjectTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  /// [{ name, role, isDone }] en orden.
+  columns     Json
+  /// Tipos propios del proyecto: [{ name, color, titleTemplate, descriptionTemplate }].
+  kinds       Json     @default("[]")
+  /// Nombres de los tipos generales que el proyecto NO usará.
+  hiddenGeneralKinds Json @default("[]")
+  /// [{ name, color }]
+  labels      Json     @default("[]")
+  position    Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 enum CardStyle {

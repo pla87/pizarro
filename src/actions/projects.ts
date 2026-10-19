@@ -2,29 +2,52 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertProjectAccess, visibleProjectsWhere } from "@/lib/access";
 import { DEFAULT_COLUMNS, PALETTE } from "@/lib/constants";
 import { AppError, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
+import { buildTemplateApplication, parseStoredTemplate, type TemplateData } from "@/lib/project-templates";
 import { requireAdmin, requireUser } from "@/lib/session";
 import { removeAttachmentFiles, removeReleaseAttachmentFiles } from "@/lib/uploads";
 import * as v from "@/lib/validation";
 import { dateToIso, isoToDate } from "@/lib/dates";
 import type { LabelOption } from "@/lib/types";
 
-export async function createProject(name: string) {
-  return runAction({ name: "projects.createProject", args: [name] }, async () => {
-    await requireAdmin();
+/** Crea columnas, tipos propios, tipos generales ocultos y etiquetas de una plantilla en el proyecto (dentro de la transacción). */
+async function applyTemplate(tx: Prisma.TransactionClient, projectId: string, template: TemplateData) {
+  const general = await tx.taskKind.findMany({ where: { projectId: null }, orderBy: { position: "asc" }, select: { id: true, name: true } });
+  const app = buildTemplateApplication(template, general);
+  await tx.column.createMany({ data: app.columns.map((c) => ({ ...c, projectId })) });
+  if (app.kinds.length) await tx.taskKind.createMany({ data: app.kinds.map((k) => ({ ...k, projectId })) });
+  if (app.hiddenKindIds.length) await tx.projectHiddenKind.createMany({ data: app.hiddenKindIds.map((kindId) => ({ projectId, kindId })) });
+  if (app.labels.length) await tx.label.createMany({ data: app.labels.map((l) => ({ ...l, projectId })) });
+}
+
+export async function createProject(name: string, options?: { templateId?: string | null; isPrivate?: boolean }) {
+  return runAction({ name: "projects.createProject", args: [name, options] }, async () => {
+    const user = await requireAdmin();
+    const projectName = v.name.parse(name);
+    const templateRow = options?.templateId
+      ? await db.projectTemplate.findUnique({ where: { id: v.id.parse(options.templateId) } })
+      : null;
+    if (options?.templateId && !templateRow) throw new AppError("La plantilla ya no existe.");
+    const template = templateRow ? parseStoredTemplate(templateRow) : null;
     const last = await db.project.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
-    const project = await db.project.create({
-      data: {
-        name: v.name.parse(name),
-        position: (last?.position ?? 0) + POSITION_STEP,
-        columns: { create: DEFAULT_COLUMNS.map((c, i) => ({ ...c, position: (i + 1) * POSITION_STEP })) },
-      },
-      select: { id: true },
+    const project = await db.$transaction(async (tx) => {
+      const created = await tx.project.create({
+        data: {
+          name: projectName,
+          position: (last?.position ?? 0) + POSITION_STEP,
+          privateOwnerId: options?.isPrivate ? user.id : null,
+          ...(template ? {} : { columns: { create: DEFAULT_COLUMNS.map((c, i) => ({ ...c, position: (i + 1) * POSITION_STEP })) } }),
+        },
+        select: { id: true },
+      });
+      if (template) await applyTemplate(tx, created.id, template);
+      return created;
     });
     revalidatePath("/", "layout");
     return project;
@@ -33,23 +56,33 @@ export async function createProject(name: string) {
 
 export async function updateProject(projectId: string, input: { name: string; description: string }) {
   return runAction({ name: "projects.updateProject", args: [projectId, input] }, async () => {
-    await requireAdmin();
+    const user = await requireAdmin();
     const data = z.object({ name: v.name, description: z.string().max(2000) }).parse(input);
-    await db.project.update({ where: { id: v.id.parse(projectId) }, data });
+    // También para admins: un proyecto privado de otra persona no existe para ellos.
+    await assertProjectAccess(user, v.id.parse(projectId));
+    await db.project.update({ where: { id: projectId }, data });
     revalidatePath("/", "layout");
   });
 }
 
-/** restricted=false: todos los usuarios ven el proyecto. true: solo admins y memberIds. */
-export async function setProjectVisibility(projectId: string, restricted: boolean, memberIds: string[]) {
-  return runAction({ name: "projects.setProjectVisibility", args: [projectId, restricted, memberIds] }, async () => {
-    await requireAdmin();
+/**
+ * PUBLIC: todos los usuarios ven el proyecto. RESTRICTED: solo admins y memberIds.
+ * PRIVATE: solo quien lo marca como privado (ni el resto de administradores).
+ */
+export async function setProjectVisibility(projectId: string, mode: "PUBLIC" | "RESTRICTED" | "PRIVATE", memberIds: string[]) {
+  return runAction({ name: "projects.setProjectVisibility", args: [projectId, mode, memberIds] }, async () => {
+    const user = await requireAdmin();
     const id = v.id.parse(projectId);
-    const ids = [...new Set(z.array(v.id).max(50).parse(memberIds))];
+    const visibility = z.enum(["PUBLIC", "RESTRICTED", "PRIVATE"]).parse(mode);
+    await assertProjectAccess(user, id);
+    const ids = visibility === "RESTRICTED" ? [...new Set(z.array(v.id).max(50).parse(memberIds))] : [];
     const valid = await db.user.count({ where: { id: { in: ids } } });
     if (valid !== ids.length) throw new AppError("Usuario no válido.");
     await db.$transaction([
-      db.project.update({ where: { id }, data: { restricted: z.boolean().parse(restricted) } }),
+      db.project.update({
+        where: { id },
+        data: { restricted: visibility === "RESTRICTED", privateOwnerId: visibility === "PRIVATE" ? user.id : null },
+      }),
       db.projectMember.deleteMany({ where: { projectId: id } }),
       db.projectMember.createMany({ data: ids.map((userId) => ({ projectId: id, userId })) }),
     ]);
@@ -59,8 +92,8 @@ export async function setProjectVisibility(projectId: string, restricted: boolea
 
 export async function deleteProject(projectId: string, confirmName: string) {
   return runAction({ name: "projects.deleteProject", args: [projectId, confirmName] }, async () => {
-    await requireAdmin();
-    const project = await db.project.findUnique({ where: { id: v.id.parse(projectId) }, select: { name: true } });
+    const user = await requireAdmin();
+    const project = await db.project.findFirst({ where: { id: v.id.parse(projectId), ...visibleProjectsWhere(user) }, select: { name: true } });
     if (!project) throw notFound();
     if (project.name !== confirmName) throw new AppError("El nombre no coincide.");
     const attachments = await db.taskAttachment.findMany({ where: { task: { projectId } }, select: { id: true } });

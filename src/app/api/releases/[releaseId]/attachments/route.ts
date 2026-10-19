@@ -1,11 +1,10 @@
-import { readFile } from "node:fs/promises";
 import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { logEvent } from "@/lib/log";
 import { clientIp } from "@/lib/request";
 import { releaseZipName } from "@/lib/release";
 import { getCurrentUser } from "@/lib/session";
-import { releaseAttachmentPath } from "@/lib/uploads";
+import { readReleaseAttachmentFile } from "@/lib/uploads";
 import { buildZip } from "@/lib/zip";
 
 export const runtime = "nodejs";
@@ -26,7 +25,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
   const files: { name: string; data: Uint8Array }[] = [];
   for (const a of release.attachments) {
     try {
-      files.push({ name: a.fileName, data: await readFile(releaseAttachmentPath(a.id)) });
+      files.push({ name: a.fileName, data: await readReleaseAttachmentFile(a.id) });
     } catch {
       // Fichero ausente en disco: se omite en lugar de romper toda la descarga.
     }

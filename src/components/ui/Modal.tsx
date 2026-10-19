@@ -82,7 +82,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
         tabIndex={-1}
         style={top && viewportH ? ({ "--vvh": `${viewportH}px` } as React.CSSProperties) : undefined}
         className={cn(
-          "relative flex w-full flex-col bg-white shadow-2xl outline-none sm:rounded-2xl dark:bg-slate-900",
+          "relative flex w-full flex-col border border-slate-200 bg-white shadow-2xl outline-none sm:rounded-2xl dark:border-slate-600/70 dark:bg-slate-900",
           top ? "max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top))] rounded-b-2xl sm:max-h-[calc(100dvh-2rem)]" : "max-h-[92dvh] rounded-t-2xl",
           SIZES[size],
           panelClassName,

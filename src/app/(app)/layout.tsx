@@ -2,6 +2,7 @@ import { listVisibleProjects, visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
 import { AppShell } from "@/components/AppShell";
+import { ClientErrorReporter } from "@/components/ClientErrorReporter";
 import pkg from "../../../package.json";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -12,6 +13,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   ]);
   return (
     <AppShell user={user} projects={projects} version={pkg.version} unread={unread}>
+      <ClientErrorReporter />
       {children}
     </AppShell>
   );

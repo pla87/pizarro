@@ -149,6 +149,18 @@ test("nombres de adjuntos: extensión .webp, saneado y duplicados", () => {
   assert.deepEqual(attachmentFileNames("C2", [{ originalName: "informe.final.tar.png" }]), ["C2_informe.final.tar.webp"]);
 });
 
+test("nombres de adjuntos: los no imagen conservan su extensión", () => {
+  assert.deepEqual(
+    attachmentFileNames("F1", [
+      { originalName: "informe final.PDF", isImage: false },
+      { originalName: "informe final.pdf", isImage: false },
+      { originalName: "informe final.png" },
+      { originalName: "LEEME", isImage: false },
+    ]),
+    ["F1_informe_final.PDF", "F1_informe_final-2.pdf", "F1_informe_final.webp", "F1_LEEME"],
+  );
+});
+
 test("nombre de fichero con fecha local", () => {
   assert.equal(releaseFileName(new Date(2026, 0, 5, 23, 30), "md"), "release-2026-01-05.md");
   assert.equal(releaseFileName(new Date(2026, 11, 31), "txt"), "release-2026-12-31.txt");

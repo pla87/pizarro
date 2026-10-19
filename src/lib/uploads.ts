@@ -1,5 +1,5 @@
 import "server-only";
-import { mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { AppError } from "./errors";
@@ -16,9 +16,39 @@ export function uploadDir(): string {
 }
 
 /** Los ids son cuid: nunca contienen separadores, pero se valida igualmente. */
-export function attachmentPath(id: string, variant: "full" | "thumb"): string {
+/**
+ * Imágenes: `<id>.webp` y `<id>.thumb.webp`. Cualquier otro fichero se guarda tal cual
+ * (sin conversión) como `<id>.bin`: el nombre y el tipo reales viven en la base de datos.
+ */
+export function attachmentPath(id: string, variant: "full" | "thumb" | "file"): string {
   if (!/^[a-z0-9]+$/i.test(id)) throw new AppError("Identificador no válido.");
-  return path.join(/*turbopackIgnore: true*/ uploadDir(), variant === "full" ? `${id}.webp` : `${id}.thumb.webp`);
+  const name = variant === "full" ? `${id}.webp` : variant === "thumb" ? `${id}.thumb.webp` : `${id}.bin`;
+  return path.join(/*turbopackIgnore: true*/ uploadDir(), name);
+}
+
+/** Tipos MIME que se pueden servir con su Content-Type real (siempre como descarga). El resto: octet-stream. */
+const SAFE_MIME = new Set([
+  "application/pdf", "text/plain", "text/csv", "application/zip", "application/x-zip-compressed",
+  "application/x-7z-compressed", "application/gzip", "application/x-tar", "application/vnd.rar", "application/x-rar-compressed",
+  "application/msword", "application/vnd.ms-excel", "application/vnd.ms-powerpoint", "application/rtf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.oasis.opendocument.text", "application/vnd.oasis.opendocument.spreadsheet",
+  "application/vnd.oasis.opendocument.presentation", "application/json",
+  "audio/mpeg", "audio/mp4", "audio/ogg", "audio/wav", "audio/x-wav", "audio/webm", "audio/aac", "audio/flac",
+  "video/mp4", "video/webm", "video/ogg", "video/quicktime", "video/x-matroska",
+]);
+
+/** Normaliza el MIME recibido del cliente: minúsculas, sin parámetros, formato válido o octet-stream. */
+export function sanitizeMime(raw: string | null | undefined): string {
+  const m = (raw ?? "").split(";")[0]!.trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9!#$&^_.+-]{0,60}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,100}$/.test(m) ? m : "application/octet-stream";
+}
+
+/** Content-Type con el que se sirve un adjunto no imagen: solo si está en la lista segura. */
+export function safeDownloadMime(stored: string): string {
+  return SAFE_MIME.has(stored) ? stored : "application/octet-stream";
 }
 
 export interface ProcessedImage {
@@ -94,18 +124,37 @@ export async function saveAttachmentFiles(id: string, image: ProcessedImage): Pr
   ]);
 }
 
+/** Guarda un adjunto que no es imagen, sin transformarlo. */
+export async function saveRawAttachmentFile(id: string, data: Buffer): Promise<void> {
+  await mkdir(uploadDir(), { recursive: true });
+  await writeAtomic(attachmentPath(id, "file"), data);
+}
+
 export async function removeAttachmentFiles(ids: string[]): Promise<void> {
   await Promise.all(
-    ids.flatMap((id) => [rm(attachmentPath(id, "full"), { force: true }), rm(attachmentPath(id, "thumb"), { force: true })]),
+    ids.flatMap((id) => [
+      rm(attachmentPath(id, "full"), { force: true }),
+      rm(attachmentPath(id, "thumb"), { force: true }),
+      rm(attachmentPath(id, "file"), { force: true }),
+    ]),
   ).catch((err) => console.error("[uploads] no se pudieron borrar ficheros", err));
 }
 
 // --- Copias compactas de adjuntos para el histórico de releases -----------------
 
-/** Los ids son cuid; ficheros en UPLOAD_DIR/releases/<id>.webp. */
-export function releaseAttachmentPath(id: string): string {
+/** Los ids son cuid; ficheros en UPLOAD_DIR/releases/<id>.webp (imágenes) o <id>.bin (otros ficheros, tal cual). */
+export function releaseAttachmentPath(id: string, kind: "webp" | "bin" = "webp"): string {
   if (!/^[a-z0-9]+$/i.test(id)) throw new AppError("Identificador no válido.");
-  return path.join(/*turbopackIgnore: true*/ uploadDir(), "releases", `${id}.webp`);
+  return path.join(/*turbopackIgnore: true*/ uploadDir(), "releases", `${id}.${kind}`);
+}
+
+/** Lee la copia de histórico de un adjunto, sea imagen compacta (.webp) o fichero tal cual (.bin). */
+export async function readReleaseAttachmentFile(id: string): Promise<Buffer> {
+  try {
+    return await readFile(releaseAttachmentPath(id, "webp"));
+  } catch {
+    return await readFile(releaseAttachmentPath(id, "bin"));
+  }
 }
 
 /** Reduce un WebP ya guardado a 960px de ancho máximo, calidad ~55, sin metadatos. */
@@ -121,13 +170,15 @@ export async function compactImage(input: Buffer): Promise<Buffer> {
   }
 }
 
-export async function saveReleaseAttachmentFile(id: string, data: Buffer): Promise<void> {
+export async function saveReleaseAttachmentFile(id: string, data: Buffer, kind: "webp" | "bin" = "webp"): Promise<void> {
   await mkdir(path.dirname(releaseAttachmentPath(id)), { recursive: true });
-  await writeAtomic(releaseAttachmentPath(id), data);
+  await writeAtomic(releaseAttachmentPath(id, kind), data);
 }
 
 export async function removeReleaseAttachmentFiles(ids: string[]): Promise<void> {
-  await Promise.all(ids.map((id) => rm(releaseAttachmentPath(id), { force: true }))).catch((err) =>
+  await Promise.all(
+    ids.flatMap((id) => [rm(releaseAttachmentPath(id, "webp"), { force: true }), rm(releaseAttachmentPath(id, "bin"), { force: true })]),
+  ).catch((err) =>
     console.error("[uploads] no se pudieron borrar ficheros de releases", err),
   );
 }
