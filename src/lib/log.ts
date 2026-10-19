@@ -1,5 +1,6 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
+import { actionContext } from "./action-context";
 import { db } from "./db";
 
 // Registro de actividad (Administración → Logs). Los eventos se acumulan en memoria y se
@@ -74,7 +75,8 @@ export function logEvent(e: LogEvent): void {
       message: (e.message ?? "").slice(0, 1000),
       userId: e.userId ?? null,
       userName: e.userName ?? null,
-      projectId: e.projectId ?? null,
+      // Sin proyecto explícito, el de la acción en curso (si lo hay): lo usan los logs para ocultar los privados ajenos.
+      projectId: e.projectId ?? actionContext.getStore()?.projectId ?? null,
       path: e.path?.slice(0, 500) ?? null,
       durationMs: e.durationMs == null ? null : Math.round(e.durationMs),
       ip: e.ip ?? null,
@@ -94,7 +96,14 @@ export async function flushLogs(): Promise<void> {
   state.timer = null;
   const batch = state.queue.splice(0);
   try {
-    if (batch.length) await db.appLog.createMany({ data: batch });
+    if (batch.length) {
+      // Se anota el dueño de los proyectos privados afectados (sigue sirviendo aunque el proyecto se borre).
+      const ids = [...new Set(batch.map((e) => e.projectId).filter((id): id is string => !!id))];
+      const owners = ids.length
+        ? new Map((await db.project.findMany({ where: { id: { in: ids }, privateOwnerId: { not: null } }, select: { id: true, privateOwnerId: true } })).map((p) => [p.id, p.privateOwnerId]))
+        : new Map<string, string | null>();
+      await db.appLog.createMany({ data: batch.map((e) => ({ ...e, privateOwnerId: (e.projectId && owners.get(e.projectId)) || null })) });
+    }
     if (Date.now() - state.lastPurge > PURGE_EVERY_MS) {
       state.lastPurge = Date.now();
       await db.appLog.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - logRetentionDays() * 86_400_000) } } });

@@ -7,16 +7,44 @@ import { ReleasesList } from "./ReleasesList";
 
 export const metadata = { title: "Releases" };
 
-export default async function ReleasesPage({ params }: { params: Promise<{ projectId: string }> }) {
+const PAGE_STEP = 50;
+
+const ACCENTS = "áàäâãéèëêíìïîóòöôõúùüûñç";
+const PLAIN = "aaaaaeeeeiiiiooooouuuunc";
+const unaccent = (text: string) => text.replace(/[áàäâãéèëêíìïîóòöôõúùüûñç]/g, (c) => PLAIN[ACCENTS.indexOf(c)]!);
+
+export default async function ReleasesPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ q?: string | string[]; limit?: string | string[] }>;
+}) {
   const user = await requireUserPage();
   const { projectId } = await params;
+  const sp = await searchParams;
+  const q = (Array.isArray(sp.q) ? sp.q[0] : sp.q)?.trim().slice(0, 200) ?? "";
+  const rawLimit = Number(Array.isArray(sp.limit) ? sp.limit[0] : sp.limit);
+  const limit = Number.isFinite(rawLimit) && rawLimit >= PAGE_STEP ? Math.min(Math.floor(rawLimit), 100000) : PAGE_STEP;
+  // Con búsqueda se recorre TODO el histórico del proyecto (sin límite); sin ella, las últimas `limit`.
+  // Sin distinguir mayúsculas ni tildes: se comparan ambos lados en minúsculas y sin acentos.
+  let where: { id?: { in: string[] } } = {};
+  if (q) {
+    const needle = `%${unaccent(q.toLowerCase()).replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const rows = await db.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "Release" WHERE "projectId" = ${projectId}
+        AND (translate(lower("title"), ${ACCENTS}, ${PLAIN}) LIKE ${needle} OR translate(lower("content"), ${ACCENTS}, ${PLAIN}) LIKE ${needle})`;
+    where = { id: { in: rows.map((r) => r.id) } };
+  }
   const project = await db.project.findFirst({
     where: { id: projectId, ...visibleProjectsWhere(user) },
     select: {
       name: true,
+      _count: { select: { releases: true } },
       releases: {
+        where,
         orderBy: { deployedAt: "desc" },
-        take: 200,
+        ...(q ? {} : { take: limit + 1 }),
         select: {
           id: true,
           title: true,
@@ -30,19 +58,24 @@ export default async function ReleasesPage({ params }: { params: Promise<{ proje
     },
   });
   if (!project) notFound();
+  const hasMore = !q && project.releases.length > limit;
+  const releases = hasMore ? project.releases.slice(0, limit) : project.releases;
 
   return (
     <div className="mx-auto max-w-4xl p-4 md:p-6">
       <h1 className="mb-1 text-xl font-semibold">Releases</h1>
       <p className="mb-6 text-sm text-slate-500">Histórico de despliegues de «{project.name}» con el texto final editado.</p>
-      {project.releases.length === 0 ? (
+      {project._count.releases === 0 ? (
         <div className="card flex flex-col items-center gap-2 p-10 text-center text-sm text-slate-500">
           <Rocket size={32} className="text-slate-300" />
           Aún no hay releases. Genera una desde la columna «Siguiente salto a producción» del tablero.
         </div>
       ) : (
         <ReleasesList
-          releases={project.releases.map((r) => ({
+          query={q}
+          resultCount={q ? releases.length : null}
+          moreHref={hasMore ? `?limit=${limit + PAGE_STEP}` : null}
+          releases={releases.map((r) => ({
             id: r.id,
             title: r.title,
             content: r.content,

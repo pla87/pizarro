@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { actionContext } from "./action-context";
 import { AppError } from "./errors";
 import { logEvent } from "./log";
 import { requestContext } from "./request-context";
@@ -24,8 +25,9 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
   const start = performance.now();
   let result: ActionResult<T>;
   let level: "info" | "warn" | "error" = "info";
+  const ctx: { message?: string; projectId?: string | null; details?: Record<string, unknown> } = {};
   try {
-    result = { ok: true, data: await fn() };
+    result = { ok: true, data: await actionContext.run(ctx, fn) };
   } catch (err) {
     // Los errores de redirect()/notFound() de Next deben propagarse.
     if (err && typeof err === "object" && "digest" in err && !(err instanceof AppError)) throw err;
@@ -44,22 +46,31 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
       console.error("[action]", err);
       result = { ok: false, error: "Error inesperado. Inténtalo de nuevo." };
       if (meta) {
-        await logAction(meta, start, level, result.error, { error: err instanceof Error ? `${err.name}: ${err.message}` : String(err) });
+        await logAction(meta, ctx, start, level, result.error, { error: err instanceof Error ? `${err.name}: ${err.message}` : String(err) });
         return result;
       }
     }
   }
-  if (meta) await logAction(meta, start, level, result.ok ? "OK" : result.error);
+  // Con éxito, el texto que haya dejado la acción («Movió «X» de A a B»); si falla, el error.
+  if (meta) await logAction(meta, ctx, start, level, result.ok ? (ctx.message ?? "OK") : result.error);
   return result;
 }
 
-async function logAction(meta: ActionMeta, start: number, level: "info" | "warn" | "error", message: string, extra?: Record<string, unknown>) {
+async function logAction(
+  meta: ActionMeta,
+  actx: { projectId?: string | null; details?: Record<string, unknown> },
+  start: number,
+  level: "info" | "warn" | "error",
+  message: string,
+  extra?: Record<string, unknown>,
+) {
   try {
     const [user, ctx] = await Promise.all([getCurrentUser().catch(() => null), requestContext()]);
     const args = meta.args ? Array.from(meta.args) : [];
     const first = args[0];
     const projectId =
-      first && typeof first === "object" && "projectId" in first && typeof first.projectId === "string" ? first.projectId : null;
+      actx.projectId ??
+      (first && typeof first === "object" && "projectId" in first && typeof first.projectId === "string" ? first.projectId : null);
     logEvent({
       level,
       category: "action",
@@ -71,7 +82,7 @@ async function logAction(meta: ActionMeta, start: number, level: "info" | "warn"
       path: ctx.path,
       ip: ctx.ip,
       durationMs: performance.now() - start,
-      details: { args, ...extra },
+      details: { args, ...actx.details, ...extra },
     });
   } catch {
     // El registro nunca debe romper la acción.

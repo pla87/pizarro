@@ -1,14 +1,14 @@
 "use client";
 
 import {
-  closestCorners, DndContext, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
+  closestCorners, DndContext, type CollisionDetection, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
   useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { Archive, FileDown, Plus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { archiveTasks, deleteTasks, moveTask, moveTasks } from "@/actions/tasks";
+import { archiveTasks, deleteTasks, makeEvergreen, moveTask, moveTasks } from "@/actions/tasks";
 import { createBoardCollisionDetection } from "@/lib/collision";
 import { positionBetween } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardTask, LabelOption } from "@/lib/types";
@@ -18,6 +18,7 @@ import { cn } from "../ui/cn";
 import { ArchivedDialog } from "./ArchivedDialog";
 import { BoardContext, type BoardApi } from "./context";
 import { ColumnView } from "./ColumnView";
+import { EVERGREEN_DROPPABLE_PREFIX } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
 import { BulkTaskDialog } from "./BulkTaskDialog";
 import { NewTaskDialog } from "./NewTaskDialog";
@@ -31,7 +32,18 @@ const COLUMN_PREFIX = "col:";
 /** Entradas del historial que se guardan al cambiar de columna en móvil (atrás vuelve a ellas). */
 const MAX_COLUMN_HISTORY = 5;
 
-const boardCollisionDetection = createBoardCollisionDetection({ closestCorners, pointerWithin });
+const baseCollisionDetection = createBoardCollisionDetection({ closestCorners, pointerWithin });
+/** Si el puntero está dentro del panel de tareas fijas, manda él; si no, la detección normal del tablero. */
+const boardCollisionDetection: CollisionDetection = (args) => {
+  if (args.pointerCoordinates) {
+    const visible = args.droppableContainers.filter(
+      (c) => String(c.id).startsWith(EVERGREEN_DROPPABLE_PREFIX) && (args.droppableRects.get(c.id)?.width ?? 0) > 0,
+    );
+    const hit = pointerWithin({ ...args, droppableContainers: visible });
+    if (hit.length) return hit;
+  }
+  return baseCollisionDetection(args);
+};
 
 /** Pantalla táctil: las tarjetas se arrastran con su asa para que el resto de la tarjeta deje hacer scroll. */
 const COARSE_QUERY = "(pointer: coarse)";
@@ -404,6 +416,20 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     flushStale();
   };
 
+  /** Soltar una tarjeta en el panel de fijas: pasa a la columna de la release como evergreen. */
+  const dropOnEvergreen = async (id: string, columnId: string) => {
+    const previous = taskById.get(id);
+    if (!previous) return;
+    const position = Math.max(0, ...tasks.filter((t) => t.columnId === columnId).map((t) => t.position)) + 1024;
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, columnId, position, evergreen: true } : t)));
+    const res = await track(makeEvergreen(id));
+    if (!res.ok) {
+      setTasks((prev) => prev.map((t) => (t.id === id ? previous : t)));
+      return toast(res.error, "error");
+    }
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, columnId: res.data.columnId, position: res.data.position, evergreen: true } : t)));
+  };
+
   const onDragEnd = async ({ active, over }: DragEndEvent) => {
     const origin = dragOrigin.current;
     const current = dragItems;
@@ -411,6 +437,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (!over || !current || !origin) return;
     const id = String(active.id);
     const overId = String(over.id);
+    if (overId.startsWith(EVERGREEN_DROPPABLE_PREFIX)) return dropOnEvergreen(id, overId.slice(EVERGREEN_DROPPABLE_PREFIX.length));
     const col = findContainer(current, id);
     if (!col) return;
     let list = current[col]!;
@@ -476,7 +503,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             <NewColumnButton variant="mobile" onCreated={showMobileColumn} />
           </div>
           <div
-            className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-3 max-md:no-scrollbar pt-2 pb-24 md:px-4 md:pb-4"
+            className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-3 max-md:no-scrollbar pt-2 pb-2 md:px-4 md:pb-4"
             onTouchStart={onSwipeStart}
             onTouchEnd={onSwipeEnd}
           >
@@ -524,10 +551,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             onDelete={deleteSelected}
             onRelease={() => {
               const ids = sortedColumns.flatMap((c) => (baseItems[c.id] ?? []).filter((id) => selected.has(id)));
-              // Las evergreen de la columna de la release se añaden siempre.
-              const fixed = nextReleaseColumn ? (evergreenByColumn[nextReleaseColumn.id] ?? []) : [];
-              const all = [...ids, ...fixed];
-              setRelease({ taskIds: all, preselected: all });
+              // Con selección solo van las elegidas (las fijas entran únicamente desde «Generar Release»).
+              setRelease({ taskIds: ids, preselected: ids });
             }}
             onClear={() => setSelected(new Set())}
           />

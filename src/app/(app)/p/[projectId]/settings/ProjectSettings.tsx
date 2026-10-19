@@ -152,8 +152,8 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
 
       <Section
         id="kinds"
-        title="Tipos de tarea del proyecto"
-        description="Exclusivos de este proyecto. Se suman a los generales y van detrás en las releases."
+        title="Tipos de tarea"
+        description="Elige qué tipos generales usa este proyecto y crea tipos propios. En los selectores y en las releases van primero los generales y después los propios."
       >
         <GeneralKinds projectId={project.id} generalKinds={generalKinds} projectKinds={kinds} />
         <div className="mt-4 mb-2 text-xs font-medium text-slate-500">Tipos propios del proyecto</div>

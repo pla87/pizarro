@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
+import { logEvent } from "@/lib/log";
 import { AppError, notFound } from "@/lib/errors";
 import { MAX_USERS } from "@/lib/limits";
 import { hashPassword, MIN_PASSWORD } from "@/lib/password";
@@ -61,6 +62,16 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
       // Al desactivar o cambiar de rol se cierran sus sesiones.
       ...(data.active !== user.active || data.role !== user.role ? [db.session.deleteMany({ where: { userId: user.id } })] : []),
     ]);
+    // Proyectos privados: se bloquean si el dueño deja de ser admin activo y se desbloquean al volver a serlo.
+    const wasAdmin = user.active && user.role === "ADMIN";
+    const isAdmin = data.active && data.role === "ADMIN";
+    if (wasAdmin && !isAdmin) {
+      const { count } = await db.project.updateMany({ where: { privateOwnerId: user.id, privateBlockedAt: null }, data: { privateBlockedAt: new Date() } });
+      if (count > 0) logEvent({ category: "system", action: "projects.privateBlocked", message: `Proyectos privados bloqueados: ${count}`, details: { ownerId: user.id, count } });
+    } else if (!wasAdmin && isAdmin) {
+      const { count } = await db.project.updateMany({ where: { privateOwnerId: user.id, privateBlockedAt: { not: null } }, data: { privateBlockedAt: null } });
+      if (count > 0) logEvent({ category: "system", action: "projects.privateUnblocked", message: `Proyectos privados desbloqueados: ${count}`, details: { ownerId: user.id, count } });
+    }
     revalidatePath("/admin/users");
   });
 }

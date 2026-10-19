@@ -1,16 +1,18 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
+import { noteProject } from "./action-context";
 import { db } from "./db";
 import { notFound } from "./errors";
 import type { CurrentUser } from "./session";
 
 /**
  * Filtro Prisma con los proyectos visibles para el usuario. Un proyecto privado solo lo ve su
- * dueño (tampoco el resto de administradores); los admins ven todos los demás; los miembros,
+ * dueño mientras no esté bloqueado (tampoco el resto de administradores); los admins ven todos los demás; los miembros,
  * los no restringidos y aquellos en los que figuran.
  */
 export function visibleProjectsWhere(user: CurrentUser): Prisma.ProjectWhereInput {
-  const notOthersPrivate: Prisma.ProjectWhereInput = { OR: [{ privateOwnerId: null }, { privateOwnerId: user.id }] };
+  // Los privados bloqueados (su dueño se desactivó o dejó de ser admin) no los ve nadie.
+  const notOthersPrivate: Prisma.ProjectWhereInput = { OR: [{ privateOwnerId: null }, { privateOwnerId: user.id, privateBlockedAt: null }] };
   if (user.role === "ADMIN") return notOthersPrivate;
   return { AND: [notOthersPrivate, { OR: [{ restricted: false }, { members: { some: { userId: user.id } } }] }] };
 }
@@ -26,6 +28,7 @@ export async function listVisibleProjects(user: CurrentUser) {
 export async function assertProjectAccess(user: CurrentUser, projectId: string): Promise<void> {
   const found = await db.project.count({ where: { id: projectId, ...visibleProjectsWhere(user) } });
   if (!found) throw notFound();
+  noteProject(projectId);
 }
 
 /** Devuelve el projectId de la tarea si el usuario puede verla. */
@@ -35,6 +38,7 @@ export async function assertTaskAccess(user: CurrentUser, taskId: string): Promi
     select: { projectId: true, columnId: true },
   });
   if (!task) throw notFound();
+  noteProject(task.projectId);
   return task;
 }
 

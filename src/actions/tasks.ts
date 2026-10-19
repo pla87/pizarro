@@ -7,6 +7,7 @@ import { runAction } from "@/lib/action";
 import { assertAssignable, assertProjectAccess, assertTaskAccess, visibleProjectsWhere } from "@/lib/access";
 import { boardTaskSelect, loadBoardTask, toBoardTask } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
+import { describeAction } from "@/lib/action-context";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
 import { requireUser } from "@/lib/session";
@@ -43,6 +44,28 @@ async function assertLabelsInProject(labelIds: string[], projectId: string) {
   if (labelIds.length === 0) return;
   const count = await db.label.count({ where: { id: { in: labelIds }, projectId } });
   if (count !== new Set(labelIds).size) throw new AppError("Etiqueta no válida.");
+}
+
+/** Título y columna actuales de una tarea, para los textos del registro de actividad. */
+async function taskLabel(taskId: string): Promise<{ title: string; column: string }> {
+  const t = await db.task.findUnique({ where: { id: taskId }, select: { title: true, column: { select: { name: true } } } });
+  return { title: t?.title ?? "(tarea)", column: t?.column.name ?? "?" };
+}
+
+async function columnName(columnId: string): Promise<string> {
+  return (await db.column.findUnique({ where: { id: columnId }, select: { name: true } }))?.name ?? "?";
+}
+
+const CHANGE_LABELS: Record<string, string> = {
+  title: "título", description: "descripción", kindId: "tipo", color: "color", linkUrl: "enlace",
+  assigneeId: "responsable", labelIds: "etiquetas", dueDate: "fecha límite", deliverableId: "entregable", evergreen: "fija en la release",
+};
+
+/** «tipo, responsable y fecha límite» a partir de los campos cambiados. */
+function describeChanges(data: Record<string, unknown>): string {
+  const names = Object.keys(data).filter((k) => data[k] !== undefined).map((k) => CHANGE_LABELS[k] ?? k);
+  if (names.length <= 1) return names[0] ?? "sin cambios";
+  return `${names.slice(0, -1).join(", ")} y ${names.at(-1)}`;
 }
 
 async function lastPosition(columnId: string): Promise<number | null> {
@@ -103,6 +126,7 @@ export async function createTask(input: z.input<typeof createSchema>) {
       },
       select: { id: true },
     });
+    describeAction(`Creó la tarea «${data.title}» en «${await columnName(data.columnId)}»`, { taskId: task.id });
     await notifyMentions({ actorId: user.id, taskId: task.id, projectId: data.projectId, recipientIds: extractMentionIds(data.description), text: data.description });
     return loadBoardTask(task.id);
   });
@@ -155,6 +179,7 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
       }
       return created.map((t) => t.id);
     });
+    describeAction(`Creó ${ids.length === 1 ? "1 tarea" : `${ids.length} tareas`} en «${await columnName(data.columnId)}»: ${data.tasks.map((t) => `«${t.title}»`).join(", ").slice(0, 600)}`, { taskIds: ids });
     const rows = await db.task.findMany({ where: { id: { in: ids } }, orderBy: { position: "asc" }, select: boardTaskSelect });
     return rows.map(toBoardTask);
   });
@@ -189,6 +214,7 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
     }
     const { labelIds, dueDate, ...rest } = data;
     const fields = { ...rest, ...(dueDate !== undefined ? { dueDate: dueDate ? isoToDate(dueDate) : null } : {}) };
+    const before = await taskLabel(taskId);
     const newMentions = await db.$transaction(async (tx) => {
       // Menciones nuevas en la descripción (las que ya estaban no vuelven a avisar).
       // Se lee la versión anterior con bloqueo de fila para que dos ediciones simultáneas no avisen dos veces.
@@ -205,6 +231,7 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
       }
       return added;
     });
+    describeAction(`Modificó «${data.title ?? before.title}»: ${describeChanges(data)}`, { taskId });
     if (newMentions.length) {
       await notifyMentions({ actorId: user.id, taskId, projectId, recipientIds: newMentions, text: data.description ?? "" });
     }
@@ -235,7 +262,10 @@ export async function moveTask(taskId: string, columnId: string, prevId: string 
       n = await neighbourPositions(columnId, prevId, nextId);
     }
     const position = n.stale ? positionBetween(await lastPosition(columnId), null) : positionBetween(n.prev, n.next);
+    const before = await taskLabel(taskId);
     await db.task.update({ where: { id: taskId }, data: { columnId, position, evergreen: false } });
+    const to = await columnName(columnId);
+    describeAction(before.column === to ? `Reordenó «${before.title}» en «${to}»` : `Movió «${before.title}» de «${before.column}» a «${to}»`, { taskId });
     return { position };
   });
 }
@@ -259,7 +289,30 @@ export async function moveTasks(taskIds: string[], columnId: string) {
     let pos = (await lastPosition(column.id)) ?? 0;
     const moved = toMove.map((t) => ({ id: t.id, position: (pos += POSITION_STEP) }));
     await db.$transaction(moved.map((m) => db.task.update({ where: { id: m.id }, data: { columnId: column.id, position: m.position, evergreen: false } })));
+    describeAction(`Movió ${moved.length === 1 ? "1 tarea" : `${moved.length} tareas`} a «${await columnName(column.id)}»`, { taskIds: moved.map((m) => m.id) });
     return { columnId: column.id, moved };
+  });
+}
+
+/** Convierte una tarea en fija (evergreen): la lleva al final de la columna de la release del proyecto. */
+export async function makeEvergreen(taskId: string) {
+  return runAction({ name: "tasks.makeEvergreen", args: [taskId] }, async () => {
+    const user = await requireUser();
+    const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
+    const result = await db.$transaction(async (tx) => {
+      const column = await tx.column.findFirst({ where: { projectId, role: "NEXT_RELEASE" }, select: { id: true } });
+      if (!column) throw new AppError("El proyecto no tiene columna de release.");
+      const last = await tx.task.findFirst({ where: { columnId: column.id }, orderBy: { position: "desc" }, select: { position: true } });
+      const position = positionBetween(last?.position ?? null, null);
+      const task = await tx.task.update({
+        where: { id: taskId },
+        data: { columnId: column.id, position, evergreen: true },
+        select: { title: true },
+      });
+      return { columnId: column.id, position, title: task.title };
+    });
+    describeAction(`Marcó «${result.title}» como fija en la release`, { taskId, columnId: result.columnId });
+    return { columnId: result.columnId, position: result.position };
   });
 }
 
@@ -267,6 +320,7 @@ export async function archiveTask(taskId: string) {
   return runAction({ name: "tasks.archiveTask", args: [taskId] }, async () => {
     const user = await requireUser();
     const { columnId } = await assertTaskAccess(user, v.id.parse(taskId));
+    describeAction(`Archivó «${(await taskLabel(taskId)).title}»`, { taskId });
     await db.task.update({ where: { id: taskId }, data: { archivedAt: new Date(), archivedFromColumnId: columnId, evergreen: false } });
   });
 }
@@ -279,6 +333,7 @@ export async function archiveTasks(taskIds: string[]) {
     const tasks = await db.task.findMany({ where: { id: { in: ids }, project: visibleProjectsWhere(user) }, select: { id: true } });
     if (tasks.length !== ids.length) throw notFound();
     await db.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId", "evergreen" = false WHERE "id" IN (${Prisma.join(ids)}) AND "archivedAt" IS NULL`;
+    describeAction(`Archivó ${ids.length === 1 ? "1 tarea" : `${ids.length} tareas`}`, { taskIds: ids });
     return { archived: ids.length };
   });
 }
@@ -288,6 +343,7 @@ export async function getArchivedTasks(projectId: string) {
   return runAction({ name: "tasks.getArchivedTasks", args: [projectId] }, async (): Promise<ArchivedTask[]> => {
     const user = await requireUser();
     await assertProjectAccess(user, v.id.parse(projectId));
+    describeAction("Consultó las tareas archivadas");
     const rows = await db.task.findMany({
       where: { projectId, archivedAt: { not: null } },
       orderBy: { archivedAt: "desc" },
@@ -320,6 +376,7 @@ export async function deleteTask(taskId: string) {
     const user = await requireUser();
     await assertTaskAccess(user, v.id.parse(taskId));
     const attachments = await db.taskAttachment.findMany({ where: { taskId }, select: { id: true } });
+    describeAction(`Borró la tarea «${(await taskLabel(taskId)).title}»`, { taskId });
     await db.task.delete({ where: { id: taskId } });
     await removeAttachmentFiles(attachments.map((a) => a.id));
   });
@@ -333,6 +390,8 @@ export async function deleteTasks(taskIds: string[]) {
     const tasks = await db.task.findMany({ where: { id: { in: ids }, project: visibleProjectsWhere(user) }, select: { id: true } });
     if (tasks.length !== ids.length) throw notFound();
     const attachments = await db.taskAttachment.findMany({ where: { taskId: { in: ids } }, select: { id: true } });
+    const titles = await db.task.findMany({ where: { id: { in: ids } }, select: { title: true } });
+    describeAction(`Borró ${ids.length === 1 ? "1 tarea" : `${ids.length} tareas`}: ${titles.map((t) => `«${t.title}»`).join(", ").slice(0, 600)}`, { taskIds: ids });
     await db.task.deleteMany({ where: { id: { in: ids } } });
     await removeAttachmentFiles(attachments.map((a) => a.id));
     return { deleted: ids.length };
@@ -343,6 +402,7 @@ export async function getTaskDetail(taskId: string) {
   return runAction({ name: "tasks.getTaskDetail", args: [taskId] }, async (): Promise<TaskDetail> => {
     const user = await requireUser();
     await assertTaskAccess(user, v.id.parse(taskId));
+    describeAction(`Abrió la tarea «${(await taskLabel(taskId)).title}»`, { taskId });
     const task = await db.task.findUniqueOrThrow({
       where: { id: taskId },
       select: {
@@ -417,6 +477,7 @@ export async function deleteAttachment(attachmentId: string) {
       select: { id: true },
     });
     if (!att) throw notFound();
+    describeAction(`Borró un adjunto de una tarea`, { attachmentId: att.id });
     await db.taskAttachment.delete({ where: { id: att.id } });
     await removeAttachmentFiles([att.id]);
   });
@@ -435,6 +496,7 @@ export async function restoreTask(taskId: string) {
     if (!column) throw new AppError("El proyecto no tiene columnas.");
     const position = positionBetween(await lastPosition(column.id), null);
     await db.task.update({ where: { id: taskId }, data: { archivedAt: null, archivedFromColumnId: null, columnId: column.id, position } });
+    describeAction(`Recuperó «${(await taskLabel(taskId)).title}» en «${column.name}»`, { taskId });
     return { task: await loadBoardTask(taskId), columnName: column.name };
   });
 }
@@ -456,6 +518,7 @@ export async function addComment(taskId: string, body: string) {
     const text = commentBody.parse(body);
     const comment = await db.taskComment.create({ data: { taskId, authorId: user.id, body: text }, select: commentSelect });
     await notifyMentions({ actorId: user.id, taskId, projectId, recipientIds: extractMentionIds(text), text });
+    describeAction(`Comentó en «${(await taskLabel(taskId)).title}»`, { taskId });
     return toCommentInfo(comment);
   });
 }

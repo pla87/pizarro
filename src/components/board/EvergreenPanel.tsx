@@ -1,10 +1,16 @@
 "use client";
 
+import { useDndContext, useDroppable } from "@dnd-kit/core";
 import { ChevronUp, Plus } from "lucide-react";
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { cn } from "../ui/cn";
 import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard } from "./context";
+
+/** Prefijo del id del droppable del panel (el resto es el id de la columna de la release). */
+export const EVERGREEN_DROPPABLE_PREFIX = "evergreen:";
+/** Tiempo con una tarjeta encima de la barra plegada antes de que se abra sola. */
+const SPRING_OPEN_MS = 300;
 
 /** Clave de localStorage del estado plegado/desplegado, por proyecto. */
 const storageKey = (projectId: string) => `pizarro:evergreen-open:${projectId}`;
@@ -20,7 +26,7 @@ const memory = new Map<string, boolean>();
 export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskIds: string[] }) {
   const { project, taskById, kindById, openTask, openNewTask } = useBoard();
   // Estado en localStorage leído como store externo (en servidor, plegado).
-  const open = useSyncExternalStore(
+  const stored = useSyncExternalStore(
     (cb) => {
       listeners.add(cb);
       window.addEventListener("storage", cb);
@@ -39,8 +45,25 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
     () => false,
   );
 
+  // Arrastrar una tarjeta sobre el panel: se suelta aquí para hacerla fija y, tras una pausa, se abre solo
+  // (como una carpeta con resorte). La apertura es temporal: se pliega al terminar el arrastre.
+  const { setNodeRef, isOver } = useDroppable({ id: EVERGREEN_DROPPABLE_PREFIX + columnId });
+  const dragging = useDndContext().active !== null;
+  const [sprung, setSprung] = useState(false);
+  const open = stored || (sprung && dragging);
+  const hovering = isOver && dragging;
+  useEffect(() => {
+    if (!dragging) return;
+    return () => setSprung(false); // al terminar el arrastre vuelve a plegarse
+  }, [dragging]);
+  useEffect(() => {
+    if (!hovering || open) return;
+    const timer = setTimeout(() => setSprung(true), SPRING_OPEN_MS);
+    return () => clearTimeout(timer);
+  }, [hovering, open]);
+
   const toggle = () => {
-    const next = !open;
+    const next = !stored;
     memory.set(project.id, next);
     try {
       localStorage.setItem(storageKey(project.id), next ? "1" : "0");
@@ -51,9 +74,15 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
   };
 
   return (
-    <div className="shrink-0 rounded-b-xl border-t border-slate-200 dark:border-slate-800">
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "shrink-0 rounded-b-xl border-t border-slate-200 transition-colors dark:border-slate-800",
+        hovering && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10",
+      )}
+    >
       {open && (
-        <div id={`evergreen-${columnId}`} className="max-h-56 space-y-1.5 overflow-y-auto px-2 pt-2">
+        <div id={`evergreen-${columnId}`} className="max-h-56 space-y-1.5 overflow-y-auto px-2 pt-2 max-lg:pr-16">
           {taskIds.map((id) => {
             const task = taskById.get(id);
             if (!task) return null;
@@ -84,11 +113,11 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
         onClick={toggle}
         aria-expanded={open}
         aria-controls={`evergreen-${columnId}`}
-        className="flex w-full items-center gap-1.5 rounded-b-xl px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-200/60 dark:text-slate-300 dark:hover:bg-slate-800/60"
+        className="flex w-full items-center gap-1.5 rounded-b-xl px-3 py-2 max-lg:pr-20 text-xs font-medium text-slate-600 hover:bg-slate-200/60 dark:text-slate-300 dark:hover:bg-slate-800/60"
       >
         <span>Siempre en la release</span>
         <span className="rounded-full bg-slate-200 px-1.5 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">{taskIds.length}</span>
-        <ChevronUp size={14} className={cn("ml-auto transition-transform", open && "rotate-180")} />
+        <ChevronUp size={14} className={cn("lg:ml-auto transition-transform", open && "rotate-180")} />
       </button>
     </div>
   );

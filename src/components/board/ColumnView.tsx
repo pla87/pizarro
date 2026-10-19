@@ -85,9 +85,9 @@ export function ColumnView({ column, taskIds, evergreenIds = [], index, total, d
       <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
         <div
           className={cn(
-            "flex min-h-20 flex-1 flex-col gap-2 overflow-y-auto rounded-b-xl px-2 pb-2 transition-colors",
-            // Con selección, la barra inferior tapa el final de la lista: se deja hueco para llegar a las últimas.
-            selected.size > 0 && "pb-44 md:pb-20",
+            "flex min-h-20 flex-1 flex-col gap-2 overflow-y-auto rounded-b-xl px-2 transition-colors",
+            // Abajo se deja hueco: con selección lo tapa la barra inferior y en móvil los botones flotantes.
+            selected.size > 0 ? "pb-44 md:pb-20" : "pb-32 lg:pb-2",
             isOver && "bg-brand-50/60 dark:bg-brand-500/5",
           )}
         >

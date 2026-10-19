@@ -3,6 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
+import { describeAction } from "@/lib/action-context";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertProjectAccess } from "@/lib/access";
@@ -74,6 +75,12 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
       }
       return { releaseId: release.id, moved, archived: target ? [] : tasks.filter((t) => !t.evergreen).map((t) => t.id) };
     });
+    const fixed = tasks.filter((t) => t.evergreen).length;
+    describeAction(
+      `Desplegó la release «${data.title}» con ${tasks.length === 1 ? "1 tarea" : `${tasks.length} tareas`}` +
+        (data.destination === "ARCHIVE" ? " (archivadas)" : "") + (fixed ? ` (${fixed} fija${fixed === 1 ? "" : "s"} se quedan)` : ""),
+      { releaseId: result.releaseId, taskIds: tasks.map((t) => t.id) },
+    );
     // Copias compactas de los adjuntos para el histórico; si algo falla se omite, el despliegue ya está hecho.
     if (data.attachments?.length) {
       await saveReleaseAttachments(result.releaseId, data.attachments, new Set(tasks.map((t) => t.id))).catch((err) =>
@@ -102,7 +109,7 @@ async function saveReleaseAttachments(releaseId: string, items: { taskId: string
         const raw = await readFile(attachmentPath(att.id, att.isImage ? "full" : "file"));
         const data = att.isImage ? await compactImage(raw) : raw;
         const row = await db.releaseAttachment.create({
-          data: { releaseId, fileName: names[i]!, size: data.length, position: position++ },
+          data: { releaseId, fileName: names[i]!, size: data.length, isImage: att.isImage, position: position++ },
           select: { id: true },
         });
         rowId = row.id;
@@ -143,6 +150,7 @@ export async function getReleaseTaskDetails(input: z.input<typeof detailsSchema>
     const user = await requireUser();
     const data = detailsSchema.parse(input);
     await assertProjectAccess(user, data.projectId);
+    describeAction(`Generó el texto de una release con ${data.taskIds.length === 1 ? "1 tarea" : `${data.taskIds.length} tareas`}`);
     return db.task.findMany({
       where: { id: { in: data.taskIds }, projectId: data.projectId },
       select: {
@@ -158,7 +166,7 @@ const releaseIdSchema = z.object({ releaseId: v.id });
 
 /** Carga la release y comprueba que el usuario ve su proyecto. */
 async function loadAccessibleRelease(user: Awaited<ReturnType<typeof requireUser>>, releaseId: string) {
-  const release = await db.release.findUnique({ where: { id: releaseId }, select: { id: true, projectId: true } });
+  const release = await db.release.findUnique({ where: { id: releaseId }, select: { id: true, projectId: true, title: true } });
   if (!release) throw new AppError("La release no existe.");
   await assertProjectAccess(user, release.projectId);
   return release;
@@ -173,6 +181,7 @@ export async function deleteRelease(releaseId: string) {
     // Los ids se leen antes de borrar: las filas caen en cascada con la release.
     const ids = (await db.releaseAttachment.findMany({ where: { releaseId: id }, select: { id: true } })).map((a) => a.id);
     await db.release.delete({ where: { id } });
+    describeAction(`Borró del histórico la release «${release.title}»`, { releaseId: id });
     await removeReleaseAttachmentFiles(ids);
     return { id: release.id };
   });
