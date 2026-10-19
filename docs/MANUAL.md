@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.9.0"
+version: "v1.10.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.9.0
+**Versión de la aplicación:** v1.10.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -24,7 +24,7 @@ Pizarro es un tablero Kanban ligero para un equipo de hasta 5 personas. Su objet
 |---|---|
 | Proyecto | Espacio de trabajo con sus propias columnas, tareas, etiquetas y releases. |
 | Columna | Estado del flujo. Configurable por proyecto. Puede tener un **rol** (*Siguiente salto* o *En producción*). |
-| Tarjeta / tarea | Unidad de trabajo con tipo, color, responsable, etiquetas, enlace, checklist, descripción y capturas. |
+| Tarjeta / tarea | Unidad de trabajo con tipo, color, responsable, etiquetas, enlace, subtareas, descripción y capturas. |
 | Release | Registro histórico de un despliegue: texto final editado y tareas incluidas. |
 | Plantillas | Cabecera y pie estándar de cada usuario, que se insertan en las releases que genera. |
 | Entregable | Hito del proyecto con fecha objetivo que agrupa tarjetas. Su avance aparece en el informe PDF. |
@@ -81,14 +81,14 @@ La aplicación es un **monolito en un único contenedor**. No hay colas, cachés
 
 | Tabla | Campos principales | Notas |
 |---|---|---|
-| `User` | email (único), name, passwordHash, role, active, cardStyle, preferencias de aviso | Los usuarios no se borran: se desactivan. |
+| `User` | email (único), name, passwordHash, role, active, cardStyle, preferencias de aviso | Se pueden desactivar o borrar; al borrar a alguien se borran sus proyectos privados. |
 | `Session` | id = HMAC del token, userId, expiresAt | El token en claro solo vive en la cookie. |
 | `Project` | name, description, restricted, position | `restricted = false` → visible para todos. |
 | `ProjectMember` | projectId, userId | Usuarios con acceso a un proyecto restringido. |
 | `Column` | projectId, name, position, role | Índice único parcial: como máximo una columna por rol en cada proyecto. |
 | `Task` | projectId, columnId, kindId, title, description, color, linkUrl, position, assigneeId, archivedAt | Posición fraccionaria para reordenar actualizando una sola fila. |
 | `Label` / `TaskLabel` | name, color | Etiquetas por proyecto. |
-| `Subtask` | taskId, title, done, position | Checklist. |
+| `Subtask` | taskId, title, done, position | Subtareas de una tarea (no pasan a las releases). |
 | `TaskAttachment` | taskId, originalName, width, height, size | El fichero está en `UPLOAD_DIR/<id>.webp` (y `<id>.thumb.webp`). |
 | `Release` / `ReleaseTask` | content (Markdown final), deployedAt, autor · instantánea de título y tipo de cada tarea | La instantánea se conserva aunque la tarea se borre. |
 | `AppVersionLog` | version (única), releasedAt, summary, changes (JSON) | Se sincroniza desde `changelog.json` en cada arranque. |
@@ -148,7 +148,7 @@ Además, `Task` tiene `dueDate` (fecha límite, solo día), `Column` tiene `isDo
   - **visibilidad** (admins), con tres opciones:
     - *Visible para todos*;
     - *Solo los usuarios seleccionados* (y los administradores);
-    - *Privado: solo tú*. Nadie más lo ve ni puede entrar, tampoco los demás administradores, y no aparece en sus listados, avisos ni asignaciones. Pide confirmación. También se puede elegir al crear el proyecto. Si su dueño se desactiva o deja de ser administrador, el proyecto queda **bloqueado** (nadie lo ve); si en 30 días no vuelve a estar activo como administrador, el proyecto **se borra** automáticamente con todo su contenido;
+    - *Privado: solo tú*. Nadie más lo ve ni puede entrar, tampoco los demás administradores, y no aparece en sus listados, avisos ni asignaciones. Pide confirmación. También se puede elegir al crear el proyecto. Si su dueño se desactiva o deja de ser administrador, el proyecto queda **bloqueado** (nadie lo ve) hasta que vuelva a ser administrador activo. Si se **borra** al dueño, sus proyectos privados se borran con él, con todo su contenido (antes se avisa y se pide confirmación);
   - etiquetas;
   - borrado del proyecto (admins; pide escribir el nombre para confirmar).
 
@@ -163,7 +163,7 @@ Desde el menú «⋯» de cada columna:
 
 ### 3.4 Tarjetas
 
-- **Crear:** botón *Nueva tarea*, el «+» de cada columna o el botón flotante en móvil. El formulario empieza por **Título, Tipo y Descripción**; en móvil se abre arriba de la pantalla para que esos campos se vean con el teclado abierto. Solo el título y el tipo son obligatorios; asignarla a alguien es opcional.
+- **Crear:** botón *Nueva tarea*, el «+» de cada columna o el botón flotante en móvil. El formulario empieza por **Título, Tipo y Descripción**; en móvil se abre arriba de la pantalla para que esos campos se vean con el teclado abierto. Solo el título y el tipo son obligatorios; asignarla a alguien es opcional. **Ctrl/⌘+Enter** en cualquier campo crea la tarea.
 - **Crear varias a la vez:** botón **Varias tareas** (escritorio) o el botón flotante pequeño encima del «+» (móvil).
   - Elige la columna (por defecto, la que estás viendo) y pega una lista: **cada línea es una tarea** con ese título. Las líneas vacías se ignoran y se quitan viñetas como «-», «*», «1.» o «[ ]».
   - Elige el **tipo para todas** y, si alguna es distinta, cámbialo en su línea. Volver a pulsar un tipo común lo aplica a todas las líneas, también a las cambiadas a mano.
@@ -171,8 +171,10 @@ Desde el menú «⋯» de cada columna:
   - Hasta 100 tareas de una vez; se añaden al final de la columna en el orden de la lista.
 - **Tipo:** por defecto *Funcionalidad* o *Corrección*. Los administradores pueden crear más tipos generales, y cada proyecto puede tener los suyos (ver 3.14).
 - **Atajo de captura:** pega una imagen (Ctrl/⌘+V) con el tablero en pantalla y se abre *Nueva tarea* con la captura adjunta.
+- **Dos tareas a la vez (escritorio):** con una tarea abierta (nueva o existente), el botón redondo **+** que hay fuera del modal, en su esquina inferior derecha, abre una tarea nueva a la derecha (por defecto en *Backlog*) y la abierta se desplaza a la izquierda. Se puede trabajar en las dos; Escape o atrás cierran la última abierta.
+- **Quién está trabajando:** en escritorio, a la izquierda de **Informe PDF** aparecen círculos con las **iniciales** de las otras personas que han hecho cualquier acción en ese tablero (abrir, crear, mover, editar, subir adjuntos…) en los **últimos 5 minutos**; al pasar el ratón se ven sus nombres. Se actualiza cada 20 segundos y tú no apareces. Si hay más de cinco, se muestra «+N».
 - **Editar:** haz clic en la tarjeta. Los cambios se guardan solos (título y enlace al salir del campo; tipo, color, responsable, etiquetas y columna al cambiarlos). La descripción admite Markdown (Ctrl/⌘+Enter guarda).
-- **Checklist:** añade elementos y márcalos. La tarjeta muestra el progreso (p. ej. `2/4`).
+- **Subtareas:** añádelas y márcalas. Junto al título *Subtareas* hay una barra verde que se llena según la proporción de subtareas hechas (con dos, cada una marca el 50 %, da igual el orden); la tarjeta muestra el progreso (p. ej. `2/4`). Las subtareas **no pasan** al texto de las releases.
 - **Adjuntos:** cualquier tipo de archivo de hasta 10 MB. Pégalos con Ctrl/⌘+V, usa *Añadir* o **arrástralos** sobre la tarea abierta (aparece «Suelta para adjuntar»); también desde la ventana de descargas del navegador. Los que no son imagen se listan con su icono, nombre y tamaño, y se descargan (nunca se abren dentro de Pizarro, por seguridad).
 - **Capturas e imágenes:** al tocar o hacer clic en una imagen se ve **a pantalla completa**; se cierra con la **X**, tocando fuera de la imagen, con Escape o con el botón atrás. Con varias imágenes, las flechas pasan de una a otra. En móvil también tienes el botón **Cámara**, al crear la tarea y en el detalle de una tarea existente. Cada imagen se reduce a 1280 px de ancho como máximo y se guarda como WebP (calidad 75).
 - **Archivar** oculta la tarjeta del tablero (desde su detalle o, para varias, con **Archivar** en la barra de selección). **Borrar** la elimina con sus adjuntos.
@@ -191,7 +193,7 @@ Desde el menú «⋯» de cada columna:
 
 ### 3.6 Generar una release
 
-**Tareas fijas («Siempre en la release»).** Al pie de la columna *Siguiente salto a producción* hay una sección plegable que indica cuántas tareas fijas tiene. Al abrirla, se despliega hacia arriba con esas tareas y el botón **+ Añadir**. Son tareas que se repiten en cada despliegue (por ejemplo, «Generar el PDF de la release»): entran preseleccionadas en cada release (con la marca *fija*), pero **no salen de la columna** al marcarla como desplegada. Solo se añaden al usar **Generar Release** de esa columna, no con *Release con selección*. Para convertir una tarea en fija, arrástrala sobre la sección: si está cerrada se abre al mantenerla encima un momento. También se puede marcar o desmarcar una tarea existente de esa columna con *Fija en la release* en su detalle. Si se mueve a otra columna o se archiva, deja de ser fija.
+**Tareas fijas («Siempre en la release»).** Al pie de la columna *Siguiente salto a producción* hay una sección plegable que indica cuántas tareas fijas tiene. Al abrirla, se despliega hacia arriba con esas tareas y el botón **+ Añadir**. Son tareas que se repiten en cada despliegue (por ejemplo, «Generar el PDF de la release»): entran preseleccionadas en cada release (con la marca *fija*), pero **no salen de la columna** al marcarla como desplegada. Solo se añaden al usar **Generar Release** de esa columna, no con *Release con selección*. Para convertir una tarea en fija, arrástrala sobre la sección: si está cerrada se abre al mantenerla encima un momento. También se puede marcar o desmarcar una tarea existente de esa columna con *Fija en la release* en su detalle. Si se mueve a otra columna o se archiva, deja de ser fija. Las tareas del panel también se pueden **arrastrar fuera** a cualquier columna y posición (en táctil, con su asa): dejan de ser fijas.
 
 1. Prepara tus plantillas en **Mi perfil y plantillas → Plantillas de release notes**. Puedes tener **varias cabeceras** (por ejemplo, «Contexto para IA» o «Para negocio») y **varios pies** (por ejemplo, «Checklist de cierre»), cada uno con su nombre.
 2. En el tablero, pulsa **Generar Release** en la columna *Siguiente salto a producción*.
@@ -274,6 +276,7 @@ El menú lateral muestra, debajo de las opciones del proyecto: **Avisos**, **Mis
 
 ### 3.12 Móvil
 
+- La pantalla no hace scroll vertical: las columnas llegan justo hasta encima de los botones del sistema (barra de gestos o de navegación).
 - El tablero muestra una columna cada vez. Cambias de columna con las pestañas superiores, que indican cuántas tarjetas tiene cada una, o **deslizando el dedo a izquierda o derecha** sobre la columna.
 - El botón flotante **+** crea una tarea en la columna visible, con opción de **Cámara** o **Archivo**. El botón *Crear tarea* queda siempre visible abajo del formulario.
 - El botón flotante pequeño de encima crea **varias tareas** pegando una lista (ver 3.4).
@@ -324,11 +327,14 @@ Cada acción se describe en lenguaje claro: «Creó la tarea «X» en «Backlog�
 
 **Proyectos privados en los logs:** la actividad de un proyecto privado solo la ve en detalle su dueño. El resto de administradores ve esas filas con la hora y el usuario y el texto «Actividad en un proyecto privado» (también en el CSV); los filtros de texto, nivel y categoría no las tienen en cuenta.
 
+**Solo cambios por defecto:** las consultas (páginas vistas, abrir una tarea, ver archivadas, generar el texto de una release, informes PDF y ZIP) se ocultan salvo que marques **Incluir consultas**. Los avisos y errores se ven siempre.
+
 Se filtra por periodo (1 h, 24 h, 7 días), nivel (Info, Aviso, Error), categoría, usuario y texto. Cada fila se despliega para ver los detalles y la IP. **Descargar CSV** exporta el filtro actual (hasta 20 000 filas). Los registros antiguos se borran solos.
 
 - **Usuarios → Nuevo usuario:** nombre, email, contraseña inicial (10 caracteres o más) y rol. Máximo de 5 usuarios activos (configurable con `MAX_USERS`).
 - **Editar:** nombre, email, rol y estado activo. Al desactivar a un usuario o cambiarle el rol se cierran sus sesiones. Un admin no puede quitarse a sí mismo el rol ni desactivarse.
 - **Restablecer contraseña:** asigna una nueva y cierra sus sesiones.
+- **Borrar** (papelera): elimina la cuenta para siempre. En los proyectos compartidos sus tareas y comentarios se conservan, sin autor. Si tiene **proyectos privados**, se muestra un aviso con cuántos son y hay que marcar una casilla de confirmación: se borran con él. Nadie puede borrarse a sí mismo.
 
 ---
 
@@ -356,7 +362,8 @@ Consulta la tabla completa en el `README.md`. Las imprescindibles son `DATABASE_
 | Situación | Acción |
 |---|---|
 | Alta de un miembro | *Administración → Usuarios → Nuevo usuario*. Comunica la contraseña inicial por un canal seguro y pide que la cambie. |
-| Baja | *Editar → desmarcar «Usuario activo»*. Sus tareas conservan el historial. |
+| Baja temporal | *Editar → desmarcar «Usuario activo»*. Sus tareas conservan el historial y sus proyectos privados quedan bloqueados. |
+| Baja definitiva | Botón **Borrar** (papelera). Sus proyectos privados se borran con él tras confirmarlo. |
 | Contraseña olvidada | Un admin usa *Restablecer contraseña*. |
 | Se pierde el acceso de todos los admins | Conéctate a la base de datos y promueve a un usuario existente: `UPDATE "User" SET role='ADMIN' WHERE email='persona@example.com';` |
 

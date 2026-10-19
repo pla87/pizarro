@@ -1,10 +1,10 @@
 "use client";
 
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { KeyRound, Pencil, UserPlus } from "lucide-react";
+import { KeyRound, Pencil, Trash2, TriangleAlert, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { createUser, resetUserPassword, updateUser } from "@/actions/users";
+import { createUser, deleteUser, resetUserPassword, updateUser } from "@/actions/users";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
 import { Modal } from "@/components/ui/Modal";
@@ -17,12 +17,14 @@ interface UserRow {
   email: string;
   role: Role;
   active: boolean;
+  privateProjects: number;
 }
 
 export function UsersAdmin({ users, meId, maxUsers }: { users: UserRow[]; meId: string; maxUsers: number }) {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [resetting, setResetting] = useState<UserRow | null>(null);
+  const [deleting, setDeleting] = useState<UserRow | null>(null);
   const activeCount = users.filter((u) => u.active).length;
 
   return (
@@ -52,12 +54,16 @@ export function UsersAdmin({ users, meId, maxUsers }: { users: UserRow[]; meId: 
             {!u.active && <span className="badge bg-slate-100 text-slate-500 ring-slate-400/20">Inactivo</span>}
             <button className="btn-icon" onClick={() => setEditing(u)} aria-label={`Editar ${u.name}`}><Pencil size={16} /></button>
             <button className="btn-icon" onClick={() => setResetting(u)} aria-label={`Restablecer contraseña de ${u.name}`}><KeyRound size={16} /></button>
+            {u.id !== meId && (
+              <button className="btn-icon text-red-600 dark:text-red-400" onClick={() => setDeleting(u)} aria-label={`Borrar ${u.name}`}><Trash2 size={16} /></button>
+            )}
           </li>
         ))}
       </ul>
       {creating && <UserForm onClose={() => setCreating(false)} />}
       {editing && <UserForm user={editing} isMe={editing.id === meId} onClose={() => setEditing(null)} />}
       {resetting && <ResetPassword user={resetting} onClose={() => setResetting(null)} />}
+      {deleting && <DeleteUser user={deleting} onClose={() => setDeleting(null)} />}
     </div>
   );
 }
@@ -113,6 +119,11 @@ function UserForm({ user, isMe, onClose }: { user?: UserRow; isMe?: boolean; onC
             Usuario activo (si lo desactivas, se cierran sus sesiones)
           </label>
         )}
+        {user && user.privateProjects > 0 && (!active || role !== "ADMIN") && (
+          <p className="text-xs text-amber-700 dark:text-amber-300">
+            {user.privateProjects === 1 ? "Su proyecto privado quedará bloqueado" : `Sus ${user.privateProjects} proyectos privados quedarán bloqueados`} (nadie podrá verlos) hasta que vuelva a ser administrador activo.
+          </p>
+        )}
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
           <button className="btn-primary" disabled={pending}>{user ? "Guardar" : "Crear usuario"}</button>
@@ -147,6 +158,49 @@ function ResetPassword({ user, onClose }: { user: UserRow; onClose: () => void }
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
           <button className="btn-primary" disabled={pending}>Restablecer</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function DeleteUser({ user, onClose }: { user: UserRow; onClose: () => void }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [pending, start] = useTransition();
+  const [confirmed, setConfirmed] = useState(false);
+  const count = user.privateProjects;
+  return (
+    <Modal open onClose={onClose} title={`Borrar a ${user.name}`} size="sm">
+      <form
+        className="space-y-3 text-sm"
+        onSubmit={(e) => {
+          e.preventDefault();
+          start(async () => {
+            const res = await deleteUser(user.id, count > 0 && confirmed);
+            if (!res.ok) return toast(res.error, "error");
+            toast(count ? "Usuario y proyectos privados borrados" : "Usuario borrado");
+            router.refresh();
+            onClose();
+          });
+        }}
+      >
+        <p>Se borrará su cuenta para siempre. En los proyectos compartidos sus tareas y comentarios se conservan, sin autor. Si solo quieres quitarle el acceso, desactívalo.</p>
+        {count > 0 && (
+          <div className="space-y-2 rounded-lg border border-red-300 bg-red-50 p-3 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
+            <p className="flex gap-2 font-medium">
+              <TriangleAlert size={18} className="shrink-0" />
+              {count === 1 ? "Tiene 1 proyecto privado." : `Tiene ${count} proyectos privados.`} Se borrarán con todas sus tareas, releases y adjuntos, y no se pueden recuperar.
+            </p>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+              Entiendo que se borran {count === 1 ? "su proyecto privado" : "sus proyectos privados"}
+            </label>
+          </div>
+        )}
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
+          <button className="btn-primary bg-red-600 hover:bg-red-700" disabled={pending || (count > 0 && !confirmed)}>Borrar usuario</button>
         </div>
       </form>
     </Modal>

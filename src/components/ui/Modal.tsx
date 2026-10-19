@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "./cn";
@@ -19,11 +19,22 @@ interface ModalProps {
   placement?: "bottom" | "top";
   /** Clases extra para el panel (p. ej. una altura fija en escritorio). */
   panelClassName?: string;
+  /** Escritorio (lg+): "left"/"right" colocan el modal en una mitad de la pantalla (pareja de modales); "center" por defecto. */
+  side?: "left" | "right" | "center";
+  /** Escritorio (lg+): si se pasa, muestra un «+» fuera del panel (esquina inferior derecha) que lo llama. */
+  onAddSecond?: () => void;
 }
 
-const SIZES = { sm: "sm:max-w-md", md: "sm:max-w-xl", lg: "sm:max-w-3xl", xl: "sm:max-w-5xl" };
+/** Pila de modales abiertos (el último es el de más arriba): solo él responde a Escape y al clic en el fondo. */
+const modalStack: { close: () => void }[] = [];
+let scrollLocks = 0;
+let savedOverflow = "";
 
-export function Modal({ open, onClose, title, children, footer, size = "md", header, placement = "bottom", panelClassName }: ModalProps) {
+const SIZES = { sm: "sm:max-w-md", md: "sm:max-w-xl", lg: "sm:max-w-3xl", xl: "sm:max-w-5xl" };
+/** Ancho máximo de cada tamaño (para combinarlo con el límite de media pantalla en lg). */
+const SIZE_REM = { sm: "28rem", md: "36rem", lg: "48rem", xl: "64rem" };
+
+export function Modal({ open, onClose, title, children, footer, size = "md", header, placement = "bottom", panelClassName, side = "center", onAddSecond }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   useEffect(() => {
@@ -47,11 +58,13 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement as HTMLElement | null;
+    const entry = { close: () => onCloseRef.current() };
+    modalStack.push(entry);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !e.defaultPrevented) onCloseRef.current();
+      if (e.key === "Escape" && !e.defaultPrevented && modalStack[modalStack.length - 1] === entry) onCloseRef.current();
     };
     document.addEventListener("keydown", onKey);
-    const { overflow } = document.body.style;
+    if (scrollLocks++ === 0) savedOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     // Enfoca el primer campo, o el panel.
     requestAnimationFrame(() => {
@@ -60,7 +73,8 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
     });
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = overflow;
+      modalStack.splice(modalStack.indexOf(entry), 1);
+      if (--scrollLocks === 0) document.body.style.overflow = savedOverflow;
       previous?.focus?.();
     };
   }, [open]);
@@ -72,19 +86,31 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
       className={cn(
         "fixed inset-0 z-50 flex justify-center sm:items-center sm:p-4",
         top ? "items-start pt-[env(safe-area-inset-top)] sm:pt-4" : "items-end",
+        side === "left" && "lg:justify-start",
+        // El segundo modal no tapa al primero: solo su panel recibe clics.
+        side === "right" && "lg:pointer-events-none lg:justify-end",
       )}
     >
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" onMouseDown={onClose} aria-hidden />
+      {/* Un solo fondo para la pareja (lo pone el modal de la izquierda o el único); cierra el de más arriba. */}
+      {side !== "right" && (
+        <div
+          className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]"
+          onMouseDown={() => (modalStack[modalStack.length - 1]?.close ?? onClose)()}
+          aria-hidden
+        />
+      )}
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
-        style={top && viewportH ? ({ "--vvh": `${viewportH}px` } as React.CSSProperties) : undefined}
+        style={{ "--mw": SIZE_REM[size], ...(top && viewportH ? { "--vvh": `${viewportH}px` } : {}) } as React.CSSProperties}
         className={cn(
           "relative flex w-full flex-col border border-slate-200 bg-white shadow-2xl outline-none sm:rounded-2xl dark:border-slate-600/70 dark:bg-slate-900",
           top ? "max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top))] rounded-b-2xl sm:max-h-[calc(100dvh-2rem)]" : "max-h-[92dvh] rounded-t-2xl",
           SIZES[size],
+          side === "center" && onAddSecond && "lg:max-w-[min(var(--mw),calc(100vw-9rem))]", // hueco para el «+»
+          side !== "center" && "lg:max-w-[min(var(--mw),calc(50vw-1.5rem))] lg:pointer-events-auto",
           panelClassName,
         )}
       >
@@ -101,6 +127,17 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
           <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-slate-800">
             {footer}
           </div>
+        )}
+        {onAddSecond && side === "center" && (
+          <button
+            type="button"
+            onClick={onAddSecond}
+            className="absolute bottom-0 left-full ml-3 hidden h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95 lg:flex"
+            aria-label="Abrir otra tarea nueva al lado"
+            title="Abrir otra tarea nueva al lado"
+          >
+            <Plus size={26} />
+          </button>
         )}
       </div>
     </div>,
