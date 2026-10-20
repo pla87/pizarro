@@ -1,12 +1,15 @@
 "use client";
 
-import { Archive, Camera, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, ImagePlus, Loader2, Plus, Send, Trash2, X } from "lucide-react";
+import { Archive, Camera, Check, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Plus, Send, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   addComment, addSubtask, archiveTask, deleteAttachment, deleteComment, deleteSubtask, deleteTask, deleteTaskLink, getTaskDetail,
-  moveTask, updateSubtask, updateTask,
+  moveTask, reorderSubtask, updateSubtask, updateTask,
 } from "@/actions/tasks";
+import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { dueStatus } from "@/lib/dates";
 import { kindBadgeStyle } from "@/lib/constants";
 import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
@@ -20,6 +23,7 @@ import { Modal } from "../ui/Modal";
 import { applyKindTemplate } from "@/lib/kinds-special";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
+import { TaskViewers } from "./TaskViewers";
 import { createAndOpenGoogleFile } from "./google";
 import { filesFrom, formatBytes, uploadFile, useFileDrop } from "./upload";
 
@@ -28,6 +32,12 @@ export function TaskDialog({ task, onClose, side, onAddSecond }: { task: BoardTa
   const toast = useToast();
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [title, setTitle] = useState(task.title);
+  // Si el título cambia desde fuera (recarga tras un conflicto, deshacer), se muestra el nuevo.
+  const [shownTitle, setShownTitle] = useState(task.title);
+  if (shownTitle !== task.title) {
+    setShownTitle(task.title);
+    setTitle(task.title);
+  }
   // Se incrementa al cambiar la descripción desde fuera del editor para que se remonte con el texto nuevo.
   const [descVersion, setDescVersion] = useState(0);
   const [link, setLink] = useState(task.linkUrl ?? "");
@@ -46,16 +56,51 @@ export function TaskDialog({ task, onClose, side, onAddSecond }: { task: BoardTa
     };
   }, [task.id, toast]);
 
+  // Indicador «Guardando… / Guardado»: cuenta los guardados en curso de este diálogo.
+  const [saving, setSaving] = useState(0);
+  const [justSaved, setJustSaved] = useState(false);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(savedTimer.current), []);
+  const tracked = async <T extends { ok: boolean }>(p: Promise<T>): Promise<T> => {
+    clearTimeout(savedTimer.current);
+    setJustSaved(false);
+    setSaving((n) => n + 1);
+    try {
+      const res = await board.track(p);
+      if (res.ok) {
+        setJustSaved(true);
+        savedTimer.current = setTimeout(() => setJustSaved(false), 2500);
+      }
+      return res;
+    } finally {
+      setSaving((n) => n - 1);
+    }
+  };
+
+  /** Vuelve a leer la tarea (p. ej. si otra persona cambió su texto mientras se editaba). */
+  const reload = async () => {
+    const res = await getTaskDetail(task.id);
+    if (!res.ok) return;
+    setDetail(res.data);
+    setDescVersion((n) => n + 1);
+    board.refresh();
+  };
+
   /** Guardado optimista de campos de la tarjeta. */
   const save = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>) => {
     const before = board.taskById.get(task.id);
     board.patchTask(task.id, optimistic);
-    const res = await board.track(updateTask(task.id, patch));
+    // Título y descripción: se envía qué versión se estaba editando para no pisar a otra persona.
+    const editsText = patch.title !== undefined || patch.description !== undefined;
+    const res = await tracked(updateTask(task.id, patch, editsText ? (detail?.textVersion ?? null) : undefined));
     if (!res.ok) {
       if (before) board.upsertTask(before);
-      return toast(res.error, "error");
+      toast(res.error, "error");
+      if (editsText) await reload();
+      return;
     }
     board.upsertTask(res.data);
+    if (editsText) setDetail((d) => (d ? { ...d, textVersion: res.data.textVersion } : d));
   };
 
   const changeColumn = async (columnId: string) => {
@@ -63,7 +108,7 @@ export function TaskDialog({ task, onClose, side, onAddSecond }: { task: BoardTa
     const before = board.taskById.get(task.id)!;
     const last = Math.max(0, ...[...board.taskById.values()].filter((t) => t.columnId === columnId).map((t) => t.position));
     board.patchTask(task.id, { columnId, position: last + 1024, evergreen: false });
-    const res = await board.track(moveTask(task.id, columnId, null, null));
+    const res = await tracked(moveTask(task.id, columnId, null, null));
     if (!res.ok) {
       board.upsertTask(before);
       return toast(res.error, "error");
@@ -197,6 +242,15 @@ export function TaskDialog({ task, onClose, side, onAddSecond }: { task: BoardTa
             className="field-sizing-content min-w-0 flex-1 resize-none rounded-md bg-transparent px-1 py-0.5 text-lg font-semibold outline-none focus:bg-slate-50 dark:focus:bg-slate-800"
             aria-label="Título"
           />
+          <span className="mt-1.5 flex h-5 shrink-0 items-center text-xs" role="status" aria-live="polite">
+            {saving > 0 ? (
+              <span className="flex items-center gap-1 text-slate-500"><Loader2 size={13} className="animate-spin" /> Guardando…</span>
+            ) : (
+              <span className={cn("flex items-center gap-1 text-emerald-600 transition-opacity duration-500 dark:text-emerald-400", justSaved ? "opacity-100" : "opacity-0")}>
+                <Check size={13} /> Guardado
+              </span>
+            )}
+          </span>
           <button type="button" className="btn-icon" onClick={onClose} aria-label="Cerrar">
             <X size={18} />
           </button>
@@ -205,6 +259,7 @@ export function TaskDialog({ task, onClose, side, onAddSecond }: { task: BoardTa
     >
       <div onPaste={onPaste} className="grid gap-6 md:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-w-0 space-y-6 md:max-h-[calc(100dvh-9rem)] md:overflow-y-auto md:pr-2">
+          <TaskViewers taskId={task.id} />
           <DescriptionEditor
             key={detail ? `loaded-${descVersion}` : "loading"}
             users={board.users}
@@ -532,6 +587,7 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
   const board = useBoard();
   const toast = useToast();
   const [newTitle, setNewTitle] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
   const subtasks = detail?.subtasks;
   const list = subtasks ?? [];
   const done = list.filter((s) => s.done).length;
@@ -567,6 +623,41 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
     }
   };
 
+  const rename = async (s: SubtaskInfo, title: string) => {
+    setEditingId(null);
+    if (!title || title === s.title) return;
+    update((l) => l.map((x) => (x.id === s.id ? { ...x, title } : x)));
+    const res = await board.track(updateSubtask(s.id, { title }));
+    if (!res.ok) {
+      update((l) => l.map((x) => (x.id === s.id ? { ...x, title: s.title } : x)));
+      toast(res.error, "error");
+    }
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const onDragEnd = async ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const from = list.findIndex((x) => x.id === active.id);
+    const to = list.findIndex((x) => x.id === over.id);
+    if (from < 0 || to < 0) return;
+    const before = list;
+    const moved = arrayMove(list, from, to);
+    const id = String(active.id);
+    const prevId = moved[to - 1]?.id ?? null;
+    const nextId = moved[to + 1]?.id ?? null;
+    update(() => moved);
+    const res = await board.track(reorderSubtask(id, prevId, nextId));
+    if (!res.ok) {
+      update(() => before);
+      return toast(res.error, "error");
+    }
+    update((l) => l.map((x) => (x.id === id ? { ...x, position: res.data.position } : x)));
+  };
+
   const remove = async (s: SubtaskInfo) => {
     update((l) => l.filter((x) => x.id !== s.id));
     const res = await board.track(deleteSubtask(s.id));
@@ -595,22 +686,93 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
           />
         </div>
       </div>
-      <ul className="space-y-0.5">
-        {list.map((s) => (
-          <li key={s.id} className="group flex items-center gap-2 rounded-md px-1 py-1 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-            <input type="checkbox" checked={s.done} onChange={() => toggle(s)} className="h-4 w-4 accent-emerald-600" aria-label={s.title} />
-            <span className={cn("flex-1 text-sm", s.done && "text-slate-400 line-through")}>{s.title}</span>
-            <button className="btn-icon h-6 w-6 opacity-0 group-hover:opacity-100 max-md:opacity-100" onClick={() => remove(s)} aria-label="Borrar subtarea">
-              <X size={14} />
-            </button>
-          </li>
-        ))}
-      </ul>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <SortableContext items={list.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+          <ul className="space-y-0.5">
+            {list.map((s) => (
+              <SubtaskRow key={s.id} s={s} editing={editingId === s.id} onEdit={() => setEditingId(s.id)} onRename={(t) => rename(s, t)} onToggle={() => toggle(s)} onRemove={() => remove(s)} />
+            ))}
+          </ul>
+        </SortableContext>
+      </DndContext>
       <form onSubmit={add} className="mt-1 flex gap-2">
         <input className="input py-1.5" placeholder="Añadir subtarea…" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} maxLength={200} disabled={!detail} />
         <button className="btn-secondary py-1.5" disabled={!newTitle.trim()} aria-label="Añadir subtarea"><Plus size={15} /></button>
       </form>
     </section>
+  );
+}
+
+/** Fila ordenable: agarre de seis puntos, título editable con doble clic/toque y borrado. */
+function SubtaskRow({ s, editing, onEdit, onRename, onToggle, onRemove }: {
+  s: SubtaskInfo; editing: boolean; onEdit: () => void; onRename: (title: string) => void; onToggle: () => void; onRemove: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: s.id });
+  const [draft, setDraft] = useState(s.title);
+  // Evita guardar dos veces (Enter y el blur posterior) o guardar tras Escape.
+  const settled = useRef(false);
+  const finish = (save: boolean) => {
+    if (settled.current) return;
+    settled.current = true;
+    if (save) onRename(draft.trim());
+    else onRename("");
+  };
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      className={cn("group flex items-center gap-2 rounded-md px-1 py-1 hover:bg-slate-50 dark:hover:bg-slate-800/50", isDragging && "relative z-10 bg-white shadow-md dark:bg-slate-800")}
+    >
+      <button
+        type="button"
+        ref={setActivatorNodeRef}
+        {...attributes}
+        {...listeners}
+        style={{ touchAction: "none" }}
+        className="-ml-0.5 shrink-0 cursor-grab text-slate-400 hover:text-slate-600 active:cursor-grabbing dark:hover:text-slate-300"
+        aria-label="Arrastrar para reordenar"
+      >
+        <GripVertical size={16} />
+      </button>
+      <input type="checkbox" checked={s.done} onChange={onToggle} className="h-4 w-4 accent-emerald-600" aria-label={s.title} />
+      {editing ? (
+        <input
+          className="input min-w-0 flex-1 py-0.5 text-sm"
+          value={draft}
+          maxLength={200}
+          autoFocus
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => finish(true)}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return;
+            if (e.key === "Enter") {
+              e.preventDefault();
+              finish(true);
+            } else if (e.key === "Escape") {
+              // Cancela la edición sin cerrar el modal.
+              e.preventDefault();
+              e.stopPropagation();
+              finish(false);
+            }
+          }}
+        />
+      ) : (
+        <span
+          className={cn("flex-1 text-sm", s.done && "text-slate-400 line-through")}
+          onDoubleClick={() => {
+            settled.current = false;
+            setDraft(s.title);
+            onEdit();
+          }}
+        >
+          {s.title}
+        </span>
+      )}
+      <button className="btn-icon h-6 w-6 opacity-0 group-hover:opacity-100 max-md:opacity-100" onClick={onRemove} aria-label="Borrar subtarea">
+        <X size={14} />
+      </button>
+    </li>
   );
 }
 

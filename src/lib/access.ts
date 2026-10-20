@@ -20,7 +20,7 @@ export function visibleProjectsWhere(user: CurrentUser): Prisma.ProjectWhereInpu
 export async function listVisibleProjects(user: CurrentUser) {
   return db.project.findMany({
     where: visibleProjectsWhere(user),
-    select: { id: true, name: true },
+    select: { id: true, name: true, privateOwnerId: true },
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
   });
 }

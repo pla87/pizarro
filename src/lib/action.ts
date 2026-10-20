@@ -3,6 +3,7 @@ import { z } from "zod";
 import { actionContext } from "./action-context";
 import { AppError } from "./errors";
 import { logEvent } from "./log";
+import { saveUndo, type UndoOp } from "./undo";
 import { requestContext } from "./request-context";
 import { getCurrentUser } from "./session";
 
@@ -25,9 +26,10 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
   const start = performance.now();
   let result: ActionResult<T>;
   let level: "info" | "warn" | "error" = "info";
-  const ctx: { message?: string; projectId?: string | null; details?: Record<string, unknown> } = {};
+  const ctx: { message?: string; projectId?: string | null; details?: Record<string, unknown>; undo?: UndoOp[] } = {};
   try {
     result = { ok: true, data: await actionContext.run(ctx, fn) };
+    if (ctx.undo?.length && ctx.projectId) await recordUndo(meta?.name ?? "acción", ctx.projectId, ctx.message, ctx.undo);
   } catch (err) {
     // Los errores de redirect()/notFound() de Next deben propagarse.
     if (err && typeof err === "object" && "digest" in err && !(err instanceof AppError)) throw err;
@@ -54,6 +56,16 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
   // Con éxito, el texto que haya dejado la acción («Movió «X» de A a B»); si falla, el error.
   if (meta) await logAction(meta, ctx, start, level, result.ok ? (ctx.message ?? "OK") : result.error);
   return result;
+}
+
+/** Guarda lo necesario para deshacer la acción; si falla, la acción ya está hecha y solo se registra. */
+async function recordUndo(name: string, projectId: string, message: string | undefined, ops: UndoOp[]) {
+  try {
+    const user = await getCurrentUser();
+    if (user) await saveUndo(user.id, projectId, message ?? name, ops);
+  } catch (err) {
+    console.error("[undo] no se pudo guardar", err);
+  }
 }
 
 async function logAction(

@@ -13,6 +13,7 @@ import { createBoardCollisionDetection } from "@/lib/collision";
 import { positionBetween } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardTask, LabelOption } from "@/lib/types";
 import { ProjectMenu } from "../ProjectMenu";
+import { UndoButton } from "../UndoButton";
 import { useToast } from "../ui/Toast";
 import { cn } from "../ui/cn";
 import { ArchivedDialog } from "./ArchivedDialog";
@@ -118,13 +119,22 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // Si llegan datos en ese momento, se marcan como pendientes y se vuelven a pedir al terminar.
   const pending = useRef(0);
   const staleRefresh = useRef(false);
+  // Un refresco pedido antes de un cambio puede llegar después con el orden viejo (las tarjetas
+  // «se reordenan solas» un momento): se anota cuándo se pidió el último y cuándo empezó el último cambio.
+  const refreshAt = useRef(0);
+  const mutationAt = useRef(0);
+  const refresh = useCallback(() => {
+    refreshAt.current = performance.now();
+    router.refresh();
+  }, [router]);
   const flushStale = useCallback(() => {
     if (staleRefresh.current && pending.current === 0) {
       staleRefresh.current = false;
-      router.refresh();
+      refresh();
     }
-  }, [router]);
+  }, [refresh]);
   const track = useCallback(async <T,>(p: Promise<T>): Promise<T> => {
+    mutationAt.current = performance.now();
     pending.current++;
     try {
       return await p;
@@ -150,8 +160,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
 
   // Sincroniza con el servidor cuando llegan datos nuevos (router.refresh).
   useEffect(() => {
-    if (pending.current > 0 || activeId) {
+    if (pending.current > 0 || activeId || mutationAt.current > refreshAt.current) {
+      // Datos que pueden ser anteriores a un cambio propio: se piden otra vez cuando no quede ninguno en vuelo.
       staleRefresh.current = true;
+      if (!activeId) flushStale();
       return;
     }
     setColumns(data.columns);
@@ -162,16 +174,16 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
 
   // Refresco ligero para ver cambios de otros usuarios.
   useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState === "visible" && pending.current === 0 && !document.querySelector("[role=dialog]")) router.refresh();
+    const tick = () => {
+      if (document.visibilityState === "visible" && pending.current === 0 && !document.querySelector("[role=dialog]")) refresh();
     };
-    const timer = setInterval(refresh, REFRESH_MS);
-    window.addEventListener("focus", refresh);
+    const timer = setInterval(tick, REFRESH_MS);
+    window.addEventListener("focus", tick);
     return () => {
       clearInterval(timer);
-      window.removeEventListener("focus", refresh);
+      window.removeEventListener("focus", tick);
     };
-  }, [router]);
+  }, [refresh]);
 
   const baseItems = useMemo(() => groupItems(columns, tasks), [columns, tasks]);
   const items = dragItems ?? baseItems;
@@ -258,9 +270,9 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           return next;
         }),
       track,
-      refresh: () => router.refresh(),
+      refresh,
     }),
-    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, dragHandle, data.google, data.today, sortedColumns, labels, taskById, baseItems, evergreenByColumn, selected, track, router, patchTask],
+    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, dragHandle, data.google, data.today, sortedColumns, labels, taskById, baseItems, evergreenByColumn, selected, track, refresh, patchTask],
   );
 
   // --- Movimiento masivo ------------------------------------------------------
@@ -494,6 +506,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       <div className="flex h-full flex-col">
         <div className="flex items-center gap-3 px-4 pt-4 pb-2 max-lg:hidden">
           <h1 className="min-w-0"><ProjectMenu textClassName="text-lg" /></h1>
+          <UndoButton projectId={data.project.id} shortcut className="-ml-2" />
           <span className="text-sm text-slate-500">{tasks.length} tarjetas</span>
           <div className="ml-auto"><Presence projectId={data.project.id} /></div>
           <a className="btn-secondary" href={`/api/projects/${data.project.id}/report`} target="_blank" rel="noopener">

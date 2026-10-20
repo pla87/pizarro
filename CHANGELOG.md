@@ -2,6 +2,35 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.11.0 — 2026-10-20
+
+Deshacer las 10 últimas acciones, avisos para trabajar varios a la vez, subtareas al crear y reordenables, indicador «Guardado», candado de privados y recarga automática tras desplegar.
+
+### Nuevas funcionalidades
+
+- Botón Deshacer (flecha de volver) junto al nombre del tablero, también en móvil y con Ctrl/⌘+Z: deshace tus 10 últimas acciones en el tablero, incluidos borrados con adjuntos y despliegues de releases.
+- Al crear una tarea se pueden añadir subtareas.
+- Subtareas: doble clic para editarlas y arrastre desde el icono de seis puntos para reordenarlas.
+- Aviso «Fulano también tiene abierta esta tarea» y protección al editar el título o la descripción a la vez que otra persona.
+- Móvil: círculos de quién está activo en el tablero, arriba a la derecha.
+
+### Mejoras
+
+- Indicador «Guardando… / Guardado» en el detalle de la tarea.
+- Candado junto al nombre de los proyectos privados.
+- Los círculos de actividad te incluyen a ti.
+- Tras un despliegue, las pestañas abiertas se recargan solas al volver a ellas (o avisan si estás escribiendo).
+
+### Correcciones
+
+- Dos tareas a la vez: quedan juntas y centradas, con el mismo ancho y un hueco pequeño.
+- Tarjetas que a veces volvían un momento a su orden anterior: un refresco pedido antes de un cambio ya no pisa ese cambio.
+- Error «Server Action … was not found on the server» al usar una pestaña abierta antes de un despliegue.
+
+### Cambios técnicos / DB
+
+- Migración v1_11: UndoEntry y Task.contentUpdatedAt/contentUpdatedById. Operaciones inversas por acción (src/lib/undo.ts) guardadas por runAction; los ficheros de adjuntos borrados se conservan mientras su entrada exista. buildId propio y /api/version. Presencia por tarea en memoria (/api/tasks/[id]/viewers).
+
 ## v1.10.0 — 2026-10-19
 
 Barra de progreso de subtareas, dos tareas a la vez en escritorio, Ctrl+Enter para crear, quién está activo en el tablero, sacar tareas de la sección de fijas, logs con solo cambios por defecto y borrado de usuarios.

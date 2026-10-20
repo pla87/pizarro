@@ -54,6 +54,7 @@ model User {
   comments          TaskComment[]
   notifications     Notification[]    @relation("NotificationRecipient")
   notificationsSent Notification[]    @relation("NotificationActor")
+  undoEntries       UndoEntry[]
 }
 
 model Session {
@@ -76,7 +77,7 @@ model Project {
   restricted  Boolean  @default(false)
   /// Proyecto privado: solo lo ve y lo usa este usuario (ni siquiera los demás administradores).
   privateOwnerId String?
-  /// Desde cuándo está bloqueado (su dueño se desactivó o dejó de ser admin). A los 30 días se borra.
+  /// Desde cuándo está bloqueado (su dueño se desactivó o dejó de ser admin). Se borra al borrar al dueño.
   privateBlockedAt DateTime?
   position    Float    @default(0)
   createdAt   DateTime @default(now())
@@ -90,6 +91,7 @@ model Project {
   deliverables Deliverable[]
   kinds        TaskKind[]
   hiddenKinds  ProjectHiddenKind[]
+  undoEntries  UndoEntry[]
   privateOwner User?           @relation("PrivateProjects", fields: [privateOwnerId], references: [id], onDelete: SetNull)
 
   @@index([position])
@@ -139,6 +141,9 @@ model Task {
   archivedFromColumnId String?
   /// Tarea fija de la columna «Siguiente salto»: se incluye en cada release y no sale de la columna al desplegar.
   evergreen     Boolean   @default(false)
+  /// Último cambio de contenido (título, descripción, tipo…) y quién lo hizo: detecta ediciones simultáneas.
+  contentUpdatedAt   DateTime?
+  contentUpdatedById String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -465,4 +470,20 @@ model ReleaseTemplate {
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, kind, position])
+}
+
+/// Acción deshacible de un usuario en un proyecto (se guardan las 10 últimas). `ops` son las
+/// operaciones inversas, que se aplican en orden inverso al deshacer (ver src/lib/undo.ts).
+model UndoEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String
+  label     String
+  ops       Json
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([userId, projectId, createdAt])
+  @@index([createdAt])
 }

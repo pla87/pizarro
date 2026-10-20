@@ -1,13 +1,18 @@
 "use client";
 
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Lock } from "lucide-react";
 import Link from "next/link";
 import { createContext, useContext, useState } from "react";
 import { cn } from "./ui/cn";
 
 interface ProjectsValue {
-  projects: { id: string; name: string }[];
+  projects: { id: string; name: string; isPrivate?: boolean }[];
   currentId: string | null;
+}
+
+/** Candado discreto junto al nombre de un proyecto privado. */
+export function PrivateIcon({ className }: { className?: string }) {
+  return <Lock size={14} className={cn("shrink-0 text-slate-400", className)} aria-label="Proyecto privado" role="img"><title>Proyecto privado</title></Lock>;
 }
 
 export const ProjectsContext = createContext<ProjectsValue>({ projects: [], currentId: null });
@@ -29,6 +34,7 @@ export function ProjectMenu({ className, textClassName }: { className?: string; 
         aria-expanded={open}
       >
         <span className={cn("truncate font-semibold", textClassName)}>{current.name}</span>
+        {current.isPrivate && <PrivateIcon />}
         <ChevronDown size={16} className={cn("shrink-0 text-slate-400 transition-transform", open && "rotate-180")} />
       </button>
       {open && (
@@ -46,6 +52,7 @@ export function ProjectMenu({ className, textClassName }: { className?: string; 
                   )}
                 >
                   <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                  {p.isPrivate && <PrivateIcon />}
                   {p.id === currentId && <Check size={15} />}
                 </Link>
               </li>
