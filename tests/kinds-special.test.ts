@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyKindPreset, applyKindTemplate, describeKindAutomation, isRespuestaKind, RESPUESTA_LINE } from "../src/lib/kinds-special";
+import { applyKindTemplate, describeKindAutomation } from "../src/lib/kinds-special";
+
+const RESPUESTA_LINE = "Respondo a las preguntas y lo que necesitas de mi:";
 
 const RESP = { titleTemplate: "Respuesta", descriptionTemplate: RESPUESTA_LINE };
 
@@ -34,11 +36,4 @@ test("describeKindAutomation resume y trunca", () => {
   const line = describeKindAutomation(RESP)!;
   assert.ok(line.includes("«Respuesta»") && line.includes("«Respondo a las preguntas y lo que necesitas de mi:»"));
   assert.ok(describeKindAutomation({ titleTemplate: "", descriptionTemplate: "a".repeat(100) })!.includes("…"));
-});
-
-test("compatibilidad: wrappers de «Respuesta»", () => {
-  for (const n of ["Respuesta", " RESPUESTA ", "Réspuesta"]) assert.ok(isRespuestaKind(n), n);
-  assert.ok(!isRespuestaKind("Respuestas"));
-  assert.equal(applyKindPreset("Corrección", { title: "x", description: "y" }), null);
-  assert.equal(applyKindPreset("Respuesta", { title: "x", description: "" })!.title, "Respuesta");
 });

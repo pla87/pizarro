@@ -22,7 +22,8 @@ const writeJson = (f, data) => writeFileSync(f, JSON.stringify(data, null, 2) + 
 function renderMarkdown(changelog) {
   const out = ["# Changelog", "", "Historial de versiones de Pizarro. Fuente: `changelog.json`.", ""];
   for (const v of changelog.versions) {
-    out.push(`## v${v.version} — ${v.date}`, "");
+    const time = v.releasedAt ? ` ${v.releasedAt.slice(11, 16)}` : "";
+    out.push(`## v${v.version} — ${v.date}${time}`, "");
     if (v.summary) out.push(v.summary, "");
     for (const [key, label] of CATEGORIES) {
       const items = v.changes?.[key] ?? [];
@@ -62,10 +63,17 @@ if (!args.includes("--render")) {
     console.error(`La versión ${next} ya existe en changelog.json`);
     process.exit(1);
   }
-  const date = opt("--date") ?? new Date().toISOString().slice(0, 10);
+  // Hora local del lanzamiento con su desfase (p. ej. 2026-10-20T19:10:00+02:00).
+  const now = new Date();
+  const offset = -now.getTimezoneOffset();
+  const pad = (n) => String(Math.trunc(Math.abs(n))).padStart(2, "0");
+  const local = new Date(now.getTime() + offset * 60000).toISOString().slice(0, 19);
+  const releasedAt = `${local}${offset >= 0 ? "+" : "-"}${pad(offset / 60)}:${pad(offset % 60)}`;
+  const date = opt("--date") ?? releasedAt.slice(0, 10);
   changelog.versions.unshift({
     version: next,
     date,
+    releasedAt,
     summary: opt("--summary") ?? "",
     changes: { nuevas: [], mejoras: [], correcciones: [], tecnicos: [] },
   });

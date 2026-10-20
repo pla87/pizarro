@@ -68,12 +68,41 @@ export async function updateCardStyle(style: "STRIPE" | "FILLED") {
   });
 }
 
+/** Modo de edición de descripciones: Markdown escrito o editor con barra de formato. */
+export async function updateEditorMode(mode: "MARKDOWN" | "WYSIWYG") {
+  return runAction({ name: "profile.updateEditorMode", args: [mode] }, async () => {
+    const user = await requireUser();
+    await db.user.update({ where: { id: user.id }, data: { editorMode: z.enum(["MARKDOWN", "WYSIWYG"]).parse(mode) } });
+    revalidatePath("/", "layout");
+  });
+}
+
 /** Tema de color del usuario: SYSTEM sigue al sistema operativo. */
 export async function updateTheme(theme: "SYSTEM" | "LIGHT" | "DARK") {
   return runAction({ name: "profile.updateTheme", args: [theme] }, async () => {
     const user = await requireUser();
     await db.user.update({ where: { id: user.id }, data: { theme: z.enum(["SYSTEM", "LIGHT", "DARK"]).parse(theme) } });
     // El atributo data-theme se pinta en el layout raíz.
+    revalidatePath("/", "layout");
+  });
+}
+
+/** Idioma de la interfaz. */
+export async function updateLocale(locale: "ES" | "EN") {
+  return runAction({ name: "profile.updateLocale", args: [locale] }, async () => {
+    const user = await requireUser();
+    await db.user.update({ where: { id: user.id }, data: { locale: z.enum(["ES", "EN"]).parse(locale) } });
+    // El idioma se aplica en el layout raíz (lang y traducciones).
+    revalidatePath("/", "layout");
+  });
+}
+
+/** Color de acento de la app (variables --color-brand-*). */
+export async function updateAccent(accent: "BLUE" | "FOREST" | "SIENNA" | "MUSTARD" | "MONO") {
+  return runAction({ name: "profile.updateAccent", args: [accent] }, async () => {
+    const user = await requireUser();
+    await db.user.update({ where: { id: user.id }, data: { accent: z.enum(["BLUE", "FOREST", "SIENNA", "MUSTARD", "MONO"]).parse(accent) } });
+    // El atributo data-accent se pinta en el layout raíz.
     revalidatePath("/", "layout");
   });
 }

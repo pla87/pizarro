@@ -2,17 +2,22 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useT } from "@/i18n/client";
+import { UNDERLINE_HREF, underlineToLink } from "@/lib/markdown-underline";
 import { mentionsToMarkdown } from "@/lib/mentions";
 
 /** Markdown seguro: react-markdown no interpreta HTML y filtra URLs peligrosas. */
 export function Markdown({ children }: { children: string }) {
+  const t = useT();
   return (
     <div className="prose-md">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
           a: ({ node: _node, href, children, ...props }) =>
-            href?.startsWith("#mention-") ? (
+            href === UNDERLINE_HREF ? (
+              <u>{children}</u>
+            ) : href?.startsWith("#mention-") ? (
               <span className="rounded bg-brand-50 px-1 font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-100">{children}</span>
             ) : (
               <a {...props} href={href} target="_blank" rel="noopener noreferrer nofollow">
@@ -24,11 +29,11 @@ export function Markdown({ children }: { children: string }) {
               // eslint-disable-next-line @next/next/no-img-element
               <img alt={alt ?? ""} src={src} className="max-w-full rounded" />
             ) : (
-              <span className="text-slate-400">[imagen: {alt}]</span>
+              <span className="text-slate-400">{t("[imagen: {alt}]", { alt: alt ?? "" })}</span>
             ),
         }}
       >
-        {mentionsToMarkdown(children)}
+        {mentionsToMarkdown(underlineToLink(children))}
       </ReactMarkdown>
     </div>
   );

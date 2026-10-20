@@ -1,10 +1,10 @@
 "use client";
 
-import { CheckCircle2, AlertCircle } from "lucide-react";
+import { CheckCircle2, AlertCircle, Undo2 } from "lucide-react";
 import { createContext, useCallback, useContext, useState } from "react";
 import { cn } from "./cn";
 
-type ToastKind = "success" | "error";
+type ToastKind = "success" | "error" | "undo";
 interface ToastItem {
   id: number;
   kind: ToastKind;
@@ -38,7 +38,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               t.kind === "error" ? "bg-red-600" : "bg-slate-900 dark:bg-slate-700",
             )}
           >
-            {t.kind === "error" ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
+            {t.kind === "error" ? <AlertCircle size={16} className="shrink-0" /> : t.kind === "undo" ? <Undo2 size={16} className="shrink-0" /> : <CheckCircle2 size={16} className="shrink-0" />}
             {t.message}
           </div>
         ))}

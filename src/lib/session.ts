@@ -15,6 +15,8 @@ export interface CurrentUser {
   name: string;
   role: "ADMIN" | "MEMBER";
   theme: "SYSTEM" | "LIGHT" | "DARK";
+  accent: "BLUE" | "FOREST" | "SIENNA" | "MUSTARD" | "MONO";
+  locale: "ES" | "EN";
 }
 
 function secret(): string {
@@ -57,7 +59,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     where: { id },
     select: {
       expiresAt: true,
-      user: { select: { id: true, email: true, name: true, role: true, theme: true, active: true } },
+      user: { select: { id: true, email: true, name: true, role: true, theme: true, accent: true, locale: true, active: true } },
     },
   });
   if (!session || !session.user.active) return null;

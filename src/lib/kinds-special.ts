@@ -41,23 +41,3 @@ export function describeKindAutomation(kind: KindAutomation): string | null {
 // --- Compatibilidad (obsoleto): lo usan TaskDialog y NewTaskDialog hasta migrar a applyKindTemplate. ---
 
 /** @deprecated Usa la plantilla del tipo (descriptionTemplate). */
-export const RESPUESTA_LINE = "Respondo a las preguntas y lo que necesitas de mi:";
-
-/** Minúsculas, sin acentos y sin espacios, para comparar nombres de tipo. */
-function normalizeName(name: string): string {
-  return name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, "").toLowerCase();
-}
-
-/** @deprecated Usa la propiedad `system` del tipo. */
-export function isRespuestaKind(kindName: string): boolean {
-  return normalizeName(kindName) === "respuesta";
-}
-
-/** @deprecated Usa applyKindTemplate. */
-export function applyKindPreset(
-  kindName: string,
-  current: { title: string; description: string },
-): { title: string; description: string } | null {
-  if (!isRespuestaKind(kindName)) return null;
-  return applyKindTemplate({ titleTemplate: "Respuesta", descriptionTemplate: RESPUESTA_LINE }, current);
-}

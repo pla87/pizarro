@@ -33,6 +33,12 @@ model User {
   cardStyle      CardStyle @default(STRIPE)
   /// Tema de la interfaz: SYSTEM sigue al sistema operativo.
   theme          Theme     @default(SYSTEM)
+  /// Color de acento de la interfaz (BLUE es el original).
+  accent         Accent    @default(BLUE)
+  /// Idioma de la interfaz.
+  locale         Locale    @default(ES)
+  /// Cómo se editan las descripciones: escribiendo Markdown o con barra de formato.
+  editorMode     EditorMode @default(MARKDOWN)
   /// Preferencias de aviso de menciones.
   notifyEmail    Boolean   @default(true)
   notifyWhatsapp Boolean   @default(false)
@@ -222,6 +228,8 @@ model TaskAttachment {
 model Release {
   id          String        @id @default(cuid())
   projectId   String
+  /// Número de la release dentro del proyecto (1, 2, 3…): da el prefijo de los códigos (R32M4).
+  number      Int
   title       String
   content     String
   createdById String?
@@ -232,6 +240,7 @@ model Release {
   attachments ReleaseAttachment[]
 
   @@index([projectId, deployedAt])
+  @@unique([projectId, number])
 }
 
 /// Copia reducida de un adjunto incluido en una release, con su nombre ya renombrado
@@ -405,8 +414,6 @@ model TaskKind {
   titleTemplate       String @default("")
   /// Automatización: texto con el que empieza la descripción (vacío = no cambia).
   descriptionTemplate String @default("")
-  /// Tipo del sistema (p. ej. «Respuesta»): no se puede borrar.
-  system    Boolean  @default(false)
   tasks     Task[]
   hiddenIn  ProjectHiddenKind[]
 
@@ -453,6 +460,24 @@ enum Theme {
   DARK
 }
 
+enum Accent {
+  BLUE
+  FOREST
+  SIENNA
+  MUSTARD
+  MONO
+}
+
+enum Locale {
+  ES
+  EN
+}
+
+enum EditorMode {
+  MARKDOWN
+  WYSIWYG
+}
+
 enum TemplateKind {
   HEADER
   FOOTER
@@ -478,6 +503,8 @@ model UndoEntry {
   id        String   @id @default(cuid())
   userId    String
   projectId String
+  /// Tarea a la que afecta (si es solo una): contexto del deshacer con la tarea abierta.
+  taskId    String?
   label     String
   ops       Json
   createdAt DateTime @default(now())
@@ -485,5 +512,6 @@ model UndoEntry {
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([userId, projectId, createdAt])
+  @@index([userId, taskId, createdAt])
   @@index([createdAt])
 }

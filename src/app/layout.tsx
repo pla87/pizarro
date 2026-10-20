@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { getCurrentUser } from "@/lib/session";
+import { I18nProvider } from "@/i18n/client";
+import { getLocale } from "@/i18n/server";
 
 export const metadata: Metadata = {
   title: { default: "Pizarro", template: "%s · Pizarro" },
@@ -25,9 +27,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // Sin sesión (p. ej. /login) o tema SYSTEM no hay atributo: se sigue al sistema operativo.
   const user = await getCurrentUser();
   const theme = user?.theme === "LIGHT" ? "light" : user?.theme === "DARK" ? "dark" : undefined;
+  // Acento: BLUE (por defecto) no lleva atributo; el resto se pinta como data-accent.
+  const accent = user && user.accent !== "BLUE" ? user.accent.toLowerCase() : undefined;
+  const locale = await getLocale();
   return (
-    <html lang="es" data-theme={theme}>
-      <body>{children}</body>
+    <html lang={locale} data-theme={theme} data-accent={accent}>
+      <body>
+        <I18nProvider locale={locale}>{children}</I18nProvider>
+      </body>
     </html>
   );
 }

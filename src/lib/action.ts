@@ -3,9 +3,12 @@ import { z } from "zod";
 import { actionContext } from "./action-context";
 import { AppError } from "./errors";
 import { logEvent } from "./log";
+import { READ_ACTIONS } from "./log-query";
+import { publishChange } from "./realtime";
 import { saveUndo, type UndoOp } from "./undo";
 import { requestContext } from "./request-context";
 import { getCurrentUser } from "./session";
+import { toLocale, translate } from "@/i18n/core";
 
 export { requestContext };
 
@@ -26,10 +29,15 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
   const start = performance.now();
   let result: ActionResult<T>;
   let level: "info" | "warn" | "error" = "info";
-  const ctx: { message?: string; projectId?: string | null; details?: Record<string, unknown>; undo?: UndoOp[] } = {};
+  const ctx: { message?: string; projectId?: string | null; details?: Record<string, unknown>; undo?: UndoOp[]; taskId?: string | null } = {};
   try {
     result = { ok: true, data: await actionContext.run(ctx, fn) };
-    if (ctx.undo?.length && ctx.projectId) await recordUndo(meta?.name ?? "acción", ctx.projectId, ctx.message, ctx.undo);
+    if (ctx.undo?.length && ctx.projectId) await recordUndo(meta?.name ?? "acción", ctx.projectId, ctx.message, ctx.undo, ctx.taskId ?? null);
+    // Aviso a las demás pestañas del proyecto (las consultas no cambian nada).
+    if (meta && ctx.projectId && !READ_ACTIONS.includes(meta.name)) {
+      const user = await getCurrentUser().catch(() => null);
+      publishChange({ projectId: ctx.projectId, userId: user?.id ?? null, action: meta.name });
+    }
   } catch (err) {
     // Los errores de redirect()/notFound() de Next deben propagarse.
     if (err && typeof err === "object" && "digest" in err && !(err instanceof AppError)) throw err;
@@ -49,22 +57,33 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
       result = { ok: false, error: "Error inesperado. Inténtalo de nuevo." };
       if (meta) {
         await logAction(meta, ctx, start, level, result.error, { error: err instanceof Error ? `${err.name}: ${err.message}` : String(err) });
-        return result;
+        return { ok: false, error: await translateError(result.error) };
       }
     }
   }
   // Con éxito, el texto que haya dejado la acción («Movió «X» de A a B»); si falla, el error.
   if (meta) await logAction(meta, ctx, start, level, result.ok ? (ctx.message ?? "OK") : result.error);
+  // El registro queda en español; al usuario, el error en su idioma.
+  if (!result.ok) result = { ok: false, error: await translateError(result.error) };
   return result;
 }
 
 /** Guarda lo necesario para deshacer la acción; si falla, la acción ya está hecha y solo se registra. */
-async function recordUndo(name: string, projectId: string, message: string | undefined, ops: UndoOp[]) {
+async function recordUndo(name: string, projectId: string, message: string | undefined, ops: UndoOp[], taskId: string | null) {
   try {
     const user = await getCurrentUser();
-    if (user) await saveUndo(user.id, projectId, message ?? name, ops);
+    if (user) await saveUndo(user.id, projectId, message ?? name, ops, taskId);
   } catch (err) {
     console.error("[undo] no se pudo guardar", err);
+  }
+}
+
+async function translateError(message: string): Promise<string> {
+  try {
+    const user = await getCurrentUser();
+    return translate(toLocale(user?.locale), message);
+  } catch {
+    return message;
   }
 }
 

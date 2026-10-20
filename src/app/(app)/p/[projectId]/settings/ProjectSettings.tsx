@@ -12,7 +12,7 @@ import { cn } from "@/components/ui/cn";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
-import { PALETTE } from "@/lib/constants";
+import { isWhite, onColor, PALETTE } from "@/lib/constants";
 import type { KindOption, LabelOption } from "@/lib/types";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
 import { setGeneralKindEnabled } from "@/actions/project-kinds";
@@ -217,7 +217,7 @@ function LabelRow({ label, onSaved, onDeleted }: { label: LabelOption; onSaved: 
   if (!editing) {
     return (
       <li className="flex items-center gap-2">
-        <span className="rounded px-2 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: label.color }}>{label.name}</span>
+        <span className="rounded px-2 py-0.5 text-xs font-medium" style={{ backgroundColor: label.color, color: onColor(label.color), boxShadow: isWhite(label.color) ? "inset 0 0 0 1px rgb(0 0 0 / 0.2)" : undefined }}>{label.name}</span>
         <button className="btn-icon ml-auto h-7 w-7" onClick={() => setEditing(true)} aria-label="Editar etiqueta"><Pencil size={14} /></button>
         <button
           className="btn-icon h-7 w-7 hover:text-red-600"
@@ -259,7 +259,7 @@ function LabelRow({ label, onSaved, onDeleted }: { label: LabelOption; onSaved: 
 function NewLabel({ projectId, onCreated }: { projectId: string; onCreated: (l: LabelOption) => void }) {
   const toast = useToast();
   const [name, setName] = useState("");
-  const [color, setColor] = useState<string | null>(PALETTE[6]);
+  const [color, setColor] = useState<string | null>(PALETTE[9]);
   return (
     <form
       className="mt-4 space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800"

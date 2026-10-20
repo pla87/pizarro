@@ -47,6 +47,7 @@ export default async function ReleasesPage({
         ...(q ? {} : { take: limit + 1 }),
         select: {
           id: true,
+          number: true,
           title: true,
           content: true,
           deployedAt: true,
@@ -77,6 +78,7 @@ export default async function ReleasesPage({
           moreHref={hasMore ? `?limit=${limit + PAGE_STEP}` : null}
           releases={releases.map((r) => ({
             id: r.id,
+            number: r.number,
             title: r.title,
             content: r.content,
             deployedAt: r.deployedAt.toISOString(),

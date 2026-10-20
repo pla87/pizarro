@@ -1,7 +1,8 @@
 import "server-only";
 import { Document, Font, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { makeT, type T } from "@/i18n/core";
 import { formatDay } from "./dates";
-import type { DeliverableStatus, Report, ReportTask } from "./report";
+import { RECENT_DONE_DAYS, UPCOMING_DAYS, type DeliverableStatus, type Report, type ReportTask } from "./report";
 
 // Sin partición de palabras con guion: en español quedaba «re-sumen».
 Font.registerHyphenationCallback((word) => [word]);
@@ -37,8 +38,8 @@ const s = StyleSheet.create({
   desc: { fontSize: 9, color: C.muted, marginTop: 6 },
   h2: { fontSize: 12.5, fontFamily: "Helvetica-Bold", color: "#312e81", marginTop: 16, marginBottom: 6 },
   h3: { fontSize: 10.5, fontFamily: "Helvetica-Bold", marginTop: 10, marginBottom: 4 },
-  kpis: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  kpi: { width: "23.8%", borderWidth: 1, borderColor: C.line, borderRadius: 6, padding: 7, backgroundColor: C.soft },
+  kpis: { flexDirection: "row", gap: 6 },
+  kpi: { flex: 1, borderWidth: 1, borderColor: C.line, borderRadius: 6, padding: 7, backgroundColor: C.soft },
   kpiValue: { fontSize: 16, lineHeight: 1.2, fontFamily: "Helvetica-Bold" },
   kpiLabel: { fontSize: 7.5, color: C.muted, marginTop: 1 },
   barTrack: { height: 6, backgroundColor: C.line, borderRadius: 3, overflow: "hidden" },
@@ -50,7 +51,6 @@ const s = StyleSheet.create({
   td: { paddingVertical: 3, paddingHorizontal: 5 },
   small: { fontSize: 7.5, color: C.muted },
   pill: { fontSize: 7, fontFamily: "Helvetica-Bold", paddingVertical: 1.5, paddingHorizontal: 4, borderRadius: 3, color: "#fff" },
-  empty: { fontSize: 8.5, color: C.faint, fontStyle: "italic" },
   footer: { position: "absolute", bottom: 20, left: 36, right: 36, flexDirection: "row", justifyContent: "space-between", fontSize: 7.5, color: C.faint },
 });
 
@@ -62,13 +62,18 @@ function Bar({ value, color = C.brand }: { value: number; color?: string }) {
   );
 }
 
-function dueLabel(t: { dueDate: string | null; daysLeft: number | null; done?: boolean }, today: string): string {
+interface Ctx {
+  t: T;
+  locale: string;
+}
+
+function dueLabel(t: { dueDate: string | null; daysLeft: number | null; done?: boolean }, today: string, x: Ctx): string {
   if (!t.dueDate) return "—";
-  const date = formatDay(t.dueDate, today);
+  const date = formatDay(t.dueDate, today, x.locale);
   if (t.done || t.daysLeft === null) return date;
-  if (t.daysLeft < 0) return `${date} (hace ${-t.daysLeft} d)`;
-  if (t.daysLeft === 0) return `${date} (hoy)`;
-  return `${date} (en ${t.daysLeft} d)`;
+  if (t.daysLeft < 0) return `${date} ${x.t("(hace {n} d)", { n: -t.daysLeft })}`;
+  if (t.daysLeft === 0) return `${date} ${x.t("(hoy)")}`;
+  return `${date} ${x.t("(en {n} d)", { n: t.daysLeft })}`;
 }
 
 function dueColor(t: ReportTask): string {
@@ -84,167 +89,194 @@ interface Col<T> {
   render: (row: T) => React.ReactNode;
 }
 
-function Table<T>({ cols, rows, empty }: { cols: Col<T>[]; rows: T[]; empty: string }) {
-  if (!rows.length) return <Text style={s.empty}>{empty}</Text>;
+/** Tabla sin cabecera suelta: la cabecera viaja junto a las primeras filas y ninguna fila se parte. */
+function Table<T>({ cols, rows }: { cols: Col<T>[]; rows: T[] }) {
+  if (!rows.length) return null;
+  const header = (
+    <View style={[s.tr, s.th]}>
+      {cols.map((c) => (
+        <Text key={c.label} style={[s.td, { width: c.width }]}>{c.label}</Text>
+      ))}
+    </View>
+  );
+  const row = (r: T, i: number) => (
+    <View key={i} style={i === rows.length - 1 ? s.trLast : s.tr} wrap={false}>
+      {cols.map((c) => {
+        const v = c.render(r);
+        return (
+          <View key={c.label} style={[s.td, { width: c.width }]}>
+            {typeof v === "string" || typeof v === "number" ? <Text>{v}</Text> : v}
+          </View>
+        );
+      })}
+    </View>
+  );
+  const HEAD_ROWS = 2;
   return (
     <View style={s.table}>
-      <View style={[s.tr, s.th]} fixed>
-        {cols.map((c) => (
-          <Text key={c.label} style={[s.td, { width: c.width }]}>{c.label}</Text>
-        ))}
+      <View wrap={false}>
+        {header}
+        {rows.slice(0, HEAD_ROWS).map((r, i) => row(r, i))}
       </View>
-      {rows.map((row, i) => (
-        <View key={i} style={i === rows.length - 1 ? s.trLast : s.tr} wrap={false}>
-          {cols.map((c) => (
-            <View key={c.label} style={[s.td, { width: c.width }]}>
-              {(() => {
-                const v = c.render(row);
-                return typeof v === "string" || typeof v === "number" ? <Text>{v}</Text> : v;
-              })()}
-            </View>
-          ))}
-        </View>
-      ))}
+      {rows.slice(HEAD_ROWS).map((r, i) => row(r, i + HEAD_ROWS))}
     </View>
   );
 }
 
-function taskCols(today: string, withColumn: boolean): Col<ReportTask>[] {
-  return [
-    { label: "Tarea", width: withColumn ? "34%" : "44%", render: (t) => <Text style={t.done ? { color: C.muted } : undefined}>{t.title}</Text> },
-    { label: "Tipo", width: "10%", render: (t) => t.kind },
-    ...(withColumn ? [{ label: "Columna", width: "17%", render: (t: ReportTask) => t.column }] : []),
-    { label: "Responsable", width: withColumn ? "15%" : "17%", render: (t) => t.assignee ?? "—" },
-    { label: "Plazo", width: withColumn ? "15%" : "19%", render: (t) => <Text style={{ color: dueColor(t) }}>{dueLabel(t, today)}</Text> },
-    { label: "Checklist", width: "9%", render: (t) => t.checklist ?? "—" },
-  ];
+function Kv({ label, value, color = C.text }: { label: string; value: number; color?: string }) {
+  return (
+    <View style={s.kpi}>
+      <Text style={[s.kpiValue, { color }]}>{value}</Text>
+      <Text style={s.kpiLabel}>{label}</Text>
+    </View>
+  );
 }
 
-function ReportDocument({ r }: { r: Report }) {
-  const generated = formatDay(r.today);
+const titleCell = (t: ReportTask) => <Text>{t.title}</Text>;
+function dueCell(today: string, x: Ctx) {
+  return function Due(t: ReportTask) {
+    const late = t.daysLeft !== null && t.daysLeft < 0 && !t.done;
+    return <Text style={{ color: dueColor(t), fontFamily: late ? "Helvetica-Bold" : "Helvetica" }}>{dueLabel(t, today, x)}</Text>;
+  };
+}
+
+function ReportDocument({ r, t, locale }: { r: Report; t: T; locale: string }) {
+  const x: Ctx = { t, locale };
+  const generated = formatDay(r.today, undefined, locale);
+  const k = r.kpis;
+  const pendingColumns = r.columns.filter((c) => !c.isDone && c.count > 0);
+  const people = r.people.filter((p) => p.open > 0);
+  const attention = [
+    k.unassignedOpen ? t("{n} sin responsable", { n: k.unassignedOpen }) : null,
+    k.withoutDueOpen ? t("{n} sin plazo", { n: k.withoutDueOpen }) : null,
+  ].filter(Boolean);
+  const pendingTypes = r.types.filter((t) => t.open > 0).map((t) => `${t.label} ${t.open}`).join(" · ");
+  const planned = [...r.overdue, ...r.upcoming];
   return (
-    <Document title={`Informe · ${r.project.name}`} author="Pizarro" creator="Pizarro" producer="Pizarro">
+    <Document title={`${t("Informe")} · ${r.project.name}`} author="Pizarro" creator="Pizarro" producer="Pizarro">
       <Page size="A4" style={s.page}>
         <View style={s.header}>
-          <Text style={s.eyebrow}>Informe de estado del proyecto</Text>
+          <Text style={s.eyebrow}>{t("Informe de estado del proyecto")}</Text>
           <Text style={s.title}>{r.project.name}</Text>
-          <Text style={s.meta}>Generado el {generated} por {r.generatedBy}</Text>
+          <Text style={s.meta}>{r.time ? t("Generado el {date} a las {time} por {name}", { date: generated, time: r.time, name: r.generatedBy }) : t("Generado el {date} por {name}", { date: generated, name: r.generatedBy })}</Text>
           {r.project.description ? <Text style={s.desc}>{r.project.description}</Text> : null}
         </View>
 
         {/* Resumen */}
-        <Text style={[s.h2, { marginTop: 0 }]}>Resumen</Text>
-        <View style={{ marginBottom: 8 }}>
+        <View style={{ marginBottom: 8 }} wrap={false}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 3 }}>
-            <Text style={{ fontFamily: "Helvetica-Bold" }}>Avance global: {r.kpis.progressPct}%</Text>
-            <Text style={s.small}>{r.kpis.done} de {r.kpis.total} tarjetas terminadas</Text>
+            <Text style={{ fontFamily: "Helvetica-Bold" }}>{t("Avance: {pct}%", { pct: k.progressPct })}</Text>
+            <Text style={s.small}>{t("{done} de {total} tarjetas terminadas", { done: k.done, total: k.total })}</Text>
           </View>
-          <Bar value={r.kpis.progressPct} color={C.green} />
-        </View>
-        <View style={s.kpis}>
-          {[
-            { v: r.kpis.open, l: "Pendientes", c: C.text },
-            { v: r.kpis.overdue, l: "Con plazo vencido", c: r.kpis.overdue ? C.red : C.text },
-            { v: r.kpis.dueSoon, l: "Vencen en 7 días", c: r.kpis.dueSoon ? C.amber : C.text },
-            { v: r.deliverables.length, l: "Entregables", c: C.text },
-            { v: r.kpis.unassignedOpen, l: "Pendientes sin responsable", c: C.text },
-            { v: r.kpis.withoutDueOpen, l: "Pendientes sin plazo", c: C.text },
-            { v: r.kpis.done, l: "Terminadas", c: C.green },
-            { v: r.kpis.archived, l: "Archivadas", c: C.muted },
-          ].map((k) => (
-            <View key={k.l} style={s.kpi}>
-              <Text style={[s.kpiValue, { color: k.c }]}>{k.v}</Text>
-              <Text style={s.kpiLabel}>{k.l}</Text>
-            </View>
-          ))}
+          <Bar value={k.progressPct} color={C.green} />
+          <View style={[s.kpis, { marginTop: 8 }]}>
+            <Kv label={t("Pendientes")} value={k.open} />
+            <Kv label={t("Vencidas")} value={k.overdue} color={k.overdue ? C.red : C.text} />
+            <Kv label={t("Vencen en 7 días")} value={k.dueSoon} color={k.dueSoon ? C.amber : C.text} />
+            <Kv label={t("Terminadas")} value={k.done} color={C.green} />
+          </View>
+          {pendingTypes ? <Text style={[s.small, { marginTop: 6 }]}>{t("Por tipo: {types}", { types: pendingTypes })}</Text> : null}
+          {attention.length ? <Text style={[s.small, { marginTop: 2, color: C.amber }]}>{t("Atención: {items}", { items: attention.join(" · ") })}</Text> : null}
         </View>
 
-        {/* Columnas */}
-        <Text style={s.h2}>Estado por columna</Text>
-        <Table
-          empty="El proyecto no tiene columnas."
-          rows={r.columns}
-          cols={[
-            { label: "Columna", width: "30%", render: (c) => <Text>{c.name}{c.isDone ? <Text style={s.small}>  (terminadas)</Text> : null}</Text> },
-            { label: "Tarjetas", width: "11%", render: (c) => String(c.count) },
-            { label: "Peso", width: "22%", render: (c) => <Bar value={r.kpis.total ? (c.count / r.kpis.total) * 100 : 0} color={c.isDone ? C.green : C.brand} /> },
-            { label: "Por tipo", width: "26%", render: (c) => <Text style={s.small}>{c.byType.map((t) => `${t.label} ${t.count}`).join(" · ") || "—"}</Text> },
-            { label: "Vencidas", width: "11%", render: (c) => <Text style={c.overdue ? { color: C.red, fontFamily: "Helvetica-Bold" } : undefined}>{c.overdue}</Text> },
-          ]}
-        />
-
-        {/* Entregables */}
-        <Text style={s.h2}>Entregables</Text>
-        <Table
-          empty="No hay entregables definidos. Créalos en «Ajustes del proyecto»."
-          rows={r.deliverables}
-          cols={[
-            { label: "Entregable", width: "32%", render: (d) => <View><Text style={{ fontFamily: "Helvetica-Bold" }}>{d.name}</Text>{d.description ? <Text style={s.small}>{d.description}</Text> : null}</View> },
-            { label: "Fecha objetivo", width: "18%", render: (d) => dueLabel({ dueDate: d.dueDate, daysLeft: d.daysLeft, done: d.status === "Completado" }, r.today) },
-            { label: "Avance", width: "26%", render: (d) => <View><Text style={s.small}>{d.done}/{d.total} · {d.pct}%</Text><Bar value={d.pct} color={STATUS_COLOR[d.status]} /></View> },
-            { label: "Estado", width: "24%", render: (d) => <View style={{ flexDirection: "row" }}><Text style={[s.pill, { backgroundColor: STATUS_COLOR[d.status] }]}>{d.status}</Text></View> },
-          ]}
-        />
-
-        {/* Plazos */}
-        <Text style={s.h2} minPresenceAhead={60}>Plazos</Text>
-        <Text style={s.h3}>Vencidos ({r.overdue.length})</Text>
-        <Table empty="No hay tareas pendientes con el plazo vencido." rows={r.overdue} cols={taskCols(r.today, true)} />
-        <Text style={s.h3}>Próximos 14 días ({r.upcoming.length})</Text>
-        <Table empty="No hay plazos en los próximos 14 días." rows={r.upcoming} cols={taskCols(r.today, true)} />
-
-        {/* Personas y tipos */}
-        <View style={{ flexDirection: "row", gap: 12 }} wrap={false}>
-          <View style={{ flex: 1.3 }}>
-            <Text style={s.h2}>Carga por persona</Text>
-            <Table
-              empty="Sin tarjetas."
-              rows={r.people}
-              cols={[
-                { label: "Persona", width: "46%", render: (p) => p.name },
-                { label: "Pendientes", width: "20%", render: (p) => String(p.open) },
-                { label: "Vencidas", width: "17%", render: (p) => <Text style={p.overdue ? { color: C.red } : undefined}>{p.overdue}</Text> },
-                { label: "Hechas", width: "17%", render: (p) => String(p.done) },
-              ]}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={s.h2}>Por tipo</Text>
-            <Table
-              empty="Sin tarjetas."
-              rows={r.types}
-              cols={[
-                { label: "Tipo", width: "44%", render: (t) => t.label },
-                { label: "Pendientes", width: "30%", render: (t) => String(t.open) },
-                { label: "Hechas", width: "26%", render: (t) => String(t.done) },
-              ]}
-            />
-          </View>
-        </View>
-
-        {/* Releases */}
-        <Text style={s.h2}>Últimas releases</Text>
-        <Table
-          empty="Todavía no se ha registrado ninguna release."
-          rows={r.releases}
-          cols={[
-            { label: "Release", width: "60%", render: (x) => x.title },
-            { label: "Fecha", width: "25%", render: (x) => formatDay(x.deployedAt.slice(0, 10), r.today) },
-            { label: "Tareas", width: "15%", render: (x) => String(x.taskCount) },
-          ]}
-        />
-
-        {/* Detalle */}
-        <Text style={s.h2} break>Detalle por columna</Text>
-        {r.columns.map((c) => (
+        {/* Pendiente por columna */}
+        {pendingColumns.length ? <Text style={s.h2} minPresenceAhead={70}>{t("Pendiente")}</Text> : null}
+        {pendingColumns.map((c) => (
           <View key={c.name} style={{ marginBottom: 6 }}>
-            <Text style={s.h3} minPresenceAhead={40}>{c.name} · {c.count}</Text>
-            <Table empty="Sin tarjetas." rows={c.tasks} cols={taskCols(r.today, false)} />
+            <Text style={s.h3} minPresenceAhead={60}>{c.name} · {c.count}</Text>
+            <Table
+              rows={c.tasks}
+              cols={[
+                { label: t("Tarea"), width: "40%", render: titleCell },
+                { label: t("Tipo"), width: "16%", render: (t) => t.kind },
+                { label: t("Responsable"), width: "16%", render: (t) => t.assignee ?? "—" },
+                { label: t("Plazo"), width: "19%", render: dueCell(r.today, x) },
+                { label: t("Subtareas"), width: "9%", render: (t) => t.checklist ?? "—" },
+              ]}
+            />
           </View>
         ))}
 
+        {/* Plazos: solo si hay vencidos o próximos */}
+        {planned.length ? (
+          <>
+            <Text style={s.h2} minPresenceAhead={70}>{t("Plazos: vencidos y próximos {n} días", { n: UPCOMING_DAYS })}</Text>
+            <Table
+              rows={planned}
+              cols={[
+                { label: t("Tarea"), width: "36%", render: titleCell },
+                { label: t("Columna"), width: "18%", render: (t) => t.column },
+                { label: t("Responsable"), width: "17%", render: (t) => t.assignee ?? "—" },
+                { label: t("Plazo"), width: "29%", render: dueCell(r.today, x) },
+              ]}
+            />
+          </>
+        ) : null}
+
+        {/* Entregables */}
+        {r.deliverables.length ? (
+          <>
+            <Text style={s.h2} minPresenceAhead={70}>{t("Entregables")}</Text>
+            <Table
+              rows={r.deliverables}
+              cols={[
+                { label: t("Entregable"), width: "34%", render: (d) => <View><Text style={{ fontFamily: "Helvetica-Bold" }}>{d.name}</Text>{d.description ? <Text style={s.small}>{d.description}</Text> : null}</View> },
+                { label: t("Fecha objetivo"), width: "20%", render: (d) => dueLabel({ dueDate: d.dueDate, daysLeft: d.daysLeft, done: d.status === "Completado" }, r.today, x) },
+                { label: t("Avance"), width: "24%", render: (d) => <View><Text style={s.small}>{d.done}/{d.total} · {d.pct}%</Text><Bar value={d.pct} color={STATUS_COLOR[d.status]} /></View> },
+                { label: t("Estado"), width: "22%", render: (d) => <View style={{ flexDirection: "row" }}><Text style={[s.pill, { backgroundColor: STATUS_COLOR[d.status] }]}>{t(d.status)}</Text></View> },
+              ]}
+            />
+          </>
+        ) : null}
+
+        {/* Carga por persona */}
+        {people.length ? (
+          <>
+            <Text style={s.h2} minPresenceAhead={70}>{t("Carga por persona")}</Text>
+            <Table
+              rows={people}
+              cols={[
+                { label: t("Persona"), width: "60%", render: (p) => p.name },
+                { label: "Pendientes", width: "20%", render: (p) => String(p.open) },
+                { label: "Vencidas", width: "20%", render: (p) => <Text style={p.overdue ? { color: C.red, fontFamily: "Helvetica-Bold" } : undefined}>{p.overdue}</Text> },
+              ]}
+            />
+          </>
+        ) : null}
+
+        {/* Terminadas recientemente */}
+        {r.recentDone.length ? (
+          <>
+            <Text style={s.h2} minPresenceAhead={70}>{t("Terminadas en los últimos {n} días", { n: RECENT_DONE_DAYS })}</Text>
+            <Table
+              rows={r.recentDone}
+              cols={[
+                { label: t("Tarea"), width: "58%", render: titleCell },
+                { label: t("Tipo"), width: "20%", render: (t) => t.kind },
+                { label: t("Columna"), width: "22%", render: (t) => t.column },
+              ]}
+            />
+          </>
+        ) : null}
+
+        {/* Releases */}
+        {r.releases.length ? (
+          <>
+            <Text style={s.h2} minPresenceAhead={70}>{t("Últimas releases")}</Text>
+            <Table
+              rows={r.releases}
+              cols={[
+                { label: t("Nº"), width: "9%", render: (x) => `R${x.number}` },
+                { label: t("Título"), width: "56%", render: (x) => x.title },
+                { label: t("Fecha"), width: "21%", render: (x) => formatDay(x.deployedAt.slice(0, 10), r.today, locale) },
+                { label: t("Tareas"), width: "14%", render: (x) => String(x.taskCount) },
+              ]}
+            />
+          </>
+        ) : null}
+
         <View style={s.footer} fixed>
-          <Text>{r.project.name} · Informe del {generated}</Text>
+          <Text>{r.project.name} · {t("Informe del {date}", { date: generated })}</Text>
           <Text render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
         </View>
       </Page>
@@ -252,6 +284,6 @@ function ReportDocument({ r }: { r: Report }) {
   );
 }
 
-export function renderReportPdf(report: Report): Promise<Buffer> {
-  return renderToBuffer(<ReportDocument r={report} />);
+export function renderReportPdf(report: Report, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
+  return renderToBuffer(<ReportDocument r={report} t={t} locale={locale} />);
 }

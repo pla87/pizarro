@@ -2,6 +2,7 @@
 
 import { Share, Smartphone } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useT } from "@/i18n/client";
 import { Modal } from "./ui/Modal";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -14,6 +15,7 @@ interface BeforeInstallPromptEvent extends Event {
  * (Safari no lo tiene) muestra cómo añadirla a la pantalla de inicio.
  */
 export function InstallApp() {
+  const t = useT();
   const [prompt, setPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [ios, setIos] = useState(false);
   const [installed, setInstalled] = useState(true);
@@ -57,17 +59,17 @@ export function InstallApp() {
           } else setHelp(true);
         }}
       >
-        <Smartphone size={17} /> Instalar app
+        <Smartphone size={17} /> {t("Instalar app")}
       </button>
-      <Modal open={help} onClose={() => setHelp(false)} title="Añadir Pizarro a la pantalla de inicio" size="sm">
+      <Modal open={help} onClose={() => setHelp(false)} title={t("Añadir Pizarro a la pantalla de inicio")} size="sm">
         <ol className="list-decimal space-y-2 pl-5 text-sm">
-          <li>Abre Pizarro en <strong>Safari</strong>.</li>
+          <li>{t("Abre Pizarro en")} <strong>Safari</strong>.</li>
           <li>
-            Pulsa el botón <strong>Compartir</strong> <Share size={14} className="inline align-text-bottom" /> (abajo en iPhone, arriba en iPad).
+            {t("Pulsa el botón")} <strong>{t("Compartir")}</strong> <Share size={14} className="inline align-text-bottom" /> {t("(abajo en iPhone, arriba en iPad).")}
           </li>
-          <li>Elige <strong>Añadir a pantalla de inicio</strong> y pulsa <strong>Añadir</strong>.</li>
+          <li>{t("Elige")} <strong>{t("Añadir a pantalla de inicio")}</strong> {t("y pulsa")} <strong>{t("Añadir")}</strong>.</li>
         </ol>
-        <p className="mt-3 text-xs text-slate-500">Se abrirá a pantalla completa, como una app, y mantendrá tu sesión.</p>
+        <p className="mt-3 text-xs text-slate-500">{t("Se abrirá a pantalla completa, como una app, y mantendrá tu sesión.")}</p>
       </Modal>
     </>
   );

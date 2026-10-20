@@ -4,9 +4,11 @@ import { assertTaskAccess } from "@/lib/access";
 import { AppError } from "@/lib/errors";
 import { actionContext } from "@/lib/action-context";
 import { logEvent } from "@/lib/log";
+import { publishChange } from "@/lib/realtime";
 import { saveUndo } from "@/lib/undo";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser, requireUser } from "@/lib/session";
+import { getT } from "@/i18n/server";
 import { MAX_UPLOAD_BYTES, processImage, removeAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveRawAttachmentFile } from "@/lib/uploads";
 import type { AttachmentInfo } from "@/lib/types";
 
@@ -66,10 +68,19 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
         width: image?.width ?? null, height: image?.height ?? null,
       },
     });
-    // Deshacer la subida borra el adjunto (como una acción más del usuario en el proyecto).
-    await saveUndo(user.id, projectId, `Subió «${attachment.originalName}»`, [{ t: "attachment.remove", id: attachment.id }]).catch((err) =>
-      console.error("[undo] no se pudo guardar", err),
-    );
+    // Deshacer la subida borra el adjunto. Con ?alCrear=1 (adjuntos de «Nueva tarea»), si lo último del
+    // usuario es crear esta tarea, la subida va con esa acción: deshacer la creación ya se lleva el adjunto.
+    const withCreation =
+      new URL(req.url).searchParams.get("alCrear") === "1" &&
+      (await db.undoEntry.findFirst({ where: { userId: user.id, projectId }, orderBy: { createdAt: "desc" }, select: { taskId: true, ops: true } }).then(
+        (last) => last?.taskId === taskId && JSON.stringify(last.ops).includes('"task.remove"'),
+      ));
+    publishChange({ projectId, userId: user.id, action: "attachments.upload" });
+    if (!withCreation) {
+      await saveUndo(user.id, projectId, `Subió «${attachment.originalName}»`, [{ t: "attachment.remove", id: attachment.id }], taskId).catch((err) =>
+        console.error("[undo] no se pudo guardar", err),
+      );
+    }
     return NextResponse.json<AttachmentInfo>(attachment, { status: 201 });
   } catch (err) {
     const user = await getCurrentUser().catch(() => null);
@@ -79,9 +90,10 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
       userId: user?.id ?? null, userName: user?.name ?? null, path: `/api/tasks/${taskIdForLog}/attachments`, ip, durationMs: performance.now() - start,
       details: { taskId: taskIdForLog, file: fileInfo, status: err instanceof AppError ? err.status : 500 },
     });
-    if (err instanceof AppError) return NextResponse.json({ error: err.message }, { status: err.status });
+    const t = await getT();
+    if (err instanceof AppError) return NextResponse.json({ error: t(err.message) }, { status: err.status });
     console.error("[upload]", err);
-    return NextResponse.json({ error: "No se pudo procesar el archivo." }, { status: 500 });
+    return NextResponse.json({ error: t("No se pudo procesar el archivo.") }, { status: 500 });
   }
 }
 

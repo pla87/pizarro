@@ -9,9 +9,10 @@ import { cn } from "@/components/ui/cn";
 import { Markdown } from "@/components/ui/Markdown";
 import { useToast } from "@/components/ui/Toast";
 import { releaseFileName } from "@/lib/release";
+import { formatDate } from "@/lib/format";
 
 interface Props {
-  release: { id: string; title: string; content: string; deployedAt: string; author: string | null; taskCount: number; attachments: string[] };
+  release: { id: string; number: number; title: string; content: string; deployedAt: string; author: string | null; taskCount: number; attachments: string[] };
 }
 
 export function ReleaseEntry({ release }: Props) {
@@ -50,9 +51,12 @@ export function ReleaseEntry({ release }: Props) {
     <article className="card">
       <button className="flex w-full items-center gap-3 px-4 py-3 text-left" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <div className="min-w-0 flex-1">
-          <h2 className="truncate font-medium">{release.title}</h2>
+          <h2 className="truncate font-medium">
+            <span className="mr-1.5 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">R{release.number}</span>
+            {release.title}
+          </h2>
           <p className="text-xs text-slate-500">
-            {date.toLocaleString("es-ES", { dateStyle: "medium", timeStyle: "short" })}
+            {formatDate(date, "dateTime")}
             {release.author && ` · ${release.author}`} · {release.taskCount === 1 ? "1 tarea" : `${release.taskCount} tareas`}
             {attachments.length > 0 && ` · ${attachments.length === 1 ? "1 adjunto" : `${attachments.length} adjuntos`}`}
           </p>

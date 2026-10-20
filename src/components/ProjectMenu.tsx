@@ -3,6 +3,7 @@
 import { Check, ChevronDown, Lock } from "lucide-react";
 import Link from "next/link";
 import { createContext, useContext, useState } from "react";
+import { useT } from "@/i18n/client";
 import { cn } from "./ui/cn";
 
 interface ProjectsValue {
@@ -12,7 +13,8 @@ interface ProjectsValue {
 
 /** Candado discreto junto al nombre de un proyecto privado. */
 export function PrivateIcon({ className }: { className?: string }) {
-  return <Lock size={14} className={cn("shrink-0 text-slate-400", className)} aria-label="Proyecto privado" role="img"><title>Proyecto privado</title></Lock>;
+  const t = useT();
+  return <Lock size={14} className={cn("ml-1 shrink-0 text-slate-400", className)} aria-label={t("Proyecto privado")} role="img"><title>{t("Proyecto privado")}</title></Lock>;
 }
 
 export const ProjectsContext = createContext<ProjectsValue>({ projects: [], currentId: null });

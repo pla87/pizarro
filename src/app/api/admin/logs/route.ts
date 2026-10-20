@@ -3,6 +3,7 @@ import { flushLogs } from "@/lib/log";
 import { isMaskedLog, logWhere, parseLogFilters } from "@/lib/log-query";
 import { appTimeZone } from "@/lib/board";
 import { getCurrentUser } from "@/lib/session";
+import { getT } from "@/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -17,9 +18,10 @@ function cell(v: unknown): string {
 
 /** Descarga en CSV de los logs con el filtro actual (solo administradores, máx. 20 000 filas). */
 export async function GET(req: Request) {
+  const t = await getT();
   const user = await getCurrentUser();
-  if (!user) return new Response("No autorizado", { status: 401 });
-  if (user.role !== "ADMIN") return new Response("Prohibido", { status: 403 });
+  if (!user) return new Response(t("No autorizado"), { status: 401 });
+  if (user.role !== "ADMIN") return new Response(t("Prohibido"), { status: 403 });
 
   await flushLogs();
   const filters = parseLogFilters(Object.fromEntries(new URL(req.url).searchParams));
@@ -45,7 +47,7 @@ export async function GET(req: Request) {
     );
   }
   const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
-  return new Response("﻿" + lines.join("\r\n"), {
+  return new Response(t("﻿") + lines.join("\r\n"), {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="logs-pizarro-${stamp}.csv"`,

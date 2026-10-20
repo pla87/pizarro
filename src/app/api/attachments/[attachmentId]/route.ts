@@ -6,22 +6,24 @@ import { visibleProjectsWhere } from "@/lib/access";
 import { logEvent } from "@/lib/log";
 import { clientIp } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
+import { getT } from "@/i18n/server";
 import { attachmentPath, safeDownloadMime } from "@/lib/uploads";
 
 export const runtime = "nodejs";
 
 /** Sirve un adjunto (o su miniatura con ?thumb=1) solo a usuarios con acceso al proyecto. */
 export async function GET(req: Request, ctx: { params: Promise<{ attachmentId: string }> }) {
+  const t = await getT();
   const user = await getCurrentUser();
-  if (!user) return new Response("No autorizado", { status: 401 });
+  if (!user) return new Response(t("No autorizado"), { status: 401 });
   const { attachmentId } = await ctx.params;
-  if (!/^[a-z0-9]{1,40}$/i.test(attachmentId)) return new Response("No encontrado", { status: 404 });
+  if (!/^[a-z0-9]{1,40}$/i.test(attachmentId)) return new Response(t("No encontrado"), { status: 404 });
 
   const attachment = await db.taskAttachment.findFirst({
     where: { id: attachmentId, task: { project: visibleProjectsWhere(user) } },
     select: { id: true, originalName: true, taskId: true, isImage: true, mimeType: true, task: { select: { projectId: true } } },
   });
-  if (!attachment) return new Response("No encontrado", { status: 404 });
+  if (!attachment) return new Response(t("No encontrado"), { status: 404 });
 
   const thumb = new URL(req.url).searchParams.has("thumb");
   const file = attachmentPath(attachment.id, !attachment.isImage ? "file" : thumb ? "thumb" : "full");
@@ -29,7 +31,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ attachmentId: s
   try {
     size = (await stat(file)).size;
   } catch {
-    return new Response("Archivo no disponible", { status: 404 });
+    return new Response(t("Archivo no disponible"), { status: 404 });
   }
   // Los que no son imagen siempre se descargan (nunca inline: evita XSS almacenado con HTML/SVG/JS).
   const download = !attachment.isImage || new URL(req.url).searchParams.has("download");

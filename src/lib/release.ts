@@ -31,6 +31,8 @@ export interface ReleaseInput {
   /** Tipos en el orden en que deben aparecer las secciones. */
   kinds: ReleaseKind[];
   tasks: ReleaseTaskInput[];
+  /** Número que tendrá la release en el proyecto: prefijo de los códigos (R32F1). */
+  releaseNumber?: number | null;
 }
 
 /** Escapa los caracteres que romperían el texto de un enlace Markdown. */
@@ -72,11 +74,14 @@ function kindPrefixes(names: string[]): string[] {
 /**
  * Código de cada tarea (taskId → «F1»): prefijo del tipo + número correlativo por tipo,
  * en el orden en que aparecen las tareas. «Otros» (tipos desconocidos) sigue la misma regla.
+ * Con el número de la release, el código lo lleva delante: «R32F1».
  */
 export function computeReleaseCodes(
   kinds: ReleaseKind[],
   tasks: Pick<ReleaseTaskInput, "id" | "kindId">[],
+  releaseNumber?: number | null,
 ): Map<string, string> {
+  const release = releaseNumber ? `R${releaseNumber}` : "";
   const prefixes = kindPrefixes([...kinds.map((k) => k.name), OTHERS_NAME]);
   const prefixByKind = new Map(kinds.map((k, i) => [k.id, prefixes[i]!]));
   const othersPrefix = prefixes[kinds.length]!;
@@ -86,7 +91,7 @@ export function computeReleaseCodes(
     const prefix = prefixByKind.get(t.kindId) ?? othersPrefix;
     const n = (counters.get(prefix) ?? 0) + 1;
     counters.set(prefix, n);
-    codes.set(t.id, `${prefix}${n}`);
+    codes.set(t.id, `${release}${prefix}${n}`);
   }
   return codes;
 }
@@ -139,9 +144,9 @@ function formatReleaseTask(task: ReleaseTaskInput, code: string): string {
 }
 
 /** Secciones por tipo (sin título, cabecera ni pie). */
-function buildSections(input: Pick<ReleaseInput, "kinds" | "tasks">): string[] {
+function buildSections(input: Pick<ReleaseInput, "kinds" | "tasks" | "releaseNumber">): string[] {
   const parts: string[] = [];
-  const codes = computeReleaseCodes(input.kinds, input.tasks);
+  const codes = computeReleaseCodes(input.kinds, input.tasks, input.releaseNumber);
   const line = (t: ReleaseTaskInput) => formatReleaseTask(t, codes.get(t.id)!);
   const known = new Set(input.kinds.map((k) => k.id));
   for (const kind of input.kinds) {
@@ -155,7 +160,7 @@ function buildSections(input: Pick<ReleaseInput, "kinds" | "tasks">): string[] {
 }
 
 /** Cuerpo de la release (una sección por tipo), sin cabecera ni pie. */
-export function buildReleaseBody(input: Pick<ReleaseInput, "kinds" | "tasks">): string {
+export function buildReleaseBody(input: Pick<ReleaseInput, "kinds" | "tasks" | "releaseNumber">): string {
   return buildSections(input).join("\n\n");
 }
 

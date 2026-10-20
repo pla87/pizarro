@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Check, Lock, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { createKind, deleteKind, moveKind, updateKind } from "@/actions/kinds";
@@ -18,7 +18,6 @@ export interface KindRow {
   taskCount: number;
   titleTemplate: string;
   descriptionTemplate: string;
-  system: boolean;
 }
 
 const EMPTY_FORM = { name: "", color: "#6366f1", titleTemplate: "", descriptionTemplate: "" };
@@ -84,11 +83,6 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <TypeBadge kind={k} />
-                  {k.system && (
-                    <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500 dark:bg-slate-800">
-                      <Lock size={11} /> Del sistema
-                    </span>
-                  )}
                   <span className="text-xs text-slate-500">{k.taskCount} tarea(s)</span>
                 </div>
                 {describeKindAutomation(k) && <p className="mt-1 text-xs text-slate-500">{describeKindAutomation(k)}</p>}
@@ -99,10 +93,10 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
                 <button className="btn-icon" onClick={() => { setEditing(k.id); setForm({ name: k.name, color: k.color, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate }); }} aria-label={`Editar ${k.name}`}><Pencil size={15} /></button>
                 <button
                   className="btn-icon hover:text-red-600"
-                  disabled={!canDelete || k.system}
+                  disabled={!canDelete}
                   onClick={() => { setDeleting(k); setReplacement(targets(k)[0]?.id ?? ""); }}
                   aria-label={`Borrar ${k.name}`}
-                  title={k.system ? "Tipo del sistema: no se puede borrar" : canDelete ? undefined : "Debe quedar al menos un tipo"}
+                  title={canDelete ? undefined : "Debe quedar al menos un tipo"}
                 >
                   <Trash2 size={15} />
                 </button>

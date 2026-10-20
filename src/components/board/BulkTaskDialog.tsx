@@ -9,6 +9,7 @@ import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
 import { TypeSelector } from "./TaskDialog";
+import { isWhite, onColor } from "@/lib/constants";
 
 interface Props {
   initialColumnId?: string;
@@ -182,8 +183,8 @@ export function BulkTaskDialog({ initialColumnId, onClose }: Props) {
                         key={l.id}
                         type="button"
                         onClick={() => setLabelIds((ids) => (on ? ids.filter((x) => x !== l.id) : [...ids, l.id]))}
-                        className={cn("rounded px-2 py-0.5 text-xs font-medium", on ? "text-white" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300")}
-                        style={on ? { backgroundColor: l.color } : undefined}
+                        className={cn("rounded px-2 py-0.5 text-xs font-medium", on ? "" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300")}
+                        style={on ? { backgroundColor: l.color, color: onColor(l.color), boxShadow: isWhite(l.color) ? "inset 0 0 0 1px rgb(0 0 0 / 0.2)" : undefined } : undefined}
                         aria-pressed={on}
                       >
                         {l.name}

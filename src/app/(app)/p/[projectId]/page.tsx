@@ -36,7 +36,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
     db.label.findMany({ where: { projectId }, orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),
     db.user.findUniqueOrThrow({
       where: { id: user.id },
-      select: { cardStyle: true, googleAccount: { select: { id: true } } },
+      select: { cardStyle: true, editorMode: true, googleAccount: { select: { id: true } } },
     }),
     db.deliverable.findMany({ where: { projectId }, orderBy: [{ position: "asc" }], select: { id: true, name: true, dueDate: true } }),
     listKinds(projectId),
@@ -52,6 +52,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
     kinds,
     templates,
     cardStyle: me.cardStyle,
+    editorMode: me.editorMode,
     currentUserId: user.id,
     deliverables: deliverables.map((d) => ({ id: d.id, name: d.name, dueDate: dateToIso(d.dueDate) })),
     google: { enabled: googleEnabled(), connected: Boolean(me.googleAccount) },

@@ -1,26 +1,39 @@
 "use client";
 
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { Bell, Check, Eye, Link2, Monitor, Moon, Palette, Pencil, Plus, Sun, Trash2, X } from "lucide-react";
+import { Bell, Check, Eye, Link2, Monitor, Moon, Palette, Pencil, PenLine, Plus, Sun, Trash2, X, Languages } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
   changePassword, createReleaseTemplate, deleteReleaseTemplate, disconnectGoogle, updateCardStyle, updateNotificationPrefs,
-  updateProfileName, updateReleaseTemplate, updateTheme,
+  updateAccent, updateEditorMode, updateProfileName, updateReleaseTemplate, updateTheme, updateLocale,
 } from "@/actions/profile";
 import { cn } from "@/components/ui/cn";
 import { Markdown } from "@/components/ui/Markdown";
 import { useToast } from "@/components/ui/Toast";
-import type { CardStyleValue, TemplateOption } from "@/lib/types";
+import type { CardStyleValue, EditorModeValue, TemplateOption } from "@/lib/types";
 
 type ThemeValue = "SYSTEM" | "LIGHT" | "DARK";
+type AccentValue = "BLUE" | "FOREST" | "SIENNA" | "MUSTARD" | "MONO";
+
+// Muestra de cada acento (el color de brand-600 de globals.css).
+const ACCENTS: { value: AccentValue; label: string; swatch: string }[] = [
+  { value: "BLUE", label: "Azul", swatch: "#4f46e5" },
+  { value: "FOREST", label: "Verde bosque", swatch: "#2d6a4f" },
+  { value: "SIENNA", label: "Siena", swatch: "#a8481f" },
+  { value: "MUSTARD", label: "Mostaza", swatch: "#946a07" },
+  { value: "MONO", label: "Blanco y negro", swatch: "#18181b" },
+];
 
 interface Props {
   name: string;
   email: string;
   templates: { headers: TemplateOption[]; footers: TemplateOption[] };
   cardStyle: CardStyleValue;
+  editorMode: EditorModeValue;
   theme: ThemeValue;
+  accent: AccentValue;
+  locale: "ES" | "EN";
   notifications: {
     notifyEmail: boolean;
     notifyWhatsapp: boolean;
@@ -53,7 +66,9 @@ export function ProfileSettings(props: Props) {
         <TemplateList kind="FOOTER" title="Pies" initial={props.templates.footers} placeholder={"Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción"} />
       </section>
 
-      <AppearanceSection initial={props.cardStyle} initialTheme={props.theme} />
+      <LanguageSection initial={props.locale} />
+      <AppearanceSection initial={props.cardStyle} initialTheme={props.theme} initialAccent={props.accent} />
+      <EditorModeSection initial={props.editorMode} />
       <GoogleSection google={props.google} />
       <NotificationSection prefs={props.notifications} />
 
@@ -120,6 +135,80 @@ export function ProfileSettings(props: Props) {
         </form>
       </section>
     </div>
+  );
+}
+
+/** Idioma: los nombres de cada opción van en su propio idioma. */
+function LanguageSection({ initial }: { initial: "ES" | "EN" }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [locale, setLocale] = useState(initial);
+  const choose = async (value: "ES" | "EN") => {
+    if (value === locale) return;
+    const previous = locale;
+    setLocale(value);
+    const res = await updateLocale(value);
+    if (!res.ok) {
+      setLocale(previous);
+      return toast(res.error, "error");
+    }
+    router.refresh();
+  };
+  return (
+    <section className="card p-5">
+      <h2 className="flex items-center gap-2 font-semibold"><Languages size={17} /> Idioma · Language</h2>
+      <div className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Idioma · Language">
+        {([["ES", "Español"], ["EN", "English"]] as const).map(([value, label]) => (
+          <button
+            key={value}
+            role="radio"
+            aria-checked={locale === value}
+            onClick={() => choose(value)}
+            className={cn("rounded-lg border-2 px-4 py-2 text-sm font-medium", locale === value ? "border-brand-500" : "border-slate-200 dark:border-slate-700")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function EditorModeSection({ initial }: { initial: EditorModeValue }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [mode, setMode] = useState(initial);
+  const choose = async (value: EditorModeValue) => {
+    const previous = mode;
+    setMode(value);
+    const res = await updateEditorMode(value);
+    if (!res.ok) {
+      setMode(previous);
+      return toast(res.error, "error");
+    }
+    router.refresh();
+  };
+  return (
+    <section className="card p-5">
+      <h2 className="flex items-center gap-2 font-semibold"><PenLine size={17} /> Edición de descripciones</h2>
+      <p className="mt-0.5 text-sm text-slate-500">Las descripciones se guardan siempre como Markdown; esto solo cambia cómo las escribes.</p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        {([
+          ["MARKDOWN", "Markdown", "Escribes los símbolos (**negrita**, - lista, # título). Al guardar se ve formateado."],
+          ["WYSIWYG", "Con barra de formato", "Ves el resultado mientras escribes y aplicas negrita, listas o títulos con botones."],
+        ] as const).map(([value, label, hint]) => (
+          <button
+            key={value}
+            onClick={() => choose(value)}
+            className={cn("rounded-xl border-2 p-3 text-left", mode === value ? "border-brand-500" : "border-slate-200 dark:border-slate-700")}
+            aria-pressed={mode === value}
+          >
+            <div className="text-sm font-medium">{label}</div>
+            <div className="mt-1 text-xs text-slate-500">{hint}</div>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -317,7 +406,14 @@ function applyTheme(value: ThemeValue) {
   else root.setAttribute("data-theme", value.toLowerCase());
 }
 
-function AppearanceSection({ initial, initialTheme }: { initial: CardStyleValue; initialTheme: ThemeValue }) {
+/** Aplica el acento al instante en <html> (BLUE = sin atributo). */
+function applyAccent(value: AccentValue) {
+  const root = document.documentElement;
+  if (value === "BLUE") root.removeAttribute("data-accent");
+  else root.setAttribute("data-accent", value.toLowerCase());
+}
+
+function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: CardStyleValue; initialTheme: ThemeValue; initialAccent: AccentValue }) {
   const router = useRouter();
   const toast = useToast();
   const [style, setStyle] = useState(initial);
@@ -343,6 +439,19 @@ function AppearanceSection({ initial, initialTheme }: { initial: CardStyleValue;
     }
     router.refresh();
   };
+  const [accent, setAccent] = useState(initialAccent);
+  const chooseAccent = async (value: AccentValue) => {
+    const previous = accent;
+    setAccent(value);
+    applyAccent(value);
+    const res = await updateAccent(value);
+    if (!res.ok) {
+      setAccent(previous);
+      applyAccent(previous);
+      return toast(res.error, "error");
+    }
+    router.refresh();
+  };
   const sample = "#6366f1";
   return (
     <section className="card p-5">
@@ -362,6 +471,32 @@ function AppearanceSection({ initial, initialTheme }: { initial: CardStyleValue;
             aria-pressed={theme === value}
           >
             <Icon size={16} /> {label}
+          </button>
+        ))}
+      </div>
+      <h3 className="mt-6 text-sm font-semibold">Color de acento</h3>
+      <p className="mt-0.5 text-sm text-slate-500">Color de botones, enlaces y selecciones en toda la app.</p>
+      <div role="radiogroup" aria-label="Color de acento" className="mt-3 flex flex-wrap gap-4">
+        {ACCENTS.map(({ value, label, swatch }) => (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={accent === value}
+            onClick={() => chooseAccent(value)}
+            className="flex w-20 flex-col items-center gap-1.5 text-center text-xs focus-visible:outline-none"
+          >
+            <span
+              className={cn(
+                "flex h-9 w-9 items-center justify-center rounded-full ring-offset-2 ring-offset-white dark:ring-offset-slate-900",
+                value === "MONO" && "border border-slate-300 dark:border-slate-600",
+                accent === value ? "ring-2 ring-slate-900 dark:ring-slate-100" : "ring-1 ring-transparent hover:ring-slate-300 dark:hover:ring-slate-600",
+              )}
+              style={value === "MONO" ? { background: "linear-gradient(135deg, #18181b 50%, #ffffff 50%)" } : { backgroundColor: swatch }}
+            >
+              {accent === value && <Check size={16} className={value === "MONO" ? "text-white mix-blend-difference" : "text-white"} />}
+            </span>
+            <span className={accent === value ? "font-semibold" : "text-slate-600 dark:text-slate-400"}>{label}</span>
           </button>
         ))}
       </div>

@@ -47,6 +47,9 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
   const [zipping, setZipping] = useState(false);
   /** Tareas con adjuntos de la release generada, con su código (para el ZIP). */
   const [zipItems, setZipItems] = useState<{ taskId: string; code: string; count: number }[]>([]);
+  /** Número que tendrá la release (prefijo R32 de los códigos) y con cuál se generó el texto. */
+  const [releaseNumber, setReleaseNumber] = useState<number | null>(null);
+  const [generatedNumber, setGeneratedNumber] = useState<number | null>(null);
   const selectedTasks = useMemo(() => tasks.filter((t) => chosen.has(t.id)), [tasks, chosen]);
   const [headerId, setHeaderId] = useState(templates.headers[0]?.id ?? "");
   const [footerId, setFooterId] = useState(templates.footers[0]?.id ?? "");
@@ -92,7 +95,9 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
     // Mismo día que usa el servidor (zona horaria de la app) para contar las releases.
     const day = board.today;
     countReleasesOn({ projectId: board.project.id, dayIso: day }).then((res) => {
-      if (res.ok && !titleEdited.current) setTitle(defaultReleaseTitle(day, board.project.name, res.data));
+      if (!res.ok) return;
+      setReleaseNumber(res.data.nextNumber);
+      if (!titleEdited.current) setTitle(defaultReleaseTitle(day, board.project.name, res.data.today));
     });
   }, [board.project.id, board.project.name, board.today]);
 
@@ -111,7 +116,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
       description: details.get(t.id)?.description ?? "",
       attachments: details.get(t.id)?.attachments ?? [],
     }));
-    const codes = computeReleaseCodes(board.kinds, releaseTasks);
+    const codes = computeReleaseCodes(board.kinds, releaseTasks, releaseNumber);
     setZipItems(
       releaseTasks.filter((t) => t.attachments.length).map((t) => ({ taskId: t.id, code: codes.get(t.id)!, count: t.attachments.length })),
     );
@@ -120,9 +125,11 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
       footer: templateText(templates.footers, footerId),
       kinds: board.kinds,
       tasks: releaseTasks,
+      releaseNumber,
     });
     setContent(md);
     setGenerated(md);
+    setGeneratedNumber(releaseNumber);
     setTab("edit");
     setStep("edit");
   };
@@ -176,6 +183,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
         taskIds: selectedTasks.map((t) => t.id),
         destination,
         attachments: zipItems.map(({ taskId, code }) => ({ taskId, code })),
+        number: generatedNumber ?? undefined,
       }),
     );
     setBusy(false);

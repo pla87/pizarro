@@ -3,6 +3,7 @@
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useT } from "@/i18n/client";
 import { useBackToClose } from "./useBackToClose";
 
 export interface LightboxImage {
@@ -21,6 +22,7 @@ interface Props {
 
 /** Imagen a pantalla completa. Se cierra con la X, tocando fuera de la imagen o con Escape (solo ella, no el modal de debajo). */
 export function Lightbox({ images, index, onIndexChange, onClose }: Props) {
+  const t = useT();
   const stateRef = useRef({ images, index, onIndexChange, onClose });
   useEffect(() => {
     stateRef.current = { images, index, onIndexChange, onClose };
@@ -59,7 +61,7 @@ export function Lightbox({ images, index, onIndexChange, onClose }: Props) {
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-4 sm:p-8"
       role="dialog"
       aria-modal="true"
-      aria-label="Imagen ampliada"
+      aria-label={t("Imagen ampliada")}
       onClick={onClose}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -76,7 +78,7 @@ export function Lightbox({ images, index, onIndexChange, onClose }: Props) {
           e.stopPropagation();
           onClose();
         }}
-        aria-label="Cerrar imagen"
+        aria-label={t("Cerrar imagen")}
       >
         <X size={22} />
       </button>
@@ -86,7 +88,7 @@ export function Lightbox({ images, index, onIndexChange, onClose }: Props) {
           onClick={(e) => e.stopPropagation()}
           className="btn-secondary absolute top-[max(1rem,env(safe-area-inset-top))] right-16"
         >
-          Descargar
+          {t("Descargar")}
         </a>
       )}
       {many && (
@@ -95,7 +97,7 @@ export function Lightbox({ images, index, onIndexChange, onClose }: Props) {
             type="button"
             className="absolute top-1/2 left-2 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white hover:bg-black/80"
             onClick={(e) => { e.stopPropagation(); go(-1); }}
-            aria-label="Imagen anterior"
+            aria-label={t("Imagen anterior")}
           >
             <ChevronLeft size={22} />
           </button>
@@ -103,7 +105,7 @@ export function Lightbox({ images, index, onIndexChange, onClose }: Props) {
             type="button"
             className="absolute top-1/2 right-2 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white hover:bg-black/80"
             onClick={(e) => { e.stopPropagation(); go(1); }}
-            aria-label="Imagen siguiente"
+            aria-label={t("Imagen siguiente")}
           >
             <ChevronRight size={22} />
           </button>

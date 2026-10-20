@@ -9,14 +9,18 @@ import { requireUser } from "@/lib/session";
 import { applyUndo, type UndoOp } from "@/lib/undo";
 import * as v from "@/lib/validation";
 
-/** Deshace la última acción deshacible del usuario en el proyecto (hasta 10 seguidas). */
-export async function undoLast(projectId: string) {
-  return runAction({ name: "undo.undoLast", args: [projectId] }, async (): Promise<{ label: string; remaining: number; skipped: number }> => {
+/**
+ * Deshace la última acción deshacible del usuario en el proyecto (hasta 10 seguidas). Con una
+ * tarea abierta (`taskId`), el contexto es esa tarea: solo sus acciones.
+ */
+export async function undoLast(projectId: string, taskId?: string | null) {
+  return runAction({ name: "undo.undoLast", args: [projectId, taskId] }, async (): Promise<{ label: string; remaining: number; skipped: number }> => {
     const user = await requireUser();
     const pid = v.id.parse(projectId);
     await assertProjectAccess(user, pid);
-    const entry = await db.undoEntry.findFirst({ where: { userId: user.id, projectId: pid }, orderBy: { createdAt: "desc" } });
-    if (!entry) throw new AppError("No hay nada que deshacer.");
+    const tid = taskId ? v.id.parse(taskId) : null;
+    const entry = await db.undoEntry.findFirst({ where: { userId: user.id, projectId: pid, ...(tid ? { taskId: tid } : {}) }, orderBy: { createdAt: "desc" } });
+    if (!entry) throw new AppError(tid ? "No hay nada que deshacer en esta tarea." : "No hay nada que deshacer.");
     // Se retira primero: dos clics seguidos no deshacen dos veces lo mismo.
     const { count } = await db.undoEntry.deleteMany({ where: { id: entry.id } });
     if (!count) throw new AppError("Esa acción ya se ha deshecho.");

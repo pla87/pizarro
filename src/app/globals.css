@@ -8,6 +8,8 @@
   --color-brand-500: #6366f1;
   --color-brand-600: #4f46e5;
   --color-brand-700: #4338ca;
+  /* Barra de progreso de subtareas: contrasta con el acento (ver overrides abajo). */
+  --color-progress: #10b981;
 }
 
 /*
@@ -35,6 +37,61 @@
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
+}
+
+/*
+ * Acento por usuario: <html data-accent="forest|sienna|mustard|mono">; sin atributo = azul (valores de @theme).
+ * brand-600 es siempre lo bastante oscuro para texto blanco (contraste >= 4.5); 50/100 son tintes claros
+ * y en oscuro la app usa variantes translúcidas (dark:bg-brand-500/15), así que 500 debe verse sobre fondo oscuro.
+ */
+:root {
+  @variant dark {
+    --color-progress: #34d399;
+  }
+}
+:root[data-accent="forest"] {
+  --color-brand-50: #ecf5ee;
+  --color-brand-100: #d5e8da;
+  --color-brand-500: #3f9a5e;
+  --color-brand-600: #2d6a4f;
+  --color-brand-700: #1f5139;
+  --color-progress: #f59e0b;
+  @variant dark {
+    --color-progress: #fbbf24;
+  }
+}
+:root[data-accent="sienna"] {
+  --color-brand-50: #fbf1ec;
+  --color-brand-100: #f5dfd3;
+  --color-brand-500: #d2693c;
+  --color-brand-600: #a8481f;
+  --color-brand-700: #86371a;
+}
+:root[data-accent="mustard"] {
+  --color-brand-50: #fbf5e0;
+  --color-brand-100: #f5e8b5;
+  --color-brand-500: #c99a14;
+  --color-brand-600: #946a07;
+  --color-brand-700: #755305;
+  --color-progress: #0d9488;
+  @variant dark {
+    --color-progress: #2dd4bf;
+  }
+}
+/* Blanco y negro: casi negro en claro; en oscuro grises claros para texto/aro y un gris medio para botones. */
+:root[data-accent="mono"] {
+  --color-brand-50: #f4f4f5;
+  --color-brand-100: #e4e4e7;
+  --color-brand-500: #52525b;
+  --color-brand-600: #18181b;
+  --color-brand-700: #000000;
+  @variant dark {
+    --color-brand-50: #27272a;
+    --color-brand-100: #3f3f46;
+    --color-brand-500: #d4d4d8;
+    --color-brand-600: #71717a;
+    --color-brand-700: #52525b;
+  }
 }
 
 /*
@@ -142,6 +199,10 @@ body {
 .prose-md hr { @apply my-4 border-slate-200 dark:border-slate-800; }
 .prose-md input[type="checkbox"] { @apply mr-1.5 align-middle; }
 .prose-md > :first-child { @apply mt-0; }
+.prose-md u { @apply underline decoration-1 underline-offset-2; }
+/* Editor con barra de formato (TipTap): hereda .prose-md; el contenido ocupa el alto mínimo. */
+.ProseMirror.prose-md > :last-child { @apply mb-0; }
+.ProseMirror.prose-md s { @apply opacity-80; }
 
 /* Scroll sin barra visible (pestañas de columnas en móvil). */
 @utility no-scrollbar {

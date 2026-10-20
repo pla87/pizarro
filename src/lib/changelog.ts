@@ -17,6 +17,8 @@ export const changelogSchema = z.object({
     z.object({
       version: z.string().regex(/^\d+\.\d+\.\d+$/, "Versión SemVer no válida"),
       date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha YYYY-MM-DD no válida"),
+      /** Momento del lanzamiento (ISO con zona); las versiones antiguas pueden no tenerlo. */
+      releasedAt: z.string().datetime({ offset: true }).optional(),
       summary: z.string().default(""),
       changes: changesSchema,
     }),

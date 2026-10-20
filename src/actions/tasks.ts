@@ -7,7 +7,7 @@ import { runAction } from "@/lib/action";
 import { assertAssignable, assertProjectAccess, assertTaskAccess, visibleProjectsWhere } from "@/lib/access";
 import { boardTaskSelect, loadBoardTask, toBoardTask } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
-import { describeAction, noteProject } from "@/lib/action-context";
+import { describeAction, noteProject, noteTask } from "@/lib/action-context";
 import { addUndo, captureTasks, snapshotTasks, type TaskField } from "@/lib/undo";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
@@ -132,6 +132,7 @@ export async function createTask(input: z.input<typeof createSchema>) {
       },
       select: { id: true },
     });
+    noteTask(task.id);
     addUndo({ t: "task.remove", id: task.id });
     describeAction(
       `Creó la tarea «${data.title}» en «${await columnName(data.columnId)}»${data.subtasks.length ? ` con ${data.subtasks.length} subtareas` : ""}`,
@@ -480,6 +481,7 @@ async function assertSubtaskAccess(subtaskId: string) {
   });
   if (!sub) throw notFound();
   noteProject(sub.task.projectId);
+  noteTask(sub.taskId);
   const { task: _task, ...row } = sub;
   return row;
 }
@@ -558,6 +560,7 @@ export async function deleteAttachment(attachmentId: string) {
     });
     if (!att) throw notFound();
     noteProject((await db.task.findUnique({ where: { id: att.taskId }, select: { projectId: true } }))?.projectId);
+    noteTask(att.taskId);
     describeAction(`Borró el adjunto «${att.originalName}» de «${(await taskLabel(att.taskId)).title}»`, { attachmentId: att.id });
     // El fichero se conserva mientras se pueda deshacer (ver undo.ts).
     addUndo({ t: "attachment.restore", row: { ...att, createdAt: att.createdAt.toISOString() } });
@@ -618,6 +621,7 @@ export async function deleteComment(commentId: string) {
     if (!comment) throw notFound();
     if (comment.authorId !== user.id && user.role !== "ADMIN") throw new AppError("Solo puedes borrar tus comentarios.", 403);
     noteProject(comment.task.projectId);
+    noteTask(comment.taskId);
     const { task, ...row } = comment;
     addUndo({ t: "comment.restore", row: { ...row, createdAt: row.createdAt.toISOString(), editedAt: row.editedAt?.toISOString() ?? null } });
     describeAction(`Borró un comentario de «${task.title}»`, { taskId: row.taskId });
@@ -658,6 +662,7 @@ export async function deleteTaskLink(linkId: string) {
     });
     if (!link) throw notFound();
     noteProject(link.task.projectId);
+    noteTask(link.taskId);
     const { task: _task, ...row } = link;
     addUndo({ t: "link.restore", row: { ...row, createdAt: row.createdAt.toISOString() } });
     describeAction(`Quitó el enlace «${row.title}»`, { taskId: row.taskId });

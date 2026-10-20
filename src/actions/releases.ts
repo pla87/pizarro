@@ -24,7 +24,9 @@ const deploySchema = z.object({
   taskIds: z.array(v.id).max(500),
   destination: z.enum(["IN_PRODUCTION", "ARCHIVE"]),
   /** Tareas con adjuntos y su código en el texto (F1, C2…), en el orden del diálogo. */
-  attachments: z.array(z.object({ taskId: v.id, code: z.string().regex(/^[A-Z]{1,4}\d{1,4}$/) })).max(200).optional(),
+  attachments: z.array(z.object({ taskId: v.id, code: z.string().regex(/^(R\d{1,5})?[A-Z]{1,4}\d{1,4}$/) })).max(200).optional(),
+  /** Número con el que se generaron los códigos (R32…): si otra persona desplegó antes, no coincide. */
+  number: z.number().int().positive().optional(),
 });
 
 /**
@@ -52,9 +54,15 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     }
 
     const result = await db.$transaction(async (tx) => {
+      const last = await tx.release.findFirst({ where: { projectId: data.projectId }, orderBy: { number: "desc" }, select: { number: true } });
+      const number = (last?.number ?? 0) + 1;
+      if (data.number && data.number !== number) {
+        throw new AppError(`Mientras tanto se ha desplegado la release ${number - 1}: vuelve a generar el texto para que los códigos lleven R${number}.`);
+      }
       const release = await tx.release.create({
         data: {
           projectId: data.projectId,
+          number,
           title: data.title,
           content: data.content,
           createdById: user.id,
@@ -129,14 +137,18 @@ async function saveReleaseAttachments(releaseId: string, items: { taskId: string
 
 const countSchema = z.object({ projectId: v.id, dayIso: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
 
-/** Releases desplegadas en el proyecto durante el día local indicado (zona horaria de la app). */
+/** Releases desplegadas en el proyecto durante el día local indicado (zona horaria de la app) y número de la siguiente. */
 export async function countReleasesOn(input: z.input<typeof countSchema>) {
-  return runAction({ name: "releases.countReleasesOn", args: [input] }, async (): Promise<number> => {
+  return runAction({ name: "releases.countReleasesOn", args: [input] }, async (): Promise<{ today: number; nextNumber: number }> => {
     const user = await requireUser();
     const data = countSchema.parse(input);
     await assertProjectAccess(user, data.projectId);
     const { start, end } = zonedDayRange(data.dayIso, appTimeZone());
-    return db.release.count({ where: { projectId: data.projectId, deployedAt: { gte: start, lt: end } } });
+    const [today, last] = await Promise.all([
+      db.release.count({ where: { projectId: data.projectId, deployedAt: { gte: start, lt: end } } }),
+      db.release.findFirst({ where: { projectId: data.projectId }, orderBy: { number: "desc" }, select: { number: true } }),
+    ]);
+    return { today, nextNumber: (last?.number ?? 0) + 1 };
   });
 }
 

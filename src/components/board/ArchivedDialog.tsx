@@ -8,8 +8,9 @@ import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
 import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard } from "./context";
+import { formatDate } from "@/lib/format";
 
-const dateFmt = (iso: string) => new Date(iso).toLocaleDateString("es-ES");
+const dateFmt = (iso: string) => formatDate(iso, "dateShort");
 
 /** Tareas archivadas del proyecto: consulta y recuperación. */
 export function ArchivedDialog({ onClose }: { onClose: () => void }) {

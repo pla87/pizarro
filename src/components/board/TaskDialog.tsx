@@ -11,11 +11,12 @@ import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { dueStatus } from "@/lib/dates";
-import { kindBadgeStyle } from "@/lib/constants";
+import { isWhite, kindBadgeStyle, onColor } from "@/lib/constants";
 import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
 import { Avatar } from "../ui/Avatar";
 import { ColorPicker } from "../ui/ColorPicker";
 import { cn } from "../ui/cn";
+import { DescriptionField } from "../ui/DescriptionField";
 import { Markdown } from "../ui/Markdown";
 import { MentionTextarea, type MentionCommand } from "../ui/MentionTextarea";
 import { Lightbox } from "../ui/Lightbox";
@@ -26,12 +27,38 @@ import { useBoard } from "./context";
 import { TaskViewers } from "./TaskViewers";
 import { createAndOpenGoogleFile } from "./google";
 import { filesFrom, formatBytes, uploadFile, useFileDrop } from "./upload";
+import { formatDate } from "@/lib/format";
+import { draftKey, useDraftAutosave, type EditTaskDraft } from "./drafts";
+import { setUndoTask, UNDONE_EVENT } from "../undo-context";
+import { useIsMobile } from "../ui/useIsMobile";
 
-export function TaskDialog({ task, onClose, side, onAddSecond }: { task: BoardTask; onClose: () => void; side?: "left" | "right" | "center"; onAddSecond?: () => void }) {
+export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
+  task: BoardTask;
+  onClose: () => void;
+  side?: "left" | "right" | "center";
+  onAddSecond?: () => void;
+  /** Borrador recuperado (la página se cerró con la tarea abierta). */
+  draft?: EditTaskDraft | null;
+}) {
   const board = useBoard();
   const toast = useToast();
+  const mobile = useIsMobile();
   const [detail, setDetail] = useState<TaskDetail | null>(null);
-  const [title, setTitle] = useState(task.title);
+  const [title, setTitle] = useState(draft?.title ?? task.title);
+  // Descripción en edición (la comunica el editor): para el botón Guardar y el borrador local.
+  const descDraft = useRef<string | null>(null);
+  const [draftUsed, setDraftUsed] = useState(false);
+  // Borrador local cada 5 s: al volver tras cerrar la página, la tarea se reabre con lo escrito.
+  const discardDraft = useDraftAutosave(draftKey("edit", board.currentUserId, board.project.id), (): EditTaskDraft => ({
+    taskId: task.id,
+    ...(title !== task.title ? { title } : {}),
+    ...(descDraft.current !== null ? { description: descDraft.current } : {}),
+  }));
+  const onClose = () => {
+    discardDraft();
+    close();
+  };
+
   // Si el título cambia desde fuera (recarga tras un conflicto, deshacer), se muestra el nuevo.
   const [shownTitle, setShownTitle] = useState(task.title);
   if (shownTitle !== task.title) {
@@ -77,7 +104,7 @@ export function TaskDialog({ task, onClose, side, onAddSecond }: { task: BoardTa
     }
   };
 
-  /** Vuelve a leer la tarea (p. ej. si otra persona cambió su texto mientras se editaba). */
+  /** Vuelve a leer la tarea (p. ej. si otra persona cambió su texto mientras se editaba, o tras deshacer). */
   const reload = async () => {
     const res = await getTaskDetail(task.id);
     if (!res.ok) return;
@@ -85,9 +112,44 @@ export function TaskDialog({ task, onClose, side, onAddSecond }: { task: BoardTa
     setDescVersion((n) => n + 1);
     board.refresh();
   };
+  const reloadRef = useRef(reload);
+  useEffect(() => {
+    reloadRef.current = reload;
+  });
+
+  // Contexto del deshacer: con la tarea abierta, deshacer actúa sobre ella y luego se recarga.
+  useEffect(() => {
+    setUndoTask(task.id);
+    const onUndone = (e: Event) => {
+      if ((e as CustomEvent<{ taskId: string }>).detail?.taskId === task.id) void reloadRef.current();
+    };
+    window.addEventListener(UNDONE_EVENT, onUndone);
+    return () => {
+      setUndoTask(null);
+      window.removeEventListener(UNDONE_EVENT, onUndone);
+    };
+  }, [task.id]);
+
+  /** Botón Guardar (móvil): guarda título y descripción tal como estén escritos y cierra. */
+  const saveAndClose = async () => {
+    const value = title.trim();
+    const patch: { title?: string; description?: string } = {};
+    if (value && value !== task.title) patch.title = value;
+    const desc = descDraft.current;
+    if (desc !== null && desc !== (detail?.description ?? "")) patch.description = desc;
+    if (patch.title !== undefined || patch.description !== undefined) {
+      if (patch.description !== undefined) setDetail((d) => (d ? { ...d, description: desc! } : d));
+      const ok = await save(patch, {
+        ...(patch.title !== undefined ? { title: patch.title } : {}),
+        ...(patch.description !== undefined ? { hasDescription: patch.description.trim().length > 0 } : {}),
+      });
+      if (!ok) return;
+    }
+    onClose();
+  };
 
   /** Guardado optimista de campos de la tarjeta. */
-  const save = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>) => {
+  const save = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>): Promise<boolean> => {
     const before = board.taskById.get(task.id);
     board.patchTask(task.id, optimistic);
     // Título y descripción: se envía qué versión se estaba editando para no pisar a otra persona.
@@ -97,10 +159,11 @@ export function TaskDialog({ task, onClose, side, onAddSecond }: { task: BoardTa
       if (before) board.upsertTask(before);
       toast(res.error, "error");
       if (editsText) await reload();
-      return;
+      return false;
     }
     board.upsertTask(res.data);
     if (editsText) setDetail((d) => (d ? { ...d, textVersion: res.data.textVersion } : d));
+    return true;
   };
 
   const changeColumn = async (columnId: string) => {
@@ -224,6 +287,16 @@ export function TaskDialog({ task, onClose, side, onAddSecond }: { task: BoardTa
       onAddSecond={onAddSecond}
       size="xl"
       placement="top"
+      // Móvil: pie siempre visible con Archivar, Borrar y Guardar.
+      footer={
+        mobile ? (
+          <>
+            <button className="btn-secondary py-1.5" onClick={archive}><Archive size={15} /> Archivar</button>
+            <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> Borrar</button>
+            <button className="btn-primary ml-auto py-1.5" onClick={saveAndClose}><Check size={15} /> Guardar</button>
+          </>
+        ) : undefined
+      }
       // Escritorio: la altura se adapta al contenido (tope = viewport); solo hacen scroll las columnas si hay mucho contenido.
       header={
         <div className="flex items-start gap-2 border-b border-slate-200 px-5 py-3 dark:border-slate-800">
@@ -265,6 +338,12 @@ export function TaskDialog({ task, onClose, side, onAddSecond }: { task: BoardTa
             users={board.users}
             onGoogle={createGoogle}
             initial={detail?.description ?? null}
+            // El borrador recuperado solo se aplica la primera vez que se carga la tarea.
+            draft={detail && !draftUsed && descVersion === 0 ? draft?.description : undefined}
+            onDraftChange={(md) => {
+              descDraft.current = md;
+              if (md !== null && !draftUsed) setDraftUsed(true);
+            }}
             onSave={(description) => {
               setDetail((d) => (d ? { ...d, description } : d));
               save({ description }, { hasDescription: description.trim().length > 0 });
@@ -419,7 +498,7 @@ export function TaskDialog({ task, onClose, side, onAddSecond }: { task: BoardTa
                       save({ labelIds }, { labelIds });
                     }}
                     className={cn("rounded px-2 py-0.5 text-xs font-medium", on ? "text-white" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300")}
-                    style={on ? { backgroundColor: l.color } : undefined}
+                    style={on ? { backgroundColor: l.color, color: onColor(l.color), boxShadow: isWhite(l.color) ? "inset 0 0 0 1px rgb(0 0 0 / 0.2)" : undefined } : undefined}
                     aria-pressed={on}
                   >
                     {l.name}
@@ -452,10 +531,11 @@ export function TaskDialog({ task, onClose, side, onAddSecond }: { task: BoardTa
           </Field>
           {detail && (
             <p className="text-xs text-slate-500">
-              Creada {detail.createdByName ? `por ${detail.createdByName} ` : ""}el {new Date(detail.createdAt).toLocaleDateString("es-ES")}
+              Creada {detail.createdByName ? `por ${detail.createdByName} ` : ""}el {formatDate(detail.createdAt, "dateShort")}
             </p>
           )}
-          <div className="mt-auto flex flex-wrap gap-2 border-t border-slate-200 pt-4 md:gap-1 md:pt-2.5 dark:border-slate-800">
+          {/* En móvil estos botones van en el pie fijo, junto a Guardar. */}
+          <div className="mt-auto flex flex-wrap gap-2 border-t border-slate-200 pt-4 max-md:hidden md:gap-1 md:pt-2.5 dark:border-slate-800">
             <button className="btn-secondary py-1.5" onClick={archive}><Archive size={15} /> Archivar</button>
             <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> Borrar</button>
           </div>
@@ -513,19 +593,46 @@ export function TypeSelector({ kinds, value, onChange }: { kinds: KindOption[]; 
   );
 }
 
-function DescriptionEditor({ initial, onSave, users, onGoogle }: {
+function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftChange }: {
   initial: string | null;
+  /** Texto recuperado de un borrador: el editor empieza editándolo. */
+  draft?: string;
   onSave: (v: string) => void;
   users: UserOption[];
   onGoogle: (kind: MentionCommand) => Promise<TaskLinkInfo | null>;
+  /** Borrador actual en Markdown mientras se edita (con retardo); null al no estar editando. */
+  onDraftChange?: (markdown: string | null) => void;
 }) {
-  const [value, setValue] = useState(initial ?? "");
-  const [editing, setEditing] = useState(false);
+  const { editorMode } = useBoard();
+  const [value, setValue] = useState(draft ?? initial ?? "");
+  const [editing, setEditing] = useState(draft !== undefined);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const draftCb = useRef(onDraftChange);
+  useEffect(() => {
+    draftCb.current = onDraftChange;
+  });
+  useEffect(() => {
+    if (!editing) {
+      draftCb.current?.(null);
+      return;
+    }
+    const t = setTimeout(() => draftCb.current?.(value), 300);
+    return () => clearTimeout(t);
+  }, [editing, value]);
+  useEffect(() => () => draftCb.current?.(null), []);
 
   if (initial === null) {
     return <div className="h-24 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />;
   }
+
+  const finish = () => {
+    setEditing(false);
+    if (value !== initial) onSave(value);
+  };
+  const cancel = () => {
+    setValue(initial);
+    setEditing(false);
+  };
 
   return (
     <section>
@@ -539,34 +646,25 @@ function DescriptionEditor({ initial, onSave, users, onGoogle }: {
       </div>
       {editing ? (
         <div className="space-y-2">
-          <MentionTextarea
-            ref={ref}
-            className="input field-sizing-content min-h-32 font-mono text-[13px]"
+          <DescriptionField
+            mode={editorMode}
+            textareaRef={ref}
             value={value}
             onValueChange={setValue}
             users={users}
+            autoFocus
             onCommand={async (kind) => {
               const link = await onGoogle(kind);
               if (link) setValue((v) => `${v.trimEnd()}\n\n${kind === "GOOGLE_SHEET" ? "Hoja" : "Documento"}: [${link.title.replace(/[\[\]]/g, "")}](${link.url})\n`);
             }}
             maxLength={20000}
             placeholder="Markdown · @persona · @docs / @sheets"
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                e.preventDefault();
-                setValue(initial);
-                setEditing(false);
-              }
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                setEditing(false);
-                if (value !== initial) onSave(value);
-              }
-            }}
+            onCancel={cancel}
+            onSubmit={finish}
           />
           <div className="flex gap-2">
-            <button className="btn-primary py-1.5" onClick={() => { setEditing(false); if (value !== initial) onSave(value); }}>Guardar</button>
-            <button className="btn-ghost py-1.5" onClick={() => { setValue(initial); setEditing(false); }}>Cancelar</button>
+            <button className="btn-primary py-1.5" onClick={finish}>Guardar</button>
+            <button className="btn-ghost py-1.5" onClick={cancel}>Cancelar</button>
             <span className="ml-auto self-center text-xs text-slate-400 max-sm:hidden">Ctrl+Enter para guardar</span>
           </div>
         </div>
@@ -681,7 +779,7 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
           aria-valuenow={done}
         >
           <div
-            className="h-full rounded-full bg-emerald-500 shadow-[0_0_6px] shadow-emerald-500/60 transition-[width] duration-300 dark:bg-emerald-400 dark:shadow-emerald-400/50"
+            className="h-full rounded-full bg-progress shadow-[0_0_6px] shadow-progress/60 transition-[width] duration-300"
             style={{ width: list.length ? `${(done / list.length) * 100}%` : "0%" }}
           />
         </div>
@@ -865,7 +963,7 @@ function Comments({ taskId, detail, setDetail, users, onGoogle }: {
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-2 text-xs">
                 <span className="font-semibold">{c.authorName ?? "Usuario eliminado"}</span>
-                <time className="text-slate-400">{new Date(c.createdAt).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" })}</time>
+                <time className="text-slate-400">{formatDate(c.createdAt, "dateTimeShort")}</time>
                 {(c.authorId === board.currentUserId) && (
                   <button
                     className="ml-auto text-slate-400 opacity-0 group-hover:opacity-100 hover:text-red-600 max-md:opacity-100"
