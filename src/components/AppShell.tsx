@@ -12,7 +12,9 @@ import { createProject } from "@/actions/projects";
 import { listTemplates } from "@/actions/templates";
 import type { CurrentUser } from "@/lib/session";
 import { InstallApp } from "./InstallApp";
-import { ProjectMenu, ProjectsContext } from "./ProjectMenu";
+import { Presence } from "./board/Presence";
+import { PrivateIcon, ProjectMenu, ProjectsContext } from "./ProjectMenu";
+import { UndoButton } from "./UndoButton";
 import { Avatar } from "./ui/Avatar";
 import { cn } from "./ui/cn";
 import { Modal } from "./ui/Modal";
@@ -20,7 +22,7 @@ import { ToastProvider, useToast } from "./ui/Toast";
 
 interface Props {
   user: CurrentUser;
-  projects: { id: string; name: string }[];
+  projects: { id: string; name: string; isPrivate?: boolean }[];
   version: string;
   unread: number;
   children: React.ReactNode;
@@ -78,7 +80,12 @@ function Shell({ user, projects, version, unread, children }: Props) {
           <button className="btn-icon" onClick={() => setDrawerOpen(true)} aria-label="Abrir menú">
             <Menu size={20} />
           </button>
-          <ProjectMenu className="flex-1" />
+          {/* Deshacer, justo a continuación del nombre del tablero. */}
+          <div className="flex min-w-0 flex-1 items-center gap-0.5">
+            <ProjectMenu className="min-w-0" />
+            {current && <UndoButton projectId={current.id} className="shrink-0" />}
+          </div>
+          {current && <Presence projectId={current.id} compact />}
           {unread > 0 && (
             <Link href="/notifications" className="ml-auto flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white" aria-label={`${unread} avisos sin leer`}>
               <Bell size={13} /> {unread}
@@ -112,8 +119,8 @@ function NavLink({ href, icon: Icon, children, active }: { href: string; icon: t
 function Sidebar({ user, projects, current, version, pathname, unread }: {
   unread: number;
   user: CurrentUser;
-  projects: { id: string; name: string }[];
-  current: { id: string; name: string } | null;
+  projects: { id: string; name: string; isPrivate?: boolean }[];
+  current: { id: string; name: string; isPrivate?: boolean } | null;
   version: string;
   pathname: string;
 }) {
@@ -179,7 +186,7 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
   );
 }
 
-function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: string; name: string }[]; current: { id: string; name: string } | null; isAdmin: boolean }) {
+function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: string; name: string; isPrivate?: boolean }[]; current: { id: string; name: string; isPrivate?: boolean } | null; isAdmin: boolean }) {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   return (
@@ -193,6 +200,7 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: strin
       >
         <FolderKanban size={16} className="shrink-0 text-brand-600" />
         <span className="min-w-0 flex-1 truncate font-medium">{current?.name ?? "Selecciona proyecto"}</span>
+        {current?.isPrivate && <PrivateIcon />}
         <ChevronsUpDown size={15} className="shrink-0 text-slate-400" />
       </button>
       {open && (
@@ -212,7 +220,10 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: strin
                 role="option"
                 aria-selected={p.id === current?.id}
               >
-                {p.name}
+                <span className="flex items-center gap-1.5">
+                  <span className="min-w-0 truncate">{p.name}</span>
+                  {p.isPrivate && <PrivateIcon />}
+                </span>
               </Link>
             ))}
             {isAdmin && (

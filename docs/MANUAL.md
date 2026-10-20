@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.10.0"
+version: "v1.11.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.10.0
+**Versión de la aplicación:** v1.11.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -89,6 +89,7 @@ La aplicación es un **monolito en un único contenedor**. No hay colas, cachés
 | `Task` | projectId, columnId, kindId, title, description, color, linkUrl, position, assigneeId, archivedAt | Posición fraccionaria para reordenar actualizando una sola fila. |
 | `Label` / `TaskLabel` | name, color | Etiquetas por proyecto. |
 | `Subtask` | taskId, title, done, position | Subtareas de una tarea (no pasan a las releases). |
+| `UndoEntry` | userId, projectId, label, ops (JSON), createdAt | Las 10 últimas acciones deshacibles de cada usuario en cada proyecto, con sus operaciones inversas. Caducan a los 7 días. |
 | `TaskAttachment` | taskId, originalName, width, height, size | El fichero está en `UPLOAD_DIR/<id>.webp` (y `<id>.thumb.webp`). |
 | `Release` / `ReleaseTask` | content (Markdown final), deployedAt, autor · instantánea de título y tipo de cada tarea | La instantánea se conserva aunque la tarea se borre. |
 | `AppVersionLog` | version (única), releasedAt, summary, changes (JSON) | Se sincroniza desde `changelog.json` en cada arranque. |
@@ -148,7 +149,7 @@ Además, `Task` tiene `dueDate` (fecha límite, solo día), `Column` tiene `isDo
   - **visibilidad** (admins), con tres opciones:
     - *Visible para todos*;
     - *Solo los usuarios seleccionados* (y los administradores);
-    - *Privado: solo tú*. Nadie más lo ve ni puede entrar, tampoco los demás administradores, y no aparece en sus listados, avisos ni asignaciones. Pide confirmación. También se puede elegir al crear el proyecto. Si su dueño se desactiva o deja de ser administrador, el proyecto queda **bloqueado** (nadie lo ve) hasta que vuelva a ser administrador activo. Si se **borra** al dueño, sus proyectos privados se borran con él, con todo su contenido (antes se avisa y se pide confirmación);
+    - *Privado: solo tú*. Nadie más lo ve ni puede entrar, tampoco los demás administradores, y no aparece en sus listados, avisos ni asignaciones. Pide confirmación. También se puede elegir al crear el proyecto. Si su dueño se desactiva o deja de ser administrador, el proyecto queda **bloqueado** (nadie lo ve) hasta que vuelva a ser administrador activo. Si se **borra** al dueño, sus proyectos privados se borran con él, con todo su contenido (antes se avisa y se pide confirmación). Los proyectos privados llevan un **candado** junto a su nombre;
   - etiquetas;
   - borrado del proyecto (admins; pide escribir el nombre para confirmar).
 
@@ -163,7 +164,7 @@ Desde el menú «⋯» de cada columna:
 
 ### 3.4 Tarjetas
 
-- **Crear:** botón *Nueva tarea*, el «+» de cada columna o el botón flotante en móvil. El formulario empieza por **Título, Tipo y Descripción**; en móvil se abre arriba de la pantalla para que esos campos se vean con el teclado abierto. Solo el título y el tipo son obligatorios; asignarla a alguien es opcional. **Ctrl/⌘+Enter** en cualquier campo crea la tarea.
+- **Crear:** botón *Nueva tarea*, el «+» de cada columna o el botón flotante en móvil. El formulario empieza por **Título, Tipo y Descripción**; en móvil se abre arriba de la pantalla para que esos campos se vean con el teclado abierto. Solo el título y el tipo son obligatorios; asignarla a alguien es opcional. También se pueden añadir **subtareas** (Enter añade cada una). **Ctrl/⌘+Enter** en cualquier campo crea la tarea.
 - **Crear varias a la vez:** botón **Varias tareas** (escritorio) o el botón flotante pequeño encima del «+» (móvil).
   - Elige la columna (por defecto, la que estás viendo) y pega una lista: **cada línea es una tarea** con ese título. Las líneas vacías se ignoran y se quitan viñetas como «-», «*», «1.» o «[ ]».
   - Elige el **tipo para todas** y, si alguna es distinta, cámbialo en su línea. Volver a pulsar un tipo común lo aplica a todas las líneas, también a las cambiadas a mano.
@@ -171,15 +172,20 @@ Desde el menú «⋯» de cada columna:
   - Hasta 100 tareas de una vez; se añaden al final de la columna en el orden de la lista.
 - **Tipo:** por defecto *Funcionalidad* o *Corrección*. Los administradores pueden crear más tipos generales, y cada proyecto puede tener los suyos (ver 3.14).
 - **Atajo de captura:** pega una imagen (Ctrl/⌘+V) con el tablero en pantalla y se abre *Nueva tarea* con la captura adjunta.
-- **Dos tareas a la vez (escritorio):** con una tarea abierta (nueva o existente), el botón redondo **+** que hay fuera del modal, en su esquina inferior derecha, abre una tarea nueva a la derecha (por defecto en *Backlog*) y la abierta se desplaza a la izquierda. Se puede trabajar en las dos; Escape o atrás cierran la última abierta.
-- **Quién está trabajando:** en escritorio, a la izquierda de **Informe PDF** aparecen círculos con las **iniciales** de las otras personas que han hecho cualquier acción en ese tablero (abrir, crear, mover, editar, subir adjuntos…) en los **últimos 5 minutos**; al pasar el ratón se ven sus nombres. Se actualiza cada 20 segundos y tú no apareces. Si hay más de cinco, se muestra «+N».
+- **Dos tareas a la vez (escritorio):** con una tarea abierta (nueva o existente), el botón redondo **+** que hay fuera del modal, en su esquina inferior derecha, abre una tarea nueva al lado (por defecto en *Backlog*): las dos quedan juntas y centradas, con el mismo ancho. Se puede trabajar en las dos; Escape o atrás cierran la última abierta.
+- **Quién está trabajando:** a la izquierda de **Informe PDF** (en móvil, arriba a la derecha) aparecen círculos con las **iniciales** de quienes han hecho cualquier acción en ese tablero (abrir, crear, mover, editar, subir adjuntos…) en los **últimos 5 minutos**, tú incluido; al pasar el ratón se ven sus nombres. Se actualiza cada 20 segundos. Si hay más (cinco en escritorio, tres en móvil), se muestra «+N».
+- **Trabajar varios a la vez:** si otra persona tiene abierta la misma tarea, el detalle lo indica («Fulano también tiene abierta esta tarea»). Si cambia el **título o la descripción** mientras tú los editas, al guardar no se pisa su texto: se avisa, la tarea se recarga con sus cambios y vuelves a aplicar los tuyos. El resto de campos (tipo, color, responsable…) se guardan al momento y gana el último cambio.
+- **Guardado:** los cambios del detalle se guardan solos; en la cabecera se ve «Guardando…» y después **«Guardado»** con un check verde.
+- **Deshacer:** el botón con la flecha de volver, justo a la derecha del nombre del tablero (también en móvil), deshace **tu última acción** en ese tablero, y así hasta las **10 últimas**: crear, editar, mover, archivar, recuperar, borrar (con sus adjuntos y subtareas), subtareas, comentarios, adjuntos, enlaces, columnas y desplegar una release (las tareas vuelven a su sitio y la release sale del histórico). En escritorio también **Ctrl/⌘+Z** con el tablero en pantalla. Solo deshace lo tuyo; si algo ya no existe (otra persona lo borró), se salta y se avisa. Las acciones de deshacer caducan a los 7 días.
 - **Editar:** haz clic en la tarjeta. Los cambios se guardan solos (título y enlace al salir del campo; tipo, color, responsable, etiquetas y columna al cambiarlos). La descripción admite Markdown (Ctrl/⌘+Enter guarda).
-- **Subtareas:** añádelas y márcalas. Junto al título *Subtareas* hay una barra verde que se llena según la proporción de subtareas hechas (con dos, cada una marca el 50 %, da igual el orden); la tarjeta muestra el progreso (p. ej. `2/4`). Las subtareas **no pasan** al texto de las releases.
+- **Subtareas:** añádelas y márcalas. **Doble clic** sobre una la edita (Enter guarda, Escape cancela) y se **reordenan** arrastrando el icono de seis puntos. Junto al título *Subtareas* hay una barra verde que se llena según la proporción de subtareas hechas (con dos, cada una marca el 50 %, da igual el orden); la tarjeta muestra el progreso (p. ej. `2/4`). Las subtareas **no pasan** al texto de las releases.
 - **Adjuntos:** cualquier tipo de archivo de hasta 10 MB. Pégalos con Ctrl/⌘+V, usa *Añadir* o **arrástralos** sobre la tarea abierta (aparece «Suelta para adjuntar»); también desde la ventana de descargas del navegador. Los que no son imagen se listan con su icono, nombre y tamaño, y se descargan (nunca se abren dentro de Pizarro, por seguridad).
 - **Capturas e imágenes:** al tocar o hacer clic en una imagen se ve **a pantalla completa**; se cierra con la **X**, tocando fuera de la imagen, con Escape o con el botón atrás. Con varias imágenes, las flechas pasan de una a otra. En móvil también tienes el botón **Cámara**, al crear la tarea y en el detalle de una tarea existente. Cada imagen se reduce a 1280 px de ancho como máximo y se guarda como WebP (calidad 75).
 - **Archivar** oculta la tarjeta del tablero (desde su detalle o, para varias, con **Archivar** en la barra de selección). **Borrar** la elimina con sus adjuntos.
 - **Archivadas:** botón en la cabecera del tablero (escritorio) o entrada **Archivadas** del menú lateral. Abre un listado con filtro de las tareas archivadas: tipo, fecha, columna de la que salieron y, si pasaron por una release, la etiqueta **En release: …**. **Recuperar** la devuelve al final de la columna en la que estaba; si esa columna ya no existe, a la primera columna del proyecto (Backlog).
 - En escritorio, el detalle de la tarjeta cabe entero en la pantalla: la columna principal y la lateral se desplazan cada una por su lado.
+
+- **Versión nueva:** después de un despliegue, las pestañas abiertas se recargan solas al volver a ellas (o muestran «Hay una versión nueva · Recargar» si estás escribiendo), para no usar acciones de la versión anterior.
 
 ### 3.5 Mover tarjetas
 

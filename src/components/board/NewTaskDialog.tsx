@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, File as FileIcon, ImagePlus, Loader2, X } from "lucide-react";
+import { Camera, File as FileIcon, ImagePlus, Loader2, Plus, X } from "lucide-react";
 import { useEffect, useId, useMemo, useState } from "react";
 import { createTask } from "@/actions/tasks";
 import { Lightbox } from "../ui/Lightbox";
@@ -41,6 +41,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const [deliverableId, setDeliverableId] = useState("");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<File[]>(initialFiles ?? []);
+  const [subtasks, setSubtasks] = useState<string[]>([]);
+  const [subtaskDraft, setSubtaskDraft] = useState("");
   const [evergreen, setEvergreen] = useState(!!initialEvergreen);
   const isReleaseColumn = board.columns.find((c) => c.id === columnId)?.role === "NEXT_RELEASE";
   const [busy, setBusy] = useState(false);
@@ -60,15 +62,26 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
 
   const dropping = useFileDrop(addFiles);
 
+  const addSubtaskDraft = () => {
+    const t = subtaskDraft.trim();
+    if (!t) return;
+    setSubtasks((l) => (l.length >= 50 ? l : [...l, t.slice(0, 200)]));
+    setSubtaskDraft("");
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (busy || !title.trim() || !columnId) return;
     setBusy(true);
+    // Una subtarea a medio escribir también se guarda al crear.
+    const pending = subtaskDraft.trim().slice(0, 200);
+    const subtaskTitles = pending && subtasks.length < 50 ? [...subtasks, pending] : subtasks;
     const res = await board.track(
       createTask({
         projectId: board.project.id, columnId, title, kindId, description,
         assigneeId: assigneeId || null, dueDate: dueDate || null, deliverableId: deliverableId || null,
         evergreen: isReleaseColumn && evergreen,
+        subtasks: subtaskTitles,
       }),
     );
     if (!res.ok) {
@@ -141,6 +154,41 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         <div>
           <label className="label" htmlFor={`${uid}-desc`}>Descripción (opcional)</label>
           <MentionTextarea id={`${uid}-desc`} className="input field-sizing-content min-h-14" value={description} onValueChange={setDescription} users={board.users} maxLength={20000} placeholder="Markdown · @persona para avisar" />
+        </div>
+        <div>
+          <label className="label" htmlFor={`${uid}-subtask`}>Subtareas (opcional)</label>
+          {subtasks.length > 0 && (
+            <ul className="mb-1.5 space-y-0.5">
+              {subtasks.map((s, i) => (
+                <li key={i} className="flex items-center gap-2 rounded-md bg-slate-50 py-0.5 pr-0.5 pl-2 text-sm dark:bg-slate-800/50">
+                  <span className="min-w-0 flex-1 break-words">{s}</span>
+                  <button type="button" className="btn-icon h-6 w-6 shrink-0" onClick={() => setSubtasks((l) => l.filter((_, j) => j !== i))} aria-label="Quitar subtarea">
+                    <X size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex gap-2">
+            <input
+              id={`${uid}-subtask`}
+              className="input py-1.5"
+              placeholder="Añadir subtarea…"
+              value={subtaskDraft}
+              maxLength={200}
+              onChange={(e) => setSubtaskDraft(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter añade la subtarea sin enviar el formulario; Ctrl/Cmd+Enter sigue creando la tarea.
+                if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  addSubtaskDraft();
+                }
+              }}
+            />
+            <button type="button" className="btn-secondary py-1.5" disabled={!subtaskDraft.trim() || subtasks.length >= 50} onClick={addSubtaskDraft} aria-label="Añadir subtarea">
+              <Plus size={15} />
+            </button>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-x-3 gap-y-3">
           <div className="min-w-0">

@@ -14,6 +14,7 @@ import { POSITION_STEP } from "@/lib/positions";
 import { attachmentFileNames, zonedDayRange } from "@/lib/release";
 import { requireUser } from "@/lib/session";
 import { attachmentPath, compactImage, removeReleaseAttachmentFiles, saveReleaseAttachmentFile } from "@/lib/uploads";
+import { addUndo, captureTasks } from "@/lib/undo";
 import * as v from "@/lib/validation";
 
 const deploySchema = z.object({
@@ -36,6 +37,8 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     const data = deploySchema.parse(input);
     await assertProjectAccess(user, data.projectId);
 
+    // Deshacer: dónde estaba cada tarea; la release del histórico se quita (ver más abajo).
+    addUndo(...(await captureTasks(data.taskIds, ["columnId", "position", "archivedAt", "archivedFromColumnId", "evergreen"])));
     const tasks = await db.task.findMany({
       where: { id: { in: data.taskIds }, projectId: data.projectId, archivedAt: null },
       orderBy: [{ column: { position: "asc" } }, { position: "asc" }],
@@ -75,6 +78,7 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
       }
       return { releaseId: release.id, moved, archived: target ? [] : tasks.filter((t) => !t.evergreen).map((t) => t.id) };
     });
+    addUndo({ t: "release.remove", id: result.releaseId });
     const fixed = tasks.filter((t) => t.evergreen).length;
     describeAction(
       `Desplegó la release «${data.title}» con ${tasks.length === 1 ? "1 tarea" : `${tasks.length} tareas`}` +

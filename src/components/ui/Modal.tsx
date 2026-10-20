@@ -86,15 +86,16 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
       className={cn(
         "fixed inset-0 z-50 flex justify-center sm:items-center sm:p-4",
         top ? "items-start pt-[env(safe-area-inset-top)] sm:pt-4" : "items-end",
-        side === "left" && "lg:justify-start",
+        // Pareja de modales: cada uno ocupa una mitad y se pega al centro (hueco total ≈ 1rem).
+        side === "left" && "lg:right-1/2 lg:justify-end lg:pr-2",
         // El segundo modal no tapa al primero: solo su panel recibe clics.
-        side === "right" && "lg:pointer-events-none lg:justify-end",
+        side === "right" && "lg:pointer-events-none lg:left-1/2 lg:justify-start lg:pl-2",
       )}
     >
       {/* Un solo fondo para la pareja (lo pone el modal de la izquierda o el único); cierra el de más arriba. */}
       {side !== "right" && (
         <div
-          className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]"
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-[2px]"
           onMouseDown={() => (modalStack[modalStack.length - 1]?.close ?? onClose)()}
           aria-hidden
         />
@@ -110,7 +111,8 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
           top ? "max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top))] rounded-b-2xl sm:max-h-[calc(100dvh-2rem)]" : "max-h-[92dvh] rounded-t-2xl",
           SIZES[size],
           side === "center" && onAddSecond && "lg:max-w-[min(var(--mw),calc(100vw-9rem))]", // hueco para el «+»
-          side !== "center" && "lg:max-w-[min(var(--mw),calc(50vw-1.5rem))] lg:pointer-events-auto",
+          // En pareja, mismo ancho los dos: juntos en el centro forman un bloque centrado.
+          side !== "center" && "lg:w-[min(44rem,calc(50vw-1.5rem))] lg:max-w-none lg:pointer-events-auto",
           panelClassName,
         )}
       >

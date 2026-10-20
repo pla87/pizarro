@@ -17,6 +17,7 @@ export const boardTaskSelect = {
   deliverableId: true,
   description: true,
   evergreen: true,
+  contentUpdatedAt: true,
   labels: { select: { labelId: true } },
   subtasks: { select: { done: true } },
   _count: { select: { attachments: true, comments: true, links: true } },
@@ -44,6 +45,7 @@ export function toBoardTask(t: BoardTaskRow): BoardTask {
     commentCount: t._count.comments,
     linkCount: t._count.links,
     evergreen: t.evergreen,
+    textVersion: t.contentUpdatedAt?.toISOString() ?? null,
   };
 }
 

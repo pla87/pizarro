@@ -1,11 +1,14 @@
 import "server-only";
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { UndoOp } from "./undo";
 
 // Contexto de la acción en curso, para que el registro de actividad diga qué pasó y en qué proyecto.
 interface ActionContext {
   message?: string;
   projectId?: string | null;
   details?: Record<string, unknown>;
+  /** Operaciones inversas para deshacer la acción (ver undo.ts). */
+  undo?: UndoOp[];
 }
 
 export const actionContext = new AsyncLocalStorage<ActionContext>();

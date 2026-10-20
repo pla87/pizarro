@@ -29,9 +29,15 @@ export async function purgeNonImageCopies(now: Date = new Date()): Promise<numbe
   return ids.length;
 }
 
+/** Borra las entradas de deshacer de más de 7 días (y los ficheros que solo ellas retenían). */
+export async function purgeOldUndo(now: Date = new Date()): Promise<number> {
+  const { discardUndo, UNDO_MAX_AGE_DAYS } = await import("@/lib/undo");
+  return discardUndo({ createdAt: { lt: new Date(now.getTime() - UNDO_MAX_AGE_DAYS * DAY_MS) } });
+}
+
 /** Una pasada de mantenimiento; nunca lanza. */
 export async function runMaintenance(): Promise<void> {
-  for (const job of [purgeNonImageCopies]) {
+  for (const job of [purgeNonImageCopies, purgeOldUndo]) {
     try {
       await job();
     } catch (err) {

@@ -2,6 +2,10 @@ import type { NextConfig } from "next";
 
 const isDev = process.env.NODE_ENV !== "production";
 
+// Identificador de esta compilación: el navegador lo compara con el del servidor para detectar
+// que hay una versión nueva desplegada (y recargar antes de llamar a acciones que ya no existen).
+const buildId = (process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 12) || Date.now().toString(36)) + (isDev ? "-dev" : "");
+
 const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
@@ -19,6 +23,8 @@ const nextConfig: NextConfig = {
   // Servidor autocontenido (.next/standalone): imagen Docker mucho más pequeña.
   output: "standalone",
   poweredByHeader: false,
+  generateBuildId: () => buildId,
+  env: { NEXT_PUBLIC_BUILD_ID: buildId },
   reactStrictMode: true,
   serverExternalPackages: ["sharp", "@react-pdf/renderer"],
   experimental: {

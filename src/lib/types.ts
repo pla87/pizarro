@@ -30,6 +30,8 @@ export interface BoardTask {
   linkCount: number;
   /** Tarea fija en la columna de la release (no se mueve ni se archiva al desplegar). */
   evergreen: boolean;
+  /** Última edición del título/descripción (para detectar ediciones simultáneas). */
+  textVersion: string | null;
 }
 
 export interface KindOption {
@@ -125,6 +127,8 @@ export interface TaskDetail {
   attachments: AttachmentInfo[];
   links: TaskLinkInfo[];
   comments: CommentInfo[];
+  /** Versión del título/descripción cargados (ver BoardTask.textVersion). */
+  textVersion: string | null;
 }
 
 /** Tarea archivada, con su columna de origen y las releases en las que entró. */

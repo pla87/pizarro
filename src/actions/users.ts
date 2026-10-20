@@ -10,6 +10,7 @@ import { AppError, notFound } from "@/lib/errors";
 import { MAX_USERS } from "@/lib/limits";
 import { hashPassword, MIN_PASSWORD } from "@/lib/password";
 import { purgeProject } from "@/lib/project-delete";
+import { discardUndo } from "@/lib/undo";
 import { requireAdmin } from "@/lib/session";
 import * as v from "@/lib/validation";
 
@@ -107,6 +108,7 @@ export async function deleteUser(userId: string, confirmPrivate: boolean) {
       throw new AppError(`${user.name} tiene ${privates.length === 1 ? "1 proyecto privado" : `${privates.length} proyectos privados`}: confirma que se borren.`);
     }
     for (const p of privates) await purgeProject(p.id);
+    await discardUndo({ userId: user.id });
     await db.user.delete({ where: { id: user.id } });
     describeAction(
       privates.length

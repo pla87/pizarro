@@ -4,6 +4,7 @@ import { assertTaskAccess } from "@/lib/access";
 import { AppError } from "@/lib/errors";
 import { actionContext } from "@/lib/action-context";
 import { logEvent } from "@/lib/log";
+import { saveUndo } from "@/lib/undo";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser, requireUser } from "@/lib/session";
 import { MAX_UPLOAD_BYTES, processImage, removeAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveRawAttachmentFile } from "@/lib/uploads";
@@ -21,7 +22,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     if (!isSameOrigin(req)) throw new AppError("Origen no permitido.", 403);
     const user = await requireUser();
     const { taskId } = await ctx.params;
-    await assertTaskAccess(user, taskId);
+    const { projectId } = await assertTaskAccess(user, taskId);
 
     const length = Number(req.headers.get("content-length") ?? 0);
     if (length > MAX_UPLOAD_BYTES + 64 * 1024) throw new AppError("El archivo supera el tamaño máximo.", 413);
@@ -65,6 +66,10 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
         width: image?.width ?? null, height: image?.height ?? null,
       },
     });
+    // Deshacer la subida borra el adjunto (como una acción más del usuario en el proyecto).
+    await saveUndo(user.id, projectId, `Subió «${attachment.originalName}»`, [{ t: "attachment.remove", id: attachment.id }]).catch((err) =>
+      console.error("[undo] no se pudo guardar", err),
+    );
     return NextResponse.json<AttachmentInfo>(attachment, { status: 201 });
   } catch (err) {
     const user = await getCurrentUser().catch(() => null);

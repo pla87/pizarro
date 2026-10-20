@@ -27,3 +27,25 @@ export function activeUsers(projectId: string, now = Date.now()): { id: string; 
   if (users.size === 0) state.delete(projectId);
   return out.sort((a, b) => b.at - a.at);
 }
+
+// Quién tiene abierta cada tarea (lo anota el propio diálogo cada pocos segundos).
+export const VIEWER_WINDOW_MS = 45_000;
+const viewers = (globalThis as unknown as { __pzViewers?: Map<string, Map<string, Entry>> }).__pzViewers ??= new Map();
+
+/** Anota que el usuario tiene la tarea abierta y devuelve quién más la tiene. */
+export function noteTaskViewer(taskId: string, userId: string, name: string, now = Date.now()): { id: string; name: string }[] {
+  let users = viewers.get(taskId);
+  if (!users) viewers.set(taskId, (users = new Map()));
+  users.set(userId, { name, at: now });
+  const others: { id: string; name: string }[] = [];
+  for (const [id, e] of users) {
+    if (now - e.at > VIEWER_WINDOW_MS) users.delete(id);
+    else if (id !== userId) others.push({ id, name: e.name });
+  }
+  return others;
+}
+
+/** El usuario ha cerrado la tarea. */
+export function leaveTask(taskId: string, userId: string): void {
+  viewers.get(taskId)?.delete(userId);
+}
