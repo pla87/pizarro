@@ -41,7 +41,6 @@ export interface KindOption {
   /** Automatización al elegir el tipo (vacío = nada). */
   titleTemplate: string;
   descriptionTemplate: string;
-  system: boolean;
 }
 
 export interface TemplateOption {
@@ -51,6 +50,7 @@ export interface TemplateOption {
 }
 
 export type CardStyleValue = "STRIPE" | "FILLED";
+export type EditorModeValue = "MARKDOWN" | "WYSIWYG";
 
 export interface DeliverableOption {
   id: string;
@@ -78,6 +78,8 @@ export interface BoardData {
   kinds: KindOption[];
   templates: { headers: TemplateOption[]; footers: TemplateOption[] };
   cardStyle: CardStyleValue;
+  /** Cómo edita descripciones el usuario actual. */
+  editorMode: EditorModeValue;
   currentUserId: string;
   deliverables: DeliverableOption[];
   google: { enabled: boolean; connected: boolean };

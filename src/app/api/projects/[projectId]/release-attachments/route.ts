@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { attachmentFileNames, isoDate } from "@/lib/release";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
+import { getT } from "@/i18n/server";
 import { attachmentPath } from "@/lib/uploads";
 import * as v from "@/lib/validation";
 import { buildZip } from "@/lib/zip";
@@ -15,7 +16,7 @@ export const runtime = "nodejs";
 
 const bodySchema = z.object({
   items: z
-    .array(z.object({ taskId: v.id, code: z.string().regex(/^[A-Z]{1,4}\d{1,4}$/) }))
+    .array(z.object({ taskId: v.id, code: z.string().regex(/^(R\d{1,5})?[A-Z]{1,4}\d{1,4}$/) }))
     .min(1)
     .max(200),
 });
@@ -25,18 +26,19 @@ const bodySchema = z.object({
  * Los nombres se recalculan aquí con el mismo helper que el texto de la release.
  */
 export async function POST(req: Request, ctx: { params: Promise<{ projectId: string }> }) {
+  const t = await getT();
   const start = performance.now();
-  if (!isSameOrigin(req)) return new Response("Origen no permitido", { status: 403 });
+  if (!isSameOrigin(req)) return new Response(t("Origen no permitido"), { status: 403 });
   const user = await getCurrentUser();
-  if (!user) return new Response("No autorizado", { status: 401 });
-  if (!rateLimit(`release-zip:${user.id}`, 10, 60_000)) return new Response("Demasiadas peticiones", { status: 429 });
+  if (!user) return new Response(t("No autorizado"), { status: 401 });
+  if (!rateLimit(`release-zip:${user.id}`, 10, 60_000)) return new Response(t("Demasiadas peticiones"), { status: 429 });
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return new Response("Datos no válidos", { status: 400 });
+  if (!parsed.success) return new Response(t("Datos no válidos"), { status: 400 });
   const { items } = parsed.data;
   const ids = new Set(items.map((i) => i.taskId));
   const codes = new Set(items.map((i) => i.code));
-  if (ids.size !== items.length || codes.size !== items.length) return new Response("Datos no válidos", { status: 400 });
+  if (ids.size !== items.length || codes.size !== items.length) return new Response(t("Datos no válidos"), { status: 400 });
 
   const { projectId } = await ctx.params;
   const tasks = await db.task.findMany({
@@ -47,7 +49,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
     },
   });
   // Todas las tareas deben existir en este proyecto y ser visibles.
-  if (tasks.length !== ids.size) return new Response("No encontrado", { status: 404 });
+  if (tasks.length !== ids.size) return new Response(t("No encontrado"), { status: 404 });
   const byId = new Map(tasks.map((t) => [t.id, t]));
 
   const files: { name: string; data: Uint8Array }[] = [];
@@ -62,7 +64,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
       }
     }
   }
-  if (files.length === 0) return new Response("No hay adjuntos disponibles", { status: 404 });
+  if (files.length === 0) return new Response(t("No hay adjuntos disponibles"), { status: 404 });
 
   const zip = buildZip(files);
   logEvent({

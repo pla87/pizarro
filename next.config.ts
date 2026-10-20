@@ -24,7 +24,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   generateBuildId: () => buildId,
-  env: { NEXT_PUBLIC_BUILD_ID: buildId },
+  env: { NEXT_PUBLIC_BUILD_ID: buildId, NEXT_PUBLIC_APP_TIMEZONE: process.env.APP_TIMEZONE || "Europe/Madrid" },
   reactStrictMode: true,
   serverExternalPackages: ["sharp", "@react-pdf/renderer"],
   experimental: {

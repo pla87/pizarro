@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { AppError, notFound } from "@/lib/errors";
 import { requireUser } from "@/lib/session";
 import * as v from "@/lib/validation";
+import { getT } from "@/i18n/server";
 
 /**
  * Activa o desactiva un tipo general en un proyecto. Al desactivarlo, sus tareas del proyecto
@@ -37,7 +38,8 @@ export async function setGeneralKindEnabled(projectId: string, kindId: string, e
       if (inUse > 0) {
         target = replacementId ? v.id.parse(replacementId) : null;
         if (!target || !remaining.some((k) => k.id === target)) {
-          throw new AppError(`Hay ${inUse} tarea(s) de tipo «${kind.name}»: elige a qué tipo pasan.`);
+          const t = await getT();
+          throw new AppError(t("Hay {n} tarea(s) de tipo «{kind}»: elige a qué tipo pasan.", { n: inUse, kind: kind.name }));
         }
       }
       await db.$transaction([

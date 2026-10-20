@@ -1,9 +1,13 @@
 import { db } from "@/lib/db";
 import { MAX_USERS } from "@/lib/limits";
 import { requireAdminPage } from "@/lib/session";
+import { getT } from "@/i18n/server";
 import { UsersAdmin } from "./UsersAdmin";
 
-export const metadata = { title: "Usuarios" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("Usuarios") };
+}
 
 export default async function UsersPage() {
   const me = await requireAdminPage();

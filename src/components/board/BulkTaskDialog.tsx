@@ -4,11 +4,13 @@ import { ChevronRight, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { createTasks } from "@/actions/tasks";
 import { MAX_BULK_TASKS, parseTaskLines } from "@/lib/bulk";
+import { useT } from "@/i18n/client";
 import { Modal } from "../ui/Modal";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
 import { TypeSelector } from "./TaskDialog";
+import { isWhite, onColor } from "@/lib/constants";
 
 interface Props {
   initialColumnId?: string;
@@ -18,6 +20,7 @@ interface Props {
 export function BulkTaskDialog({ initialColumnId, onClose }: Props) {
   const board = useBoard();
   const toast = useToast();
+  const t = useT();
   const [columnId, setColumnId] = useState(initialColumnId ?? board.columns[0]?.id ?? "");
   const [text, setText] = useState("");
   // Hay que elegir el tipo; solo se preselecciona si no hay alternativa.
@@ -56,30 +59,30 @@ export function BulkTaskDialog({ initialColumnId, onClose }: Props) {
       return toast(res.error, "error");
     }
     res.data.forEach(board.upsertTask);
-    toast(res.data.length === 1 ? "1 tarea creada" : `${res.data.length} tareas creadas`);
+    toast(res.data.length === 1 ? t("1 tarea creada") : t("{n} tareas creadas", { n: res.data.length }));
     onClose();
   };
 
   const label = !lines.length
-    ? "Crear tareas"
+    ? t("Crear tareas")
     : tooMany
-      ? `Máximo ${MAX_BULK_TASKS} tareas`
+      ? t("Máximo {n} tareas", { n: MAX_BULK_TASKS })
       : missingKind
-        ? "Elige el tipo"
+        ? t("Elige el tipo")
         : lines.length === 1
-          ? "Crear 1 tarea"
-          : `Crear ${lines.length} tareas`;
+          ? t("Crear 1 tarea")
+          : t("Crear {n} tareas", { n: lines.length });
 
   return (
     <Modal
       open
       onClose={onClose}
-      title="Crear varias tareas"
+      title={t("Crear varias tareas")}
       size="md"
       placement="top"
       footer={
         <>
-          <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
+          <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
           <button type="submit" form="bulk-tasks" className="btn-primary" disabled={busy || !lines.length || tooMany || missingKind}>
             {busy && <Loader2 size={16} className="animate-spin" />} {label}
           </button>
@@ -88,19 +91,19 @@ export function BulkTaskDialog({ initialColumnId, onClose }: Props) {
     >
       <form id="bulk-tasks" onSubmit={submit} className="space-y-3">
         <div>
-          <label className="label" htmlFor="bt-column">Columna</label>
+          <label className="label" htmlFor="bt-column">{t("Columna")}</label>
           <select id="bt-column" className="input" value={columnId} onChange={(e) => setColumnId(e.target.value)}>
             {board.columns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
         <div>
-          <label className="label" htmlFor="bt-text">Tareas (una por línea)</label>
+          <label className="label" htmlFor="bt-text">{t("Tareas (una por línea)")}</label>
           <textarea
             id="bt-text"
             className="input field-sizing-content max-h-60 min-h-28"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Pega aquí la lista"
+            placeholder={t("Pega aquí la lista")}
             data-autofocus
           />
         </div>
@@ -108,11 +111,11 @@ export function BulkTaskDialog({ initialColumnId, onClose }: Props) {
         {lines.length > 0 && (
           <div className="space-y-2">
             <div className={cn("text-sm font-medium", tooMany && "text-red-600")}>
-              {lines.length === 1 ? "1 tarea detectada" : `${lines.length} tareas detectadas`}
-              {tooMany && ` · máximo ${MAX_BULK_TASKS}`}
+              {lines.length === 1 ? t("1 tarea detectada") : t("{n} tareas detectadas", { n: lines.length })}
+              {tooMany && ` · ${t("máximo {n}", { n: MAX_BULK_TASKS })}`}
             </div>
             <div>
-              <div className="label">Tipo para todas</div>
+              <div className="label">{t("Tipo para todas")}</div>
               <TypeSelector
                 kinds={board.kinds}
                 value={kindId}
@@ -134,9 +137,9 @@ export function BulkTaskDialog({ initialColumnId, onClose }: Props) {
                       style={kind ? { color: kind.color } : undefined}
                       value={kindOf(title)}
                       onChange={(e) => setOverrides((o) => ({ ...o, [title]: e.target.value }))}
-                      aria-label={`Tipo de «${title}»`}
+                      aria-label={t("Tipo de «{title}»", { title })}
                     >
-                      {!kindOf(title) && <option value="">Tipo…</option>}
+                      {!kindOf(title) && <option value="">{t("Tipo…")}</option>}
                       {board.kinds.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
                     </select>
                   </li>
@@ -149,31 +152,31 @@ export function BulkTaskDialog({ initialColumnId, onClose }: Props) {
         <details className="group rounded-lg border border-slate-200 dark:border-slate-700">
           <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-sm font-medium select-none">
             <ChevronRight size={16} className="transition-transform group-open:rotate-90" />
-            Campos extra
-            <span className="text-xs font-normal text-slate-500">{extras ? `(${extras})` : "(opcional, para todas)"}</span>
+            {t("Campos extra")}
+            <span className="text-xs font-normal text-slate-500">{extras ? `(${extras})` : t("(opcional, para todas)")}</span>
           </summary>
           <div className="grid grid-cols-2 gap-3 border-t border-slate-200 p-3 dark:border-slate-700">
             <div className="min-w-0">
-              <label className="label truncate" htmlFor="bt-assignee">Asignada a (opcional)</label>
+              <label className="label truncate" htmlFor="bt-assignee">{t("Asignada a (opcional)")}</label>
               <select id="bt-assignee" className="input" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
-                <option value="">Sin asignar</option>
-                {board.users.map((u) => <option key={u.id} value={u.id}>{u.id === board.currentUserId ? `${u.name} (yo)` : u.name}</option>)}
+                <option value="">{t("Sin asignar")}</option>
+                {board.users.map((u) => <option key={u.id} value={u.id}>{u.id === board.currentUserId ? t("{name} (yo)", { name: u.name }) : u.name}</option>)}
               </select>
             </div>
             <div className="min-w-0">
-              <label className="label truncate" htmlFor="bt-due">Fecha límite (opcional)</label>
+              <label className="label truncate" htmlFor="bt-due">{t("Fecha límite (opcional)")}</label>
               <input id="bt-due" type="date" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
             <div className="col-span-2">
-              <label className="label" htmlFor="bt-deliverable">Entregable (opcional)</label>
+              <label className="label" htmlFor="bt-deliverable">{t("Entregable (opcional)")}</label>
               <select id="bt-deliverable" className="input" value={deliverableId} onChange={(e) => setDeliverableId(e.target.value)}>
-                <option value="">Sin entregable</option>
+                <option value="">{t("Sin entregable")}</option>
                 {board.deliverables.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
             {board.labels.length > 0 && (
               <div className="col-span-2">
-                <div className="label">Etiquetas (opcional)</div>
+                <div className="label">{t("Etiquetas (opcional)")}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {board.labels.map((l) => {
                     const on = labelIds.includes(l.id);
@@ -182,8 +185,8 @@ export function BulkTaskDialog({ initialColumnId, onClose }: Props) {
                         key={l.id}
                         type="button"
                         onClick={() => setLabelIds((ids) => (on ? ids.filter((x) => x !== l.id) : [...ids, l.id]))}
-                        className={cn("rounded px-2 py-0.5 text-xs font-medium", on ? "text-white" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300")}
-                        style={on ? { backgroundColor: l.color } : undefined}
+                        className={cn("rounded px-2 py-0.5 text-xs font-medium", on ? "" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300")}
+                        style={on ? { backgroundColor: l.color, color: onColor(l.color), boxShadow: isWhite(l.color) ? "inset 0 0 0 1px rgb(0 0 0 / 0.2)" : undefined } : undefined}
                         aria-pressed={on}
                       >
                         {l.name}

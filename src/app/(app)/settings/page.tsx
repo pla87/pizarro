@@ -3,9 +3,13 @@ import { db } from "@/lib/db";
 import { googleEnabled } from "@/lib/google";
 import { emailEnabled, whatsappEnabled } from "@/lib/notify";
 import { requireUserPage } from "@/lib/session";
+import { getT } from "@/i18n/server";
 import { ProfileSettings } from "./ProfileSettings";
 
-export const metadata = { title: "Mi perfil y plantillas" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("Mi perfil y plantillas") };
+}
 
 const GOOGLE_MESSAGES: Record<string, { ok: boolean; text: string }> = {
   connected: { ok: true, text: "Cuenta de Google conectada." },
@@ -20,6 +24,7 @@ const GOOGLE_MESSAGES: Record<string, { ok: boolean; text: string }> = {
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ google?: string }> }) {
   const user = await requireUserPage();
+  const t = await getT();
   const { google } = await searchParams;
   const row = await db.user.findUniqueOrThrow({
     where: { id: user.id },
@@ -27,21 +32,28 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       name: true,
       email: true,
       cardStyle: true,
+      editorMode: true,
       theme: true,
+      accent: true,
+      locale: true,
       notifyEmail: true,
       notifyWhatsapp: true,
       whatsappPhone: true,
       googleAccount: { select: { email: true } },
     },
   });
-  const googleMessage = typeof google === "string" && Object.hasOwn(GOOGLE_MESSAGES, google) ? GOOGLE_MESSAGES[google]! : google ? GOOGLE_MESSAGES.error! : null;
+  let googleMessage = typeof google === "string" && Object.hasOwn(GOOGLE_MESSAGES, google) ? GOOGLE_MESSAGES[google]! : google ? GOOGLE_MESSAGES.error! : null;
+  if (googleMessage) googleMessage = { ...googleMessage, text: t(googleMessage.text) };
   return (
     <ProfileSettings
       name={row.name}
       email={row.email}
       templates={await userTemplates(user.id)}
       cardStyle={row.cardStyle}
+      editorMode={row.editorMode}
       theme={row.theme}
+      accent={row.accent}
+      locale={row.locale}
       notifications={{
         notifyEmail: row.notifyEmail,
         notifyWhatsapp: row.notifyWhatsapp,

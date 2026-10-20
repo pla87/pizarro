@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { makeT, type T } from "@/i18n/core";
 import type { AttachmentInfo } from "@/lib/types";
 
 const CLIENT_MAX_WIDTH = 1920;
@@ -54,20 +55,22 @@ export function isImageFile(file: File): boolean {
 }
 
 /** Tamaño legible: «840 KB», «2,3 MB». */
-export function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number, locale = "es-ES"): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1).replace(".", ",")} MB`;
+  const mb = (bytes / 1024 / 1024).toFixed(1);
+  return `${locale.startsWith("es") ? mb.replace(".", ",") : mb} MB`;
 }
 
-export async function uploadFile(taskId: string, file: File): Promise<AttachmentInfo> {
+/** `onCreate`: adjunto de una tarea recién creada (deshacer la creación se lo lleva, no cuenta aparte). */
+export async function uploadFile(taskId: string, file: File, onCreate = false, t: T = makeT("es")): Promise<AttachmentInfo> {
   const body = new FormData();
   const isImage = isImageFile(file);
-  const fallback = isImage ? `captura-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png` : "archivo";
+  const fallback = isImage ? `${t("captura")}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png` : t("archivo");
   const name = file.name && !(isImage && file.name === "image.png") ? file.name : fallback;
   body.append("file", isImage ? await shrink(file) : file, name);
-  const res = await fetch(`/api/tasks/${taskId}/attachments`, { method: "POST", body });
+  const res = await fetch(`/api/tasks/${taskId}/attachments${onCreate ? "?alCrear=1" : ""}`, { method: "POST", body });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.error ?? "No se pudo subir el archivo.");
+  if (!res.ok) throw new Error(json.error ?? t("No se pudo subir el archivo."));
   return json as AttachmentInfo;
 }
 

@@ -146,8 +146,8 @@ export async function snapshotTasks(ids: string[]): Promise<UndoOp[]> {
 }
 
 /** Guarda una entrada y descarta las que pasen del límite (liberando sus ficheros pendientes). */
-export async function saveUndo(userId: string, projectId: string, label: string, ops: UndoOp[]): Promise<void> {
-  await db.undoEntry.create({ data: { userId, projectId, label: label.slice(0, 300), ops: ops as unknown as Prisma.InputJsonValue } });
+export async function saveUndo(userId: string, projectId: string, label: string, ops: UndoOp[], taskId: string | null = null): Promise<void> {
+  await db.undoEntry.create({ data: { userId, projectId, taskId, label: label.slice(0, 300), ops: ops as unknown as Prisma.InputJsonValue } });
   const old = await db.undoEntry.findMany({
     where: { userId, projectId },
     orderBy: { createdAt: "desc" },

@@ -1,6 +1,6 @@
 {
   "name": "pizarro",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -20,8 +20,9 @@
     "changelog:sync": "node --env-file-if-exists=.env --import tsx scripts/sync-changelog.ts",
     "version:bump": "node scripts/version-bump.mjs",
     "docs:pdf": "node scripts/build-manual-pdf.mjs",
-    "check": "npm run lint && npm run typecheck && npm test",
-    "build:boot": "esbuild scripts/boot.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/boot.mjs --log-level=warning --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\""
+    "check": "npm run lint && npm run typecheck && npm run i18n:check && npm test",
+    "build:boot": "esbuild scripts/boot.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/boot.mjs --log-level=warning --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\"",
+    "i18n:check": "node scripts/i18n-check.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",
@@ -30,6 +31,10 @@
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
     "@react-pdf/renderer": "4.9.0",
+    "@tiptap/markdown": "3.32.0",
+    "@tiptap/pm": "3.32.0",
+    "@tiptap/react": "3.32.0",
+    "@tiptap/starter-kit": "3.32.0",
     "bcryptjs": "3.0.3",
     "lucide-react": "1.59.0",
     "next": "16.4.2",

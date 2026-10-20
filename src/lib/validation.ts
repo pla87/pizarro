@@ -2,7 +2,7 @@ import { z } from "zod";
 import { COLUMN_ROLES, HEX_COLOR_RE, MAX_DESCRIPTION, MAX_TITLE, PALETTE } from "./constants";
 
 export const id = z.string().min(1).max(40);
-export const title = z.string().trim().min(1, "El título es obligatorio.").max(MAX_TITLE, `Máximo ${MAX_TITLE} caracteres.`);
+export const title = z.string().trim().min(1, "El título es obligatorio.").max(MAX_TITLE, "Máximo 200 caracteres.");
 export const name = z.string().trim().min(1, "El nombre es obligatorio.").max(80, "Máximo 80 caracteres.");
 export const description = z.string().max(MAX_DESCRIPTION, "La descripción es demasiado larga.");
 export const columnRole = z.enum(COLUMN_ROLES);

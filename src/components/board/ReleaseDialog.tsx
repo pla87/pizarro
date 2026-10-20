@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { countReleasesOn, deployRelease, getReleaseTaskDetails } from "@/actions/releases";
 import { buildReleaseMarkdown, computeReleaseCodes, defaultReleaseTitle, isoDate, releaseFileName, swapTemplateBlock } from "@/lib/release";
 import type { BoardTask, TemplateOption } from "@/lib/types";
+import { useT } from "@/i18n/client";
 import { copyText, downloadText } from "../ui/clipboard";
 import { cn } from "../ui/cn";
 import { Markdown } from "../ui/Markdown";
@@ -31,6 +32,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
   const board = useBoard();
   const now = useMemo(() => new Date(), []);
   const toast = useToast();
+  const t = useT();
   const [step, setStep] = useState<"select" | "edit">("select");
   const [chosen, setChosen] = useState<Set<string>>(new Set(preselected));
   const [title, setTitle] = useState(() => defaultReleaseTitle(board.today, board.project.name));
@@ -47,6 +49,9 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
   const [zipping, setZipping] = useState(false);
   /** Tareas con adjuntos de la release generada, con su código (para el ZIP). */
   const [zipItems, setZipItems] = useState<{ taskId: string; code: string; count: number }[]>([]);
+  /** Número que tendrá la release (prefijo R32 de los códigos) y con cuál se generó el texto. */
+  const [releaseNumber, setReleaseNumber] = useState<number | null>(null);
+  const [generatedNumber, setGeneratedNumber] = useState<number | null>(null);
   const selectedTasks = useMemo(() => tasks.filter((t) => chosen.has(t.id)), [tasks, chosen]);
   const [headerId, setHeaderId] = useState(templates.headers[0]?.id ?? "");
   const [footerId, setFooterId] = useState(templates.footers[0]?.id ?? "");
@@ -71,14 +76,14 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
         const list = which === "header" ? templates.headers : templates.footers;
         return (
           <div key={which}>
-            <label className="label" htmlFor={`rel-${which}`}>{which === "header" ? "Cabecera" : "Pie"}</label>
+            <label className="label" htmlFor={`rel-${which}`}>{which === "header" ? t("Cabecera") : t("Pie")}</label>
             <select
               id={`rel-${which}`}
               className="input"
               value={which === "header" ? headerId : footerId}
               onChange={(e) => chooseTemplate(which, e.target.value)}
             >
-              <option value="">Ninguna</option>
+              <option value="">{t("Ninguna")}</option>
               {list.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
@@ -92,7 +97,9 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
     // Mismo día que usa el servidor (zona horaria de la app) para contar las releases.
     const day = board.today;
     countReleasesOn({ projectId: board.project.id, dayIso: day }).then((res) => {
-      if (res.ok && !titleEdited.current) setTitle(defaultReleaseTitle(day, board.project.name, res.data));
+      if (!res.ok) return;
+      setReleaseNumber(res.data.nextNumber);
+      if (!titleEdited.current) setTitle(defaultReleaseTitle(day, board.project.name, res.data.today));
     });
   }, [board.project.id, board.project.name, board.today]);
 
@@ -111,7 +118,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
       description: details.get(t.id)?.description ?? "",
       attachments: details.get(t.id)?.attachments ?? [],
     }));
-    const codes = computeReleaseCodes(board.kinds, releaseTasks);
+    const codes = computeReleaseCodes(board.kinds, releaseTasks, releaseNumber);
     setZipItems(
       releaseTasks.filter((t) => t.attachments.length).map((t) => ({ taskId: t.id, code: codes.get(t.id)!, count: t.attachments.length })),
     );
@@ -120,15 +127,17 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
       footer: templateText(templates.footers, footerId),
       kinds: board.kinds,
       tasks: releaseTasks,
+      releaseNumber,
     });
     setContent(md);
     setGenerated(md);
+    setGeneratedNumber(releaseNumber);
     setTab("edit");
     setStep("edit");
   };
 
   const back = () => {
-    if (content !== generated && !window.confirm("Se perderán los cambios que has hecho en el texto. ¿Continuar?")) return;
+    if (content !== generated && !window.confirm(t("Se perderán los cambios que has hecho en el texto. ¿Continuar?"))) return;
     setStep("select");
   };
 
@@ -136,8 +145,8 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
     if (await copyText(content)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
-      toast("Copiado al portapapeles");
-    } else toast("No se pudo copiar", "error");
+      toast(t("Copiado al portapapeles"));
+    } else toast(t("No se pudo copiar"), "error");
   };
 
   const attachmentTotal = zipItems.reduce((n, i) => n + i.count, 0);
@@ -158,15 +167,17 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {
-      toast("No se pudieron descargar los adjuntos", "error");
+      toast(t("No se pudieron descargar los adjuntos"), "error");
     } finally {
       setZipping(false);
     }
   };
 
   const deploy = async () => {
-    const target = destination === "IN_PRODUCTION" ? `a «${inProduction?.name}»` : "al archivo";
-    if (!window.confirm(`Se guardará la release y ${selectedTasks.length} tarjeta(s) pasarán ${target}. ¿Continuar?`)) return;
+    const message = destination === "IN_PRODUCTION"
+      ? t("Se guardará la release y {n} tarjeta(s) pasarán a «{name}». ¿Continuar?", { n: selectedTasks.length, name: inProduction?.name ?? "" })
+      : t("Se guardará la release y {n} tarjeta(s) pasarán al archivo. ¿Continuar?", { n: selectedTasks.length });
+    if (!window.confirm(message)) return;
     setBusy(true);
     const res = await board.track(
       deployRelease({
@@ -176,11 +187,12 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
         taskIds: selectedTasks.map((t) => t.id),
         destination,
         attachments: zipItems.map(({ taskId, code }) => ({ taskId, code })),
+        number: generatedNumber ?? undefined,
       }),
     );
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
-    toast("Release registrada como desplegada");
+    toast(t("Release registrada como desplegada"));
     onDeployed(res.data);
   };
 
@@ -191,26 +203,26 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
       size="xl"
       title={
         <span className="flex items-center gap-2">
-          <Rocket size={18} className="text-brand-600" /> Generar release
-          <span className="text-xs font-normal text-slate-500">· Paso {step === "select" ? "1 de 2: tareas" : "2 de 2: revisar y exportar"}</span>
+          <Rocket size={18} className="text-brand-600" /> {t("Generar release")}
+          <span className="text-xs font-normal text-slate-500">· {step === "select" ? t("Paso 1 de 2: tareas") : t("Paso 2 de 2: revisar y exportar")}</span>
         </span>
       }
       footer={
         step === "select" ? (
           <>
             <span className="mr-auto text-xs text-slate-500">
-              Cabecera y pie salen de <Link className="text-brand-600 hover:underline" href="/settings">tus plantillas</Link>.
+              {t("Cabecera y pie salen de")} <Link className="text-brand-600 hover:underline" href="/settings">{t("tus plantillas")}</Link>.
             </span>
-            <button className="btn-secondary" onClick={onClose}>Cancelar</button>
+            <button className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
             <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || loadingDetails}>
-              {loadingDetails && <Loader2 size={15} className="animate-spin" />} Generar con {selectedTasks.length} tarea(s)
+              {loadingDetails && <Loader2 size={15} className="animate-spin" />} {t("Generar con {n} tarea(s)", { n: selectedTasks.length })}
             </button>
           </>
         ) : (
           <>
-            <button className="btn-ghost mr-auto" onClick={back}><ArrowLeft size={15} /> Cambiar tareas</button>
+            <button className="btn-ghost mr-auto" onClick={back}><ArrowLeft size={15} /> {t("Cambiar tareas")}</button>
             <button className="btn-secondary" onClick={copy}>
-              {copied ? <Check size={15} /> : <ClipboardCopy size={15} />} Copiar todo
+              {copied ? <Check size={15} /> : <ClipboardCopy size={15} />} {t("Copiar todo")}
             </button>
             <button className="btn-secondary" onClick={() => downloadText(content, releaseFileName(now, "md"), "text/markdown")}>
               <Download size={15} /> .md
@@ -220,11 +232,11 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
             </button>
             {attachmentTotal > 0 && (
               <button className="btn-secondary" onClick={downloadAttachments} disabled={zipping}>
-                {zipping ? <Loader2 size={15} className="animate-spin" /> : <FileArchive size={15} />} Descargar adjuntos ({attachmentTotal})
+                {zipping ? <Loader2 size={15} className="animate-spin" /> : <FileArchive size={15} />} {t("Descargar adjuntos ({n})", { n: attachmentTotal })}
               </button>
             )}
             <button className="btn-primary" onClick={deploy} disabled={busy || !content.trim() || (destination === "IN_PRODUCTION" && !inProduction)}>
-              {busy ? <Loader2 size={15} className="animate-spin" /> : <Rocket size={15} />} Marcar como desplegado
+              {busy ? <Loader2 size={15} className="animate-spin" /> : <Rocket size={15} />} {t("Marcar como desplegado")}
             </button>
           </>
         )
@@ -233,7 +245,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
       {step === "select" ? (
         <div className="space-y-3">
           <div>
-            <label className="label" htmlFor="rel-title">Título de la release</label>
+            <label className="label" htmlFor="rel-title">{t("Título de la release")}</label>
             <input id="rel-title" className="input" value={title} onChange={(e) => {
                 titleEdited.current = true;
                 setTitle(e.target.value);
@@ -241,54 +253,54 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
           </div>
           {templatePickers}
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Tareas incluidas</span>
+            <span className="text-sm font-medium">{t("Tareas incluidas")}</span>
             <div className="flex gap-1">
-              <button className="btn-ghost py-1 text-xs" onClick={() => setChosen(new Set(tasks.map((t) => t.id)))}>Todas</button>
-              <button className="btn-ghost py-1 text-xs" onClick={() => setChosen(new Set())}>Ninguna</button>
+              <button className="btn-ghost py-1 text-xs" onClick={() => setChosen(new Set(tasks.map((t) => t.id)))}>{t("Todas")}</button>
+              <button className="btn-ghost py-1 text-xs" onClick={() => setChosen(new Set())}>{t("Ninguna")}</button>
             </div>
           </div>
           <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-            {tasks.map((t) => (
-              <li key={t.id}>
+            {tasks.map((task) => (
+              <li key={task.id}>
                 <label className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50">
                   <input
                     type="checkbox"
                     className="h-4 w-4 accent-brand-600"
-                    checked={chosen.has(t.id)}
+                    checked={chosen.has(task.id)}
                     onChange={() =>
                       setChosen((prev) => {
                         const next = new Set(prev);
-                        if (next.has(t.id)) next.delete(t.id);
-                        else next.add(t.id);
+                        if (next.has(task.id)) next.delete(task.id);
+                        else next.add(task.id);
                         return next;
                       })
                     }
                   />
-                  <TypeBadge kind={board.kindById.get(t.kindId)} />
-                  <span className="min-w-0 flex-1 truncate text-sm">{t.title}</span>
-                  {t.evergreen && (
-                    <span className="shrink-0 rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-500/20 dark:text-brand-300" title="Tarea fija en la release: se queda en su columna al desplegar">fija</span>
+                  <TypeBadge kind={board.kindById.get(task.kindId)} />
+                  <span className="min-w-0 flex-1 truncate text-sm">{task.title}</span>
+                  {task.evergreen && (
+                    <span className="shrink-0 rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-500/20 dark:text-brand-300" title={t("Tarea fija en la release: se queda en su columna al desplegar")}>{t("fija")}</span>
                   )}
                 </label>
               </li>
             ))}
-            {tasks.length === 0 && <li className="px-3 py-4 text-sm text-slate-500">No hay tareas.</li>}
+            {tasks.length === 0 && <li className="px-3 py-4 text-sm text-slate-500">{t("No hay tareas.")}</li>}
           </ul>
         </div>
       ) : (
         <div className="flex h-full flex-col gap-3">
           {templatePickers}
           <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 text-sm dark:bg-slate-800">
-            {(["edit", "preview"] as const).map((t) => (
+            {(["edit", "preview"] as const).map((tb) => (
               <button
-                key={t}
-                onClick={() => setTab(t)}
+                key={tb}
+                onClick={() => setTab(tb)}
                 className={cn(
                   "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 font-medium",
-                  tab === t ? "bg-white shadow-sm dark:bg-slate-900" : "text-slate-500",
+                  tab === tb ? "bg-white shadow-sm dark:bg-slate-900" : "text-slate-500",
                 )}
               >
-                {t === "edit" ? <><Pencil size={14} /> Editar</> : <><Eye size={14} /> Vista previa</>}
+                {tb === "edit" ? <><Pencil size={14} /> {t("Editar")}</> : <><Eye size={14} /> {t("Vista previa")}</>}
               </button>
             ))}
           </div>
@@ -298,7 +310,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
               value={content}
               onChange={(e) => setContent(e.target.value)}
               spellCheck={false}
-              aria-label="Contenido de la release"
+              aria-label={t("Contenido de la release")}
               data-autofocus
             />
           ) : (
@@ -307,15 +319,15 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
             </div>
           )}
           <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-            <legend className="sr-only">Al marcar como desplegado</legend>
-            <span className="text-xs font-medium text-slate-500">Al marcar como desplegado:</span>
+            <legend className="sr-only">{t("Al marcar como desplegado")}</legend>
+            <span className="text-xs font-medium text-slate-500">{t("Al marcar como desplegado:")}</span>
             <label className="flex items-center gap-1.5">
               <input type="radio" name="dest" checked={destination === "IN_PRODUCTION"} onChange={() => setDestination("IN_PRODUCTION")} disabled={!inProduction} />
-              {inProduction ? `Mover a «${inProduction.name}»` : "Mover a En producción (no hay columna con ese rol)"}
+              {inProduction ? t("Mover a «{name}»", { name: inProduction.name }) : t("Mover a En producción (no hay columna con ese rol)")}
             </label>
             <label className="flex items-center gap-1.5">
               <input type="radio" name="dest" checked={destination === "ARCHIVE"} onChange={() => setDestination("ARCHIVE")} />
-              Archivar tarjetas
+              {t("Archivar tarjetas")}
             </label>
           </fieldset>
         </div>

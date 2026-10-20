@@ -7,6 +7,7 @@ import { useState } from "react";
 import { deleteColumn, moveColumn, renameColumn, setColumnDone, setColumnRole } from "@/actions/columns";
 import { COLUMN_ROLE_LABEL, COLUMN_ROLES, type ColumnRoleValue } from "@/lib/constants";
 import type { BoardColumn } from "@/lib/types";
+import { useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
@@ -26,6 +27,7 @@ interface Props {
 
 export function ColumnView({ column, taskIds, evergreenIds = [], index, total, droppableId, mobileHidden }: Props) {
   const { openNewTask, openRelease, selected, setSelectedMany } = useBoard();
+  const t = useT();
   const selectedHere = taskIds.filter((id) => selected.has(id)).length;
   const allSelected = taskIds.length > 0 && selectedHere === taskIds.length;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
@@ -52,8 +54,8 @@ export function ColumnView({ column, taskIds, evergreenIds = [], index, total, d
               "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
               allSelected || selectedHere ? "border-brand-600 bg-brand-600 text-white" : "border-slate-300 dark:border-slate-600",
             )}
-            aria-label={allSelected ? `Quitar la selección de «${column.name}»` : `Seleccionar todas las tareas de «${column.name}»`}
-            title={allSelected ? "Quitar selección" : "Seleccionar todas"}
+            aria-label={allSelected ? t("Quitar la selección de «{name}»", { name: column.name }) : t("Seleccionar todas las tareas de «{name}»", { name: column.name })}
+            title={allSelected ? t("Quitar selección") : t("Seleccionar todas")}
             aria-pressed={allSelected ? true : selectedHere ? "mixed" : false}
           >
             {allSelected ? <Check size={12} strokeWidth={3} /> : selectedHere ? <Minus size={12} strokeWidth={3} /> : null}
@@ -64,7 +66,7 @@ export function ColumnView({ column, taskIds, evergreenIds = [], index, total, d
           {taskIds.length}
         </span>
         <div className="ml-auto flex items-center">
-          <button className="btn-icon h-7 w-7" onClick={() => openNewTask(column.id)} aria-label={`Añadir tarea en ${column.name}`}>
+          <button className="btn-icon h-7 w-7" onClick={() => openNewTask(column.id)} aria-label={t("Añadir tarea en {name}", { name: column.name })}>
             <Plus size={16} />
           </button>
           <ColumnMenu column={column} index={index} total={total} empty={taskIds.length === 0 && evergreenIds.length === 0} />
@@ -76,9 +78,9 @@ export function ColumnView({ column, taskIds, evergreenIds = [], index, total, d
             className="btn-primary w-full py-1.5"
             onClick={() => openRelease(column.id)}
             disabled={taskIds.length + evergreenIds.length === 0}
-            title={taskIds.length + evergreenIds.length === 0 ? "No hay tarjetas en esta columna" : undefined}
+            title={taskIds.length + evergreenIds.length === 0 ? t("No hay tarjetas en esta columna") : undefined}
           >
-            <Rocket size={15} /> Generar Release
+            <Rocket size={15} /> {t("Generar Release")}
           </button>
         </div>
       )}
@@ -95,7 +97,7 @@ export function ColumnView({ column, taskIds, evergreenIds = [], index, total, d
             <SortableTaskCard key={id} id={id} />
           ))}
           {taskIds.length === 0 && (
-            <p className="py-6 text-center text-xs text-slate-400">Arrastra tarjetas aquí</p>
+            <p className="py-6 text-center text-xs text-slate-400">{t("Arrastra tarjetas aquí")}</p>
           )}
         </div>
       </SortableContext>
@@ -107,6 +109,7 @@ export function ColumnView({ column, taskIds, evergreenIds = [], index, total, d
 function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; index: number; total: number; empty: boolean }) {
   const { setColumns, track, refresh } = useBoard();
   const toast = useToast();
+  const t = useT();
   const [open, setOpen] = useState(false);
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, optimistic?: () => void) => {
@@ -114,13 +117,13 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
     optimistic?.();
     const res = await track(fn());
     if (!res.ok) {
-      toast(res.error ?? "Error", "error");
+      toast(res.error ?? t("Error"), "error");
       refresh();
     }
   };
 
   const rename = () => {
-    const name = window.prompt("Nuevo nombre de la columna", column.name)?.trim();
+    const name = window.prompt(t("Nuevo nombre de la columna"), column.name)?.trim();
     if (!name || name === column.name) return setOpen(false);
     run(() => renameColumn(column.id, name), () => setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, name } : c))));
   };
@@ -162,26 +165,26 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
   const remove = () => {
     if (!empty) {
       setOpen(false);
-      return toast("Solo se pueden borrar columnas vacías.", "error");
+      return toast(t("Solo se pueden borrar columnas vacías."), "error");
     }
-    if (!window.confirm(`¿Borrar la columna «${column.name}»?`)) return setOpen(false);
+    if (!window.confirm(t("¿Borrar la columna «{name}»?", { name: column.name }))) return setOpen(false);
     run(() => deleteColumn(column.id), () => setColumns((cols) => cols.filter((c) => c.id !== column.id)));
   };
 
   return (
     <div className="relative">
-      <button className="btn-icon h-7 w-7" onClick={() => setOpen((o) => !o)} aria-label="Opciones de columna" aria-expanded={open}>
+      <button className="btn-icon h-7 w-7" onClick={() => setOpen((o) => !o)} aria-label={t("Opciones de columna")} aria-expanded={open}>
         <MoreHorizontal size={16} />
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} aria-hidden />
           <div className="absolute right-0 z-30 mt-1 w-64 rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900">
-            <MenuItem icon={Pencil} onClick={rename}>Renombrar</MenuItem>
-            <MenuItem icon={ArrowLeft} onClick={() => move(-1)} disabled={index === 0}>Mover a la izquierda</MenuItem>
-            <MenuItem icon={ArrowRight} onClick={() => move(1)} disabled={index === total - 1}>Mover a la derecha</MenuItem>
+            <MenuItem icon={Pencil} onClick={rename}>{t("Renombrar")}</MenuItem>
+            <MenuItem icon={ArrowLeft} onClick={() => move(-1)} disabled={index === 0}>{t("Mover a la izquierda")}</MenuItem>
+            <MenuItem icon={ArrowRight} onClick={() => move(1)} disabled={index === total - 1}>{t("Mover a la derecha")}</MenuItem>
             <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
-            <div className="flex items-center gap-2 px-2.5 pt-1 pb-0.5 text-xs font-medium text-slate-500"><Tag size={13} /> Rol de la columna</div>
+            <div className="flex items-center gap-2 px-2.5 pt-1 pb-0.5 text-xs font-medium text-slate-500"><Tag size={13} /> {t("Rol de la columna")}</div>
             {COLUMN_ROLES.map((r) => (
               <button
                 key={r}
@@ -191,16 +194,16 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
                   column.role === r && "font-semibold text-brand-600",
                 )}
               >
-                {column.role === r ? "● " : ""}{COLUMN_ROLE_LABEL[r]}
+                {column.role === r ? "● " : ""}{t(COLUMN_ROLE_LABEL[r])}
               </button>
             ))}
             <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
             <MenuItem icon={CheckCircle2} onClick={toggleDone}>
-              {column.isDone ? "✓ Cuenta como terminada" : "Contar como terminada"}
+              {column.isDone ? t("✓ Cuenta como terminada") : t("Contar como terminada")}
             </MenuItem>
             <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
             <MenuItem icon={Trash2} onClick={remove} danger disabled={!empty}>
-              {empty ? "Borrar columna" : "Borrar (debe estar vacía)"}
+              {empty ? t("Borrar columna") : t("Borrar (debe estar vacía)")}
             </MenuItem>
           </div>
         </>

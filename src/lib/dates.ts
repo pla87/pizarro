@@ -34,8 +34,8 @@ export function dueStatus(due: string | null, done: boolean, today: string): Due
 }
 
 /** 2026-10-18 → "18 oct 2026" (o sin año si es el actual). */
-export function formatDay(iso: string, today?: string): string {
+export function formatDay(iso: string, today?: string, locale = "es-ES"): string {
   const d = isoToDate(iso);
   const sameYear = today ? today.slice(0, 4) === iso.slice(0, 4) : false;
-  return d.toLocaleDateString("es-ES", { day: "numeric", month: "short", year: sameYear ? undefined : "numeric", timeZone: "UTC" });
+  return d.toLocaleDateString(locale, { day: "numeric", month: "short", year: sameYear ? undefined : "numeric", timeZone: "UTC" });
 }

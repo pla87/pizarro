@@ -7,16 +7,18 @@ import { googleEnabled } from "@/lib/google";
 import { db } from "@/lib/db";
 import { getCurrentUser, requireUserPage } from "@/lib/session";
 import type { BoardData } from "@/lib/types";
+import { getT } from "@/i18n/server";
 import { Board } from "@/components/board/Board";
 
 type Params = { params: Promise<{ projectId: string }>; searchParams: Promise<{ task?: string }> };
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
+  const t = await getT();
   const user = await getCurrentUser();
   const { projectId } = await params;
   // Solo se muestra el nombre si el usuario tiene acceso al proyecto.
   const p = user ? await db.project.findFirst({ where: { id: projectId, ...visibleProjectsWhere(user) }, select: { name: true } }) : null;
-  return { title: p?.name ?? "Tablero" };
+  return { title: p?.name ?? t("Tablero") };
 }
 
 export default async function BoardPage({ params, searchParams }: Params) {
@@ -36,7 +38,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
     db.label.findMany({ where: { projectId }, orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),
     db.user.findUniqueOrThrow({
       where: { id: user.id },
-      select: { cardStyle: true, googleAccount: { select: { id: true } } },
+      select: { cardStyle: true, editorMode: true, googleAccount: { select: { id: true } } },
     }),
     db.deliverable.findMany({ where: { projectId }, orderBy: [{ position: "asc" }], select: { id: true, name: true, dueDate: true } }),
     listKinds(projectId),
@@ -52,6 +54,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
     kinds,
     templates,
     cardStyle: me.cardStyle,
+    editorMode: me.editorMode,
     currentUserId: user.id,
     deliverables: deliverables.map((d) => ({ id: d.id, name: d.name, dueDate: dateToIso(d.dueDate) })),
     google: { enabled: googleEnabled(), connected: Boolean(me.googleAccount) },

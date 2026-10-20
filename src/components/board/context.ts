@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { BoardColumn, BoardTask, CardStyleValue, DeliverableOption, KindOption, LabelOption, UserOption } from "@/lib/types";
+import type { BoardColumn, BoardTask, CardStyleValue, DeliverableOption, EditorModeValue, KindOption, LabelOption, UserOption } from "@/lib/types";
 
 export interface BoardApi {
   project: { id: string; name: string };
@@ -13,6 +13,7 @@ export interface BoardApi {
   kinds: KindOption[];
   kindById: Map<string, KindOption>;
   cardStyle: CardStyleValue;
+  editorMode: EditorModeValue;
   /** Táctil: las tarjetas se arrastran solo desde su asa. */
   dragHandle: boolean;
   google: { enabled: boolean; connected: boolean };

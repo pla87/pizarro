@@ -65,3 +65,13 @@ test("desglose por tipo usa los nombres configurados", () => {
   const r = buildReport(base);
   assert.deepEqual(r.types.map((t) => [t.label, t.open, t.done]), [["Funcionalidad", 2, 1], ["Corrección", 1, 0]]);
 });
+
+test("terminadas recientes y hora", () => {
+  const r = buildReport({
+    ...base,
+    time: "09:30",
+    tasks: base.tasks.map((t) => (t.id === "c" ? { ...t, updatedAt: "2026-10-10T08:00:00.000Z" } : { ...t, updatedAt: "2026-01-01T00:00:00.000Z" })),
+  });
+  assert.equal(r.time, "09:30");
+  assert.deepEqual(r.recentDone.map((t) => t.title), ["Hecha vencida"]);
+});

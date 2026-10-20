@@ -3,6 +3,8 @@
 import { Search } from "lucide-react";
 import { useState } from "react";
 import { CHANGE_CATEGORIES, type Changes } from "@/lib/changelog";
+import { useIntlLocale, useT } from "@/i18n/client";
+import { formatDate } from "@/lib/format";
 
 interface VersionRow {
   id: string;
@@ -17,6 +19,8 @@ const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
 
 /** Versiones con un buscador por número, resumen y cambios; al buscar solo se muestran los cambios que coinciden. */
 export function ChangelogList({ versions, currentVersion }: { versions: VersionRow[]; currentVersion: string }) {
+  const t = useT();
+  const locale = useIntlLocale();
   const [query, setQuery] = useState("");
   const q = fold(query.trim());
   const has = (s: string) => fold(s).includes(q);
@@ -40,13 +44,13 @@ export function ChangelogList({ versions, currentVersion }: { versions: VersionR
           <input
             type="search"
             className="input pl-9"
-            placeholder="Buscar por versión, resumen o cambio…"
+            placeholder={t("Buscar por versión, resumen o cambio…")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            aria-label="Buscar en el historial"
+            aria-label={t("Buscar en el historial")}
           />
         </div>
-        {q && <p className="mt-1 text-xs text-slate-500" aria-live="polite">{shown.length} de {versions.length} versiones</p>}
+        {q && <p className="mt-1 text-xs text-slate-500" aria-live="polite">{t("{n} de {total} versiones", { n: shown.length, total: versions.length })}</p>}
       </div>
       <ol className="relative space-y-6 border-l-2 border-slate-200 pl-6 dark:border-slate-800">
         {shown.map(({ v, changes }) => (
@@ -56,16 +60,16 @@ export function ChangelogList({ versions, currentVersion }: { versions: VersionR
               <div className="flex flex-wrap items-baseline gap-x-3">
                 <h2 className="font-mono text-lg font-semibold">v{v.version}</h2>
                 <time className="text-sm text-slate-500" dateTime={v.releasedAt}>
-                  {new Date(v.releasedAt).toLocaleDateString("es-ES", { dateStyle: "long", timeZone: "UTC" })}
+                  {formatDate(v.releasedAt, "dateLong", locale)} · {formatDate(v.releasedAt, "time", locale)}
                 </time>
-                {v.version === currentVersion && <span className="badge bg-emerald-100 text-emerald-800 ring-emerald-600/20">actual</span>}
+                {v.version === currentVersion && <span className="badge bg-emerald-100 text-emerald-800 ring-emerald-600/20">{t("actual")}</span>}
               </div>
               {v.summary && <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{v.summary}</p>}
               <div className="mt-3 space-y-3">
                 {CHANGE_CATEGORIES.map((cat) =>
                   changes[cat.key].length ? (
                     <div key={cat.key}>
-                      <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">{cat.label}</h3>
+                      <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">{t(cat.label)}</h3>
                       <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">
                         {changes[cat.key].map((c, i) => <li key={i}>{c}</li>)}
                       </ul>
@@ -76,8 +80,8 @@ export function ChangelogList({ versions, currentVersion }: { versions: VersionR
             </div>
           </li>
         ))}
-        {versions.length === 0 && <li className="text-sm text-slate-500">Sin datos. Ejecuta <code>npm run changelog:sync</code>.</li>}
-        {versions.length > 0 && shown.length === 0 && <li className="text-sm text-slate-500">Ninguna versión coincide con «{query.trim()}».</li>}
+        {versions.length === 0 && <li className="text-sm text-slate-500">{t("Sin datos. Ejecuta")} <code>npm run changelog:sync</code>.</li>}
+        {versions.length > 0 && shown.length === 0 && <li className="text-sm text-slate-500">{t("Ninguna versión coincide con «{query}».", { query: query.trim() })}</li>}
       </ol>
     </div>
   );

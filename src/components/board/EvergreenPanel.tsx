@@ -3,6 +3,7 @@
 import { useDndContext, useDraggable, useDroppable } from "@dnd-kit/core";
 import { ChevronUp, GripVertical, Plus } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
 import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard } from "./context";
@@ -25,6 +26,7 @@ const memory = new Map<string, boolean>();
  */
 export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskIds: string[] }) {
   const { project, taskById, openNewTask } = useBoard();
+  const t = useT();
   // Estado en localStorage leído como store externo (en servidor, plegado).
   const stored = useSyncExternalStore(
     (cb) => {
@@ -87,13 +89,13 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
             if (!taskById.has(id)) return null;
             return <EvergreenCard key={id} id={id} />;
           })}
-          {taskIds.length === 0 && <p className="py-2 text-center text-xs text-slate-400">Sin tareas fijas</p>}
+          {taskIds.length === 0 && <p className="py-2 text-center text-xs text-slate-400">{t("Sin tareas fijas")}</p>}
           <button
             type="button"
             onClick={() => openNewTask(columnId, true)}
             className="btn-ghost w-full justify-center py-1 text-xs"
           >
-            <Plus size={13} /> Añadir
+            <Plus size={13} /> {t("Añadir")}
           </button>
         </div>
       )}
@@ -104,7 +106,7 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
         aria-controls={`evergreen-${columnId}`}
         className="flex w-full items-center gap-1.5 rounded-b-xl px-3 py-2 max-lg:pr-20 text-xs font-medium text-slate-600 hover:bg-slate-200/60 dark:text-slate-300 dark:hover:bg-slate-800/60"
       >
-        <span>Siempre en la release</span>
+        <span>{t("Siempre en la release")}</span>
         <span className="rounded-full bg-slate-200 px-1.5 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">{taskIds.length}</span>
         <ChevronUp size={14} className={cn("lg:ml-auto transition-transform", open && "rotate-180")} />
       </button>
@@ -115,6 +117,7 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
 /** Tarjeta compacta del panel: se puede arrastrar a cualquier columna (deja de ser fija al soltarla). */
 function EvergreenCard({ id }: { id: string }) {
   const { taskById, kindById, openTask, dragHandle } = useBoard();
+  const t = useT();
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({ id });
   const task = taskById.get(id);
   if (!task) return null;
@@ -143,7 +146,7 @@ function EvergreenCard({ id }: { id: string }) {
           {...listeners}
           onClick={(e) => e.stopPropagation()}
           className="-my-1 -mr-1 flex h-7 w-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-slate-400 active:text-brand-600"
-          aria-label="Arrastrar para reordenar"
+          aria-label={t("Arrastrar para reordenar")}
         >
           <GripVertical size={14} />
         </span>

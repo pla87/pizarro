@@ -9,6 +9,7 @@ import { AppError, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
 import { requireAdmin, requireUser } from "@/lib/session";
 import * as v from "@/lib/validation";
+import { getT } from "@/i18n/server";
 
 const kindSchema = z.object({
   name: v.name.max(40, "Máximo 40 caracteres."),
@@ -34,7 +35,7 @@ async function authorize(projectId: string | null) {
 
 /** Un tipo, con su ámbito, tras comprobar que se puede gestionar. */
 async function loadKind(kindId: string) {
-  const kind = await db.taskKind.findUnique({ where: { id: v.id.parse(kindId) }, select: { id: true, name: true, projectId: true, system: true } });
+  const kind = await db.taskKind.findUnique({ where: { id: v.id.parse(kindId) }, select: { id: true, name: true, projectId: true } });
   if (!kind) throw notFound();
   await authorize(kind.projectId);
   return kind;
@@ -71,11 +72,14 @@ export async function createKind(input: KindInput, projectId?: string | null) {
     await authorize(scope);
     const data = kindSchema.parse(input);
     await assertUniqueName(data.name, scope);
-    if ((await db.taskKind.count({ where: { projectId: scope } })) >= MAX_KINDS) throw new AppError(`Máximo ${MAX_KINDS} tipos de tarea.`);
+    if ((await db.taskKind.count({ where: { projectId: scope } })) >= MAX_KINDS) {
+      const t = await getT();
+      throw new AppError(t("Máximo {n} tipos de tarea.", { n: MAX_KINDS }));
+    }
     const last = await db.taskKind.findFirst({ where: { projectId: scope }, orderBy: { position: "desc" }, select: { position: true } });
     const kind = await db.taskKind.create({
       data: { ...data, projectId: scope, position: (last?.position ?? 0) + POSITION_STEP },
-      select: { id: true, name: true, color: true, titleTemplate: true, descriptionTemplate: true, system: true },
+      select: { id: true, name: true, color: true, titleTemplate: true, descriptionTemplate: true },
     });
     revalidate(scope);
     return kind;
@@ -118,7 +122,6 @@ export async function moveKind(kindId: string, direction: number) {
 export async function deleteKind(kindId: string, replacementId: string) {
   return runAction({ name: "kinds.deleteKind", args: [kindId, replacementId] }, async () => {
     const kind = await loadKind(kindId);
-    if (kind.system) throw new AppError(`«${kind.name}» es un tipo del sistema y no se puede borrar.`);
     const replacement = v.id.parse(replacementId);
     if (kind.id === replacement) throw new AppError("Elige otro tipo para las tareas.");
     const target = await db.taskKind.findUnique({ where: { id: replacement }, select: { projectId: true } });

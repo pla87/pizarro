@@ -2,6 +2,7 @@
 
 import { AtSign, FileSpreadsheet, FileText } from "lucide-react";
 import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useT } from "@/i18n/client";
 import { mentionToken } from "@/lib/mentions";
 import type { UserOption } from "@/lib/types";
 import { Avatar } from "./Avatar";
@@ -36,6 +37,7 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
   { value, onValueChange, users, onCommand, onKeyDown, className, ...rest },
   ref,
 ) {
+  const t = useT();
   const inner = useRef<HTMLTextAreaElement>(null);
   useImperativeHandle(ref, () => inner.current!);
   const [query, setQuery] = useState<{ start: number; text: string } | null>(null);
@@ -147,14 +149,14 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
                   <FileText size={20} className="text-sky-600" />
                 )}
                 <span className="min-w-0">
-                  <span className="block truncate font-medium">{o.label}</span>
-                  {o.kind === "command" && <span className="block truncate text-xs text-slate-500">{o.hint}</span>}
+                  <span className="block truncate font-medium">{o.kind === "command" ? t(o.label) : o.label}</span>
+                  {o.kind === "command" && <span className="block truncate text-xs text-slate-500">{t(o.hint)}</span>}
                 </span>
               </button>
             </li>
           ))}
           <li className="flex items-center gap-1 px-2 pt-1 pb-0.5 text-[11px] text-slate-400">
-            <AtSign size={11} /> ↑↓ para elegir · Enter para insertar
+            <AtSign size={11} /> {t("↑↓ para elegir · Enter para insertar")}
           </li>
         </ul>
       )}

@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.11.0"
+version: "v1.12.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.11.0
+**Versión de la aplicación:** v1.12.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -81,7 +81,7 @@ La aplicación es un **monolito en un único contenedor**. No hay colas, cachés
 
 | Tabla | Campos principales | Notas |
 |---|---|---|
-| `User` | email (único), name, passwordHash, role, active, cardStyle, preferencias de aviso | Se pueden desactivar o borrar; al borrar a alguien se borran sus proyectos privados. |
+| `User` | email (único), name, passwordHash, role, active, cardStyle, theme, accent, locale, editorMode, preferencias de aviso | Se pueden desactivar o borrar; al borrar a alguien se borran sus proyectos privados. |
 | `Session` | id = HMAC del token, userId, expiresAt | El token en claro solo vive en la cookie. |
 | `Project` | name, description, restricted, position | `restricted = false` → visible para todos. |
 | `ProjectMember` | projectId, userId | Usuarios con acceso a un proyecto restringido. |
@@ -91,7 +91,7 @@ La aplicación es un **monolito en un único contenedor**. No hay colas, cachés
 | `Subtask` | taskId, title, done, position | Subtareas de una tarea (no pasan a las releases). |
 | `UndoEntry` | userId, projectId, label, ops (JSON), createdAt | Las 10 últimas acciones deshacibles de cada usuario en cada proyecto, con sus operaciones inversas. Caducan a los 7 días. |
 | `TaskAttachment` | taskId, originalName, width, height, size | El fichero está en `UPLOAD_DIR/<id>.webp` (y `<id>.thumb.webp`). |
-| `Release` / `ReleaseTask` | content (Markdown final), deployedAt, autor · instantánea de título y tipo de cada tarea | La instantánea se conserva aunque la tarea se borre. |
+| `Release` / `ReleaseTask` | number (correlativo por proyecto), content (Markdown final), deployedAt, autor · instantánea de título y tipo de cada tarea | La instantánea se conserva aunque la tarea se borre. |
 | `AppVersionLog` | version (única), releasedAt, summary, changes (JSON) | Se sincroniza desde `changelog.json` en cada arranque. |
 | `Deliverable` | projectId, name, description, dueDate, position | Las tareas lo referencian con `deliverableId`. Al borrarlo, quedan sin entregable. |
 | `TaskKind` | name, color, position, projectId (opcional) | Tipos de tarea configurables; sin `projectId` son generales, con él son exclusivos de ese proyecto. Nombre único entre los generales y dentro de cada proyecto. Cada tarea tiene `kindId`. |
@@ -128,7 +128,7 @@ Además, `Task` tiene `dueDate` (fecha límite, solo día), `Column` tiene `isDo
 - **Generación de releases en el navegador:** instantánea, sin llamadas al servidor hasta *Marcar como desplegado*.
 - **Imágenes:** en móvil, las fotos grandes se reducen en el navegador antes de subirse. El servidor genera una miniatura, y las imágenes se sirven con caché inmutable.
 - **Sin dependencias externas en tiempo de ejecución:** fuentes del sistema, sin CDNs.
-- **Refresco ligero:** el tablero se actualiza al volver a la pestaña y cada 30 segundos, para ver los cambios del resto del equipo.
+- **Cambios casi al momento:** cada cambio en un proyecto se avisa al instante a las pestañas que lo tienen abierto (canal *Server-Sent Events* `/api/projects/[id]/events`) y estas se refrescan en menos de un segundo, también entre dos pestañas tuyas. Como respaldo, el tablero también se actualiza al volver a la pestaña y cada 30 segundos.
 
 ---
 
@@ -176,8 +176,16 @@ Desde el menú «⋯» de cada columna:
 - **Quién está trabajando:** a la izquierda de **Informe PDF** (en móvil, arriba a la derecha) aparecen círculos con las **iniciales** de quienes han hecho cualquier acción en ese tablero (abrir, crear, mover, editar, subir adjuntos…) en los **últimos 5 minutos**, tú incluido; al pasar el ratón se ven sus nombres. Se actualiza cada 20 segundos. Si hay más (cinco en escritorio, tres en móvil), se muestra «+N».
 - **Trabajar varios a la vez:** si otra persona tiene abierta la misma tarea, el detalle lo indica («Fulano también tiene abierta esta tarea»). Si cambia el **título o la descripción** mientras tú los editas, al guardar no se pisa su texto: se avisa, la tarea se recarga con sus cambios y vuelves a aplicar los tuyos. El resto de campos (tipo, color, responsable…) se guardan al momento y gana el último cambio.
 - **Guardado:** los cambios del detalle se guardan solos; en la cabecera se ve «Guardando…» y después **«Guardado»** con un check verde.
-- **Deshacer:** el botón con la flecha de volver, justo a la derecha del nombre del tablero (también en móvil), deshace **tu última acción** en ese tablero, y así hasta las **10 últimas**: crear, editar, mover, archivar, recuperar, borrar (con sus adjuntos y subtareas), subtareas, comentarios, adjuntos, enlaces, columnas y desplegar una release (las tareas vuelven a su sitio y la release sale del histórico). En escritorio también **Ctrl/⌘+Z** con el tablero en pantalla. Solo deshace lo tuyo; si algo ya no existe (otra persona lo borró), se salta y se avisa. Las acciones de deshacer caducan a los 7 días.
-- **Editar:** haz clic en la tarjeta. Los cambios se guardan solos (título y enlace al salir del campo; tipo, color, responsable, etiquetas y columna al cambiarlos). La descripción admite Markdown (Ctrl/⌘+Enter guarda).
+- **Deshacer:** el botón con la flecha de volver, justo a la derecha del nombre del tablero (también en móvil), deshace **tu última acción** en ese tablero, y así hasta las **10 últimas** (cuenta como una sola acción crear una tarea con sus adjuntos y subtareas): crear, editar, mover, archivar, recuperar, borrar (con sus adjuntos y subtareas), subtareas, comentarios, adjuntos, enlaces, columnas y desplegar una release (las tareas vuelven a su sitio y la release sale del histórico). En escritorio también **Ctrl/⌘+Z** con el tablero en pantalla. Solo deshace lo tuyo; si algo ya no existe (otra persona lo borró), se salta y se avisa. Las acciones de deshacer caducan a los 7 días.
+  - **Con una tarea abierta**, el contexto es esa tarea: deshacer solo actúa sobre lo que has hecho en ella (cada subtarea, cada archivo subido, cada cambio), y el detalle se recarga. En escritorio el botón se ve por encima del fondo oscuro del modal, y Ctrl/⌘+Z también funciona si no estás escribiendo.
+- **Guardar en móvil:** al editar una tarea en el móvil, el pie del modal tiene siempre visibles **Archivar**, **Borrar** y **Guardar**. *Guardar* guarda el título y la descripción tal como estén escritos (aunque sigas editándolos) y cierra.
+- **Borradores:** mientras creas o editas una tarea, lo escrito se guarda en tu navegador **cada 5 segundos**. Si cierras la página sin cancelar ni guardar, al volver al tablero el modal se reabre con lo que tenías (en *Nueva tarea*, todos los campos salvo los archivos; en una tarea abierta, el título y la descripción en edición). Cancelar o cerrar el modal borra el borrador.
+- **Editar:** haz clic en la tarjeta. Los cambios se guardan solos (título y enlace al salir del campo; tipo, color, responsable, etiquetas y columna al cambiarlos).
+- **Descripción con formato:** se guarda como Markdown y, cuando no la estás editando, se ve formateada (títulos, negrita, cursiva, subrayado, tachado, listas, enlaces). Hay dos formas de editarla, a elegir en **Mi perfil y plantillas → Edición de descripciones**:
+  - **Markdown** (por defecto): escribes los símbolos (`**negrita**`, `*cursiva*`, `~~tachado~~`, `++subrayado++`, `# Título`, `- lista`, `1. lista`); al guardar se ve formateado.
+  - **Con barra de formato:** ves el resultado mientras escribes y aplicas **negrita, cursiva, subrayado, tachado, título, subtítulo, texto normal, lista y lista numerada** con botones (o Ctrl+B / I / U). Si pegas texto en Markdown, se convierte en formato.
+  - En ambos modos, Ctrl/⌘+Enter guarda y Escape cancela.
+- **Colores de tarjeta:** gris, blanco, rojo, naranja, marrón, amarillo, verde, verde oscuro, turquesa, celeste, índigo, azul marino, violeta y rosa (también para etiquetas).
 - **Subtareas:** añádelas y márcalas. **Doble clic** sobre una la edita (Enter guarda, Escape cancela) y se **reordenan** arrastrando el icono de seis puntos. Junto al título *Subtareas* hay una barra verde que se llena según la proporción de subtareas hechas (con dos, cada una marca el 50 %, da igual el orden); la tarjeta muestra el progreso (p. ej. `2/4`). Las subtareas **no pasan** al texto de las releases.
 - **Adjuntos:** cualquier tipo de archivo de hasta 10 MB. Pégalos con Ctrl/⌘+V, usa *Añadir* o **arrástralos** sobre la tarea abierta (aparece «Suelta para adjuntar»); también desde la ventana de descargas del navegador. Los que no son imagen se listan con su icono, nombre y tamaño, y se descargan (nunca se abren dentro de Pizarro, por seguridad).
 - **Capturas e imágenes:** al tocar o hacer clic en una imagen se ve **a pantalla completa**; se cierra con la **X**, tocando fuera de la imagen, con Escape o con el botón atrás. Con varias imágenes, las flechas pasan de una a otra. En móvil también tienes el botón **Cámara**, al crear la tarea y en el detalle de una tarea existente. Cada imagen se reduce a 1280 px de ancho como máximo y se guarda como WebP (calidad 75).
@@ -203,25 +211,25 @@ Desde el menú «⋯» de cada columna:
 
 1. Prepara tus plantillas en **Mi perfil y plantillas → Plantillas de release notes**. Puedes tener **varias cabeceras** (por ejemplo, «Contexto para IA» o «Para negocio») y **varios pies** (por ejemplo, «Checklist de cierre»), cada uno con su nombre.
 2. En el tablero, pulsa **Generar Release** en la columna *Siguiente salto a producción*.
-3. **Paso 1:** revisa el título, elige la **cabecera** y el **pie** (o «Ninguna») y marca las tareas incluidas. El título propuesto es `Release AAAA-MM-DD · Proyecto`; si ese día ya hubo releases en el proyecto, lleva el número tras la fecha: `Release AAAA-MM-DD (2) · Proyecto`, `(3)`… El título se guarda en el histórico pero **no forma parte del texto** que se copia o descarga. Por defecto están todas las de la columna; si tenías tarjetas seleccionadas, solo esas.
+3. **Paso 1:** revisa el título, elige la **cabecera** y el **pie** (o «Ninguna») y marca las tareas incluidas. Las releases de cada proyecto están **numeradas** (1, 2, 3…). El título propuesto es `Release AAAA-MM-DD · Proyecto`; si ese día ya hubo releases en el proyecto, lleva el número tras la fecha: `Release AAAA-MM-DD (2) · Proyecto`, `(3)`… El título se guarda en el histórico pero **no forma parte del texto** que se copia o descarga. Por defecto están todas las de la columna; si tenías tarjetas seleccionadas, solo esas.
 4. **Paso 2:** se genera el documento: la **cabecera**, **una sección por tipo de tarea** (generales y luego los del proyecto) y el **pie**:
 
 ```markdown
 <cabecera elegida>
 
 ### Funcionalidad
-- **F1** · Nueva pantalla de exportación ([enlace](<https://example.com/pr/1>))
-  Adjuntos: F1_captura.webp, F1_detalle.webp
+- **R32F1** · Nueva pantalla de exportación ([enlace](<https://example.com/pr/1>))
+  Adjuntos: R32F1_captura.webp, R32F1_detalle.webp
   Descripción de la tarea, sangrada bajo su punto.
 
 ### Corrección
-- **C1** · Error al guardar
-- **C2** · Corrección del cálculo de totales
+- **R32C1** · Error al guardar
+- **R32C2** · Corrección del cálculo de totales
 
 <pie elegido>
 ```
 
-   - **Códigos:** cada punto lleva un código con la inicial del tipo y un número por tipo (F1, F2… C1…). Si dos tipos empiezan por la misma letra, el segundo usa más letras (p. ej. D y DI).
+   - **Códigos:** cada punto lleva un código con el **número de la release**, la inicial del tipo y un número por tipo: en la release 32, `R32F1`, `R32F2`… `R32C1`. Si dos tipos empiezan por la misma letra, el segundo usa más letras (p. ej. D y DI). Si otra persona despliega una release mientras generas la tuya, al marcarla como desplegada se avisa para volver a generar el texto con el número correcto.
    - **Descripción:** la de cada tarea va debajo de su punto. Las menciones salen como `@Nombre`.
    - **Adjuntos:** se nombran `código_nombre-original.webp` y se listan bajo su punto. Si alguna tarea tiene adjuntos, aparece el botón **Descargar adjuntos (N)**, que baja un ZIP (`release-AAAA-MM-DD-adjuntos.zip`) con todos los ficheros ya renombrados.
 
@@ -242,15 +250,19 @@ Las secciones sin tareas se omiten.
 
 ### 3.8 Informe PDF del proyecto
 
-Botón **Informe PDF** en la cabecera del tablero (o en el menú lateral). Se abre en otra pestaña y contiene:
+Botón **Informe PDF** en la cabecera del tablero (o en el menú lateral). En escritorio se abre en otra pestaña. En el **móvil** (o con la app instalada) se genera dentro de Pizarro y, al terminar, aparecen los botones **Descargar** y **Abrir**.
 
-- **Resumen:** avance global, pendientes, vencidas, que vencen en 7 días, sin responsable, sin plazo, terminadas y archivadas.
-- **Estado por columna:** número de tarjetas, peso, desglose por tipo y vencidas.
-- **Entregables:** fecha objetivo, avance y estado. Los estados posibles son *Completado*, *En plazo*, *En riesgo* (vence en 7 días o menos con menos del 75 % hecho), *Retrasado*, *Sin fecha* y *Sin tareas*.
-- **Plazos:** vencidos y próximos 14 días, con columna, responsable y checklist.
-- **Carga por persona** y **distribución por tipo**.
-- **Últimas releases.**
-- **Detalle de cada columna** con todas sus tarjetas.
+Está pensado para leerse de un vistazo; cada sección sale solo si tiene contenido:
+
+- **Resumen:** barra de avance y cuatro cifras (pendientes, vencidas, vencen en 7 días, terminadas), el reparto por tipo de lo pendiente y, si hay, un aviso de tareas sin responsable o sin plazo.
+- **Pendiente:** las tareas sin terminar agrupadas por columna, con tipo, responsable, plazo (los vencidos en rojo) y subtareas hechas.
+- **Plazos:** vencidos y próximos 14 días.
+- **Entregables:** fecha objetivo, avance y estado (*Completado*, *En plazo*, *En riesgo* —vence en 7 días o menos con menos del 75 % hecho—, *Retrasado*, *Sin fecha* o *Sin tareas*).
+- **Carga por persona:** pendientes y vencidas de cada una.
+- **Terminadas en los últimos 14 días.**
+- **Últimas releases:** las cinco últimas, con su número (R32), título, fecha y tareas.
+
+Se genera en el idioma de quien lo pide.
 
 «Hoy» se calcula en la zona horaria `APP_TIMEZONE` (por defecto `Europe/Madrid`).
 
@@ -278,7 +290,7 @@ El menú lateral muestra, debajo de las opciones del proyecto: **Avisos**, **Mis
 
 - **Mis tareas asignadas:** todas tus tarjetas activas en los proyectos a los que tienes acceso, agrupadas por proyecto y con su columna actual.
 - **Releases:** histórico del proyecto, con **buscador** por texto en todo el histórico (título y contenido, sin distinguir mayúsculas ni tildes); sin buscar se muestran las 50 últimas con *Cargar más*, opción de copiar o descargar cada release, y de **Borrar release** (la quita del histórico con sus adjuntos; las tareas no cambian) o **Borrar adjuntos** (conserva el texto). Ambas piden confirmación. Cada entrada indica cuántas tareas y adjuntos tiene; al abrirla se ven los nombres de los adjuntos y el botón **Descargar adjuntos** (ZIP).
-- **Historial de versiones:** versión actual de la app y cambios de cada versión, con **buscador** por texto.
+- **Historial de versiones:** versión actual de la app y cambios de cada versión, con la **fecha y hora** de su lanzamiento y **buscador** por texto.
 
 ### 3.12 Móvil
 
@@ -299,7 +311,10 @@ El menú lateral muestra, debajo de las opciones del proyecto: **Avisos**, **Mis
 
 En **Mi perfil y plantillas → Apariencia**, cada persona elige:
 - **Tema:** *Sistema* (sigue el modo claro u oscuro del dispositivo, por defecto), *Claro* u *Oscuro*. Se aplica al momento y se recuerda en todos tus dispositivos. Las barras de scroll usan los colores de Pizarro en ambos temas.
+- **Color de acento:** *Azul* (por defecto), *Verde bosque*, *Siena*, *Mostaza* o *Blanco y negro*. Cambia botones, enlaces y resaltados, en modo claro y oscuro. La barra de progreso de las subtareas usa un color que contrasta con el acento elegido.
 - **Tarjetas:** *Franja a la izquierda* (por defecto) o *Tarjeta entera del color*, con un tono suave para que el texto se siga leyendo.
+- **Idioma · Language:** *Español* (por defecto) o *English*. Cambia toda la interfaz, los mensajes, las fechas y el informe PDF. No se traducen los datos (nombres de proyectos, columnas, tipos, tareas), el texto de las releases ni el historial de versiones.
+- **Edición de descripciones:** *Markdown* o *Con barra de formato* (ver 3.4).
 
 ### 3.14 Tipos de tarea
 
@@ -313,7 +328,7 @@ En ambos casos:
 - **Nuevo tipo:** nombre y color (de la paleta o cualquier otro con el selector de color).
 - Las flechas cambian el **orden**. En los selectores y en la release van primero los generales y después los del proyecto, cada grupo en su orden.
 - **Automatización:** cada tipo puede tener un **título automático** y un **texto inicial de la descripción** (al crearlo o editarlo, sección *Automatización*). Al elegir ese tipo en una tarea nueva o existente, el título se sustituye y la descripción empieza por ese texto (sin repetirlo si ya está). La lista de tipos explica en una línea lo que hace cada uno. No se aplica en *Varias tareas*.
-- **Tipos del sistema:** **Respuesta** (título «Respuesta» y descripción que empieza por «Respondo a las preguntas y lo que necesitas de mi:») viene de serie, lleva la etiqueta *Del sistema* y **no se puede borrar**; sí se puede cambiar su nombre, color o automatización.
+- **Respuesta:** viene creado de serie (título «Respuesta» y descripción que empieza por «Respondo a las preguntas y lo que necesitas de mi:»), pero es un tipo general como cualquier otro: se puede editar o **borrar**.
 - **Borrar** un tipo pide a qué tipo pasan sus tareas. Un tipo general solo puede pasar a otro general, y siempre queda al menos uno. Un tipo de proyecto puede pasar a un general o a otro del mismo proyecto.
 - **Nombres:** un tipo de proyecto no puede llamarse igual que un general ni que otro de su proyecto. Dos proyectos sí pueden tener tipos con el mismo nombre. Un tipo general nuevo no puede repetir el nombre de ningún tipo de proyecto.
 - Al borrar un proyecto se borran también sus tipos.
@@ -385,8 +400,8 @@ Cambia la variable en Railway y redespliega. Todas las sesiones dejan de ser vá
 ### 4.6 Publicar una nueva versión de la app
 
 1. Desarrolla el cambio. Si afecta al esquema, crea la migración con `npm run db:migrate -- --name descripcion` y súbela al repositorio.
-2. `npm run check` (lint, tipos y tests).
-3. `npm run version:bump -- patch|minor|major`, rellena la entrada en `changelog.json` y ejecuta `npm run version:bump -- --render`.
+2. `npm run check` (lint, tipos, traducciones y tests). Los textos nuevos de la interfaz van con `t("texto en español")` y su traducción en `src/i18n/en/`; `npm run i18n:check` lista los que falten.
+3. `npm run version:bump -- patch|minor|major` (anota la fecha y la hora del lanzamiento), rellena la entrada en `changelog.json` y ejecuta `npm run version:bump -- --render`.
 4. Haz commit y *push*. Railway despliega, aplica la migración y la nueva versión aparece en *Historial de versiones*.
 
 ### 4.7 Integraciones: Google, email y WhatsApp

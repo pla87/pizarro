@@ -7,12 +7,13 @@ import {
   createDeliverable, createLabel, deleteDeliverable, deleteLabel, deleteProject, setProjectVisibility, updateDeliverable, updateLabel, updateProject,
 } from "@/actions/projects";
 import { formatDay } from "@/lib/dates";
+import { useIntlLocale, useT } from "@/i18n/client";
 import { ColorPicker } from "@/components/ui/ColorPicker";
 import { cn } from "@/components/ui/cn";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
-import { PALETTE } from "@/lib/constants";
+import { isWhite, onColor, PALETTE } from "@/lib/constants";
 import type { KindOption, LabelOption } from "@/lib/types";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
 import { setGeneralKindEnabled } from "@/actions/project-kinds";
@@ -29,16 +30,18 @@ interface Props {
 }
 
 function Section({ title, description, children, id }: { title: string; description?: string; children: React.ReactNode; id?: string }) {
+  const t = useT();
   return (
     <section id={id} className="card scroll-mt-4 p-5">
-      <h2 className="font-semibold">{title}</h2>
-      {description && <p className="mt-0.5 text-sm text-slate-500">{description}</p>}
+      <h2 className="font-semibold">{t(title)}</h2>
+      {description && <p className="mt-0.5 text-sm text-slate-500">{t(description)}</p>}
       <div className="mt-4">{children}</div>
     </section>
   );
 }
 
 export function ProjectSettings({ isAdmin, project, deliverables, kinds, generalKinds, labels: initialLabels, users }: Props) {
+  const t = useT();
   const router = useRouter();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -59,7 +62,7 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-4 md:p-6">
-      <h1 className="text-xl font-semibold">Ajustes del proyecto</h1>
+      <h1 className="text-xl font-semibold">{t("Ajustes del proyecto")}</h1>
 
       {isAdmin && (
         <Section title="General">
@@ -67,18 +70,18 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
             className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
-              run(async () => updateProject(project.id, { name, description }), "Proyecto actualizado", () => router.refresh());
+              run(async () => updateProject(project.id, { name, description }), t("Proyecto actualizado"), () => router.refresh());
             }}
           >
             <div>
-              <label className="label" htmlFor="p-name">Nombre</label>
+              <label className="label" htmlFor="p-name">{t("Nombre")}</label>
               <input id="p-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required />
             </div>
             <div>
-              <label className="label" htmlFor="p-desc">Descripción</label>
+              <label className="label" htmlFor="p-desc">{t("Descripción")}</label>
               <textarea id="p-desc" className="input" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={2000} />
             </div>
-            <button className="btn-primary" disabled={pending}>Guardar</button>
+            <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
           </form>
         </Section>
       )}
@@ -88,18 +91,18 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-sm">
               <input type="radio" checked={visibility === "PUBLIC"} onChange={() => setVisibility("PUBLIC")} />
-              <UsersIcon size={15} /> Visible para todos los usuarios
+              <UsersIcon size={15} /> {t("Visible para todos los usuarios")}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input type="radio" checked={visibility === "RESTRICTED"} onChange={() => setVisibility("RESTRICTED")} />
-              <Lock size={15} /> Solo los usuarios seleccionados (y los administradores)
+              <Lock size={15} /> {t("Solo los usuarios seleccionados (y los administradores)")}
             </label>
             <label className="flex items-start gap-2 text-sm">
               <input type="radio" className="mt-1" checked={visibility === "PRIVATE"} onChange={() => setVisibility("PRIVATE")} />
               <EyeOff size={15} className="mt-0.5 shrink-0" />
               <span>
-                Privado: solo tú
-                <span className="block text-xs text-slate-500">Nadie más lo ve ni puede entrar, tampoco el resto de administradores.</span>
+                {t("Privado: solo tú")}
+                <span className="block text-xs text-slate-500">{t("Nadie más lo ve ni puede entrar, tampoco el resto de administradores.")}</span>
               </span>
             </label>
           </div>
@@ -123,7 +126,7 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
                       }
                     />
                     {u.name}
-                    {u.role === "ADMIN" && <span className="text-xs text-slate-500">(administrador, siempre tiene acceso)</span>}
+                    {u.role === "ADMIN" && <span className="text-xs text-slate-500">{t("(administrador, siempre tiene acceso)")}</span>}
                   </label>
                 </li>
               ))}
@@ -133,11 +136,11 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
             className="btn-primary mt-4"
             disabled={pending}
             onClick={() => {
-              if (visibility === "PRIVATE" && project.visibility !== "PRIVATE" && !window.confirm("¿Hacer el proyecto privado? Dejará de verlo todo el mundo menos tú, incluidos los demás administradores.")) return;
-              run(() => setProjectVisibility(project.id, visibility, [...members]), "Visibilidad actualizada", () => router.refresh());
+              if (visibility === "PRIVATE" && project.visibility !== "PRIVATE" && !window.confirm(t("¿Hacer el proyecto privado? Dejará de verlo todo el mundo menos tú, incluidos los demás administradores."))) return;
+              run(() => setProjectVisibility(project.id, visibility, [...members]), t("Visibilidad actualizada"), () => router.refresh());
             }}
           >
-            Guardar visibilidad
+            {t("Guardar visibilidad")}
           </button>
         </Section>
       )}
@@ -156,7 +159,7 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
         description="Elige qué tipos generales usa este proyecto y crea tipos propios. En los selectores y en las releases van primero los generales y después los propios."
       >
         <GeneralKinds projectId={project.id} generalKinds={generalKinds} projectKinds={kinds} />
-        <div className="mt-4 mb-2 text-xs font-medium text-slate-500">Tipos propios del proyecto</div>
+        <div className="mt-4 mb-2 text-xs font-medium text-slate-500">{t("Tipos propios del proyecto")}</div>
         <KindsManager kinds={kinds} projectId={project.id} otherKinds={generalKinds.filter((k) => k.enabled)} embedded />
       </Section>
 
@@ -170,19 +173,19 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
               onDeleted={() => setLabels((ls) => ls.filter((x) => x.id !== l.id))}
             />
           ))}
-          {labels.length === 0 && <li className="text-sm text-slate-500">No hay etiquetas.</li>}
+          {labels.length === 0 && <li className="text-sm text-slate-500">{t("No hay etiquetas.")}</li>}
         </ul>
         <NewLabel projectId={project.id} onCreated={(l) => setLabels((ls) => [...ls, l].sort((a, b) => a.name.localeCompare(b.name)))} />
       </Section>
 
       <Section title="Columnas" description="Las columnas se crean, renombran, reordenan, cambian de rol y borran (si están vacías) desde el menú «⋯» de cada columna en el tablero." >
         <p className="text-sm text-slate-500">
-          El rol <strong>Siguiente salto</strong> muestra el botón «Generar Release»; el rol <strong>En producción</strong> es el destino de las tarjetas al marcar una release como desplegada.
+          {t("El rol")} <strong>{t("Siguiente salto")}</strong> {t("muestra el botón «Generar Release»; el rol")} <strong>{t("En producción")}</strong> {t("es el destino de las tarjetas al marcar una release como desplegada.")}
         </p>
       </Section>
 
       <Section title="Tarjetas archivadas">
-        <p className="text-sm text-slate-500">Las tarjetas archivadas se consultan y recuperan desde el botón «Archivadas» del tablero.</p>
+        <p className="text-sm text-slate-500">{t("Las tarjetas archivadas se consultan y recuperan desde el botón «Archivadas» del tablero.")}</p>
       </Section>
 
       {isAdmin && (
@@ -190,16 +193,16 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
           <div className="flex flex-wrap gap-2">
             <input
               className="input max-w-xs"
-              placeholder={`Escribe «${project.name}» para confirmar`}
+              placeholder={t("Escribe «{name}» para confirmar", { name: project.name })}
               value={confirmName}
               onChange={(e) => setConfirmName(e.target.value)}
             />
             <button
               className="btn-danger"
               disabled={pending || confirmName !== project.name}
-              onClick={() => run(() => deleteProject(project.id, confirmName), "Proyecto borrado", () => { router.push("/"); router.refresh(); })}
+              onClick={() => run(() => deleteProject(project.id, confirmName), t("Proyecto borrado"), () => { router.push("/"); router.refresh(); })}
             >
-              <Trash2 size={15} /> Borrar proyecto
+              <Trash2 size={15} /> {t("Borrar proyecto")}
             </button>
           </div>
         </Section>
@@ -209,6 +212,7 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
 }
 
 function LabelRow({ label, onSaved, onDeleted }: { label: LabelOption; onSaved: (l: LabelOption) => void; onDeleted: () => void }) {
+  const t = useT();
   const toast = useToast();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(label.name);
@@ -217,13 +221,13 @@ function LabelRow({ label, onSaved, onDeleted }: { label: LabelOption; onSaved: 
   if (!editing) {
     return (
       <li className="flex items-center gap-2">
-        <span className="rounded px-2 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: label.color }}>{label.name}</span>
-        <button className="btn-icon ml-auto h-7 w-7" onClick={() => setEditing(true)} aria-label="Editar etiqueta"><Pencil size={14} /></button>
+        <span className="rounded px-2 py-0.5 text-xs font-medium" style={{ backgroundColor: label.color, color: onColor(label.color), boxShadow: isWhite(label.color) ? "inset 0 0 0 1px rgb(0 0 0 / 0.2)" : undefined }}>{label.name}</span>
+        <button className="btn-icon ml-auto h-7 w-7" onClick={() => setEditing(true)} aria-label={t("Editar etiqueta")}><Pencil size={14} /></button>
         <button
           className="btn-icon h-7 w-7 hover:text-red-600"
-          aria-label="Borrar etiqueta"
+          aria-label={t("Borrar etiqueta")}
           onClick={async () => {
-            if (!window.confirm(`¿Borrar la etiqueta «${label.name}»? Se quitará de todas las tarjetas.`)) return;
+            if (!window.confirm(t("¿Borrar la etiqueta «{name}»? Se quitará de todas las tarjetas.", { name: label.name }))) return;
             const res = await deleteLabel(label.id);
             if (!res.ok) return toast(res.error, "error");
             onDeleted();
@@ -248,18 +252,19 @@ function LabelRow({ label, onSaved, onDeleted }: { label: LabelOption; onSaved: 
             setEditing(false);
           }}
         >
-          <Check size={15} /> Guardar
+          <Check size={15} /> {t("Guardar")}
         </button>
-        <button className="btn-ghost py-1.5" onClick={() => setEditing(false)}><X size={15} /> Cancelar</button>
+        <button className="btn-ghost py-1.5" onClick={() => setEditing(false)}><X size={15} /> {t("Cancelar")}</button>
       </div>
     </li>
   );
 }
 
 function NewLabel({ projectId, onCreated }: { projectId: string; onCreated: (l: LabelOption) => void }) {
+  const t = useT();
   const toast = useToast();
   const [name, setName] = useState("");
-  const [color, setColor] = useState<string | null>(PALETTE[6]);
+  const [color, setColor] = useState<string | null>(PALETTE[9]);
   return (
     <form
       className="mt-4 space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800"
@@ -272,8 +277,8 @@ function NewLabel({ projectId, onCreated }: { projectId: string; onCreated: (l: 
       }}
     >
       <div className="flex gap-2">
-        <input className="input" placeholder="Nueva etiqueta" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
-        <button className="btn-secondary shrink-0" disabled={!name.trim()}><Plus size={15} /> Añadir</button>
+        <input className="input" placeholder={t("Nueva etiqueta")} value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
+        <button className="btn-secondary shrink-0" disabled={!name.trim()}><Plus size={15} /> {t("Añadir")}</button>
       </div>
       <ColorPicker value={color} onChange={setColor} allowNone={false} />
     </form>
@@ -289,6 +294,8 @@ interface DeliverableRow {
 }
 
 function Deliverables({ projectId, initial }: { projectId: string; initial: DeliverableRow[] }) {
+  const t = useT();
+  const locale = useIntlLocale();
   const router = useRouter();
   const toast = useToast();
   const [rows, setRows] = useState(initial);
@@ -310,12 +317,12 @@ function Deliverables({ projectId, initial }: { projectId: string; initial: Deli
         const res = await updateDeliverable(editing, input);
         if (!res.ok) return toast(res.error, "error");
         setRows((r) => r.map((d) => (d.id === editing ? { ...d, ...input, name: input.name.trim() } : d)));
-        toast("Entregable actualizado");
+        toast(t("Entregable actualizado"));
       } else {
         const res = await createDeliverable(projectId, input);
         if (!res.ok) return toast(res.error, "error");
         setRows((r) => [...r, { ...res.data, taskCount: 0 }]);
-        toast("Entregable creado");
+        toast(t("Entregable creado"));
       }
       setEditing(null);
       router.refresh();
@@ -330,19 +337,19 @@ function Deliverables({ projectId, initial }: { projectId: string; initial: Deli
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium">{d.name}</div>
               <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
-                <span className="inline-flex items-center gap-1"><CalendarClock size={12} /> {d.dueDate ? formatDay(d.dueDate) : "Sin fecha"}</span>
-                <span>{d.taskCount} tarjeta(s)</span>
+                <span className="inline-flex items-center gap-1"><CalendarClock size={12} /> {d.dueDate ? formatDay(d.dueDate, undefined, locale) : t("Sin fecha")}</span>
+                <span>{t("{n} tarjeta(s)", { n: d.taskCount })}</span>
               </div>
               {d.description && <p className="mt-0.5 text-xs text-slate-500">{d.description}</p>}
             </div>
-            <button className="btn-icon h-7 w-7" aria-label="Editar entregable" onClick={() => open(d)}>
+            <button className="btn-icon h-7 w-7" aria-label={t("Editar entregable")} onClick={() => open(d)}>
               <Pencil size={14} />
             </button>
             <button
               className="btn-icon h-7 w-7 hover:text-red-600"
-              aria-label="Borrar entregable"
+              aria-label={t("Borrar entregable")}
               onClick={async () => {
-                if (!window.confirm(`¿Borrar el entregable «${d.name}»? Sus tarjetas se conservan, sin entregable.`)) return;
+                if (!window.confirm(t("¿Borrar el entregable «{name}»? Sus tarjetas se conservan, sin entregable.", { name: d.name }))) return;
                 const res = await deleteDeliverable(d.id);
                 if (!res.ok) return toast(res.error, "error");
                 setRows((r) => r.filter((x) => x.id !== d.id));
@@ -353,36 +360,36 @@ function Deliverables({ projectId, initial }: { projectId: string; initial: Deli
             </button>
           </li>
         ))}
-        {rows.length === 0 && <li className="py-2 text-sm text-slate-500">No hay entregables.</li>}
+        {rows.length === 0 && <li className="py-2 text-sm text-slate-500">{t("No hay entregables.")}</li>}
       </ul>
       <button className="btn-primary mt-3" onClick={() => open()}>
-        <Plus size={15} /> Añadir entregable
+        <Plus size={15} /> {t("Añadir entregable")}
       </button>
       <Modal
         open={editing !== null}
         onClose={() => setEditing(null)}
-        title={editing ? "Editar entregable" : "Nuevo entregable"}
+        title={editing ? t("Editar entregable") : t("Nuevo entregable")}
         size="sm"
         footer={
           <>
-            <button type="button" className="btn-secondary" onClick={() => setEditing(null)}>Cancelar</button>
+            <button type="button" className="btn-secondary" onClick={() => setEditing(null)}>{t("Cancelar")}</button>
             <button type="submit" form="deliverable-form" className="btn-primary" disabled={pending || !form.name.trim()}>
-              {pending ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} {editing ? "Guardar" : "Añadir"}
+              {pending ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} {editing ? t("Guardar") : t("Añadir")}
             </button>
           </>
         }
       >
         <form id="deliverable-form" onSubmit={submit} className="space-y-3">
           <div>
-            <label className="label" htmlFor="dl-name">Nombre</label>
-            <input id="dl-name" className="input" placeholder="p. ej. «Beta cerrada»" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={120} required data-autofocus />
+            <label className="label" htmlFor="dl-name">{t("Nombre")}</label>
+            <input id="dl-name" className="input" placeholder={t("p. ej. «Beta cerrada»")} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={120} required data-autofocus />
           </div>
           <div>
-            <label className="label" htmlFor="dl-date">Fecha objetivo (opcional)</label>
+            <label className="label" htmlFor="dl-date">{t("Fecha objetivo (opcional)")}</label>
             <input id="dl-date" className="input" type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
           </div>
           <div>
-            <label className="label" htmlFor="dl-desc">Descripción (opcional)</label>
+            <label className="label" htmlFor="dl-desc">{t("Descripción (opcional)")}</label>
             <textarea id="dl-desc" className="input field-sizing-content min-h-16" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} maxLength={2000} />
           </div>
         </form>
@@ -397,6 +404,7 @@ function GeneralKinds({ projectId, generalKinds, projectKinds }: {
   generalKinds: (KindOption & { enabled: boolean; taskCount: number })[];
   projectKinds: KindRow[];
 }) {
+  const t = useT();
   const router = useRouter();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -407,7 +415,7 @@ function GeneralKinds({ projectId, generalKinds, projectKinds }: {
     start(async () => {
       const res = await setGeneralKindEnabled(projectId, kindId, enabled, replacementId);
       if (!res.ok) return toast(res.error, "error");
-      toast(enabled ? "Tipo activado en el proyecto" : "Tipo desactivado en el proyecto");
+      toast(enabled ? t("Tipo activado en el proyecto") : t("Tipo desactivado en el proyecto"));
       setDisabling(null);
       router.refresh();
     });
@@ -419,7 +427,7 @@ function GeneralKinds({ projectId, generalKinds, projectKinds }: {
 
   return (
     <div>
-      <div className="mb-1.5 text-xs font-medium text-slate-500">Tipos generales que usa este proyecto</div>
+      <div className="mb-1.5 text-xs font-medium text-slate-500">{t("Tipos generales que usa este proyecto")}</div>
       <div className="flex flex-wrap gap-x-4 gap-y-2">
         {generalKinds.map((k) => (
           <label key={k.id} className={cn("flex items-center gap-1.5 text-sm", pending && "opacity-60")}>
@@ -440,20 +448,20 @@ function GeneralKinds({ projectId, generalKinds, projectKinds }: {
           </label>
         ))}
       </div>
-      <p className="mt-1 text-xs text-slate-500">Los desmarcados no aparecen en los selectores ni en las releases de este proyecto.</p>
+      <p className="mt-1 text-xs text-slate-500">{t("Los desmarcados no aparecen en los selectores ni en las releases de este proyecto.")}</p>
       {disabling && (
-        <Modal open onClose={() => setDisabling(null)} title={`Dejar de usar «${disabling.name}»`} size="sm">
+        <Modal open onClose={() => setDisabling(null)} title={t("Dejar de usar «{name}»", { name: disabling.name })} size="sm">
           <div className="space-y-3">
             <p className="text-sm">
-              {disabling.taskCount === 1 ? "Su tarea en este proyecto pasará al tipo:" : `Sus ${disabling.taskCount} tareas en este proyecto pasarán al tipo:`}
+              {disabling.taskCount === 1 ? t("Su tarea en este proyecto pasará al tipo:") : t("Sus {n} tareas en este proyecto pasarán al tipo:", { n: disabling.taskCount })}
             </p>
-            <select className="input" value={replacement} onChange={(e) => setReplacement(e.target.value)} aria-label="Tipo de destino">
+            <select className="input" value={replacement} onChange={(e) => setReplacement(e.target.value)} aria-label={t("Tipo de destino")}>
               {targets(disabling.id).map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
             </select>
             <div className="flex justify-end gap-2">
-              <button className="btn-secondary" onClick={() => setDisabling(null)}>Cancelar</button>
+              <button className="btn-secondary" onClick={() => setDisabling(null)}>{t("Cancelar")}</button>
               <button className="btn-primary" disabled={pending || !replacement} onClick={() => apply(disabling.id, false, replacement)}>
-                Dejar de usarlo
+                {t("Dejar de usarlo")}
               </button>
             </div>
           </div>

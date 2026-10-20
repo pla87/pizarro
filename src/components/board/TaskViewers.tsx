@@ -2,11 +2,13 @@
 
 import { Users } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useT } from "@/i18n/client";
 
 const POLL_MS = 15_000;
 
 /** Aviso «Fulano también tiene abierta esta tarea» (para no pisarse al editar). */
 export function TaskViewers({ taskId }: { taskId: string }) {
+  const t = useT();
   const [others, setOthers] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
@@ -33,7 +35,9 @@ export function TaskViewers({ taskId }: { taskId: string }) {
 
   if (!others.length) return null;
   const names = others.map((o) => o.name);
-  const text = names.length === 1 ? `${names[0]} también tiene abierta esta tarea` : `${names.slice(0, -1).join(", ")} y ${names.at(-1)} también tienen abierta esta tarea`;
+  const text = names.length === 1
+    ? t("{name} también tiene abierta esta tarea", { name: names[0]! })
+    : t("{names} y {last} también tienen abierta esta tarea", { names: names.slice(0, -1).join(", "), last: names.at(-1)! });
   return (
     <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-200" role="status">
       <Users size={14} className="shrink-0" /> {text}.

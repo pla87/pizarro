@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/components/ui/cn";
+import { useT } from "@/i18n/client";
 
 const TABS = [
   { href: "/admin/users", label: "Usuarios" },
@@ -14,14 +15,15 @@ const TABS = [
 /** Pestañas de la sección de administración; la activa se deduce de la ruta. */
 export function AdminTabs() {
   const pathname = usePathname();
+  const t = useT();
   return (
-    <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800" aria-label="Administración">
-      {TABS.map((t) => {
-        const active = pathname.startsWith(t.href);
+    <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800" aria-label={t("Administración")}>
+      {TABS.map((tab) => {
+        const active = pathname.startsWith(tab.href);
         return (
           <Link
-            key={t.href}
-            href={t.href}
+            key={tab.href}
+            href={tab.href}
             aria-current={active ? "page" : undefined}
             className={cn(
               "-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium",
@@ -30,7 +32,7 @@ export function AdminTabs() {
                 : "border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white",
             )}
           >
-            {t.label}
+            {t(tab.label)}
           </Link>
         );
       })}

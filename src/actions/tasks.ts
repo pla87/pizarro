@@ -7,7 +7,7 @@ import { runAction } from "@/lib/action";
 import { assertAssignable, assertProjectAccess, assertTaskAccess, visibleProjectsWhere } from "@/lib/access";
 import { boardTaskSelect, loadBoardTask, toBoardTask } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
-import { describeAction, noteProject } from "@/lib/action-context";
+import { describeAction, noteProject, noteTask } from "@/lib/action-context";
 import { addUndo, captureTasks, snapshotTasks, type TaskField } from "@/lib/undo";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
@@ -18,6 +18,7 @@ import { createDriveFile, type GoogleFileKind } from "@/lib/google";
 import { extractMentionIds } from "@/lib/mentions";
 import { notifyMentions } from "@/lib/notify";
 import type { ArchivedTask, CommentInfo, SubtaskInfo, TaskDetail, TaskLinkInfo } from "@/lib/types";
+import { getT } from "@/i18n/server";
 
 async function assertColumnInProject(columnId: string, projectId: string) {
   const ok = await db.column.count({ where: { id: columnId, projectId } });
@@ -132,6 +133,7 @@ export async function createTask(input: z.input<typeof createSchema>) {
       },
       select: { id: true },
     });
+    noteTask(task.id);
     addUndo({ t: "task.remove", id: task.id });
     describeAction(
       `Creó la tarea «${data.title}» en «${await columnName(data.columnId)}»${data.subtasks.length ? ` con ${data.subtasks.length} subtareas` : ""}`,
@@ -145,7 +147,7 @@ export async function createTask(input: z.input<typeof createSchema>) {
 const createManySchema = z.object({
   projectId: v.id,
   columnId: v.id,
-  tasks: z.array(z.object({ title: v.title, kindId: v.id })).min(1, "No hay tareas que crear.").max(MAX_BULK_TASKS, `Máximo ${MAX_BULK_TASKS} tareas de una vez.`),
+  tasks: z.array(z.object({ title: v.title, kindId: v.id })).min(1, "No hay tareas que crear.").max(MAX_BULK_TASKS, "Máximo 100 tareas de una vez."),
   assigneeId: v.id.nullable().default(null),
   labelIds: z.array(v.id).max(20).default([]),
   dueDate: v.dayIso.default(null),
@@ -224,7 +226,8 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
       const base = since ? new Date(since).getTime() : 0;
       if (current.contentUpdatedAt && current.contentUpdatedById !== user.id && current.contentUpdatedAt.getTime() > base) {
         const who = current.contentUpdatedById ? (await db.user.findUnique({ where: { id: current.contentUpdatedById }, select: { name: true } }))?.name : null;
-        throw new AppError(`${who ?? "Otra persona"} ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos.`, 409);
+        const t = await getT();
+        throw new AppError(who ? t("{who} ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos.", { who }) : t("Otra persona ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos."), 409);
       }
     }
     if (data.assigneeId) await assertAssignable(projectId, data.assigneeId);
@@ -480,6 +483,7 @@ async function assertSubtaskAccess(subtaskId: string) {
   });
   if (!sub) throw notFound();
   noteProject(sub.task.projectId);
+  noteTask(sub.taskId);
   const { task: _task, ...row } = sub;
   return row;
 }
@@ -558,6 +562,7 @@ export async function deleteAttachment(attachmentId: string) {
     });
     if (!att) throw notFound();
     noteProject((await db.task.findUnique({ where: { id: att.taskId }, select: { projectId: true } }))?.projectId);
+    noteTask(att.taskId);
     describeAction(`Borró el adjunto «${att.originalName}» de «${(await taskLabel(att.taskId)).title}»`, { attachmentId: att.id });
     // El fichero se conserva mientras se pueda deshacer (ver undo.ts).
     addUndo({ t: "attachment.restore", row: { ...att, createdAt: att.createdAt.toISOString() } });
@@ -618,6 +623,7 @@ export async function deleteComment(commentId: string) {
     if (!comment) throw notFound();
     if (comment.authorId !== user.id && user.role !== "ADMIN") throw new AppError("Solo puedes borrar tus comentarios.", 403);
     noteProject(comment.task.projectId);
+    noteTask(comment.taskId);
     const { task, ...row } = comment;
     addUndo({ t: "comment.restore", row: { ...row, createdAt: row.createdAt.toISOString(), editedAt: row.editedAt?.toISOString() ?? null } });
     describeAction(`Borró un comentario de «${task.title}»`, { taskId: row.taskId });
@@ -658,6 +664,7 @@ export async function deleteTaskLink(linkId: string) {
     });
     if (!link) throw notFound();
     noteProject(link.task.projectId);
+    noteTask(link.taskId);
     const { task: _task, ...row } = link;
     addUndo({ t: "link.restore", row: { ...row, createdAt: row.createdAt.toISOString() } });
     describeAction(`Quitó el enlace «${row.title}»`, { taskId: row.taskId });

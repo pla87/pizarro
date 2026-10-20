@@ -1,4 +1,5 @@
 /** Automatización por tipo de tarea: al elegir el tipo se fija el título y/o se antepone un texto a la descripción. */
+import { makeT, type T } from "@/i18n/core";
 
 export interface KindAutomation {
   titleTemplate: string;
@@ -29,35 +30,15 @@ function short(text: string, max = 60): string {
 }
 
 /** Una línea breve en español que explica la automatización del tipo; null si no tiene. */
-export function describeKindAutomation(kind: KindAutomation): string | null {
+export function describeKindAutomation(kind: KindAutomation, t: T = makeT("es")): string | null {
   const title = kind.titleTemplate.trim();
   const desc = kind.descriptionTemplate.trim();
-  if (title && desc) return `Al elegirlo, el título pasa a ser «${short(title)}» y la descripción empieza por «${short(desc)}».`;
-  if (title) return `Al elegirlo, el título pasa a ser «${short(title)}».`;
-  if (desc) return `Al elegirlo, la descripción empieza por «${short(desc)}».`;
+  if (title && desc) return t("Al elegirlo, el título pasa a ser «{title}» y la descripción empieza por «{desc}».", { title: short(title), desc: short(desc) });
+  if (title) return t("Al elegirlo, el título pasa a ser «{title}».", { title: short(title) });
+  if (desc) return t("Al elegirlo, la descripción empieza por «{desc}».", { desc: short(desc) });
   return null;
 }
 
 // --- Compatibilidad (obsoleto): lo usan TaskDialog y NewTaskDialog hasta migrar a applyKindTemplate. ---
 
 /** @deprecated Usa la plantilla del tipo (descriptionTemplate). */
-export const RESPUESTA_LINE = "Respondo a las preguntas y lo que necesitas de mi:";
-
-/** Minúsculas, sin acentos y sin espacios, para comparar nombres de tipo. */
-function normalizeName(name: string): string {
-  return name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, "").toLowerCase();
-}
-
-/** @deprecated Usa la propiedad `system` del tipo. */
-export function isRespuestaKind(kindName: string): boolean {
-  return normalizeName(kindName) === "respuesta";
-}
-
-/** @deprecated Usa applyKindTemplate. */
-export function applyKindPreset(
-  kindName: string,
-  current: { title: string; description: string },
-): { title: string; description: string } | null {
-  if (!isRespuestaKind(kindName)) return null;
-  return applyKindTemplate({ titleTemplate: "Respuesta", descriptionTemplate: RESPUESTA_LINE }, current);
-}

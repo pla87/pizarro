@@ -2,6 +2,7 @@ import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { leaveTask, noteTaskViewer } from "@/lib/presence";
 import { getCurrentUser } from "@/lib/session";
+import { getT } from "@/i18n/server";
 import * as v from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -18,8 +19,9 @@ async function load(ctx: { params: Promise<{ taskId: string }> }) {
 
 /** El diálogo de la tarea avisa de que sigue abierto y recibe quién más la tiene abierta. No se registra en los logs. */
 export async function GET(_req: Request, ctx: { params: Promise<{ taskId: string }> }) {
+  const t = await getT();
   const found = await load(ctx);
-  if (!found) return new Response("No encontrado", { status: 404 });
+  if (!found) return new Response(t("No encontrado"), { status: 404 });
   const others = noteTaskViewer(found.taskId, found.user.id, found.user.name);
   return Response.json({ others }, { headers: { "Cache-Control": "no-store" } });
 }

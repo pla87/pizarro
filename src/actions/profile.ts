@@ -68,6 +68,15 @@ export async function updateCardStyle(style: "STRIPE" | "FILLED") {
   });
 }
 
+/** Modo de edición de descripciones: Markdown escrito o editor con barra de formato. */
+export async function updateEditorMode(mode: "MARKDOWN" | "WYSIWYG") {
+  return runAction({ name: "profile.updateEditorMode", args: [mode] }, async () => {
+    const user = await requireUser();
+    await db.user.update({ where: { id: user.id }, data: { editorMode: z.enum(["MARKDOWN", "WYSIWYG"]).parse(mode) } });
+    revalidatePath("/", "layout");
+  });
+}
+
 /** Tema de color del usuario: SYSTEM sigue al sistema operativo. */
 export async function updateTheme(theme: "SYSTEM" | "LIGHT" | "DARK") {
   return runAction({ name: "profile.updateTheme", args: [theme] }, async () => {
@@ -78,10 +87,30 @@ export async function updateTheme(theme: "SYSTEM" | "LIGHT" | "DARK") {
   });
 }
 
+/** Idioma de la interfaz. */
+export async function updateLocale(locale: "ES" | "EN") {
+  return runAction({ name: "profile.updateLocale", args: [locale] }, async () => {
+    const user = await requireUser();
+    await db.user.update({ where: { id: user.id }, data: { locale: z.enum(["ES", "EN"]).parse(locale) } });
+    // El idioma se aplica en el layout raíz (lang y traducciones).
+    revalidatePath("/", "layout");
+  });
+}
+
+/** Color de acento de la app (variables --color-brand-*). */
+export async function updateAccent(accent: "BLUE" | "FOREST" | "SIENNA" | "MUSTARD" | "MONO") {
+  return runAction({ name: "profile.updateAccent", args: [accent] }, async () => {
+    const user = await requireUser();
+    await db.user.update({ where: { id: user.id }, data: { accent: z.enum(["BLUE", "FOREST", "SIENNA", "MUSTARD", "MONO"]).parse(accent) } });
+    // El atributo data-accent se pinta en el layout raíz.
+    revalidatePath("/", "layout");
+  });
+}
+
 export async function changePassword(current: string, next: string) {
   return runAction({ name: "profile.changePassword", args: [current, next] }, async () => {
     const user = await requireUser();
-    const pw = z.string().min(MIN_PASSWORD, `La nueva contraseña debe tener al menos ${MIN_PASSWORD} caracteres.`).max(200).parse(next);
+    const pw = z.string().min(MIN_PASSWORD, "La nueva contraseña debe tener al menos 10 caracteres.").max(200).parse(next);
     if (!rateLimit(`password:${user.id}`, 5, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
     const row = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { passwordHash: true } });
     if (!(await verifyPassword(z.string().max(200).parse(current), row.passwordHash))) {

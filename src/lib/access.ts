@@ -1,6 +1,6 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
-import { noteProject } from "./action-context";
+import { noteProject, noteTask } from "./action-context";
 import { db } from "./db";
 import { notFound } from "./errors";
 import type { CurrentUser } from "./session";
@@ -39,6 +39,7 @@ export async function assertTaskAccess(user: CurrentUser, taskId: string): Promi
   });
   if (!task) throw notFound();
   noteProject(task.projectId);
+  noteTask(taskId);
   return task;
 }
 

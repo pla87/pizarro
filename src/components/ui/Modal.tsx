@@ -3,6 +3,7 @@
 import { Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useT } from "@/i18n/client";
 import { cn } from "./cn";
 import { useBackToClose } from "./useBackToClose";
 
@@ -35,6 +36,7 @@ const SIZES = { sm: "sm:max-w-md", md: "sm:max-w-xl", lg: "sm:max-w-3xl", xl: "s
 const SIZE_REM = { sm: "28rem", md: "36rem", lg: "48rem", xl: "64rem" };
 
 export function Modal({ open, onClose, title, children, footer, size = "md", header, placement = "bottom", panelClassName, side = "center", onAddSecond }: ModalProps) {
+  const t = useT();
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   useEffect(() => {
@@ -119,7 +121,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
         {header ?? (
           <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-slate-800">
             <h2 className="truncate text-base font-semibold">{title}</h2>
-            <button type="button" className="btn-icon" onClick={onClose} aria-label="Cerrar">
+            <button type="button" className="btn-icon" onClick={onClose} aria-label={t("Cerrar")}>
               <X size={18} />
             </button>
           </div>
@@ -135,8 +137,8 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
             type="button"
             onClick={onAddSecond}
             className="absolute bottom-0 left-full ml-3 hidden h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95 lg:flex"
-            aria-label="Abrir otra tarea nueva al lado"
-            title="Abrir otra tarea nueva al lado"
+            aria-label={t("Abrir otra tarea nueva al lado")}
+            title={t("Abrir otra tarea nueva al lado")}
           >
             <Plus size={26} />
           </button>

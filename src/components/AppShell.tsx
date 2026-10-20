@@ -1,13 +1,14 @@
 "use client";
 
 import {
-  Archive, Bell, ChevronsUpDown, FileDown, FolderKanban, History, LayoutDashboard, ListChecks, LogOut, Menu, Plus, Rocket,
+  Archive, Bell, ChevronsUpDown, FolderKanban, History, LayoutDashboard, ListChecks, LogOut, Menu, Plus, Rocket,
   Settings, Shield, SlidersHorizontal, X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { logout } from "@/actions/auth";
+import { useT } from "@/i18n/client";
 import { createProject } from "@/actions/projects";
 import { listTemplates } from "@/actions/templates";
 import type { CurrentUser } from "@/lib/session";
@@ -16,6 +17,7 @@ import { Presence } from "./board/Presence";
 import { PrivateIcon, ProjectMenu, ProjectsContext } from "./ProjectMenu";
 import { UndoButton } from "./UndoButton";
 import { Avatar } from "./ui/Avatar";
+import { ReportButton } from "./ReportButton";
 import { cn } from "./ui/cn";
 import { Modal } from "./ui/Modal";
 import { ToastProvider, useToast } from "./ui/Toast";
@@ -37,6 +39,7 @@ export function AppShell(props: Props) {
 }
 
 function Shell({ user, projects, version, unread, children }: Props) {
+  const t = useT();
   const pathname = usePathname();
   // El menú móvil se cierra solo al navegar: queda asociado a la ruta en que se abrió.
   const [drawerPath, setDrawerPath] = useState<string | null>(null);
@@ -67,7 +70,7 @@ function Shell({ user, projects, version, unread, children }: Props) {
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-slate-900/50" onClick={() => setDrawerOpen(false)} aria-hidden />
           <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white shadow-xl dark:bg-slate-900">
-            <button className="btn-icon absolute top-3 right-3" onClick={() => setDrawerOpen(false)} aria-label="Cerrar menú">
+            <button className="btn-icon absolute top-3 right-3" onClick={() => setDrawerOpen(false)} aria-label={t("Cerrar menú")}>
               <X size={18} />
             </button>
             {sidebar}
@@ -77,7 +80,7 @@ function Shell({ user, projects, version, unread, children }: Props) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 pt-[env(safe-area-inset-top)] lg:hidden dark:border-slate-800 dark:bg-slate-900">
-          <button className="btn-icon" onClick={() => setDrawerOpen(true)} aria-label="Abrir menú">
+          <button className="btn-icon" onClick={() => setDrawerOpen(true)} aria-label={t("Abrir menú")}>
             <Menu size={20} />
           </button>
           {/* Deshacer, justo a continuación del nombre del tablero. */}
@@ -87,7 +90,7 @@ function Shell({ user, projects, version, unread, children }: Props) {
           </div>
           {current && <Presence projectId={current.id} compact />}
           {unread > 0 && (
-            <Link href="/notifications" className="ml-auto flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white" aria-label={`${unread} avisos sin leer`}>
+            <Link href="/notifications" className="ml-auto flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white" aria-label={t("{n} avisos sin leer", { n: unread })}>
               <Bell size={13} /> {unread}
             </Link>
           )}
@@ -104,7 +107,8 @@ function NavLink({ href, icon: Icon, children, active }: { href: string; icon: t
     <Link
       href={href}
       className={cn(
-        "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium",
+        // El contorno de foco va por dentro: el menú hace scroll y recortaría uno exterior.
+        "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-500",
         active
           ? "bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-100"
           : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
@@ -124,6 +128,7 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
   version: string;
   pathname: string;
 }) {
+  const t = useT();
   const isAdmin = user.role === "ADMIN";
   return (
     <div className="flex h-full flex-col">
@@ -140,31 +145,24 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
       <nav className="mt-3 flex-1 space-y-0.5 overflow-y-auto px-3">
         {current && (
           <>
-            <NavLink href={`/p/${current.id}`} icon={LayoutDashboard} active={pathname === `/p/${current.id}`}>Tablero</NavLink>
-            <NavLink href={`/p/${current.id}/releases`} icon={Rocket} active={pathname.startsWith(`/p/${current.id}/releases`)}>Releases</NavLink>
-            <a
-              href={`/api/projects/${current.id}/report`}
-              target="_blank"
-              rel="noopener"
-              className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              <FileDown size={17} /> Informe PDF
-            </a>
-            <NavLink href={`/p/${current.id}/settings`} icon={SlidersHorizontal} active={pathname.startsWith(`/p/${current.id}/settings`)}>Ajustes del proyecto</NavLink>
-            <NavLink href={`/p/${current.id}?archivadas=1`} icon={Archive} active={false}>Archivadas</NavLink>
+            <NavLink href={`/p/${current.id}`} icon={LayoutDashboard} active={pathname === `/p/${current.id}`}>{t("Tablero")}</NavLink>
+            <NavLink href={`/p/${current.id}/releases`} icon={Rocket} active={pathname.startsWith(`/p/${current.id}/releases`)}>{t("Releases")}</NavLink>
+            <ReportButton projectId={current.id} variant="sidebar" />
+            <NavLink href={`/p/${current.id}/settings`} icon={SlidersHorizontal} active={pathname.startsWith(`/p/${current.id}/settings`)}>{t("Ajustes del proyecto")}</NavLink>
+            <NavLink href={`/p/${current.id}?archivadas=1`} icon={Archive} active={false}>{t("Archivadas")}</NavLink>
             <div className="my-3 border-t border-slate-200 dark:border-slate-800" />
           </>
         )}
         <NavLink href="/notifications" icon={Bell} active={pathname === "/notifications"}>
-          <span className="flex-1">Avisos</span>
+          <span className="flex-1">{t("Avisos")}</span>
           {unread > 0 && (
-            <span className="rounded-full bg-red-500 px-1.5 text-[11px] font-semibold text-white" aria-label={`${unread} sin leer`}>{unread > 99 ? "99+" : unread}</span>
+            <span className="rounded-full bg-red-500 px-1.5 text-[11px] font-semibold text-white" aria-label={t("{n} sin leer", { n: unread })}>{unread > 99 ? "99+" : unread}</span>
           )}
         </NavLink>
-        <NavLink href="/my-tasks" icon={ListChecks} active={pathname === "/my-tasks"}>Mis tareas asignadas</NavLink>
-        <NavLink href="/settings" icon={Settings} active={pathname === "/settings"}>Mi perfil y plantillas</NavLink>
-        {isAdmin && <NavLink href="/admin" icon={Shield} active={pathname.startsWith("/admin")}>Administración</NavLink>}
-        <NavLink href="/changelog" icon={History} active={pathname === "/changelog"}>Historial de versiones</NavLink>
+        <NavLink href="/my-tasks" icon={ListChecks} active={pathname === "/my-tasks"}>{t("Mis tareas asignadas")}</NavLink>
+        <NavLink href="/settings" icon={Settings} active={pathname === "/settings"}>{t("Mi perfil y plantillas")}</NavLink>
+        {isAdmin && <NavLink href="/admin" icon={Shield} active={pathname.startsWith("/admin")}>{t("Administración")}</NavLink>}
+        <NavLink href="/changelog" icon={History} active={pathname === "/changelog"}>{t("Historial de versiones")}</NavLink>
         <InstallApp />
       </nav>
 
@@ -176,7 +174,7 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
             <Link href="/changelog" className="text-xs text-slate-500 hover:underline">v{version}</Link>
           </div>
           <form action={logout}>
-            <button type="submit" className="btn-icon" title="Cerrar sesión" aria-label="Cerrar sesión">
+            <button type="submit" className="btn-icon" title={t("Cerrar sesión")} aria-label={t("Cerrar sesión")}>
               <LogOut size={17} />
             </button>
           </form>
@@ -187,6 +185,7 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
 }
 
 function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: string; name: string; isPrivate?: boolean }[]; current: { id: string; name: string; isPrivate?: boolean } | null; isAdmin: boolean }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   return (
@@ -199,7 +198,7 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: strin
         aria-expanded={open}
       >
         <FolderKanban size={16} className="shrink-0 text-brand-600" />
-        <span className="min-w-0 flex-1 truncate font-medium">{current?.name ?? "Selecciona proyecto"}</span>
+        <span className="min-w-0 flex-1 truncate font-medium">{current?.name ?? t("Selecciona proyecto")}</span>
         {current?.isPrivate && <PrivateIcon />}
         <ChevronsUpDown size={15} className="shrink-0 text-slate-400" />
       </button>
@@ -207,7 +206,7 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: strin
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden />
           <div className="absolute inset-x-0 z-20 mt-1 max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900" role="listbox">
-            {projects.length === 0 && <div className="px-2.5 py-2 text-sm text-slate-500">No tienes proyectos.</div>}
+            {projects.length === 0 && <div className="px-2.5 py-2 text-sm text-slate-500">{t("No tienes proyectos.")}</div>}
             {projects.map((p) => (
               <Link
                 key={p.id}
@@ -235,7 +234,7 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: strin
                   setCreating(true);
                 }}
               >
-                <Plus size={15} /> Nuevo proyecto
+                <Plus size={15} /> {t("Nuevo proyecto")}
               </button>
             )}
           </div>
@@ -247,6 +246,7 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: strin
 }
 
 function NewProjectModal({ onClose }: { onClose: () => void }) {
+  const t = useT();
   const router = useRouter();
   const toast = useToast();
   const [name, setName] = useState("");
@@ -279,18 +279,18 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
     });
   };
   return (
-    <Modal open onClose={onClose} title="Nuevo proyecto" size="sm">
+    <Modal open onClose={onClose} title={t("Nuevo proyecto")} size="sm">
       <form onSubmit={submit} className="space-y-4">
         <div>
-          <label className="label" htmlFor="project-name">Nombre</label>
+          <label className="label" htmlFor="project-name">{t("Nombre")}</label>
           <input id="project-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required data-autofocus />
-          <p className="mt-1 text-xs text-slate-500">Luego puedes cambiar las columnas, tipos y etiquetas.</p>
+          <p className="mt-1 text-xs text-slate-500">{t("Luego puedes cambiar las columnas, tipos y etiquetas.")}</p>
         </div>
         <div>
-          <label className="label" htmlFor="project-template">Plantilla</label>
+          <label className="label" htmlFor="project-template">{t("Plantilla")}</label>
           <select id="project-template" className="input" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-            <option value="">Columnas por defecto</option>
-            {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            <option value="">{t("Columnas por defecto")}</option>
+            {templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.name}</option>)}
           </select>
           {templates.find((t) => t.id === templateId)?.description && (
             <p className="mt-1 text-xs text-slate-500">{templates.find((t) => t.id === templateId)?.description}</p>
@@ -298,11 +298,11 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
         </div>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
-          Proyecto privado (solo lo verás tú)
+          {t("Proyecto privado (solo lo verás tú)")}
         </label>
         <div className="flex justify-end gap-2">
-          <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
-          <button type="submit" className="btn-primary" disabled={pending || !!target || !name.trim()}>Crear</button>
+          <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
+          <button type="submit" className="btn-primary" disabled={pending || !!target || !name.trim()}>{t("Crear")}</button>
         </div>
       </form>
     </Modal>

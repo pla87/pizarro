@@ -73,7 +73,7 @@ export function appTimeZone(): string {
 
 /** Tipos de tarea: sin proyecto, solo los generales; con proyecto, los generales y después los de ese proyecto. */
 /** Selección común de los tipos (con su automatización). */
-export const kindSelect = { id: true, name: true, color: true, titleTemplate: true, descriptionTemplate: true, system: true } as const;
+export const kindSelect = { id: true, name: true, color: true, titleTemplate: true, descriptionTemplate: true } as const;
 
 /**
  * Tipos de tarea: sin proyecto, solo los generales; con proyecto, los generales que el proyecto

@@ -1,9 +1,13 @@
 import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
+import { getT } from "@/i18n/server";
 import { NotificationList } from "./NotificationList";
 
-export const metadata = { title: "Avisos" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("Avisos") };
+}
 
 export default async function NotificationsPage() {
   const user = await requireUserPage();

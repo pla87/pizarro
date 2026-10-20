@@ -8,21 +8,24 @@ import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
+import { getT } from "@/i18n/server";
+import { intlLocale, toLocale } from "@/i18n/core";
 
 export const runtime = "nodejs";
 
-/** Informe PDF del estado del proyecto (columnas, entregables, plazos, personas y releases). */
+/** Informe PDF del estado del proyecto (resumen, pendiente por columna, plazos, entregables, carga por persona y releases). */
 export async function GET(_req: Request, ctx: { params: Promise<{ projectId: string }> }) {
   const start = performance.now();
   const user = await getCurrentUser();
-  if (!user) return new Response("No autorizado", { status: 401 });
-  if (!rateLimit(`report:${user.id}`, 20, 60_000)) return new Response("Demasiadas peticiones", { status: 429 });
+  const t = await getT();
+  if (!user) return new Response(t("No autorizado"), { status: 401 });
+  if (!rateLimit(`report:${user.id}`, 20, 60_000)) return new Response(t("Demasiadas peticiones"), { status: 429 });
   const { projectId } = await ctx.params;
   const project = await db.project.findFirst({
     where: { id: projectId, ...visibleProjectsWhere(user) },
     select: { id: true, name: true, description: true },
   });
-  if (!project) return new Response("No encontrado", { status: 404 });
+  if (!project) return new Response(t("No encontrado"), { status: 404 });
 
   const [columns, tasks, deliverables, releases, archivedCount, kinds] = await Promise.all([
     db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, isDone: true } }),
@@ -38,20 +41,23 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
         dueDate: true,
         deliverableId: true,
         assignee: { select: { name: true } },
+        updatedAt: true,
         subtasks: { select: { done: true } },
       },
     }),
     db.deliverable.findMany({ where: { projectId }, orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { position: "asc" }], select: { id: true, name: true, description: true, dueDate: true } }),
-    db.release.findMany({ where: { projectId }, orderBy: { deployedAt: "desc" }, take: 5, select: { title: true, deployedAt: true, _count: { select: { tasks: true } } } }),
+    db.release.findMany({ where: { projectId }, orderBy: { deployedAt: "desc" }, take: 5, select: { number: true, title: true, deployedAt: true, _count: { select: { tasks: true } } } }),
     db.task.count({ where: { projectId, archivedAt: { not: null } } }),
     listKinds(projectId),
   ]);
 
+  const locale = intlLocale(toLocale(user.locale));
   const today = todayIso(appTimeZone());
   const report = buildReport({
     project: { name: project.name, description: project.description },
     generatedBy: user.name,
     today,
+    time: new Intl.DateTimeFormat(locale, { timeZone: appTimeZone(), hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date()),
     columns,
     kinds: kinds.map((k) => k.name),
     tasks: tasks.map((t) => ({
@@ -64,15 +70,16 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
       deliverableId: t.deliverableId,
       subtaskTotal: t.subtasks.length,
       subtaskDone: t.subtasks.filter((x) => x.done).length,
+      updatedAt: t.updatedAt.toISOString(),
     })),
     deliverables: deliverables.map((d) => ({ ...d, dueDate: dateToIso(d.dueDate) })),
-    releases: releases.map((r) => ({ title: r.title, deployedAt: r.deployedAt.toISOString(), taskCount: r._count.tasks })),
+    releases: releases.map((r) => ({ number: r.number, title: r.title, deployedAt: r.deployedAt.toISOString(), taskCount: r._count.tasks })),
     archivedCount,
-  });
+  }, t);
 
   let pdf: Uint8Array;
   try {
-    pdf = await renderReportPdf(report);
+    pdf = await renderReportPdf(report, t, locale);
   } catch (err) {
     logEvent({
       level: "error", category: "api", action: "report.pdfFailed", message: `Fallo al generar el informe PDF de «${project.name}»: ${err instanceof Error ? err.message : String(err)}`,
@@ -85,11 +92,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
     userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/report`, ip: clientIp(_req.headers), durationMs: performance.now() - start,
     details: { tasks: tasks.length, bytes: pdf.length },
   });
-  const slug = project.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "proyecto";
+  const slug = project.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || t("proyecto");
   return new Response(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="informe-${slug}-${today}.pdf"`,
+      "Content-Disposition": `inline; filename="${t("informe")}-${slug}-${today}.pdf"`,
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
     },

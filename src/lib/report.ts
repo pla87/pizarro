@@ -1,13 +1,19 @@
 // Cálculo del informe de estado de un proyecto. Funciones puras (sin BD) para poder testearlas.
+import { makeT, type T } from "../i18n/core";
 import { daysBetween } from "./dates";
 
 export const UPCOMING_DAYS = 14;
 export const RISK_DAYS = 7;
+/** Ventana de «terminadas recientemente». */
+export const RECENT_DONE_DAYS = 14;
+const RECENT_DONE_MAX = 15;
 
 export interface ReportInput {
   project: { name: string; description: string };
   generatedBy: string;
   today: string;
+  /** Hora de generación (HH:mm, zona de la app). */
+  time?: string;
   columns: { id: string; name: string; isDone: boolean }[];
   /** Nombres de los tipos de tarea, en su orden. */
   kinds: string[];
@@ -21,9 +27,11 @@ export interface ReportInput {
     deliverableId: string | null;
     subtaskTotal: number;
     subtaskDone: number;
+    /** Última modificación (ISO): sin fecha de cierre, se usa para «terminadas recientemente». */
+    updatedAt?: string;
   }[];
   deliverables: { id: string; name: string; description: string; dueDate: string | null }[];
-  releases: { title: string; deployedAt: string; taskCount: number }[];
+  releases: { number: number; title: string; deployedAt: string; taskCount: number }[];
   archivedCount: number;
 }
 
@@ -44,6 +52,7 @@ export interface Report {
   project: ReportInput["project"];
   generatedBy: string;
   today: string;
+  time: string | null;
   kpis: {
     total: number;
     done: number;
@@ -61,6 +70,8 @@ export interface Report {
   upcoming: ReportTask[];
   people: { name: string; open: number; done: number; overdue: number }[];
   types: { label: string; open: number; done: number }[];
+  /** Terminadas con actividad en los últimos 14 días (más recientes primero). */
+  recentDone: ReportTask[];
   releases: ReportInput["releases"];
 }
 
@@ -75,7 +86,7 @@ export function deliverableStatus(total: number, done: number, daysLeft: number 
   return "En plazo";
 }
 
-export function buildReport(input: ReportInput): Report {
+export function buildReport(input: ReportInput, tr: T = makeT("es")): Report {
   const { today } = input;
   const columnById = new Map(input.columns.map((c) => [c.id, c]));
   const isDone = (t: ReportInput["tasks"][number]) => columnById.get(t.columnId)?.isDone ?? false;
@@ -132,7 +143,7 @@ export function buildReport(input: ReportInput): Report {
 
   const peopleMap = new Map<string, { name: string; open: number; done: number; overdue: number }>();
   for (const t of all) {
-    const name = t.assignee ?? "Sin asignar";
+    const name = t.assignee ?? tr("Sin asignar");
     const p = peopleMap.get(name) ?? { name, open: 0, done: 0, overdue: 0 };
     if (t.done) p.done++;
     else p.open++;
@@ -144,6 +155,7 @@ export function buildReport(input: ReportInput): Report {
     project: input.project,
     generatedBy: input.generatedBy,
     today,
+    time: input.time ?? null,
     kpis: {
       total: all.length,
       done,
@@ -165,6 +177,11 @@ export function buildReport(input: ReportInput): Report {
       open: open.filter((t) => t.kind === kind).length,
       done: all.filter((t) => t.done && t.kind === kind).length,
     })).filter((x) => x.open + x.done > 0),
+    recentDone: input.tasks
+      .filter((t) => isDone(t) && t.updatedAt && daysBetween(t.updatedAt.slice(0, 10), today) <= RECENT_DONE_DAYS)
+      .sort((a, b) => b.updatedAt!.localeCompare(a.updatedAt!))
+      .slice(0, RECENT_DONE_MAX)
+      .map(toReportTask),
     releases: input.releases,
   };
 }

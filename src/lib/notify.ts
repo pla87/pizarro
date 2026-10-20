@@ -1,6 +1,7 @@
 import "server-only";
 import { after } from "next/server";
 import nodemailer from "nodemailer";
+import { makeT, toLocale, type T } from "../i18n/core";
 import { db } from "./db";
 import { logEvent } from "./log";
 import { excerpt as makeExcerpt } from "./mentions";
@@ -46,14 +47,14 @@ export interface MentionMessage {
   url: string;
 }
 
-export function mentionEmail(m: MentionMessage) {
-  const subject = `${m.actorName} te ha mencionado en «${m.taskTitle}»`;
-  const text = `${m.actorName} te ha mencionado en la tarea «${m.taskTitle}» (${m.projectName}):\n\n${m.excerpt}\n\nAbrir la tarea: ${m.url}\n`;
+export function mentionEmail(m: MentionMessage, t: T = makeT("es")) {
+  const subject = t("{actor} te ha mencionado en «{task}»", { actor: m.actorName, task: m.taskTitle });
+  const text = `${t("{actor} te ha mencionado en la tarea «{task}» ({project}):", { actor: m.actorName, task: m.taskTitle, project: m.projectName })}\n\n${m.excerpt}\n\n${t("Abrir la tarea")}: ${m.url}\n`;
   const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
-<p><strong>${escapeHtml(m.actorName)}</strong> te ha mencionado en la tarea <strong>«${escapeHtml(m.taskTitle)}»</strong> · ${escapeHtml(m.projectName)}</p>
+<p>${t("{actor} te ha mencionado en la tarea {task}", { actor: `<strong>${escapeHtml(m.actorName)}</strong>`, task: `<strong>«${escapeHtml(m.taskTitle)}»</strong>` })} · ${escapeHtml(m.projectName)}</p>
 <blockquote style="margin:12px 0;padding:8px 12px;border-left:4px solid #6366f1;background:#f8fafc;color:#334155">${escapeHtml(m.excerpt)}</blockquote>
-<p><a href="${escapeHtml(m.url)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">Abrir la tarea</a></p>
-<p style="color:#94a3b8;font-size:12px">Puedes desactivar estos avisos en «Mi perfil» de Pizarro.</p></div>`;
+<p><a href="${escapeHtml(m.url)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">${escapeHtml(t("Abrir la tarea"))}</a></p>
+<p style="color:#94a3b8;font-size:12px">${escapeHtml(t("Puedes desactivar estos avisos en «Mi perfil» de Pizarro."))}</p></div>`;
   return { subject, text, html };
 }
 
@@ -95,15 +96,16 @@ async function deliver(notificationIds: string[]): Promise<void> {
     select: {
       id: true,
       excerpt: true,
-      user: { select: { id: true, name: true, email: true, active: true, notifyEmail: true, notifyWhatsapp: true, whatsappPhone: true } },
+      user: { select: { id: true, name: true, email: true, locale: true, active: true, notifyEmail: true, notifyWhatsapp: true, whatsappPhone: true } },
       actor: { select: { name: true } },
       task: { select: { id: true, title: true, project: { select: { id: true, name: true } } } },
     },
   });
   for (const n of rows) {
     if (!n.task || !n.user.active) continue;
+    const t = makeT(toLocale(n.user.locale));
     const msg: MentionMessage = {
-      actorName: n.actor?.name ?? "Alguien",
+      actorName: n.actor?.name ?? t("Alguien"),
       taskTitle: n.task.title,
       projectName: n.task.project.name,
       excerpt: n.excerpt,
@@ -115,7 +117,7 @@ async function deliver(notificationIds: string[]): Promise<void> {
     if (emailEnabled() && n.user.notifyEmail) {
       const t0 = performance.now();
       try {
-        await mailer().sendMail({ from: process.env.SMTP_FROM, to: n.user.email, ...mentionEmail(msg) });
+        await mailer().sendMail({ from: process.env.SMTP_FROM, to: n.user.email, ...mentionEmail(msg, t) });
         update.emailSentAt = new Date();
         logEvent({ ...base, action: "notify.email", message: `Email de mención enviado a ${n.user.name}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId: n.task.id, to: n.user.email } });
       } catch (err) {

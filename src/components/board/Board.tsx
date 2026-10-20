@@ -5,7 +5,7 @@ import {
   useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { Archive, FileDown, Plus } from "lucide-react";
+import { Archive, Plus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { archiveTasks, deleteTasks, makeEvergreen, moveTask, moveTasks } from "@/actions/tasks";
@@ -14,6 +14,7 @@ import { positionBetween } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardTask, LabelOption } from "@/lib/types";
 import { ProjectMenu } from "../ProjectMenu";
 import { UndoButton } from "../UndoButton";
+import { useT } from "@/i18n/client";
 import { useToast } from "../ui/Toast";
 import { cn } from "../ui/cn";
 import { ArchivedDialog } from "./ArchivedDialog";
@@ -27,8 +28,10 @@ import { Presence } from "./Presence";
 import { ReleaseDialog } from "./ReleaseDialog";
 import { SelectionBar } from "./SelectionBar";
 import { TaskCard } from "./TaskCard";
+import { ReportButton } from "../ReportButton";
 import { TaskDialog } from "./TaskDialog";
 import { imageFilesFrom } from "./upload";
+import { draftKey, readDraft, type EditTaskDraft, type NewTaskDraft } from "./drafts";
 
 const COLUMN_PREFIX = "col:";
 /** Contenedor virtual del arrastre de una tarea fija (evergreen): origen fuera de las listas ordenables. */
@@ -95,6 +98,7 @@ function findContainer(items: Items, id: string): string | undefined {
 export function Board({ data, initialTaskId = null }: { data: BoardData; initialTaskId?: string | null }) {
   const router = useRouter();
   const toast = useToast();
+  const t = useT();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [archivedOpen, setArchivedOpen] = useState(false);
@@ -103,12 +107,29 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const [labels, setLabels] = useState<LabelOption[]>(data.labels);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openTaskId, setOpenTaskId] = useState<string | null>(initialTaskId);
-  const [newTask, setNewTask] = useState<{ columnId?: string; files?: File[]; evergreen?: boolean } | null>(null);
+  const [newTask, setNewTask] = useState<{ columnId?: string; files?: File[]; evergreen?: boolean; draft?: NewTaskDraft | null } | null>(null);
+  const [editDraft, setEditDraft] = useState<EditTaskDraft | null>(null);
   const [secondNew, setSecondNew] = useState<{ columnId?: string } | null>(null);
   const [bulk, setBulk] = useState<{ columnId?: string } | null>(null);
   const [release, setRelease] = useState<{ taskIds: string[]; preselected: string[] } | null>(null);
   const [mobileColumn, setMobileColumn] = useState<string | null>(null);
   const dragHandle = useCoarsePointer();
+
+  // Borradores locales: si la página se cerró con una tarea abierta o a medio crear, se reabre.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const edit = readDraft<EditTaskDraft>(draftKey("edit", data.currentUserId, data.project.id));
+      if (edit && !initialTaskId && data.tasks.some((t) => t.id === edit.taskId)) {
+        setEditDraft(edit);
+        setOpenTaskId(edit.taskId);
+      }
+      const created = readDraft<NewTaskDraft>(draftKey("new", data.currentUserId, data.project.id));
+      if (created) setNewTask({ draft: created });
+    });
+    return () => cancelAnimationFrame(frame);
+    // Solo al abrir el tablero.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Estado temporal durante el arrastre.
   const [dragItems, setDragItems] = useState<Items | null>(null);
@@ -172,7 +193,27 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
-  // Refresco ligero para ver cambios de otros usuarios.
+  // Cambios de otras pestañas y personas casi al momento: el servidor avisa (Server-Sent Events) y
+  // se refresca. Se agrupan los avisos seguidos; si la conexión cae, EventSource reconecta solo.
+  useEffect(() => {
+    if (typeof EventSource === "undefined") return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const source = new EventSource(`/api/projects/${data.project.id}/events`);
+    source.addEventListener("change", () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        if (pending.current > 0) staleRefresh.current = true;
+        else refresh();
+      }, 200);
+    });
+    return () => {
+      if (timer) clearTimeout(timer);
+      source.close();
+    };
+  }, [data.project.id, refresh]);
+
+  // Refresco ligero de respaldo (por si el canal de avisos no llega).
   useEffect(() => {
     const tick = () => {
       if (document.visibilityState === "visible" && pending.current === 0 && !document.querySelector("[role=dialog]")) refresh();
@@ -225,6 +266,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       kinds: data.kinds,
       kindById: new Map(data.kinds.map((k) => [k.id, k])),
       cardStyle: data.cardStyle,
+      editorMode: data.editorMode,
       dragHandle,
       google: data.google,
       today: data.today,
@@ -272,7 +314,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       track,
       refresh,
     }),
-    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, dragHandle, data.google, data.today, sortedColumns, labels, taskById, baseItems, evergreenByColumn, selected, track, refresh, patchTask],
+    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, data.editorMode, dragHandle, data.google, data.today, sortedColumns, labels, taskById, baseItems, evergreenByColumn, selected, track, refresh, patchTask],
   );
 
   // --- Movimiento masivo ------------------------------------------------------
@@ -294,7 +336,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const server = new Map(res.data.moved.map((m) => [m.id, m.position]));
     setTasks((prev) => prev.map((t) => (server.has(t.id) ? { ...t, columnId, position: server.get(t.id)!, evergreen: false } : t)));
     const name = sortedColumns.find((c) => c.id === columnId)?.name;
-    toast(`${res.data.moved.length === 1 ? "1 tarjeta movida" : `${res.data.moved.length} tarjetas movidas`} a «${name}»`);
+    toast(t("{moved} a «{name}»", { moved: res.data.moved.length === 1 ? t("1 tarjeta movida") : t("{n} tarjetas movidas", { n: res.data.moved.length }), name: name ?? "" }));
   };
 
   const archiveSelected = async () => {
@@ -309,7 +351,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       setTasks(snapshot);
       return toast(res.error, "error");
     }
-    toast(res.data.archived === 1 ? "1 tarea archivada" : `${res.data.archived} tareas archivadas`);
+    toast(res.data.archived === 1 ? t("1 tarea archivada") : t("{n} tareas archivadas", { n: res.data.archived }));
   };
 
   // «?archivadas=1» (enlace del menú lateral en móvil) abre el listado de archivadas.
@@ -326,7 +368,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
 
   const deleteSelected = async () => {
     const ids = [...selected];
-    if (!ids.length || !window.confirm(`¿Borrar definitivamente ${ids.length === 1 ? "la tarea seleccionada" : `las ${ids.length} tareas seleccionadas`} y sus adjuntos?`)) return;
+    if (!ids.length || !window.confirm(ids.length === 1 ? t("¿Borrar definitivamente la tarea seleccionada y sus adjuntos?") : t("¿Borrar definitivamente las {n} tareas seleccionadas y sus adjuntos?", { n: ids.length }))) return;
     const snapshot = tasks;
     const gone = new Set(ids);
     setTasks((prev) => prev.filter((t) => !gone.has(t.id)));
@@ -336,7 +378,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       setTasks(snapshot);
       return toast(res.error, "error");
     }
-    toast(res.data.deleted === 1 ? "1 tarea borrada" : `${res.data.deleted} tareas borradas`);
+    toast(res.data.deleted === 1 ? t("1 tarea borrada") : t("{n} tareas borradas", { n: res.data.deleted }));
   };
 
   // --- Columna visible en móvil e historial -----------------------------------
@@ -364,7 +406,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const swipe = useRef<{ x: number; y: number; t: number } | null>(null);
   const onSwipeStart = (e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
-    if (e.touches.length !== 1 || activeId || target.closest("button[aria-label='Arrastrar para reordenar'], input, textarea, select")) {
+    if (e.touches.length !== 1 || activeId || target.closest(`button[aria-label='${t("Arrastrar para reordenar")}'], input, textarea, select`)) {
       swipe.current = null;
       return;
     }
@@ -507,19 +549,17 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         <div className="flex items-center gap-3 px-4 pt-4 pb-2 max-lg:hidden">
           <h1 className="min-w-0"><ProjectMenu textClassName="text-lg" /></h1>
           <UndoButton projectId={data.project.id} shortcut className="-ml-2" />
-          <span className="text-sm text-slate-500">{tasks.length} tarjetas</span>
+          <span className="text-sm text-slate-500">{t("{n} tarjetas", { n: tasks.length })}</span>
           <div className="ml-auto"><Presence projectId={data.project.id} /></div>
-          <a className="btn-secondary" href={`/api/projects/${data.project.id}/report`} target="_blank" rel="noopener">
-            <FileDown size={16} /> Informe PDF
-          </a>
+          <ReportButton projectId={data.project.id} variant="header" />
           <button className="btn-secondary" onClick={() => setArchivedOpen(true)}>
-            <Archive size={16} /> Archivadas
+            <Archive size={16} /> {t("Archivadas")}
           </button>
-          <button className="btn-secondary" onClick={() => setBulk({})} title="Crear varias tareas pegando una lista">
-            <PlusStack size={16} /> Varias tareas
+          <button className="btn-secondary" onClick={() => setBulk({})} title={t("Crear varias tareas pegando una lista")}>
+            <PlusStack size={16} /> {t("Varias tareas")}
           </button>
           <button className="btn-primary" onClick={() => setNewTask({})}>
-            <Plus size={16} /> Nueva tarea
+            <Plus size={16} /> {t("Nueva tarea")}
           </button>
         </div>
 
@@ -568,14 +608,14 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         <button
           onClick={() => setBulk({ columnId: activeMobileColumn })}
           className="fixed right-[1.625rem] bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-30 flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-brand-600 shadow-lg hover:bg-slate-50 active:scale-95 lg:hidden dark:border-slate-700 dark:bg-slate-800 dark:text-brand-300"
-          aria-label="Crear varias tareas"
+          aria-label={t("Crear varias tareas")}
         >
           <PlusStack size={22} />
         </button>
         <button
           onClick={() => setNewTask({ columnId: activeMobileColumn })}
           className="fixed right-5 bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] z-30 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95 lg:hidden"
-          aria-label="Nueva tarea o captura"
+          aria-label={t("Nueva tarea o captura")}
         >
           <Plus size={26} />
         </button>
@@ -601,7 +641,11 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <TaskDialog
             key={openTaskId}
             task={taskById.get(openTaskId)!}
-            onClose={() => setOpenTaskId(null)}
+            draft={editDraft?.taskId === openTaskId ? editDraft : null}
+            onClose={() => {
+              setOpenTaskId(null);
+              setEditDraft(null);
+            }}
             side={secondNew ? "left" : "center"}
             onAddSecond={secondNew ? undefined : addSecond}
           />
@@ -613,6 +657,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             initialColumnId={newTask.columnId}
             initialEvergreen={newTask.evergreen}
             initialFiles={newTask.files}
+            draft={newTask.draft}
+            autosave
             onClose={() => setNewTask(null)}
           />
         )}
