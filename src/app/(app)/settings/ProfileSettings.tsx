@@ -11,6 +11,7 @@ import {
 import { cn } from "@/components/ui/cn";
 import { Markdown } from "@/components/ui/Markdown";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/i18n/client";
 import type { CardStyleValue, EditorModeValue, TemplateOption } from "@/lib/types";
 
 type ThemeValue = "SYSTEM" | "LIGHT" | "DARK";
@@ -45,6 +46,7 @@ interface Props {
 }
 
 export function ProfileSettings(props: Props) {
+  const t = useT();
   const router = useRouter();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -55,15 +57,15 @@ export function ProfileSettings(props: Props) {
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-4 md:p-6">
-      <h1 className="text-xl font-semibold">Mi perfil y plantillas</h1>
+      <h1 className="text-xl font-semibold">{t("Mi perfil y plantillas")}</h1>
 
       <section className="card p-5">
-        <h2 className="font-semibold">Plantillas de release notes</h2>
+        <h2 className="font-semibold">{t("Plantillas de release notes")}</h2>
         <p className="mt-0.5 text-sm text-slate-500">
-          Puedes tener varias cabeceras y varios pies. Al generar una release eliges cuáles usar y se insertan en el texto. Admiten Markdown.
+          {t("Puedes tener varias cabeceras y varios pies. Al generar una release eliges cuáles usar y se insertan en el texto. Admiten Markdown.")}
         </p>
-        <TemplateList kind="HEADER" title="Cabeceras" initial={props.templates.headers} placeholder={"Ej.: instrucciones de contexto para una IA.\n\n> Resume estos cambios para el equipo de negocio."} />
-        <TemplateList kind="FOOTER" title="Pies" initial={props.templates.footers} placeholder={"Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción"} />
+        <TemplateList kind="HEADER" title={t("Cabeceras")} initial={props.templates.headers} placeholder={t("Ej.: instrucciones de contexto para una IA.\n\n> Resume estos cambios para el equipo de negocio.")} />
+        <TemplateList kind="FOOTER" title={t("Pies")} initial={props.templates.footers} placeholder={t("Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción")} />
       </section>
 
       <LanguageSection initial={props.locale} />
@@ -73,14 +75,14 @@ export function ProfileSettings(props: Props) {
       <NotificationSection prefs={props.notifications} />
 
       <section className="card p-5">
-        <h2 className="font-semibold">Perfil</h2>
+        <h2 className="font-semibold">{t("Perfil")}</h2>
         <form
           className="mt-4 space-y-3"
           onSubmit={(e) => {
             e.preventDefault();
             start(async () => {
               const res = await updateProfileName(name);
-              toast(res.ok ? "Perfil actualizado" : res.error, res.ok ? "success" : "error");
+              toast(res.ok ? t("Perfil actualizado") : res.error, res.ok ? "success" : "error");
               if (res.ok) router.refresh();
             });
           }}
@@ -90,24 +92,24 @@ export function ProfileSettings(props: Props) {
             <p className="text-sm">{props.email}</p>
           </div>
           <div>
-            <label className="label" htmlFor="pf-name">Nombre visible</label>
+            <label className="label" htmlFor="pf-name">{t("Nombre visible")}</label>
             <input id="pf-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required />
           </div>
-          <button className="btn-primary" disabled={pending}>Guardar</button>
+          <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
         </form>
       </section>
 
       <section className="card p-5">
-        <h2 className="font-semibold">Cambiar contraseña</h2>
-        <p className="mt-0.5 text-sm text-slate-500">Se cerrará la sesión en el resto de dispositivos.</p>
+        <h2 className="font-semibold">{t("Cambiar contraseña")}</h2>
+        <p className="mt-0.5 text-sm text-slate-500">{t("Se cerrará la sesión en el resto de dispositivos.")}</p>
         <form
           className="mt-4 space-y-3"
           onSubmit={(e) => {
             e.preventDefault();
-            if (next !== repeat) return toast("Las contraseñas nuevas no coinciden.", "error");
+            if (next !== repeat) return toast(t("Las contraseñas nuevas no coinciden."), "error");
             start(async () => {
               const res = await changePassword(current, next);
-              toast(res.ok ? "Contraseña actualizada" : res.error, res.ok ? "success" : "error");
+              toast(res.ok ? t("Contraseña actualizada") : res.error, res.ok ? "success" : "error");
               if (res.ok) {
                 setCurrent("");
                 setNext("");
@@ -118,20 +120,20 @@ export function ProfileSettings(props: Props) {
         >
           <input type="text" name="username" autoComplete="username" value={props.email} readOnly hidden />
           <div>
-            <label className="label" htmlFor="pw-current">Contraseña actual</label>
+            <label className="label" htmlFor="pw-current">{t("Contraseña actual")}</label>
             <PasswordInput id="pw-current" className="input" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="label" htmlFor="pw-new">Nueva contraseña (mín. 10)</label>
+              <label className="label" htmlFor="pw-new">{t("Nueva contraseña (mín. 10)")}</label>
               <PasswordInput id="pw-new" className="input" autoComplete="new-password" minLength={10} value={next} onChange={(e) => setNext(e.target.value)} required />
             </div>
             <div>
-              <label className="label" htmlFor="pw-repeat">Repite la nueva</label>
+              <label className="label" htmlFor="pw-repeat">{t("Repite la nueva")}</label>
               <PasswordInput id="pw-repeat" className="input" autoComplete="new-password" minLength={10} value={repeat} onChange={(e) => setRepeat(e.target.value)} required />
             </div>
           </div>
-          <button className="btn-primary" disabled={pending}>Cambiar contraseña</button>
+          <button className="btn-primary" disabled={pending}>{t("Cambiar contraseña")}</button>
         </form>
       </section>
     </div>
@@ -175,6 +177,7 @@ function LanguageSection({ initial }: { initial: "ES" | "EN" }) {
 }
 
 function EditorModeSection({ initial }: { initial: EditorModeValue }) {
+  const t = useT();
   const router = useRouter();
   const toast = useToast();
   const [mode, setMode] = useState(initial);
@@ -190,8 +193,8 @@ function EditorModeSection({ initial }: { initial: EditorModeValue }) {
   };
   return (
     <section className="card p-5">
-      <h2 className="flex items-center gap-2 font-semibold"><PenLine size={17} /> Edición de descripciones</h2>
-      <p className="mt-0.5 text-sm text-slate-500">Las descripciones se guardan siempre como Markdown; esto solo cambia cómo las escribes.</p>
+      <h2 className="flex items-center gap-2 font-semibold"><PenLine size={17} /> {t("Edición de descripciones")}</h2>
+      <p className="mt-0.5 text-sm text-slate-500">{t("Las descripciones se guardan siempre como Markdown; esto solo cambia cómo las escribes.")}</p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {([
           ["MARKDOWN", "Markdown", "Escribes los símbolos (**negrita**, - lista, # título). Al guardar se ve formateado."],
@@ -203,8 +206,8 @@ function EditorModeSection({ initial }: { initial: EditorModeValue }) {
             className={cn("rounded-xl border-2 p-3 text-left", mode === value ? "border-brand-500" : "border-slate-200 dark:border-slate-700")}
             aria-pressed={mode === value}
           >
-            <div className="text-sm font-medium">{label}</div>
-            <div className="mt-1 text-xs text-slate-500">{hint}</div>
+            <div className="text-sm font-medium">{t(label)}</div>
+            <div className="mt-1 text-xs text-slate-500">{t(hint)}</div>
           </button>
         ))}
       </div>
@@ -213,15 +216,16 @@ function EditorModeSection({ initial }: { initial: EditorModeValue }) {
 }
 
 function GoogleSection({ google }: { google: Props["google"] }) {
+  const t = useT();
   const router = useRouter();
   const toast = useToast();
   const [pending, start] = useTransition();
   return (
     <section id="google" className="card scroll-mt-4 p-5">
-      <h2 className="flex items-center gap-2 font-semibold"><Link2 size={17} /> Google Docs y Sheets</h2>
+      <h2 className="flex items-center gap-2 font-semibold"><Link2 size={17} /> {t("Google Docs y Sheets")}</h2>
       <p className="mt-0.5 text-sm text-slate-500">
-        Conecta tu cuenta para crear documentos y hojas de cálculo desde las tarjetas con <code>@docs</code> y <code>@sheets</code>.
-        Pizarro solo puede acceder a los archivos que crea él mismo (permiso <code>drive.file</code>).
+        {t("Conecta tu cuenta para crear documentos y hojas de cálculo desde las tarjetas con")} <code>@docs</code> {t("y")} <code>@sheets</code>.
+        {t("Pizarro solo puede acceder a los archivos que crea él mismo (permiso")} <code>drive.file</code>).
       </p>
       {google.message && (
         <p className={cn("mt-3 rounded-lg px-3 py-2 text-sm", google.message.ok ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300")}>
@@ -230,27 +234,27 @@ function GoogleSection({ google }: { google: Props["google"] }) {
       )}
       <div className="mt-4">
         {!google.enabled ? (
-          <p className="text-sm text-slate-500">Un administrador debe configurar <code>GOOGLE_CLIENT_ID</code> y <code>GOOGLE_CLIENT_SECRET</code> en el servidor.</p>
+          <p className="text-sm text-slate-500">{t("Un administrador debe configurar")} <code>GOOGLE_CLIENT_ID</code> {t("y")} <code>GOOGLE_CLIENT_SECRET</code> {t("en el servidor.")}</p>
         ) : google.email ? (
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-sm">Conectada como <strong>{google.email}</strong></span>
+            <span className="text-sm">{t("Conectada como")} <strong>{google.email}</strong></span>
             <button
               className="btn-secondary"
               disabled={pending}
               onClick={() =>
                 start(async () => {
                   const res = await disconnectGoogle();
-                  toast(res.ok ? "Cuenta de Google desconectada" : res.error, res.ok ? "success" : "error");
+                  toast(res.ok ? t("Cuenta de Google desconectada") : res.error, res.ok ? "success" : "error");
                   if (res.ok) router.replace("/settings#google");
                   router.refresh();
                 })
               }
             >
-              Desconectar
+              {t("Desconectar")}
             </button>
           </div>
         ) : (
-          <a href="/api/google/connect" className="btn-primary">Conectar con Google</a>
+          <a href="/api/google/connect" className="btn-primary">{t("Conectar con Google")}</a>
         )}
       </div>
     </section>
@@ -258,6 +262,7 @@ function GoogleSection({ google }: { google: Props["google"] }) {
 }
 
 function NotificationSection({ prefs }: { prefs: Props["notifications"] }) {
+  const t = useT();
   const toast = useToast();
   const [pending, start] = useTransition();
   const [notifyEmail, setNotifyEmail] = useState(prefs.notifyEmail);
@@ -265,15 +270,15 @@ function NotificationSection({ prefs }: { prefs: Props["notifications"] }) {
   const [phone, setPhone] = useState(prefs.whatsappPhone);
   return (
     <section className="card p-5">
-      <h2 className="flex items-center gap-2 font-semibold"><Bell size={17} /> Avisos de menciones</h2>
-      <p className="mt-0.5 text-sm text-slate-500">Cuando alguien te menciona con @ en una tarjeta o comentario, siempre te aparece en la campana de avisos. Además puedes recibirlo por:</p>
+      <h2 className="flex items-center gap-2 font-semibold"><Bell size={17} /> {t("Avisos de menciones")}</h2>
+      <p className="mt-0.5 text-sm text-slate-500">{t("Cuando alguien te menciona con @ en una tarjeta o comentario, siempre te aparece en la campana de avisos. Además puedes recibirlo por:")}</p>
       <form
         className="mt-4 space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
           start(async () => {
             const res = await updateNotificationPrefs({ notifyEmail, notifyWhatsapp, whatsappPhone: phone });
-            toast(res.ok ? "Preferencias guardadas" : res.error, res.ok ? "success" : "error");
+            toast(res.ok ? t("Preferencias guardadas") : res.error, res.ok ? "success" : "error");
           });
         }}
       >
@@ -281,7 +286,7 @@ function NotificationSection({ prefs }: { prefs: Props["notifications"] }) {
           <input type="checkbox" className="mt-0.5" checked={notifyEmail} onChange={(e) => setNotifyEmail(e.target.checked)} />
           <span>
             Email
-            {!prefs.emailAvailable && <span className="block text-xs text-slate-500">El envío de emails aún no está configurado en el servidor.</span>}
+            {!prefs.emailAvailable && <span className="block text-xs text-slate-500">{t("El envío de emails aún no está configurado en el servidor.")}</span>}
           </span>
         </label>
         <label className="flex items-start gap-2 text-sm">
@@ -290,24 +295,25 @@ function NotificationSection({ prefs }: { prefs: Props["notifications"] }) {
             WhatsApp
             <span className="block text-xs text-slate-500">
               {prefs.whatsappAvailable
-                ? "Al activarlo aceptas recibir estos avisos en tu número de WhatsApp."
-                : "El envío por WhatsApp aún no está configurado en el servidor; tu preferencia se guardará para cuando lo esté."}
+                ? t("Al activarlo aceptas recibir estos avisos en tu número de WhatsApp.")
+                : t("El envío por WhatsApp aún no está configurado en el servidor; tu preferencia se guardará para cuando lo esté.")}
             </span>
           </span>
         </label>
         {notifyWhatsapp && (
           <div className="max-w-xs">
-            <label className="label" htmlFor="wa-phone">Número de WhatsApp (formato internacional)</label>
+            <label className="label" htmlFor="wa-phone">{t("Número de WhatsApp (formato internacional)")}</label>
             <input id="wa-phone" type="tel" inputMode="tel" className="input" placeholder="+34600111222" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />
           </div>
         )}
-        <button className="btn-primary" disabled={pending}>Guardar avisos</button>
+        <button className="btn-primary" disabled={pending}>{t("Guardar avisos")}</button>
       </form>
     </section>
   );
 }
 
 function TemplateList({ kind, title, initial, placeholder }: { kind: "HEADER" | "FOOTER"; title: string; initial: TemplateOption[]; placeholder: string }) {
+  const t = useT();
   const toast = useToast();
   const [items, setItems] = useState(initial);
   const [editing, setEditing] = useState<string | "new" | null>(null);
@@ -315,9 +321,9 @@ function TemplateList({ kind, title, initial, placeholder }: { kind: "HEADER" | 
   const [preview, setPreview] = useState(false);
   const [pending, start] = useTransition();
 
-  const open = (t?: TemplateOption) => {
-    setEditing(t ? t.id : "new");
-    setForm(t ? { name: t.name, content: t.content } : { name: "", content: "" });
+  const open = (tpl?: TemplateOption) => {
+    setEditing(tpl ? tpl.id : "new");
+    setForm(tpl ? { name: tpl.name, content: tpl.content } : { name: "", content: "" });
     setPreview(false);
   };
 
@@ -330,10 +336,10 @@ function TemplateList({ kind, title, initial, placeholder }: { kind: "HEADER" | 
       } else if (editing) {
         const res = await updateReleaseTemplate(editing, form);
         if (!res.ok) return toast(res.error, "error");
-        setItems((l) => l.map((t) => (t.id === editing ? { ...t, name: form.name.trim(), content: form.content } : t)));
+        setItems((l) => l.map((x) => (x.id === editing ? { ...x, name: form.name.trim(), content: form.content } : x)));
       }
       setEditing(null);
-      toast("Plantilla guardada");
+      toast(t("Plantilla guardada"));
     });
 
   return (
@@ -342,37 +348,37 @@ function TemplateList({ kind, title, initial, placeholder }: { kind: "HEADER" | 
         <h3 className="text-sm font-semibold">{title}</h3>
         {editing === null && (
           <button className="btn-ghost py-1 text-xs" onClick={() => open()}>
-            <Plus size={14} /> Añadir
+            <Plus size={14} /> {t("Añadir")}
           </button>
         )}
       </div>
       <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-        {items.map((t) => (
-          <li key={t.id} className="flex items-start gap-2 px-3 py-2">
+        {items.map((tpl) => (
+          <li key={tpl.id} className="flex items-start gap-2 px-3 py-2">
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">{t.name}</div>
-              <p className="line-clamp-2 font-mono text-xs whitespace-pre-wrap text-slate-500">{t.content || "(vacía)"}</p>
+              <div className="text-sm font-medium">{tpl.name}</div>
+              <p className="line-clamp-2 font-mono text-xs whitespace-pre-wrap text-slate-500">{tpl.content || t("(vacía)")}</p>
             </div>
-            <button className="btn-icon h-7 w-7" onClick={() => open(t)} aria-label={`Editar ${t.name}`}><Pencil size={14} /></button>
+            <button className="btn-icon h-7 w-7" onClick={() => open(tpl)} aria-label={t("Editar {name}", { name: tpl.name })}><Pencil size={14} /></button>
             <button
               className="btn-icon h-7 w-7 hover:text-red-600"
-              aria-label={`Borrar ${t.name}`}
+              aria-label={t("Borrar {name}", { name: tpl.name })}
               onClick={async () => {
-                if (!window.confirm(`¿Borrar «${t.name}»?`)) return;
-                const res = await deleteReleaseTemplate(t.id);
+                if (!window.confirm(t("¿Borrar «{name}»?", { name: tpl.name }))) return;
+                const res = await deleteReleaseTemplate(tpl.id);
                 if (!res.ok) return toast(res.error, "error");
-                setItems((l) => l.filter((x) => x.id !== t.id));
+                setItems((l) => l.filter((x) => x.id !== tpl.id));
               }}
             >
               <Trash2 size={14} />
             </button>
           </li>
         ))}
-        {items.length === 0 && <li className="px-3 py-2 text-sm text-slate-500">Ninguna todavía.</li>}
+        {items.length === 0 && <li className="px-3 py-2 text-sm text-slate-500">{t("Ninguna todavía.")}</li>}
       </ul>
       {editing !== null && (
         <div className="mt-3 space-y-2 rounded-lg border border-brand-500/40 p-3">
-          <input className="input" placeholder="Nombre (p. ej. «Para el equipo de negocio»)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60} autoFocus />
+          <input className="input" placeholder={t("Nombre (p. ej. «Para el equipo de negocio»)")} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60} autoFocus />
           <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 text-xs dark:bg-slate-800">
             {[false, true].map((p) => (
               <button
@@ -380,7 +386,7 @@ function TemplateList({ kind, title, initial, placeholder }: { kind: "HEADER" | 
                 onClick={() => setPreview(p)}
                 className={cn("flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1 font-medium", preview === p ? "bg-white shadow-sm dark:bg-slate-900" : "text-slate-500")}
               >
-                {p ? <><Eye size={13} /> Vista previa</> : <><Pencil size={13} /> Editar</>}
+                {p ? <><Eye size={13} /> {t("Vista previa")}</> : <><Pencil size={13} /> {t("Editar")}</>}
               </button>
             ))}
           </div>
@@ -390,8 +396,8 @@ function TemplateList({ kind, title, initial, placeholder }: { kind: "HEADER" | 
             <textarea className="input field-sizing-content min-h-28 font-mono text-[13px]" value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} maxLength={20000} placeholder={placeholder} />
           )}
           <div className="flex gap-2">
-            <button className="btn-primary py-1.5" onClick={save} disabled={pending || !form.name.trim()}><Check size={15} /> Guardar</button>
-            <button className="btn-ghost py-1.5" onClick={() => setEditing(null)}><X size={15} /> Cancelar</button>
+            <button className="btn-primary py-1.5" onClick={save} disabled={pending || !form.name.trim()}><Check size={15} /> {t("Guardar")}</button>
+            <button className="btn-ghost py-1.5" onClick={() => setEditing(null)}><X size={15} /> {t("Cancelar")}</button>
           </div>
         </div>
       )}
@@ -414,6 +420,7 @@ function applyAccent(value: AccentValue) {
 }
 
 function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: CardStyleValue; initialTheme: ThemeValue; initialAccent: AccentValue }) {
+  const t = useT();
   const router = useRouter();
   const toast = useToast();
   const [style, setStyle] = useState(initial);
@@ -455,9 +462,9 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
   const sample = "#6366f1";
   return (
     <section className="card p-5">
-      <h2 className="flex items-center gap-2 font-semibold"><Palette size={17} /> Apariencia</h2>
-      <h3 className="mt-4 text-sm font-semibold">Tema</h3>
-      <p className="mt-0.5 text-sm text-slate-500">«Sistema» sigue el modo claro u oscuro de tu dispositivo.</p>
+      <h2 className="flex items-center gap-2 font-semibold"><Palette size={17} /> {t("Apariencia")}</h2>
+      <h3 className="mt-4 text-sm font-semibold">{t("Tema")}</h3>
+      <p className="mt-0.5 text-sm text-slate-500">{t("«Sistema» sigue el modo claro u oscuro de tu dispositivo.")}</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
         {([
           ["SYSTEM", "Sistema", Monitor],
@@ -470,13 +477,13 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
             className={cn("flex items-center gap-2 rounded-xl border-2 p-3 text-left text-sm", theme === value ? "border-brand-500" : "border-slate-200 dark:border-slate-700")}
             aria-pressed={theme === value}
           >
-            <Icon size={16} /> {label}
+            <Icon size={16} /> {t(label)}
           </button>
         ))}
       </div>
-      <h3 className="mt-6 text-sm font-semibold">Color de acento</h3>
-      <p className="mt-0.5 text-sm text-slate-500">Color de botones, enlaces y selecciones en toda la app.</p>
-      <div role="radiogroup" aria-label="Color de acento" className="mt-3 flex flex-wrap gap-4">
+      <h3 className="mt-6 text-sm font-semibold">{t("Color de acento")}</h3>
+      <p className="mt-0.5 text-sm text-slate-500">{t("Color de botones, enlaces y selecciones en toda la app.")}</p>
+      <div role="radiogroup" aria-label={t("Color de acento")} className="mt-3 flex flex-wrap gap-4">
         {ACCENTS.map(({ value, label, swatch }) => (
           <button
             key={value}
@@ -496,12 +503,12 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
             >
               {accent === value && <Check size={16} className={value === "MONO" ? "text-white mix-blend-difference" : "text-white"} />}
             </span>
-            <span className={accent === value ? "font-semibold" : "text-slate-600 dark:text-slate-400"}>{label}</span>
+            <span className={accent === value ? "font-semibold" : "text-slate-600 dark:text-slate-400"}>{t(label)}</span>
           </button>
         ))}
       </div>
-      <h3 className="mt-6 text-sm font-semibold">Tarjetas</h3>
-      <p className="mt-0.5 text-sm text-slate-500">Cómo se muestra el color de cada tarjeta en el tablero.</p>
+      <h3 className="mt-6 text-sm font-semibold">{t("Tarjetas")}</h3>
+      <p className="mt-0.5 text-sm text-slate-500">{t("Cómo se muestra el color de cada tarjeta en el tablero.")}</p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {([
           ["STRIPE", "Franja a la izquierda"],
@@ -518,9 +525,9 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
               style={value === "FILLED" ? { backgroundColor: `${sample}26`, borderColor: `${sample}66` } : undefined}
             >
               {value === "STRIPE" && <span className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: sample }} />}
-              Tarjeta de ejemplo
+              {t("Tarjeta de ejemplo")}
             </div>
-            <div className="mt-2 text-sm">{label}</div>
+            <div className="mt-2 text-sm">{t(label)}</div>
           </button>
         ))}
       </div>
