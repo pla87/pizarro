@@ -2,7 +2,39 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
-## v1.11.0 — 2026-10-20
+## v1.12.0 — 2026-10-20 23:46
+
+Pizarro en inglés, descripciones con formato (Markdown o barra de formato), informe PDF más útil con descarga en móvil, cambios casi al instante entre pestañas, borradores automáticos, colores de acento, releases numeradas y deshacer por tarea.
+
+### Nuevas funcionalidades
+
+- Idioma: español o inglés en «Mi perfil y plantillas» (interfaz, mensajes, fechas, informe PDF y emails de aviso).
+- Descripciones con formato: se ven formateadas al no editarlas y se escriben en Markdown o con barra de formato (negrita, cursiva, subrayado, tachado, título, subtítulo, texto normal y listas), a elegir en el perfil. Pegar Markdown lo convierte en formato.
+- Colores de acento: Azul, Verde bosque, Siena, Mostaza y Blanco y negro, en claro y oscuro; la barra de subtareas contrasta con cada uno.
+- Colores de tarjeta nuevos: blanco, marrón, verde oscuro y azul marino.
+- Releases numeradas por proyecto: los códigos llevan el número (R32M4) y el histórico lo muestra.
+- Borradores: la tarea que creas o editas se guarda cada 5 s en el navegador y se reabre si cerraste la página sin cancelar ni guardar.
+- Móvil: botón Guardar fijo abajo a la derecha (con Archivar y Borrar) que guarda el título y la descripción tal como estén escritos.
+
+### Mejoras
+
+- Informe PDF más corto y útil: resumen con 4 cifras, lo pendiente por columna, plazos, entregables, carga, terminadas recientes y últimas releases (solo las secciones con contenido). En móvil se genera en la app con botones Descargar y Abrir.
+- Los cambios de otras pestañas y personas aparecen casi al instante (menos de un segundo).
+- Deshacer con contexto: con una tarea abierta deshace solo lo de esa tarea; crear una tarea con sus adjuntos cuenta como una acción; el botón ya no queda borroso detrás del modal y el aviso lleva el icono de deshacer.
+- «Respuesta» es un tipo general como los demás y se puede borrar.
+- Historial de versiones con la hora de cada lanzamiento.
+
+### Correcciones
+
+- Error de React #418 en la página de releases (y en avisos): las fechas se formatean con la misma zona horaria en servidor y navegador.
+- El recuadro de foco de las opciones del menú lateral ya no se corta.
+- Espacio a la izquierda del candado de los proyectos privados.
+
+### Cambios técnicos / DB
+
+- Migración v1_12: User.accent/locale/editorMode, Release.number (rellenado por fecha), UndoEntry.taskId y se elimina TaskKind.system. i18n propio (src/i18n, clave = texto en español, npm run i18n:check). Canal SSE /api/projects/[id]/events. Editor TipTap 3 con @tiptap/markdown. changelog.json con releasedAt.
+
+## v1.11.0 — 2026-10-20 19:10
 
 Deshacer las 10 últimas acciones, avisos para trabajar varios a la vez, subtareas al crear y reordenables, indicador «Guardado», candado de privados y recarga automática tras desplegar.
 
@@ -31,7 +63,7 @@ Deshacer las 10 últimas acciones, avisos para trabajar varios a la vez, subtare
 
 - Migración v1_11: UndoEntry y Task.contentUpdatedAt/contentUpdatedById. Operaciones inversas por acción (src/lib/undo.ts) guardadas por runAction; los ficheros de adjuntos borrados se conservan mientras su entrada exista. buildId propio y /api/version. Presencia por tarea en memoria (/api/tasks/[id]/viewers).
 
-## v1.10.0 — 2026-10-19
+## v1.10.0 — 2026-10-19 22:57
 
 Barra de progreso de subtareas, dos tareas a la vez en escritorio, Ctrl+Enter para crear, quién está activo en el tablero, sacar tareas de la sección de fijas, logs con solo cambios por defecto y borrado de usuarios.
 
@@ -57,7 +89,7 @@ Barra de progreso de subtareas, dos tareas a la vez en escritorio, Ctrl+Enter pa
 
 - Presencia en memoria alimentada por los logs (GET /api/projects/[id]/presence, sin registro). Pila de modales con Escape y fondo para el de más arriba. purgeProject compartido entre borrar proyecto y borrar usuario.
 
-## v1.9.0 — 2026-10-19
+## v1.9.0 — 2026-10-19 19:55
 
 Arrastrar tareas a la sección de fijas, logs con acciones legibles y privacidad de los proyectos privados, búsqueda en todo el histórico de releases, bloqueo y borrado de privados huérfanos y columnas hasta abajo en móvil.
 
@@ -83,7 +115,7 @@ Arrastrar tareas a la sección de fijas, logs con acciones legibles y privacidad
 
 - Migración v1_9: Project.privateBlockedAt, ReleaseAttachment.isImage y AppLog.privateOwnerId. Tarea de mantenimiento horaria (instrumentation register). Contexto por acción (AsyncLocalStorage) para el texto y el proyecto de cada log.
 
-## v1.8.0 — 2026-10-19
+## v1.8.0 — 2026-10-19 18:25
 
 Proyectos privados, tipos generales por proyecto, plantillas de proyecto, tareas fijas en la release, adjuntos de cualquier tipo con arrastrar y soltar, buscadores, automatización de tipos y cambio de columna deslizando en móvil.
 
@@ -111,7 +143,7 @@ Proyectos privados, tipos generales por proyecto, plantillas de proyecto, tareas
 
 - Migración v1_8: Project.privateOwnerId, ProjectHiddenKind, ProjectTemplate, Task.evergreen, TaskKind (titleTemplate, descriptionTemplate, system) y TaskAttachment (mimeType, isImage, medidas opcionales). Los ficheros que no son imagen se guardan tal cual (<id>.bin) y se sirven siempre como descarga con tipo restringido.
 
-## v1.7.0 — 2026-10-18
+## v1.7.0 — 2026-10-19 00:38
 
 Logs de administración, archivadas en un modal con recuperación a su columna, borrado de releases y adjuntos del histórico, tipo «Respuesta» y columnas que llenan la pantalla.
 
@@ -138,7 +170,7 @@ Logs de administración, archivadas en un modal con recuperación a su columna, 
 
 - Migración v1_7: tabla AppLog y Task.archivedFromColumnId. Registro en lote (sin coste por petición) y purga automática (LOG_RETENTION_DAYS).
 
-## v1.6.0 — 2026-10-18
+## v1.6.0 — 2026-10-19 00:08
 
 Tema claro u oscuro por usuario, sección de Administración, marcar una columna entera, releases numeradas por día con adjuntos en el histórico y modal de tarea compacto.
 
@@ -165,7 +197,7 @@ Tema claro u oscuro por usuario, sección de Administración, marcar una columna
 - Migración v1_6: User.theme (enum Theme) y tabla ReleaseAttachment (copias en UPLOAD_DIR/releases); al borrar un proyecto se borran también esos ficheros.
 - Variante dark de Tailwind por atributo data-theme con respaldo prefers-color-scheme.
 
-## v1.5.0 — 2026-10-18
+## v1.5.0 — 2026-10-18 22:47
 
 Pizarro (nuevo nombre), releases con códigos, descripciones y adjuntos en ZIP, visor de imágenes, borrado en grupo, botón atrás y mejoras en móvil.
 
@@ -195,7 +227,7 @@ Pizarro (nuevo nombre), releases con códigos, descripciones y adjuntos en ZIP, 
 - Ruta POST /api/projects/[id]/release-attachments que genera el ZIP en el servidor (sin dependencias nuevas) y acciones getReleaseTaskDetails y deleteTasks.
 - Se mantienen los identificadores técnicos con el nombre anterior (cookies, base de datos y clave de cifrado) para no cerrar sesiones ni invalidar tokens guardados.
 
-## v1.4.0 — 2026-10-18
+## v1.4.0 — 2026-10-18 18:14
 
 Tipos de tarea exclusivos de cada proyecto.
 
@@ -211,7 +243,7 @@ Tipos de tarea exclusivos de cada proyecto.
 
 - Migración v1_4: TaskKind.projectId (opcional, se borra con el proyecto); el nombre deja de ser único global y pasa a serlo entre los generales y dentro de cada proyecto (índices parciales sin distinguir mayúsculas).
 
-## v1.3.1 — 2026-10-18
+## v1.3.1 — 2026-10-18 17:56
 
 Ver la contraseña al escribirla y corrección en «Crear varias tareas».
 
@@ -223,7 +255,7 @@ Ver la contraseña al escribirla y corrección en «Crear varias tareas».
 
 - Crear varias tareas: «Tipo para todas» cambia ahora todas las líneas, también las que se habían cambiado a mano.
 
-## v1.3.0 — 2026-10-18
+## v1.3.0 — 2026-10-18 17:45
 
 Crear varias tareas pegando una lista, formularios más compactos en móvil y entregables en un modal.
 
@@ -243,7 +275,7 @@ Crear varias tareas pegando una lista, formularios más compactos en móvil y en
 
 - Acción createTasks: alta en bloque en una transacción (createManyAndReturn), máximo 100 tareas.
 
-## v1.2.0 — 2026-10-18
+## v1.2.0 — 2026-10-18 17:11
 
 Tipos de tarea configurables, varias plantillas de release, app instalable en el móvil y mejoras de uso en móvil y escritorio.
 
@@ -270,7 +302,7 @@ Tipos de tarea configurables, varias plantillas de release, app instalable en el
 - Migración v1_2: tabla TaskKind (Feature/Chore/Refactor → Funcionalidad; Fix/Hotfix → Corrección), tabla ReleaseTemplate (migra las plantillas existentes) y User.cardStyle.
 - Manifiesto web, iconos PNG (incl. maskable y apple-touch-icon) y service worker mínimo sin caché; la imagen Docker incluye public/.
 
-## v1.1.2 — 2026-10-18
+## v1.1.2 — 2026-10-18 14:19
 
 Mensaje claro en los logs si faltan variables de entorno al arrancar.
 
@@ -278,7 +310,7 @@ Mensaje claro en los logs si faltan variables de entorno al arrancar.
 
 - Al arrancar se comprueban DATABASE_URL y SESSION_SECRET: si faltan, los logs indican cuál y cómo configurarla, en lugar de reiniciarse en bucle con un error de Prisma.
 
-## v1.1.1 — 2026-10-18
+## v1.1.1 — 2026-10-18 14:11
 
 Compatibilidad del build Docker con Railway.
 
@@ -286,7 +318,7 @@ Compatibilidad del build Docker con Railway.
 
 - Dockerfile sin cachés de BuildKit (--mount=type=cache), que el builder de Railway rechaza si no llevan su identificador de servicio.
 
-## v1.1.0 — 2026-10-18
+## v1.1.0 — 2026-10-18 13:56
 
 Informe PDF del proyecto, plazos y entregables, Google Docs/Sheets desde las tarjetas y menciones con avisos.
 
@@ -311,7 +343,7 @@ Informe PDF del proyecto, plazos y entregables, Google Docs/Sheets desde las tar
 - Envío de avisos tras responder (after) para no añadir espera; SMTP con nodemailer y WhatsApp Cloud API con plantilla.
 - Nuevas variables opcionales: GOOGLE_*, SMTP_*, WHATSAPP_* y APP_TIMEZONE.
 
-## v1.0.0 — 2026-10-18
+## v1.0.0 — 2026-10-18 13:25
 
 Primera versión de Pizarro: kanban multiproyecto y generador de release notes.
 

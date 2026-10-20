@@ -12,7 +12,6 @@ import { createSession, requireUser } from "@/lib/session";
 import { disconnectGoogleAccount } from "@/lib/google";
 import { rateLimit } from "@/lib/rate-limit";
 import * as v from "@/lib/validation";
-import { getT } from "@/i18n/server";
 
 export async function updateProfileName(name: string) {
   return runAction({ name: "profile.updateProfileName", args: [name] }, async () => {

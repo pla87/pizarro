@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { reportClientError } from "@/components/clientErrors";
 import { makeT, type Locale } from "@/i18n/core";
 
@@ -8,8 +8,11 @@ import { makeT, type Locale } from "@/i18n/core";
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => reportClientError("global-error", error, error.digest), [error]);
   // Sin proveedor (el layout raíz ha fallado): el idioma se deduce del navegador.
-  const [locale, setLocale] = useState<Locale>("es");
-  useEffect(() => setLocale(/^en\b/i.test(navigator.language) ? "en" : "es"), []);
+  const locale = useSyncExternalStore<Locale>(
+    () => () => {},
+    () => (/^en\b/i.test(navigator.language) ? "en" : "es"),
+    () => "es",
+  );
   const t = makeT(locale);
   return (
     <html lang={locale}>

@@ -1,6 +1,38 @@
 {
   "versions": [
     {
+      "version": "1.12.0",
+      "date": "2026-10-20",
+      "releasedAt": "2026-10-20T23:46:48+02:00",
+      "summary": "Pizarro en inglés, descripciones con formato (Markdown o barra de formato), informe PDF más útil con descarga en móvil, cambios casi al instante entre pestañas, borradores automáticos, colores de acento, releases numeradas y deshacer por tarea.",
+      "changes": {
+        "nuevas": [
+          "Idioma: español o inglés en «Mi perfil y plantillas» (interfaz, mensajes, fechas, informe PDF y emails de aviso).",
+          "Descripciones con formato: se ven formateadas al no editarlas y se escriben en Markdown o con barra de formato (negrita, cursiva, subrayado, tachado, título, subtítulo, texto normal y listas), a elegir en el perfil. Pegar Markdown lo convierte en formato.",
+          "Colores de acento: Azul, Verde bosque, Siena, Mostaza y Blanco y negro, en claro y oscuro; la barra de subtareas contrasta con cada uno.",
+          "Colores de tarjeta nuevos: blanco, marrón, verde oscuro y azul marino.",
+          "Releases numeradas por proyecto: los códigos llevan el número (R32M4) y el histórico lo muestra.",
+          "Borradores: la tarea que creas o editas se guarda cada 5 s en el navegador y se reabre si cerraste la página sin cancelar ni guardar.",
+          "Móvil: botón Guardar fijo abajo a la derecha (con Archivar y Borrar) que guarda el título y la descripción tal como estén escritos."
+        ],
+        "mejoras": [
+          "Informe PDF más corto y útil: resumen con 4 cifras, lo pendiente por columna, plazos, entregables, carga, terminadas recientes y últimas releases (solo las secciones con contenido). En móvil se genera en la app con botones Descargar y Abrir.",
+          "Los cambios de otras pestañas y personas aparecen casi al instante (menos de un segundo).",
+          "Deshacer con contexto: con una tarea abierta deshace solo lo de esa tarea; crear una tarea con sus adjuntos cuenta como una acción; el botón ya no queda borroso detrás del modal y el aviso lleva el icono de deshacer.",
+          "«Respuesta» es un tipo general como los demás y se puede borrar.",
+          "Historial de versiones con la hora de cada lanzamiento."
+        ],
+        "correcciones": [
+          "Error de React #418 en la página de releases (y en avisos): las fechas se formatean con la misma zona horaria en servidor y navegador.",
+          "El recuadro de foco de las opciones del menú lateral ya no se corta.",
+          "Espacio a la izquierda del candado de los proyectos privados."
+        ],
+        "tecnicos": [
+          "Migración v1_12: User.accent/locale/editorMode, Release.number (rellenado por fecha), UndoEntry.taskId y se elimina TaskKind.system. i18n propio (src/i18n, clave = texto en español, npm run i18n:check). Canal SSE /api/projects/[id]/events. Editor TipTap 3 con @tiptap/markdown. changelog.json con releasedAt."
+        ]
+      }
+    },
+    {
       "version": "1.11.0",
       "date": "2026-10-20",
       "releasedAt": "2026-10-20T19:10:49+02:00",
