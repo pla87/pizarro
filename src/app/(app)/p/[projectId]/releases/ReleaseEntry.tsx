@@ -9,6 +9,7 @@ import { cn } from "@/components/ui/cn";
 import { Markdown } from "@/components/ui/Markdown";
 import { useToast } from "@/components/ui/Toast";
 import { releaseFileName } from "@/lib/release";
+import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 
 interface Props {
@@ -16,6 +17,8 @@ interface Props {
 }
 
 export function ReleaseEntry({ release }: Props) {
+  const t = useT();
+  const locale = useIntlLocale();
   const [open, setOpen] = useState(false);
   const toast = useToast();
   const router = useRouter();
@@ -25,24 +28,24 @@ export function ReleaseEntry({ release }: Props) {
   const date = new Date(release.deployedAt);
 
   const remove = async () => {
-    if (!window.confirm(`¿Borrar la release «${release.title}» del histórico? Se borran también sus adjuntos. Las tareas no cambian.`)) return;
+    if (!window.confirm(t("¿Borrar la release «{title}» del histórico? Se borran también sus adjuntos. Las tareas no cambian.", { title: release.title }))) return;
     setBusy(true);
     const res = await deleteRelease(release.id);
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
     setRemoved(true);
-    toast("Release borrada");
+    toast(t("Release borrada"));
     router.refresh();
   };
 
   const removeAttachments = async () => {
-    if (!window.confirm(`¿Borrar los ${attachments.length} adjuntos de esta release? El texto se conserva.`)) return;
+    if (!window.confirm(t("¿Borrar los {n} adjuntos de esta release? El texto se conserva.", { n: attachments.length }))) return;
     setBusy(true);
     const res = await deleteReleaseAttachments(release.id);
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
     setAttachments([]);
-    toast("Adjuntos borrados");
+    toast(t("Adjuntos borrados"));
     router.refresh();
   };
 
@@ -56,9 +59,9 @@ export function ReleaseEntry({ release }: Props) {
             {release.title}
           </h2>
           <p className="text-xs text-slate-500">
-            {formatDate(date, "dateTime")}
-            {release.author && ` · ${release.author}`} · {release.taskCount === 1 ? "1 tarea" : `${release.taskCount} tareas`}
-            {attachments.length > 0 && ` · ${attachments.length === 1 ? "1 adjunto" : `${attachments.length} adjuntos`}`}
+            {formatDate(date, "dateTime", locale)}
+            {release.author && ` · ${release.author}`} · {release.taskCount === 1 ? t("1 tarea") : t("{n} tareas", { n: release.taskCount })}
+            {attachments.length > 0 && ` · ${attachments.length === 1 ? t("1 adjunto") : t("{n} adjuntos", { n: attachments.length })}`}
           </p>
         </div>
         <ChevronDown size={18} className={cn("shrink-0 text-slate-400 transition-transform", open && "rotate-180")} />
@@ -66,8 +69,8 @@ export function ReleaseEntry({ release }: Props) {
       {open && (
         <div className="border-t border-slate-200 px-4 py-3 dark:border-slate-800">
           <div className="mb-3 flex flex-wrap gap-2">
-            <button className="btn-secondary py-1.5" onClick={async () => toast(await copyText(release.content) ? "Copiado al portapapeles" : "No se pudo copiar")}>
-              <ClipboardCopy size={15} /> Copiar
+            <button className="btn-secondary py-1.5" onClick={async () => toast(await copyText(release.content) ? t("Copiado al portapapeles") : t("No se pudo copiar"))}>
+              <ClipboardCopy size={15} /> {t("Copiar")}
             </button>
             <button className="btn-secondary py-1.5" onClick={() => downloadText(release.content, releaseFileName(date, "md"), "text/markdown")}>
               <Download size={15} /> .md
@@ -76,19 +79,19 @@ export function ReleaseEntry({ release }: Props) {
               <Download size={15} /> .txt
             </button>
             <button className="btn-secondary py-1.5 text-red-600 dark:text-red-400 sm:ml-auto" disabled={busy} onClick={remove}>
-              <Trash2 size={15} /> Borrar release
+              <Trash2 size={15} /> {t("Borrar release")}
             </button>
           </div>
           {attachments.length > 0 && (
             <div className="mb-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium">Adjuntos ({attachments.length})</span>
+                <span className="text-sm font-medium">{t("Adjuntos ({n})", { n: attachments.length })}</span>
                 <div className="ml-auto flex flex-wrap gap-2">
                   <a className="btn-secondary py-1.5" href={`/api/releases/${release.id}/attachments`} download>
-                    <FileArchive size={15} /> Descargar adjuntos
+                    <FileArchive size={15} /> {t("Descargar adjuntos")}
                   </a>
                   <button className="btn-secondary py-1.5 text-red-600 dark:text-red-400" disabled={busy} onClick={removeAttachments}>
-                    <Trash2 size={15} /> Borrar adjuntos
+                    <Trash2 size={15} /> {t("Borrar adjuntos")}
                   </button>
                 </div>
               </div>

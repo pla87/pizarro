@@ -4,9 +4,13 @@ import { listKinds } from "@/lib/board";
 import { dateToIso } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
+import { getT } from "@/i18n/server";
 import { ProjectSettings } from "./ProjectSettings";
 
-export const metadata = { title: "Ajustes del proyecto" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("Ajustes del proyecto") };
+}
 
 export default async function ProjectSettingsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const user = await requireUserPage();

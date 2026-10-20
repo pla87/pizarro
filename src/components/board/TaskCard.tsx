@@ -7,7 +7,7 @@ import { isWhite } from "@/lib/constants";
 import { dueStatus, formatDay } from "@/lib/dates";
 import { memo } from "react";
 import type { BoardTask } from "@/lib/types";
-import { useT } from "@/i18n/client";
+import { useIntlLocale, useT } from "@/i18n/client";
 import { Avatar } from "../ui/Avatar";
 import { cn } from "../ui/cn";
 import { TypeBadge } from "../ui/TypeBadge";
@@ -49,6 +49,7 @@ export function SortableTaskCard({ id }: { id: string }) {
 
 export const TaskCard = memo(function TaskCard({ task, overlay = false, handle = null }: { task: BoardTask; overlay?: boolean; handle?: React.ReactNode }) {
   const { users, labels, openTask, selected, toggleSelected, columns, today, kindById, cardStyle } = useBoard();
+  const locale = useIntlLocale();
   const t = useT();
   const done = columns.find((c) => c.id === task.columnId)?.isDone ?? false;
   const due = dueStatus(task.dueDate, done, today);
@@ -127,7 +128,7 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
             )}
             title={due === "overdue" ? t("Plazo vencido") : t("Fecha límite")}
           >
-            <CalendarClock size={12} /> {due === "today" ? t("Hoy") : formatDay(task.dueDate, today)}
+            <CalendarClock size={12} /> {due === "today" ? t("Hoy") : formatDay(task.dueDate, today, locale)}
           </span>
         )}
         {task.hasDescription && <AlignLeft size={13} aria-label={t("Con descripción")} />}

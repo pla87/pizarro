@@ -9,6 +9,7 @@ import { AppError, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
 import { requireAdmin, requireUser } from "@/lib/session";
 import * as v from "@/lib/validation";
+import { getT } from "@/i18n/server";
 
 const kindSchema = z.object({
   name: v.name.max(40, "Máximo 40 caracteres."),
@@ -71,7 +72,10 @@ export async function createKind(input: KindInput, projectId?: string | null) {
     await authorize(scope);
     const data = kindSchema.parse(input);
     await assertUniqueName(data.name, scope);
-    if ((await db.taskKind.count({ where: { projectId: scope } })) >= MAX_KINDS) throw new AppError(`Máximo ${MAX_KINDS} tipos de tarea.`);
+    if ((await db.taskKind.count({ where: { projectId: scope } })) >= MAX_KINDS) {
+      const t = await getT();
+      throw new AppError(t("Máximo {n} tipos de tarea.", { n: MAX_KINDS }));
+    }
     const last = await db.taskKind.findFirst({ where: { projectId: scope }, orderBy: { position: "desc" }, select: { position: true } });
     const kind = await db.taskKind.create({
       data: { ...data, projectId: scope, position: (last?.position ?? 0) + POSITION_STEP },

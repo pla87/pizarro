@@ -18,6 +18,7 @@ import { createDriveFile, type GoogleFileKind } from "@/lib/google";
 import { extractMentionIds } from "@/lib/mentions";
 import { notifyMentions } from "@/lib/notify";
 import type { ArchivedTask, CommentInfo, SubtaskInfo, TaskDetail, TaskLinkInfo } from "@/lib/types";
+import { getT } from "@/i18n/server";
 
 async function assertColumnInProject(columnId: string, projectId: string) {
   const ok = await db.column.count({ where: { id: columnId, projectId } });
@@ -146,7 +147,7 @@ export async function createTask(input: z.input<typeof createSchema>) {
 const createManySchema = z.object({
   projectId: v.id,
   columnId: v.id,
-  tasks: z.array(z.object({ title: v.title, kindId: v.id })).min(1, "No hay tareas que crear.").max(MAX_BULK_TASKS, `Máximo ${MAX_BULK_TASKS} tareas de una vez.`),
+  tasks: z.array(z.object({ title: v.title, kindId: v.id })).min(1, "No hay tareas que crear.").max(MAX_BULK_TASKS, "Máximo 100 tareas de una vez."),
   assigneeId: v.id.nullable().default(null),
   labelIds: z.array(v.id).max(20).default([]),
   dueDate: v.dayIso.default(null),
@@ -225,7 +226,8 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
       const base = since ? new Date(since).getTime() : 0;
       if (current.contentUpdatedAt && current.contentUpdatedById !== user.id && current.contentUpdatedAt.getTime() > base) {
         const who = current.contentUpdatedById ? (await db.user.findUnique({ where: { id: current.contentUpdatedById }, select: { name: true } }))?.name : null;
-        throw new AppError(`${who ?? "Otra persona"} ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos.`, 409);
+        const t = await getT();
+        throw new AppError(who ? t("{who} ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos.", { who }) : t("Otra persona ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos."), 409);
       }
     }
     if (data.assigneeId) await assertAssignable(projectId, data.assigneeId);

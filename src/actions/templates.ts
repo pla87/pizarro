@@ -10,6 +10,7 @@ import { POSITION_STEP } from "@/lib/positions";
 import { parseStoredTemplate, templateInputSchema, type TemplateDto, type TemplateInput } from "@/lib/project-templates";
 import { requireAdmin } from "@/lib/session";
 import * as v from "@/lib/validation";
+import { getT } from "@/i18n/server";
 
 const MAX_TEMPLATES = 50;
 
@@ -35,7 +36,10 @@ export async function saveTemplate(input: TemplateInput, templateId?: string | n
       revalidatePath("/admin/templates");
       return { id };
     }
-    if ((await db.projectTemplate.count()) >= MAX_TEMPLATES) throw new AppError(`Máximo ${MAX_TEMPLATES} plantillas.`);
+    if ((await db.projectTemplate.count()) >= MAX_TEMPLATES) {
+      const t = await getT();
+      throw new AppError(t("Máximo {n} plantillas.", { n: MAX_TEMPLATES }));
+    }
     const last = await db.projectTemplate.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
     const created = await db.projectTemplate.create({ data: { ...row, position: (last?.position ?? 0) + POSITION_STEP }, select: { id: true } });
     revalidatePath("/admin/templates");

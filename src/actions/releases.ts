@@ -16,6 +16,7 @@ import { requireUser } from "@/lib/session";
 import { attachmentPath, compactImage, removeReleaseAttachmentFiles, saveReleaseAttachmentFile } from "@/lib/uploads";
 import { addUndo, captureTasks } from "@/lib/undo";
 import * as v from "@/lib/validation";
+import { getT } from "@/i18n/server";
 
 const deploySchema = z.object({
   projectId: v.id,
@@ -57,7 +58,8 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
       const last = await tx.release.findFirst({ where: { projectId: data.projectId }, orderBy: { number: "desc" }, select: { number: true } });
       const number = (last?.number ?? 0) + 1;
       if (data.number && data.number !== number) {
-        throw new AppError(`Mientras tanto se ha desplegado la release ${number - 1}: vuelve a generar el texto para que los códigos lleven R${number}.`);
+        const t = await getT();
+        throw new AppError(t("Mientras tanto se ha desplegado la release {prev}: vuelve a generar el texto para que los códigos lleven R{number}.", { prev: number - 1, number }));
       }
       const release = await tx.release.create({
         data: {

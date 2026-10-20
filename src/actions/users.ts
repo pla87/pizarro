@@ -13,8 +13,9 @@ import { purgeProject } from "@/lib/project-delete";
 import { discardUndo } from "@/lib/undo";
 import { requireAdmin } from "@/lib/session";
 import * as v from "@/lib/validation";
+import { getT } from "@/i18n/server";
 
-const password = z.string().min(MIN_PASSWORD, `La contraseña debe tener al menos ${MIN_PASSWORD} caracteres.`).max(200);
+const password = z.string().min(MIN_PASSWORD, "La contraseña debe tener al menos 10 caracteres.").max(200);
 
 const createSchema = z.object({
   name: v.name,
@@ -28,7 +29,10 @@ export async function createUser(input: z.input<typeof createSchema>) {
     await requireAdmin();
     const data = createSchema.parse(input);
     const active = await db.user.count({ where: { active: true } });
-    if (active >= MAX_USERS) throw new AppError(`Se ha alcanzado el máximo de ${MAX_USERS} usuarios activos.`);
+    if (active >= MAX_USERS) {
+      const t = await getT();
+      throw new AppError(t("Se ha alcanzado el máximo de {n} usuarios activos.", { n: MAX_USERS }));
+    }
     if (await db.user.count({ where: { email: data.email } })) throw new AppError("Ya existe un usuario con ese email.");
     await db.user.create({
       data: { name: data.name, email: data.email, role: data.role, passwordHash: await hashPassword(data.password) },
@@ -55,7 +59,10 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
     }
     if (data.active && !user.active) {
       const active = await db.user.count({ where: { active: true } });
-      if (active >= MAX_USERS) throw new AppError(`Se ha alcanzado el máximo de ${MAX_USERS} usuarios activos.`);
+      if (active >= MAX_USERS) {
+      const t = await getT();
+      throw new AppError(t("Se ha alcanzado el máximo de {n} usuarios activos.", { n: MAX_USERS }));
+    }
     }
     if (await db.user.count({ where: { email: data.email, id: { not: user.id } } })) {
       throw new AppError("Ya existe un usuario con ese email.");
@@ -105,7 +112,9 @@ export async function deleteUser(userId: string, confirmPrivate: boolean) {
     if (user.id === admin.id) throw new AppError("No puedes borrarte a ti mismo.");
     const privates = await db.project.findMany({ where: { privateOwnerId: user.id }, select: { id: true } });
     if (privates.length > 0 && confirmPrivate !== true) {
-      throw new AppError(`${user.name} tiene ${privates.length === 1 ? "1 proyecto privado" : `${privates.length} proyectos privados`}: confirma que se borren.`);
+      const t = await getT();
+      const count = privates.length === 1 ? t("1 proyecto privado") : t("{n} proyectos privados", { n: privates.length });
+      throw new AppError(t("{name} tiene {count}: confirma que se borren.", { name: user.name, count }));
     }
     for (const p of privates) await purgeProject(p.id);
     await discardUndo({ userId: user.id });

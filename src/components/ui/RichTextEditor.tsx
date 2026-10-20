@@ -6,6 +6,7 @@ import { Markdown } from "@tiptap/markdown";
 import StarterKit from "@tiptap/starter-kit";
 import { Bold, Heading2, Heading3, Italic, List, ListOrdered, Pilcrow, Strikethrough, Underline } from "lucide-react";
 import { createElement, useEffect, useRef } from "react";
+import { useT } from "@/i18n/client";
 import { looksLikeMarkdown } from "@/lib/markdown-paste";
 import { cn } from "./cn";
 
@@ -23,6 +24,7 @@ interface Props {
 
 /** Editor con barra de formato (TipTap). Lee y guarda siempre Markdown. */
 export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeholder, autoFocus, className }: Props) {
+  const t = useT();
   // Callbacks siempre actuales sin recrear el editor.
   const handlers = useRef({ onChange, onSubmit, onCancel });
   useEffect(() => {
@@ -127,7 +129,7 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
         }
       }}
     >
-      <div role="toolbar" aria-label="Formato" className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 p-1 dark:border-slate-800">
+      <div role="toolbar" aria-label={t("Formato")} className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 p-1 dark:border-slate-800">
         {buttons.map((b, i) =>
           b === null ? (
             <span key={i} className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" aria-hidden />
@@ -135,8 +137,8 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
             <button
               key={b[0]}
               type="button"
-              title={b[0]}
-              aria-label={b[0].replace(/ \(.*\)$/, "")}
+              title={t(b[0])}
+              aria-label={t(b[0]).replace(/ \(.*\)$/, "")}
               aria-pressed={Boolean(b[2])}
               // mousedown no debe quitar el foco al editor
               onMouseDown={(e) => e.preventDefault()}

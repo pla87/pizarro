@@ -3,9 +3,13 @@ import { Rocket } from "lucide-react";
 import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
+import { getT } from "@/i18n/server";
 import { ReleasesList } from "./ReleasesList";
 
-export const metadata = { title: "Releases" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("Releases") };
+}
 
 const PAGE_STEP = 50;
 
@@ -21,6 +25,7 @@ export default async function ReleasesPage({
   searchParams: Promise<{ q?: string | string[]; limit?: string | string[] }>;
 }) {
   const user = await requireUserPage();
+  const t = await getT();
   const { projectId } = await params;
   const sp = await searchParams;
   const q = (Array.isArray(sp.q) ? sp.q[0] : sp.q)?.trim().slice(0, 200) ?? "";
@@ -64,12 +69,12 @@ export default async function ReleasesPage({
 
   return (
     <div className="mx-auto max-w-4xl p-4 md:p-6">
-      <h1 className="mb-1 text-xl font-semibold">Releases</h1>
-      <p className="mb-6 text-sm text-slate-500">Histórico de despliegues de «{project.name}» con el texto final editado.</p>
+      <h1 className="mb-1 text-xl font-semibold">{t("Releases")}</h1>
+      <p className="mb-6 text-sm text-slate-500">{t("Histórico de despliegues de «{name}» con el texto final editado.", { name: project.name })}</p>
       {project._count.releases === 0 ? (
         <div className="card flex flex-col items-center gap-2 p-10 text-center text-sm text-slate-500">
           <Rocket size={32} className="text-slate-300" />
-          Aún no hay releases. Genera una desde la columna «Siguiente salto a producción» del tablero.
+          {t("Aún no hay releases. Genera una desde la columna «Siguiente salto a producción» del tablero.")}
         </div>
       ) : (
         <ReleasesList

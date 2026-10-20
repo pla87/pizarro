@@ -9,6 +9,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/i18n/client";
 
 type Role = "ADMIN" | "MEMBER";
 interface UserRow {
@@ -21,6 +22,7 @@ interface UserRow {
 }
 
 export function UsersAdmin({ users, meId, maxUsers }: { users: UserRow[]; meId: string; maxUsers: number }) {
+  const t = useT();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [resetting, setResetting] = useState<UserRow | null>(null);
@@ -31,11 +33,11 @@ export function UsersAdmin({ users, meId, maxUsers }: { users: UserRow[]; meId: 
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Usuarios</h2>
-          <p className="text-sm text-slate-500">{activeCount} de {maxUsers} usuarios activos. No hay registro público: solo un administrador puede dar de alta usuarios.</p>
+          <h2 className="text-lg font-semibold">{t("Usuarios")}</h2>
+          <p className="text-sm text-slate-500">{t("{n} de {max} usuarios activos. No hay registro público: solo un administrador puede dar de alta usuarios.", { n: activeCount, max: maxUsers })}</p>
         </div>
         <button className="btn-primary ml-auto" onClick={() => setCreating(true)} disabled={activeCount >= maxUsers}>
-          <UserPlus size={16} /> Nuevo usuario
+          <UserPlus size={16} /> {t("Nuevo usuario")}
         </button>
       </div>
       <ul className="card divide-y divide-slate-200 dark:divide-slate-800">
@@ -44,18 +46,18 @@ export function UsersAdmin({ users, meId, maxUsers }: { users: UserRow[]; meId: 
             <Avatar id={u.id} name={u.name} size="md" />
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-medium">
-                {u.name} {u.id === meId && <span className="text-xs text-slate-500">(tú)</span>}
+                {u.name} {u.id === meId && <span className="text-xs text-slate-500">{t("(tú)")}</span>}
               </div>
               <div className="truncate text-xs text-slate-500">{u.email}</div>
             </div>
             <span className={cn("badge", u.role === "ADMIN" ? "bg-brand-50 text-brand-700 ring-brand-500/20" : "bg-slate-100 text-slate-600 ring-slate-500/20")}>
-              {u.role === "ADMIN" ? "Admin" : "Miembro"}
+              {u.role === "ADMIN" ? t("Admin") : t("Miembro")}
             </span>
-            {!u.active && <span className="badge bg-slate-100 text-slate-500 ring-slate-400/20">Inactivo</span>}
-            <button className="btn-icon" onClick={() => setEditing(u)} aria-label={`Editar ${u.name}`}><Pencil size={16} /></button>
-            <button className="btn-icon" onClick={() => setResetting(u)} aria-label={`Restablecer contraseña de ${u.name}`}><KeyRound size={16} /></button>
+            {!u.active && <span className="badge bg-slate-100 text-slate-500 ring-slate-400/20">{t("Inactivo")}</span>}
+            <button className="btn-icon" onClick={() => setEditing(u)} aria-label={t("Editar {name}", { name: u.name })}><Pencil size={16} /></button>
+            <button className="btn-icon" onClick={() => setResetting(u)} aria-label={t("Restablecer contraseña de {name}", { name: u.name })}><KeyRound size={16} /></button>
             {u.id !== meId && (
-              <button className="btn-icon text-red-600 dark:text-red-400" onClick={() => setDeleting(u)} aria-label={`Borrar ${u.name}`}><Trash2 size={16} /></button>
+              <button className="btn-icon text-red-600 dark:text-red-400" onClick={() => setDeleting(u)} aria-label={t("Borrar {name}", { name: u.name })}><Trash2 size={16} /></button>
             )}
           </li>
         ))}
@@ -69,6 +71,7 @@ export function UsersAdmin({ users, meId, maxUsers }: { users: UserRow[]; meId: 
 }
 
 function UserForm({ user, isMe, onClose }: { user?: UserRow; isMe?: boolean; onClose: () => void }) {
+  const t = useT();
   const router = useRouter();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -83,17 +86,17 @@ function UserForm({ user, isMe, onClose }: { user?: UserRow; isMe?: boolean; onC
     start(async () => {
       const res = user ? await updateUser(user.id, { name, email, role, active }) : await createUser({ name, email, role, password });
       if (!res.ok) return toast(res.error, "error");
-      toast(user ? "Usuario actualizado" : "Usuario creado");
+      toast(user ? t("Usuario actualizado") : t("Usuario creado"));
       router.refresh();
       onClose();
     });
   };
 
   return (
-    <Modal open onClose={onClose} title={user ? "Editar usuario" : "Nuevo usuario"} size="sm">
+    <Modal open onClose={onClose} title={user ? t("Editar usuario") : t("Nuevo usuario")} size="sm">
       <form onSubmit={submit} className="space-y-3">
         <div>
-          <label className="label" htmlFor="u-name">Nombre</label>
+          <label className="label" htmlFor="u-name">{t("Nombre")}</label>
           <input id="u-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required data-autofocus />
         </div>
         <div>
@@ -102,31 +105,31 @@ function UserForm({ user, isMe, onClose }: { user?: UserRow; isMe?: boolean; onC
         </div>
         {!user && (
           <div>
-            <label className="label" htmlFor="u-pass">Contraseña inicial (mín. 10)</label>
+            <label className="label" htmlFor="u-pass">{t("Contraseña inicial (mín. 10)")}</label>
             <PasswordInput id="u-pass" className="input" value={password} onChange={(e) => setPassword(e.target.value)} minLength={10} required autoComplete="new-password" />
           </div>
         )}
         <div>
-          <label className="label" htmlFor="u-role">Rol</label>
+          <label className="label" htmlFor="u-role">{t("Rol")}</label>
           <select id="u-role" className="input" value={role} onChange={(e) => setRole(e.target.value as Role)} disabled={isMe}>
-            <option value="MEMBER">Miembro</option>
-            <option value="ADMIN">Administrador</option>
+            <option value="MEMBER">{t("Miembro")}</option>
+            <option value="ADMIN">{t("Administrador")}</option>
           </select>
         </div>
         {user && (
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} disabled={isMe} />
-            Usuario activo (si lo desactivas, se cierran sus sesiones)
+            {t("Usuario activo (si lo desactivas, se cierran sus sesiones)")}
           </label>
         )}
         {user && user.privateProjects > 0 && (!active || role !== "ADMIN") && (
           <p className="text-xs text-amber-700 dark:text-amber-300">
-            {user.privateProjects === 1 ? "Su proyecto privado quedará bloqueado" : `Sus ${user.privateProjects} proyectos privados quedarán bloqueados`} (nadie podrá verlos) hasta que vuelva a ser administrador activo.
+            {user.privateProjects === 1 ? t("Su proyecto privado quedará bloqueado") : t("Sus {n} proyectos privados quedarán bloqueados", { n: user.privateProjects })} {t("(nadie podrá verlos) hasta que vuelva a ser administrador activo.")}
           </p>
         )}
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
-          <button className="btn-primary" disabled={pending}>{user ? "Guardar" : "Crear usuario"}</button>
+          <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
+          <button className="btn-primary" disabled={pending}>{user ? t("Guardar") : t("Crear usuario")}</button>
         </div>
       </form>
     </Modal>
@@ -134,11 +137,12 @@ function UserForm({ user, isMe, onClose }: { user?: UserRow; isMe?: boolean; onC
 }
 
 function ResetPassword({ user, onClose }: { user: UserRow; onClose: () => void }) {
+  const t = useT();
   const toast = useToast();
   const [pending, start] = useTransition();
   const [password, setPassword] = useState("");
   return (
-    <Modal open onClose={onClose} title={`Restablecer contraseña de ${user.name}`} size="sm">
+    <Modal open onClose={onClose} title={t("Restablecer contraseña de {name}", { name: user.name })} size="sm">
       <form
         className="space-y-3"
         onSubmit={(e) => {
@@ -146,18 +150,18 @@ function ResetPassword({ user, onClose }: { user: UserRow; onClose: () => void }
           start(async () => {
             const res = await resetUserPassword(user.id, password);
             if (!res.ok) return toast(res.error, "error");
-            toast("Contraseña restablecida; se han cerrado sus sesiones");
+            toast(t("Contraseña restablecida; se han cerrado sus sesiones"));
             onClose();
           });
         }}
       >
         <div>
-          <label className="label" htmlFor="r-pass">Nueva contraseña (mín. 10)</label>
+          <label className="label" htmlFor="r-pass">{t("Nueva contraseña (mín. 10)")}</label>
           <PasswordInput id="r-pass" className="input" value={password} onChange={(e) => setPassword(e.target.value)} minLength={10} required autoComplete="new-password" data-autofocus />
         </div>
         <div className="flex justify-end gap-2">
-          <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
-          <button className="btn-primary" disabled={pending}>Restablecer</button>
+          <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
+          <button className="btn-primary" disabled={pending}>{t("Restablecer")}</button>
         </div>
       </form>
     </Modal>
@@ -165,13 +169,14 @@ function ResetPassword({ user, onClose }: { user: UserRow; onClose: () => void }
 }
 
 function DeleteUser({ user, onClose }: { user: UserRow; onClose: () => void }) {
+  const t = useT();
   const router = useRouter();
   const toast = useToast();
   const [pending, start] = useTransition();
   const [confirmed, setConfirmed] = useState(false);
   const count = user.privateProjects;
   return (
-    <Modal open onClose={onClose} title={`Borrar a ${user.name}`} size="sm">
+    <Modal open onClose={onClose} title={t("Borrar a {name}", { name: user.name })} size="sm">
       <form
         className="space-y-3 text-sm"
         onSubmit={(e) => {
@@ -179,28 +184,28 @@ function DeleteUser({ user, onClose }: { user: UserRow; onClose: () => void }) {
           start(async () => {
             const res = await deleteUser(user.id, count > 0 && confirmed);
             if (!res.ok) return toast(res.error, "error");
-            toast(count ? "Usuario y proyectos privados borrados" : "Usuario borrado");
+            toast(count ? t("Usuario y proyectos privados borrados") : t("Usuario borrado"));
             router.refresh();
             onClose();
           });
         }}
       >
-        <p>Se borrará su cuenta para siempre. En los proyectos compartidos sus tareas y comentarios se conservan, sin autor. Si solo quieres quitarle el acceso, desactívalo.</p>
+        <p>{t("Se borrará su cuenta para siempre. En los proyectos compartidos sus tareas y comentarios se conservan, sin autor. Si solo quieres quitarle el acceso, desactívalo.")}</p>
         {count > 0 && (
           <div className="space-y-2 rounded-lg border border-red-300 bg-red-50 p-3 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
             <p className="flex gap-2 font-medium">
               <TriangleAlert size={18} className="shrink-0" />
-              {count === 1 ? "Tiene 1 proyecto privado." : `Tiene ${count} proyectos privados.`} Se borrarán con todas sus tareas, releases y adjuntos, y no se pueden recuperar.
+              {count === 1 ? t("Tiene 1 proyecto privado.") : t("Tiene {n} proyectos privados.", { n: count })} {t("Se borrarán con todas sus tareas, releases y adjuntos, y no se pueden recuperar.")}
             </p>
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
-              Entiendo que se borran {count === 1 ? "su proyecto privado" : "sus proyectos privados"}
+              {count === 1 ? t("Entiendo que se borra su proyecto privado") : t("Entiendo que se borran sus proyectos privados")}
             </label>
           </div>
         )}
         <div className="flex justify-end gap-2">
-          <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
-          <button className="btn-primary bg-red-600 hover:bg-red-700" disabled={pending || (count > 0 && !confirmed)}>Borrar usuario</button>
+          <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
+          <button className="btn-primary bg-red-600 hover:bg-red-700" disabled={pending || (count > 0 && !confirmed)}>{t("Borrar usuario")}</button>
         </div>
       </form>
     </Modal>

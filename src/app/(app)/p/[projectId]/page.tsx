@@ -7,16 +7,18 @@ import { googleEnabled } from "@/lib/google";
 import { db } from "@/lib/db";
 import { getCurrentUser, requireUserPage } from "@/lib/session";
 import type { BoardData } from "@/lib/types";
+import { getT } from "@/i18n/server";
 import { Board } from "@/components/board/Board";
 
 type Params = { params: Promise<{ projectId: string }>; searchParams: Promise<{ task?: string }> };
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
+  const t = await getT();
   const user = await getCurrentUser();
   const { projectId } = await params;
   // Solo se muestra el nombre si el usuario tiene acceso al proyecto.
   const p = user ? await db.project.findFirst({ where: { id: projectId, ...visibleProjectsWhere(user) }, select: { name: true } }) : null;
-  return { title: p?.name ?? "Tablero" };
+  return { title: p?.name ?? t("Tablero") };
 }
 
 export default async function BoardPage({ params, searchParams }: Params) {

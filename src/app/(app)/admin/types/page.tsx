@@ -1,9 +1,13 @@
 import { listKinds } from "@/lib/board";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/session";
+import { getT } from "@/i18n/server";
 import { KindsAdmin } from "./KindsAdmin";
 
-export const metadata = { title: "Tipos de tarea" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("Tipos de tarea") };
+}
 
 export default async function KindsPage() {
   await requireAdminPage();

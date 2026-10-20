@@ -1,4 +1,5 @@
 /** Automatización por tipo de tarea: al elegir el tipo se fija el título y/o se antepone un texto a la descripción. */
+import { makeT, type T } from "@/i18n/core";
 
 export interface KindAutomation {
   titleTemplate: string;
@@ -29,12 +30,12 @@ function short(text: string, max = 60): string {
 }
 
 /** Una línea breve en español que explica la automatización del tipo; null si no tiene. */
-export function describeKindAutomation(kind: KindAutomation): string | null {
+export function describeKindAutomation(kind: KindAutomation, t: T = makeT("es")): string | null {
   const title = kind.titleTemplate.trim();
   const desc = kind.descriptionTemplate.trim();
-  if (title && desc) return `Al elegirlo, el título pasa a ser «${short(title)}» y la descripción empieza por «${short(desc)}».`;
-  if (title) return `Al elegirlo, el título pasa a ser «${short(title)}».`;
-  if (desc) return `Al elegirlo, la descripción empieza por «${short(desc)}».`;
+  if (title && desc) return t("Al elegirlo, el título pasa a ser «{title}» y la descripción empieza por «{desc}».", { title: short(title), desc: short(desc) });
+  if (title) return t("Al elegirlo, el título pasa a ser «{title}».", { title: short(title) });
+  if (desc) return t("Al elegirlo, la descripción empieza por «{desc}».", { desc: short(desc) });
   return null;
 }
 

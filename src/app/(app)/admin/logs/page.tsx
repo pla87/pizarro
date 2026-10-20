@@ -6,8 +6,13 @@ import { flushLogs, logRetentionDays } from "@/lib/log";
 import { isMaskedLog, LOG_RANGES, logQuery, logWhere, parseLogFilters } from "@/lib/log-query";
 import { requireAdminPage } from "@/lib/session";
 import { cn } from "@/components/ui/cn";
+import { intlLocale } from "@/i18n/core";
+import { getLocale, getT } from "@/i18n/server";
 
-export const metadata = { title: "Logs" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("Logs") };
+}
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 100;
@@ -21,9 +26,9 @@ const LEVELS = [
 const field =
   "rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900";
 
-function formatTime(d: Date, tz: string): string {
+function formatTime(d: Date, tz: string, locale: string): string {
   const p = Object.fromEntries(
-    new Intl.DateTimeFormat("es-ES", { timeZone: tz, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })
+    new Intl.DateTimeFormat(locale, { timeZone: tz, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })
       .formatToParts(d)
       .map((x) => [x.type, x.value]),
   );
@@ -32,6 +37,8 @@ function formatTime(d: Date, tz: string): string {
 
 export default async function LogsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const viewer = await requireAdminPage();
+  const t = await getT();
+  const locale = intlLocale(await getLocale());
   const sp = await searchParams;
   const filters = parseLogFilters(sp);
   const cursor = typeof sp.cursor === "string" && /^[a-z0-9]{1,40}$/i.test(sp.cursor) ? sp.cursor : null;
@@ -60,14 +67,14 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          Se conservan {days} {days === 1 ? "día" : "días"} de actividad.
-          {!filters.reads && " Se muestran solo los cambios: marca «Incluir consultas» para ver también páginas vistas, tareas abiertas y descargas."}
+          {days === 1 ? t("Se conserva 1 día de actividad.") : t("Se conservan {days} días de actividad.", { days })}
+          {!filters.reads && " " + t("Se muestran solo los cambios: marca «Incluir consultas» para ver también páginas vistas, tareas abiertas y descargas.")}
         </p>
         <a
           href={`/api/admin/logs${logQuery(filters)}`}
           className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
         >
-          <Download className="size-4" aria-hidden /> Descargar CSV
+          <Download className="size-4" aria-hidden /> {t("Descargar CSV")}
         </a>
       </div>
 
@@ -78,74 +85,74 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
             href={`/admin/logs${logQuery({ ...filters, level: filters.level === l.value ? "" : l.value })}`}
             className={cn("rounded-full px-3 py-1 font-medium", l.badge, filters.level === l.value && "ring-2 ring-brand-600")}
           >
-            {l.label}: {(counts[l.value] ?? 0).toLocaleString("es-ES")}
+            {t(l.label)}: {(counts[l.value] ?? 0).toLocaleString(locale)}
           </Link>
         ))}
       </div>
 
       <form method="get" action="/admin/logs" className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-end">
         <label className="flex flex-col gap-1 text-xs text-slate-500">
-          Periodo
+          {t("Periodo")}
           <select name="range" defaultValue={filters.range} className={field}>
             {LOG_RANGES.map((r) => (
-              <option key={r.value} value={r.value}>{r.label}</option>
+              <option key={r.value} value={r.value}>{t(r.label)}</option>
             ))}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-slate-500">
-          Nivel
+          {t("Nivel")}
           <select name="level" defaultValue={filters.level} className={field}>
-            <option value="">Todos</option>
+            <option value="">{t("Todos")}</option>
             {LEVELS.map((l) => (
-              <option key={l.value} value={l.value}>{l.label}</option>
+              <option key={l.value} value={l.value}>{t(l.label)}</option>
             ))}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-slate-500">
-          Categoría
+          {t("Categoría")}
           <select name="category" defaultValue={filters.category} className={field}>
-            <option value="">Todas</option>
+            <option value="">{t("Todas")}</option>
             {categories.map((c) => (
               <option key={c.category} value={c.category}>{c.category}</option>
             ))}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-slate-500">
-          Usuario
+          {t("Usuario")}
           <select name="user" defaultValue={filters.userId} className={field}>
-            <option value="">Todos</option>
+            <option value="">{t("Todos")}</option>
             {users.map((u) => (
               <option key={u.id} value={u.id}>{u.name}</option>
             ))}
           </select>
         </label>
-        <label className="col-span-2 flex items-center gap-2 self-center text-sm sm:col-span-1 sm:pb-1.5" title="Páginas vistas, tareas abiertas, informes y descargas">
+        <label className="col-span-2 flex items-center gap-2 self-center text-sm sm:col-span-1 sm:pb-1.5" title={t("Páginas vistas, tareas abiertas, informes y descargas")}>
           <input type="checkbox" name="consultas" value="1" defaultChecked={filters.reads} />
-          Incluir consultas
+          {t("Incluir consultas")}
         </label>
         <label className="col-span-2 flex flex-col gap-1 text-xs text-slate-500 sm:min-w-48 sm:flex-1">
-          Buscar (acción, mensaje, ruta)
+          {t("Buscar (acción, mensaje, ruta)")}
           <input type="search" name="q" defaultValue={filters.q} maxLength={100} className={field} />
         </label>
         <div className="col-span-2 flex gap-2">
           <button type="submit" className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
-            Filtrar
+            {t("Filtrar")}
           </button>
           <Link href="/admin/logs" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700">
-            Limpiar
+            {t("Limpiar")}
           </Link>
         </div>
       </form>
 
       {cursor && (
         <Link href={`/admin/logs${logQuery(filters)}`} className="inline-block text-sm text-brand-700 hover:underline dark:text-brand-100">
-          ← Volver a los más recientes
+          {t("← Volver a los más recientes")}
         </Link>
       )}
 
       {items.length === 0 ? (
         <p className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:border-slate-700">
-          No hay eventos con este filtro.
+          {t("No hay eventos con este filtro.")}
         </p>
       ) : (
         <ul className="divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
@@ -154,9 +161,9 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
             if (isMaskedLog(r, viewer.id)) {
               return (
                 <li key={r.id} className="flex flex-wrap items-center gap-x-2 px-3 py-2 text-sm text-slate-500">
-                  <span className="font-mono text-xs">{formatTime(r.createdAt, tz)}</span>
+                  <span className="font-mono text-xs">{formatTime(r.createdAt, tz, locale)}</span>
                   {r.userName && <span className="text-xs">· {r.userName}</span>}
-                  <span className="italic">Actividad en un proyecto privado</span>
+                  <span className="italic">{t("Actividad en un proyecto privado")}</span>
                 </li>
               );
             }
@@ -167,8 +174,8 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
                 <details className="group">
                   <summary className="cursor-pointer list-none px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800/50 [&::-webkit-details-marker]:hidden">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="font-mono text-xs text-slate-500">{formatTime(r.createdAt, tz)}</span>
-                      <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", level.badge)}>{level.label}</span>
+                      <span className="font-mono text-xs text-slate-500">{formatTime(r.createdAt, tz, locale)}</span>
+                      <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", level.badge)}>{t(level.label)}</span>
                       <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-800">{r.category}</span>
                       <span className="font-mono text-xs font-semibold">{r.action}</span>
                       {r.userName && <span className="text-xs text-slate-600 dark:text-slate-300">· {r.userName}</span>}
@@ -179,14 +186,14 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
                   </summary>
                   <div className="space-y-1 bg-slate-50 px-3 py-2 text-xs dark:bg-slate-900/60">
                     <p className="text-slate-500">
-                      IP: {r.ip ?? "—"} · Usuario: {r.userId ?? "—"} · Proyecto: {r.projectId ?? "—"}
+                      {t("IP: {ip} · Usuario: {user} · Proyecto: {project}", { ip: r.ip ?? "—", user: r.userId ?? "—", project: r.projectId ?? "—" })}
                     </p>
                     {hasDetails ? (
                       <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded bg-white p-2 font-mono dark:bg-slate-950">
                         {JSON.stringify(r.details, null, 2)}
                       </pre>
                     ) : (
-                      <p className="text-slate-500">Sin detalles.</p>
+                      <p className="text-slate-500">{t("Sin detalles.")}</p>
                     )}
                   </div>
                 </details>
@@ -202,7 +209,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
             href={`/admin/logs${logQuery(filters, { cursor: items[items.length - 1]!.id })}`}
             className="inline-block rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
           >
-            Cargar más
+            {t("Cargar más")}
           </Link>
         </div>
       )}

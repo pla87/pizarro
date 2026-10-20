@@ -12,6 +12,7 @@ import { createSession, requireUser } from "@/lib/session";
 import { disconnectGoogleAccount } from "@/lib/google";
 import { rateLimit } from "@/lib/rate-limit";
 import * as v from "@/lib/validation";
+import { getT } from "@/i18n/server";
 
 export async function updateProfileName(name: string) {
   return runAction({ name: "profile.updateProfileName", args: [name] }, async () => {
@@ -110,7 +111,7 @@ export async function updateAccent(accent: "BLUE" | "FOREST" | "SIENNA" | "MUSTA
 export async function changePassword(current: string, next: string) {
   return runAction({ name: "profile.changePassword", args: [current, next] }, async () => {
     const user = await requireUser();
-    const pw = z.string().min(MIN_PASSWORD, `La nueva contraseña debe tener al menos ${MIN_PASSWORD} caracteres.`).max(200).parse(next);
+    const pw = z.string().min(MIN_PASSWORD, "La nueva contraseña debe tener al menos 10 caracteres.").max(200).parse(next);
     if (!rateLimit(`password:${user.id}`, 5, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
     const row = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { passwordHash: true } });
     if (!(await verifyPassword(z.string().max(200).parse(current), row.passwordHash))) {

@@ -4,8 +4,10 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Loader2 } from "lucide-react";
 import { useActionState, useState } from "react";
 import { login, type LoginState } from "@/actions/auth";
+import { useT } from "@/i18n/client";
 
 export function LoginForm({ next }: { next: string }) {
+  const t = useT();
   const [state, action, pending] = useActionState<LoginState, FormData>(login, {});
   // Controlado: React restablece los formularios tras cada acción y se perdería el email.
   const [email, setEmail] = useState("");
@@ -17,13 +19,13 @@ export function LoginForm({ next }: { next: string }) {
         <input id="email" name="email" type="email" autoComplete="username" required className="input" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
       </div>
       <div>
-        <label className="label" htmlFor="password">Contraseña</label>
+        <label className="label" htmlFor="password">{t("Contraseña")}</label>
         <PasswordInput id="password" name="password" autoComplete="current-password" required className="input" />
       </div>
       {state.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">{state.error}</p>}
       <button type="submit" className="btn-primary w-full" disabled={pending}>
         {pending && <Loader2 size={16} className="animate-spin" />}
-        Entrar
+        {t("Entrar")}
       </button>
     </form>
   );

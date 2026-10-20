@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useT } from "@/i18n/client";
 import { ReleaseEntry } from "./ReleaseEntry";
 
 type Release = React.ComponentProps<typeof ReleaseEntry>["release"];
@@ -20,6 +21,7 @@ export function ReleasesList({
   resultCount: number | null;
   moreHref: string | null;
 }) {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const [text, setText] = useState(query);
@@ -45,16 +47,16 @@ export function ReleasesList({
           <input
             type="search"
             className="input pl-9"
-            placeholder="Buscar en título y contenido…"
+            placeholder={t("Buscar en título y contenido…")}
             value={text}
             onChange={(e) => onChange(e.target.value)}
-            aria-label="Buscar releases"
+            aria-label={t("Buscar releases")}
           />
         </div>
-        {resultCount !== null && <p className="mt-1 text-xs text-slate-500" aria-live="polite">{resultCount} resultados</p>}
+        {resultCount !== null && <p className="mt-1 text-xs text-slate-500" aria-live="polite">{t("{n} resultados", { n: resultCount })}</p>}
       </div>
       {releases.length === 0 ? (
-        <p className="card p-6 text-center text-sm text-slate-500">Ninguna release coincide con «{query}».</p>
+        <p className="card p-6 text-center text-sm text-slate-500">{t("Ninguna release coincide con «{query}».", { query })}</p>
       ) : (
         <div className="space-y-3">
           {releases.map((r) => <ReleaseEntry key={r.id} release={r} />)}
@@ -62,7 +64,7 @@ export function ReleasesList({
       )}
       {moreHref && (
         <div className="mt-4 text-center">
-          <Link href={moreHref} scroll={false} className="btn-secondary">Cargar más</Link>
+          <Link href={moreHref} scroll={false} className="btn-secondary">{t("Cargar más")}</Link>
         </div>
       )}
     </div>

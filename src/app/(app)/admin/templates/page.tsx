@@ -3,9 +3,13 @@ import { listKinds } from "@/lib/board";
 import { db } from "@/lib/db";
 import { parseStoredTemplate } from "@/lib/project-templates";
 import { requireAdminPage } from "@/lib/session";
+import { getT } from "@/i18n/server";
 import { TemplatesAdmin } from "./TemplatesAdmin";
 
-export const metadata = { title: "Plantillas de proyecto" };
+export async function generateMetadata() {
+  const t = await getT();
+  return { title: t("Plantillas de proyecto") };
+}
 
 export default async function TemplatesPage() {
   const user = await requireAdminPage();

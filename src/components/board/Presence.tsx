@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "@/i18n/client";
 import { Avatar } from "../ui/Avatar";
 import { cn } from "../ui/cn";
 
@@ -10,6 +11,7 @@ const MAX_COMPACT = 3; // cabecera móvil: círculos pequeños y solo 3
 
 /** Círculos con las iniciales de quien ha hecho algo en este tablero en los últimos 5 minutos. */
 export function Presence({ projectId, compact }: { projectId: string; compact?: boolean }) {
+  const t = useT();
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
@@ -38,7 +40,7 @@ export function Presence({ projectId, compact }: { projectId: string; compact?: 
   const extra = users.length - max;
   const names = users.map((u) => u.name).join(", ");
   return (
-    <div className="flex items-center -space-x-1.5" title={`Activos en los últimos 5 minutos: ${names}`} aria-label={`Activos en los últimos 5 minutos: ${names}`}>
+    <div className="flex items-center -space-x-1.5" title={t("Activos en los últimos 5 minutos: {names}", { names })} aria-label={t("Activos en los últimos 5 minutos: {names}", { names })}>
       {users.slice(0, max).map((u) => (
         <span key={u.id} className={cn("rounded-full ring-2", compact ? "ring-white dark:ring-slate-900" : "ring-slate-50 dark:ring-slate-950")}>
           <Avatar id={u.id} name={u.name} size={compact ? "sm" : "md"} />

@@ -11,6 +11,7 @@ import { rateLimit, resetRateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { safeNextPath } from "@/lib/redirect";
 import { createSession, destroySession, getCurrentUser } from "@/lib/session";
+import { getT } from "@/i18n/server";
 
 export interface LoginState {
   error?: string;
@@ -22,8 +23,9 @@ const loginSchema = z.object({
 });
 
 export async function login(_prev: LoginState, formData: FormData): Promise<LoginState> {
+  const t = await getT();
   const parsed = loginSchema.safeParse({ email: formData.get("email"), password: formData.get("password") });
-  if (!parsed.success) return { error: "Introduce email y contraseña." };
+  if (!parsed.success) return { error: t("Introduce email y contraseña.") };
   const { email, password } = parsed.data;
 
   const ip = clientIp(await headers());
@@ -34,7 +36,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
       level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión bloqueado por demasiados intentos (${email})`,
       path: "/login", ip, details: { email, reason: "rate_limited" },
     });
-    return { error: "Demasiados intentos. Espera unos minutos." };
+    return { error: t("Demasiados intentos. Espera unos minutos.") };
   }
 
   const user = await db.user.findUnique({ where: { email }, select: { id: true, name: true, passwordHash: true, active: true } });
@@ -46,7 +48,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
       level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión fallido (${email}): ${why}`,
       userId: user?.id ?? null, userName: user?.name ?? null, path: "/login", ip, details: { email, reason },
     });
-    return { error: "Credenciales incorrectas." };
+    return { error: t("Credenciales incorrectas.") };
   }
 
   resetRateLimit(emailKey);

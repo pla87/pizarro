@@ -10,6 +10,7 @@ import {
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useIntlLocale, useT } from "@/i18n/client";
 import { dueStatus } from "@/lib/dates";
 import { isWhite, kindBadgeStyle, onColor } from "@/lib/constants";
 import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
@@ -40,6 +41,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   /** Borrador recuperado (la página se cerró con la tarea abierta). */
   draft?: EditTaskDraft | null;
 }) {
+  const t = useT();
+  const locale = useIntlLocale();
   const board = useBoard();
   const toast = useToast();
   const mobile = useIsMobile();
@@ -184,7 +187,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     setUploading((n) => n + files.length);
     for (const file of files) {
       try {
-        const att = await board.track(uploadFile(task.id, file));
+        const att = await board.track(uploadFile(task.id, file, false, t));
         setDetail((d) => (d ? { ...d, attachments: [...d.attachments, att] } : d));
         board.patchTask(task.id, (t) => ({ attachmentCount: t.attachmentCount + 1 }));
       } catch (err) {
@@ -216,12 +219,12 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   const dropping = useFileDrop(upload);
 
   const remove = async () => {
-    if (!window.confirm("¿Borrar definitivamente esta tarea y sus adjuntos?")) return;
+    if (!window.confirm(t("¿Borrar definitivamente esta tarea y sus adjuntos?"))) return;
     const res = await board.track(deleteTask(task.id));
     if (!res.ok) return toast(res.error, "error");
     board.removeTask(task.id);
     onClose();
-    toast("Tarea borrada");
+    toast(t("Tarea borrada"));
   };
 
   const archive = async () => {
@@ -229,27 +232,27 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     if (!res.ok) return toast(res.error, "error");
     board.removeTask(task.id);
     onClose();
-    toast("Tarea archivada");
+    toast(t("Tarea archivada"));
   };
 
   /** @docs / @sheets: crea el archivo, lo abre en otra pestaña y lo enlaza. Debe llamarse dentro de un clic o tecla. */
   const createGoogle = async (kind: MentionCommand): Promise<TaskLinkInfo | null> => {
     if (!board.google.enabled) {
-      toast("La integración con Google no está configurada en el servidor.", "error");
+      toast(t("La integración con Google no está configurada en el servidor."), "error");
       return null;
     }
     if (!board.google.connected) {
-      toast("Conecta tu cuenta de Google en «Mi perfil y plantillas» para crear documentos.", "error");
+      toast(t("Conecta tu cuenta de Google en «Mi perfil y plantillas» para crear documentos."), "error");
       return null;
     }
-    const res = await board.track(createAndOpenGoogleFile(task.id, kind, title.trim() || task.title));
+    const res = await board.track(createAndOpenGoogleFile(task.id, kind, title.trim() || task.title, t));
     if (!res.ok) {
       toast(res.error, "error");
       return null;
     }
     setDetail((d) => (d ? { ...d, links: [...d.links, res.link] } : d));
     board.patchTask(task.id, (t) => ({ linkCount: t.linkCount + 1 }));
-    toast(kind === "GOOGLE_SHEET" ? "Hoja de cálculo creada" : "Documento creado");
+    toast(kind === "GOOGLE_SHEET" ? t("Hoja de cálculo creada") : t("Documento creado"));
     return res.link;
   };
 
@@ -291,9 +294,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       footer={
         mobile ? (
           <>
-            <button className="btn-secondary py-1.5" onClick={archive}><Archive size={15} /> Archivar</button>
-            <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> Borrar</button>
-            <button className="btn-primary ml-auto py-1.5" onClick={saveAndClose}><Check size={15} /> Guardar</button>
+            <button className="btn-secondary py-1.5" onClick={archive}><Archive size={15} /> {t("Archivar")}</button>
+            <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> {t("Borrar")}</button>
+            <button className="btn-primary ml-auto py-1.5" onClick={saveAndClose}><Check size={15} /> {t("Guardar")}</button>
           </>
         ) : undefined
       }
@@ -313,18 +316,18 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
             rows={1}
             maxLength={200}
             className="field-sizing-content min-w-0 flex-1 resize-none rounded-md bg-transparent px-1 py-0.5 text-lg font-semibold outline-none focus:bg-slate-50 dark:focus:bg-slate-800"
-            aria-label="Título"
+            aria-label={t("Título")}
           />
           <span className="mt-1.5 flex h-5 shrink-0 items-center text-xs" role="status" aria-live="polite">
             {saving > 0 ? (
-              <span className="flex items-center gap-1 text-slate-500"><Loader2 size={13} className="animate-spin" /> Guardando…</span>
+              <span className="flex items-center gap-1 text-slate-500"><Loader2 size={13} className="animate-spin" /> {t("Guardando…")}</span>
             ) : (
               <span className={cn("flex items-center gap-1 text-emerald-600 transition-opacity duration-500 dark:text-emerald-400", justSaved ? "opacity-100" : "opacity-0")}>
-                <Check size={13} /> Guardado
+                <Check size={13} /> {t("Guardado")}
               </span>
             )}
           </span>
-          <button type="button" className="btn-icon" onClick={onClose} aria-label="Cerrar">
+          <button type="button" className="btn-icon" onClick={onClose} aria-label={t("Cerrar")}>
             <X size={18} />
           </button>
         </div>
@@ -352,31 +355,31 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
           <Subtasks taskId={task.id} detail={detail} setDetail={setDetail} />
           <section>
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Capturas y adjuntos</h3>
+              <h3 className="text-sm font-semibold">{t("Capturas y adjuntos")}</h3>
               <div className="flex items-center gap-1">
                 <label className="btn-ghost cursor-pointer py-1 text-xs sm:hidden">
-                  <Camera size={15} /> Cámara
+                  <Camera size={15} /> {t("Cámara")}
                   <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { upload(filesFrom(e.target.files)); e.target.value = ""; }} />
                 </label>
                 <label className="btn-ghost cursor-pointer py-1 text-xs">
-                  <ImagePlus size={15} /> Añadir
+                  <ImagePlus size={15} /> {t("Añadir")}
                   <input type="file" multiple className="sr-only" onChange={(e) => { upload(filesFrom(e.target.files)); e.target.value = ""; }} />
                 </label>
               </div>
             </div>
-            <p className="mb-2 truncate text-xs text-slate-500 max-sm:hidden">Pega o arrastra archivos (máx. 10 MB)</p>
+            <p className="mb-2 truncate text-xs text-slate-500 max-sm:hidden">{t("Pega o arrastra archivos (máx. 10 MB)")}</p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {images.map((a, i) => (
                 <div key={a.id} className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
-                  <button type="button" onClick={() => setLightbox(i)} className="block w-full" aria-label={`Ver ${a.originalName}`}>
+                  <button type="button" onClick={() => setLightbox(i)} className="block w-full" aria-label={t("Ver {name}", { name: a.originalName })}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={`/api/attachments/${a.id}?thumb=1`} alt={a.originalName} loading="lazy" className="aspect-video w-full object-cover" />
                   </button>
                   <button
                     type="button"
                     className="absolute top-1 right-1 rounded-md bg-black/60 p-1 text-white opacity-0 group-hover:opacity-100 max-md:opacity-100"
-                    aria-label="Borrar adjunto"
-                    onClick={() => removeAttachment(a.id, "¿Borrar esta imagen?")}
+                    aria-label={t("Borrar adjunto")}
+                    onClick={() => removeAttachment(a.id, t("¿Borrar esta imagen?"))}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -384,7 +387,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
               ))}
               {uploading > 0 && (
                 <div className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-slate-300 text-xs text-slate-500 dark:border-slate-700">
-                  <Loader2 size={16} className="mr-1.5 animate-spin" /> Subiendo…
+                  <Loader2 size={16} className="mr-1.5 animate-spin" /> {t("Subiendo…")}
                 </div>
               )}
             </div>
@@ -396,11 +399,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
                     <li key={a.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800">
                       <Icon size={18} className="shrink-0 text-slate-500" />
                       <span className="min-w-0 flex-1 truncate" title={a.originalName}>{a.originalName}</span>
-                      <span className="shrink-0 text-xs text-slate-500">{formatBytes(a.size)}</span>
-                      <a href={`/api/attachments/${a.id}?download=1`} download={a.originalName} className="btn-icon h-7 w-7 shrink-0" aria-label={`Descargar ${a.originalName}`} title="Descargar">
+                      <span className="shrink-0 text-xs text-slate-500">{formatBytes(a.size, locale)}</span>
+                      <a href={`/api/attachments/${a.id}?download=1`} download={a.originalName} className="btn-icon h-7 w-7 shrink-0" aria-label={t("Descargar {name}", { name: a.originalName })} title={t("Descargar")}>
                         <Download size={15} />
                       </a>
-                      <button type="button" className="btn-icon h-7 w-7 shrink-0 text-red-600" aria-label="Borrar adjunto" onClick={() => removeAttachment(a.id, "¿Borrar este archivo?")}>
+                      <button type="button" className="btn-icon h-7 w-7 shrink-0 text-red-600" aria-label={t("Borrar adjunto")} onClick={() => removeAttachment(a.id, t("¿Borrar este archivo?"))}>
                         <Trash2 size={15} />
                       </button>
                     </li>
@@ -409,7 +412,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
               </ul>
             )}
             {detail && detail.attachments.length === 0 && uploading === 0 && (
-              <p className="text-xs text-slate-400">Sin adjuntos.</p>
+              <p className="text-xs text-slate-400">{t("Sin adjuntos.")}</p>
             )}
           </section>
           <GoogleLinks taskId={task.id} detail={detail} setDetail={setDetail} onCreate={createGoogle} />
@@ -417,36 +420,36 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
         </div>
 
         <aside className="flex flex-col gap-4 text-sm md:max-h-[calc(100dvh-9rem)] md:gap-2.5 md:overflow-y-auto md:pr-1">
-          <Field label="Columna">
+          <Field label={t("Columna")}>
             <select className="input md:py-1.5" value={task.columnId} onChange={(e) => changeColumn(e.target.value)}>
               {board.columns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
           {board.columns.find((c) => c.id === task.columnId)?.role === "NEXT_RELEASE" && (
-            <label className="flex items-center gap-2" title="Se queda en la columna de la release al desplegar y se incluye siempre en el texto">
+            <label className="flex items-center gap-2" title={t("Se queda en la columna de la release al desplegar y se incluye siempre en el texto")}>
               <input
                 type="checkbox"
                 className="h-4 w-4 accent-brand-600"
                 checked={task.evergreen}
                 onChange={(e) => save({ evergreen: e.target.checked }, { evergreen: e.target.checked })}
               />
-              Fija en la release (evergreen)
+              {t("Fija en la release (evergreen)")}
             </label>
           )}
-          <Field label="Tipo">
+          <Field label={t("Tipo")}>
             <TypeSelector kinds={board.kinds} value={task.kindId} onChange={changeKind} />
           </Field>
-          <Field label="Asignada a (opcional)">
+          <Field label={t("Asignada a (opcional)")}>
             <select
               className="input md:py-1.5"
               value={task.assigneeId ?? ""}
               onChange={(e) => save({ assigneeId: e.target.value || null }, { assigneeId: e.target.value || null })}
             >
-              <option value="">Sin asignar</option>
+              <option value="">{t("Sin asignar")}</option>
               {board.users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           </Field>
-          <Field label="Fecha límite">
+          <Field label={t("Fecha límite")}>
             <div className="flex gap-1">
               <input
                 type="date"
@@ -463,29 +466,29 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
                 }}
               />
               {task.dueDate && (
-                <button className="btn-icon h-9 w-9 shrink-0 md:h-8 md:w-8" onClick={() => save({ dueDate: null }, { dueDate: null })} aria-label="Quitar fecha límite">
+                <button className="btn-icon h-9 w-9 shrink-0 md:h-8 md:w-8" onClick={() => save({ dueDate: null }, { dueDate: null })} aria-label={t("Quitar fecha límite")}>
                   <X size={15} />
                 </button>
               )}
             </div>
           </Field>
-          <Field label="Entregable">
+          <Field label={t("Entregable")}>
             <select
               className="input md:py-1.5"
               value={task.deliverableId ?? ""}
               onChange={(e) => save({ deliverableId: e.target.value || null }, { deliverableId: e.target.value || null })}
             >
-              <option value="">Sin entregable</option>
+              <option value="">{t("Sin entregable")}</option>
               {board.deliverables.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </Field>
-          <Field label="Color">
+          <Field label={t("Color")}>
             {/* Escritorio: swatches más pequeños y juntos para que quepan en una sola fila. */}
             <div className="md:[&>div]:gap-1 md:[&_button]:h-[22px] md:[&_button]:w-[22px]">
               <ColorPicker value={task.color} onChange={(color) => save({ color: color as never }, { color })} />
             </div>
           </Field>
-          <Field label="Etiquetas">
+          <Field label={t("Etiquetas")}>
             <div className="flex flex-wrap gap-1.5 md:gap-1">
               {board.labels.map((l) => {
                 const on = task.labelIds.includes(l.id);
@@ -506,11 +509,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
                 );
               })}
               <Link href={`/p/${board.project.id}/settings#labels`} className="px-1 py-0.5 text-xs text-brand-600 hover:underline">
-                Gestionar
+                {t("Gestionar")}
               </Link>
             </div>
           </Field>
-          <Field label="Enlace externo (PR, commit, issue)">
+          <Field label={t("Enlace externo (PR, commit, issue)")}>
             <div className="flex gap-1">
               <input
                 className="input md:py-1.5"
@@ -523,7 +526,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
                 onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
               />
               {task.linkUrl && (
-                <a href={task.linkUrl} target="_blank" rel="noopener noreferrer nofollow" className="btn-icon h-9 w-9 shrink-0 md:h-8 md:w-8" aria-label="Abrir enlace">
+                <a href={task.linkUrl} target="_blank" rel="noopener noreferrer nofollow" className="btn-icon h-9 w-9 shrink-0 md:h-8 md:w-8" aria-label={t("Abrir enlace")}>
                   <ExternalLink size={16} />
                 </a>
               )}
@@ -531,13 +534,15 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
           </Field>
           {detail && (
             <p className="text-xs text-slate-500">
-              Creada {detail.createdByName ? `por ${detail.createdByName} ` : ""}el {formatDate(detail.createdAt, "dateShort")}
+              {detail.createdByName
+                ? t("Creada por {name} el {date}", { name: detail.createdByName, date: formatDate(detail.createdAt, "dateShort", locale) })
+                : t("Creada el {date}", { date: formatDate(detail.createdAt, "dateShort", locale) })}
             </p>
           )}
           {/* En móvil estos botones van en el pie fijo, junto a Guardar. */}
           <div className="mt-auto flex flex-wrap gap-2 border-t border-slate-200 pt-4 max-md:hidden md:gap-1 md:pt-2.5 dark:border-slate-800">
-            <button className="btn-secondary py-1.5" onClick={archive}><Archive size={15} /> Archivar</button>
-            <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> Borrar</button>
+            <button className="btn-secondary py-1.5" onClick={archive}><Archive size={15} /> {t("Archivar")}</button>
+            <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> {t("Borrar")}</button>
           </div>
         </aside>
       </div>
@@ -545,7 +550,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       {dropping && (
         <div className="pointer-events-none fixed inset-0 z-[70] flex items-center justify-center bg-brand-500/15 p-4 backdrop-blur-[1px]">
           <div className="rounded-2xl border-2 border-dashed border-brand-500 bg-white/90 px-8 py-6 text-lg font-semibold text-brand-700 shadow-xl dark:bg-slate-900/90 dark:text-brand-300">
-            Suelta para adjuntar
+            {t("Suelta para adjuntar")}
           </div>
         </div>
       )}
@@ -603,6 +608,7 @@ function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftCha
   /** Borrador actual en Markdown mientras se edita (con retardo); null al no estar editando. */
   onDraftChange?: (markdown: string | null) => void;
 }) {
+  const t = useT();
   const { editorMode } = useBoard();
   const [value, setValue] = useState(draft ?? initial ?? "");
   const [editing, setEditing] = useState(draft !== undefined);
@@ -616,8 +622,8 @@ function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftCha
       draftCb.current?.(null);
       return;
     }
-    const t = setTimeout(() => draftCb.current?.(value), 300);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => draftCb.current?.(value), 300);
+    return () => clearTimeout(timer);
   }, [editing, value]);
   useEffect(() => () => draftCb.current?.(null), []);
 
@@ -637,10 +643,10 @@ function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftCha
   return (
     <section>
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Descripción</h3>
+        <h3 className="text-sm font-semibold">{t("Descripción")}</h3>
         {!editing && (
           <button className="btn-ghost py-1 text-xs" onClick={() => { setEditing(true); requestAnimationFrame(() => ref.current?.focus()); }}>
-            Editar
+            {t("Editar")}
           </button>
         )}
       </div>
@@ -655,17 +661,17 @@ function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftCha
             autoFocus
             onCommand={async (kind) => {
               const link = await onGoogle(kind);
-              if (link) setValue((v) => `${v.trimEnd()}\n\n${kind === "GOOGLE_SHEET" ? "Hoja" : "Documento"}: [${link.title.replace(/[\[\]]/g, "")}](${link.url})\n`);
+              if (link) setValue((v) => `${v.trimEnd()}\n\n${kind === "GOOGLE_SHEET" ? t("Hoja") : t("Documento")}: [${link.title.replace(/[\[\]]/g, "")}](${link.url})\n`);
             }}
             maxLength={20000}
-            placeholder="Markdown · @persona · @docs / @sheets"
+            placeholder={t("Markdown · @persona · @docs / @sheets")}
             onCancel={cancel}
             onSubmit={finish}
           />
           <div className="flex gap-2">
-            <button className="btn-primary py-1.5" onClick={finish}>Guardar</button>
-            <button className="btn-ghost py-1.5" onClick={cancel}>Cancelar</button>
-            <span className="ml-auto self-center text-xs text-slate-400 max-sm:hidden">Ctrl+Enter para guardar</span>
+            <button className="btn-primary py-1.5" onClick={finish}>{t("Guardar")}</button>
+            <button className="btn-ghost py-1.5" onClick={cancel}>{t("Cancelar")}</button>
+            <span className="ml-auto self-center text-xs text-slate-400 max-sm:hidden">{t("Ctrl+Enter para guardar")}</span>
           </div>
         </div>
       ) : value.trim() ? (
@@ -674,7 +680,7 @@ function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftCha
         </div>
       ) : (
         <button className="w-full rounded-lg border border-dashed border-slate-300 p-4 text-left text-sm text-slate-400 hover:border-brand-500 dark:border-slate-700" onClick={() => setEditing(true)}>
-          Añade una descripción…
+          {t("Añade una descripción…")}
         </button>
       )}
     </section>
@@ -682,6 +688,7 @@ function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftCha
 }
 
 function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskDetail | null; setDetail: React.Dispatch<React.SetStateAction<TaskDetail | null>> }) {
+  const t = useT();
   const board = useBoard();
   const toast = useToast();
   const [newTitle, setNewTitle] = useState("");
@@ -769,11 +776,11 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
     <section>
       {/* Barra de progreso hasta el borde derecho: se llena según la proporción de subtareas hechas (no su orden). */}
       <div className="mb-2 flex items-center gap-3">
-        <h3 className="text-sm font-semibold">Subtareas</h3>
+        <h3 className="text-sm font-semibold">{t("Subtareas")}</h3>
         <div
           className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"
           role="progressbar"
-          aria-label="Progreso de las subtareas"
+          aria-label={t("Progreso de las subtareas")}
           aria-valuemin={0}
           aria-valuemax={list.length}
           aria-valuenow={done}
@@ -788,14 +795,14 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
         <SortableContext items={list.map((s) => s.id)} strategy={verticalListSortingStrategy}>
           <ul className="space-y-0.5">
             {list.map((s) => (
-              <SubtaskRow key={s.id} s={s} editing={editingId === s.id} onEdit={() => setEditingId(s.id)} onRename={(t) => rename(s, t)} onToggle={() => toggle(s)} onRemove={() => remove(s)} />
+              <SubtaskRow key={s.id} s={s} editing={editingId === s.id} onEdit={() => setEditingId(s.id)} onRename={(v) => rename(s, v)} onToggle={() => toggle(s)} onRemove={() => remove(s)} />
             ))}
           </ul>
         </SortableContext>
       </DndContext>
       <form onSubmit={add} className="mt-1 flex gap-2">
-        <input className="input py-1.5" placeholder="Añadir subtarea…" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} maxLength={200} disabled={!detail} />
-        <button className="btn-secondary py-1.5" disabled={!newTitle.trim()} aria-label="Añadir subtarea"><Plus size={15} /></button>
+        <input className="input py-1.5" placeholder={t("Añadir subtarea…")} value={newTitle} onChange={(e) => setNewTitle(e.target.value)} maxLength={200} disabled={!detail} />
+        <button className="btn-secondary py-1.5" disabled={!newTitle.trim()} aria-label={t("Añadir subtarea")}><Plus size={15} /></button>
       </form>
     </section>
   );
@@ -805,6 +812,7 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
 function SubtaskRow({ s, editing, onEdit, onRename, onToggle, onRemove }: {
   s: SubtaskInfo; editing: boolean; onEdit: () => void; onRename: (title: string) => void; onToggle: () => void; onRemove: () => void;
 }) {
+  const t = useT();
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: s.id });
   const [draft, setDraft] = useState(s.title);
   // Evita guardar dos veces (Enter y el blur posterior) o guardar tras Escape.
@@ -828,7 +836,7 @@ function SubtaskRow({ s, editing, onEdit, onRename, onToggle, onRemove }: {
         {...listeners}
         style={{ touchAction: "none" }}
         className="-ml-0.5 shrink-0 cursor-grab text-slate-400 hover:text-slate-600 active:cursor-grabbing dark:hover:text-slate-300"
-        aria-label="Arrastrar para reordenar"
+        aria-label={t("Arrastrar para reordenar")}
       >
         <GripVertical size={16} />
       </button>
@@ -867,7 +875,7 @@ function SubtaskRow({ s, editing, onEdit, onRename, onToggle, onRemove }: {
           {s.title}
         </span>
       )}
-      <button className="btn-icon h-6 w-6 opacity-0 group-hover:opacity-100 max-md:opacity-100" onClick={onRemove} aria-label="Borrar subtarea">
+      <button className="btn-icon h-6 w-6 opacity-0 group-hover:opacity-100 max-md:opacity-100" onClick={onRemove} aria-label={t("Borrar subtarea")}>
         <X size={14} />
       </button>
     </li>
@@ -880,23 +888,24 @@ function GoogleLinks({ detail, setDetail, onCreate, taskId }: {
   setDetail: React.Dispatch<React.SetStateAction<TaskDetail | null>>;
   onCreate: (kind: MentionCommand) => Promise<TaskLinkInfo | null>;
 }) {
+  const t = useT();
   const board = useBoard();
   const toast = useToast();
   const links = detail?.links ?? [];
   return (
     <section>
       <div className="mb-2 flex flex-wrap items-center gap-1">
-        <h3 className="mr-auto text-sm font-semibold">Documentos de Google</h3>
+        <h3 className="mr-auto text-sm font-semibold">{t("Documentos de Google")}</h3>
         <button className="btn-ghost py-1 text-xs" onClick={() => onCreate("GOOGLE_DOC")} disabled={!detail}>
-          <FileText size={15} className="text-sky-600" /> Nuevo Doc
+          <FileText size={15} className="text-sky-600" /> {t("Nuevo Doc")}
         </button>
         <button className="btn-ghost py-1 text-xs" onClick={() => onCreate("GOOGLE_SHEET")} disabled={!detail}>
-          <FileSpreadsheet size={15} className="text-emerald-600" /> Nuevo Sheet
+          <FileSpreadsheet size={15} className="text-emerald-600" /> {t("Nuevo Sheet")}
         </button>
       </div>
       {links.length === 0 ? (
         <p className="truncate text-xs text-slate-400">
-          Sin documentos · escribe <code>@docs</code> o <code>@sheets</code>
+          {t("Sin documentos · escribe")} <code>@docs</code> {t("o")} <code>@sheets</code>
         </p>
       ) : (
         <ul className="space-y-1">
@@ -908,10 +917,10 @@ function GoogleLinks({ detail, setDetail, onCreate, taskId }: {
               </a>
               <button
                 className="btn-icon h-6 w-6 opacity-0 group-hover:opacity-100 max-md:opacity-100"
-                aria-label="Quitar enlace"
-                title="Quitar el enlace (el archivo sigue en Google Drive)"
+                aria-label={t("Quitar enlace")}
+                title={t("Quitar el enlace (el archivo sigue en Google Drive)")}
                 onClick={async () => {
-                  if (!window.confirm("¿Quitar el enlace de la tarea? El archivo seguirá en Google Drive.")) return;
+                  if (!window.confirm(t("¿Quitar el enlace de la tarea? El archivo seguirá en Google Drive."))) return;
                   const res = await board.track(deleteTaskLink(l.id));
                   if (!res.ok) return toast(res.error, "error");
                   setDetail((d) => (d ? { ...d, links: d.links.filter((x) => x.id !== l.id) } : d));
@@ -935,6 +944,8 @@ function Comments({ taskId, detail, setDetail, users, onGoogle }: {
   users: UserOption[];
   onGoogle: (kind: MentionCommand) => Promise<TaskLinkInfo | null>;
 }) {
+  const t = useT();
+  const locale = useIntlLocale();
   const board = useBoard();
   const toast = useToast();
   const [text, setText] = useState("");
@@ -955,27 +966,27 @@ function Comments({ taskId, detail, setDetail, users, onGoogle }: {
 
   return (
     <section>
-      <h3 className="mb-2 text-sm font-semibold">Comentarios {comments.length > 0 && <span className="font-normal text-slate-500">{comments.length}</span>}</h3>
+      <h3 className="mb-2 text-sm font-semibold">{t("Comentarios")} {comments.length > 0 && <span className="font-normal text-slate-500">{comments.length}</span>}</h3>
       <ul className="space-y-3">
         {comments.map((c) => (
           <li key={c.id} className="group flex gap-2">
             {c.authorId ? <Avatar id={c.authorId} name={c.authorName ?? "?"} /> : <span className="h-6 w-6" />}
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-2 text-xs">
-                <span className="font-semibold">{c.authorName ?? "Usuario eliminado"}</span>
-                <time className="text-slate-400">{formatDate(c.createdAt, "dateTimeShort")}</time>
+                <span className="font-semibold">{c.authorName ?? t("Usuario eliminado")}</span>
+                <time className="text-slate-400">{formatDate(c.createdAt, "dateTimeShort", locale)}</time>
                 {(c.authorId === board.currentUserId) && (
                   <button
                     className="ml-auto text-slate-400 opacity-0 group-hover:opacity-100 hover:text-red-600 max-md:opacity-100"
                     onClick={async () => {
-                      if (!window.confirm("¿Borrar este comentario?")) return;
+                      if (!window.confirm(t("¿Borrar este comentario?"))) return;
                       const res = await board.track(deleteComment(c.id));
                       if (!res.ok) return toast(res.error, "error");
                       setDetail((d) => (d ? { ...d, comments: d.comments.filter((x) => x.id !== c.id) } : d));
                       board.patchTask(taskId, (t) => ({ commentCount: Math.max(0, t.commentCount - 1) }));
                     }}
                   >
-                    Borrar
+                    {t("Borrar")}
                   </button>
                 )}
               </div>
@@ -993,7 +1004,7 @@ function Comments({ taskId, detail, setDetail, users, onGoogle }: {
           onValueChange={setText}
           users={users}
           disabled={!detail}
-          placeholder="Comenta… (@persona, @docs, @sheets)"
+          placeholder={t("Comenta… (@persona, @docs, @sheets)")}
           onCommand={async (kind) => {
             const link = await onGoogle(kind);
             if (link) setText((v) => `${v.trimEnd()} [${link.title.replace(/[\[\]]/g, "")}](${link.url}) `.trimStart());
@@ -1005,12 +1016,12 @@ function Comments({ taskId, detail, setDetail, users, onGoogle }: {
             }
           }}
           maxLength={10000}
-          aria-label="Nuevo comentario"
+          aria-label={t("Nuevo comentario")}
         />
         <div className="flex items-center gap-2">
-          <span className="truncate text-xs text-slate-400 max-sm:hidden">Ctrl+Enter para enviar</span>
+          <span className="truncate text-xs text-slate-400 max-sm:hidden">{t("Ctrl+Enter para enviar")}</span>
           <button className="btn-primary ml-auto py-1.5" onClick={send} disabled={sending || !text.trim()}>
-            {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Comentar
+            {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} {t("Comentar")}
           </button>
         </div>
       </div>

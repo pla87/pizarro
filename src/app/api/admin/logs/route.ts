@@ -47,7 +47,7 @@ export async function GET(req: Request) {
     );
   }
   const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
-  return new Response(t("﻿") + lines.join("\r\n"), {
+  return new Response("﻿" + lines.join("\r\n"), {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="logs-pizarro-${stamp}.csv"`,
