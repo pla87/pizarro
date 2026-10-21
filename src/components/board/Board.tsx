@@ -6,6 +6,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { Archive, Plus } from "lucide-react";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { archiveTasks, deleteTasks, makeEvergreen, moveTask, moveTasks } from "@/actions/tasks";
@@ -17,21 +18,26 @@ import { UndoButton } from "../UndoButton";
 import { useT } from "@/i18n/client";
 import { useToast } from "../ui/Toast";
 import { cn } from "../ui/cn";
-import { ArchivedDialog } from "./ArchivedDialog";
 import { BoardContext, type BoardApi } from "./context";
 import { ColumnView } from "./ColumnView";
 import { EVERGREEN_DROPPABLE_PREFIX } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
-import { BulkTaskDialog } from "./BulkTaskDialog";
-import { NewTaskDialog } from "./NewTaskDialog";
 import { Presence } from "./Presence";
-import { ReleaseDialog } from "./ReleaseDialog";
 import { SelectionBar } from "./SelectionBar";
 import { TaskCard } from "./TaskCard";
 import { ReportButton } from "../ReportButton";
-import { TaskDialog } from "./TaskDialog";
 import { imageFilesFrom } from "./upload";
 import { draftKey, readDraft, type EditTaskDraft, type NewTaskDraft } from "./drafts";
+
+// Los diálogos (con el editor de texto y el Markdown) no van en el código inicial del tablero:
+// se cargan al abrirlos y se precargan cuando el navegador está libre.
+const loadTaskDialog = () => import("./TaskDialog");
+const loadNewTaskDialog = () => import("./NewTaskDialog");
+const TaskDialog = dynamic(() => loadTaskDialog().then((m) => m.TaskDialog));
+const NewTaskDialog = dynamic(() => loadNewTaskDialog().then((m) => m.NewTaskDialog));
+const ReleaseDialog = dynamic(() => import("./ReleaseDialog").then((m) => m.ReleaseDialog));
+const BulkTaskDialog = dynamic(() => import("./BulkTaskDialog").then((m) => m.BulkTaskDialog));
+const ArchivedDialog = dynamic(() => import("./ArchivedDialog").then((m) => m.ArchivedDialog));
 
 const COLUMN_PREFIX = "col:";
 /** Contenedor virtual del arrastre de una tarea fija (evergreen): origen fuera de las listas ordenables. */
@@ -73,7 +79,7 @@ function MobileTab({ active, onClick, children }: { active: boolean; onClick: ()
       data-active={active || undefined}
       className={cn(
         "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors",
-        active ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+        active ? "bg-brand-600 text-on-brand" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
       )}
     >
       {children}
@@ -114,6 +120,17 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const [release, setRelease] = useState<{ taskIds: string[]; preselected: string[] } | null>(null);
   const [mobileColumn, setMobileColumn] = useState<string | null>(null);
   const dragHandle = useCoarsePointer();
+
+  // Precarga de los diálogos más usados cuando el navegador queda libre: abrirlos es instantáneo.
+  useEffect(() => {
+    const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1500));
+    const cancel = window.cancelIdleCallback ?? window.clearTimeout;
+    const id = idle(() => {
+      void loadTaskDialog();
+      void loadNewTaskDialog();
+    });
+    return () => cancel(id);
+  }, []);
 
   // Borradores locales: si la página se cerró con una tarea abierta o a medio crear, se reabre.
   useEffect(() => {
@@ -614,7 +631,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         </button>
         <button
           onClick={() => setNewTask({ columnId: activeMobileColumn })}
-          className="fixed right-5 bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] z-30 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95 lg:hidden"
+          className="fixed right-5 bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] z-30 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-on-brand shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95 lg:hidden"
           aria-label={t("Nueva tarea o captura")}
         >
           <Plus size={26} />

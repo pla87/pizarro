@@ -3,7 +3,7 @@ import { makeT, type T } from "../i18n/core";
 import { daysBetween } from "./dates";
 
 export const UPCOMING_DAYS = 14;
-export const RISK_DAYS = 7;
+const RISK_DAYS = 7;
 /** Ventana de «terminadas recientemente». */
 export const RECENT_DONE_DAYS = 14;
 const RECENT_DONE_MAX = 15;

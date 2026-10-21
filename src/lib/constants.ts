@@ -33,7 +33,7 @@ export const PALETTE = [
   "#a855f7", "#ec4899",
 ] as const;
 
-export const WHITE_COLOR = "#ffffff";
+const WHITE_COLOR = "#ffffff";
 export const isWhite = (c: string | null | undefined) => c?.toLowerCase() === WHITE_COLOR;
 /** Color de texto legible sobre un fondo de la paleta (el blanco necesita texto oscuro). */
 export const onColor = (c: string) => (isWhite(c) ? "#0f172a" : "#ffffff");
@@ -49,4 +49,3 @@ export const MAX_TITLE = 200;
 export const MAX_DESCRIPTION = 20_000;
 export const MAX_TEMPLATE = 20_000;
 export const MAX_RELEASE_CONTENT = 200_000;
-export const ALLOWED_UPLOAD_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif", "image/avif"];

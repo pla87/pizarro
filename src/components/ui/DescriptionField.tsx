@@ -27,7 +27,7 @@ interface Props {
 export function DescriptionField({ id, mode, value, onValueChange, users, placeholder, maxLength, autoFocus, onCommand, onSubmit, onCancel, textareaRef, textareaClassName }: Props) {
   const t = useT();
   if (mode === "WYSIWYG") {
-    return <RichTextEditor id={id} value={value} onChange={onValueChange} onSubmit={onSubmit} onCancel={onCancel} placeholder={placeholder} autoFocus={autoFocus} />;
+    return <RichTextEditor id={id} value={value} onChange={onValueChange} onSubmit={onSubmit} onCancel={onCancel} placeholder={placeholder} autoFocus={autoFocus} users={users} onCommand={onCommand} />;
   }
   return (
     <>

@@ -1,7 +1,7 @@
 // Tareas periódicas de mantenimiento (se arrancan desde instrumentation.ts, una vez por proceso).
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-export const NON_IMAGE_COPY_DAYS = 7;
+const NON_IMAGE_COPY_DAYS = 7;
 const FIRST_RUN_MS = 60 * 1000;
 const EVERY_MS = 60 * 60 * 1000;
 
@@ -11,7 +11,7 @@ export function nonImageCopyCutoff(now: Date = new Date()): Date {
 }
 
 /** Borra las copias de adjuntos que no son imágenes con más de 7 días (filas y ficheros). */
-export async function purgeNonImageCopies(now: Date = new Date()): Promise<number> {
+async function purgeNonImageCopies(now: Date = new Date()): Promise<number> {
   const [{ db }, { logEvent }, { removeReleaseAttachmentFiles }] = await Promise.all([
     import("@/lib/db"),
     import("@/lib/log"),
@@ -30,13 +30,13 @@ export async function purgeNonImageCopies(now: Date = new Date()): Promise<numbe
 }
 
 /** Borra las entradas de deshacer de más de 7 días (y los ficheros que solo ellas retenían). */
-export async function purgeOldUndo(now: Date = new Date()): Promise<number> {
+async function purgeOldUndo(now: Date = new Date()): Promise<number> {
   const { discardUndo, UNDO_MAX_AGE_DAYS } = await import("@/lib/undo");
   return discardUndo({ createdAt: { lt: new Date(now.getTime() - UNDO_MAX_AGE_DAYS * DAY_MS) } });
 }
 
 /** Una pasada de mantenimiento; nunca lanza. */
-export async function runMaintenance(): Promise<void> {
+async function runMaintenance(): Promise<void> {
   for (const job of [purgeNonImageCopies, purgeOldUndo]) {
     try {
       await job();

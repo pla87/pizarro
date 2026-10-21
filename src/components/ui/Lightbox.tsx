@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { useT } from "@/i18n/client";
 import { useBackToClose } from "./useBackToClose";
 
-export interface LightboxImage {
+interface LightboxImage {
   src: string;
   alt?: string;
   /** Enlace de descarga (opcional). */

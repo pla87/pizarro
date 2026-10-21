@@ -30,6 +30,35 @@
         "tecnicos": [
           "Migración v1_12: User.accent/locale/editorMode, Release.number (rellenado por fecha), UndoEntry.taskId y se elimina TaskKind.system. i18n propio (src/i18n, clave = texto en español, npm run i18n:check). Canal SSE /api/projects/[id]/events. Editor TipTap 3 con @tiptap/markdown. changelog.json con releasedAt."
         ]
+      },
+      "en": {
+        "summary": "Pizarro in English, formatted descriptions (Markdown or a formatting toolbar), a more useful PDF report with mobile download, near-instant updates across tabs, automatic drafts, accent colors, numbered releases and per-task undo.",
+        "changes": {
+          "nuevas": [
+            "Language: Spanish or English in “My profile and templates” (interface, messages, dates, PDF report and notification emails).",
+            "Formatted descriptions: they display formatted when not being edited and are written in Markdown or with a formatting toolbar (bold, italic, underline, strikethrough, heading, subheading, normal text and lists), your choice in the profile. Pasting Markdown converts it to formatting.",
+            "Accent colors: Blue, Forest green, Sienna, Mustard and Black and white, in light and dark; the subtask bar contrasts with each one.",
+            "New card colors: white, brown, dark green and navy blue.",
+            "Numbered releases per project: codes carry the number (R32M4) and the history shows it.",
+            "Drafts: the task you are creating or editing is saved in the browser every 5 s and reopens if you closed the page without canceling or saving.",
+            "Mobile: fixed Save button at the bottom right (with Archive and Delete) that saves the title and description exactly as written."
+          ],
+          "mejoras": [
+            "Shorter, more useful PDF report: summary with 4 figures, what is pending per column, deadlines, deliverables, workload, recently finished tasks and latest releases (only sections with content). On mobile it is generated in the app with Download and Open buttons.",
+            "Changes from other tabs and people appear almost instantly (under a second).",
+            "Contextual undo: with a task open it undoes only that task's changes; creating a task with its attachments counts as one action; the button no longer looks blurry behind the modal and the notice carries the undo icon.",
+            "“Reply” is a general type like the others and can be deleted.",
+            "Version history with the time of each release."
+          ],
+          "correcciones": [
+            "React error #418 on the releases page (and in notifications): dates are formatted with the same time zone on server and browser.",
+            "The focus outline of the side menu options is no longer clipped.",
+            "Spacing to the left of the lock icon on private projects."
+          ],
+          "tecnicos": [
+            "Migration v1_12: User.accent/locale/editorMode, Release.number (filled by date), UndoEntry.taskId, and TaskKind.system is removed. Custom i18n (src/i18n, key = Spanish text, npm run i18n:check). SSE channel /api/projects/[id]/events. TipTap 3 editor with @tiptap/markdown. changelog.json with releasedAt."
+          ]
+        }
       }
     },
     {
@@ -59,6 +88,32 @@
         "tecnicos": [
           "Migración v1_11: UndoEntry y Task.contentUpdatedAt/contentUpdatedById. Operaciones inversas por acción (src/lib/undo.ts) guardadas por runAction; los ficheros de adjuntos borrados se conservan mientras su entrada exista. buildId propio y /api/version. Presencia por tarea en memoria (/api/tasks/[id]/viewers)."
         ]
+      },
+      "en": {
+        "summary": "Undo your last 10 actions, notices for working together, subtasks on creation and reorderable, “Saved” indicator, lock icon for private projects and automatic reload after deploys.",
+        "changes": {
+          "nuevas": [
+            "Undo button (back arrow) next to the board name, also on mobile and with Ctrl/⌘+Z: it undoes your last 10 actions on the board, including deletions with attachments and release deployments.",
+            "Subtasks can be added when creating a task.",
+            "Subtasks: double-click to edit them and drag from the six-dot icon to reorder them.",
+            "Notice “So-and-so also has this task open” and protection when editing the title or description at the same time as another person.",
+            "Mobile: circles showing who is active on the board, at the top right."
+          ],
+          "mejoras": [
+            "“Saving… / Saved” indicator in the task detail.",
+            "Lock icon next to the name of private projects.",
+            "The activity circles include you.",
+            "After a deploy, open tabs reload by themselves when you return to them (or warn you if you are typing)."
+          ],
+          "correcciones": [
+            "Two tasks at once: they sit together and centered, with the same width and a small gap.",
+            "Cards that sometimes briefly went back to their previous order: a refresh requested before a change no longer overwrites that change.",
+            "“Server Action … was not found on the server” error when using a tab opened before a deploy."
+          ],
+          "tecnicos": [
+            "Migration v1_11: UndoEntry and Task.contentUpdatedAt/contentUpdatedById. Inverse operations per action (src/lib/undo.ts) stored by runAction; deleted attachment files are kept while their entry exists. Custom buildId and /api/version. In-memory per-task presence (/api/tasks/[id]/viewers)."
+          ]
+        }
       }
     },
     {
@@ -85,6 +140,29 @@
         "tecnicos": [
           "Presencia en memoria alimentada por los logs (GET /api/projects/[id]/presence, sin registro). Pila de modales con Escape y fondo para el de más arriba. purgeProject compartido entre borrar proyecto y borrar usuario."
         ]
+      },
+      "en": {
+        "summary": "Subtask progress bar, two tasks side by side on desktop, Ctrl+Enter to create, who is active on the board, removing tasks from the pinned section, logs showing only changes by default and user deletion.",
+        "changes": {
+          "nuevas": [
+            "Subtasks with a green progress bar next to the title, filling according to the share of subtasks done. Subtasks are not included in releases.",
+            "Desktop: with a task open, the “+” button outside the modal opens a new task on the right (in Backlog) and the open one moves to the left.",
+            "Ctrl/⌘+Enter in any “New task” field creates it.",
+            "Circles with the initials of whoever has done something on the board in the last 5 minutes, next to “PDF report”.",
+            "Delete users: if they have private projects, a warning and confirmation are shown, and the projects are deleted with them."
+          ],
+          "mejoras": [
+            "Tasks in “Always in the release” can be dragged to any column and position (they are no longer pinned).",
+            "Logs: only changes by default; “Include reads” also shows page views, opened tasks, reports and downloads.",
+            "Private projects of a deactivated owner stay locked until they return; they are no longer deleted automatically after 30 days."
+          ],
+          "correcciones": [
+            "Mobile: no vertical scroll; columns end right above the system gesture or navigation bar."
+          ],
+          "tecnicos": [
+            "In-memory presence fed by the logs (GET /api/projects/[id]/presence, not recorded). Modal stack with Escape and a backdrop for the topmost one. purgeProject shared between deleting a project and deleting a user."
+          ]
+        }
       }
     },
     {
@@ -111,6 +189,29 @@
         "tecnicos": [
           "Migración v1_9: Project.privateBlockedAt, ReleaseAttachment.isImage y AppLog.privateOwnerId. Tarea de mantenimiento horaria (instrumentation register). Contexto por acción (AsyncLocalStorage) para el texto y el proyecto de cada log."
         ]
+      },
+      "en": {
+        "summary": "Drag tasks to the pinned section, logs with readable actions and privacy for private projects, search across the whole release history, locking and deletion of orphaned private projects and full-height columns on mobile.",
+        "changes": {
+          "nuevas": [
+            "Dragging a task onto “Always in the release” pins it; if the section is closed, it opens when you hover over it.",
+            "Logs with readable actions: create, modify (which fields), move, reorder, archive, restore, delete, comment, deploy releases, columns and projects.",
+            "Orphaned private projects: if their owner is deactivated or stops being an admin, they are locked (nobody sees them) and deleted automatically after 30 days."
+          ],
+          "mejoras": [
+            "In Logs, activity on other people's private projects shows only time and user (also in the CSV and the filters).",
+            "Release history search covers all releases, ignoring case and accents; without a search, they load 50 at a time.",
+            "Pinned tasks are only added when generating the release from their column, not with “Release with selection”.",
+            "Copies of non-image files saved on deploy are deleted after 7 days."
+          ],
+          "correcciones": [
+            "Mobile: columns reach the bottom and the pinned tasks bar is no longer covered by the floating buttons.",
+            "Text of the task types section in the project settings."
+          ],
+          "tecnicos": [
+            "Migration v1_9: Project.privateBlockedAt, ReleaseAttachment.isImage and AppLog.privateOwnerId. Hourly maintenance task (instrumentation register). Per-action context (AsyncLocalStorage) for the text and project of each log."
+          ]
+        }
       }
     },
     {
@@ -139,6 +240,31 @@
         "tecnicos": [
           "Migración v1_8: Project.privateOwnerId, ProjectHiddenKind, ProjectTemplate, Task.evergreen, TaskKind (titleTemplate, descriptionTemplate, system) y TaskAttachment (mimeType, isImage, medidas opcionales). Los ficheros que no son imagen se guardan tal cual (<id>.bin) y se sirven siempre como descarga con tipo restringido."
         ]
+      },
+      "en": {
+        "summary": "Private projects, general types per project, project templates, pinned tasks in the release, attachments of any type with drag and drop, search boxes, type automation and column switching by swiping on mobile.",
+        "changes": {
+          "nuevas": [
+            "Private projects: only their owner sees them, not even other administrators (Project settings → Visibility or when creating it).",
+            "Each project chooses which general types it uses; unchecked ones do not appear in it (when unchecking one that has tasks, you choose which type they move to).",
+            "Project templates (Administration → Templates): columns and roles, own types, hidden general types and labels; chosen when creating a project.",
+            "Pinned tasks in the release column (“Always in the release”): they go into every release and do not leave the column on deploy.",
+            "Attachments of any type up to 10 MB and dragging files onto the open task (also from the browser's downloads).",
+            "Search boxes in the release history and in the version history.",
+            "Automation per task type: initial title and description text, with its explanation in the type list.",
+            "Mobile: swiping sideways switches column."
+          ],
+          "mejoras": [
+            "“Reply” is a system type: it comes built in, explains what it does and cannot be deleted.",
+            "Modals have a light border that separates them from the background (especially in dark theme)."
+          ],
+          "correcciones": [
+            "Browser errors (the “Something went wrong” screen and uncaught exceptions) are now recorded in Administration → Logs."
+          ],
+          "tecnicos": [
+            "Migration v1_8: Project.privateOwnerId, ProjectHiddenKind, ProjectTemplate, Task.evergreen, TaskKind (titleTemplate, descriptionTemplate, system) and TaskAttachment (mimeType, isImage, optional dimensions). Non-image files are stored as is (<id>.bin) and always served as a download with a restricted type."
+          ]
+        }
       }
     },
     {
@@ -166,6 +292,30 @@
         "tecnicos": [
           "Migración v1_7: tabla AppLog y Task.archivedFromColumnId. Registro en lote (sin coste por petición) y purga automática (LOG_RETENTION_DAYS)."
         ]
+      },
+      "en": {
+        "summary": "Administration logs, archived tasks in a modal with restoring to their column, deletion of releases and history attachments, “Reply” type and columns that fill the screen.",
+        "changes": {
+          "nuevas": [
+            "Administration → Logs: detailed record of the last 7 days (visits, sign-ins, each action with its duration and data, attachments, reports, Google, emails, WhatsApp and errors), with filters and CSV download.",
+            "Archived tasks in a modal (“Archived” on the board and in the side menu) with a filter, origin column and the releases they went through; “Restore” returns them to their column or to the first one if it no longer exists.",
+            "Archive several tasks from the selection bar.",
+            "Release history: “Delete release” and “Delete attachments”, with confirmation.",
+            "Special “Reply” type: when chosen, the title becomes “Reply” and the description starts with “I reply to the questions and what you need from me:”."
+          ],
+          "mejoras": [
+            "Desktop: with more than three columns, they share the window width.",
+            "Each page has its own loading indicator (before, Settings or Releases showed the board skeleton).",
+            "With tasks selected, columns leave room so the bar does not cover the last cards."
+          ],
+          "correcciones": [
+            "Occasional slow loads: database connections are no longer closed after 10 s of inactivity (they are kept for 10 min).",
+            "The “no color” circle is no longer clipped in the task detail."
+          ],
+          "tecnicos": [
+            "Migration v1_7: AppLog table and Task.archivedFromColumnId. Batched logging (no per-request cost) and automatic purge (LOG_RETENTION_DAYS)."
+          ]
+        }
       }
     },
     {
@@ -193,6 +343,30 @@
           "Migración v1_6: User.theme (enum Theme) y tabla ReleaseAttachment (copias en UPLOAD_DIR/releases); al borrar un proyecto se borran también esos ficheros.",
           "Variante dark de Tailwind por atributo data-theme con respaldo prefers-color-scheme."
         ]
+      },
+      "en": {
+        "summary": "Light or dark theme per user, Administration section, select an entire column, releases numbered per day with attachments in the history and compact task modal.",
+        "changes": {
+          "nuevas": [
+            "Theme per user in My profile → Appearance: System, Light or Dark.",
+            "Check or uncheck all tasks in a column with the checkbox next to its name.",
+            "Release history with attachments: on deploy a reduced copy is saved (960 px, WebP 55) with the release names, downloadable as a ZIP from Releases."
+          ],
+          "mejoras": [
+            "Single Administration section (Users and Task types) and new side menu order: Notifications, My assigned tasks, My profile and templates, Administration, Version history, Install app.",
+            "Desktop task detail: fully visible without scrolling, with a wider, more compact side column and the Archive and Delete buttons always visible.",
+            "Releases on the same day are numbered after the date: “Release 2026-10-18 (2) · Project”.",
+            "Scrollbars in Pizarro's colors in both themes."
+          ],
+          "correcciones": [
+            "Selection bar on desktop on a single line; it says “1 selected” / “N selected”.",
+            "The release title no longer appears in the text to copy; it is saved only in the history."
+          ],
+          "tecnicos": [
+            "Migration v1_6: User.theme (Theme enum) and ReleaseAttachment table (copies in UPLOAD_DIR/releases); deleting a project also deletes those files.",
+            "Tailwind dark variant via the data-theme attribute with a prefers-color-scheme fallback."
+          ]
+        }
       }
     },
     {
@@ -223,6 +397,33 @@
           "Ruta POST /api/projects/[id]/release-attachments que genera el ZIP en el servidor (sin dependencias nuevas) y acciones getReleaseTaskDetails y deleteTasks.",
           "Se mantienen los identificadores técnicos con el nombre anterior (cookies, base de datos y clave de cifrado) para no cerrar sesiones ni invalidar tokens guardados."
         ]
+      },
+      "en": {
+        "summary": "Pizarro (new name), releases with codes, descriptions and attachments as ZIP, image viewer, group deletion, back button and mobile improvements.",
+        "changes": {
+          "nuevas": [
+            "Releases: each item carries a code per type (F1, C2…), its description and its attachments renamed `code_name.webp`; “Download attachments” button with a ZIP of all of them.",
+            "Image viewer: tapping an attachment shows it full screen; it closes with the X, by tapping outside, with Escape or with back.",
+            "Delete the selected tasks as a group.",
+            "Back button: closes the open modal and, on mobile, returns to the previous column (up to 5 steps).",
+            "Reorder tasks by dragging within their column on mobile too, with a handle on each card."
+          ],
+          "mejoras": [
+            "The application is now called Pizarro.",
+            "New task: Title, Type and Description first; on mobile the modal opens at the top and stays visible with the keyboard.",
+            "The task detail fits entirely on desktop screens.",
+            "Selection bar on mobile: “Move to Next production push” and “Move to…” on the same line."
+          ],
+          "correcciones": [
+            "Mobile: vertical scrolling in a column with many tasks did not work (the gesture started a drag). Dragging between columns on mobile is removed.",
+            "Release: the title goes before the header.",
+            "Release: each task's description is included."
+          ],
+          "tecnicos": [
+            "POST /api/projects/[id]/release-attachments route that builds the ZIP on the server (no new dependencies) and getReleaseTaskDetails and deleteTasks actions.",
+            "Technical identifiers keep the previous name (cookies, database and encryption key) so as not to sign users out or invalidate stored tokens."
+          ]
+        }
       }
     },
     {
@@ -241,6 +442,21 @@
         "tecnicos": [
           "Migración v1_4: TaskKind.projectId (opcional, se borra con el proyecto); el nombre deja de ser único global y pasa a serlo entre los generales y dentro de cada proyecto (índices parciales sin distinguir mayúsculas)."
         ]
+      },
+      "en": {
+        "summary": "Task types exclusive to each project.",
+        "changes": {
+          "nuevas": [
+            "Task types exclusive to a project: managed in Project settings (anyone with access) and added to the general ones in the selectors, releases and PDF report."
+          ],
+          "mejoras": [
+            "The admin page is now called “General task types”; creating and editing types is done in a modal."
+          ],
+          "correcciones": [],
+          "tecnicos": [
+            "Migration v1_4: TaskKind.projectId (optional, deleted with the project); the name is no longer globally unique and is instead unique among general types and within each project (case-insensitive partial indexes)."
+          ]
+        }
       }
     },
     {
@@ -257,6 +473,19 @@
           "Crear varias tareas: «Tipo para todas» cambia ahora todas las líneas, también las que se habían cambiado a mano."
         ],
         "tecnicos": []
+      },
+      "en": {
+        "summary": "Show the password while typing and a fix in “Create several tasks”.",
+        "changes": {
+          "nuevas": [],
+          "mejoras": [
+            "Eye icon on password fields (sign-in, password change and user administration) to see what you type."
+          ],
+          "correcciones": [
+            "Create several tasks: “Type for all” now changes all lines, including those that had been changed by hand."
+          ],
+          "tecnicos": []
+        }
       }
     },
     {
@@ -279,6 +508,25 @@
         "tecnicos": [
           "Acción createTasks: alta en bloque en una transacción (createManyAndReturn), máximo 100 tareas."
         ]
+      },
+      "en": {
+        "summary": "Create several tasks by pasting a list, more compact forms on mobile and deliverables in a modal.",
+        "changes": {
+          "nuevas": [
+            "Create several tasks at once: paste a list (one task per line), choose the type for all or line by line and, if you want, assign a shared assignee, due date, deliverable and labels. “Several tasks” button on desktop and a small floating button above the “+” on mobile."
+          ],
+          "mejoras": [
+            "New task: the “Create task” button stays fixed at the bottom and always visible; “Assigned to” and “Due date” on the same row and a shorter description.",
+            "“Assigned to” is shown as an optional field.",
+            "Task detail: help texts shortened to one line (and hidden on mobile when they mention keyboard shortcuts).",
+            "Deliverables: the form opens in a modal when pressing “Add deliverable” (and when editing one).",
+            "On mobile, the column tabs no longer show a horizontal scrollbar."
+          ],
+          "correcciones": [],
+          "tecnicos": [
+            "createTasks action: bulk creation in one transaction (createManyAndReturn), maximum 100 tasks."
+          ]
+        }
       }
     },
     {
@@ -306,6 +554,30 @@
           "Migración v1_2: tabla TaskKind (Feature/Chore/Refactor → Funcionalidad; Fix/Hotfix → Corrección), tabla ReleaseTemplate (migra las plantillas existentes) y User.cardStyle.",
           "Manifiesto web, iconos PNG (incl. maskable y apple-touch-icon) y service worker mínimo sin caché; la imagen Docker incluye public/."
         ]
+      },
+      "en": {
+        "summary": "Configurable task types, multiple release templates, app installable on mobile and usability improvements on mobile and desktop.",
+        "changes": {
+          "nuevas": [
+            "Task types configurable by administrators (name, color and order); each type is a section of the release.",
+            "Multiple release headers and footers per user, with a name; they are chosen in the “Generate release” dialog and replaced in the already edited text.",
+            "Install Pizarro as an app on Android, iPhone and desktop (home screen, full screen).",
+            "Appearance preference: cards with a color stripe or fully tinted in their color.",
+            "On mobile, dragging a card over another column's tab (holding for half a second) shows that column so you can drop it in place; dropping it on the tab puts it at the end."
+          ],
+          "mejoras": [
+            "Quick project switch from the project title (dropdown on mobile and desktop).",
+            "“Camera” button also in the detail of existing tasks (mobile).",
+            "Add column: narrow vertical bar at the end of the board (desktop) and round button after the tabs (mobile)."
+          ],
+          "correcciones": [
+            "favicon.ico is added (it avoided a 404 on every load)."
+          ],
+          "tecnicos": [
+            "Migration v1_2: TaskKind table (Feature/Chore/Refactor → Feature; Fix/Hotfix → Fix), ReleaseTemplate table (migrates existing templates) and User.cardStyle.",
+            "Web manifest, PNG icons (incl. maskable and apple-touch-icon) and a minimal service worker without caching; the Docker image includes public/."
+          ]
+        }
       }
     },
     {
@@ -320,6 +592,17 @@
         ],
         "correcciones": [],
         "tecnicos": []
+      },
+      "en": {
+        "summary": "Clear message in the logs if environment variables are missing at startup.",
+        "changes": {
+          "nuevas": [],
+          "mejoras": [
+            "On startup DATABASE_URL and SESSION_SECRET are checked: if missing, the logs say which one and how to set it, instead of restarting in a loop with a Prisma error."
+          ],
+          "correcciones": [],
+          "tecnicos": []
+        }
       }
     },
     {
@@ -334,6 +617,17 @@
         "tecnicos": [
           "Dockerfile sin cachés de BuildKit (--mount=type=cache), que el builder de Railway rechaza si no llevan su identificador de servicio."
         ]
+      },
+      "en": {
+        "summary": "Docker build compatibility with Railway.",
+        "changes": {
+          "nuevas": [],
+          "mejoras": [],
+          "correcciones": [],
+          "tecnicos": [
+            "Dockerfile without BuildKit caches (--mount=type=cache), which Railway's builder rejects if they lack their service identifier."
+          ]
+        }
       }
     },
     {
@@ -361,6 +655,30 @@
           "Envío de avisos tras responder (after) para no añadir espera; SMTP con nodemailer y WhatsApp Cloud API con plantilla.",
           "Nuevas variables opcionales: GOOGLE_*, SMTP_*, WHATSAPP_* y APP_TIMEZONE."
         ]
+      },
+      "en": {
+        "summary": "Project PDF report, deadlines and deliverables, Google Docs/Sheets from cards and mentions with notifications.",
+        "changes": {
+          "nuevas": [
+            "Project PDF report: summary and progress, status per column, deliverables, overdue and upcoming deadlines, workload per person, types, latest releases and detail of each column.",
+            "Due date on cards, with a visual warning for overdue, due today or upcoming on the board and in “My tasks”.",
+            "Deliverables (milestones with a target date) that group cards, managed from “Project settings”.",
+            "Google Docs and Sheets: @docs or @sheets in a card creates the file in your Drive, opens it in another tab and leaves it linked.",
+            "Comments on cards with @person mentions and autocomplete.",
+            "Mention notifications in the app (bell with counter), by email and by WhatsApp."
+          ],
+          "mejoras": [
+            "Columns can be marked as “done” to calculate progress and not warn about deadlines already met.",
+            "Notification preferences and Google connection in “My profile and templates”."
+          ],
+          "correcciones": [],
+          "tecnicos": [
+            "Migration v1_1: Task.dueDate and deliverableId, Column.isDone and the Deliverable, TaskLink, GoogleAccount, TaskComment and Notification tables.",
+            "Google OAuth with the minimal drive.file scope and tokens encrypted with AES-256-GCM.",
+            "Notifications are sent after responding (after) so as not to add waiting time; SMTP with nodemailer and WhatsApp Cloud API with a template.",
+            "New optional variables: GOOGLE_*, SMTP_*, WHATSAPP_* and APP_TIMEZONE."
+          ]
+        }
       }
     },
     {
@@ -391,6 +709,33 @@
           "Sesiones en base de datos con cookie HttpOnly, SameSite=Lax y limitación de intentos de login.",
           "Despliegue en un único contenedor Docker con volumen persistente para adjuntos (Railway)."
         ]
+      },
+      "en": {
+        "summary": "First version of Pizarro: multi-project kanban and release notes generator.",
+        "changes": {
+          "nuevas": [
+            "Multi-project Kanban board with drag and drop between columns and within each column.",
+            "Columns configurable per project: create, rename, reorder, assign a role and delete when empty.",
+            "Cards with type (Feature, Fix, Chore, Refactor, Hotfix), color, assignee, labels, external link, checklist and Markdown description.",
+            "Screenshots pasted from the clipboard or uploaded from file/camera, optimized to WebP.",
+            "Multi-select and bulk move to “Next production push”.",
+            "Release notes generator with personal header and footer, editor with preview, copy, download .md/.txt and “Mark as deployed”.",
+            "Release history per project.",
+            "“My assigned tasks” view.",
+            "Project visibility restrictable per user.",
+            "User management (max. 5) with Admin and Member roles.",
+            "Application version history."
+          ],
+          "mejoras": [
+            "Mobile-friendly interface with column tabs and a floating button to create tasks or upload screenshots."
+          ],
+          "correcciones": [],
+          "tecnicos": [
+            "Next.js (App Router) + PostgreSQL with Prisma; initial migration and seed.",
+            "Database-backed sessions with an HttpOnly, SameSite=Lax cookie and login attempt limiting.",
+            "Deployment in a single Docker container with a persistent volume for attachments (Railway)."
+          ]
+        }
       }
     }
   ]

@@ -52,7 +52,7 @@ export function ColumnView({ column, taskIds, evergreenIds = [], index, total, d
             onClick={() => setSelectedMany(taskIds, !allSelected)}
             className={cn(
               "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
-              allSelected || selectedHere ? "border-brand-600 bg-brand-600 text-white" : "border-slate-300 dark:border-slate-600",
+              allSelected || selectedHere ? "border-brand-600 bg-brand-600 text-on-brand" : "border-slate-300 dark:border-slate-600",
             )}
             aria-label={allSelected ? t("Quitar la selección de «{name}»", { name: column.name }) : t("Seleccionar todas las tareas de «{name}»", { name: column.name })}
             title={allSelected ? t("Quitar selección") : t("Seleccionar todas")}

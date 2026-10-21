@@ -76,6 +76,7 @@ if (!args.includes("--render")) {
     releasedAt,
     summary: opt("--summary") ?? "",
     changes: { nuevas: [], mejoras: [], correcciones: [], tecnicos: [] },
+    en: { summary: "", changes: { nuevas: [], mejoras: [], correcciones: [], tecnicos: [] } },
   });
   pkg.version = next;
   writeJson("package.json", pkg);

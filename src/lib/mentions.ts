@@ -1,6 +1,6 @@
 // Menciones: se guardan en el texto como @[Nombre](user:ID).
 
-export const MENTION_RE = /@\[([^\]\n]{1,80})\]\(user:([a-z0-9]{1,40})\)/gi;
+const MENTION_RE = /@\[([^\]\n]{1,80})\]\(user:([a-z0-9]{1,40})\)/gi;
 
 export function mentionToken(name: string, userId: string): string {
   return `@[${name.replace(/[\[\]\n]/g, "")}](user:${userId})`;

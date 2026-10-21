@@ -94,7 +94,7 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
           className={cn(
             "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-opacity",
             isSelected
-              ? "border-brand-600 bg-brand-600 text-white"
+              ? "border-brand-600 bg-brand-600 text-on-brand"
               : "border-slate-300 opacity-60 group-hover:opacity-100 max-md:opacity-100 dark:border-slate-600",
           )}
           aria-label={isSelected ? t("Quitar de la selección") : t("Seleccionar")}

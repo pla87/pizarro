@@ -1,7 +1,7 @@
 /** Automatización por tipo de tarea: al elegir el tipo se fija el título y/o se antepone un texto a la descripción. */
 import { makeT, type T } from "@/i18n/core";
 
-export interface KindAutomation {
+interface KindAutomation {
   titleTemplate: string;
   descriptionTemplate: string;
 }
@@ -38,7 +38,3 @@ export function describeKindAutomation(kind: KindAutomation, t: T = makeT("es"))
   if (desc) return t("Al elegirlo, la descripción empieza por «{desc}».", { desc: short(desc) });
   return null;
 }
-
-// --- Compatibilidad (obsoleto): lo usan TaskDialog y NewTaskDialog hasta migrar a applyKindTemplate. ---
-
-/** @deprecated Usa la plantilla del tipo (descriptionTemplate). */

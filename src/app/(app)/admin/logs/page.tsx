@@ -135,7 +135,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           <input type="search" name="q" defaultValue={filters.q} maxLength={100} className={field} />
         </label>
         <div className="col-span-2 flex gap-2">
-          <button type="submit" className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+          <button type="submit" className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-on-brand hover:bg-brand-700">
             {t("Filtrar")}
           </button>
           <Link href="/admin/logs" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700">

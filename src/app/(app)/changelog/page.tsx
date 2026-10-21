@@ -2,7 +2,7 @@ import { History } from "lucide-react";
 import { db } from "@/lib/db";
 import { parseChanges } from "@/lib/changelog";
 import { requireUserPage } from "@/lib/session";
-import { getT } from "@/i18n/server";
+import { getLocale, getT } from "@/i18n/server";
 import { ChangelogList } from "./ChangelogList";
 import pkg from "../../../../package.json";
 
@@ -21,6 +21,7 @@ function compareSemver(a: string, b: string): number {
 export default async function ChangelogPage() {
   await requireUserPage();
   const t = await getT();
+  const en = (await getLocale()) === "en";
   const versions = (await db.appVersionLog.findMany()).sort((a, b) => compareSemver(a.version, b.version));
 
   return (
@@ -40,8 +41,9 @@ export default async function ChangelogPage() {
           id: v.id,
           version: v.version,
           releasedAt: v.releasedAt.toISOString(),
-          summary: v.summary,
-          changes: parseChanges(v.changes),
+          // En inglés, la traducción si la hay; si no, el texto original.
+          summary: en && v.summaryEn ? v.summaryEn : v.summary,
+          changes: en && v.changesEn ? parseChanges(v.changesEn) : parseChanges(v.changes),
         }))}
       />
     </div>

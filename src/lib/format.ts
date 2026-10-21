@@ -1,7 +1,7 @@
 // Fechas con la misma zona horaria en el servidor y en el navegador: si no, el HTML del
 // servidor y el del navegador no coinciden (error de hidratación de React #418).
 
-export const APP_TIME_ZONE = process.env.NEXT_PUBLIC_APP_TIMEZONE || "Europe/Madrid";
+const APP_TIME_ZONE = process.env.NEXT_PUBLIC_APP_TIMEZONE || "Europe/Madrid";
 
 type Style = "date" | "dateShort" | "dateLong" | "dateTime" | "dateTimeShort" | "time";
 

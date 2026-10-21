@@ -45,11 +45,6 @@ export function imageFilesFrom(list: FileList | DataTransferItemList | null | un
   return filesFrom(list).filter((f) => f.type.startsWith("image/"));
 }
 
-/** ¿El arrastre lleva archivos? (ignora arrastres internos de texto). */
-export function dragHasFiles(e: { dataTransfer: DataTransfer | null }): boolean {
-  return Array.from(e.dataTransfer?.types ?? []).includes("Files");
-}
-
 export function isImageFile(file: File): boolean {
   return file.type.startsWith("image/");
 }

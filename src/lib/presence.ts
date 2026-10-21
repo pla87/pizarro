@@ -3,7 +3,7 @@ import "server-only";
 // Quién ha hecho algo en cada tablero hace poco (los círculos con iniciales de la cabecera).
 // Vive en memoria del proceso: basta con una sola instancia y se alimenta de los logs.
 
-export const PRESENCE_WINDOW_MS = 5 * 60 * 1000;
+const PRESENCE_WINDOW_MS = 5 * 60 * 1000;
 
 type Entry = { name: string; at: number };
 const state = (globalThis as unknown as { __pzPresence?: Map<string, Map<string, Entry>> }).__pzPresence ??= new Map();
@@ -29,7 +29,7 @@ export function activeUsers(projectId: string, now = Date.now()): { id: string; 
 }
 
 // Quién tiene abierta cada tarea (lo anota el propio diálogo cada pocos segundos).
-export const VIEWER_WINDOW_MS = 45_000;
+const VIEWER_WINDOW_MS = 45_000;
 const viewers = (globalThis as unknown as { __pzViewers?: Map<string, Map<string, Entry>> }).__pzViewers ??= new Map();
 
 /** Anota que el usuario tiene la tarea abierta y devuelve quién más la tiene. */

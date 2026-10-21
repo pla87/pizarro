@@ -9,7 +9,7 @@ export const MAX_TEMPLATE_KINDS = 30;
 export const MAX_TEMPLATE_LABELS = 50;
 
 /** Comparación de nombres sin distinguir mayúsculas ni espacios sobrantes. */
-export const nameKey = (s: string) => s.trim().toLowerCase();
+const nameKey = (s: string) => s.trim().toLowerCase();
 
 function uniqueNames(items: { name: string }[]): boolean {
   return new Set(items.map((i) => nameKey(i.name))).size === items.length;
@@ -17,20 +17,20 @@ function uniqueNames(items: { name: string }[]): boolean {
 
 const itemName = v.name.max(40, "Máximo 40 caracteres.");
 
-export const templateColumnSchema = z.object({
+const templateColumnSchema = z.object({
   name: v.name,
   role: z.enum(COLUMN_ROLES),
   isDone: z.boolean(),
 });
 
-export const templateKindSchema = z.object({
+const templateKindSchema = z.object({
   name: itemName,
   color: v.hexColor,
   titleTemplate: z.string().trim().max(200, "El título automático es demasiado largo.").default(""),
   descriptionTemplate: z.string().max(5000, "El texto inicial es demasiado largo.").default(""),
 });
 
-export const templateLabelSchema = z.object({ name: itemName, color: z.enum(PALETTE) });
+const templateLabelSchema = z.object({ name: itemName, color: z.enum(PALETTE) });
 
 /** Forma de los datos de una plantilla (lo que se guarda y lo que edita el administrador). */
 export const templateInputSchema = z
@@ -76,12 +76,12 @@ export function summarizeTemplate(t: Pick<TemplateData, "columns" | "kinds" | "l
   return parts.join(" · ");
 }
 
-export interface GeneralKind {
+interface GeneralKind {
   id: string;
   name: string;
 }
 
-export interface TemplateApplication {
+interface TemplateApplication {
   columns: { name: string; role: ColumnRoleValue; isDone: boolean; position: number }[];
   kinds: { name: string; color: string; titleTemplate: string; descriptionTemplate: string; position: number }[];
   labels: { name: string; color: string }[];
