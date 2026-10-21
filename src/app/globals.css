@@ -176,7 +176,14 @@
  * scrollbar-color anularía los ::-webkit-scrollbar).
  */
 @layer base {
-  /* Foco con teclado: siempre el color principal del tema (sin el anillo blanco del navegador). */
+  /*
+   * Foco con teclado: siempre el color principal del tema (sin el anillo blanco del navegador).
+   * El color va en todos los elementos para que la transición de los botones no parta del color
+   * del texto (se veía un destello blanco antes de pasar al del tema).
+   */
+  * {
+    outline-color: var(--color-brand-500);
+  }
   :focus-visible {
     outline: 2px solid var(--color-brand-500);
     outline-offset: 2px;

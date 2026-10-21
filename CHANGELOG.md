@@ -2,6 +2,29 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.14.0 — 2026-10-21 22:55
+
+Etiquetas de tipo legibles en cualquier color, foco y logo con el color del tema, plantillas de tipo con Markdown y correcciones de borradores, deshacer en inglés y la tecla Supr en listas
+
+### Mejoras
+
+- Las etiquetas de tipo se leen bien con cualquier color, también negro, marino o blanco: el texto se oscurece en modo claro y se aclara en modo oscuro.
+- El recuadro de foco al moverse con el tabulador usa siempre el color del tema (antes aparecía blanco en algunos elementos).
+- El logo de Pizarro toma el color del tema elegido.
+- El texto inicial de la descripción de un tipo de tarea admite Markdown y se edita con el mismo editor que las descripciones.
+- Sin plantilla, un proyecto creado por alguien que usa Pizarro en inglés trae las columnas en inglés.
+- El aviso de deshacer sale en el idioma de cada persona.
+- El círculo de la tarjeta indica «Asignada a …» al pasar el ratón.
+
+### Correcciones
+
+- Los borradores solo se guardan si queda algo sin guardar: una tarea ya creada, guardada o cancelada no se vuelve a abrir al entrar en el tablero.
+- Corregido: pulsar Supr al final de una lista en la descripción creaba y borraba una línea vacía alternativamente.
+
+### Cambios técnicos / DB
+
+- Las etiquetas de deshacer se guardan como plantillas traducibles; las antiguas se muestran tal cual.
+
 ## v1.13.0 — 2026-10-21 15:44
 
 Temas de color completos y más cuidados, historial de versiones en inglés, menciones con la barra de formato, barra de formato por defecto y optimizaciones.
