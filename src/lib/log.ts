@@ -7,9 +7,9 @@ import { notePresence } from "./presence";
 // Registro de actividad (Administración → Logs). Los eventos se acumulan en memoria y se
 // escriben en lote cada pocos segundos: registrar nunca añade una consulta a la petición.
 
-export type LogLevel = "info" | "warn" | "error";
+type LogLevel = "info" | "warn" | "error";
 
-export interface LogEvent {
+interface LogEvent {
   level?: LogLevel;
   /** auth, page, action, api, notify, system… */
   category: string;
@@ -41,7 +41,7 @@ const state = (globalThis as unknown as { __pzLog?: { queue: Prisma.AppLogCreate
 const SECRET_KEY = /pass(word)?|token|secret|authorization|cookie/i;
 
 /** Copia apta para guardar: sin secretos, con textos y listas recortados. */
-export function sanitize(value: unknown, depth = 0): unknown {
+function sanitize(value: unknown, depth = 0): unknown {
   if (value === null || value === undefined) return value ?? null;
   if (typeof value === "string") return value.length > 500 ? `${value.slice(0, 500)}… (${value.length} caracteres)` : value;
   if (typeof value === "number" || typeof value === "boolean") return value;

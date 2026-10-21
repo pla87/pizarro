@@ -17,13 +17,13 @@ import type { CardStyleValue, EditorModeValue, TemplateOption } from "@/lib/type
 type ThemeValue = "SYSTEM" | "LIGHT" | "DARK";
 type AccentValue = "BLUE" | "FOREST" | "SIENNA" | "MUSTARD" | "MONO";
 
-// Muestra de cada acento (el color de brand-600 de globals.css).
+// Muestra de cada tema: su color principal (brand-600) sobre su fondo (slate-200) de globals.css.
 const ACCENTS: { value: AccentValue; label: string; swatch: string }[] = [
-  { value: "BLUE", label: "Azul", swatch: "#4f46e5" },
-  { value: "FOREST", label: "Verde bosque", swatch: "#2d6a4f" },
-  { value: "SIENNA", label: "Siena", swatch: "#a8481f" },
-  { value: "MUSTARD", label: "Mostaza", swatch: "#946a07" },
-  { value: "MONO", label: "Blanco y negro", swatch: "#18181b" },
+  { value: "BLUE", label: "Azul", swatch: "linear-gradient(135deg, #4f46e5 50%, #e2e8f0 50%)" },
+  { value: "FOREST", label: "Verde bosque", swatch: "linear-gradient(135deg, #1f6b42 50%, #d2dccf 50%)" },
+  { value: "SIENNA", label: "Siena", swatch: "linear-gradient(135deg, #a2491f 50%, #e6d7cb 50%)" },
+  { value: "MUSTARD", label: "Mostaza", swatch: "linear-gradient(135deg, #9a7209 50%, #e5dec3 50%)" },
+  { value: "MONO", label: "Blanco y negro", swatch: "linear-gradient(135deg, #111111 50%, #ffffff 50%)" },
 ];
 
 interface Props {
@@ -481,9 +481,9 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
           </button>
         ))}
       </div>
-      <h3 className="mt-6 text-sm font-semibold">{t("Color de acento")}</h3>
-      <p className="mt-0.5 text-sm text-slate-500">{t("Color de botones, enlaces y selecciones en toda la app.")}</p>
-      <div role="radiogroup" aria-label={t("Color de acento")} className="mt-3 flex flex-wrap gap-4">
+      <h3 className="mt-6 text-sm font-semibold">{t("Tema de color")}</h3>
+      <p className="mt-0.5 text-sm text-slate-500">{t("Colores de toda la app: fondos, bordes, botones, enlaces y selecciones, en modo claro y oscuro.")}</p>
+      <div role="radiogroup" aria-label={t("Tema de color")} className="mt-3 flex flex-wrap gap-4">
         {ACCENTS.map(({ value, label, swatch }) => (
           <button
             key={value}
@@ -499,9 +499,9 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
                 value === "MONO" && "border border-slate-300 dark:border-slate-600",
                 accent === value ? "ring-2 ring-slate-900 dark:ring-slate-100" : "ring-1 ring-transparent hover:ring-slate-300 dark:hover:ring-slate-600",
               )}
-              style={value === "MONO" ? { background: "linear-gradient(135deg, #18181b 50%, #ffffff 50%)" } : { backgroundColor: swatch }}
+              style={{ background: swatch }}
             >
-              {accent === value && <Check size={16} className={value === "MONO" ? "text-white mix-blend-difference" : "text-white"} />}
+              {accent === value && <Check size={16} className="text-white drop-shadow-[0_0_2px_rgb(0_0_0/0.9)]" />}
             </span>
             <span className={accent === value ? "font-semibold" : "text-slate-600 dark:text-slate-400"}>{t(label)}</span>
           </button>

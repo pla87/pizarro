@@ -2,7 +2,7 @@
 import type { CollisionDetection } from "@dnd-kit/core";
 
 /** Prefijo del id de los droppables de columna (el resto de droppables son tarjetas). */
-export const COLUMN_DROPPABLE_PREFIX = "col:";
+const COLUMN_DROPPABLE_PREFIX = "col:";
 
 /**
  * Detección de colisiones del tablero. Solo cuentan los droppables visibles (en móvil las columnas

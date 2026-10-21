@@ -14,7 +14,7 @@ export class GoogleConnectError extends AppError {
   }
 }
 
-export const GOOGLE_SCOPES = ["openid", "email", "https://www.googleapis.com/auth/drive.file"];
+const GOOGLE_SCOPES = ["openid", "email", "https://www.googleapis.com/auth/drive.file"];
 
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -31,7 +31,7 @@ export function googleEnabled(): boolean {
   return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.APP_URL);
 }
 
-export function googleRedirectUri(): string {
+function googleRedirectUri(): string {
   return `${process.env.APP_URL!.replace(/\/$/, "")}/api/google/callback`;
 }
 

@@ -21,6 +21,8 @@ export const changelogSchema = z.object({
       releasedAt: z.string().datetime({ offset: true }).optional(),
       summary: z.string().default(""),
       changes: changesSchema,
+      /** Traducción al inglés (opcional). */
+      en: z.object({ summary: z.string().default(""), changes: changesSchema }).optional(),
     }),
   ),
 });

@@ -2,6 +2,32 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.13.0 — 2026-10-21 15:44
+
+Temas de color completos y más cuidados, historial de versiones en inglés, menciones con la barra de formato, barra de formato por defecto y optimizaciones.
+
+### Nuevas funcionalidades
+
+- Menciones en el editor con barra de formato: al escribir @ aparece la lista de personas (y @docs / @sheets); la mención se ve como una etiqueta.
+
+### Mejoras
+
+- Temas de color rehechos: cada tema (Verde bosque, Siena, Mostaza, Blanco y negro) cambia toda la app —fondos, columnas, tarjetas, bordes y textos—, no solo los resaltados. Blanco y negro es completamente en grises.
+- Subtareas hechas en verde neón (casilla y barra) en el tema azul.
+- Historial de versiones también en inglés.
+- La edición con barra de formato es la opción por defecto.
+- La pantalla de acceso sale siempre en español.
+- El tablero carga menos código al abrirse: los diálogos y el editor se cargan al usarlos (con precarga en segundo plano).
+- Los refrescos automáticos ya no registran una visita cada vez en los logs.
+
+### Correcciones
+
+- Tonos 200 y 300 del color principal que no estaban definidos (algunos textos y bordes salían sin color).
+
+### Cambios técnicos / DB
+
+- Migración v1_13: AppVersionLog.summaryEn/changesEn y editorMode WYSIWYG por defecto (también para los usuarios existentes). Escala slate-* y color on-brand por tema. Limpieza de código sin uso (exports, helpers obsoletos). @tiptap/extension-mention y @tiptap/suggestion 3.32.0.
+
 ## v1.12.0 — 2026-10-20 23:46
 
 Pizarro en inglés, descripciones con formato (Markdown o barra de formato), informe PDF más útil con descarga en móvil, cambios casi al instante entre pestañas, borradores automáticos, colores de acento, releases numeradas y deshacer por tarea.

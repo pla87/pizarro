@@ -1,8 +1,8 @@
 // Fechas límite: se guardan como día (YYYY-MM-DD, columna DATE) y se comparan por día.
 
-export type DueStatus = "none" | "done" | "overdue" | "today" | "soon" | "ok";
+type DueStatus = "none" | "done" | "overdue" | "today" | "soon" | "ok";
 
-export const SOON_DAYS = 3;
+const SOON_DAYS = 3;
 
 /** "Hoy" en la zona horaria indicada, como YYYY-MM-DD. */
 export function todayIso(timeZone?: string): string {

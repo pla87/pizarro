@@ -1,7 +1,7 @@
 // Escritor ZIP mínimo, solo almacenamiento (sin compresión: los WebP ya van comprimidos).
 import { crc32 } from "node:zlib";
 
-export interface ZipFile {
+interface ZipFile {
   /** Ruta dentro del ZIP (UTF-8). */
   name: string;
   data: Uint8Array;

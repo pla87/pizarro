@@ -10,12 +10,10 @@ import { requestContext } from "./request-context";
 import { getCurrentUser } from "./session";
 import { toLocale, translate } from "@/i18n/core";
 
-export { requestContext };
-
-export type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string };
+type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string };
 
 /** Nombre y argumentos de la acción, para el registro de actividad. */
-export interface ActionMeta {
+interface ActionMeta {
   name: string;
   args?: ArrayLike<unknown>;
 }

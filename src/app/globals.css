@@ -5,11 +5,16 @@
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --color-brand-50: #eef2ff;
   --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
   --color-brand-500: #6366f1;
   --color-brand-600: #4f46e5;
   --color-brand-700: #4338ca;
   /* Barra de progreso de subtareas: contrasta con el acento (ver overrides abajo). */
-  --color-progress: #10b981;
+  /* Texto sobre el color principal (botones, pestañas activas). */
+  --color-on-brand: #ffffff;
+  /* Subtareas hechas: verde neón en el tema azul (más vivo en oscuro). */
+  --color-progress: #00c96b;
 }
 
 /*
@@ -40,57 +45,126 @@
 }
 
 /*
- * Acento por usuario: <html data-accent="forest|sienna|mustard|mono">; sin atributo = azul (valores de @theme).
- * brand-600 es siempre lo bastante oscuro para texto blanco (contraste >= 4.5); 50/100 son tintes claros
- * y en oscuro la app usa variantes translúcidas (dark:bg-brand-500/15), así que 500 debe verse sobre fondo oscuro.
+ * Tema de color por usuario: <html data-accent="forest|sienna|mustard|mono">; sin atributo = azul.
+ * Cada tema cambia el color principal (brand), el texto sobre él (on-brand), el color de progreso
+ * (subtareas) y TODA la escala neutra (slate-*): fondos, bordes y textos secundarios toman el tono
+ * del tema. Así botones, tarjetas, menús y modales combinan con el color principal.
  */
 :root {
   @variant dark {
-    --color-progress: #34d399;
+    --color-progress: #2bff88;
   }
 }
+
+/* Verde bosque: neutros salvia y verde profundo; progreso en ámbar. */
 :root[data-accent="forest"] {
-  --color-brand-50: #ecf5ee;
-  --color-brand-100: #d5e8da;
-  --color-brand-500: #3f9a5e;
-  --color-brand-600: #2d6a4f;
-  --color-brand-700: #1f5139;
+  --color-slate-50: #f3f6f2;
+  --color-slate-100: #e7ede5;
+  --color-slate-200: #d2dccf;
+  --color-slate-300: #b2c1ae;
+  --color-slate-400: #869a82;
+  --color-slate-500: #637760;
+  --color-slate-600: #4b5d49;
+  --color-slate-700: #3a4a39;
+  --color-slate-800: #263226;
+  --color-slate-900: #172119;
+  --color-slate-950: #0c140e;
+  --color-brand-50: #e8f4ec;
+  --color-brand-100: #cfe8d7;
+  --color-brand-200: #a8d5b8;
+  --color-brand-300: #7cc297;
+  --color-brand-500: #3d9a63;
+  --color-brand-600: #1f6b42;
+  --color-brand-700: #175433;
   --color-progress: #f59e0b;
   @variant dark {
-    --color-progress: #fbbf24;
+    --color-brand-500: #5fbf86;
+    --color-progress: #ffc23d;
   }
 }
+
+/* Siena: neutros cálidos de terracota y arcilla; progreso en turquesa. */
 :root[data-accent="sienna"] {
-  --color-brand-50: #fbf1ec;
-  --color-brand-100: #f5dfd3;
-  --color-brand-500: #d2693c;
-  --color-brand-600: #a8481f;
-  --color-brand-700: #86371a;
-}
-:root[data-accent="mustard"] {
-  --color-brand-50: #fbf5e0;
-  --color-brand-100: #f5e8b5;
-  --color-brand-500: #c99a14;
-  --color-brand-600: #946a07;
-  --color-brand-700: #755305;
+  --color-slate-50: #faf6f2;
+  --color-slate-100: #f3ebe4;
+  --color-slate-200: #e6d7cb;
+  --color-slate-300: #d1bba9;
+  --color-slate-400: #ad917c;
+  --color-slate-500: #8b705d;
+  --color-slate-600: #6e5646;
+  --color-slate-700: #564337;
+  --color-slate-800: #3a2c24;
+  --color-slate-900: #241b16;
+  --color-slate-950: #140e0b;
+  --color-brand-50: #fbeee6;
+  --color-brand-100: #f6dacb;
+  --color-brand-200: #edbfa5;
+  --color-brand-300: #e29c78;
+  --color-brand-500: #c8612f;
+  --color-brand-600: #a2491f;
+  --color-brand-700: #813817;
   --color-progress: #0d9488;
   @variant dark {
-    --color-progress: #2dd4bf;
+    --color-brand-500: #e0804f;
+    --color-progress: #2ee6d0;
   }
 }
-/* Blanco y negro: casi negro en claro; en oscuro grises claros para texto/aro y un gris medio para botones. */
-:root[data-accent="mono"] {
-  --color-brand-50: #f4f4f5;
-  --color-brand-100: #e4e4e7;
-  --color-brand-500: #52525b;
-  --color-brand-600: #18181b;
-  --color-brand-700: #000000;
+
+/* Mostaza: neutros de arena y oliva; mostaza intensa en botones y enlaces; progreso en azul. */
+:root[data-accent="mustard"] {
+  --color-slate-50: #faf8f0;
+  --color-slate-100: #f3efdf;
+  --color-slate-200: #e5dec3;
+  --color-slate-300: #d0c59f;
+  --color-slate-400: #aea072;
+  --color-slate-500: #8b7f55;
+  --color-slate-600: #6d6342;
+  --color-slate-700: #554d34;
+  --color-slate-800: #393423;
+  --color-slate-900: #242116;
+  --color-slate-950: #14120b;
+  --color-brand-50: #fcf5d9;
+  --color-brand-100: #f8e7a8;
+  --color-brand-200: #f2d675;
+  --color-brand-300: #e9c24a;
+  --color-brand-500: #d4a017;
+  --color-brand-600: #9a7209;
+  --color-brand-700: #7d5c06;
+  --color-progress: #2563eb;
   @variant dark {
-    --color-brand-50: #27272a;
-    --color-brand-100: #3f3f46;
-    --color-brand-500: #d4d4d8;
-    --color-brand-600: #71717a;
-    --color-brand-700: #52525b;
+    --color-brand-500: #e8b931;
+    --color-progress: #5b9bff;
+  }
+}
+
+/* Blanco y negro: todo en grises puros; el principal es negro en claro y blanco en oscuro. */
+:root[data-accent="mono"] {
+  --color-slate-50: #fafafa;
+  --color-slate-100: #f4f4f4;
+  --color-slate-200: #e4e4e4;
+  --color-slate-300: #d0d0d0;
+  --color-slate-400: #a0a0a0;
+  --color-slate-500: #737373;
+  --color-slate-600: #535353;
+  --color-slate-700: #3d3d3d;
+  --color-slate-800: #262626;
+  --color-slate-900: #171717;
+  --color-slate-950: #0a0a0a;
+  --color-brand-50: #f2f2f2;
+  --color-brand-100: #e4e4e4;
+  --color-brand-200: #d0d0d0;
+  --color-brand-300: #a0a0a0;
+  --color-brand-500: #404040;
+  --color-brand-600: #111111;
+  --color-brand-700: #000000;
+  --color-progress: #111111;
+  /* En oscuro, 50-300 se usan como texto claro (como en el resto de temas): se quedan claros. */
+  @variant dark {
+    --color-brand-500: #e4e4e4;
+    --color-brand-600: #f4f4f4;
+    --color-brand-700: #ffffff;
+    --color-on-brand: #0a0a0a;
+    --color-progress: #f4f4f4;
   }
 }
 
@@ -150,7 +224,7 @@ body {
   @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-50;
 }
 @utility btn-primary {
-  @apply btn bg-brand-600 text-white hover:bg-brand-700;
+  @apply btn bg-brand-600 text-on-brand hover:bg-brand-700;
 }
 @utility btn-secondary {
   @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
@@ -199,6 +273,8 @@ body {
 .prose-md hr { @apply my-4 border-slate-200 dark:border-slate-800; }
 .prose-md input[type="checkbox"] { @apply mr-1.5 align-middle; }
 .prose-md > :first-child { @apply mt-0; }
+.prose-md .mention-chip { @apply rounded bg-brand-50 px-1 py-0.5 font-medium text-brand-700 dark:bg-brand-500/20 dark:text-brand-100; }
+.prose-md .mention-chip.ProseMirror-selectednode { @apply ring-2 ring-brand-500/50; }
 .prose-md u { @apply underline decoration-1 underline-offset-2; }
 /* Editor con barra de formato (TipTap): hereda .prose-md; el contenido ocupa el alto mínimo. */
 .ProseMirror.prose-md > :last-child { @apply mb-0; }

@@ -47,7 +47,7 @@ export function readDraft<T>(key: string): T | null {
   }
 }
 
-export function writeDraft(key: string, value: unknown): void {
+function writeDraft(key: string, value: unknown): void {
   try {
     if (value == null) localStorage.removeItem(key);
     else localStorage.setItem(key, JSON.stringify({ at: Date.now(), value }));
@@ -56,7 +56,7 @@ export function writeDraft(key: string, value: unknown): void {
   }
 }
 
-export function clearDraft(key: string): void {
+function clearDraft(key: string): void {
   writeDraft(key, null);
 }
 

@@ -43,7 +43,7 @@ export function NewColumnButton({ variant, onCreated }: { variant: "desktop" | "
           aria-label={t("Añadir columna")}
           title={t("Añadir columna")}
         >
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-slate-600 group-hover:bg-brand-600 group-hover:text-white dark:bg-slate-800 dark:text-slate-300">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-slate-600 group-hover:bg-brand-600 group-hover:text-on-brand dark:bg-slate-800 dark:text-slate-300">
             <Plus size={16} />
           </span>
         </button>

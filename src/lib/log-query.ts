@@ -10,7 +10,7 @@ export const LOG_RANGES = [
   { value: "7d", label: "7 días", hours: 24 * 7 },
 ] as const;
 
-export interface LogFilters {
+interface LogFilters {
   range: string;
   level: string;
   category: string;

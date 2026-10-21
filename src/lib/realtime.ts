@@ -3,7 +3,7 @@ import "server-only";
 // Avisos en tiempo (casi) real: cada cambio en un proyecto se anuncia a las pestañas que lo
 // tienen abierto (/api/projects/[id]/events) y estas se refrescan. En memoria: una sola instancia.
 
-export interface ProjectChange {
+interface ProjectChange {
   projectId: string;
   userId: string | null;
   action: string;

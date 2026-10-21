@@ -30,17 +30,3 @@ export async function undoLast(projectId: string, taskId?: string | null) {
     return { label: entry.label, remaining, skipped };
   });
 }
-
-/** Cuántas acciones puede deshacer el usuario en el proyecto y cuál es la última. */
-export async function undoStatus(projectId: string) {
-  return runAction(async (): Promise<{ count: number; label: string | null }> => {
-    const user = await requireUser();
-    const pid = v.id.parse(projectId);
-    await assertProjectAccess(user, pid);
-    const [count, last] = await Promise.all([
-      db.undoEntry.count({ where: { userId: user.id, projectId: pid } }),
-      db.undoEntry.findFirst({ where: { userId: user.id, projectId: pid }, orderBy: { createdAt: "desc" }, select: { label: true } }),
-    ]);
-    return { count, label: last?.label ?? null };
-  });
-}

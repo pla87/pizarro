@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.12.0"
+version: "v1.13.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.12.0
+**Versión de la aplicación:** v1.13.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -129,6 +129,8 @@ Además, `Task` tiene `dueDate` (fecha límite, solo día), `Column` tiene `isDo
 - **Imágenes:** en móvil, las fotos grandes se reducen en el navegador antes de subirse. El servidor genera una miniatura, y las imágenes se sirven con caché inmutable.
 - **Sin dependencias externas en tiempo de ejecución:** fuentes del sistema, sin CDNs.
 - **Cambios casi al momento:** cada cambio en un proyecto se avisa al instante a las pestañas que lo tienen abierto (canal *Server-Sent Events* `/api/projects/[id]/events`) y estas se refrescan en menos de un segundo, también entre dos pestañas tuyas. Como respaldo, el tablero también se actualiza al volver a la pestaña y cada 30 segundos.
+- **Carga diferida:** el código de los diálogos (detalle de tarea, nueva tarea, release, varias tareas, archivadas) y del editor de texto no se descarga al abrir el tablero; se precarga cuando el navegador está libre y se usa al abrirlos.
+- **Logs sin duplicados:** las visitas a una misma página de una misma persona se registran como mucho una vez por minuto (los refrescos automáticos no llenan los logs).
 
 ---
 
@@ -182,8 +184,8 @@ Desde el menú «⋯» de cada columna:
 - **Borradores:** mientras creas o editas una tarea, lo escrito se guarda en tu navegador **cada 5 segundos**. Si cierras la página sin cancelar ni guardar, al volver al tablero el modal se reabre con lo que tenías (en *Nueva tarea*, todos los campos salvo los archivos; en una tarea abierta, el título y la descripción en edición). Cancelar o cerrar el modal borra el borrador.
 - **Editar:** haz clic en la tarjeta. Los cambios se guardan solos (título y enlace al salir del campo; tipo, color, responsable, etiquetas y columna al cambiarlos).
 - **Descripción con formato:** se guarda como Markdown y, cuando no la estás editando, se ve formateada (títulos, negrita, cursiva, subrayado, tachado, listas, enlaces). Hay dos formas de editarla, a elegir en **Mi perfil y plantillas → Edición de descripciones**:
-  - **Markdown** (por defecto): escribes los símbolos (`**negrita**`, `*cursiva*`, `~~tachado~~`, `++subrayado++`, `# Título`, `- lista`, `1. lista`); al guardar se ve formateado.
-  - **Con barra de formato:** ves el resultado mientras escribes y aplicas **negrita, cursiva, subrayado, tachado, título, subtítulo, texto normal, lista y lista numerada** con botones (o Ctrl+B / I / U). Si pegas texto en Markdown, se convierte en formato.
+  - **Con barra de formato** (por defecto): ves el resultado mientras escribes y aplicas **negrita, cursiva, subrayado, tachado, título, subtítulo, texto normal, lista y lista numerada** con botones (o Ctrl+B / I / U). Si pegas texto en Markdown, se convierte en formato. Al escribir `@` aparece la lista de personas para mencionar (y `@docs` / `@sheets`); la mención se ve como una etiqueta.
+  - **Markdown:** escribes los símbolos (`**negrita**`, `*cursiva*`, `~~tachado~~`, `++subrayado++`, `# Título`, `- lista`, `1. lista`); al guardar se ve formateado.
   - En ambos modos, Ctrl/⌘+Enter guarda y Escape cancela.
 - **Colores de tarjeta:** gris, blanco, rojo, naranja, marrón, amarillo, verde, verde oscuro, turquesa, celeste, índigo, azul marino, violeta y rosa (también para etiquetas).
 - **Subtareas:** añádelas y márcalas. **Doble clic** sobre una la edita (Enter guarda, Escape cancela) y se **reordenan** arrastrando el icono de seis puntos. Junto al título *Subtareas* hay una barra verde que se llena según la proporción de subtareas hechas (con dos, cada una marca el 50 %, da igual el orden); la tarjeta muestra el progreso (p. ej. `2/4`). Las subtareas **no pasan** al texto de las releases.
@@ -311,10 +313,10 @@ El menú lateral muestra, debajo de las opciones del proyecto: **Avisos**, **Mis
 
 En **Mi perfil y plantillas → Apariencia**, cada persona elige:
 - **Tema:** *Sistema* (sigue el modo claro u oscuro del dispositivo, por defecto), *Claro* u *Oscuro*. Se aplica al momento y se recuerda en todos tus dispositivos. Las barras de scroll usan los colores de Pizarro en ambos temas.
-- **Color de acento:** *Azul* (por defecto), *Verde bosque*, *Siena*, *Mostaza* o *Blanco y negro*. Cambia botones, enlaces y resaltados, en modo claro y oscuro. La barra de progreso de las subtareas usa un color que contrasta con el acento elegido.
+- **Tema de color:** *Azul* (por defecto), *Verde bosque*, *Siena*, *Mostaza* o *Blanco y negro*, en modo claro y oscuro. Cambia **toda la app**: fondos, columnas, tarjetas, bordes, textos secundarios, botones, enlaces y resaltados toman los tonos del tema (salvia y verde profundo; arcilla y terracota; arena y mostaza; o grises puros, con negro en claro y blanco en oscuro). Las subtareas hechas (casilla y barra) usan un color que contrasta con el tema: verde neón en el azul.
 - **Tarjetas:** *Franja a la izquierda* (por defecto) o *Tarjeta entera del color*, con un tono suave para que el texto se siga leyendo.
-- **Idioma · Language:** *Español* (por defecto) o *English*. Cambia toda la interfaz, los mensajes, las fechas y el informe PDF. No se traducen los datos (nombres de proyectos, columnas, tipos, tareas), el texto de las releases ni el historial de versiones.
-- **Edición de descripciones:** *Markdown* o *Con barra de formato* (ver 3.4).
+- **Idioma · Language:** *Español* (por defecto) o *English*. Cambia toda la interfaz, los mensajes, las fechas, el informe PDF y el **historial de versiones**. No se traducen los datos (nombres de proyectos, columnas, tipos, tareas), el texto de las releases ni los logs de administración. La pantalla de acceso sale siempre en español.
+- **Edición de descripciones:** *Con barra de formato* (por defecto) o *Markdown* (ver 3.4).
 
 ### 3.14 Tipos de tarea
 
@@ -400,7 +402,7 @@ Cambia la variable en Railway y redespliega. Todas las sesiones dejan de ser vá
 ### 4.6 Publicar una nueva versión de la app
 
 1. Desarrolla el cambio. Si afecta al esquema, crea la migración con `npm run db:migrate -- --name descripcion` y súbela al repositorio.
-2. `npm run check` (lint, tipos, traducciones y tests). Los textos nuevos de la interfaz van con `t("texto en español")` y su traducción en `src/i18n/en/`; `npm run i18n:check` lista los que falten.
+2. `npm run check` (lint, tipos, traducciones y tests). Rellena también la traducción al inglés de la versión (`en` en `changelog.json`). Los textos nuevos de la interfaz van con `t("texto en español")` y su traducción en `src/i18n/en/`; `npm run i18n:check` lista los que falten.
 3. `npm run version:bump -- patch|minor|major` (anota la fecha y la hora del lanzamiento), rellena la entrada en `changelog.json` y ejecuta `npm run version:bump -- --render`.
 4. Haz commit y *push*. Railway despliega, aplica la migración y la nueva versión aparece en *Historial de versiones*.
 

@@ -840,7 +840,7 @@ function SubtaskRow({ s, editing, onEdit, onRename, onToggle, onRemove }: {
       >
         <GripVertical size={16} />
       </button>
-      <input type="checkbox" checked={s.done} onChange={onToggle} className="h-4 w-4 accent-emerald-600" aria-label={s.title} />
+      <input type="checkbox" checked={s.done} onChange={onToggle} className="h-4 w-4 accent-progress" aria-label={s.title} />
       {editing ? (
         <input
           className="input min-w-0 flex-1 py-0.5 text-sm"

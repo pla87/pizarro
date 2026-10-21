@@ -3,18 +3,18 @@
 
 import { mentionsToPlain } from "./mentions";
 
-export interface ReleaseKind {
+interface ReleaseKind {
   id: string;
   name: string;
 }
 
-export interface ReleaseAttachmentInput {
+interface ReleaseAttachmentInput {
   originalName: string;
   /** false = archivo no imagen: conserva su extensión original. Por defecto true (se guarda como .webp). */
   isImage?: boolean;
 }
 
-export interface ReleaseTaskInput {
+interface ReleaseTaskInput {
   id: string;
   title: string;
   kindId: string;
@@ -25,7 +25,7 @@ export interface ReleaseTaskInput {
   attachments?: ReleaseAttachmentInput[];
 }
 
-export interface ReleaseInput {
+interface ReleaseInput {
   header: string;
   footer: string;
   /** Tipos en el orden en que deben aparecer las secciones. */
@@ -124,7 +124,7 @@ export function formatReleaseLine(task: Pick<ReleaseTaskInput, "title" | "linkUr
 }
 
 /** Descripción sangrada 2 espacios: menciones en texto plano, sin espacios finales ni líneas en blanco repetidas. */
-export function formatReleaseDescription(description: string | null | undefined): string[] {
+function formatReleaseDescription(description: string | null | undefined): string[] {
   const lines: string[] = [];
   for (const raw of mentionsToPlain(description ?? "").split(/\r\n|\r|\n/)) {
     const line = raw.trimEnd();
@@ -157,11 +157,6 @@ function buildSections(input: Pick<ReleaseInput, "kinds" | "tasks" | "releaseNum
   if (others.length) parts.push([`### ${OTHERS_NAME}`, ...others.map(line)].join("\n"));
   if (input.tasks.length === 0) parts.push("_Sin tareas seleccionadas._");
   return parts;
-}
-
-/** Cuerpo de la release (una sección por tipo), sin cabecera ni pie. */
-export function buildReleaseBody(input: Pick<ReleaseInput, "kinds" | "tasks" | "releaseNumber">): string {
-  return buildSections(input).join("\n\n");
 }
 
 /** Orden: cabecera, secciones, pie. El título de la release no forma parte del texto. */

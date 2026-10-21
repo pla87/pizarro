@@ -3,9 +3,9 @@ import { DEFAULT_COLUMNS } from "./constants";
 import { hashPassword, MIN_PASSWORD } from "./password";
 import { POSITION_STEP } from "./positions";
 
-export const DEFAULT_HEADER_TEMPLATE = `> **Contexto para la IA:** a partir de la lista de cambios siguiente, redacta unas notas de versión claras para el equipo, agrupadas por tipo y sin jerga innecesaria.`;
+const DEFAULT_HEADER_TEMPLATE = `> **Contexto para la IA:** a partir de la lista de cambios siguiente, redacta unas notas de versión claras para el equipo, agrupadas por tipo y sin jerga innecesaria.`;
 
-export const DEFAULT_FOOTER_TEMPLATE = `---
+const DEFAULT_FOOTER_TEMPLATE = `---
 
 **Checklist de cierre**
 

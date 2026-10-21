@@ -38,7 +38,7 @@ model User {
   /// Idioma de la interfaz.
   locale         Locale    @default(ES)
   /// Cómo se editan las descripciones: escribiendo Markdown o con barra de formato.
-  editorMode     EditorMode @default(MARKDOWN)
+  editorMode     EditorMode @default(WYSIWYG)
   /// Preferencias de aviso de menciones.
   notifyEmail    Boolean   @default(true)
   notifyWhatsapp Boolean   @default(false)
@@ -282,6 +282,9 @@ model AppVersionLog {
   summary    String   @default("")
   /// { "nuevas": string[], "mejoras": string[], "correcciones": string[], "tecnicos": string[] }
   changes    Json
+  /// Versión en inglés (vacía = se muestra la española).
+  summaryEn  String   @default("")
+  changesEn  Json?
   syncedAt   DateTime @updatedAt
 }
 

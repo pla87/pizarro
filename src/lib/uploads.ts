@@ -11,7 +11,7 @@ const INPUT_FORMATS = new Set(["png", "jpeg", "webp", "gif", "avif", "heif"]);
 sharp.cache({ memory: 64, items: 20 });
 sharp.concurrency(2);
 
-export function uploadDir(): string {
+function uploadDir(): string {
   return path.resolve(/*turbopackIgnore: true*/ process.env.UPLOAD_DIR ?? "./uploads");
 }
 
@@ -51,7 +51,7 @@ export function safeDownloadMime(stored: string): string {
   return SAFE_MIME.has(stored) ? stored : "application/octet-stream";
 }
 
-export interface ProcessedImage {
+interface ProcessedImage {
   full: Buffer;
   thumb: Buffer;
   width: number;
@@ -143,7 +143,7 @@ export async function removeAttachmentFiles(ids: string[]): Promise<void> {
 // --- Copias compactas de adjuntos para el histórico de releases -----------------
 
 /** Los ids son cuid; ficheros en UPLOAD_DIR/releases/<id>.webp (imágenes) o <id>.bin (otros ficheros, tal cual). */
-export function releaseAttachmentPath(id: string, kind: "webp" | "bin" = "webp"): string {
+function releaseAttachmentPath(id: string, kind: "webp" | "bin" = "webp"): string {
   if (!/^[a-z0-9]+$/i.test(id)) throw new AppError("Identificador no válido.");
   return path.join(/*turbopackIgnore: true*/ uploadDir(), "releases", `${id}.${kind}`);
 }

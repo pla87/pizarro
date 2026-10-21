@@ -156,7 +156,7 @@ export async function countReleasesOn(input: z.input<typeof countSchema>) {
 
 const detailsSchema = z.object({ projectId: v.id, taskIds: z.array(v.id).max(500) });
 
-export interface ReleaseTaskDetails {
+interface ReleaseTaskDetails {
   id: string;
   description: string;
   attachments: { id: string; originalName: string; isImage: boolean }[];

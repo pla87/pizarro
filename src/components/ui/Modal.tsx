@@ -136,7 +136,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
           <button
             type="button"
             onClick={onAddSecond}
-            className="absolute bottom-0 left-full ml-3 hidden h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95 lg:flex"
+            className="absolute bottom-0 left-full ml-3 hidden h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-on-brand shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95 lg:flex"
             aria-label={t("Abrir otra tarea nueva al lado")}
             title={t("Abrir otra tarea nueva al lado")}
           >
