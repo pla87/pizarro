@@ -1,6 +1,6 @@
 // Plantillas de proyecto: esquemas de validación y ayudas puras (sin acceso a base de datos).
 import { z } from "zod";
-import { COLUMN_ROLES, DEFAULT_COLUMNS, PALETTE, type ColumnRoleValue } from "./constants";
+import { COLUMN_ROLES, defaultColumns, PALETTE, type ColumnRoleValue } from "./constants";
 import { POSITION_STEP } from "./positions";
 import * as v from "./validation";
 
@@ -94,14 +94,14 @@ interface TemplateApplication {
  * a ocultar se comparan sin distinguir mayúsculas y los inexistentes se ignoran. Si el proyecto
  * no tiene tipos propios nunca se ocultan todos los generales: se conserva el primero.
  */
-export function buildTemplateApplication(template: TemplateData, generalKinds: GeneralKind[]): TemplateApplication {
+export function buildTemplateApplication(template: TemplateData, generalKinds: GeneralKind[], locale: "es" | "en" = "es"): TemplateApplication {
   const hiddenNames = new Set(template.hiddenGeneralKinds.map(nameKey));
   let hidden = generalKinds.filter((k) => hiddenNames.has(nameKey(k.name)));
   if (template.kinds.length === 0 && generalKinds.length > 0 && hidden.length >= generalKinds.length) {
     hidden = hidden.slice(1);
   }
   // Sin columnas (plantilla dañada): las de por defecto, para que el proyecto sea usable.
-  const columns = template.columns.length ? template.columns : DEFAULT_COLUMNS;
+  const columns = template.columns.length ? template.columns : defaultColumns(locale);
   // Un tipo propio no puede llamarse como uno general (secciones repetidas en la release): se omite.
   const generalNames = new Set(generalKinds.map((k) => nameKey(k.name)));
   return {

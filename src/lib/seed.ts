@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@/generated/prisma/client";
-import { DEFAULT_COLUMNS } from "./constants";
+import { defaultColumns } from "./constants";
 import { hashPassword, MIN_PASSWORD } from "./password";
 import { POSITION_STEP } from "./positions";
 
@@ -54,7 +54,7 @@ export async function seed(db: PrismaClient, log: (msg: string) => void = consol
         name: "Proyecto de ejemplo",
         description: "Proyecto creado por el seed inicial. Puedes renombrarlo o borrarlo.",
         position: POSITION_STEP,
-        columns: { create: DEFAULT_COLUMNS.map((c, i) => ({ ...c, position: (i + 1) * POSITION_STEP })) },
+        columns: { create: defaultColumns().map((c, i) => ({ ...c, position: (i + 1) * POSITION_STEP })) },
         labels: {
           create: [
             { name: "Frontend", color: "#0ea5e9" },

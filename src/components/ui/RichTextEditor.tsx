@@ -8,6 +8,7 @@ import { AtSign, Bold, FileSpreadsheet, FileText, Heading2, Heading3, Italic, Li
 import { createElement, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/i18n/client";
+import { ListDeleteFix } from "@/lib/editor-keys";
 import { MentionChip } from "@/lib/editor-mention";
 import { looksLikeMarkdown } from "@/lib/markdown-paste";
 import type { UserOption } from "@/lib/types";
@@ -75,6 +76,7 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
       // El subrayado ya viene en StarterKit y se serializa como ++texto++.
       StarterKit.configure({ heading: { levels: [2, 3] }, link: { openOnClick: false } }),
       Markdown,
+      ListDeleteFix,
       // Los refs solo se leen dentro de callbacks (nunca durante el render).
       // eslint-disable-next-line react-hooks/refs
       MentionChip.configure({

@@ -13,10 +13,10 @@ function initials(name: string): string {
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1]![0] : "")).toUpperCase() || "?";
 }
 
-export function Avatar({ id, name, size = "sm" }: { id: string; name: string; size?: "sm" | "md" }) {
+export function Avatar({ id, name, size = "sm", title }: { id: string; name: string; size?: "sm" | "md"; title?: string }) {
   return (
     <span
-      title={name}
+      title={title ?? name}
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white",
         COLORS[hash(id) % COLORS.length],

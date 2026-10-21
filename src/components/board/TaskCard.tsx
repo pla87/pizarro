@@ -165,7 +165,7 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
             <ExternalLink size={13} />
           </a>
         )}
-        <span className="ml-auto">{assignee && <Avatar id={assignee.id} name={assignee.name} />}</span>
+        <span className="ml-auto">{assignee && <Avatar id={assignee.id} name={assignee.name} title={t("Asignada a {name}", { name: assignee.name })} />}</span>
       </div>
     </div>
   );

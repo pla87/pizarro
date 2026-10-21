@@ -145,7 +145,7 @@ Además, `Task` tiene `dueDate` (fecha límite, solo día), `Column` tiene `isDo
 ### 3.2 Proyectos
 
 - Para cambiar de proyecto, pulsa el **nombre del proyecto** en la parte superior del tablero (o en la barra superior en móvil) y elige otro en el desplegable. También sirve el selector de la barra lateral. La app recuerda el último que abriste.
-- Los administradores crean proyectos desde el selector (**Nuevo proyecto**). Pueden elegir una **plantilla** (ver 3.15) y marcarlo como **privado**. Sin plantilla, el proyecto trae las columnas *Backlog*, *En progreso*, *Siguiente salto a producción*, *En producción* y *Cerrado*.
+- Los administradores crean proyectos desde el selector (**Nuevo proyecto**). Pueden elegir una **plantilla** (ver 3.16) y marcarlo como **privado**. Sin plantilla, el proyecto trae las columnas *Backlog*, *En progreso*, *Siguiente salto a producción*, *En producción* y *Cerrado*; si quien lo crea usa Pizarro en inglés, salen en inglés (*Backlog*, *In progress*, *Next release*, *In production*, *Closed*).
 - **Ajustes del proyecto** contiene:
   - nombre y descripción (admins);
   - **visibilidad** (admins), con tres opciones:
@@ -178,10 +178,11 @@ Desde el menú «⋯» de cada columna:
 - **Quién está trabajando:** a la izquierda de **Informe PDF** (en móvil, arriba a la derecha) aparecen círculos con las **iniciales** de quienes han hecho cualquier acción en ese tablero (abrir, crear, mover, editar, subir adjuntos…) en los **últimos 5 minutos**, tú incluido; al pasar el ratón se ven sus nombres. Se actualiza cada 20 segundos. Si hay más (cinco en escritorio, tres en móvil), se muestra «+N».
 - **Trabajar varios a la vez:** si otra persona tiene abierta la misma tarea, el detalle lo indica («Fulano también tiene abierta esta tarea»). Si cambia el **título o la descripción** mientras tú los editas, al guardar no se pisa su texto: se avisa, la tarea se recarga con sus cambios y vuelves a aplicar los tuyos. El resto de campos (tipo, color, responsable…) se guardan al momento y gana el último cambio.
 - **Guardado:** los cambios del detalle se guardan solos; en la cabecera se ve «Guardando…» y después **«Guardado»** con un check verde.
-- **Deshacer:** el botón con la flecha de volver, justo a la derecha del nombre del tablero (también en móvil), deshace **tu última acción** en ese tablero, y así hasta las **10 últimas** (cuenta como una sola acción crear una tarea con sus adjuntos y subtareas): crear, editar, mover, archivar, recuperar, borrar (con sus adjuntos y subtareas), subtareas, comentarios, adjuntos, enlaces, columnas y desplegar una release (las tareas vuelven a su sitio y la release sale del histórico). En escritorio también **Ctrl/⌘+Z** con el tablero en pantalla. Solo deshace lo tuyo; si algo ya no existe (otra persona lo borró), se salta y se avisa. Las acciones de deshacer caducan a los 7 días.
+- **Deshacer:** el botón con la flecha de volver, justo a la derecha del nombre del tablero (también en móvil), deshace **tu última acción** en ese tablero, y así hasta las **10 últimas** (cuenta como una sola acción crear una tarea con sus adjuntos y subtareas): crear, editar, mover, archivar, recuperar, borrar (con sus adjuntos y subtareas), subtareas, comentarios, adjuntos, enlaces, columnas y desplegar una release (las tareas vuelven a su sitio y la release sale del histórico). En escritorio también **Ctrl/⌘+Z** con el tablero en pantalla. El aviso de lo deshecho sale en tu idioma. Solo deshace lo tuyo; si algo ya no existe (otra persona lo borró), se salta y se avisa. Las acciones de deshacer caducan a los 7 días.
   - **Con una tarea abierta**, el contexto es esa tarea: deshacer solo actúa sobre lo que has hecho en ella (cada subtarea, cada archivo subido, cada cambio), y el detalle se recarga. En escritorio el botón se ve por encima del fondo oscuro del modal, y Ctrl/⌘+Z también funciona si no estás escribiendo.
 - **Guardar en móvil:** al editar una tarea en el móvil, el pie del modal tiene siempre visibles **Archivar**, **Borrar** y **Guardar**. *Guardar* guarda el título y la descripción tal como estén escritos (aunque sigas editándolos) y cierra.
-- **Borradores:** mientras creas o editas una tarea, lo escrito se guarda en tu navegador **cada 5 segundos**. Si cierras la página sin cancelar ni guardar, al volver al tablero el modal se reabre con lo que tenías (en *Nueva tarea*, todos los campos salvo los archivos; en una tarea abierta, el título y la descripción en edición). Cancelar o cerrar el modal borra el borrador.
+- **Borradores:** mientras creas o editas una tarea, lo escrito se guarda en tu navegador **cada 5 segundos**. Si cierras la página sin cancelar ni guardar, al volver al tablero el modal se reabre con lo que tenías (en *Nueva tarea*, todos los campos salvo los archivos; en una tarea abierta, el título y la descripción en edición). Solo hay borrador si queda **algo sin guardar**: crear, guardar, cancelar o cerrar el modal lo borra, y una tarea abierta sin cambios nunca se reabre.
+- **Persona asignada:** el círculo con iniciales en la esquina inferior derecha de la tarjeta es **la persona asignada** (al pasar el ratón: «Asignada a …»). No indica quién la tiene abierta; eso se ve dentro del detalle y en los círculos de la cabecera.
 - **Editar:** haz clic en la tarjeta. Los cambios se guardan solos (título y enlace al salir del campo; tipo, color, responsable, etiquetas y columna al cambiarlos).
 - **Descripción con formato:** se guarda como Markdown y, cuando no la estás editando, se ve formateada (títulos, negrita, cursiva, subrayado, tachado, listas, enlaces). Hay dos formas de editarla, a elegir en **Mi perfil y plantillas → Edición de descripciones**:
   - **Con barra de formato** (por defecto): ves el resultado mientras escribes y aplicas **negrita, cursiva, subrayado, tachado, título, subtítulo, texto normal, lista y lista numerada** con botones (o Ctrl+B / I / U). Si pegas texto en Markdown, se convierte en formato. Al escribir `@` aparece la lista de personas para mencionar (y `@docs` / `@sheets`); la mención se ve como una etiqueta.
@@ -313,7 +314,8 @@ El menú lateral muestra, debajo de las opciones del proyecto: **Avisos**, **Mis
 
 En **Mi perfil y plantillas → Apariencia**, cada persona elige:
 - **Tema:** *Sistema* (sigue el modo claro u oscuro del dispositivo, por defecto), *Claro* u *Oscuro*. Se aplica al momento y se recuerda en todos tus dispositivos. Las barras de scroll usan los colores de Pizarro en ambos temas.
-- **Tema de color:** *Azul* (por defecto), *Verde bosque*, *Siena*, *Mostaza* o *Blanco y negro*, en modo claro y oscuro. Cambia **toda la app**: fondos, columnas, tarjetas, bordes, textos secundarios, botones, enlaces y resaltados toman los tonos del tema (salvia y verde profundo; arcilla y terracota; arena y mostaza; o grises puros, con negro en claro y blanco en oscuro). Las subtareas hechas (casilla y barra) usan un color que contrasta con el tema: verde neón en el azul.
+- **Tema de color:** *Azul* (por defecto), *Verde bosque*, *Siena*, *Mostaza* o *Blanco y negro*, en modo claro y oscuro. Cambia **toda la app**: fondos, columnas, tarjetas, bordes, textos secundarios, botones, enlaces y resaltados toman los tonos del tema (salvia y verde profundo; arcilla y terracota; arena y mostaza; o grises puros, con negro en claro y blanco en oscuro). Las subtareas hechas (casilla y barra) usan un color que contrasta con el tema: verde neón en el azul. El **logo** de Pizarro y el **recuadro de foco** al moverte con el tabulador también usan el color del tema (la pantalla de acceso mantiene el azul).
+- **Distintivos de tipo:** cada tipo conserva su color en todos los temas, pero el texto se oscurece en modo claro y se aclara en modo oscuro para que se lea siempre (también con tipos negros, marinos o blancos).
 - **Tarjetas:** *Franja a la izquierda* (por defecto) o *Tarjeta entera del color*, con un tono suave para que el texto se siga leyendo.
 - **Idioma · Language:** *Español* (por defecto) o *English*. Cambia toda la interfaz, los mensajes, las fechas, el informe PDF y el **historial de versiones**. No se traducen los datos (nombres de proyectos, columnas, tipos, tareas), el texto de las releases ni los logs de administración. La pantalla de acceso sale siempre en español.
 - **Edición de descripciones:** *Con barra de formato* (por defecto) o *Markdown* (ver 3.4).
@@ -329,13 +331,27 @@ Hay dos clases de tipos. Cada tipo es una sección de las release notes.
 En ambos casos:
 - **Nuevo tipo:** nombre y color (de la paleta o cualquier otro con el selector de color).
 - Las flechas cambian el **orden**. En los selectores y en la release van primero los generales y después los del proyecto, cada grupo en su orden.
-- **Automatización:** cada tipo puede tener un **título automático** y un **texto inicial de la descripción** (al crearlo o editarlo, sección *Automatización*). Al elegir ese tipo en una tarea nueva o existente, el título se sustituye y la descripción empieza por ese texto (sin repetirlo si ya está). La lista de tipos explica en una línea lo que hace cada uno. No se aplica en *Varias tareas*.
+- **Automatización:** cada tipo puede tener un **título automático** y un **texto inicial de la descripción** (al crearlo o editarlo, sección *Automatización*). Al elegir ese tipo en una tarea nueva o existente, el título se sustituye y la descripción empieza por ese texto (sin repetirlo si ya está). El texto inicial admite **formato Markdown** y se edita con el mismo editor que las descripciones (con barra de formato o Markdown, según tu perfil). La lista de tipos explica en una línea lo que hace cada uno. No se aplica en *Varias tareas*.
 - **Respuesta:** viene creado de serie (título «Respuesta» y descripción que empieza por «Respondo a las preguntas y lo que necesitas de mi:»), pero es un tipo general como cualquier otro: se puede editar o **borrar**.
 - **Borrar** un tipo pide a qué tipo pasan sus tareas. Un tipo general solo puede pasar a otro general, y siempre queda al menos uno. Un tipo de proyecto puede pasar a un general o a otro del mismo proyecto.
 - **Nombres:** un tipo de proyecto no puede llamarse igual que un general ni que otro de su proyecto. Dos proyectos sí pueden tener tipos con el mismo nombre. Un tipo general nuevo no puede repetir el nombre de ningún tipo de proyecto.
 - Al borrar un proyecto se borran también sus tipos.
 
-### 3.15 Administración (admins)
+### 3.15 Atajos de teclado
+
+| Acción | Windows / Linux | Mac |
+|---|---|---|
+| Crear la tarea, guardar la descripción o enviar un comentario | Ctrl+Enter | ⌘+Enter |
+| Cerrar el modal o cancelar la edición | Esc | Esc |
+| Deshacer la última acción (escritorio, sin estar escribiendo) | Ctrl+Z | ⌘+Z |
+| Nueva tarea con una captura pegada (con el tablero en pantalla) | Ctrl+V | ⌘+V |
+| Abrir la tarjeta con el foco | Enter | Enter |
+| Añadir subtarea / guardar subtarea editada | Enter | Enter |
+| Negrita, cursiva, subrayado (editor con barra) | Ctrl+B / I / U | ⌘+B / I / U |
+| Elegir persona o comando en la lista de «@» | ↑ ↓ y Enter o Tab | ↑ ↓ y Enter o Tab |
+| Imagen anterior o siguiente (pantalla completa) | ← → | ← → |
+
+### 3.16 Administración (admins)
 
 La entrada **Administración** del menú lateral reúne cuatro pestañas: **Usuarios**, **Tipos de tarea** (ver 3.14), **Plantillas** y **Logs**.
 
@@ -421,7 +437,7 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 ### 4.8 Monitorización
 
 - **Salud:** `GET /api/health` → `{"status":"ok"}` si la base de datos responde.
-- **Logs de la app:** *Administración → Logs* (ver 3.15), con la duración de cada acción: es el primer sitio donde mirar si algo va lento o falla.
+- **Logs de la app:** *Administración → Logs* (ver 3.16), con la duración de cada acción: es el primer sitio donde mirar si algo va lento o falla.
 - **Logs del contenedor:** en Railway, *Deployments → View logs*. Los errores inesperados también salen ahí con el prefijo `[action]`, `[upload]` o `[uploads]`.
 - **Errores en el navegador:** la pantalla «Algo ha fallado» y cualquier excepción no capturada del navegador se registran en *Logs* (categoría *client*), con la página, el navegador y el código del error para cruzarlo con el del servidor.
 - **Uso del volumen:** visible en la pestaña del volumen. Como referencia, una captura típica ocupa entre 50 y 300 KB.

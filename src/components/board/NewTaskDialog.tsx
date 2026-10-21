@@ -57,7 +57,11 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const [evergreen, setEvergreen] = useState(d?.evergreen ?? !!initialEvergreen);
   // Borrador cada 5 s; cancelar o crear lo borra (los archivos no se guardan en el borrador).
   const discardDraft = useDraftAutosave(draftKey("new", board.currentUserId, board.project.id), () =>
-    autosave ? ({ title, kindId, description, columnId, assigneeId, dueDate, deliverableId, evergreen, subtasks, subtaskDraft } satisfies NewTaskDraft) : undefined,
+    !autosave
+      ? undefined
+      : !title.trim() && !description.trim() && !subtasks.length && !subtaskDraft.trim()
+        ? null
+        : ({ title, kindId, description, columnId, assigneeId, dueDate, deliverableId, evergreen, subtasks, subtaskDraft } satisfies NewTaskDraft),
   );
   const onClose = () => {
     if (autosave) discardDraft();

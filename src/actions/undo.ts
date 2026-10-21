@@ -6,6 +6,9 @@ import { describeAction } from "@/lib/action-context";
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import { requireUser } from "@/lib/session";
+import { renderStoredLabel } from "@/lib/undo-label";
+import { getT } from "@/i18n/server";
+import { makeT } from "@/i18n/core";
 import { applyUndo, type UndoOp } from "@/lib/undo";
 import * as v from "@/lib/validation";
 
@@ -26,7 +29,7 @@ export async function undoLast(projectId: string, taskId?: string | null) {
     if (!count) throw new AppError("Esa acción ya se ha deshecho.");
     const skipped = await applyUndo(pid, entry.ops as unknown as UndoOp[]);
     const remaining = await db.undoEntry.count({ where: { userId: user.id, projectId: pid } });
-    describeAction(`Deshizo: ${entry.label}${skipped ? ` (${skipped} parte${skipped === 1 ? "" : "s"} ya no existía${skipped === 1 ? "" : "n"})` : ""}`, { undoneId: entry.id });
-    return { label: entry.label, remaining, skipped };
+    describeAction(`Deshizo: ${renderStoredLabel(entry.label, makeT("es"))}${skipped ? ` (${skipped} parte${skipped === 1 ? "" : "s"} ya no existía${skipped === 1 ? "" : "n"})` : ""}`, { undoneId: entry.id });
+    return { label: renderStoredLabel(entry.label, await getT()), remaining, skipped };
   });
 }

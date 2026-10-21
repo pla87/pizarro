@@ -136,7 +136,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const edit = readDraft<EditTaskDraft>(draftKey("edit", data.currentUserId, data.project.id));
-      if (edit && !initialTaskId && data.tasks.some((t) => t.id === edit.taskId)) {
+      // Los borradores sin cambios (versiones anteriores los guardaban siempre) no reabren nada.
+      if (edit && (edit.title !== undefined || edit.description !== undefined) && !initialTaskId && data.tasks.some((t) => t.id === edit.taskId)) {
         setEditDraft(edit);
         setOpenTaskId(edit.taskId);
       }

@@ -6,9 +6,11 @@ import { useState, useTransition } from "react";
 import { useT } from "@/i18n/client";
 import { createKind, deleteKind, moveKind, updateKind } from "@/actions/kinds";
 import { cn } from "@/components/ui/cn";
+import { DescriptionField } from "@/components/ui/DescriptionField";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
+import type { EditorModeValue } from "@/lib/types";
 import { PALETTE } from "@/lib/constants";
 import { describeKindAutomation } from "@/lib/kinds-special";
 
@@ -22,6 +24,20 @@ export interface KindRow {
 }
 
 const EMPTY_FORM = { name: "", color: "#6366f1", titleTemplate: "", descriptionTemplate: "" };
+const DESC_MAX = 2000;
+const NO_USERS: never[] = [];
+
+/** Markdown a texto plano de una línea para la vista previa de la lista. */
+function stripMarkdown(md: string): string {
+  return md
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}(#{1,6}\s+|>\s?|[-*+]\s+|\d+[.)]\s+)/gm, "")
+    .replace(/(\*\*|__|~~|\+\+|[*_`])/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 const COLORS = [...PALETTE, "#84cc16", "#06b6d4", "#d946ef", "#78716c"];
 
 function ColorField({ value, onChange }: { value: string; onChange: (c: string) => void }) {
@@ -53,9 +69,11 @@ interface Props {
   otherKinds?: { id: string; name: string }[];
   /** Dentro de otra tarjeta (ajustes del proyecto). */
   embedded?: boolean;
+  /** Editor de Markdown elegido en el perfil de la persona. */
+  editorMode?: EditorModeValue;
 }
 
-export function KindsManager({ kinds, projectId, otherKinds = [], embedded = false }: Props) {
+export function KindsManager({ kinds, projectId, otherKinds = [], embedded = false, editorMode = "MARKDOWN" }: Props) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
@@ -88,7 +106,10 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
                   <TypeBadge kind={k} />
                   <span className="text-xs text-slate-500">{t("{n} tarea(s)", { n: k.taskCount })}</span>
                 </div>
-                {describeKindAutomation(k, t) && <p className="mt-1 text-xs text-slate-500">{describeKindAutomation(k, t)}</p>}
+                {(() => {
+                  const text = describeKindAutomation({ titleTemplate: k.titleTemplate, descriptionTemplate: stripMarkdown(k.descriptionTemplate) }, t);
+                  return text && <p className="mt-1 line-clamp-2 text-xs text-slate-500">{text}</p>;
+                })()}
               </div>
               <div className="ml-auto flex items-center">
                 <button className="btn-icon" disabled={i === 0 || pending} onClick={() => run(() => moveKind(k.id, -1), t("Orden actualizado"))} aria-label={t("Subir")}><ArrowUp size={15} /></button>
@@ -131,8 +152,9 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
             className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
+              const payload = { ...form, descriptionTemplate: form.descriptionTemplate.slice(0, DESC_MAX) };
               run(
-                () => (editing === "new" ? createKind(form, projectId ?? null) : updateKind(editing, form)),
+                () => (editing === "new" ? createKind(payload, projectId ?? null) : updateKind(editing, payload)),
                 editing === "new" ? t("Tipo creado") : t("Tipo actualizado"),
                 () => setEditing(null),
               );
@@ -158,7 +180,7 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
               </div>
               <div>
                 <label className="label" htmlFor="kind-desc-tpl">{t("Texto inicial de la descripción")}</label>
-                <textarea id="kind-desc-tpl" className="input min-h-20" value={form.descriptionTemplate} onChange={(e) => setForm({ ...form, descriptionTemplate: e.target.value })} maxLength={2000} rows={3} />
+                <DescriptionField id="kind-desc-tpl" mode={editorMode} textareaClassName="input field-sizing-content min-h-20" value={form.descriptionTemplate} onValueChange={(v) => setForm({ ...form, descriptionTemplate: v })} users={NO_USERS} maxLength={DESC_MAX} />
               </div>
               <p className="text-xs text-slate-500">{t("Al elegir este tipo en una tarea se rellenan solos el título y el comienzo de la descripción.")}</p>
             </div>

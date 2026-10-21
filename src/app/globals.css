@@ -176,6 +176,11 @@
  * scrollbar-color anularía los ::-webkit-scrollbar).
  */
 @layer base {
+  /* Foco con teclado: siempre el color principal del tema (sin el anillo blanco del navegador). */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+  }
   @supports not selector(::-webkit-scrollbar) {
     * {
       scrollbar-width: thin;
@@ -285,5 +290,24 @@ body {
   scrollbar-width: none;
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/*
+ * Distintivo de tipo de tarea (--kind = color del tipo). El texto toma el tono del tipo con la
+ * luminosidad ajustada al fondo: oscuro en modo claro y claro en modo oscuro, para que un tipo
+ * negro, marino o blanco se lea igual de bien que uno de color.
+ */
+.kind-badge {
+  color: var(--kind);
+  color: oklch(from var(--kind) min(l, 0.47) c h);
+  background-color: color-mix(in srgb, var(--kind) 13%, transparent);
+  box-shadow: inset 0 0 0 1px oklch(from var(--kind) min(l, 0.7) c h / 0.5);
+}
+@variant dark {
+  .kind-badge {
+    color: oklch(from var(--kind) max(l, 0.8) c h);
+    background-color: color-mix(in srgb, var(--kind) 20%, transparent);
+    box-shadow: inset 0 0 0 1px oklch(from var(--kind) max(l, 0.62) c h / 0.55);
   }
 }

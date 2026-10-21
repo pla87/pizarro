@@ -15,6 +15,7 @@ import { attachmentFileNames, zonedDayRange } from "@/lib/release";
 import { requireUser } from "@/lib/session";
 import { attachmentPath, compactImage, removeReleaseAttachmentFiles, saveReleaseAttachmentFile } from "@/lib/uploads";
 import { addUndo, captureTasks } from "@/lib/undo";
+import { tasksN } from "@/lib/undo-label";
 import * as v from "@/lib/validation";
 import { getT } from "@/i18n/server";
 
@@ -91,8 +92,13 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     addUndo({ t: "release.remove", id: result.releaseId });
     const fixed = tasks.filter((t) => t.evergreen).length;
     describeAction(
-      `Desplegó la release «${data.title}» con ${tasks.length === 1 ? "1 tarea" : `${tasks.length} tareas`}` +
-        (data.destination === "ARCHIVE" ? " (archivadas)" : "") + (fixed ? ` (${fixed} fija${fixed === 1 ? "" : "s"} se quedan)` : ""),
+      "Desplegó la release «{title}» con {count}{archived}{fixed}",
+      {
+        title: data.title,
+        count: tasksN(tasks.length),
+        archived: data.destination === "ARCHIVE" ? { k: " (archivadas)" } : "",
+        fixed: fixed ? (fixed === 1 ? { k: " (1 fija se queda)" } : { k: " ({n} fijas se quedan)", p: { n: fixed } }) : "",
+      },
       { releaseId: result.releaseId, taskIds: tasks.map((t) => t.id) },
     );
     // Copias compactas de los adjuntos para el histórico; si algo falla se omite, el despliegue ya está hecho.

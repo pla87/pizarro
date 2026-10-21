@@ -14,7 +14,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
 import { isWhite, onColor, PALETTE } from "@/lib/constants";
-import type { KindOption, LabelOption } from "@/lib/types";
+import type { EditorModeValue, KindOption, LabelOption } from "@/lib/types";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
 import { setGeneralKindEnabled } from "@/actions/project-kinds";
 
@@ -27,6 +27,7 @@ interface Props {
   generalKinds: (KindOption & { enabled: boolean; taskCount: number })[];
   deliverables: DeliverableRow[];
   users: { id: string; name: string; role: "ADMIN" | "MEMBER" }[];
+  editorMode: EditorModeValue;
 }
 
 function Section({ title, description, children, id }: { title: string; description?: string; children: React.ReactNode; id?: string }) {
@@ -40,7 +41,7 @@ function Section({ title, description, children, id }: { title: string; descript
   );
 }
 
-export function ProjectSettings({ isAdmin, project, deliverables, kinds, generalKinds, labels: initialLabels, users }: Props) {
+export function ProjectSettings({ isAdmin, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode }: Props) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
@@ -160,7 +161,7 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
       >
         <GeneralKinds projectId={project.id} generalKinds={generalKinds} projectKinds={kinds} />
         <div className="mt-4 mb-2 text-xs font-medium text-slate-500">{t("Tipos propios del proyecto")}</div>
-        <KindsManager kinds={kinds} projectId={project.id} otherKinds={generalKinds.filter((k) => k.enabled)} embedded />
+        <KindsManager kinds={kinds} projectId={project.id} otherKinds={generalKinds.filter((k) => k.enabled)} embedded editorMode={editorMode} />
       </Section>
 
       <Section id="labels" title="Etiquetas" description="Etiquetas propias de este proyecto para clasificar tarjetas.">

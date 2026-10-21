@@ -48,6 +48,8 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
     ? await db.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, role: true } })
     : [];
 
+  const editorMode = (await db.user.findUnique({ where: { id: user.id }, select: { editorMode: true } }))?.editorMode ?? "MARKDOWN";
+
   return (
     <ProjectSettings
       isAdmin={isAdmin}
@@ -63,6 +65,7 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
       generalKinds={generalKinds.map((k) => ({ ...k, enabled: !hidden.has(k.id), taskCount: usage.get(k.id) ?? 0 }))}
       deliverables={project.deliverables.map((d) => ({ id: d.id, name: d.name, description: d.description, dueDate: dateToIso(d.dueDate), taskCount: d._count.tasks }))}
       users={users}
+      editorMode={editorMode}
     />
   );
 }
