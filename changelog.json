@@ -1,6 +1,53 @@
 {
   "versions": [
     {
+      "version": "1.14.0",
+      "date": "2026-10-21",
+      "releasedAt": "2026-10-21T22:55:11+02:00",
+      "summary": "Etiquetas de tipo legibles en cualquier color, foco y logo con el color del tema, plantillas de tipo con Markdown y correcciones de borradores, deshacer en inglés y la tecla Supr en listas",
+      "changes": {
+        "nuevas": [],
+        "mejoras": [
+          "Las etiquetas de tipo se leen bien con cualquier color, también negro, marino o blanco: el texto se oscurece en modo claro y se aclara en modo oscuro.",
+          "El recuadro de foco al moverse con el tabulador usa siempre el color del tema (antes aparecía blanco en algunos elementos).",
+          "El logo de Pizarro toma el color del tema elegido.",
+          "El texto inicial de la descripción de un tipo de tarea admite Markdown y se edita con el mismo editor que las descripciones.",
+          "Sin plantilla, un proyecto creado por alguien que usa Pizarro en inglés trae las columnas en inglés.",
+          "El aviso de deshacer sale en el idioma de cada persona.",
+          "El círculo de la tarjeta indica «Asignada a …» al pasar el ratón."
+        ],
+        "correcciones": [
+          "Los borradores solo se guardan si queda algo sin guardar: una tarea ya creada, guardada o cancelada no se vuelve a abrir al entrar en el tablero.",
+          "Corregido: pulsar Supr al final de una lista en la descripción creaba y borraba una línea vacía alternativamente."
+        ],
+        "tecnicos": [
+          "Las etiquetas de deshacer se guardan como plantillas traducibles; las antiguas se muestran tal cual."
+        ]
+      },
+      "en": {
+        "summary": "Type badges readable in any colour, focus ring and logo in the theme colour, Markdown in task type templates, and fixes for drafts, undo in English and the Delete key in lists",
+        "changes": {
+          "nuevas": [],
+          "mejoras": [
+            "Task type badges are readable with any colour, including black, navy or white: the text darkens in light mode and lightens in dark mode.",
+            "The keyboard focus ring always uses the theme colour (it used to show white on some elements).",
+            "The Pizarro logo takes the colour of the chosen theme.",
+            "A task type's initial description supports Markdown and is edited with the same editor as task descriptions.",
+            "Without a template, a project created by someone using Pizarro in English gets English column names.",
+            "The undo notice appears in each person's language.",
+            "The circle on a card shows “Assigned to …” on hover."
+          ],
+          "correcciones": [
+            "Drafts are only kept when something is unsaved: a task already created, saved or cancelled no longer reopens when you open the board.",
+            "Fixed: pressing Delete at the end of a list in the description alternately created and removed an empty line."
+          ],
+          "tecnicos": [
+            "Undo labels are stored as translatable templates; older ones are shown as they were."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.13.0",
       "date": "2026-10-21",
       "releasedAt": "2026-10-21T15:44:06+02:00",

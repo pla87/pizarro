@@ -9,6 +9,7 @@ import { boardTaskSelect, loadBoardTask, toBoardTask } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
 import { describeAction, noteProject, noteTask } from "@/lib/action-context";
 import { addUndo, captureTasks, snapshotTasks, type TaskField } from "@/lib/undo";
+import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
 import { requireUser } from "@/lib/session";
@@ -63,10 +64,10 @@ const CHANGE_LABELS: Record<string, string> = {
 };
 
 /** «tipo, responsable y fecha límite» a partir de los campos cambiados. */
-function describeChanges(data: Record<string, unknown>): string {
-  const names = Object.keys(data).filter((k) => data[k] !== undefined).map((k) => CHANGE_LABELS[k] ?? k);
-  if (names.length <= 1) return names[0] ?? "sin cambios";
-  return `${names.slice(0, -1).join(", ")} y ${names.at(-1)}`;
+function describeChanges(data: Record<string, unknown>): Label {
+  const names: Label[] = Object.keys(data).filter((k) => data[k] !== undefined).map((k) => ({ k: CHANGE_LABELS[k] ?? k }));
+  if (names.length <= 1) return names[0] ?? { k: "sin cambios" };
+  return { k: "{list} y {last}", p: { list: names.slice(0, -1), last: names.at(-1)! } };
 }
 
 /** Campos que cambian al archivar o recuperar una tarea. */
@@ -136,7 +137,8 @@ export async function createTask(input: z.input<typeof createSchema>) {
     noteTask(task.id);
     addUndo({ t: "task.remove", id: task.id });
     describeAction(
-      `Creó la tarea «${data.title}» en «${await columnName(data.columnId)}»${data.subtasks.length ? ` con ${data.subtasks.length} subtareas` : ""}`,
+      data.subtasks.length ? "Creó la tarea «{title}» en «{col}» con {subs}" : "Creó la tarea «{title}» en «{col}»",
+      { title: data.title, col: await columnName(data.columnId), subs: subtasksN(data.subtasks.length) },
       { taskId: task.id },
     );
     await notifyMentions({ actorId: user.id, taskId: task.id, projectId: data.projectId, recipientIds: extractMentionIds(data.description), text: data.description });
@@ -192,7 +194,7 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
       return created.map((t) => t.id);
     });
     addUndo(...ids.map((id) => ({ t: "task.remove" as const, id })));
-    describeAction(`Creó ${ids.length === 1 ? "1 tarea" : `${ids.length} tareas`} en «${await columnName(data.columnId)}»: ${data.tasks.map((t) => `«${t.title}»`).join(", ").slice(0, 600)}`, { taskIds: ids });
+    describeAction("Creó {count} en «{col}»: {titles}", { count: tasksN(ids.length), col: await columnName(data.columnId), titles: data.tasks.map((t) => `«${t.title}»`).join(", ").slice(0, 600) }, { taskIds: ids });
     const rows = await db.task.findMany({ where: { id: { in: ids } }, orderBy: { position: "asc" }, select: boardTaskSelect });
     return rows.map(toBoardTask);
   });
@@ -264,7 +266,7 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
       }
       return added;
     });
-    describeAction(`Modificó «${data.title ?? before.title}»: ${describeChanges(data)}`, { taskId });
+    describeAction("Modificó «{title}»: {changes}", { title: data.title ?? before.title, changes: describeChanges(data) }, { taskId });
     if (newMentions.length) {
       await notifyMentions({ actorId: user.id, taskId, projectId, recipientIds: newMentions, text: data.description ?? "" });
     }
@@ -299,7 +301,11 @@ export async function moveTask(taskId: string, columnId: string, prevId: string 
     addUndo(...(await captureTasks([taskId], ["columnId", "position", "evergreen"])));
     await db.task.update({ where: { id: taskId }, data: { columnId, position, evergreen: false } });
     const to = await columnName(columnId);
-    describeAction(before.column === to ? `Reordenó «${before.title}» en «${to}»` : `Movió «${before.title}» de «${before.column}» a «${to}»`, { taskId });
+    describeAction(
+      before.column === to ? "Reordenó «{title}» en «{to}»" : "Movió «{title}» de «{from}» a «{to}»",
+      { title: before.title, from: before.column, to },
+      { taskId },
+    );
     return { position };
   });
 }
@@ -325,7 +331,7 @@ export async function moveTasks(taskIds: string[], columnId: string) {
     const moved = toMove.map((t) => ({ id: t.id, position: (pos += POSITION_STEP) }));
     addUndo(...(await captureTasks(moved.map((m) => m.id), ["columnId", "position", "evergreen"])));
     await db.$transaction(moved.map((m) => db.task.update({ where: { id: m.id }, data: { columnId: column.id, position: m.position, evergreen: false } })));
-    describeAction(`Movió ${moved.length === 1 ? "1 tarea" : `${moved.length} tareas`} a «${await columnName(column.id)}»`, { taskIds: moved.map((m) => m.id) });
+    describeAction("Movió {count} a «{col}»", { count: tasksN(moved.length), col: await columnName(column.id) }, { taskIds: moved.map((m) => m.id) });
     return { columnId: column.id, moved };
   });
 }
@@ -348,7 +354,7 @@ export async function makeEvergreen(taskId: string) {
       });
       return { columnId: column.id, position, title: task.title };
     });
-    describeAction(`Marcó «${result.title}» como fija en la release`, { taskId, columnId: result.columnId });
+    describeAction("Marcó «{title}» como fija en la release", { title: result.title }, { taskId, columnId: result.columnId });
     return { columnId: result.columnId, position: result.position };
   });
 }
@@ -357,7 +363,7 @@ export async function archiveTask(taskId: string) {
   return runAction({ name: "tasks.archiveTask", args: [taskId] }, async () => {
     const user = await requireUser();
     const { columnId } = await assertTaskAccess(user, v.id.parse(taskId));
-    describeAction(`Archivó «${(await taskLabel(taskId)).title}»`, { taskId });
+    describeAction("Archivó «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
     addUndo(...(await captureTasks([taskId], ARCHIVE_FIELDS)));
     await db.task.update({ where: { id: taskId }, data: { archivedAt: new Date(), archivedFromColumnId: columnId, evergreen: false } });
   });
@@ -373,7 +379,7 @@ export async function archiveTasks(taskIds: string[]) {
     noteProject(tasks[0]?.projectId);
     addUndo(...(await captureTasks((await db.task.findMany({ where: { id: { in: ids }, archivedAt: null }, select: { id: true } })).map((t) => t.id), ARCHIVE_FIELDS)));
     await db.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId", "evergreen" = false WHERE "id" IN (${Prisma.join(ids)}) AND "archivedAt" IS NULL`;
-    describeAction(`Archivó ${ids.length === 1 ? "1 tarea" : `${ids.length} tareas`}`, { taskIds: ids });
+    describeAction("Archivó {count}", { count: tasksN(ids.length) }, { taskIds: ids });
     return { archived: ids.length };
   });
 }
@@ -415,7 +421,7 @@ export async function deleteTask(taskId: string) {
   return runAction({ name: "tasks.deleteTask", args: [taskId] }, async () => {
     const user = await requireUser();
     await assertTaskAccess(user, v.id.parse(taskId));
-    describeAction(`Borró la tarea «${(await taskLabel(taskId)).title}»`, { taskId });
+    describeAction("Borró la tarea «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
     // Los ficheros de sus adjuntos se conservan mientras se pueda deshacer (ver undo.ts).
     addUndo(...(await snapshotTasks([taskId])));
     await db.task.delete({ where: { id: taskId } });
@@ -434,7 +440,7 @@ export async function deleteTasks(taskIds: string[]) {
     noteProject(tasks[0]?.projectId);
     addUndo(...(await snapshotTasks(ids)));
     const titles = await db.task.findMany({ where: { id: { in: ids } }, select: { title: true } });
-    describeAction(`Borró ${ids.length === 1 ? "1 tarea" : `${ids.length} tareas`}: ${titles.map((t) => `«${t.title}»`).join(", ").slice(0, 600)}`, { taskIds: ids });
+    describeAction("Borró {count}: {titles}", { count: tasksN(ids.length), titles: titles.map((t) => `«${t.title}»`).join(", ").slice(0, 600) }, { taskIds: ids });
     await db.task.deleteMany({ where: { id: { in: ids } } });
     return { deleted: ids.length };
   });
@@ -498,7 +504,7 @@ export async function addSubtask(taskId: string, title: string) {
       select: { id: true, title: true, done: true, position: true },
     });
     addUndo({ t: "subtask.remove", id: sub.id });
-    describeAction(`Añadió la subtarea «${sub.title}» en «${(await taskLabel(taskId)).title}»`, { taskId });
+    describeAction("Añadió la subtarea «{subtask}» en «{task}»", { subtask: sub.title, task: (await taskLabel(taskId)).title }, { taskId });
     return sub;
   });
 }
@@ -509,7 +515,8 @@ export async function updateSubtask(subtaskId: string, patch: { title?: string; 
     const data = z.object({ title: v.title.optional(), done: z.boolean().optional() }).parse(patch);
     addUndo({ t: "subtask.set", id: sub.id, data: { ...(data.title !== undefined ? { title: sub.title } : {}), ...(data.done !== undefined ? { done: sub.done } : {}) } });
     describeAction(
-      data.title !== undefined ? `Renombró la subtarea «${sub.title}» a «${data.title}»` : `${data.done ? "Marcó" : "Desmarcó"} la subtarea «${sub.title}»`,
+      data.title !== undefined ? "Renombró la subtarea «{subtask}» a «{to}»" : data.done ? "Marcó la subtarea «{subtask}»" : "Desmarcó la subtarea «{subtask}»",
+      { subtask: sub.title, to: data.title ?? "" },
       { subtaskId: sub.id },
     );
     await db.subtask.update({ where: { id: subtaskId }, data });
@@ -537,7 +544,7 @@ export async function reorderSubtask(subtaskId: string, prevId: string | null, n
       const fresh = async (id: string | null) => (id ? (await db.subtask.findUnique({ where: { id }, select: { position: true } }))?.position ?? null : null);
       position = positionBetween(await fresh(prevId), await fresh(nextId));
     }
-    describeAction(`Reordenó la subtarea «${sub.title}»`, { subtaskId: sub.id });
+    describeAction("Reordenó la subtarea «{subtask}»", { subtask: sub.title }, { subtaskId: sub.id });
     await db.subtask.update({ where: { id: sub.id }, data: { position } });
     return { position };
   });
@@ -547,7 +554,7 @@ export async function deleteSubtask(subtaskId: string) {
   return runAction({ name: "tasks.deleteSubtask", args: [subtaskId] }, async () => {
     const sub = await assertSubtaskAccess(subtaskId);
     addUndo({ t: "subtask.restore", row: sub });
-    describeAction(`Borró la subtarea «${sub.title}»`, { subtaskId: sub.id });
+    describeAction("Borró la subtarea «{subtask}»", { subtask: sub.title }, { subtaskId: sub.id });
     await db.subtask.delete({ where: { id: subtaskId } });
   });
 }
@@ -563,7 +570,7 @@ export async function deleteAttachment(attachmentId: string) {
     if (!att) throw notFound();
     noteProject((await db.task.findUnique({ where: { id: att.taskId }, select: { projectId: true } }))?.projectId);
     noteTask(att.taskId);
-    describeAction(`Borró el adjunto «${att.originalName}» de «${(await taskLabel(att.taskId)).title}»`, { attachmentId: att.id });
+    describeAction("Borró el adjunto «{name}» de «{task}»", { name: att.originalName, task: (await taskLabel(att.taskId)).title }, { attachmentId: att.id });
     // El fichero se conserva mientras se pueda deshacer (ver undo.ts).
     addUndo({ t: "attachment.restore", row: { ...att, createdAt: att.createdAt.toISOString() } });
     await db.taskAttachment.delete({ where: { id: att.id } });
@@ -584,7 +591,7 @@ export async function restoreTask(taskId: string) {
     const position = positionBetween(await lastPosition(column.id), null);
     addUndo(...(await captureTasks([taskId], ARCHIVE_FIELDS)));
     await db.task.update({ where: { id: taskId }, data: { archivedAt: null, archivedFromColumnId: null, columnId: column.id, position } });
-    describeAction(`Recuperó «${(await taskLabel(taskId)).title}» en «${column.name}»`, { taskId });
+    describeAction("Recuperó «{title}» en «{col}»", { title: (await taskLabel(taskId)).title, col: column.name }, { taskId });
     return { task: await loadBoardTask(taskId), columnName: column.name };
   });
 }
@@ -607,7 +614,7 @@ export async function addComment(taskId: string, body: string) {
     const comment = await db.taskComment.create({ data: { taskId, authorId: user.id, body: text }, select: commentSelect });
     addUndo({ t: "comment.remove", id: comment.id });
     await notifyMentions({ actorId: user.id, taskId, projectId, recipientIds: extractMentionIds(text), text });
-    describeAction(`Comentó en «${(await taskLabel(taskId)).title}»`, { taskId });
+    describeAction("Comentó en «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
     return toCommentInfo(comment);
   });
 }
@@ -626,7 +633,7 @@ export async function deleteComment(commentId: string) {
     noteTask(comment.taskId);
     const { task, ...row } = comment;
     addUndo({ t: "comment.restore", row: { ...row, createdAt: row.createdAt.toISOString(), editedAt: row.editedAt?.toISOString() ?? null } });
-    describeAction(`Borró un comentario de «${task.title}»`, { taskId: row.taskId });
+    describeAction("Borró un comentario de «{title}»", { title: task.title }, { taskId: row.taskId });
     await db.taskComment.delete({ where: { id: comment.id } });
   });
 }
@@ -667,7 +674,7 @@ export async function deleteTaskLink(linkId: string) {
     noteTask(link.taskId);
     const { task: _task, ...row } = link;
     addUndo({ t: "link.restore", row: { ...row, createdAt: row.createdAt.toISOString() } });
-    describeAction(`Quitó el enlace «${row.title}»`, { taskId: row.taskId });
+    describeAction("Quitó el enlace «{title}»", { title: row.title }, { taskId: row.taskId });
     await db.taskLink.delete({ where: { id: link.id } });
   });
 }

@@ -1,10 +1,10 @@
 // Constantes compartidas entre cliente y servidor (sin dependencias de Node).
 
-/** Estilo del distintivo de un tipo de tarea a partir de su color (hex). */
-export function kindBadgeStyle(color: string): { backgroundColor: string; color: string; boxShadow: string } {
-  // El blanco no se vería sobre fondo claro: fondo blanco, texto pizarra y borde gris.
-  if (color.toLowerCase() === "#ffffff") return { backgroundColor: "#ffffff", color: "#334155", boxShadow: "inset 0 0 0 1px #94a3b8" };
-  return { backgroundColor: `${color}22`, color, boxShadow: `inset 0 0 0 1px ${color}55` };
+import type { CSSProperties } from "react";
+
+/** Estilo del distintivo de un tipo de tarea (va con la clase `kind-badge`, que ajusta el contraste). */
+export function kindBadgeStyle(color: string): CSSProperties {
+  return { "--kind": color } as CSSProperties;
 }
 
 export const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
@@ -18,13 +18,18 @@ export const COLUMN_ROLE_LABEL: Record<ColumnRoleValue, string> = {
   IN_PRODUCTION: "En producción (destino al desplegar)",
 };
 
-export const DEFAULT_COLUMNS: { name: string; role: ColumnRoleValue; isDone: boolean }[] = [
-  { name: "Backlog", role: "NONE", isDone: false },
-  { name: "En progreso", role: "NONE", isDone: false },
-  { name: "Siguiente salto a producción", role: "NEXT_RELEASE", isDone: false },
-  { name: "En producción", role: "IN_PRODUCTION", isDone: true },
-  { name: "Cerrado", role: "NONE", isDone: true },
+export const DEFAULT_COLUMNS: { name: string; nameEn: string; role: ColumnRoleValue; isDone: boolean }[] = [
+  { name: "Backlog", nameEn: "Backlog", role: "NONE", isDone: false },
+  { name: "En progreso", nameEn: "In progress", role: "NONE", isDone: false },
+  { name: "Siguiente salto a producción", nameEn: "Next release", role: "NEXT_RELEASE", isDone: false },
+  { name: "En producción", nameEn: "In production", role: "IN_PRODUCTION", isDone: true },
+  { name: "Cerrado", nameEn: "Closed", role: "NONE", isDone: true },
 ];
+
+/** Columnas por defecto de un proyecto nuevo, con los nombres en el idioma de quien lo crea. */
+export function defaultColumns(locale: "es" | "en" = "es"): { name: string; role: ColumnRoleValue; isDone: boolean }[] {
+  return DEFAULT_COLUMNS.map(({ name, nameEn, role, isDone }) => ({ name: locale === "en" ? nameEn : name, role, isDone }));
+}
 
 /** Paleta de colores para tarjetas y etiquetas (hex). */
 export const PALETTE = [

@@ -1,9 +1,10 @@
 "use client";
 
 import { useT } from "@/i18n/client";
+import type { EditorModeValue } from "@/lib/types";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
 
-export function KindsAdmin({ kinds }: { kinds: KindRow[] }) {
+export function KindsAdmin({ kinds, editorMode }: { kinds: KindRow[]; editorMode: EditorModeValue }) {
   const t = useT();
   return (
     <div>
@@ -13,7 +14,7 @@ export function KindsAdmin({ kinds }: { kinds: KindRow[] }) {
           {t("Disponibles en todos los proyectos. Cada tipo es una sección de las release notes, en este orden; los tipos propios de un proyecto se gestionan en sus ajustes y van detrás.")}
         </p>
       </div>
-      <KindsManager kinds={kinds} />
+      <KindsManager kinds={kinds} editorMode={editorMode} />
     </div>
   );
 }

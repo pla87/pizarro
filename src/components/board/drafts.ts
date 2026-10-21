@@ -84,6 +84,9 @@ export function useDraftAutosave(key: string, get: () => unknown): () => void {
     window.addEventListener("pagehide", save);
     document.addEventListener("visibilitychange", onHide);
     return () => {
+      // Al cerrarse el modal por otra vía (tarea borrada o archivada, cambio de página) se guarda
+      // el estado final: si no queda nada pendiente, el borrador desaparece.
+      save();
       clearInterval(timer);
       window.removeEventListener("pagehide", save);
       document.removeEventListener("visibilitychange", onHide);

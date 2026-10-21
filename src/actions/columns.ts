@@ -32,7 +32,7 @@ export async function createColumn(projectId: string, name: string) {
     const count = await db.column.count({ where: { projectId } });
     if (count >= 30) throw new AppError("Máximo 30 columnas por proyecto.");
     const last = await db.column.findFirst({ where: { projectId }, orderBy: { position: "desc" }, select: { position: true } });
-    describeAction(`Creó la columna «${v.name.parse(name)}»`);
+    describeAction("Creó la columna «{name}»", { name: v.name.parse(name) });
     const column = await db.column.create({
       data: { projectId, name: v.name.parse(name), position: (last?.position ?? 0) + POSITION_STEP },
       select: columnSelect,
@@ -47,7 +47,7 @@ export async function renameColumn(columnId: string, name: string) {
     const column = await findColumn(columnId);
     addUndo({ t: "column.set", id: column.id, data: { name: column.name } });
     await db.column.update({ where: { id: columnId }, data: { name: v.name.parse(name) } });
-    describeAction(`Renombró la columna «${column.name}» a «${v.name.parse(name)}»`);
+    describeAction("Renombró la columna «{from}» a «{to}»", { from: column.name, to: v.name.parse(name) });
   });
 }
 
@@ -60,7 +60,7 @@ export async function setColumnRole(columnId: string, role: string) {
     const before = await db.column.findMany({ where: { projectId: column.projectId }, select: { id: true, role: true } });
     const fixed = await db.task.findMany({ where: { projectId: column.projectId, evergreen: true }, select: { id: true } });
     addUndo(...before.map((c) => ({ t: "column.set" as const, id: c.id, data: { role: c.role } })), ...(await captureTasks(fixed.map((t) => t.id), ["evergreen"])));
-    describeAction(`Cambió el rol de la columna «${column.name}»`);
+    describeAction("Cambió el rol de la columna «{name}»", { name: column.name });
     await db.$transaction(async (tx) => {
       if (value !== "NONE") {
         await tx.column.updateMany({ where: { projectId: column.projectId, role: value }, data: { role: "NONE" } });
@@ -78,7 +78,7 @@ export async function setColumnDone(columnId: string, isDone: boolean) {
   return runAction({ name: "columns.setColumnDone", args: [columnId, isDone] }, async () => {
     const column = await findColumn(columnId);
     addUndo({ t: "column.set", id: column.id, data: { isDone: column.isDone } });
-    describeAction(`${isDone ? "Marcó" : "Desmarcó"} la columna «${column.name}» como terminada`);
+    describeAction(isDone ? "Marcó la columna «{name}» como terminada" : "Desmarcó la columna «{name}» como terminada", { name: column.name });
     await db.column.update({ where: { id: columnId }, data: { isDone: z.boolean().parse(isDone) } });
   });
 }
@@ -94,7 +94,7 @@ export async function moveColumn(columnId: string, direction: number) {
       select: { id: true, position: true },
     });
     addUndo(...columns.map((c) => ({ t: "column.set" as const, id: c.id, data: { position: c.position } })));
-    describeAction(`Movió la columna «${column.name}» a la ${dir < 0 ? "izquierda" : "derecha"}`);
+    describeAction(dir < 0 ? "Movió la columna «{name}» a la izquierda" : "Movió la columna «{name}» a la derecha", { name: column.name });
     const idx = columns.findIndex((c) => c.id === columnId);
     const target = idx + dir;
     if (target < 0 || target >= columns.length) return;
@@ -130,6 +130,6 @@ export async function deleteColumn(columnId: string) {
       await tx.task.updateMany({ where: { columnId, archivedAt: { not: null } }, data: { columnId: other.id } });
       await tx.column.delete({ where: { id: columnId } });
     });
-    describeAction(`Borró la columna «${column.name}»`);
+    describeAction("Borró la columna «{name}»", { name: column.name });
   });
 }

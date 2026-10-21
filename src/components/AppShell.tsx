@@ -1,5 +1,6 @@
 "use client";
 
+import { BrandMark } from "@/components/ui/BrandMark";
 import {
   Archive, Bell, ChevronsUpDown, FolderKanban, History, LayoutDashboard, ListChecks, LogOut, Menu, Plus, Rocket,
   Settings, Shield, SlidersHorizontal, X,
@@ -133,8 +134,7 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-14 items-center gap-2 px-4">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/icon.svg" alt="" width={26} height={26} />
+        <BrandMark size={26} />
         <span className="text-lg font-bold tracking-tight">Pizarro</span>
       </div>
 

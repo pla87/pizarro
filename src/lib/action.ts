@@ -6,6 +6,7 @@ import { logEvent } from "./log";
 import { READ_ACTIONS } from "./log-query";
 import { publishChange } from "./realtime";
 import { saveUndo, type UndoOp } from "./undo";
+import { encodeLabel, type Label } from "./undo-label";
 import { requestContext } from "./request-context";
 import { getCurrentUser } from "./session";
 import { toLocale, translate } from "@/i18n/core";
@@ -27,10 +28,10 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
   const start = performance.now();
   let result: ActionResult<T>;
   let level: "info" | "warn" | "error" = "info";
-  const ctx: { message?: string; projectId?: string | null; details?: Record<string, unknown>; undo?: UndoOp[]; taskId?: string | null } = {};
+  const ctx: { message?: string; label?: Label; projectId?: string | null; details?: Record<string, unknown>; undo?: UndoOp[]; taskId?: string | null } = {};
   try {
     result = { ok: true, data: await actionContext.run(ctx, fn) };
-    if (ctx.undo?.length && ctx.projectId) await recordUndo(meta?.name ?? "acción", ctx.projectId, ctx.message, ctx.undo, ctx.taskId ?? null);
+    if (ctx.undo?.length && ctx.projectId) await recordUndo(meta?.name ?? "acción", ctx.projectId, ctx.label ? encodeLabel(ctx.label) : ctx.message, ctx.undo, ctx.taskId ?? null);
     // Aviso a las demás pestañas del proyecto (las consultas no cambian nada).
     if (meta && ctx.projectId && !READ_ACTIONS.includes(meta.name)) {
       const user = await getCurrentUser().catch(() => null);

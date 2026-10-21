@@ -52,11 +52,13 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   const descDraft = useRef<string | null>(null);
   const [draftUsed, setDraftUsed] = useState(false);
   // Borrador local cada 5 s: al volver tras cerrar la página, la tarea se reabre con lo escrito.
-  const discardDraft = useDraftAutosave(draftKey("edit", board.currentUserId, board.project.id), (): EditTaskDraft => ({
-    taskId: task.id,
-    ...(title !== task.title ? { title } : {}),
-    ...(descDraft.current !== null ? { description: descDraft.current } : {}),
-  }));
+  // Solo hay borrador si queda algo sin guardar; si no, se borra (no se reabre una tarea ya cerrada).
+  const discardDraft = useDraftAutosave(draftKey("edit", board.currentUserId, board.project.id), (): EditTaskDraft | null => {
+    const desc = descDraft.current;
+    const descChanged = desc !== null && desc !== (detail?.description ?? "");
+    if (title === task.title && !descChanged) return null;
+    return { taskId: task.id, ...(title !== task.title ? { title } : {}), ...(descChanged ? { description: desc } : {}) };
+  });
   const onClose = () => {
     discardDraft();
     close();
@@ -587,7 +589,7 @@ export function TypeSelector({ kinds, value, onChange }: { kinds: KindOption[]; 
           key={k.id}
           type="button"
           onClick={() => onChange(k.id)}
-          className={cn("badge cursor-pointer px-2 py-1 text-xs", value !== k.id && "bg-transparent text-slate-500 ring-slate-300 dark:ring-slate-700")}
+          className={cn("badge cursor-pointer px-2 py-1 text-xs", value === k.id ? "kind-badge" : "bg-transparent text-slate-500 ring-slate-300 dark:ring-slate-700")}
           style={value === k.id ? kindBadgeStyle(k.color) : undefined}
           aria-pressed={value === k.id}
         >

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { BrandMark } from "@/components/ui/BrandMark";
 import { getCurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { LoginForm } from "./LoginForm";
@@ -16,8 +17,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     <main className="flex min-h-dvh items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex items-center justify-center gap-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icon.svg" alt="" width={36} height={36} />
+          <BrandMark size={36} />
           <span className="text-2xl font-bold tracking-tight">Pizarro</span>
         </div>
         <div className="card p-6">

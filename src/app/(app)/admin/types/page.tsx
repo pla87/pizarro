@@ -10,11 +10,13 @@ export async function generateMetadata() {
 }
 
 export default async function KindsPage() {
-  await requireAdminPage();
-  const [kinds, counts] = await Promise.all([
+  const user = await requireAdminPage();
+  const [kinds, counts, me] = await Promise.all([
     listKinds(),
     db.task.groupBy({ by: ["kindId"], _count: { _all: true } }),
+    db.user.findUnique({ where: { id: user.id }, select: { editorMode: true } }),
   ]);
+  const editorMode = me?.editorMode ?? "MARKDOWN";
   const usage = Object.fromEntries(counts.map((c) => [c.kindId, c._count._all]));
-  return <KindsAdmin kinds={kinds.map((k) => ({ ...k, taskCount: usage[k.id] ?? 0 }))} />;
+  return <KindsAdmin editorMode={editorMode} kinds={kinds.map((k) => ({ ...k, taskCount: usage[k.id] ?? 0 }))} />;
 }

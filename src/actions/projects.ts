@@ -7,7 +7,8 @@ import { describeAction, noteProject } from "@/lib/action-context";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertProjectAccess, visibleProjectsWhere } from "@/lib/access";
-import { DEFAULT_COLUMNS, PALETTE } from "@/lib/constants";
+import { defaultColumns, PALETTE } from "@/lib/constants";
+import { getLocale } from "@/i18n/server";
 import { AppError, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
 import { buildTemplateApplication, parseStoredTemplate, type TemplateData } from "@/lib/project-templates";
@@ -18,9 +19,9 @@ import { dateToIso, isoToDate } from "@/lib/dates";
 import type { LabelOption } from "@/lib/types";
 
 /** Crea columnas, tipos propios, tipos generales ocultos y etiquetas de una plantilla en el proyecto (dentro de la transacción). */
-async function applyTemplate(tx: Prisma.TransactionClient, projectId: string, template: TemplateData) {
+async function applyTemplate(tx: Prisma.TransactionClient, projectId: string, template: TemplateData, locale: "es" | "en") {
   const general = await tx.taskKind.findMany({ where: { projectId: null }, orderBy: { position: "asc" }, select: { id: true, name: true } });
-  const app = buildTemplateApplication(template, general);
+  const app = buildTemplateApplication(template, general, locale);
   await tx.column.createMany({ data: app.columns.map((c) => ({ ...c, projectId })) });
   if (app.kinds.length) await tx.taskKind.createMany({ data: app.kinds.map((k) => ({ ...k, projectId })) });
   if (app.hiddenKindIds.length) await tx.projectHiddenKind.createMany({ data: app.hiddenKindIds.map((kindId) => ({ projectId, kindId })) });
@@ -37,17 +38,19 @@ export async function createProject(name: string, options?: { templateId?: strin
     if (options?.templateId && !templateRow) throw new AppError("La plantilla ya no existe.");
     const template = templateRow ? parseStoredTemplate(templateRow) : null;
     const last = await db.project.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
+    // Sin plantilla, las columnas por defecto salen en el idioma de quien crea el proyecto.
+    const locale = await getLocale();
     const project = await db.$transaction(async (tx) => {
       const created = await tx.project.create({
         data: {
           name: projectName,
           position: (last?.position ?? 0) + POSITION_STEP,
           privateOwnerId: options?.isPrivate ? user.id : null,
-          ...(template ? {} : { columns: { create: DEFAULT_COLUMNS.map((c, i) => ({ ...c, position: (i + 1) * POSITION_STEP })) } }),
+          ...(template ? {} : { columns: { create: defaultColumns(locale).map((c, i) => ({ ...c, position: (i + 1) * POSITION_STEP })) } }),
         },
         select: { id: true },
       });
-      if (template) await applyTemplate(tx, created.id, template);
+      if (template) await applyTemplate(tx, created.id, template, locale);
       return created;
     });
     describeAction(`Creó el proyecto «${projectName}»${options?.isPrivate ? " (privado)" : ""}${template ? ` con la plantilla «${templateRow!.name}»` : ""}`);

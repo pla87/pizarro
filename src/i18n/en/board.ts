@@ -172,4 +172,5 @@ export const board: Record<string, string> = {
   "captura": "screenshot",
   "archivo": "file",
   "No se pudo subir el archivo.": "Could not upload the file.",
+  "Asignada a {name}": "Assigned to {name}",
 };
