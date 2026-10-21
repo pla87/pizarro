@@ -10,8 +10,6 @@ import { requestContext } from "./request-context";
 import { getCurrentUser } from "./session";
 import { toLocale, translate } from "@/i18n/core";
 
-export { requestContext };
-
 type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string };
 
 /** Nombre y argumentos de la acción, para el registro de actividad. */

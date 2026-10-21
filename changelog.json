@@ -1,6 +1,55 @@
 {
   "versions": [
     {
+      "version": "1.13.0",
+      "date": "2026-10-21",
+      "releasedAt": "2026-10-21T15:44:06+02:00",
+      "summary": "Temas de color completos y más cuidados, historial de versiones en inglés, menciones con la barra de formato, barra de formato por defecto y optimizaciones.",
+      "changes": {
+        "nuevas": [
+          "Menciones en el editor con barra de formato: al escribir @ aparece la lista de personas (y @docs / @sheets); la mención se ve como una etiqueta."
+        ],
+        "mejoras": [
+          "Temas de color rehechos: cada tema (Verde bosque, Siena, Mostaza, Blanco y negro) cambia toda la app —fondos, columnas, tarjetas, bordes y textos—, no solo los resaltados. Blanco y negro es completamente en grises.",
+          "Subtareas hechas en verde neón (casilla y barra) en el tema azul.",
+          "Historial de versiones también en inglés.",
+          "La edición con barra de formato es la opción por defecto.",
+          "La pantalla de acceso sale siempre en español.",
+          "El tablero carga menos código al abrirse: los diálogos y el editor se cargan al usarlos (con precarga en segundo plano).",
+          "Los refrescos automáticos ya no registran una visita cada vez en los logs."
+        ],
+        "correcciones": [
+          "Tonos 200 y 300 del color principal que no estaban definidos (algunos textos y bordes salían sin color)."
+        ],
+        "tecnicos": [
+          "Migración v1_13: AppVersionLog.summaryEn/changesEn y editorMode WYSIWYG por defecto (también para los usuarios existentes). Escala slate-* y color on-brand por tema. Limpieza de código sin uso (exports, helpers obsoletos). @tiptap/extension-mention y @tiptap/suggestion 3.32.0."
+        ]
+      },
+      "en": {
+        "summary": "Fully reworked color themes, version history in English, mentions in the formatting toolbar, formatting toolbar by default and optimizations.",
+        "changes": {
+          "nuevas": [
+            "Mentions in the formatting-toolbar editor: typing @ shows the list of people (and @docs / @sheets); the mention appears as a chip."
+          ],
+          "mejoras": [
+            "Color themes reworked: each theme (Forest green, Sienna, Mustard, Black and white) changes the whole app —backgrounds, columns, cards, borders and text—, not just highlights. Black and white is entirely grayscale.",
+            "Completed subtasks in neon green (checkbox and bar) in the blue theme.",
+            "Version history also in English.",
+            "Editing with the formatting toolbar is now the default.",
+            "The sign-in screen is always in Spanish.",
+            "The board loads less code on open: dialogs and the editor load when used (preloaded in the background).",
+            "Automatic refreshes no longer log a page view every time."
+          ],
+          "correcciones": [
+            "Shades 200 and 300 of the main color were not defined (some text and borders had no color)."
+          ],
+          "tecnicos": [
+            "Migration v1_13: AppVersionLog.summaryEn/changesEn and editorMode WYSIWYG by default (also for existing users). Per-theme slate-* scale and on-brand color. Removal of unused code (exports, obsolete helpers). @tiptap/extension-mention and @tiptap/suggestion 3.32.0."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.12.0",
       "date": "2026-10-20",
       "releasedAt": "2026-10-20T23:46:48+02:00",

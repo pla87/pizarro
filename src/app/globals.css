@@ -158,11 +158,8 @@
   --color-brand-600: #111111;
   --color-brand-700: #000000;
   --color-progress: #111111;
+  /* En oscuro, 50-300 se usan como texto claro (como en el resto de temas): se quedan claros. */
   @variant dark {
-    --color-brand-50: #262626;
-    --color-brand-100: #3d3d3d;
-    --color-brand-200: #535353;
-    --color-brand-300: #d0d0d0;
     --color-brand-500: #e4e4e4;
     --color-brand-600: #f4f4f4;
     --color-brand-700: #ffffff;
