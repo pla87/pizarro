@@ -8,7 +8,8 @@ UPLOAD_DIR="${UPLOAD_DIR:-/app/uploads}"
 # vuelve a ejecutar este script como el usuario sin privilegios "node".
 if [ "$(id -u)" = "0" ]; then
   mkdir -p "$UPLOAD_DIR"
-  chown -R node:node "$UPLOAD_DIR"
+  # Solo la primera vez (o si cambió el dueño): recorrer todo el volumen en cada arranque es lento con muchos adjuntos.
+  [ "$(stat -c %u "$UPLOAD_DIR")" = "$(id -u node)" ] || chown -R node:node "$UPLOAD_DIR"
   exec setpriv --reuid=node --regid=node --init-groups sh "$0" "$@"
 fi
 

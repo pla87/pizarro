@@ -1,4 +1,5 @@
 import "server-only";
+import { reportRecipientAllowed } from "./report-recipient";
 import { intlLocale, makeT, toLocale, type T } from "../i18n/core";
 import { visibleProjectsWhere } from "./access";
 import { appTimeZone } from "./board";
@@ -108,9 +109,11 @@ export async function sendDueReports(now: Date = new Date()): Promise<number> {
     // La persona que lo configuró debe seguir activa y con acceso al proyecto (si no, no se manda nada de un proyecto que ya no ve).
     const creator = s.createdById ? await db.user.findFirst({ where: { id: s.createdById, active: true }, select: { id: true, name: true, role: true, locale: true } }) : null;
     const allowed = creator ? await db.project.count({ where: { id: s.projectId, ...visibleProjectsWhere(creator as CurrentUser) } }) : 0;
-    if (!creator || !allowed) {
+    // El destinatario también se comprueba al enviar: pudo perder el acceso después de programarlo.
+    const recipientOk = creator && allowed ? await reportRecipientAllowed(s.projectId, s.recipient, creator.role) : false;
+    if (!creator || !allowed || !recipientOk) {
       await db.reportSchedule.update({ where: { projectId: s.projectId }, data: { enabled: false } });
-      logEvent({ level: "warn", category: "notify", action: "report.scheduleDisabled", message: "Informe semanal desactivado: quien lo configuró ya no tiene acceso al proyecto", projectId: s.projectId });
+      logEvent({ level: "warn", category: "notify", action: "report.scheduleDisabled", message: "Informe semanal desactivado: quien lo configuró o su destinatario ya no tiene acceso al proyecto", projectId: s.projectId });
       continue;
     }
     const claim = await db.reportSchedule.updateMany({ where: { projectId: s.projectId, lastSentAt: s.lastSentAt }, data: { lastSentAt: now } });

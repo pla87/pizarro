@@ -247,6 +247,7 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
 export async function duplicateTask(taskId: string) {
   return runAction({ name: "tasks.duplicateTask", args: [taskId] }, async () => {
     const user = await requireUser();
+    if (!rateLimit(`duplicate:${user.id}`, 60, 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
     const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
     await assertNotArchived(taskId);
     const src = await db.task.findUniqueOrThrow({
@@ -493,7 +494,7 @@ export async function moveTasks(taskIds: string[], columnId: string) {
     if (!column) throw notFound();
     noteProject(column.projectId);
     const tasks = await db.task.findMany({
-      where: { id: { in: ids }, projectId: column.projectId },
+      where: { id: { in: ids }, projectId: column.projectId, archivedAt: null },
       orderBy: [{ column: { position: "asc" } }, { position: "asc" }],
       select: { id: true, columnId: true },
     });
@@ -546,6 +547,7 @@ export async function archiveTask(taskId: string) {
   return runAction({ name: "tasks.archiveTask", args: [taskId] }, async () => {
     const user = await requireUser();
     const { columnId } = await assertTaskAccess(user, v.id.parse(taskId));
+    await assertNotArchived(taskId);
     describeAction("Archivó «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
     addUndo(...(await captureTasks([taskId], ARCHIVE_FIELDS)));
     await db.task.update({ where: { id: taskId }, data: { archivedAt: new Date(), archivedFromColumnId: columnId, evergreen: false } });
@@ -654,7 +656,8 @@ export async function getTaskDetail(taskId: string) {
         subtasks: { orderBy: { position: "asc" }, select: { id: true, title: true, done: true, position: true } },
         attachments: { orderBy: { createdAt: "asc" }, select: { id: true, originalName: true, mimeType: true, isImage: true, size: true, width: true, height: true } },
         links: { orderBy: { createdAt: "asc" }, select: linkSelect },
-        comments: { orderBy: { createdAt: "asc" }, take: 300, select: commentSelect },
+        // Los 300 más recientes (si hubiera más, se pierden los antiguos, no los nuevos).
+        comments: { orderBy: { createdAt: "desc" }, take: 300, select: commentSelect },
       },
     });
     return {
@@ -666,7 +669,7 @@ export async function getTaskDetail(taskId: string) {
       subtasks: task.subtasks,
       attachments: task.attachments,
       links: task.links,
-      comments: task.comments.map(toCommentInfo),
+      comments: task.comments.reverse().map(toCommentInfo),
       following: isFollowing(user.id, { createdById: task.createdById, assigneeId: task.assigneeId, rows: task.followers }),
     };
   });

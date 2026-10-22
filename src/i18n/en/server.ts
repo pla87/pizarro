@@ -225,4 +225,5 @@ export const server: Record<string, string> = {
   "Duplicó «{title}»": "Duplicated “{title}”",
   "repetición": "repeat",
   "Máximo 50 subtareas.": "Maximum 50 subtasks.",
+  "El destinatario debe ser alguien con acceso al proyecto.": "The recipient must be someone with access to the project.",
 };

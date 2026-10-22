@@ -96,7 +96,8 @@ function MobileTab({ active, onClick, children }: { active: boolean; onClick: ()
     </button>
   );
 }
-const REFRESH_MS = 30_000;
+// Respaldo del canal en vivo (SSE), que ya avisa de cada cambio: no hace falta refrescar más a menudo.
+const REFRESH_MS = 120_000;
 
 type Items = Record<string, string[]>;
 
@@ -170,6 +171,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const id = idle(() => {
       void loadTaskDialog();
       void loadNewTaskDialog();
+      void import("@/components/ui/RichTextEditor");
     });
     return () => cancel(id);
   }, []);

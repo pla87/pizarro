@@ -5,6 +5,9 @@ import { assertProjectAccess } from "@/lib/access";
 import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
 import { db } from "@/lib/db";
+import { AppError } from "@/lib/errors";
+import { rateLimit } from "@/lib/rate-limit";
+import { reportRecipientAllowed } from "@/lib/report-recipient";
 import { requireUser } from "@/lib/session";
 import * as v from "@/lib/validation";
 
@@ -25,6 +28,12 @@ export async function saveReportSchedule(projectId: string, input: z.input<typeo
     const pid = v.id.parse(projectId);
     const data = schema.parse(input);
     await assertProjectAccess(user, pid);
+    if (!rateLimit(`report-schedule:${user.id}`, 20, 60 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
+    // El informe solo puede salir hacia alguien que ya ve el proyecto. Una dirección externa solo la
+    // puede poner un administrador, y nunca en un proyecto privado.
+    if (data.enabled && !(await reportRecipientAllowed(pid, data.recipient, user.role))) {
+      throw new AppError("El destinatario debe ser alguien con acceso al proyecto.");
+    }
     const prev = await db.reportSchedule.findUnique({ where: { projectId: pid }, select: { weekday: true, hour: true, enabled: true } });
     const reset = !prev || prev.weekday !== data.weekday || prev.hour !== data.hour || prev.enabled !== data.enabled;
     await db.reportSchedule.upsert({

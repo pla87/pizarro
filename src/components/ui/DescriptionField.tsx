@@ -1,8 +1,14 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useT } from "@/i18n/client";
 import { MentionTextarea, type MentionCommand } from "./MentionTextarea";
-import { RichTextEditor } from "./RichTextEditor";
+
+// El editor con barra (TipTap) pesa: solo se descarga para quien lo usa (el tablero lo precarga en reposo).
+const RichTextEditor = dynamic(() => import("./RichTextEditor").then((m) => m.RichTextEditor), {
+  ssr: false,
+  loading: () => <div className="min-h-40 animate-pulse rounded-lg border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900" />,
+});
 import type { EditorModeValue, UserOption } from "@/lib/types";
 
 export const MARKDOWN_HINT = "**negrita**, *cursiva*, ~~tachado~~, ++subrayado++, # Título, - lista, 1. lista";

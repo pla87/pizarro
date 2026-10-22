@@ -8,6 +8,18 @@ import { POSITION_STEP } from "./positions";
 import { addUndo } from "./undo";
 import type { BoardTask } from "./types";
 
+/** El responsable pasa a la siguiente aparición solo si sigue pudiendo tenerla (activo y con acceso). */
+async function stillAssignable(projectId: string, userId: string | null): Promise<string | null> {
+  if (!userId) return null;
+  const [user, project] = await Promise.all([
+    db.user.findFirst({ where: { id: userId, active: true }, select: { role: true, memberships: { where: { projectId }, select: { userId: true } } } }),
+    db.project.findUnique({ where: { id: projectId }, select: { isPrivate: true, restricted: true } }),
+  ]);
+  if (!user || !project) return null;
+  if (project.isPrivate || (project.restricted && user.role !== "ADMIN")) return user.memberships.length ? userId : null;
+  return userId;
+}
+
 /**
  * Crea la siguiente aparición de las tareas recurrentes que se acaban de terminar (movidas a una columna
  * «terminada») o archivar. Es idempotente: `recurrenceFromId` es único, así que de cada tarea solo sale una
@@ -58,7 +70,7 @@ export async function spawnRecurrences(taskIds: string[], actorId: string): Prom
           kindId: src.kindId,
           color: src.color,
           linkUrl: src.linkUrl,
-          assigneeId: src.assigneeId,
+          assigneeId: await stillAssignable(src.projectId, src.assigneeId),
           deliverableId: src.deliverableId,
           dueDate,
           recurrence: src.recurrence,

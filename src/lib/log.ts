@@ -85,7 +85,8 @@ export function logEvent(e: LogEvent): void {
     });
     // Presencia en el tablero: cualquier acción, no las simples visitas (el tablero se refresca solo).
     const projectId = state.queue[state.queue.length - 1]!.projectId;
-    if (projectId && e.userId && e.category !== "page") notePresence(projectId, e.userId, e.userName ?? "?");
+    // Solo acciones correctas: una fallida (p. ej. sin acceso) podría traer un projectId ajeno del cliente.
+    if (projectId && e.userId && e.category !== "page" && (e.level ?? "info") === "info") notePresence(projectId, e.userId, e.userName ?? "?");
     if (e.level === "error") console.error(`[${e.category}] ${e.action}: ${e.message ?? ""}`);
     if (state.queue.length >= MAX_QUEUE) void flushLogs();
     else state.timer ??= setTimeout(() => void flushLogs(), FLUSH_MS);

@@ -41,10 +41,12 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   const ip = clientIp(await headers());
   // Límite estricto por pareja IP+email (un tercero no puede bloquear a otra persona desde su IP) y otro más holgado por IP.
   const keys = loginRateKeys(ip, email);
+  // En los logs solo se anota si parece un email (si alguien pega ahí su contraseña, no queda guardada).
+  const shownEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "[no es un email]";
   if (!rateLimit(keys.ip, 60, 15 * 60_000) || !rateLimit(keys.pair, 8, 15 * 60_000)) {
     logEvent({
-      level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión bloqueado por demasiados intentos (${email})`,
-      path: "/login", ip, details: { email, reason: "rate_limited" },
+      level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión bloqueado por demasiados intentos (${shownEmail})`,
+      path: "/login", ip, details: { email: shownEmail, reason: "rate_limited" },
     });
     return { error: t("Demasiados intentos. Espera unos minutos.") };
   }
@@ -55,8 +57,8 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     const reason = !user ? "unknown_email" : !valid ? "wrong_password" : "inactive";
     const why = reason === "inactive" ? "usuario desactivado" : reason === "unknown_email" ? "email desconocido" : "contraseña incorrecta";
     logEvent({
-      level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión fallido (${email}): ${why}`,
-      userId: user?.id ?? null, userName: user?.name ?? null, path: "/login", ip, details: { email, reason },
+      level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión fallido (${shownEmail}): ${why}`,
+      userId: user?.id ?? null, userName: user?.name ?? null, path: "/login", ip, details: { email: shownEmail, reason },
     });
     return { error: t("Credenciales incorrectas.") };
   }
@@ -64,8 +66,8 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   // Con «solo Google» la contraseña correcta tampoco abre la puerta (salvo el acceso de emergencia de los administradores).
   if (!passwordLoginAllowed(user.role)) {
     logEvent({
-      level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión con contraseña rechazado (${email}): solo se admite Google`,
-      userId: user.id, userName: user.name, path: "/login", ip, details: { email, reason: "google_only" },
+      level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión con contraseña rechazado (${shownEmail}): solo se admite Google`,
+      userId: user.id, userName: user.name, path: "/login", ip, details: { email: shownEmail, reason: "google_only" },
     });
     return { error: t("El acceso con contraseña está desactivado en este servidor. Entra con Google.") };
   }

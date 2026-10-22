@@ -60,7 +60,13 @@ function undoReferencedTokens(ops: unknown[]): Set<string> {
  * Borra de UPLOAD_DIR los ficheros (adjuntos, miniaturas, copias de releases) que ninguna fila de la BD
  * referencia y que tienen más de 24 h. No toca backups/, enlaces simbólicos ni nombres desconocidos.
  */
+const ORPHAN_EVERY_MS = 23 * 60 * 60 * 1000;
+const orphanState = (globalThis as unknown as { __pzOrphans?: { last: number } }).__pzOrphans ??= { last: 0 };
+
 async function purgeOrphanFiles(): Promise<number> {
+  // Recorre todos los adjuntos y la carpeta de subidas: basta con una vez al día.
+  if (Date.now() - orphanState.last < ORPHAN_EVERY_MS) return 0;
+  orphanState.last = Date.now();
   const [{ db }, { logEvent }, { cleanOrphanFiles }, { uploadDir }] = await Promise.all([
     import("@/lib/db"),
     import("@/lib/log"),

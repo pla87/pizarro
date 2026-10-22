@@ -97,9 +97,9 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
     // Aviso a la dirección antigua: si alguien se hiciera con la cuenta, el dueño se entera.
     if (data.email !== user.email && emailEnabled()) {
       sendMailInBackground("aviso de email cambiado por un administrador", () => sendEmailChangedMail(user, user.email, data.email));
+    }
     // Cualquier canal en vivo (SSE, presencia) del usuario se corta si se ha desactivado o ha cambiado de rol.
     if (data.active !== user.active || data.role !== user.role) revokeUser(user.id);
-    }
     revalidatePath("/admin/users");
   });
 }

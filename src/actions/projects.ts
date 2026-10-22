@@ -177,6 +177,8 @@ export async function removeProjectMember(projectId: string, userId: string) {
       db.projectMember.delete({ where: { projectId_userId: { projectId: project.id, userId: targetId } } }),
       db.task.updateMany({ where: { projectId: project.id, assigneeId: targetId }, data: { assigneeId: null } }),
     ]);
+    // Quien sale deja de ver el tablero en vivo al momento (los demás miembros se reconectan solos).
+    revokeProject(project.id);
     describeAction(targetId === user.id ? `Salió del proyecto privado «${project.name}»` : `Quitó a «${member.user.name}» del proyecto privado «${project.name}»`);
     revalidatePath("/", "layout");
   });
