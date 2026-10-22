@@ -29,12 +29,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={show}>
       {children}
-      <div className="pointer-events-none fixed inset-x-0 top-[max(1rem,env(safe-area-inset-top))] z-[80] flex flex-col items-center gap-2 px-4">
+      <div className="pointer-events-none fixed inset-x-0 top-[max(1rem,env(safe-area-inset-top))] z-[80] flex flex-col items-center gap-2 px-4" aria-live="polite">
         {items.map((t) => (
           <div
             key={t.id}
-            role={t.kind === "error" ? "alert" : "status"}
-            aria-live={t.kind === "error" ? "assertive" : "polite"}
+            // La región ya es «polite»; los errores se anuncian al momento.
+            role={t.kind === "error" ? "alert" : undefined}
             className={cn(
               "pointer-events-auto flex max-w-md items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white shadow-lg",
               t.kind === "error" ? "bg-red-600" : "bg-slate-900 dark:bg-slate-700",
