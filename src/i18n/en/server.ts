@@ -221,4 +221,8 @@ export const server: Record<string, string> = {
   "Cuota de adjuntos del proyecto superada: {used} MB usados de {limit} MB.": "Project attachment quota exceeded: {used} MB used of {limit} MB.",
   "Cuota total de adjuntos del servidor superada: {used} MB usados de {limit} MB.": "Total server attachment quota exceeded: {used} MB used of {limit} MB.",
   "Las copias de seguridad están desactivadas: falta una BACKUP_KEY válida.": "Backups are disabled: a valid BACKUP_KEY is missing.",
+  "(copia)": "(copy)",
+  "Duplicó «{title}»": "Duplicated “{title}”",
+  "repetición": "repeat",
+  "Máximo 50 subtareas.": "Maximum 50 subtasks.",
 };

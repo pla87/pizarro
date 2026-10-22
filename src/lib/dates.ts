@@ -18,6 +18,27 @@ export function isoToDate(iso: string): Date {
   return new Date(`${iso}T00:00:00.000Z`);
 }
 
+/** Suma (o resta) días naturales a un día YYYY-MM-DD. */
+export function addDaysIso(iso: string, days: number): string {
+  return dateToIso(new Date(isoToDate(iso).getTime() + days * 86_400_000))!;
+}
+
+/** Día de la semana de un día YYYY-MM-DD: 1 = lunes … 7 = domingo. */
+export function isoWeekday(iso: string): number {
+  return isoToDate(iso).getUTCDay() || 7;
+}
+
+/** Primer día (YYYY-MM-DD) posterior a `from` que cae en ese día de la semana (1 = lunes … 7 = domingo). */
+export function nextWeekdayIso(from: string, weekday: number): string {
+  return addDaysIso(from, ((weekday - isoWeekday(from) + 6) % 7) + 1);
+}
+
+/** Lunes y domingo de la semana que contiene ese día. */
+export function weekBoundsIso(iso: string): { start: string; end: string } {
+  const start = addDaysIso(iso, 1 - isoWeekday(iso));
+  return { start, end: addDaysIso(start, 6) };
+}
+
 /** Días naturales de `from` a `to` (ambos YYYY-MM-DD). */
 export function daysBetween(from: string, to: string): number {
   return Math.round((isoToDate(to).getTime() - isoToDate(from).getTime()) / 86_400_000);

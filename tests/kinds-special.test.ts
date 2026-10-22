@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyKindTemplate, describeKindAutomation } from "../src/lib/kinds-special";
+import { applyKindTemplate, describeKindAutomation, mergeSubtasks, parseSubtaskLines } from "../src/lib/kinds-special";
 
 const RESPUESTA_LINE = "Respondo a las preguntas y lo que necesitas de mi:";
 
@@ -36,4 +36,18 @@ test("describeKindAutomation resume y trunca", () => {
   const line = describeKindAutomation(RESP)!;
   assert.ok(line.includes("«Respuesta»") && line.includes("«Respondo a las preguntas y lo que necesitas de mi:»"));
   assert.ok(describeKindAutomation({ titleTemplate: "", descriptionTemplate: "a".repeat(100) })!.includes("…"));
+});
+
+test("subtareas predefinidas: una por línea, sin vacías ni repetidas", () => {
+  assert.deepEqual(parseSubtaskLines("Revisar\n\n  Probar  \r\nrevisar\nDesplegar"), ["Revisar", "Probar", "Desplegar"]);
+  assert.deepEqual(parseSubtaskLines(""), []);
+  assert.equal(parseSubtaskLines(Array.from({ length: 80 }, (_, i) => `paso ${i}`).join("\n")).length, 50);
+});
+
+test("al elegir el tipo se añaden las subtareas que faltan", () => {
+  assert.deepEqual(mergeSubtasks([], ["A", "B"]), ["A", "B"]);
+  assert.deepEqual(mergeSubtasks(["b", "Extra"], ["A", "B"]), ["b", "Extra", "A"]);
+  // Elegir el mismo tipo dos veces no duplica.
+  assert.deepEqual(mergeSubtasks(mergeSubtasks([], ["A", "B"]), ["A", "B"]), ["A", "B"]);
+  assert.equal(mergeSubtasks(Array.from({ length: 49 }, (_, i) => `x${i}`), ["n1", "n2"]).length, 50);
 });

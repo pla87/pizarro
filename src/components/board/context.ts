@@ -33,6 +33,13 @@ export interface BoardApi {
   toggleSelected: (id: string) => void;
   /** Marca (o desmarca) de golpe varias tareas, p. ej. todas las de una columna. */
   setSelectedMany: (ids: string[], on: boolean) => void;
+  /** Atajos de tarjeta (ver cardActions.ts): cada uno hace el cambio optimista, avisa y deshace si falla. */
+  assignToMe: (id: string) => void;
+  moveToAdjacentColumn: (id: string, dir: -1 | 1) => void;
+  setDueDate: (id: string, day: string | null) => Promise<void>;
+  /** `true` si se guardó (o no hacía falta). */
+  renameTask: (id: string, title: string) => Promise<boolean>;
+  duplicateTask: (id: string) => Promise<void>;
   /** Marca una mutación en curso (evita que un refresco pise el estado optimista). */
   track: <T>(p: Promise<T>) => Promise<T>;
   /** Como `track`, pero deja pasar las excepciones (subidas de archivos). */

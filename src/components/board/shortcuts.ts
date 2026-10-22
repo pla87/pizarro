@@ -14,6 +14,14 @@ export function dialogOpen(): boolean {
   return !!document.querySelector("[role=dialog]");
 }
 
+/** Devuelve el foco a una tarjeta (p. ej. tras moverla de columna, que la vuelve a montar). */
+export function focusCard(taskId: string): void {
+  // Dos fotogramas: el primero deja que React pinte la tarjeta en su nueva columna.
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-task-card="${CSS.escape(taskId)}"]`)?.focus({ preventScroll: false })),
+  );
+}
+
 /** Evento para que el menú de proyectos (ProjectMenu) se abra desde un atajo. */
 export const OPEN_PROJECT_MENU_EVENT = "pz:open-project-menu";
 

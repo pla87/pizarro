@@ -27,6 +27,8 @@ export interface TaskData {
   archivedAt?: string | null;
   archivedFromColumnId?: string | null;
   evergreen?: boolean;
+  recurrence?: "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
+  recurrenceDay?: number | null;
   contentUpdatedAt?: string | null;
   contentUpdatedById?: string | null;
 }
@@ -81,7 +83,7 @@ const date = (s: string | null | undefined) => (s ? new Date(s) : null);
 
 const TASK_SELECT = {
   title: true, description: true, kindId: true, color: true, linkUrl: true, position: true, columnId: true, assigneeId: true,
-  dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, contentUpdatedAt: true, contentUpdatedById: true,
+  dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, recurrence: true, recurrenceDay: true, contentUpdatedAt: true, contentUpdatedById: true,
 } as const;
 type TaskRowFull = Prisma.TaskGetPayload<{ select: typeof TASK_SELECT }>;
 

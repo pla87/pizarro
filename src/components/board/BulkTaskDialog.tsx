@@ -31,12 +31,15 @@ export function BulkTaskDialog({ initialColumnId, onClose }: Props) {
   const [dueDate, setDueDate] = useState("");
   const [deliverableId, setDeliverableId] = useState("");
   const [labelIds, setLabelIds] = useState<string[]>([]);
+  const [withSubtasks, setWithSubtasks] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const lines = useMemo(() => parseTaskLines(text), [text]);
   const tooMany = lines.length > MAX_BULK_TASKS;
   const kindOf = (title: string) => overrides[title] || kindId;
   const missingKind = lines.some((l) => !kindOf(l));
+  // Solo se ofrece si algún tipo elegido tiene subtareas predefinidas.
+  const templated = lines.some((l) => (board.kindById.get(kindOf(l))?.subtaskTemplate.length ?? 0) > 0);
   const extras = [assigneeId, dueDate, deliverableId].filter(Boolean).length + (labelIds.length ? 1 : 0);
 
   const submit = async (e: React.FormEvent) => {
@@ -52,6 +55,7 @@ export function BulkTaskDialog({ initialColumnId, onClose }: Props) {
         dueDate: dueDate || null,
         deliverableId: deliverableId || null,
         labelIds,
+        applySubtaskTemplates: templated && withSubtasks,
       }),
     ).catch(() => ({ ok: false as const, error: t("Error inesperado. Inténtalo de nuevo.") }));
     if (!res.ok) {
@@ -126,6 +130,12 @@ export function BulkTaskDialog({ initialColumnId, onClose }: Props) {
                 }}
               />
             </div>
+            {templated && (
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={withSubtasks} onChange={(e) => setWithSubtasks(e.target.checked)} />
+                {t("Añadir las subtareas predefinidas de cada tipo")}
+              </label>
+            )}
             <ul className="max-h-48 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-700">
               {lines.map((title, i) => {
                 const kind = board.kindById.get(kindOf(title));

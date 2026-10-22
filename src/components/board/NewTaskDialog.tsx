@@ -10,7 +10,7 @@ import { useShortcut } from "./shortcuts";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
 import { DescriptionField } from "../ui/DescriptionField";
-import { applyKindTemplate } from "@/lib/kinds-special";
+import { applyKindTemplate, mergeSubtasks } from "@/lib/kinds-special";
 import { TypeSelector } from "./TaskDialog";
 import type { T } from "@/i18n/core";
 import { filesFrom, isImageFile, uploadFile, useFileDrop } from "./upload";
@@ -195,6 +195,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
               setTitle(preset.title);
               setDescription(preset.description);
             }
+            // Subtareas predefinidas del tipo: se añaden a las que haya, sin repetir.
+            if (kind?.subtaskTemplate.length) setSubtasks((l) => mergeSubtasks(l, kind.subtaskTemplate));
           }} />
         </div>
         <div>
