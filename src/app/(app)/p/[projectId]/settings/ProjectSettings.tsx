@@ -195,6 +195,7 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
             <input
               className="input max-w-xs"
               placeholder={t("Escribe «{name}» para confirmar", { name: project.name })}
+              aria-label={t("Escribe «{name}» para confirmar", { name: project.name })}
               value={confirmName}
               onChange={(e) => setConfirmName(e.target.value)}
             />
@@ -241,7 +242,7 @@ function LabelRow({ label, onSaved, onDeleted }: { label: LabelOption; onSaved: 
   }
   return (
     <li className="space-y-2 rounded-lg border border-slate-200 p-2 dark:border-slate-800">
-      <input className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
+      <input className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} aria-label={t("Nombre")} />
       <ColorPicker value={color} onChange={setColor} allowNone={false} />
       <div className="flex gap-2">
         <button

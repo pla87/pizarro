@@ -1,6 +1,7 @@
 "use client";
 
 import { Bell, CheckCheck, Mail, MessageCircle } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { markAllNotificationsRead, markNotificationRead } from "@/actions/notifications";
@@ -20,7 +21,7 @@ interface Item {
   task: { id: string; title: string; projectId: string; projectName: string } | null;
 }
 
-export function NotificationList({ items: initial }: { items: Item[] }) {
+export function NotificationList({ items: initial, moreHref }: { items: Item[]; moreHref: string | null }) {
   const router = useRouter();
   const t = useT();
   const locale = useIntlLocale();
@@ -87,6 +88,11 @@ export function NotificationList({ items: initial }: { items: Item[] }) {
             </li>
           ))}
         </ul>
+      )}
+      {moreHref && (
+        <div className="mt-4 text-center">
+          <Link href={moreHref} scroll={false} className="btn-secondary">{t("Cargar más")}</Link>
+        </div>
       )}
     </div>
   );
