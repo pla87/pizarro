@@ -54,6 +54,26 @@ export async function updateReleaseTemplate(templateId: string, input: { name: s
   });
 }
 
+/** Sube (-1) o baja (+1) una plantilla dentro de su tipo; la primera es la que «Generar release» elige por defecto. */
+export async function moveReleaseTemplate(templateId: string, direction: number) {
+  return runAction({ name: "profile.moveReleaseTemplate", args: [templateId, direction] }, async () => {
+    const t = await ownTemplate(templateId);
+    const dir = z.union([z.literal(-1), z.literal(1)]).parse(direction);
+    const current = await db.releaseTemplate.findUniqueOrThrow({ where: { id: t.id }, select: { userId: true, kind: true } });
+    const list = await db.releaseTemplate.findMany({
+      where: { userId: current.userId, kind: current.kind },
+      orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+      select: { id: true },
+    });
+    const idx = list.findIndex((x) => x.id === t.id);
+    const target = idx + dir;
+    if (idx < 0 || target < 0 || target >= list.length) return;
+    [list[idx], list[target]] = [list[target]!, list[idx]!];
+    // Se renumera la lista entera: el orden queda fijo aunque hubiera posiciones repetidas.
+    await db.$transaction(list.map((x, i) => db.releaseTemplate.update({ where: { id: x.id }, data: { position: (i + 1) * POSITION_STEP } })));
+  });
+}
+
 export async function deleteReleaseTemplate(templateId: string) {
   return runAction({ name: "profile.deleteReleaseTemplate", args: [templateId] }, async () => {
     const t = await ownTemplate(templateId);
@@ -98,10 +118,10 @@ export async function updateLocale(locale: "ES" | "EN") {
 }
 
 /** Color de acento de la app (variables --color-brand-*). */
-export async function updateAccent(accent: "BLUE" | "FOREST" | "SIENNA" | "MUSTARD" | "MONO") {
+export async function updateAccent(accent: "BLUE" | "FOREST" | "SIENNA" | "MUSTARD" | "MONO" | "EVA") {
   return runAction({ name: "profile.updateAccent", args: [accent] }, async () => {
     const user = await requireUser();
-    await db.user.update({ where: { id: user.id }, data: { accent: z.enum(["BLUE", "FOREST", "SIENNA", "MUSTARD", "MONO"]).parse(accent) } });
+    await db.user.update({ where: { id: user.id }, data: { accent: z.enum(["BLUE", "FOREST", "SIENNA", "MUSTARD", "MONO", "EVA"]).parse(accent) } });
     // El atributo data-accent se pinta en el layout raíz.
     revalidatePath("/", "layout");
   });

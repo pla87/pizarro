@@ -27,3 +27,24 @@ export function useUndoTask(): string | null {
 
 /** Aviso a la tarea abierta de que se ha deshecho algo suyo (para que recargue su detalle). */
 export const UNDONE_EVENT = "pz:undone";
+
+// Hay un diálogo de tarea (nueva o existente) abierto en el tablero: los botones de la cabecera
+// (deshacer, «Nueva tarea») se dibujan encima del fondo difuminado. Lo fija el tablero.
+let boardModalOpen = false;
+
+export function setBoardModalOpen(open: boolean): void {
+  if (boardModalOpen === open) return;
+  boardModalOpen = open;
+  for (const l of listeners) l();
+}
+
+export function useBoardModalOpen(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    () => boardModalOpen,
+    () => false,
+  );
+}

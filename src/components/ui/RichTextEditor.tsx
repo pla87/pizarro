@@ -229,6 +229,12 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
       )}
       onKeyDown={(e) => {
         if (e.nativeEvent.isComposing) return;
+        // Alt+F10: lleva el foco a la barra de formato (sus botones se saltan con Tab).
+        if (e.key === "F10" && e.altKey) {
+          e.preventDefault();
+          e.currentTarget.querySelector<HTMLElement>("[role=toolbar] button")?.focus();
+          return;
+        }
         if (e.key === "Escape" && handlers.current.onCancel) {
           e.preventDefault();
           handlers.current.onCancel();
@@ -238,7 +244,28 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
         }
       }}
     >
-      <div role="toolbar" aria-label={t("Formato")} className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 p-1 dark:border-slate-800">
+      <div
+        role="toolbar"
+        aria-label={t("Formato")}
+        className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 p-1 dark:border-slate-800"
+        onKeyDown={(e) => {
+          // Los botones no están en el orden de Tab: se recorren con las flechas (Alt+F10 entra); Tab o Escape vuelven al texto.
+          const items = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
+          const index = items.indexOf(document.activeElement as HTMLButtonElement);
+          if (index < 0) return;
+          if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+            e.preventDefault();
+            items[(index + (e.key === "ArrowRight" ? 1 : -1) + items.length) % items.length]!.focus();
+          } else if (e.key === "Home" || e.key === "End") {
+            e.preventDefault();
+            items[e.key === "Home" ? 0 : items.length - 1]!.focus();
+          } else if (e.key === "Escape" || (e.key === "Tab" && !e.shiftKey)) {
+            e.preventDefault();
+            e.stopPropagation();
+            editorRef.current?.commands.focus();
+          }
+        }}
+      >
         {buttons.map((b, i) =>
           b === null ? (
             <span key={i} className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" aria-hidden />
@@ -249,6 +276,8 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
               title={t(b[0])}
               aria-label={t(b[0]).replace(/ \(.*\)$/, "")}
               aria-pressed={Boolean(b[2])}
+              // Fuera del orden de Tab (Título → descripción directo); se alcanzan con Alt+F10 y las flechas, o con el ratón.
+              tabIndex={-1}
               // mousedown no debe quitar el foco al editor
               onMouseDown={(e) => e.preventDefault()}
               onClick={b[3]}

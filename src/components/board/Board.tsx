@@ -4,17 +4,20 @@ import {
   closestCorners, DndContext, type CollisionDetection, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
   useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from "@dnd-kit/core";
-import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { Archive, Plus, Search, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { archiveTasks, deleteTasks, makeEvergreen, moveTask, moveTasks } from "@/actions/tasks";
 import { createBoardCollisionDetection } from "@/lib/collision";
-import { positionBetween } from "@/lib/positions";
+import { insertBefore, moveOnto, neighboursOf, positionBetween } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardTask, LabelOption } from "@/lib/types";
 import { ProjectMenu } from "../ProjectMenu";
 import { UndoButton } from "../UndoButton";
+import { setBoardModalOpen } from "../undo-context";
+import { useFloatingRect } from "../ui/useFloatingRect";
 import { useT } from "@/i18n/client";
 import { useToast } from "../ui/Toast";
 import { cn } from "../ui/cn";
@@ -287,7 +290,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     }
     return ids;
   }, [filtering, terms, tasks, data.kinds, data.users, labels]);
-  // Con filtro no hay arrastre (ver `filtering` en el contexto), así que `dragItems` es null.
+  // `dragItems` lleva siempre las listas COMPLETAS (también con filtro): al soltar, los vecinos que se
+  // envían al servidor son los reales, de modo que las tarjetas ocultas conservan su orden relativo.
   const items = useMemo(() => {
     const all = dragItems ?? baseItems;
     if (!matchingIds) return all;
@@ -346,7 +350,6 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       cardStyle: data.cardStyle,
       editorMode: data.editorMode,
       dragHandle,
-      filtering,
       google: data.google,
       today: data.today,
       setLabels,
@@ -394,7 +397,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       trackRaw,
       refresh,
     }),
-    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, data.editorMode, dragHandle, filtering, data.google, data.today, sortedColumns, labels, taskById, baseItems, evergreenByColumn, selected, track, trackRaw, refresh, patchTask],
+    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, data.editorMode, dragHandle, data.google, data.today, sortedColumns, labels, taskById, baseItems, evergreenByColumn, selected, track, trackRaw, refresh, patchTask],
   );
 
   // --- Movimiento masivo ------------------------------------------------------
@@ -564,13 +567,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       }
       const to = findContainer(prev, overId);
       if (!to || from === to) return prev;
-      const target = prev[to]!;
-      const overIndex = target.indexOf(overId);
-      const index = overIndex >= 0 ? overIndex : target.length;
       return {
         ...prev,
         [from]: prev[from]!.filter((x) => x !== id),
-        [to]: [...target.slice(0, index), id, ...target.slice(index)],
+        [to]: insertBefore(prev[to]!, id, overId),
       };
     });
   };
@@ -612,13 +612,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (!col || col === EVERGREEN_ORIGIN) return;
     let list = current[col]!;
     if (findContainer(current, overId) === col && overId !== id && !overId.startsWith(COLUMN_PREFIX)) {
-      list = arrayMove(list, list.indexOf(id), list.indexOf(overId));
+      list = moveOnto(list, id, overId);
     }
     const index = list.indexOf(id);
     if (col === origin.columnId && index === origin.index) return;
 
-    const prevId = list[index - 1] ?? null;
-    const nextId = list[index + 1] ?? null;
+    const { prevId, nextId } = neighboursOf(list, id);
     const position = positionBetween(prevId ? taskById.get(prevId)?.position : null, nextId ? taskById.get(nextId)?.position : null);
     const previous = taskById.get(id)!;
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, columnId: col, position, evergreen: false } : t)));
@@ -634,6 +633,13 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
 
   // Dos modales a la vez (escritorio): el «+» del abierto crea un segundo de nueva tarea (columna «Backlog» si existe, si no la primera; no hay rol BACKLOG).
   const primaryOpen = !!newTask || (!!openTaskId && taskById.has(openTaskId));
+  // Mientras hay un diálogo de tarea, los botones de la cabecera (deshacer, «Nueva tarea») quedan por encima del fondo.
+  useEffect(() => {
+    setBoardModalOpen(primaryOpen);
+    return () => setBoardModalOpen(false);
+  }, [primaryOpen]);
+  const newTaskBtnRef = useRef<HTMLButtonElement>(null);
+  const newTaskRect = useFloatingRect(newTaskBtnRef, primaryOpen);
   const addSecond = () => setSecondNew({ columnId: (sortedColumns.find((c) => c.name.trim().toLowerCase() === "backlog") ?? sortedColumns[0])?.id });
 
   // Atajos de teclado (escritorio). Alt+N con un modal abierto lo comporta como el «+» de al lado.
@@ -667,6 +673,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <span className="text-sm text-slate-500" aria-live="polite">
             {filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : t("{n} tarjetas", { n: tasks.length })}
           </span>
+          <Presence projectId={data.project.id} />
           <div className="relative ml-auto">
             <Search size={14} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" aria-hidden />
             <input
@@ -692,8 +699,6 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               </button>
             )}
           </div>
-          {filtering && <span className="max-w-48 text-xs text-slate-500 max-xl:hidden">{t("Con el filtro activo no se puede arrastrar")}</span>}
-          <Presence projectId={data.project.id} />
           <ReportButton projectId={data.project.id} variant="header" />
           <button className="btn-secondary" onClick={() => setArchivedOpen(true)}>
             <Archive size={16} /> {t("Archivadas")}
@@ -701,9 +706,25 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <button className="btn-secondary" onClick={() => setBulk({})} title={`${t("Crear varias tareas pegando una lista")} (${sc("Alt+Shift+N")})`}>
             <PlusStack size={16} /> {t("Varias tareas")}
           </button>
-          <button className="btn-primary" onClick={() => setNewTask({})} title={`${t("Nueva tarea")} (${sc("Alt+N")})`}>
+          <button ref={newTaskBtnRef} className="btn-primary" onClick={() => (primaryOpen ? (!secondNew && addSecond()) : setNewTask({}))} title={`${t("Nueva tarea")} (${sc("Alt+N")})`}>
             <Plus size={16} /> {t("Nueva tarea")}
           </button>
+          {/* Con un diálogo abierto, una copia encima del fondo difuminado: abre una segunda tarea al lado (como el «+» del modal). */}
+          {primaryOpen && newTaskRect &&
+            createPortal(
+              <button
+                type="button"
+                tabIndex={-1}
+                className={cn("btn-primary fixed z-[70] shadow-lg", secondNew && "opacity-60")}
+                style={{ left: newTaskRect.left, top: newTaskRect.top, width: newTaskRect.width, height: newTaskRect.height }}
+                onClick={() => !secondNew && addSecond()}
+                aria-disabled={!!secondNew}
+                title={t("Abrir otra tarea nueva al lado")}
+              >
+                <Plus size={16} /> {t("Nueva tarea")}
+              </button>,
+              document.body,
+            )}
         </div>
 
         <DndContext

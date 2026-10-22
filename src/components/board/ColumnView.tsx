@@ -197,7 +197,7 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
                 onClick={() => setRole(r)}
                 className={cn(
                   "block w-full rounded-md px-2.5 py-1.5 pl-7 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800",
-                  column.role === r && "font-semibold text-brand-600",
+                  column.role === r && "font-semibold text-brand-600 dark:text-brand-300",
                 )}
               >
                 {column.role === r ? "● " : ""}{t(COLUMN_ROLE_LABEL[r])}
