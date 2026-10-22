@@ -5,23 +5,23 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { applyNewPassword } from "@/lib/account";
 import { runAction } from "@/lib/action";
-import { sendEmailChangedMail, sendNewLoginMail, sendPasswordResetMail } from "@/lib/auth-mail";
+import { sendEmailChangedMail, sendPasswordResetMail } from "@/lib/auth-mail";
+import { passwordLoginAllowed } from "@/lib/auth-policy";
 import { consumeToken, findUsableToken, issueAuthToken } from "@/lib/auth-token";
-import { registerDevice } from "@/lib/devices";
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import { logEvent } from "@/lib/log";
 import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
+import { completeLogin } from "@/lib/login";
 import { requestContext } from "@/lib/request-context";
 import { dummyVerify, hashPassword, passwordSchema, verifyPassword } from "@/lib/password";
 import { loginRateKeys, rateLimit, resetRateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { safeNextPath } from "@/lib/redirect";
 import { createSession, destroySession, getCurrentUser, requirePendingUser } from "@/lib/session";
-import { deviceLabel } from "@/lib/user-agent";
+import { secondStepFor, sendEmailCode, startChallenge } from "@/lib/two-factor";
 import * as v from "@/lib/validation";
 import { getT } from "@/i18n/server";
-import { makeT, toLocale } from "@/i18n/core";
 
 export interface LoginState {
   error?: string;
@@ -49,7 +49,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     return { error: t("Demasiados intentos. Espera unos minutos.") };
   }
 
-  const user = await db.user.findUnique({ where: { email }, select: { id: true, name: true, email: true, locale: true, passwordHash: true, active: true, mustChangePassword: true } });
+  const user = await db.user.findUnique({ where: { email }, select: { id: true, name: true, email: true, locale: true, role: true, passwordHash: true, active: true, mustChangePassword: true, twoFactorMethod: true } });
   const valid = user ? await verifyPassword(password, user.passwordHash) : await dummyVerify(password);
   if (!user || !valid || !user.active) {
     const reason = !user ? "unknown_email" : !valid ? "wrong_password" : "inactive";
@@ -61,22 +61,28 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     return { error: t("Credenciales incorrectas.") };
   }
 
-  resetRateLimit(keys.pair);
-  await createSession(user.id, { mustChangePassword: user.mustChangePassword });
-  // Aviso si es un dispositivo nuevo (no en el primer acceso de la cuenta).
-  const device = await registerDevice(user.id);
-  if (device.alert && emailEnabled()) {
-    const ua = (await headers()).get("user-agent");
-    sendMailInBackground("aviso de nuevo inicio de sesión", () =>
-      sendNewLoginMail(user, { when: new Date(), device: deviceLabel(ua, makeT(toLocale(user.locale))), ip: ip === "unknown" ? null : ip }),
-    );
+  // Con «solo Google» la contraseña correcta tampoco abre la puerta (salvo el acceso de emergencia de los administradores).
+  if (!passwordLoginAllowed(user.role)) {
+    logEvent({
+      level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión con contraseña rechazado (${email}): solo se admite Google`,
+      userId: user.id, userName: user.name, path: "/login", ip, details: { email, reason: "google_only" },
+    });
+    return { error: t("El acceso con contraseña está desactivado en este servidor. Entra con Google.") };
   }
-  logEvent({
-    category: "auth", action: "auth.login", message: `${user.name} ha iniciado sesión`,
-    userId: user.id, userName: user.name, path: "/login", ip, details: { email },
-  });
+
+  resetRateLimit(keys.pair);
+  const next = safeNextPath(String(formData.get("next") ?? ""));
+  // Segundo paso: todavía NO hay sesión, solo un estado pendiente (cookie pz_2fa, 10 min) hasta que el código sea correcto.
+  const step = await secondStepFor(user);
+  if (step) {
+    const challenge = await startChallenge(user.id, step === "VERIFY" ? "LOGIN" : "SETUP", { next });
+    if (step === "VERIFY" && user.twoFactorMethod === "EMAIL") await sendEmailCode(challenge, user).catch(() => {});
+    logEvent({ category: "auth", action: "auth.secondStepRequested", message: `${user.name}: contraseña correcta, falta la verificación en dos pasos`, userId: user.id, userName: user.name, path: "/login", ip });
+    redirect("/login/verify");
+  }
+  await completeLogin(user, { method: "password", path: "/login" });
   if (user.mustChangePassword) redirect("/change-password");
-  redirect(safeNextPath(String(formData.get("next") ?? "")));
+  redirect(next);
 }
 
 export async function logout(): Promise<void> {

@@ -22,7 +22,7 @@ function secret(): string {
 }
 
 /** HMAC con etiqueta de dominio: un valor de un uso nunca coincide con el de otro (sesión, enlace, dispositivo). */
-function labelledHmac(label: string, value: string): string {
+export function labelledHmac(label: string, value: string): string {
   return createHmac("sha256", secret()).update(`${label}:${value}`).digest("hex");
 }
 

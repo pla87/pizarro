@@ -115,4 +115,154 @@ export const cuentas: Record<string, string> = {
     "User created, but the invitation could not be sent. Use “Force password change” to resend it.",
   "Para cambiar tu propia contraseña usa «Mi perfil».": "To change your own password use “My profile”.",
   "Se ha forzado el cambio, pero no se pudo enviar el email con el enlace.": "The change was forced, but the email with the link could not be sent.",
+
+  // Google, verificación en dos pasos y modo «solo Google»
+  "El acceso con contraseña está desactivado en este servidor. Entra con Google.":
+    "Password sign-in is disabled on this server. Sign in with Google.",
+  "Demasiados intentos. Vuelve a introducir tu contraseña.":
+    "Too many attempts. Enter your password again.",
+  "Código incorrecto o caducado.":
+    "Incorrect or expired code.",
+  "Tiene activada la verificación en dos pasos":
+    "Has two-step verification enabled",
+  "Ha entrado con Google":
+    "Has signed in with Google",
+  "Restablecer la verificación en dos pasos de {name}":
+    "Reset two-step verification for {name}",
+  "Restablecer la verificación en dos pasos":
+    "Reset two-step verification",
+  "Verificación en dos pasos restablecida":
+    "Two-step verification reset",
+  "Se borrarán su método y sus códigos de recuperación. Si es administrador, tendrá que configurar uno nuevo antes de entrar con contraseña; si es miembro, puede volver a activarlo desde «Mi perfil».":
+    "Their method and recovery codes will be deleted. If they are an administrator, they will have to set up a new one before signing in with a password; if they are a member, they can enable it again from “My profile”.",
+  "Verificación en dos pasos":
+    "Two-step verification",
+  "Obligatoria para administradores al entrar con contraseña. Al entrar con Google no se pide: Google ya tiene la suya.":
+    "Required for administrators when signing in with a password. Not asked when signing in with Google: Google has its own.",
+  "Añade un segundo código al entrar con contraseña. Al entrar con Google no se pide: Google ya tiene la suya.":
+    "Adds a second code when signing in with a password. Not asked when signing in with Google: Google has its own.",
+  "He guardado los códigos":
+    "I have saved the codes",
+  "Activada":
+    "Enabled",
+  "App de autenticación":
+    "Authenticator app",
+  "Código por email":
+    "Email code",
+  "{n} códigos de recuperación sin usar":
+    "{n} unused recovery codes",
+  "Desactivada":
+    "Disabled",
+  "Cambiar de método":
+    "Change method",
+  "Activar":
+    "Enable",
+  "Generar códigos de recuperación nuevos":
+    "Generate new recovery codes",
+  "Desactivar":
+    "Disable",
+  "Verificación en dos pasos desactivada.":
+    "Two-step verification disabled.",
+  "Generar":
+    "Generate",
+  "Iniciar sesión con Google":
+    "Sign in with Google",
+  "o con tu email":
+    "or with your email",
+  "Acceso de emergencia (administradores)":
+    "Emergency access (administrators)",
+  "La verificación ya está activada. Puedes generar códigos de recuperación nuevos en «Mi perfil».":
+    "Verification is already enabled. You can generate new recovery codes in “My profile”.",
+  "Los administradores deben activar la verificación en dos pasos antes de entrar con contraseña.":
+    "Administrators must enable two-step verification before signing in with a password.",
+  "Volver":
+    "Back",
+  "Te hemos enviado un código a tu email.":
+    "We've sent a code to your email.",
+  "Escribe el código de 6 dígitos que te hemos enviado por email, o un código de recuperación.":
+    "Enter the 6-digit code we emailed you, or a recovery code.",
+  "Escribe el código de 6 dígitos de tu app de autenticación, o un código de recuperación.":
+    "Enter the 6-digit code from your authenticator app, or a recovery code.",
+  "Código":
+    "Code",
+  "Recordar este dispositivo 30 días":
+    "Remember this device for 30 days",
+  "Verificar":
+    "Verify",
+  "Código reenviado.":
+    "Code sent again.",
+  "Reenviar código":
+    "Resend code",
+  "Configura la verificación en dos pasos":
+    "Set up two-step verification",
+  "Elige cómo quieres recibir el segundo código al entrar con contraseña.":
+    "Choose how you want to get the second code when signing in with a password.",
+  "Añade esta cuenta en tu app de autenticación (Google Authenticator, Aegis, 1Password…) con esta clave y escribe el código de 6 dígitos que te muestre.":
+    "Add this account to your authenticator app (Google Authenticator, Aegis, 1Password…) with this key and enter the 6-digit code it shows.",
+  "Clave secreta":
+    "Secret key",
+  "Copiar clave":
+    "Copy key",
+  "Abrir en la app":
+    "Open in app",
+  "Te hemos enviado un código de 6 dígitos a tu email. Escríbelo aquí.":
+    "We've emailed you a 6-digit code. Enter it here.",
+  "Pide un código a tu email.":
+    "Request a code by email.",
+  "Reenviar":
+    "Resend",
+  "Enviar código":
+    "Send code",
+  "Código de verificación":
+    "Verification code",
+  "Atrás":
+    "Back",
+  "Guarda estos códigos en un sitio seguro. Cada uno sirve una sola vez si pierdes el acceso a tu app o a tu email, y no volverán a mostrarse.":
+    "Keep these codes somewhere safe. Each one works once if you lose access to your app or email, and they will not be shown again.",
+  "Tu código de verificación de Pizarro: {code}":
+    "Your Pizarro verification code: {code}",
+  "Tu código de verificación es {code}. Caduca en {n} minutos y solo sirve una vez.":
+    "Your verification code is {code}. It expires in {n} minutes and works only once.",
+  "Si no has sido tú quien intenta entrar, cambia tu contraseña: alguien la conoce.":
+    "If it wasn't you trying to sign in, change your password: someone knows it.",
+  "Cambios en la verificación en dos pasos de tu cuenta":
+    "Changes to your account's two-step verification",
+  "Se ha activado o cambiado la verificación en dos pasos de tu cuenta de Pizarro.":
+    "Two-step verification on your Pizarro account has been enabled or changed.",
+  "Se ha desactivado la verificación en dos pasos de tu cuenta de Pizarro.":
+    "Two-step verification on your Pizarro account has been disabled.",
+  "Un administrador ha restablecido la verificación en dos pasos de tu cuenta de Pizarro.":
+    "An administrator has reset two-step verification on your Pizarro account.",
+  "Si no has sido tú, cambia tu contraseña y avisa a un administrador de inmediato.":
+    "If it wasn't you, change your password and tell an administrator immediately.",
+  "No hay ninguna cuenta con ese email de Google; pide a un administrador que te dé de alta.":
+    "There is no account with that Google email; ask an administrator to add you.",
+  "Google no ha verificado ese email.":
+    "Google has not verified that email.",
+  "El inicio de sesión con Google ha caducado o no es válido. Vuelve a intentarlo.":
+    "Google sign-in has expired or is not valid. Try again.",
+  "Has cancelado el inicio de sesión con Google.":
+    "You cancelled the Google sign-in.",
+  "El inicio de sesión con Google no está configurado en el servidor.":
+    "Google sign-in is not configured on the server.",
+  "No se pudo iniciar sesión con Google. Inténtalo de nuevo.":
+    "Could not sign in with Google. Try again.",
+  "La verificación ha caducado. Vuelve a entrar.":
+    "Verification has expired. Sign in again.",
+  "Demasiados envíos. Espera unos minutos.":
+    "Too many sends. Wait a few minutes.",
+  "No se pudo enviar el código por email.":
+    "The code could not be sent by email.",
+  "La verificación en dos pasos es obligatoria para administradores. Puedes cambiar de método.":
+    "Two-step verification is required for administrators. You can change method.",
+  "Activa primero la verificación en dos pasos.":
+    "Enable two-step verification first.",
+  "La configuración ha caducado. Empieza de nuevo.":
+    "The setup has expired. Start again.",
+  "Demasiados intentos. Empieza de nuevo.":
+    "Too many attempts. Start again.",
+  "Para cambiar tu propia verificación usa «Mi perfil».":
+    "To change your own verification use “My profile”.",
+  "Esa persona no tiene activada la verificación en dos pasos.":
+    "That person doesn't have two-step verification enabled.",
 };

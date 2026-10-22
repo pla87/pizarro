@@ -14,6 +14,8 @@ export async function applyNewPassword(userId: string, passwordHash: string, opt
     db.user.update({ where: { id: userId }, data: { passwordHash, mustChangePassword: false }, select: { name: true, email: true, locale: true } }),
     db.session.deleteMany({ where: { userId } }),
     db.authToken.deleteMany({ where: { userId, purpose: { in: ["PASSWORD_RESET", "PASSWORD_CHANGE"] } } }),
+    // Con otra contraseña, también se deja de confiar en los dispositivos recordados para el segundo paso.
+    db.knownDevice.updateMany({ where: { userId, trustedUntil: { not: null } }, data: { trustedUntil: null } }),
   ]);
   // Sesiones borradas: también se cortan sus canales en vivo (SSE, presencia).
   revokeUser(userId);

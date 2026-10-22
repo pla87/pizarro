@@ -1,10 +1,10 @@
 "use client";
 
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { KeyRound, Pencil, Trash2, TriangleAlert, UserPlus } from "lucide-react";
+import { KeyRound, Pencil, ShieldOff, Trash2, TriangleAlert, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { createUser, deleteUser, forcePasswordChange, updateUser } from "@/actions/users";
+import { createUser, deleteUser, forcePasswordChange, resetUserTwoFactor, updateUser } from "@/actions/users";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
 import { Modal } from "@/components/ui/Modal";
@@ -19,6 +19,8 @@ interface UserRow {
   role: Role;
   active: boolean;
   mustChangePassword: boolean;
+  twoFactor: boolean;
+  googleLinked: boolean;
   privateProjects: number;
 }
 
@@ -28,6 +30,7 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable }: { users: U
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [resetting, setResetting] = useState<UserRow | null>(null);
   const [deleting, setDeleting] = useState<UserRow | null>(null);
+  const [resetting2fa, setResetting2fa] = useState<UserRow | null>(null);
   const activeCount = users.filter((u) => u.active).length;
 
   return (
@@ -56,9 +59,14 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable }: { users: U
             </span>
             {!u.active && <span className="badge bg-slate-100 text-slate-500 ring-slate-400/20">{t("Inactivo")}</span>}
             {u.mustChangePassword && <span className="badge bg-amber-50 text-amber-700 ring-amber-500/20" title={t("Tiene que elegir una contraseña nueva al entrar")}>{t("Contraseña pendiente")}</span>}
+            {u.twoFactor && <span className="badge bg-emerald-50 text-emerald-700 ring-emerald-500/20" title={t("Tiene activada la verificación en dos pasos")}>2FA</span>}
+            {u.googleLinked && <span className="badge bg-slate-100 text-slate-600 ring-slate-500/20" title={t("Ha entrado con Google")}>Google</span>}
             <button className="btn-icon" onClick={() => setEditing(u)} aria-label={t("Editar {name}", { name: u.name })}><Pencil size={16} /></button>
             {u.id !== meId && (
               <button className="btn-icon" onClick={() => setResetting(u)} aria-label={t("Forzar cambio de contraseña de {name}", { name: u.name })} title={t("Forzar cambio de contraseña")}><KeyRound size={16} /></button>
+            )}
+            {u.id !== meId && u.twoFactor && (
+              <button className="btn-icon" onClick={() => setResetting2fa(u)} aria-label={t("Restablecer la verificación en dos pasos de {name}", { name: u.name })} title={t("Restablecer la verificación en dos pasos")}><ShieldOff size={16} /></button>
             )}
             {u.id !== meId && (
               <button className="btn-icon text-red-600 dark:text-red-400" onClick={() => setDeleting(u)} aria-label={t("Borrar {name}", { name: u.name })}><Trash2 size={16} /></button>
@@ -69,6 +77,7 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable }: { users: U
       {creating && <UserForm emailAvailable={emailAvailable} onClose={() => setCreating(false)} />}
       {editing && <UserForm user={editing} isMe={editing.id === meId} onClose={() => setEditing(null)} />}
       {resetting && <ForcePasswordChange user={resetting} emailAvailable={emailAvailable} onClose={() => setResetting(null)} />}
+      {resetting2fa && <ResetTwoFactor user={resetting2fa} onClose={() => setResetting2fa(null)} />}
       {deleting && <DeleteUser user={deleting} onClose={() => setDeleting(null)} />}
     </div>
   );
@@ -175,6 +184,36 @@ function ForcePasswordChange({ user, emailAvailable, onClose }: { user: UserRow;
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
           <button className="btn-primary" disabled={pending}>{t("Forzar cambio")}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function ResetTwoFactor({ user, onClose }: { user: UserRow; onClose: () => void }) {
+  const t = useT();
+  const router = useRouter();
+  const toast = useToast();
+  const [pending, start] = useTransition();
+  return (
+    <Modal open onClose={onClose} title={t("Restablecer la verificación en dos pasos de {name}", { name: user.name })} size="sm">
+      <form
+        className="space-y-3 text-sm"
+        onSubmit={(e) => {
+          e.preventDefault();
+          start(async () => {
+            const res = await resetUserTwoFactor(user.id);
+            if (!res.ok) return toast(res.error, "error");
+            toast(t("Verificación en dos pasos restablecida"));
+            router.refresh();
+            onClose();
+          });
+        }}
+      >
+        <p>{t("Se borrarán su método y sus códigos de recuperación. Si es administrador, tendrá que configurar uno nuevo antes de entrar con contraseña; si es miembro, puede volver a activarlo desde «Mi perfil».")}</p>
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
+          <button className="btn-primary" disabled={pending}>{t("Restablecer")}</button>
         </div>
       </form>
     </Modal>

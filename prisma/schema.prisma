@@ -46,12 +46,22 @@ model User {
   whatsappPhone  String?
   /// Obliga a elegir una contraseña nueva antes de usar la app (alta con clave inicial o cambio forzado por un admin).
   mustChangePassword Boolean @default(false)
+  /// Identificador estable («sub») de su cuenta de Google, guardado en el primer «Iniciar sesión con Google».
+  googleSub      String?   @unique
+  /// Verificación en dos pasos para el acceso con contraseña (null = desactivada).
+  twoFactorMethod TwoFactorMethod?
+  /// Secreto TOTP cifrado (AES-GCM); solo con método TOTP.
+  totpSecretEnc  String?
+  /// Último paso de 30 s aceptado: impide reutilizar un código TOTP.
+  totpLastStep   Int?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
   sessions          Session[]
   authTokens        AuthToken[]
   knownDevices      KnownDevice[]
+  recoveryCodes     RecoveryCode[]
+  loginChallenges   LoginChallenge[]
   memberships       ProjectMember[]
   privateProjects   Project[]         @relation("PrivateProjects")
   assignedTasks     Task[]            @relation("TaskAssignee")
@@ -116,10 +126,64 @@ model KnownDevice {
   deviceHash String
   createdAt  DateTime @default(now())
   lastSeenAt DateTime @default(now())
+  /// «Recordar este dispositivo»: hasta esta fecha no se pide el segundo paso en este navegador.
+  trustedUntil DateTime?
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, deviceHash])
   @@index([lastSeenAt])
+}
+
+enum TwoFactorMethod {
+  TOTP
+  EMAIL
+}
+
+enum LoginChallengeKind {
+  /// Contraseña correcta, falta el segundo paso.
+  LOGIN
+  /// Administrador sin método: debe configurarlo antes de entrar.
+  SETUP
+  /// Alta o cambio de método desde «Mi perfil» (sin cookie; ligado a la sesión).
+  ENROLL
+}
+
+/// Códigos de recuperación de un solo uso de la verificación en dos pasos. Solo se guarda su HMAC.
+model RecoveryCode {
+  id        String    @id @default(cuid())
+  userId    String
+  codeHash  String    @unique
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Estado pendiente de un inicio de sesión o de un alta de 2FA. La cookie solo lleva el token; aquí queda su HMAC.
+model LoginChallenge {
+  id                String             @id @default(cuid())
+  userId            String
+  kind              LoginChallengeKind
+  tokenHash         String             @unique
+  /// Método elegido (en altas) para el que se espera el código.
+  method            TwoFactorMethod?
+  /// Secreto TOTP nuevo, cifrado, aún sin confirmar.
+  pendingSecretEnc  String?
+  /// HMAC del código de email vigente (un solo uso) y su caducidad.
+  codeHash          String?
+  codeExpiresAt     DateTime?
+  attempts          Int                @default(0)
+  /// El código del alta ya se ha comprobado y se han mostrado los códigos de recuperación.
+  confirmed         Boolean            @default(false)
+  /// Ruta a la que volver tras entrar.
+  next              String?
+  expiresAt         DateTime
+  createdAt         DateTime           @default(now())
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind])
+  @@index([expiresAt])
 }
 
 model Project {

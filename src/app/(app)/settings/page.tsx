@@ -3,11 +3,13 @@ import { db } from "@/lib/db";
 import { googleEnabled } from "@/lib/google";
 import { emailEnabled, whatsappEnabled } from "@/lib/notify";
 import { currentSessionId, requireUserPage } from "@/lib/session";
+import { recoveryCodesLeft } from "@/lib/two-factor";
 import { deviceLabel } from "@/lib/user-agent";
 import { getT } from "@/i18n/server";
 import { EmailChangeSection } from "./EmailChangeSection";
 import { ProfileSettings } from "./ProfileSettings";
 import { SessionsSection } from "./SessionsSection";
+import { TwoFactorSection } from "./TwoFactorSection";
 
 export async function generateMetadata() {
   const t = await getT();
@@ -42,9 +44,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       notifyEmail: true,
       notifyWhatsapp: true,
       whatsappPhone: true,
+      twoFactorMethod: true,
       googleAccount: { select: { email: true } },
     },
   });
+  const codesLeft = row.twoFactorMethod ? await recoveryCodesLeft(user.id) : 0;
   const [sessions, currentId] = await Promise.all([
     db.session.findMany({
       where: { userId: user.id, expiresAt: { gt: new Date() } },
@@ -77,6 +81,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       />
       <div className="mx-auto max-w-3xl space-y-5 px-4 pb-6 md:px-6">
         {emailEnabled() && <EmailChangeSection email={row.email} />}
+        <TwoFactorSection method={row.twoFactorMethod} admin={user.role === "ADMIN"} emailAvailable={emailEnabled()} codesLeft={codesLeft} />
         <SessionsSection
           sessions={sessions.map((s) => ({
             id: s.id,

@@ -3,6 +3,7 @@ import { intlLocale, makeT, toLocale, type T } from "../i18n/core";
 import { formatDate } from "./format";
 import { escapeHtml, sendMail, type MailMessage } from "./mail";
 import { TOKEN_TTL_MS } from "./auth-token-core";
+import { EMAIL_CODE_TTL_MS } from "./two-factor-core";
 
 // Emails de cuentas (enlaces y avisos de seguridad). Cada uno sale en el idioma del destinatario;
 // los enlaces se construyen con APP_URL (ver appUrl en mail.ts) y todo el HTML va escapado.
@@ -144,5 +145,33 @@ export function sendNewLoginMail(user: Recipient, info: { when: Date; device: st
       [t("IP"), info.ip ?? t("Desconocida")],
     ],
     note: t("Si has sido tú, no tienes que hacer nada. Si no, cambia tu contraseña desde «Mi perfil» y cierra las demás sesiones."),
+  }));
+}
+
+/** Código de 6 dígitos para el segundo paso del acceso (o para dar de alta el método por email). */
+export function sendTwoFactorCodeMail(user: Recipient, code: string): Promise<void> {
+  return send(user, user.locale, (t) => ({
+    subject: t("Tu código de verificación de Pizarro: {code}", { code }),
+    paragraphs: [
+      t("Hola, {name}:", { name: user.name }),
+      t("Tu código de verificación es {code}. Caduca en {n} minutos y solo sirve una vez.", { code, n: minutes(EMAIL_CODE_TTL_MS) }),
+    ],
+    note: t("Si no has sido tú quien intenta entrar, cambia tu contraseña: alguien la conoce."),
+  }));
+}
+
+/** Aviso de que la verificación en dos pasos de la cuenta ha cambiado. */
+export function sendTwoFactorChangedMail(user: Recipient, change: "enabled" | "disabled" | "reset"): Promise<void> {
+  return send(user, user.locale, (t) => ({
+    subject: t("Cambios en la verificación en dos pasos de tu cuenta"),
+    paragraphs: [
+      t("Hola, {name}:", { name: user.name }),
+      change === "enabled"
+        ? t("Se ha activado o cambiado la verificación en dos pasos de tu cuenta de Pizarro.")
+        : change === "disabled"
+          ? t("Se ha desactivado la verificación en dos pasos de tu cuenta de Pizarro.")
+          : t("Un administrador ha restablecido la verificación en dos pasos de tu cuenta de Pizarro."),
+      t("Si no has sido tú, cambia tu contraseña y avisa a un administrador de inmediato."),
+    ],
   }));
 }

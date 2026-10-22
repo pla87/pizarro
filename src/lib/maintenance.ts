@@ -45,8 +45,8 @@ async function purgeOldNotifications(now: Date = new Date()): Promise<number> {
 
 /** Borra los enlaces de email caducados y los dispositivos conocidos sin actividad en más de un año. */
 async function purgeAuthData(now: Date = new Date()): Promise<number> {
-  const [{ purgeExpiredTokens }, { purgeOldDevices }] = await Promise.all([import("@/lib/auth-token"), import("@/lib/devices")]);
-  return (await purgeExpiredTokens(now)) + (await purgeOldDevices(now));
+  const [{ purgeExpiredTokens }, { purgeOldDevices }, { purgeExpiredChallenges }] = await Promise.all([import("@/lib/auth-token"), import("@/lib/devices"), import("@/lib/two-factor")]);
+  return (await purgeExpiredTokens(now)) + (await purgeOldDevices(now)) + (await purgeExpiredChallenges(now));
 }
 
 /** Ids de fichero (cuid) que mencionan las entradas de deshacer: sus ficheros se retienen aunque la fila ya no exista. */
