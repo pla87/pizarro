@@ -41,13 +41,14 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     const data = deploySchema.parse(input);
     await assertProjectAccess(user, data.projectId);
 
-    // Deshacer: dónde estaba cada tarea; la release del histórico se quita (ver más abajo).
-    addUndo(...(await captureTasks(data.taskIds, ["columnId", "position", "archivedAt", "archivedFromColumnId", "evergreen"])));
     const tasks = await db.task.findMany({
       where: { id: { in: data.taskIds }, projectId: data.projectId, archivedAt: null },
       orderBy: [{ column: { position: "asc" } }, { position: "asc" }],
       select: { id: true, title: true, evergreen: true, kind: { select: { name: true } } },
     });
+
+    // Deshacer: dónde estaba cada tarea (solo las de este proyecto); la release del histórico se quita (ver más abajo).
+    addUndo(...(await captureTasks(tasks.map((t) => t.id), ["columnId", "position", "archivedAt", "archivedFromColumnId", "evergreen"])));
 
     let target: { id: string } | null = null;
     if (data.destination === "IN_PRODUCTION") {

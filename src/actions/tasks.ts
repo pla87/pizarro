@@ -291,6 +291,8 @@ export async function moveTask(taskId: string, columnId: string, prevId: string 
     const user = await requireUser();
     const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
     await assertColumnInProject(v.id.parse(columnId), projectId);
+    prevId = v.id.nullable().parse(prevId);
+    nextId = v.id.nullable().parse(nextId);
     let n = await neighbourPositions(columnId, prevId, nextId);
     if (!n.stale && needsRebalance(n.prev, n.next)) {
       await rebalanceColumn(columnId);
@@ -376,6 +378,8 @@ export async function archiveTasks(taskIds: string[]) {
     const ids = [...new Set(z.array(v.id).min(1).max(500).parse(taskIds))];
     const tasks = await db.task.findMany({ where: { id: { in: ids }, project: visibleProjectsWhere(user) }, select: { id: true, projectId: true } });
     if (tasks.length !== ids.length) throw notFound();
+    // Como en el borrado múltiple: el deshacer se guarda por proyecto, así que todas deben ser del mismo.
+    if (new Set(tasks.map((t) => t.projectId)).size > 1) throw new AppError("Las tareas son de proyectos distintos.");
     noteProject(tasks[0]?.projectId);
     addUndo(...(await captureTasks((await db.task.findMany({ where: { id: { in: ids }, archivedAt: null }, select: { id: true } })).map((t) => t.id), ARCHIVE_FIELDS)));
     await db.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId", "evergreen" = false WHERE "id" IN (${Prisma.join(ids)}) AND "archivedAt" IS NULL`;

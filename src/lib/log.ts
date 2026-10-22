@@ -38,7 +38,7 @@ export function logRetentionDays(): number {
 const state = (globalThis as unknown as { __pzLog?: { queue: Prisma.AppLogCreateManyInput[]; timer: ReturnType<typeof setTimeout> | null; lastPurge: number } })
   .__pzLog ??= { queue: [], timer: null, lastPurge: 0 };
 
-const SECRET_KEY = /pass(word)?|token|secret|authorization|cookie/i;
+const SECRET_KEY = /pass(word)?|token|secret|authorization|cookie|phone/i;
 
 /** Copia apta para guardar: sin secretos, con textos y listas recortados. */
 function sanitize(value: unknown, depth = 0): unknown {

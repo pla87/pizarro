@@ -46,8 +46,8 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
     } else if (err instanceof z.ZodError) {
       level = "warn";
       result = { ok: false, error: err.issues[0]?.message ?? "Datos no válidos." };
-    } else if (err && typeof err === "object" && "code" in err && err.code === "P2003") {
-      // Clave foránea violada: otra persona cambió los datos a la vez.
+    } else if (err && typeof err === "object" && "code" in err && (err.code === "P2003" || err.code === "P2002" || err.code === "P2025")) {
+      // Clave foránea o única violada, o fila desaparecida: otra persona cambió los datos a la vez.
       level = "warn";
       result = { ok: false, error: "Los datos han cambiado mientras tanto. Recarga e inténtalo de nuevo." };
     } else {
