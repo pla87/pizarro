@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, Camera, Check, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Plus, Send, Trash2, X } from "lucide-react";
+import { Archive, Camera, Check, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Send, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -837,7 +837,7 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
   );
 }
 
-/** Fila ordenable: agarre de seis puntos, título editable con doble clic/toque y borrado. */
+/** Fila ordenable: agarre de seis puntos, título editable (doble clic, Enter/F2 o lápiz) y borrado. */
 function SubtaskRow({ s, editing, onEdit, onRename, onToggle, onRemove }: {
   s: SubtaskInfo; editing: boolean; onEdit: () => void; onRename: (title: string) => void; onToggle: () => void; onRemove: () => void;
 }) {
@@ -851,6 +851,11 @@ function SubtaskRow({ s, editing, onEdit, onRename, onToggle, onRemove }: {
     settled.current = true;
     if (save) onRename(draft.trim());
     else onRename("");
+  };
+  const startEdit = () => {
+    settled.current = false;
+    setDraft(s.title);
+    onEdit();
   };
   return (
     <li
@@ -894,17 +899,26 @@ function SubtaskRow({ s, editing, onEdit, onRename, onToggle, onRemove }: {
         />
       ) : (
         <span
-          className={cn("flex-1 text-sm", s.done && "text-slate-400 line-through")}
-          onDoubleClick={() => {
-            settled.current = false;
-            setDraft(s.title);
-            onEdit();
+          className={cn("flex-1 rounded-sm text-sm focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:outline-none", s.done && "text-slate-400 line-through")}
+          tabIndex={0}
+          aria-label={t("{title} (Enter o F2 para editar)", { title: s.title })}
+          onDoubleClick={startEdit}
+          onKeyDown={(e) => {
+            if ((e.key === "Enter" || e.key === "F2") && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              startEdit();
+            }
           }}
         >
           {s.title}
         </span>
       )}
-      <button className="btn-icon h-6 w-6 opacity-0 group-hover:opacity-100 max-md:opacity-100" onClick={onRemove} aria-label={t("Borrar subtarea")}>
+      {!editing && (
+        <button type="button" className="btn-icon h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100" onClick={startEdit} aria-label={t("Editar subtarea")}>
+          <Pencil size={13} />
+        </button>
+      )}
+      <button type="button" className="btn-icon h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-md:opacity-100" onClick={onRemove} aria-label={t("Borrar subtarea")}>
         <X size={14} />
       </button>
     </li>

@@ -290,10 +290,15 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
       ) : (
         <div className="flex h-full flex-col gap-3">
           {templatePickers}
-          <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 text-sm dark:bg-slate-800">
+          <div role="tablist" className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 text-sm dark:bg-slate-800">
             {(["edit", "preview"] as const).map((tb) => (
               <button
                 key={tb}
+                type="button"
+                role="tab"
+                id={`release-tab-${tb}`}
+                aria-selected={tab === tb}
+                aria-controls="release-tabpanel"
                 onClick={() => setTab(tb)}
                 className={cn(
                   "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 font-medium",
@@ -304,6 +309,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
               </button>
             ))}
           </div>
+          <div role="tabpanel" id="release-tabpanel" aria-labelledby={`release-tab-${tab}`} className="flex min-h-0 flex-1 flex-col">
           {tab === "edit" ? (
             <textarea
               className="input min-h-[45vh] flex-1 font-mono text-[13px] leading-relaxed"
@@ -318,6 +324,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
               <Markdown>{content}</Markdown>
             </div>
           )}
+          </div>
           <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
             <legend className="sr-only">{t("Al marcar como desplegado")}</legend>
             <span className="text-xs font-medium text-slate-500">{t("Al marcar como desplegado:")}</span>

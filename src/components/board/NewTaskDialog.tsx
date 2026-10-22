@@ -69,6 +69,12 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     if (autosave) discardDraft();
     close();
   };
+  // Escape, clic fuera, X o «Cancelar» con contenido escrito piden confirmación; crear no.
+  const requestClose = () => {
+    const dirty = !!(title.trim() || description.trim() || subtasks.length || subtaskDraft.trim());
+    if (dirty && !window.confirm(t("Hay cambios sin guardar. ¿Descartar la nueva tarea?"))) return;
+    onClose();
+  };
   const isReleaseColumn = board.columns.find((c) => c.id === columnId)?.role === "NEXT_RELEASE";
   const [busy, setBusy] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
@@ -146,7 +152,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={requestClose}
       side={side}
       onAddSecond={onAddSecond}
       title={t("Nueva tarea")}
@@ -154,7 +160,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       placement="top"
       footer={
         <>
-          <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
+          <button type="button" className="btn-secondary" onClick={requestClose}>{t("Cancelar")}</button>
           <button type="submit" form={formId} className="btn-primary" disabled={busy || !title.trim()} title={`${t("Crear tarea")} (${sc("Alt+S")})`}>
             {busy && <Loader2 size={16} className="animate-spin" />} {t("Crear tarea")}
           </button>
