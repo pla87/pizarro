@@ -1,6 +1,7 @@
 // Generador de release notes. Función pura: se usa en el navegador (instantáneo)
 // y en los tests.
 
+import { decodeEntities } from "./markdown-entities";
 import { mentionsToPlain } from "./mentions";
 
 interface ReleaseKind {
@@ -126,7 +127,8 @@ export function formatReleaseLine(task: Pick<ReleaseTaskInput, "title" | "linkUr
 /** Descripción sangrada 2 espacios: menciones en texto plano, sin espacios finales ni líneas en blanco repetidas. */
 function formatReleaseDescription(description: string | null | undefined): string[] {
   const lines: string[] = [];
-  for (const raw of mentionsToPlain(description ?? "").split(/\r\n|\r|\n/)) {
+  // Descripciones guardadas por versiones anteriores del editor pueden traer `-&gt;` en vez de `->`.
+  for (const raw of decodeEntities(mentionsToPlain(description ?? "")).split(/\r\n|\r|\n/)) {
     const line = raw.trimEnd();
     if (!line && (lines.length === 0 || lines.at(-1) === "")) continue;
     lines.push(line);

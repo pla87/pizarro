@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { useT } from "@/i18n/client";
 import { ListDeleteFix } from "@/lib/editor-keys";
 import { MentionChip } from "@/lib/editor-mention";
+import { normalizeEditorMarkdown } from "@/lib/markdown-entities";
 import { looksLikeMarkdown } from "@/lib/markdown-paste";
 import type { UserOption } from "@/lib/types";
 import { Avatar } from "./Avatar";
@@ -172,7 +173,7 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
       },
     },
     onUpdate: ({ editor: ed }) => {
-      const md = ed.getMarkdown();
+      const md = normalizeEditorMarkdown(ed.getMarkdown());
       lastEmitted.current = md;
       handlers.current.onChange(md);
     },
