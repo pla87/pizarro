@@ -20,9 +20,11 @@ import { UndoButton } from "../UndoButton";
 import { setBoardModalOpen } from "../undo-context";
 import { useFloatingRect } from "../ui/useFloatingRect";
 import { useT } from "@/i18n/client";
+import { useConfirm } from "../ui/ConfirmDialog";
 import { useToast } from "../ui/Toast";
 import { cn } from "../ui/cn";
-import { BoardContext, type BoardApi } from "./context";
+import { BoardContext, useSelectionSize, type BoardApi } from "./context";
+import { createBoardStores, mergeTasks, tasksById, useStableValue } from "./stores";
 import { ColumnView } from "./ColumnView";
 import { EVERGREEN_DROPPABLE_PREFIX } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
@@ -106,6 +108,36 @@ function groupItems(columns: BoardColumn[], tasks: BoardTask[]): Items {
   return items;
 }
 
+// Constante: un objeto nuevo en cada dibujo invalidaría el contexto de dnd-kit y redibujaría todas las tarjetas.
+const MEASURING = { droppable: { strategy: MeasuringStrategy.Always } };
+// Opciones de los sensores, también constantes: si cambian, cambian los `listeners` de todas las tarjetas.
+const POINTER_OPTIONS = { activationConstraint: { distance: 6 } };
+const KEYBOARD_OPTIONS = { coordinateGetter: sortableKeyboardCoordinates };
+
+/**
+ * Conserva el mismo array de ids en las columnas cuyo contenido no cambió: dnd-kit rehace su contexto (y redibuja
+ * todas las tarjetas de la columna) cuando le llega un array nuevo, aunque tenga los mismos ids.
+ */
+function useStableItems(items: Items): Items {
+  const [stable, setStable] = useState(items);
+  if (stable === items) return stable;
+  const cols = Object.keys(items);
+  let changed = cols.length !== Object.keys(stable).length;
+  const next: Items = {};
+  for (const col of cols) {
+    const before = stable[col];
+    const now = items[col]!;
+    if (before && before.length === now.length && before.every((id, i) => id === now[i])) next[col] = before;
+    else {
+      next[col] = now;
+      changed = true;
+    }
+  }
+  if (!changed) return stable;
+  setStable(next);
+  return next;
+}
+
 /** Minúsculas y sin acentos, para comparar el filtro. */
 const normalize = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
@@ -117,14 +149,19 @@ function findContainer(items: Items, id: string): string | undefined {
 export function Board({ data, initialTaskId = null }: { data: BoardData; initialTaskId?: string | null }) {
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
   const t = useT();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [columns, setColumns] = useState(data.columns);
-  const [tasks, setTasks] = useState(data.tasks);
+  // Tareas y selección viven en almacenes externos: cada tarjeta se suscribe solo a lo suyo (ver context.ts)
+  // y el tablero no se redibuja al seleccionar.
+  const [stores] = useState(() => createBoardStores(data.tasks));
+  const tasks = useSyncExternalStore(stores.tasks.subscribe, stores.tasks.get, stores.tasks.get);
+  const setTasks = stores.tasks.set;
+  const setSelected = stores.selection.set;
   const [labels, setLabels] = useState<LabelOption[]>(data.labels);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openTaskId, setOpenTaskId] = useState<string | null>(initialTaskId);
   const [newTask, setNewTask] = useState<{ columnId?: string; files?: File[]; evergreen?: boolean; draft?: NewTaskDraft | null } | null>(null);
   const [editDraft, setEditDraft] = useState<EditTaskDraft | null>(null);
@@ -252,11 +289,11 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       });
       return changed ? next : prev;
     });
-  }, []);
+  }, [setTasks]);
 
   const upsertTask = useCallback(
     (task: BoardTask) => setTasks((prev) => (prev.some((t) => t.id === task.id) ? prev.map((t) => (t.id === task.id ? task : t)) : [...prev, task])),
-    [],
+    [setTasks],
   );
 
   // Sincroniza con el servidor cuando llegan datos nuevos (router.refresh).
@@ -268,7 +305,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       return;
     }
     setColumns(data.columns);
-    setTasks(data.tasks);
+    setTasks((prev) => mergeTasks(prev, data.tasks));
     setLabels(data.labels);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
@@ -306,7 +343,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     };
   }, [refresh]);
 
-  const baseItems = useMemo(() => groupItems(columns, tasks), [columns, tasks]);
+  const baseItems = useStableItems(useMemo(() => groupItems(columns, tasks), [columns, tasks]));
   // Filtro del buscador: por título, tipo, responsable y etiquetas (todas las palabras deben aparecer).
   const terms = useMemo(() => normalize(query).split(/\s+/).filter(Boolean), [query]);
   // Filtros rápidos sin lo que ya no existe (etiqueta borrada, persona que dejó el proyecto…).
@@ -333,20 +370,18 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   }, [filtering, terms, tasks, data.kinds, data.users, data.currentUserId, data.today, labels, columns, activeFilters]);
   // `dragItems` lleva siempre las listas COMPLETAS (también con filtro): al soltar, los vecinos que se
   // envían al servidor son los reales, de modo que las tarjetas ocultas conservan su orden relativo.
-  const items = useMemo(() => {
+  const items = useStableItems(useMemo(() => {
     const all = dragItems ?? baseItems;
     if (!matchingIds) return all;
     return Object.fromEntries(Object.entries(all).map(([col, ids]) => [col, ids.filter((id) => matchingIds.has(id))])) as Items;
-  }, [dragItems, baseItems, matchingIds]);
+  }, [dragItems, baseItems, matchingIds]));
   const shownCount = matchingIds ? matchingIds.size : tasks.length;
   // Al filtrar se deseleccionan las tarjetas que quedan ocultas (las acciones masivas no deben tocar lo que no se ve).
-  const [prevMatching, setPrevMatching] = useState(matchingIds);
-  if (prevMatching !== matchingIds) {
-    setPrevMatching(matchingIds);
-    if (matchingIds && selected.size && [...selected].some((id) => !matchingIds.has(id))) {
-      setSelected(new Set([...selected].filter((id) => matchingIds.has(id))));
-    }
-  }
+  useEffect(() => {
+    if (!matchingIds) return;
+    const sel = stores.selection.get();
+    if (sel.size && [...sel].some((id) => !matchingIds.has(id))) stores.selection.set(new Set([...sel].filter((id) => matchingIds.has(id))));
+  }, [matchingIds, stores]);
   // Tareas evergreen por columna: fuera de la lista ordenable, se muestran en el pie de la columna de la release.
   const evergreenByColumn = useMemo(() => {
     const map: Record<string, string[]> = {};
@@ -357,7 +392,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     () => (matchingIds ? Object.fromEntries(Object.entries(evergreenByColumn).map(([c, ids]) => [c, ids.filter((id) => matchingIds.has(id))])) : evergreenByColumn),
     [evergreenByColumn, matchingIds],
   );
-  const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
+  const taskById = tasksById(tasks);
   const sortedColumns = useMemo(() => [...columns].sort((a, b) => a.position - b.position), [columns]);
   const nextReleaseColumn = sortedColumns.find((c) => c.role === "NEXT_RELEASE");
   const activeMobileColumn = sortedColumns.find((c) => c.id === mobileColumn)?.id ?? sortedColumns[0]?.id;
@@ -378,31 +413,49 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     return () => document.removeEventListener("paste", onPaste);
   }, []);
 
-  const cardActions = useCardActions({ currentUserId: data.currentUserId, taskById, sortedColumns, baseItems, patchTask, upsertTask, track, toast, t });
+  const getTask = useCallback((id: string) => tasksById(stores.tasks.get()).get(id), [stores]);
+  const cardActions = useCardActions({ currentUserId: data.currentUserId, getTask, sortedColumns, baseItems, patchTask, upsertTask, track, toast, t });
+
+  // El contexto solo cambia si cambia su contenido: los datos del servidor llegan como objetos nuevos en cada
+  // refresco aunque sean iguales, y sin esto todas las tarjetas se redibujarían cada vez.
+  const project = useStableValue(data.project);
+  const users = useStableValue(data.users);
+  const kinds = useStableValue(data.kinds);
+  const deliverables = useStableValue(data.deliverables);
+  const google = useStableValue(data.google);
+  const stableColumns = useStableValue(sortedColumns);
+  const stableLabels = useStableValue(labels);
+  // Lo que necesitan las funciones del contexto sin ser dependencia suya (se leen al llamarlas).
+  const latest = useRef({ baseItems, evergreenByColumn });
+  useEffect(() => {
+    latest.current = { baseItems, evergreenByColumn };
+  });
 
   const api: BoardApi = useMemo(
     () => ({
-      project: data.project,
-      users: data.users,
+      project,
+      users,
       currentUserId: data.currentUserId,
-      columns: sortedColumns,
-      labels,
-      deliverables: data.deliverables,
-      kinds: data.kinds,
-      kindById: new Map(data.kinds.map((k) => [k.id, k])),
+      columns: stableColumns,
+      labels: stableLabels,
+      deliverables,
+      kinds,
+      kindById: new Map(kinds.map((k) => [k.id, k])),
       cardStyle: data.cardStyle,
       editorMode: data.editorMode,
       dragHandle,
-      google: data.google,
+      google,
       today: data.today,
       setLabels,
-      taskById,
+      stores,
+      getTask,
+      getTasks: stores.tasks.get,
       upsertTask,
       patchTask,
       ...cardActions,
       removeTask: (id) => {
         setTasks((prev) => prev.filter((t) => t.id !== id));
-        setSelected((prev) => {
+        stores.selection.set((prev) => {
           if (!prev.has(id)) return prev;
           const next = new Set(prev);
           next.delete(id);
@@ -414,14 +467,17 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       openNewTask: (columnId, evergreen) => setNewTask({ columnId, evergreen }),
       openRelease: (columnId) => {
         // Las evergreen van siempre incluidas y preseleccionadas (se pueden desmarcar en el diálogo).
-        const fixed = evergreenByColumn[columnId] ?? [];
-        const ids = [...(baseItems[columnId] ?? []), ...fixed];
+        const { baseItems: base, evergreenByColumn: evergreen } = latest.current;
+        const fixed = evergreen[columnId] ?? [];
+        const ids = [...(base[columnId] ?? []), ...fixed];
+        const selected = stores.selection.get();
         const pre = ids.filter((id) => selected.has(id));
         setRelease({ taskIds: ids, preselected: pre.length ? [...new Set([...pre, ...fixed])] : ids });
       },
-      selected,
+      getSelected: stores.selection.get,
+      clearSelection: () => stores.selection.set(new Set()),
       setSelectedMany: (ids, on) =>
-        setSelected((prev) => {
+        stores.selection.set((prev) => {
           const next = new Set(prev);
           for (const id of ids) {
             if (on) next.add(id);
@@ -430,7 +486,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           return next;
         }),
       toggleSelected: (id) =>
-        setSelected((prev) => {
+        stores.selection.set((prev) => {
           const next = new Set(prev);
           if (next.has(id)) next.delete(id);
           else next.add(id);
@@ -440,7 +496,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       trackRaw,
       refresh,
     }),
-    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, data.editorMode, dragHandle, data.google, data.today, sortedColumns, labels, taskById, baseItems, evergreenByColumn, selected, track, trackRaw, refresh, patchTask, upsertTask, cardActions],
+    [setTasks, project, users, data.currentUserId, deliverables, kinds, data.cardStyle, data.editorMode, dragHandle, google, data.today, stableColumns, stableLabels, stores, getTask, track, trackRaw, refresh, patchTask, upsertTask, cardActions],
   );
 
   // --- Movimiento masivo ------------------------------------------------------
@@ -460,6 +516,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     });
 
   const moveSelected = async (columnId: string) => {
+    const selected = stores.selection.get();
     const ids = [...selected];
     if (!ids.length) return;
     const before = new Map(tasks.filter((t) => ids.includes(t.id)).map((t) => [t.id, t]));
@@ -482,7 +539,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   };
 
   const archiveSelected = async () => {
-    const ids = [...selected];
+    const ids = [...stores.selection.get()];
     if (!ids.length) return;
     const before = new Map(tasks.filter((t) => ids.includes(t.id)).map((t) => [t.id, t]));
     const gone = new Set(ids);
@@ -510,8 +567,15 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   };
 
   const deleteSelected = async () => {
-    const ids = [...selected];
-    if (!ids.length || !window.confirm(ids.length === 1 ? t("¿Borrar definitivamente la tarea seleccionada y sus adjuntos?") : t("¿Borrar definitivamente las {n} tareas seleccionadas y sus adjuntos?", { n: ids.length }))) return;
+    const ids = [...stores.selection.get()];
+    if (!ids.length) return;
+    const ok = await confirm({
+      title: ids.length === 1 ? t("Borrar tarea") : t("Borrar tareas"),
+      message: ids.length === 1 ? t("¿Borrar definitivamente la tarea seleccionada y sus adjuntos?") : t("¿Borrar definitivamente las {n} tareas seleccionadas y sus adjuntos?", { n: ids.length }),
+      confirmLabel: t("Borrar"),
+      danger: true,
+    });
+    if (!ok) return;
     const before = new Map(tasks.filter((t) => ids.includes(t.id)).map((t) => [t.id, t]));
     const gone = new Set(ids);
     setTasks((prev) => prev.filter((t) => !gone.has(t.id)));
@@ -576,8 +640,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // --- Drag & drop --------------------------------------------------------------
   const sensors = useSensors(
     // Con ratón, toda la tarjeta; en táctil, solo el asa (touch-action: none), así que basta con poca distancia.
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(PointerSensor, POINTER_OPTIONS),
+    useSensor(KeyboardSensor, KEYBOARD_OPTIONS),
   );
 
   const onDragStart = ({ active }: DragStartEvent) => {
@@ -785,7 +849,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         <DndContext
           sensors={sensors}
           collisionDetection={boardCollisionDetection}
-          measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+          measuring={MEASURING}
           onDragStart={onDragStart}
           onDragOver={onDragOver}
           onDragEnd={onDragEnd}
@@ -889,22 +953,21 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <Plus size={26} />
         </button>
 
-        {selected.size > 0 && (
-          <SelectionBar
-            count={selected.size}
-            columns={sortedColumns}
-            nextReleaseColumn={nextReleaseColumn}
-            onMove={moveSelected}
-            onArchive={archiveSelected}
-            onDelete={deleteSelected}
-            onRelease={() => {
-              const ids = sortedColumns.flatMap((c) => (baseItems[c.id] ?? []).filter((id) => selected.has(id)));
-              // Con selección solo van las elegidas (las fijas entran únicamente desde «Generar Release»).
-              setRelease({ taskIds: ids, preselected: ids });
-            }}
-            onClear={() => setSelected(new Set())}
-          />
-        )}
+        <SelectionBarHost
+          columns={sortedColumns}
+          nextReleaseColumn={nextReleaseColumn}
+          onMove={moveSelected}
+          onArchive={archiveSelected}
+          onDelete={deleteSelected}
+          onRelease={() => {
+            const selected = stores.selection.get();
+            const ids = sortedColumns.flatMap((c) => (baseItems[c.id] ?? []).filter((id) => selected.has(id)));
+            // Con selección solo van las elegidas (las fijas entran únicamente desde «Generar Release»).
+            setRelease({ taskIds: ids, preselected: ids });
+          }}
+          onClear={() => setSelected(new Set())}
+        />
+
 
         {openTaskId && taskById.has(openTaskId) && (
           <TaskDialog
@@ -964,6 +1027,13 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       </div>
     </BoardContext.Provider>
   );
+}
+
+/** La barra de selección se suscribe al contador por su cuenta: seleccionar no redibuja el tablero entero. */
+function SelectionBarHost(props: Omit<React.ComponentProps<typeof SelectionBar>, "count">) {
+  const count = useSelectionSize();
+  if (count === 0) return null;
+  return <SelectionBar count={count} {...props} />;
 }
 
 /** Dos «+» superpuestos: crear varias tareas. */

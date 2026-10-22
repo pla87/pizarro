@@ -230,4 +230,8 @@ export const settings: Record<string, string> = {
   "Subtareas predefinidas": "Predefined subtasks",
   "Una por línea": "One per line",
   "Se añaden al elegir este tipo al crear una tarea (máx. {n}, sin repetir las que ya estén).": "Added when this type is chosen while creating a task (max. {n}, skipping any already there).",
+  // Confirmaciones (ui/ConfirmDialog)
+  "Hacer el proyecto privado": "Make the project private",
+  "Hacer privado": "Make private",
+  "Salir": "Leave",
 };

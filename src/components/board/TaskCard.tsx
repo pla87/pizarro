@@ -12,17 +12,17 @@ import { Avatar } from "../ui/Avatar";
 import { MentionText } from "../ui/MentionText";
 import { cn } from "../ui/cn";
 import { TypeBadge } from "../ui/TypeBadge";
-import { useBoard } from "./context";
+import { useBoard, useIsSelected, useTask } from "./context";
 import { DueDatePopover } from "./DueDatePopover";
 import { recurrenceLabel } from "./recurrence-ui";
 import { focusCard, isTypingTarget } from "./shortcuts";
 import { TaskViewerBubbles } from "./TaskViewerBubbles";
 
-export function SortableTaskCard({ id }: { id: string }) {
-  const { taskById, dragHandle } = useBoard();
+export const SortableTaskCard = memo(function SortableTaskCard({ id }: { id: string }) {
+  const { dragHandle } = useBoard();
   const t = useT();
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
-  const task = taskById.get(id);
+  const task = useTask(id);
   if (!task) return null;
   // En táctil solo arrastra el asa: el resto de la tarjeta deja hacer scroll y abrirla con un toque.
   return (
@@ -51,16 +51,16 @@ export function SortableTaskCard({ id }: { id: string }) {
       />
     </div>
   );
-}
+});
 
 export const TaskCard = memo(function TaskCard({ task, overlay = false, handle = null }: { task: BoardTask; overlay?: boolean; handle?: React.ReactNode }) {
-  const { users, labels, openTask, selected, toggleSelected, columns, today, kindById, cardStyle, assignToMe, moveToAdjacentColumn, setDueDate, renameTask, duplicateTask } = useBoard();
+  const { users, labels, openTask, toggleSelected, columns, today, kindById, cardStyle, assignToMe, moveToAdjacentColumn, setDueDate, renameTask, duplicateTask } = useBoard();
   const locale = useIntlLocale();
   const t = useT();
   const done = columns.find((c) => c.id === task.columnId)?.isDone ?? false;
   const due = dueStatus(task.dueDate, done, today);
   const assignee = task.assigneeId ? users.find((u) => u.id === task.assigneeId) : null;
-  const isSelected = selected.has(task.id);
+  const isSelected = useIsSelected(task.id);
   const filled = cardStyle === "FILLED" && !!task.color;
   const white = isWhite(task.color);
   const taskLabels = task.labelIds.map((id) => labels.find((l) => l.id === id)).filter((l) => !!l);

@@ -11,6 +11,7 @@ import { useIntlLocale, useT } from "@/i18n/client";
 import { ColorPicker } from "@/components/ui/ColorPicker";
 import { cn } from "@/components/ui/cn";
 import { Modal } from "@/components/ui/Modal";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
 import { isWhite, onColor, PALETTE } from "@/lib/constants";
@@ -48,6 +49,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
   const t = useT();
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
   const [pending, start] = useTransition();
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description);
@@ -153,8 +155,8 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
           <button
             className="btn-primary mt-4"
             disabled={pending}
-            onClick={() => {
-              if (visibility === "PRIVATE" && project.visibility !== "PRIVATE" && !window.confirm(t("¿Hacer el proyecto privado? Solo lo verás tú (podrás añadir más miembros después): los demás dejarán de verlo, incluidos los administradores, y se desasignarán sus tarjetas."))) return;
+            onClick={async () => {
+              if (visibility === "PRIVATE" && project.visibility !== "PRIVATE" && !(await confirm({ title: t("Hacer el proyecto privado"), message: t("¿Hacer el proyecto privado? Solo lo verás tú (podrás añadir más miembros después): los demás dejarán de verlo, incluidos los administradores, y se desasignarán sus tarjetas."), confirmLabel: t("Hacer privado"), danger: true }))) return;
               run(() => setProjectVisibility(project.id, visibility, [...members]), t("Visibilidad actualizada"), () => router.refresh());
             }}
           >
@@ -242,6 +244,7 @@ function MemberManager({ projectId, currentUserId, members, users }: {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
   const [pending, start] = useTransition();
   const [candidate, setCandidate] = useState("");
   const memberIds = new Set(members.map((m) => m.id));
@@ -274,8 +277,8 @@ function MemberManager({ projectId, currentUserId, members, users }: {
                 className="btn-secondary"
                 disabled={pending || lastOne}
                 title={lastOne ? t("Eres el último miembro: si ya no lo necesitas, borra el proyecto.") : undefined}
-                onClick={() => {
-                  if (isMe && !window.confirm(t("¿Salir del proyecto? Dejarás de verlo salvo que otro miembro te vuelva a añadir."))) return;
+                onClick={async () => {
+                  if (isMe && !(await confirm({ title: t("Salir del proyecto"), message: t("¿Salir del proyecto? Dejarás de verlo salvo que otro miembro te vuelva a añadir."), confirmLabel: t("Salir"), danger: true }))) return;
                   run(
                     () => removeProjectMember(projectId, m.id),
                     isMe ? t("Has salido del proyecto") : t("Miembro quitado"),
@@ -310,6 +313,7 @@ function MemberManager({ projectId, currentUserId, members, users }: {
 function LabelRow({ label, onSaved, onDeleted }: { label: LabelOption; onSaved: (l: LabelOption) => void; onDeleted: () => void }) {
   const t = useT();
   const toast = useToast();
+  const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(label.name);
   const [color, setColor] = useState<string | null>(label.color);
@@ -323,7 +327,7 @@ function LabelRow({ label, onSaved, onDeleted }: { label: LabelOption; onSaved: 
           className="btn-icon h-7 w-7 hover:text-red-600"
           aria-label={t("Borrar etiqueta")}
           onClick={async () => {
-            if (!window.confirm(t("¿Borrar la etiqueta «{name}»? Se quitará de todas las tarjetas.", { name: label.name }))) return;
+            if (!(await confirm({ title: t("Borrar etiqueta"), message: t("¿Borrar la etiqueta «{name}»? Se quitará de todas las tarjetas.", { name: label.name }), confirmLabel: t("Borrar"), danger: true }))) return;
             const res = await deleteLabel(label.id);
             if (!res.ok) return toast(res.error, "error");
             onDeleted();
@@ -394,6 +398,7 @@ function Deliverables({ projectId, initial }: { projectId: string; initial: Deli
   const locale = useIntlLocale();
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
   const [rows, setRows] = useState(initial);
   // null: modal cerrado; "": nuevo entregable; id: edición.
   const [editing, setEditing] = useState<string | null>(null);
@@ -445,7 +450,7 @@ function Deliverables({ projectId, initial }: { projectId: string; initial: Deli
               className="btn-icon h-7 w-7 hover:text-red-600"
               aria-label={t("Borrar entregable")}
               onClick={async () => {
-                if (!window.confirm(t("¿Borrar el entregable «{name}»? Sus tarjetas se conservan, sin entregable.", { name: d.name }))) return;
+                if (!(await confirm({ title: t("Borrar entregable"), message: t("¿Borrar el entregable «{name}»? Sus tarjetas se conservan, sin entregable.", { name: d.name }), confirmLabel: t("Borrar"), danger: true }))) return;
                 const res = await deleteDeliverable(d.id);
                 if (!res.ok) return toast(res.error, "error");
                 setRows((r) => r.filter((x) => x.id !== d.id));

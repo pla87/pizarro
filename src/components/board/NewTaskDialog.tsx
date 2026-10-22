@@ -4,6 +4,7 @@ import { Camera, File as FileIcon, ImagePlus, Loader2, Plus, X } from "lucide-re
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createTask } from "@/actions/tasks";
 import { useT, useIntlLocale } from "@/i18n/client";
+import { useConfirm } from "../ui/ConfirmDialog";
 import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
 import { useShortcut } from "./shortcuts";
@@ -44,6 +45,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const formId = `${uid}-new-task`;
   const board = useBoard();
   const toast = useToast();
+  const confirm = useConfirm();
   // Un borrador solo vale si su tipo y su columna siguen existiendo.
   const d = draft ?? null;
   const [title, setTitle] = useState(() => d?.title ?? (initialFiles?.length ? captureTitle(t, locale) : ""));
@@ -70,9 +72,17 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     close();
   };
   // Escape, clic fuera, X o «Cancelar» con contenido escrito piden confirmación; crear no.
-  const requestClose = () => {
+  const confirming = useRef(false);
+  const requestClose = async () => {
     const dirty = !!(title.trim() || description.trim() || subtasks.length || subtaskDraft.trim());
-    if (dirty && !window.confirm(t("Hay cambios sin guardar. ¿Descartar la nueva tarea?"))) return;
+    if (dirty) {
+      // Una sola confirmación a la vez (Escape o clics repetidos no las apilan).
+      if (confirming.current) return;
+      confirming.current = true;
+      const ok = await confirm({ title: t("Descartar la nueva tarea"), message: t("Hay cambios sin guardar. ¿Descartar la nueva tarea?"), confirmLabel: t("Descartar"), danger: true });
+      confirming.current = false;
+      if (!ok) return;
+    }
     onClose();
   };
   const isReleaseColumn = board.columns.find((c) => c.id === columnId)?.role === "NEXT_RELEASE";

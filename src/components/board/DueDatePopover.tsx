@@ -1,15 +1,13 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { addDaysIso, nextWeekdayIso } from "@/lib/dates";
 import { useT } from "@/i18n/client";
-
-const WIDTH = 248;
+import { PopoverPanel } from "../ui/Popover";
 
 /**
  * Selector de fecha límite junto a una tarjeta (Alt+D): campo de fecha y atajos Hoy / Mañana / Próximo lunes / Sin fecha.
- * Se dibuja en el cuerpo de la página (la tarjeta recorta lo que se sale). Escape o un clic fuera lo cierran sin cambiar nada.
+ * Panel flotante común (ui/Popover): se dibuja en el cuerpo de la página (la tarjeta recorta lo que se sale). Escape o un
+ * clic fuera lo cierran sin cambiar nada.
  */
 export function DueDatePopover({ anchor, value, today, onPick, onClose }: {
   anchor: HTMLElement;
@@ -19,28 +17,6 @@ export function DueDatePopover({ anchor, value, today, onPick, onClose }: {
   onClose: () => void;
 }) {
   const t = useT();
-  const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-
-  // Debajo de la tarjeta (o encima si no cabe), sin salirse de la pantalla.
-  useLayoutEffect(() => {
-    const r = anchor.getBoundingClientRect();
-    const h = ref.current?.offsetHeight ?? 160;
-    const top = r.bottom + 6 + h > window.innerHeight ? Math.max(8, r.top - h - 6) : r.bottom + 6;
-    setPos({ top, left: Math.min(Math.max(8, r.left), Math.max(8, window.innerWidth - WIDTH - 8)) });
-  }, [anchor]);
-
-  useEffect(() => {
-    ref.current?.querySelector<HTMLInputElement>("input")?.focus();
-    const onDown = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener("pointerdown", onDown, true);
-    return () => document.removeEventListener("pointerdown", onDown, true);
-    // Solo al abrir.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const quick: { label: string; day: string | null }[] = [
     { label: t("Hoy"), day: today },
     { label: t("Mañana"), day: addDaysIso(today, 1) },
@@ -48,23 +24,18 @@ export function DueDatePopover({ anchor, value, today, onPick, onClose }: {
     { label: t("Sin fecha"), day: null },
   ];
 
-  return createPortal(
-    <div
-      ref={ref}
+  return (
+    <PopoverPanel
+      anchor={anchor}
       role="group"
       aria-label={t("Fecha límite")}
-      style={{ top: pos?.top ?? 0, left: pos?.left ?? 0, width: WIDTH, visibility: pos ? "visible" : "hidden" }}
-      className="fixed z-[60] space-y-2 rounded-lg border border-slate-200 bg-white p-2.5 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900"
+      gap={6}
+      modal={false}
       // Lo que se pulse aquí no debe llegar a la tarjeta (sus atajos, abrirla ni arrastrarla).
-      onKeyDown={(e) => {
-        e.stopPropagation();
-        if (e.key === "Escape") {
-          e.preventDefault();
-          onClose();
-        }
-      }}
-      onClick={(e) => e.stopPropagation()}
-      onPointerDown={(e) => e.stopPropagation()}
+      isolate
+      initialFocus={(panel) => panel.querySelector("input")}
+      onClose={onClose}
+      className="w-[248px] space-y-2 rounded-lg border border-slate-200 bg-white p-2.5 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900"
     >
       <input
         type="date"
@@ -84,7 +55,6 @@ export function DueDatePopover({ anchor, value, today, onPick, onClose }: {
           </button>
         ))}
       </div>
-    </div>,
-    document.body,
+    </PopoverPanel>
   );
 }

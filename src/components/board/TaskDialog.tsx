@@ -23,6 +23,7 @@ import type { MentionCommand } from "../ui/MentionTextarea";
 import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
 import { applyKindTemplate } from "@/lib/kinds-special";
+import { useConfirm } from "../ui/ConfirmDialog";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
 import { isTypingTarget, useShortcut } from "./shortcuts";
@@ -51,6 +52,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   const locale = useIntlLocale();
   const board = useBoard();
   const toast = useToast();
+  const confirm = useConfirm();
   const mobile = useIsMobile();
   const sc = useShortcut();
   const [detail, setDetail] = useState<TaskDetail | null>(null);
@@ -173,7 +175,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
 
   /** Guardado optimista de campos de la tarjeta. */
   const save = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>): Promise<boolean> => {
-    const before = board.taskById.get(task.id);
+    const before = board.getTask(task.id);
     board.patchTask(task.id, optimistic);
     // Título y descripción: se envía qué versión se estaba editando para no pisar a otra persona.
     const editsText = patch.title !== undefined || patch.description !== undefined;
@@ -191,8 +193,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
 
   const changeColumn = async (columnId: string) => {
     if (columnId === task.columnId) return;
-    const before = board.taskById.get(task.id)!;
-    const last = Math.max(0, ...[...board.taskById.values()].filter((t) => t.columnId === columnId).map((t) => t.position));
+    const before = board.getTask(task.id)!;
+    const last = Math.max(0, ...board.getTasks().filter((t) => t.columnId === columnId).map((t) => t.position));
     board.patchTask(task.id, { columnId, position: last + 1024, evergreen: false });
     const res = await tracked(moveTask(task.id, columnId, null, null));
     if (!res.ok) {
@@ -229,7 +231,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   const files = detail?.attachments.filter((a) => !a.isImage) ?? [];
 
   const removeAttachment = async (id: string, question: string) => {
-    if (!window.confirm(question)) return;
+    if (!(await confirm({ title: t("Borrar adjunto"), message: question, confirmLabel: t("Borrar"), danger: true }))) return;
     const res = await board.track(deleteAttachment(id));
     if (!res.ok) return toast(res.error, "error");
     setDetail((d) => (d ? { ...d, attachments: d.attachments.filter((x) => x.id !== id) } : d));
@@ -246,7 +248,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   const dropping = useFileDrop(upload);
 
   const remove = async () => {
-    if (!window.confirm(t("¿Borrar definitivamente esta tarea y sus adjuntos?"))) return;
+    if (!(await confirm({ title: t("Borrar tarea"), message: t("¿Borrar definitivamente esta tarea y sus adjuntos?"), confirmLabel: t("Borrar"), danger: true }))) return;
     const res = await board.track(deleteTask(task.id));
     if (!res.ok) return toast(res.error, "error");
     board.removeTask(task.id);
@@ -1044,6 +1046,7 @@ function GoogleLinks({ detail, setDetail, onCreate, taskId }: {
   const t = useT();
   const board = useBoard();
   const toast = useToast();
+  const confirm = useConfirm();
   const links = detail?.links ?? [];
   return (
     <section>
@@ -1073,7 +1076,7 @@ function GoogleLinks({ detail, setDetail, onCreate, taskId }: {
                 aria-label={t("Quitar enlace")}
                 title={t("Quitar el enlace (el archivo sigue en Google Drive)")}
                 onClick={async () => {
-                  if (!window.confirm(t("¿Quitar el enlace de la tarea? El archivo seguirá en Google Drive."))) return;
+                  if (!(await confirm({ title: t("Quitar enlace"), message: t("¿Quitar el enlace de la tarea? El archivo seguirá en Google Drive."), confirmLabel: t("Quitar"), danger: true }))) return;
                   const res = await board.track(deleteTaskLink(l.id));
                   if (!res.ok) return toast(res.error, "error");
                   setDetail((d) => (d ? { ...d, links: d.links.filter((x) => x.id !== l.id) } : d));

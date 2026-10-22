@@ -3,15 +3,15 @@
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Minus, MoreHorizontal, Pencil, Plus, Rocket, Tag, Trash2 } from "lucide-react";
-import { useState } from "react";
 import { deleteColumn, moveColumn, renameColumn, setColumnDone, setColumnRole } from "@/actions/columns";
 import { COLUMN_ROLE_LABEL, COLUMN_ROLES, type ColumnRoleValue } from "@/lib/constants";
 import type { BoardColumn } from "@/lib/types";
 import { useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
-import { useEscapeClose } from "../ui/useEscapeClose";
-import { useBoard } from "./context";
+import { useConfirm } from "../ui/ConfirmDialog";
+import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
+import { useBoard, useSelectedCount, useSelectionSize } from "./context";
 import { useShortcut } from "./shortcuts";
 import { EvergreenPanel } from "./EvergreenPanel";
 import { SortableTaskCard } from "./TaskCard";
@@ -30,10 +30,11 @@ interface Props {
 }
 
 export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, index, total, droppableId, mobileHidden }: Props) {
-  const { openNewTask, openRelease, selected, setSelectedMany } = useBoard();
+  const { openNewTask, openRelease, setSelectedMany } = useBoard();
   const t = useT();
   const sc = useShortcut();
-  const selectedHere = taskIds.filter((id) => selected.has(id)).length;
+  const selectedHere = useSelectedCount(taskIds);
+  const hasSelection = useSelectionSize() > 0;
   const allSelected = taskIds.length > 0 && selectedHere === taskIds.length;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
   const isNextRelease = column.role === "NEXT_RELEASE";
@@ -94,7 +95,7 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
           className={cn(
             "flex min-h-20 flex-1 flex-col gap-2 overflow-y-auto rounded-b-xl px-2 transition-colors",
             // Abajo se deja hueco: con selección lo tapa la barra inferior y en móvil los botones flotantes.
-            selected.size > 0 ? "pb-44 md:pb-20" : "pb-32 lg:pb-2",
+            hasSelection ? "pb-44 md:pb-20" : "pb-32 lg:pb-2",
             isOver && "bg-brand-50/60 dark:bg-brand-500/5",
           )}
         >
@@ -114,12 +115,11 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
 function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; index: number; total: number; empty: boolean }) {
   const { setColumns, track, refresh } = useBoard();
   const toast = useToast();
+  const confirm = useConfirm();
   const t = useT();
-  const [open, setOpen] = useState(false);
-  useEscapeClose(open, () => setOpen(false));
 
+  // El menú se cierra solo al elegir una opción (ver Menu).
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, optimistic?: () => void) => {
-    setOpen(false);
     optimistic?.();
     const res = await track(fn());
     if (!res.ok) {
@@ -130,7 +130,7 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
 
   const rename = () => {
     const name = window.prompt(t("Nuevo nombre de la columna"), column.name)?.trim();
-    if (!name || name === column.name) return setOpen(false);
+    if (!name || name === column.name) return;
     run(() => renameColumn(column.id, name), () => setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, name } : c))));
   };
 
@@ -168,67 +168,49 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
       () => setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, isDone: !c.isDone } : c))),
     );
 
-  const remove = () => {
-    if (!empty) {
-      setOpen(false);
-      return toast(t("Solo se pueden borrar columnas vacías."), "error");
-    }
-    if (!window.confirm(t("¿Borrar la columna «{name}»?", { name: column.name }))) return setOpen(false);
+  const remove = async () => {
+    if (!empty) return toast(t("Solo se pueden borrar columnas vacías."), "error");
+    const ok = await confirm({ title: t("Borrar columna"), message: t("¿Borrar la columna «{name}»?", { name: column.name }), confirmLabel: t("Borrar"), danger: true });
+    if (!ok) return;
     run(() => deleteColumn(column.id), () => setColumns((cols) => cols.filter((c) => c.id !== column.id)));
   };
 
   return (
-    <div className="relative">
-      <button className="btn-icon h-7 w-7" onClick={() => setOpen((o) => !o)} aria-label={t("Opciones de columna")} aria-expanded={open}>
-        <MoreHorizontal size={16} />
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} aria-hidden />
-          <div className="absolute right-0 z-30 mt-1 w-64 rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900">
-            <MenuItem icon={Pencil} onClick={rename}>{t("Renombrar")}</MenuItem>
-            <MenuItem icon={ArrowLeft} onClick={() => move(-1)} disabled={index === 0}>{t("Mover a la izquierda")}</MenuItem>
-            <MenuItem icon={ArrowRight} onClick={() => move(1)} disabled={index === total - 1}>{t("Mover a la derecha")}</MenuItem>
-            <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
-            <div className="flex items-center gap-2 px-2.5 pt-1 pb-0.5 text-xs font-medium text-slate-500"><Tag size={13} /> {t("Rol de la columna")}</div>
-            {COLUMN_ROLES.map((r) => (
-              <button
-                key={r}
-                onClick={() => setRole(r)}
-                className={cn(
-                  "block w-full rounded-md px-2.5 py-1.5 pl-7 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800",
-                  column.role === r && "font-semibold text-brand-600 dark:text-brand-300",
-                )}
-              >
-                {column.role === r ? "● " : ""}{t(COLUMN_ROLE_LABEL[r])}
-              </button>
-            ))}
-            <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
-            <MenuItem icon={CheckCircle2} onClick={toggleDone}>
-              {column.isDone ? t("✓ Cuenta como terminada") : t("Contar como terminada")}
-            </MenuItem>
-            <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
-            <MenuItem icon={Trash2} onClick={remove} danger disabled={!empty}>
-              {empty ? t("Borrar columna") : t("Borrar (debe estar vacía)")}
-            </MenuItem>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function MenuItem({ icon: Icon, children, onClick, disabled, danger }: { icon: typeof Pencil; children: React.ReactNode; onClick: () => void; disabled?: boolean; danger?: boolean }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-slate-800",
-        danger && "text-red-600",
+    <Menu
+      align="end"
+      label={t("Opciones de columna")}
+      className="relative"
+      panelClassName="w-64 rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900"
+      trigger={({ props }) => (
+        <button className="btn-icon h-7 w-7" aria-label={t("Opciones de columna")} {...props}>
+          <MoreHorizontal size={16} />
+        </button>
       )}
     >
-      <Icon size={15} /> {children}
-    </button>
+      <MenuItem icon={Pencil} onClick={rename}>{t("Renombrar")}</MenuItem>
+      <MenuItem icon={ArrowLeft} onClick={() => move(-1)} disabled={index === 0}>{t("Mover a la izquierda")}</MenuItem>
+      <MenuItem icon={ArrowRight} onClick={() => move(1)} disabled={index === total - 1}>{t("Mover a la derecha")}</MenuItem>
+      <MenuSeparator />
+      <div className="flex items-center gap-2 px-2.5 pt-1 pb-0.5 text-xs font-medium text-slate-500"><Tag size={13} /> {t("Rol de la columna")}</div>
+      {COLUMN_ROLES.map((r) => (
+        <MenuItem
+          key={r}
+          role="menuitemradio"
+          aria-checked={column.role === r}
+          onClick={() => setRole(r)}
+          className={cn("py-1.5 pl-7 text-xs", column.role === r && "font-semibold text-brand-600 dark:text-brand-300")}
+        >
+          {column.role === r ? "● " : ""}{t(COLUMN_ROLE_LABEL[r])}
+        </MenuItem>
+      ))}
+      <MenuSeparator />
+      <MenuItem icon={CheckCircle2} onClick={toggleDone}>
+        {column.isDone ? t("✓ Cuenta como terminada") : t("Contar como terminada")}
+      </MenuItem>
+      <MenuSeparator />
+      <MenuItem icon={Trash2} onClick={remove} danger disabled={!empty}>
+        {empty ? t("Borrar columna") : t("Borrar (debe estar vacía)")}
+      </MenuItem>
+    </Menu>
   );
 }

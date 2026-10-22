@@ -21,7 +21,9 @@ import { UndoButton } from "./UndoButton";
 import { Avatar } from "./ui/Avatar";
 import { ReportButton } from "./ReportButton";
 import { cn } from "./ui/cn";
+import { Menu as DropdownMenu, MenuItem } from "./ui/Menu";
 import { Modal } from "./ui/Modal";
+import { ConfirmProvider } from "./ui/ConfirmDialog";
 import { ToastProvider, useToast } from "./ui/Toast";
 import { useEscapeClose } from "./ui/useEscapeClose";
 
@@ -36,7 +38,9 @@ interface Props {
 export function AppShell(props: Props) {
   return (
     <ToastProvider>
-      <Shell {...props} />
+      <ConfirmProvider>
+        <Shell {...props} />
+      </ConfirmProvider>
     </ToastProvider>
   );
 }
@@ -190,59 +194,51 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
 
 function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: string; name: string; isPrivate?: boolean }[]; current: { id: string; name: string; isPrivate?: boolean } | null; isAdmin: boolean }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
-  useEscapeClose(open, () => setOpen(false));
   const [creating, setCreating] = useState(false);
   return (
     <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-left text-sm hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800/60 dark:hover:bg-slate-800"
-        aria-haspopup="listbox"
-        aria-expanded={open}
+      <DropdownMenu
+        matchWidth
+        label={t("Selecciona proyecto")}
+        panelClassName="max-h-80 rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+        trigger={({ props }) => (
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-left text-sm hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800/60 dark:hover:bg-slate-800"
+            {...props}
+          >
+            <FolderKanban size={16} className="shrink-0 text-brand-600" />
+            <span className="min-w-0 flex-1 truncate font-medium">{current?.name ?? t("Selecciona proyecto")}</span>
+            {current?.isPrivate && <PrivateIcon />}
+            <ChevronsUpDown size={15} className="shrink-0 text-slate-400" />
+          </button>
+        )}
       >
-        <FolderKanban size={16} className="shrink-0 text-brand-600 dark:text-brand-300" />
-        <span className="min-w-0 flex-1 truncate font-medium">{current?.name ?? t("Selecciona proyecto")}</span>
-        {current?.isPrivate && <PrivateIcon />}
-        <ChevronsUpDown size={15} className="shrink-0 text-slate-400" />
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden />
-          <div className="absolute inset-x-0 z-20 mt-1 max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900" role="listbox">
-            {projects.length === 0 && <div className="px-2.5 py-2 text-sm text-slate-500">{t("No tienes proyectos.")}</div>}
-            {projects.map((p) => (
-              <Link
-                key={p.id}
-                href={`/p/${p.id}`}
-                onClick={() => setOpen(false)}
-                className={cn(
-                  "block truncate rounded-md px-2.5 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800",
-                  p.id === current?.id && "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-100",
-                )}
-                role="option"
-                aria-selected={p.id === current?.id}
-              >
-                <span className="flex items-center gap-1.5">
-                  <span className="min-w-0 truncate">{p.name}</span>
-                  {p.isPrivate && <PrivateIcon />}
-                </span>
-              </Link>
-            ))}
-            <button
-              type="button"
-              className="mt-1 flex w-full items-center gap-2 rounded-md border-t border-slate-200 px-2.5 py-2 text-sm text-brand-600 dark:text-brand-300 hover:bg-slate-100 dark:border-slate-800 dark:hover:bg-slate-800"
-              onClick={() => {
-                setOpen(false);
-                setCreating(true);
-              }}
-            >
-              <Plus size={15} /> {t("Nuevo proyecto")}
-            </button>
-          </div>
-        </>
-      )}
+        {projects.length === 0 && <div className="px-2.5 py-2 text-sm text-slate-500">{t("No tienes proyectos.")}</div>}
+        {projects.map((p) => (
+          <Link
+            key={p.id}
+            href={`/p/${p.id}`}
+            role="menuitem"
+            tabIndex={-1}
+            aria-current={p.id === current?.id ? "true" : undefined}
+            className={cn(
+              "block truncate rounded-md px-2.5 py-2 text-sm hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none dark:hover:bg-slate-800 dark:focus-visible:bg-slate-800",
+              p.id === current?.id && "bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-100",
+            )}
+          >
+            <span className="flex items-center gap-1.5">
+              <span className="min-w-0 truncate">{p.name}</span>
+              {p.isPrivate && <PrivateIcon />}
+            </span>
+          </Link>
+        ))}
+        {isAdmin && (
+          <MenuItem icon={Plus} className="mt-1 rounded-md border-t border-slate-200 text-brand-600 dark:border-slate-800" onClick={() => setCreating(true)}>
+            {t("Nuevo proyecto")}
+          </MenuItem>
+        )}
+      </DropdownMenu>
       {creating && <NewProjectModal isAdmin={isAdmin} onClose={() => setCreating(false)} />}
     </div>
   );

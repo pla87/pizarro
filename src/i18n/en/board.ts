@@ -232,4 +232,12 @@ export const board: Record<string, string> = {
   "Duplicar": "Duplicate",
   "Crea una copia justo detrás de esta tarea": "Creates a copy right after this task",
   "Añadir las subtareas predefinidas de cada tipo": "Add each type's predefined subtasks",
+  // Confirmaciones (ui/ConfirmDialog)
+  "Borrar tarea": "Delete task",
+  "Borrar tareas": "Delete tasks",
+  "Borrar comentario": "Delete comment",
+  "Descartar la nueva tarea": "Discard the new task",
+  "Descartar": "Discard",
+  "Volver a la selección": "Back to the selection",
+  "Desplegar la release": "Deploy the release",
 };
