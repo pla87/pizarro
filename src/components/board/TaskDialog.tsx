@@ -191,7 +191,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     setUploading((n) => n + files.length);
     for (const file of files) {
       try {
-        const att = await board.track(uploadFile(task.id, file, false, t));
+        const att = await board.trackRaw(uploadFile(task.id, file, false, t));
         setDetail((d) => (d ? { ...d, attachments: [...d.attachments, att] } : d));
         board.patchTask(task.id, (t) => ({ attachmentCount: t.attachmentCount + 1 }));
       } catch (err) {
