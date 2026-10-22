@@ -265,4 +265,7 @@ export const cuentas: Record<string, string> = {
     "To change your own verification use “My profile”.",
   "Esa persona no tiene activada la verificación en dos pasos.":
     "That person doesn't have two-step verification enabled.",
+  "Código enviado a tu email": "Code sent to your email",
+  "Para confirmar que la cuenta es tuya, escribe también el código que te hemos enviado por email.": "To confirm the account is yours, also enter the code we sent you by email.",
+  "El código del email no es correcto o ha caducado.": "The email code is incorrect or has expired.",
 };

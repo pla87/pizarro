@@ -88,7 +88,7 @@ export async function sendEmailCode(ch: Pick<Challenge, "id">, user: { name: str
   }
 }
 
-async function verifyEmailCode(ch: Challenge, code: string): Promise<boolean> {
+export async function verifyEmailCode(ch: Challenge, code: string): Promise<boolean> {
   if (!ch.codeHash || !ch.codeExpiresAt || ch.codeExpiresAt.getTime() < Date.now() || !/^\d{6}$/.test(code)) return false;
   if (!safeEq(ch.codeHash, hashEmailCode(ch.id, code))) return false;
   // Un solo uso: solo una petición consigue gastarlo.

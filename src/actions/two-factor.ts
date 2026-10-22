@@ -18,8 +18,7 @@ import { clientIp } from "@/lib/request";
 import { safeNextPath } from "@/lib/redirect";
 import { requireUser } from "@/lib/session";
 import {
-  CHALLENGE_TTL_MS, checkCode, clearTwoFactor, commitEnrollment, dropChallenge, readChallenge, replaceRecoveryCodes, sendEmailCode,
-} from "@/lib/two-factor";
+  CHALLENGE_TTL_MS, checkCode, clearTwoFactor, commitEnrollment, dropChallenge, readChallenge, replaceRecoveryCodes, sendEmailCode, verifyEmailCode, } from "@/lib/two-factor";
 import { generateTotpSecret, otpauthUri } from "@/lib/two-factor-core";
 import { getT } from "@/i18n/server";
 
@@ -87,12 +86,19 @@ export async function chooseSetupMethod(method: string) {
     const m = methodSchema.parse(method);
     const ch = await readChallenge();
     if (!ch || ch.kind !== "SETUP" || ch.confirmed) throw new AppError("La verificación ha caducado. Vuelve a entrar.");
-    return startMethod(ch.id, ch.user, m);
+    const started = await startMethod(ch.id, ch.user, m);
+    // App nueva con email disponible: también se pide un código enviado al email, para que quien solo tenga
+    // la contraseña (filtrada) no pueda registrar su propia app en una cuenta que aún no tenía segundo paso.
+    if (m === "TOTP" && emailEnabled()) {
+      await sendEmailCode({ id: ch.id }, ch.user);
+      return { ...started, emailCodeSent: true };
+    }
+    return started;
   });
 }
 
 /** Comprueba el primer código del método elegido, lo deja activado y devuelve los códigos de recuperación (se ven una sola vez). */
-export async function confirmSetup(code: string) {
+export async function confirmSetup(code: string, emailCode?: string) {
   return runAction({ name: "auth.confirmSetup", args: [] }, async () => {
     await ipLimit();
     const ch = await readChallenge();
@@ -100,6 +106,9 @@ export async function confirmSetup(code: string) {
     const result = await checkCode(ch, String(code));
     if (result === "locked") throw new AppError("Demasiados intentos. Vuelve a introducir tu contraseña.");
     if (result === "wrong") throw new AppError("Código incorrecto o caducado.");
+    if (ch.method === "TOTP" && emailEnabled() && !(await verifyEmailCode(ch, String(emailCode ?? "").replace(/\s/g, "")))) {
+      throw new AppError("El código del email no es correcto o ha caducado.");
+    }
     const codes = await commitEnrollment(ch.userId, ch.method, ch.pendingSecretEnc);
     await db.loginChallenge.update({ where: { id: ch.id }, data: { confirmed: true, pendingSecretEnc: null } });
     logEvent({ category: "auth", action: "auth.twoFactorEnabled", message: `${ch.user.name} ha activado la verificación en dos pasos (${ch.method})`, userId: ch.userId, userName: ch.user.name, details: { method: ch.method } });

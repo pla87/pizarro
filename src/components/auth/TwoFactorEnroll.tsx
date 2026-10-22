@@ -9,6 +9,8 @@ export interface BeginData {
   method: "TOTP" | "EMAIL";
   secret?: string;
   uri?: string;
+  /** Alta de una app con email disponible: además se ha enviado un código al email que también hay que escribir. */
+  emailCodeSent?: boolean;
 }
 
 interface Props {
@@ -16,7 +18,7 @@ interface Props {
   /** Empieza el método elegido (el servidor genera el secreto o envía el código por email). */
   begin: (method: "TOTP" | "EMAIL") => Promise<Result<BeginData>>;
   /** Comprueba el primer código y activa el método; devuelve los códigos de recuperación. */
-  confirm: (code: string) => Promise<Result<{ codes: string[] }>>;
+  confirm: (code: string, emailCode?: string) => Promise<Result<{ codes: string[] }>>;
   onCodes: (codes: string[]) => void;
   /** Impide elegir método (por ejemplo, mientras falta la contraseña en «Mi perfil»). */
   disabled?: boolean;
@@ -32,6 +34,7 @@ export function TwoFactorEnroll({ emailAvailable, begin, confirm, onCodes, disab
   const [pending, start] = useTransition();
   const [info, setInfo] = useState<BeginData | null>(null);
   const [code, setCode] = useState("");
+  const [emailCode, setEmailCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
@@ -42,6 +45,7 @@ export function TwoFactorEnroll({ emailAvailable, begin, confirm, onCodes, disab
       if (!res.ok) return setError(res.error);
       setInfo(res.data);
       setCode("");
+      setEmailCode("");
       setSent(method === "EMAIL");
     });
 
@@ -72,7 +76,7 @@ export function TwoFactorEnroll({ emailAvailable, begin, confirm, onCodes, disab
         e.preventDefault();
         start(async () => {
           setError(null);
-          const res = await confirm(code);
+          const res = await confirm(code, info.emailCodeSent ? emailCode : undefined);
           if (res.ok) onCodes(res.data.codes);
           else setError(res.error);
         });
@@ -104,9 +108,16 @@ export function TwoFactorEnroll({ emailAvailable, begin, confirm, onCodes, disab
         <label className="label" htmlFor="enroll-code">{t("Código de verificación")}</label>
         <input id="enroll-code" className="input" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]*" maxLength={8} required value={code} onChange={(e) => setCode(e.target.value)} />
       </div>
+      {info.emailCodeSent && (
+        <div>
+          <label className="label" htmlFor="enroll-email-code">{t("Código enviado a tu email")}</label>
+          <input id="enroll-email-code" className="input" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]*" maxLength={8} required value={emailCode} onChange={(e) => setEmailCode(e.target.value)} />
+          <p className="mt-1 text-xs text-slate-500">{t("Para confirmar que la cuenta es tuya, escribe también el código que te hemos enviado por email.")}</p>
+        </div>
+      )}
       {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       <div className="flex gap-2">
-        <button className="btn-primary" disabled={pending || code.replace(/\s/g, "").length !== 6}>
+        <button className="btn-primary" disabled={pending || code.replace(/\s/g, "").length !== 6 || (!!info.emailCodeSent && emailCode.replace(/\s/g, "").length !== 6)}>
           {pending && <Loader2 size={16} className="animate-spin" />}
           {t("Activar")}
         </button>
