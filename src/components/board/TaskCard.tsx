@@ -14,9 +14,9 @@ import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard } from "./context";
 
 export function SortableTaskCard({ id }: { id: string }) {
-  const { taskById, dragHandle } = useBoard();
+  const { taskById, dragHandle, filtering } = useBoard();
   const t = useT();
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: filtering });
   const task = taskById.get(id);
   if (!task) return null;
   // En táctil solo arrastra el asa: el resto de la tarjeta deja hacer scroll y abrirla con un toque.

@@ -11,6 +11,7 @@ import { useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
+import { useShortcut } from "./shortcuts";
 import { EvergreenPanel } from "./EvergreenPanel";
 import { SortableTaskCard } from "./TaskCard";
 
@@ -28,6 +29,7 @@ interface Props {
 export function ColumnView({ column, taskIds, evergreenIds = [], index, total, droppableId, mobileHidden }: Props) {
   const { openNewTask, openRelease, selected, setSelectedMany } = useBoard();
   const t = useT();
+  const sc = useShortcut();
   const selectedHere = taskIds.filter((id) => selected.has(id)).length;
   const allSelected = taskIds.length > 0 && selectedHere === taskIds.length;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
@@ -78,7 +80,7 @@ export function ColumnView({ column, taskIds, evergreenIds = [], index, total, d
             className="btn-primary w-full py-1.5"
             onClick={() => openRelease(column.id)}
             disabled={taskIds.length + evergreenIds.length === 0}
-            title={taskIds.length + evergreenIds.length === 0 ? t("No hay tarjetas en esta columna") : undefined}
+            title={taskIds.length + evergreenIds.length === 0 ? t("No hay tarjetas en esta columna") : `${t("Generar Release")} (${sc("Alt+R")})`}
           >
             <Rocket size={15} /> {t("Generar Release")}
           </button>
