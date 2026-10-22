@@ -1,6 +1,69 @@
 {
   "versions": [
     {
+      "version": "1.15.0",
+      "date": "2026-10-22",
+      "releasedAt": "2026-10-22T02:35:24+02:00",
+      "summary": "Atajos de teclado y filtro del tablero, caracteres especiales intactos en las releases, y dos pasadas de revisión con correcciones de seguridad, fiabilidad, accesibilidad y rendimiento",
+      "changes": {
+        "nuevas": [
+          "Atajos de teclado: Alt+N nueva tarea, Alt+Mayús+N varias tareas, / filtrar, ? ver atajos, Alt+P cambiar de proyecto, Alt+Z deshacer en el tablero, Alt+A archivar, Alt+S guardar y cerrar, Alt+R generar release (⌥ en Mac).",
+          "Filtro del tablero por título, tipo, responsable y etiquetas, con recuento «3 de 27».",
+          "Subtareas editables con el lápiz o con Enter/F2, además del doble clic.",
+          "«Cargar más» en Avisos."
+        ],
+        "mejoras": [
+          "Al cerrar «Nueva tarea» con algo escrito se pide confirmación.",
+          "Con un modal abierto, el tabulador no sale al tablero; Escape cierra los menús desplegables.",
+          "Botones de icono más fáciles de tocar en móvil; avisos de error anunciados a lectores de pantalla; visor de imágenes y pestañas de la release accesibles.",
+          "Si una acción del tablero falla por red, se avisa, se revierte solo lo afectado y se recarga.",
+          "El tablero carga más rápido: sin descripciones hasta abrir cada tarea.",
+          "La fecha de los logs incluye el año; «1 resultado» en singular."
+        ],
+        "correcciones": [
+          "Los caracteres como >, < o & escritos con la barra de formato llegaban a la release como &gt;, &lt; o &amp;.",
+          "Seguridad: las contraseñas cambiadas o restablecidas quedaban en claro en los logs; ya no se guardan y se han borrado las existentes.",
+          "Las menciones en un proyecto privado avisaban a su dueño aunque se mencionara a otra persona.",
+          "Varias correcciones de robustez: tareas archivadas no editables, archivado masivo de un solo proyecto, deshacer de releases acotado al proyecto, errores de concurrencia con mensaje claro, soltar un archivo con dos modales abiertos ya no lo sube dos veces."
+        ],
+        "tecnicos": [
+          "Migraciones: índices de avisos y deshacer, y limpieza de contraseñas en logs antiguos.",
+          "Límites de subidas, comentarios, subtareas, documentos de Google y tamaño del ZIP de adjuntos.",
+          "Mantenimiento: borra avisos leídos de más de 90 días; limpieza de memoria de visores de tareas."
+        ]
+      },
+      "en": {
+        "summary": "Keyboard shortcuts and board filter, special characters kept intact in releases, and two review passes with security, reliability, accessibility and performance fixes",
+        "changes": {
+          "nuevas": [
+            "Keyboard shortcuts: Alt+N new task, Alt+Shift+N several tasks, / filter, ? show shortcuts, Alt+P switch project, Alt+Z board undo, Alt+A archive, Alt+S save and close, Alt+R generate release (⌥ on Mac).",
+            "Board filter by title, type, assignee and labels, with a “3 of 27” count.",
+            "Subtasks can be edited with the pencil or Enter/F2, besides double click.",
+            "“Load more” in Notifications."
+          ],
+          "mejoras": [
+            "Closing “New task” with something typed asks for confirmation.",
+            "With a modal open, Tab no longer leaves it; Escape closes dropdown menus.",
+            "Easier-to-tap icon buttons on mobile; error notices announced to screen readers; accessible image viewer and release tabs.",
+            "If a board action fails due to the network, you are told, only the affected cards are reverted and the board reloads.",
+            "The board loads faster: descriptions are fetched when each task is opened.",
+            "Log dates include the year; “1 result” in singular."
+          ],
+          "correcciones": [
+            "Characters such as >, < or & typed with the formatting toolbar reached the release as &gt;, &lt; or &amp;.",
+            "Security: changed or reset passwords were stored in plain text in the logs; they no longer are and existing ones were removed.",
+            "Mentions in a private project notified its owner even when someone else was mentioned.",
+            "Several robustness fixes: archived tasks are not editable, bulk archive within one project, release undo scoped to the project, clear message on concurrency errors, dropping a file with two modals open no longer uploads it twice."
+          ],
+          "tecnicos": [
+            "Migrations: notification and undo indexes, and password scrubbing in old logs.",
+            "Limits on uploads, comments, subtasks, Google documents and release attachment ZIP size.",
+            "Maintenance: deletes read notifications older than 90 days; memory cleanup of task viewers."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.14.0",
       "date": "2026-10-21",
       "releasedAt": "2026-10-21T22:55:11+02:00",

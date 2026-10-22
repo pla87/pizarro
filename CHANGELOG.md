@@ -2,6 +2,39 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.15.0 — 2026-10-22 02:35
+
+Atajos de teclado y filtro del tablero, caracteres especiales intactos en las releases, y dos pasadas de revisión con correcciones de seguridad, fiabilidad, accesibilidad y rendimiento
+
+### Nuevas funcionalidades
+
+- Atajos de teclado: Alt+N nueva tarea, Alt+Mayús+N varias tareas, / filtrar, ? ver atajos, Alt+P cambiar de proyecto, Alt+Z deshacer en el tablero, Alt+A archivar, Alt+S guardar y cerrar, Alt+R generar release (⌥ en Mac).
+- Filtro del tablero por título, tipo, responsable y etiquetas, con recuento «3 de 27».
+- Subtareas editables con el lápiz o con Enter/F2, además del doble clic.
+- «Cargar más» en Avisos.
+
+### Mejoras
+
+- Al cerrar «Nueva tarea» con algo escrito se pide confirmación.
+- Con un modal abierto, el tabulador no sale al tablero; Escape cierra los menús desplegables.
+- Botones de icono más fáciles de tocar en móvil; avisos de error anunciados a lectores de pantalla; visor de imágenes y pestañas de la release accesibles.
+- Si una acción del tablero falla por red, se avisa, se revierte solo lo afectado y se recarga.
+- El tablero carga más rápido: sin descripciones hasta abrir cada tarea.
+- La fecha de los logs incluye el año; «1 resultado» en singular.
+
+### Correcciones
+
+- Los caracteres como >, < o & escritos con la barra de formato llegaban a la release como &gt;, &lt; o &amp;.
+- Seguridad: las contraseñas cambiadas o restablecidas quedaban en claro en los logs; ya no se guardan y se han borrado las existentes.
+- Las menciones en un proyecto privado avisaban a su dueño aunque se mencionara a otra persona.
+- Varias correcciones de robustez: tareas archivadas no editables, archivado masivo de un solo proyecto, deshacer de releases acotado al proyecto, errores de concurrencia con mensaje claro, soltar un archivo con dos modales abiertos ya no lo sube dos veces.
+
+### Cambios técnicos / DB
+
+- Migraciones: índices de avisos y deshacer, y limpieza de contraseñas en logs antiguos.
+- Límites de subidas, comentarios, subtareas, documentos de Google y tamaño del ZIP de adjuntos.
+- Mantenimiento: borra avisos leídos de más de 90 días; limpieza de memoria de visores de tareas.
+
 ## v1.14.0 — 2026-10-21 22:55
 
 Etiquetas de tipo legibles en cualquier color, foco y logo con el color del tema, plantillas de tipo con Markdown y correcciones de borradores, deshacer en inglés y la tecla Supr en listas
