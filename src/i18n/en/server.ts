@@ -217,4 +217,8 @@ export const server: Record<string, string> = {
   "{name} es el único miembro de {count}: confirma que se borren.": "{name} is the only member of {count}: confirm that they will be deleted.",
   "Solo los proyectos privados tienen miembros propios.": "Only private projects have their own members.",
   "Eres el último miembro: no puedes salir del proyecto, bórralo si ya no lo necesitas.": "You are the last member: you cannot leave the project, delete it if you no longer need it.",
+  "Demasiadas conexiones abiertas.": "Too many open connections.",
+  "Cuota de adjuntos del proyecto superada: {used} MB usados de {limit} MB.": "Project attachment quota exceeded: {used} MB used of {limit} MB.",
+  "Cuota total de adjuntos del servidor superada: {used} MB usados de {limit} MB.": "Total server attachment quota exceeded: {used} MB used of {limit} MB.",
+  "Las copias de seguridad están desactivadas: falta una BACKUP_KEY válida.": "Backups are disabled: a valid BACKUP_KEY is missing.",
 };

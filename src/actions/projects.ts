@@ -17,6 +17,7 @@ import { purgeProject } from "@/lib/project-delete";
 import * as v from "@/lib/validation";
 import { dateToIso, isoToDate } from "@/lib/dates";
 import type { LabelOption } from "@/lib/types";
+import { revokeProject } from "@/lib/revoke";
 
 /** Crea columnas, tipos propios, tipos generales ocultos y etiquetas de una plantilla en el proyecto (dentro de la transacción). */
 async function applyTemplate(tx: Prisma.TransactionClient, projectId: string, template: TemplateData, locale: "es" | "en") {
@@ -118,6 +119,7 @@ export async function setProjectVisibility(projectId: string, mode: "PUBLIC" | "
       // Al hacerlo privado, las tarjetas asignadas a quien ya no tiene acceso quedan sin asignar.
       ...(visibility === "PRIVATE" ? [db.task.updateMany({ where: { projectId: id, assigneeId: { notIn: finalMembers } }, data: { assigneeId: null } })] : []),
     ]);
+    revokeProject(id);
     describeAction(`Cambió la visibilidad del proyecto a ${visibility === "PUBLIC" ? "pública" : visibility === "RESTRICTED" ? "usuarios seleccionados" : "privada"}`);
     revalidatePath("/", "layout");
   });

@@ -60,3 +60,23 @@ function sweepViewers(now: number): void {
     if (users.size === 0) viewers.delete(taskId);
   }
 }
+
+/** Quita a un usuario de la presencia (pierde acceso): deja de aparecer en cabeceras y diálogos. */
+export function dropUserPresence(userId: string, projectId?: string): void {
+  for (const [pid, users] of state) {
+    if (projectId && pid !== projectId) continue;
+    users.delete(userId);
+    if (users.size === 0) state.delete(pid);
+  }
+  if (!projectId) {
+    for (const [taskId, users] of viewers) {
+      users.delete(userId);
+      if (users.size === 0) viewers.delete(taskId);
+    }
+  }
+}
+
+/** Vacía la presencia de un proyecto (cambia su visibilidad o se borra); reaparece quien siga actuando. */
+export function dropProjectPresence(projectId: string): void {
+  state.delete(projectId);
+}

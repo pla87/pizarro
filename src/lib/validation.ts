@@ -1,3 +1,4 @@
+import "./zod-config";
 import { z } from "zod";
 import { COLUMN_ROLES, HEX_COLOR_RE, MAX_DESCRIPTION, MAX_TITLE, PALETTE } from "./constants";
 

@@ -1,4 +1,5 @@
 import "server-only";
+import { revokeUser } from "./revoke";
 import { db } from "./db";
 import { sendPasswordChangedMail } from "./auth-mail";
 import { emailEnabled, sendMailInBackground } from "./mail";
@@ -14,6 +15,8 @@ export async function applyNewPassword(userId: string, passwordHash: string, opt
     db.session.deleteMany({ where: { userId } }),
     db.authToken.deleteMany({ where: { userId, purpose: { in: ["PASSWORD_RESET", "PASSWORD_CHANGE"] } } }),
   ]);
+  // Sesiones borradas: también se cortan sus canales en vivo (SSE, presencia).
+  revokeUser(userId);
   if (opts.notice !== false && emailEnabled()) {
     sendMailInBackground("aviso de contraseña cambiada", () => sendPasswordChangedMail(user));
   }

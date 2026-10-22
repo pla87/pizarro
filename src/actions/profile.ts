@@ -16,6 +16,7 @@ import { createSession, currentSessionId, requireUser } from "@/lib/session";
 import { disconnectGoogleAccount } from "@/lib/google";
 import { rateLimit } from "@/lib/rate-limit";
 import * as v from "@/lib/validation";
+import { revokeSession as cutSessionStreams } from "@/lib/revoke";
 
 export async function updateProfileName(name: string) {
   return runAction({ name: "profile.updateProfileName", args: [name] }, async () => {
@@ -192,7 +193,9 @@ export async function revokeSession(sessionId: string) {
     const user = await requireUser();
     const id = z.string().min(1).max(100).parse(sessionId);
     if (id === (await currentSessionId())) throw new AppError("Esta es tu sesión actual: usa «Cerrar sesión».");
-    await db.session.deleteMany({ where: { id, userId: user.id } });
+    const { count } = await db.session.deleteMany({ where: { id, userId: user.id } });
+    // También se corta su canal en vivo del tablero.
+    if (count) cutSessionStreams(id);
     revalidatePath("/settings");
   });
 }
@@ -202,7 +205,10 @@ export async function revokeOtherSessions() {
   return runAction({ name: "profile.revokeOtherSessions", args: [] }, async () => {
     const user = await requireUser();
     const current = await currentSessionId();
-    await db.session.deleteMany({ where: { userId: user.id, ...(current ? { id: { not: current } } : {}) } });
+    const where = { userId: user.id, ...(current ? { id: { not: current } } : {}) };
+    const others = await db.session.findMany({ where, select: { id: true } });
+    await db.session.deleteMany({ where });
+    for (const s of others) cutSessionStreams(s.id);
     revalidatePath("/settings");
   });
 }

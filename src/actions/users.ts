@@ -17,6 +17,7 @@ import { discardUndo } from "@/lib/undo";
 import { requireAdmin } from "@/lib/session";
 import * as v from "@/lib/validation";
 import { getT } from "@/i18n/server";
+import { revokeUser } from "@/lib/revoke";
 
 const createSchema = z.object({
   name: v.name,
@@ -95,6 +96,8 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
     // Aviso a la dirección antigua: si alguien se hiciera con la cuenta, el dueño se entera.
     if (data.email !== user.email && emailEnabled()) {
       sendMailInBackground("aviso de email cambiado por un administrador", () => sendEmailChangedMail(user, user.email, data.email));
+    // Cualquier canal en vivo (SSE, presencia) del usuario se corta si se ha desactivado o ha cambiado de rol.
+    if (data.active !== user.active || data.role !== user.role) revokeUser(user.id);
     }
     revalidatePath("/admin/users");
   });
@@ -114,6 +117,7 @@ export async function forcePasswordChange(userId: string) {
       db.user.update({ where: { id: user.id }, data: { mustChangePassword: true } }),
       db.session.deleteMany({ where: { userId: user.id } }),
     ]);
+    revokeUser(user.id);
     if (!emailEnabled()) return { emailed: false };
     try {
       const token = await issueAuthToken(user.id, "PASSWORD_RESET");
@@ -150,6 +154,7 @@ export async function deleteUser(userId: string, confirmPrivate: boolean) {
     for (const p of privates) await purgeProject(p.id);
     await discardUndo({ userId: user.id });
     await db.user.delete({ where: { id: user.id } });
+    revokeUser(user.id);
     describeAction(
       privates.length
         ? `Borró el usuario «${user.name}» y ${privates.length === 1 ? "su proyecto privado" : `sus ${privates.length} proyectos privados`}`

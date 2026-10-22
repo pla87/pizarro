@@ -6,6 +6,7 @@ import { cache } from "react";
 import { db } from "./db";
 import { AppError, forbidden } from "./errors";
 import { logEvent } from "./log";
+import { revokeSession } from "./revoke";
 import { requestContext } from "./request-context";
 import { clientIp } from "./request";
 import { PASSWORD_CHANGE_COOKIE, SESSION_MAX_AGE_SECONDS, sessionCookieName, sessionCookieOptions } from "./session-config";
@@ -70,7 +71,11 @@ export async function createSession(userId: string, opts: { mustChangePassword?:
 export async function destroySession(): Promise<void> {
   const store = await cookies();
   const token = store.get(sessionCookieName())?.value;
-  if (token) await db.session.deleteMany({ where: { id: sessionIdFromToken(token) } });
+  if (token && token.length <= 100) {
+    const id = sessionIdFromToken(token);
+    await db.session.deleteMany({ where: { id } });
+    revokeSession(id);
+  }
   store.delete(sessionCookieName());
   store.delete(PASSWORD_CHANGE_COOKIE);
 }
@@ -184,3 +189,4 @@ export async function requireAdmin(): Promise<CurrentUser> {
   if (user.role !== "ADMIN") throw forbidden();
   return user;
 }
+
