@@ -8,7 +8,7 @@ import { publishChange } from "./realtime";
 import { saveUndo, type UndoOp } from "./undo";
 import { encodeLabel, type Label } from "./undo-label";
 import { requestContext } from "./request-context";
-import { getCurrentUser } from "./session";
+import { getCurrentUser, getPendingUser } from "./session";
 import { toLocale, translate } from "@/i18n/core";
 
 type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string };
@@ -79,7 +79,7 @@ async function recordUndo(name: string, projectId: string, message: string | und
 
 async function translateError(message: string): Promise<string> {
   try {
-    const user = await getCurrentUser();
+    const user = (await getCurrentUser()) ?? (await getPendingUser());
     return translate(toLocale(user?.locale), message);
   } catch {
     return message;

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { sessionCookieName, sessionCookieOptions } from "@/lib/session-config";
+import { PASSWORD_CHANGE_COOKIE, sessionCookieName, sessionCookieOptions } from "@/lib/session-config";
 
 // Comprobación rápida (sin BD) de que existe la cookie; la validación real se hace
 // en el servidor. También renueva la caducidad de la cookie al navegar.
@@ -12,6 +12,16 @@ export function proxy(req: NextRequest) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.search = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname + search)}`;
+    return NextResponse.redirect(url);
+  }
+
+  // Con el cambio de contraseña pendiente solo se puede ver esa pantalla (y usar sus acciones); el servidor lo
+  // vuelve a comprobar en cada página, acción y ruta API.
+  if (req.cookies.get(PASSWORD_CHANGE_COOKIE)?.value && pathname !== "/change-password") {
+    if (pathname.startsWith("/api/") || req.method !== "GET") return NextResponse.json({ error: "Debes elegir una contraseña nueva" }, { status: 403 });
+    const url = req.nextUrl.clone();
+    url.pathname = "/change-password";
+    url.search = "";
     return NextResponse.redirect(url);
   }
 
@@ -30,5 +40,5 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!login|api/health|_next/static|_next/image|favicon.ico|icon.svg|icons/|apple-touch-icon.png|sw.js|manifest.webmanifest).*)"],
+  matcher: ["/((?!login|forgot-password|reset/|confirm/|api/health|_next/static|_next/image|favicon.ico|icon.svg|icons/|apple-touch-icon.png|sw.js|manifest.webmanifest).*)"],
 };

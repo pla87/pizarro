@@ -7,36 +7,57 @@ import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
 import { AppError, notFound } from "@/lib/errors";
 import { MAX_USERS } from "@/lib/limits";
-import { hashPassword, MIN_PASSWORD } from "@/lib/password";
+import { randomBytes } from "node:crypto";
+import { sendEmailChangedMail, sendInviteMail, sendPasswordResetMail } from "@/lib/auth-mail";
+import { issueAuthToken } from "@/lib/auth-token";
+import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
+import { hashPassword, passwordSchema } from "@/lib/password";
 import { purgeProject } from "@/lib/project-delete";
 import { discardUndo } from "@/lib/undo";
 import { requireAdmin } from "@/lib/session";
 import * as v from "@/lib/validation";
 import { getT } from "@/i18n/server";
 
-const password = z.string().min(MIN_PASSWORD, "La contraseña debe tener al menos 10 caracteres.").max(200);
-
 const createSchema = z.object({
   name: v.name,
   email: v.email,
-  password,
+  /** Solo se pide sin email configurado; con email, la persona elige la suya desde la invitación. */
+  password: z.string().max(200).optional(),
   role: z.enum(["ADMIN", "MEMBER"]),
 });
 
+/**
+ * Alta de usuario. Con email configurado se envía una invitación (72 h) para que elija su contraseña;
+ * sin email, el admin escribe una clave inicial y la persona está obligada a cambiarla al entrar.
+ * En ningún caso el admin llega a conocer la contraseña definitiva.
+ */
 export async function createUser(input: z.input<typeof createSchema>) {
-  return runAction({ name: "users.createUser", args: [input] }, async () => {
-    await requireAdmin();
+  return runAction({ name: "users.createUser", args: [{ name: input.name, email: input.email, role: input.role }] }, async () => {
+    const admin = await requireAdmin();
     const data = createSchema.parse(input);
+    const invite = emailEnabled();
+    const initial = invite ? null : passwordSchema("La contraseña debe tener al menos 10 caracteres.").parse(data.password ?? "");
     const active = await db.user.count({ where: { active: true } });
     if (active >= MAX_USERS) {
       const t = await getT();
       throw new AppError(t("Se ha alcanzado el máximo de {n} usuarios activos.", { n: MAX_USERS }));
     }
     if (await db.user.count({ where: { email: data.email } })) throw new AppError("Ya existe un usuario con ese email.");
-    await db.user.create({
-      data: { name: data.name, email: data.email, role: data.role, passwordHash: await hashPassword(data.password) },
+    // Con invitación la contraseña provisional es aleatoria y nadie la conoce.
+    const created = await db.user.create({
+      data: { name: data.name, email: data.email, role: data.role, mustChangePassword: true, passwordHash: await hashPassword(initial ?? randomBytes(32).toString("base64url")) },
+      select: { id: true, name: true, email: true, locale: true },
     });
     revalidatePath("/admin/users");
+    if (!invite) return { invited: false };
+    try {
+      const token = await issueAuthToken(created.id, "INVITE");
+      await sendInviteMail(created, `${appUrl()}/reset/${token}`, admin.name);
+    } catch (err) {
+      console.error("[users] invitación", err);
+      throw new AppError("Usuario creado, pero no se pudo enviar la invitación. Usa «Forzar cambio de contraseña» para reenviarla.");
+    }
+    return { invited: true };
   });
 }
 
@@ -51,7 +72,7 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
   return runAction({ name: "users.updateUser", args: [userId, input] }, async () => {
     const admin = await requireAdmin();
     const data = updateSchema.parse(input);
-    const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, role: true, active: true } });
+    const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, name: true, email: true, locale: true, role: true, active: true } });
     if (!user) throw notFound();
     if (user.id === admin.id && (data.role !== "ADMIN" || !data.active)) {
       throw new AppError("No puedes quitarte el rol de administrador ni desactivarte a ti mismo.");
@@ -71,20 +92,37 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
       // Al desactivar o cambiar de rol se cierran sus sesiones.
       ...(data.active !== user.active || data.role !== user.role ? [db.session.deleteMany({ where: { userId: user.id } })] : []),
     ]);
+    // Aviso a la dirección antigua: si alguien se hiciera con la cuenta, el dueño se entera.
+    if (data.email !== user.email && emailEnabled()) {
+      sendMailInBackground("aviso de email cambiado por un administrador", () => sendEmailChangedMail(user, user.email, data.email));
+    }
     revalidatePath("/admin/users");
   });
 }
 
-export async function resetUserPassword(userId: string, newPassword: string) {
-  return runAction({ name: "users.resetUserPassword", args: [userId] }, async () => {
-    await requireAdmin();
-    const pw = password.parse(newPassword);
-    const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true } });
+/**
+ * «Forzar cambio de contraseña»: el admin no escribe ninguna clave. La persona queda obligada a elegir una
+ * nueva, se cierran sus sesiones y, con email configurado, recibe un enlace de restablecimiento (30 min).
+ */
+export async function forcePasswordChange(userId: string) {
+  return runAction({ name: "users.forcePasswordChange", args: [userId] }, async () => {
+    const admin = await requireAdmin();
+    const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, name: true, email: true, locale: true } });
     if (!user) throw notFound();
+    if (user.id === admin.id) throw new AppError("Para cambiar tu propia contraseña usa «Mi perfil».");
     await db.$transaction([
-      db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(pw) } }),
+      db.user.update({ where: { id: user.id }, data: { mustChangePassword: true } }),
       db.session.deleteMany({ where: { userId: user.id } }),
     ]);
+    if (!emailEnabled()) return { emailed: false };
+    try {
+      const token = await issueAuthToken(user.id, "PASSWORD_RESET");
+      await sendPasswordResetMail(user, `${appUrl()}/reset/${token}`);
+    } catch (err) {
+      console.error("[users] enlace de restablecimiento", err);
+      throw new AppError("Se ha forzado el cambio, pero no se pudo enviar el email con el enlace.");
+    }
+    return { emailed: true };
   });
 }
 

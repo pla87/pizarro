@@ -1,9 +1,9 @@
 import "server-only";
 import { after } from "next/server";
 import type { Prisma } from "@/generated/prisma/client";
-import nodemailer from "nodemailer";
 import { makeT, toLocale, type T } from "../i18n/core";
 import { db } from "./db";
+import { appUrl, emailEnabled, escapeHtml, sendMail } from "./mail";
 import { logEvent } from "./log";
 import { excerpt as makeExcerpt } from "./mentions";
 import { rateLimit } from "./rate-limit";
@@ -12,33 +12,11 @@ import { rateLimit } from "./rate-limit";
 // WhatsApp (Cloud API de Meta). Los envíos externos se hacen tras responder al
 // usuario (after), para que mencionar a alguien no añada espera.
 
-export function emailEnabled(): boolean {
-  return Boolean(process.env.SMTP_HOST && process.env.SMTP_FROM);
-}
+export { emailEnabled };
 
 export function whatsappEnabled(): boolean {
   return Boolean(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_TEMPLATE_NAME);
 }
-
-let transport: ReturnType<typeof nodemailer.createTransport> | null = null;
-function mailer() {
-  const port = Number(process.env.SMTP_PORT ?? 465);
-  transport ??= nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port,
-    secure: port === 465,
-    auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
-    connectionTimeout: 10_000,
-    socketTimeout: 15_000,
-  });
-  return transport;
-}
-
-function appUrl(): string {
-  return (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
-}
-
-const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
 interface MentionMessage {
   actorName: string;
@@ -118,7 +96,7 @@ async function deliver(notificationIds: string[]): Promise<void> {
     if (emailEnabled() && n.user.notifyEmail) {
       const t0 = performance.now();
       try {
-        await mailer().sendMail({ from: process.env.SMTP_FROM, to: n.user.email, ...mentionEmail(msg, t) });
+        await sendMail({ to: n.user.email, ...mentionEmail(msg, t) });
         update.emailSentAt = new Date();
         logEvent({ ...base, action: "notify.email", message: `Email de mención enviado a ${n.user.name}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId: n.task.id, to: n.user.email } });
       } catch (err) {

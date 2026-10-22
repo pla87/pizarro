@@ -4,7 +4,7 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 import { KeyRound, Pencil, Trash2, TriangleAlert, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { createUser, deleteUser, resetUserPassword, updateUser } from "@/actions/users";
+import { createUser, deleteUser, forcePasswordChange, updateUser } from "@/actions/users";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
 import { Modal } from "@/components/ui/Modal";
@@ -18,10 +18,11 @@ interface UserRow {
   email: string;
   role: Role;
   active: boolean;
+  mustChangePassword: boolean;
   privateProjects: number;
 }
 
-export function UsersAdmin({ users, meId, maxUsers }: { users: UserRow[]; meId: string; maxUsers: number }) {
+export function UsersAdmin({ users, meId, maxUsers, emailAvailable }: { users: UserRow[]; meId: string; maxUsers: number; emailAvailable: boolean }) {
   const t = useT();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
@@ -54,23 +55,26 @@ export function UsersAdmin({ users, meId, maxUsers }: { users: UserRow[]; meId: 
               {u.role === "ADMIN" ? t("Admin") : t("Miembro")}
             </span>
             {!u.active && <span className="badge bg-slate-100 text-slate-500 ring-slate-400/20">{t("Inactivo")}</span>}
+            {u.mustChangePassword && <span className="badge bg-amber-50 text-amber-700 ring-amber-500/20" title={t("Tiene que elegir una contraseña nueva al entrar")}>{t("Contraseña pendiente")}</span>}
             <button className="btn-icon" onClick={() => setEditing(u)} aria-label={t("Editar {name}", { name: u.name })}><Pencil size={16} /></button>
-            <button className="btn-icon" onClick={() => setResetting(u)} aria-label={t("Restablecer contraseña de {name}", { name: u.name })}><KeyRound size={16} /></button>
+            {u.id !== meId && (
+              <button className="btn-icon" onClick={() => setResetting(u)} aria-label={t("Forzar cambio de contraseña de {name}", { name: u.name })} title={t("Forzar cambio de contraseña")}><KeyRound size={16} /></button>
+            )}
             {u.id !== meId && (
               <button className="btn-icon text-red-600 dark:text-red-400" onClick={() => setDeleting(u)} aria-label={t("Borrar {name}", { name: u.name })}><Trash2 size={16} /></button>
             )}
           </li>
         ))}
       </ul>
-      {creating && <UserForm onClose={() => setCreating(false)} />}
+      {creating && <UserForm emailAvailable={emailAvailable} onClose={() => setCreating(false)} />}
       {editing && <UserForm user={editing} isMe={editing.id === meId} onClose={() => setEditing(null)} />}
-      {resetting && <ResetPassword user={resetting} onClose={() => setResetting(null)} />}
+      {resetting && <ForcePasswordChange user={resetting} emailAvailable={emailAvailable} onClose={() => setResetting(null)} />}
       {deleting && <DeleteUser user={deleting} onClose={() => setDeleting(null)} />}
     </div>
   );
 }
 
-function UserForm({ user, isMe, onClose }: { user?: UserRow; isMe?: boolean; onClose: () => void }) {
+function UserForm({ user, isMe, emailAvailable, onClose }: { user?: UserRow; isMe?: boolean; emailAvailable?: boolean; onClose: () => void }) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
@@ -84,9 +88,9 @@ function UserForm({ user, isMe, onClose }: { user?: UserRow; isMe?: boolean; onC
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     start(async () => {
-      const res = user ? await updateUser(user.id, { name, email, role, active }) : await createUser({ name, email, role, password });
+      const res = user ? await updateUser(user.id, { name, email, role, active }) : await createUser({ name, email, role, password: emailAvailable ? undefined : password });
       if (!res.ok) return toast(res.error, "error");
-      toast(user ? t("Usuario actualizado") : t("Usuario creado"));
+      toast(user ? t("Usuario actualizado") : emailAvailable ? t("Usuario creado: le hemos enviado una invitación por email") : t("Usuario creado"));
       router.refresh();
       onClose();
     });
@@ -103,11 +107,22 @@ function UserForm({ user, isMe, onClose }: { user?: UserRow; isMe?: boolean; onC
           <label className="label" htmlFor="u-email">Email</label>
           <input id="u-email" type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={200} required autoComplete="off" />
         </div>
-        {!user && (
+        {!user && emailAvailable && (
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+            {t("Recibirá un email con un enlace (válido 72 horas) para elegir su propia contraseña. Tú no la llegas a conocer.")}
+          </p>
+        )}
+        {!user && !emailAvailable && (
           <div>
             <label className="label" htmlFor="u-pass">{t("Contraseña inicial (mín. 10)")}</label>
             <PasswordInput id="u-pass" className="input" value={password} onChange={(e) => setPassword(e.target.value)} minLength={10} required autoComplete="new-password" />
+            <p className="mt-1 text-xs text-slate-500">
+              {t("El envío de emails no está configurado: dale esta clave por otro medio. Al entrar tendrá que elegir una contraseña nueva, así que tú no llegarás a conocer la definitiva.")}
+            </p>
           </div>
+        )}
+        {user && user.email !== email && emailAvailable && (
+          <p className="text-xs text-amber-700 dark:text-amber-300">{t("Se avisará por email a la dirección antigua del cambio.")}</p>
         )}
         <div>
           <label className="label" htmlFor="u-role">{t("Rol")}</label>
@@ -131,32 +146,35 @@ function UserForm({ user, isMe, onClose }: { user?: UserRow; isMe?: boolean; onC
   );
 }
 
-function ResetPassword({ user, onClose }: { user: UserRow; onClose: () => void }) {
+function ForcePasswordChange({ user, emailAvailable, onClose }: { user: UserRow; emailAvailable: boolean; onClose: () => void }) {
   const t = useT();
+  const router = useRouter();
   const toast = useToast();
   const [pending, start] = useTransition();
-  const [password, setPassword] = useState("");
   return (
-    <Modal open onClose={onClose} title={t("Restablecer contraseña de {name}", { name: user.name })} size="sm">
+    <Modal open onClose={onClose} title={t("Forzar cambio de contraseña de {name}", { name: user.name })} size="sm">
       <form
-        className="space-y-3"
+        className="space-y-3 text-sm"
         onSubmit={(e) => {
           e.preventDefault();
           start(async () => {
-            const res = await resetUserPassword(user.id, password);
+            const res = await forcePasswordChange(user.id);
             if (!res.ok) return toast(res.error, "error");
-            toast(t("Contraseña restablecida; se han cerrado sus sesiones"));
+            toast(res.data.emailed ? t("Cambio forzado: se han cerrado sus sesiones y le hemos enviado un enlace por email") : t("Cambio forzado: se han cerrado sus sesiones"));
+            router.refresh();
             onClose();
           });
         }}
       >
-        <div>
-          <label className="label" htmlFor="r-pass">{t("Nueva contraseña (mín. 10)")}</label>
-          <PasswordInput id="r-pass" className="input" value={password} onChange={(e) => setPassword(e.target.value)} minLength={10} required autoComplete="new-password" data-autofocus />
-        </div>
+        <p>{t("Se cerrarán todas sus sesiones y tendrá que elegir una contraseña nueva la próxima vez que entre. Tú no escribes ninguna contraseña.")}</p>
+        <p className="text-slate-500">
+          {emailAvailable
+            ? t("Le enviaremos un enlace por email (válido 30 minutos) para elegirla.")
+            : t("El envío de emails no está configurado: entrará con su contraseña actual y, antes de usar la app, se le pedirá una nueva.")}
+        </p>
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
-          <button className="btn-primary" disabled={pending}>{t("Restablecer")}</button>
+          <button className="btn-primary" disabled={pending}>{t("Forzar cambio")}</button>
         </div>
       </form>
     </Modal>
