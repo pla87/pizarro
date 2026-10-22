@@ -26,6 +26,7 @@ const GROUPS: { title: string; items: { keys: string; label: string }[] }[] = [
       { keys: "Alt+S", label: "Guardar y cerrar (en una tarea nueva, crearla)" },
       { keys: "Alt+A", label: "Archivar la tarea" },
       { keys: "Ctrl+Enter", label: "Crear la tarea, guardar la descripción o enviar el comentario" },
+      { keys: "Alt+F10", label: "Ir a la barra de formato de la descripción (flechas para moverse, Esc para volver)" },
       { keys: "Esc", label: "Cerrar" },
     ],
   },

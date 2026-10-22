@@ -200,7 +200,7 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: strin
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <FolderKanban size={16} className="shrink-0 text-brand-600" />
+        <FolderKanban size={16} className="shrink-0 text-brand-600 dark:text-brand-300" />
         <span className="min-w-0 flex-1 truncate font-medium">{current?.name ?? t("Selecciona proyecto")}</span>
         {current?.isPrivate && <PrivateIcon />}
         <ChevronsUpDown size={15} className="shrink-0 text-slate-400" />
@@ -230,7 +230,7 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: strin
             ))}
             <button
               type="button"
-              className="mt-1 flex w-full items-center gap-2 rounded-md border-t border-slate-200 px-2.5 py-2 text-sm text-brand-600 hover:bg-slate-100 dark:border-slate-800 dark:hover:bg-slate-800"
+              className="mt-1 flex w-full items-center gap-2 rounded-md border-t border-slate-200 px-2.5 py-2 text-sm text-brand-600 dark:text-brand-300 hover:bg-slate-100 dark:border-slate-800 dark:hover:bg-slate-800"
               onClick={() => {
                 setOpen(false);
                 setCreating(true);

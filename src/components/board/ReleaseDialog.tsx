@@ -203,7 +203,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
       size="xl"
       title={
         <span className="flex items-center gap-2">
-          <Rocket size={18} className="text-brand-600" /> {t("Generar release")}
+          <Rocket size={18} className="text-brand-600 dark:text-brand-300" /> {t("Generar release")}
           <span className="text-xs font-normal text-slate-500">· {step === "select" ? t("Paso 1 de 2: tareas") : t("Paso 2 de 2: revisar y exportar")}</span>
         </span>
       }
@@ -211,7 +211,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
         step === "select" ? (
           <>
             <span className="mr-auto text-xs text-slate-500">
-              {t("Cabecera y pie salen de")} <Link className="text-brand-600 hover:underline" href="/settings">{t("tus plantillas")}</Link>.
+              {t("Cabecera y pie salen de")} <Link className="text-brand-600 dark:text-brand-300 hover:underline" href="/settings">{t("tus plantillas")}</Link>.
             </span>
             <button className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
             <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || loadingDetails}>

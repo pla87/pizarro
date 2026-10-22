@@ -9,7 +9,8 @@ import { useT } from "@/i18n/client";
 import { cn } from "./ui/cn";
 import { useToast } from "./ui/Toast";
 import { isTypingTarget, useShortcut } from "./board/shortcuts";
-import { UNDONE_EVENT, useUndoTask } from "./undo-context";
+import { UNDONE_EVENT, useBoardModalOpen, useUndoTask } from "./undo-context";
+import { useFloatingRect } from "./ui/useFloatingRect";
 
 /**
  * Deshace la última acción del usuario en el proyecto (hasta 10 seguidas). Con una tarea abierta,
@@ -24,7 +25,6 @@ export function UndoButton({ projectId, shortcut = false, className }: { project
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const ref = useRef<HTMLButtonElement>(null);
-  const [rect, setRect] = useState<DOMRect | null>(null);
 
   // `scope`: la tarea abierta (por defecto) o null para deshacer en todo el tablero (Alt+Z).
   const undo = useCallback(async (scope: string | null = taskId) => {
@@ -66,21 +66,10 @@ export function UndoButton({ projectId, shortcut = false, className }: { project
     return () => document.removeEventListener("keydown", onKey);
   }, [shortcut, undo, taskId]);
 
-  // Con una tarea abierta, el fondo del modal taparía el botón: se dibuja una copia encima, en el mismo sitio.
-  useEffect(() => {
-    if (!taskId) return;
-    // Solo en escritorio: en móvil el modal ocupa la pantalla y la copia taparía su cabecera.
-    const measure = () => {
-      const r = ref.current?.getBoundingClientRect();
-      setRect(r && r.width > 0 && window.matchMedia("(min-width: 1024px)").matches ? r : null);
-    };
-    const frame = requestAnimationFrame(measure);
-    window.addEventListener("resize", measure);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("resize", measure);
-    };
-  }, [taskId]);
+  // Con un diálogo de tarea abierto (existente o nueva), el fondo del modal taparía el botón: se dibuja una copia encima, en el mismo sitio.
+  const boardModal = useBoardModalOpen();
+  const floating = !!taskId || boardModal;
+  const rect = useFloatingRect(ref, floating);
 
   const title = taskId ? t("Deshacer tu última acción en esta tarea") : shortcut ? t("Deshacer tu última acción en este tablero (hasta 10) · {keys}", { keys: `${sc("Ctrl+Z")}, ${sc("Alt+Z")}` }) : t("Deshacer tu última acción en este tablero (hasta 10)");
   const icon = busy ? <Loader2 size={18} className="animate-spin" /> : <Undo2 size={18} />;
@@ -89,7 +78,7 @@ export function UndoButton({ projectId, shortcut = false, className }: { project
       <button ref={ref} type="button" className={cn("btn-icon", className)} onClick={() => void undo()} disabled={busy} title={title} aria-label={t("Deshacer la última acción")}>
         {icon}
       </button>
-      {taskId && rect &&
+      {floating && rect &&
         createPortal(
           <button
             type="button"

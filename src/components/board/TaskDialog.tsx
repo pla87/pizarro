@@ -52,6 +52,10 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   const [title, setTitle] = useState(draft?.title ?? task.title);
   // Descripción en edición (la comunica el editor): para el botón Guardar y el borrador local.
   const descDraft = useRef<string | null>(null);
+  // Texto vivo de la descripción abierta (sin el retardo del borrador): lo que Guardar debe enviar.
+  const descLive = useRef<string | null>(null);
+  // Las subtareas (nueva a medio escribir, renombrado en curso) se guardan con este callback al pulsar Guardar.
+  const flushSubtasks = useRef<(() => Promise<boolean>) | null>(null);
   const [draftUsed, setDraftUsed] = useState(false);
   // Borrador local cada 5 s: al volver tras cerrar la página, la tarea se reabre con lo escrito.
   // Solo hay borrador si queda algo sin guardar; si no, se borra (no se reabre una tarea ya cerrada).
@@ -137,21 +141,28 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     };
   }, [task.id]);
 
-  /** Botón Guardar (móvil): guarda título y descripción tal como estén escritos y cierra. */
+  /**
+   * Botón Guardar / Alt+S: guarda TODO lo que se esté editando aunque aún no se haya confirmado (título,
+   * descripción abierta, enlace, subtarea nueva o en renombrado) y cierra. Si algo falla, no cierra.
+   */
   const saveAndClose = async () => {
     const value = title.trim();
-    const patch: { title?: string; description?: string } = {};
+    const patch: { title?: string; description?: string; linkUrl?: string } = {};
     if (value && value !== task.title) patch.title = value;
-    const desc = descDraft.current;
+    const desc = descLive.current;
     if (desc !== null && desc !== (detail?.description ?? "")) patch.description = desc;
-    if (patch.title !== undefined || patch.description !== undefined) {
+    const linkValue = link.trim();
+    if (linkValue !== (task.linkUrl ?? "")) patch.linkUrl = linkValue;
+    if (patch.title !== undefined || patch.description !== undefined || patch.linkUrl !== undefined) {
       if (patch.description !== undefined) setDetail((d) => (d ? { ...d, description: desc! } : d));
       const ok = await save(patch, {
         ...(patch.title !== undefined ? { title: patch.title } : {}),
         ...(patch.description !== undefined ? { hasDescription: patch.description.trim().length > 0 } : {}),
+        ...(patch.linkUrl !== undefined ? { linkUrl: patch.linkUrl || null } : {}),
       });
       if (!ok) return;
     }
+    if (flushSubtasks.current && !(await flushSubtasks.current())) return;
     onClose();
   };
 
@@ -341,7 +352,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
             }}
             rows={1}
             maxLength={200}
-            className="field-sizing-content min-w-0 flex-1 resize-none rounded-md bg-transparent px-1 py-0.5 text-lg font-semibold outline-none focus:bg-slate-50 dark:focus:bg-slate-800"
+            className="field-sizing-content min-w-0 flex-1 resize-none rounded-md bg-transparent px-1 py-0.5 text-lg font-semibold outline-none focus:bg-slate-50 focus-visible:ring-2 focus-visible:ring-brand-500/50 dark:focus:bg-slate-800"
             aria-label={t("Título")}
           />
           <span className="mt-1.5 flex h-5 shrink-0 items-center text-xs" role="status" aria-live="polite">
@@ -369,6 +380,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
             initial={detail?.description ?? null}
             // El borrador recuperado solo se aplica la primera vez que se carga la tarea.
             draft={detail && !draftUsed && descVersion === 0 ? draft?.description : undefined}
+            liveRef={descLive}
             onDraftChange={(md) => {
               descDraft.current = md;
               if (md !== null && !draftUsed) setDraftUsed(true);
@@ -378,16 +390,16 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
               save({ description }, { hasDescription: description.trim().length > 0 });
             }}
           />
-          <Subtasks taskId={task.id} detail={detail} setDetail={setDetail} />
+          <Subtasks taskId={task.id} detail={detail} setDetail={setDetail} flushRef={flushSubtasks} />
           <section>
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-sm font-semibold">{t("Capturas y adjuntos")}</h3>
               <div className="flex items-center gap-1">
-                <label className="btn-ghost cursor-pointer py-1 text-xs sm:hidden">
+                <label className="btn-ghost cursor-pointer py-1 text-xs has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-500 sm:hidden">
                   <Camera size={15} /> {t("Cámara")}
                   <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { upload(filesFrom(e.target.files)); e.target.value = ""; }} />
                 </label>
-                <label className="btn-ghost cursor-pointer py-1 text-xs">
+                <label className="btn-ghost cursor-pointer py-1 text-xs has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-500">
                   <ImagePlus size={15} /> {t("Añadir")}
                   <input type="file" multiple className="sr-only" onChange={(e) => { upload(filesFrom(e.target.files)); e.target.value = ""; }} />
                 </label>
@@ -403,7 +415,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
                   </button>
                   <button
                     type="button"
-                    className="absolute top-1 right-1 rounded-md bg-black/60 p-1 text-white opacity-0 group-hover:opacity-100 max-md:opacity-100"
+                    className="absolute top-1 right-1 rounded-md bg-black/60 p-1 text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-md:opacity-100"
                     aria-label={t("Borrar adjunto")}
                     onClick={() => removeAttachment(a.id, t("¿Borrar esta imagen?"))}
                   >
@@ -534,7 +546,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
                   </button>
                 );
               })}
-              <Link href={`/p/${board.project.id}/settings#labels`} className="px-1 py-0.5 text-xs text-brand-600 hover:underline">
+              <Link href={`/p/${board.project.id}/settings#labels`} className="px-1 py-0.5 text-xs text-brand-600 dark:text-brand-300 hover:underline">
                 {t("Gestionar")}
               </Link>
             </div>
@@ -569,6 +581,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
           <div className="mt-auto flex flex-wrap gap-2 border-t border-slate-200 pt-4 max-md:hidden md:gap-1 md:pt-2.5 dark:border-slate-800">
             <button className="btn-secondary py-1.5" onClick={archive} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /> {t("Archivar")}</button>
             <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> {t("Borrar")}</button>
+            <button className="btn-primary ml-auto py-1.5" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} /> {t("Guardar")}</button>
           </div>
         </aside>
       </div>
@@ -605,17 +618,40 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+/**
+ * Selector de tipo como grupo de radio: un solo punto de Tab (en el tipo elegido); las flechas mueven
+ * el foco entre tipos (de la última a la primera y al revés) y Espacio/Intro elige el tipo enfocado.
+ */
 export function TypeSelector({ kinds, value, onChange }: { kinds: KindOption[]; value: string; onChange: (kindId: string) => void }) {
+  const t = useT();
+  const [focused, setFocused] = useState<string | null>(null);
+  // Punto de Tab: el tipo con el foco, si no el elegido, si no el primero.
+  const tabStop = kinds.some((k) => k.id === focused) ? focused : kinds.some((k) => k.id === value) ? value : kinds[0]?.id;
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+    if (!step || e.altKey || e.ctrlKey || e.metaKey || e.nativeEvent.isComposing) return;
+    const buttons = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>("[role=radio]"));
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (index < 0 || !buttons.length) return;
+    e.preventDefault();
+    const next = buttons[(index + step + buttons.length) % buttons.length]!;
+    setFocused(next.dataset.kind ?? null);
+    next.focus();
+  };
   return (
-    <div className="flex flex-wrap gap-1">
+    <div role="radiogroup" aria-label={t("Tipo")} className="flex flex-wrap gap-1" onKeyDown={onKeyDown}>
       {kinds.map((k) => (
         <button
           key={k.id}
           type="button"
+          role="radio"
+          data-kind={k.id}
+          tabIndex={k.id === tabStop ? 0 : -1}
           onClick={() => onChange(k.id)}
+          onFocus={() => setFocused(k.id)}
           className={cn("badge cursor-pointer px-2 py-1 text-xs", value === k.id ? "kind-badge" : "bg-transparent text-slate-500 ring-slate-300 dark:ring-slate-700")}
           style={value === k.id ? kindBadgeStyle(k.color) : undefined}
-          aria-pressed={value === k.id}
+          aria-checked={value === k.id}
         >
           {k.name}
         </button>
@@ -624,7 +660,7 @@ export function TypeSelector({ kinds, value, onChange }: { kinds: KindOption[]; 
   );
 }
 
-function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftChange }: {
+function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftChange, liveRef }: {
   initial: string | null;
   /** Texto recuperado de un borrador: el editor empieza editándolo. */
   draft?: string;
@@ -633,11 +669,19 @@ function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftCha
   onGoogle: (kind: MentionCommand) => Promise<TaskLinkInfo | null>;
   /** Borrador actual en Markdown mientras se edita (con retardo); null al no estar editando. */
   onDraftChange?: (markdown: string | null) => void;
+  /** Texto en edición al instante (null si no se edita): lo lee el botón Guardar. */
+  liveRef?: React.MutableRefObject<string | null>;
 }) {
   const t = useT();
   const { editorMode } = useBoard();
   const [value, setValue] = useState(draft ?? initial ?? "");
   const [editing, setEditing] = useState(draft !== undefined);
+  useEffect(() => {
+    if (liveRef) liveRef.current = editing ? value : null;
+  }, [liveRef, editing, value]);
+  useEffect(() => () => {
+    if (liveRef) liveRef.current = null;
+  }, [liveRef]);
   const ref = useRef<HTMLTextAreaElement>(null);
   const draftCb = useRef(onDraftChange);
   useEffect(() => {
@@ -713,7 +757,7 @@ function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftCha
   );
 }
 
-function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskDetail | null; setDetail: React.Dispatch<React.SetStateAction<TaskDetail | null>> }) {
+function Subtasks({ taskId, detail, setDetail, flushRef }: { taskId: string; detail: TaskDetail | null; setDetail: React.Dispatch<React.SetStateAction<TaskDetail | null>>; flushRef?: React.MutableRefObject<(() => Promise<boolean>) | null> }) {
   const t = useT();
   const board = useBoard();
   const toast = useToast();
@@ -733,17 +777,22 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
   const update = (fn: (list: SubtaskInfo[]) => SubtaskInfo[]) =>
     setDetail((d) => (d ? { ...d, subtasks: fn(d.subtasks) } : d));
 
-  const add = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const addNow = async (): Promise<boolean> => {
     const title = newTitle.trim();
-    if (!title) return;
+    if (!title) return true;
     setNewTitle("");
     const res = await board.track(addSubtask(taskId, title));
     if (!res.ok) {
       setNewTitle((cur) => cur || title);
-      return toast(res.error, "error");
+      toast(res.error, "error");
+      return false;
     }
     update((l) => [...l, res.data]);
+    return true;
+  };
+  const add = (e: React.FormEvent) => {
+    e.preventDefault();
+    void addNow();
   };
 
   const setDone = (id: string, value: boolean) => update((l) => l.map((x) => (x.id === id ? { ...x, done: value } : x)));
@@ -757,16 +806,37 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
     }
   };
 
-  const rename = async (s: SubtaskInfo, title: string) => {
+  // Renombrado en curso (id + texto escrito): Guardar lo confirma aunque no se haya pulsado Enter.
+  const renameDraft = useRef<{ id: string; title: string } | null>(null);
+  const rename = async (s: SubtaskInfo, title: string): Promise<boolean> => {
     setEditingId(null);
-    if (!title || title === s.title) return;
+    renameDraft.current = null;
+    if (!title || title === s.title) return true;
     update((l) => l.map((x) => (x.id === s.id ? { ...x, title } : x)));
     const res = await board.track(updateSubtask(s.id, { title }));
     if (!res.ok) {
       update((l) => l.map((x) => (x.id === s.id ? { ...x, title: s.title } : x)));
       toast(res.error, "error");
+      return false;
     }
+    return true;
   };
+  const flushLatest = useRef<() => Promise<boolean>>(async () => true);
+  useEffect(() => {
+    flushLatest.current = async () => {
+      const pending = renameDraft.current;
+      const target = pending ? list.find((x) => x.id === pending.id) : undefined;
+      if (pending && target && !(await rename(target, pending.title.trim()))) return false;
+      return addNow();
+    };
+  });
+  useEffect(() => {
+    if (!flushRef) return;
+    flushRef.current = () => flushLatest.current();
+    return () => {
+      flushRef.current = null;
+    };
+  }, [flushRef]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -824,7 +894,7 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
         <SortableContext items={list.map((s) => s.id)} strategy={verticalListSortingStrategy}>
           <ul className="space-y-0.5">
             {list.map((s) => (
-              <SubtaskRow key={s.id} s={s} editing={editingId === s.id} onEdit={() => setEditingId(s.id)} onRename={(v) => rename(s, v)} onToggle={() => toggle(s)} onRemove={() => remove(s)} />
+              <SubtaskRow key={s.id} s={s} editing={editingId === s.id} onEdit={() => setEditingId(s.id)} onRename={(v) => void rename(s, v)} onDraft={(v) => (renameDraft.current = { id: s.id, title: v })} onToggle={() => toggle(s)} onRemove={() => remove(s)} />
             ))}
           </ul>
         </SortableContext>
@@ -838,8 +908,8 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
 }
 
 /** Fila ordenable: agarre de seis puntos, título editable (doble clic, Enter/F2 o lápiz) y borrado. */
-function SubtaskRow({ s, editing, onEdit, onRename, onToggle, onRemove }: {
-  s: SubtaskInfo; editing: boolean; onEdit: () => void; onRename: (title: string) => void; onToggle: () => void; onRemove: () => void;
+function SubtaskRow({ s, editing, onEdit, onRename, onDraft, onToggle, onRemove }: {
+  s: SubtaskInfo; editing: boolean; onEdit: () => void; onRename: (title: string) => void; onDraft: (title: string) => void; onToggle: () => void; onRemove: () => void;
 }) {
   const t = useT();
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: s.id });
@@ -855,6 +925,7 @@ function SubtaskRow({ s, editing, onEdit, onRename, onToggle, onRemove }: {
   const startEdit = () => {
     settled.current = false;
     setDraft(s.title);
+    onDraft(s.title);
     onEdit();
   };
   return (
@@ -882,7 +953,10 @@ function SubtaskRow({ s, editing, onEdit, onRename, onToggle, onRemove }: {
           maxLength={200}
           autoFocus
           onFocus={(e) => e.currentTarget.select()}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            onDraft(e.target.value);
+          }}
           onBlur={() => finish(true)}
           onKeyDown={(e) => {
             if (e.nativeEvent.isComposing) return;
@@ -959,7 +1033,7 @@ function GoogleLinks({ detail, setDetail, onCreate, taskId }: {
                 {l.title}
               </a>
               <button
-                className="btn-icon h-6 w-6 opacity-0 group-hover:opacity-100 max-md:opacity-100"
+                className="btn-icon h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-md:opacity-100"
                 aria-label={t("Quitar enlace")}
                 title={t("Quitar el enlace (el archivo sigue en Google Drive)")}
                 onClick={async () => {
@@ -1020,7 +1094,7 @@ function Comments({ taskId, detail, setDetail, users, onGoogle }: {
                 <time className="text-slate-400">{formatDate(c.createdAt, "dateTimeShort", locale)}</time>
                 {(c.authorId === board.currentUserId) && (
                   <button
-                    className="ml-auto text-slate-400 opacity-0 group-hover:opacity-100 hover:text-red-600 max-md:opacity-100"
+                    className="ml-auto text-slate-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-600 max-md:opacity-100"
                     onClick={async () => {
                       if (!window.confirm(t("¿Borrar este comentario?"))) return;
                       const res = await board.track(deleteComment(c.id));

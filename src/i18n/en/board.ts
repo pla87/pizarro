@@ -180,7 +180,6 @@ export const board: Record<string, string> = {
   "Filtrar tarjetas": "Filter cards",
   "Filtrar tarjetas por título, tipo, responsable o etiqueta ({keys})": "Filter cards by title, type, assignee or label ({keys})",
   "Quitar el filtro": "Clear filter",
-  "Con el filtro activo no se puede arrastrar": "Dragging is disabled while a filter is active",
   "Cambiar de proyecto ({keys})": "Switch project ({keys})",
   "Atajos de teclado": "Keyboard shortcuts",
   "Tarea abierta": "Open task",
@@ -192,5 +191,6 @@ export const board: Record<string, string> = {
   "Ver los atajos": "Show shortcuts",
   "Guardar y cerrar (en una tarea nueva, crearla)": "Save and close (in a new task, create it)",
   "Archivar la tarea": "Archive the task",
+  "Ir a la barra de formato de la descripción (flechas para moverse, Esc para volver)": "Go to the description formatting toolbar (arrows to move, Esc to return)",
   "Crear la tarea, guardar la descripción o enviar el comentario": "Create the task, save the description or send the comment",
 };

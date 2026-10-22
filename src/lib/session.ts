@@ -15,7 +15,7 @@ export interface CurrentUser {
   name: string;
   role: "ADMIN" | "MEMBER";
   theme: "SYSTEM" | "LIGHT" | "DARK";
-  accent: "BLUE" | "FOREST" | "SIENNA" | "MUSTARD" | "MONO";
+  accent: "BLUE" | "FOREST" | "SIENNA" | "MUSTARD" | "MONO" | "EVA";
   locale: "ES" | "EN";
 }
 
