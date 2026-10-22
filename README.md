@@ -58,12 +58,40 @@ Para generar un `SESSION_SECRET`: `openssl rand -base64 48`.
 | `npm run build` / `npm start` | Build de producción (salida *standalone*) y arranque. |
 | `npm run check` | Lint + typecheck + tests. |
 | `npm test` | Tests unitarios (generador de releases, posiciones, validación, imágenes, changelog). |
+| `npm run test:db` | Tests de integración (permisos y deshacer) contra una PostgreSQL efímera; ver «Tests de integración». |
 | `npm run db:migrate` | Crea una nueva migración en desarrollo (`prisma migrate dev`). |
 | `npm run db:deploy` | Aplica las migraciones pendientes. |
 | `npm run db:seed` | Seed idempotente: crea el admin si no hay usuarios y un proyecto de ejemplo si no hay proyectos. |
 | `npm run changelog:sync` | Sincroniza `changelog.json` con la tabla `AppVersionLog`. |
 | `npm run version:bump -- <patch\|minor\|major>` | Registra una nueva versión de la app (ver abajo). |
 | `npm run docs:pdf` | Regenera `MANUAL.pdf` a partir de `docs/MANUAL.md`. |
+
+### Tests de integración (base de datos real)
+
+`npm run test:db` ejecuta `tests/db/*.test.ts` llamando a las Server Actions de verdad (permisos de proyectos públicos, restringidos y privados, miembros, usuarios desactivados, cambio de contraseña forzado, deshacer y avisos). `npm test` sigue siendo solo unitario y no necesita base de datos.
+
+- **Qué hace el script** (`scripts/test-db.mjs`): crea una base con nombre único `pizarro_test_<aleatorio>` en el servidor de `TEST_DATABASE_URL` (o, si no existe, de `DATABASE_URL`, también desde `.env`), aplica `prisma migrate deploy`, lanza los tests con esa `DATABASE_URL` y borra la base al terminar, también si fallan o se interrumpe con Ctrl+C. El nombre de base de la URL se ignora: la base original nunca se toca. El usuario de PostgreSQL necesita permiso `CREATEDB`.
+- **Local:** `service postgresql start` (o Docker) y `npm run test:db`. Los tests se niegan a ejecutarse si `DATABASE_URL` no apunta a una base `pizarro_test_*`.
+- **Sesión en los tests:** `tests/db/register.mjs` sustituye `next/headers`, `next/cache`, `next/navigation` y `next/server` por stubs solo en el proceso de test; `loginAs(usuario)` crea una sesión real con `createSession` y su cookie va a un «jar» en memoria. No hay ningún atajo de autenticación en el código de producción.
+- **CI:** basta un servicio PostgreSQL y dos variables. Ejemplo para GitHub Actions:
+
+```yaml
+services:
+  postgres:
+    image: postgres:16
+    env: { POSTGRES_PASSWORD: postgres }
+    ports: ["5432:5432"]
+    options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+steps:
+  - uses: actions/checkout@v4
+  - uses: actions/setup-node@v4
+    with: { node-version: 22, cache: npm }
+  - run: npm ci
+  - run: npx prisma generate
+    env: { DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres" }
+  - run: npm run test:db
+    env: { TEST_DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres" }
+```
 
 ### Registrar una nueva versión de la app
 
