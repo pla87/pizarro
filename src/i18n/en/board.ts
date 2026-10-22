@@ -73,6 +73,7 @@ export const board: Record<string, string> = {
   "Markdown · @persona para avisar": "Markdown · @person to notify",
   "Subtareas (opcional)": "Subtasks (optional)",
   "Quitar subtarea": "Remove subtask",
+  "Hay cambios sin guardar. ¿Descartar la nueva tarea?": "You have unsaved changes. Discard the new task?",
   "Añadir subtarea…": "Add subtask…",
   "Añadir subtarea": "Add subtask",
   "Columna": "Column",

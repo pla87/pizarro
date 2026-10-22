@@ -318,3 +318,22 @@ body {
     box-shadow: inset 0 0 0 1px oklch(from var(--kind) max(l, 0.62) c h / 0.55);
   }
 }
+
+/*
+ * Pantallas táctiles: los botones de icono pequeños amplían su zona de toque a ~40 px con un
+ * pseudo-elemento invisible, sin cambiar su tamaño visible ni la maquetación en escritorio.
+ */
+@media (pointer: coarse) {
+  .btn-icon:not(.absolute, .fixed) {
+    position: relative;
+  }
+  .btn-icon::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 40px);
+    height: max(100%, 40px);
+    transform: translate(-50%, -50%);
+  }
+}

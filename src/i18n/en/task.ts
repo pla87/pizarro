@@ -52,6 +52,8 @@ export const task: Record<string, string> = {
   "Añadir subtarea": "Add subtask",
   "Arrastrar para reordenar": "Drag to reorder",
   "Borrar subtarea": "Delete subtask",
+  "Editar subtarea": "Edit subtask",
+  "{title} (Enter o F2 para editar)": "{title} (Enter or F2 to edit)",
   "Documentos de Google": "Google documents",
   "Nuevo Doc": "New Doc",
   "Nuevo Sheet": "New Sheet",
