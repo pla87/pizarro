@@ -19,6 +19,7 @@ import { addUndo, captureTasks } from "@/lib/undo";
 import { tasksN } from "@/lib/undo-label";
 import * as v from "@/lib/validation";
 import { getT } from "@/i18n/server";
+import { mentionsToPlain } from "@/lib/mentions";
 
 const deploySchema = z.object({
   projectId: v.id,
@@ -71,7 +72,7 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
           title: data.title,
           content: data.content,
           createdById: user.id,
-          tasks: { create: tasks.map((t) => ({ taskId: t.id, title: t.title, kindName: t.kind.name })) },
+          tasks: { create: tasks.map((t) => ({ taskId: t.id, title: mentionsToPlain(t.title), kindName: t.kind.name })) },
         },
         select: { id: true },
       });

@@ -7,6 +7,8 @@ import { useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
 import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard } from "./context";
+import { MentionText } from "../ui/MentionText";
+import { mentionsToPlain } from "@/lib/mentions";
 
 /** Prefijo del id del droppable del panel (el resto es el id de la columna de la release). */
 export const EVERGREEN_DROPPABLE_PREFIX = "evergreen:";
@@ -137,7 +139,7 @@ function EvergreenCard({ id }: { id: string }) {
         isDragging && "opacity-40",
       )}
     >
-      <span className="min-w-0 flex-1 truncate font-medium" title={task.title}>{task.title}</span>
+      <span className="min-w-0 flex-1 truncate font-medium" title={mentionsToPlain(task.title)}><MentionText text={task.title} /></span>
       <TypeBadge kind={kindById.get(task.kindId)} />
       {dragHandle && (
         <span

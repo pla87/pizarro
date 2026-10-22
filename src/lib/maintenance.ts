@@ -97,9 +97,21 @@ async function restoreTestJob(): Promise<void> {
   await monthlyRestoreTestJob();
 }
 
+/** Borra el historial de tareas de más de un año. */
+async function purgeOldTaskHistory(now: Date = new Date()): Promise<number> {
+  const { purgeOldTaskEvents } = await import("@/lib/task-events");
+  return purgeOldTaskEvents(now);
+}
+
+/** Resumen diario y informe semanal por email a quien toca (ver periodic-mail.ts). */
+async function sendPeriodicMail(now: Date = new Date()): Promise<number> {
+  const { sendDueDigests, sendDueReports } = await import("@/lib/periodic-mail");
+  return (await sendDueDigests(now)) + (await sendDueReports(now));
+}
+
 /** Una pasada de mantenimiento; nunca lanza. */
 async function runMaintenance(): Promise<void> {
-  for (const job of [purgeNonImageCopies, purgeOldUndo, purgeOldNotifications, purgeAuthData, purgeOrphanFiles, backupJob, restoreTestJob]) {
+  for (const job of [purgeNonImageCopies, purgeOldUndo, purgeOldNotifications, purgeAuthData, purgeOldTaskHistory, purgeOrphanFiles, backupJob, restoreTestJob, sendPeriodicMail]) {
     try {
       await job();
     } catch (err) {

@@ -1,10 +1,10 @@
 "use client";
 
-import { Archive, Camera, Check, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Send, Trash2, X } from "lucide-react";
+import { Archive, Camera, Check, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
-  addComment, addSubtask, archiveTask, deleteAttachment, deleteComment, deleteSubtask, deleteTask, deleteTaskLink, getTaskDetail,
+  addSubtask, archiveTask, deleteAttachment, deleteSubtask, deleteTask, deleteTaskLink, getTaskDetail,
   moveTask, reorderSubtask, updateSubtask, updateTask,
 } from "@/actions/tasks";
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
@@ -15,12 +15,11 @@ import { dueStatus } from "@/lib/dates";
 import { defaultRecurrenceDay, type RecurrenceRule } from "@/lib/recurrence-date";
 import { isWhite, kindBadgeStyle, onColor } from "@/lib/constants";
 import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
-import { Avatar } from "../ui/Avatar";
 import { ColorPicker } from "../ui/ColorPicker";
 import { cn } from "../ui/cn";
 import { DescriptionField } from "../ui/DescriptionField";
 import { Markdown } from "../ui/Markdown";
-import { MentionTextarea, type MentionCommand } from "../ui/MentionTextarea";
+import type { MentionCommand } from "../ui/MentionTextarea";
 import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
 import { applyKindTemplate } from "@/lib/kinds-special";
@@ -29,6 +28,10 @@ import { useBoard } from "./context";
 import { isTypingTarget, useShortcut } from "./shortcuts";
 import { weekdayName } from "./recurrence-ui";
 import { TaskViewers } from "./TaskViewers";
+import { Comments } from "./TaskComments";
+import { FollowToggle } from "./FollowToggle";
+import { TaskHistory } from "./TaskHistory";
+import { TitleField } from "./TitleField";
 import { createAndOpenGoogleFile } from "./google";
 import { filesFrom, formatBytes, uploadFile, useFileDrop } from "./upload";
 import { formatDate } from "@/lib/format";
@@ -351,21 +354,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       // Escritorio: la altura se adapta al contenido (tope = viewport); solo hacen scroll las columnas si hay mucho contenido.
       header={
         <div className="flex items-start gap-2 border-b border-slate-200 px-5 py-3 dark:border-slate-800">
-          <textarea
-            value={title}
-            onChange={(e) => setTitle(e.target.value.replace(/\n/g, ""))}
-            onBlur={commitTitle}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                e.currentTarget.blur();
-              }
-            }}
-            rows={1}
-            maxLength={200}
-            className="field-sizing-content min-w-0 flex-1 resize-none rounded-md bg-transparent px-1 py-0.5 text-lg font-semibold outline-none focus:bg-slate-50 focus-visible:ring-2 focus-visible:ring-brand-500/50 dark:focus:bg-slate-800"
-            aria-label={t("Título")}
-          />
+          <TitleField value={title} onChange={setTitle} onCommit={commitTitle} users={board.users} />
           <span className="mt-1.5 flex h-5 shrink-0 items-center text-xs" role="status" aria-live="polite">
             {saving > 0 ? (
               <span className="flex items-center gap-1 text-slate-500"><Loader2 size={13} className="animate-spin" /> {t("Guardando…")}</span>
@@ -466,6 +455,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
           </section>
           <GoogleLinks taskId={task.id} detail={detail} setDetail={setDetail} onCreate={createGoogle} />
           <Comments taskId={task.id} detail={detail} setDetail={setDetail} users={board.users} onGoogle={createGoogle} />
+          <TaskHistory taskId={task.id} />
         </div>
 
         <aside className="flex flex-col gap-4 text-sm md:max-h-[calc(100dvh-9rem)] md:gap-2.5 md:overflow-y-auto md:pr-1">
@@ -621,6 +611,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
                 : t("Creada el {date}", { date: formatDate(detail.createdAt, "dateShort", locale) })}
             </p>
           )}
+          <FollowToggle taskId={task.id} following={detail?.following} />
           {/* En móvil estos botones van en el pie fijo, junto a Guardar. */}
           <div className="mt-auto flex flex-wrap gap-2 border-t border-slate-200 pt-4 max-md:hidden md:gap-1 md:pt-2.5 dark:border-slate-800">
             <button className="btn-secondary py-1.5" onClick={archive} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /> {t("Archivar")}</button>
@@ -1095,98 +1086,6 @@ function GoogleLinks({ detail, setDetail, onCreate, taskId }: {
           ))}
         </ul>
       )}
-    </section>
-  );
-}
-
-function Comments({ taskId, detail, setDetail, users, onGoogle }: {
-  taskId: string;
-  detail: TaskDetail | null;
-  setDetail: React.Dispatch<React.SetStateAction<TaskDetail | null>>;
-  users: UserOption[];
-  onGoogle: (kind: MentionCommand) => Promise<TaskLinkInfo | null>;
-}) {
-  const t = useT();
-  const locale = useIntlLocale();
-  const board = useBoard();
-  const toast = useToast();
-  const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
-  const comments = detail?.comments ?? [];
-
-  const send = async () => {
-    const body = text.trim();
-    if (!body || sending) return;
-    setSending(true);
-    const res = await board.track(addComment(taskId, body)).catch(() => ({ ok: false as const, error: t("Error inesperado. Inténtalo de nuevo.") }));
-    setSending(false);
-    if (!res.ok) return toast(res.error, "error");
-    setText("");
-    setDetail((d) => (d ? { ...d, comments: [...d.comments, res.data] } : d));
-    board.patchTask(taskId, (t) => ({ commentCount: t.commentCount + 1 }));
-  };
-
-  return (
-    <section>
-      <h3 className="mb-2 text-sm font-semibold">{t("Comentarios")} {comments.length > 0 && <span className="font-normal text-slate-500">{comments.length}</span>}</h3>
-      <ul className="space-y-3">
-        {comments.map((c) => (
-          <li key={c.id} className="group flex gap-2">
-            {c.authorId ? <Avatar id={c.authorId} name={c.authorName ?? "?"} /> : <span className="h-6 w-6" />}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline gap-2 text-xs">
-                <span className="font-semibold">{c.authorName ?? t("Usuario eliminado")}</span>
-                <time className="text-slate-400">{formatDate(c.createdAt, "dateTimeShort", locale)}</time>
-                {(c.authorId === board.currentUserId) && (
-                  <button
-                    className="ml-auto text-slate-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-600 max-md:opacity-100"
-                    onClick={async () => {
-                      if (!window.confirm(t("¿Borrar este comentario?"))) return;
-                      const res = await board.track(deleteComment(c.id));
-                      if (!res.ok) return toast(res.error, "error");
-                      setDetail((d) => (d ? { ...d, comments: d.comments.filter((x) => x.id !== c.id) } : d));
-                      board.patchTask(taskId, (t) => ({ commentCount: Math.max(0, t.commentCount - 1) }));
-                    }}
-                  >
-                    {t("Borrar")}
-                  </button>
-                )}
-              </div>
-              <div className="mt-0.5 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
-                <Markdown>{c.body}</Markdown>
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-3 space-y-2">
-        <MentionTextarea
-          className="input field-sizing-content min-h-16"
-          value={text}
-          onValueChange={setText}
-          users={users}
-          disabled={!detail}
-          placeholder={t("Comenta… (@persona, @docs, @sheets)")}
-          onCommand={async (kind) => {
-            const link = await onGoogle(kind);
-            if (link) setText((v) => `${v.trimEnd()} [${link.title.replace(/[\[\]]/g, "")}](${link.url}) `.trimStart());
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              send();
-            }
-          }}
-          maxLength={10000}
-          aria-label={t("Nuevo comentario")}
-        />
-        <div className="flex items-center gap-2">
-          <span className="truncate text-xs text-slate-400 max-sm:hidden">{t("Ctrl+Enter para enviar")}</span>
-          <button className="btn-primary ml-auto py-1.5" onClick={send} disabled={sending || !text.trim()}>
-            {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} {t("Comentar")}
-          </button>
-        </div>
-      </div>
     </section>
   );
 }

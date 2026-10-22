@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useT } from "@/i18n/client";
 import { Avatar } from "../ui/Avatar";
 import { cn } from "../ui/cn";
+import { setTaskViewers, type TaskViewer } from "./taskPresence";
 
 const POLL_MS = 20_000;
 const MAX_SHOWN = 5;
@@ -20,7 +21,11 @@ export function Presence({ projectId, compact }: { projectId: string; compact?: 
       if (document.visibilityState !== "visible") return;
       try {
         const res = await fetch(`/api/projects/${projectId}/presence`, { cache: "no-store" });
-        if (res.ok && !cancelled) setUsers(((await res.json()) as { users: { id: string; name: string }[] }).users);
+        if (res.ok && !cancelled) {
+          const json = (await res.json()) as { users: { id: string; name: string }[]; viewers?: Record<string, TaskViewer[]> };
+          setUsers(json.users);
+          setTaskViewers(json.viewers ?? {});
+        }
       } catch {
         // Sin conexión: se mantiene lo último conocido.
       }

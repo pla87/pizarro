@@ -1,7 +1,9 @@
 import { userTemplates } from "@/lib/board";
 import { db } from "@/lib/db";
 import { googleEnabled } from "@/lib/google";
+import { appTimeZone } from "@/lib/board";
 import { emailEnabled, whatsappEnabled } from "@/lib/notify";
+import { NotificationExtras } from "./NotificationExtras";
 import { currentSessionId, requireUserPage } from "@/lib/session";
 import { recoveryCodesLeft } from "@/lib/two-factor";
 import { deviceLabel } from "@/lib/user-agent";
@@ -45,6 +47,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       notifyWhatsapp: true,
       whatsappPhone: true,
       twoFactorMethod: true,
+      notifyAssignedEmail: true,
+      notifyDueEmail: true,
+      notifyCommentEmail: true,
+      dailyDigest: true,
+      digestHour: true,
       googleAccount: { select: { email: true } },
     },
   });
@@ -77,6 +84,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           emailAvailable: emailEnabled(),
           whatsappAvailable: whatsappEnabled(),
         }}
+        notificationExtras={
+          <NotificationExtras
+            prefs={{ notifyAssignedEmail: row.notifyAssignedEmail, notifyDueEmail: row.notifyDueEmail, notifyCommentEmail: row.notifyCommentEmail, dailyDigest: row.dailyDigest, digestHour: row.digestHour }}
+            emailAvailable={emailEnabled()}
+            timeZone={appTimeZone()}
+          />
+        }
         google={{ enabled: googleEnabled(), email: row.googleAccount?.email ?? null, message: googleMessage }}
       />
       <div className="mx-auto max-w-3xl space-y-5 px-4 pb-6 md:px-6">

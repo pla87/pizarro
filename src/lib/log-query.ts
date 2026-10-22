@@ -25,6 +25,7 @@ interface LogFilters {
 export const READ_ACTIONS = [
   "tasks.getTaskDetail",
   "tasks.getArchivedTasks",
+  "tasks.getTaskHistory",
   "releases.getReleaseTaskDetails",
   "releases.countReleasesOn",
   "templates.listTemplates",

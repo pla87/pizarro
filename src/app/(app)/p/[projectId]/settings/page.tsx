@@ -1,11 +1,13 @@
 import { notFound } from "next/navigation";
 import { visibleProjectsWhere } from "@/lib/access";
-import { listKinds } from "@/lib/board";
+import { appTimeZone, listKinds } from "@/lib/board";
 import { dateToIso } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
 import { getT } from "@/i18n/server";
+import { emailEnabled } from "@/lib/mail";
 import { ProjectSettings } from "./ProjectSettings";
+import { ReportScheduleSection } from "./ReportScheduleSection";
 
 export async function generateMetadata() {
   const t = await getT();
@@ -49,6 +51,7 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
     ? await db.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, role: true } })
     : [];
 
+  const schedule = await db.reportSchedule.findUnique({ where: { projectId: project.id }, select: { enabled: true, recipient: true, weekday: true, hour: true } });
   const editorMode = (await db.user.findUnique({ where: { id: user.id }, select: { editorMode: true } }))?.editorMode ?? "MARKDOWN";
 
   return (
@@ -69,6 +72,14 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
       deliverables={project.deliverables.map((d) => ({ id: d.id, name: d.name, description: d.description, dueDate: dateToIso(d.dueDate), taskCount: d._count.tasks }))}
       users={users}
       editorMode={editorMode}
+      reportSchedule={
+        <ReportScheduleSection
+          projectId={project.id}
+          initial={schedule ?? { enabled: false, recipient: user.email, weekday: 1, hour: 8 }}
+          emailAvailable={emailEnabled()}
+          timeZone={appTimeZone()}
+        />
+      }
     />
   );
 }

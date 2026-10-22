@@ -4,9 +4,11 @@ import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
 import { TypeBadge } from "@/components/ui/TypeBadge";
+import { MentionText } from "@/components/ui/MentionText";
 import { cn } from "@/components/ui/cn";
 import { appTimeZone } from "@/lib/board";
 import { dateToIso, dueStatus, formatDay, todayIso } from "@/lib/dates";
+import { bucketOf, groupByDue, matchesFilter, parseFilter, type TaskBucket, type TaskFilter } from "@/lib/my-tasks";
 import { intlLocale } from "@/i18n/core";
 import { getLocale, getT } from "@/i18n/server";
 
@@ -15,13 +17,21 @@ export async function generateMetadata() {
   return { title: t("Mis tareas") };
 }
 
-export default async function MyTasksPage() {
+const FILTERS: { value: TaskFilter; label: string }[] = [
+  { value: "all", label: "Todas" },
+  { value: "overdue", label: "Vencidas" },
+  { value: "week", label: "Esta semana" },
+];
+
+export default async function MyTasksPage({ searchParams }: { searchParams: Promise<{ filter?: string | string[] }> }) {
   const user = await requireUserPage();
   const t = await getT();
   const locale = intlLocale(await getLocale());
-  const tasks = await db.task.findMany({
+  const filter = parseFilter((await searchParams).filter);
+  const rows = await db.task.findMany({
     where: { assigneeId: user.id, archivedAt: null, project: visibleProjectsWhere(user) },
-    orderBy: [{ project: { position: "asc" } }, { dueDate: { sort: "asc", nulls: "last" } }, { column: { position: "asc" } }, { position: "asc" }],
+    // Dentro de cada grupo se ordena por fecha; a igual fecha, por proyecto y posición en el tablero.
+    orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { project: { position: "asc" } }, { column: { position: "asc" } }, { position: "asc" }],
     select: {
       id: true,
       title: true,
@@ -36,45 +46,70 @@ export default async function MyTasksPage() {
   });
 
   const today = todayIso(appTimeZone());
-  const byProject = new Map<string, { name: string; tasks: typeof tasks }>();
-  for (const task of tasks) {
-    const group = byProject.get(task.project.id) ?? { name: task.project.name, tasks: [] };
-    group.tasks.push(task);
-    byProject.set(task.project.id, group);
-  }
+  // Una tarea en una columna «hecha» ya no corre prisa: se agrupa como «Sin fecha» aunque conserve su fecha límite.
+  const tasks = rows.map((task) => ({ ...task, due: dateToIso(task.dueDate), dueDate: task.column.isDone ? null : dateToIso(task.dueDate) }));
+  const counts = Object.fromEntries(FILTERS.map((f) => [f.value, tasks.filter((x) => matchesFilter(bucketOf(x.dueDate, today), f.value)).length])) as Record<TaskFilter, number>;
+  const groups = groupByDue(tasks, today, filter);
+  const shown = groups.reduce((n, g) => n + g.tasks.length, 0);
+
+  const heading: Record<TaskBucket, string> = {
+    overdue: t("Vencidas"),
+    today: t("Hoy"),
+    week: t("Esta semana"),
+    later: t("Más adelante"),
+    none: t("Sin fecha"),
+  };
 
   return (
     <div className="mx-auto max-w-4xl p-4 md:p-6">
       <h1 className="mb-1 text-xl font-semibold">{t("Mis tareas asignadas")}</h1>
-      <p className="mb-6 text-sm text-slate-500">{t("{n} tarea(s) en todos tus proyectos.", { n: tasks.length })}</p>
-      {tasks.length === 0 && (
+      <p className="mb-4 text-sm text-slate-500">{t("{n} tarea(s) en todos tus proyectos.", { n: tasks.length })}</p>
+      <nav className="mb-6 flex flex-wrap gap-2" aria-label={t("Filtrar mis tareas")}>
+        {FILTERS.map((f) => (
+          <Link
+            key={f.value}
+            href={f.value === "all" ? "/my-tasks" : `/my-tasks?filter=${f.value}`}
+            aria-current={filter === f.value ? "page" : undefined}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm",
+              filter === f.value ? "border-brand-600 bg-brand-600 text-on-brand" : "border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800",
+            )}
+          >
+            {t(f.label)}
+            <span className={cn("text-xs", filter === f.value ? "opacity-80" : "text-slate-400")}>{counts[f.value]}</span>
+          </Link>
+        ))}
+      </nav>
+      {shown === 0 && (
         <div className="card flex flex-col items-center gap-2 p-10 text-sm text-slate-500">
-          <ListChecks size={32} className="text-slate-300" /> {t("No tienes tareas asignadas.")}
+          <ListChecks size={32} className="text-slate-300" />
+          {tasks.length === 0 ? t("No tienes tareas asignadas.") : t("No hay tareas en este filtro.")}
         </div>
       )}
       <div className="space-y-6">
-        {[...byProject.entries()].map(([projectId, group]) => (
-          <section key={projectId}>
-            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-slate-300">
-              <Link href={`/p/${projectId}`} className="hover:underline">{group.name}</Link>
+        {groups.map((group) => (
+          <section key={group.bucket}>
+            <h2 className={cn("mb-2 flex items-center gap-2 text-sm font-semibold", group.bucket === "overdue" ? "text-red-600" : "text-slate-600 dark:text-slate-300")}>
+              {heading[group.bucket]}
               <span className="text-xs font-normal text-slate-400">{group.tasks.length}</span>
             </h2>
             <ul className="card divide-y divide-slate-200 dark:divide-slate-800">
               {group.tasks.map((task) => {
                 const done = task.subtasks.filter((s) => s.done).length;
+                const projectId = task.project.id;
                 return (
-                  <li key={task.id} className="relative flex items-center gap-3 px-4 py-2.5">
+                  <li key={task.id} className="relative flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
                     {task.color && <span className="absolute inset-y-1 left-0 w-1 rounded-r" style={{ backgroundColor: task.color }} aria-hidden />}
                     <TypeBadge kind={task.kind} />
-                    <Link href={`/p/${projectId}?task=${task.id}`} className="min-w-0 flex-1 truncate text-sm font-medium hover:text-brand-600">
-                      {task.title}
+                    <Link href={`/p/${projectId}?task=${task.id}`} className="min-w-0 flex-1 basis-40 truncate text-sm font-medium hover:text-brand-600">
+                      <MentionText text={task.title} />
                     </Link>
-                    {task.dueDate && (() => {
-                      const iso = dateToIso(task.dueDate)!;
-                      const st = dueStatus(iso, task.column.isDone, today);
+                    <Link href={`/p/${projectId}`} className="max-w-40 shrink-0 truncate text-xs text-slate-500 hover:underline">{task.project.name}</Link>
+                    {task.due && (() => {
+                      const st = dueStatus(task.due, task.column.isDone, today);
                       return (
                         <span className={cn("shrink-0 text-xs", st === "overdue" ? "font-semibold text-red-600" : st === "today" || st === "soon" ? "font-semibold text-amber-600" : "text-slate-500")}>
-                          {st === "today" ? t("Hoy") : formatDay(iso, today, locale)}
+                          {st === "today" ? t("Hoy") : formatDay(task.due, today, locale)}
                         </span>
                       );
                     })()}

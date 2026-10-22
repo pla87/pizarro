@@ -44,6 +44,8 @@ interface Props {
     whatsappAvailable: boolean;
   };
   google: { enabled: boolean; email: string | null; message: { ok: boolean; text: string } | null };
+  /** Bloque extra bajo «Avisos» (avisos por email de más tipos y resumen diario). */
+  notificationExtras?: React.ReactNode;
 }
 
 export function ProfileSettings(props: Props) {
@@ -74,6 +76,7 @@ export function ProfileSettings(props: Props) {
       <EditorModeSection initial={props.editorMode} />
       <GoogleSection google={props.google} />
       <NotificationSection prefs={props.notifications} />
+      {props.notificationExtras}
 
       <section className="card p-5">
         <h2 className="font-semibold">{t("Perfil")}</h2>

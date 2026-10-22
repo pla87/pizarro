@@ -1,5 +1,6 @@
 import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
+import { mentionsToPlain } from "@/lib/mentions";
 import { requireUserPage } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { NotificationList } from "./NotificationList";
@@ -23,6 +24,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
     take: limit + 1,
     select: {
       id: true,
+      type: true,
       excerpt: true,
       createdAt: true,
       readAt: true,
@@ -40,13 +42,14 @@ export default async function NotificationsPage({ searchParams }: { searchParams
       moreHref={hasMore ? `?limit=${limit + PAGE_STEP}` : null}
       items={rows.slice(0, limit).map((n) => ({
         id: n.id,
+        type: n.type,
         excerpt: n.excerpt,
         createdAt: n.createdAt.toISOString(),
         read: Boolean(n.readAt),
         viaEmail: Boolean(n.emailSentAt),
         viaWhatsapp: Boolean(n.whatsappSentAt),
         actor: n.actor,
-        task: n.task ? { id: n.task.id, title: n.task.title, projectId: n.task.project.id, projectName: n.task.project.name } : null,
+        task: n.task ? { id: n.task.id, title: mentionsToPlain(n.task.title), projectId: n.task.project.id, projectName: n.task.project.name } : null,
       }))}
     />
   );
