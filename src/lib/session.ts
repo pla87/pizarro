@@ -30,6 +30,10 @@ function sessionIdFromToken(token: string): string {
 }
 
 export async function createSession(userId: string): Promise<void> {
+  const store = await cookies();
+  // Si el navegador ya traía una sesión (otra cuenta, o la misma), se cierra: un token viejo no sobrevive al inicio de sesión.
+  const previous = store.get(sessionCookieName())?.value;
+  if (previous && previous.length <= 100) await db.session.deleteMany({ where: { id: sessionIdFromToken(previous) } });
   const token = randomBytes(32).toString("base64url");
   await db.session.create({
     data: {
@@ -40,7 +44,7 @@ export async function createSession(userId: string): Promise<void> {
   });
   // Limpieza oportunista de sesiones caducadas (barato con 5 usuarios).
   await db.session.deleteMany({ where: { expiresAt: { lt: new Date() } } });
-  (await cookies()).set(sessionCookieName(), token, sessionCookieOptions());
+  store.set(sessionCookieName(), token, sessionCookieOptions());
 }
 
 export async function destroySession(): Promise<void> {
