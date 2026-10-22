@@ -10,20 +10,26 @@ type ModalState = { pzModals?: string[] } | null;
 // y, si a la vez se navega a otra página, el router los interpretaría como «atrás» y la anularía.
 let silentPops = 0;
 let silencerInstalled = false;
+// Eventos popstate provocados por nosotros: los modales los ignoran aunque otro escuchador se ejecute antes
+// que el silenciador (no depende del orden de registro ni de la fase).
+const silentEvents = new WeakSet<Event>();
+function installSilencer() {
+  if (silencerInstalled || typeof window === "undefined") return;
+  silencerInstalled = true;
+  window.addEventListener(
+    "popstate",
+    (e) => {
+      if (silentPops > 0) {
+        silentPops--;
+        silentEvents.add(e);
+        e.stopImmediatePropagation();
+      }
+    },
+    true,
+  );
+}
 function silentBack() {
-  if (!silencerInstalled) {
-    silencerInstalled = true;
-    window.addEventListener(
-      "popstate",
-      (e) => {
-        if (silentPops > 0) {
-          silentPops--;
-          e.stopImmediatePropagation();
-        }
-      },
-      true,
-    );
-  }
+  installSilencer();
   silentPops++;
   window.history.back();
 }
@@ -41,6 +47,8 @@ export function useBackToClose(active: boolean, onClose: () => void) {
 
   useEffect(() => {
     if (!active) return;
+    // Instalado ya al abrir el primer modal: así va por delante de los escuchadores de los modales.
+    installSilencer();
     const token = `m${++seq}`;
     const inState = () => ((window.history.state as ModalState)?.pzModals ?? []).includes(token);
     let pushed = false;
@@ -51,7 +59,8 @@ export function useBackToClose(active: boolean, onClose: () => void) {
       window.history.pushState({ ...state, pzModals: [...(state.pzModals ?? []), token] }, "");
       pushed = true;
     }, 0);
-    const onPop = () => {
+    const onPop = (e: PopStateEvent) => {
+      if (silentEvents.has(e)) return;
       if (pushed && !inState()) {
         closedByBack = true;
         onCloseRef.current();
