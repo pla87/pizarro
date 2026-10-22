@@ -13,6 +13,7 @@ import { archiveTasks, deleteTasks, makeEvergreen, moveTask, moveTasks } from "@
 import { createBoardCollisionDetection } from "@/lib/collision";
 import { positionBetween } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardTask, LabelOption } from "@/lib/types";
+import { FilterMenu } from "./FilterMenu";
 import { ProjectMenu } from "../ProjectMenu";
 import { UndoButton } from "../UndoButton";
 import { useT } from "@/i18n/client";
@@ -22,6 +23,8 @@ import { BoardContext, type BoardApi } from "./context";
 import { ColumnView } from "./ColumnView";
 import { EVERGREEN_DROPPABLE_PREFIX } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
+import { useCardActions } from "./cardActions";
+import { activeFilterCount, EMPTY_FILTERS, filtersKey, parseStoredFilters, sanitizeFilters, taskMatchesFilters, type BoardFilters } from "./filters";
 import { Presence } from "./Presence";
 import { SelectionBar } from "./SelectionBar";
 import { ShortcutsHelp } from "./ShortcutsHelp";
@@ -128,6 +131,31 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const [helpOpen, setHelpOpen] = useState(false);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+  const mobileSearchRef = useRef<HTMLInputElement>(null);
+  // Móvil: el buscador y los filtros se despliegan desde un icono (ver más abajo).
+  const [mobileSearch, setMobileSearch] = useState(false);
+  // Filtros rápidos: se recuerdan por persona y proyecto (localStorage; si no está disponible, solo dura la sesión).
+  const [filters, setFilters] = useState<BoardFilters>(EMPTY_FILTERS);
+  const filtersStorageKey = filtersKey(data.currentUserId, data.project.id);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      try {
+        setFilters(parseStoredFilters(window.localStorage.getItem(filtersStorageKey)));
+      } catch {
+        // Sin almacenamiento: se empieza sin filtros.
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [filtersStorageKey]);
+  const changeFilters = (next: BoardFilters) => {
+    setFilters(next);
+    try {
+      if (activeFilterCount(next) === 0) window.localStorage.removeItem(filtersStorageKey);
+      else window.localStorage.setItem(filtersStorageKey, JSON.stringify(next));
+    } catch {
+      // Sin almacenamiento: el filtro vale igualmente en esta sesión.
+    }
+  };
   const sc = useShortcut();
   const dragHandle = useCoarsePointer();
 
@@ -222,6 +250,11 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     });
   }, []);
 
+  const upsertTask = useCallback(
+    (task: BoardTask) => setTasks((prev) => (prev.some((t) => t.id === task.id) ? prev.map((t) => (t.id === task.id ? task : t)) : [...prev, task])),
+    [],
+  );
+
   // Sincroniza con el servidor cuando llegan datos nuevos (router.refresh).
   useEffect(() => {
     if (pending.current > 0 || activeId || mutationAt.current > refreshAt.current) {
@@ -272,9 +305,16 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const baseItems = useMemo(() => groupItems(columns, tasks), [columns, tasks]);
   // Filtro del buscador: por título, tipo, responsable y etiquetas (todas las palabras deben aparecer).
   const terms = useMemo(() => normalize(query).split(/\s+/).filter(Boolean), [query]);
-  const filtering = terms.length > 0;
+  // Filtros rápidos sin lo que ya no existe (etiqueta borrada, persona que dejó el proyecto…).
+  const activeFilters = useMemo(
+    () => sanitizeFilters(filters, { labels: new Set(labels.map((l) => l.id)), kinds: new Set(data.kinds.map((k) => k.id)), users: new Set(data.users.map((u) => u.id)) }),
+    [filters, labels, data.kinds, data.users],
+  );
+  const filterCount = activeFilterCount(activeFilters);
+  const filtering = terms.length > 0 || filterCount > 0;
   const matchingIds = useMemo(() => {
     if (!filtering) return null;
+    const doneColumnIds = new Set(columns.filter((c) => c.isDone).map((c) => c.id));
     const kindName = new Map(data.kinds.map((k) => [k.id, k.name]));
     const userName = new Map(data.users.map((u) => [u.id, u.name]));
     const labelName = new Map(labels.map((l) => [l.id, l.name]));
@@ -283,10 +323,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       const hay = normalize(
         [task.title, kindName.get(task.kindId), task.assigneeId ? userName.get(task.assigneeId) : "", ...task.labelIds.map((id) => labelName.get(id))].join(" "),
       );
-      if (terms.every((w) => hay.includes(w))) ids.add(task.id);
+      if (terms.every((w) => hay.includes(w)) && taskMatchesFilters(task, activeFilters, { currentUserId: data.currentUserId, today: data.today, doneColumnIds })) ids.add(task.id);
     }
     return ids;
-  }, [filtering, terms, tasks, data.kinds, data.users, labels]);
+  }, [filtering, terms, tasks, data.kinds, data.users, data.currentUserId, data.today, labels, columns, activeFilters]);
   // Con filtro no hay arrastre (ver `filtering` en el contexto), así que `dragItems` es null.
   const items = useMemo(() => {
     const all = dragItems ?? baseItems;
@@ -333,6 +373,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     return () => document.removeEventListener("paste", onPaste);
   }, []);
 
+  const cardActions = useCardActions({ currentUserId: data.currentUserId, taskById, sortedColumns, baseItems, patchTask, upsertTask, track, toast, t });
+
   const api: BoardApi = useMemo(
     () => ({
       project: data.project,
@@ -351,9 +393,9 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       today: data.today,
       setLabels,
       taskById,
-      upsertTask: (task) =>
-        setTasks((prev) => (prev.some((t) => t.id === task.id) ? prev.map((t) => (t.id === task.id ? task : t)) : [...prev, task])),
+      upsertTask,
       patchTask,
+      ...cardActions,
       removeTask: (id) => {
         setTasks((prev) => prev.filter((t) => t.id !== id));
         setSelected((prev) => {
@@ -394,7 +436,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       trackRaw,
       refresh,
     }),
-    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, data.editorMode, dragHandle, filtering, data.google, data.today, sortedColumns, labels, taskById, baseItems, evergreenByColumn, selected, track, trackRaw, refresh, patchTask],
+    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, data.editorMode, dragHandle, filtering, data.google, data.today, sortedColumns, labels, taskById, baseItems, evergreenByColumn, selected, track, trackRaw, refresh, patchTask, upsertTask, cardActions],
   );
 
   // --- Movimiento masivo ------------------------------------------------------
@@ -430,6 +472,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     }
     const server = new Map(res.data.moved.map((m) => [m.id, m.position]));
     setTasks((prev) => prev.map((t) => (server.has(t.id) ? { ...t, columnId, position: server.get(t.id)!, evergreen: false } : t)));
+    res.data.spawned.forEach(upsertTask);
     const name = sortedColumns.find((c) => c.id === columnId)?.name;
     toast(t("{moved} a «{name}»", { moved: res.data.moved.length === 1 ? t("1 tarjeta movida") : t("{n} tarjetas movidas", { n: res.data.moved.length }), name: name ?? "" }));
   };
@@ -446,6 +489,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       restoreTasks(before);
       return toast(res.error, "error");
     }
+    res.data.spawned.forEach(upsertTask);
     toast(res.data.archived === 1 ? t("1 tarea archivada") : t("{n} tareas archivadas", { n: res.data.archived }));
   };
 
@@ -630,6 +674,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     } else if (res.data.position !== position) {
       setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, position: res.data.position } : t)));
     }
+    if (res.ok) res.data.spawned.forEach(upsertTask);
   };
 
   // Dos modales a la vez (escritorio): el «+» del abierto crea un segundo de nueva tarea (columna «Backlog» si existe, si no la primera; no hay rol BACKLOG).
@@ -647,8 +692,11 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     },
     bulk: () => setBulk({}),
     search: () => {
-      searchRef.current?.focus();
-      searchRef.current?.select();
+      // El buscador de escritorio, o el de móvil/tableta si es el visible.
+      const input = [searchRef.current, mobileSearchRef.current].find((el) => el && el.offsetParent !== null);
+      if (!input) return setMobileSearch(true);
+      input.focus();
+      input.select();
     },
     help: () => setHelpOpen(true),
     release: () => {
@@ -692,6 +740,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               </button>
             )}
           </div>
+          <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} className="-ml-1.5" />
+          {filterCount > 0 && (
+            <button type="button" className="-ml-1 text-xs text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline dark:hover:text-slate-300" onClick={() => changeFilters(EMPTY_FILTERS)}>
+              {t("Limpiar filtros")}
+            </button>
+          )}
           {filtering && <span className="max-w-48 text-xs text-slate-500 max-xl:hidden">{t("Con el filtro activo no se puede arrastrar")}</span>}
           <Presence projectId={data.project.id} />
           <ReportButton projectId={data.project.id} variant="header" />
@@ -717,12 +771,61 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         >
           {/* Pestañas de columnas en móvil */}
           <div data-mobile-tabs className="no-scrollbar flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 md:hidden dark:border-slate-800 dark:bg-slate-900">
+            <button
+              type="button"
+              className={cn("btn-icon relative h-8 w-8 shrink-0", filtering && "text-brand-600")}
+              onClick={() => setMobileSearch((o) => !o)}
+              aria-label={t("Buscar y filtrar")}
+              aria-expanded={mobileSearch || filtering}
+            >
+              <Search size={16} />
+              {filtering && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-brand-600" aria-hidden />}
+            </button>
             {sortedColumns.map((c) => (
               <MobileTab key={c.id} active={c.id === activeMobileColumn} onClick={() => showMobileColumn(c.id)}>
                 {c.name} <span className="opacity-70">{items[c.id]?.length ?? 0}</span>
               </MobileTab>
             ))}
             <NewColumnButton variant="mobile" onCreated={showMobileColumn} />
+          </div>
+          {/* Móvil y tableta: buscador y filtros (en móvil, solo al pulsar el icono de la lupa o con un filtro activo). */}
+          <div className={cn("flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-1.5 lg:hidden dark:border-slate-800 dark:bg-slate-900", !(mobileSearch || filtering) && "max-md:hidden")}>
+            <div className="relative min-w-0 flex-1">
+              <Search size={14} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" aria-hidden />
+              <input
+                ref={mobileSearchRef}
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setQuery("");
+                    e.currentTarget.blur();
+                  }
+                }}
+                autoFocus={mobileSearch && !filtering}
+                placeholder={t("Filtrar tarjetas")}
+                aria-label={t("Filtrar tarjetas")}
+                className="input h-8 w-full [&::-webkit-search-cancel-button]:hidden pr-3 pl-8 text-sm"
+              />
+            </div>
+            <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} />
+            <span className="shrink-0 text-xs text-slate-500" aria-live="polite">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : t("{n} tarjetas", { n: tasks.length })}</span>
+            {(mobileSearch || filtering) && (
+              <button
+                type="button"
+                className="btn-icon h-8 w-8 shrink-0 md:hidden"
+                onClick={() => {
+                  setQuery("");
+                  changeFilters(EMPTY_FILTERS);
+                  setMobileSearch(false);
+                }}
+                aria-label={t("Quitar el filtro")}
+              >
+                <X size={16} />
+              </button>
+            )}
           </div>
           <div
             className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-3 max-md:no-scrollbar pt-2 pb-2 md:px-4 md:pb-4"
@@ -832,6 +935,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
                   .filter((t) => !archived.has(t.id))
                   .map((t) => (moved.has(t.id) ? { ...t, columnId: moved.get(t.id)!.columnId, position: moved.get(t.id)!.position } : t)),
               );
+              result.spawned?.forEach(upsertTask);
             }}
           />
         )}

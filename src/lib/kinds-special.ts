@@ -24,6 +24,33 @@ export function applyKindTemplate(
   return { title: titleTpl || current.title, description };
 }
 
+/** Máximo de subtareas por plantilla de tipo y por tarea nueva (el de createTask). */
+export const MAX_KIND_SUBTASKS = 50;
+const MAX_SUBTASK_LEN = 200;
+
+const sameSubtask = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** Texto de un cuadro de varias líneas → subtareas: recorta, descarta vacías y repetidas, respeta el máximo. */
+export function parseSubtaskLines(text: string): string[] {
+  const out: string[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const title = line.trim().slice(0, MAX_SUBTASK_LEN);
+    if (title && !out.some((x) => sameSubtask(x, title))) out.push(title);
+    if (out.length >= MAX_KIND_SUBTASKS) break;
+  }
+  return out;
+}
+
+/** Añade al final las subtareas de la plantilla que aún no estén (sin distinguir mayúsculas), hasta el máximo. */
+export function mergeSubtasks(current: string[], template: string[]): string[] {
+  const out = [...current];
+  for (const raw of template) {
+    const title = raw.trim().slice(0, MAX_SUBTASK_LEN);
+    if (title && out.length < MAX_KIND_SUBTASKS && !out.some((x) => sameSubtask(x, title))) out.push(title);
+  }
+  return out;
+}
+
 function short(text: string, max = 60): string {
   const t = text.trim().replace(/\s+/g, " ");
   return t.length > max ? `${t.slice(0, max).trimEnd()}…` : t;

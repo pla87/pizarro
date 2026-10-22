@@ -9,6 +9,7 @@ import { AppError, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
 import { requireAdmin, requireUser } from "@/lib/session";
 import * as v from "@/lib/validation";
+import { MAX_KIND_SUBTASKS, parseSubtaskLines } from "@/lib/kinds-special";
 import { getT } from "@/i18n/server";
 
 const kindSchema = z.object({
@@ -17,8 +18,14 @@ const kindSchema = z.object({
   // Automatización opcional al elegir el tipo (vacío = ninguna).
   titleTemplate: z.string().trim().max(200, "Máximo 200 caracteres.").default(""),
   descriptionTemplate: z.string().trim().max(2000, "Máximo 2000 caracteres.").default(""),
+  // Subtareas que se añaden al crear una tarea de este tipo (sin vacías ni repetidas).
+  subtaskTemplate: z
+    .array(z.string().trim().min(1).max(200, "Máximo 200 caracteres."))
+    .max(MAX_KIND_SUBTASKS, "Máximo 50 subtareas.")
+    .default([])
+    .transform((list) => parseSubtaskLines(list.join("\n"))),
 });
-type KindInput = { name: string; color: string; titleTemplate?: string; descriptionTemplate?: string };
+type KindInput = { name: string; color: string; titleTemplate?: string; descriptionTemplate?: string; subtaskTemplate?: string[] };
 const MAX_KINDS = 30;
 
 /**
@@ -79,7 +86,7 @@ export async function createKind(input: KindInput, projectId?: string | null) {
     const last = await db.taskKind.findFirst({ where: { projectId: scope }, orderBy: { position: "desc" }, select: { position: true } });
     const kind = await db.taskKind.create({
       data: { ...data, projectId: scope, position: (last?.position ?? 0) + POSITION_STEP },
-      select: { id: true, name: true, color: true, titleTemplate: true, descriptionTemplate: true },
+      select: { id: true, name: true, color: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true },
     });
     revalidate(scope);
     return kind;

@@ -29,7 +29,7 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
       labels: { orderBy: { name: "asc" }, select: { id: true, name: true, color: true } },
       kinds: {
         orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-        select: { id: true, name: true, color: true, titleTemplate: true, descriptionTemplate: true, _count: { select: { tasks: true } } },
+        select: { id: true, name: true, color: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true, _count: { select: { tasks: true } } },
       },
       deliverables: {
         orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { position: "asc" }],
@@ -61,7 +61,7 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
         memberIds: project.members.map((m) => m.userId),
       }}
       labels={project.labels}
-      kinds={project.kinds.map((k) => ({ id: k.id, name: k.name, color: k.color, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate, taskCount: k._count.tasks }))}
+      kinds={project.kinds.map((k) => ({ id: k.id, name: k.name, color: k.color, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate, subtaskTemplate: k.subtaskTemplate, taskCount: k._count.tasks }))}
       generalKinds={generalKinds.map((k) => ({ ...k, enabled: !hidden.has(k.id), taskCount: usage.get(k.id) ?? 0 }))}
       deliverables={project.deliverables.map((d) => ({ id: d.id, name: d.name, description: d.description, dueDate: dateToIso(d.dueDate), taskCount: d._count.tasks }))}
       users={users}

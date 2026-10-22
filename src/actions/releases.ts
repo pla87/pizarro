@@ -11,6 +11,7 @@ import { MAX_RELEASE_CONTENT } from "@/lib/constants";
 import { appTimeZone } from "@/lib/board";
 import { AppError } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
+import { spawnRecurrences } from "@/lib/recurrence";
 import { attachmentFileNames, zonedDayRange } from "@/lib/release";
 import { requireUser } from "@/lib/session";
 import { attachmentPath, compactImage, removeReleaseAttachmentFiles, saveReleaseAttachmentFile } from "@/lib/uploads";
@@ -50,9 +51,9 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     // Deshacer: dónde estaba cada tarea (solo las de este proyecto); la release del histórico se quita (ver más abajo).
     addUndo(...(await captureTasks(tasks.map((t) => t.id), ["columnId", "position", "archivedAt", "archivedFromColumnId", "evergreen"])));
 
-    let target: { id: string } | null = null;
+    let target: { id: string; isDone: boolean } | null = null;
     if (data.destination === "IN_PRODUCTION") {
-      target = await db.column.findFirst({ where: { projectId: data.projectId, role: "IN_PRODUCTION" }, select: { id: true } });
+      target = await db.column.findFirst({ where: { projectId: data.projectId, role: "IN_PRODUCTION" }, select: { id: true, isDone: true } });
       if (!target) throw new AppError("No hay ninguna columna con el rol «En producción». Asígnalo en el menú de una columna o elige archivar.");
     }
 
@@ -91,6 +92,8 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
       return { releaseId: release.id, moved, archived: target ? [] : tasks.filter((t) => !t.evergreen).map((t) => t.id) };
     });
     addUndo({ t: "release.remove", id: result.releaseId });
+    // Recurrentes que salen terminadas (columna terminada de destino o archivo): nace su siguiente aparición.
+    const spawned = !target || target.isDone ? await spawnRecurrences(tasks.filter((t) => !t.evergreen).map((t) => t.id), user.id) : [];
     const fixed = tasks.filter((t) => t.evergreen).length;
     describeAction(
       "Desplegó la release «{title}» con {count}{archived}{fixed}",
@@ -108,7 +111,7 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
         console.error("[releases] no se pudieron guardar los adjuntos", err),
       );
     }
-    return result;
+    return { ...result, spawned };
   });
 }
 

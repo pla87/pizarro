@@ -18,6 +18,8 @@ import { useBoard } from "./context";
 interface DeployResult {
   moved: { id: string; columnId: string; position: number }[];
   archived: string[];
+  /** Siguientes apariciones de tareas recurrentes que se acaban de terminar. */
+  spawned?: BoardTask[];
 }
 
 interface Props {

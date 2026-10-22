@@ -210,4 +210,9 @@ export const settings: Record<string, string> = {
   "Sus {n} tareas en este proyecto pasarán al tipo:": "Its {n} tasks in this project will move to the type:",
   "Tipo de destino": "Target type",
   "Dejar de usarlo": "Stop using it",
+  "1 subtarea predefinida": "1 predefined subtask",
+  "{n} subtareas predefinidas": "{n} predefined subtasks",
+  "Subtareas predefinidas": "Predefined subtasks",
+  "Una por línea": "One per line",
+  "Se añaden al elegir este tipo al crear una tarea (máx. {n}, sin repetir las que ya estén).": "Added when this type is chosen while creating a task (max. {n}, skipping any already there).",
 };

@@ -17,6 +17,8 @@ export const boardTaskSelect = {
   deliverableId: true,
   description: true,
   evergreen: true,
+  recurrence: true,
+  recurrenceDay: true,
   contentUpdatedAt: true,
   labels: { select: { labelId: true } },
   subtasks: { select: { done: true } },
@@ -52,6 +54,8 @@ function toBoardTaskWith(t: BoardTaskRow, hasDescription: boolean): BoardTask {
     commentCount: t._count.comments,
     linkCount: t._count.links,
     evergreen: t.evergreen,
+    recurrence: t.recurrence,
+    recurrenceDay: t.recurrenceDay,
     textVersion: t.contentUpdatedAt?.toISOString() ?? null,
   };
 }
@@ -94,7 +98,7 @@ export function appTimeZone(): string {
 
 /** Tipos de tarea: sin proyecto, solo los generales; con proyecto, los generales y después los de ese proyecto. */
 /** Selección común de los tipos (con su automatización). */
-export const kindSelect = { id: true, name: true, color: true, titleTemplate: true, descriptionTemplate: true } as const;
+export const kindSelect = { id: true, name: true, color: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true } as const;
 
 /**
  * Tipos de tarea: sin proyecto, solo los generales; con proyecto, los generales que el proyecto

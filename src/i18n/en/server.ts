@@ -215,4 +215,8 @@ export const server: Record<string, string> = {
   "Comentó en «{title}»": "Commented on “{title}”",
   "Borró un comentario de «{title}»": "Deleted a comment on “{title}”",
   "Quitó el enlace «{title}»": "Removed the link “{title}”",
+  "(copia)": "(copy)",
+  "Duplicó «{title}»": "Duplicated “{title}”",
+  "repetición": "repeat",
+  "Máximo 50 subtareas.": "Maximum 50 subtasks.",
 };

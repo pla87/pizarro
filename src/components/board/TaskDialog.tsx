@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, Camera, Check, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Send, Trash2, X } from "lucide-react";
+import { Archive, Camera, Check, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Send, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -12,6 +12,7 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from "@dnd-kit/utilities";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { dueStatus } from "@/lib/dates";
+import { defaultRecurrenceDay, type RecurrenceRule } from "@/lib/recurrence-date";
 import { isWhite, kindBadgeStyle, onColor } from "@/lib/constants";
 import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
 import { Avatar } from "../ui/Avatar";
@@ -26,6 +27,7 @@ import { applyKindTemplate } from "@/lib/kinds-special";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
 import { isTypingTarget, useShortcut } from "./shortcuts";
+import { weekdayName } from "./recurrence-ui";
 import { TaskViewers } from "./TaskViewers";
 import { createAndOpenGoogleFile } from "./google";
 import { filesFrom, formatBytes, uploadFile, useFileDrop } from "./upload";
@@ -184,6 +186,13 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       return toast(res.error, "error");
     }
     board.patchTask(task.id, { position: res.data.position });
+    res.data.spawned.forEach(board.upsertTask);
+  };
+
+  /** Cambio de la repetición; al activar semanal o mensual el día sale de la fecha límite (o de hoy). */
+  const changeRecurrence = (recurrence: RecurrenceRule) => {
+    const recurrenceDay = defaultRecurrenceDay(recurrence, task.dueDate, board.today);
+    save({ recurrence, recurrenceDay }, { recurrence, recurrenceDay });
   };
 
   const upload = async (files: File[]) => {
@@ -235,6 +244,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     const res = await board.track(archiveTask(task.id));
     if (!res.ok) return toast(res.error, "error");
     board.removeTask(task.id);
+    res.data.spawned.forEach(board.upsertTask);
     onClose();
     toast(t("Tarea archivada"));
   };
@@ -321,6 +331,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
         mobile ? (
           <>
             <button className="btn-secondary py-1.5" onClick={archive} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /> {t("Archivar")}</button>
+            <button className="btn-secondary py-1.5" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")}><Copy size={15} /></button>
             <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> {t("Borrar")}</button>
             <button className="btn-primary ml-auto py-1.5" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} /> {t("Guardar")}</button>
           </>
@@ -498,6 +509,39 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
               )}
             </div>
           </Field>
+          <Field label={t("Repetir")}>
+            <div className="flex gap-1">
+              <select className="input md:py-1.5" value={task.recurrence} onChange={(e) => changeRecurrence(e.target.value as RecurrenceRule)}>
+                <option value="NONE">{t("No se repite")}</option>
+                <option value="DAILY">{t("Cada día")}</option>
+                <option value="WEEKLY">{t("Cada semana")}</option>
+                <option value="MONTHLY">{t("Cada mes")}</option>
+              </select>
+              {task.recurrence === "WEEKLY" && (
+                <select
+                  className="input md:py-1.5"
+                  value={task.recurrenceDay ?? 1}
+                  onChange={(e) => save({ recurrenceDay: Number(e.target.value) }, { recurrenceDay: Number(e.target.value) })}
+                  aria-label={t("Día de la semana")}
+                >
+                  {[1, 2, 3, 4, 5, 6, 7].map((d) => <option key={d} value={d}>{weekdayName(d, locale)}</option>)}
+                </select>
+              )}
+              {task.recurrence === "MONTHLY" && (
+                <select
+                  className="input md:py-1.5"
+                  value={task.recurrenceDay ?? 1}
+                  onChange={(e) => save({ recurrenceDay: Number(e.target.value) }, { recurrenceDay: Number(e.target.value) })}
+                  aria-label={t("Día del mes")}
+                >
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => <option key={d} value={d}>{t("día {n}", { n: d })}</option>)}
+                </select>
+              )}
+            </div>
+            {task.recurrence !== "NONE" && (
+              <p className="mt-1 text-xs text-slate-500">{t("Al terminarla o archivarla se crea la siguiente, sin las subtareas marcadas.")}</p>
+            )}
+          </Field>
           <Field label={t("Entregable")}>
             <select
               className="input md:py-1.5"
@@ -568,6 +612,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
           {/* En móvil estos botones van en el pie fijo, junto a Guardar. */}
           <div className="mt-auto flex flex-wrap gap-2 border-t border-slate-200 pt-4 max-md:hidden md:gap-1 md:pt-2.5 dark:border-slate-800">
             <button className="btn-secondary py-1.5" onClick={archive} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /> {t("Archivar")}</button>
+            <button className="btn-secondary py-1.5" onClick={() => void board.duplicateTask(task.id)} title={t("Crea una copia justo detrás de esta tarea")}><Copy size={15} /> {t("Duplicar")}</button>
             <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> {t("Borrar")}</button>
           </div>
         </aside>

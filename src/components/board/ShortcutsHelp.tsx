@@ -21,6 +21,17 @@ const GROUPS: { title: string; items: { keys: string; label: string }[] }[] = [
     ],
   },
   {
+    title: "Tarjeta enfocada",
+    items: [
+      { keys: "Alt+M", label: "Asignármela o quitármela" },
+      { keys: "Alt+←", label: "Mover a la columna anterior" },
+      { keys: "Alt+→", label: "Mover a la columna siguiente" },
+      { keys: "Alt+D", label: "Fecha límite de la tarjeta" },
+      { keys: "F2", label: "Renombrar la tarjeta" },
+      { keys: "Alt+Shift+D", label: "Duplicar la tarjeta" },
+    ],
+  },
+  {
     title: "Tarea abierta",
     items: [
       { keys: "Alt+S", label: "Guardar y cerrar (en una tarea nueva, crearla)" },
