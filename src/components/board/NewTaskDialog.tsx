@@ -108,7 +108,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         evergreen: isReleaseColumn && evergreen,
         subtasks: subtaskTitles,
       }),
-    );
+    ).catch(() => ({ ok: false as const, error: t("Error inesperado. Inténtalo de nuevo.") }));
     if (!res.ok) {
       setBusy(false);
       return toast(res.error, "error");

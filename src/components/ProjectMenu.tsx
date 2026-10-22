@@ -6,6 +6,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n/client";
 import { OPEN_PROJECT_MENU_EVENT, useShortcut } from "./board/shortcuts";
 import { cn } from "./ui/cn";
+import { useEscapeClose } from "./ui/useEscapeClose";
 
 interface ProjectsValue {
   projects: { id: string; name: string; isPrivate?: boolean }[];
@@ -27,6 +28,7 @@ export function ProjectMenu({ className, textClassName }: { className?: string; 
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const sc = useShortcut();
+  useEscapeClose(open, () => setOpen(false));
   const current = projects.find((p) => p.id === currentId);
 
   // Alt+P abre el desplegable (solo el que se ve: en la cabecera hay uno para escritorio y otro para móvil).

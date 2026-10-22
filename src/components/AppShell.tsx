@@ -22,6 +22,7 @@ import { ReportButton } from "./ReportButton";
 import { cn } from "./ui/cn";
 import { Modal } from "./ui/Modal";
 import { ToastProvider, useToast } from "./ui/Toast";
+import { useEscapeClose } from "./ui/useEscapeClose";
 
 interface Props {
   user: CurrentUser;
@@ -46,6 +47,7 @@ function Shell({ user, projects, version, unread, children }: Props) {
   const [drawerPath, setDrawerPath] = useState<string | null>(null);
   const drawerOpen = drawerPath === pathname;
   const setDrawerOpen = (open: boolean) => setDrawerPath(open ? pathname : null);
+  useEscapeClose(drawerOpen, () => setDrawerPath(null));
   const projectId = pathname.match(/^\/p\/([^/]+)/)?.[1] ?? null;
   const current = projects.find((p) => p.id === projectId) ?? null;
 
@@ -187,6 +189,7 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
 function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: string; name: string; isPrivate?: boolean }[]; current: { id: string; name: string; isPrivate?: boolean } | null; isAdmin: boolean }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  useEscapeClose(open, () => setOpen(false));
   const [creating, setCreating] = useState(false);
   return (
     <div className="relative">

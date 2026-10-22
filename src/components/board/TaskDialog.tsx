@@ -739,7 +739,10 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
     if (!title) return;
     setNewTitle("");
     const res = await board.track(addSubtask(taskId, title));
-    if (!res.ok) return toast(res.error, "error");
+    if (!res.ok) {
+      setNewTitle((cur) => cur || title);
+      return toast(res.error, "error");
+    }
     update((l) => [...l, res.data]);
   };
 
@@ -982,7 +985,7 @@ function Comments({ taskId, detail, setDetail, users, onGoogle }: {
     const body = text.trim();
     if (!body || sending) return;
     setSending(true);
-    const res = await board.track(addComment(taskId, body));
+    const res = await board.track(addComment(taskId, body)).catch(() => ({ ok: false as const, error: t("Error inesperado. Inténtalo de nuevo.") }));
     setSending(false);
     if (!res.ok) return toast(res.error, "error");
     setText("");
