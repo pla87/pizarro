@@ -119,7 +119,7 @@ export function attachmentFileNames(code: string, attachments: ReleaseAttachment
 }
 
 export function formatReleaseLine(task: Pick<ReleaseTaskInput, "title" | "linkUrl">, code?: string): string {
-  const title = task.title.replace(/\s+/g, " ").trim();
+  const title = mentionsToPlain(task.title).replace(/\s+/g, " ").trim();
   const link = task.linkUrl ? ` ([enlace](<${task.linkUrl.replace(/[<>]/g, "")}>))` : "";
   return `- ${code ? `**${code}** · ` : ""}${escapeLinkText(title)}${link}`;
 }

@@ -1,6 +1,89 @@
 {
   "versions": [
     {
+      "version": "1.16.0",
+      "date": "2026-10-23",
+      "releasedAt": "2026-10-23T01:41:02+02:00",
+      "summary": "Cuentas más seguras (acceso con Google, verificación en dos pasos, enlaces por email, sesiones), proyectos privados compartidos, tema Eva, atajos y filtros nuevos, tareas recurrentes, colaboración ampliada y copias de seguridad cifradas",
+      "changes": {
+        "nuevas": [
+          "Iniciar sesión con Google (cuentas existentes, opcionalmente solo de tu dominio).",
+          "Verificación en dos pasos con app o código por email: obligatoria para administradores, opcional para el resto, con códigos de recuperación y «recordar este dispositivo».",
+          "¿Olvidaste tu contraseña?, confirmación por email de los cambios de contraseña y de email, aviso de inicio de sesión desde un dispositivo nuevo y página de sesiones abiertas.",
+          "Los administradores ya no escriben contraseñas: fuerzan el cambio o invitan por email.",
+          "Proyectos privados compartidos: solo los ven sus miembros (tampoco los administradores) y cualquier persona puede crear uno.",
+          "Tema de color Eva.",
+          "Atajos sobre la tarjeta: Alt+M asignarme, Alt+←/→ mover de columna, Alt+D fecha, F2 renombrar, Alt+Mayús+D duplicar; y «Duplicar» en la tarea.",
+          "Filtros rápidos (mis tareas, vencidas, esta semana, etiqueta, tipo, responsable), también en móvil.",
+          "Tareas recurrentes y subtareas predefinidas por tipo.",
+          "Avisos de asignación, cambio de fecha, comentarios y respuestas; seguir tareas; marcar avisos uno a uno; menciones en el título; respuestas a comentarios; historial de la tarea.",
+          "Resumen diario por email (opcional) e informe PDF semanal por email.",
+          "Mis tareas como bandeja diaria; accesos directos y contador en el icono de la app.",
+          "Copias de seguridad cifradas automáticas con prueba de restauración mensual."
+        ],
+        "mejoras": [
+          "Botón Guardar en la tarea, también en escritorio, que guarda todo lo que se está editando.",
+          "Se puede arrastrar con un filtro activo.",
+          "Con una tarea abierta, «Nueva tarea» y deshacer siguen a mano en escritorio.",
+          "Tabulador más cómodo en todos los modales; menús y confirmaciones propios de la app.",
+          "Plantillas de release ordenables (la primera es la de por defecto).",
+          "Textos blancos puros en los temas no azules y presencia junto al número de tarjetas.",
+          "Quién tiene abierta cada tarea se ve en la propia tarjeta.",
+          "El tablero redibuja solo las tarjetas que cambian y descarga el editor con barra solo si se usa."
+        ],
+        "correcciones": [
+          "Al abrir una tarea por enlace directo aparecía el error de React #418.",
+          "Cerrar el visor de imágenes tocando fuera ya no cierra la tarea en móvil.",
+          "Varias correcciones de seguridad y robustez de la revisión de código."
+        ],
+        "tecnicos": [
+          "Política de seguridad del navegador estricta (nonce), corte inmediato de conexiones en vivo al perder el acceso, cuotas de adjuntos y limpieza diaria de archivos huérfanos.",
+          "Pruebas de integración contra PostgreSQL real (npm run test:db).",
+          "Migraciones: cuentas por email, proyectos privados con miembros, tema Eva, productividad, Google y 2FA, colaboración."
+        ]
+      },
+      "en": {
+        "summary": "Safer accounts (Google sign-in, two-step verification, email links, sessions), shared private projects, Eva theme, new shortcuts and filters, recurring tasks, richer collaboration and encrypted backups",
+        "changes": {
+          "nuevas": [
+            "Sign in with Google (existing accounts, optionally only from your domain).",
+            "Two-step verification with an app or email code: mandatory for administrators, optional for others, with recovery codes and “remember this device”.",
+            "Forgot password, email confirmation for password and email changes, new-device sign-in alert and an open sessions page.",
+            "Administrators no longer type passwords: they force a change or invite by email.",
+            "Shared private projects: only their members see them (not even administrators) and anyone can create one.",
+            "Eva colour theme.",
+            "Card shortcuts: Alt+M assign to me, Alt+←/→ move column, Alt+D due date, F2 rename, Alt+Shift+D duplicate; plus “Duplicate” in the task.",
+            "Quick filters (my tasks, overdue, this week, label, type, assignee), also on mobile.",
+            "Recurring tasks and predefined subtasks per type.",
+            "Notifications for assignment, due date changes, comments and replies; follow tasks; mark notifications as read one by one; mentions in titles; comment replies; task history.",
+            "Optional daily digest email and weekly PDF report by email.",
+            "My tasks as a daily inbox; app shortcuts and unread badge on the app icon.",
+            "Automatic encrypted backups with a monthly restore test."
+          ],
+          "mejoras": [
+            "Save button in the task, also on desktop, that saves everything being edited.",
+            "Dragging works with an active filter.",
+            "With a task open, “New task” and undo stay available on desktop.",
+            "Better Tab navigation in every modal; in-app menus and confirmations.",
+            "Release templates can be reordered (the first one is the default).",
+            "Pure white texts in non-blue themes and presence next to the card count.",
+            "Who has each task open is shown on the card.",
+            "The board only redraws the cards that change and loads the toolbar editor only when used."
+          ],
+          "correcciones": [
+            "Opening a task from a direct link showed React error #418.",
+            "Closing the image viewer by tapping outside no longer closes the task on mobile.",
+            "Several security and robustness fixes from the code review."
+          ],
+          "tecnicos": [
+            "Strict browser security policy (nonce), immediate cut of live connections on access loss, attachment quotas and daily orphan file cleanup.",
+            "Integration tests against real PostgreSQL (npm run test:db).",
+            "Migrations: email accounts, private projects with members, Eva theme, productivity, Google and 2FA, collaboration."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.15.0",
       "date": "2026-10-22",
       "releasedAt": "2026-10-22T02:35:24+02:00",

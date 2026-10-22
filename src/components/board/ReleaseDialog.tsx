@@ -8,16 +8,21 @@ import { buildReleaseMarkdown, computeReleaseCodes, defaultReleaseTitle, isoDate
 import type { BoardTask, TemplateOption } from "@/lib/types";
 import { useT } from "@/i18n/client";
 import { copyText, downloadText } from "../ui/clipboard";
+import { useConfirm } from "../ui/ConfirmDialog";
 import { cn } from "../ui/cn";
 import { Markdown } from "../ui/Markdown";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
 import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard } from "./context";
+import { MentionText } from "../ui/MentionText";
+import { mentionsToPlain } from "@/lib/mentions";
 
 interface DeployResult {
   moved: { id: string; columnId: string; position: number }[];
   archived: string[];
+  /** Siguientes apariciones de tareas recurrentes que se acaban de terminar. */
+  spawned?: BoardTask[];
 }
 
 interface Props {
@@ -32,6 +37,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
   const board = useBoard();
   const now = useMemo(() => new Date(), []);
   const toast = useToast();
+  const confirm = useConfirm();
   const t = useT();
   const [step, setStep] = useState<"select" | "edit">("select");
   const [chosen, setChosen] = useState<Set<string>>(new Set(preselected));
@@ -112,7 +118,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
     const details = new Map(res.data.map((d) => [d.id, d]));
     const releaseTasks = selectedTasks.map((t) => ({
       id: t.id,
-      title: t.title,
+      title: mentionsToPlain(t.title),
       kindId: t.kindId,
       linkUrl: t.linkUrl,
       description: details.get(t.id)?.description ?? "",
@@ -136,8 +142,8 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
     setStep("edit");
   };
 
-  const back = () => {
-    if (content !== generated && !window.confirm(t("Se perderán los cambios que has hecho en el texto. ¿Continuar?"))) return;
+  const back = async () => {
+    if (content !== generated && !(await confirm({ title: t("Volver a la selección"), message: t("Se perderán los cambios que has hecho en el texto. ¿Continuar?"), confirmLabel: t("Continuar"), danger: true }))) return;
     setStep("select");
   };
 
@@ -177,7 +183,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
     const message = destination === "IN_PRODUCTION"
       ? t("Se guardará la release y {n} tarjeta(s) pasarán a «{name}». ¿Continuar?", { n: selectedTasks.length, name: inProduction?.name ?? "" })
       : t("Se guardará la release y {n} tarjeta(s) pasarán al archivo. ¿Continuar?", { n: selectedTasks.length });
-    if (!window.confirm(message)) return;
+    if (!(await confirm({ title: t("Desplegar la release"), message, confirmLabel: t("Continuar") }))) return;
     setBusy(true);
     const res = await board.track(
       deployRelease({
@@ -203,7 +209,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
       size="xl"
       title={
         <span className="flex items-center gap-2">
-          <Rocket size={18} className="text-brand-600" /> {t("Generar release")}
+          <Rocket size={18} className="text-brand-600 dark:text-brand-300" /> {t("Generar release")}
           <span className="text-xs font-normal text-slate-500">· {step === "select" ? t("Paso 1 de 2: tareas") : t("Paso 2 de 2: revisar y exportar")}</span>
         </span>
       }
@@ -211,7 +217,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
         step === "select" ? (
           <>
             <span className="mr-auto text-xs text-slate-500">
-              {t("Cabecera y pie salen de")} <Link className="text-brand-600 hover:underline" href="/settings">{t("tus plantillas")}</Link>.
+              {t("Cabecera y pie salen de")} <Link className="text-brand-600 dark:text-brand-300 hover:underline" href="/settings">{t("tus plantillas")}</Link>.
             </span>
             <button className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
             <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || loadingDetails}>
@@ -277,7 +283,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
                     }
                   />
                   <TypeBadge kind={board.kindById.get(task.kindId)} />
-                  <span className="min-w-0 flex-1 truncate text-sm">{task.title}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm"><MentionText text={task.title} /></span>
                   {task.evergreen && (
                     <span className="shrink-0 rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-500/20 dark:text-brand-300" title={t("Tarea fija en la release: se queda en su columna al desplegar")}>{t("fija")}</span>
                   )}

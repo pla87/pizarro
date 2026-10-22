@@ -6,7 +6,9 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
 import { TypeBadge } from "../ui/TypeBadge";
-import { useBoard } from "./context";
+import { useBoard, useTask } from "./context";
+import { MentionText } from "../ui/MentionText";
+import { mentionsToPlain } from "@/lib/mentions";
 
 /** Prefijo del id del droppable del panel (el resto es el id de la columna de la release). */
 export const EVERGREEN_DROPPABLE_PREFIX = "evergreen:";
@@ -25,7 +27,7 @@ const memory = new Map<string, boolean>();
  * Plegado es una barra con el contador; desplegado crece hacia arriba mostrando tarjetas compactas.
  */
 export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskIds: string[] }) {
-  const { project, taskById, openNewTask } = useBoard();
+  const { project, openNewTask } = useBoard();
   const t = useT();
   // Estado en localStorage leído como store externo (en servidor, plegado).
   const stored = useSyncExternalStore(
@@ -85,10 +87,7 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
     >
       {open && (
         <div id={`evergreen-${columnId}`} className="max-h-56 space-y-1.5 overflow-y-auto px-2 pt-2 max-lg:pr-16">
-          {taskIds.map((id) => {
-            if (!taskById.has(id)) return null;
-            return <EvergreenCard key={id} id={id} />;
-          })}
+          {taskIds.map((id) => <EvergreenCard key={id} id={id} />)}
           {taskIds.length === 0 && <p className="py-2 text-center text-xs text-slate-400">{t("Sin tareas fijas")}</p>}
           <button
             type="button"
@@ -116,10 +115,10 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
 
 /** Tarjeta compacta del panel: se puede arrastrar a cualquier columna (deja de ser fija al soltarla). */
 function EvergreenCard({ id }: { id: string }) {
-  const { taskById, kindById, openTask, dragHandle, filtering } = useBoard();
+  const { kindById, openTask, dragHandle } = useBoard();
   const t = useT();
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({ id, disabled: filtering });
-  const task = taskById.get(id);
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({ id });
+  const task = useTask(id);
   if (!task) return null;
   // En táctil solo arrastra el asa (igual que las tarjetas normales).
   return (
@@ -137,7 +136,7 @@ function EvergreenCard({ id }: { id: string }) {
         isDragging && "opacity-40",
       )}
     >
-      <span className="min-w-0 flex-1 truncate font-medium" title={task.title}>{task.title}</span>
+      <span className="min-w-0 flex-1 truncate font-medium" title={mentionsToPlain(task.title)}><MentionText text={task.title} /></span>
       <TypeBadge kind={kindById.get(task.kindId)} />
       {dragHandle && (
         <span

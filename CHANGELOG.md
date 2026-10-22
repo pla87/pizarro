@@ -2,6 +2,49 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.16.0 — 2026-10-23 01:41
+
+Cuentas más seguras (acceso con Google, verificación en dos pasos, enlaces por email, sesiones), proyectos privados compartidos, tema Eva, atajos y filtros nuevos, tareas recurrentes, colaboración ampliada y copias de seguridad cifradas
+
+### Nuevas funcionalidades
+
+- Iniciar sesión con Google (cuentas existentes, opcionalmente solo de tu dominio).
+- Verificación en dos pasos con app o código por email: obligatoria para administradores, opcional para el resto, con códigos de recuperación y «recordar este dispositivo».
+- ¿Olvidaste tu contraseña?, confirmación por email de los cambios de contraseña y de email, aviso de inicio de sesión desde un dispositivo nuevo y página de sesiones abiertas.
+- Los administradores ya no escriben contraseñas: fuerzan el cambio o invitan por email.
+- Proyectos privados compartidos: solo los ven sus miembros (tampoco los administradores) y cualquier persona puede crear uno.
+- Tema de color Eva.
+- Atajos sobre la tarjeta: Alt+M asignarme, Alt+←/→ mover de columna, Alt+D fecha, F2 renombrar, Alt+Mayús+D duplicar; y «Duplicar» en la tarea.
+- Filtros rápidos (mis tareas, vencidas, esta semana, etiqueta, tipo, responsable), también en móvil.
+- Tareas recurrentes y subtareas predefinidas por tipo.
+- Avisos de asignación, cambio de fecha, comentarios y respuestas; seguir tareas; marcar avisos uno a uno; menciones en el título; respuestas a comentarios; historial de la tarea.
+- Resumen diario por email (opcional) e informe PDF semanal por email.
+- Mis tareas como bandeja diaria; accesos directos y contador en el icono de la app.
+- Copias de seguridad cifradas automáticas con prueba de restauración mensual.
+
+### Mejoras
+
+- Botón Guardar en la tarea, también en escritorio, que guarda todo lo que se está editando.
+- Se puede arrastrar con un filtro activo.
+- Con una tarea abierta, «Nueva tarea» y deshacer siguen a mano en escritorio.
+- Tabulador más cómodo en todos los modales; menús y confirmaciones propios de la app.
+- Plantillas de release ordenables (la primera es la de por defecto).
+- Textos blancos puros en los temas no azules y presencia junto al número de tarjetas.
+- Quién tiene abierta cada tarea se ve en la propia tarjeta.
+- El tablero redibuja solo las tarjetas que cambian y descarga el editor con barra solo si se usa.
+
+### Correcciones
+
+- Al abrir una tarea por enlace directo aparecía el error de React #418.
+- Cerrar el visor de imágenes tocando fuera ya no cierra la tarea en móvil.
+- Varias correcciones de seguridad y robustez de la revisión de código.
+
+### Cambios técnicos / DB
+
+- Política de seguridad del navegador estricta (nonce), corte inmediato de conexiones en vivo al perder el acceso, cuotas de adjuntos y limpieza diaria de archivos huérfanos.
+- Pruebas de integración contra PostgreSQL real (npm run test:db).
+- Migraciones: cuentas por email, proyectos privados con miembros, tema Eva, productividad, Google y 2FA, colaboración.
+
 ## v1.15.0 — 2026-10-22 02:35
 
 Atajos de teclado y filtro del tablero, caracteres especiales intactos en las releases, y dos pasadas de revisión con correcciones de seguridad, fiabilidad, accesibilidad y rendimiento

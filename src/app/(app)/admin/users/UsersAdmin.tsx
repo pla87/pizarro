@@ -1,10 +1,10 @@
 "use client";
 
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { KeyRound, Pencil, Trash2, TriangleAlert, UserPlus } from "lucide-react";
+import { KeyRound, Pencil, ShieldOff, Trash2, TriangleAlert, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { createUser, deleteUser, resetUserPassword, updateUser } from "@/actions/users";
+import { createUser, deleteUser, forcePasswordChange, resetUserTwoFactor, updateUser } from "@/actions/users";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
 import { Modal } from "@/components/ui/Modal";
@@ -18,15 +18,19 @@ interface UserRow {
   email: string;
   role: Role;
   active: boolean;
+  mustChangePassword: boolean;
+  twoFactor: boolean;
+  googleLinked: boolean;
   privateProjects: number;
 }
 
-export function UsersAdmin({ users, meId, maxUsers }: { users: UserRow[]; meId: string; maxUsers: number }) {
+export function UsersAdmin({ users, meId, maxUsers, emailAvailable }: { users: UserRow[]; meId: string; maxUsers: number; emailAvailable: boolean }) {
   const t = useT();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [resetting, setResetting] = useState<UserRow | null>(null);
   const [deleting, setDeleting] = useState<UserRow | null>(null);
+  const [resetting2fa, setResetting2fa] = useState<UserRow | null>(null);
   const activeCount = users.filter((u) => u.active).length;
 
   return (
@@ -54,23 +58,32 @@ export function UsersAdmin({ users, meId, maxUsers }: { users: UserRow[]; meId: 
               {u.role === "ADMIN" ? t("Admin") : t("Miembro")}
             </span>
             {!u.active && <span className="badge bg-slate-100 text-slate-500 ring-slate-400/20">{t("Inactivo")}</span>}
+            {u.mustChangePassword && <span className="badge bg-amber-50 text-amber-700 ring-amber-500/20" title={t("Tiene que elegir una contraseña nueva al entrar")}>{t("Contraseña pendiente")}</span>}
+            {u.twoFactor && <span className="badge bg-emerald-50 text-emerald-700 ring-emerald-500/20" title={t("Tiene activada la verificación en dos pasos")}>2FA</span>}
+            {u.googleLinked && <span className="badge bg-slate-100 text-slate-600 ring-slate-500/20" title={t("Ha entrado con Google")}>Google</span>}
             <button className="btn-icon" onClick={() => setEditing(u)} aria-label={t("Editar {name}", { name: u.name })}><Pencil size={16} /></button>
-            <button className="btn-icon" onClick={() => setResetting(u)} aria-label={t("Restablecer contraseña de {name}", { name: u.name })}><KeyRound size={16} /></button>
+            {u.id !== meId && (
+              <button className="btn-icon" onClick={() => setResetting(u)} aria-label={t("Forzar cambio de contraseña de {name}", { name: u.name })} title={t("Forzar cambio de contraseña")}><KeyRound size={16} /></button>
+            )}
+            {u.id !== meId && u.twoFactor && (
+              <button className="btn-icon" onClick={() => setResetting2fa(u)} aria-label={t("Restablecer la verificación en dos pasos de {name}", { name: u.name })} title={t("Restablecer la verificación en dos pasos")}><ShieldOff size={16} /></button>
+            )}
             {u.id !== meId && (
               <button className="btn-icon text-red-600 dark:text-red-400" onClick={() => setDeleting(u)} aria-label={t("Borrar {name}", { name: u.name })}><Trash2 size={16} /></button>
             )}
           </li>
         ))}
       </ul>
-      {creating && <UserForm onClose={() => setCreating(false)} />}
+      {creating && <UserForm emailAvailable={emailAvailable} onClose={() => setCreating(false)} />}
       {editing && <UserForm user={editing} isMe={editing.id === meId} onClose={() => setEditing(null)} />}
-      {resetting && <ResetPassword user={resetting} onClose={() => setResetting(null)} />}
+      {resetting && <ForcePasswordChange user={resetting} emailAvailable={emailAvailable} onClose={() => setResetting(null)} />}
+      {resetting2fa && <ResetTwoFactor user={resetting2fa} onClose={() => setResetting2fa(null)} />}
       {deleting && <DeleteUser user={deleting} onClose={() => setDeleting(null)} />}
     </div>
   );
 }
 
-function UserForm({ user, isMe, onClose }: { user?: UserRow; isMe?: boolean; onClose: () => void }) {
+function UserForm({ user, isMe, emailAvailable, onClose }: { user?: UserRow; isMe?: boolean; emailAvailable?: boolean; onClose: () => void }) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
@@ -84,9 +97,9 @@ function UserForm({ user, isMe, onClose }: { user?: UserRow; isMe?: boolean; onC
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     start(async () => {
-      const res = user ? await updateUser(user.id, { name, email, role, active }) : await createUser({ name, email, role, password });
+      const res = user ? await updateUser(user.id, { name, email, role, active }) : await createUser({ name, email, role, password: emailAvailable ? undefined : password });
       if (!res.ok) return toast(res.error, "error");
-      toast(user ? t("Usuario actualizado") : t("Usuario creado"));
+      toast(user ? t("Usuario actualizado") : emailAvailable ? t("Usuario creado: le hemos enviado una invitación por email") : t("Usuario creado"));
       router.refresh();
       onClose();
     });
@@ -103,11 +116,22 @@ function UserForm({ user, isMe, onClose }: { user?: UserRow; isMe?: boolean; onC
           <label className="label" htmlFor="u-email">Email</label>
           <input id="u-email" type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={200} required autoComplete="off" />
         </div>
-        {!user && (
+        {!user && emailAvailable && (
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+            {t("Recibirá un email con un enlace (válido 72 horas) para elegir su propia contraseña. Tú no la llegas a conocer.")}
+          </p>
+        )}
+        {!user && !emailAvailable && (
           <div>
             <label className="label" htmlFor="u-pass">{t("Contraseña inicial (mín. 10)")}</label>
             <PasswordInput id="u-pass" className="input" value={password} onChange={(e) => setPassword(e.target.value)} minLength={10} required autoComplete="new-password" />
+            <p className="mt-1 text-xs text-slate-500">
+              {t("El envío de emails no está configurado: dale esta clave por otro medio. Al entrar tendrá que elegir una contraseña nueva, así que tú no llegarás a conocer la definitiva.")}
+            </p>
           </div>
+        )}
+        {user && user.email !== email && emailAvailable && (
+          <p className="text-xs text-amber-700 dark:text-amber-300">{t("Se avisará por email a la dirección antigua del cambio.")}</p>
         )}
         <div>
           <label className="label" htmlFor="u-role">{t("Rol")}</label>
@@ -122,11 +146,6 @@ function UserForm({ user, isMe, onClose }: { user?: UserRow; isMe?: boolean; onC
             {t("Usuario activo (si lo desactivas, se cierran sus sesiones)")}
           </label>
         )}
-        {user && user.privateProjects > 0 && (!active || role !== "ADMIN") && (
-          <p className="text-xs text-amber-700 dark:text-amber-300">
-            {user.privateProjects === 1 ? t("Su proyecto privado quedará bloqueado") : t("Sus {n} proyectos privados quedarán bloqueados", { n: user.privateProjects })} {t("(nadie podrá verlos) hasta que vuelva a ser administrador activo.")}
-          </p>
-        )}
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
           <button className="btn-primary" disabled={pending}>{user ? t("Guardar") : t("Crear usuario")}</button>
@@ -136,29 +155,62 @@ function UserForm({ user, isMe, onClose }: { user?: UserRow; isMe?: boolean; onC
   );
 }
 
-function ResetPassword({ user, onClose }: { user: UserRow; onClose: () => void }) {
+function ForcePasswordChange({ user, emailAvailable, onClose }: { user: UserRow; emailAvailable: boolean; onClose: () => void }) {
   const t = useT();
+  const router = useRouter();
   const toast = useToast();
   const [pending, start] = useTransition();
-  const [password, setPassword] = useState("");
   return (
-    <Modal open onClose={onClose} title={t("Restablecer contraseña de {name}", { name: user.name })} size="sm">
+    <Modal open onClose={onClose} title={t("Forzar cambio de contraseña de {name}", { name: user.name })} size="sm">
       <form
-        className="space-y-3"
+        className="space-y-3 text-sm"
         onSubmit={(e) => {
           e.preventDefault();
           start(async () => {
-            const res = await resetUserPassword(user.id, password);
+            const res = await forcePasswordChange(user.id);
             if (!res.ok) return toast(res.error, "error");
-            toast(t("Contraseña restablecida; se han cerrado sus sesiones"));
+            toast(res.data.emailed ? t("Cambio forzado: se han cerrado sus sesiones y le hemos enviado un enlace por email") : t("Cambio forzado: se han cerrado sus sesiones"));
+            router.refresh();
             onClose();
           });
         }}
       >
-        <div>
-          <label className="label" htmlFor="r-pass">{t("Nueva contraseña (mín. 10)")}</label>
-          <PasswordInput id="r-pass" className="input" value={password} onChange={(e) => setPassword(e.target.value)} minLength={10} required autoComplete="new-password" data-autofocus />
+        <p>{t("Se cerrarán todas sus sesiones y tendrá que elegir una contraseña nueva la próxima vez que entre. Tú no escribes ninguna contraseña.")}</p>
+        <p className="text-slate-500">
+          {emailAvailable
+            ? t("Le enviaremos un enlace por email (válido 30 minutos) para elegirla.")
+            : t("El envío de emails no está configurado: entrará con su contraseña actual y, antes de usar la app, se le pedirá una nueva.")}
+        </p>
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
+          <button className="btn-primary" disabled={pending}>{t("Forzar cambio")}</button>
         </div>
+      </form>
+    </Modal>
+  );
+}
+
+function ResetTwoFactor({ user, onClose }: { user: UserRow; onClose: () => void }) {
+  const t = useT();
+  const router = useRouter();
+  const toast = useToast();
+  const [pending, start] = useTransition();
+  return (
+    <Modal open onClose={onClose} title={t("Restablecer la verificación en dos pasos de {name}", { name: user.name })} size="sm">
+      <form
+        className="space-y-3 text-sm"
+        onSubmit={(e) => {
+          e.preventDefault();
+          start(async () => {
+            const res = await resetUserTwoFactor(user.id);
+            if (!res.ok) return toast(res.error, "error");
+            toast(t("Verificación en dos pasos restablecida"));
+            router.refresh();
+            onClose();
+          });
+        }}
+      >
+        <p>{t("Se borrarán su método y sus códigos de recuperación. Si es administrador, tendrá que configurar uno nuevo antes de entrar con contraseña; si es miembro, puede volver a activarlo desde «Mi perfil».")}</p>
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
           <button className="btn-primary" disabled={pending}>{t("Restablecer")}</button>
@@ -190,12 +242,12 @@ function DeleteUser({ user, onClose }: { user: UserRow; onClose: () => void }) {
           });
         }}
       >
-        <p>{t("Se borrará su cuenta para siempre. En los proyectos compartidos sus tareas y comentarios se conservan, sin autor. Si solo quieres quitarle el acceso, desactívalo.")}</p>
+        <p>{t("Se borrará su cuenta para siempre. En los proyectos compartidos sus tareas y comentarios se conservan, sin autor, y deja de ser miembro de los proyectos privados con más gente. Si solo quieres quitarle el acceso, desactívalo.")}</p>
         {count > 0 && (
           <div className="space-y-2 rounded-lg border border-red-300 bg-red-50 p-3 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
             <p className="flex gap-2 font-medium">
               <TriangleAlert size={18} className="shrink-0" />
-              {count === 1 ? t("Tiene 1 proyecto privado.") : t("Tiene {n} proyectos privados.", { n: count })} {t("Se borrarán con todas sus tareas, releases y adjuntos, y no se pueden recuperar.")}
+              {count === 1 ? t("Es el único miembro de 1 proyecto privado.") : t("Es el único miembro de {n} proyectos privados.", { n: count })} {t("Se borrarán con todas sus tareas, releases y adjuntos, y no se pueden recuperar.")}
             </p>
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />

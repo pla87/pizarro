@@ -1,14 +1,15 @@
 import "server-only";
 import { z } from "zod";
-import { actionContext } from "./action-context";
+import { actionContext, type ActionContext } from "./action-context";
 import { AppError } from "./errors";
 import { logEvent } from "./log";
 import { READ_ACTIONS } from "./log-query";
 import { publishChange } from "./realtime";
+import { saveTaskEvents } from "./task-events";
 import { saveUndo, type UndoOp } from "./undo";
-import { encodeLabel, type Label } from "./undo-label";
+import { encodeLabel } from "./undo-label";
 import { requestContext } from "./request-context";
-import { getCurrentUser } from "./session";
+import { getCurrentUser, getPendingUser } from "./session";
 import { toLocale, translate } from "@/i18n/core";
 
 type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string };
@@ -28,7 +29,7 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
   const start = performance.now();
   let result: ActionResult<T>;
   let level: "info" | "warn" | "error" = "info";
-  const ctx: { message?: string; label?: Label; projectId?: string | null; details?: Record<string, unknown>; undo?: UndoOp[]; taskId?: string | null } = {};
+  const ctx: ActionContext = {};
   try {
     result = { ok: true, data: await actionContext.run(ctx, fn) };
     if (ctx.undo?.length && ctx.projectId) await recordUndo(meta?.name ?? "acción", ctx.projectId, ctx.label ? encodeLabel(ctx.label) : ctx.message, ctx.undo, ctx.taskId ?? null);
@@ -36,6 +37,7 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
     if (meta && ctx.projectId && !READ_ACTIONS.includes(meta.name)) {
       const user = await getCurrentUser().catch(() => null);
       publishChange({ projectId: ctx.projectId, userId: user?.id ?? null, action: meta.name });
+      await saveTaskEvents(meta.name, ctx, ctx.projectId, user);
     }
   } catch (err) {
     // Los errores de redirect()/notFound() de Next deben propagarse.
@@ -79,7 +81,7 @@ async function recordUndo(name: string, projectId: string, message: string | und
 
 async function translateError(message: string): Promise<string> {
   try {
-    const user = await getCurrentUser();
+    const user = (await getCurrentUser()) ?? (await getPendingUser());
     return translate(toLocale(user?.locale), message);
   } catch {
     return message;

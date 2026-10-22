@@ -6,19 +6,6 @@ const isDev = process.env.NODE_ENV !== "production";
 // que hay una versión nueva desplegada (y recargar antes de llamar a acciones que ya no existen).
 const buildId = (process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 12) || Date.now().toString(36)) + (isDev ? "-dev" : "");
 
-const csp = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self'",
-  "connect-src 'self'",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-].join("; ");
-
 const nextConfig: NextConfig = {
   // Servidor autocontenido (.next/standalone): imagen Docker mucho más pequeña.
   output: "standalone",
@@ -36,10 +23,10 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // El informe PDF queda fuera de la CSP: el visor de PDF de Chrome se queda en blanco con object-src 'none'.
+        // La CSP (con nonce por petición) se fija en src/proxy.ts; aquí van el resto de cabeceras.
+        // El informe PDF queda fuera: el visor de PDF de Chrome se queda en blanco con cabeceras restrictivas.
         source: "/((?!api/projects/[^/]+/report).*)",
         headers: [
-          { key: "Content-Security-Policy", value: csp },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "same-origin" },

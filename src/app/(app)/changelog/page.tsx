@@ -27,7 +27,7 @@ export default async function ChangelogPage() {
   return (
     <div className="mx-auto max-w-3xl p-4 md:p-6">
       <div className="mb-6 flex items-center gap-3">
-        <History size={22} className="text-brand-600" />
+        <History size={22} className="text-brand-600 dark:text-brand-300" />
         <div>
           <h1 className="text-xl font-semibold">{t("Historial de versiones")}</h1>
           <p className="text-sm text-slate-500">

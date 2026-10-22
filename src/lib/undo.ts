@@ -27,13 +27,15 @@ export interface TaskData {
   archivedAt?: string | null;
   archivedFromColumnId?: string | null;
   evergreen?: boolean;
+  recurrence?: "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
+  recurrenceDay?: number | null;
   contentUpdatedAt?: string | null;
   contentUpdatedById?: string | null;
 }
 export type TaskField = keyof TaskData;
 
 type SubtaskRow = { id: string; taskId: string; title: string; done: boolean; position: number };
-type CommentRow = { id: string; taskId: string; authorId: string | null; body: string; createdAt: string; editedAt: string | null };
+type CommentRow = { id: string; taskId: string; authorId: string | null; body: string; createdAt: string; editedAt: string | null; parentId?: string | null };
 type AttachmentRow = {
   id: string; taskId: string; originalName: string; mimeType: string; isImage: boolean;
   width: number | null; height: number | null; size: number; createdById: string | null; createdAt: string;
@@ -81,7 +83,7 @@ const date = (s: string | null | undefined) => (s ? new Date(s) : null);
 
 const TASK_SELECT = {
   title: true, description: true, kindId: true, color: true, linkUrl: true, position: true, columnId: true, assigneeId: true,
-  dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, contentUpdatedAt: true, contentUpdatedById: true,
+  dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, recurrence: true, recurrenceDay: true, contentUpdatedAt: true, contentUpdatedById: true,
 } as const;
 type TaskRowFull = Prisma.TaskGetPayload<{ select: typeof TASK_SELECT }>;
 
@@ -134,7 +136,7 @@ export async function snapshotTasks(ids: string[]): Promise<UndoOp[]> {
       },
       labelIds: r.labels.map((l) => l.labelId),
       subtasks: r.subtasks.map((s) => ({ id: s.id, taskId: s.taskId, title: s.title, done: s.done, position: s.position })),
-      comments: r.comments.map((c) => ({ id: c.id, taskId: c.taskId, authorId: c.authorId, body: c.body, createdAt: c.createdAt.toISOString(), editedAt: iso(c.editedAt) })),
+      comments: r.comments.map((c) => ({ id: c.id, taskId: c.taskId, authorId: c.authorId, body: c.body, createdAt: c.createdAt.toISOString(), editedAt: iso(c.editedAt), parentId: c.parentId })),
       attachments: r.attachments.map((a) => ({
         id: a.id, taskId: a.taskId, originalName: a.originalName, mimeType: a.mimeType, isImage: a.isImage,
         width: a.width, height: a.height, size: a.size, createdById: a.createdById, createdAt: a.createdAt.toISOString(),
@@ -289,7 +291,8 @@ export async function applyUndo(projectId: string, ops: UndoOp[]): Promise<numbe
           const r = op.row;
           if (!(await db.task.count({ where: { id: r.taskId, projectId } })) || (await db.taskComment.count({ where: { id: r.id } }))) { skipped++; break; }
           const author = r.authorId && (await db.user.count({ where: { id: r.authorId } })) ? r.authorId : null;
-          await db.taskComment.create({ data: { ...r, authorId: author, createdAt: new Date(r.createdAt), editedAt: date(r.editedAt) } });
+          const parentId = r.parentId && (await db.taskComment.count({ where: { id: r.parentId } })) ? r.parentId : null;
+          await db.taskComment.create({ data: { ...r, parentId, authorId: author, createdAt: new Date(r.createdAt), editedAt: date(r.editedAt) } });
           break;
         }
         case "attachment.remove": {

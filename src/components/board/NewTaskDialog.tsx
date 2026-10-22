@@ -4,13 +4,14 @@ import { Camera, File as FileIcon, ImagePlus, Loader2, Plus, X } from "lucide-re
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createTask } from "@/actions/tasks";
 import { useT, useIntlLocale } from "@/i18n/client";
+import { useConfirm } from "../ui/ConfirmDialog";
 import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
 import { useShortcut } from "./shortcuts";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
 import { DescriptionField } from "../ui/DescriptionField";
-import { applyKindTemplate } from "@/lib/kinds-special";
+import { applyKindTemplate, mergeSubtasks } from "@/lib/kinds-special";
 import { TypeSelector } from "./TaskDialog";
 import type { T } from "@/i18n/core";
 import { filesFrom, isImageFile, uploadFile, useFileDrop } from "./upload";
@@ -44,6 +45,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const formId = `${uid}-new-task`;
   const board = useBoard();
   const toast = useToast();
+  const confirm = useConfirm();
   // Un borrador solo vale si su tipo y su columna siguen existiendo.
   const d = draft ?? null;
   const [title, setTitle] = useState(() => d?.title ?? (initialFiles?.length ? captureTitle(t, locale) : ""));
@@ -70,9 +72,17 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     close();
   };
   // Escape, clic fuera, X o «Cancelar» con contenido escrito piden confirmación; crear no.
-  const requestClose = () => {
+  const confirming = useRef(false);
+  const requestClose = async () => {
     const dirty = !!(title.trim() || description.trim() || subtasks.length || subtaskDraft.trim());
-    if (dirty && !window.confirm(t("Hay cambios sin guardar. ¿Descartar la nueva tarea?"))) return;
+    if (dirty) {
+      // Una sola confirmación a la vez (Escape o clics repetidos no las apilan).
+      if (confirming.current) return;
+      confirming.current = true;
+      const ok = await confirm({ title: t("Descartar la nueva tarea"), message: t("Hay cambios sin guardar. ¿Descartar la nueva tarea?"), confirmLabel: t("Descartar"), danger: true });
+      confirming.current = false;
+      if (!ok) return;
+    }
     onClose();
   };
   const isReleaseColumn = board.columns.find((c) => c.id === columnId)?.role === "NEXT_RELEASE";
@@ -195,6 +205,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
               setTitle(preset.title);
               setDescription(preset.description);
             }
+            // Subtareas predefinidas del tipo: se añaden a las que haya, sin repetir.
+            if (kind?.subtaskTemplate.length) setSubtasks((l) => mergeSubtasks(l, kind.subtaskTemplate));
           }} />
         </div>
         <div>
@@ -289,11 +301,11 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
                 </button>
               </div>
             ))}
-            <label className="flex h-14 w-20 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-slate-300 text-xs text-slate-500 hover:border-brand-500 dark:border-slate-700">
+            <label className="flex h-14 w-20 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-slate-300 text-xs text-slate-500 hover:border-brand-500 has-[:focus-visible]:border-brand-500 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-500 dark:border-slate-700">
               <ImagePlus size={16} /> {t("Archivo")}
               <input type="file" multiple className="sr-only" onChange={(e) => { addFiles(filesFrom(e.target.files)); e.target.value = ""; }} />
             </label>
-            <label className="flex h-14 w-20 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-slate-300 text-xs text-slate-500 hover:border-brand-500 sm:hidden dark:border-slate-700">
+            <label className="flex h-14 w-20 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-slate-300 text-xs text-slate-500 hover:border-brand-500 has-[:focus-visible]:border-brand-500 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-500 sm:hidden dark:border-slate-700">
               <Camera size={16} /> {t("Cámara")}
               <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { addFiles(filesFrom(e.target.files)); e.target.value = ""; }} />
             </label>

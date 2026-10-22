@@ -12,7 +12,7 @@ import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
 import type { EditorModeValue } from "@/lib/types";
 import { PALETTE } from "@/lib/constants";
-import { describeKindAutomation } from "@/lib/kinds-special";
+import { describeKindAutomation, MAX_KIND_SUBTASKS, parseSubtaskLines } from "@/lib/kinds-special";
 
 export interface KindRow {
   id: string;
@@ -21,9 +21,12 @@ export interface KindRow {
   taskCount: number;
   titleTemplate: string;
   descriptionTemplate: string;
+  /** Subtareas que se añaden al crear una tarea de este tipo. */
+  subtaskTemplate: string[];
 }
 
-const EMPTY_FORM = { name: "", color: "#6366f1", titleTemplate: "", descriptionTemplate: "" };
+/** `subtasks`: texto del cuadro, una subtarea por línea. */
+const EMPTY_FORM = { name: "", color: "#6366f1", titleTemplate: "", descriptionTemplate: "", subtasks: "" };
 const DESC_MAX = 2000;
 const NO_USERS: never[] = [];
 
@@ -54,7 +57,7 @@ function ColorField({ value, onChange }: { value: string; onChange: (c: string) 
           aria-label={t("Color {name}", { name: c })}
         />
       ))}
-      <label className="relative h-7 w-7 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600" title={t("Otro color")}>
+      <label className="relative h-7 w-7 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-500" title={t("Otro color")}>
         <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label={t("Elegir otro color")} />
       </label>
     </div>
@@ -110,11 +113,16 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
                   const text = describeKindAutomation({ titleTemplate: k.titleTemplate, descriptionTemplate: stripMarkdown(k.descriptionTemplate) }, t);
                   return text && <p className="mt-1 line-clamp-2 text-xs text-slate-500">{text}</p>;
                 })()}
+                {k.subtaskTemplate.length > 0 && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    {k.subtaskTemplate.length === 1 ? t("1 subtarea predefinida") : t("{n} subtareas predefinidas", { n: k.subtaskTemplate.length })}
+                  </p>
+                )}
               </div>
               <div className="ml-auto flex items-center">
                 <button className="btn-icon" disabled={i === 0 || pending} onClick={() => run(() => moveKind(k.id, -1), t("Orden actualizado"))} aria-label={t("Subir")}><ArrowUp size={15} /></button>
                 <button className="btn-icon" disabled={i === kinds.length - 1 || pending} onClick={() => run(() => moveKind(k.id, 1), t("Orden actualizado"))} aria-label={t("Bajar")}><ArrowDown size={15} /></button>
-                <button className="btn-icon" onClick={() => { setEditing(k.id); setForm({ name: k.name, color: k.color, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate }); }} aria-label={t("Editar {name}", { name: k.name })}><Pencil size={15} /></button>
+                <button className="btn-icon" onClick={() => { setEditing(k.id); setForm({ name: k.name, color: k.color, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate, subtasks: k.subtaskTemplate.join("\n") }); }} aria-label={t("Editar {name}", { name: k.name })}><Pencil size={15} /></button>
                 <button
                   className="btn-icon hover:text-red-600"
                   disabled={!canDelete}
@@ -152,7 +160,8 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
             className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
-              const payload = { ...form, descriptionTemplate: form.descriptionTemplate.slice(0, DESC_MAX) };
+              const { subtasks, ...fields } = form;
+              const payload = { ...fields, descriptionTemplate: form.descriptionTemplate.slice(0, DESC_MAX), subtaskTemplate: parseSubtaskLines(subtasks) };
               run(
                 () => (editing === "new" ? createKind(payload, projectId ?? null) : updateKind(editing, payload)),
                 editing === "new" ? t("Tipo creado") : t("Tipo actualizado"),
@@ -181,6 +190,19 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
               <div>
                 <label className="label" htmlFor="kind-desc-tpl">{t("Texto inicial de la descripción")}</label>
                 <DescriptionField id="kind-desc-tpl" mode={editorMode} textareaClassName="input field-sizing-content min-h-20" value={form.descriptionTemplate} onValueChange={(v) => setForm({ ...form, descriptionTemplate: v })} users={NO_USERS} maxLength={DESC_MAX} />
+              </div>
+              <div>
+                <label className="label" htmlFor="kind-subtasks-tpl">{t("Subtareas predefinidas")}</label>
+                <textarea
+                  id="kind-subtasks-tpl"
+                  className="input field-sizing-content max-h-48 min-h-20"
+                  value={form.subtasks}
+                  onChange={(e) => setForm({ ...form, subtasks: e.target.value })}
+                  placeholder={t("Una por línea")}
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  {t("Se añaden al elegir este tipo al crear una tarea (máx. {n}, sin repetir las que ya estén).", { n: MAX_KIND_SUBTASKS })}
+                </p>
               </div>
               <p className="text-xs text-slate-500">{t("Al elegir este tipo en una tarea se rellenan solos el título y el comienzo de la descripción.")}</p>
             </div>

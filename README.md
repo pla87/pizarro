@@ -58,12 +58,40 @@ Para generar un `SESSION_SECRET`: `openssl rand -base64 48`.
 | `npm run build` / `npm start` | Build de producción (salida *standalone*) y arranque. |
 | `npm run check` | Lint + typecheck + tests. |
 | `npm test` | Tests unitarios (generador de releases, posiciones, validación, imágenes, changelog). |
+| `npm run test:db` | Tests de integración (permisos y deshacer) contra una PostgreSQL efímera; ver «Tests de integración». |
 | `npm run db:migrate` | Crea una nueva migración en desarrollo (`prisma migrate dev`). |
 | `npm run db:deploy` | Aplica las migraciones pendientes. |
 | `npm run db:seed` | Seed idempotente: crea el admin si no hay usuarios y un proyecto de ejemplo si no hay proyectos. |
 | `npm run changelog:sync` | Sincroniza `changelog.json` con la tabla `AppVersionLog`. |
 | `npm run version:bump -- <patch\|minor\|major>` | Registra una nueva versión de la app (ver abajo). |
 | `npm run docs:pdf` | Regenera `MANUAL.pdf` a partir de `docs/MANUAL.md`. |
+
+### Tests de integración (base de datos real)
+
+`npm run test:db` ejecuta `tests/db/*.test.ts` llamando a las Server Actions de verdad (permisos de proyectos públicos, restringidos y privados, miembros, usuarios desactivados, cambio de contraseña forzado, deshacer y avisos). `npm test` sigue siendo solo unitario y no necesita base de datos.
+
+- **Qué hace el script** (`scripts/test-db.mjs`): crea una base con nombre único `pizarro_test_<aleatorio>` en el servidor de `TEST_DATABASE_URL` (o, si no existe, de `DATABASE_URL`, también desde `.env`), aplica `prisma migrate deploy`, lanza los tests con esa `DATABASE_URL` y borra la base al terminar, también si fallan o se interrumpe con Ctrl+C. El nombre de base de la URL se ignora: la base original nunca se toca. El usuario de PostgreSQL necesita permiso `CREATEDB`.
+- **Local:** `service postgresql start` (o Docker) y `npm run test:db`. Los tests se niegan a ejecutarse si `DATABASE_URL` no apunta a una base `pizarro_test_*`.
+- **Sesión en los tests:** `tests/db/register.mjs` sustituye `next/headers`, `next/cache`, `next/navigation` y `next/server` por stubs solo en el proceso de test; `loginAs(usuario)` crea una sesión real con `createSession` y su cookie va a un «jar» en memoria. No hay ningún atajo de autenticación en el código de producción.
+- **CI:** basta un servicio PostgreSQL y dos variables. Ejemplo para GitHub Actions:
+
+```yaml
+services:
+  postgres:
+    image: postgres:16
+    env: { POSTGRES_PASSWORD: postgres }
+    ports: ["5432:5432"]
+    options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+steps:
+  - uses: actions/checkout@v4
+  - uses: actions/setup-node@v4
+    with: { node-version: 22, cache: npm }
+  - run: npm ci
+  - run: npx prisma generate
+    env: { DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres" }
+  - run: npm run test:db
+    env: { TEST_DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres" }
+```
 
 ### Registrar una nueva versión de la app
 
@@ -89,12 +117,17 @@ Para generar un `SESSION_SECRET`: `openssl rand -base64 48`.
 | `MAX_USERS` | No | `5` | Máximo de usuarios activos. |
 | `MAX_UPLOAD_MB` | No | `10` | Tamaño máximo por imagen. |
 | `DATABASE_POOL_SIZE` | No | `10` | Conexiones del pool. |
+| `UPLOAD_QUOTA_MB_PER_PROJECT` | No | `2048` | Cuota de adjuntos por proyecto (MB). Pasada la cuota, la subida se rechaza mostrando el uso. |
+| `UPLOAD_QUOTA_MB_TOTAL` | No | (sin límite) | Cuota total de adjuntos de todo el servidor (MB). |
+| `BACKUP_KEY` | Para copias automáticas | `openssl rand -base64 32` | Clave AES-256 (32 bytes en base64) con la que se cifran las copias de la base de datos. Sin ella las copias están desactivadas. **Guárdala fuera de Railway: sin ella las copias no se pueden abrir.** |
 | `COOKIE_SECURE` | No | `true` / `false` | Fuerza el atributo `Secure` de la cookie. |
 | `APP_TIMEZONE` | No | `Europe/Madrid` | Zona horaria para calcular «hoy» en plazos e informes. |
 | `LOG_RETENTION_DAYS` | No | `7` | Días que se conservan los logs de *Administración → Logs* (máx. 90). |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Para Google Docs/Sheets | (de Google Cloud) | Cliente OAuth «Aplicación web». Ver [Google Docs y Sheets](#71-google-docs-y-sheets). |
 | `GOOGLE_WORKSPACE_DOMAIN` | Recomendada con Google | `tu-dominio.com` | Solo admite cuentas de ese dominio y comparte cada archivo nuevo con él, para que todo el equipo pueda abrirlo desde la tarjeta. |
 | `GOOGLE_SHARE_ROLE` | No | `writer` | Rol con el que se comparte con el dominio: `writer`, `commenter`, `reader` o `none` (no compartir). |
+| `AUTH_GOOGLE_ONLY` | No | `true` | Solo se entra con Google (necesita `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `APP_URL`; sin ellos no tiene efecto). Ver [Acceso con Google y dos pasos](#74-acceso-con-google-y-verificación-en-dos-pasos). |
+| `AUTH_ALLOW_ADMIN_PASSWORD` | No | `true` | Con `AUTH_GOOGLE_ONLY`, deja entrar con contraseña (y segundo paso) a los administradores: acceso de emergencia. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Para avisos por email | `smtp.gmail.com` / `465` / … | Servidor de correo saliente. Ver [Email](#72-avisos-por-email). |
 | `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_TEMPLATE_NAME` | Para avisos por WhatsApp | (de Meta) | WhatsApp Cloud API. Ver [WhatsApp](#73-avisos-por-whatsapp). |
 | `WHATSAPP_TEMPLATE_LANG` / `WHATSAPP_API_VERSION` | No | `es` / `v23.0` | Idioma de la plantilla y versión de la API de Meta. |
@@ -180,8 +213,19 @@ Nota: `railway run` ejecuta el comando en tu máquina con las variables del serv
 
 ### 6. Copias de seguridad (recomendado)
 
-- **Base de datos:** activa los *Backups* del servicio Postgres en Railway, o programa un `pg_dump` con la URL pública.
-- **Capturas:** el volumen admite *backups* desde la pestaña del volumen.
+- **Base de datos (automáticas):** con `BACKUP_KEY` definida, cada día se vuelca toda la base de datos (instantánea consistente `REPEATABLE READ`, sin `pg_dump`) a `UPLOAD_DIR/backups/pizarro-backup-AAAAMMDDTHHMMSSZ.pzbak`: NDJSON → gzip → AES-256-GCM, con un manifiesto (versión, migración, filas por tabla, sha256) dentro del fichero y en un `.json` al lado. Se conservan las últimas 14 diarias y 6 mensuales. Cada mes se hace una **prueba de restauración**: se descifra la última copia y se comprueba la integridad y que las filas coinciden con el manifiesto. Ambos resultados se ven en *Administración → Copias de seguridad* (con *Crear copia ahora* y *Descargar*) y en los logs (categoría *system*).
+- **Dónde se guardan:** en el mismo volumen que los adjuntos. Un fallo del volumen se llevaría copia y adjuntos juntos: descarga de vez en cuando la última copia (botón *Descargar*) y activa también los *Backups/snapshots del volumen* desde su pestaña en Railway; eso protege los adjuntos, que son ficheros del volumen (no se empaquetan en la copia de la base de datos). Opcionalmente, activa los *Backups* del servicio Postgres de Railway.
+- **Restaurar** en una base de datos **vacía** (recién creada, sin arrancar la app):
+
+  ```bash
+  export DATABASE_URL="postgresql://…/base_vacia"
+  npx prisma migrate deploy                    # mismas migraciones que la copia
+  BACKUP_KEY="…" npm run backup:restore -- ruta/pizarro-backup-….pzbak
+  # en el contenedor compilado:  BACKUP_KEY="…" node dist/restore-backup.mjs <fichero>
+  ```
+
+  `scripts/restore-backup.ts` verifica primero toda la copia (clave, integridad, sha256 y cuentas), se niega si la base de datos ya tiene usuarios o proyectos y carga todo en una sola transacción (si falla, no queda nada a medias).
+- **Limpieza de huérfanos:** cada hora se borran de `UPLOAD_DIR` los ficheros (adjuntos, miniaturas, copias de releases) que ninguna fila de la base de datos referencia y tienen más de 24 h. No toca `backups/`, enlaces simbólicos ni ficheros con nombres desconocidos, y se cancela sola si más de la mitad de los ficheros parecen huérfanos.
 
 ---
 
@@ -196,7 +240,7 @@ Nota: `railway run` ejecuta el comando en tu máquina con las variables del serv
    - **Audience / Público**: tipo **Interno**. Solo podrán conectarse las cuentas de tu Workspace y no hace falta verificación de Google.
    - **Data access / Acceso a datos**: añade los permisos `openid`, `email` y `https://www.googleapis.com/auth/drive.file`. `drive.file` solo da acceso a los archivos que crea Pizarro, no al resto de tu Drive.
 4. **Clients / Credenciales → Crear cliente → Aplicación web**:
-   - **URI de redirección autorizados**: `https://<tu-dominio>.up.railway.app/api/google/callback`. Debe coincidir exactamente con `APP_URL` + `/api/google/callback`.
+   - **URI de redirección autorizados**: `https://<tu-dominio>.up.railway.app/api/google/callback`. Debe coincidir exactamente con `APP_URL` + `/api/google/callback`. Si además usarás «Iniciar sesión con Google» ([7.4](#74-acceso-con-google-y-verificación-en-dos-pasos)), añade también `APP_URL` + `/api/auth/google/callback` (las dos URI en el mismo cliente).
 5. Copia el **ID de cliente** y el **secreto** a Railway: `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`, y añade `GOOGLE_WORKSPACE_DOMAIN=tu-dominio.com`. Así, cada archivo creado se comparte automáticamente con tu dominio como editor (`GOOGLE_SHARE_ROLE`), y el resto del equipo puede abrirlo desde la tarjeta. Sin dominio, solo lo ve quien lo crea hasta que lo comparta a mano.
 6. Redespliega. Cada usuario entra en **Mi perfil y plantillas → Google Docs y Sheets → Conectar con Google**.
 
@@ -250,6 +294,18 @@ Se usa la **WhatsApp Cloud API** oficial de Meta. Pasos:
 7. Cada usuario activa **WhatsApp** en *Mi perfil → Avisos de menciones* y escribe su número en formato internacional (`+34…`).
 
 > Meta cobra por cada mensaje de plantilla de utilidad (céntimos en España; consulta su tabla de precios). Si el idioma de la plantilla aprobada es `es_ES` en vez de `es`, cambia `WHATSAPP_TEMPLATE_LANG`. Los errores de envío quedan en los logs con el prefijo `[notify]`.
+
+#### 7.4 Acceso con Google y verificación en dos pasos
+
+**Iniciar sesión con Google.** Con `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `APP_URL` definidos, la pantalla de acceso muestra «Iniciar sesión con Google» (OpenID Connect con PKCE, `state` y `nonce`; solo los permisos `openid email profile`, Drive sigue siendo una conexión aparte). Requisitos:
+
+- En el cliente OAuth de Google Cloud añade la URI de redirección autorizada `APP_URL` + `/api/auth/google/callback` (además de la de Drive, `/api/google/callback`).
+- No hay registro: entra quien ya tiene cuenta en Pizarro con ese email (verificado por Google). La primera vez se guarda el identificador `sub` de Google y desde entonces se reconoce por él. Si `GOOGLE_WORKSPACE_DOMAIN` está definido, solo valen cuentas de ese dominio.
+- El acceso con Google no pide contraseña ni segundo paso (Google aplica el suyo) y no modifica la marca de «contraseña pendiente». Sí avisa por email de los dispositivos nuevos.
+
+**Solo con Google.** `AUTH_GOOGLE_ONLY=true` desactiva el acceso con contraseña para todos. `AUTH_ALLOW_ADMIN_PASSWORD=true` mantiene la contraseña solo para administradores como acceso de emergencia (aparece plegado en la pantalla de acceso). Por defecto ambas están sin definir y se admiten los dos métodos.
+
+**Verificación en dos pasos.** Solo afecta al acceso con contraseña. Cada persona puede activarla en *Mi perfil → Verificación en dos pasos* con una app de autenticación (TOTP, 6 dígitos, 30 s) o un código de 6 dígitos por email (10 minutos, un solo uso; requiere SMTP). Al activarla se muestran 10 códigos de recuperación de un solo uso (solo se guarda su HMAC). Es **obligatoria para administradores**: tras la contraseña se les pide configurarla antes de entrar. Hasta completar el segundo paso no existe sesión. Se permiten 5 fallos por cada contraseña correcta y 20 por persona y hora. «Recordar este dispositivo 30 días» omite el segundo paso en ese navegador (se anula al cambiar la contraseña o el método). Si alguien pierde el móvil y los códigos, un administrador puede restablecerla en *Administración → Usuarios*. Los secretos TOTP se guardan cifrados con una clave derivada de `SESSION_SECRET`.
 
 ## Arquitectura (resumen)
 

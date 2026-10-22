@@ -5,9 +5,9 @@ import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertAssignable, assertProjectAccess, assertTaskAccess, visibleProjectsWhere } from "@/lib/access";
-import { boardTaskSelect, loadBoardTask, toBoardTask } from "@/lib/board";
+import { appTimeZone, boardTaskSelect, loadBoardTask, toBoardTask } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
-import { describeAction, noteProject, noteTask } from "@/lib/action-context";
+import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents } from "@/lib/action-context";
 import { addUndo, captureTasks, snapshotTasks, type TaskField } from "@/lib/undo";
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
@@ -15,11 +15,16 @@ import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions"
 import { rateLimit } from "@/lib/rate-limit";
 import { requireUser } from "@/lib/session";
 import * as v from "@/lib/validation";
-import { isoToDate } from "@/lib/dates";
+import { dateToIso, isoToDate, todayIso } from "@/lib/dates";
+import { normalizeRecurrence, RECURRENCES } from "@/lib/recurrence-date";
+import { spawnRecurrences } from "@/lib/recurrence";
 import { createDriveFile, type GoogleFileKind } from "@/lib/google";
-import { extractMentionIds } from "@/lib/mentions";
-import { notifyMentions } from "@/lib/notify";
-import type { ArchivedTask, CommentInfo, SubtaskInfo, TaskDetail, TaskLinkInfo } from "@/lib/types";
+import { excerpt as makeExcerpt, extractMentionIds, mentionsToPlain } from "@/lib/mentions";
+import { dueChangeExcerpt } from "@/lib/notification-text";
+import { followTask, notifyMentions, notifyTask, taskFollowerIds } from "@/lib/notify";
+import { isFollowing } from "@/lib/followers";
+import { loadTaskHistory } from "@/lib/task-events";
+import type { ArchivedTask, BoardTask, CommentInfo, SubtaskInfo, TaskDetail, TaskLinkInfo } from "@/lib/types";
 import { getT } from "@/i18n/server";
 
 async function assertColumnInProject(columnId: string, projectId: string) {
@@ -52,21 +57,26 @@ async function assertLabelsInProject(labelIds: string[], projectId: string) {
 /** Título y columna actuales de una tarea, para los textos del registro de actividad. */
 async function taskLabel(taskId: string): Promise<{ title: string; column: string }> {
   const t = await db.task.findUnique({ where: { id: taskId }, select: { title: true, column: { select: { name: true } } } });
-  return { title: t?.title ?? "(tarea)", column: t?.column.name ?? "?" };
+  return { title: t ? mentionsToPlain(t.title) : "(tarea)", column: t?.column.name ?? "?" };
 }
 
 async function columnName(columnId: string): Promise<string> {
   return (await db.column.findUnique({ where: { id: columnId }, select: { name: true } }))?.name ?? "?";
 }
 
+async function columnIsDone(columnId: string): Promise<boolean> {
+  return (await db.column.findUnique({ where: { id: columnId }, select: { isDone: true } }))?.isDone ?? false;
+}
+
 const CHANGE_LABELS: Record<string, string> = {
   title: "título", description: "descripción", kindId: "tipo", color: "color", linkUrl: "enlace",
   assigneeId: "responsable", labelIds: "etiquetas", dueDate: "fecha límite", deliverableId: "entregable", evergreen: "fija en la release",
+  recurrence: "repetición", recurrenceDay: "repetición",
 };
 
 /** «tipo, responsable y fecha límite» a partir de los campos cambiados. */
 function describeChanges(data: Record<string, unknown>): Label {
-  const names: Label[] = Object.keys(data).filter((k) => data[k] !== undefined).map((k) => ({ k: CHANGE_LABELS[k] ?? k }));
+  const names: Label[] = [...new Set(Object.keys(data).filter((k) => data[k] !== undefined).map((k) => CHANGE_LABELS[k] ?? k))].map((k) => ({ k }));
   if (names.length <= 1) return names[0] ?? { k: "sin cambios" };
   return { k: "{list} y {last}", p: { list: names.slice(0, -1), last: names.at(-1)! } };
 }
@@ -98,7 +108,7 @@ async function rebalanceColumn(columnId: string) {
 const createSchema = z.object({
   projectId: v.id,
   columnId: v.id,
-  title: v.title,
+  title: v.taskTitle,
   kindId: v.id,
   description: v.description.default(""),
   assigneeId: v.id.nullable().default(null),
@@ -149,10 +159,13 @@ export async function createTask(input: z.input<typeof createSchema>) {
     addUndo({ t: "task.remove", id: task.id });
     describeAction(
       data.subtasks.length ? "Creó la tarea «{title}» en «{col}» con {subs}" : "Creó la tarea «{title}» en «{col}»",
-      { title: data.title, col: await columnName(data.columnId), subs: subtasksN(data.subtasks.length) },
+      { title: mentionsToPlain(data.title), col: await columnName(data.columnId), subs: subtasksN(data.subtasks.length) },
       { taskId: task.id },
     );
-    await notifyMentions({ actorId: user.id, taskId: task.id, projectId: data.projectId, recipientIds: extractMentionIds(data.description), text: data.description });
+    const descMentions = extractMentionIds(data.description);
+    await notifyMentions({ actorId: user.id, taskId: task.id, projectId: data.projectId, recipientIds: descMentions, text: data.description });
+    await notifyMentions({ actorId: user.id, taskId: task.id, projectId: data.projectId, recipientIds: extractMentionIds(data.title).filter((id) => !descMentions.includes(id)), text: data.title });
+    if (data.assigneeId) await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId: task.id, projectId: data.projectId, recipientIds: [data.assigneeId], excerpt: makeExcerpt(data.title) });
     return loadBoardTask(task.id);
   });
 }
@@ -165,6 +178,8 @@ const createManySchema = z.object({
   labelIds: z.array(v.id).max(20).default([]),
   dueDate: v.dayIso.default(null),
   deliverableId: v.id.nullable().default(null),
+  /** Añade a cada tarea las subtareas predefinidas de su tipo. */
+  applySubtaskTemplates: z.boolean().default(false),
 });
 
 /** Crea varias tareas a la vez (una por línea pegada), al final de la columna y en el orden recibido. */
@@ -180,6 +195,11 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
     await assertKindsInProject(data.tasks.map((t) => t.kindId), data.projectId);
     const labelIds = [...new Set(data.labelIds)];
     const dueDate = data.dueDate ? isoToDate(data.dueDate) : null;
+    const templates = new Map<string, string[]>();
+    if (data.applySubtaskTemplates) {
+      const kinds = await db.taskKind.findMany({ where: { id: { in: [...new Set(data.tasks.map((t) => t.kindId))] } }, select: { id: true, subtaskTemplate: true } });
+      for (const k of kinds) if (k.subtaskTemplate.length) templates.set(k.id, k.subtaskTemplate);
+    }
     const ids = await db.$transaction(async (tx) => {
       let position = (await tx.task.findFirst({ where: { columnId: data.columnId }, orderBy: { position: "desc" }, select: { position: true } }))?.position ?? null;
       const created = await tx.task.createManyAndReturn({
@@ -202,6 +222,14 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
       if (labelIds.length) {
         await tx.taskLabel.createMany({ data: created.flatMap((t) => labelIds.map((labelId) => ({ taskId: t.id, labelId }))) });
       }
+      if (templates.size) {
+        // `createManyAndReturn` conserva el orden de entrada: la tarea i es la línea i.
+        await tx.subtask.createMany({
+          data: created.flatMap((t, i) =>
+            (templates.get(data.tasks[i]!.kindId) ?? []).map((title, j) => ({ taskId: t.id, title, position: (j + 1) * POSITION_STEP })),
+          ),
+        });
+      }
       return created.map((t) => t.id);
     });
     addUndo(...ids.map((id) => ({ t: "task.remove" as const, id })));
@@ -211,8 +239,65 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
   });
 }
 
+/**
+ * Duplica una tarea: copia título (con « (copia)»), tipo, descripción, etiquetas, responsable, fecha límite,
+ * entregable, color, enlace y subtareas (sin marcar); no copia comentarios, adjuntos, historial ni repetición.
+ * Queda justo detrás de la original en su columna. Se deshace de una vez (borra la copia).
+ */
+export async function duplicateTask(taskId: string) {
+  return runAction({ name: "tasks.duplicateTask", args: [taskId] }, async () => {
+    const user = await requireUser();
+    if (!rateLimit(`duplicate:${user.id}`, 60, 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
+    const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
+    await assertNotArchived(taskId);
+    const src = await db.task.findUniqueOrThrow({
+      where: { id: taskId },
+      select: {
+        title: true, description: true, kindId: true, color: true, linkUrl: true, assigneeId: true, dueDate: true, deliverableId: true,
+        columnId: true, position: true,
+        labels: { select: { labelId: true } },
+        subtasks: { orderBy: { position: "asc" }, select: { title: true, position: true } },
+      },
+    });
+    const t = await getT();
+    const suffix = ` ${t("(copia)")}`;
+    const title = src.title.length + suffix.length > 200 ? `${src.title.slice(0, 200 - suffix.length).trimEnd()}${suffix}` : `${src.title}${suffix}`;
+    // Entre la original y la siguiente de su columna (si las posiciones se agotan, se renumera la columna).
+    const nextAfter = async (pos: number) => (await db.task.findFirst({ where: { columnId: src.columnId, position: { gt: pos } }, orderBy: { position: "asc" }, select: { position: true } }))?.position ?? null;
+    let from = src.position;
+    let next = await nextAfter(from);
+    if (needsRebalance(from, next)) {
+      await rebalanceColumn(src.columnId);
+      from = (await db.task.findUniqueOrThrow({ where: { id: taskId }, select: { position: true } })).position;
+      next = await nextAfter(from);
+    }
+    const copy = await db.task.create({
+      data: {
+        projectId,
+        columnId: src.columnId,
+        title,
+        description: src.description,
+        kindId: src.kindId,
+        color: src.color,
+        linkUrl: src.linkUrl,
+        assigneeId: src.assigneeId,
+        dueDate: src.dueDate,
+        deliverableId: src.deliverableId,
+        position: positionBetween(from, next),
+        createdById: user.id,
+        labels: { create: src.labels.map((l) => ({ labelId: l.labelId })) },
+        subtasks: { create: src.subtasks.map((s) => ({ title: s.title, position: s.position })) },
+      },
+      select: { id: true },
+    });
+    addUndo({ t: "task.remove", id: copy.id });
+    describeAction("Duplicó «{title}»", { title: src.title }, { taskId: copy.id });
+    return loadBoardTask(copy.id);
+  });
+}
+
 const updateSchema = z.object({
-  title: v.title.optional(),
+  title: v.taskTitle.optional(),
   description: v.description.optional(),
   kindId: v.id.optional(),
   color: v.color.optional(),
@@ -222,7 +307,39 @@ const updateSchema = z.object({
   dueDate: v.dayIso.optional(),
   deliverableId: v.id.nullable().optional(),
   evergreen: z.boolean().optional(),
+  recurrence: z.enum(RECURRENCES).optional(),
+  recurrenceDay: z.number().int().min(1).max(31).nullable().optional(),
 });
+
+/** Anota en el historial qué ha cambiado realmente al editar la tarea (una línea por cambio). */
+async function recordUpdateEvents(
+  taskId: string,
+  prev: { title: string; description: string; kindId: string; kind: { name: string }; assigneeId: string | null; dueDate: Date | null; color: string | null; linkUrl: string | null; deliverableId: string | null; evergreen: boolean },
+  data: z.infer<typeof updateSchema>,
+  dueDate: string | null | undefined,
+) {
+  const add = (label: Label) => recordTaskEvent(taskId, "update", label);
+  if (data.title !== undefined && data.title !== prev.title) add({ k: "Cambió el título de «{from}» a «{to}»", p: { from: mentionsToPlain(prev.title), to: mentionsToPlain(data.title) } });
+  if (data.description !== undefined && data.description !== prev.description) add({ k: "Editó la descripción" });
+  if (data.kindId !== undefined && data.kindId !== prev.kindId) {
+    const kind = await db.taskKind.findUnique({ where: { id: data.kindId }, select: { name: true } });
+    add({ k: "Cambió el tipo de «{from}» a «{to}»", p: { from: prev.kind.name, to: kind?.name ?? "?" } });
+  }
+  if (data.assigneeId !== undefined && data.assigneeId !== prev.assigneeId) {
+    const who = data.assigneeId ? (await db.user.findUnique({ where: { id: data.assigneeId }, select: { name: true } }))?.name ?? "?" : null;
+    add(who ? { k: "Asignó la tarea a {name}", p: { name: who } } : { k: "Quitó el responsable" });
+  }
+  if (dueDate !== undefined && dueDate !== dateToIso(prev.dueDate)) add(dueDate ? { k: "Puso la fecha límite el {date}", p: { date: dueDate } } : { k: "Quitó la fecha límite" });
+  const others: Record<string, unknown> = {};
+  if (data.color !== undefined && data.color !== prev.color) others.color = true;
+  if (data.linkUrl !== undefined && (data.linkUrl ?? null) !== prev.linkUrl) others.linkUrl = true;
+  if (data.deliverableId !== undefined && data.deliverableId !== prev.deliverableId) others.deliverableId = true;
+  if (data.evergreen !== undefined && data.evergreen !== prev.evergreen) others.evergreen = true;
+  if (data.labelIds !== undefined) others.labelIds = true;
+  if (Object.keys(others).length) add({ k: "Cambió {changes}", p: { changes: describeChanges(others) } });
+  // Sin cambios reales (p. ej. se guardó el mismo texto): ni siquiera la línea genérica.
+  skipTaskEvents();
+}
 
 /**
  * `since`: cuándo se cargó el título/descripción que se está editando. Si otra persona los ha
@@ -253,15 +370,27 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
       const ok = await db.task.count({ where: { id: taskId, column: { role: "NEXT_RELEASE" } } });
       if (!ok) throw new AppError("Solo las tareas de la columna de la release pueden ser fijas.");
     }
-    const { labelIds, dueDate, ...rest } = data;
+    const { labelIds, dueDate, recurrence, recurrenceDay, ...rest } = data;
+    // Repetición: el día se deja coherente con la regla (semanal 1-7, mensual 1-31) y, si falta, sale de la fecha límite o de hoy.
+    let repeat: { recurrence: (typeof RECURRENCES)[number]; recurrenceDay: number | null } | null = null;
+    if (recurrence !== undefined || recurrenceDay !== undefined) {
+      const cur = await db.task.findUniqueOrThrow({ where: { id: taskId }, select: { recurrence: true, recurrenceDay: true, dueDate: true } });
+      const rule = recurrence ?? cur.recurrence;
+      const day = recurrenceDay !== undefined ? recurrenceDay : recurrence !== undefined && recurrence !== cur.recurrence ? null : cur.recurrenceDay;
+      repeat = normalizeRecurrence(rule, day, dueDate !== undefined ? dueDate : dateToIso(cur.dueDate), todayIso(appTimeZone()));
+    }
     const fields = {
       ...rest,
+      ...(repeat ?? {}),
       ...(dueDate !== undefined ? { dueDate: dueDate ? isoToDate(dueDate) : null } : {}),
       ...(editsText ? { contentUpdatedAt: new Date(), contentUpdatedById: user.id } : {}),
     };
     const changed = Object.keys(fields).filter((k) => k !== "labelIds") as TaskField[];
     addUndo(...(await captureTasks([taskId], changed, labelIds !== undefined)));
-    const before = await taskLabel(taskId);
+    const prev = await db.task.findUniqueOrThrow({
+      where: { id: taskId },
+      select: { title: true, description: true, kindId: true, kind: { select: { name: true } }, assigneeId: true, dueDate: true, color: true, linkUrl: true, deliverableId: true, evergreen: true },
+    });
     const newMentions = await db.$transaction(async (tx) => {
       // Menciones nuevas en la descripción (las que ya estaban no vuelven a avisar).
       // Se lee la versión anterior con bloqueo de fila para que dos ediciones simultáneas no avisen dos veces.
@@ -278,12 +407,35 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
       }
       return added;
     });
-    describeAction("Modificó «{title}»: {changes}", { title: data.title ?? before.title, changes: describeChanges(data) }, { taskId });
+    describeAction("Modificó «{title}»: {changes}", { title: mentionsToPlain(data.title ?? prev.title), changes: describeChanges(data) }, { taskId });
+    await recordUpdateEvents(taskId, prev, data, dueDate);
     if (newMentions.length) {
       await notifyMentions({ actorId: user.id, taskId, projectId, recipientIds: newMentions, text: data.description ?? "" });
     }
+    if (data.title !== undefined) {
+      const oldTitle = new Set(extractMentionIds(prev.title));
+      const added = extractMentionIds(data.title).filter((id) => !oldTitle.has(id) && !newMentions.includes(id));
+      if (added.length) await notifyMentions({ actorId: user.id, taskId, projectId, recipientIds: added, text: data.title });
+    }
+    // Asignación y cambio de fecha: avisan a la persona asignada (nunca a quien hace el cambio).
+    const assigneeChanged = data.assigneeId !== undefined && data.assigneeId !== prev.assigneeId;
+    if (assigneeChanged && data.assigneeId) {
+      await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId, projectId, recipientIds: [data.assigneeId], excerpt: makeExcerpt(data.title ?? prev.title) });
+    }
+    const oldDue = dateToIso(prev.dueDate);
+    const assigneeNow = data.assigneeId !== undefined ? data.assigneeId : prev.assigneeId;
+    if (dueDate !== undefined && dueDate !== oldDue && assigneeNow && !assigneeChanged) {
+      await notifyTask({ type: "DUE_CHANGED", actorId: user.id, taskId, projectId, recipientIds: [assigneeNow], excerpt: dueChangeExcerpt(oldDue, dueDate) });
+    }
     return loadBoardTask(taskId);
   });
+}
+
+/** `true` si `toId` es una columna terminada y ninguna de las de origen lo era (la tarea acaba de terminarse). */
+async function finishedNow(fromIds: string[], toId: string): Promise<boolean> {
+  const cols = await db.column.findMany({ where: { id: { in: [...new Set([...fromIds, toId])] } }, select: { id: true, isDone: true } });
+  const done = new Set(cols.filter((c) => c.isDone).map((c) => c.id));
+  return done.has(toId) && !fromIds.every((id) => done.has(id));
 }
 
 async function neighbourPositions(columnId: string, prevId: string | null, nextId: string | null) {
@@ -301,7 +453,7 @@ async function neighbourPositions(columnId: string, prevId: string | null, nextI
 export async function moveTask(taskId: string, columnId: string, prevId: string | null, nextId: string | null) {
   return runAction({ name: "tasks.moveTask", args: [taskId, columnId, prevId, nextId] }, async () => {
     const user = await requireUser();
-    const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
+    const { projectId, columnId: fromColumnId } = await assertTaskAccess(user, v.id.parse(taskId));
     await assertNotArchived(taskId);
     await assertColumnInProject(v.id.parse(columnId), projectId);
     prevId = v.id.nullable().parse(prevId);
@@ -315,13 +467,18 @@ export async function moveTask(taskId: string, columnId: string, prevId: string 
     const before = await taskLabel(taskId);
     addUndo(...(await captureTasks([taskId], ["columnId", "position", "evergreen"])));
     await db.task.update({ where: { id: taskId }, data: { columnId, position, evergreen: false } });
+    // Recurrente que llega a una columna terminada: nace la siguiente aparición.
+    const spawned = (await finishedNow([fromColumnId], columnId)) ? await spawnRecurrences([taskId], user.id) : [];
     const to = await columnName(columnId);
     describeAction(
       before.column === to ? "Reordenó «{title}» en «{to}»" : "Movió «{title}» de «{from}» a «{to}»",
       { title: before.title, from: before.column, to },
       { taskId },
     );
-    return { position };
+    // Historial: solo si cambia de columna (reordenar dentro de la misma no cuenta). «done» alimenta el resumen diario.
+    if (before.column === to) skipTaskEvents();
+    else recordTaskEvent(taskId, (await columnIsDone(columnId)) ? "done" : "move", { k: "Movió la tarea de «{from}» a «{to}»", p: { from: before.column, to } });
+    return { position, spawned };
   });
 }
 
@@ -337,7 +494,7 @@ export async function moveTasks(taskIds: string[], columnId: string) {
     if (!column) throw notFound();
     noteProject(column.projectId);
     const tasks = await db.task.findMany({
-      where: { id: { in: ids }, projectId: column.projectId },
+      where: { id: { in: ids }, projectId: column.projectId, archivedAt: null },
       orderBy: [{ column: { position: "asc" } }, { position: "asc" }],
       select: { id: true, columnId: true },
     });
@@ -346,8 +503,19 @@ export async function moveTasks(taskIds: string[], columnId: string) {
     const moved = toMove.map((t) => ({ id: t.id, position: (pos += POSITION_STEP) }));
     addUndo(...(await captureTasks(moved.map((m) => m.id), ["columnId", "position", "evergreen"])));
     await db.$transaction(moved.map((m) => db.task.update({ where: { id: m.id }, data: { columnId: column.id, position: m.position, evergreen: false } })));
-    describeAction("Movió {count} a «{col}»", { count: tasksN(moved.length), col: await columnName(column.id) }, { taskIds: moved.map((m) => m.id) });
-    return { columnId: column.id, moved };
+    // Las recurrentes que no estaban en una columna terminada y llegan a una: nace la siguiente aparición.
+    const target = await db.column.findUnique({ where: { id: column.id }, select: { isDone: true } });
+    let spawned: BoardTask[] = [];
+    if (target?.isDone) {
+      const doneBefore = new Set((await db.column.findMany({ where: { id: { in: [...new Set(toMove.map((t) => t.columnId))] }, isDone: true }, select: { id: true } })).map((c) => c.id));
+      spawned = await spawnRecurrences(toMove.filter((t) => !doneBefore.has(t.columnId)).map((t) => t.id), user.id);
+    }
+    const colName = await columnName(column.id);
+    describeAction("Movió {count} a «{col}»", { count: tasksN(moved.length), col: colName }, { taskIds: moved.map((m) => m.id) });
+    const code = target?.isDone ? "done" : "move";
+    skipTaskEvents();
+    for (const m of moved) recordTaskEvent(m.id, code, { k: "Movió la tarea a «{to}»", p: { to: colName } });
+    return { columnId: column.id, moved, spawned };
   });
 }
 
@@ -379,9 +547,11 @@ export async function archiveTask(taskId: string) {
   return runAction({ name: "tasks.archiveTask", args: [taskId] }, async () => {
     const user = await requireUser();
     const { columnId } = await assertTaskAccess(user, v.id.parse(taskId));
+    await assertNotArchived(taskId);
     describeAction("Archivó «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
     addUndo(...(await captureTasks([taskId], ARCHIVE_FIELDS)));
     await db.task.update({ where: { id: taskId }, data: { archivedAt: new Date(), archivedFromColumnId: columnId, evergreen: false } });
+    return { spawned: await spawnRecurrences([taskId], user.id) };
   });
 }
 
@@ -395,10 +565,13 @@ export async function archiveTasks(taskIds: string[]) {
     // Como en el borrado múltiple: el deshacer se guarda por proyecto, así que todas deben ser del mismo.
     if (new Set(tasks.map((t) => t.projectId)).size > 1) throw new AppError("Las tareas son de proyectos distintos.");
     noteProject(tasks[0]?.projectId);
-    addUndo(...(await captureTasks((await db.task.findMany({ where: { id: { in: ids }, archivedAt: null }, select: { id: true } })).map((t) => t.id), ARCHIVE_FIELDS)));
+    const active = (await db.task.findMany({ where: { id: { in: ids }, archivedAt: null }, select: { id: true } })).map((t) => t.id);
+    addUndo(...(await captureTasks(active, ARCHIVE_FIELDS)));
     await db.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId", "evergreen" = false WHERE "id" IN (${Prisma.join(ids)}) AND "archivedAt" IS NULL`;
+    const spawned = await spawnRecurrences(active, user.id);
     describeAction("Archivó {count}", { count: tasksN(ids.length) }, { taskIds: ids });
-    return { archived: ids.length };
+    for (const id of ids) recordTaskEvent(id, "archive", { k: "Archivó la tarea" });
+    return { archived: ids.length, spawned };
   });
 }
 
@@ -476,11 +649,15 @@ export async function getTaskDetail(taskId: string) {
         description: true,
         createdAt: true,
         createdBy: { select: { name: true } },
+        createdById: true,
+        assigneeId: true,
+        followers: { select: { userId: true, muted: true } },
         contentUpdatedAt: true,
         subtasks: { orderBy: { position: "asc" }, select: { id: true, title: true, done: true, position: true } },
         attachments: { orderBy: { createdAt: "asc" }, select: { id: true, originalName: true, mimeType: true, isImage: true, size: true, width: true, height: true } },
         links: { orderBy: { createdAt: "asc" }, select: linkSelect },
-        comments: { orderBy: { createdAt: "asc" }, take: 300, select: commentSelect },
+        // Los 300 más recientes (si hubiera más, se pierden los antiguos, no los nuevos).
+        comments: { orderBy: { createdAt: "desc" }, take: 300, select: commentSelect },
       },
     });
     return {
@@ -492,8 +669,34 @@ export async function getTaskDetail(taskId: string) {
       subtasks: task.subtasks,
       attachments: task.attachments,
       links: task.links,
-      comments: task.comments.map(toCommentInfo),
+      comments: task.comments.reverse().map(toCommentInfo),
+      following: isFollowing(user.id, { createdById: task.createdById, assigneeId: task.assigneeId, rows: task.followers }),
     };
+  });
+}
+
+/** «Seguir / Dejar de seguir»: quien deja de seguir una tarea no recibe sus avisos de cambios y comentarios. */
+export async function setTaskFollowing(taskId: string, follow: boolean) {
+  return runAction({ name: "tasks.setTaskFollowing", args: [taskId, follow] }, async () => {
+    const user = await requireUser();
+    await assertTaskAccess(user, v.id.parse(taskId));
+    const muted = !z.boolean().parse(follow);
+    await db.taskFollower.upsert({
+      where: { taskId_userId: { taskId, userId: user.id } },
+      create: { taskId, userId: user.id, muted },
+      update: { muted },
+    });
+    describeAction(muted ? "Dejó de seguir «{title}»" : "Empezó a seguir «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
+    skipTaskEvents();
+  });
+}
+
+/** Historial de la tarea (quién cambió qué y cuándo); se pide al desplegar la sección. */
+export async function getTaskHistory(taskId: string) {
+  return runAction({ name: "tasks.getTaskHistory", args: [taskId] }, async () => {
+    const user = await requireUser();
+    await assertTaskAccess(user, v.id.parse(taskId));
+    return loadTaskHistory(taskId, await getT());
   });
 }
 
@@ -617,25 +820,37 @@ export async function restoreTask(taskId: string) {
 
 // --- Comentarios y menciones ---------------------------------------------------
 
-const commentSelect = { id: true, body: true, createdAt: true, authorId: true, author: { select: { name: true } } } as const;
+const commentSelect = { id: true, body: true, createdAt: true, authorId: true, parentId: true, author: { select: { name: true } } } as const;
 
-function toCommentInfo(c: { id: string; body: string; createdAt: Date; authorId: string | null; author: { name: string } | null }): CommentInfo {
-  return { id: c.id, body: c.body, createdAt: c.createdAt.toISOString(), authorId: c.authorId, authorName: c.author?.name ?? null };
+function toCommentInfo(c: { id: string; body: string; createdAt: Date; authorId: string | null; parentId: string | null; author: { name: string } | null }): CommentInfo {
+  return { id: c.id, body: c.body, createdAt: c.createdAt.toISOString(), authorId: c.authorId, authorName: c.author?.name ?? null, parentId: c.parentId };
 }
 
 const commentBody = z.string().trim().min(1, "El comentario está vacío.").max(10_000, "El comentario es demasiado largo.");
 
-export async function addComment(taskId: string, body: string) {
-  return runAction({ name: "tasks.addComment", args: [taskId, body] }, async (): Promise<CommentInfo> => {
+/** `parentId`: comentario al que responde (un solo nivel: si es una respuesta, se cuelga del comentario raíz). */
+export async function addComment(taskId: string, body: string, parentId?: string | null) {
+  return runAction({ name: "tasks.addComment", args: [taskId, body, parentId] }, async (): Promise<CommentInfo> => {
     const user = await requireUser();
     const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
     const text = commentBody.parse(body);
     if ((await db.taskComment.count({ where: { taskId } })) >= MAX_COMMENTS) throw new AppError("Esta tarea ya tiene el máximo de 1000 comentarios.");
     if (!rateLimit(`comment:${user.id}`, 30, 60_000)) throw new AppError("Demasiados comentarios seguidos. Espera un momento.");
-    const comment = await db.taskComment.create({ data: { taskId, authorId: user.id, body: text }, select: commentSelect });
+    const parent = parentId ? await db.taskComment.findFirst({ where: { id: v.id.parse(parentId), taskId }, select: { id: true, parentId: true, authorId: true } }) : null;
+    if (parentId && !parent) throw new AppError("El comentario al que respondes ya no existe.");
+    const comment = await db.taskComment.create({ data: { taskId, authorId: user.id, body: text, parentId: parent ? (parent.parentId ?? parent.id) : null }, select: commentSelect });
     addUndo({ t: "comment.remove", id: comment.id });
-    await notifyMentions({ actorId: user.id, taskId, projectId, recipientIds: extractMentionIds(text), text });
-    describeAction("Comentó en «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
+    const mentioned = await notifyMentions({ actorId: user.id, taskId, projectId, recipientIds: extractMentionIds(text), text });
+    // Quien comenta sigue la tarea. Avisos: respuesta al autor del comentario; comentario a quien la sigue (sin repetir a nadie).
+    await followTask(taskId, [user.id]);
+    const notified = [user.id, ...mentioned];
+    if (parent?.authorId && !notified.includes(parent.authorId)) {
+      const { recipients } = await notifyTask({ type: "REPLY", actorId: user.id, taskId, projectId, recipientIds: [parent.authorId], excerpt: makeExcerpt(text) });
+      notified.push(...recipients, parent.authorId);
+    }
+    const followers = await taskFollowerIds(taskId, notified);
+    if (followers.length) await notifyTask({ type: "COMMENT", actorId: user.id, taskId, projectId, recipientIds: followers, excerpt: makeExcerpt(text) });
+    describeAction(parent ? "Respondió a un comentario en «{title}»" : "Comentó en «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
     return toCommentInfo(comment);
   });
 }

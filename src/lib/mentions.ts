@@ -24,3 +24,16 @@ export function excerpt(text: string, max = 180): string {
   const plain = mentionsToPlain(text).replace(/\s+/g, " ").trim();
   return plain.length > max ? plain.slice(0, max - 1) + "…" : plain;
 }
+
+/** Trozos de un texto con menciones: texto suelto o {name, id}. Sirve para pintar las menciones como etiquetas. */
+export function splitMentions(text: string): (string | { name: string; id: string })[] {
+  const out: (string | { name: string; id: string })[] = [];
+  let last = 0;
+  for (const m of text.matchAll(MENTION_RE)) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    out.push({ name: m[1]!, id: m[2]! });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}

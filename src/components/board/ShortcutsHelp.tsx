@@ -21,11 +21,23 @@ const GROUPS: { title: string; items: { keys: string; label: string }[] }[] = [
     ],
   },
   {
+    title: "Tarjeta enfocada",
+    items: [
+      { keys: "Alt+M", label: "Asignármela o quitármela" },
+      { keys: "Alt+←", label: "Mover a la columna anterior" },
+      { keys: "Alt+→", label: "Mover a la columna siguiente" },
+      { keys: "Alt+D", label: "Fecha límite de la tarjeta" },
+      { keys: "F2", label: "Renombrar la tarjeta" },
+      { keys: "Alt+Shift+D", label: "Duplicar la tarjeta" },
+    ],
+  },
+  {
     title: "Tarea abierta",
     items: [
       { keys: "Alt+S", label: "Guardar y cerrar (en una tarea nueva, crearla)" },
       { keys: "Alt+A", label: "Archivar la tarea" },
       { keys: "Ctrl+Enter", label: "Crear la tarea, guardar la descripción o enviar el comentario" },
+      { keys: "Alt+F10", label: "Ir a la barra de formato de la descripción (flechas para moverse, Esc para volver)" },
       { keys: "Esc", label: "Cerrar" },
     ],
   },

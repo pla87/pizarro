@@ -10,6 +10,8 @@ import { useToast } from "../ui/Toast";
 import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard } from "./context";
 import { formatDate } from "@/lib/format";
+import { MentionText } from "../ui/MentionText";
+import { mentionsToPlain } from "@/lib/mentions";
 
 /** Tareas archivadas del proyecto: consulta y recuperación. */
 export function ArchivedDialog({ onClose }: { onClose: () => void }) {
@@ -40,7 +42,7 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q || !items) return items;
-    return items.filter((it) => it.title.toLowerCase().includes(q) || it.releases.some((r) => r.title.toLowerCase().includes(q)));
+    return items.filter((it) => mentionsToPlain(it.title).toLowerCase().includes(q) || it.releases.some((r) => r.title.toLowerCase().includes(q)));
   }, [items, query]);
 
   const restore = async (id: string) => {
@@ -76,7 +78,7 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-center gap-2">
                   <TypeBadge kind={board.kindById.get(task.kindId)} />
-                  <span className="min-w-0 truncate text-sm font-medium">{task.title}</span>
+                  <span className="min-w-0 truncate text-sm font-medium"><MentionText text={task.title} /></span>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
                   <span>{t("Archivada el {date}", { date: dateFmt(task.archivedAt) })}</span>

@@ -46,6 +46,19 @@ export function noteTaskViewer(taskId: string, userId: string, name: string, now
   return others;
 }
 
+/** Quién tiene abierta cada tarea ahora mismo (sin `exceptUserId`), para los círculos de las tarjetas del tablero. */
+export function openTaskViewers(exceptUserId: string, now = Date.now()): Map<string, { id: string; name: string }[]> {
+  const out = new Map<string, { id: string; name: string }[]>();
+  for (const [taskId, users] of viewers) {
+    for (const [id, e] of users) {
+      if (now - e.at > VIEWER_WINDOW_MS) users.delete(id);
+      else if (id !== exceptUserId) out.set(taskId, [...(out.get(taskId) ?? []), { id, name: e.name }]);
+    }
+    if (users.size === 0) viewers.delete(taskId);
+  }
+  return out;
+}
+
 /** El usuario ha cerrado la tarea. */
 export function leaveTask(taskId: string, userId: string): void {
   const users = viewers.get(taskId);
@@ -59,4 +72,24 @@ function sweepViewers(now: number): void {
     for (const [id, e] of users) if (now - e.at > VIEWER_WINDOW_MS) users.delete(id);
     if (users.size === 0) viewers.delete(taskId);
   }
+}
+
+/** Quita a un usuario de la presencia (pierde acceso): deja de aparecer en cabeceras y diálogos. */
+export function dropUserPresence(userId: string, projectId?: string): void {
+  for (const [pid, users] of state) {
+    if (projectId && pid !== projectId) continue;
+    users.delete(userId);
+    if (users.size === 0) state.delete(pid);
+  }
+  if (!projectId) {
+    for (const [taskId, users] of viewers) {
+      users.delete(userId);
+      if (users.size === 0) viewers.delete(taskId);
+    }
+  }
+}
+
+/** Vacía la presencia de un proyecto (cambia su visibilidad o se borra); reaparece quien siga actuando. */
+export function dropProjectPresence(projectId: string): void {
+  state.delete(projectId);
 }

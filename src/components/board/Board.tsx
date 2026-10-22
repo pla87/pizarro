@@ -4,24 +4,32 @@ import {
   closestCorners, DndContext, type CollisionDetection, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
   useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from "@dnd-kit/core";
-import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { Archive, Plus, Search, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { archiveTasks, deleteTasks, makeEvergreen, moveTask, moveTasks } from "@/actions/tasks";
 import { createBoardCollisionDetection } from "@/lib/collision";
-import { positionBetween } from "@/lib/positions";
+import { insertBefore, moveOnto, neighboursOf, positionBetween } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardTask, LabelOption } from "@/lib/types";
+import { FilterMenu } from "./FilterMenu";
 import { ProjectMenu } from "../ProjectMenu";
 import { UndoButton } from "../UndoButton";
+import { setBoardModalOpen } from "../undo-context";
+import { useFloatingRect } from "../ui/useFloatingRect";
 import { useT } from "@/i18n/client";
+import { useConfirm } from "../ui/ConfirmDialog";
 import { useToast } from "../ui/Toast";
 import { cn } from "../ui/cn";
-import { BoardContext, type BoardApi } from "./context";
+import { BoardContext, useSelectionSize, type BoardApi } from "./context";
+import { createBoardStores, mergeTasks, tasksById, useStableValue } from "./stores";
 import { ColumnView } from "./ColumnView";
 import { EVERGREEN_DROPPABLE_PREFIX } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
+import { useCardActions } from "./cardActions";
+import { activeFilterCount, EMPTY_FILTERS, filtersKey, parseStoredFilters, sanitizeFilters, taskMatchesFilters, type BoardFilters } from "./filters";
 import { Presence } from "./Presence";
 import { SelectionBar } from "./SelectionBar";
 import { ShortcutsHelp } from "./ShortcutsHelp";
@@ -31,6 +39,7 @@ import { TaskCard } from "./TaskCard";
 import { ReportButton } from "../ReportButton";
 import { imageFilesFrom } from "./upload";
 import { draftKey, readDraft, type EditTaskDraft, type NewTaskDraft } from "./drafts";
+import { mentionsToPlain } from "@/lib/mentions";
 
 // Los diálogos (con el editor de texto y el Markdown) no van en el código inicial del tablero:
 // se cargan al abrirlos y se precargan cuando el navegador está libre.
@@ -89,7 +98,8 @@ function MobileTab({ active, onClick, children }: { active: boolean; onClick: ()
     </button>
   );
 }
-const REFRESH_MS = 30_000;
+// Respaldo del canal en vivo (SSE), que ya avisa de cada cambio: no hace falta refrescar más a menudo.
+const REFRESH_MS = 120_000;
 
 type Items = Record<string, string[]>;
 
@@ -97,6 +107,36 @@ function groupItems(columns: BoardColumn[], tasks: BoardTask[]): Items {
   const items: Items = Object.fromEntries(columns.map((c) => [c.id, [] as string[]]));
   for (const t of [...tasks].sort((a, b) => a.position - b.position)) if (!t.evergreen) items[t.columnId]?.push(t.id);
   return items;
+}
+
+// Constante: un objeto nuevo en cada dibujo invalidaría el contexto de dnd-kit y redibujaría todas las tarjetas.
+const MEASURING = { droppable: { strategy: MeasuringStrategy.Always } };
+// Opciones de los sensores, también constantes: si cambian, cambian los `listeners` de todas las tarjetas.
+const POINTER_OPTIONS = { activationConstraint: { distance: 6 } };
+const KEYBOARD_OPTIONS = { coordinateGetter: sortableKeyboardCoordinates };
+
+/**
+ * Conserva el mismo array de ids en las columnas cuyo contenido no cambió: dnd-kit rehace su contexto (y redibuja
+ * todas las tarjetas de la columna) cuando le llega un array nuevo, aunque tenga los mismos ids.
+ */
+function useStableItems(items: Items): Items {
+  const [stable, setStable] = useState(items);
+  if (stable === items) return stable;
+  const cols = Object.keys(items);
+  let changed = cols.length !== Object.keys(stable).length;
+  const next: Items = {};
+  for (const col of cols) {
+    const before = stable[col];
+    const now = items[col]!;
+    if (before && before.length === now.length && before.every((id, i) => id === now[i])) next[col] = before;
+    else {
+      next[col] = now;
+      changed = true;
+    }
+  }
+  if (!changed) return stable;
+  setStable(next);
+  return next;
 }
 
 /** Minúsculas y sin acentos, para comparar el filtro. */
@@ -110,14 +150,19 @@ function findContainer(items: Items, id: string): string | undefined {
 export function Board({ data, initialTaskId = null }: { data: BoardData; initialTaskId?: string | null }) {
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
   const t = useT();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [columns, setColumns] = useState(data.columns);
-  const [tasks, setTasks] = useState(data.tasks);
+  // Tareas y selección viven en almacenes externos: cada tarjeta se suscribe solo a lo suyo (ver context.ts)
+  // y el tablero no se redibuja al seleccionar.
+  const [stores] = useState(() => createBoardStores(data.tasks));
+  const tasks = useSyncExternalStore(stores.tasks.subscribe, stores.tasks.get, stores.tasks.get);
+  const setTasks = stores.tasks.set;
+  const setSelected = stores.selection.set;
   const [labels, setLabels] = useState<LabelOption[]>(data.labels);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openTaskId, setOpenTaskId] = useState<string | null>(initialTaskId);
   const [newTask, setNewTask] = useState<{ columnId?: string; files?: File[]; evergreen?: boolean; draft?: NewTaskDraft | null } | null>(null);
   const [editDraft, setEditDraft] = useState<EditTaskDraft | null>(null);
@@ -128,6 +173,31 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const [helpOpen, setHelpOpen] = useState(false);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+  const mobileSearchRef = useRef<HTMLInputElement>(null);
+  // Móvil: el buscador y los filtros se despliegan desde un icono (ver más abajo).
+  const [mobileSearch, setMobileSearch] = useState(false);
+  // Filtros rápidos: se recuerdan por persona y proyecto (localStorage; si no está disponible, solo dura la sesión).
+  const [filters, setFilters] = useState<BoardFilters>(EMPTY_FILTERS);
+  const filtersStorageKey = filtersKey(data.currentUserId, data.project.id);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      try {
+        setFilters(parseStoredFilters(window.localStorage.getItem(filtersStorageKey)));
+      } catch {
+        // Sin almacenamiento: se empieza sin filtros.
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [filtersStorageKey]);
+  const changeFilters = (next: BoardFilters) => {
+    setFilters(next);
+    try {
+      if (activeFilterCount(next) === 0) window.localStorage.removeItem(filtersStorageKey);
+      else window.localStorage.setItem(filtersStorageKey, JSON.stringify(next));
+    } catch {
+      // Sin almacenamiento: el filtro vale igualmente en esta sesión.
+    }
+  };
   const sc = useShortcut();
   const dragHandle = useCoarsePointer();
 
@@ -138,6 +208,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const id = idle(() => {
       void loadTaskDialog();
       void loadNewTaskDialog();
+      void import("@/components/ui/RichTextEditor");
     });
     return () => cancel(id);
   }, []);
@@ -220,7 +291,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       });
       return changed ? next : prev;
     });
-  }, []);
+  }, [setTasks]);
+
+  const upsertTask = useCallback(
+    (task: BoardTask) => setTasks((prev) => (prev.some((t) => t.id === task.id) ? prev.map((t) => (t.id === task.id ? task : t)) : [...prev, task])),
+    [setTasks],
+  );
 
   // Sincroniza con el servidor cuando llegan datos nuevos (router.refresh).
   useEffect(() => {
@@ -231,7 +307,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       return;
     }
     setColumns(data.columns);
-    setTasks(data.tasks);
+    setTasks((prev) => mergeTasks(prev, data.tasks));
     setLabels(data.labels);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
@@ -269,39 +345,45 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     };
   }, [refresh]);
 
-  const baseItems = useMemo(() => groupItems(columns, tasks), [columns, tasks]);
+  const baseItems = useStableItems(useMemo(() => groupItems(columns, tasks), [columns, tasks]));
   // Filtro del buscador: por título, tipo, responsable y etiquetas (todas las palabras deben aparecer).
   const terms = useMemo(() => normalize(query).split(/\s+/).filter(Boolean), [query]);
-  const filtering = terms.length > 0;
+  // Filtros rápidos sin lo que ya no existe (etiqueta borrada, persona que dejó el proyecto…).
+  const activeFilters = useMemo(
+    () => sanitizeFilters(filters, { labels: new Set(labels.map((l) => l.id)), kinds: new Set(data.kinds.map((k) => k.id)), users: new Set(data.users.map((u) => u.id)) }),
+    [filters, labels, data.kinds, data.users],
+  );
+  const filterCount = activeFilterCount(activeFilters);
+  const filtering = terms.length > 0 || filterCount > 0;
   const matchingIds = useMemo(() => {
     if (!filtering) return null;
+    const doneColumnIds = new Set(columns.filter((c) => c.isDone).map((c) => c.id));
     const kindName = new Map(data.kinds.map((k) => [k.id, k.name]));
     const userName = new Map(data.users.map((u) => [u.id, u.name]));
     const labelName = new Map(labels.map((l) => [l.id, l.name]));
     const ids = new Set<string>();
     for (const task of tasks) {
       const hay = normalize(
-        [task.title, kindName.get(task.kindId), task.assigneeId ? userName.get(task.assigneeId) : "", ...task.labelIds.map((id) => labelName.get(id))].join(" "),
+        [mentionsToPlain(task.title), kindName.get(task.kindId), task.assigneeId ? userName.get(task.assigneeId) : "", ...task.labelIds.map((id) => labelName.get(id))].join(" "),
       );
-      if (terms.every((w) => hay.includes(w))) ids.add(task.id);
+      if (terms.every((w) => hay.includes(w)) && taskMatchesFilters(task, activeFilters, { currentUserId: data.currentUserId, today: data.today, doneColumnIds })) ids.add(task.id);
     }
     return ids;
-  }, [filtering, terms, tasks, data.kinds, data.users, labels]);
-  // Con filtro no hay arrastre (ver `filtering` en el contexto), así que `dragItems` es null.
-  const items = useMemo(() => {
+  }, [filtering, terms, tasks, data.kinds, data.users, data.currentUserId, data.today, labels, columns, activeFilters]);
+  // `dragItems` lleva siempre las listas COMPLETAS (también con filtro): al soltar, los vecinos que se
+  // envían al servidor son los reales, de modo que las tarjetas ocultas conservan su orden relativo.
+  const items = useStableItems(useMemo(() => {
     const all = dragItems ?? baseItems;
     if (!matchingIds) return all;
     return Object.fromEntries(Object.entries(all).map(([col, ids]) => [col, ids.filter((id) => matchingIds.has(id))])) as Items;
-  }, [dragItems, baseItems, matchingIds]);
+  }, [dragItems, baseItems, matchingIds]));
   const shownCount = matchingIds ? matchingIds.size : tasks.length;
   // Al filtrar se deseleccionan las tarjetas que quedan ocultas (las acciones masivas no deben tocar lo que no se ve).
-  const [prevMatching, setPrevMatching] = useState(matchingIds);
-  if (prevMatching !== matchingIds) {
-    setPrevMatching(matchingIds);
-    if (matchingIds && selected.size && [...selected].some((id) => !matchingIds.has(id))) {
-      setSelected(new Set([...selected].filter((id) => matchingIds.has(id))));
-    }
-  }
+  useEffect(() => {
+    if (!matchingIds) return;
+    const sel = stores.selection.get();
+    if (sel.size && [...sel].some((id) => !matchingIds.has(id))) stores.selection.set(new Set([...sel].filter((id) => matchingIds.has(id))));
+  }, [matchingIds, stores]);
   // Tareas evergreen por columna: fuera de la lista ordenable, se muestran en el pie de la columna de la release.
   const evergreenByColumn = useMemo(() => {
     const map: Record<string, string[]> = {};
@@ -312,7 +394,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     () => (matchingIds ? Object.fromEntries(Object.entries(evergreenByColumn).map(([c, ids]) => [c, ids.filter((id) => matchingIds.has(id))])) : evergreenByColumn),
     [evergreenByColumn, matchingIds],
   );
-  const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
+  const taskById = tasksById(tasks);
   const sortedColumns = useMemo(() => [...columns].sort((a, b) => a.position - b.position), [columns]);
   const nextReleaseColumn = sortedColumns.find((c) => c.role === "NEXT_RELEASE");
   const activeMobileColumn = sortedColumns.find((c) => c.id === mobileColumn)?.id ?? sortedColumns[0]?.id;
@@ -333,30 +415,49 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     return () => document.removeEventListener("paste", onPaste);
   }, []);
 
+  const getTask = useCallback((id: string) => tasksById(stores.tasks.get()).get(id), [stores]);
+  const cardActions = useCardActions({ currentUserId: data.currentUserId, getTask, sortedColumns, baseItems, patchTask, upsertTask, track, toast, t });
+
+  // El contexto solo cambia si cambia su contenido: los datos del servidor llegan como objetos nuevos en cada
+  // refresco aunque sean iguales, y sin esto todas las tarjetas se redibujarían cada vez.
+  const project = useStableValue(data.project);
+  const users = useStableValue(data.users);
+  const kinds = useStableValue(data.kinds);
+  const deliverables = useStableValue(data.deliverables);
+  const google = useStableValue(data.google);
+  const stableColumns = useStableValue(sortedColumns);
+  const stableLabels = useStableValue(labels);
+  // Lo que necesitan las funciones del contexto sin ser dependencia suya (se leen al llamarlas).
+  const latest = useRef({ baseItems, evergreenByColumn });
+  useEffect(() => {
+    latest.current = { baseItems, evergreenByColumn };
+  });
+
   const api: BoardApi = useMemo(
     () => ({
-      project: data.project,
-      users: data.users,
+      project,
+      users,
       currentUserId: data.currentUserId,
-      columns: sortedColumns,
-      labels,
-      deliverables: data.deliverables,
-      kinds: data.kinds,
-      kindById: new Map(data.kinds.map((k) => [k.id, k])),
+      columns: stableColumns,
+      labels: stableLabels,
+      deliverables,
+      kinds,
+      kindById: new Map(kinds.map((k) => [k.id, k])),
       cardStyle: data.cardStyle,
       editorMode: data.editorMode,
       dragHandle,
-      filtering,
-      google: data.google,
+      google,
       today: data.today,
       setLabels,
-      taskById,
-      upsertTask: (task) =>
-        setTasks((prev) => (prev.some((t) => t.id === task.id) ? prev.map((t) => (t.id === task.id ? task : t)) : [...prev, task])),
+      stores,
+      getTask,
+      getTasks: stores.tasks.get,
+      upsertTask,
       patchTask,
+      ...cardActions,
       removeTask: (id) => {
         setTasks((prev) => prev.filter((t) => t.id !== id));
-        setSelected((prev) => {
+        stores.selection.set((prev) => {
           if (!prev.has(id)) return prev;
           const next = new Set(prev);
           next.delete(id);
@@ -368,14 +469,17 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       openNewTask: (columnId, evergreen) => setNewTask({ columnId, evergreen }),
       openRelease: (columnId) => {
         // Las evergreen van siempre incluidas y preseleccionadas (se pueden desmarcar en el diálogo).
-        const fixed = evergreenByColumn[columnId] ?? [];
-        const ids = [...(baseItems[columnId] ?? []), ...fixed];
+        const { baseItems: base, evergreenByColumn: evergreen } = latest.current;
+        const fixed = evergreen[columnId] ?? [];
+        const ids = [...(base[columnId] ?? []), ...fixed];
+        const selected = stores.selection.get();
         const pre = ids.filter((id) => selected.has(id));
         setRelease({ taskIds: ids, preselected: pre.length ? [...new Set([...pre, ...fixed])] : ids });
       },
-      selected,
+      getSelected: stores.selection.get,
+      clearSelection: () => stores.selection.set(new Set()),
       setSelectedMany: (ids, on) =>
-        setSelected((prev) => {
+        stores.selection.set((prev) => {
           const next = new Set(prev);
           for (const id of ids) {
             if (on) next.add(id);
@@ -384,7 +488,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           return next;
         }),
       toggleSelected: (id) =>
-        setSelected((prev) => {
+        stores.selection.set((prev) => {
           const next = new Set(prev);
           if (next.has(id)) next.delete(id);
           else next.add(id);
@@ -394,7 +498,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       trackRaw,
       refresh,
     }),
-    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, data.editorMode, dragHandle, filtering, data.google, data.today, sortedColumns, labels, taskById, baseItems, evergreenByColumn, selected, track, trackRaw, refresh, patchTask],
+    [setTasks, project, users, data.currentUserId, deliverables, kinds, data.cardStyle, data.editorMode, dragHandle, google, data.today, stableColumns, stableLabels, stores, getTask, track, trackRaw, refresh, patchTask, upsertTask, cardActions],
   );
 
   // --- Movimiento masivo ------------------------------------------------------
@@ -414,6 +518,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     });
 
   const moveSelected = async (columnId: string) => {
+    const selected = stores.selection.get();
     const ids = [...selected];
     if (!ids.length) return;
     const before = new Map(tasks.filter((t) => ids.includes(t.id)).map((t) => [t.id, t]));
@@ -430,12 +535,13 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     }
     const server = new Map(res.data.moved.map((m) => [m.id, m.position]));
     setTasks((prev) => prev.map((t) => (server.has(t.id) ? { ...t, columnId, position: server.get(t.id)!, evergreen: false } : t)));
+    res.data.spawned.forEach(upsertTask);
     const name = sortedColumns.find((c) => c.id === columnId)?.name;
     toast(t("{moved} a «{name}»", { moved: res.data.moved.length === 1 ? t("1 tarjeta movida") : t("{n} tarjetas movidas", { n: res.data.moved.length }), name: name ?? "" }));
   };
 
   const archiveSelected = async () => {
-    const ids = [...selected];
+    const ids = [...stores.selection.get()];
     if (!ids.length) return;
     const before = new Map(tasks.filter((t) => ids.includes(t.id)).map((t) => [t.id, t]));
     const gone = new Set(ids);
@@ -446,6 +552,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       restoreTasks(before);
       return toast(res.error, "error");
     }
+    res.data.spawned.forEach(upsertTask);
     toast(res.data.archived === 1 ? t("1 tarea archivada") : t("{n} tareas archivadas", { n: res.data.archived }));
   };
 
@@ -462,8 +569,15 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   };
 
   const deleteSelected = async () => {
-    const ids = [...selected];
-    if (!ids.length || !window.confirm(ids.length === 1 ? t("¿Borrar definitivamente la tarea seleccionada y sus adjuntos?") : t("¿Borrar definitivamente las {n} tareas seleccionadas y sus adjuntos?", { n: ids.length }))) return;
+    const ids = [...stores.selection.get()];
+    if (!ids.length) return;
+    const ok = await confirm({
+      title: ids.length === 1 ? t("Borrar tarea") : t("Borrar tareas"),
+      message: ids.length === 1 ? t("¿Borrar definitivamente la tarea seleccionada y sus adjuntos?") : t("¿Borrar definitivamente las {n} tareas seleccionadas y sus adjuntos?", { n: ids.length }),
+      confirmLabel: t("Borrar"),
+      danger: true,
+    });
+    if (!ok) return;
     const before = new Map(tasks.filter((t) => ids.includes(t.id)).map((t) => [t.id, t]));
     const gone = new Set(ids);
     setTasks((prev) => prev.filter((t) => !gone.has(t.id)));
@@ -528,8 +642,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // --- Drag & drop --------------------------------------------------------------
   const sensors = useSensors(
     // Con ratón, toda la tarjeta; en táctil, solo el asa (touch-action: none), así que basta con poca distancia.
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(PointerSensor, POINTER_OPTIONS),
+    useSensor(KeyboardSensor, KEYBOARD_OPTIONS),
   );
 
   const onDragStart = ({ active }: DragStartEvent) => {
@@ -564,13 +678,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       }
       const to = findContainer(prev, overId);
       if (!to || from === to) return prev;
-      const target = prev[to]!;
-      const overIndex = target.indexOf(overId);
-      const index = overIndex >= 0 ? overIndex : target.length;
       return {
         ...prev,
         [from]: prev[from]!.filter((x) => x !== id),
-        [to]: [...target.slice(0, index), id, ...target.slice(index)],
+        [to]: insertBefore(prev[to]!, id, overId),
       };
     });
   };
@@ -612,13 +723,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (!col || col === EVERGREEN_ORIGIN) return;
     let list = current[col]!;
     if (findContainer(current, overId) === col && overId !== id && !overId.startsWith(COLUMN_PREFIX)) {
-      list = arrayMove(list, list.indexOf(id), list.indexOf(overId));
+      list = moveOnto(list, id, overId);
     }
     const index = list.indexOf(id);
     if (col === origin.columnId && index === origin.index) return;
 
-    const prevId = list[index - 1] ?? null;
-    const nextId = list[index + 1] ?? null;
+    const { prevId, nextId } = neighboursOf(list, id);
     const position = positionBetween(prevId ? taskById.get(prevId)?.position : null, nextId ? taskById.get(nextId)?.position : null);
     const previous = taskById.get(id)!;
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, columnId: col, position, evergreen: false } : t)));
@@ -630,10 +740,18 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     } else if (res.data.position !== position) {
       setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, position: res.data.position } : t)));
     }
+    if (res.ok) res.data.spawned.forEach(upsertTask);
   };
 
   // Dos modales a la vez (escritorio): el «+» del abierto crea un segundo de nueva tarea (columna «Backlog» si existe, si no la primera; no hay rol BACKLOG).
   const primaryOpen = !!newTask || (!!openTaskId && taskById.has(openTaskId));
+  // Mientras hay un diálogo de tarea, los botones de la cabecera (deshacer, «Nueva tarea») quedan por encima del fondo.
+  useEffect(() => {
+    setBoardModalOpen(primaryOpen);
+    return () => setBoardModalOpen(false);
+  }, [primaryOpen]);
+  const newTaskBtnRef = useRef<HTMLButtonElement>(null);
+  const newTaskRect = useFloatingRect(newTaskBtnRef, primaryOpen);
   const addSecond = () => setSecondNew({ columnId: (sortedColumns.find((c) => c.name.trim().toLowerCase() === "backlog") ?? sortedColumns[0])?.id });
 
   // Atajos de teclado (escritorio). Alt+N con un modal abierto lo comporta como el «+» de al lado.
@@ -647,8 +765,11 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     },
     bulk: () => setBulk({}),
     search: () => {
-      searchRef.current?.focus();
-      searchRef.current?.select();
+      // El buscador de escritorio, o el de móvil/tableta si es el visible.
+      const input = [searchRef.current, mobileSearchRef.current].find((el) => el && el.offsetParent !== null);
+      if (!input) return setMobileSearch(true);
+      input.focus();
+      input.select();
     },
     help: () => setHelpOpen(true),
     release: () => {
@@ -667,6 +788,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <span className="text-sm text-slate-500" aria-live="polite">
             {filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : t("{n} tarjetas", { n: tasks.length })}
           </span>
+          <Presence projectId={data.project.id} />
           <div className="relative ml-auto">
             <Search size={14} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" aria-hidden />
             <input
@@ -692,8 +814,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               </button>
             )}
           </div>
-          {filtering && <span className="max-w-48 text-xs text-slate-500 max-xl:hidden">{t("Con el filtro activo no se puede arrastrar")}</span>}
-          <Presence projectId={data.project.id} />
+          <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} className="-ml-1.5" />
+          {filterCount > 0 && (
+            <button type="button" className="-ml-1 text-xs text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline dark:hover:text-slate-300" onClick={() => changeFilters(EMPTY_FILTERS)}>
+              {t("Limpiar filtros")}
+            </button>
+          )}
           <ReportButton projectId={data.project.id} variant="header" />
           <button className="btn-secondary" onClick={() => setArchivedOpen(true)}>
             <Archive size={16} /> {t("Archivadas")}
@@ -701,15 +827,31 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <button className="btn-secondary" onClick={() => setBulk({})} title={`${t("Crear varias tareas pegando una lista")} (${sc("Alt+Shift+N")})`}>
             <PlusStack size={16} /> {t("Varias tareas")}
           </button>
-          <button className="btn-primary" onClick={() => setNewTask({})} title={`${t("Nueva tarea")} (${sc("Alt+N")})`}>
+          <button ref={newTaskBtnRef} className="btn-primary" onClick={() => (primaryOpen ? (!secondNew && addSecond()) : setNewTask({}))} title={`${t("Nueva tarea")} (${sc("Alt+N")})`}>
             <Plus size={16} /> {t("Nueva tarea")}
           </button>
+          {/* Con un diálogo abierto, una copia encima del fondo difuminado: abre una segunda tarea al lado (como el «+» del modal). */}
+          {primaryOpen && newTaskRect &&
+            createPortal(
+              <button
+                type="button"
+                tabIndex={-1}
+                className={cn("btn-primary fixed z-[70] shadow-lg", secondNew && "opacity-60")}
+                style={{ left: newTaskRect.left, top: newTaskRect.top, width: newTaskRect.width, height: newTaskRect.height }}
+                onClick={() => !secondNew && addSecond()}
+                aria-disabled={!!secondNew}
+                title={t("Abrir otra tarea nueva al lado")}
+              >
+                <Plus size={16} /> {t("Nueva tarea")}
+              </button>,
+              document.body,
+            )}
         </div>
 
         <DndContext
           sensors={sensors}
           collisionDetection={boardCollisionDetection}
-          measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+          measuring={MEASURING}
           onDragStart={onDragStart}
           onDragOver={onDragOver}
           onDragEnd={onDragEnd}
@@ -717,12 +859,61 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         >
           {/* Pestañas de columnas en móvil */}
           <div data-mobile-tabs className="no-scrollbar flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 md:hidden dark:border-slate-800 dark:bg-slate-900">
+            <button
+              type="button"
+              className={cn("btn-icon relative h-8 w-8 shrink-0", filtering && "text-brand-600")}
+              onClick={() => setMobileSearch((o) => !o)}
+              aria-label={t("Buscar y filtrar")}
+              aria-expanded={mobileSearch || filtering}
+            >
+              <Search size={16} />
+              {filtering && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-brand-600" aria-hidden />}
+            </button>
             {sortedColumns.map((c) => (
               <MobileTab key={c.id} active={c.id === activeMobileColumn} onClick={() => showMobileColumn(c.id)}>
                 {c.name} <span className="opacity-70">{items[c.id]?.length ?? 0}</span>
               </MobileTab>
             ))}
             <NewColumnButton variant="mobile" onCreated={showMobileColumn} />
+          </div>
+          {/* Móvil y tableta: buscador y filtros (en móvil, solo al pulsar el icono de la lupa o con un filtro activo). */}
+          <div className={cn("flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-1.5 lg:hidden dark:border-slate-800 dark:bg-slate-900", !(mobileSearch || filtering) && "max-md:hidden")}>
+            <div className="relative min-w-0 flex-1">
+              <Search size={14} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" aria-hidden />
+              <input
+                ref={mobileSearchRef}
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setQuery("");
+                    e.currentTarget.blur();
+                  }
+                }}
+                autoFocus={mobileSearch && !filtering}
+                placeholder={t("Filtrar tarjetas")}
+                aria-label={t("Filtrar tarjetas")}
+                className="input h-8 w-full [&::-webkit-search-cancel-button]:hidden pr-3 pl-8 text-sm"
+              />
+            </div>
+            <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} />
+            <span className="shrink-0 text-xs text-slate-500" aria-live="polite">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : t("{n} tarjetas", { n: tasks.length })}</span>
+            {(mobileSearch || filtering) && (
+              <button
+                type="button"
+                className="btn-icon h-8 w-8 shrink-0 md:hidden"
+                onClick={() => {
+                  setQuery("");
+                  changeFilters(EMPTY_FILTERS);
+                  setMobileSearch(false);
+                }}
+                aria-label={t("Quitar el filtro")}
+              >
+                <X size={16} />
+              </button>
+            )}
           </div>
           <div
             className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-3 max-md:no-scrollbar pt-2 pb-2 md:px-4 md:pb-4"
@@ -764,22 +955,21 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <Plus size={26} />
         </button>
 
-        {selected.size > 0 && (
-          <SelectionBar
-            count={selected.size}
-            columns={sortedColumns}
-            nextReleaseColumn={nextReleaseColumn}
-            onMove={moveSelected}
-            onArchive={archiveSelected}
-            onDelete={deleteSelected}
-            onRelease={() => {
-              const ids = sortedColumns.flatMap((c) => (baseItems[c.id] ?? []).filter((id) => selected.has(id)));
-              // Con selección solo van las elegidas (las fijas entran únicamente desde «Generar Release»).
-              setRelease({ taskIds: ids, preselected: ids });
-            }}
-            onClear={() => setSelected(new Set())}
-          />
-        )}
+        <SelectionBarHost
+          columns={sortedColumns}
+          nextReleaseColumn={nextReleaseColumn}
+          onMove={moveSelected}
+          onArchive={archiveSelected}
+          onDelete={deleteSelected}
+          onRelease={() => {
+            const selected = stores.selection.get();
+            const ids = sortedColumns.flatMap((c) => (baseItems[c.id] ?? []).filter((id) => selected.has(id)));
+            // Con selección solo van las elegidas (las fijas entran únicamente desde «Generar Release»).
+            setRelease({ taskIds: ids, preselected: ids });
+          }}
+          onClear={() => setSelected(new Set())}
+        />
+
 
         {openTaskId && taskById.has(openTaskId) && (
           <TaskDialog
@@ -832,12 +1022,20 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
                   .filter((t) => !archived.has(t.id))
                   .map((t) => (moved.has(t.id) ? { ...t, columnId: moved.get(t.id)!.columnId, position: moved.get(t.id)!.position } : t)),
               );
+              result.spawned?.forEach(upsertTask);
             }}
           />
         )}
       </div>
     </BoardContext.Provider>
   );
+}
+
+/** La barra de selección se suscribe al contador por su cuenta: seleccionar no redibuja el tablero entero. */
+function SelectionBarHost(props: Omit<React.ComponentProps<typeof SelectionBar>, "count">) {
+  const count = useSelectionSize();
+  if (count === 0) return null;
+  return <SelectionBar count={count} {...props} />;
 }
 
 /** Dos «+» superpuestos: crear varias tareas. */

@@ -1,10 +1,10 @@
 "use client";
 
-import { Archive, Camera, Check, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Send, Trash2, X } from "lucide-react";
+import { Archive, Camera, Check, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
-  addComment, addSubtask, archiveTask, deleteAttachment, deleteComment, deleteSubtask, deleteTask, deleteTaskLink, getTaskDetail,
+  addSubtask, archiveTask, deleteAttachment, deleteSubtask, deleteTask, deleteTaskLink, getTaskDetail,
   moveTask, reorderSubtask, updateSubtask, updateTask,
 } from "@/actions/tasks";
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
@@ -12,21 +12,27 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from "@dnd-kit/utilities";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { dueStatus } from "@/lib/dates";
+import { defaultRecurrenceDay, type RecurrenceRule } from "@/lib/recurrence-date";
 import { isWhite, kindBadgeStyle, onColor } from "@/lib/constants";
 import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
-import { Avatar } from "../ui/Avatar";
 import { ColorPicker } from "../ui/ColorPicker";
 import { cn } from "../ui/cn";
 import { DescriptionField } from "../ui/DescriptionField";
 import { Markdown } from "../ui/Markdown";
-import { MentionTextarea, type MentionCommand } from "../ui/MentionTextarea";
+import type { MentionCommand } from "../ui/MentionTextarea";
 import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
 import { applyKindTemplate } from "@/lib/kinds-special";
+import { useConfirm } from "../ui/ConfirmDialog";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
 import { isTypingTarget, useShortcut } from "./shortcuts";
+import { weekdayName } from "./recurrence-ui";
 import { TaskViewers } from "./TaskViewers";
+import { Comments } from "./TaskComments";
+import { FollowToggle } from "./FollowToggle";
+import { TaskHistory } from "./TaskHistory";
+import { TitleField } from "./TitleField";
 import { createAndOpenGoogleFile } from "./google";
 import { filesFrom, formatBytes, uploadFile, useFileDrop } from "./upload";
 import { formatDate } from "@/lib/format";
@@ -46,12 +52,17 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   const locale = useIntlLocale();
   const board = useBoard();
   const toast = useToast();
+  const confirm = useConfirm();
   const mobile = useIsMobile();
   const sc = useShortcut();
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [title, setTitle] = useState(draft?.title ?? task.title);
   // Descripción en edición (la comunica el editor): para el botón Guardar y el borrador local.
   const descDraft = useRef<string | null>(null);
+  // Texto vivo de la descripción abierta (sin el retardo del borrador): lo que Guardar debe enviar.
+  const descLive = useRef<string | null>(null);
+  // Las subtareas (nueva a medio escribir, renombrado en curso) se guardan con este callback al pulsar Guardar.
+  const flushSubtasks = useRef<(() => Promise<boolean>) | null>(null);
   const [draftUsed, setDraftUsed] = useState(false);
   // Borrador local cada 5 s: al volver tras cerrar la página, la tarea se reabre con lo escrito.
   // Solo hay borrador si queda algo sin guardar; si no, se borra (no se reabre una tarea ya cerrada).
@@ -137,27 +148,34 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     };
   }, [task.id]);
 
-  /** Botón Guardar (móvil): guarda título y descripción tal como estén escritos y cierra. */
+  /**
+   * Botón Guardar / Alt+S: guarda TODO lo que se esté editando aunque aún no se haya confirmado (título,
+   * descripción abierta, enlace, subtarea nueva o en renombrado) y cierra. Si algo falla, no cierra.
+   */
   const saveAndClose = async () => {
     const value = title.trim();
-    const patch: { title?: string; description?: string } = {};
+    const patch: { title?: string; description?: string; linkUrl?: string } = {};
     if (value && value !== task.title) patch.title = value;
-    const desc = descDraft.current;
+    const desc = descLive.current;
     if (desc !== null && desc !== (detail?.description ?? "")) patch.description = desc;
-    if (patch.title !== undefined || patch.description !== undefined) {
+    const linkValue = link.trim();
+    if (linkValue !== (task.linkUrl ?? "")) patch.linkUrl = linkValue;
+    if (patch.title !== undefined || patch.description !== undefined || patch.linkUrl !== undefined) {
       if (patch.description !== undefined) setDetail((d) => (d ? { ...d, description: desc! } : d));
       const ok = await save(patch, {
         ...(patch.title !== undefined ? { title: patch.title } : {}),
         ...(patch.description !== undefined ? { hasDescription: patch.description.trim().length > 0 } : {}),
+        ...(patch.linkUrl !== undefined ? { linkUrl: patch.linkUrl || null } : {}),
       });
       if (!ok) return;
     }
+    if (flushSubtasks.current && !(await flushSubtasks.current())) return;
     onClose();
   };
 
   /** Guardado optimista de campos de la tarjeta. */
   const save = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>): Promise<boolean> => {
-    const before = board.taskById.get(task.id);
+    const before = board.getTask(task.id);
     board.patchTask(task.id, optimistic);
     // Título y descripción: se envía qué versión se estaba editando para no pisar a otra persona.
     const editsText = patch.title !== undefined || patch.description !== undefined;
@@ -175,8 +193,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
 
   const changeColumn = async (columnId: string) => {
     if (columnId === task.columnId) return;
-    const before = board.taskById.get(task.id)!;
-    const last = Math.max(0, ...[...board.taskById.values()].filter((t) => t.columnId === columnId).map((t) => t.position));
+    const before = board.getTask(task.id)!;
+    const last = Math.max(0, ...board.getTasks().filter((t) => t.columnId === columnId).map((t) => t.position));
     board.patchTask(task.id, { columnId, position: last + 1024, evergreen: false });
     const res = await tracked(moveTask(task.id, columnId, null, null));
     if (!res.ok) {
@@ -184,6 +202,13 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       return toast(res.error, "error");
     }
     board.patchTask(task.id, { position: res.data.position });
+    res.data.spawned.forEach(board.upsertTask);
+  };
+
+  /** Cambio de la repetición; al activar semanal o mensual el día sale de la fecha límite (o de hoy). */
+  const changeRecurrence = (recurrence: RecurrenceRule) => {
+    const recurrenceDay = defaultRecurrenceDay(recurrence, task.dueDate, board.today);
+    save({ recurrence, recurrenceDay }, { recurrence, recurrenceDay });
   };
 
   const upload = async (files: File[]) => {
@@ -206,7 +231,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   const files = detail?.attachments.filter((a) => !a.isImage) ?? [];
 
   const removeAttachment = async (id: string, question: string) => {
-    if (!window.confirm(question)) return;
+    if (!(await confirm({ title: t("Borrar adjunto"), message: question, confirmLabel: t("Borrar"), danger: true }))) return;
     const res = await board.track(deleteAttachment(id));
     if (!res.ok) return toast(res.error, "error");
     setDetail((d) => (d ? { ...d, attachments: d.attachments.filter((x) => x.id !== id) } : d));
@@ -223,7 +248,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   const dropping = useFileDrop(upload);
 
   const remove = async () => {
-    if (!window.confirm(t("¿Borrar definitivamente esta tarea y sus adjuntos?"))) return;
+    if (!(await confirm({ title: t("Borrar tarea"), message: t("¿Borrar definitivamente esta tarea y sus adjuntos?"), confirmLabel: t("Borrar"), danger: true }))) return;
     const res = await board.track(deleteTask(task.id));
     if (!res.ok) return toast(res.error, "error");
     board.removeTask(task.id);
@@ -235,6 +260,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     const res = await board.track(archiveTask(task.id));
     if (!res.ok) return toast(res.error, "error");
     board.removeTask(task.id);
+    res.data.spawned.forEach(board.upsertTask);
     onClose();
     toast(t("Tarea archivada"));
   };
@@ -321,6 +347,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
         mobile ? (
           <>
             <button className="btn-secondary py-1.5" onClick={archive} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /> {t("Archivar")}</button>
+            <button className="btn-secondary py-1.5" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")}><Copy size={15} /></button>
             <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> {t("Borrar")}</button>
             <button className="btn-primary ml-auto py-1.5" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} /> {t("Guardar")}</button>
           </>
@@ -329,21 +356,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       // Escritorio: la altura se adapta al contenido (tope = viewport); solo hacen scroll las columnas si hay mucho contenido.
       header={
         <div className="flex items-start gap-2 border-b border-slate-200 px-5 py-3 dark:border-slate-800">
-          <textarea
-            value={title}
-            onChange={(e) => setTitle(e.target.value.replace(/\n/g, ""))}
-            onBlur={commitTitle}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                e.currentTarget.blur();
-              }
-            }}
-            rows={1}
-            maxLength={200}
-            className="field-sizing-content min-w-0 flex-1 resize-none rounded-md bg-transparent px-1 py-0.5 text-lg font-semibold outline-none focus:bg-slate-50 dark:focus:bg-slate-800"
-            aria-label={t("Título")}
-          />
+          <TitleField value={title} onChange={setTitle} onCommit={commitTitle} users={board.users} />
           <span className="mt-1.5 flex h-5 shrink-0 items-center text-xs" role="status" aria-live="polite">
             {saving > 0 ? (
               <span className="flex items-center gap-1 text-slate-500"><Loader2 size={13} className="animate-spin" /> {t("Guardando…")}</span>
@@ -369,6 +382,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
             initial={detail?.description ?? null}
             // El borrador recuperado solo se aplica la primera vez que se carga la tarea.
             draft={detail && !draftUsed && descVersion === 0 ? draft?.description : undefined}
+            liveRef={descLive}
             onDraftChange={(md) => {
               descDraft.current = md;
               if (md !== null && !draftUsed) setDraftUsed(true);
@@ -378,16 +392,16 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
               save({ description }, { hasDescription: description.trim().length > 0 });
             }}
           />
-          <Subtasks taskId={task.id} detail={detail} setDetail={setDetail} />
+          <Subtasks taskId={task.id} detail={detail} setDetail={setDetail} flushRef={flushSubtasks} />
           <section>
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-sm font-semibold">{t("Capturas y adjuntos")}</h3>
               <div className="flex items-center gap-1">
-                <label className="btn-ghost cursor-pointer py-1 text-xs sm:hidden">
+                <label className="btn-ghost cursor-pointer py-1 text-xs has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-500 sm:hidden">
                   <Camera size={15} /> {t("Cámara")}
                   <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { upload(filesFrom(e.target.files)); e.target.value = ""; }} />
                 </label>
-                <label className="btn-ghost cursor-pointer py-1 text-xs">
+                <label className="btn-ghost cursor-pointer py-1 text-xs has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-500">
                   <ImagePlus size={15} /> {t("Añadir")}
                   <input type="file" multiple className="sr-only" onChange={(e) => { upload(filesFrom(e.target.files)); e.target.value = ""; }} />
                 </label>
@@ -403,7 +417,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
                   </button>
                   <button
                     type="button"
-                    className="absolute top-1 right-1 rounded-md bg-black/60 p-1 text-white opacity-0 group-hover:opacity-100 max-md:opacity-100"
+                    className="absolute top-1 right-1 rounded-md bg-black/60 p-1 text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-md:opacity-100"
                     aria-label={t("Borrar adjunto")}
                     onClick={() => removeAttachment(a.id, t("¿Borrar esta imagen?"))}
                   >
@@ -443,6 +457,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
           </section>
           <GoogleLinks taskId={task.id} detail={detail} setDetail={setDetail} onCreate={createGoogle} />
           <Comments taskId={task.id} detail={detail} setDetail={setDetail} users={board.users} onGoogle={createGoogle} />
+          <TaskHistory taskId={task.id} />
         </div>
 
         <aside className="flex flex-col gap-4 text-sm md:max-h-[calc(100dvh-9rem)] md:gap-2.5 md:overflow-y-auto md:pr-1">
@@ -498,6 +513,39 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
               )}
             </div>
           </Field>
+          <Field label={t("Repetir")}>
+            <div className="flex gap-1">
+              <select className="input md:py-1.5" value={task.recurrence} onChange={(e) => changeRecurrence(e.target.value as RecurrenceRule)}>
+                <option value="NONE">{t("No se repite")}</option>
+                <option value="DAILY">{t("Cada día")}</option>
+                <option value="WEEKLY">{t("Cada semana")}</option>
+                <option value="MONTHLY">{t("Cada mes")}</option>
+              </select>
+              {task.recurrence === "WEEKLY" && (
+                <select
+                  className="input md:py-1.5"
+                  value={task.recurrenceDay ?? 1}
+                  onChange={(e) => save({ recurrenceDay: Number(e.target.value) }, { recurrenceDay: Number(e.target.value) })}
+                  aria-label={t("Día de la semana")}
+                >
+                  {[1, 2, 3, 4, 5, 6, 7].map((d) => <option key={d} value={d}>{weekdayName(d, locale)}</option>)}
+                </select>
+              )}
+              {task.recurrence === "MONTHLY" && (
+                <select
+                  className="input md:py-1.5"
+                  value={task.recurrenceDay ?? 1}
+                  onChange={(e) => save({ recurrenceDay: Number(e.target.value) }, { recurrenceDay: Number(e.target.value) })}
+                  aria-label={t("Día del mes")}
+                >
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => <option key={d} value={d}>{t("día {n}", { n: d })}</option>)}
+                </select>
+              )}
+            </div>
+            {task.recurrence !== "NONE" && (
+              <p className="mt-1 text-xs text-slate-500">{t("Al terminarla o archivarla se crea la siguiente, sin las subtareas marcadas.")}</p>
+            )}
+          </Field>
           <Field label={t("Entregable")}>
             <select
               className="input md:py-1.5"
@@ -534,7 +582,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
                   </button>
                 );
               })}
-              <Link href={`/p/${board.project.id}/settings#labels`} className="px-1 py-0.5 text-xs text-brand-600 hover:underline">
+              <Link href={`/p/${board.project.id}/settings#labels`} className="px-1 py-0.5 text-xs text-brand-600 dark:text-brand-300 hover:underline">
                 {t("Gestionar")}
               </Link>
             </div>
@@ -565,10 +613,13 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
                 : t("Creada el {date}", { date: formatDate(detail.createdAt, "dateShort", locale) })}
             </p>
           )}
+          <FollowToggle taskId={task.id} following={detail?.following} />
           {/* En móvil estos botones van en el pie fijo, junto a Guardar. */}
           <div className="mt-auto flex flex-wrap gap-2 border-t border-slate-200 pt-4 max-md:hidden md:gap-1 md:pt-2.5 dark:border-slate-800">
             <button className="btn-secondary py-1.5" onClick={archive} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /> {t("Archivar")}</button>
+            <button className="btn-secondary py-1.5" onClick={() => void board.duplicateTask(task.id)} title={t("Crea una copia justo detrás de esta tarea")}><Copy size={15} /> {t("Duplicar")}</button>
             <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> {t("Borrar")}</button>
+            <button className="btn-primary ml-auto py-1.5" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} /> {t("Guardar")}</button>
           </div>
         </aside>
       </div>
@@ -605,17 +656,40 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+/**
+ * Selector de tipo como grupo de radio: un solo punto de Tab (en el tipo elegido); las flechas mueven
+ * el foco entre tipos (de la última a la primera y al revés) y Espacio/Intro elige el tipo enfocado.
+ */
 export function TypeSelector({ kinds, value, onChange }: { kinds: KindOption[]; value: string; onChange: (kindId: string) => void }) {
+  const t = useT();
+  const [focused, setFocused] = useState<string | null>(null);
+  // Punto de Tab: el tipo con el foco, si no el elegido, si no el primero.
+  const tabStop = kinds.some((k) => k.id === focused) ? focused : kinds.some((k) => k.id === value) ? value : kinds[0]?.id;
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+    if (!step || e.altKey || e.ctrlKey || e.metaKey || e.nativeEvent.isComposing) return;
+    const buttons = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>("[role=radio]"));
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (index < 0 || !buttons.length) return;
+    e.preventDefault();
+    const next = buttons[(index + step + buttons.length) % buttons.length]!;
+    setFocused(next.dataset.kind ?? null);
+    next.focus();
+  };
   return (
-    <div className="flex flex-wrap gap-1">
+    <div role="radiogroup" aria-label={t("Tipo")} className="flex flex-wrap gap-1" onKeyDown={onKeyDown}>
       {kinds.map((k) => (
         <button
           key={k.id}
           type="button"
+          role="radio"
+          data-kind={k.id}
+          tabIndex={k.id === tabStop ? 0 : -1}
           onClick={() => onChange(k.id)}
+          onFocus={() => setFocused(k.id)}
           className={cn("badge cursor-pointer px-2 py-1 text-xs", value === k.id ? "kind-badge" : "bg-transparent text-slate-500 ring-slate-300 dark:ring-slate-700")}
           style={value === k.id ? kindBadgeStyle(k.color) : undefined}
-          aria-pressed={value === k.id}
+          aria-checked={value === k.id}
         >
           {k.name}
         </button>
@@ -624,7 +698,7 @@ export function TypeSelector({ kinds, value, onChange }: { kinds: KindOption[]; 
   );
 }
 
-function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftChange }: {
+function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftChange, liveRef }: {
   initial: string | null;
   /** Texto recuperado de un borrador: el editor empieza editándolo. */
   draft?: string;
@@ -633,11 +707,19 @@ function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftCha
   onGoogle: (kind: MentionCommand) => Promise<TaskLinkInfo | null>;
   /** Borrador actual en Markdown mientras se edita (con retardo); null al no estar editando. */
   onDraftChange?: (markdown: string | null) => void;
+  /** Texto en edición al instante (null si no se edita): lo lee el botón Guardar. */
+  liveRef?: React.MutableRefObject<string | null>;
 }) {
   const t = useT();
   const { editorMode } = useBoard();
   const [value, setValue] = useState(draft ?? initial ?? "");
   const [editing, setEditing] = useState(draft !== undefined);
+  useEffect(() => {
+    if (liveRef) liveRef.current = editing ? value : null;
+  }, [liveRef, editing, value]);
+  useEffect(() => () => {
+    if (liveRef) liveRef.current = null;
+  }, [liveRef]);
   const ref = useRef<HTMLTextAreaElement>(null);
   const draftCb = useRef(onDraftChange);
   useEffect(() => {
@@ -713,7 +795,7 @@ function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftCha
   );
 }
 
-function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskDetail | null; setDetail: React.Dispatch<React.SetStateAction<TaskDetail | null>> }) {
+function Subtasks({ taskId, detail, setDetail, flushRef }: { taskId: string; detail: TaskDetail | null; setDetail: React.Dispatch<React.SetStateAction<TaskDetail | null>>; flushRef?: React.MutableRefObject<(() => Promise<boolean>) | null> }) {
   const t = useT();
   const board = useBoard();
   const toast = useToast();
@@ -733,17 +815,22 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
   const update = (fn: (list: SubtaskInfo[]) => SubtaskInfo[]) =>
     setDetail((d) => (d ? { ...d, subtasks: fn(d.subtasks) } : d));
 
-  const add = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const addNow = async (): Promise<boolean> => {
     const title = newTitle.trim();
-    if (!title) return;
+    if (!title) return true;
     setNewTitle("");
     const res = await board.track(addSubtask(taskId, title));
     if (!res.ok) {
       setNewTitle((cur) => cur || title);
-      return toast(res.error, "error");
+      toast(res.error, "error");
+      return false;
     }
     update((l) => [...l, res.data]);
+    return true;
+  };
+  const add = (e: React.FormEvent) => {
+    e.preventDefault();
+    void addNow();
   };
 
   const setDone = (id: string, value: boolean) => update((l) => l.map((x) => (x.id === id ? { ...x, done: value } : x)));
@@ -757,16 +844,37 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
     }
   };
 
-  const rename = async (s: SubtaskInfo, title: string) => {
+  // Renombrado en curso (id + texto escrito): Guardar lo confirma aunque no se haya pulsado Enter.
+  const renameDraft = useRef<{ id: string; title: string } | null>(null);
+  const rename = async (s: SubtaskInfo, title: string): Promise<boolean> => {
     setEditingId(null);
-    if (!title || title === s.title) return;
+    renameDraft.current = null;
+    if (!title || title === s.title) return true;
     update((l) => l.map((x) => (x.id === s.id ? { ...x, title } : x)));
     const res = await board.track(updateSubtask(s.id, { title }));
     if (!res.ok) {
       update((l) => l.map((x) => (x.id === s.id ? { ...x, title: s.title } : x)));
       toast(res.error, "error");
+      return false;
     }
+    return true;
   };
+  const flushLatest = useRef<() => Promise<boolean>>(async () => true);
+  useEffect(() => {
+    flushLatest.current = async () => {
+      const pending = renameDraft.current;
+      const target = pending ? list.find((x) => x.id === pending.id) : undefined;
+      if (pending && target && !(await rename(target, pending.title.trim()))) return false;
+      return addNow();
+    };
+  });
+  useEffect(() => {
+    if (!flushRef) return;
+    flushRef.current = () => flushLatest.current();
+    return () => {
+      flushRef.current = null;
+    };
+  }, [flushRef]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -824,7 +932,7 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
         <SortableContext items={list.map((s) => s.id)} strategy={verticalListSortingStrategy}>
           <ul className="space-y-0.5">
             {list.map((s) => (
-              <SubtaskRow key={s.id} s={s} editing={editingId === s.id} onEdit={() => setEditingId(s.id)} onRename={(v) => rename(s, v)} onToggle={() => toggle(s)} onRemove={() => remove(s)} />
+              <SubtaskRow key={s.id} s={s} editing={editingId === s.id} onEdit={() => setEditingId(s.id)} onRename={(v) => void rename(s, v)} onDraft={(v) => (renameDraft.current = { id: s.id, title: v })} onToggle={() => toggle(s)} onRemove={() => remove(s)} />
             ))}
           </ul>
         </SortableContext>
@@ -838,8 +946,8 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
 }
 
 /** Fila ordenable: agarre de seis puntos, título editable (doble clic, Enter/F2 o lápiz) y borrado. */
-function SubtaskRow({ s, editing, onEdit, onRename, onToggle, onRemove }: {
-  s: SubtaskInfo; editing: boolean; onEdit: () => void; onRename: (title: string) => void; onToggle: () => void; onRemove: () => void;
+function SubtaskRow({ s, editing, onEdit, onRename, onDraft, onToggle, onRemove }: {
+  s: SubtaskInfo; editing: boolean; onEdit: () => void; onRename: (title: string) => void; onDraft: (title: string) => void; onToggle: () => void; onRemove: () => void;
 }) {
   const t = useT();
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: s.id });
@@ -855,6 +963,7 @@ function SubtaskRow({ s, editing, onEdit, onRename, onToggle, onRemove }: {
   const startEdit = () => {
     settled.current = false;
     setDraft(s.title);
+    onDraft(s.title);
     onEdit();
   };
   return (
@@ -882,7 +991,10 @@ function SubtaskRow({ s, editing, onEdit, onRename, onToggle, onRemove }: {
           maxLength={200}
           autoFocus
           onFocus={(e) => e.currentTarget.select()}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            onDraft(e.target.value);
+          }}
           onBlur={() => finish(true)}
           onKeyDown={(e) => {
             if (e.nativeEvent.isComposing) return;
@@ -934,6 +1046,7 @@ function GoogleLinks({ detail, setDetail, onCreate, taskId }: {
   const t = useT();
   const board = useBoard();
   const toast = useToast();
+  const confirm = useConfirm();
   const links = detail?.links ?? [];
   return (
     <section>
@@ -959,11 +1072,11 @@ function GoogleLinks({ detail, setDetail, onCreate, taskId }: {
                 {l.title}
               </a>
               <button
-                className="btn-icon h-6 w-6 opacity-0 group-hover:opacity-100 max-md:opacity-100"
+                className="btn-icon h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-md:opacity-100"
                 aria-label={t("Quitar enlace")}
                 title={t("Quitar el enlace (el archivo sigue en Google Drive)")}
                 onClick={async () => {
-                  if (!window.confirm(t("¿Quitar el enlace de la tarea? El archivo seguirá en Google Drive."))) return;
+                  if (!(await confirm({ title: t("Quitar enlace"), message: t("¿Quitar el enlace de la tarea? El archivo seguirá en Google Drive."), confirmLabel: t("Quitar"), danger: true }))) return;
                   const res = await board.track(deleteTaskLink(l.id));
                   if (!res.ok) return toast(res.error, "error");
                   setDetail((d) => (d ? { ...d, links: d.links.filter((x) => x.id !== l.id) } : d));
@@ -976,98 +1089,6 @@ function GoogleLinks({ detail, setDetail, onCreate, taskId }: {
           ))}
         </ul>
       )}
-    </section>
-  );
-}
-
-function Comments({ taskId, detail, setDetail, users, onGoogle }: {
-  taskId: string;
-  detail: TaskDetail | null;
-  setDetail: React.Dispatch<React.SetStateAction<TaskDetail | null>>;
-  users: UserOption[];
-  onGoogle: (kind: MentionCommand) => Promise<TaskLinkInfo | null>;
-}) {
-  const t = useT();
-  const locale = useIntlLocale();
-  const board = useBoard();
-  const toast = useToast();
-  const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
-  const comments = detail?.comments ?? [];
-
-  const send = async () => {
-    const body = text.trim();
-    if (!body || sending) return;
-    setSending(true);
-    const res = await board.track(addComment(taskId, body)).catch(() => ({ ok: false as const, error: t("Error inesperado. Inténtalo de nuevo.") }));
-    setSending(false);
-    if (!res.ok) return toast(res.error, "error");
-    setText("");
-    setDetail((d) => (d ? { ...d, comments: [...d.comments, res.data] } : d));
-    board.patchTask(taskId, (t) => ({ commentCount: t.commentCount + 1 }));
-  };
-
-  return (
-    <section>
-      <h3 className="mb-2 text-sm font-semibold">{t("Comentarios")} {comments.length > 0 && <span className="font-normal text-slate-500">{comments.length}</span>}</h3>
-      <ul className="space-y-3">
-        {comments.map((c) => (
-          <li key={c.id} className="group flex gap-2">
-            {c.authorId ? <Avatar id={c.authorId} name={c.authorName ?? "?"} /> : <span className="h-6 w-6" />}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline gap-2 text-xs">
-                <span className="font-semibold">{c.authorName ?? t("Usuario eliminado")}</span>
-                <time className="text-slate-400">{formatDate(c.createdAt, "dateTimeShort", locale)}</time>
-                {(c.authorId === board.currentUserId) && (
-                  <button
-                    className="ml-auto text-slate-400 opacity-0 group-hover:opacity-100 hover:text-red-600 max-md:opacity-100"
-                    onClick={async () => {
-                      if (!window.confirm(t("¿Borrar este comentario?"))) return;
-                      const res = await board.track(deleteComment(c.id));
-                      if (!res.ok) return toast(res.error, "error");
-                      setDetail((d) => (d ? { ...d, comments: d.comments.filter((x) => x.id !== c.id) } : d));
-                      board.patchTask(taskId, (t) => ({ commentCount: Math.max(0, t.commentCount - 1) }));
-                    }}
-                  >
-                    {t("Borrar")}
-                  </button>
-                )}
-              </div>
-              <div className="mt-0.5 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
-                <Markdown>{c.body}</Markdown>
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-3 space-y-2">
-        <MentionTextarea
-          className="input field-sizing-content min-h-16"
-          value={text}
-          onValueChange={setText}
-          users={users}
-          disabled={!detail}
-          placeholder={t("Comenta… (@persona, @docs, @sheets)")}
-          onCommand={async (kind) => {
-            const link = await onGoogle(kind);
-            if (link) setText((v) => `${v.trimEnd()} [${link.title.replace(/[\[\]]/g, "")}](${link.url}) `.trimStart());
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              send();
-            }
-          }}
-          maxLength={10000}
-          aria-label={t("Nuevo comentario")}
-        />
-        <div className="flex items-center gap-2">
-          <span className="truncate text-xs text-slate-400 max-sm:hidden">{t("Ctrl+Enter para enviar")}</span>
-          <button className="btn-primary ml-auto py-1.5" onClick={send} disabled={sending || !text.trim()}>
-            {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} {t("Comentar")}
-          </button>
-        </div>
-      </div>
     </section>
   );
 }

@@ -43,9 +43,81 @@ async function purgeOldNotifications(now: Date = new Date()): Promise<number> {
   return count;
 }
 
+/** Borra los enlaces de email caducados y los dispositivos conocidos sin actividad en más de un año. */
+async function purgeAuthData(now: Date = new Date()): Promise<number> {
+  const [{ purgeExpiredTokens }, { purgeOldDevices }, { purgeExpiredChallenges }] = await Promise.all([import("@/lib/auth-token"), import("@/lib/devices"), import("@/lib/two-factor")]);
+  return (await purgeExpiredTokens(now)) + (await purgeOldDevices(now)) + (await purgeExpiredChallenges(now));
+}
+
+/** Ids de fichero (cuid) que mencionan las entradas de deshacer: sus ficheros se retienen aunque la fila ya no exista. */
+function undoReferencedTokens(ops: unknown[]): Set<string> {
+  const out = new Set<string>();
+  for (const m of JSON.stringify(ops).matchAll(/[a-z0-9]{20,}/gi)) out.add(m[0]);
+  return out;
+}
+
+/**
+ * Borra de UPLOAD_DIR los ficheros (adjuntos, miniaturas, copias de releases) que ninguna fila de la BD
+ * referencia y que tienen más de 24 h. No toca backups/, enlaces simbólicos ni nombres desconocidos.
+ */
+const ORPHAN_EVERY_MS = 23 * 60 * 60 * 1000;
+const orphanState = (globalThis as unknown as { __pzOrphans?: { last: number } }).__pzOrphans ??= { last: 0 };
+
+async function purgeOrphanFiles(): Promise<number> {
+  // Recorre todos los adjuntos y la carpeta de subidas: basta con una vez al día.
+  if (Date.now() - orphanState.last < ORPHAN_EVERY_MS) return 0;
+  orphanState.last = Date.now();
+  const [{ db }, { logEvent }, { cleanOrphanFiles }, { uploadDir }] = await Promise.all([
+    import("@/lib/db"),
+    import("@/lib/log"),
+    import("@/lib/orphan-files"),
+    import("@/lib/upload-dir"),
+  ]);
+  const [attachments, releaseAttachments, undo] = await Promise.all([
+    db.taskAttachment.findMany({ select: { id: true } }),
+    db.releaseAttachment.findMany({ select: { id: true } }),
+    db.undoEntry.findMany({ select: { ops: true } }),
+  ]);
+  const retained = undoReferencedTokens(undo.map((u) => u.ops));
+  const report = await cleanOrphanFiles(uploadDir(), {
+    attachments: new Set([...attachments.map((a) => a.id), ...retained]),
+    releaseAttachments: new Set([...releaseAttachments.map((a) => a.id), ...retained]),
+  });
+  if (report.aborted) {
+    logEvent({ level: "warn", category: "system", action: "uploads.orphansAborted", message: `Limpieza de huérfanos cancelada: ${report.orphans} de ${report.scanned} ficheros parecen huérfanos (demasiados; ¿base de datos equivocada?)`, details: { ...report } });
+  } else if (report.deleted > 0) {
+    logEvent({ category: "system", action: "uploads.orphansPurged", message: `Ficheros huérfanos borrados: ${report.deleted} (${Math.round(report.bytes / 1024)} KB)`, details: { ...report } });
+  }
+  return report.deleted;
+}
+
+/** Copia de seguridad diaria cifrada (si hay BACKUP_KEY). */
+async function backupJob(): Promise<void> {
+  const { dailyBackupJob } = await import("@/lib/backup");
+  await dailyBackupJob();
+}
+
+/** Prueba de restauración mensual de la última copia. */
+async function restoreTestJob(): Promise<void> {
+  const { monthlyRestoreTestJob } = await import("@/lib/backup");
+  await monthlyRestoreTestJob();
+}
+
+/** Borra el historial de tareas de más de un año. */
+async function purgeOldTaskHistory(now: Date = new Date()): Promise<number> {
+  const { purgeOldTaskEvents } = await import("@/lib/task-events");
+  return purgeOldTaskEvents(now);
+}
+
+/** Resumen diario y informe semanal por email a quien toca (ver periodic-mail.ts). */
+async function sendPeriodicMail(now: Date = new Date()): Promise<number> {
+  const { sendDueDigests, sendDueReports } = await import("@/lib/periodic-mail");
+  return (await sendDueDigests(now)) + (await sendDueReports(now));
+}
+
 /** Una pasada de mantenimiento; nunca lanza. */
 async function runMaintenance(): Promise<void> {
-  for (const job of [purgeNonImageCopies, purgeOldUndo, purgeOldNotifications]) {
+  for (const job of [purgeNonImageCopies, purgeOldUndo, purgeOldNotifications, purgeAuthData, purgeOldTaskHistory, purgeOrphanFiles, backupJob, restoreTestJob, sendPeriodicMail]) {
     try {
       await job();
     } catch (err) {

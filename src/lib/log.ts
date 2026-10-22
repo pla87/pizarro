@@ -85,7 +85,8 @@ export function logEvent(e: LogEvent): void {
     });
     // Presencia en el tablero: cualquier acción, no las simples visitas (el tablero se refresca solo).
     const projectId = state.queue[state.queue.length - 1]!.projectId;
-    if (projectId && e.userId && e.category !== "page") notePresence(projectId, e.userId, e.userName ?? "?");
+    // Solo acciones correctas: una fallida (p. ej. sin acceso) podría traer un projectId ajeno del cliente.
+    if (projectId && e.userId && e.category !== "page" && (e.level ?? "info") === "info") notePresence(projectId, e.userId, e.userName ?? "?");
     if (e.level === "error") console.error(`[${e.category}] ${e.action}: ${e.message ?? ""}`);
     if (state.queue.length >= MAX_QUEUE) void flushLogs();
     else state.timer ??= setTimeout(() => void flushLogs(), FLUSH_MS);
@@ -101,12 +102,12 @@ export async function flushLogs(): Promise<void> {
   const batch = state.queue.splice(0);
   try {
     if (batch.length) {
-      // Se anota el dueño de los proyectos privados afectados (sigue sirviendo aunque el proyecto se borre).
+      // Se anota el proyecto cuando es privado (sigue ocultando el detalle aunque el proyecto se borre).
       const ids = [...new Set(batch.map((e) => e.projectId).filter((id): id is string => !!id))];
-      const owners = ids.length
-        ? new Map((await db.project.findMany({ where: { id: { in: ids }, privateOwnerId: { not: null } }, select: { id: true, privateOwnerId: true } })).map((p) => [p.id, p.privateOwnerId]))
-        : new Map<string, string | null>();
-      await db.appLog.createMany({ data: batch.map((e) => ({ ...e, privateOwnerId: (e.projectId && owners.get(e.projectId)) || null })) });
+      const privates = ids.length
+        ? new Set((await db.project.findMany({ where: { id: { in: ids }, isPrivate: true }, select: { id: true } })).map((p) => p.id))
+        : new Set<string>();
+      await db.appLog.createMany({ data: batch.map((e) => ({ ...e, privateProjectId: e.projectId && privates.has(e.projectId) ? e.projectId : null })) });
     }
     if (Date.now() - state.lastPurge > PURGE_EVERY_MS) {
       state.lastPurge = Date.now();

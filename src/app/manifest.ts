@@ -13,6 +13,11 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: "any",
     background_color: "#0b1020",
     theme_color: "#4f46e5",
+    // Accesos directos al mantener pulsado el icono de la app instalada.
+    shortcuts: [
+      { name: "Mis tareas", short_name: "Mis tareas", url: "/my-tasks", icons: [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }] },
+      { name: "Avisos", short_name: "Avisos", url: "/notifications", icons: [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }] },
+    ],
     icons: [
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },

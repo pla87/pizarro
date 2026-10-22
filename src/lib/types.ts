@@ -30,6 +30,10 @@ export interface BoardTask {
   linkCount: number;
   /** Tarea fija en la columna de la release (no se mueve ni se archiva al desplegar). */
   evergreen: boolean;
+  /** Repetición: al terminarse o archivarse nace la siguiente aparición. */
+  recurrence: "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
+  /** Semanal: 1 (lunes) a 7 (domingo). Mensual: día del mes. */
+  recurrenceDay: number | null;
   /** Última edición del título/descripción (para detectar ediciones simultáneas). */
   textVersion: string | null;
 }
@@ -41,6 +45,8 @@ export interface KindOption {
   /** Automatización al elegir el tipo (vacío = nada). */
   titleTemplate: string;
   descriptionTemplate: string;
+  /** Subtareas que se añaden al elegir el tipo al crear una tarea. */
+  subtaskTemplate: string[];
 }
 
 export interface TemplateOption {
@@ -100,6 +106,8 @@ export interface CommentInfo {
   createdAt: string;
   authorId: string | null;
   authorName: string | null;
+  /** Comentario raíz al que responde (null = comentario de primer nivel). */
+  parentId: string | null;
 }
 
 export interface AttachmentInfo {
@@ -131,6 +139,8 @@ export interface TaskDetail {
   comments: CommentInfo[];
   /** Versión del título/descripción cargados (ver BoardTask.textVersion). */
   textVersion: string | null;
+  /** El usuario actual sigue la tarea (recibe avisos de comentarios y cambios). */
+  following: boolean;
 }
 
 /** Tarea archivada, con su columna de origen y las releases en las que entró. */

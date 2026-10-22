@@ -21,7 +21,6 @@ export const common: Record<string, string> = {
   "Luego puedes cambiar las columnas, tipos y etiquetas.": "You can change the columns, types and labels later.",
   "Plantilla": "Template",
   "Columnas por defecto": "Default columns",
-  "Proyecto privado (solo lo verás tú)": "Private project (only you will see it)",
   "Cancelar": "Cancel",
   "Crear": "Create",
   "Instalar app": "Install app",
@@ -125,4 +124,6 @@ export const common: Record<string, string> = {
   "Al elegirlo, el título pasa a ser «{title}» y la descripción empieza por «{desc}».": "When chosen, the title becomes “{title}” and the description starts with “{desc}”.",
   "Al elegirlo, el título pasa a ser «{title}».": "When chosen, the title becomes “{title}”.",
   "Al elegirlo, la descripción empieza por «{desc}».": "When chosen, the description starts with “{desc}”.",
+  "Proyecto privado (solo sus miembros; empiezas siendo el único)": "Private project (members only; you start as the only one)",
+  "Será un proyecto privado: solo lo verás tú hasta que añadas más miembros.": "It will be a private project: only you will see it until you add more members.",
 };

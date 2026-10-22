@@ -2,31 +2,37 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlignLeft, CalendarClock, Check, CheckSquare, ExternalLink, FileText, GripVertical, Image as ImageIcon, MessageSquare } from "lucide-react";
+import { AlignLeft, CalendarClock, Check, CheckSquare, ExternalLink, FileText, GripVertical, Image as ImageIcon, MessageSquare, Repeat } from "lucide-react";
 import { isWhite } from "@/lib/constants";
 import { dueStatus, formatDay } from "@/lib/dates";
-import { memo } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { BoardTask } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { Avatar } from "../ui/Avatar";
+import { MentionText } from "../ui/MentionText";
 import { cn } from "../ui/cn";
 import { TypeBadge } from "../ui/TypeBadge";
-import { useBoard } from "./context";
+import { useBoard, useIsSelected, useTask } from "./context";
+import { DueDatePopover } from "./DueDatePopover";
+import { recurrenceLabel } from "./recurrence-ui";
+import { focusCard, isTypingTarget } from "./shortcuts";
+import { TaskViewerBubbles } from "./TaskViewerBubbles";
 
-export function SortableTaskCard({ id }: { id: string }) {
-  const { taskById, dragHandle, filtering } = useBoard();
+export const SortableTaskCard = memo(function SortableTaskCard({ id }: { id: string }) {
+  const { dragHandle } = useBoard();
   const t = useT();
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: filtering });
-  const task = taskById.get(id);
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const task = useTask(id);
   if (!task) return null;
   // En táctil solo arrastra el asa: el resto de la tarjeta deja hacer scroll y abrirla con un toque.
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={cn("touch-manipulation", isDragging && "opacity-40")}
+      className={cn("relative touch-manipulation", isDragging && "opacity-40")}
       {...(dragHandle ? {} : { ...attributes, ...listeners })}
     >
+      <TaskViewerBubbles taskId={id} />
       <TaskCard
         task={task}
         handle={dragHandle ? (
@@ -45,33 +51,63 @@ export function SortableTaskCard({ id }: { id: string }) {
       />
     </div>
   );
-}
+});
 
 export const TaskCard = memo(function TaskCard({ task, overlay = false, handle = null }: { task: BoardTask; overlay?: boolean; handle?: React.ReactNode }) {
-  const { users, labels, openTask, selected, toggleSelected, columns, today, kindById, cardStyle } = useBoard();
+  const { users, labels, openTask, toggleSelected, columns, today, kindById, cardStyle, assignToMe, moveToAdjacentColumn, setDueDate, renameTask, duplicateTask } = useBoard();
   const locale = useIntlLocale();
   const t = useT();
   const done = columns.find((c) => c.id === task.columnId)?.isDone ?? false;
   const due = dueStatus(task.dueDate, done, today);
   const assignee = task.assigneeId ? users.find((u) => u.id === task.assigneeId) : null;
-  const isSelected = selected.has(task.id);
+  const isSelected = useIsSelected(task.id);
   const filled = cardStyle === "FILLED" && !!task.color;
   const white = isWhite(task.color);
   const taskLabels = task.labelIds.map((id) => labels.find((l) => l.id === id)).filter((l) => !!l);
+  const repeat = recurrenceLabel(task, t, locale);
+
+  // F2: renombrar en la propia tarjeta. Alt+D: fecha límite en un pequeño selector (junto a la tarjeta).
+  const [renaming, setRenaming] = useState(false);
+  const [dueAnchor, setDueAnchor] = useState<HTMLElement | null>(null);
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter") {
+      // Evita que el KeyboardSensor de dnd-kit empiece además un arrastre.
+      e.stopPropagation();
+      // Enter sobre el checkbox o el enlace internos solo los activa a ellos, no abre la tarea.
+      if (e.target === e.currentTarget) openTask(task.id);
+      return;
+    }
+    // Atajos de la tarjeta enfocada (escritorio); no mientras se escribe (renombrar, fecha) ni con Ctrl/⌘.
+    if (overlay || e.ctrlKey || e.metaKey || e.nativeEvent.isComposing || isTypingTarget(e.target)) return;
+    // `e.code` con Alt: en Mac Option+letra produce otro carácter.
+    if (e.code === "F2" && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      setRenaming(true);
+      return;
+    }
+    if (!e.altKey || e.repeat) return;
+    if (e.shiftKey) {
+      if (e.code !== "KeyD") return;
+      e.preventDefault();
+      void duplicateTask(task.id);
+      return;
+    }
+    if (e.code === "KeyM") void assignToMe(task.id);
+    else if (e.code === "ArrowLeft") void moveToAdjacentColumn(task.id, -1);
+    else if (e.code === "ArrowRight") void moveToAdjacentColumn(task.id, 1);
+    else if (e.code === "KeyD") setDueAnchor(e.currentTarget);
+    else return;
+    e.preventDefault();
+  };
 
   return (
     <div
       role="button"
       tabIndex={0}
+      data-task-card={task.id}
       onClick={() => openTask(task.id)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          // Evita que el KeyboardSensor de dnd-kit empiece además un arrastre.
-          e.stopPropagation();
-          // Enter sobre el checkbox o el enlace internos solo los activa a ellos, no abre la tarea.
-          if (e.target === e.currentTarget) openTask(task.id);
-        }
-      }}
+      onKeyDown={onKeyDown}
       className={cn(
         "group relative cursor-pointer overflow-hidden rounded-lg border bg-white p-2.5 pl-3 text-left shadow-sm transition-shadow select-none hover:shadow-md dark:bg-slate-900",
         isSelected ? "border-brand-500 ring-2 ring-brand-500/30" : "border-slate-200 dark:border-slate-700/80",
@@ -103,7 +139,18 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
         >
           {isSelected && <Check size={12} strokeWidth={3} />}
         </button>
-        <p className="min-w-0 flex-1 text-sm leading-snug font-medium break-words">{task.title}</p>
+        {renaming ? (
+          <RenameInput
+            title={task.title}
+            onDone={async (value, save, refocus) => {
+              setRenaming(false);
+              if (refocus) focusCard(task.id);
+              if (save) await renameTask(task.id, value);
+            }}
+          />
+        ) : (
+          <p className="min-w-0 flex-1 text-sm leading-snug font-medium break-words"><MentionText text={task.title} /></p>
+        )}
         {handle}
       </div>
 
@@ -132,6 +179,7 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
             <CalendarClock size={12} /> {due === "today" ? t("Hoy") : formatDay(task.dueDate, today, locale)}
           </span>
         )}
+        {repeat && <span title={repeat} className="inline-flex"><Repeat size={13} aria-label={repeat} /></span>}
         {task.hasDescription && <AlignLeft size={13} aria-label={t("Con descripción")} />}
         {task.subtaskTotal > 0 && (
           <span className={cn("inline-flex items-center gap-0.5", task.subtaskDone === task.subtaskTotal && "text-emerald-600")}>
@@ -168,6 +216,65 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
         )}
         <span className="ml-auto">{assignee && <Avatar id={assignee.id} name={assignee.name} title={t("Asignada a {name}", { name: assignee.name })} />}</span>
       </div>
+      {dueAnchor && (
+        <DueDatePopover
+          anchor={dueAnchor}
+          value={task.dueDate}
+          today={today}
+          onClose={() => {
+            setDueAnchor(null);
+            focusCard(task.id);
+          }}
+          onPick={(day) => {
+            setDueAnchor(null);
+            focusCard(task.id);
+            void setDueDate(task.id, day);
+          }}
+        />
+      )}
     </div>
   );
 });
+
+/** Título editable en la tarjeta: Enter guarda, Esc cancela y al salir del campo también se guarda. */
+function RenameInput({ title, onDone }: { title: string; onDone: (value: string, save: boolean, refocus: boolean) => void }) {
+  const t = useT();
+  const ref = useRef<HTMLInputElement>(null);
+  const [value, setValue] = useState(title);
+  const finished = useRef(false);
+  useEffect(() => {
+    ref.current?.focus();
+    ref.current?.select();
+  }, []);
+  const finish = (save: boolean, refocus: boolean) => {
+    if (finished.current) return;
+    finished.current = true;
+    onDone(value, save, refocus);
+  };
+  return (
+    <input
+      ref={ref}
+      value={value}
+      maxLength={200}
+      aria-label={t("Título")}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => finish(true, false)}
+      onClick={(e) => e.stopPropagation()}
+      // Sin esto, pulsar y mover dentro del campo arrastraría la tarjeta.
+      onPointerDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        // Las teclas del campo no deben llegar a la tarjeta (atajos) ni al arrastre por teclado.
+        e.stopPropagation();
+        if (e.nativeEvent.isComposing) return;
+        if (e.key === "Enter") {
+          e.preventDefault();
+          finish(true, true);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          finish(false, true);
+        }
+      }}
+      className="min-w-0 flex-1 rounded border border-brand-500 bg-white px-1 text-sm leading-snug font-medium outline-none dark:bg-slate-900"
+    />
+  );
+}

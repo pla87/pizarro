@@ -26,7 +26,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
   const { projectId } = await params;
   const project = await db.project.findFirst({
     where: { id: projectId, ...visibleProjectsWhere(user) },
-    select: { id: true, name: true, restricted: true, privateOwnerId: true },
+    select: { id: true, name: true, restricted: true, isPrivate: true },
   });
   if (!project) notFound();
 

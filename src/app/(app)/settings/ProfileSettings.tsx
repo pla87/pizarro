@@ -1,21 +1,22 @@
 "use client";
 
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { Bell, Check, Eye, Link2, Monitor, Moon, Palette, Pencil, PenLine, Plus, Sun, Trash2, X, Languages } from "lucide-react";
+import { ArrowDown, ArrowUp, Bell, Check, Eye, Link2, Monitor, Moon, Palette, Pencil, PenLine, Plus, Sun, Trash2, X, Languages } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
-  changePassword, createReleaseTemplate, deleteReleaseTemplate, disconnectGoogle, updateCardStyle, updateNotificationPrefs,
+  changePassword, createReleaseTemplate, deleteReleaseTemplate, disconnectGoogle, moveReleaseTemplate, updateCardStyle, updateNotificationPrefs,
   updateAccent, updateEditorMode, updateProfileName, updateReleaseTemplate, updateTheme, updateLocale,
 } from "@/actions/profile";
 import { cn } from "@/components/ui/cn";
 import { Markdown } from "@/components/ui/Markdown";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { CardStyleValue, EditorModeValue, TemplateOption } from "@/lib/types";
 
 type ThemeValue = "SYSTEM" | "LIGHT" | "DARK";
-type AccentValue = "BLUE" | "FOREST" | "SIENNA" | "MUSTARD" | "MONO";
+type AccentValue = "BLUE" | "FOREST" | "SIENNA" | "MUSTARD" | "MONO" | "EVA";
 
 // Muestra de cada tema: su color principal (brand-600) sobre su fondo (slate-200) de globals.css.
 const ACCENTS: { value: AccentValue; label: string; swatch: string }[] = [
@@ -24,6 +25,7 @@ const ACCENTS: { value: AccentValue; label: string; swatch: string }[] = [
   { value: "SIENNA", label: "Siena", swatch: "linear-gradient(135deg, #a2491f 50%, #e6d7cb 50%)" },
   { value: "MUSTARD", label: "Mostaza", swatch: "linear-gradient(135deg, #9a7209 50%, #e5dec3 50%)" },
   { value: "MONO", label: "Blanco y negro", swatch: "linear-gradient(135deg, #111111 50%, #ffffff 50%)" },
+  { value: "EVA", label: "Eva", swatch: "linear-gradient(135deg, #6b3fa0 50%, #a6e22e 50%)" },
 ];
 
 interface Props {
@@ -43,6 +45,8 @@ interface Props {
     whatsappAvailable: boolean;
   };
   google: { enabled: boolean; email: string | null; message: { ok: boolean; text: string } | null };
+  /** Bloque extra bajo «Avisos» (avisos por email de más tipos y resumen diario). */
+  notificationExtras?: React.ReactNode;
 }
 
 export function ProfileSettings(props: Props) {
@@ -73,6 +77,7 @@ export function ProfileSettings(props: Props) {
       <EditorModeSection initial={props.editorMode} />
       <GoogleSection google={props.google} />
       <NotificationSection prefs={props.notifications} />
+      {props.notificationExtras}
 
       <section className="card p-5">
         <h2 className="font-semibold">{t("Perfil")}</h2>
@@ -101,7 +106,11 @@ export function ProfileSettings(props: Props) {
 
       <section className="card p-5">
         <h2 className="font-semibold">{t("Cambiar contraseña")}</h2>
-        <p className="mt-0.5 text-sm text-slate-500">{t("Se cerrará la sesión en el resto de dispositivos.")}</p>
+        <p className="mt-0.5 text-sm text-slate-500">
+          {props.notifications.emailAvailable
+            ? t("Te enviaremos un enlace por email para confirmar el cambio; al confirmarlo se cerrará la sesión en todos los dispositivos.")
+            : t("Se cerrará la sesión en el resto de dispositivos.")}
+        </p>
         <form
           className="mt-4 space-y-3"
           onSubmit={(e) => {
@@ -109,7 +118,7 @@ export function ProfileSettings(props: Props) {
             if (next !== repeat) return toast(t("Las contraseñas nuevas no coinciden."), "error");
             start(async () => {
               const res = await changePassword(current, next);
-              toast(res.ok ? t("Contraseña actualizada") : res.error, res.ok ? "success" : "error");
+              toast(res.ok ? (res.data.pending ? t("Te hemos enviado un email: confirma el cambio con el enlace (caduca en 30 minutos).") : t("Contraseña actualizada")) : res.error, res.ok ? "success" : "error");
               if (res.ok) {
                 setCurrent("");
                 setNext("");
@@ -315,11 +324,29 @@ function NotificationSection({ prefs }: { prefs: Props["notifications"] }) {
 function TemplateList({ kind, title, initial, placeholder }: { kind: "HEADER" | "FOOTER"; title: string; initial: TemplateOption[]; placeholder: string }) {
   const t = useT();
   const toast = useToast();
+  const confirm = useConfirm();
   const [items, setItems] = useState(initial);
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const [form, setForm] = useState({ name: "", content: "" });
   const [preview, setPreview] = useState(false);
   const [pending, start] = useTransition();
+
+  // Sube/baja una plantilla; la primera es la que «Generar release» elige por defecto.
+  const move = (id: string, dir: -1 | 1) =>
+    start(async () => {
+      const index = items.findIndex((x) => x.id === id);
+      const target = index + dir;
+      if (index < 0 || target < 0 || target >= items.length) return;
+      const previous = items;
+      const next = items.slice();
+      [next[index], next[target]] = [next[target]!, next[index]!];
+      setItems(next);
+      const res = await moveReleaseTemplate(id, dir);
+      if (!res.ok) {
+        setItems(previous);
+        toast(res.error, "error");
+      }
+    });
 
   const open = (tpl?: TemplateOption) => {
     setEditing(tpl ? tpl.id : "new");
@@ -353,18 +380,27 @@ function TemplateList({ kind, title, initial, placeholder }: { kind: "HEADER" | 
         )}
       </div>
       <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-        {items.map((tpl) => (
+        {items.map((tpl, i) => (
           <li key={tpl.id} className="flex items-start gap-2 px-3 py-2">
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">{tpl.name}</div>
+              <div className="flex items-center gap-2 text-sm font-medium">
+                {tpl.name}
+                {i === 0 && items.length > 1 && <span className="badge bg-brand-50 text-brand-700 ring-brand-200 dark:bg-brand-500/15 dark:text-brand-200 dark:ring-brand-500/40">{t("Por defecto")}</span>}
+              </div>
               <p className="line-clamp-2 font-mono text-xs whitespace-pre-wrap text-slate-500">{tpl.content || t("(vacía)")}</p>
             </div>
+            {items.length > 1 && (
+              <>
+                <button className="btn-icon h-7 w-7" disabled={i === 0 || pending} onClick={() => move(tpl.id, -1)} aria-label={t("Subir {name}", { name: tpl.name })}><ArrowUp size={14} /></button>
+                <button className="btn-icon h-7 w-7" disabled={i === items.length - 1 || pending} onClick={() => move(tpl.id, 1)} aria-label={t("Bajar {name}", { name: tpl.name })}><ArrowDown size={14} /></button>
+              </>
+            )}
             <button className="btn-icon h-7 w-7" onClick={() => open(tpl)} aria-label={t("Editar {name}", { name: tpl.name })}><Pencil size={14} /></button>
             <button
               className="btn-icon h-7 w-7 hover:text-red-600"
               aria-label={t("Borrar {name}", { name: tpl.name })}
               onClick={async () => {
-                if (!window.confirm(t("¿Borrar «{name}»?", { name: tpl.name }))) return;
+                if (!(await confirm({ title: t("Borrar plantilla"), message: t("¿Borrar «{name}»?", { name: tpl.name }), confirmLabel: t("Borrar"), danger: true }))) return;
                 const res = await deleteReleaseTemplate(tpl.id);
                 if (!res.ok) return toast(res.error, "error");
                 setItems((l) => l.filter((x) => x.id !== tpl.id));
@@ -491,11 +527,11 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
             role="radio"
             aria-checked={accent === value}
             onClick={() => chooseAccent(value)}
-            className="flex w-20 flex-col items-center gap-1.5 text-center text-xs focus-visible:outline-none"
+            className="group flex w-20 flex-col items-center gap-1.5 text-center text-xs focus-visible:outline-none"
           >
             <span
               className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-full ring-offset-2 ring-offset-white dark:ring-offset-slate-900",
+                "flex h-9 w-9 items-center justify-center rounded-full group-focus-visible:outline-2 group-focus-visible:outline-offset-4 ring-offset-2 ring-offset-white dark:ring-offset-slate-900",
                 value === "MONO" && "border border-slate-300 dark:border-slate-600",
                 accent === value ? "ring-2 ring-slate-900 dark:ring-slate-100" : "ring-1 ring-transparent hover:ring-slate-300 dark:hover:ring-slate-600",
               )}

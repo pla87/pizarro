@@ -78,6 +78,9 @@
   --color-brand-700: #175433;
   --color-progress: #f59e0b;
   @variant dark {
+    /* Los tonos más claros de texto (títulos y cuerpo) son blanco puro, no un tinte del tema. */
+    --color-slate-50: #ffffff;
+    --color-slate-100: #ffffff;
     --color-brand-500: #5fbf86;
     --color-progress: #ffc23d;
   }
@@ -105,6 +108,9 @@
   --color-brand-700: #813817;
   --color-progress: #0d9488;
   @variant dark {
+    /* Los tonos más claros de texto (títulos y cuerpo) son blanco puro, no un tinte del tema. */
+    --color-slate-50: #ffffff;
+    --color-slate-100: #ffffff;
     --color-brand-500: #e0804f;
     --color-progress: #2ee6d0;
   }
@@ -132,6 +138,9 @@
   --color-brand-700: #7d5c06;
   --color-progress: #2563eb;
   @variant dark {
+    /* Los tonos más claros de texto (títulos y cuerpo) son blanco puro, no un tinte del tema. */
+    --color-slate-50: #ffffff;
+    --color-slate-100: #ffffff;
     --color-brand-500: #e8b931;
     --color-progress: #5b9bff;
   }
@@ -160,12 +169,57 @@
   --color-progress: #111111;
   /* En oscuro, 50-300 se usan como texto claro (como en el resto de temas): se quedan claros. */
   @variant dark {
+    /* Los tonos más claros de texto (títulos y cuerpo) son blanco puro, no un tinte del tema. */
+    --color-slate-50: #ffffff;
+    --color-slate-100: #ffffff;
     --color-brand-500: #e4e4e4;
     --color-brand-600: #f4f4f4;
     --color-brand-700: #ffffff;
     --color-on-brand: #0a0a0a;
     --color-progress: #f4f4f4;
   }
+}
+
+/*
+ * Eva (Evangelion Unit-01): morado EVA como color principal y verde neón para lo destacado
+ * (progreso, subtareas hechas, foco). Neutros lavanda en claro y violeta casi negro en oscuro.
+ * --color-focus: anillo de foco verde (más oscuro en claro para llegar a 3:1 sobre lavanda).
+ */
+:root[data-accent="eva"] {
+  --color-slate-50: #f7f4fc;
+  --color-slate-100: #efe9f8;
+  --color-slate-200: #dfd5ef;
+  --color-slate-300: #c4b4de;
+  --color-slate-400: #9985ba;
+  --color-slate-500: #7a67a0;
+  --color-slate-600: #5b4a7d;
+  --color-slate-700: #473a63;
+  --color-slate-800: #2f2445;
+  --color-slate-900: #1d1530;
+  --color-slate-950: #0f0a1a;
+  --color-brand-50: #f3edfb;
+  --color-brand-100: #e6daf6;
+  --color-brand-200: #d0b9ee;
+  --color-brand-300: #b690e3;
+  --color-brand-500: #7b4bb7;
+  --color-brand-600: #6b3fa0;
+  --color-brand-700: #532f80;
+  --color-progress: #62b51f;
+  --color-focus: #4a9412;
+  @variant dark {
+    --color-slate-50: #ffffff;
+    --color-slate-100: #ffffff;
+    --color-brand-500: #9a6ddb;
+    --color-progress: #a6e22e;
+    --color-focus: #a6e22e;
+  }
+}
+:root[data-accent="eva"] :focus-visible {
+  outline-color: var(--color-focus);
+}
+:root[data-accent="eva"] .input:focus {
+  border-color: var(--color-focus);
+  --tw-ring-color: color-mix(in srgb, var(--color-focus) 35%, transparent);
 }
 
 /*
