@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "./db";
+import { revokeProject } from "./revoke";
 import { discardUndo } from "./undo";
 import { removeAttachmentFiles, removeReleaseAttachmentFiles } from "./uploads";
 
@@ -11,6 +12,7 @@ export async function purgeProject(projectId: string): Promise<void> {
   // Las copias de los adjuntos de sus releases se borran en cascada: se leen antes sus ids.
   const releaseAttachments = await db.releaseAttachment.findMany({ where: { release: { projectId } }, select: { id: true } });
   await db.$transaction([db.task.deleteMany({ where: { projectId } }), db.project.delete({ where: { id: projectId } })]);
+  revokeProject(projectId);
   await removeAttachmentFiles(attachments.map((a) => a.id));
   await removeReleaseAttachmentFiles(releaseAttachments.map((a) => a.id));
 }

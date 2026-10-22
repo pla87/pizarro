@@ -1,4 +1,5 @@
 // Formato de changelog.json y su sincronización con la tabla AppVersionLog.
+import "./zod-config";
 import { z } from "zod";
 
 export const CHANGE_CATEGORIES = [

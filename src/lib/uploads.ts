@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { AppError } from "./errors";
+import { uploadDir } from "./upload-dir";
 
 export const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_MB ?? 10) * 1024 * 1024;
 const INPUT_FORMATS = new Set(["png", "jpeg", "webp", "gif", "avif", "heif"]);
@@ -10,10 +11,6 @@ const INPUT_FORMATS = new Set(["png", "jpeg", "webp", "gif", "avif", "heif"]);
 // Limita la memoria de sharp en un contenedor pequeño.
 sharp.cache({ memory: 64, items: 20 });
 sharp.concurrency(2);
-
-function uploadDir(): string {
-  return path.resolve(/*turbopackIgnore: true*/ process.env.UPLOAD_DIR ?? "./uploads");
-}
 
 /** Los ids son cuid: nunca contienen separadores, pero se valida igualmente. */
 /**

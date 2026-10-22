@@ -14,6 +14,7 @@ import { discardUndo } from "@/lib/undo";
 import { requireAdmin } from "@/lib/session";
 import * as v from "@/lib/validation";
 import { getT } from "@/i18n/server";
+import { revokeUser } from "@/lib/revoke";
 
 const password = z.string().min(MIN_PASSWORD, "La contraseña debe tener al menos 10 caracteres.").max(200);
 
@@ -72,6 +73,8 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
       // Al desactivar o cambiar de rol se cierran sus sesiones.
       ...(data.active !== user.active || data.role !== user.role ? [db.session.deleteMany({ where: { userId: user.id } })] : []),
     ]);
+    // Cualquier canal en vivo (SSE, presencia) del usuario se corta si se ha desactivado o ha cambiado de rol.
+    if (data.active !== user.active || data.role !== user.role) revokeUser(user.id);
     // Proyectos privados: se bloquean si el dueño deja de ser admin activo y se desbloquean al volver a serlo.
     const wasAdmin = user.active && user.role === "ADMIN";
     const isAdmin = data.active && data.role === "ADMIN";
@@ -96,6 +99,7 @@ export async function resetUserPassword(userId: string, newPassword: string) {
       db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(pw) } }),
       db.session.deleteMany({ where: { userId: user.id } }),
     ]);
+    revokeUser(user.id);
   });
 }
 
@@ -119,6 +123,7 @@ export async function deleteUser(userId: string, confirmPrivate: boolean) {
     for (const p of privates) await purgeProject(p.id);
     await discardUndo({ userId: user.id });
     await db.user.delete({ where: { id: user.id } });
+    revokeUser(user.id);
     describeAction(
       privates.length
         ? `Borró el usuario «${user.name}» y ${privates.length === 1 ? "su proyecto privado" : `sus ${privates.length} proyectos privados`}`

@@ -1,4 +1,5 @@
 // Plantillas de proyecto: esquemas de validación y ayudas puras (sin acceso a base de datos).
+import "./zod-config";
 import { z } from "zod";
 import { COLUMN_ROLES, defaultColumns, PALETTE, type ColumnRoleValue } from "./constants";
 import { POSITION_STEP } from "./positions";

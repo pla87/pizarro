@@ -215,4 +215,8 @@ export const server: Record<string, string> = {
   "Comentó en «{title}»": "Commented on “{title}”",
   "Borró un comentario de «{title}»": "Deleted a comment on “{title}”",
   "Quitó el enlace «{title}»": "Removed the link “{title}”",
+  "Demasiadas conexiones abiertas.": "Too many open connections.",
+  "Cuota de adjuntos del proyecto superada: {used} MB usados de {limit} MB.": "Project attachment quota exceeded: {used} MB used of {limit} MB.",
+  "Cuota total de adjuntos del servidor superada: {used} MB usados de {limit} MB.": "Total server attachment quota exceeded: {used} MB used of {limit} MB.",
+  "Las copias de seguridad están desactivadas: falta una BACKUP_KEY válida.": "Backups are disabled: a valid BACKUP_KEY is missing.",
 };

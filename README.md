@@ -89,6 +89,9 @@ Para generar un `SESSION_SECRET`: `openssl rand -base64 48`.
 | `MAX_USERS` | No | `5` | Máximo de usuarios activos. |
 | `MAX_UPLOAD_MB` | No | `10` | Tamaño máximo por imagen. |
 | `DATABASE_POOL_SIZE` | No | `10` | Conexiones del pool. |
+| `UPLOAD_QUOTA_MB_PER_PROJECT` | No | `2048` | Cuota de adjuntos por proyecto (MB). Pasada la cuota, la subida se rechaza mostrando el uso. |
+| `UPLOAD_QUOTA_MB_TOTAL` | No | (sin límite) | Cuota total de adjuntos de todo el servidor (MB). |
+| `BACKUP_KEY` | Para copias automáticas | `openssl rand -base64 32` | Clave AES-256 (32 bytes en base64) con la que se cifran las copias de la base de datos. Sin ella las copias están desactivadas. **Guárdala fuera de Railway: sin ella las copias no se pueden abrir.** |
 | `COOKIE_SECURE` | No | `true` / `false` | Fuerza el atributo `Secure` de la cookie. |
 | `APP_TIMEZONE` | No | `Europe/Madrid` | Zona horaria para calcular «hoy» en plazos e informes. |
 | `LOG_RETENTION_DAYS` | No | `7` | Días que se conservan los logs de *Administración → Logs* (máx. 90). |
@@ -180,8 +183,19 @@ Nota: `railway run` ejecuta el comando en tu máquina con las variables del serv
 
 ### 6. Copias de seguridad (recomendado)
 
-- **Base de datos:** activa los *Backups* del servicio Postgres en Railway, o programa un `pg_dump` con la URL pública.
-- **Capturas:** el volumen admite *backups* desde la pestaña del volumen.
+- **Base de datos (automáticas):** con `BACKUP_KEY` definida, cada día se vuelca toda la base de datos (instantánea consistente `REPEATABLE READ`, sin `pg_dump`) a `UPLOAD_DIR/backups/pizarro-backup-AAAAMMDDTHHMMSSZ.pzbak`: NDJSON → gzip → AES-256-GCM, con un manifiesto (versión, migración, filas por tabla, sha256) dentro del fichero y en un `.json` al lado. Se conservan las últimas 14 diarias y 6 mensuales. Cada mes se hace una **prueba de restauración**: se descifra la última copia y se comprueba la integridad y que las filas coinciden con el manifiesto. Ambos resultados se ven en *Administración → Copias de seguridad* (con *Crear copia ahora* y *Descargar*) y en los logs (categoría *system*).
+- **Dónde se guardan:** en el mismo volumen que los adjuntos. Un fallo del volumen se llevaría copia y adjuntos juntos: descarga de vez en cuando la última copia (botón *Descargar*) y activa también los *Backups/snapshots del volumen* desde su pestaña en Railway; eso protege los adjuntos, que son ficheros del volumen (no se empaquetan en la copia de la base de datos). Opcionalmente, activa los *Backups* del servicio Postgres de Railway.
+- **Restaurar** en una base de datos **vacía** (recién creada, sin arrancar la app):
+
+  ```bash
+  export DATABASE_URL="postgresql://…/base_vacia"
+  npx prisma migrate deploy                    # mismas migraciones que la copia
+  BACKUP_KEY="…" npm run backup:restore -- ruta/pizarro-backup-….pzbak
+  # en el contenedor compilado:  BACKUP_KEY="…" node dist/restore-backup.mjs <fichero>
+  ```
+
+  `scripts/restore-backup.ts` verifica primero toda la copia (clave, integridad, sha256 y cuentas), se niega si la base de datos ya tiene usuarios o proyectos y carga todo en una sola transacción (si falla, no queda nada a medias).
+- **Limpieza de huérfanos:** cada hora se borran de `UPLOAD_DIR` los ficheros (adjuntos, miniaturas, copias de releases) que ninguna fila de la base de datos referencia y tienen más de 24 h. No toca `backups/`, enlaces simbólicos ni ficheros con nombres desconocidos, y se cancela sola si más de la mitad de los ficheros parecen huérfanos.
 
 ---
 

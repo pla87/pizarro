@@ -12,6 +12,7 @@ import { createSession, requireUser } from "@/lib/session";
 import { disconnectGoogleAccount } from "@/lib/google";
 import { rateLimit } from "@/lib/rate-limit";
 import * as v from "@/lib/validation";
+import { revokeUser } from "@/lib/revoke";
 
 export async function updateProfileName(name: string) {
   return runAction({ name: "profile.updateProfileName", args: [name] }, async () => {
@@ -120,7 +121,8 @@ export async function changePassword(current: string, next: string) {
       db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(pw) } }),
       db.session.deleteMany({ where: { userId: user.id } }),
     ]);
-    // Se cierran todas las sesiones y se abre una nueva en este dispositivo.
+    // Se cierran todas las sesiones (y sus canales en vivo) y se abre una nueva en este dispositivo.
+    revokeUser(user.id);
     await createSession(user.id);
   });
 }
