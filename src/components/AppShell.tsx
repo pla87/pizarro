@@ -13,6 +13,7 @@ import { useT } from "@/i18n/client";
 import { createProject } from "@/actions/projects";
 import { listTemplates } from "@/actions/templates";
 import type { CurrentUser } from "@/lib/session";
+import { AppBadge } from "./AppBadge";
 import { InstallApp } from "./InstallApp";
 import { Presence } from "./board/Presence";
 import { PrivateIcon, ProjectMenu, ProjectsContext } from "./ProjectMenu";
@@ -62,6 +63,7 @@ function Shell({ user, projects, version, unread, children }: Props) {
 
   return (
     <ProjectsContext.Provider value={{ projects, currentId: current?.id ?? null }}>
+    <AppBadge count={unread} />
     {/* Fijo al viewport: nunca hay scroll del documento. En Android con la barra de gestos dibujada
         encima (viewport-fit=cover) el contenido acaba justo antes de esa barra. */}
     <div className="fixed inset-0 flex overflow-hidden">

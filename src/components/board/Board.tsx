@@ -34,6 +34,7 @@ import { TaskCard } from "./TaskCard";
 import { ReportButton } from "../ReportButton";
 import { imageFilesFrom } from "./upload";
 import { draftKey, readDraft, type EditTaskDraft, type NewTaskDraft } from "./drafts";
+import { mentionsToPlain } from "@/lib/mentions";
 
 // Los diálogos (con el editor de texto y el Markdown) no van en el código inicial del tablero:
 // se cargan al abrirlos y se precargan cuando el navegador está libre.
@@ -284,7 +285,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const ids = new Set<string>();
     for (const task of tasks) {
       const hay = normalize(
-        [task.title, kindName.get(task.kindId), task.assigneeId ? userName.get(task.assigneeId) : "", ...task.labelIds.map((id) => labelName.get(id))].join(" "),
+        [mentionsToPlain(task.title), kindName.get(task.kindId), task.assigneeId ? userName.get(task.assigneeId) : "", ...task.labelIds.map((id) => labelName.get(id))].join(" "),
       );
       if (terms.every((w) => hay.includes(w))) ids.add(task.id);
     }

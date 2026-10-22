@@ -9,9 +9,11 @@ import { memo } from "react";
 import type { BoardTask } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { Avatar } from "../ui/Avatar";
+import { MentionText } from "../ui/MentionText";
 import { cn } from "../ui/cn";
 import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard } from "./context";
+import { TaskViewerBubbles } from "./TaskViewerBubbles";
 
 export function SortableTaskCard({ id }: { id: string }) {
   const { taskById, dragHandle } = useBoard();
@@ -24,9 +26,10 @@ export function SortableTaskCard({ id }: { id: string }) {
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={cn("touch-manipulation", isDragging && "opacity-40")}
+      className={cn("relative touch-manipulation", isDragging && "opacity-40")}
       {...(dragHandle ? {} : { ...attributes, ...listeners })}
     >
+      <TaskViewerBubbles taskId={id} />
       <TaskCard
         task={task}
         handle={dragHandle ? (
@@ -103,7 +106,7 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
         >
           {isSelected && <Check size={12} strokeWidth={3} />}
         </button>
-        <p className="min-w-0 flex-1 text-sm leading-snug font-medium break-words">{task.title}</p>
+        <p className="min-w-0 flex-1 text-sm leading-snug font-medium break-words"><MentionText text={task.title} /></p>
         {handle}
       </div>
 

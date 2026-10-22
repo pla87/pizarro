@@ -27,6 +27,8 @@ interface Props extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 
   users: UserOption[];
   /** Si se indica, @docs y @sheets aparecen como comandos. Debe abrir la pestaña de forma síncrona. */
   onCommand?: (command: MentionCommand) => void;
+  /** Clases del contenedor (por defecto, un bloque normal). */
+  wrapperClassName?: string;
 }
 
 /**
@@ -34,7 +36,7 @@ interface Props extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 
  * y, si hay onCommand, los comandos @docs / @sheets.
  */
 export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function MentionTextarea(
-  { value, onValueChange, users, onCommand, onKeyDown, className, ...rest },
+  { value, onValueChange, users, onCommand, onKeyDown, onBlur, className, wrapperClassName, ...rest },
   ref,
 ) {
   const t = useT();
@@ -89,7 +91,7 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
   };
 
   return (
-    <div className="relative">
+    <div className={cn("relative", wrapperClassName)}>
       <textarea
         ref={inner}
         value={value}
@@ -99,7 +101,10 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
           detect(e.target);
         }}
         onClick={(e) => detect(e.currentTarget)}
-        onBlur={() => setTimeout(() => setQuery(null), 150)}
+        onBlur={(e) => {
+          setTimeout(() => setQuery(null), 150);
+          onBlur?.(e);
+        }}
         onKeyDown={(e) => {
           if (query && options.length) {
             if (e.key === "ArrowDown" || e.key === "ArrowUp") {

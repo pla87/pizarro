@@ -100,6 +100,8 @@ export interface CommentInfo {
   createdAt: string;
   authorId: string | null;
   authorName: string | null;
+  /** Comentario raíz al que responde (null = comentario de primer nivel). */
+  parentId: string | null;
 }
 
 export interface AttachmentInfo {
@@ -131,6 +133,8 @@ export interface TaskDetail {
   comments: CommentInfo[];
   /** Versión del título/descripción cargados (ver BoardTask.textVersion). */
   textVersion: string | null;
+  /** El usuario actual sigue la tarea (recibe avisos de comentarios y cambios). */
+  following: boolean;
 }
 
 /** Tarea archivada, con su columna de origen y las releases en las que entró. */

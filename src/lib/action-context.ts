@@ -3,8 +3,16 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { UndoOp } from "./undo";
 import { fitsTemplate, renderLabelEs, type Label, type Params } from "./undo-label";
 
+/** Cambio que se anota en el historial de una tarea (ver task-events.ts). */
+export interface TaskEventInput {
+  taskId: string;
+  /** create, update, move, done, archive, restore, subtask, comment, other… */
+  code: string;
+  label: Label;
+}
+
 // Contexto de la acción en curso, para que el registro de actividad diga qué pasó y en qué proyecto.
-interface ActionContext {
+export interface ActionContext {
   message?: string;
   /** Plantilla traducible de la acción (para el texto del deshacer en el idioma del usuario). */
   label?: Label;
@@ -14,6 +22,8 @@ interface ActionContext {
   undo?: UndoOp[];
   /** Tarea afectada si es solo una (null si son varias): contexto del deshacer. */
   taskId?: string | null;
+  /** Historial de tareas: si la acción lo fija, sustituye al que se deduce de la etiqueta; [] = no anotar nada. */
+  events?: TaskEventInput[];
 }
 
 export const actionContext = new AsyncLocalStorage<ActionContext>();
@@ -54,4 +64,17 @@ export function noteTask(taskId: string | null | undefined): void {
 export function noteProject(projectId: string | null | undefined): void {
   const store = actionContext.getStore();
   if (store && projectId && !store.projectId) store.projectId = projectId;
+}
+
+/** Anota un cambio en el historial de la tarea (con varias llamadas, solo cuentan las explícitas). */
+export function recordTaskEvent(taskId: string, code: string, label: Label): void {
+  const store = actionContext.getStore();
+  if (!store) return;
+  (store.events ??= []).push({ taskId, code, label });
+}
+
+/** La acción no deja rastro en el historial (p. ej. reordenar sin cambiar de columna). */
+export function skipTaskEvents(): void {
+  const store = actionContext.getStore();
+  if (store) store.events ??= [];
 }

@@ -49,9 +49,21 @@ async function purgeAuthData(now: Date = new Date()): Promise<number> {
   return (await purgeExpiredTokens(now)) + (await purgeOldDevices(now));
 }
 
+/** Borra el historial de tareas de más de un año. */
+async function purgeOldTaskHistory(now: Date = new Date()): Promise<number> {
+  const { purgeOldTaskEvents } = await import("@/lib/task-events");
+  return purgeOldTaskEvents(now);
+}
+
+/** Resumen diario y informe semanal por email a quien toca (ver periodic-mail.ts). */
+async function sendPeriodicMail(now: Date = new Date()): Promise<number> {
+  const { sendDueDigests, sendDueReports } = await import("@/lib/periodic-mail");
+  return (await sendDueDigests(now)) + (await sendDueReports(now));
+}
+
 /** Una pasada de mantenimiento; nunca lanza. */
 async function runMaintenance(): Promise<void> {
-  for (const job of [purgeNonImageCopies, purgeOldUndo, purgeOldNotifications, purgeAuthData]) {
+  for (const job of [purgeNonImageCopies, purgeOldUndo, purgeOldNotifications, purgeAuthData, purgeOldTaskHistory, sendPeriodicMail]) {
     try {
       await job();
     } catch (err) {

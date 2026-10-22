@@ -44,6 +44,14 @@ model User {
   notifyWhatsapp Boolean   @default(false)
   /// Teléfono en formato E.164 (+34600111222).
   whatsappPhone  String?
+  /// Avisos por email de los demás tipos (los avisos en la app se crean siempre).
+  notifyAssignedEmail Boolean @default(false)
+  notifyDueEmail      Boolean @default(false)
+  notifyCommentEmail  Boolean @default(false)
+  /// Resumen diario por email: activado, hora local de la app (0-23) y cuándo se envió el último.
+  dailyDigest    Boolean   @default(false)
+  digestHour     Int       @default(8)
+  lastDigestAt   DateTime?
   /// Obliga a elegir una contraseña nueva antes de usar la app (alta con clave inicial o cambio forzado por un admin).
   mustChangePassword Boolean @default(false)
   createdAt      DateTime  @default(now())
@@ -65,6 +73,7 @@ model User {
   notifications     Notification[]    @relation("NotificationRecipient")
   notificationsSent Notification[]    @relation("NotificationActor")
   undoEntries       UndoEntry[]
+  followedTasks     TaskFollower[]
 }
 
 model Session {
@@ -146,6 +155,7 @@ model Project {
   kinds        TaskKind[]
   hiddenKinds  ProjectHiddenKind[]
   undoEntries  UndoEntry[]
+  reportSchedule ReportSchedule?
   privateOwner User?           @relation("PrivateProjects", fields: [privateOwnerId], references: [id], onDelete: SetNull)
 
   @@index([position])
@@ -214,6 +224,8 @@ model Task {
   attachments   TaskAttachment[]
   labels        TaskLabel[]
   releases      ReleaseTask[]
+  followers     TaskFollower[]
+  events        TaskEvent[]
 
   @@index([columnId, position])
   @@index([projectId, archivedAt])
@@ -394,14 +406,71 @@ model TaskComment {
   body      String
   createdAt DateTime  @default(now())
   editedAt  DateTime?
+  /// Comentario al que responde (un solo nivel: siempre el comentario raíz).
+  parentId  String?
   task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
   author    User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  parent    TaskComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies   TaskComment[] @relation("CommentReplies")
 
   @@index([taskId, createdAt])
+  @@index([parentId])
 }
 
 enum NotificationType {
   MENTION
+  ASSIGNED
+  DUE_CHANGED
+  COMMENT
+  REPLY
+}
+
+/// Seguimiento de una tarea. Se sigue implícitamente al crearla, tener asignada, comentar o ser mencionado
+/// (se guarda la fila); `muted` = la persona ha dejado de seguirla y no recibe sus avisos.
+model TaskFollower {
+  taskId    String
+  userId    String
+  muted     Boolean  @default(false)
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([userId])
+}
+
+/// Historial de cambios de una tarea (se conserva 365 días, a diferencia de los logs).
+model TaskEvent {
+  id        String   @id @default(cuid())
+  taskId    String
+  projectId String
+  userId    String?
+  /// Nombre en el momento del cambio.
+  userName  String
+  /// create, update, move, done, archive, restore, subtask, comment, other…
+  code      String
+  /// Etiqueta traducible (ver undo-label.ts): se traduce al idioma de quien la lee.
+  label     String
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+  @@index([projectId, code, createdAt])
+  @@index([createdAt])
+}
+
+/// Informe PDF semanal por email de un proyecto.
+model ReportSchedule {
+  projectId   String    @id
+  enabled     Boolean   @default(true)
+  recipient   String
+  /// Día de la semana ISO (1 = lunes … 7 = domingo) y hora local de la app (0-23).
+  weekday     Int       @default(1)
+  hour        Int       @default(8)
+  lastSentAt  DateTime?
+  createdById String?
+  updatedAt   DateTime  @updatedAt
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
 /// Registro de actividad de la aplicación (se conserva LOG_RETENTION_DAYS días, 7 por defecto).

@@ -34,11 +34,18 @@ function mailer() {
   return transport;
 }
 
+export interface MailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+}
+
 export interface MailMessage {
   to: string;
   subject: string;
   text: string;
   html?: string;
+  attachments?: MailAttachment[];
 }
 
 /** Envía un email; lanza si falla. */
@@ -46,8 +53,16 @@ export async function sendMail(m: MailMessage): Promise<void> {
   const dir = process.env.MAIL_OUTBOX_DIR;
   if (dir) {
     await mkdir(dir, { recursive: true });
-    const file = join(dir, `${Date.now()}-${randomBytes(4).toString("hex")}.json`);
-    await writeFile(file, JSON.stringify({ from: process.env.SMTP_FROM ?? null, ...m, createdAt: new Date().toISOString() }, null, 2));
+    const base = `${Date.now()}-${randomBytes(4).toString("hex")}`;
+    // Los adjuntos se guardan como ficheros junto al JSON (que solo anota nombre y tamaño).
+    const { attachments, ...rest } = m;
+    const saved: { filename: string; bytes: number; file: string }[] = [];
+    for (const [i, a] of (attachments ?? []).entries()) {
+      const file = `${base}-${i}.attachment`;
+      await writeFile(join(dir, file), a.content);
+      saved.push({ filename: a.filename, bytes: a.content.length, file });
+    }
+    await writeFile(join(dir, `${base}.json`), JSON.stringify({ from: process.env.SMTP_FROM ?? null, ...rest, ...(saved.length ? { attachments: saved } : {}), createdAt: new Date().toISOString() }, null, 2));
     return;
   }
   await mailer().sendMail({ from: process.env.SMTP_FROM, ...m });

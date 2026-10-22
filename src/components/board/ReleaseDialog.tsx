@@ -14,6 +14,8 @@ import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
 import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard } from "./context";
+import { MentionText } from "../ui/MentionText";
+import { mentionsToPlain } from "@/lib/mentions";
 
 interface DeployResult {
   moved: { id: string; columnId: string; position: number }[];
@@ -112,7 +114,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
     const details = new Map(res.data.map((d) => [d.id, d]));
     const releaseTasks = selectedTasks.map((t) => ({
       id: t.id,
-      title: t.title,
+      title: mentionsToPlain(t.title),
       kindId: t.kindId,
       linkUrl: t.linkUrl,
       description: details.get(t.id)?.description ?? "",
@@ -277,7 +279,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
                     }
                   />
                   <TypeBadge kind={board.kindById.get(task.kindId)} />
-                  <span className="min-w-0 flex-1 truncate text-sm">{task.title}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm"><MentionText text={task.title} /></span>
                   {task.evergreen && (
                     <span className="shrink-0 rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-500/20 dark:text-brand-300" title={t("Tarea fija en la release: se queda en su columna al desplegar")}>{t("fija")}</span>
                   )}

@@ -1,15 +1,12 @@
 import { visibleProjectsWhere } from "@/lib/access";
-import { appTimeZone, listKinds } from "@/lib/board";
-import { dateToIso, todayIso } from "@/lib/dates";
 import { db } from "@/lib/db";
-import { buildReport } from "@/lib/report";
-import { renderReportPdf } from "@/lib/report-pdf";
+import { generateProjectReportPdf } from "@/lib/report-build";
 import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
-import { intlLocale, toLocale } from "@/i18n/core";
+import { toLocale } from "@/i18n/core";
 
 export const runtime = "nodejs";
 
@@ -23,63 +20,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
   const { projectId } = await ctx.params;
   const project = await db.project.findFirst({
     where: { id: projectId, ...visibleProjectsWhere(user) },
-    select: { id: true, name: true, description: true },
+    select: { id: true, name: true },
   });
   if (!project) return new Response(t("No encontrado"), { status: 404 });
 
-  const [columns, tasks, deliverables, releases, archivedCount, kinds] = await Promise.all([
-    db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, isDone: true } }),
-    db.task.findMany({
-      where: { projectId, archivedAt: null },
-      orderBy: { position: "asc" },
-      take: 2000,
-      select: {
-        id: true,
-        title: true,
-        kind: { select: { name: true } },
-        columnId: true,
-        dueDate: true,
-        deliverableId: true,
-        assignee: { select: { name: true } },
-        updatedAt: true,
-        subtasks: { select: { done: true } },
-      },
-    }),
-    db.deliverable.findMany({ where: { projectId }, orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { position: "asc" }], select: { id: true, name: true, description: true, dueDate: true } }),
-    db.release.findMany({ where: { projectId }, orderBy: { deployedAt: "desc" }, take: 5, select: { number: true, title: true, deployedAt: true, _count: { select: { tasks: true } } } }),
-    db.task.count({ where: { projectId, archivedAt: { not: null } } }),
-    listKinds(projectId),
-  ]);
-
-  const locale = intlLocale(toLocale(user.locale));
-  const today = todayIso(appTimeZone());
-  const report = buildReport({
-    project: { name: project.name, description: project.description },
-    generatedBy: user.name,
-    today,
-    time: new Intl.DateTimeFormat(locale, { timeZone: appTimeZone(), hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date()),
-    columns,
-    kinds: kinds.map((k) => k.name),
-    tasks: tasks.map((t) => ({
-      id: t.id,
-      title: t.title,
-      kind: t.kind.name,
-      columnId: t.columnId,
-      assigneeName: t.assignee?.name ?? null,
-      dueDate: dateToIso(t.dueDate),
-      deliverableId: t.deliverableId,
-      subtaskTotal: t.subtasks.length,
-      subtaskDone: t.subtasks.filter((x) => x.done).length,
-      updatedAt: t.updatedAt.toISOString(),
-    })),
-    deliverables: deliverables.map((d) => ({ ...d, dueDate: dateToIso(d.dueDate) })),
-    releases: releases.map((r) => ({ number: r.number, title: r.title, deployedAt: r.deployedAt.toISOString(), taskCount: r._count.tasks })),
-    archivedCount,
-  }, t);
-
-  let pdf: Uint8Array;
+  let report;
   try {
-    pdf = await renderReportPdf(report, t, locale);
+    report = await generateProjectReportPdf(projectId, { generatedBy: user.name, locale: toLocale(user.locale) });
   } catch (err) {
     logEvent({
       level: "error", category: "api", action: "report.pdfFailed", message: `Fallo al generar el informe PDF de «${project.name}»: ${err instanceof Error ? err.message : String(err)}`,
@@ -87,16 +34,16 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
     });
     throw err;
   }
+  if (!report) return new Response(t("No encontrado"), { status: 404 });
   logEvent({
-    category: "api", action: "report.pdf", message: `Informe PDF generado de «${project.name}» (${Math.round(pdf.length / 1024)} KB)`,
+    category: "api", action: "report.pdf", message: `Informe PDF generado de «${project.name}» (${Math.round(report.pdf.length / 1024)} KB)`,
     userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/report`, ip: clientIp(_req.headers), durationMs: performance.now() - start,
-    details: { tasks: tasks.length, bytes: pdf.length },
+    details: { tasks: report.taskCount, bytes: report.pdf.length },
   });
-  const slug = project.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || t("proyecto");
-  return new Response(new Uint8Array(pdf), {
+  return new Response(new Uint8Array(report.pdf), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${t("informe")}-${slug}-${today}.pdf"`,
+      "Content-Disposition": `inline; filename="${report.filename}"`,
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
     },

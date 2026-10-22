@@ -29,6 +29,8 @@ interface Props {
   deliverables: DeliverableRow[];
   users: { id: string; name: string; role: "ADMIN" | "MEMBER" }[];
   editorMode: EditorModeValue;
+  /** Sección «Informe semanal por email» (la monta la página). */
+  reportSchedule?: React.ReactNode;
 }
 
 function Section({ title, description, children, id }: { title: string; description?: string; children: React.ReactNode; id?: string }) {
@@ -42,7 +44,7 @@ function Section({ title, description, children, id }: { title: string; descript
   );
 }
 
-export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode }: Props) {
+export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode, reportSchedule }: Props) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
@@ -199,6 +201,8 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
           {t("El rol")} <strong>{t("Siguiente salto")}</strong> {t("muestra el botón «Generar Release»; el rol")} <strong>{t("En producción")}</strong> {t("es el destino de las tarjetas al marcar una release como desplegada.")}
         </p>
       </Section>
+
+      {reportSchedule}
 
       <Section title="Tarjetas archivadas">
         <p className="text-sm text-slate-500">{t("Las tarjetas archivadas se consultan y recuperan desde el botón «Archivadas» del tablero.")}</p>
