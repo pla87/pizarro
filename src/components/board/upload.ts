@@ -69,6 +69,9 @@ export async function uploadFile(taskId: string, file: File, onCreate = false, t
   return json as AttachmentInfo;
 }
 
+/** Diálogos con zona de soltado abiertos: solo el último (el de más arriba) recibe los archivos. */
+const dropStack: object[] = [];
+
 /**
  * Arrastrar y soltar archivos en cualquier punto de la ventana mientras el diálogo está abierto.
  * Devuelve true mientras se arrastran archivos por encima (para mostrar el aviso). Ignora arrastres de texto.
@@ -81,7 +84,10 @@ export function useFileDrop(onFiles: (files: File[]) => void): boolean {
   });
   useEffect(() => {
     let depth = 0;
-    const has = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
+    const token = {};
+    dropStack.push(token);
+    const isTop = () => dropStack[dropStack.length - 1] === token;
+    const has = (e: DragEvent) => isTop() && Array.from(e.dataTransfer?.types ?? []).includes("Files");
     const reset = () => {
       depth = 0;
       setOver(false);
@@ -115,6 +121,7 @@ export function useFileDrop(onFiles: (files: File[]) => void): boolean {
     document.addEventListener("drop", drop);
     document.addEventListener("dragend", reset);
     return () => {
+      dropStack.splice(dropStack.indexOf(token), 1);
       document.removeEventListener("dragenter", enter);
       document.removeEventListener("dragover", overFn);
       document.removeEventListener("dragleave", leave);

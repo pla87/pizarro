@@ -189,7 +189,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
         attachments: zipItems.map(({ taskId, code }) => ({ taskId, code })),
         number: generatedNumber ?? undefined,
       }),
-    );
+    ).catch(() => ({ ok: false as const, error: t("Error inesperado. Inténtalo de nuevo.") }));
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
     toast(t("Release registrada como desplegada"));

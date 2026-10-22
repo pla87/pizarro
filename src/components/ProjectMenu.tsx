@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createContext, useContext, useState } from "react";
 import { useT } from "@/i18n/client";
 import { cn } from "./ui/cn";
+import { useEscapeClose } from "./ui/useEscapeClose";
 
 interface ProjectsValue {
   projects: { id: string; name: string; isPrivate?: boolean }[];
@@ -23,6 +24,7 @@ export const ProjectsContext = createContext<ProjectsValue>({ projects: [], curr
 export function ProjectMenu({ className, textClassName }: { className?: string; textClassName?: string }) {
   const { projects, currentId } = useContext(ProjectsContext);
   const [open, setOpen] = useState(false);
+  useEscapeClose(open, () => setOpen(false));
   const current = projects.find((p) => p.id === currentId);
   if (!current) return <span className={cn("truncate font-semibold", textClassName)}>Pizarro</span>;
 

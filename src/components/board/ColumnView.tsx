@@ -10,6 +10,7 @@ import type { BoardColumn } from "@/lib/types";
 import { useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
+import { useEscapeClose } from "../ui/useEscapeClose";
 import { useBoard } from "./context";
 import { EvergreenPanel } from "./EvergreenPanel";
 import { SortableTaskCard } from "./TaskCard";
@@ -111,6 +112,7 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
   const toast = useToast();
   const t = useT();
   const [open, setOpen] = useState(false);
+  useEscapeClose(open, () => setOpen(false));
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, optimistic?: () => void) => {
     setOpen(false);
