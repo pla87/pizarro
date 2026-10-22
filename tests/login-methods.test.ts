@@ -228,7 +228,7 @@ test("claims: con dominio de Workspace exige hd y email de ese dominio", () => {
   assert.deepEqual(check({ hd: "otra.test" }, { domain: "empresa.test" }), { ok: false, reason: "domain" });
   assert.deepEqual(check({ email: "ana@otra.test" }, { domain: "empresa.test" }), { ok: false, reason: "domain" });
   assert.deepEqual(check({ email: "ana@sub.empresa.test" }, { domain: "empresa.test" }), { ok: false, reason: "domain" });
-  assert.equal(check({ hd: undefined, email: "ana@gmail.com" }, { domain: null }).ok, true, "sin dominio configurado vale cualquier cuenta verificada");
+  assert.equal(check({ hd: undefined, email: "ana@correo.example" }, { domain: null }).ok, true, "sin dominio configurado vale cualquier cuenta verificada");
 });
 
 test("claims: sin sub o email no son válidas", () => {
