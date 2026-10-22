@@ -12,7 +12,7 @@ type Toast = ReturnType<typeof useToast>;
 
 interface Deps {
   currentUserId: string;
-  taskById: Map<string, BoardTask>;
+  getTask: (id: string) => BoardTask | undefined;
   sortedColumns: BoardColumn[];
   /** Ids por columna, sin filtrar y en orden. */
   baseItems: Record<string, string[]>;
@@ -36,8 +36,8 @@ export function useCardActions(deps: Deps) {
   return useMemo(() => {
     /** Guarda campos con cambio optimista; si el servidor lo rechaza, vuelve a como estaba. */
     const saveFields = async (id: string, patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, since?: string | null): Promise<boolean> => {
-      const { taskById, patchTask, upsertTask, track, toast } = ref.current;
-      const before = taskById.get(id);
+      const { getTask, patchTask, upsertTask, track, toast } = ref.current;
+      const before = getTask(id);
       if (!before) return false;
       patchTask(id, optimistic);
       const res = await track(updateTask(id, patch, since));
@@ -52,8 +52,8 @@ export function useCardActions(deps: Deps) {
 
     return {
       assignToMe: async (id: string) => {
-        const { taskById, currentUserId, toast, t } = ref.current;
-        const task = taskById.get(id);
+        const { getTask, currentUserId, toast, t } = ref.current;
+        const task = getTask(id);
         if (!task) return;
         // Alterna: si ya es mía, la libera.
         const assigneeId = task.assigneeId === currentUserId ? null : currentUserId;
@@ -61,14 +61,14 @@ export function useCardActions(deps: Deps) {
       },
 
       moveToAdjacentColumn: async (id: string, dir: -1 | 1) => {
-        const { taskById, sortedColumns, baseItems, patchTask, upsertTask, track, toast, t } = ref.current;
-        const task = taskById.get(id);
+        const { getTask, sortedColumns, baseItems, patchTask, upsertTask, track, toast, t } = ref.current;
+        const task = getTask(id);
         if (!task) return;
         const target = sortedColumns[sortedColumns.findIndex((c) => c.id === task.columnId) + dir];
         if (!target) return;
         // Al final de la columna destino.
         const prevId = baseItems[target.id]?.at(-1) ?? null;
-        const position = positionBetween(prevId ? taskById.get(prevId)?.position : null, null);
+        const position = positionBetween(prevId ? getTask(prevId)?.position : null, null);
         patchTask(id, { columnId: target.id, position, evergreen: false });
         focusCard(id);
         const res = await track(moveTask(id, target.id, prevId, null));
@@ -88,7 +88,7 @@ export function useCardActions(deps: Deps) {
       },
 
       renameTask: async (id: string, title: string) => {
-        const task = ref.current.taskById.get(id);
+        const task = ref.current.getTask(id);
         const value = title.trim();
         if (!task || !value || value === task.title) return true;
         // `since`: si otra persona cambió el texto mientras tanto, el servidor avisa en vez de pisarlo.

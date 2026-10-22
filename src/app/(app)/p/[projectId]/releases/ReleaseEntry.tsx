@@ -6,6 +6,7 @@ import { useState } from "react";
 import { deleteRelease, deleteReleaseAttachments } from "@/actions/releases";
 import { copyText, downloadText } from "@/components/ui/clipboard";
 import { cn } from "@/components/ui/cn";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Markdown } from "@/components/ui/Markdown";
 import { useToast } from "@/components/ui/Toast";
 import { releaseFileName } from "@/lib/release";
@@ -21,6 +22,7 @@ export function ReleaseEntry({ release }: Props) {
   const locale = useIntlLocale();
   const [open, setOpen] = useState(false);
   const toast = useToast();
+  const confirm = useConfirm();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [attachments, setAttachments] = useState(release.attachments);
@@ -28,7 +30,7 @@ export function ReleaseEntry({ release }: Props) {
   const date = new Date(release.deployedAt);
 
   const remove = async () => {
-    if (!window.confirm(t("¿Borrar la release «{title}» del histórico? Se borran también sus adjuntos. Las tareas no cambian.", { title: release.title }))) return;
+    if (!(await confirm({ title: t("Borrar release"), message: t("¿Borrar la release «{title}» del histórico? Se borran también sus adjuntos. Las tareas no cambian.", { title: release.title }), confirmLabel: t("Borrar"), danger: true }))) return;
     setBusy(true);
     const res = await deleteRelease(release.id);
     setBusy(false);
@@ -39,7 +41,7 @@ export function ReleaseEntry({ release }: Props) {
   };
 
   const removeAttachments = async () => {
-    if (!window.confirm(t("¿Borrar los {n} adjuntos de esta release? El texto se conserva.", { n: attachments.length }))) return;
+    if (!(await confirm({ title: t("Borrar adjuntos"), message: t("¿Borrar los {n} adjuntos de esta release? El texto se conserva.", { n: attachments.length }), confirmLabel: t("Borrar"), danger: true }))) return;
     setBusy(true);
     const res = await deleteReleaseAttachments(release.id);
     setBusy(false);

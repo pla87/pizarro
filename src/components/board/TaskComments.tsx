@@ -10,6 +10,7 @@ import type { CommentInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/ty
 import { Avatar } from "../ui/Avatar";
 import { Markdown } from "../ui/Markdown";
 import { MentionTextarea, type MentionCommand } from "../ui/MentionTextarea";
+import { useConfirm } from "../ui/ConfirmDialog";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
 
@@ -25,6 +26,7 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle }: {
   const locale = useIntlLocale();
   const board = useBoard();
   const toast = useToast();
+  const confirm = useConfirm();
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [replyTo, setReplyTo] = useState<CommentInfo | null>(null);
@@ -49,7 +51,7 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle }: {
   };
 
   const remove = async (c: CommentInfo) => {
-    if (!window.confirm(t("¿Borrar este comentario?"))) return;
+    if (!(await confirm({ title: t("Borrar comentario"), message: t("¿Borrar este comentario?"), confirmLabel: t("Borrar"), danger: true }))) return;
     const res = await board.track(deleteComment(c.id));
     if (!res.ok) return toast(res.error, "error");
     // Sus respuestas pasan a ser comentarios de primer nivel (el servidor las desvincula).

@@ -10,6 +10,7 @@ import {
 } from "@/actions/profile";
 import { cn } from "@/components/ui/cn";
 import { Markdown } from "@/components/ui/Markdown";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { CardStyleValue, EditorModeValue, TemplateOption } from "@/lib/types";
@@ -323,6 +324,7 @@ function NotificationSection({ prefs }: { prefs: Props["notifications"] }) {
 function TemplateList({ kind, title, initial, placeholder }: { kind: "HEADER" | "FOOTER"; title: string; initial: TemplateOption[]; placeholder: string }) {
   const t = useT();
   const toast = useToast();
+  const confirm = useConfirm();
   const [items, setItems] = useState(initial);
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const [form, setForm] = useState({ name: "", content: "" });
@@ -398,7 +400,7 @@ function TemplateList({ kind, title, initial, placeholder }: { kind: "HEADER" | 
               className="btn-icon h-7 w-7 hover:text-red-600"
               aria-label={t("Borrar {name}", { name: tpl.name })}
               onClick={async () => {
-                if (!window.confirm(t("¿Borrar «{name}»?", { name: tpl.name }))) return;
+                if (!(await confirm({ title: t("Borrar plantilla"), message: t("¿Borrar «{name}»?", { name: tpl.name }), confirmLabel: t("Borrar"), danger: true }))) return;
                 const res = await deleteReleaseTemplate(tpl.id);
                 if (!res.ok) return toast(res.error, "error");
                 setItems((l) => l.filter((x) => x.id !== tpl.id));

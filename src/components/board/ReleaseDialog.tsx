@@ -8,6 +8,7 @@ import { buildReleaseMarkdown, computeReleaseCodes, defaultReleaseTitle, isoDate
 import type { BoardTask, TemplateOption } from "@/lib/types";
 import { useT } from "@/i18n/client";
 import { copyText, downloadText } from "../ui/clipboard";
+import { useConfirm } from "../ui/ConfirmDialog";
 import { cn } from "../ui/cn";
 import { Markdown } from "../ui/Markdown";
 import { Modal } from "../ui/Modal";
@@ -36,6 +37,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
   const board = useBoard();
   const now = useMemo(() => new Date(), []);
   const toast = useToast();
+  const confirm = useConfirm();
   const t = useT();
   const [step, setStep] = useState<"select" | "edit">("select");
   const [chosen, setChosen] = useState<Set<string>>(new Set(preselected));
@@ -140,8 +142,8 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
     setStep("edit");
   };
 
-  const back = () => {
-    if (content !== generated && !window.confirm(t("Se perderán los cambios que has hecho en el texto. ¿Continuar?"))) return;
+  const back = async () => {
+    if (content !== generated && !(await confirm({ title: t("Volver a la selección"), message: t("Se perderán los cambios que has hecho en el texto. ¿Continuar?"), confirmLabel: t("Continuar"), danger: true }))) return;
     setStep("select");
   };
 
@@ -181,7 +183,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
     const message = destination === "IN_PRODUCTION"
       ? t("Se guardará la release y {n} tarjeta(s) pasarán a «{name}». ¿Continuar?", { n: selectedTasks.length, name: inProduction?.name ?? "" })
       : t("Se guardará la release y {n} tarjeta(s) pasarán al archivo. ¿Continuar?", { n: selectedTasks.length });
-    if (!window.confirm(message)) return;
+    if (!(await confirm({ title: t("Desplegar la release"), message, confirmLabel: t("Continuar") }))) return;
     setBusy(true);
     const res = await board.track(
       deployRelease({
