@@ -53,7 +53,7 @@ export function ReleasesList({
             aria-label={t("Buscar releases")}
           />
         </div>
-        {resultCount !== null && <p className="mt-1 text-xs text-slate-500" aria-live="polite">{t("{n} resultados", { n: resultCount })}</p>}
+        {resultCount !== null && <p className="mt-1 text-xs text-slate-500" aria-live="polite">{resultCount === 1 ? t("1 resultado") : t("{n} resultados", { n: resultCount })}</p>}
       </div>
       {releases.length === 0 ? (
         <p className="card p-6 text-center text-sm text-slate-500">{t("Ninguna release coincide con «{query}».", { query })}</p>

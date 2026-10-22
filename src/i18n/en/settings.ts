@@ -47,6 +47,7 @@ export const settings: Record<string, string> = {
   "Buscar en título y contenido…": "Search in title and content…",
   "Buscar releases": "Search releases",
   "{n} resultados": "{n} results",
+  "1 resultado": "1 result",
   "Ninguna release coincide con «{query}».": "No release matches “{query}”.",
   "Cargar más": "Load more",
   "¿Borrar la release «{title}» del histórico? Se borran también sus adjuntos. Las tareas no cambian.": "Delete the release “{title}” from the history? Its attachments are deleted too. Tasks are not changed.",
