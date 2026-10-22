@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/i18n/client";
 import { cn } from "./cn";
@@ -37,8 +37,13 @@ const SIZES = { sm: "sm:max-w-md", md: "sm:max-w-xl", lg: "sm:max-w-3xl", xl: "s
 /** Ancho máximo de cada tamaño (para combinarlo con el límite de media pantalla en lg). */
 const SIZE_REM = { sm: "28rem", md: "36rem", lg: "48rem", xl: "64rem" };
 
+const noopSubscribe = () => () => {};
+
 export function Modal({ open, onClose, title, children, footer, size = "md", header, placement = "bottom", panelClassName, side = "center", onAddSecond }: ModalProps) {
   const t = useT();
+  // El portal solo existe en el navegador: durante la hidratación se pinta como en el servidor (nada) y
+  // justo después aparece. Sin esto, un modal abierto desde el primer render (?task=) daba el error #418.
+  const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false);
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   useEffect(() => {
@@ -108,7 +113,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
   }, [open]);
 
   const top = placement === "top";
-  if (!open || typeof document === "undefined") return null;
+  if (!open || !hydrated) return null;
   return createPortal(
     <div
       className={cn(
