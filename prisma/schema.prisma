@@ -400,6 +400,8 @@ model Notification {
   task           Task?            @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt, createdAt])
+  @@index([taskId])
+  @@index([readAt, createdAt])
 }
 
 /// Tipo de tarea configurable por los administradores (cada uno es una sección de la release).
@@ -516,5 +518,6 @@ model UndoEntry {
 
   @@index([userId, projectId, createdAt])
   @@index([userId, taskId, createdAt])
+  @@index([projectId])
   @@index([createdAt])
 }

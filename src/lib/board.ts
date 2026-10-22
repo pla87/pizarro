@@ -23,9 +23,16 @@ export const boardTaskSelect = {
   _count: { select: { attachments: true, comments: true, links: true } },
 } satisfies Prisma.TaskSelect;
 
-type BoardTaskRow = Prisma.TaskGetPayload<{ select: typeof boardTaskSelect }>;
+/** Igual que boardTaskSelect pero sin la descripción: en el tablero completo solo hace falta saber si la hay. */
+const { description: _description, ...boardTaskListSelect } = boardTaskSelect;
+
+type BoardTaskRow = Omit<Prisma.TaskGetPayload<{ select: typeof boardTaskSelect }>, "description"> & { description?: string };
 
 export function toBoardTask(t: BoardTaskRow): BoardTask {
+  return toBoardTaskWith(t, (t.description ?? "").trim().length > 0);
+}
+
+function toBoardTaskWith(t: BoardTaskRow, hasDescription: boolean): BoardTask {
   return {
     id: t.id,
     columnId: t.columnId,
@@ -39,7 +46,7 @@ export function toBoardTask(t: BoardTaskRow): BoardTask {
     subtaskTotal: t.subtasks.length,
     subtaskDone: t.subtasks.filter((s) => s.done).length,
     attachmentCount: t._count.attachments,
-    hasDescription: t.description.trim().length > 0,
+    hasDescription,
     dueDate: dateToIso(t.dueDate),
     deliverableId: t.deliverableId,
     commentCount: t._count.comments,
@@ -47,6 +54,20 @@ export function toBoardTask(t: BoardTaskRow): BoardTask {
     evergreen: t.evergreen,
     textVersion: t.contentUpdatedAt?.toISOString() ?? null,
   };
+}
+
+/**
+ * Tareas activas del tablero. No se traen las descripciones (pueden ser largas y se enviarían
+ * todas al cliente): una consulta ligera dice cuáles tienen y el detalle se pide al abrir la tarea.
+ */
+export async function loadBoardTasks(projectId: string): Promise<BoardTask[]> {
+  const where = { projectId, archivedAt: null };
+  const [rows, described] = await Promise.all([
+    db.task.findMany({ where, orderBy: { position: "asc" }, select: boardTaskListSelect }),
+    db.task.findMany({ where: { ...where, description: { not: "" } }, select: { id: true } }),
+  ]);
+  const withText = new Set(described.map((d) => d.id));
+  return rows.map((r) => toBoardTaskWith(r, withText.has(r.id)));
 }
 
 export async function loadBoardTask(id: string): Promise<BoardTask> {
