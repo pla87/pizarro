@@ -23,3 +23,9 @@ export function sessionCookieOptions() {
     maxAge: SESSION_MAX_AGE_SECONDS,
   };
 }
+
+/**
+ * Marca (sin datos) de que la sesión de este navegador debe elegir una contraseña nueva. La usa proxy.ts para
+ * cerrar el paso a todo lo demás sin consultar la BD; la comprobación real está en session.ts.
+ */
+export const PASSWORD_CHANGE_COOKIE = "pz_pwchange";

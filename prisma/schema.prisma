@@ -44,10 +44,14 @@ model User {
   notifyWhatsapp Boolean   @default(false)
   /// Teléfono en formato E.164 (+34600111222).
   whatsappPhone  String?
+  /// Obliga a elegir una contraseña nueva antes de usar la app (alta con clave inicial o cambio forzado por un admin).
+  mustChangePassword Boolean @default(false)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
   sessions          Session[]
+  authTokens        AuthToken[]
+  knownDevices      KnownDevice[]
   memberships       ProjectMember[]
   privateProjects   Project[]         @relation("PrivateProjects")
   assignedTasks     Task[]            @relation("TaskAssignee")
@@ -69,10 +73,53 @@ model Session {
   userId    String
   expiresAt DateTime
   createdAt DateTime @default(now())
+  /// Última actividad (se actualiza como mucho cada 5 minutos).
+  lastSeenAt DateTime @default(now())
+  /// Navegador que abrió la sesión (truncado) e IP de ese momento.
+  userAgent String?
+  ip        String?
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+enum AuthTokenPurpose {
+  PASSWORD_RESET
+  PASSWORD_CHANGE
+  EMAIL_CHANGE
+  INVITE
+}
+
+/// Enlace de un solo uso enviado por email (restablecer o confirmar contraseña, confirmar email, invitación).
+model AuthToken {
+  id        String           @id @default(cuid())
+  userId    String
+  purpose   AuthTokenPurpose
+  /// HMAC-SHA256 del token del enlace; el token en claro nunca se guarda.
+  tokenHash String           @unique
+  /// Datos pendientes de confirmar (hash de la contraseña nueva, email nuevo); nunca texto en claro.
+  data      Json?
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@index([expiresAt])
+}
+
+/// Dispositivos desde los que ya se ha iniciado sesión (para avisar de accesos nuevos). Solo se guarda el hash de la cookie.
+model KnownDevice {
+  id         String   @id @default(cuid())
+  userId     String
+  deviceHash String
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceHash])
+  @@index([lastSeenAt])
 }
 
 model Project {

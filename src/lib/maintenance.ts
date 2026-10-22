@@ -43,9 +43,15 @@ async function purgeOldNotifications(now: Date = new Date()): Promise<number> {
   return count;
 }
 
+/** Borra los enlaces de email caducados y los dispositivos conocidos sin actividad en más de un año. */
+async function purgeAuthData(now: Date = new Date()): Promise<number> {
+  const [{ purgeExpiredTokens }, { purgeOldDevices }] = await Promise.all([import("@/lib/auth-token"), import("@/lib/devices")]);
+  return (await purgeExpiredTokens(now)) + (await purgeOldDevices(now));
+}
+
 /** Una pasada de mantenimiento; nunca lanza. */
 async function runMaintenance(): Promise<void> {
-  for (const job of [purgeNonImageCopies, purgeOldUndo, purgeOldNotifications]) {
+  for (const job of [purgeNonImageCopies, purgeOldUndo, purgeOldNotifications, purgeAuthData]) {
     try {
       await job();
     } catch (err) {

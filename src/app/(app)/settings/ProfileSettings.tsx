@@ -101,7 +101,11 @@ export function ProfileSettings(props: Props) {
 
       <section className="card p-5">
         <h2 className="font-semibold">{t("Cambiar contraseña")}</h2>
-        <p className="mt-0.5 text-sm text-slate-500">{t("Se cerrará la sesión en el resto de dispositivos.")}</p>
+        <p className="mt-0.5 text-sm text-slate-500">
+          {props.notifications.emailAvailable
+            ? t("Te enviaremos un enlace por email para confirmar el cambio; al confirmarlo se cerrará la sesión en todos los dispositivos.")
+            : t("Se cerrará la sesión en el resto de dispositivos.")}
+        </p>
         <form
           className="mt-4 space-y-3"
           onSubmit={(e) => {
@@ -109,7 +113,7 @@ export function ProfileSettings(props: Props) {
             if (next !== repeat) return toast(t("Las contraseñas nuevas no coinciden."), "error");
             start(async () => {
               const res = await changePassword(current, next);
-              toast(res.ok ? t("Contraseña actualizada") : res.error, res.ok ? "success" : "error");
+              toast(res.ok ? (res.data.pending ? t("Te hemos enviado un email: confirma el cambio con el enlace (caduca en 30 minutos).") : t("Contraseña actualizada")) : res.error, res.ok ? "success" : "error");
               if (res.ok) {
                 setCurrent("");
                 setNext("");

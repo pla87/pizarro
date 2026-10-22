@@ -18,3 +18,9 @@ export function rateLimit(key: string, limit: number, windowMs: number): boolean
 export function resetRateLimit(key: string): void {
   buckets.delete(key);
 }
+
+/** Claves del límite de inicio de sesión: por pareja IP+email (estricto) y por IP (más holgado). */
+export function loginRateKeys(ip: string, email: string): { pair: string; ip: string } {
+  const e = email.trim().toLowerCase().slice(0, 200);
+  return { pair: `login:pair:${ip}|${e}`, ip: `login:ip:${ip}` };
+}
