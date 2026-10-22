@@ -1,6 +1,11 @@
 // Traducciones al inglés (server). Clave: texto exacto en español.
 export const server: Record<string, string> = {
   // Genéricos (action.ts, errors.ts, session.ts)
+  "La tarea está archivada. Recupérala para modificarla.": "The task is archived. Restore it to modify it.",
+  "Una tarea no puede tener más de 100 subtareas.": "A task cannot have more than 100 subtasks.",
+  "Esta tarea ya tiene el máximo de 1000 comentarios.": "This task already has the maximum of 1000 comments.",
+  "Demasiados comentarios seguidos. Espera un momento.": "Too many comments in a row. Please wait a moment.",
+  "Demasiados documentos creados seguidos. Espera un minuto.": "Too many documents created in a row. Please wait a minute.",
   "Error inesperado. Inténtalo de nuevo.": "Unexpected error. Please try again.",
   "Datos no válidos.": "Invalid data.",
   "Los datos han cambiado mientras tanto. Recarga e inténtalo de nuevo.": "The data has changed in the meantime. Reload and try again.",

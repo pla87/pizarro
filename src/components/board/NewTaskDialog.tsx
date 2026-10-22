@@ -114,7 +114,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     let task = res.data;
     board.upsertTask(task);
     // Los archivos se suben en paralelo tras crear la tarea.
-    const results = await Promise.allSettled(files.map((f) => board.track(uploadFile(task.id, f, true, t))));
+    const results = await Promise.allSettled(files.map((f) => board.trackRaw(uploadFile(task.id, f, true, t))));
     const ok = results.filter((r) => r.status === "fulfilled").length;
     const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
     if (ok) {

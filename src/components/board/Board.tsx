@@ -172,7 +172,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       refresh();
     }
   }, [refresh]);
-  const track = useCallback(async <T,>(p: Promise<T>): Promise<T> => {
+  // Contador de operaciones en curso (evita refrescos intermedios). Sin capturar errores: lo usan las subidas, que informan por excepción.
+  const trackRaw = useCallback(async <T,>(p: Promise<T>): Promise<T> => {
     mutationAt.current = performance.now();
     pending.current++;
     try {
@@ -182,6 +183,20 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       flushStale();
     }
   }, [flushStale]);
+  // Para server actions: si lanzan (sin red, acción inexistente tras un despliegue) se avisa, se refresca
+  // desde el servidor para deshacer lo optimista y se devuelve un fallo como el de cualquier acción.
+  const track = useCallback(async <T,>(p: Promise<T>): Promise<T> => {
+    try {
+      return await trackRaw(p);
+    } catch {
+      const error = t("Error inesperado. Inténtalo de nuevo.");
+      toast(error, "error");
+      // Un refresco ya pedido antes del cambio podría traer datos viejos: se fuerza uno nuevo.
+      mutationAt.current = 0;
+      refresh();
+      return { ok: false, error } as T;
+    }
+  }, [trackRaw, toast, t, refresh]);
 
   const patchTask = useCallback((id: string, patch: Partial<BoardTask> | ((t: BoardTask) => Partial<BoardTask>)) => {
     setTasks((prev) => {
@@ -330,16 +345,32 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           return next;
         }),
       track,
+      trackRaw,
       refresh,
     }),
-    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, data.editorMode, dragHandle, data.google, data.today, sortedColumns, labels, taskById, baseItems, evergreenByColumn, selected, track, refresh, patchTask],
+    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, data.editorMode, dragHandle, data.google, data.today, sortedColumns, labels, taskById, baseItems, evergreenByColumn, selected, track, trackRaw, refresh, patchTask],
   );
 
   // --- Movimiento masivo ------------------------------------------------------
+  // Deshace un cambio masivo fallido tocando solo esas tareas (por id): no pisa lo que haya llegado mientras tanto
+  // (refrescos por SSE, ediciones desde un diálogo). Las que ya no estén se vuelven a añadir.
+  const restoreTasks = (before: Map<string, BoardTask>) =>
+    setTasks((prev) => {
+      const seen = new Set<string>();
+      const next = prev.map((t) => {
+        const old = before.get(t.id);
+        if (!old) return t;
+        seen.add(t.id);
+        return old;
+      });
+      for (const [id, old] of before) if (!seen.has(id)) next.push(old);
+      return next;
+    });
+
   const moveSelected = async (columnId: string) => {
     const ids = [...selected];
     if (!ids.length) return;
-    const snapshot = tasks;
+    const before = new Map(tasks.filter((t) => ids.includes(t.id)).map((t) => [t.id, t]));
     // Optimista: al final de la columna destino, conservando el orden actual.
     let pos = Math.max(0, ...tasks.filter((t) => t.columnId === columnId).map((t) => t.position));
     const ordered = sortedColumns.flatMap((c) => (baseItems[c.id] ?? []).filter((id) => selected.has(id) && c.id !== columnId));
@@ -348,7 +379,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     setSelected(new Set());
     const res = await track(moveTasks(ids, columnId));
     if (!res.ok) {
-      setTasks(snapshot);
+      restoreTasks(before);
       return toast(res.error, "error");
     }
     const server = new Map(res.data.moved.map((m) => [m.id, m.position]));
@@ -360,13 +391,13 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const archiveSelected = async () => {
     const ids = [...selected];
     if (!ids.length) return;
-    const snapshot = tasks;
+    const before = new Map(tasks.filter((t) => ids.includes(t.id)).map((t) => [t.id, t]));
     const gone = new Set(ids);
     setTasks((prev) => prev.filter((t) => !gone.has(t.id)));
     setSelected(new Set());
     const res = await track(archiveTasks(ids));
     if (!res.ok) {
-      setTasks(snapshot);
+      restoreTasks(before);
       return toast(res.error, "error");
     }
     toast(res.data.archived === 1 ? t("1 tarea archivada") : t("{n} tareas archivadas", { n: res.data.archived }));
@@ -387,13 +418,13 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const deleteSelected = async () => {
     const ids = [...selected];
     if (!ids.length || !window.confirm(ids.length === 1 ? t("¿Borrar definitivamente la tarea seleccionada y sus adjuntos?") : t("¿Borrar definitivamente las {n} tareas seleccionadas y sus adjuntos?", { n: ids.length }))) return;
-    const snapshot = tasks;
+    const before = new Map(tasks.filter((t) => ids.includes(t.id)).map((t) => [t.id, t]));
     const gone = new Set(ids);
     setTasks((prev) => prev.filter((t) => !gone.has(t.id)));
     setSelected(new Set());
     const res = await track(deleteTasks(ids));
     if (!res.ok) {
-      setTasks(snapshot);
+      restoreTasks(before);
       return toast(res.error, "error");
     }
     toast(res.data.deleted === 1 ? t("1 tarea borrada") : t("{n} tareas borradas", { n: res.data.deleted }));
