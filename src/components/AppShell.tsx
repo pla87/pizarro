@@ -228,27 +228,25 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: strin
                 </span>
               </Link>
             ))}
-            {isAdmin && (
-              <button
-                type="button"
-                className="mt-1 flex w-full items-center gap-2 rounded-md border-t border-slate-200 px-2.5 py-2 text-sm text-brand-600 hover:bg-slate-100 dark:border-slate-800 dark:hover:bg-slate-800"
-                onClick={() => {
-                  setOpen(false);
-                  setCreating(true);
-                }}
-              >
-                <Plus size={15} /> {t("Nuevo proyecto")}
-              </button>
-            )}
+            <button
+              type="button"
+              className="mt-1 flex w-full items-center gap-2 rounded-md border-t border-slate-200 px-2.5 py-2 text-sm text-brand-600 hover:bg-slate-100 dark:border-slate-800 dark:hover:bg-slate-800"
+              onClick={() => {
+                setOpen(false);
+                setCreating(true);
+              }}
+            >
+              <Plus size={15} /> {t("Nuevo proyecto")}
+            </button>
           </div>
         </>
       )}
-      {creating && <NewProjectModal onClose={() => setCreating(false)} />}
+      {creating && <NewProjectModal isAdmin={isAdmin} onClose={() => setCreating(false)} />}
     </div>
   );
 }
 
-function NewProjectModal({ onClose }: { onClose: () => void }) {
+function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () => void }) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
@@ -258,15 +256,17 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
   const [target, setTarget] = useState<string | null>(null);
   const [templates, setTemplates] = useState<{ id: string; name: string; description: string }[]>([]);
   const [templateId, setTemplateId] = useState("");
-  const [isPrivate, setIsPrivate] = useState(false);
-  // Las plantillas se piden al abrir el modal.
+  // Quien no es administrador solo puede crear proyectos privados.
+  const [isPrivate, setIsPrivate] = useState(!isAdmin);
+  // Las plantillas (solo administradores) se piden al abrir el modal.
   useEffect(() => {
+    if (!isAdmin) return;
     let cancelled = false;
     listTemplates().then((res) => {
       if (!cancelled && res.ok) setTemplates(res.data);
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [isAdmin]);
   // Se cierra al llegar al proyecto nuevo, no antes: cerrar retira su entrada del historial
   // y eso cancelaría la navegación en curso.
   useEffect(() => {
@@ -289,6 +289,7 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
           <input id="project-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required data-autofocus />
           <p className="mt-1 text-xs text-slate-500">{t("Luego puedes cambiar las columnas, tipos y etiquetas.")}</p>
         </div>
+        {isAdmin && (
         <div>
           <label className="label" htmlFor="project-template">{t("Plantilla")}</label>
           <select id="project-template" className="input" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
@@ -299,10 +300,17 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
             <p className="mt-1 text-xs text-slate-500">{templates.find((t) => t.id === templateId)?.description}</p>
           )}
         </div>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
-          {t("Proyecto privado (solo lo verás tú)")}
-        </label>
+        )}
+        {isAdmin ? (
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
+            {t("Proyecto privado (solo sus miembros; empiezas siendo el único)")}
+          </label>
+        ) : (
+          <p className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+            <PrivateIcon /> {t("Será un proyecto privado: solo lo verás tú hasta que añadas más miembros.")}
+          </p>
+        )}
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
           <button type="submit" className="btn-primary" disabled={pending || !!target || !name.trim()}>{t("Crear")}</button>

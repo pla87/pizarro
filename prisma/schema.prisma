@@ -81,10 +81,11 @@ model Project {
   description String   @default("")
   /// false: visible para todos los usuarios. true: solo admins y miembros explícitos.
   restricted  Boolean  @default(false)
-  /// Proyecto privado: solo lo ve y lo usa este usuario (ni siquiera los demás administradores).
+  /// Proyecto privado: solo lo ven y usan sus miembros (ProjectMember), ni siquiera los administradores.
+  /// Se marca aparte de privateOwnerId para que borrar a quien lo creó no lo haga público.
+  isPrivate   Boolean  @default(false)
+  /// Quien creó el proyecto privado (informativo; pasa a null si se borra ese usuario).
   privateOwnerId String?
-  /// Desde cuándo está bloqueado (su dueño se desactivó o dejó de ser admin). Se borra al borrar al dueño.
-  privateBlockedAt DateTime?
   position    Float    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -371,8 +372,9 @@ model AppLog {
   /// Nombre en el momento del evento (se conserva aunque el usuario cambie o se borre).
   userName   String?
   projectId  String?
-  /// Dueño del proyecto privado afectado (si lo es): el resto de admins solo ve hora y usuario.
-  privateOwnerId String?
+  /// Proyecto privado afectado (si lo es): quien no es miembro solo ve hora y usuario. Se guarda aparte de
+  /// projectId para seguir ocultando el detalle aunque el proyecto se borre.
+  privateProjectId String?
   path       String?
   durationMs Int?
   ip         String?

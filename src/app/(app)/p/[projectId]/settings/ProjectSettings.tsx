@@ -4,7 +4,7 @@ import { CalendarClock, Check, EyeOff, Loader2, Lock, Pencil, Plus, Trash2, User
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
-  createDeliverable, createLabel, deleteDeliverable, deleteLabel, deleteProject, setProjectVisibility, updateDeliverable, updateLabel, updateProject,
+  createDeliverable, createLabel, deleteDeliverable, deleteLabel, addProjectMember, deleteProject, removeProjectMember, setProjectVisibility, updateDeliverable, updateLabel, updateProject,
 } from "@/actions/projects";
 import { formatDay } from "@/lib/dates";
 import { useIntlLocale, useT } from "@/i18n/client";
@@ -20,7 +20,8 @@ import { setGeneralKindEnabled } from "@/actions/project-kinds";
 
 interface Props {
   isAdmin: boolean;
-  project: { id: string; name: string; description: string; visibility: "PUBLIC" | "RESTRICTED" | "PRIVATE"; memberIds: string[] };
+  currentUserId: string;
+  project: { id: string; name: string; description: string; visibility: "PUBLIC" | "RESTRICTED" | "PRIVATE"; memberIds: string[]; members: { id: string; name: string; active: boolean }[] };
   labels: LabelOption[];
   kinds: KindRow[];
   /** Todos los tipos generales, con si el proyecto los usa y cuántas tareas tienen aquí. */
@@ -41,7 +42,7 @@ function Section({ title, description, children, id }: { title: string; descript
   );
 }
 
-export function ProjectSettings({ isAdmin, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode }: Props) {
+export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode }: Props) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
@@ -52,6 +53,9 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
   const [members, setMembers] = useState(new Set(project.memberIds));
   const [labels, setLabels] = useState(initialLabels);
   const [confirmName, setConfirmName] = useState("");
+  // Los miembros de un proyecto privado lo gestionan aunque no sean administradores.
+  const isPrivateProject = project.visibility === "PRIVATE";
+  const canManage = isAdmin || isPrivateProject;
 
   const run = (fn: () => Promise<{ ok: true } | { ok: false; error: string }>, success: string, after?: () => void) =>
     start(async () => {
@@ -65,7 +69,7 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
     <div className="mx-auto max-w-3xl space-y-5 p-4 md:p-6">
       <h1 className="text-xl font-semibold">{t("Ajustes del proyecto")}</h1>
 
-      {isAdmin && (
+      {canManage && (
         <Section title="General">
           <form
             className="space-y-3"
@@ -87,6 +91,12 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
         </Section>
       )}
 
+      {!isAdmin && isPrivateProject && (
+        <Section title="Visibilidad" description="Proyecto privado: solo lo ven sus miembros, tampoco los administradores. Cualquier miembro puede añadir o quitar miembros.">
+          <MemberManager projectId={project.id} currentUserId={currentUserId} members={project.members} users={users} />
+        </Section>
+      )}
+
       {isAdmin && (
         <Section title="Visibilidad" description="Por defecto todos los usuarios ven el proyecto. Puedes limitarlo a usuarios concretos o hacerlo privado.">
           <div className="space-y-2">
@@ -102,11 +112,16 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
               <input type="radio" className="mt-1" checked={visibility === "PRIVATE"} onChange={() => setVisibility("PRIVATE")} />
               <EyeOff size={15} className="mt-0.5 shrink-0" />
               <span>
-                {t("Privado: solo tú")}
-                <span className="block text-xs text-slate-500">{t("Nadie más lo ve ni puede entrar, tampoco el resto de administradores.")}</span>
+                {t("Privado: solo sus miembros")}
+                <span className="block text-xs text-slate-500">{t("Solo los miembros lo ven y pueden entrar, tampoco los administradores. Tú serás el primer miembro.")}</span>
               </span>
             </label>
           </div>
+          {isPrivateProject && visibility === "PRIVATE" && (
+            <div className="mt-3">
+              <MemberManager projectId={project.id} currentUserId={currentUserId} members={project.members} users={users} />
+            </div>
+          )}
           {visibility === "RESTRICTED" && (
             <ul className="mt-3 divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
               {users.map((u) => (
@@ -137,7 +152,7 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
             className="btn-primary mt-4"
             disabled={pending}
             onClick={() => {
-              if (visibility === "PRIVATE" && project.visibility !== "PRIVATE" && !window.confirm(t("¿Hacer el proyecto privado? Dejará de verlo todo el mundo menos tú, incluidos los demás administradores."))) return;
+              if (visibility === "PRIVATE" && project.visibility !== "PRIVATE" && !window.confirm(t("¿Hacer el proyecto privado? Solo lo verás tú (podrás añadir más miembros después): los demás dejarán de verlo, incluidos los administradores, y se desasignarán sus tarjetas."))) return;
               run(() => setProjectVisibility(project.id, visibility, [...members]), t("Visibilidad actualizada"), () => router.refresh());
             }}
           >
@@ -189,7 +204,7 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
         <p className="text-sm text-slate-500">{t("Las tarjetas archivadas se consultan y recuperan desde el botón «Archivadas» del tablero.")}</p>
       </Section>
 
-      {isAdmin && (
+      {canManage && (
         <Section title="Borrar proyecto" description="Borra el proyecto con todas sus columnas, tarjetas, adjuntos y releases. No se puede deshacer.">
           <div className="flex flex-wrap gap-2">
             <input
@@ -209,6 +224,81 @@ export function ProjectSettings({ isAdmin, project, deliverables, kinds, general
           </div>
         </Section>
       )}
+    </div>
+  );
+}
+
+/** Miembros de un proyecto privado: cualquier miembro añade, quita o sale (el último no puede salir). */
+function MemberManager({ projectId, currentUserId, members, users }: {
+  projectId: string;
+  currentUserId: string;
+  members: { id: string; name: string; active: boolean }[];
+  users: { id: string; name: string }[];
+}) {
+  const t = useT();
+  const router = useRouter();
+  const toast = useToast();
+  const [pending, start] = useTransition();
+  const [candidate, setCandidate] = useState("");
+  const memberIds = new Set(members.map((m) => m.id));
+  const candidates = users.filter((u) => !memberIds.has(u.id));
+  const run = (fn: () => Promise<{ ok: true } | { ok: false; error: string }>, success: string, after?: () => void) =>
+    start(async () => {
+      const res = await fn();
+      if (!res.ok) return toast(res.error, "error");
+      toast(success);
+      after?.();
+      router.refresh();
+    });
+  const activeCount = members.filter((m) => m.active).length;
+  return (
+    <div className="space-y-3">
+      <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+        {members.map((m) => {
+          const isMe = m.id === currentUserId;
+          // El último miembro activo no puede salir: debe borrar el proyecto.
+          const lastOne = isMe && activeCount <= 1;
+          return (
+            <li key={m.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+              <span className="min-w-0 flex-1 truncate">
+                {m.name}
+                {isMe && <span className="ml-1 text-xs text-slate-500">{t("(tú)")}</span>}
+                {!m.active && <span className="ml-1 text-xs text-slate-500">{t("(desactivado)")}</span>}
+              </span>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={pending || lastOne}
+                title={lastOne ? t("Eres el último miembro: si ya no lo necesitas, borra el proyecto.") : undefined}
+                onClick={() => {
+                  if (isMe && !window.confirm(t("¿Salir del proyecto? Dejarás de verlo salvo que otro miembro te vuelva a añadir."))) return;
+                  run(
+                    () => removeProjectMember(projectId, m.id),
+                    isMe ? t("Has salido del proyecto") : t("Miembro quitado"),
+                    isMe ? () => router.push("/") : undefined,
+                  );
+                }}
+              >
+                {isMe ? t("Salir del proyecto") : t("Quitar")}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="flex flex-wrap gap-2">
+        <select className="input max-w-xs" aria-label={t("Añadir miembro")} value={candidate} onChange={(e) => setCandidate(e.target.value)}>
+          <option value="">{t("Añadir miembro…")}</option>
+          {candidates.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
+        <button
+          type="button"
+          className="btn-primary"
+          disabled={pending || !candidate}
+          onClick={() => run(() => addProjectMember(projectId, candidate), t("Miembro añadido"), () => setCandidate(""))}
+        >
+          {t("Añadir")}
+        </button>
+      </div>
     </div>
   );
 }

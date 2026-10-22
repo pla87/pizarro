@@ -23,9 +23,9 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
       name: true,
       description: true,
       restricted: true,
-      privateOwnerId: true,
+      isPrivate: true,
       hiddenKinds: { select: { kindId: true } },
-      members: { select: { userId: true } },
+      members: { select: { userId: true, user: { select: { name: true, active: true } } }, orderBy: { user: { name: "asc" } } },
       labels: { orderBy: { name: "asc" }, select: { id: true, name: true, color: true } },
       kinds: {
         orderBy: [{ position: "asc" }, { createdAt: "asc" }],
@@ -44,7 +44,8 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
   ]);
   const hidden = new Set(project.hiddenKinds.map((h) => h.kindId));
   const usage = new Map(generalUsage.map((g) => [g.kindId, g._count._all]));
-  const users = isAdmin
+  // Los administradores eligen miembros de proyectos restringidos; los miembros de un privado añaden a otros usuarios.
+  const users = isAdmin || project.isPrivate
     ? await db.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, role: true } })
     : [];
 
@@ -53,12 +54,14 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
   return (
     <ProjectSettings
       isAdmin={isAdmin}
+      currentUserId={user.id}
       project={{
         id: project.id,
         name: project.name,
         description: project.description,
-        visibility: project.privateOwnerId ? "PRIVATE" : project.restricted ? "RESTRICTED" : "PUBLIC",
+        visibility: project.isPrivate ? "PRIVATE" : project.restricted ? "RESTRICTED" : "PUBLIC",
         memberIds: project.members.map((m) => m.userId),
+        members: project.members.map((m) => ({ id: m.userId, name: m.user.name, active: m.user.active })),
       }}
       labels={project.labels}
       kinds={project.kinds.map((k) => ({ id: k.id, name: k.name, color: k.color, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate, taskCount: k._count.tasks }))}

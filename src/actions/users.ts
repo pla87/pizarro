@@ -5,7 +5,6 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
-import { logEvent } from "@/lib/log";
 import { AppError, notFound } from "@/lib/errors";
 import { MAX_USERS } from "@/lib/limits";
 import { hashPassword, MIN_PASSWORD } from "@/lib/password";
@@ -72,16 +71,6 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
       // Al desactivar o cambiar de rol se cierran sus sesiones.
       ...(data.active !== user.active || data.role !== user.role ? [db.session.deleteMany({ where: { userId: user.id } })] : []),
     ]);
-    // Proyectos privados: se bloquean si el dueño deja de ser admin activo y se desbloquean al volver a serlo.
-    const wasAdmin = user.active && user.role === "ADMIN";
-    const isAdmin = data.active && data.role === "ADMIN";
-    if (wasAdmin && !isAdmin) {
-      const { count } = await db.project.updateMany({ where: { privateOwnerId: user.id, privateBlockedAt: null }, data: { privateBlockedAt: new Date() } });
-      if (count > 0) logEvent({ category: "system", action: "projects.privateBlocked", message: `Proyectos privados bloqueados: ${count}`, details: { ownerId: user.id, count } });
-    } else if (!wasAdmin && isAdmin) {
-      const { count } = await db.project.updateMany({ where: { privateOwnerId: user.id, privateBlockedAt: { not: null } }, data: { privateBlockedAt: null } });
-      if (count > 0) logEvent({ category: "system", action: "projects.privateUnblocked", message: `Proyectos privados desbloqueados: ${count}`, details: { ownerId: user.id, count } });
-    }
     revalidatePath("/admin/users");
   });
 }
@@ -100,8 +89,9 @@ export async function resetUserPassword(userId: string, newPassword: string) {
 }
 
 /**
- * Borra un usuario. Sus proyectos privados se borran con él (con tareas, releases y adjuntos):
- * si tiene alguno hay que confirmarlo expresamente. En los proyectos compartidos sus tareas y
+ * Borra un usuario. De sus proyectos privados solo se borran (con tareas, releases y adjuntos) aquellos
+ * en los que es el único miembro: si tiene alguno hay que confirmarlo expresamente. En los privados
+ * con más miembros simplemente deja de serlo. En los proyectos compartidos sus tareas y
  * comentarios se conservan sin autor.
  */
 export async function deleteUser(userId: string, confirmPrivate: boolean) {
@@ -110,11 +100,14 @@ export async function deleteUser(userId: string, confirmPrivate: boolean) {
     const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, name: true } });
     if (!user) throw notFound();
     if (user.id === admin.id) throw new AppError("No puedes borrarte a ti mismo.");
-    const privates = await db.project.findMany({ where: { privateOwnerId: user.id }, select: { id: true } });
+    const privates = await db.project.findMany({
+      where: { isPrivate: true, members: { some: { userId: user.id }, none: { userId: { not: user.id } } } },
+      select: { id: true },
+    });
     if (privates.length > 0 && confirmPrivate !== true) {
       const t = await getT();
       const count = privates.length === 1 ? t("1 proyecto privado") : t("{n} proyectos privados", { n: privates.length });
-      throw new AppError(t("{name} tiene {count}: confirma que se borren.", { name: user.name, count }));
+      throw new AppError(t("{name} es el único miembro de {count}: confirma que se borren.", { name: user.name, count }));
     }
     for (const p of privates) await purgeProject(p.id);
     await discardUndo({ userId: user.id });

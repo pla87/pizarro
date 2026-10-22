@@ -6,21 +6,20 @@ import { notFound } from "./errors";
 import type { CurrentUser } from "./session";
 
 /**
- * Filtro Prisma con los proyectos visibles para el usuario. Un proyecto privado solo lo ve su
- * dueño mientras no esté bloqueado (tampoco el resto de administradores); los admins ven todos los demás; los miembros,
- * los no restringidos y aquellos en los que figuran.
+ * Filtro Prisma con los proyectos visibles para el usuario. Un proyecto privado solo lo ven sus
+ * miembros (tampoco los administradores). El resto: los admins ven todos; los demás, los no
+ * restringidos y aquellos en los que figuran como miembros.
  */
 export function visibleProjectsWhere(user: CurrentUser): Prisma.ProjectWhereInput {
-  // Los privados bloqueados (su dueño se desactivó o dejó de ser admin) no los ve nadie.
-  const notOthersPrivate: Prisma.ProjectWhereInput = { OR: [{ privateOwnerId: null }, { privateOwnerId: user.id, privateBlockedAt: null }] };
-  if (user.role === "ADMIN") return notOthersPrivate;
-  return { AND: [notOthersPrivate, { OR: [{ restricted: false }, { members: { some: { userId: user.id } } }] }] };
+  const member: Prisma.ProjectWhereInput = { members: { some: { userId: user.id } } };
+  if (user.role === "ADMIN") return { OR: [{ isPrivate: false }, member] };
+  return { OR: [{ isPrivate: false, restricted: false }, member] };
 }
 
 export async function listVisibleProjects(user: CurrentUser) {
   return db.project.findMany({
     where: visibleProjectsWhere(user),
-    select: { id: true, name: true, privateOwnerId: true },
+    select: { id: true, name: true, isPrivate: true },
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
   });
 }
@@ -50,9 +49,10 @@ export async function assertAssignable(projectId: string, userId: string): Promi
       where: { id: userId, active: true },
       select: { role: true, memberships: { where: { projectId }, select: { userId: true } } },
     }),
-    db.project.findUnique({ where: { id: projectId }, select: { restricted: true, privateOwnerId: true } }),
+    db.project.findUnique({ where: { id: projectId }, select: { restricted: true, isPrivate: true } }),
   ]);
   if (!user || !project) throw notFound();
-  if (project.privateOwnerId && project.privateOwnerId !== userId) throw notFound();
+  // Privado: solo sus miembros; restringido: admins o miembros.
+  if (project.isPrivate && user.memberships.length === 0) throw notFound();
   if (project.restricted && user.role !== "ADMIN" && user.memberships.length === 0) throw notFound();
 }

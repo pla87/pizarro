@@ -1,5 +1,6 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
+import { db } from "./db";
 import { logRetentionDays } from "./log";
 
 // Filtros compartidos por la página de logs y la descarga CSV (Administración → Logs).
@@ -48,21 +49,27 @@ export function parseLogFilters(p: Params): LogFilters {
   };
 }
 
-/** Registros de proyectos privados de otra persona: el visor solo puede ver su hora y su usuario. */
-export function isMaskedLog(row: { privateOwnerId: string | null }, viewerId: string): boolean {
-  return !!row.privateOwnerId && row.privateOwnerId !== viewerId;
+/** Ids de los proyectos privados de los que el visor es miembro (los únicos cuyos registros puede ver completos). */
+export async function memberPrivateProjectIds(viewerId: string): Promise<string[]> {
+  const rows = await db.projectMember.findMany({ where: { userId: viewerId, project: { isPrivate: true } }, select: { projectId: true } });
+  return rows.map((r) => r.projectId);
+}
+
+/** Registros de un proyecto privado del que el visor no es miembro: solo puede ver su hora y su usuario. */
+export function isMaskedLog(row: { privateProjectId: string | null }, memberProjectIds: readonly string[]): boolean {
+  return !!row.privateProjectId && !memberProjectIds.includes(row.privateProjectId);
 }
 
 /**
- * Condición de Prisma para el filtro; `withLevel` false sirve para contar por nivel. Los filtros
+ * Condición de Prisma para el filtro (`memberProjectIds`: privados de los que el visor es miembro); `withLevel` false sirve para contar por nivel. Los filtros
  * por nivel, categoría y texto solo miran registros no ocultos (para no revelar su contenido).
  */
-export function logWhere(f: LogFilters, viewerId: string, withLevel = true): Prisma.AppLogWhereInput {
+export function logWhere(f: LogFilters, memberProjectIds: readonly string[], withLevel = true): Prisma.AppLogWhereInput {
   const hours = LOG_RANGES.find((r) => r.value === f.range)!.hours;
   const maxMs = logRetentionDays() * 86_400_000;
   const since = new Date(Date.now() - Math.min(hours * 3_600_000, maxMs));
   const and: Prisma.AppLogWhereInput[] = [{ createdAt: { gte: since } }];
-  const visible: Prisma.AppLogWhereInput = { OR: [{ privateOwnerId: null }, { privateOwnerId: viewerId }] };
+  const visible: Prisma.AppLogWhereInput = { OR: [{ privateProjectId: null }, { privateProjectId: { in: [...memberProjectIds] } }] };
   if ((withLevel && f.level) || f.category || f.q || !withLevel) and.push(visible);
   if (withLevel && f.level) and.push({ level: f.level });
   if (f.category) and.push({ category: f.category });

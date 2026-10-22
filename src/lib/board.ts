@@ -75,10 +75,10 @@ export async function loadBoardTask(id: string): Promise<BoardTask> {
 }
 
 /** Usuarios activos que pueden ver el proyecto (para el selector de asignación). */
-export async function projectUsers(projectId: string, project: { restricted: boolean; privateOwnerId: string | null }) {
+export async function projectUsers(projectId: string, project: { restricted: boolean; isPrivate: boolean }) {
   return db.user.findMany({
-    where: project.privateOwnerId
-      ? { id: project.privateOwnerId, active: true }
+    where: project.isPrivate
+      ? { active: true, memberships: { some: { projectId } } }
       : project.restricted
         ? { active: true, OR: [{ role: "ADMIN" }, { memberships: { some: { projectId } } }] }
         : { active: true },

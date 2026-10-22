@@ -147,15 +147,13 @@ async function deliver(notificationIds: string[]): Promise<void> {
 
 /**
  * Quién puede recibir un aviso entre los mencionados: activos y con acceso al proyecto. Con un proyecto
- * privado, solo su dueño (y solo si lo han mencionado: antes la condición del dueño pisaba la lista y
- * avisaba al dueño aunque mencionaran a otra persona).
+ * privado, solo sus miembros (y solo los mencionados).
  */
-export function mentionRecipientsWhere(project: { restricted: boolean; privateOwnerId: string | null }, ids: string[], projectId: string): Prisma.UserWhereInput {
-  const mentioned = project.privateOwnerId ? ids.filter((id) => id === project.privateOwnerId) : ids;
+export function mentionRecipientsWhere(project: { restricted: boolean; isPrivate: boolean }, ids: string[], projectId: string): Prisma.UserWhereInput {
   return {
-    id: { in: mentioned },
+    id: { in: ids },
     active: true,
-    ...(project.restricted ? { OR: [{ role: "ADMIN" }, { memberships: { some: { projectId } } }] } : {}),
+    ...(project.isPrivate ? { memberships: { some: { projectId } } } : project.restricted ? { OR: [{ role: "ADMIN" }, { memberships: { some: { projectId } } }] } : {}),
   };
 }
 
@@ -172,7 +170,7 @@ export async function notifyMentions(opts: {
 }): Promise<number> {
   const ids = opts.recipientIds.filter((id) => id !== opts.actorId);
   if (!ids.length) return 0;
-  const project = await db.project.findUnique({ where: { id: opts.projectId }, select: { restricted: true, privateOwnerId: true } });
+  const project = await db.project.findUnique({ where: { id: opts.projectId }, select: { restricted: true, isPrivate: true } });
   if (!project) return 0;
   const recipients = await db.user.findMany({
     where: mentionRecipientsWhere(project, ids, opts.projectId),

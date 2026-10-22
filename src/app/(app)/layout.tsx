@@ -13,7 +13,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     db.notification.count({ where: { userId: user.id, readAt: null, task: { project: visibleProjectsWhere(user) } } }),
   ]);
   return (
-    <AppShell user={user} projects={projects.map((p) => ({ id: p.id, name: p.name, isPrivate: !!p.privateOwnerId }))} version={pkg.version} unread={unread}>
+    <AppShell user={user} projects={projects.map((p) => ({ id: p.id, name: p.name, isPrivate: p.isPrivate }))} version={pkg.version} unread={unread}>
       <ClientErrorReporter />
       <VersionWatcher />
       {children}

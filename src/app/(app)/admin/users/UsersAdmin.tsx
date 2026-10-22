@@ -122,11 +122,6 @@ function UserForm({ user, isMe, onClose }: { user?: UserRow; isMe?: boolean; onC
             {t("Usuario activo (si lo desactivas, se cierran sus sesiones)")}
           </label>
         )}
-        {user && user.privateProjects > 0 && (!active || role !== "ADMIN") && (
-          <p className="text-xs text-amber-700 dark:text-amber-300">
-            {user.privateProjects === 1 ? t("Su proyecto privado quedará bloqueado") : t("Sus {n} proyectos privados quedarán bloqueados", { n: user.privateProjects })} {t("(nadie podrá verlos) hasta que vuelva a ser administrador activo.")}
-          </p>
-        )}
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
           <button className="btn-primary" disabled={pending}>{user ? t("Guardar") : t("Crear usuario")}</button>
@@ -190,12 +185,12 @@ function DeleteUser({ user, onClose }: { user: UserRow; onClose: () => void }) {
           });
         }}
       >
-        <p>{t("Se borrará su cuenta para siempre. En los proyectos compartidos sus tareas y comentarios se conservan, sin autor. Si solo quieres quitarle el acceso, desactívalo.")}</p>
+        <p>{t("Se borrará su cuenta para siempre. En los proyectos compartidos sus tareas y comentarios se conservan, sin autor, y deja de ser miembro de los proyectos privados con más gente. Si solo quieres quitarle el acceso, desactívalo.")}</p>
         {count > 0 && (
           <div className="space-y-2 rounded-lg border border-red-300 bg-red-50 p-3 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
             <p className="flex gap-2 font-medium">
               <TriangleAlert size={18} className="shrink-0" />
-              {count === 1 ? t("Tiene 1 proyecto privado.") : t("Tiene {n} proyectos privados.", { n: count })} {t("Se borrarán con todas sus tareas, releases y adjuntos, y no se pueden recuperar.")}
+              {count === 1 ? t("Es el único miembro de 1 proyecto privado.") : t("Es el único miembro de {n} proyectos privados.", { n: count })} {t("Se borrarán con todas sus tareas, releases y adjuntos, y no se pueden recuperar.")}
             </p>
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />

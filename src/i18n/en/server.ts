@@ -46,7 +46,6 @@ export const server: Record<string, string> = {
   "No puedes borrarte a ti mismo.": "You can't delete yourself.",
   "1 proyecto privado": "1 private project",
   "{n} proyectos privados": "{n} private projects",
-  "{name} tiene {count}: confirma que se borren.": "{name} has {count}: confirm that they will be deleted.",
   "Máximo {n} plantillas.": "Maximum {n} templates.",
   "La columna no existe.": "The column doesn't exist.",
   "El entregable no existe.": "The deliverable doesn't exist.",
@@ -215,4 +214,7 @@ export const server: Record<string, string> = {
   "Comentó en «{title}»": "Commented on “{title}”",
   "Borró un comentario de «{title}»": "Deleted a comment on “{title}”",
   "Quitó el enlace «{title}»": "Removed the link “{title}”",
+  "{name} es el único miembro de {count}: confirma que se borren.": "{name} is the only member of {count}: confirm that they will be deleted.",
+  "Solo los proyectos privados tienen miembros propios.": "Only private projects have their own members.",
+  "Eres el último miembro: no puedes salir del proyecto, bórralo si ya no lo necesitas.": "You are the last member: you cannot leave the project, delete it if you no longer need it.",
 };

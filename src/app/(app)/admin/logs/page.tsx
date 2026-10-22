@@ -3,7 +3,7 @@ import { Download } from "lucide-react";
 import { appTimeZone } from "@/lib/board";
 import { db } from "@/lib/db";
 import { flushLogs, logRetentionDays } from "@/lib/log";
-import { isMaskedLog, LOG_RANGES, logQuery, logWhere, parseLogFilters } from "@/lib/log-query";
+import { isMaskedLog, LOG_RANGES, logQuery, logWhere, memberPrivateProjectIds, parseLogFilters } from "@/lib/log-query";
 import { requireAdminPage } from "@/lib/session";
 import { cn } from "@/components/ui/cn";
 import { intlLocale } from "@/i18n/core";
@@ -37,6 +37,7 @@ function formatTime(d: Date, tz: string, locale: string): string {
 
 export default async function LogsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const viewer = await requireAdminPage();
+  const mine = await memberPrivateProjectIds(viewer.id);
   const t = await getT();
   const locale = intlLocale(await getLocale());
   const sp = await searchParams;
@@ -49,12 +50,12 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
 
   const [rows, levelCounts, categories, users] = await Promise.all([
     db.appLog.findMany({
-      where: logWhere(filters, viewer.id),
+      where: logWhere(filters, mine),
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: PAGE_SIZE + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     }),
-    db.appLog.groupBy({ by: ["level"], where: logWhere(filters, viewer.id, false), _count: { _all: true } }),
+    db.appLog.groupBy({ by: ["level"], where: logWhere(filters, mine, false), _count: { _all: true } }),
     db.appLog.groupBy({ by: ["category"], orderBy: { category: "asc" } }),
     db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
@@ -158,7 +159,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
         <ul className="divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
           {items.map((r) => {
             // Proyecto privado de otra persona: solo hora y usuario.
-            if (isMaskedLog(r, viewer.id)) {
+            if (isMaskedLog(r, mine)) {
               return (
                 <li key={r.id} className="flex flex-wrap items-center gap-x-2 px-3 py-2 text-sm text-slate-500">
                   <span className="font-mono text-xs">{formatTime(r.createdAt, tz, locale)}</span>

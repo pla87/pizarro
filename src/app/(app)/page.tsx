@@ -17,7 +17,7 @@ export default async function Home() {
       <FolderKanban size={40} className="text-slate-300" />
       <p className="font-medium text-slate-700 dark:text-slate-300">{t("Todavía no tienes acceso a ningún proyecto.")}</p>
       <p className="text-sm">
-        {user.role === "ADMIN" ? t("Crea uno desde el selector de proyectos del menú.") : t("Pide a un administrador que te dé acceso.")}
+        {user.role === "ADMIN" ? t("Crea uno desde el selector de proyectos del menú.") : t("Crea un proyecto privado desde el selector del menú o pide a un administrador que te dé acceso.")}
       </p>
     </div>
   );
