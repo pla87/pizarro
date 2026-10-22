@@ -30,6 +30,16 @@ export function Lightbox({ images, index, onIndexChange, onClose }: Props) {
 
   useBackToClose(true, () => stateRef.current.onClose());
 
+  // Foco dentro al abrir y de vuelta al elemento anterior al cerrar.
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const hasImage = !!images[index];
+  useEffect(() => {
+    if (!hasImage) return;
+    const previous = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+    return () => previous?.focus?.();
+  }, [hasImage]);
+
   useEffect(() => {
     // En captura sobre window, antes del listener del Modal (document), que respeta defaultPrevented.
     const onKey = (e: KeyboardEvent) => {
@@ -72,6 +82,7 @@ export function Lightbox({ images, index, onIndexChange, onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
       />
       <button
+        ref={closeRef}
         type="button"
         className="absolute top-[max(1rem,env(safe-area-inset-top))] right-4 rounded-full bg-black/60 p-2 text-white hover:bg-black/80"
         onClick={(e) => {

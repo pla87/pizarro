@@ -14,6 +14,8 @@ import { buildZip } from "@/lib/zip";
 
 export const runtime = "nodejs";
 
+const MAX_ZIP_BYTES = 200 * 1024 * 1024;
+
 const bodySchema = z.object({
   items: z
     .array(z.object({ taskId: v.id, code: z.string().regex(/^(R\d{1,5})?[A-Z]{1,4}\d{1,4}$/) }))
@@ -53,12 +55,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   const byId = new Map(tasks.map((t) => [t.id, t]));
 
   const files: { name: string; data: Uint8Array }[] = [];
+  let total = 0;
   for (const item of items) {
     const attachments = byId.get(item.taskId)!.attachments;
     const names = attachmentFileNames(item.code, attachments);
     for (const [i, a] of attachments.entries()) {
       try {
-        files.push({ name: names[i]!, data: await readFile(attachmentPath(a.id, a.isImage ? "full" : "file")) });
+        const data = await readFile(attachmentPath(a.id, a.isImage ? "full" : "file"));
+        // El ZIP se arma en memoria: un tope evita agotar el contenedor.
+        total += data.length;
+        if (total > MAX_ZIP_BYTES) return new Response(t("El archivo supera el tamaño máximo."), { status: 413 });
+        files.push({ name: names[i]!, data });
       } catch {
         // Fichero ausente en disco: se omite en lugar de romper toda la descarga.
       }

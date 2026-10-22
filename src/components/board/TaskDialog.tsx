@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, Camera, Check, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Plus, Send, Trash2, X } from "lucide-react";
+import { Archive, Camera, Check, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Send, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -25,6 +25,7 @@ import { Modal } from "../ui/Modal";
 import { applyKindTemplate } from "@/lib/kinds-special";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
+import { isTypingTarget, useShortcut } from "./shortcuts";
 import { TaskViewers } from "./TaskViewers";
 import { createAndOpenGoogleFile } from "./google";
 import { filesFrom, formatBytes, uploadFile, useFileDrop } from "./upload";
@@ -46,6 +47,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   const board = useBoard();
   const toast = useToast();
   const mobile = useIsMobile();
+  const sc = useShortcut();
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [title, setTitle] = useState(draft?.title ?? task.title);
   // Descripción en edición (la comunica el editor): para el botón Guardar y el borrador local.
@@ -189,7 +191,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     setUploading((n) => n + files.length);
     for (const file of files) {
       try {
-        const att = await board.track(uploadFile(task.id, file, false, t));
+        const att = await board.trackRaw(uploadFile(task.id, file, false, t));
         setDetail((d) => (d ? { ...d, attachments: [...d.attachments, att] } : d));
         board.patchTask(task.id, (t) => ({ attachmentCount: t.attachmentCount + 1 }));
       } catch (err) {
@@ -236,6 +238,28 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     onClose();
     toast(t("Tarea archivada"));
   };
+
+  // Alt+S guarda y cierra (también escribiendo); Alt+A archiva (solo sin escribir). Actúan sobre la última versión de las funciones.
+  const shortcutRef = useRef({ saveAndClose, archive });
+  useEffect(() => {
+    shortcutRef.current = { saveAndClose, archive };
+  });
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.repeat || e.defaultPrevented) return;
+      if (e.code !== "KeyS" && e.code !== "KeyA") return;
+      // Con dos modales a la vez, responde el que contiene el foco (o este, si el foco está fuera de todos).
+      const inside = rootRef.current?.closest("[role=dialog]")?.contains(e.target as Node);
+      if (!inside && (e.target as HTMLElement | null)?.closest?.("[role=dialog]")) return;
+      if (e.code === "KeyA" && isTypingTarget(e.target)) return;
+      e.preventDefault();
+      if (e.code === "KeyS") void shortcutRef.current.saveAndClose();
+      else void shortcutRef.current.archive();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   /** @docs / @sheets: crea el archivo, lo abre en otra pestaña y lo enlaza. Debe llamarse dentro de un clic o tecla. */
   const createGoogle = async (kind: MentionCommand): Promise<TaskLinkInfo | null> => {
@@ -296,9 +320,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       footer={
         mobile ? (
           <>
-            <button className="btn-secondary py-1.5" onClick={archive}><Archive size={15} /> {t("Archivar")}</button>
+            <button className="btn-secondary py-1.5" onClick={archive} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /> {t("Archivar")}</button>
             <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> {t("Borrar")}</button>
-            <button className="btn-primary ml-auto py-1.5" onClick={saveAndClose}><Check size={15} /> {t("Guardar")}</button>
+            <button className="btn-primary ml-auto py-1.5" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} /> {t("Guardar")}</button>
           </>
         ) : undefined
       }
@@ -335,7 +359,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
         </div>
       }
     >
-      <div onPaste={onPaste} className="grid gap-6 md:grid-cols-[minmax(0,1fr)_20rem]">
+      <div ref={rootRef} onPaste={onPaste} className="grid gap-6 md:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-w-0 space-y-6 md:max-h-[calc(100dvh-9rem)] md:overflow-y-auto md:pr-2">
           <TaskViewers taskId={task.id} />
           <DescriptionEditor
@@ -543,7 +567,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
           )}
           {/* En móvil estos botones van en el pie fijo, junto a Guardar. */}
           <div className="mt-auto flex flex-wrap gap-2 border-t border-slate-200 pt-4 max-md:hidden md:gap-1 md:pt-2.5 dark:border-slate-800">
-            <button className="btn-secondary py-1.5" onClick={archive}><Archive size={15} /> {t("Archivar")}</button>
+            <button className="btn-secondary py-1.5" onClick={archive} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /> {t("Archivar")}</button>
             <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> {t("Borrar")}</button>
           </div>
         </aside>
@@ -715,7 +739,10 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
     if (!title) return;
     setNewTitle("");
     const res = await board.track(addSubtask(taskId, title));
-    if (!res.ok) return toast(res.error, "error");
+    if (!res.ok) {
+      setNewTitle((cur) => cur || title);
+      return toast(res.error, "error");
+    }
     update((l) => [...l, res.data]);
   };
 
@@ -810,7 +837,7 @@ function Subtasks({ taskId, detail, setDetail }: { taskId: string; detail: TaskD
   );
 }
 
-/** Fila ordenable: agarre de seis puntos, título editable con doble clic/toque y borrado. */
+/** Fila ordenable: agarre de seis puntos, título editable (doble clic, Enter/F2 o lápiz) y borrado. */
 function SubtaskRow({ s, editing, onEdit, onRename, onToggle, onRemove }: {
   s: SubtaskInfo; editing: boolean; onEdit: () => void; onRename: (title: string) => void; onToggle: () => void; onRemove: () => void;
 }) {
@@ -824,6 +851,11 @@ function SubtaskRow({ s, editing, onEdit, onRename, onToggle, onRemove }: {
     settled.current = true;
     if (save) onRename(draft.trim());
     else onRename("");
+  };
+  const startEdit = () => {
+    settled.current = false;
+    setDraft(s.title);
+    onEdit();
   };
   return (
     <li
@@ -867,17 +899,26 @@ function SubtaskRow({ s, editing, onEdit, onRename, onToggle, onRemove }: {
         />
       ) : (
         <span
-          className={cn("flex-1 text-sm", s.done && "text-slate-400 line-through")}
-          onDoubleClick={() => {
-            settled.current = false;
-            setDraft(s.title);
-            onEdit();
+          className={cn("flex-1 rounded-sm text-sm focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:outline-none", s.done && "text-slate-400 line-through")}
+          tabIndex={0}
+          aria-label={t("{title} (Enter o F2 para editar)", { title: s.title })}
+          onDoubleClick={startEdit}
+          onKeyDown={(e) => {
+            if ((e.key === "Enter" || e.key === "F2") && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              startEdit();
+            }
           }}
         >
           {s.title}
         </span>
       )}
-      <button className="btn-icon h-6 w-6 opacity-0 group-hover:opacity-100 max-md:opacity-100" onClick={onRemove} aria-label={t("Borrar subtarea")}>
+      {!editing && (
+        <button type="button" className="btn-icon h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-md:opacity-100 pointer-coarse:opacity-100" onClick={startEdit} aria-label={t("Editar subtarea")}>
+          <Pencil size={13} />
+        </button>
+      )}
+      <button type="button" className="btn-icon h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-md:opacity-100" onClick={onRemove} aria-label={t("Borrar subtarea")}>
         <X size={14} />
       </button>
     </li>
@@ -958,7 +999,7 @@ function Comments({ taskId, detail, setDetail, users, onGoogle }: {
     const body = text.trim();
     if (!body || sending) return;
     setSending(true);
-    const res = await board.track(addComment(taskId, body));
+    const res = await board.track(addComment(taskId, body)).catch(() => ({ ok: false as const, error: t("Error inesperado. Inténtalo de nuevo.") }));
     setSending(false);
     if (!res.ok) return toast(res.error, "error");
     setText("");

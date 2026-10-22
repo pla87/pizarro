@@ -31,6 +31,8 @@ const modalStack: { close: () => void }[] = [];
 let scrollLocks = 0;
 let savedOverflow = "";
 
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
+
 const SIZES = { sm: "sm:max-w-md", md: "sm:max-w-xl", lg: "sm:max-w-3xl", xl: "sm:max-w-5xl" };
 /** Ancho máximo de cada tamaño (para combinarlo con el límite de media pantalla en lg). */
 const SIZE_REM = { sm: "28rem", md: "36rem", lg: "48rem", xl: "64rem" };
@@ -63,7 +65,31 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
     const entry = { close: () => onCloseRef.current() };
     modalStack.push(entry);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !e.defaultPrevented && modalStack[modalStack.length - 1] === entry) onCloseRef.current();
+      if (modalStack[modalStack.length - 1] !== entry) return;
+      if (e.key === "Escape" && !e.defaultPrevented) onCloseRef.current();
+      else if (e.key === "Tab" && !e.defaultPrevented) {
+        // Trampa de foco: Tab desde el último campo vuelve al primero (y Mayús+Tab al revés), sin salir al tablero de debajo.
+        const panel = panelRef.current;
+        if (!panel) return;
+        const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.offsetParent !== null || el === document.activeElement);
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const current = document.activeElement;
+        // Foco en otro diálogo (el otro modal de la pareja, el visor de imágenes): se deja al navegador.
+        const otherDialog = current?.closest?.("[role=dialog]");
+        if (otherDialog && !panel.contains(otherDialog) && !otherDialog.contains(panel)) return;
+        if (!first || !last) return e.preventDefault();
+        if (!panel.contains(current) || current === panel) {
+          e.preventDefault();
+          (e.shiftKey ? last : first).focus();
+        } else if (e.shiftKey && current === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && current === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     document.addEventListener("keydown", onKey);
     if (scrollLocks++ === 0) savedOverflow = document.body.style.overflow;

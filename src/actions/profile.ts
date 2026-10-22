@@ -108,7 +108,7 @@ export async function updateAccent(accent: "BLUE" | "FOREST" | "SIENNA" | "MUSTA
 }
 
 export async function changePassword(current: string, next: string) {
-  return runAction({ name: "profile.changePassword", args: [current, next] }, async () => {
+  return runAction({ name: "profile.changePassword", args: [] }, async () => {
     const user = await requireUser();
     const pw = z.string().min(MIN_PASSWORD, "La nueva contraseña debe tener al menos 10 caracteres.").max(200).parse(next);
     if (!rateLimit(`password:${user.id}`, 5, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");

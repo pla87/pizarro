@@ -12,6 +12,7 @@ import { addUndo, captureTasks, snapshotTasks, type TaskField } from "@/lib/undo
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
+import { rateLimit } from "@/lib/rate-limit";
 import { requireUser } from "@/lib/session";
 import * as v from "@/lib/validation";
 import { isoToDate } from "@/lib/dates";
@@ -71,6 +72,16 @@ function describeChanges(data: Record<string, unknown>): Label {
 }
 
 /** Campos que cambian al archivar o recuperar una tarea. */
+/** Las tareas archivadas solo se recuperan (restoreTask): no se editan ni se mueven. */
+async function assertNotArchived(taskId: string) {
+  const task = await db.task.findUnique({ where: { id: taskId }, select: { archivedAt: true } });
+  if (task?.archivedAt) throw new AppError("La tarea está archivada. Recupérala para modificarla.");
+}
+
+/** Límites por tarea / usuario, para que nadie sature la base de datos ni la API de Google. */
+const MAX_SUBTASKS = 100;
+const MAX_COMMENTS = 1000;
+
 const ARCHIVE_FIELDS: TaskField[] = ["archivedAt", "archivedFromColumnId", "columnId", "position", "evergreen"];
 
 async function lastPosition(columnId: string): Promise<number | null> {
@@ -222,6 +233,7 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
     const user = await requireUser();
     const data = updateSchema.parse(patch);
     const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
+    await assertNotArchived(taskId);
     const editsText = data.title !== undefined || data.description !== undefined;
     if (editsText && since !== undefined) {
       const current = await db.task.findUniqueOrThrow({ where: { id: taskId }, select: { contentUpdatedAt: true, contentUpdatedById: true } });
@@ -290,7 +302,10 @@ export async function moveTask(taskId: string, columnId: string, prevId: string 
   return runAction({ name: "tasks.moveTask", args: [taskId, columnId, prevId, nextId] }, async () => {
     const user = await requireUser();
     const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
+    await assertNotArchived(taskId);
     await assertColumnInProject(v.id.parse(columnId), projectId);
+    prevId = v.id.nullable().parse(prevId);
+    nextId = v.id.nullable().parse(nextId);
     let n = await neighbourPositions(columnId, prevId, nextId);
     if (!n.stale && needsRebalance(n.prev, n.next)) {
       await rebalanceColumn(columnId);
@@ -341,6 +356,7 @@ export async function makeEvergreen(taskId: string) {
   return runAction({ name: "tasks.makeEvergreen", args: [taskId] }, async () => {
     const user = await requireUser();
     const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
+    await assertNotArchived(taskId);
     addUndo(...(await captureTasks([taskId], ["columnId", "position", "evergreen"])));
     const result = await db.$transaction(async (tx) => {
       const column = await tx.column.findFirst({ where: { projectId, role: "NEXT_RELEASE" }, select: { id: true } });
@@ -376,6 +392,8 @@ export async function archiveTasks(taskIds: string[]) {
     const ids = [...new Set(z.array(v.id).min(1).max(500).parse(taskIds))];
     const tasks = await db.task.findMany({ where: { id: { in: ids }, project: visibleProjectsWhere(user) }, select: { id: true, projectId: true } });
     if (tasks.length !== ids.length) throw notFound();
+    // Como en el borrado múltiple: el deshacer se guarda por proyecto, así que todas deben ser del mismo.
+    if (new Set(tasks.map((t) => t.projectId)).size > 1) throw new AppError("Las tareas son de proyectos distintos.");
     noteProject(tasks[0]?.projectId);
     addUndo(...(await captureTasks((await db.task.findMany({ where: { id: { in: ids }, archivedAt: null }, select: { id: true } })).map((t) => t.id), ARCHIVE_FIELDS)));
     await db.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId", "evergreen" = false WHERE "id" IN (${Prisma.join(ids)}) AND "archivedAt" IS NULL`;
@@ -498,6 +516,7 @@ export async function addSubtask(taskId: string, title: string) {
   return runAction({ name: "tasks.addSubtask", args: [taskId, title] }, async (): Promise<SubtaskInfo> => {
     const user = await requireUser();
     await assertTaskAccess(user, v.id.parse(taskId));
+    if ((await db.subtask.count({ where: { taskId } })) >= MAX_SUBTASKS) throw new AppError("Una tarea no puede tener más de 100 subtareas.");
     const last = await db.subtask.findFirst({ where: { taskId }, orderBy: { position: "desc" }, select: { position: true } });
     const sub = await db.subtask.create({
       data: { taskId, title: v.title.parse(title), position: positionBetween(last?.position, null) },
@@ -611,6 +630,8 @@ export async function addComment(taskId: string, body: string) {
     const user = await requireUser();
     const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
     const text = commentBody.parse(body);
+    if ((await db.taskComment.count({ where: { taskId } })) >= MAX_COMMENTS) throw new AppError("Esta tarea ya tiene el máximo de 1000 comentarios.");
+    if (!rateLimit(`comment:${user.id}`, 30, 60_000)) throw new AppError("Demasiados comentarios seguidos. Espera un momento.");
     const comment = await db.taskComment.create({ data: { taskId, authorId: user.id, body: text }, select: commentSelect });
     addUndo({ t: "comment.remove", id: comment.id });
     await notifyMentions({ actorId: user.id, taskId, projectId, recipientIds: extractMentionIds(text), text });
@@ -647,6 +668,7 @@ export async function createGoogleFile(taskId: string, kind: GoogleFileKind, tit
   return runAction({ name: "tasks.createGoogleFile", args: [taskId, kind, title] }, async (): Promise<TaskLinkInfo> => {
     const user = await requireUser();
     await assertTaskAccess(user, v.id.parse(taskId));
+    if (!rateLimit(`google-file:${user.id}`, 20, 60_000)) throw new AppError("Demasiados documentos creados seguidos. Espera un minuto.");
     const fileKind = z.enum(["GOOGLE_DOC", "GOOGLE_SHEET"]).parse(kind);
     const name = v.title.parse(title);
     const file = await createDriveFile(user.id, fileKind, name);

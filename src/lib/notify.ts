@@ -1,5 +1,6 @@
 import "server-only";
 import { after } from "next/server";
+import type { Prisma } from "@/generated/prisma/client";
 import nodemailer from "nodemailer";
 import { makeT, toLocale, type T } from "../i18n/core";
 import { db } from "./db";
@@ -145,6 +146,20 @@ async function deliver(notificationIds: string[]): Promise<void> {
 }
 
 /**
+ * Quién puede recibir un aviso entre los mencionados: activos y con acceso al proyecto. Con un proyecto
+ * privado, solo su dueño (y solo si lo han mencionado: antes la condición del dueño pisaba la lista y
+ * avisaba al dueño aunque mencionaran a otra persona).
+ */
+export function mentionRecipientsWhere(project: { restricted: boolean; privateOwnerId: string | null }, ids: string[], projectId: string): Prisma.UserWhereInput {
+  const mentioned = project.privateOwnerId ? ids.filter((id) => id === project.privateOwnerId) : ids;
+  return {
+    id: { in: mentioned },
+    active: true,
+    ...(project.restricted ? { OR: [{ role: "ADMIN" }, { memberships: { some: { projectId } } }] } : {}),
+  };
+}
+
+/**
  * Crea avisos de mención para los usuarios indicados que estén activos, no sean el autor
  * y puedan ver el proyecto. Devuelve cuántos se han creado.
  */
@@ -160,13 +175,7 @@ export async function notifyMentions(opts: {
   const project = await db.project.findUnique({ where: { id: opts.projectId }, select: { restricted: true, privateOwnerId: true } });
   if (!project) return 0;
   const recipients = await db.user.findMany({
-    where: {
-      id: { in: ids },
-      active: true,
-      // Proyecto privado: solo su dueño puede recibir avisos.
-      ...(project.privateOwnerId ? { id: project.privateOwnerId } : {}),
-      ...(project.restricted ? { OR: [{ role: "ADMIN" }, { memberships: { some: { projectId: opts.projectId } } }] } : {}),
-    },
+    where: mentionRecipientsWhere(project, ids, opts.projectId),
     select: { id: true },
   });
   if (!recipients.length) return 0;

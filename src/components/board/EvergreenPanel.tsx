@@ -116,9 +116,9 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
 
 /** Tarjeta compacta del panel: se puede arrastrar a cualquier columna (deja de ser fija al soltarla). */
 function EvergreenCard({ id }: { id: string }) {
-  const { taskById, kindById, openTask, dragHandle } = useBoard();
+  const { taskById, kindById, openTask, dragHandle, filtering } = useBoard();
   const t = useT();
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({ id });
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({ id, disabled: filtering });
   const task = taskById.get(id);
   if (!task) return null;
   // En táctil solo arrastra el asa (igual que las tarjetas normales).

@@ -16,6 +16,8 @@ export interface BoardApi {
   editorMode: EditorModeValue;
   /** Táctil: las tarjetas se arrastran solo desde su asa. */
   dragHandle: boolean;
+  /** Hay un filtro activo en el tablero: no se arrastra (el orden mostrado no es el real). */
+  filtering: boolean;
   google: { enabled: boolean; connected: boolean };
   today: string;
   setLabels: React.Dispatch<React.SetStateAction<LabelOption[]>>;
@@ -35,6 +37,8 @@ export interface BoardApi {
   setSelectedMany: (ids: string[], on: boolean) => void;
   /** Marca una mutación en curso (evita que un refresco pise el estado optimista). */
   track: <T>(p: Promise<T>) => Promise<T>;
+  /** Como `track`, pero deja pasar las excepciones (subidas de archivos). */
+  trackRaw: <T>(p: Promise<T>) => Promise<T>;
   refresh: () => void;
 }
 

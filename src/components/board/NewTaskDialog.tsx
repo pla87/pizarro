@@ -1,11 +1,12 @@
 "use client";
 
 import { Camera, File as FileIcon, ImagePlus, Loader2, Plus, X } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createTask } from "@/actions/tasks";
 import { useT, useIntlLocale } from "@/i18n/client";
 import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
+import { useShortcut } from "./shortcuts";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
 import { DescriptionField } from "../ui/DescriptionField";
@@ -37,6 +38,7 @@ function captureTitle(t: T, locale: string): string {
 
 export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles, onClose: close, side, onAddSecond, draft, autosave = false }: Props) {
   const t = useT();
+  const sc = useShortcut();
   const locale = useIntlLocale();
   const uid = useId();
   const formId = `${uid}-new-task`;
@@ -66,6 +68,12 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const onClose = () => {
     if (autosave) discardDraft();
     close();
+  };
+  // Escape, clic fuera, X o «Cancelar» con contenido escrito piden confirmación; crear no.
+  const requestClose = () => {
+    const dirty = !!(title.trim() || description.trim() || subtasks.length || subtaskDraft.trim());
+    if (dirty && !window.confirm(t("Hay cambios sin guardar. ¿Descartar la nueva tarea?"))) return;
+    onClose();
   };
   const isReleaseColumn = board.columns.find((c) => c.id === columnId)?.role === "NEXT_RELEASE";
   const [busy, setBusy] = useState(false);
@@ -106,7 +114,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         evergreen: isReleaseColumn && evergreen,
         subtasks: subtaskTitles,
       }),
-    );
+    ).catch(() => ({ ok: false as const, error: t("Error inesperado. Inténtalo de nuevo.") }));
     if (!res.ok) {
       setBusy(false);
       return toast(res.error, "error");
@@ -114,7 +122,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     let task = res.data;
     board.upsertTask(task);
     // Los archivos se suben en paralelo tras crear la tarea.
-    const results = await Promise.allSettled(files.map((f) => board.track(uploadFile(task.id, f, true, t))));
+    const results = await Promise.allSettled(files.map((f) => board.trackRaw(uploadFile(task.id, f, true, t))));
     const ok = results.filter((r) => r.status === "fulfilled").length;
     const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
     if (ok) {
@@ -126,10 +134,25 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     onClose();
   };
 
+  // Alt+S crea la tarea (también escribiendo), como Ctrl+Enter. Con dos modales a la vez, el que tiene el foco.
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey || e.code !== "KeyS" || e.ctrlKey || e.metaKey || e.shiftKey || e.repeat || e.defaultPrevented) return;
+      const mine = formRef.current?.closest("[role=dialog]");
+      const other = (e.target as HTMLElement | null)?.closest?.("[role=dialog]");
+      if (other ? other !== mine : side === "right") return;
+      e.preventDefault();
+      formRef.current?.requestSubmit();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [side]);
+
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={requestClose}
       side={side}
       onAddSecond={onAddSecond}
       title={t("Nueva tarea")}
@@ -137,14 +160,14 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       placement="top"
       footer={
         <>
-          <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
-          <button type="submit" form={formId} className="btn-primary" disabled={busy || !title.trim()}>
+          <button type="button" className="btn-secondary" onClick={requestClose}>{t("Cancelar")}</button>
+          <button type="submit" form={formId} className="btn-primary" disabled={busy || !title.trim()} title={`${t("Crear tarea")} (${sc("Alt+S")})`}>
             {busy && <Loader2 size={16} className="animate-spin" />} {t("Crear tarea")}
           </button>
         </>
       }
     >
-      <form id={formId} onSubmit={submit} className="space-y-3" onKeyDown={(e) => {
+      <form id={formId} ref={formRef} onSubmit={submit} className="space-y-3" onKeyDown={(e) => {
         // Ctrl/Cmd+Enter en cualquier campo crea la tarea (como pulsar «Crear tarea»).
         if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) {
           e.preventDefault();

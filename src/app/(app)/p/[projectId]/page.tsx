@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { visibleProjectsWhere } from "@/lib/access";
-import { appTimeZone, boardTaskSelect, listKinds, projectUsers, toBoardTask, userTemplates } from "@/lib/board";
+import { appTimeZone, listKinds, loadBoardTasks, projectUsers, userTemplates } from "@/lib/board";
 import { dateToIso, todayIso } from "@/lib/dates";
 import { googleEnabled } from "@/lib/google";
 import { db } from "@/lib/db";
@@ -33,7 +33,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
   // Todas las consultas en paralelo: una sola ida y vuelta efectiva.
   const [columns, tasks, users, labels, me, deliverables, kinds, templates] = await Promise.all([
     db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true } }),
-    db.task.findMany({ where: { projectId, archivedAt: null }, orderBy: { position: "asc" }, select: boardTaskSelect }),
+    loadBoardTasks(projectId),
     projectUsers(projectId, project),
     db.label.findMany({ where: { projectId }, orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),
     db.user.findUniqueOrThrow({
@@ -48,7 +48,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
   const data: BoardData = {
     project: { id: project.id, name: project.name },
     columns,
-    tasks: tasks.map(toBoardTask),
+    tasks,
     users,
     labels,
     kinds,

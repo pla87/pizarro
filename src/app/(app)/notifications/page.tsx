@@ -9,13 +9,18 @@ export async function generateMetadata() {
   return { title: t("Avisos") };
 }
 
-export default async function NotificationsPage() {
+const PAGE_STEP = 100;
+
+export default async function NotificationsPage({ searchParams }: { searchParams: Promise<{ limit?: string | string[] }> }) {
   const user = await requireUserPage();
+  const sp = await searchParams;
+  const rawLimit = Number(Array.isArray(sp.limit) ? sp.limit[0] : sp.limit);
+  const limit = Number.isFinite(rawLimit) && rawLimit >= PAGE_STEP ? Math.min(Math.floor(rawLimit), 5000) : PAGE_STEP;
   const rows = await db.notification.findMany({
     // Solo avisos de tareas que el usuario sigue pudiendo ver.
     where: { userId: user.id, task: { project: visibleProjectsWhere(user) } },
     orderBy: { createdAt: "desc" },
-    take: 100,
+    take: limit + 1,
     select: {
       id: true,
       excerpt: true,
@@ -27,9 +32,13 @@ export default async function NotificationsPage() {
       task: { select: { id: true, title: true, project: { select: { id: true, name: true } } } },
     },
   });
+  const hasMore = rows.length > limit;
   return (
     <NotificationList
-      items={rows.map((n) => ({
+      // Al cargar más cambia la lista del servidor: se reinicia el estado local.
+      key={limit}
+      moreHref={hasMore ? `?limit=${limit + PAGE_STEP}` : null}
+      items={rows.slice(0, limit).map((n) => ({
         id: n.id,
         excerpt: n.excerpt,
         createdAt: n.createdAt.toISOString(),

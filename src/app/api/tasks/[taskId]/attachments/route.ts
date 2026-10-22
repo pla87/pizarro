@@ -5,6 +5,7 @@ import { AppError } from "@/lib/errors";
 import { actionContext } from "@/lib/action-context";
 import { logEvent } from "@/lib/log";
 import { publishChange } from "@/lib/realtime";
+import { rateLimit } from "@/lib/rate-limit";
 import { saveUndo } from "@/lib/undo";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser, requireUser } from "@/lib/session";
@@ -25,6 +26,8 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     const user = await requireUser();
     const { taskId } = await ctx.params;
     const { projectId } = await assertTaskAccess(user, taskId);
+    // Tope de subidas por persona: evita llenar el disco o la memoria (sharp) con un bucle.
+    if (!rateLimit(`upload:${user.id}`, 60, 60_000)) throw new AppError("Demasiadas peticiones", 429);
 
     const length = Number(req.headers.get("content-length") ?? 0);
     if (length > MAX_UPLOAD_BYTES + 64 * 1024) throw new AppError("El archivo supera el tamaño máximo.", 413);

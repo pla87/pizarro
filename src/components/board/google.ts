@@ -20,7 +20,14 @@ export async function createAndOpenGoogleFile(
     win.document.title = t("Creando documento…");
     win.document.body.innerHTML = `<p style="font-family:system-ui;padding:2rem;color:#475569">${t("Creando el documento en Google Drive…")}</p>`;
   }
-  const res = await createGoogleFile(taskId, kind, title);
+  let res: Awaited<ReturnType<typeof createGoogleFile>>;
+  try {
+    res = await createGoogleFile(taskId, kind, title);
+  } catch (err) {
+    // Sin red o acción de una versión anterior: no se deja la pestaña en blanco abierta.
+    win?.close();
+    throw err;
+  }
   if (!res.ok) {
     win?.close();
     return res;

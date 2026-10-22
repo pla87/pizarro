@@ -87,7 +87,7 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
 }
 
 export async function resetUserPassword(userId: string, newPassword: string) {
-  return runAction({ name: "users.resetUserPassword", args: [userId, newPassword] }, async () => {
+  return runAction({ name: "users.resetUserPassword", args: [userId] }, async () => {
     await requireAdmin();
     const pw = password.parse(newPassword);
     const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true } });

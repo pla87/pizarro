@@ -28,7 +28,7 @@ const field =
 
 function formatTime(d: Date, tz: string, locale: string): string {
   const p = Object.fromEntries(
-    new Intl.DateTimeFormat(locale, { timeZone: tz, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })
+    new Intl.DateTimeFormat(locale, { timeZone: tz, day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })
       .formatToParts(d)
       .map((x) => [x.type, x.value]),
   );

@@ -13,3 +13,6 @@ next-env.d.ts
 .DS_Store
 npm-debug.log*
 dist/
+
+# Capturas de pruebas locales mal dirigidas
+/undefined/

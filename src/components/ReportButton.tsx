@@ -19,6 +19,8 @@ export function ReportButton({ projectId, variant }: { projectId: string; varian
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<State>({ status: "loading" });
   const urlRef = useRef<string | null>(null);
+  // Identifica la generación en curso: si se cierra el diálogo o se reintenta, la anterior se descarta.
+  const runRef = useRef(0);
 
   const revoke = useCallback(() => {
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
@@ -27,16 +29,19 @@ export function ReportButton({ projectId, variant }: { projectId: string; varian
 
   const generate = useCallback(async () => {
     revoke();
+    const run = ++runRef.current;
     setState({ status: "loading" });
     try {
       const res = await fetch(endpoint, { cache: "no-store" });
       if (!res.ok) throw new Error(res.status === 429 ? t("Demasiadas peticiones, espera un momento.") : t("No se pudo generar el informe."));
       const blob = await res.blob();
       const name = /filename="?([^";]+)"?/i.exec(res.headers.get("Content-Disposition") ?? "")?.[1];
+      if (run !== runRef.current) return;
       const url = URL.createObjectURL(blob);
       urlRef.current = url;
       setState({ status: "ready", url, filename: name ?? `informe-${new Date().toISOString().slice(0, 10)}.pdf` });
     } catch (err) {
+      if (run !== runRef.current) return;
       setState({ status: "error", message: err instanceof Error ? err.message : t("No se pudo generar el informe.") });
     }
   }, [endpoint, revoke, t]);
@@ -55,6 +60,7 @@ export function ReportButton({ projectId, variant }: { projectId: string; varian
   }
 
   function close() {
+    runRef.current++;
     setOpen(false);
     revoke();
   }

@@ -53,7 +53,7 @@ export function BulkTaskDialog({ initialColumnId, onClose }: Props) {
         deliverableId: deliverableId || null,
         labelIds,
       }),
-    );
+    ).catch(() => ({ ok: false as const, error: t("Error inesperado. Inténtalo de nuevo.") }));
     if (!res.ok) {
       setBusy(false);
       return toast(res.error, "error");

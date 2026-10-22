@@ -2,6 +2,7 @@
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NON_IMAGE_COPY_DAYS = 7;
+const READ_NOTIFICATION_DAYS = 90;
 const FIRST_RUN_MS = 60 * 1000;
 const EVERY_MS = 60 * 60 * 1000;
 
@@ -35,9 +36,16 @@ async function purgeOldUndo(now: Date = new Date()): Promise<number> {
   return discardUndo({ createdAt: { lt: new Date(now.getTime() - UNDO_MAX_AGE_DAYS * DAY_MS) } });
 }
 
+/** Borra los avisos ya leídos de más de 90 días (los no leídos se conservan). */
+async function purgeOldNotifications(now: Date = new Date()): Promise<number> {
+  const { db } = await import("@/lib/db");
+  const { count } = await db.notification.deleteMany({ where: { readAt: { not: null }, createdAt: { lt: new Date(now.getTime() - READ_NOTIFICATION_DAYS * DAY_MS) } } });
+  return count;
+}
+
 /** Una pasada de mantenimiento; nunca lanza. */
 async function runMaintenance(): Promise<void> {
-  for (const job of [purgeNonImageCopies, purgeOldUndo]) {
+  for (const job of [purgeNonImageCopies, purgeOldUndo, purgeOldNotifications]) {
     try {
       await job();
     } catch (err) {

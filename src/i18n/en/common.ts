@@ -46,7 +46,7 @@ export const common: Record<string, string> = {
   "Deshecho: {label} (parte ya no existía)": "Undone: {label} (part of it no longer existed)",
   "Deshecho: {label}": "Undone: {label}",
   "Deshacer tu última acción en esta tarea": "Undo your last action on this task",
-  "Deshacer tu última acción en este tablero (hasta 10) · Ctrl+Z": "Undo your last action on this board (up to 10) · Ctrl+Z",
+  "Deshacer tu última acción en este tablero (hasta 10) · {keys}": "Undo your last action on this board (up to 10) · {keys}",
   "Deshacer tu última acción en este tablero (hasta 10)": "Undo your last action on this board (up to 10)",
   "Deshacer la última acción": "Undo the last action",
   "Deshacer la última acción en la tarea": "Undo the last action on the task",

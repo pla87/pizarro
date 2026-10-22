@@ -34,6 +34,7 @@ const viewers = (globalThis as unknown as { __pzViewers?: Map<string, Map<string
 
 /** Anota que el usuario tiene la tarea abierta y devuelve quién más la tiene. */
 export function noteTaskViewer(taskId: string, userId: string, name: string, now = Date.now()): { id: string; name: string }[] {
+  if (viewers.size > 200) sweepViewers(now);
   let users = viewers.get(taskId);
   if (!users) viewers.set(taskId, (users = new Map()));
   users.set(userId, { name, at: now });
@@ -47,5 +48,15 @@ export function noteTaskViewer(taskId: string, userId: string, name: string, now
 
 /** El usuario ha cerrado la tarea. */
 export function leaveTask(taskId: string, userId: string): void {
-  viewers.get(taskId)?.delete(userId);
+  const users = viewers.get(taskId);
+  users?.delete(userId);
+  if (users?.size === 0) viewers.delete(taskId);
+}
+
+// Las tareas que nadie vuelve a pingear no se limpiaban solas: barrido ocasional del mapa entero.
+function sweepViewers(now: number): void {
+  for (const [taskId, users] of viewers) {
+    for (const [id, e] of users) if (now - e.at > VIEWER_WINDOW_MS) users.delete(id);
+    if (users.size === 0) viewers.delete(taskId);
+  }
 }

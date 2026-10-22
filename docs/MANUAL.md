@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.14.0"
+version: "v1.15.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.14.0
+**Versión de la aplicación:** v1.15.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -89,7 +89,7 @@ La aplicación es un **monolito en un único contenedor**. No hay colas, cachés
 | `Task` | projectId, columnId, kindId, title, description, color, linkUrl, position, assigneeId, archivedAt | Posición fraccionaria para reordenar actualizando una sola fila. |
 | `Label` / `TaskLabel` | name, color | Etiquetas por proyecto. |
 | `Subtask` | taskId, title, done, position | Subtareas de una tarea (no pasan a las releases). |
-| `UndoEntry` | userId, projectId, label, ops (JSON), createdAt | Las 10 últimas acciones deshacibles de cada usuario en cada proyecto, con sus operaciones inversas. Caducan a los 7 días. |
+| `UndoEntry` | userId, projectId, label, ops (JSON), createdAt | Las 10 últimas acciones deshacibles de cada usuario en cada proyecto, con sus operaciones inversas. Caducan a los 7 días. Su etiqueta se guarda como plantilla traducible. |
 | `TaskAttachment` | taskId, originalName, width, height, size | El fichero está en `UPLOAD_DIR/<id>.webp` (y `<id>.thumb.webp`). |
 | `Release` / `ReleaseTask` | number (correlativo por proyecto), content (Markdown final), deployedAt, autor · instantánea de título y tipo de cada tarea | La instantánea se conserva aunque la tarea se borre. |
 | `AppVersionLog` | version (única), releasedAt, summary, changes (JSON) | Se sincroniza desde `changelog.json` en cada arranque. |
@@ -109,8 +109,8 @@ Además, `Task` tiene `dueDate` (fecha límite, solo día), `Column` tiene `isDo
 |---|---|
 | Contraseñas | bcrypt (coste 11), mínimo 10 caracteres. Tiempo de respuesta constante si el usuario no existe. |
 | Sesiones | Token aleatorio de 256 bits en cookie `HttpOnly`, `SameSite=Lax` y `Secure` (con HTTPS, con prefijo `__Host-`). En base de datos solo se guarda su HMAC-SHA256 con `SESSION_SECRET`. Caducidad deslizante de 30 días. |
-| Revocación | Cerrar sesión, cambiar la contraseña, restablecerla, desactivar al usuario o cambiarle el rol eliminan sus sesiones. |
-| Fuerza bruta | Límite de intentos de login por IP y por email (ventana de 15 minutos), y de cambios de contraseña. |
+| Revocación | Cerrar sesión, cambiar la contraseña, restablecerla, desactivar al usuario o cambiarle el rol eliminan sus sesiones. Iniciar sesión cierra la sesión anterior de ese navegador. |
+| Fuerza bruta y abuso | Límite de intentos de login por IP y por email (ventana de 15 minutos) y de cambios de contraseña. También hay topes de subidas (60 por minuto y persona), comentarios (30 por minuto, 1000 por tarea), subtareas (100 por tarea), documentos de Google (20 por minuto) y tamaño del ZIP de adjuntos de una release (200 MB). |
 | CSRF | `SameSite=Lax`, verificación de `Origin` integrada en las Server Actions y comprobación explícita de `Origin` en la ruta de subida. |
 | Autorización | Sin registro público. Solo los admins gestionan usuarios y proyectos. Cada operación comprueba la visibilidad del proyecto. |
 | XSS | React escapa todo el contenido. El Markdown se renderiza sin HTML. Los enlaces solo admiten `http(s)` y se abren con `rel="noopener noreferrer"`. CSP restrictiva. |
@@ -118,7 +118,8 @@ Además, `Task` tiene `dueDate` (fecha límite, solo día), `Column` tiene `isDo
 | Imágenes | Tamaño máximo configurable, límite de píxeles en sharp (protección frente a *decompression bombs*), reconversión siempre a WebP (se descarta cualquier contenido incrustado) y servido solo a usuarios con acceso. |
 | Contenedor | El proceso Node se ejecuta como el usuario sin privilegios `node`. |
 | Google | OAuth con permiso mínimo `drive.file`: solo da acceso a los archivos que crea Pizarro. Parámetro `state` ligado a la sesión contra CSRF. Tokens cifrados en base de datos. Opcionalmente, restringido a un dominio de Workspace. |
-| Avisos | Solo se avisa a usuarios activos con acceso al proyecto. El email y el WhatsApp no se repiten a la misma persona por la misma tarea en 10 minutos, y cada autor tiene un tope de envíos por hora. El contenido de los emails se escapa y los enlaces apuntan siempre a `APP_URL`. |
+| Registros | Los logs nunca guardan contraseñas, tokens, cookies ni teléfonos (se ocultan por nombre de campo). Una migración de la v1.15 borró las contraseñas que versiones anteriores dejaban en los logs al cambiarlas o restablecerlas. |
+| Avisos | Solo se avisa a usuarios activos con acceso al proyecto (en un proyecto privado, solo a su dueño si lo mencionan). El email y el WhatsApp no se repiten a la misma persona por la misma tarea en 10 minutos, y cada autor tiene un tope de envíos por hora. El contenido de los emails se escapa y los enlaces apuntan siempre a `APP_URL`. |
 
 ### 2.6 Rendimiento
 
@@ -130,6 +131,9 @@ Además, `Task` tiene `dueDate` (fecha límite, solo día), `Column` tiene `isDo
 - **Sin dependencias externas en tiempo de ejecución:** fuentes del sistema, sin CDNs.
 - **Cambios casi al momento:** cada cambio en un proyecto se avisa al instante a las pestañas que lo tienen abierto (canal *Server-Sent Events* `/api/projects/[id]/events`) y estas se refrescan en menos de un segundo, también entre dos pestañas tuyas. Como respaldo, el tablero también se actualiza al volver a la pestaña y cada 30 segundos.
 - **Carga diferida:** el código de los diálogos (detalle de tarea, nueva tarea, release, varias tareas, archivadas) y del editor de texto no se descarga al abrir el tablero; se precarga cuando el navegador está libre y se usa al abrirlos.
+- **Tablero ligero:** al cargar el tablero no se envían las descripciones de las tarjetas (solo si tienen); se piden al abrir cada tarea.
+- **Errores de red:** si una acción del tablero falla por red o tras un despliegue, se avisa, se deshace el cambio optimista solo en las tarjetas afectadas y se recarga el tablero.
+- **Índices y limpieza:** índices para avisos y deshacer; el mantenimiento horario borra avisos leídos de más de 90 días.
 - **Logs sin duplicados:** las visitas a una misma página de una misma persona se registran como mucho una vez por minuto (los refrescos automáticos no llenan los logs).
 
 ---
@@ -183,13 +187,16 @@ Desde el menú «⋯» de cada columna:
 - **Guardar en móvil:** al editar una tarea en el móvil, el pie del modal tiene siempre visibles **Archivar**, **Borrar** y **Guardar**. *Guardar* guarda el título y la descripción tal como estén escritos (aunque sigas editándolos) y cierra.
 - **Borradores:** mientras creas o editas una tarea, lo escrito se guarda en tu navegador **cada 5 segundos**. Si cierras la página sin cancelar ni guardar, al volver al tablero el modal se reabre con lo que tenías (en *Nueva tarea*, todos los campos salvo los archivos; en una tarea abierta, el título y la descripción en edición). Solo hay borrador si queda **algo sin guardar**: crear, guardar, cancelar o cerrar el modal lo borra, y una tarea abierta sin cambios nunca se reabre.
 - **Persona asignada:** el círculo con iniciales en la esquina inferior derecha de la tarjeta es **la persona asignada** (al pasar el ratón: «Asignada a …»). No indica quién la tiene abierta; eso se ve dentro del detalle y en los círculos de la cabecera.
+- **Filtrar el tablero (escritorio):** el campo *Filtrar* de la cabecera (o la tecla **/**) muestra solo las tarjetas cuyo título, tipo, responsable o etiquetas contienen todas las palabras escritas, sin distinguir mayúsculas ni acentos. Se ve cuántas quedan («3 de 27») y los contadores de columna cuentan solo las visibles. Mientras hay filtro no se puede arrastrar (para no desordenar lo oculto) y se deseleccionan las tarjetas que quedan ocultas. Escape lo borra.
+- **Descartar una tarea nueva:** si cierras *Nueva tarea* (Escape, la X, *Cancelar* o fuera del modal) con algo escrito, se pide confirmación.
 - **Editar:** haz clic en la tarjeta. Los cambios se guardan solos (título y enlace al salir del campo; tipo, color, responsable, etiquetas y columna al cambiarlos).
 - **Descripción con formato:** se guarda como Markdown y, cuando no la estás editando, se ve formateada (títulos, negrita, cursiva, subrayado, tachado, listas, enlaces). Hay dos formas de editarla, a elegir en **Mi perfil y plantillas → Edición de descripciones**:
   - **Con barra de formato** (por defecto): ves el resultado mientras escribes y aplicas **negrita, cursiva, subrayado, tachado, título, subtítulo, texto normal, lista y lista numerada** con botones (o Ctrl+B / I / U). Si pegas texto en Markdown, se convierte en formato. Al escribir `@` aparece la lista de personas para mencionar (y `@docs` / `@sheets`); la mención se ve como una etiqueta.
   - **Markdown:** escribes los símbolos (`**negrita**`, `*cursiva*`, `~~tachado~~`, `++subrayado++`, `# Título`, `- lista`, `1. lista`); al guardar se ve formateado.
   - En ambos modos, Ctrl/⌘+Enter guarda y Escape cancela.
+  - Lo que escribes se guarda tal cual, incluidos `<`, `>`, `&` o comillas, y llega igual al texto de la release (p. ej. `->` no se convierte en `-&gt;`).
 - **Colores de tarjeta:** gris, blanco, rojo, naranja, marrón, amarillo, verde, verde oscuro, turquesa, celeste, índigo, azul marino, violeta y rosa (también para etiquetas).
-- **Subtareas:** añádelas y márcalas. **Doble clic** sobre una la edita (Enter guarda, Escape cancela) y se **reordenan** arrastrando el icono de seis puntos. Junto al título *Subtareas* hay una barra verde que se llena según la proporción de subtareas hechas (con dos, cada una marca el 50 %, da igual el orden); la tarjeta muestra el progreso (p. ej. `2/4`). Las subtareas **no pasan** al texto de las releases.
+- **Subtareas:** añádelas y márcalas. **Doble clic** sobre una, el **lápiz** que aparece al pasar por encima (siempre visible en móvil) o **Enter/F2** con el foco en ella la editan (Enter guarda, Escape cancela) y se **reordenan** arrastrando el icono de seis puntos. Junto al título *Subtareas* hay una barra verde que se llena según la proporción de subtareas hechas (con dos, cada una marca el 50 %, da igual el orden); la tarjeta muestra el progreso (p. ej. `2/4`). Las subtareas **no pasan** al texto de las releases.
 - **Adjuntos:** cualquier tipo de archivo de hasta 10 MB. Pégalos con Ctrl/⌘+V, usa *Añadir* o **arrástralos** sobre la tarea abierta (aparece «Suelta para adjuntar»); también desde la ventana de descargas del navegador. Los que no son imagen se listan con su icono, nombre y tamaño, y se descargan (nunca se abren dentro de Pizarro, por seguridad).
 - **Capturas e imágenes:** al tocar o hacer clic en una imagen se ve **a pantalla completa**; se cierra con la **X**, tocando fuera de la imagen, con Escape o con el botón atrás. Con varias imágenes, las flechas pasan de una a otra. En móvil también tienes el botón **Cámara**, al crear la tarea y en el detalle de una tarea existente. Cada imagen se reduce a 1280 px de ancho como máximo y se guarda como WebP (calidad 75).
 - **Archivar** oculta la tarjeta del tablero (desde su detalle o, para varias, con **Archivar** en la barra de selección). **Borrar** la elimina con sus adjuntos.
@@ -277,6 +284,7 @@ Se genera en el idioma de quien lo pide.
   - un **email**, si el servidor tiene SMTP y la persona no lo ha desactivado;
   - un **WhatsApp**, si el servidor lo tiene configurado y la persona lo ha activado con su número.
 - Cada persona elige sus canales en **Mi perfil y plantillas → Avisos de menciones**.
+- La página **Avisos** muestra los 100 últimos y el botón **Cargar más** trae los anteriores. Los avisos ya leídos se borran a los 90 días.
 - Al hacer clic en un aviso se abre directamente la tarjeta.
 
 ### 3.10 Google Docs y Sheets
@@ -339,17 +347,31 @@ En ambos casos:
 
 ### 3.15 Atajos de teclado
 
+Solo en ordenador. Los atajos con Alt usan la tecla física, así que en Mac funcionan con ⌥ aunque esa combinación escriba otro carácter. Salvo los indicados, no actúan mientras escribes en un campo. **?** muestra esta lista dentro de Pizarro, y los botones indican su atajo al pasar el ratón.
+
 | Acción | Windows / Linux | Mac |
 |---|---|---|
+| Nueva tarea (con una tarea abierta, abre otra al lado) | Alt+N | ⌥+N |
+| Varias tareas | Alt+Mayús+N | ⌥+⇧+N |
+| Buscar o filtrar tarjetas en el tablero | / | / |
+| Ver la lista de atajos | ? | ? |
+| Cambiar de proyecto | Alt+P | ⌥+P |
+| Deshacer en el tablero (también con una tarea abierta) | Alt+Z | ⌥+Z |
+| Archivar la tarea abierta | Alt+A | ⌥+A |
+| Guardar y cerrar la tarea, o crear la tarea nueva (también escribiendo) | Alt+S | ⌥+S |
+| Generar release | Alt+R | ⌥+R |
 | Crear la tarea, guardar la descripción o enviar un comentario | Ctrl+Enter | ⌘+Enter |
-| Cerrar el modal o cancelar la edición | Esc | Esc |
-| Deshacer la última acción (escritorio, sin estar escribiendo) | Ctrl+Z | ⌘+Z |
+| Cerrar el modal, el menú o cancelar la edición | Esc | Esc |
+| Deshacer la última acción (en una tarea abierta, la de esa tarea) | Ctrl+Z | ⌘+Z |
 | Nueva tarea con una captura pegada (con el tablero en pantalla) | Ctrl+V | ⌘+V |
 | Abrir la tarjeta con el foco | Enter | Enter |
+| Editar la subtarea con el foco | Enter o F2 | Enter o F2 |
 | Añadir subtarea / guardar subtarea editada | Enter | Enter |
 | Negrita, cursiva, subrayado (editor con barra) | Ctrl+B / I / U | ⌘+B / I / U |
 | Elegir persona o comando en la lista de «@» | ↑ ↓ y Enter o Tab | ↑ ↓ y Enter o Tab |
 | Imagen anterior o siguiente (pantalla completa) | ← → | ← → |
+
+Con un modal abierto, el tabulador recorre solo sus campos (no salta al tablero de debajo).
 
 ### 3.16 Administración (admins)
 

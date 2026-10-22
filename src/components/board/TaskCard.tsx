@@ -14,9 +14,9 @@ import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard } from "./context";
 
 export function SortableTaskCard({ id }: { id: string }) {
-  const { taskById, dragHandle } = useBoard();
+  const { taskById, dragHandle, filtering } = useBoard();
   const t = useT();
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: filtering });
   const task = taskById.get(id);
   if (!task) return null;
   // En táctil solo arrastra el asa: el resto de la tarjeta deja hacer scroll y abrirla con un toque.
@@ -68,7 +68,8 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
         if (e.key === "Enter") {
           // Evita que el KeyboardSensor de dnd-kit empiece además un arrastre.
           e.stopPropagation();
-          openTask(task.id);
+          // Enter sobre el checkbox o el enlace internos solo los activa a ellos, no abre la tarea.
+          if (e.target === e.currentTarget) openTask(task.id);
         }
       }}
       className={cn(
