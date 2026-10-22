@@ -40,5 +40,5 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!login|forgot-password|reset/|confirm/|api/health|_next/static|_next/image|favicon.ico|icon.svg|icons/|apple-touch-icon.png|sw.js|manifest.webmanifest).*)"],
+  matcher: ["/((?!login|forgot-password|reset/|confirm/|api/auth/google/|api/health|_next/static|_next/image|favicon.ico|icon.svg|icons/|apple-touch-icon.png|sw.js|manifest.webmanifest).*)"],
 };

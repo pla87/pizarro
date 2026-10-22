@@ -8,13 +8,14 @@ import { describeAction } from "@/lib/action-context";
 import { AppError, notFound } from "@/lib/errors";
 import { MAX_USERS } from "@/lib/limits";
 import { randomBytes } from "node:crypto";
-import { sendEmailChangedMail, sendInviteMail, sendPasswordResetMail } from "@/lib/auth-mail";
+import { sendEmailChangedMail, sendInviteMail, sendPasswordResetMail, sendTwoFactorChangedMail } from "@/lib/auth-mail";
 import { issueAuthToken } from "@/lib/auth-token";
 import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { hashPassword, passwordSchema } from "@/lib/password";
 import { purgeProject } from "@/lib/project-delete";
 import { discardUndo } from "@/lib/undo";
 import { requireAdmin } from "@/lib/session";
+import { clearTwoFactor } from "@/lib/two-factor";
 import * as v from "@/lib/validation";
 import { getT } from "@/i18n/server";
 
@@ -123,6 +124,24 @@ export async function forcePasswordChange(userId: string) {
       throw new AppError("Se ha forzado el cambio, pero no se pudo enviar el email con el enlace.");
     }
     return { emailed: true };
+  });
+}
+
+/**
+ * Restablece la verificación en dos pasos de otra persona (perdió el móvil y los códigos): borra método, secreto,
+ * códigos de recuperación y dispositivos recordados. Un administrador tendrá que configurarla de nuevo para entrar con contraseña.
+ */
+export async function resetUserTwoFactor(userId: string) {
+  return runAction({ name: "users.resetUserTwoFactor", args: [userId] }, async () => {
+    const admin = await requireAdmin();
+    const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, name: true, email: true, locale: true, twoFactorMethod: true } });
+    if (!user) throw notFound();
+    if (user.id === admin.id) throw new AppError("Para cambiar tu propia verificación usa «Mi perfil».");
+    if (!user.twoFactorMethod) throw new AppError("Esa persona no tiene activada la verificación en dos pasos.");
+    await clearTwoFactor(user.id);
+    describeAction(`Restableció la verificación en dos pasos de «${user.name}»`);
+    if (emailEnabled()) sendMailInBackground("aviso de verificación en dos pasos restablecida", () => sendTwoFactorChangedMail(user, "reset"));
+    revalidatePath("/admin/users");
   });
 }
 

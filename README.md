@@ -95,6 +95,8 @@ Para generar un `SESSION_SECRET`: `openssl rand -base64 48`.
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Para Google Docs/Sheets | (de Google Cloud) | Cliente OAuth «Aplicación web». Ver [Google Docs y Sheets](#71-google-docs-y-sheets). |
 | `GOOGLE_WORKSPACE_DOMAIN` | Recomendada con Google | `tu-dominio.com` | Solo admite cuentas de ese dominio y comparte cada archivo nuevo con él, para que todo el equipo pueda abrirlo desde la tarjeta. |
 | `GOOGLE_SHARE_ROLE` | No | `writer` | Rol con el que se comparte con el dominio: `writer`, `commenter`, `reader` o `none` (no compartir). |
+| `AUTH_GOOGLE_ONLY` | No | `true` | Solo se entra con Google (necesita `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `APP_URL`; sin ellos no tiene efecto). Ver [Acceso con Google y dos pasos](#74-acceso-con-google-y-verificación-en-dos-pasos). |
+| `AUTH_ALLOW_ADMIN_PASSWORD` | No | `true` | Con `AUTH_GOOGLE_ONLY`, deja entrar con contraseña (y segundo paso) a los administradores: acceso de emergencia. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Para avisos por email | `smtp.gmail.com` / `465` / … | Servidor de correo saliente. Ver [Email](#72-avisos-por-email). |
 | `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_TEMPLATE_NAME` | Para avisos por WhatsApp | (de Meta) | WhatsApp Cloud API. Ver [WhatsApp](#73-avisos-por-whatsapp). |
 | `WHATSAPP_TEMPLATE_LANG` / `WHATSAPP_API_VERSION` | No | `es` / `v23.0` | Idioma de la plantilla y versión de la API de Meta. |
@@ -196,7 +198,7 @@ Nota: `railway run` ejecuta el comando en tu máquina con las variables del serv
    - **Audience / Público**: tipo **Interno**. Solo podrán conectarse las cuentas de tu Workspace y no hace falta verificación de Google.
    - **Data access / Acceso a datos**: añade los permisos `openid`, `email` y `https://www.googleapis.com/auth/drive.file`. `drive.file` solo da acceso a los archivos que crea Pizarro, no al resto de tu Drive.
 4. **Clients / Credenciales → Crear cliente → Aplicación web**:
-   - **URI de redirección autorizados**: `https://<tu-dominio>.up.railway.app/api/google/callback`. Debe coincidir exactamente con `APP_URL` + `/api/google/callback`.
+   - **URI de redirección autorizados**: `https://<tu-dominio>.up.railway.app/api/google/callback`. Debe coincidir exactamente con `APP_URL` + `/api/google/callback`. Si además usarás «Iniciar sesión con Google» ([7.4](#74-acceso-con-google-y-verificación-en-dos-pasos)), añade también `APP_URL` + `/api/auth/google/callback` (las dos URI en el mismo cliente).
 5. Copia el **ID de cliente** y el **secreto** a Railway: `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`, y añade `GOOGLE_WORKSPACE_DOMAIN=tu-dominio.com`. Así, cada archivo creado se comparte automáticamente con tu dominio como editor (`GOOGLE_SHARE_ROLE`), y el resto del equipo puede abrirlo desde la tarjeta. Sin dominio, solo lo ve quien lo crea hasta que lo comparta a mano.
 6. Redespliega. Cada usuario entra en **Mi perfil y plantillas → Google Docs y Sheets → Conectar con Google**.
 
@@ -250,6 +252,18 @@ Se usa la **WhatsApp Cloud API** oficial de Meta. Pasos:
 7. Cada usuario activa **WhatsApp** en *Mi perfil → Avisos de menciones* y escribe su número en formato internacional (`+34…`).
 
 > Meta cobra por cada mensaje de plantilla de utilidad (céntimos en España; consulta su tabla de precios). Si el idioma de la plantilla aprobada es `es_ES` en vez de `es`, cambia `WHATSAPP_TEMPLATE_LANG`. Los errores de envío quedan en los logs con el prefijo `[notify]`.
+
+#### 7.4 Acceso con Google y verificación en dos pasos
+
+**Iniciar sesión con Google.** Con `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `APP_URL` definidos, la pantalla de acceso muestra «Iniciar sesión con Google» (OpenID Connect con PKCE, `state` y `nonce`; solo los permisos `openid email profile`, Drive sigue siendo una conexión aparte). Requisitos:
+
+- En el cliente OAuth de Google Cloud añade la URI de redirección autorizada `APP_URL` + `/api/auth/google/callback` (además de la de Drive, `/api/google/callback`).
+- No hay registro: entra quien ya tiene cuenta en Pizarro con ese email (verificado por Google). La primera vez se guarda el identificador `sub` de Google y desde entonces se reconoce por él. Si `GOOGLE_WORKSPACE_DOMAIN` está definido, solo valen cuentas de ese dominio.
+- El acceso con Google no pide contraseña ni segundo paso (Google aplica el suyo) y no modifica la marca de «contraseña pendiente». Sí avisa por email de los dispositivos nuevos.
+
+**Solo con Google.** `AUTH_GOOGLE_ONLY=true` desactiva el acceso con contraseña para todos. `AUTH_ALLOW_ADMIN_PASSWORD=true` mantiene la contraseña solo para administradores como acceso de emergencia (aparece plegado en la pantalla de acceso). Por defecto ambas están sin definir y se admiten los dos métodos.
+
+**Verificación en dos pasos.** Solo afecta al acceso con contraseña. Cada persona puede activarla en *Mi perfil → Verificación en dos pasos* con una app de autenticación (TOTP, 6 dígitos, 30 s) o un código de 6 dígitos por email (10 minutos, un solo uso; requiere SMTP). Al activarla se muestran 10 códigos de recuperación de un solo uso (solo se guarda su HMAC). Es **obligatoria para administradores**: tras la contraseña se les pide configurarla antes de entrar. Hasta completar el segundo paso no existe sesión. Se permiten 5 fallos por cada contraseña correcta y 20 por persona y hora. «Recordar este dispositivo 30 días» omite el segundo paso en ese navegador (se anula al cambiar la contraseña o el método). Si alguien pierde el móvil y los códigos, un administrador puede restablecerla en *Administración → Usuarios*. Los secretos TOTP se guardan cifrados con una clave derivada de `SESSION_SECRET`.
 
 ## Arquitectura (resumen)
 
