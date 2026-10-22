@@ -5,7 +5,7 @@ import {
   useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { Archive, Plus } from "lucide-react";
+import { Archive, Plus, Search, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -24,6 +24,9 @@ import { EVERGREEN_DROPPABLE_PREFIX } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
 import { Presence } from "./Presence";
 import { SelectionBar } from "./SelectionBar";
+import { ShortcutsHelp } from "./ShortcutsHelp";
+import { useShortcut } from "./shortcuts";
+import { useBoardShortcuts } from "./useBoardShortcuts";
 import { TaskCard } from "./TaskCard";
 import { ReportButton } from "../ReportButton";
 import { imageFilesFrom } from "./upload";
@@ -96,6 +99,9 @@ function groupItems(columns: BoardColumn[], tasks: BoardTask[]): Items {
   return items;
 }
 
+/** Minúsculas y sin acentos, para comparar el filtro. */
+const normalize = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+
 function findContainer(items: Items, id: string): string | undefined {
   if (id.startsWith(COLUMN_PREFIX)) return id.slice(COLUMN_PREFIX.length);
   return Object.keys(items).find((col) => items[col]!.includes(id));
@@ -119,6 +125,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const [bulk, setBulk] = useState<{ columnId?: string } | null>(null);
   const [release, setRelease] = useState<{ taskIds: string[]; preselected: string[] } | null>(null);
   const [mobileColumn, setMobileColumn] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const sc = useShortcut();
   const dragHandle = useCoarsePointer();
 
   // Precarga de los diálogos más usados cuando el navegador queda libre: abrirlos es instantáneo.
@@ -245,13 +255,40 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   }, [refresh]);
 
   const baseItems = useMemo(() => groupItems(columns, tasks), [columns, tasks]);
-  const items = dragItems ?? baseItems;
+  // Filtro del buscador: por título, tipo, responsable y etiquetas (todas las palabras deben aparecer).
+  const terms = useMemo(() => normalize(query).split(/\s+/).filter(Boolean), [query]);
+  const filtering = terms.length > 0;
+  const matchingIds = useMemo(() => {
+    if (!filtering) return null;
+    const kindName = new Map(data.kinds.map((k) => [k.id, k.name]));
+    const userName = new Map(data.users.map((u) => [u.id, u.name]));
+    const labelName = new Map(labels.map((l) => [l.id, l.name]));
+    const ids = new Set<string>();
+    for (const task of tasks) {
+      const hay = normalize(
+        [task.title, kindName.get(task.kindId), task.assigneeId ? userName.get(task.assigneeId) : "", ...task.labelIds.map((id) => labelName.get(id))].join(" "),
+      );
+      if (terms.every((w) => hay.includes(w))) ids.add(task.id);
+    }
+    return ids;
+  }, [filtering, terms, tasks, data.kinds, data.users, labels]);
+  // Con filtro no hay arrastre (ver `filtering` en el contexto), así que `dragItems` es null.
+  const items = useMemo(() => {
+    const all = dragItems ?? baseItems;
+    if (!matchingIds) return all;
+    return Object.fromEntries(Object.entries(all).map(([col, ids]) => [col, ids.filter((id) => matchingIds.has(id))])) as Items;
+  }, [dragItems, baseItems, matchingIds]);
+  const shownCount = matchingIds ? matchingIds.size : tasks.length;
   // Tareas evergreen por columna: fuera de la lista ordenable, se muestran en el pie de la columna de la release.
   const evergreenByColumn = useMemo(() => {
     const map: Record<string, string[]> = {};
     for (const t of [...tasks].sort((a, b) => a.position - b.position)) if (t.evergreen) (map[t.columnId] ??= []).push(t.id);
     return map;
   }, [tasks]);
+  const shownEvergreen = useMemo(
+    () => (matchingIds ? Object.fromEntries(Object.entries(evergreenByColumn).map(([c, ids]) => [c, ids.filter((id) => matchingIds.has(id))])) : evergreenByColumn),
+    [evergreenByColumn, matchingIds],
+  );
   const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
   const sortedColumns = useMemo(() => [...columns].sort((a, b) => a.position - b.position), [columns]);
   const nextReleaseColumn = sortedColumns.find((c) => c.role === "NEXT_RELEASE");
@@ -286,6 +323,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       cardStyle: data.cardStyle,
       editorMode: data.editorMode,
       dragHandle,
+      filtering,
       google: data.google,
       today: data.today,
       setLabels,
@@ -332,7 +370,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       track,
       refresh,
     }),
-    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, data.editorMode, dragHandle, data.google, data.today, sortedColumns, labels, taskById, baseItems, evergreenByColumn, selected, track, refresh, patchTask],
+    [data.project, data.users, data.currentUserId, data.deliverables, data.kinds, data.cardStyle, data.editorMode, dragHandle, filtering, data.google, data.today, sortedColumns, labels, taskById, baseItems, evergreenByColumn, selected, track, refresh, patchTask],
   );
 
   // --- Movimiento masivo ------------------------------------------------------
@@ -559,6 +597,26 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const primaryOpen = !!newTask || (!!openTaskId && taskById.has(openTaskId));
   const addSecond = () => setSecondNew({ columnId: (sortedColumns.find((c) => c.name.trim().toLowerCase() === "backlog") ?? sortedColumns[0])?.id });
 
+  // Atajos de teclado (escritorio). Alt+N con un modal abierto lo comporta como el «+» de al lado.
+  useBoardShortcuts({
+    newTask: () => {
+      if (document.querySelector("[role=dialog]")) {
+        if (primaryOpen && !secondNew && window.matchMedia("(min-width: 1024px)").matches) addSecond();
+        return;
+      }
+      setNewTask({});
+    },
+    bulk: () => setBulk({}),
+    search: () => {
+      searchRef.current?.focus();
+      searchRef.current?.select();
+    },
+    help: () => setHelpOpen(true),
+    release: () => {
+      if (nextReleaseColumn && (baseItems[nextReleaseColumn.id]?.length || evergreenByColumn[nextReleaseColumn.id]?.length)) api.openRelease(nextReleaseColumn.id);
+    },
+  });
+
   const activeTask = activeId ? taskById.get(activeId) : null;
 
   return (
@@ -567,16 +625,44 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         <div className="flex items-center gap-3 px-4 pt-4 pb-2 max-lg:hidden">
           <h1 className="min-w-0"><ProjectMenu textClassName="text-lg" /></h1>
           <UndoButton projectId={data.project.id} shortcut className="-ml-2" />
-          <span className="text-sm text-slate-500">{t("{n} tarjetas", { n: tasks.length })}</span>
-          <div className="ml-auto"><Presence projectId={data.project.id} /></div>
+          <span className="text-sm text-slate-500" aria-live="polite">
+            {filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : t("{n} tarjetas", { n: tasks.length })}
+          </span>
+          <div className="relative ml-auto">
+            <Search size={14} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" aria-hidden />
+            <input
+              ref={searchRef}
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setQuery("");
+                  e.currentTarget.blur();
+                }
+              }}
+              placeholder={t("Filtrar ({keys})", { keys: "/" })}
+              aria-label={t("Filtrar tarjetas")}
+              title={t("Filtrar tarjetas por título, tipo, responsable o etiqueta ({keys})", { keys: "/" })}
+              className="input h-8 w-36 [&::-webkit-search-cancel-button]:hidden pr-7 pl-8 text-sm transition-[width] focus:w-56"
+            />
+            {query && (
+              <button type="button" className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600" onClick={() => { setQuery(""); searchRef.current?.focus(); }} aria-label={t("Quitar el filtro")}>
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          {filtering && <span className="max-w-48 text-xs text-slate-500 max-xl:hidden">{t("Con el filtro activo no se puede arrastrar")}</span>}
+          <Presence projectId={data.project.id} />
           <ReportButton projectId={data.project.id} variant="header" />
           <button className="btn-secondary" onClick={() => setArchivedOpen(true)}>
             <Archive size={16} /> {t("Archivadas")}
           </button>
-          <button className="btn-secondary" onClick={() => setBulk({})} title={t("Crear varias tareas pegando una lista")}>
+          <button className="btn-secondary" onClick={() => setBulk({})} title={`${t("Crear varias tareas pegando una lista")} (${sc("Alt+Shift+N")})`}>
             <PlusStack size={16} /> {t("Varias tareas")}
           </button>
-          <button className="btn-primary" onClick={() => setNewTask({})}>
+          <button className="btn-primary" onClick={() => setNewTask({})} title={`${t("Nueva tarea")} (${sc("Alt+N")})`}>
             <Plus size={16} /> {t("Nueva tarea")}
           </button>
         </div>
@@ -609,7 +695,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
                 key={column.id}
                 column={column}
                 taskIds={items[column.id] ?? []}
-                evergreenIds={evergreenByColumn[column.id] ?? []}
+                evergreenIds={shownEvergreen[column.id] ?? []}
                 index={i}
                 total={sortedColumns.length}
                 droppableId={COLUMN_PREFIX + column.id}
@@ -687,6 +773,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             onClose={() => setSecondNew(null)}
           />
         )}
+        {helpOpen && <ShortcutsHelp onClose={() => setHelpOpen(false)} />}
         {(archivedOpen || wantsArchived) && <ArchivedDialog onClose={closeArchived} />}
         {bulk && <BulkTaskDialog initialColumnId={bulk.columnId} onClose={() => setBulk(null)} />}
         {release && (

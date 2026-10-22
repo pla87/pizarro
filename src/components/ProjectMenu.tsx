@@ -2,8 +2,9 @@
 
 import { Check, ChevronDown, Lock } from "lucide-react";
 import Link from "next/link";
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n/client";
+import { OPEN_PROJECT_MENU_EVENT, useShortcut } from "./board/shortcuts";
 import { cn } from "./ui/cn";
 
 interface ProjectsValue {
@@ -21,18 +22,31 @@ export const ProjectsContext = createContext<ProjectsValue>({ projects: [], curr
 
 /** Título del proyecto actual que abre un desplegable para cambiar de proyecto al instante. */
 export function ProjectMenu({ className, textClassName }: { className?: string; textClassName?: string }) {
+  const t = useT();
   const { projects, currentId } = useContext(ProjectsContext);
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const sc = useShortcut();
   const current = projects.find((p) => p.id === currentId);
+
+  // Alt+P abre el desplegable (solo el que se ve: en la cabecera hay uno para escritorio y otro para móvil).
+  useEffect(() => {
+    const onShortcut = () => {
+      if (rootRef.current && rootRef.current.getClientRects().length > 0) setOpen(true);
+    };
+    window.addEventListener(OPEN_PROJECT_MENU_EVENT, onShortcut);
+    return () => window.removeEventListener(OPEN_PROJECT_MENU_EVENT, onShortcut);
+  }, []);
   if (!current) return <span className={cn("truncate font-semibold", textClassName)}>Pizarro</span>;
 
   return (
-    <div className={cn("relative min-w-0", className)}>
+    <div ref={rootRef} className={cn("relative min-w-0", className)}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         className="flex max-w-full items-center gap-1 rounded-lg px-1.5 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
         aria-haspopup="listbox"
+        title={t("Cambiar de proyecto ({keys})", { keys: sc("Alt+P") })}
         aria-expanded={open}
       >
         <span className={cn("truncate font-semibold", textClassName)}>{current.name}</span>

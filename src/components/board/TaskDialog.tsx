@@ -25,6 +25,7 @@ import { Modal } from "../ui/Modal";
 import { applyKindTemplate } from "@/lib/kinds-special";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
+import { isTypingTarget, useShortcut } from "./shortcuts";
 import { TaskViewers } from "./TaskViewers";
 import { createAndOpenGoogleFile } from "./google";
 import { filesFrom, formatBytes, uploadFile, useFileDrop } from "./upload";
@@ -46,6 +47,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   const board = useBoard();
   const toast = useToast();
   const mobile = useIsMobile();
+  const sc = useShortcut();
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [title, setTitle] = useState(draft?.title ?? task.title);
   // Descripción en edición (la comunica el editor): para el botón Guardar y el borrador local.
@@ -237,6 +239,28 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     toast(t("Tarea archivada"));
   };
 
+  // Alt+S guarda y cierra (también escribiendo); Alt+A archiva (solo sin escribir). Actúan sobre la última versión de las funciones.
+  const shortcutRef = useRef({ saveAndClose, archive });
+  useEffect(() => {
+    shortcutRef.current = { saveAndClose, archive };
+  });
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.repeat || e.defaultPrevented) return;
+      if (e.code !== "KeyS" && e.code !== "KeyA") return;
+      // Con dos modales a la vez, responde el que contiene el foco (o este, si el foco está fuera de todos).
+      const inside = rootRef.current?.closest("[role=dialog]")?.contains(e.target as Node);
+      if (!inside && (e.target as HTMLElement | null)?.closest?.("[role=dialog]")) return;
+      if (e.code === "KeyA" && isTypingTarget(e.target)) return;
+      e.preventDefault();
+      if (e.code === "KeyS") void shortcutRef.current.saveAndClose();
+      else void shortcutRef.current.archive();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
   /** @docs / @sheets: crea el archivo, lo abre en otra pestaña y lo enlaza. Debe llamarse dentro de un clic o tecla. */
   const createGoogle = async (kind: MentionCommand): Promise<TaskLinkInfo | null> => {
     if (!board.google.enabled) {
@@ -296,9 +320,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       footer={
         mobile ? (
           <>
-            <button className="btn-secondary py-1.5" onClick={archive}><Archive size={15} /> {t("Archivar")}</button>
+            <button className="btn-secondary py-1.5" onClick={archive} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /> {t("Archivar")}</button>
             <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> {t("Borrar")}</button>
-            <button className="btn-primary ml-auto py-1.5" onClick={saveAndClose}><Check size={15} /> {t("Guardar")}</button>
+            <button className="btn-primary ml-auto py-1.5" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} /> {t("Guardar")}</button>
           </>
         ) : undefined
       }
@@ -335,7 +359,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
         </div>
       }
     >
-      <div onPaste={onPaste} className="grid gap-6 md:grid-cols-[minmax(0,1fr)_20rem]">
+      <div ref={rootRef} onPaste={onPaste} className="grid gap-6 md:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-w-0 space-y-6 md:max-h-[calc(100dvh-9rem)] md:overflow-y-auto md:pr-2">
           <TaskViewers taskId={task.id} />
           <DescriptionEditor
@@ -543,7 +567,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
           )}
           {/* En móvil estos botones van en el pie fijo, junto a Guardar. */}
           <div className="mt-auto flex flex-wrap gap-2 border-t border-slate-200 pt-4 max-md:hidden md:gap-1 md:pt-2.5 dark:border-slate-800">
-            <button className="btn-secondary py-1.5" onClick={archive}><Archive size={15} /> {t("Archivar")}</button>
+            <button className="btn-secondary py-1.5" onClick={archive} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /> {t("Archivar")}</button>
             <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> {t("Borrar")}</button>
           </div>
         </aside>
