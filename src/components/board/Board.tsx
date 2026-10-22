@@ -294,6 +294,14 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     return Object.fromEntries(Object.entries(all).map(([col, ids]) => [col, ids.filter((id) => matchingIds.has(id))])) as Items;
   }, [dragItems, baseItems, matchingIds]);
   const shownCount = matchingIds ? matchingIds.size : tasks.length;
+  // Al filtrar se deseleccionan las tarjetas que quedan ocultas (las acciones masivas no deben tocar lo que no se ve).
+  const [prevMatching, setPrevMatching] = useState(matchingIds);
+  if (prevMatching !== matchingIds) {
+    setPrevMatching(matchingIds);
+    if (matchingIds && selected.size && [...selected].some((id) => !matchingIds.has(id))) {
+      setSelected(new Set([...selected].filter((id) => matchingIds.has(id))));
+    }
+  }
   // Tareas evergreen por columna: fuera de la lista ordenable, se muestran en el pie de la columna de la release.
   const evergreenByColumn = useMemo(() => {
     const map: Record<string, string[]> = {};
@@ -727,6 +735,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
                 column={column}
                 taskIds={items[column.id] ?? []}
                 evergreenIds={shownEvergreen[column.id] ?? []}
+                cardCount={(baseItems[column.id]?.length ?? 0) + (evergreenByColumn[column.id]?.length ?? 0)}
                 index={i}
                 total={sortedColumns.length}
                 droppableId={COLUMN_PREFIX + column.id}

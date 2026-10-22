@@ -75,6 +75,9 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
         const current = document.activeElement;
+        // Foco en otro diálogo (el otro modal de la pareja, el visor de imágenes): se deja al navegador.
+        const otherDialog = current?.closest?.("[role=dialog]");
+        if (otherDialog && !panel.contains(otherDialog) && !otherDialog.contains(panel)) return;
         if (!first || !last) return e.preventDefault();
         if (!panel.contains(current) || current === panel) {
           e.preventDefault();

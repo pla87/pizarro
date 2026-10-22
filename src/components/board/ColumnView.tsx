@@ -21,13 +21,15 @@ interface Props {
   taskIds: string[];
   /** Tareas evergreen de la columna (solo la de la release): fuera de la lista ordenable. */
   evergreenIds?: string[];
+  /** Tarjetas de la columna sin filtrar (para borrar la columna o generar la release con un filtro activo). */
+  cardCount: number;
   index: number;
   total: number;
   droppableId: string;
   mobileHidden: boolean;
 }
 
-export function ColumnView({ column, taskIds, evergreenIds = [], index, total, droppableId, mobileHidden }: Props) {
+export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, index, total, droppableId, mobileHidden }: Props) {
   const { openNewTask, openRelease, selected, setSelectedMany } = useBoard();
   const t = useT();
   const sc = useShortcut();
@@ -72,7 +74,7 @@ export function ColumnView({ column, taskIds, evergreenIds = [], index, total, d
           <button className="btn-icon h-7 w-7" onClick={() => openNewTask(column.id)} aria-label={t("Añadir tarea en {name}", { name: column.name })}>
             <Plus size={16} />
           </button>
-          <ColumnMenu column={column} index={index} total={total} empty={taskIds.length === 0 && evergreenIds.length === 0} />
+          <ColumnMenu column={column} index={index} total={total} empty={cardCount === 0} />
         </div>
       </header>
       {isNextRelease && (
@@ -80,8 +82,8 @@ export function ColumnView({ column, taskIds, evergreenIds = [], index, total, d
           <button
             className="btn-primary w-full py-1.5"
             onClick={() => openRelease(column.id)}
-            disabled={taskIds.length + evergreenIds.length === 0}
-            title={taskIds.length + evergreenIds.length === 0 ? t("No hay tarjetas en esta columna") : `${t("Generar Release")} (${sc("Alt+R")})`}
+            disabled={cardCount === 0}
+            title={cardCount === 0 ? t("No hay tarjetas en esta columna") : `${t("Generar Release")} (${sc("Alt+R")})`}
           >
             <Rocket size={15} /> {t("Generar Release")}
           </button>
