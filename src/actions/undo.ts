@@ -10,7 +10,7 @@ import { requireUser } from "@/lib/session";
 import { renderStoredLabel } from "@/lib/undo-label";
 import { getT } from "@/i18n/server";
 import { makeT } from "@/i18n/core";
-import { applyUndo, mirrorOps, saveUndo, type UndoKind, type UndoOp } from "@/lib/undo";
+import { applyUndo, discardEntries, fingerprintOps, mirrorOps, saveUndo, type UndoKind, type UndoOp } from "@/lib/undo";
 import * as v from "@/lib/validation";
 
 type Result = { label: string; remaining: number; skipped: number; redoable: number };
@@ -35,6 +35,19 @@ async function applyLast(kind: UndoKind, projectId: string, taskId?: string | nu
   const { count } = await db.undoEntry.deleteMany({ where: { id: entry.id } });
   if (!count) throw new AppError(undo ? "Esa acción ya se ha deshecho." : "Esa acción ya se ha rehecho.");
   const ops = entry.ops as unknown as UndoOp[];
+  // Si otra persona ha cambiado lo afectado desde que se creó esta entrada, aplicarla pisaría su trabajo:
+  // se descarta (para no bloquear la pila) y se avisa. Las acciones propias ya vacían la pila de rehacer.
+  if (entry.fingerprint && (await fingerprintOps(pid, ops)) !== entry.fingerprint) {
+    await discardEntries([{ id: entry.id, ops: entry.ops }]);
+    throw new AppError(
+      undo ? "Otra persona ha cambiado esto después de rehacerlo: no se puede deshacer." : "Otra persona ha cambiado esto después de deshacerlo: no se puede rehacer.",
+    );
+  }
+  // Otras entradas con huella (de la misma persona y proyecto) que siguen intactas: este cambio es suyo,
+  // así que tras aplicarlo se les actualiza la huella para que no cuente como ajeno.
+  const siblings = await db.undoEntry.findMany({ where: { userId: user.id, projectId: pid, fingerprint: { not: null }, id: { not: entry.id } }, select: { id: true, ops: true, fingerprint: true } });
+  const intact: typeof siblings = [];
+  for (const s of siblings) if ((await fingerprintOps(pid, s.ops as unknown as UndoOp[])) === s.fingerprint) intact.push(s);
   // Antes de aplicar, el estado actual de lo que se va a tocar: es lo que hace la entrada contraria.
   let counter: UndoOp[];
   let skipped: number;
@@ -48,7 +61,10 @@ async function applyLast(kind: UndoKind, projectId: string, taskId?: string | nu
     }).catch(() => {});
     throw err;
   }
-  if (counter.length) await saveUndo(user.id, pid, entry.label, counter, entry.taskId, undo ? "REDO" : "UNDO", false);
+  if (counter.length) await saveUndo(user.id, pid, entry.label, counter, entry.taskId, undo ? "REDO" : "UNDO", false, await fingerprintOps(pid, counter));
+  for (const s of intact) {
+    await db.undoEntry.updateMany({ where: { id: s.id }, data: { fingerprint: await fingerprintOps(pid, s.ops as unknown as UndoOp[]) } });
+  }
   const [remaining, redoable] = await Promise.all([
     db.undoEntry.count({ where: { userId: user.id, projectId: pid, kind: "UNDO" } }),
     db.undoEntry.count({ where: { userId: user.id, projectId: pid, kind: "REDO" } }),
