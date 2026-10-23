@@ -851,13 +851,14 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               <button
                 type="button"
                 tabIndex={-1}
-                className={cn("btn-primary fixed z-[70] shadow-lg", secondNew && "opacity-60")}
+                className={cn("btn-primary fixed z-[70] whitespace-nowrap shadow-lg", secondNew && "opacity-60")}
                 style={{ left: newTaskRect.left, top: newTaskRect.top, width: newTaskRect.width, height: newTaskRect.height }}
                 onClick={() => !secondNew && addSecond()}
                 aria-disabled={!!secondNew}
                 title={t("Abrir otra tarea nueva al lado")}
               >
-                <Plus size={16} /> {t("Nueva tarea")}
+                {/* Mismo texto que el botón original: corto cuando la cabecera va justa de sitio. */}
+                <Plus size={16} /> {newTaskRect.width < 130 ? t("Nueva") : t("Nueva tarea")}
               </button>,
               document.body,
             )}
