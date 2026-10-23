@@ -12,6 +12,7 @@ import { defaultColumns, PALETTE } from "@/lib/constants";
 import { getLocale } from "@/i18n/server";
 import { AppError, forbidden, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
+import { localizeTemplate } from "@/lib/builtin-templates-en";
 import { buildTemplateApplication, parseStoredTemplate, type TemplateData } from "@/lib/project-templates";
 import { requireUser, type CurrentUser } from "@/lib/session";
 import { purgeProject } from "@/lib/project-delete";
@@ -38,6 +39,7 @@ async function applyTemplate(tx: Prisma.TransactionClient, projectId: string, te
 async function findManageableProject(user: CurrentUser, projectId: string) {
   const project = await db.project.findFirst({ where: { id: v.id.parse(projectId), ...visibleProjectsWhere(user) }, select: { id: true, name: true, isPrivate: true } });
   if (!project) throw notFound();
+  noteProject(project.id, project.isPrivate);
   if (user.role !== "ADMIN" && !project.isPrivate) throw forbidden();
   return project;
 }
@@ -57,10 +59,11 @@ export async function createProject(name: string, options?: { templateId?: strin
       ? await db.projectTemplate.findUnique({ where: { id: v.id.parse(options.templateId) } })
       : null;
     if (options?.templateId && !templateRow) throw new AppError("La plantilla ya no existe.");
-    const template = templateRow ? parseStoredTemplate(templateRow) : null;
-    const last = await db.project.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
     // Sin plantilla, las columnas por defecto salen en el idioma de quien crea el proyecto.
     const locale = await getLocale();
+    // Una plantilla de serie sin modificar se aplica en inglés a quien usa la interfaz en inglés.
+    const template = templateRow ? localizeTemplate(parseStoredTemplate(templateRow), templateRow.builtinKey, locale) : null;
+    const last = await db.project.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
     const project = await db.$transaction(async (tx) => {
       const created = await tx.project.create({
         data: {
@@ -92,6 +95,18 @@ export async function updateProject(projectId: string, input: { name: string; de
     await findManageableProject(user, projectId);
     await db.project.update({ where: { id: projectId }, data });
     revalidatePath("/", "layout");
+  });
+}
+
+/** Tope (MB) del ZIP de adjuntos de las releases del proyecto. */
+export async function setReleaseZipMaxMb(projectId: string, mb: number) {
+  return runAction({ name: "projects.setReleaseZipMaxMb", args: [projectId, mb] }, async () => {
+    const user = await requireUser();
+    const value = v.releaseZipMb.parse(mb);
+    await findManageableProject(user, projectId);
+    await db.project.update({ where: { id: projectId }, data: { releaseZipMaxMb: value } });
+    describeAction(`Cambió el tamaño máximo del ZIP de adjuntos de las releases a ${value} MB`);
+    revalidatePath(`/p/${projectId}/settings`);
   });
 }
 
@@ -134,7 +149,7 @@ export async function setProjectVisibility(projectId: string, mode: "TEAM" | "PR
 }
 
 export async function deleteProject(projectId: string, confirmName: string) {
-  return runAction({ name: "projects.deleteProject", args: [projectId, confirmName] }, async () => {
+  return runAction({ name: "projects.deleteProject", args: [projectId] }, async () => {
     const user = await requireUser();
     const project = await findManageableProject(user, projectId);
     if (project.name !== confirmName) throw new AppError("El nombre no coincide.");
@@ -240,6 +255,7 @@ async function findLabel(labelId: string) {
     select: { id: true, projectId: true },
   });
   if (!label) throw notFound();
+  noteProject(label.projectId);
   return label;
 }
 
@@ -286,9 +302,10 @@ async function findDeliverable(deliverableId: string) {
   const user = await requireUser();
   const d = await db.deliverable.findFirst({
     where: { id: v.id.parse(deliverableId), project: visibleProjectsWhere(user) },
-    select: { id: true },
+    select: { id: true, projectId: true },
   });
   if (!d) throw notFound();
+  noteProject(d.projectId);
   return d;
 }
 

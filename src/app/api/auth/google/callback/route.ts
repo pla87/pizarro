@@ -13,7 +13,11 @@ import { clientIp } from "@/lib/request";
 
 export const runtime = "nodejs";
 
-const safeEqual = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+// Se comparan bytes, no caracteres: con multibyte las longitudes difieren y timingSafeEqual lanzaría.
+const safeEqual = (a: string, b: string) => {
+  const x = Buffer.from(a), y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+};
 
 /** Vuelta de Google: valida state, intercambia el código (PKCE), verifica el id_token y abre sesión con una cuenta EXISTENTE. */
 export async function GET(req: Request) {

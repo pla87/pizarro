@@ -66,7 +66,8 @@ export function totpAt(secretB32: string, nowMs: number, digits: number = TOTP_D
 }
 
 function safeEqual(a: string, b: string): boolean {
-  return a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  const x = Buffer.from(a), y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
 }
 
 /**

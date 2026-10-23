@@ -31,7 +31,8 @@ export async function GET(req: Request) {
   const state = url.searchParams.get("state") ?? "";
   const cookie = req.headers.get("cookie")?.split(/;\s*/).find((c) => c.startsWith(`${STATE_COOKIE}=`))?.slice(STATE_COOKIE.length + 1) ?? "";
   const expected = `${state}.${user.id}`;
-  const valid = state.length > 0 && cookie.length === expected.length && timingSafeEqual(Buffer.from(cookie), Buffer.from(expected));
+  const [got, want] = [Buffer.from(cookie), Buffer.from(expected)];
+  const valid = state.length > 0 && got.length === want.length && timingSafeEqual(got, want);
   if (!valid) return settings(req, "state", user);
   if (url.searchParams.get("error") || !code) return settings(req, "cancelled", user);
 

@@ -7,6 +7,7 @@ import { isoToDate, todayIso } from "./dates";
 import { db } from "./db";
 import { buildDigest, digestEmail, emptyDigestInput, type DigestInput, type DigestItem } from "./digest";
 import { logEvent } from "./log";
+import { maskEmail, maskEmailsIn } from "./mask-email";
 import { appUrl, emailEnabled, escapeHtml, sendMail } from "./mail";
 import { generateProjectReportPdf } from "./report-build";
 import { digestDue, reportDue } from "./schedule";
@@ -79,7 +80,7 @@ export async function sendDueDigests(now: Date = new Date()): Promise<number> {
       logEvent({ category: "notify", action: "digest.sent", message: `Resumen diario enviado a ${u.name}`, userId: u.id, userName: u.name, durationMs: performance.now() - t0 });
     } catch (err) {
       await db.user.updateMany({ where: { id: u.id, lastDigestAt: now }, data: { lastDigestAt: u.lastDigestAt } });
-      logEvent({ level: "error", category: "notify", action: "digest.failed", message: `Fallo al enviar el resumen diario a ${u.name}: ${(err as Error).message}`, userId: u.id, userName: u.name, durationMs: performance.now() - t0 });
+      logEvent({ level: "error", category: "notify", action: "digest.failed", message: `Fallo al enviar el resumen diario a ${u.name}: ${maskEmailsIn((err as Error).message)}`, userId: u.id, userName: u.name, durationMs: performance.now() - t0 });
     }
   }
   return sent;
@@ -127,10 +128,10 @@ export async function sendDueReports(now: Date = new Date()): Promise<number> {
       const mail = reportMail({ projectName: report.project.name, url: `${appUrl()}/p/${s.projectId}` }, makeT(locale));
       await sendMail({ to: s.recipient, ...mail, attachments: [{ filename: report.filename, content: Buffer.from(report.pdf), contentType: "application/pdf" }] });
       sent++;
-      logEvent({ ...base, action: "report.scheduledSent", message: `Informe semanal de «${report.project.name}» enviado a ${s.recipient}`, durationMs: performance.now() - t0, details: { to: s.recipient, bytes: report.pdf.length, locale: intlLocale(locale) } });
+      logEvent({ ...base, action: "report.scheduledSent", message: `Informe semanal de «${report.project.name}» enviado a ${maskEmail(s.recipient)}`, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient), bytes: report.pdf.length, locale: intlLocale(locale) } });
     } catch (err) {
       await db.reportSchedule.updateMany({ where: { projectId: s.projectId, lastSentAt: now }, data: { lastSentAt: s.lastSentAt } });
-      logEvent({ ...base, level: "error", action: "report.scheduledFailed", message: `Fallo al enviar el informe semanal a ${s.recipient}: ${(err as Error).message}`, durationMs: performance.now() - t0, details: { to: s.recipient } });
+      logEvent({ ...base, level: "error", action: "report.scheduledFailed", message: `Fallo al enviar el informe semanal a ${maskEmail(s.recipient)}: ${maskEmailsIn((err as Error).message)}`, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient) } });
     }
   }
   return sent;

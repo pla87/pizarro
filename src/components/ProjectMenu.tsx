@@ -2,8 +2,10 @@
 
 import { Check, ChevronDown, Lock } from "lucide-react";
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n/client";
+import { projectSwitchPath } from "@/lib/project-path";
 import { OPEN_PROJECT_MENU_EVENT, useShortcut } from "./board/shortcuts";
 import { cn } from "./ui/cn";
 import { Menu } from "./ui/Menu";
@@ -21,6 +23,13 @@ export function PrivateIcon({ className }: { className?: string }) {
 
 export const ProjectsContext = createContext<ProjectsValue>({ projects: [], currentId: null });
 
+/** Destino al cambiar de proyecto: la misma página (ajustes, releases, tablero…) en el proyecto elegido. */
+export function useProjectSwitchHref(): (projectId: string) => string {
+  const pathname = usePathname();
+  const search = useSearchParams().toString();
+  return (projectId) => projectSwitchPath(pathname, search, projectId);
+}
+
 /** Título del proyecto actual que abre un desplegable para cambiar de proyecto al instante. */
 export function ProjectMenu({ className, textClassName }: { className?: string; textClassName?: string }) {
   const t = useT();
@@ -29,6 +38,7 @@ export function ProjectMenu({ className, textClassName }: { className?: string; 
   const rootRef = useRef<HTMLDivElement>(null);
   const sc = useShortcut();
   const current = projects.find((p) => p.id === currentId);
+  const switchHref = useProjectSwitchHref();
 
   // Alt+P abre el desplegable (solo el que se ve: en la cabecera hay uno para escritorio y otro para móvil).
   useEffect(() => {
@@ -64,7 +74,7 @@ export function ProjectMenu({ className, textClassName }: { className?: string; 
       {projects.map((p) => (
         <Link
           key={p.id}
-          href={`/p/${p.id}`}
+          href={switchHref(p.id)}
           role="menuitem"
           tabIndex={-1}
           aria-current={p.id === currentId ? "true" : undefined}

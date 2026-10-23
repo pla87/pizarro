@@ -2,6 +2,36 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.19.0 — 2026-10-23 23:09
+
+Plantillas en inglés, calendario con varias personas, cambio de proyecto sin perder la página, tope del ZIP por proyecto y correcciones del editor
+
+### Nuevas funcionalidades
+
+- Calendario: elige varias personas a la vez (incluida «Sin asignar»); tú apareces una sola vez, como «Nombre (yo)».
+- Con la interfaz en inglés, las plantillas de serie se ofrecen en inglés y crean columnas, tipos y etiquetas en inglés.
+- Ajustes del proyecto → Releases: tamaño máximo del ZIP de adjuntos de una release (80 MB por defecto).
+
+### Mejoras
+
+- Al cambiar de proyecto te quedas en la misma página (tablero, releases o ajustes).
+- Al crear un proyecto se abren primero sus ajustes, con un botón «Ir al tablero».
+- Adjuntos de hasta 20 MB.
+- En una tarea, Tab desde el título entra directamente en la descripción.
+- Pegar Markdown en el móvil conserva el formato.
+- Las imágenes se guardan un día en la caché del navegador: los tableros con muchas imágenes cargan más rápido.
+- Los logs solo anotan las descargas (no cada imagen vista) y muestran los destinatarios de avisos enmascarados (p***@dominio).
+
+### Correcciones
+
+- Supr o Retroceso con texto seleccionado borra toda la selección, también entre elementos de lista.
+- El anillo de foco de los botones de archivar y duplicar ya no se corta.
+- Revisión de código: logs de proyectos privados siempre ocultos a quien no es miembro, cambios de etiquetas y entregables en vivo, búsqueda de releases acotada y menos consultas repetidas.
+
+### Cambios técnicos / DB
+
+- Migración: Project.releaseZipMaxMb (tope del ZIP de adjuntos de releases).
+
 ## v1.18.0 — 2026-10-23 15:53
 
 Cabecera adaptada a media pantalla, calendario con varios proyectos, rehacer protegido frente a cambios ajenos, 12 plantillas de serie y mejoras de rendimiento y robustez

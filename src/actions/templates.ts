@@ -11,7 +11,7 @@ import { templateInputSchema, type TemplateDto, type TemplateInput } from "@/lib
 import { listTemplatesSorted, resetBuiltinTemplate, restoreBuiltinTemplates } from "@/lib/template-store";
 import { requireAdmin } from "@/lib/session";
 import * as v from "@/lib/validation";
-import { getT } from "@/i18n/server";
+import { getLocale, getT } from "@/i18n/server";
 
 const MAX_TEMPLATES = 50;
 
@@ -19,7 +19,8 @@ const MAX_TEMPLATES = 50;
 export async function listTemplates() {
   return runAction({ name: "templates.listTemplates" }, async (): Promise<TemplateDto[]> => {
     await requireAdmin();
-    return listTemplatesSorted(db);
+    // Para el diálogo de «Nuevo proyecto»: las de serie sin tocar salen en el idioma de quien las ve.
+    return listTemplatesSorted(db, await getLocale());
   });
 }
 

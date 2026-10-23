@@ -641,11 +641,11 @@ export async function getTaskDetail(taskId: string) {
   return runAction({ name: "tasks.getTaskDetail", args: [taskId] }, async (): Promise<TaskDetail> => {
     const user = await requireUser();
     await assertTaskAccess(user, v.id.parse(taskId));
-    describeAction(`Abrió la tarea «${(await taskLabel(taskId)).title}»`, { taskId });
     const task = await db.task.findUniqueOrThrow({
       where: { id: taskId },
       select: {
         id: true,
+        title: true,
         description: true,
         createdAt: true,
         createdBy: { select: { name: true } },
@@ -660,6 +660,7 @@ export async function getTaskDetail(taskId: string) {
         comments: { orderBy: { createdAt: "desc" }, take: 300, select: commentSelect },
       },
     });
+    describeAction(`Abrió la tarea «${task.title}»`, { taskId });
     return {
       id: task.id,
       description: task.description,

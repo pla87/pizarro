@@ -1,6 +1,63 @@
 {
   "versions": [
     {
+      "version": "1.19.0",
+      "date": "2026-10-23",
+      "releasedAt": "2026-10-23T23:09:11+02:00",
+      "summary": "Plantillas en inglés, calendario con varias personas, cambio de proyecto sin perder la página, tope del ZIP por proyecto y correcciones del editor",
+      "changes": {
+        "nuevas": [
+          "Calendario: elige varias personas a la vez (incluida «Sin asignar»); tú apareces una sola vez, como «Nombre (yo)».",
+          "Con la interfaz en inglés, las plantillas de serie se ofrecen en inglés y crean columnas, tipos y etiquetas en inglés.",
+          "Ajustes del proyecto → Releases: tamaño máximo del ZIP de adjuntos de una release (80 MB por defecto)."
+        ],
+        "mejoras": [
+          "Al cambiar de proyecto te quedas en la misma página (tablero, releases o ajustes).",
+          "Al crear un proyecto se abren primero sus ajustes, con un botón «Ir al tablero».",
+          "Adjuntos de hasta 20 MB.",
+          "En una tarea, Tab desde el título entra directamente en la descripción.",
+          "Pegar Markdown en el móvil conserva el formato.",
+          "Las imágenes se guardan un día en la caché del navegador: los tableros con muchas imágenes cargan más rápido.",
+          "Los logs solo anotan las descargas (no cada imagen vista) y muestran los destinatarios de avisos enmascarados (p***@dominio)."
+        ],
+        "correcciones": [
+          "Supr o Retroceso con texto seleccionado borra toda la selección, también entre elementos de lista.",
+          "El anillo de foco de los botones de archivar y duplicar ya no se corta.",
+          "Revisión de código: logs de proyectos privados siempre ocultos a quien no es miembro, cambios de etiquetas y entregables en vivo, búsqueda de releases acotada y menos consultas repetidas."
+        ],
+        "tecnicos": [
+          "Migración: Project.releaseZipMaxMb (tope del ZIP de adjuntos de releases)."
+        ]
+      },
+      "en": {
+        "summary": "Built-in templates in English, calendar with several people, project switching keeps the page, per-project ZIP limit and editor fixes",
+        "changes": {
+          "nuevas": [
+            "Calendar: choose several people at once (including “Unassigned”); you appear only once, as “Name (me)”.",
+            "With the interface in English, built-in templates are offered in English and create English columns, types and labels.",
+            "Project settings → Releases: maximum size of a release's attachments ZIP (80 MB by default)."
+          ],
+          "mejoras": [
+            "Switching project keeps you on the same page (board, releases or settings).",
+            "Creating a project opens its settings first, with a “Go to board” button.",
+            "Attachments of up to 20 MB.",
+            "In a task, Tab from the title goes straight into the description.",
+            "Pasting Markdown on mobile keeps the formatting.",
+            "Images are kept for a day in the browser cache: boards with many images load faster.",
+            "Logs only record downloads (not every image view) and show notification recipients masked (p***@domain)."
+          ],
+          "correcciones": [
+            "Delete or Backspace with selected text deletes the whole selection, also across list items.",
+            "The focus ring of the archive and duplicate buttons is no longer cut off.",
+            "Code review: private project logs always hidden from non-members, label and deliverable changes live, bounded release search and fewer repeated queries."
+          ],
+          "tecnicos": [
+            "Migration: Project.releaseZipMaxMb (release attachments ZIP limit)."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.18.0",
       "date": "2026-10-23",
       "releasedAt": "2026-10-23T15:53:41+02:00",

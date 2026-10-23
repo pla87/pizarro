@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.18.0"
+version: "v1.19.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.18.0
+**Versión de la aplicación:** v1.19.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -125,7 +125,7 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 | Verificación en dos pasos | App TOTP o código por email, con 10 códigos de recuperación (se muestran una vez). Obligatoria para admins con contraseña, opcional para el resto. Los secretos se cifran con una clave derivada de `SESSION_SECRET`. «Recordar este dispositivo 14 días» la omite en ese navegador. Un admin puede reiniciar el segundo paso de otra persona. |
 | Inicio con Google | OpenID Connect con PKCE. Solo entran usuarios existentes y activos (por email verificado y, después, por id de Google); opcionalmente limitado a `GOOGLE_WORKSPACE_DOMAIN`. No pide segundo paso propio (vale el de Google). |
 | Avisos de cuenta | Email de aviso al iniciar sesión desde un dispositivo desconocido (no en el primer acceso de una cuenta) y tras cualquier cambio de contraseña o de email. |
-| Fuerza bruta y abuso | Límite de intentos de login por pareja IP+email y por IP (ventana de 15 minutos), de «¿Olvidaste tu contraseña?» y de cambios de contraseña. También hay topes de subidas (60 por minuto y persona), comentarios (30 por minuto, 1000 por tarea), subtareas (100 por tarea), documentos de Google (20 por minuto) tamaño del ZIP de adjuntos de una release (80 MB, también al descargar una release guardada, con 10 descargas por minuto) e informes PDF (5 por minuto y persona; se generan de uno en uno para que la app no se frene). |
+| Fuerza bruta y abuso | Límite de intentos de login por pareja IP+email y por IP (ventana de 15 minutos), de «¿Olvidaste tu contraseña?» y de cambios de contraseña. También hay topes de subidas (60 por minuto y persona), comentarios (30 por minuto, 1000 por tarea), subtareas (100 por tarea), documentos de Google (20 por minuto) tamaño del ZIP de adjuntos de una release (80 MB por defecto, configurable en cada proyecto entre 10 y 500 MB; también al descargar una release guardada, con 10 descargas por minuto) e informes PDF (5 por minuto y persona; se generan de uno en uno para que la app no se frene). |
 | CSRF | `SameSite=Lax`, verificación de `Origin` integrada en las Server Actions y comprobación explícita de `Origin` en la ruta de subida. |
 | Autorización | Sin registro público. Solo los admins gestionan usuarios. Cualquier usuario puede crear proyectos privados (máximo 100 por usuario no admin y 10 creaciones por hora). Cada operación comprueba la visibilidad del proyecto: un usuario no admin solo accede a los proyectos de equipo a los que está **asignado** y a sus privados; los admins acceden a todos los de equipo; los privados solo los ven sus miembros. Deshacer y rehacer nunca reasignan una tarjeta a alguien que ha perdido el acceso. |
 | XSS | React escapa todo el contenido. El Markdown se renderiza sin HTML. Los enlaces solo admiten `http(s)` y se abren con `rel="noopener noreferrer"`. CSP estricta con *nonce* distinto en cada petición. |
@@ -145,7 +145,7 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 - **Interfaz optimista:** mover tarjetas, marcar subtareas o editar campos se reflejan al instante; si el servidor rechaza el cambio, se revierte y se muestra el error.
 - **Posiciones fraccionarias:** mover una tarjeta actualiza una sola fila.
 - **Generación de releases en el navegador:** instantánea, sin llamadas al servidor hasta *Marcar como desplegado*.
-- **Imágenes:** en móvil, las fotos grandes se reducen en el navegador antes de subirse. El servidor genera una miniatura, y las imágenes se sirven con caché inmutable.
+- **Imágenes:** en móvil, las fotos grandes se reducen en el navegador antes de subirse. El servidor genera una miniatura, y el navegador guarda las imágenes un día en su caché privada; pasado ese tiempo pregunta al servidor, que responde «sin cambios» (304) tras comprobar el acceso, sin volver a enviar la imagen.
 - **Sin dependencias externas en tiempo de ejecución:** fuentes del sistema, sin CDNs.
 - **Cambios casi al momento:** cada cambio en un proyecto se avisa al instante a las pestañas que lo tienen abierto (canal *Server-Sent Events* `/api/projects/[id]/events`) y estas se refrescan en menos de un segundo, también entre dos pestañas tuyas. Como respaldo, el tablero también se actualiza al volver a la pestaña y cada 2 minutos (el canal en vivo hace el resto).
 - **Carga diferida:** el código de los diálogos (detalle de tarea, nueva tarea, release, varias tareas, archivadas) no se descarga al abrir el tablero; se precarga cuando el navegador está libre. El editor con barra de formato solo se descarga cuando se usa.
@@ -184,8 +184,8 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 
 ### 3.2 Proyectos
 
-- Para cambiar de proyecto, pulsa el **nombre del proyecto** en la parte superior del tablero (o en la barra superior en móvil) y elige otro en el desplegable. También sirve el selector de la barra lateral. La app recuerda el último que abriste.
-- Los administradores crean proyectos desde el selector (**Nuevo proyecto**) y pueden elegir una **plantilla** (ver 3.16) y marcarlo como **privado**; los proyectos de equipo que crean se añaden solos a sus «Proyectos en los que trabajo». Los demás usuarios también pueden crear proyectos, pero **solo privados** (máximo 100 y 10 creaciones por hora).
+- Para cambiar de proyecto, pulsa el **nombre del proyecto** en la parte superior del tablero (o en la barra superior en móvil) y elige otro en el desplegable. También sirve el selector de la barra lateral. Te quedas en la misma página: desde los **ajustes** de un proyecto pasas a los ajustes del otro, desde las **releases** a sus releases (con el texto buscado) y desde el **tablero** a su tablero. La app recuerda el último que abriste.
+- Los administradores crean proyectos desde el selector (**Nuevo proyecto**) y pueden elegir una **plantilla** (ver 3.16) y marcarlo como **privado**; al crearlo se abren primero sus **ajustes** (columnas, tipos, miembros…), con el botón **Ir al tablero** arriba; los proyectos de equipo que crean se añaden solos a sus «Proyectos en los que trabajo». Los demás usuarios también pueden crear proyectos, pero **solo privados** (máximo 100 y 10 creaciones por hora).
 - **Qué proyectos ves:** un usuario no admin solo ve los proyectos de equipo a los que está **asignado** y sus proyectos privados. Los administradores pueden abrir cualquier proyecto de equipo, pero en **Mi perfil → Proyectos en los que trabajo** eligen cuáles salen en sus selectores, menús y calendario. Si un admin no ha elegido ninguno, la página de inicio le muestra una pista para hacerlo. Al actualizar a la v1.17 se respetó el acceso previo: todos los usuarios quedaron asignados a los antiguos proyectos públicos y los admins con todos marcados. Sin plantilla, el proyecto trae las columnas *Backlog*, *En progreso*, *Siguiente salto a producción*, *En producción* y *Cerrado*; si quien lo crea usa Pizarro en inglés, salen en inglés (*Backlog*, *In progress*, *Next release*, *In production*, *Closed*).
 - **Ajustes del proyecto** contiene:
   - nombre y descripción (admins; en un proyecto privado, cualquier miembro);
@@ -194,6 +194,7 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
     - *Privado*: tiene **miembros** y lo ven **solo ellos**, tampoco los administradores que no sean miembros; no aparece en sus listados, avisos ni asignaciones. Cualquier miembro puede **añadir o quitar miembros**, renombrarlo y borrarlo (escribiendo su nombre). El último miembro no puede salir. Al **borrar a un usuario** se borran los proyectos privados donde era el único miembro; en los demás, simplemente deja de ser miembro. Llevan un **candado** junto a su nombre;
   - etiquetas;
   - **informe semanal por email** (ver 3.9);
+  - **Releases** (admins; en un proyecto privado, cualquier miembro): tamaño máximo del ZIP de adjuntos de una release, entre 10 y 500 MB (80 por defecto). Vale al generar la release y al descargar los adjuntos de una guardada; si se supera, el aviso indica el tope y que se puede cambiar aquí. El ZIP se arma en la memoria del servidor: súbelo solo si hace falta;
   - borrado del proyecto (admins, o cualquier miembro si es privado; pide escribir el nombre para confirmar).
 
 ### 3.3 Columnas
@@ -232,17 +233,17 @@ Desde el menú «⋯» de cada columna:
 - **Descartar una tarea nueva:** si cierras *Nueva tarea* (Escape, la X, *Cancelar* o fuera del modal) con algo escrito, se pide confirmación.
 - **Editar:** haz clic en la tarjeta. Los cambios se guardan solos (título y enlace al salir del campo; tipo, color, responsable, etiquetas y columna al cambiarlos).
 - **Descripción con formato:** se guarda como Markdown y, cuando no la estás editando, se ve formateada (títulos, negrita, cursiva, subrayado, tachado, listas, enlaces). Hay dos formas de editarla, a elegir en **Mi perfil → Edición de descripciones**:
-  - **Con barra de formato** (por defecto): ves el resultado mientras escribes y aplicas **negrita, cursiva, subrayado, tachado, título, subtítulo, texto normal, lista y lista numerada** con botones (o Ctrl+B / I / U). Si pegas texto en Markdown, se convierte en formato. Al escribir `@` aparece la lista de personas para mencionar (y `@docs` / `@sheets`); la mención se ve como una etiqueta.
+  - **Con barra de formato** (por defecto): ves el resultado mientras escribes y aplicas **negrita, cursiva, subrayado, tachado, título, subtítulo, texto normal, lista y lista numerada** con botones (o Ctrl+B / I / U). Si pegas texto en Markdown, se convierte en formato, también en el móvil (aunque el teclado lo pegue envuelto en HTML sin formato). **Supr** o **Retroceso** con texto seleccionado borran toda la selección, también cuando abarca varios elementos de una lista. Al escribir `@` aparece la lista de personas para mencionar (y `@docs` / `@sheets`); la mención se ve como una etiqueta.
   - **Markdown:** escribes los símbolos (`**negrita**`, `*cursiva*`, `~~tachado~~`, `++subrayado++`, `# Título`, `- lista`, `1. lista`); al guardar se ve formateado.
   - En ambos modos, Ctrl/⌘+Enter guarda y Escape cancela.
   - Lo que escribes se guarda tal cual, incluidos `<`, `>`, `&` o comillas, y llega igual al texto de la release (p. ej. `->` no se convierte en `-&gt;`).
 - **Colores de tarjeta:** gris, blanco, rojo, naranja, marrón, amarillo, verde, verde oscuro, turquesa, celeste, índigo, azul marino, violeta y rosa (también para etiquetas).
 - **Subtareas:** añádelas y márcalas. **Doble clic** sobre una, el **lápiz** que aparece al pasar por encima (siempre visible en móvil) o **Enter/F2** con el foco en ella la editan (Enter guarda, Escape cancela) y se **reordenan** arrastrando el icono de seis puntos. Junto al título *Subtareas* hay una barra verde que se llena según la proporción de subtareas hechas (con dos, cada una marca el 50 %, da igual el orden); la tarjeta muestra el progreso (p. ej. `2/4`). Las subtareas **no pasan** al texto de las releases.
-- **Adjuntos:** cualquier tipo de archivo de hasta 10 MB. Pégalos con Ctrl/⌘+V, usa *Añadir* o **arrástralos** sobre la tarea abierta (aparece «Suelta para adjuntar»); también desde la ventana de descargas del navegador. Los que no son imagen se listan con su icono, nombre y tamaño, y se descargan (nunca se abren dentro de Pizarro, por seguridad). En la tarjeta del tablero, un icono de imagen indica cuántas imágenes tiene y un icono de clip/archivo cuántos otros archivos (ambos si hay de las dos clases).
+- **Adjuntos:** cualquier tipo de archivo de hasta 20 MB (`MAX_UPLOAD_MB`). Pégalos con Ctrl/⌘+V, usa *Añadir* o **arrástralos** sobre la tarea abierta (aparece «Suelta para adjuntar»); también desde la ventana de descargas del navegador. Los que no son imagen se listan con su icono, nombre y tamaño, y se descargan (nunca se abren dentro de Pizarro, por seguridad). En la tarjeta del tablero, un icono de imagen indica cuántas imágenes tiene y un icono de clip/archivo cuántos otros archivos (ambos si hay de las dos clases).
 - **Capturas e imágenes:** al tocar o hacer clic en una imagen se ve **a pantalla completa**; se cierra con la **X**, tocando fuera de la imagen, con Escape o con el botón atrás. Con varias imágenes, las flechas pasan de una a otra. En móvil, **Cámara** y **Añadir** son botones visibles, al crear la tarea y en el detalle de una tarea existente. Cada imagen se reduce a 1280 px de ancho como máximo y se guarda como WebP (calidad 75).
 - **Archivar** oculta la tarjeta del tablero (desde su detalle o, para varias, con **Archivar** en la barra de selección). **Borrar** la elimina con sus adjuntos.
 - **Archivadas:** botón en la cabecera del tablero (escritorio) o entrada **Archivadas** del menú lateral. Abre un listado con filtro de las tareas archivadas: tipo, fecha, columna de la que salieron y, si pasaron por una release, la etiqueta **En release: …**. **Recuperar** la devuelve al final de la columna en la que estaba; si esa columna ya no existe, a la primera columna del proyecto (Backlog).
-- **Teclado y accesibilidad:** cada tarjeta es una sola parada de tabulador (la casilla de selección se salta; **Espacio** selecciona la tarjeta con el foco); el selector de tipo es una sola parada de tabulador y se maneja con las flechas; el tabulador salta la barra de formato del editor (**Alt+F10** entra en ella); el foco es visible en todas partes; todos los desplegables comparten el mismo menú (flechas, Esc, foco) y las confirmaciones son diálogos de la propia app, no ventanas del navegador.
+- **Teclado y accesibilidad:** cada tarjeta es una sola parada de tabulador (la casilla de selección se salta; **Espacio** selecciona la tarjeta con el foco); el selector de tipo es una sola parada de tabulador y se maneja con las flechas; el tabulador salta la barra de formato del editor (**Alt+F10** entra en ella); en una tarea abierta, **Tab desde el título entra directamente en la descripción** (en modo edición) y Mayús+Tab vuelve al título (los botones *Editar* y *Cerrar* se usan con el ratón; Esc cierra); el foco es visible en todas partes; todos los desplegables comparten el mismo menú (flechas, Esc, foco) y las confirmaciones son diálogos de la propia app, no ventanas del navegador.
 - En escritorio, el detalle de la tarjeta cabe entero en la pantalla: la columna principal y la lateral se desplazan cada una por su lado.
 
 - **Versión nueva:** después de un despliegue, las pestañas abiertas se recargan solas al volver a ellas (o muestran «Hay una versión nueva · Recargar» si estás escribiendo), para no usar acciones de la versión anterior.
@@ -355,7 +356,7 @@ El menú lateral muestra, debajo de las opciones del proyecto: **Calendario**, *
   - Cada tarea con fecha límite aparece en su día, coloreada por tipo (con las iniciales del proyecto cuando miras todos); las terminadas se ven atenuadas. Si un día tiene muchas, aparece «+N más».
   - Un clic abre la tarea. **Arrastrar** una tarea a otro día cambia su fecha límite; con el foco en ella, **Alt+←/→** la mueve ±1 día y **Alt+↑/↓** ±7 días. El botón **Deshacer** (o Ctrl/⌘+Z) revierte el último cambio de fecha.
   - Los **entregables** salen como bandas durante la semana anterior a su fecha, con su avance y estado (*Completado*, *En plazo*, *En riesgo*, *Retrasado*, *Sin tareas*).
-  - Filtros de **proyectos** (puedes marcar varios a la vez; el botón indica «N proyectos»), persona y **Ocultar terminadas**, que se guardan en la URL. «Todos los proyectos» son los proyectos en los que trabajas. Con más de un proyecto a la vista, cada tarea lleva las iniciales de su proyecto.
+  - Filtros de **proyectos** y de **personas** (en ambos puedes marcar varios a la vez; el botón indica «N proyectos» o «N personas»; entre las personas están *Sin asignar* y tú, una sola vez, como «Nombre (yo)») y **Ocultar terminadas**, que se guardan en la URL. «Todos los proyectos» son los proyectos en los que trabajas. Con más de un proyecto a la vista, cada tarea lleva las iniciales de su proyecto.
   - En móvil se muestra como una lista por semanas.
 - **Releases:** histórico del proyecto, con **buscador** por texto en todo el histórico (título y contenido, sin distinguir mayúsculas ni tildes); sin buscar se muestran las 50 últimas con *Cargar más*, opción de copiar o descargar cada release, y de **Borrar release** (la quita del histórico con sus adjuntos; las tareas no cambian) o **Borrar adjuntos** (conserva el texto). Ambas piden confirmación. Cada entrada indica cuántas tareas y adjuntos tiene; al abrirla se ven los nombres de los adjuntos y el botón **Descargar adjuntos** (ZIP).
 - **Historial de versiones:** versión actual de la app y cambios de cada versión, con la **fecha y hora** de su lanzamiento y **buscador** por texto.
@@ -451,13 +452,14 @@ La entrada **Administración** del menú lateral reúne seis pestañas: **Usuari
 - Vienen **12 plantillas de serie**: *Vibecoding*, *Tareas familiares*, *Producción audiovisual*, *Negocio*, *Marketing y contenidos*, *Organización de eventos*, *Soporte y atención al cliente*, *Selección de personal*, *Reformas y obras*, *Viajes*, *Estudios o tesis* y *Mudanza*, con sus columnas, tipos y etiquetas. La lista se ordena alfabéticamente.
 - **Ocultar todos los tipos generales:** opción de cada plantilla para que el proyecto nuevo solo use los tipos de la plantilla (por ejemplo, en *Tareas familiares* no salen *Mejora*, *Funcionalidad*, etc.). Está activada en todas las de serie salvo *Vibecoding*. Solo afecta a los proyectos que se creen a partir de ahora; en uno ya creado, desmarca los tipos en *Ajustes del proyecto → Tipos de tarea*.
 - Las de serie se pueden **editar** o **borrar**. En una modificada, **Restablecer** vuelve a su contenido original; **Recuperar plantillas por defecto** recrea las de serie que se hayan borrado. Cuando Pizarro mejora una plantilla de serie, se actualiza sola al desplegar si no la has modificado; si la has cambiado, se respeta tu versión.
+- **En inglés:** quien usa Pizarro en inglés ve las plantillas de serie sin modificar con su nombre en inglés, y el proyecto se crea con columnas, tipos (con sus descripciones y subtareas) y etiquetas en inglés. Una plantilla de serie modificada o una propia se ofrece y se aplica tal como está guardada. Los tipos generales (*Funcionalidad*, *Corrección*) son comunes a todos los proyectos y conservan su nombre.
 
 **Copias de seguridad:** estado de las copias automáticas (última copia, última prueba de restauración, copias conservadas), **Crear copia ahora** y **Descargar** la última (pide tu contraseña, o un código de tu app de autenticación, y usa un enlace de un solo uso de 60 s; ver 4.5). Solo funciona con `BACKUP_KEY` definida.
 
 **Logs:** registro detallado de la actividad de los últimos 7 días (configurable con `LOG_RETENTION_DAYS`):
 - páginas visitadas, inicios de sesión (también los fallidos, con el email probado y el motivo, nunca la contraseña) y cierres de sesión;
 - cada acción (crear, mover, editar, archivar, borrar, desplegar…) con quién, cuándo, desde qué página, cuánto tardó, el resultado y sus datos (sin contraseñas ni tokens);
-- subidas y descargas de adjuntos, informes PDF, ZIP de releases, conexiones con Google, envíos de email y WhatsApp, arranques de la app y errores del servidor.
+- subidas y descargas de adjuntos (ver una imagen no se registra, solo las descargas), informes PDF, ZIP de releases, conexiones con Google, envíos de email y WhatsApp, arranques de la app y errores del servidor.
 
 Cada acción se describe en lenguaje claro: «Creó la tarea «X» en «Backlog»», «Movió «X» de «Backlog» a «En progreso»», «Modificó «X»: tipo y responsable», «Desplegó la release «…» con 4 tareas», etc.
 
@@ -559,7 +561,7 @@ Son opcionales e independientes. La configuración paso a paso está en el `READ
 
 Para el **inicio de sesión con Google**, añade al cliente OAuth una segunda URI de redirección autorizada: `https://<dominio>/api/auth/google/callback` (además de `APP_URL` + `/api/google/callback`, la de Drive).
 
-El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `whatsappSentAt`, `deliveryError`) y en los logs con el prefijo `[notify]`.
+El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `whatsappSentAt`, `deliveryError`) y en los logs con el prefijo `[notify]`. En los logs, el destinatario aparece enmascarado (`p***@dominio`); el email se envía a la dirección completa.
 
 ### 4.8 Enviar emails con Google Workspace
 

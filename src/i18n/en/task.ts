@@ -14,7 +14,7 @@ export const task: Record<string, string> = {
   "Guardado": "Saved",
   "Capturas y adjuntos": "Screenshots and attachments",
   "Cámara": "Camera",
-  "Pega o arrastra archivos (máx. 10 MB)": "Paste or drag files (max. 10 MB)",
+  "Pega o arrastra archivos (máx. 20 MB)": "Paste or drag files (max. 20 MB)",
   "Ver {name}": "View {name}",
   "Borrar adjunto": "Delete attachment",
   "¿Borrar esta imagen?": "Delete this image?",

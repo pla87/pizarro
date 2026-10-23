@@ -17,7 +17,7 @@ import { AppBadge } from "./AppBadge";
 import { InstallApp } from "./InstallApp";
 import { clearAllDrafts } from "./board/drafts";
 import { Presence } from "./board/Presence";
-import { PrivateIcon, ProjectMenu, ProjectsContext } from "./ProjectMenu";
+import { PrivateIcon, ProjectMenu, ProjectsContext, useProjectSwitchHref } from "./ProjectMenu";
 import { UndoButton } from "./UndoButton";
 import { Avatar } from "./ui/Avatar";
 import { ReportButton } from "./ReportButton";
@@ -196,6 +196,7 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
 
 function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: string; name: string; isPrivate?: boolean }[]; current: { id: string; name: string; isPrivate?: boolean } | null; isAdmin: boolean }) {
   const t = useT();
+  const switchHref = useProjectSwitchHref();
   const [creating, setCreating] = useState(false);
   return (
     <div className="relative">
@@ -220,7 +221,7 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: strin
         {projects.map((p) => (
           <Link
             key={p.id}
-            href={`/p/${p.id}`}
+            href={switchHref(p.id)}
             role="menuitem"
             tabIndex={-1}
             aria-current={p.id === current?.id ? "true" : undefined}
@@ -277,8 +278,10 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
     start(async () => {
       const res = await createProject(name, { templateId: templateId || null, isPrivate });
       if (!res.ok) return toast(res.error, "error");
-      setTarget(`/p/${res.data.id}`);
-      router.push(`/p/${res.data.id}`);
+      // Primero los ajustes del proyecto nuevo (columnas, tipos, miembros…); desde ahí se va al tablero.
+      const dest = `/p/${res.data.id}/settings`;
+      setTarget(dest);
+      router.push(dest);
     });
   };
   return (

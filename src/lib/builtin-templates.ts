@@ -5,8 +5,8 @@ import { templateInputSchema, type TemplateData, type TemplateInput } from "./pr
 type Col = TemplateInput["columns"][number];
 type Kind = NonNullable<TemplateInput["kinds"]>[number];
 
-const col = (name: string, isDone = false, role: Col["role"] = "NONE"): Col => ({ name, role, isDone });
-const kind = (name: string, color: string, titleTemplate: string, descriptionTemplate: string, subtaskTemplate: string[] = []): Kind => ({
+export const col = (name: string, isDone = false, role: Col["role"] = "NONE"): Col => ({ name, role, isDone });
+export const kind = (name: string, color: string, titleTemplate: string, descriptionTemplate: string, subtaskTemplate: string[] = []): Kind => ({
   name,
   color,
   titleTemplate,
@@ -15,7 +15,7 @@ const kind = (name: string, color: string, titleTemplate: string, descriptionTem
 });
 
 /** Tipos generales de software que las plantillas ajenas al software no usan. */
-const GENERALES_SOFTWARE = ["Funcionalidad", "Corrección"];
+export const GENERALES_SOFTWARE = ["Funcionalidad", "Corrección"];
 
 export interface BuiltinTemplate {
   /** Identificador estable: no cambia aunque se renombre la plantilla. */

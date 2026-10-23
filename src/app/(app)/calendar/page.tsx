@@ -1,6 +1,6 @@
-import { listVisibleProjects, visibleProjectsWhere, workingProjectsWhere } from "@/lib/access";
+import { listVisibleProjects, projectUsersWhere, visibleProjectsWhere, workingProjectsWhere } from "@/lib/access";
 import { appTimeZone } from "@/lib/board";
-import { BAND_DAYS, monthGrid, parseMonth } from "@/lib/calendar";
+import { BAND_DAYS, MAX_PERSON_FILTER, PERSON_UNASSIGNED, monthGrid, parseMonth, parsePersonParam } from "@/lib/calendar";
 import { addDaysIso, dateToIso, isoToDate, todayIso } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { mentionsToPlain } from "@/lib/mentions";
@@ -34,11 +34,12 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   // `?project=a,b,c` (o un solo id, como antes). Los ids de la URL no se fían: solo valen los proyectos visibles;
   // sin ninguno válido equivale a «todos».
   const requested = [...new Set(one(sp.project).split(",").map((x) => x.trim()).filter(Boolean))].slice(0, MAX_PROJECT_FILTER);
-  const picked = requested.length ? await db.project.findMany({ where: { ...visibleProjectsWhere(user), id: { in: requested } }, select: { id: true, name: true } }) : [];
+  const picked = requested.length ? await db.project.findMany({ where: { ...visibleProjectsWhere(user), id: { in: requested } }, select: { id: true, name: true, isPrivate: true } }) : [];
   const projectIds = requested.filter((id) => picked.some((p) => p.id === id));
   // Un proyecto elegido que no está entre los de trabajo (p. ej. un enlace) también debe poder verse en el selector.
   const options = [...projects.map((p) => ({ id: p.id, name: p.name })), ...picked.filter((p) => !projects.some((x) => x.id === p.id))];
-  const person = one(sp.person);
+  // `?person=id1,id2,unassigned` (o los valores antiguos `me`, `none` o un solo id).
+  const requestedPeople = parsePersonParam(one(sp.person), user.id, MAX_PERSON_FILTER);
   const hideDone = one(sp.hideDone) === "1";
 
   // «Todos» son los proyectos en los que trabaja (un admin, los que eligió); los elegidos, cualquiera al que tenga acceso.
@@ -46,23 +47,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const range = { gte: isoToDate(grid.start), lte: isoToDate(grid.end) };
   const base: Prisma.TaskWhereInput = { project: projectWhere, archivedAt: null, dueDate: range };
 
-  const personWhere: Prisma.TaskWhereInput =
-    person === "me" ? { assigneeId: user.id } : person === "none" ? { assigneeId: null } : person ? { assigneeId: person } : {};
-
-  const [rows, assigneeGroups, deliverableRows] = await Promise.all([
-    db.task.findMany({
-      where: { ...base, ...personWhere, ...(hideDone ? { column: { isDone: false } } : {}) },
-      take: MAX_TASKS,
-      orderBy: [{ dueDate: "asc" }, { project: { position: "asc" } }, { position: "asc" }],
-      select: {
-        id: true,
-        title: true,
-        dueDate: true,
-        project: { select: { id: true, name: true } },
-        kind: { select: { name: true, color: true } },
-        column: { select: { isDone: true } },
-      },
-    }),
+  const [assigneeGroups, deliverableRows] = await Promise.all([
     // Personas con tareas en el rango (para el filtro): solo las que ya se ven en este calendario.
     db.task.groupBy({ by: ["assigneeId"], where: base }),
     db.deliverable.findMany({
@@ -89,10 +74,40 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       })
     : [];
   const doneBy = new Map(doneGroups.map((g) => [g.deliverableId, g._count._all]));
-  // Solo personas con tareas visibles en el rango: un id arbitrario en la URL no revela ningún nombre.
+  // Un id arbitrario en la URL no revela ningún nombre ni filtra nada: solo valen el propio usuario, quienes tienen tareas
+  // visibles en el rango y quienes pueden usar alguno de los proyectos a la vista (projectUsersWhere).
   const peopleIds = assigneeGroups.map((g) => g.assigneeId).filter((x): x is string => !!x);
-  const wanted = peopleIds;
-  const people = wanted.length ? await db.user.findMany({ where: { id: { in: wanted }, active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }) : [];
+  const requestedIds = requestedPeople.filter((x) => x !== PERSON_UNASSIGNED && x !== user.id);
+  const scope = projectIds.length ? picked : projects;
+  const people = await db.user.findMany({
+    where: {
+      active: true,
+      OR: [
+        { id: { in: [...peopleIds, user.id] } },
+        ...(requestedIds.length && scope.length ? [{ id: { in: requestedIds }, OR: scope.map((p) => projectUsersWhere(p, p.id)) }] : []),
+      ],
+    },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+  const personIds = requestedPeople.filter((x) => x === PERSON_UNASSIGNED || people.some((p) => p.id === x));
+  const assigneeIds = personIds.filter((x) => x !== PERSON_UNASSIGNED);
+  const personWhere: Prisma.TaskWhereInput = personIds.length
+    ? { OR: [...(assigneeIds.length ? [{ assigneeId: { in: assigneeIds } }] : []), ...(personIds.includes(PERSON_UNASSIGNED) ? [{ assigneeId: null }] : [])] }
+    : {};
+  const rows = await db.task.findMany({
+    where: { ...base, ...personWhere, ...(hideDone ? { column: { isDone: false } } : {}) },
+    take: MAX_TASKS,
+    orderBy: [{ dueDate: "asc" }, { project: { position: "asc" } }, { position: "asc" }],
+    select: {
+      id: true,
+      title: true,
+      dueDate: true,
+      project: { select: { id: true, name: true } },
+      kind: { select: { name: true, color: true } },
+      column: { select: { isDone: true } },
+    },
+  });
 
   const tasks: CalendarTask[] = rows.map((r) => ({
     id: r.id,
@@ -123,7 +138,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       deliverables={deliverables}
       projects={options}
       people={people}
-      filters={{ project: projectIds, person, hideDone }}
+      meId={user.id}
+      filters={{ project: projectIds, person: personIds, hideDone }}
       truncated={rows.length >= MAX_TASKS}
     />
   );

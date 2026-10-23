@@ -75,8 +75,8 @@ export interface TemplateDto extends TemplateData {
 }
 
 /** Orden alfabético con la colación española (sin distinguir mayúsculas ni tildes; números por valor). */
-export function sortTemplates<T extends { name: string }>(list: T[]): T[] {
-  const collator = new Intl.Collator("es", { sensitivity: "base", numeric: true });
+export function sortTemplates<T extends { name: string }>(list: T[], locale: "es" | "en" = "es"): T[] {
+  const collator = new Intl.Collator(locale, { sensitivity: "base", numeric: true });
   return [...list].sort((a, b) => collator.compare(a.name, b.name));
 }
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bandsForWeek, groupByDay, groupWeeks, monthGrid, parseMonth, shiftMonth } from "../src/lib/calendar";
+import { bandsForWeek, groupByDay, groupWeeks, monthGrid, parseMonth, parsePersonParam, shiftMonth } from "../src/lib/calendar";
 import { deliverableStatus } from "../src/lib/report";
 
 test("parseMonth valida y cae al mes de hoy", () => {
@@ -82,4 +82,22 @@ test("groupWeeks: solo días del mes con contenido y semanas no vacías", () => 
     { start: "2026-09-28", end: "2026-10-04", days: ["2026-10-02", "2026-10-03"] },
     { start: "2026-10-19", end: "2026-10-25", days: ["2026-10-21"] },
   ]);
+});
+
+test("parsePersonParam: varias personas, sin asignar, duplicados y tope", () => {
+  assert.deepEqual(parsePersonParam("a,b,unassigned", "me1"), ["a", "b", "unassigned"]);
+  assert.deepEqual(parsePersonParam(" a , ,a,b ", "me1"), ["a", "b"]);
+  assert.deepEqual(parsePersonParam("", "me1"), []);
+  assert.deepEqual(parsePersonParam(undefined, "me1"), []);
+  const many = Array.from({ length: 80 }, (_, i) => `u${i}`).join(",");
+  assert.equal(parsePersonParam(many, "me1").length, 50);
+  assert.equal(parsePersonParam(many, "me1", 3).length, 3);
+});
+
+test("parsePersonParam: enlaces antiguos (me, none, un id)", () => {
+  assert.deepEqual(parsePersonParam("me", "me1"), ["me1"]);
+  assert.deepEqual(parsePersonParam("none", "me1"), ["unassigned"]);
+  assert.deepEqual(parsePersonParam("abc123", "me1"), ["abc123"]);
+  // «me» y el id propio se funden en una sola entrada.
+  assert.deepEqual(parsePersonParam("me,me1,none,unassigned", "me1"), ["me1", "unassigned"]);
 });

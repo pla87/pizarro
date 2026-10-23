@@ -68,6 +68,7 @@ function sanitize(value: unknown, depth = 0): unknown {
 
 export function logEvent(e: LogEvent): void {
   try {
+    const store = actionContext.getStore();
     state.queue.push({
       createdAt: new Date(),
       level: e.level ?? "info",
@@ -77,7 +78,8 @@ export function logEvent(e: LogEvent): void {
       userId: e.userId ?? null,
       userName: e.userName ?? null,
       // Sin proyecto explícito, el de la acción en curso (si lo hay): lo usan los logs para ocultar los privados ajenos.
-      projectId: e.projectId ?? actionContext.getStore()?.projectId ?? null,
+      projectId: e.projectId ?? store?.projectId ?? null,
+      privateProjectId: store?.projectIsPrivate && (e.projectId ?? store.projectId) === store.projectId ? store.projectId : null,
       path: e.path?.slice(0, 500) ?? null,
       durationMs: e.durationMs == null ? null : Math.round(e.durationMs),
       ip: e.ip ?? null,
@@ -107,7 +109,7 @@ export async function flushLogs(): Promise<void> {
       const privates = ids.length
         ? new Set((await db.project.findMany({ where: { id: { in: ids }, isPrivate: true }, select: { id: true } })).map((p) => p.id))
         : new Set<string>();
-      await db.appLog.createMany({ data: batch.map((e) => ({ ...e, privateProjectId: e.projectId && privates.has(e.projectId) ? e.projectId : null })) });
+      await db.appLog.createMany({ data: batch.map((e) => ({ ...e, privateProjectId: e.privateProjectId ?? (e.projectId && privates.has(e.projectId) ? e.projectId : null) })) });
     }
     if (Date.now() - state.lastPurge > PURGE_EVERY_MS) {
       state.lastPurge = Date.now();
