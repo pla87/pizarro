@@ -28,4 +28,5 @@ export const proyectos: Record<string, string> = {
   "No hay proyectos.": "There are no projects.",
   "Proyectos actualizados": "Projects updated",
   "Los administradores ven todos los proyectos de equipo: lo eligen en su perfil.": "Administrators see all team projects: they choose theirs in their profile.",
+  "Hay {n} proyecto(s) de equipo. Elige en cuáles trabajas en": "There are {n} team project(s). Choose the ones you work on in",
 };

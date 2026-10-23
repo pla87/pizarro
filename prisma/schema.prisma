@@ -326,6 +326,7 @@ model Task {
   @@index([assigneeId, archivedAt])
   @@index([deliverableId])
   @@index([kindId])
+  @@index([projectId, dueDate])
 }
 
 model Label {
@@ -455,6 +456,7 @@ model Deliverable {
   tasks       Task[]
 
   @@index([projectId, position])
+  @@index([projectId, dueDate])
 }
 
 enum TaskLinkKind {

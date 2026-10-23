@@ -1,5 +1,6 @@
 "use server";
 
+import type { Prisma } from "@/generated/prisma/client";
 import { assertProjectAccess } from "@/lib/access";
 import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
@@ -35,8 +36,18 @@ async function applyLast(kind: UndoKind, projectId: string, taskId?: string | nu
   if (!count) throw new AppError(undo ? "Esa acción ya se ha deshecho." : "Esa acción ya se ha rehecho.");
   const ops = entry.ops as unknown as UndoOp[];
   // Antes de aplicar, el estado actual de lo que se va a tocar: es lo que hace la entrada contraria.
-  const counter = await mirrorOps(pid, ops);
-  const skipped = await applyUndo(pid, ops, { keepFiles: true });
+  let counter: UndoOp[];
+  let skipped: number;
+  try {
+    counter = await mirrorOps(pid, ops);
+    skipped = await applyUndo(pid, ops, { keepFiles: true });
+  } catch (err) {
+    // Si algo falla a medias, la entrada vuelve a su sitio para poder reintentarlo.
+    await db.undoEntry.create({
+      data: { id: entry.id, userId: entry.userId, projectId: entry.projectId, taskId: entry.taskId, label: entry.label, kind: entry.kind, ops: entry.ops as Prisma.InputJsonValue, createdAt: entry.createdAt },
+    }).catch(() => {});
+    throw err;
+  }
   if (counter.length) await saveUndo(user.id, pid, entry.label, counter, entry.taskId, undo ? "REDO" : "UNDO", false);
   const [remaining, redoable] = await Promise.all([
     db.undoEntry.count({ where: { userId: user.id, projectId: pid, kind: "UNDO" } }),

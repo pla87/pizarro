@@ -230,4 +230,5 @@ export const server: Record<string, string> = {
   "El destinatario debe ser alguien con acceso al proyecto.": "The recipient must be someone with access to the project.",
   "La contraseña no es correcta.": "The password is not correct.",
   "Para descargar la copia confirma con tu contraseña.": "To download the backup, confirm with your password.",
+  "Has llegado al máximo de proyectos privados.": "You have reached the maximum number of private projects.",
 };

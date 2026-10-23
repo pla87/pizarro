@@ -1,5 +1,6 @@
 "use server";
 
+import { rateLimit } from "@/lib/rate-limit";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
@@ -41,15 +42,16 @@ async function findManageableProject(user: CurrentUser, projectId: string) {
   return project;
 }
 
-/** Usuarios activos del proyecto privado (cuentan para que siga accesible). */
-const activeMembers = (projectId: string, exceptUserId?: string) =>
-  db.projectMember.count({ where: { projectId, user: { active: true }, ...(exceptUserId ? { userId: { not: exceptUserId } } : {}) } });
 
 export async function createProject(name: string, options?: { templateId?: string | null; isPrivate?: boolean }) {
   return runAction({ name: "projects.createProject", args: [name, options] }, async () => {
     const user = await requireUser();
     // Quien no es administrador solo puede crear proyectos privados (y sin plantillas, que gestionan los admins).
     if (user.role !== "ADMIN" && (!options?.isPrivate || options.templateId)) throw forbidden();
+    if (!rateLimit(`project-create:${user.id}`, 10, 60 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
+    if (user.role !== "ADMIN" && (await db.project.count({ where: { privateOwnerId: user.id } })) >= 100) {
+      throw new AppError("Has llegado al máximo de proyectos privados.");
+    }
     const projectName = v.name.parse(name);
     const templateRow = options?.templateId
       ? await db.projectTemplate.findUnique({ where: { id: v.id.parse(options.templateId) } })
@@ -179,13 +181,16 @@ export async function removeProjectMember(projectId: string, userId: string) {
       select: { user: { select: { name: true } } },
     });
     if (!member) throw notFound();
-    if (project.isPrivate && (await activeMembers(project.id, targetId)) === 0) {
-      throw new AppError("Eres el último miembro: no puedes salir del proyecto, bórralo si ya no lo necesitas.");
-    }
-    await db.$transaction([
-      db.projectMember.delete({ where: { projectId_userId: { projectId: project.id, userId: targetId } } }),
-      db.task.updateMany({ where: { projectId: project.id, assigneeId: targetId }, data: { assigneeId: null } }),
-    ]);
+    await db.$transaction(async (tx) => {
+      // Bloquea el proyecto: dos miembros que salen a la vez no pueden dejar un privado sin nadie.
+      await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${project.id} FOR UPDATE`;
+      if (project.isPrivate) {
+        const others = await tx.projectMember.count({ where: { projectId: project.id, userId: { not: targetId }, user: { active: true } } });
+        if (others === 0) throw new AppError("Eres el último miembro: no puedes salir del proyecto, bórralo si ya no lo necesitas.");
+      }
+      await tx.projectMember.delete({ where: { projectId_userId: { projectId: project.id, userId: targetId } } });
+      await tx.task.updateMany({ where: { projectId: project.id, assigneeId: targetId }, data: { assigneeId: null } });
+    });
     // Quien sale deja de ver el tablero en vivo al momento (los demás se reconectan solos).
     revokeProject(project.id);
     const kind = project.isPrivate ? "privado " : "";

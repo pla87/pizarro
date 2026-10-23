@@ -190,7 +190,8 @@ export async function createDriveFile(userId: string, kind: GoogleFileKind, name
  * solo con los emails de sus miembros, con el rol GOOGLE_SHARE_ROLE (writer por defecto; "none" lo desactiva).
  */
 async function shareFile(token: string, fileId: string, target: DriveShareTarget): Promise<void> {
-  for (const body of sharePermissionBodies(target)) {
+  // En paralelo: con muchos miembros, uno detrás de otro podía tardar más de un minuto.
+  await Promise.all(sharePermissionBodies(target).map(async (body) => {
     const res = await fetch(`${DRIVE_FILES_URL}/${encodeURIComponent(fileId)}/permissions?sendNotificationEmail=false&supportsAllDrives=true`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -203,7 +204,7 @@ async function shareFile(token: string, fileId: string, target: DriveShareTarget
       console.error(`[google] No se pudo compartir el archivo ${what}`, res?.status);
       logEvent({ level: "warn", category: "google", action: "google.shareFailed", message: `No se pudo compartir el archivo ${what} (HTTP ${res?.status ?? "sin respuesta"})`, details: { fileId, status: res?.status ?? null } });
     }
-  }
+  }));
 }
 
 export async function disconnectGoogleAccount(userId: string): Promise<void> {

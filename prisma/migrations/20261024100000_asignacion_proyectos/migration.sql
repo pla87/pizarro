@@ -16,7 +16,7 @@ ALTER TABLE "AdminProjectPick" ADD CONSTRAINT "AdminProjectPick_userId_fkey" FOR
 INSERT INTO "ProjectMember" ("projectId", "userId")
 SELECT p."id", u."id"
 FROM "Project" p CROSS JOIN "User" u
-WHERE p."isPrivate" = false AND p."restricted" = false AND u."active" = true AND u."role" <> 'ADMIN'
+WHERE p."isPrivate" = false AND p."restricted" = false AND u."role" <> 'ADMIN'
 ON CONFLICT DO NOTHING;
 
 -- En los restringidos, los miembros explícitos ya están en ProjectMember. Los administradores no son miembros de los

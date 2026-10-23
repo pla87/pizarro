@@ -311,6 +311,18 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
   const firstColumn = async () => (await db.column.findFirst({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true } }))?.id;
   /** Una columna borrada entretanto: la tarea va a la primera. */
   const safeColumn = async (id: string | undefined) => (id && columnIds.has(id) ? id : await firstColumn());
+  // Quién puede seguir siendo responsable (activo y con acceso al proyecto) y quién existe aún (autor):
+  // se leen una vez para toda la entrada, no por tarea.
+  const project = await db.project.findUnique({ where: { id: projectId }, select: { isPrivate: true } });
+  const existingIds = new Set((await db.user.findMany({ select: { id: true } })).map((u) => u.id));
+  const assignableIds = new Set(
+    (await db.user.findMany({
+      where: { active: true, ...(project?.isPrivate ? { memberships: { some: { projectId } } } : { OR: [{ role: "ADMIN" }, { memberships: { some: { projectId } } }] }) },
+      select: { id: true },
+    })).map((u) => u.id),
+  );
+  const known = (id: string | null | undefined) => (id && existingIds.has(id) ? id : null);
+  const assignable = (id: string | null | undefined) => (id && assignableIds.has(id) ? id : null);
 
   for (const op of [...ops].reverse()) {
     try {
@@ -322,7 +334,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           if (data.columnId) data.columnId = await safeColumn(data.columnId);
           if (data.kindId && !(await db.taskKind.count({ where: { id: data.kindId } }))) delete data.kindId;
           if (data.deliverableId && !(await db.deliverable.count({ where: { id: data.deliverableId } }))) data.deliverableId = null;
-          if (data.assigneeId && !(await db.user.count({ where: { id: data.assigneeId } }))) data.assigneeId = null;
+          if (data.assigneeId) data.assigneeId = assignable(data.assigneeId);
           await db.$transaction([
             db.task.update({ where: { id: op.id }, data: taskUpdateData(data) }),
             ...(op.labelIds
@@ -351,14 +363,12 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           const kindId = kindOk ? t.kindId : (await db.taskKind.findFirst({ where: { OR: [{ projectId: null }, { projectId }] }, orderBy: { position: "asc" }, select: { id: true } }))?.id;
           const columnId = await safeColumn(t.columnId);
           if (!kindId || !columnId) { skipped++; break; }
-          const userIds = new Set((await db.user.findMany({ select: { id: true } })).map((u) => u.id));
-          const known = (id: string | null | undefined) => (id && userIds.has(id) ? id : null);
           const deliverableId = t.deliverableId && (await db.deliverable.count({ where: { id: t.deliverableId } })) ? t.deliverableId : null;
           const labels = await db.label.findMany({ where: { id: { in: s.labelIds }, projectId }, select: { id: true } });
           await db.$transaction([
             db.task.create({
               data: {
-                ...(taskUpdateData({ ...t, columnId, kindId, deliverableId, assigneeId: known(t.assigneeId) }) as Prisma.TaskUncheckedCreateInput),
+                ...(taskUpdateData({ ...t, columnId, kindId, deliverableId, assigneeId: assignable(t.assigneeId) }) as Prisma.TaskUncheckedCreateInput),
                 id: t.id, projectId, title: t.title, position: t.position, createdById: known(t.createdById), createdAt: new Date(t.createdAt),
               },
             }),

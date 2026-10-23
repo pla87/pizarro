@@ -68,14 +68,23 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         name: true,
         dueDate: true,
         project: { select: { id: true, name: true } },
-        // Todas sus tareas (también archivadas por release: cuentan como hechas).
-        tasks: { select: { archivedAt: true, column: { select: { isDone: true } } } },
+        _count: { select: { tasks: true } },
       },
     }),
   ]);
 
+  // Hechas por entregable (en columna terminada o archivadas por una release): se cuentan en la BD, sin traer las tareas.
+  const doneGroups = deliverableRows.length
+    ? await db.task.groupBy({
+        by: ["deliverableId"],
+        where: { deliverableId: { in: deliverableRows.map((d) => d.id) }, OR: [{ archivedAt: { not: null } }, { column: { isDone: true } }] },
+        _count: { _all: true },
+      })
+    : [];
+  const doneBy = new Map(doneGroups.map((g) => [g.deliverableId, g._count._all]));
+  // Solo personas con tareas visibles en el rango: un id arbitrario en la URL no revela ningún nombre.
   const peopleIds = assigneeGroups.map((g) => g.assigneeId).filter((x): x is string => !!x);
-  const wanted = person && person !== "me" && person !== "none" ? [...new Set([...peopleIds, person])] : peopleIds;
+  const wanted = peopleIds;
   const people = wanted.length ? await db.user.findMany({ where: { id: { in: wanted }, active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }) : [];
 
   const tasks: CalendarTask[] = rows.map((r) => ({
@@ -94,8 +103,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     due: dateToIso(d.dueDate)!,
     projectId: d.project.id,
     projectName: d.project.name,
-    total: d.tasks.length,
-    done: d.tasks.filter((x) => x.archivedAt || x.column.isDone).length,
+    total: d._count.tasks,
+    done: doneBy.get(d.id) ?? 0,
   }));
 
   return (
