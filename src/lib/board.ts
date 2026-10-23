@@ -1,6 +1,7 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { dateToIso } from "./dates";
+import { projectUsersWhere } from "./access";
 import { db } from "./db";
 import type { BoardTask } from "./types";
 
@@ -82,13 +83,9 @@ export async function loadBoardTask(id: string): Promise<BoardTask> {
 }
 
 /** Usuarios activos que pueden ver el proyecto (para el selector de asignación). */
-export async function projectUsers(projectId: string, project: { restricted: boolean; isPrivate: boolean }) {
+export async function projectUsers(projectId: string, project: { isPrivate: boolean }) {
   return db.user.findMany({
-    where: project.isPrivate
-      ? { active: true, memberships: { some: { projectId } } }
-      : project.restricted
-        ? { active: true, OR: [{ role: "ADMIN" }, { memberships: { some: { projectId } } }] }
-        : { active: true },
+    where: { active: true, ...projectUsersWhere(project, projectId) },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });

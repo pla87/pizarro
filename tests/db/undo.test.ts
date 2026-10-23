@@ -1,7 +1,7 @@
 // Deshacer (undoLast) de punta a punta contra PostgreSQL real.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
+import { assign, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
 import { addComment, archiveTask, createTask, deleteComment, deleteTask, moveTask, updateTask } from "../../src/actions/tasks";
 import { redoLast, undoLast } from "../../src/actions/undo";
 import { removeProjectMember } from "../../src/actions/projects";
@@ -33,6 +33,7 @@ describe("deshacer acciones propias", () => {
   test("editar campos: deshacer restaura título, descripción, responsable y etiquetas", async () => {
     const { user, f } = await setup();
     const other = await makeUser();
+    await assign(f, other);
     const label = await db.label.create({ data: { projectId: f.project.id, name: "L1", color: "blue" } });
     const task = await makeTask(f, { title: "Original" });
     await db.task.update({ where: { id: task.id }, data: { description: "desc original", assigneeId: user.id } });
@@ -163,6 +164,7 @@ describe("límites del deshacer", () => {
     expectOk(await updateTask(a.id, { title: "Editada por A" }));
 
     const b = await makeUser();
+    await assign(f, b);
     await loginAs(b);
     expectFail(await undoLast(f.project.id), NOTHING);
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: a.id } })).title, "Editada por A");
@@ -193,6 +195,7 @@ describe("límites del deshacer", () => {
     const task = await makeTask(f, { title: "Se va" });
     expectOk(await updateTask(task.id, { title: "Editada" }));
     const other = await makeUser();
+    await assign(f, other);
     await loginAs(other);
     expectOk(await deleteTask(task.id));
 

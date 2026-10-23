@@ -42,7 +42,7 @@ describe("miembros de proyectos privados", () => {
     expectFail(await getTaskDetail(task.id), NOT_FOUND);
   });
 
-  test("no se puede añadir a un usuario desactivado ni a nadie en un proyecto no privado", async () => {
+  test("no se puede añadir a un usuario desactivado ni a un administrador en un proyecto de equipo", async () => {
     const owner = await makeUser();
     const inactive = await makeUser({ active: false });
     const p = await makeProject({ visibility: "PRIVATE", owner });
@@ -52,7 +52,8 @@ describe("miembros de proyectos privados", () => {
     const admin = await makeUser({ role: "ADMIN" });
     const pub = await makeProject();
     await loginAs(admin);
-    expectFail(await addProjectMember(pub.project.id, owner.id), /proyectos privados/);
+    // En un proyecto de equipo los administradores no se asignan (ven todos).
+    expectFail(await addProjectMember(pub.project.id, admin.id), /administradores ven todos/);
   });
 
   test("el último miembro no puede salir; con otro miembro sí", async () => {

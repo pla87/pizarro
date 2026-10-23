@@ -76,7 +76,12 @@ export async function makeKind(projectId: string | null = null) {
   return db.taskKind.create({ data: { name: `Tipo ${uid()}`, color: "#3b82f6", position: 1, projectId } });
 }
 
-export type Visibility = "PUBLIC" | "RESTRICTED" | "PRIVATE";
+/** Asigna a un usuario a un proyecto (ProjectMember). */
+export async function assign(f: { project: { id: string } }, user: { id: string }) {
+  await db.projectMember.upsert({ where: { projectId_userId: { projectId: f.project.id, userId: user.id } }, create: { projectId: f.project.id, userId: user.id }, update: {} });
+}
+
+export type Visibility = "TEAM" | "PRIVATE";
 
 export interface Fixture {
   project: { id: string; name: string };
@@ -86,11 +91,13 @@ export interface Fixture {
 
 /**
  * Proyecto con tres columnas (la última «terminada») y un tipo propio.
- * PRIVATE: `owner` es el dueño y primer miembro; RESTRICTED: `members` pueden verlo además de los admins.
+ * PRIVATE: `owner` es el dueño y primer miembro; TEAM: `members` son los usuarios asignados (los admins lo ven siempre).
  */
 export async function makeProject(opts: { visibility?: Visibility; members?: { id: string }[]; owner?: { id: string } } = {}): Promise<Fixture> {
-  const visibility = opts.visibility ?? "PUBLIC";
-  const members = [...(opts.members ?? [])];
+  const visibility = opts.visibility ?? "TEAM";
+  // En un proyecto de equipo sin `members`, se asigna a todos los usuarios activos no administradores que ya existan
+  // (la mayoría de pruebas no tratan de permisos); con `members: []` queda sin asignados.
+  const members = [...(opts.members ?? (visibility === "TEAM" ? await db.user.findMany({ where: { active: true, role: { not: "ADMIN" } }, select: { id: true } }) : []))];
   if (visibility === "PRIVATE") {
     assert.ok(opts.owner, "un proyecto privado necesita dueño");
     if (!members.some((m) => m.id === opts.owner!.id)) members.push(opts.owner);
@@ -98,7 +105,6 @@ export async function makeProject(opts: { visibility?: Visibility; members?: { i
   const project = await db.project.create({
     data: {
       name: `Proyecto ${uid()}`,
-      restricted: visibility === "RESTRICTED",
       isPrivate: visibility === "PRIVATE",
       privateOwnerId: visibility === "PRIVATE" ? opts.owner!.id : null,
       members: { create: members.map((m) => ({ userId: m.id })) },

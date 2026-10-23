@@ -67,7 +67,8 @@ export async function createProject(name: string, options?: { templateId?: strin
           isPrivate: !!options?.isPrivate,
           privateOwnerId: options?.isPrivate ? user.id : null,
           // El creador es el primer miembro del proyecto privado.
-          ...(options?.isPrivate ? { members: { create: { userId: user.id } } } : {}),
+          // Si es de equipo, el admin que lo crea lo marca como proyecto en el que trabaja.
+          ...(options?.isPrivate ? { members: { create: { userId: user.id } } } : { adminPicks: { create: { userId: user.id } } }),
           ...(template ? {} : { columns: { create: defaultColumns(locale).map((c, i) => ({ ...c, position: (i + 1) * POSITION_STEP })) } }),
         },
         select: { id: true },
@@ -93,34 +94,39 @@ export async function updateProject(projectId: string, input: { name: string; de
 }
 
 /**
- * PUBLIC: todos los usuarios ven el proyecto. RESTRICTED: solo admins y memberIds.
+ * TEAM: lo ven los usuarios asignados (ProjectMember) y todos los administradores.
  * PRIVATE: solo sus miembros (quien lo marca como privado es el primero; ni el resto de administradores).
- * Si ya era privado, los miembros no cambian (se gestionan con addProjectMember/removeProjectMember).
+ * Al pasar a privado se desasignan las tarjetas de quien pierde el acceso y se quitan las elecciones de los
+ * administradores; al pasar a equipo se conservan los miembros (los administradores pasan a «proyecto en el que trabajo»).
+ * Si ya estaba en ese modo, no cambia nada (los usuarios se gestionan con addProjectMember/removeProjectMember).
  */
-export async function setProjectVisibility(projectId: string, mode: "PUBLIC" | "RESTRICTED" | "PRIVATE", memberIds: string[]) {
-  return runAction({ name: "projects.setProjectVisibility", args: [projectId, mode, memberIds] }, async () => {
+export async function setProjectVisibility(projectId: string, mode: "TEAM" | "PRIVATE") {
+  return runAction({ name: "projects.setProjectVisibility", args: [projectId, mode] }, async () => {
     const user = await requireUser();
     if (user.role !== "ADMIN") throw forbidden();
     const id = v.id.parse(projectId);
-    const visibility = z.enum(["PUBLIC", "RESTRICTED", "PRIVATE"]).parse(mode);
+    const visibility = z.enum(["TEAM", "PRIVATE"]).parse(mode);
     const current = await findManageableProject(user, id);
-    if (visibility === "PRIVATE" && current.isPrivate) return;
-    const ids = visibility === "RESTRICTED" ? [...new Set(z.array(v.id).max(50).parse(memberIds))] : [];
-    const valid = await db.user.count({ where: { id: { in: ids } } });
-    if (valid !== ids.length) throw new AppError("Usuario no válido.");
-    const finalMembers = visibility === "PRIVATE" ? [user.id] : ids;
-    await db.$transaction([
-      db.project.update({
-        where: { id },
-        data: { restricted: visibility === "RESTRICTED", isPrivate: visibility === "PRIVATE", privateOwnerId: visibility === "PRIVATE" ? user.id : null },
-      }),
-      db.projectMember.deleteMany({ where: { projectId: id } }),
-      db.projectMember.createMany({ data: finalMembers.map((userId) => ({ projectId: id, userId })) }),
-      // Al hacerlo privado, las tarjetas asignadas a quien ya no tiene acceso quedan sin asignar.
-      ...(visibility === "PRIVATE" ? [db.task.updateMany({ where: { projectId: id, assigneeId: { notIn: finalMembers } }, data: { assigneeId: null } })] : []),
-    ]);
+    if ((visibility === "PRIVATE") === current.isPrivate) return;
+    if (visibility === "PRIVATE") {
+      await db.$transaction([
+        db.project.update({ where: { id }, data: { isPrivate: true, privateOwnerId: user.id } }),
+        db.projectMember.deleteMany({ where: { projectId: id } }),
+        db.projectMember.create({ data: { projectId: id, userId: user.id } }),
+        db.adminProjectPick.deleteMany({ where: { projectId: id } }),
+        // Las tarjetas asignadas a quien ya no tiene acceso quedan sin asignar.
+        db.task.updateMany({ where: { projectId: id, assigneeId: { not: user.id } }, data: { assigneeId: null } }),
+      ]);
+    } else {
+      const admins = await db.projectMember.findMany({ where: { projectId: id, user: { role: "ADMIN" } }, select: { userId: true } });
+      await db.$transaction([
+        db.project.update({ where: { id }, data: { isPrivate: false, privateOwnerId: null } }),
+        db.projectMember.deleteMany({ where: { projectId: id, user: { role: "ADMIN" } } }),
+        db.adminProjectPick.createMany({ data: admins.map((a) => ({ projectId: id, userId: a.userId })), skipDuplicates: true }),
+      ]);
+    }
     revokeProject(id);
-    describeAction(`Cambió la visibilidad del proyecto a ${visibility === "PUBLIC" ? "pública" : visibility === "RESTRICTED" ? "usuarios seleccionados" : "privada"}`);
+    describeAction(`Cambió la visibilidad del proyecto a ${visibility === "TEAM" ? "equipo" : "privada"}`);
     revalidatePath("/", "layout");
   });
 }
@@ -135,51 +141,74 @@ export async function deleteProject(projectId: string, confirmName: string) {
   });
 }
 
-// --- Miembros de proyectos privados ------------------------------------------------
+// --- Usuarios asignados al proyecto -----------------------------------------------
 
-/** Añade a un usuario activo como miembro de un proyecto privado (cualquier miembro puede hacerlo). */
+/**
+ * Asigna a un usuario activo al proyecto. En uno privado, cualquier miembro puede hacerlo; en uno de equipo,
+ * los administradores (que ya ven todos los de equipo, así que no se asignan: lo eligen en su perfil).
+ */
 export async function addProjectMember(projectId: string, userId: string) {
   return runAction({ name: "projects.addProjectMember", args: [projectId, userId] }, async () => {
     const user = await requireUser();
     const project = await findManageableProject(user, projectId);
-    if (!project.isPrivate) throw new AppError("Solo los proyectos privados tienen miembros propios.");
-    const target = await db.user.findFirst({ where: { id: v.id.parse(userId), active: true }, select: { id: true, name: true } });
+    const target = await db.user.findFirst({ where: { id: v.id.parse(userId), active: true }, select: { id: true, name: true, role: true } });
     if (!target) throw new AppError("Usuario no válido.");
+    if (!project.isPrivate && target.role === "ADMIN") throw new AppError("Los administradores ven todos los proyectos de equipo: lo eligen en su perfil.");
     await db.projectMember.upsert({
       where: { projectId_userId: { projectId: project.id, userId: target.id } },
       create: { projectId: project.id, userId: target.id },
       update: {},
     });
-    describeAction(`Añadió a «${target.name}» al proyecto privado «${project.name}»`);
+    describeAction(`Añadió a «${target.name}» al proyecto ${project.isPrivate ? "privado " : ""}«${project.name}»`);
     revalidatePath("/", "layout");
   });
 }
 
 /**
- * Quita a un miembro (o sale uno mismo). Debe quedar algún miembro activo: el último no puede salir,
- * tiene que borrar el proyecto. Las tarjetas que tuviera asignadas quedan sin asignar.
+ * Quita la asignación de un usuario al proyecto (o sale uno mismo, en privados). Un proyecto privado debe conservar
+ * algún miembro activo: el último no puede salir, tiene que borrar el proyecto. Las tarjetas que tuviera
+ * asignadas quedan sin asignar y se cortan sus conexiones en vivo al proyecto.
  */
 export async function removeProjectMember(projectId: string, userId: string) {
   return runAction({ name: "projects.removeProjectMember", args: [projectId, userId] }, async () => {
     const user = await requireUser();
     const project = await findManageableProject(user, projectId);
-    if (!project.isPrivate) throw new AppError("Solo los proyectos privados tienen miembros propios.");
     const targetId = v.id.parse(userId);
     const member = await db.projectMember.findUnique({
       where: { projectId_userId: { projectId: project.id, userId: targetId } },
       select: { user: { select: { name: true } } },
     });
     if (!member) throw notFound();
-    if ((await activeMembers(project.id, targetId)) === 0) {
+    if (project.isPrivate && (await activeMembers(project.id, targetId)) === 0) {
       throw new AppError("Eres el último miembro: no puedes salir del proyecto, bórralo si ya no lo necesitas.");
     }
     await db.$transaction([
       db.projectMember.delete({ where: { projectId_userId: { projectId: project.id, userId: targetId } } }),
       db.task.updateMany({ where: { projectId: project.id, assigneeId: targetId }, data: { assigneeId: null } }),
     ]);
-    // Quien sale deja de ver el tablero en vivo al momento (los demás miembros se reconectan solos).
+    // Quien sale deja de ver el tablero en vivo al momento (los demás se reconectan solos).
     revokeProject(project.id);
-    describeAction(targetId === user.id ? `Salió del proyecto privado «${project.name}»` : `Quitó a «${member.user.name}» del proyecto privado «${project.name}»`);
+    const kind = project.isPrivate ? "privado " : "";
+    describeAction(targetId === user.id ? `Salió del proyecto ${kind}«${project.name}»` : `Quitó a «${member.user.name}» del proyecto ${kind}«${project.name}»`);
+    revalidatePath("/", "layout");
+  });
+}
+
+/**
+ * Proyectos de equipo en los que trabaja el administrador (salen en sus menús y selectores). Los privados de los
+ * que es miembro aparecen siempre. Solo administradores; ids que no sean proyectos de equipo se ignoran.
+ */
+export async function setMyProjectPicks(projectIds: string[]) {
+  return runAction({ name: "projects.setMyProjectPicks", args: [projectIds] }, async () => {
+    const user = await requireUser();
+    if (user.role !== "ADMIN") throw forbidden();
+    const ids = [...new Set(z.array(v.id).max(500).parse(projectIds))];
+    const valid = await db.project.findMany({ where: { id: { in: ids }, isPrivate: false }, select: { id: true } });
+    await db.$transaction([
+      db.adminProjectPick.deleteMany({ where: { userId: user.id } }),
+      db.adminProjectPick.createMany({ data: valid.map((p) => ({ projectId: p.id, userId: user.id })) }),
+    ]);
+    describeAction(`Eligió ${valid.length} proyecto(s) en los que trabaja`);
     revalidatePath("/", "layout");
   });
 }

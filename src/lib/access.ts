@@ -6,19 +6,36 @@ import { notFound } from "./errors";
 import type { CurrentUser } from "./session";
 
 /**
- * Filtro Prisma con los proyectos visibles para el usuario. Un proyecto privado solo lo ven sus
- * miembros (tampoco los administradores). El resto: los admins ven todos; los demás, los no
- * restringidos y aquellos en los que figuran como miembros.
+ * Filtro Prisma con los proyectos a los que el usuario puede acceder. Un proyecto privado solo lo ven sus
+ * miembros (tampoco los administradores). Los de equipo los ven sus usuarios asignados (ProjectMember) y
+ * todos los administradores, estén o no entre los que han elegido para trabajar.
  */
 export function visibleProjectsWhere(user: CurrentUser): Prisma.ProjectWhereInput {
   const member: Prisma.ProjectWhereInput = { members: { some: { userId: user.id } } };
   if (user.role === "ADMIN") return { OR: [{ isPrivate: false }, member] };
-  return { OR: [{ isPrivate: false, restricted: false }, member] };
+  return member;
 }
 
-export async function listVisibleProjects(user: CurrentUser) {
+/**
+ * Proyectos en los que el usuario trabaja: los que salen en selectores, menús y filtros. Para quien no es
+ * administrador son todos los accesibles; un administrador, solo los de equipo que ha elegido en su perfil
+ * (AdminProjectPick) y los privados de los que es miembro.
+ */
+export function workingProjectsWhere(user: CurrentUser): Prisma.ProjectWhereInput {
+  if (user.role !== "ADMIN") return visibleProjectsWhere(user);
+  return { OR: [{ isPrivate: false, adminPicks: { some: { userId: user.id } } }, { members: { some: { userId: user.id } } }] };
+}
+
+/** Usuarios que pueden ver y usar un proyecto: sus miembros y, si no es privado, también todos los administradores. */
+export function projectUsersWhere(project: { isPrivate: boolean }, projectId: string): Prisma.UserWhereInput {
+  const member: Prisma.UserWhereInput = { memberships: { some: { projectId } } };
+  return project.isPrivate ? member : { OR: [{ role: "ADMIN" }, member] };
+}
+
+/** Proyectos para menús y selectores. Con `all`, todos los accesibles (p. ej. pantallas de administración). */
+export async function listVisibleProjects(user: CurrentUser, opts?: { all?: boolean }) {
   return db.project.findMany({
-    where: visibleProjectsWhere(user),
+    where: opts?.all ? visibleProjectsWhere(user) : workingProjectsWhere(user),
     select: { id: true, name: true, isPrivate: true },
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
   });
@@ -45,14 +62,10 @@ export async function assertTaskAccess(user: CurrentUser, taskId: string): Promi
 /** Lanza error si el usuario no puede ser asignado a tareas del proyecto. */
 export async function assertAssignable(projectId: string, userId: string): Promise<void> {
   const [user, project] = await Promise.all([
-    db.user.findFirst({
-      where: { id: userId, active: true },
-      select: { role: true, memberships: { where: { projectId }, select: { userId: true } } },
-    }),
-    db.project.findUnique({ where: { id: projectId }, select: { restricted: true, isPrivate: true } }),
+    db.user.findFirst({ where: { id: userId, active: true }, select: { role: true, memberships: { where: { projectId }, select: { userId: true } } } }),
+    db.project.findUnique({ where: { id: projectId }, select: { isPrivate: true } }),
   ]);
   if (!user || !project) throw notFound();
-  // Privado: solo sus miembros; restringido: admins o miembros.
-  if (project.isPrivate && user.memberships.length === 0) throw notFound();
-  if (project.restricted && user.role !== "ADMIN" && user.memberships.length === 0) throw notFound();
+  // Privado: solo sus miembros. Equipo: miembros asignados y administradores.
+  if (user.memberships.length === 0 && (project.isPrivate || user.role !== "ADMIN")) throw notFound();
 }

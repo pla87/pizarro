@@ -17,7 +17,7 @@ export default async function TemplatesPage() {
     listTemplatesSorted(db),
     missingBuiltinKeys(db),
     listKinds(),
-    listVisibleProjects(user),
+    listVisibleProjects(user, { all: true }),
   ]);
   return (
     <TemplatesAdmin
