@@ -386,7 +386,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
             </button>
           )}
         >
-          <ul className="max-h-72 overflow-y-auto text-sm">
+          <ul className="text-sm">
             <li>
               <button type="button" role="checkbox" aria-checked={draftPeople.length === 0} onClick={() => setDraftPeople([])} className={optionCls}>
                 <CheckBox on={draftPeople.length === 0} />

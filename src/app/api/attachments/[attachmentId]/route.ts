@@ -52,7 +52,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ attachmentId: s
   const headers: Record<string, string> = {
     ETag: etag,
     // Caché solo del navegador (nunca compartida). Las descargas se revalidan siempre para que queden registradas.
-    "Cache-Control": download ? "private, no-cache" : "private, max-age=3600",
+    "Cache-Control": download ? "private, no-cache" : "private, max-age=86400",
     Vary: "Cookie",
     "X-Content-Type-Options": "nosniff",
   };
