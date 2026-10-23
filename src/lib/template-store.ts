@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { BUILTIN_TEMPLATES, builtinByKey, canonicalTemplate, comparable, isBuiltinModified } from "./builtin-templates";
+import { localizeTemplate } from "./builtin-templates-en";
 import { POSITION_STEP } from "./positions";
 import { parseStoredTemplate, sortTemplates, type TemplateData, type TemplateDto } from "./project-templates";
 
@@ -15,9 +16,10 @@ export function toTemplateDto(row: Row): TemplateDto {
 }
 
 /** Todas las plantillas, de serie y propias juntas, por orden alfabético. */
-export async function listTemplatesSorted(db: PrismaClient): Promise<TemplateDto[]> {
+export async function listTemplatesSorted(db: PrismaClient, locale: "es" | "en" = "es"): Promise<TemplateDto[]> {
   const rows = await db.projectTemplate.findMany();
-  return sortTemplates(rows.map(toTemplateDto));
+  // En inglés, las de serie sin tocar salen con su versión inglesa (el nombre decide el orden, así que se ordena después).
+  return sortTemplates(rows.map((r) => localizeTemplate(toTemplateDto(r), r.builtinKey, locale)), locale);
 }
 
 /** Claves de serie que no tienen plantilla ahora mismo (borradas por el administrador). */
