@@ -11,7 +11,7 @@ import { useT } from "@/i18n/client";
 import { ListDeleteFix } from "@/lib/editor-keys";
 import { MentionChip } from "@/lib/editor-mention";
 import { normalizeEditorMarkdown } from "@/lib/markdown-entities";
-import { looksLikeMarkdown } from "@/lib/markdown-paste";
+import { markdownFromPaste } from "@/lib/markdown-paste";
 import type { UserOption } from "@/lib/types";
 import { Avatar } from "./Avatar";
 import { cn } from "./cn";
@@ -161,12 +161,13 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
         "aria-multiline": "true",
         ...(placeholder ? { "aria-label": placeholder } : {}),
       },
-      // Texto plano con aspecto de Markdown (sin HTML): se interpreta como Markdown.
+      // Texto plano con aspecto de Markdown: se interpreta como Markdown. El HTML que solo envuelve el texto
+      // (div/span/br que añaden los teclados y navegadores móviles) cuenta como texto plano.
       handlePaste: (_view, event) => {
         const data = event.clipboardData;
-        if (!data || data.getData("text/html")) return false;
-        const text = data.getData("text/plain");
-        if (!text || !looksLikeMarkdown(text)) return false;
+        if (!data) return false;
+        const text = markdownFromPaste(data.getData("text/plain"), data.getData("text/html"));
+        if (!text) return false;
         event.preventDefault();
         editorRef.current?.chain().focus().insertContent(text, { contentType: "markdown" }).run();
         return true;
