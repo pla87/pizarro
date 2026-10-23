@@ -31,7 +31,7 @@ export function FilterMenu({ filters, onChange, labels, kinds, users, currentUse
       align="end"
       className={cn("relative", className)}
       label={t("Filtros")}
-      panelClassName="max-h-[min(32rem,70vh)] w-72 max-w-[calc(100vw-1.5rem)] space-y-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900"
+      panelClassName="w-72 max-w-[calc(100vw-1.5rem)] space-y-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900"
       trigger={({ props }) => (
         <button
           type="button"

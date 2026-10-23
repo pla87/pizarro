@@ -67,8 +67,9 @@ export function ReportButton({ projectId, variant }: { projectId: string; varian
 
   return (
     <>
-      <button type="button" className={CLASSES[variant]} onClick={onClick}>
-        <FileDown size={variant === "sidebar" ? 17 : 16} /> {t("Informe PDF")}
+      <button type="button" className={CLASSES[variant]} onClick={onClick} aria-label={variant === "header" ? t("Informe PDF") : undefined} title={variant === "header" ? t("Informe PDF") : undefined}>
+        {/* En la cabecera del tablero, con poco ancho solo el icono (el contenedor de consulta es el de la cabecera). */}
+        <FileDown size={variant === "sidebar" ? 17 : 16} /> <span className={variant === "header" ? "hidden @min-[1240px]:inline" : undefined}>{t("Informe PDF")}</span>
       </button>
       <Modal open={open} onClose={close} title={t("Informe PDF")} size="sm">
         {state.status === "loading" && (

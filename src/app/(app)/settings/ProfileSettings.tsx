@@ -534,7 +534,7 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
           >
             <span
               className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-full group-focus-visible:outline-2 group-focus-visible:outline-offset-4 ring-offset-2 ring-offset-white dark:ring-offset-slate-900",
+                "flex h-9 w-9 items-center justify-center rounded-full group-focus-visible:outline-3 group-focus-visible:outline-offset-4 ring-offset-2 ring-offset-white dark:ring-offset-slate-900",
                 value === "MONO" && "border border-slate-300 dark:border-slate-600",
                 accent === value ? "ring-2 ring-slate-900 dark:ring-slate-100" : "ring-1 ring-transparent hover:ring-slate-300 dark:hover:ring-slate-600",
               )}

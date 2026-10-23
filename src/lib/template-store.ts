@@ -1,8 +1,9 @@
 // Plantillas de proyecto en la base de datos: lectura ordenada y plantillas de serie (sembrado, restablecer, recuperar).
+import { createHash } from "node:crypto";
 import type { PrismaClient } from "@/generated/prisma/client";
-import { BUILTIN_TEMPLATES, builtinByKey, canonicalTemplate, isBuiltinModified } from "./builtin-templates";
+import { BUILTIN_TEMPLATES, builtinByKey, canonicalTemplate, comparable, isBuiltinModified } from "./builtin-templates";
 import { POSITION_STEP } from "./positions";
-import { parseStoredTemplate, sortTemplates, type TemplateDto } from "./project-templates";
+import { parseStoredTemplate, sortTemplates, type TemplateData, type TemplateDto } from "./project-templates";
 
 type Row = Parameters<typeof parseStoredTemplate>[0] & { builtinKey: string | null };
 
@@ -25,6 +26,35 @@ export async function missingBuiltinKeys(db: PrismaClient): Promise<string[]> {
   return BUILTIN_TEMPLATES.map((b) => b.key).filter((k) => !present.has(k));
 }
 
+/** Huella del contenido de una plantilla (la misma forma comparable que usa «modificada»). */
+export function templateFingerprint(t: TemplateData): string {
+  return createHash("sha256").update(comparable(t)).digest("hex");
+}
+
+/**
+ * Definición anterior a que existiera la huella guardada: la canónica actual sin la opción «ocultar todos los
+ * generales» (lo único que cambió en esa versión). Sirve de referencia para las sembradas antes de la huella.
+ */
+function legacyBaseline(canon: TemplateData): TemplateData {
+  return { ...canon, hideAllGeneralKinds: false };
+}
+
+const contentOf = (data: TemplateData) => ({
+  name: data.name,
+  description: data.description,
+  columns: data.columns,
+  kinds: data.kinds,
+  hiddenGeneralKinds: data.hiddenGeneralKinds,
+  hideAllGeneralKinds: data.hideAllGeneralKinds,
+  labels: data.labels,
+});
+
+/** Anota la huella del contenido canónico aplicado a la plantilla de serie `key`. */
+async function markApplied(db: PrismaClient, key: string, data: TemplateData): Promise<void> {
+  const appliedHash = templateFingerprint(data);
+  await db.builtinTemplateSeeded.upsert({ where: { key }, create: { key, appliedHash }, update: { appliedHash } });
+}
+
 async function createBuiltin(db: PrismaClient, key: string): Promise<void> {
   const data = canonicalTemplate(key);
   if (!data) return;
@@ -32,12 +62,7 @@ async function createBuiltin(db: PrismaClient, key: string): Promise<void> {
   await db.projectTemplate.create({
     data: {
       builtinKey: key,
-      name: data.name,
-      description: data.description,
-      columns: data.columns,
-      kinds: data.kinds,
-      hiddenGeneralKinds: data.hiddenGeneralKinds,
-      labels: data.labels,
+      ...contentOf(data),
       position: (last?.position ?? 0) + POSITION_STEP,
     },
   });
@@ -57,9 +82,41 @@ export async function seedBuiltinTemplates(db: PrismaClient): Promise<string[]> 
       await createBuiltin(db, key);
       created.push(key);
     }
-    await db.builtinTemplateSeeded.upsert({ where: { key }, create: { key }, update: {} });
+    const canon = canonicalTemplate(key);
+    if (canon) await markApplied(db, key, canon);
   }
   return created;
+}
+
+/**
+ * Pone al día las plantillas de serie cuando cambia su definición canónica. Se guarda la huella del contenido
+ * canónico aplicado la última vez (`appliedHash`): si lo almacenado sigue siendo exactamente eso, el administrador no la
+ * tocó y se sustituye por la nueva; si difiere, se respeta (figurará como modificada, con «Restablecer»).
+ * Sin huella (sembradas antes de existir) la referencia es la definición anterior, ver `legacyBaseline`.
+ * Devuelve las claves actualizadas.
+ */
+export async function upgradeBuiltinTemplates(db: PrismaClient): Promise<string[]> {
+  const upgraded: string[] = [];
+  for (const { key } of BUILTIN_TEMPLATES) {
+    const canon = canonicalTemplate(key);
+    const seeded = await db.builtinTemplateSeeded.findUnique({ where: { key } });
+    const row = await db.projectTemplate.findUnique({ where: { builtinKey: key } });
+    if (!canon || !seeded || !row) continue;
+    const canonHash = templateFingerprint(canon);
+    const storedHash = templateFingerprint(parseStoredTemplate(row));
+    const appliedHash = seeded.appliedHash ?? templateFingerprint(legacyBaseline(canon));
+    if (storedHash === canonHash) {
+      if (seeded.appliedHash !== canonHash) await markApplied(db, key, canon);
+    } else if (storedHash === appliedHash) {
+      await db.projectTemplate.update({ where: { id: row.id }, data: contentOf(canon) });
+      await markApplied(db, key, canon);
+      upgraded.push(key);
+    } else if (seeded.appliedHash === null) {
+      // Modificada por el administrador: se fija su referencia para que un cambio canónico futuro no la confunda.
+      await db.builtinTemplateSeeded.update({ where: { key }, data: { appliedHash } });
+    }
+  }
+  return upgraded;
 }
 
 /** «Recuperar plantillas por defecto»: recrea las de serie que falten. Devuelve cuántas. */
@@ -67,7 +124,8 @@ export async function restoreBuiltinTemplates(db: PrismaClient): Promise<number>
   const missing = await missingBuiltinKeys(db);
   for (const key of missing) {
     await createBuiltin(db, key);
-    await db.builtinTemplateSeeded.upsert({ where: { key }, create: { key }, update: {} });
+    const canon = canonicalTemplate(key);
+    if (canon) await markApplied(db, key, canon);
   }
   return missing.length;
 }
@@ -79,7 +137,8 @@ export async function resetBuiltinTemplate(db: PrismaClient, templateId: string)
   if (!data) return false;
   await db.projectTemplate.update({
     where: { id: templateId },
-    data: { name: data.name, description: data.description, columns: data.columns, kinds: data.kinds, hiddenGeneralKinds: data.hiddenGeneralKinds, labels: data.labels },
+    data: contentOf(data),
   });
+  await markApplied(db, row!.builtinKey!, data);
   return true;
 }

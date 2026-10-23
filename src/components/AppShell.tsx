@@ -118,7 +118,7 @@ function NavLink({ href, icon: Icon, children, active }: { href: string; icon: t
       href={href}
       className={cn(
         // El contorno de foco va por dentro: el menú hace scroll y recortaría uno exterior.
-        "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
+        "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium focus-visible:outline-3 focus-visible:-outline-offset-2 focus-visible:outline-focus",
         active
           ? "bg-brand-50 text-brand-700 shadow-[inset_3px_0_0_var(--color-detail)] dark:bg-brand-500/15 dark:text-brand-100"
           : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
@@ -202,7 +202,7 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: strin
       <DropdownMenu
         matchWidth
         label={t("Selecciona proyecto")}
-        panelClassName="max-h-80 rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+        panelClassName="rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
         trigger={({ props }) => (
           <button
             type="button"

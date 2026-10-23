@@ -20,6 +20,8 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) 
 /** Tope de tareas por mes: un tablero normal queda muy por debajo; evita enviar páginas enormes. */
 const MAX_TASKS = 1000;
 const MAX_DELIVERABLES = 200;
+/** Proyectos que se aceptan en `?project=`. */
+const MAX_PROJECT_FILTER = 50;
 
 export default async function CalendarPage({ searchParams }: { searchParams: Promise<Params> }) {
   const user = await requireUserPage();
@@ -29,13 +31,18 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const grid = monthGrid(month, 1);
 
   const projects = await listVisibleProjects(user);
-  // Un proyecto desconocido o no visible equivale a «todos».
-  const projectId = projects.some((p) => p.id === one(sp.project)) ? one(sp.project) : "";
+  // `?project=a,b,c` (o un solo id, como antes). Los ids de la URL no se fían: solo valen los proyectos visibles;
+  // sin ninguno válido equivale a «todos».
+  const requested = [...new Set(one(sp.project).split(",").map((x) => x.trim()).filter(Boolean))].slice(0, MAX_PROJECT_FILTER);
+  const picked = requested.length ? await db.project.findMany({ where: { ...visibleProjectsWhere(user), id: { in: requested } }, select: { id: true, name: true } }) : [];
+  const projectIds = requested.filter((id) => picked.some((p) => p.id === id));
+  // Un proyecto elegido que no está entre los de trabajo (p. ej. un enlace) también debe poder verse en el selector.
+  const options = [...projects.map((p) => ({ id: p.id, name: p.name })), ...picked.filter((p) => !projects.some((x) => x.id === p.id))];
   const person = one(sp.person);
   const hideDone = one(sp.hideDone) === "1";
 
-  // «Todos» son los proyectos en los que trabaja (un admin, los que eligió); uno concreto, cualquiera al que tenga acceso.
-  const projectWhere: Prisma.ProjectWhereInput = projectId ? { ...visibleProjectsWhere(user), id: projectId } : workingProjectsWhere(user);
+  // «Todos» son los proyectos en los que trabaja (un admin, los que eligió); los elegidos, cualquiera al que tenga acceso.
+  const projectWhere: Prisma.ProjectWhereInput = projectIds.length ? { ...visibleProjectsWhere(user), id: { in: projectIds } } : workingProjectsWhere(user);
   const range = { gte: isoToDate(grid.start), lte: isoToDate(grid.end) };
   const base: Prisma.TaskWhereInput = { project: projectWhere, archivedAt: null, dueDate: range };
 
@@ -114,9 +121,9 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       weeks={grid.weeks}
       tasks={tasks}
       deliverables={deliverables}
-      projects={projects.map((p) => ({ id: p.id, name: p.name }))}
+      projects={options}
       people={people}
-      filters={{ project: projectId, person, hideDone }}
+      filters={{ project: projectIds, person, hideDone }}
       truncated={rows.length >= MAX_TASKS}
     />
   );

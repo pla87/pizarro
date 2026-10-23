@@ -663,6 +663,8 @@ model ProjectTemplate {
   kinds       Json     @default("[]")
   /// Nombres de los tipos generales que el proyecto NO usará.
   hiddenGeneralKinds Json @default("[]")
+  /// Oculta todos los tipos generales (plantillas ajenas al software).
+  hideAllGeneralKinds Boolean @default(false)
   /// [{ name, color }]
   labels      Json     @default("[]")
   position    Float    @default(0)
@@ -676,6 +678,8 @@ model ProjectTemplate {
 model BuiltinTemplateSeeded {
   key      String   @id
   seededAt DateTime @default(now())
+  /// Huella del contenido canónico aplicado por última vez a la plantilla; null en las sembradas antes de existir este campo.
+  appliedHash String?
 }
 
 enum CardStyle {
@@ -745,6 +749,8 @@ model UndoEntry {
   kind      UndoKind @default(UNDO)
   label     String
   ops       Json
+  /// Huella de lo que tocan las ops justo después de crear la entrada contraria (rehacer/deshacer): si cambia, alguien más lo modificó y no se aplica.
+  fingerprint String?
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)

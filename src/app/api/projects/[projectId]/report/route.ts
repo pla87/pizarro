@@ -16,7 +16,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
   const user = await getCurrentUser();
   const t = await getT();
   if (!user) return new Response(t("No autorizado"), { status: 401 });
-  if (!rateLimit(`report:${user.id}`, 20, 60_000)) return new Response(t("Demasiadas peticiones"), { status: 429 });
+  if (!rateLimit(`report:${user.id}`, 5, 60_000)) return new Response(t("Demasiadas peticiones"), { status: 429 });
   const { projectId } = await ctx.params;
   const project = await db.project.findFirst({
     where: { id: projectId, ...visibleProjectsWhere(user) },

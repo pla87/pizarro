@@ -253,6 +253,21 @@ describe("rehacer", () => {
   const NOTHING_REDO = /No hay nada que rehacer/;
   const title = async (id: string) => (await db.task.findUniqueOrThrow({ where: { id } })).title;
 
+  test("los cambios propios no bloquean deshacer lo rehecho", async () => {
+    const { f } = await setup();
+    const task = await makeTask(f, { title: "A" });
+    expectOk(await updateTask(task.id, { title: "B" }));
+    expectOk(await undoLast(f.project.id));
+    expectOk(await redoLast(f.project.id));
+    assert.equal(await title(task.id), "B");
+    // Otra acción propia sobre la misma tarea y su deshacer: el estado vuelve a «B» y la entrada anterior sigue valiendo.
+    expectOk(await updateTask(task.id, { title: "C" }));
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await title(task.id), "B");
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await title(task.id), "A");
+  });
+
   test("deshacer y rehacer restauran el estado de antes de deshacer", async () => {
     const { f } = await setup();
     const label = await db.label.create({ data: { projectId: f.project.id, name: "R1", color: "blue" } });
@@ -393,14 +408,88 @@ describe("rehacer", () => {
     assert.equal(await db.undoEntry.count({ where: { userId: user.id, projectId: f.project.id, kind: "REDO" } }), 10);
   });
 
-  test("lo que ya no existe se salta al rehacer sin fallar", async () => {
+  const BLOCKED_REDO = /Otra persona ha cambiado esto después de deshacerlo: no se puede rehacer/;
+  const BLOCKED_UNDO = /Otra persona ha cambiado esto después de rehacerlo: no se puede deshacer/;
+  const redoStack = (userId: string, projectId: string, kind: "UNDO" | "REDO") => db.undoEntry.count({ where: { userId, projectId, kind } });
+
+  test("si otra persona edita la tarea tras deshacer, rehacer se rechaza y la entrada se descarta", async () => {
+    const { user, f } = await setup();
+    const task = await makeTask(f, { title: "A" });
+    expectOk(await updateTask(task.id, { title: "B" }));
+    expectOk(await undoLast(f.project.id));
+    const second = await makeUser();
+    await assign(f, second);
+    await loginAs(second);
+    expectOk(await updateTask(task.id, { title: "De otra persona" }));
+    await loginAs(user);
+    expectFail(await redoLast(f.project.id), BLOCKED_REDO);
+    assert.equal(await title(task.id), "De otra persona");
+    assert.equal(await redoStack(user.id, f.project.id, "REDO"), 0);
+    expectFail(await redoLast(f.project.id), NOTHING_REDO);
+  });
+
+  test("un comentario ajeno tras deshacer también bloquea rehacer (no toca Task.updatedAt)", async () => {
+    const { user, f } = await setup();
+    const task = await makeTask(f, { title: "A" });
+    expectOk(await updateTask(task.id, { title: "B" }));
+    expectOk(await undoLast(f.project.id));
+    await db.taskComment.create({ data: { taskId: task.id, authorId: null, body: "ajeno" } });
+    expectFail(await redoLast(f.project.id), BLOCKED_REDO);
+    assert.equal(await title(task.id), "A");
+    assert.equal(await redoStack(user.id, f.project.id, "REDO"), 0);
+  });
+
+  test("sin interferencias rehacer funciona; cambios en otra tarea no molestan", async () => {
+    const { f } = await setup();
+    const task = await makeTask(f, { title: "A" });
+    const other = await makeTask(f, { title: "X" });
+    expectOk(await updateTask(task.id, { title: "B" }));
+    expectOk(await undoLast(f.project.id));
+    await db.task.update({ where: { id: other.id }, data: { title: "Y" } });
+    expectOk(await redoLast(f.project.id));
+    assert.equal(await title(task.id), "B");
+  });
+
+  test("varias entradas sobre la misma tarea se rehacen en cadena sin bloquearse a sí mismas", async () => {
+    const { f } = await setup();
+    const task = await makeTask(f, { title: "A" });
+    expectOk(await updateTask(task.id, { title: "B" }));
+    expectOk(await updateTask(task.id, { title: "C" }));
+    expectOk(await undoLast(f.project.id));
+    expectOk(await undoLast(f.project.id));
+    expectOk(await redoLast(f.project.id));
+    expectOk(await redoLast(f.project.id));
+    assert.equal(await title(task.id), "C");
+  });
+
+  test("deshacer tras rehacer: se rechaza si otra persona cambió algo, y funciona si no", async () => {
+    const { user, f } = await setup();
+    const task = await makeTask(f, { title: "A" });
+    expectOk(await updateTask(task.id, { title: "B" }));
+    expectOk(await undoLast(f.project.id));
+    expectOk(await redoLast(f.project.id));
+    // Sin interferencias: el deshacer resultante funciona.
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await title(task.id), "A");
+    expectOk(await redoLast(f.project.id));
+    // Ahora otra persona edita y el deshacer de esa entrada se bloquea.
+    const second = await makeUser();
+    await assign(f, second);
+    await loginAs(second);
+    expectOk(await updateTask(task.id, { title: "Ajena" }));
+    await loginAs(user);
+    expectFail(await undoLast(f.project.id), BLOCKED_UNDO);
+    assert.equal(await title(task.id), "Ajena");
+    assert.equal(await redoStack(user.id, f.project.id, "UNDO"), 0);
+  });
+
+  test("si la tarea ya no existe al rehacer, se rechaza como cambio ajeno", async () => {
     const { f } = await setup();
     const task = await makeTask(f, { title: "A" });
     expectOk(await updateTask(task.id, { title: "B" }));
     expectOk(await undoLast(f.project.id));
     await db.task.delete({ where: { id: task.id } });
-    const res = expectOk(await redoLast(f.project.id));
-    assert.equal(res.skipped, 1);
+    expectFail(await redoLast(f.project.id), BLOCKED_REDO);
     assert.equal(await db.task.count({ where: { id: task.id } }), 0);
   });
 });

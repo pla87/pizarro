@@ -40,6 +40,16 @@ export const PALETTE = [
 
 const WHITE_COLOR = "#ffffff";
 export const isWhite = (c: string | null | undefined) => c?.toLowerCase() === WHITE_COLOR;
+/** ¿Color tan claro (blanco o casi) que sobre un fondo claro no se distingue? */
+export function isVeryLight(c: string | null | undefined) {
+  const m = /^#([0-9a-f]{6})$/i.exec(c ?? "");
+  if (!m) return false;
+  const n = parseInt(m[1]!, 16);
+  return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) >= 235;
+}
+/** Clases de borde para una muestra de color: el blanco (y lo muy claro) lleva un borde visible, en claro y en oscuro. */
+export const swatchBorder = (c: string | null | undefined) => (isVeryLight(c) ? "border border-slate-400 dark:border-slate-500" : "");
+
 /** Color de texto legible sobre un fondo de la paleta (el blanco necesita texto oscuro). */
 export const onColor = (c: string) => (isWhite(c) ? "#0f172a" : "#ffffff");
 

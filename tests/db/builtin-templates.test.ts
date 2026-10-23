@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectOk, loginAs, makeUser } from "./helpers";
 import { deleteTemplate, listTemplates, resetTemplate, restoreDefaultTemplates, saveTemplate } from "../../src/actions/templates";
-import { BUILTIN_KEYS } from "../../src/lib/builtin-templates";
-import { seedBuiltinTemplates } from "../../src/lib/template-store";
+import { BUILTIN_KEYS, canonicalTemplate } from "../../src/lib/builtin-templates";
+import { seedBuiltinTemplates, templateFingerprint, upgradeBuiltinTemplates } from "../../src/lib/template-store";
 
 describe("plantillas de proyecto de serie", () => {
   test("se siembran una sola vez, se pueden recuperar y restablecer", async () => {
@@ -37,5 +37,44 @@ describe("plantillas de proyecto de serie", () => {
     const back = expectOk(await listTemplates()).find((t) => t.id === vibe.id)!;
     assert.equal(back.name, "Vibecoding");
     assert.equal(back.builtinModified, false);
+  });
+
+  test("las de serie sin tocar se actualizan solas a la nueva definición; las modificadas se respetan", async () => {
+    await db.projectTemplate.deleteMany();
+    await db.builtinTemplateSeeded.deleteMany();
+    await seedBuiltinTemplates(db);
+    // Instalación anterior: sin la opción nueva y sin huella guardada.
+    await db.projectTemplate.updateMany({ where: { builtinKey: { not: null } }, data: { hideAllGeneralKinds: false } });
+    await db.builtinTemplateSeeded.updateMany({ data: { appliedHash: null } });
+    // El administrador cambió el nombre de una.
+    await db.projectTemplate.update({ where: { builtinKey: "eventos" }, data: { name: "Mis eventos" } });
+
+    const upgraded = await upgradeBuiltinTemplates(db);
+    assert.equal(upgraded.includes("eventos"), false);
+    assert.equal(upgraded.includes("negocio"), true);
+    assert.equal(upgraded.includes("vibecoding"), false); // ya coincidía con la canónica
+    assert.equal((await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "negocio" } })).hideAllGeneralKinds, true);
+    const eventos = await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "eventos" } });
+    assert.equal(eventos.name, "Mis eventos");
+    assert.equal(eventos.hideAllGeneralKinds, false);
+
+    // Idempotente, y la modificada sigue figurando como tal.
+    assert.deepEqual(await upgradeBuiltinTemplates(db), []);
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    const list = expectOk(await listTemplates());
+    assert.equal(list.find((t) => t.builtinKey === "eventos")!.builtinModified, true);
+    assert.equal(list.find((t) => t.builtinKey === "negocio")!.builtinModified, false);
+
+    // Cambio canónico futuro: con huella guardada también se actualiza solo lo no tocado.
+    const neg = await db.builtinTemplateSeeded.findUniqueOrThrow({ where: { key: "negocio" } });
+    assert.equal(neg.appliedHash, templateFingerprint(canonicalTemplate("negocio")!));
+    await db.builtinTemplateSeeded.update({ where: { key: "negocio" }, data: { appliedHash: "huella-de-la-version-anterior" } });
+    await db.projectTemplate.update({ where: { builtinKey: "negocio" }, data: { description: "otra" } });
+    assert.deepEqual(await upgradeBuiltinTemplates(db), []);
+
+    // «Restablecer» deja la huella al día.
+    expectOk(await resetTemplate(eventos.id));
+    assert.equal((await db.builtinTemplateSeeded.findUniqueOrThrow({ where: { key: "eventos" } })).appliedHash, templateFingerprint(canonicalTemplate("eventos")!));
   });
 });

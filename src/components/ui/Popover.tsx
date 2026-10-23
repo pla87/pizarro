@@ -20,12 +20,14 @@ function focusables(panel: HTMLElement): HTMLElement[] {
 
 /**
  * Coloca el panel (position: fixed) junto al ancla: debajo y alineado al borde elegido; si no cabe y arriba hay más
- * sitio, lo pone encima; nunca se sale de la pantalla y, si aun así no cabe entero, se queda con scroll propio.
+ * sitio, lo pone encima; la altura máxima es el hueco hasta el borde de la pantalla (menos un margen), así que solo
+ * hay scroll propio si de verdad no cabe entero.
  */
 function place(panel: HTMLElement, anchor: HTMLElement, align: PopoverAlign, gap: number, matchWidth: boolean) {
   const a = anchor.getBoundingClientRect();
   const scroll = panel.scrollTop;
-  panel.style.maxHeight = "";
+  // Se mide la altura natural (sin el tope de las clases del panel): el espacio disponible manda, no un máximo fijo.
+  panel.style.maxHeight = "none";
   if (matchWidth) panel.style.width = `${a.width}px`;
   const vw = document.documentElement.clientWidth;
   const vh = window.innerHeight;
@@ -35,7 +37,8 @@ function place(panel: HTMLElement, anchor: HTMLElement, align: PopoverAlign, gap
   const above = a.top - gap - MARGIN;
   const flip = full > below && above > below;
   const room = flip ? above : below;
-  if (full > room) panel.style.maxHeight = `${Math.max(room, 96)}px`;
+  // El inline gana a cualquier `max-h-*` de las clases: se muestra la lista entera si cabe en pantalla.
+  panel.style.maxHeight = `${Math.max(room, 96)}px`;
   const h = Math.min(full, Math.max(room, 96));
   const top = flip ? Math.max(MARGIN, a.top - gap - h) : a.bottom + gap;
   const left = align === "end" ? a.right - w : a.left;
@@ -120,8 +123,18 @@ export function PopoverPanel({
       if (!panel.contains(e.target as Node)) reposition();
     };
     window.addEventListener("scroll", onScroll, true);
+    // Si cambia el contenido (lista que se filtra o crece), se recoloca; solo cuando cambia su altura
+    // natural, para no entrar en bucle con el max-height que pone `place`.
+    let lastHeight = panel.scrollHeight;
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
+      if (panel.scrollHeight === lastHeight) return;
+      lastHeight = panel.scrollHeight;
+      reposition();
+    });
+    for (const child of Array.from(panel.children)) observer?.observe(child);
     return () => {
       cancelAnimationFrame(frame);
+      observer?.disconnect();
       window.removeEventListener("resize", reposition);
       window.removeEventListener("scroll", onScroll, true);
     };

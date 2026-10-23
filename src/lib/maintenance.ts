@@ -73,12 +73,18 @@ async function purgeOrphanFiles(): Promise<number> {
     import("@/lib/orphan-files"),
     import("@/lib/upload-dir"),
   ]);
-  const [attachments, releaseAttachments, undo] = await Promise.all([
+  const [attachments, releaseAttachments] = await Promise.all([
     db.taskAttachment.findMany({ select: { id: true } }),
     db.releaseAttachment.findMany({ select: { id: true } }),
-    db.undoEntry.findMany({ select: { ops: true } }),
   ]);
-  const retained = undoReferencedTokens(undo.map((u) => u.ops));
+  // Entradas de deshacer por tandas: solo se guardan los ids que mencionan, no todos sus datos a la vez.
+  const retained = new Set<string>();
+  for (let cursor: string | undefined; ; ) {
+    const page = await db.undoEntry.findMany({ select: { id: true, ops: true }, orderBy: { id: "asc" }, take: 200, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}) });
+    for (const token of undoReferencedTokens(page.map((u) => u.ops))) retained.add(token);
+    if (page.length < 200) break;
+    cursor = page[page.length - 1]!.id;
+  }
   const report = await cleanOrphanFiles(uploadDir(), {
     attachments: new Set([...attachments.map((a) => a.id), ...retained]),
     releaseAttachments: new Set([...releaseAttachments.map((a) => a.id), ...retained]),

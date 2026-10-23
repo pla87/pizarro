@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, ChevronLeft, ChevronRight, Flag, Loader2, Undo2, X } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Flag, Loader2, Undo2, X } from "lucide-react";
 import Link, { useLinkStatus } from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -13,6 +13,7 @@ import { deliverableStatus, type DeliverableStatus } from "@/lib/report";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { isTypingTarget } from "@/components/board/shortcuts";
 import { cn } from "@/components/ui/cn";
+import { Popover } from "@/components/ui/Popover";
 import { useToast } from "@/components/ui/Toast";
 
 export interface CalendarTask {
@@ -38,7 +39,8 @@ export interface CalendarDeliverable {
 }
 
 interface Filters {
-  project: string;
+  /** Proyectos elegidos; vacío = todos aquellos en los que trabaja. */
+  project: string[];
   person: string;
   hideDone: boolean;
 }
@@ -86,6 +88,15 @@ const initials = (name: string) =>
     .map((w) => [...w][0])
     .join("")
     .toUpperCase();
+
+/** Casilla de las opciones del filtro de proyectos. */
+function CheckBox({ on }: { on: boolean }) {
+  return (
+    <span className={cn("flex size-4 shrink-0 items-center justify-center rounded border", on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-slate-400 dark:border-slate-600")} aria-hidden>
+      {on && <Check size={12} strokeWidth={3} />}
+    </span>
+  );
+}
 
 /** Spinner dentro de un <Link> mientras se navega al mes siguiente. */
 function LinkSpinner() {
@@ -140,7 +151,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
       const m = over.month === undefined ? month : over.month;
       const q = new URLSearchParams();
       if (m && m !== today.slice(0, 7)) q.set("month", m);
-      if (f.project) q.set("project", f.project);
+      if (f.project.length) q.set("project", f.project.join(","));
       if (f.person) q.set("person", f.person);
       if (f.hideDone) q.set("hideDone", "1");
       const s = q.toString();
@@ -153,7 +164,17 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
   const dayLabel = useCallback((iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }), [locale]);
   const monthTitle = new Date(`${month}-01T00:00:00Z`).toLocaleDateString(locale, { month: "long", year: "numeric", timeZone: "UTC" });
   const weekdays = weeks[0]!.map((d) => new Date(`${d.iso}T00:00:00Z`).toLocaleDateString(locale, { weekday: "short", timeZone: "UTC" }));
-  const showProject = !filters.project;
+  // Con más de un proyecto a la vista, cada tarea lleva las iniciales del suyo.
+  const showProject = (filters.project.length || projects.length) > 1;
+  // Selección del desplegable de proyectos: se aplica al cerrarlo (una sola navegación por varios clics).
+  const [draft, setDraft] = useState<string[]>(filters.project);
+  const toggleProject = (id: string) => setDraft((d) => (d.includes(id) ? d.filter((x) => x !== id) : [...d, id]));
+  const applyProjects = () => {
+    const same = draft.length === filters.project.length && draft.every((id) => filters.project.includes(id));
+    if (!same) go({ project: draft });
+  };
+  const projectLabel =
+    filters.project.length === 0 ? t("Todos los proyectos") : filters.project.length === 1 ? (projects.find((p) => p.id === filters.project[0])?.name ?? t("1 proyecto")) : t("{n} proyectos", { n: filters.project.length });
 
   const moveTask = useCallback(
     async (task: CalendarTask, to: string) => {
@@ -245,7 +266,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
       aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
       style={kindBadgeStyle(task.kind.color)}
       className={cn(
-        "kind-badge flex w-full min-w-0 cursor-grab items-center gap-1 rounded px-1.5 py-0.5 text-left text-xs leading-5 outline-offset-1 focus-visible:outline-2 focus-visible:outline-brand-500 active:cursor-grabbing",
+        "kind-badge flex w-full min-w-0 cursor-grab items-center gap-1 rounded px-1.5 py-0.5 text-left text-xs leading-5 outline-offset-1 focus-visible:outline-3 focus-visible:outline-focus active:cursor-grabbing",
         task.done && "opacity-55 line-through",
         dragging === task.id && "opacity-40",
       )}
@@ -264,6 +285,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
   };
 
   const navBtn = "inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-slate-300 px-2.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800";
+  const optionCls = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none dark:hover:bg-slate-800 dark:focus-visible:bg-slate-800";
   const selectCls = "h-9 min-w-0 max-w-full rounded-lg border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-900";
 
   return (
@@ -297,12 +319,36 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-2" role="group" aria-label={t("Filtros del calendario")}>
-        <select aria-label={t("Proyecto")} value={filters.project} onChange={(e) => go({ project: e.target.value })} className={cn(selectCls, "w-44 md:w-52")}>
-          <option value="">{t("Todos los proyectos")}</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+        <Popover
+          kind="dialog"
+          label={t("Proyectos")}
+          onOpenChange={(open) => (open ? setDraft(filters.project) : applyProjects())}
+          panelClassName="w-64 max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+          trigger={({ open, props }) => (
+            <button type="button" {...props} aria-label={t("Proyectos")} className={cn(selectCls, "flex w-44 items-center justify-between gap-1.5 text-left md:w-52")}>
+              <span className="min-w-0 truncate">{projectLabel}</span>
+              {filters.project.length > 1 && <span className="shrink-0 rounded-full bg-brand-600 px-1.5 text-[11px] font-semibold leading-4 text-on-brand tabular-nums">{filters.project.length}</span>}
+              <ChevronDown size={14} className={cn("shrink-0 text-slate-400 transition-transform", open && "rotate-180")} aria-hidden />
+            </button>
+          )}
+        >
+          <ul className="text-sm">
+            <li>
+              <button type="button" role="checkbox" aria-checked={draft.length === 0} onClick={() => setDraft([])} className={optionCls}>
+                <CheckBox on={draft.length === 0} />
+                <span className="font-medium">{t("Todos")}</span>
+              </button>
+            </li>
+            {projects.map((p) => (
+              <li key={p.id}>
+                <button type="button" role="checkbox" aria-checked={draft.includes(p.id)} onClick={() => toggleProject(p.id)} className={optionCls}>
+                  <CheckBox on={draft.includes(p.id)} />
+                  <span className="min-w-0 truncate">{p.name}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Popover>
         <select aria-label={t("Persona")} value={filters.person} onChange={(e) => go({ person: e.target.value })} className={cn(selectCls, "w-40 md:w-48")}>
           <option value="">{t("Cualquier persona")}</option>
           <option value="me">{t("Yo")}</option>
@@ -476,7 +522,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
                           className={cn("kind-badge flex min-w-0 items-center gap-1.5 rounded px-2 py-1.5 text-sm", task.done && "opacity-55 line-through")}
                         >
                           <span className="min-w-0 flex-1 truncate">{task.title}</span>
-                          {showProject && <span className="max-w-[40%] shrink-0 truncate text-xs opacity-80">{task.projectName}</span>}
+                          {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" title={task.projectName} aria-label={task.projectName}>{initials(task.projectName)}</span>}
                         </Link>
                       </li>
                     ))}

@@ -75,6 +75,8 @@ export const admin: Record<string, string> = {
   "1 etiqueta": "1 label",
   "{n} etiquetas": "{n} labels",
   "1 general oculto": "1 general type hidden",
+  "todos los generales ocultos": "all general types hidden",
+  "Ocultar todos los tipos generales": "Hide all general types",
   "{n} generales ocultos": "{n} general types hidden",
   "Color {c}": "Color {c}",
   "Otro color": "Other color",

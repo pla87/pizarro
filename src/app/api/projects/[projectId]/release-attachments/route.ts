@@ -14,7 +14,8 @@ import { buildZip } from "@/lib/zip";
 
 export const runtime = "nodejs";
 
-const MAX_ZIP_BYTES = 200 * 1024 * 1024;
+// Se arma en memoria (ficheros + ZIP): un tope moderado evita picos de memoria en un contenedor pequeño.
+const MAX_ZIP_BYTES = 80 * 1024 * 1024;
 
 const bodySchema = z.object({
   items: z
@@ -79,7 +80,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
     userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/release-attachments`, ip: clientIp(req.headers),
     durationMs: performance.now() - start, details: { tasks: items.length, files: files.length, bytes: zip.length },
   });
-  return new Response(new Uint8Array(zip), {
+  return new Response(new Uint8Array(zip.buffer as ArrayBuffer, zip.byteOffset, zip.length), {
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="release-${isoDate()}-adjuntos.zip"`,

@@ -10,7 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { T } from "@/i18n/core";
-import { COLUMN_ROLES, PALETTE, type ColumnRoleValue } from "@/lib/constants";
+import { COLUMN_ROLES, PALETTE, swatchBorder, type ColumnRoleValue } from "@/lib/constants";
 import { parseSubtaskLines } from "@/lib/kinds-special";
 import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS, type TemplateDto, type TemplateInput } from "@/lib/project-templates";
 
@@ -18,14 +18,15 @@ const KIND_COLORS = [...PALETTE, "#84cc16", "#06b6d4", "#d946ef", "#78716c"];
 const ROLE_LABEL: Record<ColumnRoleValue, string> = { NONE: "Ninguno", NEXT_RELEASE: "Siguiente salto", IN_PRODUCTION: "En producción" };
 
 /** Resumen de una línea: «5 columnas · 2 tipos propios · 3 etiquetas · 1 general oculto». */
-function summarizeTemplate(tpl: Pick<TemplateDto, "columns" | "kinds" | "labels" | "hiddenGeneralKinds">, t: T): string {
+function summarizeTemplate(tpl: Pick<TemplateDto, "columns" | "kinds" | "labels" | "hiddenGeneralKinds" | "hideAllGeneralKinds">, t: T): string {
   const n = (count: number, one: string, many: string) => (count === 1 ? t(one) : t(many, { n: count }));
   const parts = [
     n(tpl.columns.length, "1 columna", "{n} columnas"),
     n(tpl.kinds.length, "1 tipo propio", "{n} tipos propios"),
     n(tpl.labels.length, "1 etiqueta", "{n} etiquetas"),
   ];
-  if (tpl.hiddenGeneralKinds.length) parts.push(n(tpl.hiddenGeneralKinds.length, "1 general oculto", "{n} generales ocultos"));
+  if (tpl.hideAllGeneralKinds) parts.push(t("todos los generales ocultos"));
+  else if (tpl.hiddenGeneralKinds.length) parts.push(n(tpl.hiddenGeneralKinds.length, "1 general oculto", "{n} generales ocultos"));
   return parts.join(" · ");
 }
 
@@ -35,6 +36,7 @@ type Draft = {
   columns: { name: string; role: ColumnRoleValue; isDone: boolean }[];
   kinds: { name: string; color: string; titleTemplate: string; descriptionTemplate: string; subtaskTemplate: string[] }[];
   hiddenGeneralKinds: string[];
+  hideAllGeneralKinds: boolean;
   labels: { name: string; color: (typeof PALETTE)[number] }[];
 };
 
@@ -44,6 +46,7 @@ const EMPTY: Draft = {
   columns: [{ name: "", role: "NONE", isDone: false }],
   kinds: [],
   hiddenGeneralKinds: [],
+  hideAllGeneralKinds: false,
   labels: [],
 };
 
@@ -56,13 +59,13 @@ function ColorField({ value, onChange, colors }: { value: string; onChange: (c: 
           key={c}
           type="button"
           onClick={() => onChange(c)}
-          className={cn("h-6 w-6 rounded-full", value.toLowerCase() === c && "ring-2 ring-brand-500 ring-offset-1 dark:ring-offset-slate-900")}
+          className={cn("h-6 w-6 rounded-full", swatchBorder(c), value.toLowerCase() === c && "ring-2 ring-brand-500 ring-offset-1 dark:ring-offset-slate-900")}
           style={{ backgroundColor: c }}
           aria-label={t("Color {c}", { c })}
         />
       ))}
       {colors.length > PALETTE.length && (
-        <label className="relative h-6 w-6 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus" title={t("Otro color")}>
+        <label className="relative h-6 w-6 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus" title={t("Otro color")}>
           <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label={t("Elegir otro color")} />
         </label>
       )}
@@ -108,6 +111,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
     columns: tpl.columns,
     kinds: (tpl.kinds ?? []).map((k) => ({ name: k.name, color: k.color, titleTemplate: k.titleTemplate ?? "", descriptionTemplate: k.descriptionTemplate ?? "", subtaskTemplate: k.subtaskTemplate ?? [] })),
     hiddenGeneralKinds: tpl.hiddenGeneralKinds,
+    hideAllGeneralKinds: tpl.hideAllGeneralKinds ?? false,
     labels: tpl.labels,
   });
 
@@ -314,7 +318,11 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
             <section>
               <h3 className="mb-1 text-sm font-semibold">{t("Tipos generales que no se usarán")}</h3>
               <p className="mb-2 text-xs text-slate-500">{t("Marca los generales que el proyecto ocultará. Si no hay tipos propios siempre quedará al menos uno visible.")}</p>
-              <div className="flex flex-wrap gap-x-4 gap-y-1">
+              <label className="mb-2 flex items-center gap-1.5 text-sm font-medium">
+                <input type="checkbox" checked={draft.hideAllGeneralKinds} onChange={(e) => patch({ hideAllGeneralKinds: e.target.checked })} />
+                {t("Ocultar todos los tipos generales")}
+              </label>
+              <div className={cn("flex flex-wrap gap-x-4 gap-y-1", draft.hideAllGeneralKinds && "opacity-50")}>
                 {generalKinds.map((name) => (
                   <label key={name} className="flex items-center gap-1.5 text-sm">
                     <input

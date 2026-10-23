@@ -782,14 +782,29 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   return (
     <BoardContext.Provider value={api}>
       <div className="flex h-full flex-col">
-        <div className="flex items-center gap-3 px-4 pt-4 pb-2 max-lg:hidden">
-          <h1 className="min-w-0"><ProjectMenu textClassName="text-lg" /></h1>
+        {/* Contenedor de consulta: la cabecera se adapta al ancho que le deja la barra lateral, no al de la ventana. */}
+        <div className="@container max-lg:hidden">
+        <div className="flex items-center gap-2 px-4 pt-4 pb-2 @min-[1000px]:gap-3 [&>*]:whitespace-nowrap [&_.btn-primary]:shrink-0 [&_.btn-secondary]:shrink-0">
+          {/* El nombre del proyecto no se encoge: el resto de la cabecera cede sitio antes (solo se trunca si ocupa media cabecera). */}
+          <h1 className="max-w-[45%] shrink-0"><ProjectMenu textClassName="text-lg" /></h1>
           <UndoButton projectId={data.project.id} shortcut className="-ml-2" />
-          <span className="text-sm text-slate-500" aria-live="polite">
-            {filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : t("{n} tarjetas", { n: tasks.length })}
+          <span
+            className="shrink-0 text-sm text-slate-500"
+            aria-live="polite"
+            title={filtering ? undefined : t("{n} tarjetas", { n: tasks.length })}
+          >
+            {filtering ? (
+              t("{shown} de {total}", { shown: shownCount, total: tasks.length })
+            ) : (
+              <>
+                {/* Con poco ancho, solo el número (el texto completo queda en el tooltip y para lectores de pantalla). */}
+                <span className="@min-[1000px]:hidden" aria-hidden>{tasks.length}</span>
+                <span className="@max-[999px]:sr-only">{t("{n} tarjetas", { n: tasks.length })}</span>
+              </>
+            )}
           </span>
           <Presence projectId={data.project.id} />
-          <div className="relative ml-auto">
+          <div className="relative ml-auto w-36 min-w-16 shrink transition-[width] @min-[1000px]:focus-within:w-56">
             <Search size={14} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" aria-hidden />
             <input
               ref={searchRef}
@@ -806,7 +821,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               placeholder={t("Filtrar ({keys})", { keys: "/" })}
               aria-label={t("Filtrar tarjetas")}
               title={t("Filtrar tarjetas por título, tipo, responsable o etiqueta ({keys})", { keys: "/" })}
-              className="input h-8 w-36 [&::-webkit-search-cancel-button]:hidden pr-7 pl-8 text-sm transition-[width] focus:w-56"
+              className="input h-8 [&::-webkit-search-cancel-button]:hidden pr-7 pl-8 text-sm"
             />
             {query && (
               <button type="button" className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600" onClick={() => { setQuery(""); searchRef.current?.focus(); }} aria-label={t("Quitar el filtro")}>
@@ -814,21 +829,21 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               </button>
             )}
           </div>
-          <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} className="-ml-1.5" />
+          <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} className="-ml-1.5 shrink-0" />
           {filterCount > 0 && (
             <button type="button" className="-ml-1 text-xs text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline dark:hover:text-slate-300" onClick={() => changeFilters(EMPTY_FILTERS)}>
               {t("Limpiar filtros")}
             </button>
           )}
           <ReportButton projectId={data.project.id} variant="header" />
-          <button className="btn-secondary" onClick={() => setArchivedOpen(true)}>
-            <Archive size={16} /> {t("Archivadas")}
+          <button className="btn-secondary" onClick={() => setArchivedOpen(true)} aria-label={t("Archivadas")} title={t("Archivadas")}>
+            <Archive size={16} /> <span className="hidden @min-[1240px]:inline">{t("Archivadas")}</span>
           </button>
-          <button className="btn-secondary" onClick={() => setBulk({})} title={`${t("Crear varias tareas pegando una lista")} (${sc("Alt+Shift+N")})`}>
-            <PlusStack size={16} /> {t("Varias tareas")}
+          <button className="btn-secondary" onClick={() => setBulk({})} aria-label={t("Varias tareas")} title={`${t("Crear varias tareas pegando una lista")} (${sc("Alt+Shift+N")})`}>
+            <PlusStack size={16} /> <span className="hidden @min-[1240px]:inline">{t("Varias tareas")}</span>
           </button>
-          <button ref={newTaskBtnRef} className="btn-primary" onClick={() => (primaryOpen ? (!secondNew && addSecond()) : setNewTask({}))} title={`${t("Nueva tarea")} (${sc("Alt+N")})`}>
-            <Plus size={16} /> {t("Nueva tarea")}
+          <button ref={newTaskBtnRef} className="btn-primary" onClick={() => (primaryOpen ? (!secondNew && addSecond()) : setNewTask({}))} aria-label={t("Nueva tarea")} title={`${t("Nueva tarea")} (${sc("Alt+N")})`}>
+            <Plus size={16} /> <span className="@min-[1240px]:hidden">{t("Nueva")}</span><span className="hidden @min-[1240px]:inline">{t("Nueva tarea")}</span>
           </button>
           {/* Con un diálogo abierto, una copia encima del fondo difuminado: abre una segunda tarea al lado (como el «+» del modal). */}
           {primaryOpen && newTaskRect &&
@@ -836,16 +851,18 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               <button
                 type="button"
                 tabIndex={-1}
-                className={cn("btn-primary fixed z-[70] shadow-lg", secondNew && "opacity-60")}
+                className={cn("btn-primary fixed z-[70] whitespace-nowrap shadow-lg", secondNew && "opacity-60")}
                 style={{ left: newTaskRect.left, top: newTaskRect.top, width: newTaskRect.width, height: newTaskRect.height }}
                 onClick={() => !secondNew && addSecond()}
                 aria-disabled={!!secondNew}
                 title={t("Abrir otra tarea nueva al lado")}
               >
-                <Plus size={16} /> {t("Nueva tarea")}
+                {/* Mismo texto que el botón original: corto cuando la cabecera va justa de sitio. */}
+                <Plus size={16} /> {newTaskRect.width < 130 ? t("Nueva") : t("Nueva tarea")}
               </button>,
               document.body,
             )}
+        </div>
         </div>
 
         <DndContext

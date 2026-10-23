@@ -187,7 +187,7 @@
 }
 
 /*
- * Eva (Evangelion Unit-01): morado #6848a0 como color principal, verde neón #78c838 para lo destacado
+ * Eva (Evangelion Unit-01): morado #6848a0 como color principal, verde neón (#66ff33 en claro, #78c838 en oscuro) para lo destacado
  * (progreso, subtareas hechas, foco y borde de los campos activos) y un toque naranja #f8a030
  * (--color-detail). Neutros lavanda en claro y violeta casi negro en oscuro.
  */
@@ -210,8 +210,9 @@
   --color-brand-500: #7d5cb4;
   --color-brand-600: #6848a0;
   --color-brand-700: #503579;
-  --color-progress: #78c838;
-  --color-focus: #78c838;
+  /* Verde neón vivo en claro (sobre el lavanda se ve mejor que el verde apagado del oscuro). */
+  --color-progress: #66ff33;
+  --color-focus: #66ff33;
   --color-detail: #f8a030;
   --color-detail-mid: #f8a030;
   --mark-mid-opacity: 1;
@@ -240,7 +241,7 @@
     outline-color: var(--color-focus);
   }
   :focus-visible {
-    outline: 2px solid var(--color-focus);
+    outline: 3px solid var(--color-focus);
     outline-offset: 2px;
   }
   @supports not selector(::-webkit-scrollbar) {
@@ -288,7 +289,7 @@ body {
 
 /* Componentes reutilizables */
 @utility btn {
-  @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-50;
+  @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-50;
 }
 @utility btn-primary {
   @apply btn bg-brand-600 text-on-brand hover:bg-brand-700;
@@ -306,7 +307,7 @@ body {
   @apply inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100;
 }
 @utility input {
-  @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-focus focus:ring-2 focus:ring-focus/30 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100;
+  @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-focus focus:ring-3 focus:ring-focus/30 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100;
 }
 @utility label {
   @apply mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400;
