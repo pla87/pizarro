@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { undoLast } from "@/actions/undo";
 import { updateTask } from "@/actions/tasks";
-import { bandsForWeek, groupByDay, groupWeeks, shiftMonth, type CalendarDay } from "@/lib/calendar";
+import { PERSON_UNASSIGNED, bandsForWeek, groupByDay, groupWeeks, shiftMonth, type CalendarDay } from "@/lib/calendar";
 import { kindBadgeStyle } from "@/lib/constants";
 import { addDaysIso, daysBetween, formatDay } from "@/lib/dates";
 import { deliverableStatus, type DeliverableStatus } from "@/lib/report";
@@ -41,7 +41,8 @@ export interface CalendarDeliverable {
 interface Filters {
   /** Proyectos elegidos; vacío = todos aquellos en los que trabaja. */
   project: string[];
-  person: string;
+  /** Ids de personas elegidas (y/o PERSON_UNASSIGNED); vacío = cualquiera. */
+  person: string[];
   hideDone: boolean;
 }
 
@@ -53,6 +54,8 @@ interface Props {
   deliverables: CalendarDeliverable[];
   projects: { id: string; name: string }[];
   people: { id: string; name: string }[];
+  /** Usuario actual: aparece una sola vez en el selector de personas, como «Nombre (yo)». */
+  meId: string;
   filters: Filters;
   /** Se alcanzó el tope de tareas cargadas. */
   truncated: boolean;
@@ -104,7 +107,7 @@ function LinkSpinner() {
   return pending ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null;
 }
 
-export function CalendarView({ month, today, weeks, tasks, deliverables, projects, people, filters, truncated }: Props) {
+export function CalendarView({ month, today, weeks, tasks, deliverables, projects, people, meId, filters, truncated }: Props) {
   const t = useT();
   const locale = useIntlLocale();
   const router = useRouter();
@@ -152,7 +155,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
       const q = new URLSearchParams();
       if (m && m !== today.slice(0, 7)) q.set("month", m);
       if (f.project.length) q.set("project", f.project.join(","));
-      if (f.person) q.set("person", f.person);
+      if (f.person.length) q.set("person", f.person.join(","));
       if (f.hideDone) q.set("hideDone", "1");
       const s = q.toString();
       return s ? `/calendar?${s}` : "/calendar";
@@ -173,6 +176,27 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
     const same = draft.length === filters.project.length && draft.every((id) => filters.project.includes(id));
     if (!same) go({ project: draft });
   };
+  // Selector de personas: igual que el de proyectos. Primero las opciones generales, luego el usuario actual y el resto.
+  const [draftPeople, setDraftPeople] = useState<string[]>(filters.person);
+  const togglePerson = (id: string) => setDraftPeople((d) => (d.includes(id) ? d.filter((x) => x !== id) : [...d, id]));
+  const applyPeople = () => {
+    const same = draftPeople.length === filters.person.length && draftPeople.every((id) => filters.person.includes(id));
+    if (!same) go({ person: draftPeople });
+  };
+  const personOptions = useMemo(() => {
+    const me = people.find((p) => p.id === meId);
+    return [
+      { id: PERSON_UNASSIGNED, label: t("Sin asignar") },
+      ...(me ? [{ id: me.id, label: t("{name} (yo)", { name: me.name }) }] : []),
+      ...people.filter((p) => p.id !== meId).map((p) => ({ id: p.id, label: p.name })),
+    ];
+  }, [people, meId, t]);
+  const personLabel =
+    filters.person.length === 0
+      ? t("Cualquier persona")
+      : filters.person.length === 1
+        ? (personOptions.find((o) => o.id === filters.person[0])?.label ?? t("1 persona"))
+        : t("{n} personas", { n: filters.person.length });
   const projectLabel =
     filters.project.length === 0 ? t("Todos los proyectos") : filters.project.length === 1 ? (projects.find((p) => p.id === filters.project[0])?.name ?? t("1 proyecto")) : t("{n} proyectos", { n: filters.project.length });
 
@@ -349,14 +373,36 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
             ))}
           </ul>
         </Popover>
-        <select aria-label={t("Persona")} value={filters.person} onChange={(e) => go({ person: e.target.value })} className={cn(selectCls, "w-40 md:w-48")}>
-          <option value="">{t("Cualquier persona")}</option>
-          <option value="me">{t("Yo")}</option>
-          <option value="none">{t("Sin asignar")}</option>
-          {people.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+        <Popover
+          kind="dialog"
+          label={t("Persona")}
+          onOpenChange={(open) => (open ? setDraftPeople(filters.person) : applyPeople())}
+          panelClassName="w-64 max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+          trigger={({ open, props }) => (
+            <button type="button" {...props} aria-label={t("Persona")} className={cn(selectCls, "flex w-44 items-center justify-between gap-1.5 text-left md:w-52")}>
+              <span className="min-w-0 truncate">{personLabel}</span>
+              {filters.person.length > 1 && <span className="shrink-0 rounded-full bg-brand-600 px-1.5 text-[11px] font-semibold leading-4 text-on-brand tabular-nums">{filters.person.length}</span>}
+              <ChevronDown size={14} className={cn("shrink-0 text-slate-400 transition-transform", open && "rotate-180")} aria-hidden />
+            </button>
+          )}
+        >
+          <ul className="max-h-72 overflow-y-auto text-sm">
+            <li>
+              <button type="button" role="checkbox" aria-checked={draftPeople.length === 0} onClick={() => setDraftPeople([])} className={optionCls}>
+                <CheckBox on={draftPeople.length === 0} />
+                <span className="font-medium">{t("Todos")}</span>
+              </button>
+            </li>
+            {personOptions.map((o) => (
+              <li key={o.id}>
+                <button type="button" role="checkbox" aria-checked={draftPeople.includes(o.id)} onClick={() => togglePerson(o.id)} className={optionCls}>
+                  <CheckBox on={draftPeople.includes(o.id)} />
+                  <span className="min-w-0 truncate">{o.label}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Popover>
         <label className="flex h-9 cursor-pointer items-center gap-2 text-sm">
           <input type="checkbox" checked={filters.hideDone} onChange={(e) => go({ hideDone: e.target.checked })} className="size-4 accent-brand-600" />
           {t("Ocultar terminadas")}

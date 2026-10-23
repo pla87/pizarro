@@ -104,3 +104,25 @@ export function groupWeeks(weeks: CalendarDay[][], hasItems: (iso: string) => bo
     .map((w) => ({ start: w[0]!.iso, end: w[w.length - 1]!.iso, days: w.filter((d) => d.inMonth && hasItems(d.iso)).map((d) => d.iso) }))
     .filter((w) => w.days.length > 0);
 }
+
+/** Marca de «sin asignar» en `?person=`. */
+export const PERSON_UNASSIGNED = "unassigned";
+/** Personas que se aceptan en `?person=`. */
+export const MAX_PERSON_FILTER = 50;
+
+/**
+ * Valor de `?person=`: lista separada por comas de ids de usuario y/o «unassigned». Acepta los valores antiguos:
+ * `me` (el usuario actual) y `none` (sin asignar). Sin duplicados y con tope; lo vacío se descarta.
+ * Los ids no se validan aquí (eso es cosa del servidor, contra los usuarios visibles).
+ */
+export function parsePersonParam(raw: string | undefined | null, meId: string, max: number = MAX_PERSON_FILTER): string[] {
+  const out: string[] = [];
+  for (const part of (raw ?? "").split(",")) {
+    const x = part.trim();
+    if (!x) continue;
+    const v = x === "me" ? meId : x === "none" ? PERSON_UNASSIGNED : x;
+    if (!out.includes(v)) out.push(v);
+    if (out.length >= max) break;
+  }
+  return out;
+}

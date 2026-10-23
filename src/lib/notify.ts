@@ -6,6 +6,7 @@ import { projectUsersWhere } from "./access";
 import { db } from "./db";
 import { appUrl, emailEnabled, escapeHtml, sendMail } from "./mail";
 import { logEvent } from "./log";
+import { maskEmail, maskEmailsIn } from "./mask-email";
 import { excerpt as makeExcerpt, mentionsToPlain } from "./mentions";
 import { dueChangeText, notificationHeadline, type NotificationKind } from "./notification-text";
 import { followerIds } from "./followers";
@@ -123,10 +124,10 @@ async function deliver(notificationIds: string[]): Promise<void> {
       try {
         await sendMail({ to: n.user.email, ...mentionEmail(msg, t) });
         update.emailSentAt = new Date();
-        logEvent({ ...base, action: "notify.email", message: `Email de aviso (${n.type}) enviado a ${n.user.name}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId: n.task.id, to: n.user.email } });
+        logEvent({ ...base, action: "notify.email", message: `Email de aviso (${n.type}) enviado a ${n.user.name}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId: n.task.id, to: maskEmail(n.user.email) } });
       } catch (err) {
         errors.push(`email: ${(err as Error).message}`);
-        logEvent({ ...base, level: "error", action: "notify.emailFailed", message: `Fallo al enviar email a ${n.user.name}: ${(err as Error).message}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId: n.task.id, to: n.user.email } });
+        logEvent({ ...base, level: "error", action: "notify.emailFailed", message: `Fallo al enviar email a ${n.user.name}: ${maskEmailsIn((err as Error).message)}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId: n.task.id, to: maskEmail(n.user.email) } });
       }
     }
     // WhatsApp solo para menciones: la plantilla aprobada por Meta es la de mención.
@@ -143,7 +144,7 @@ async function deliver(notificationIds: string[]): Promise<void> {
     }
     if (errors.length) {
       update.deliveryError = errors.join(" | ").slice(0, 500);
-      console.error("[notify]", n.id, update.deliveryError);
+      console.error("[notify]", n.id, maskEmailsIn(update.deliveryError));
     }
     if (Object.keys(update).length) await db.notification.update({ where: { id: n.id }, data: update });
   }
