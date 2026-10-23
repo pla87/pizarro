@@ -28,7 +28,7 @@ export async function saveTemplate(input: TemplateInput, templateId?: string | n
   return runAction({ name: "templates.saveTemplate", args: [input, templateId] }, async () => {
     await requireAdmin();
     const data = templateInputSchema.parse(input);
-    const row = { name: data.name, description: data.description, columns: data.columns, kinds: data.kinds, hiddenGeneralKinds: data.hiddenGeneralKinds, labels: data.labels };
+    const row = { name: data.name, description: data.description, columns: data.columns, kinds: data.kinds, hiddenGeneralKinds: data.hiddenGeneralKinds, hideAllGeneralKinds: data.hideAllGeneralKinds, labels: data.labels };
     if (templateId) {
       const id = v.id.parse(templateId);
       if (!(await db.projectTemplate.count({ where: { id } }))) throw notFound();

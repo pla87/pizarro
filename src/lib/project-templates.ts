@@ -47,6 +47,8 @@ export const templateInputSchema = z
       .max(MAX_TEMPLATE_COLUMNS, `Máximo ${MAX_TEMPLATE_COLUMNS} columnas.`),
     kinds: z.array(templateKindSchema).max(MAX_TEMPLATE_KINDS, `Máximo ${MAX_TEMPLATE_KINDS} tipos propios.`),
     hiddenGeneralKinds: z.array(v.name).max(100),
+    // Oculta todos los tipos generales del proyecto nuevo, sean los que sean (para plantillas ajenas al software).
+    hideAllGeneralKinds: z.boolean().default(false),
     labels: z.array(templateLabelSchema).max(MAX_TEMPLATE_LABELS, `Máximo ${MAX_TEMPLATE_LABELS} etiquetas.`),
   })
   .superRefine((t, ctx) => {
@@ -79,14 +81,15 @@ export function sortTemplates<T extends { name: string }>(list: T[]): T[] {
 }
 
 /** Resumen de una línea: «5 columnas · 2 tipos propios · 3 etiquetas · 1 general oculto». */
-export function summarizeTemplate(t: Pick<TemplateData, "columns" | "kinds" | "labels" | "hiddenGeneralKinds">): string {
+export function summarizeTemplate(t: Pick<TemplateData, "columns" | "kinds" | "labels" | "hiddenGeneralKinds"> & { hideAllGeneralKinds?: boolean }): string {
   const n = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
   const parts = [
     n(t.columns.length, "columna", "columnas"),
     n(t.kinds.length, "tipo propio", "tipos propios"),
     n(t.labels.length, "etiqueta", "etiquetas"),
   ];
-  if (t.hiddenGeneralKinds.length) parts.push(n(t.hiddenGeneralKinds.length, "general oculto", "generales ocultos"));
+  if (t.hideAllGeneralKinds) parts.push("todos los generales ocultos");
+  else if (t.hiddenGeneralKinds.length) parts.push(n(t.hiddenGeneralKinds.length, "general oculto", "generales ocultos"));
   return parts.join(" · ");
 }
 
@@ -106,11 +109,12 @@ interface TemplateApplication {
 /**
  * Datos a crear en un proyecto nuevo a partir de una plantilla. Los nombres de tipos generales
  * a ocultar se comparan sin distinguir mayúsculas y los inexistentes se ignoran. Si el proyecto
- * no tiene tipos propios nunca se ocultan todos los generales: se conserva el primero.
+ * no tiene tipos propios nunca se ocultan todos los generales: se conserva el primero. Con
+ * `hideAllGeneralKinds` se ocultan todos (salvo esa excepción), vengan o no en la lista de nombres.
  */
 export function buildTemplateApplication(template: TemplateData, generalKinds: GeneralKind[], locale: "es" | "en" = "es"): TemplateApplication {
   const hiddenNames = new Set(template.hiddenGeneralKinds.map(nameKey));
-  let hidden = generalKinds.filter((k) => hiddenNames.has(nameKey(k.name)));
+  let hidden = template.hideAllGeneralKinds ? [...generalKinds] : generalKinds.filter((k) => hiddenNames.has(nameKey(k.name)));
   if (template.kinds.length === 0 && generalKinds.length > 0 && hidden.length >= generalKinds.length) {
     hidden = hidden.slice(1);
   }
@@ -134,7 +138,7 @@ export function buildTemplateApplication(template: TemplateData, generalKinds: G
 }
 
 /** Lee el JSON guardado en la base de datos y descarta lo que no cumpla el esquema. */
-export function parseStoredTemplate(row: { id: string; name: string; description: string; columns: unknown; kinds: unknown; hiddenGeneralKinds: unknown; labels: unknown }): TemplateDto {
+export function parseStoredTemplate(row: { id: string; name: string; description: string; columns: unknown; kinds: unknown; hiddenGeneralKinds: unknown; hideAllGeneralKinds?: unknown; labels: unknown }): TemplateDto {
   const parsed = templateInputSchema.safeParse(row);
   if (parsed.success) return { id: row.id, ...parsed.data };
   // Datos corruptos: se devuelve lo que se pueda leer sin romper el listado.
@@ -147,6 +151,7 @@ export function parseStoredTemplate(row: { id: string; name: string; description
     columns: list(templateColumnSchema, row.columns),
     kinds: list(templateKindSchema, row.kinds),
     hiddenGeneralKinds: list(v.name, row.hiddenGeneralKinds),
+    hideAllGeneralKinds: row.hideAllGeneralKinds === true,
     labels: list(templateLabelSchema, row.labels),
   };
 }

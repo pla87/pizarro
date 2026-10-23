@@ -663,6 +663,8 @@ model ProjectTemplate {
   kinds       Json     @default("[]")
   /// Nombres de los tipos generales que el proyecto NO usará.
   hiddenGeneralKinds Json @default("[]")
+  /// Oculta todos los tipos generales (plantillas ajenas al software).
+  hideAllGeneralKinds Boolean @default(false)
   /// [{ name, color }]
   labels      Json     @default("[]")
   position    Float    @default(0)
@@ -676,6 +678,8 @@ model ProjectTemplate {
 model BuiltinTemplateSeeded {
   key      String   @id
   seededAt DateTime @default(now())
+  /// Huella del contenido canónico aplicado por última vez a la plantilla; null en las sembradas antes de existir este campo.
+  appliedHash String?
 }
 
 enum CardStyle {
