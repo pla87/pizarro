@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { visibleProjectsWhere } from "@/lib/access";
 import { appTimeZone, listKinds, loadBoardTasks, projectUsers, userTemplates } from "@/lib/board";
 import { dateToIso, todayIso } from "@/lib/dates";
@@ -12,22 +13,24 @@ import { Board } from "@/components/board/Board";
 
 type Params = { params: Promise<{ projectId: string }>; searchParams: Promise<{ task?: string }> };
 
+// Una sola consulta por petición para el título y la página.
+const visibleProject = cache(async (projectId: string) => {
+  const user = await getCurrentUser();
+  return user ? db.project.findFirst({ where: { id: projectId, ...visibleProjectsWhere(user) }, select: { id: true, name: true, isPrivate: true } }) : null;
+});
+
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const t = await getT();
-  const user = await getCurrentUser();
   const { projectId } = await params;
   // Solo se muestra el nombre si el usuario tiene acceso al proyecto.
-  const p = user ? await db.project.findFirst({ where: { id: projectId, ...visibleProjectsWhere(user) }, select: { name: true } }) : null;
+  const p = await visibleProject(projectId);
   return { title: p?.name ?? t("Tablero") };
 }
 
 export default async function BoardPage({ params, searchParams }: Params) {
   const user = await requireUserPage();
   const { projectId } = await params;
-  const project = await db.project.findFirst({
-    where: { id: projectId, ...visibleProjectsWhere(user) },
-    select: { id: true, name: true, isPrivate: true },
-  });
+  const project = await visibleProject(projectId);
   if (!project) notFound();
 
   // Todas las consultas en paralelo: una sola ida y vuelta efectiva.

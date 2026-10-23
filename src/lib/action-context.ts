@@ -17,6 +17,8 @@ export interface ActionContext {
   /** Plantilla traducible de la acción (para el texto del deshacer en el idioma del usuario). */
   label?: Label;
   projectId?: string | null;
+  /** El proyecto anotado es privado: los logs lo ocultan aunque se borre antes de escribirse. */
+  projectIsPrivate?: boolean;
   details?: Record<string, unknown>;
   /** Operaciones inversas para deshacer la acción (ver undo.ts). */
   undo?: UndoOp[];
@@ -61,9 +63,11 @@ export function noteTask(taskId: string | null | undefined): void {
 }
 
 /** Proyecto afectado por la acción (lo anotan las comprobaciones de acceso). */
-export function noteProject(projectId: string | null | undefined): void {
+export function noteProject(projectId: string | null | undefined, isPrivate?: boolean): void {
   const store = actionContext.getStore();
-  if (store && projectId && !store.projectId) store.projectId = projectId;
+  if (!store || !projectId) return;
+  if (!store.projectId) store.projectId = projectId;
+  if (isPrivate && store.projectId === projectId) store.projectIsPrivate = true;
 }
 
 /** Anota un cambio en el historial de la tarea (con varias llamadas, solo cuentan las explícitas). */

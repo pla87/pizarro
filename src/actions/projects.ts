@@ -38,6 +38,7 @@ async function applyTemplate(tx: Prisma.TransactionClient, projectId: string, te
 async function findManageableProject(user: CurrentUser, projectId: string) {
   const project = await db.project.findFirst({ where: { id: v.id.parse(projectId), ...visibleProjectsWhere(user) }, select: { id: true, name: true, isPrivate: true } });
   if (!project) throw notFound();
+  noteProject(project.id, project.isPrivate);
   if (user.role !== "ADMIN" && !project.isPrivate) throw forbidden();
   return project;
 }
@@ -134,7 +135,7 @@ export async function setProjectVisibility(projectId: string, mode: "TEAM" | "PR
 }
 
 export async function deleteProject(projectId: string, confirmName: string) {
-  return runAction({ name: "projects.deleteProject", args: [projectId, confirmName] }, async () => {
+  return runAction({ name: "projects.deleteProject", args: [projectId] }, async () => {
     const user = await requireUser();
     const project = await findManageableProject(user, projectId);
     if (project.name !== confirmName) throw new AppError("El nombre no coincide.");
@@ -240,6 +241,7 @@ async function findLabel(labelId: string) {
     select: { id: true, projectId: true },
   });
   if (!label) throw notFound();
+  noteProject(label.projectId);
   return label;
 }
 
@@ -286,9 +288,10 @@ async function findDeliverable(deliverableId: string) {
   const user = await requireUser();
   const d = await db.deliverable.findFirst({
     where: { id: v.id.parse(deliverableId), project: visibleProjectsWhere(user) },
-    select: { id: true },
+    select: { id: true, projectId: true },
   });
   if (!d) throw notFound();
+  noteProject(d.projectId);
   return d;
 }
 

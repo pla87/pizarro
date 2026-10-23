@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import type { Prisma } from "@/generated/prisma/client";
 import { noteProject, noteTask } from "./action-context";
 import { db } from "./db";
@@ -34,12 +35,18 @@ export function projectUsersWhere(project: { isPrivate: boolean }, projectId: st
 
 /** Proyectos para menús y selectores. Con `all`, todos los accesibles (p. ej. pantallas de administración). */
 export async function listVisibleProjects(user: CurrentUser, opts?: { all?: boolean }) {
+  return listProjectsCached(user.id, user.role, !!opts?.all);
+}
+
+// Memoizado por petición: el layout y la página piden la misma lista.
+const listProjectsCached = cache(async (userId: string, role: CurrentUser["role"], all: boolean) => {
+  const user = { id: userId, role } as CurrentUser;
   return db.project.findMany({
-    where: opts?.all ? visibleProjectsWhere(user) : workingProjectsWhere(user),
+    where: all ? visibleProjectsWhere(user) : workingProjectsWhere(user),
     select: { id: true, name: true, isPrivate: true },
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
   });
-}
+});
 
 export async function assertProjectAccess(user: CurrentUser, projectId: string): Promise<void> {
   const found = await db.project.count({ where: { id: projectId, ...visibleProjectsWhere(user) } });

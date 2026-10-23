@@ -12,6 +12,7 @@ export async function generateMetadata() {
 }
 
 const PAGE_STEP = 50;
+const SEARCH_MAX = 200;
 
 const ACCENTS = "áàäâãéèëêíìïîóòöôõúùüûñç";
 const PLAIN = "aaaaaeeeeiiiiooooouuuunc";
@@ -30,15 +31,18 @@ export default async function ReleasesPage({
   const sp = await searchParams;
   const q = (Array.isArray(sp.q) ? sp.q[0] : sp.q)?.trim().slice(0, 200) ?? "";
   const rawLimit = Number(Array.isArray(sp.limit) ? sp.limit[0] : sp.limit);
-  const limit = Number.isFinite(rawLimit) && rawLimit >= PAGE_STEP ? Math.min(Math.floor(rawLimit), 100000) : PAGE_STEP;
-  // Con búsqueda se recorre TODO el histórico del proyecto (sin límite); sin ella, las últimas `limit`.
+  const limit = Number.isFinite(rawLimit) && rawLimit >= PAGE_STEP ? Math.min(Math.floor(rawLimit), 500) : PAGE_STEP;
+  // Primero el acceso: la búsqueda no debe tocar proyectos ajenos.
+  if (!(await db.project.count({ where: { id: projectId, ...visibleProjectsWhere(user) } }))) notFound();
+  // Con búsqueda se recorre todo el histórico del proyecto (hasta SEARCH_MAX coincidencias, las más recientes); sin ella, las últimas `limit`.
   // Sin distinguir mayúsculas ni tildes: se comparan ambos lados en minúsculas y sin acentos.
   let where: { id?: { in: string[] } } = {};
   if (q) {
     const needle = `%${unaccent(q.toLowerCase()).replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     const rows = await db.$queryRaw<{ id: string }[]>`
       SELECT "id" FROM "Release" WHERE "projectId" = ${projectId}
-        AND (translate(lower("title"), ${ACCENTS}, ${PLAIN}) LIKE ${needle} OR translate(lower("content"), ${ACCENTS}, ${PLAIN}) LIKE ${needle})`;
+        AND (translate(lower("title"), ${ACCENTS}, ${PLAIN}) LIKE ${needle} OR translate(lower("content"), ${ACCENTS}, ${PLAIN}) LIKE ${needle})
+      ORDER BY "deployedAt" DESC LIMIT ${SEARCH_MAX}`;
     where = { id: { in: rows.map((r) => r.id) } };
   }
   const project = await db.project.findFirst({
