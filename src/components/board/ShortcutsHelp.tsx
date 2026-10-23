@@ -16,6 +16,8 @@ const GROUPS: { title: string; items: { keys: string; label: string }[] }[] = [
       { keys: "Alt+R", label: "Generar Release" },
       { keys: "Alt+Z", label: "Deshacer en el tablero (también con una tarea abierta)" },
       { keys: "Ctrl+Z", label: "Deshacer (en una tarea abierta, solo sus cambios)" },
+      { keys: "Alt+Shift+Z", label: "Rehacer en el tablero (también con una tarea abierta)" },
+      { keys: "Ctrl+Shift+Z", label: "Rehacer (en una tarea abierta, solo sus cambios; también Ctrl+Y)" },
       { keys: "Ctrl+V", label: "Pegar una captura como nueva tarea" },
       { keys: "?", label: "Ver los atajos" },
     ],

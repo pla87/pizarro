@@ -702,7 +702,13 @@ model ReleaseTemplate {
   @@index([userId, kind, position])
 }
 
-/// Acción deshacible de un usuario en un proyecto (se guardan las 10 últimas). `ops` son las
+/// Pila a la que pertenece una entrada: deshacer o rehacer.
+enum UndoKind {
+  UNDO
+  REDO
+}
+
+/// Acción deshacible de un usuario en un proyecto (se guardan las 10 últimas de cada pila). `ops` son las
 /// operaciones inversas, que se aplican en orden inverso al deshacer (ver src/lib/undo.ts).
 model UndoEntry {
   id        String   @id @default(cuid())
@@ -710,13 +716,15 @@ model UndoEntry {
   projectId String
   /// Tarea a la que afecta (si es solo una): contexto del deshacer con la tarea abierta.
   taskId    String?
+  /// UNDO: lo que hace «Deshacer». REDO: lo que rehace una acción ya deshecha (se vacía con una acción nueva).
+  kind      UndoKind @default(UNDO)
   label     String
   ops       Json
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@index([userId, projectId, createdAt])
+  @@index([userId, projectId, kind, createdAt])
   @@index([userId, taskId, createdAt])
   @@index([projectId])
   @@index([createdAt])

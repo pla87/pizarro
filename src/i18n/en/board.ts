@@ -187,6 +187,8 @@ export const board: Record<string, string> = {
   "Cambiar de proyecto": "Switch project",
   "Deshacer en el tablero (también con una tarea abierta)": "Undo on the board (also with a task open)",
   "Deshacer (en una tarea abierta, solo sus cambios)": "Undo (in an open task, only its changes)",
+  "Rehacer en el tablero (también con una tarea abierta)": "Redo on the board (also with a task open)",
+  "Rehacer (en una tarea abierta, solo sus cambios; también Ctrl+Y)": "Redo (in an open task, only its changes; also Ctrl+Y)",
   "Pegar una captura como nueva tarea": "Paste a screenshot as a new task",
   "Ver los atajos": "Show shortcuts",
   "Guardar y cerrar (en una tarea nueva, crearla)": "Save and close (in a new task, create it)",

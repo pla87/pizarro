@@ -88,7 +88,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     // usuario es crear esta tarea, la subida va con esa acción: deshacer la creación ya se lleva el adjunto.
     const withCreation =
       new URL(req.url).searchParams.get("alCrear") === "1" &&
-      (await db.undoEntry.findFirst({ where: { userId: user.id, projectId }, orderBy: { createdAt: "desc" }, select: { taskId: true, ops: true } }).then(
+      (await db.undoEntry.findFirst({ where: { userId: user.id, projectId, kind: "UNDO" }, orderBy: { createdAt: "desc" }, select: { taskId: true, ops: true } }).then(
         (last) => last?.taskId === taskId && JSON.stringify(last.ops).includes('"task.remove"'),
       ));
     publishChange({ projectId, userId: user.id, action: "attachments.upload" });
