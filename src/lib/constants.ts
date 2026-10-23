@@ -64,3 +64,7 @@ export const MAX_TITLE = 200;
 export const MAX_DESCRIPTION = 20_000;
 export const MAX_TEMPLATE = 20_000;
 export const MAX_RELEASE_CONTENT = 200_000;
+/** Tope del ZIP de adjuntos de una release (MB): valor por defecto y límites que admite el ajuste del proyecto. */
+export const RELEASE_ZIP_DEFAULT_MB = 80;
+export const RELEASE_ZIP_MIN_MB = 10;
+export const RELEASE_ZIP_MAX_MB = 500;

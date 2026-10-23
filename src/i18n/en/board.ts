@@ -90,7 +90,7 @@ export const board: Record<string, string> = {
   "Quitar archivo": "Remove file",
   "Archivo": "File",
   "Cámara": "Camera",
-  "o pega o arrastra archivos (máx. 10 MB)": "or paste or drag files (max. 10 MB)",
+  "o pega o arrastra archivos (máx. 20 MB)": "or paste or drag files (max. 20 MB)",
   "Suelta para adjuntar": "Drop to attach",
   // BulkTaskDialog
   "1 tarea creada": "1 task created",

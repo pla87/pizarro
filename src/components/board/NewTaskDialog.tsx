@@ -310,7 +310,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
               <Camera size={16} /> {t("Cámara")}
               <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { addFiles(filesFrom(e.target.files)); e.target.value = ""; }} />
             </label>
-            <p className="self-center text-xs text-slate-500 max-sm:hidden">{t("o pega o arrastra archivos (máx. 10 MB)")}</p>
+            <p className="self-center text-xs text-slate-500 max-sm:hidden">{t("o pega o arrastra archivos (máx. 20 MB)")}</p>
           </div>
         </div>
       </form>

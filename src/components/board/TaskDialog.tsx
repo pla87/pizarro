@@ -417,7 +417,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
                 </label>
               </div>
             </div>
-            <p className="mb-2 truncate text-xs text-slate-500 max-sm:hidden">{t("Pega o arrastra archivos (máx. 10 MB)")}</p>
+            <p className="mb-2 truncate text-xs text-slate-500 max-sm:hidden">{t("Pega o arrastra archivos (máx. 20 MB)")}</p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {images.map((a, i) => (
                 <div key={a.id} className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">

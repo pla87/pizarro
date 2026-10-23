@@ -5,7 +5,7 @@ import sharp from "sharp";
 import { AppError } from "./errors";
 import { uploadDir } from "./upload-dir";
 
-export const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_MB ?? 10) * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_MB ?? 20) * 1024 * 1024;
 const INPUT_FORMATS = new Set(["png", "jpeg", "webp", "gif", "avif", "heif"]);
 
 // Limita la memoria de sharp en un contenedor pequeño.

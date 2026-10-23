@@ -165,15 +165,16 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items: zipItems.map(({ taskId, code }) => ({ taskId, code })) }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      // El 413 trae el tope del proyecto y dónde cambiarlo: se muestra tal cual.
+      if (!res.ok) throw new Error(res.status === 413 ? await res.text() : "");
       const url = URL.createObjectURL(await res.blob());
       const a = document.createElement("a");
       a.href = url;
       a.download = `release-${isoDate(now)}-adjuntos.zip`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch {
-      toast(t("No se pudieron descargar los adjuntos"), "error");
+    } catch (e) {
+      toast(e instanceof Error && e.message ? e.message : t("No se pudieron descargar los adjuntos"), "error");
     } finally {
       setZipping(false);
     }

@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
-import { releaseZipName } from "@/lib/release";
+import { releaseZipName, zipTooLarge } from "@/lib/release";
 import { getCurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { readReleaseAttachmentFile } from "@/lib/uploads";
@@ -23,18 +23,19 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
   if (!/^[a-z0-9]{1,40}$/i.test(releaseId)) return new Response(t("No encontrado"), { status: 404 });
   const release = await db.release.findFirst({
     where: { id: releaseId, project: visibleProjectsWhere(user) },
-    select: { title: true, projectId: true, attachments: { orderBy: { position: "asc" }, select: { id: true, fileName: true } } },
+    select: { title: true, projectId: true, project: { select: { releaseZipMaxMb: true } }, attachments: { orderBy: { position: "asc" }, select: { id: true, fileName: true } } },
   });
   if (!release) return new Response(t("No encontrado"), { status: 404 });
 
+  // Tope del proyecto (su valor actual), que se arma en memoria.
+  const maxMb = release.project.releaseZipMaxMb;
   const files: { name: string; data: Uint8Array }[] = [];
   let total = 0;
   for (const a of release.attachments) {
     try {
       const data = await readReleaseAttachmentFile(a.id);
       total += data.length;
-      // Mismo tope que el ZIP de la release en preparación (se arma en memoria).
-      if (total > 80 * 1024 * 1024) return new Response(t("El archivo supera el tamaño máximo."), { status: 413 });
+      if (total > maxMb * 1024 * 1024) return new Response(zipTooLarge(t, maxMb), { status: 413 });
       files.push({ name: a.fileName, data });
     } catch {
       // Fichero ausente en disco: se omite en lugar de romper toda la descarga.
