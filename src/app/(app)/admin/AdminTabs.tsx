@@ -8,7 +8,7 @@ import { useT } from "@/i18n/client";
 const TABS = [
   { href: "/admin/users", label: "Usuarios" },
   { href: "/admin/types", label: "Tipos de tarea" },
-  { href: "/admin/templates", label: "Plantillas" },
+  { href: "/admin/templates", label: "Plantillas de proyecto" },
   { href: "/admin/backups", label: "Copias de seguridad" },
   { href: "/admin/logs", label: "Logs" },
 ];
