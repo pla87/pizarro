@@ -2,6 +2,33 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.18.0 — 2026-10-23 15:53
+
+Cabecera adaptada a media pantalla, calendario con varios proyectos, rehacer protegido frente a cambios ajenos, 12 plantillas de serie y mejoras de rendimiento y robustez
+
+### Nuevas funcionalidades
+
+- Calendario: elige varios proyectos a la vez.
+- Seis plantillas de serie nuevas: Soporte y atención al cliente, Selección de personal, Reformas y obras, Viajes, Estudios o tesis y Mudanza.
+- Opción de plantilla «Ocultar todos los tipos generales» (activada en las de serie salvo Vibecoding).
+
+### Mejoras
+
+- Cabecera del tablero a media pantalla: botones con solo icono, «Nueva» y el número de tarjetas sin saltos de línea; el nombre del proyecto no se recorta.
+- Los desplegables se ven completos si caben en la pantalla.
+- El blanco de los selectores de color tiene borde en los temas claros.
+- Tema Eva: verde más neón en modo claro; indicadores de foco de 3 px en todos los temas.
+- Rehacer (y deshacer tras rehacer) no se aplica si otra persona cambió lo afectado entretanto.
+- Las plantillas de serie que no hayas modificado se actualizan solas.
+
+### Correcciones
+
+- Varias correcciones de robustez y rendimiento de la revisión de código: deshacer/rehacer sin bloqueos por cambios propios, arranque tolerante, ZIP e informes PDF con límites, logs que no se pierden y menús que se recolocan.
+
+### Cambios técnicos / DB
+
+- Migraciones: opción de plantillas y huella de las de serie; huella en las entradas de deshacer.
+
 ## v1.17.0 — 2026-10-23 14:24
 
 Asignación de usuarios a proyectos, botón de rehacer, calendario, plantillas de proyecto por defecto, QR para la verificación en dos pasos, tema Eva retocado y ajustes de seguridad

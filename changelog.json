@@ -1,6 +1,57 @@
 {
   "versions": [
     {
+      "version": "1.18.0",
+      "date": "2026-10-23",
+      "releasedAt": "2026-10-23T15:53:41+02:00",
+      "summary": "Cabecera adaptada a media pantalla, calendario con varios proyectos, rehacer protegido frente a cambios ajenos, 12 plantillas de serie y mejoras de rendimiento y robustez",
+      "changes": {
+        "nuevas": [
+          "Calendario: elige varios proyectos a la vez.",
+          "Seis plantillas de serie nuevas: Soporte y atención al cliente, Selección de personal, Reformas y obras, Viajes, Estudios o tesis y Mudanza.",
+          "Opción de plantilla «Ocultar todos los tipos generales» (activada en las de serie salvo Vibecoding)."
+        ],
+        "mejoras": [
+          "Cabecera del tablero a media pantalla: botones con solo icono, «Nueva» y el número de tarjetas sin saltos de línea; el nombre del proyecto no se recorta.",
+          "Los desplegables se ven completos si caben en la pantalla.",
+          "El blanco de los selectores de color tiene borde en los temas claros.",
+          "Tema Eva: verde más neón en modo claro; indicadores de foco de 3 px en todos los temas.",
+          "Rehacer (y deshacer tras rehacer) no se aplica si otra persona cambió lo afectado entretanto.",
+          "Las plantillas de serie que no hayas modificado se actualizan solas."
+        ],
+        "correcciones": [
+          "Varias correcciones de robustez y rendimiento de la revisión de código: deshacer/rehacer sin bloqueos por cambios propios, arranque tolerante, ZIP e informes PDF con límites, logs que no se pierden y menús que se recolocan."
+        ],
+        "tecnicos": [
+          "Migraciones: opción de plantillas y huella de las de serie; huella en las entradas de deshacer."
+        ]
+      },
+      "en": {
+        "summary": "Header adapted to half-screen widths, calendar with several projects, redo protected against others' changes, 12 built-in templates and performance and robustness improvements",
+        "changes": {
+          "nuevas": [
+            "Calendar: choose several projects at once.",
+            "Six new built-in templates: Customer support, Recruiting, Renovations, Travel, Studies or thesis and Moving house.",
+            "Template option “Hide all general types” (on for every built-in except Vibecoding)."
+          ],
+          "mejoras": [
+            "Board header at half-screen widths: icon-only buttons, “New” and the card count without line breaks; the project name is never cut.",
+            "Dropdowns show in full when they fit on screen.",
+            "The white colour swatch has a border in light themes.",
+            "Eva theme: brighter neon green in light mode; 3 px focus indicators in every theme.",
+            "Redo (and undo after redo) is not applied if someone else changed the affected data in between.",
+            "Built-in templates you haven't modified update automatically."
+          ],
+          "correcciones": [
+            "Several robustness and performance fixes from the code review: undo/redo no longer blocked by your own changes, tolerant boot, limits on ZIPs and PDF reports, logs that are not lost and menus that reposition."
+          ],
+          "tecnicos": [
+            "Migrations: template option and built-in template fingerprint; fingerprint on undo entries."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.17.0",
       "date": "2026-10-23",
       "releasedAt": "2026-10-23T14:24:09+02:00",
