@@ -1,6 +1,75 @@
 {
   "versions": [
     {
+      "version": "1.17.0",
+      "date": "2026-10-23",
+      "releasedAt": "2026-10-23T14:24:09+02:00",
+      "summary": "Asignación de usuarios a proyectos, botón de rehacer, calendario, plantillas de proyecto por defecto, QR para la verificación en dos pasos, tema Eva retocado y ajustes de seguridad",
+      "changes": {
+        "nuevas": [
+          "Asignación a proyectos: quien no es administrador solo ve los proyectos a los que está asignado; los administradores eligen en su perfil en cuáles trabajan; nueva pestaña Administración → Proyectos.",
+          "Botón de rehacer junto al de deshacer (Ctrl/⌘+Mayús+Z, Ctrl/⌘+Y, Alt+Mayús+Z).",
+          "Calendario: tareas por fecha límite con arrastrar para cambiarla, entregables con avance y estado, filtros y vista por semanas en móvil.",
+          "6 plantillas de proyecto por defecto (Vibecoding, Tareas familiares, Producción audiovisual, Negocio, Marketing y contenidos, Organización de eventos), restablecibles y recuperables.",
+          "Código QR y clave al configurar la verificación en dos pasos.",
+          "Opción de perfil para borrar los borradores al cerrar sesión."
+        ],
+        "mejoras": [
+          "Hasta 10 usuarios.",
+          "Sesiones y dispositivos recordados de 14 días; descargar una copia de seguridad pide la contraseña.",
+          "Los Google Docs de proyectos privados solo se comparten con sus miembros.",
+          "Archivar y Duplicar como iconos: los botones de la tarea caben en una línea.",
+          "Botones de Cámara y Añadir más visibles en móvil.",
+          "Las tarjetas distinguen imágenes y archivos con su icono.",
+          "Teclado: un Tab por tarjeta, Espacio selecciona y Alt+↑/↓ la mueve dentro de la columna.",
+          "Tema Eva con el morado y el verde del Eva-01 y detalles en naranja; foco y bordes de escritura en verde.",
+          "Mis tareas muestra claramente el proyecto de cada tarea.",
+          "«Mi perfil» y «Plantillas de proyecto» como nombres de menú; códigos de recuperación centrados; añadir miembro en una línea en móvil."
+        ],
+        "correcciones": [
+          "El menú de Administración ya no tiene scroll vertical en móvil.",
+          "En una instalación nueva los administradores no veían el proyecto de ejemplo.",
+          "Correcciones de seguridad y rendimiento de la revisión de código."
+        ],
+        "tecnicos": [
+          "Migraciones: asignación de proyectos (sin proyectos «visibles para todos»), ajustes de seguridad, rehacer, plantillas por defecto e índices del calendario."
+        ]
+      },
+      "en": {
+        "summary": "Project assignment, redo button, calendar, default project templates, QR for two-step verification, refined Eva theme and security settings",
+        "changes": {
+          "nuevas": [
+            "Project assignment: non-admins only see projects they are assigned to; administrators choose in their profile which ones they work on; new Administration → Projects tab.",
+            "Redo button next to undo (Ctrl/⌘+Shift+Z, Ctrl/⌘+Y, Alt+Shift+Z).",
+            "Calendar: tasks by due date with drag to change it, deliverables with progress and status, filters and a weekly view on mobile.",
+            "6 default project templates (Vibecoding, Family tasks, Video production, Business, Marketing and content, Event planning), resettable and recoverable.",
+            "QR code and key when setting up two-step verification.",
+            "Profile option to clear drafts on sign-out."
+          ],
+          "mejoras": [
+            "Up to 10 users.",
+            "Sessions and remembered devices last 14 days; downloading a backup asks for the password.",
+            "Google Docs from private projects are only shared with their members.",
+            "Archive and Duplicate as icons: the task buttons fit on one line.",
+            "More visible Camera and Add buttons on mobile.",
+            "Cards tell images and files apart with their icons.",
+            "Keyboard: one Tab per card, Space selects and Alt+↑/↓ moves it within the column.",
+            "Eva theme with Unit-01 purple and green plus orange details; green focus and typing borders.",
+            "My tasks clearly shows each task's project.",
+            "“My profile” and “Project templates” menu names; centred recovery codes; add member on one line on mobile."
+          ],
+          "correcciones": [
+            "The Administration menu no longer scrolls vertically on mobile.",
+            "On a fresh install administrators did not see the sample project.",
+            "Security and performance fixes from the code review."
+          ],
+          "tecnicos": [
+            "Migrations: project assignment (no more “visible to everyone” projects), security settings, redo, default templates and calendar indexes."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.16.0",
       "date": "2026-10-23",
       "releasedAt": "2026-10-23T01:41:02+02:00",
