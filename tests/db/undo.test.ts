@@ -376,7 +376,9 @@ describe("rehacer", () => {
 
     // Otro proyecto y otra persona no ven este rehacer.
     expectFail(await redoLast(g.project.id), NOTHING_REDO);
-    await loginAs(await makeUser());
+    const second = await makeUser();
+    await assign(f, second);
+    await loginAs(second);
     expectFail(await redoLast(f.project.id), NOTHING_REDO);
     // Una acción nueva de otra persona no vacía la pila del primero.
     const other = await makeTask(f, { title: "X" });
