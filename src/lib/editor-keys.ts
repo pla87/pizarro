@@ -1,4 +1,4 @@
-import { Extension } from "@tiptap/core";
+import { Extension, type Editor } from "@tiptap/core";
 
 /**
  * Supr al final del último elemento de una lista seguida de un párrafo vacío: borra ese párrafo.
@@ -9,11 +9,21 @@ export const ListDeleteFix = Extension.create({
   name: "listDeleteFix",
   priority: 1000,
   addKeyboardShortcuts() {
+    // Con una selección no vacía, Supr/Retroceso solo borran la selección. Sin esto, ListKeymap (StarterKit)
+    // la trataba como un cursor al final de un elemento y unía el siguiente a este («OK» + «Activos de Roma:»),
+    // dejando el resto de la selección sin borrar.
+    const deleteSelectionOnly = ({ editor }: { editor: Editor }) => {
+      if (editor.state.selection.empty) return false;
+      return editor.commands.deleteSelection();
+    };
     return {
+      Backspace: deleteSelectionOnly,
+      "Mod-Backspace": deleteSelectionOnly,
+      "Mod-Delete": deleteSelectionOnly,
       Delete: ({ editor }) => {
         const { state } = editor;
         const { selection } = state;
-        if (!selection.empty) return false;
+        if (!selection.empty) return deleteSelectionOnly({ editor });
         const $from = selection.$from;
         if ($from.depth < 2 || $from.parentOffset !== $from.parent.content.size) return false;
         let inList = false;

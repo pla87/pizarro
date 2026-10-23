@@ -376,7 +376,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
               </span>
             )}
           </span>
-          <button type="button" className="btn-icon" onClick={onClose} aria-label={t("Cerrar")}>
+          {/* Fuera del orden de Tab (Título → descripción directo); Escape también cierra. */}
+          <button type="button" className="btn-icon" tabIndex={-1} onClick={onClose} aria-label={t("Cerrar")}>
             <X size={18} />
           </button>
         </div>
@@ -470,7 +471,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
           <TaskHistory taskId={task.id} />
         </div>
 
-        <aside className="flex flex-col gap-4 text-sm md:max-h-[calc(100dvh-9rem)] md:gap-2.5 md:overflow-y-auto md:pr-1">
+        {/* El margen negativo con relleno igual deja sitio al anillo de foco (3 px + 2 de separación) que el scroll recortaría. */}
+        <aside className="flex flex-col gap-4 text-sm md:-m-2 md:max-h-[calc(100dvh-8rem)] md:gap-2.5 md:overflow-y-auto md:p-2">
           <Field label={t("Columna")}>
             <select className="input md:py-1.5" value={task.columnId} onChange={(e) => changeColumn(e.target.value)}>
               {board.columns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -760,7 +762,8 @@ function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftCha
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-sm font-semibold">{t("Descripción")}</h3>
         {!editing && (
-          <button className="btn-ghost py-1 text-xs" onClick={() => { setEditing(true); requestAnimationFrame(() => ref.current?.focus()); }}>
+          // Fuera del orden de Tab (Título → descripción directo): al tabular, la propia zona de la descripción entra en edición.
+          <button className="btn-ghost py-1 text-xs" tabIndex={-1} onClick={() => { setEditing(true); requestAnimationFrame(() => ref.current?.focus()); }}>
             {t("Editar")}
           </button>
         )}
@@ -790,11 +793,30 @@ function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftCha
           </div>
         </div>
       ) : value.trim() ? (
-        <div className="cursor-text rounded-lg p-1 hover:bg-slate-50 dark:hover:bg-slate-800/50" onDoubleClick={() => setEditing(true)}>
+        <div
+          className="cursor-text rounded-lg p-1 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+          onDoubleClick={() => setEditing(true)}
+          tabIndex={0}
+          role="group"
+          aria-label={t("Descripción")}
+          // Solo con el teclado (Tab): el clic con el ratón no debe abrir la edición, y un enlace del texto conserva su foco.
+          onFocus={(e) => {
+            if (e.target === e.currentTarget && e.currentTarget.matches(":focus-visible")) setEditing(true);
+          }}
+          onKeyDown={(e) => {
+            if (e.target === e.currentTarget && e.key === "Enter") setEditing(true);
+          }}
+        >
           <Markdown>{value}</Markdown>
         </div>
       ) : (
-        <button className="w-full rounded-lg border border-dashed border-slate-300 p-4 text-left text-sm text-slate-400 hover:border-brand-500 dark:border-slate-700" onClick={() => setEditing(true)}>
+        <button
+          className="w-full rounded-lg border border-dashed border-slate-300 p-4 text-left text-sm text-slate-400 hover:border-brand-500 dark:border-slate-700"
+          onClick={() => setEditing(true)}
+          onFocus={(e) => {
+            if (e.currentTarget.matches(":focus-visible")) setEditing(true);
+          }}
+        >
           {t("Añade una descripción…")}
         </button>
       )}
