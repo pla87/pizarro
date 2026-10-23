@@ -1,10 +1,11 @@
 "use client";
 
 import { CalendarClock, Check, EyeOff, Loader2, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
-  createDeliverable, createLabel, deleteDeliverable, deleteLabel, addProjectMember, deleteProject, removeProjectMember, setProjectVisibility, updateDeliverable, updateLabel, updateProject,
+  createDeliverable, createLabel, deleteDeliverable, deleteLabel, addProjectMember, deleteProject, removeProjectMember, setProjectVisibility, setReleaseZipMaxMb, updateDeliverable, updateLabel, updateProject,
 } from "@/actions/projects";
 import { formatDay } from "@/lib/dates";
 import { useIntlLocale, useT } from "@/i18n/client";
@@ -14,7 +15,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
-import { isWhite, onColor, PALETTE } from "@/lib/constants";
+import { isWhite, onColor, PALETTE, RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "@/lib/constants";
 import type { EditorModeValue, KindOption, LabelOption } from "@/lib/types";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
 import { setGeneralKindEnabled } from "@/actions/project-kinds";
@@ -22,7 +23,7 @@ import { setGeneralKindEnabled } from "@/actions/project-kinds";
 interface Props {
   isAdmin: boolean;
   currentUserId: string;
-  project: { id: string; name: string; description: string; visibility: "TEAM" | "PRIVATE"; members: { id: string; name: string; active: boolean }[] };
+  project: { id: string; name: string; description: string; visibility: "TEAM" | "PRIVATE"; releaseZipMaxMb: number; members: { id: string; name: string; active: boolean }[] };
   labels: LabelOption[];
   kinds: KindRow[];
   /** Todos los tipos generales, con si el proyecto los usa y cuántas tareas tienen aquí. */
@@ -53,6 +54,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
   const [pending, start] = useTransition();
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description);
+  const [zipMb, setZipMb] = useState(String(project.releaseZipMaxMb));
   const [visibility, setVisibility] = useState(project.visibility);
   const [labels, setLabels] = useState(initialLabels);
   const [confirmName, setConfirmName] = useState("");
@@ -70,7 +72,10 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-4 md:p-6">
-      <h1 className="text-xl font-semibold">{t("Ajustes del proyecto")}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-semibold">{t("Ajustes del proyecto")}</h1>
+        <Link href={`/p/${project.id}`} className="btn-primary">{t("Ir al tablero")}</Link>
+      </div>
 
       {canManage && (
         <Section title="General">
@@ -88,6 +93,28 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
             <div>
               <label className="label" htmlFor="p-desc">{t("Descripción")}</label>
               <textarea id="p-desc" className="input" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={2000} />
+            </div>
+            <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
+          </form>
+        </Section>
+      )}
+
+      {canManage && (
+        <Section title="Releases" description="Límites al generar o descargar una release.">
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              run(async () => setReleaseZipMaxMb(project.id, Number(zipMb)), t("Proyecto actualizado"), () => router.refresh());
+            }}
+          >
+            <div>
+              <label className="label" htmlFor="p-zip-mb">{t("Tamaño máximo del ZIP de adjuntos (MB)")}</label>
+              <input
+                id="p-zip-mb" className="input w-32" type="number" inputMode="numeric" step={1}
+                min={RELEASE_ZIP_MIN_MB} max={RELEASE_ZIP_MAX_MB} value={zipMb} onChange={(e) => setZipMb(e.target.value)} required
+              />
+              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto 80). El ZIP se arma en memoria del servidor: súbelo solo si hace falta.", { min: RELEASE_ZIP_MIN_MB, max: RELEASE_ZIP_MAX_MB })}</p>
             </div>
             <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
           </form>

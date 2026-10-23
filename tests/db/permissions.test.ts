@@ -5,7 +5,7 @@ import { asUser, db, expectFail, expectOk, FORBIDDEN, assign, loginAs, makeKind,
 import { assertAssignable, assertProjectAccess, assertTaskAccess, listVisibleProjects, visibleProjectsWhere } from "../../src/lib/access";
 import { addComment, createTask, deleteTask, getTaskDetail, moveTask, updateTask } from "../../src/actions/tasks";
 import { deleteRelease, deployRelease, getReleaseTaskDetails } from "../../src/actions/releases";
-import { addProjectMember, createProject, removeProjectMember, setMyProjectPicks, setProjectVisibility } from "../../src/actions/projects";
+import { addProjectMember, createProject, removeProjectMember, setMyProjectPicks, setProjectVisibility, setReleaseZipMaxMb } from "../../src/actions/projects";
 
 /** Tres proyectos (equipo con asignado, equipo sin asignados, privado) con dos administradores, un miembro y un ajeno. */
 async function world() {
@@ -274,6 +274,32 @@ describe("crear y cambiar la visibilidad de proyectos", () => {
     expectOk(await setProjectVisibility(created.id, "TEAM"));
     assert.equal(await db.projectMember.count({ where: { projectId: created.id } }), 0);
     assert.equal(await db.adminProjectPick.count({ where: { projectId: created.id, userId: admin.id } }), 1);
+  });
+});
+
+describe("tope del ZIP de adjuntos de la release (setReleaseZipMaxMb)", () => {
+  test("valida el rango, exige poder gestionar el proyecto y guarda el valor", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const member = await makeUser();
+    const f = await makeProject({ members: [member] });
+    const id = f.project.id;
+    assert.equal((await db.project.findUniqueOrThrow({ where: { id } })).releaseZipMaxMb, 80);
+    await loginAs(admin);
+    expectFail(await setReleaseZipMaxMb(id, 9), /mínimo/);
+    expectFail(await setReleaseZipMaxMb(id, 501), /máximo/);
+    expectFail(await setReleaseZipMaxMb(id, 80.5), /no válido/);
+    expectFail(await setReleaseZipMaxMb(id, Number.NaN), /no válido/);
+    assert.equal((await db.project.findUniqueOrThrow({ where: { id } })).releaseZipMaxMb, 80);
+    expectOk(await setReleaseZipMaxMb(id, 200));
+    assert.equal((await db.project.findUniqueOrThrow({ where: { id } })).releaseZipMaxMb, 200);
+    expectOk(await setReleaseZipMaxMb(id, 10));
+    expectOk(await setReleaseZipMaxMb(id, 500));
+    // Un miembro de un proyecto de equipo no puede cambiarlo; un ajeno ni lo ve.
+    await loginAs(member);
+    expectFail(await setReleaseZipMaxMb(id, 100), FORBIDDEN);
+    await loginAs(await makeUser());
+    expectFail(await setReleaseZipMaxMb(id, 100), NOT_FOUND);
+    assert.equal((await db.project.findUniqueOrThrow({ where: { id } })).releaseZipMaxMb, 500);
   });
 });
 

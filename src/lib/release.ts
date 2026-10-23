@@ -3,6 +3,7 @@
 
 import { decodeEntities } from "./markdown-entities";
 import { mentionsToPlain } from "./mentions";
+import type { T } from "../i18n/core";
 
 interface ReleaseKind {
   id: string;
@@ -228,6 +229,11 @@ export function zonedDayRange(dayIso: string, timeZone: string): { start: Date; 
   };
   const next = new Date(Date.UTC(y, m - 1, d + 1));
   return { start: midnight(y, m, d), end: midnight(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate()) };
+}
+
+/** Texto del 413 cuando los adjuntos de una release superan el tope del proyecto. */
+export function zipTooLarge(t: T, maxMb: number): string {
+  return t("Los adjuntos superan el tamaño máximo del ZIP ({mb} MB). Puedes cambiarlo en los ajustes del proyecto.", { mb: maxMb });
 }
 
 /** Nombre del ZIP de adjuntos del histórico: título saneado + «-adjuntos.zip». */

@@ -115,7 +115,7 @@ steps:
 | `SEED_ADMIN_PASSWORD` | Solo el primer arranque | mínimo 10 caracteres | Contraseña inicial: cámbiala después desde *Mi perfil*. |
 | `SEED_ADMIN_NAME` | No | `Administrador` | Nombre visible del admin inicial. |
 | `MAX_USERS` | No | `10` | Máximo de usuarios activos. |
-| `MAX_UPLOAD_MB` | No | `10` | Tamaño máximo por imagen. |
+| `MAX_UPLOAD_MB` | No | `20` | Tamaño máximo por adjunto. |
 | `DATABASE_POOL_SIZE` | No | `10` | Conexiones del pool. |
 | `UPLOAD_QUOTA_MB_PER_PROJECT` | No | `2048` | Cuota de adjuntos por proyecto (MB). Pasada la cuota, la subida se rechaza mostrando el uso. |
 | `UPLOAD_QUOTA_MB_TOTAL` | No | (sin límite) | Cuota total de adjuntos de todo el servidor (MB). |

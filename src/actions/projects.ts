@@ -96,6 +96,18 @@ export async function updateProject(projectId: string, input: { name: string; de
   });
 }
 
+/** Tope (MB) del ZIP de adjuntos de las releases del proyecto. */
+export async function setReleaseZipMaxMb(projectId: string, mb: number) {
+  return runAction({ name: "projects.setReleaseZipMaxMb", args: [projectId, mb] }, async () => {
+    const user = await requireUser();
+    const value = v.releaseZipMb.parse(mb);
+    await findManageableProject(user, projectId);
+    await db.project.update({ where: { id: projectId }, data: { releaseZipMaxMb: value } });
+    describeAction(`Cambió el tamaño máximo del ZIP de adjuntos de las releases a ${value} MB`);
+    revalidatePath(`/p/${projectId}/settings`);
+  });
+}
+
 /**
  * TEAM: lo ven los usuarios asignados (ProjectMember) y todos los administradores.
  * PRIVATE: solo sus miembros (quien lo marca como privado es el primero; ni el resto de administradores).

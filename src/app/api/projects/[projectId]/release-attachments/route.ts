@@ -4,7 +4,7 @@ import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
-import { attachmentFileNames, isoDate } from "@/lib/release";
+import { attachmentFileNames, isoDate, zipTooLarge } from "@/lib/release";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
@@ -13,9 +13,6 @@ import * as v from "@/lib/validation";
 import { buildZip } from "@/lib/zip";
 
 export const runtime = "nodejs";
-
-// Se arma en memoria (ficheros + ZIP): un tope moderado evita picos de memoria en un contenedor pequeño.
-const MAX_ZIP_BYTES = 80 * 1024 * 1024;
 
 const bodySchema = z.object({
   items: z
@@ -54,6 +51,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   // Todas las tareas deben existir en este proyecto y ser visibles.
   if (tasks.length !== ids.size) return new Response(t("No encontrado"), { status: 404 });
   const byId = new Map(tasks.map((t) => [t.id, t]));
+  // Se arma en memoria (ficheros + ZIP): el tope por proyecto evita picos de memoria en un contenedor pequeño.
+  const { releaseZipMaxMb } = await db.project.findUniqueOrThrow({ where: { id: projectId }, select: { releaseZipMaxMb: true } });
+  const maxBytes = releaseZipMaxMb * 1024 * 1024;
 
   const files: { name: string; data: Uint8Array }[] = [];
   let total = 0;
@@ -65,7 +65,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
         const data = await readFile(attachmentPath(a.id, a.isImage ? "full" : "file"));
         // El ZIP se arma en memoria: un tope evita agotar el contenedor.
         total += data.length;
-        if (total > MAX_ZIP_BYTES) return new Response(t("El archivo supera el tamaño máximo."), { status: 413 });
+        if (total > maxBytes) return new Response(zipTooLarge(t, releaseZipMaxMb), { status: 413 });
         files.push({ name: names[i]!, data });
       } catch {
         // Fichero ausente en disco: se omite en lugar de romper toda la descarga.
