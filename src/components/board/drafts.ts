@@ -32,6 +32,15 @@ export interface EditTaskDraft {
 
 export const draftKey = (kind: "new" | "edit", userId: string, projectId: string) => `pz-draft-${kind}:${userId}:${projectId}`;
 
+/** Borra todos los borradores locales (`pz-draft-*`); las preferencias de filtros del tablero se conservan. */
+export function clearAllDrafts(): void {
+  try {
+    for (const key of Object.keys(localStorage)) if (key.startsWith("pz-draft-")) localStorage.removeItem(key);
+  } catch {
+    // Sin acceso a localStorage no hay borradores que borrar.
+  }
+}
+
 export function readDraft<T>(key: string): T | null {
   try {
     const raw = localStorage.getItem(key);

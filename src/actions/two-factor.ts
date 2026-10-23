@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import QRCode from "qrcode";
 import { z } from "zod";
 import { runAction } from "@/lib/action";
 import { sendTwoFactorChangedMail } from "@/lib/auth-mail";
@@ -135,7 +136,10 @@ async function startMethod(challengeId: string, user: { name: string; email: str
   }
   const secret = generateTotpSecret();
   await db.loginChallenge.update({ where: { id: challengeId }, data: { method, pendingSecretEnc: encryptSecret(secret), codeHash: null, codeExpiresAt: null } });
-  return { method, secret, uri: otpauthUri({ secret, account: user.email, issuer: ISSUER }) };
+  const uri = otpauthUri({ secret, account: user.email, issuer: ISSUER });
+  // QR como SVG generado aquí y entregado como data: URL, para pintarlo con <img> sin inyectar HTML.
+  const svg = await QRCode.toString(uri, { type: "svg", margin: 1, errorCorrectionLevel: "M" });
+  return { method, secret, uri, qr: `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}` };
 }
 
 // --- Desde «Mi perfil» (con sesión) ---

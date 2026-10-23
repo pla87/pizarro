@@ -185,8 +185,8 @@ export const cuentas: Record<string, string> = {
     "Enter the 6-digit code from your authenticator app, or a recovery code.",
   "Código":
     "Code",
-  "Recordar este dispositivo 30 días":
-    "Remember this device for 30 days",
+  "Recordar este dispositivo 14 días":
+    "Remember this device for 14 days",
   "Verificar":
     "Verify",
   "Código reenviado.":
@@ -197,8 +197,8 @@ export const cuentas: Record<string, string> = {
     "Set up two-step verification",
   "Elige cómo quieres recibir el segundo código al entrar con contraseña.":
     "Choose how you want to get the second code when signing in with a password.",
-  "Añade esta cuenta en tu app de autenticación (Google Authenticator, Aegis, 1Password…) con esta clave y escribe el código de 6 dígitos que te muestre.":
-    "Add this account to your authenticator app (Google Authenticator, Aegis, 1Password…) with this key and enter the 6-digit code it shows.",
+  "Añade esta cuenta en tu app de autenticación (Google Authenticator, Aegis, 1Password…) escaneando el código QR o con la clave, y escribe el código de 6 dígitos que te muestre.":
+    "Add this account to your authenticator app (Google Authenticator, Aegis, 1Password…) by scanning the QR code or with the key, and enter the 6-digit code it shows.",
   "Clave secreta":
     "Secret key",
   "Copiar clave":
@@ -268,4 +268,5 @@ export const cuentas: Record<string, string> = {
   "Código enviado a tu email": "Code sent to your email",
   "Para confirmar que la cuenta es tuya, escribe también el código que te hemos enviado por email.": "To confirm the account is yours, also enter the code we sent you by email.",
   "El código del email no es correcto o ha caducado.": "The email code is incorrect or has expired.",
+  "Código QR para añadir la cuenta en tu app de autenticación": "QR code to add the account in your authenticator app",
 };

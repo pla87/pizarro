@@ -141,4 +141,10 @@ export const admin: Record<string, string> = {
   "Cada mes se descifra la última copia y se comprueba que es íntegra y que las filas coinciden con el manifiesto.": "Every month the latest backup is decrypted and checked for integrity and for rows matching the manifest.",
   "Copias guardadas ({n})": "Stored backups ({n})",
   "Los adjuntos ya son ficheros del mismo volumen: activa también las copias (snapshots) del volumen en Railway para protegerlos.": "Attachments are already files on the same volume: also enable volume snapshots in Railway to protect them.",
+  "Confirma tu identidad": "Confirm your identity",
+  "Escribe el código de 6 dígitos de tu app de autenticación para descargar la copia.": "Enter the 6-digit code from your authenticator app to download the backup.",
+  "Por seguridad, escribe tu contraseña para descargar la copia.": "For security, enter your password to download the backup.",
+  "Usar mi contraseña": "Use my password",
+  "Entro con Google y no tengo contraseña: usar un código de mi app": "I sign in with Google and have no password: use a code from my app",
+  "Comprobando…": "Checking…",
 };

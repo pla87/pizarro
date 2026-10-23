@@ -13,6 +13,7 @@ import { Markdown } from "@/components/ui/Markdown";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
+import { DraftsSection } from "./DraftsSection";
 import type { CardStyleValue, EditorModeValue, TemplateOption } from "@/lib/types";
 
 type ThemeValue = "SYSTEM" | "LIGHT" | "DARK";
@@ -34,6 +35,7 @@ interface Props {
   templates: { headers: TemplateOption[]; footers: TemplateOption[] };
   cardStyle: CardStyleValue;
   editorMode: EditorModeValue;
+  clearDraftsOnLogout: boolean;
   theme: ThemeValue;
   accent: AccentValue;
   locale: "ES" | "EN";
@@ -61,7 +63,7 @@ export function ProfileSettings(props: Props) {
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-4 md:p-6">
-      <h1 className="text-xl font-semibold">{t("Mi perfil y plantillas")}</h1>
+      <h1 className="text-xl font-semibold">{t("Mi perfil")}</h1>
 
       <section className="card p-5">
         <h2 className="font-semibold">{t("Plantillas de release notes")}</h2>
@@ -75,6 +77,7 @@ export function ProfileSettings(props: Props) {
       <LanguageSection initial={props.locale} />
       <AppearanceSection initial={props.cardStyle} initialTheme={props.theme} initialAccent={props.accent} />
       <EditorModeSection initial={props.editorMode} />
+      <DraftsSection initial={props.clearDraftsOnLogout} />
       <GoogleSection google={props.google} />
       <NotificationSection prefs={props.notifications} />
       {props.notificationExtras}

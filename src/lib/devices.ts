@@ -9,7 +9,7 @@ import { cookieSecure } from "./session-config";
 // se guarda su hash. Sirve únicamente para avisar de inicios de sesión desde un dispositivo nuevo.
 
 export const DEVICE_COOKIE = "pz_device";
-export const TRUST_DEVICE_DAYS = 30;
+export const TRUST_DEVICE_DAYS = 14;
 const DEVICE_MAX_AGE_SECONDS = 400 * 24 * 60 * 60;
 
 /**

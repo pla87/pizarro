@@ -197,7 +197,7 @@ Cómo comprobarlo: en **Deployments → View logs** deberían aparecer `All migr
 
 Después del primer arranque:
 
-1. Entra con el email y la contraseña del seed y **cambia la contraseña** en *Mi perfil y plantillas*.
+1. Entra con el email y la contraseña del seed y **cambia la contraseña** en *Mi perfil*.
 2. **Borra `SEED_ADMIN_PASSWORD`** (y, si quieres, el resto de `SEED_ADMIN_*`) de las variables de Railway. No se vuelven a usar mientras exista algún usuario.
 3. Da de alta al resto del equipo en **Usuarios** (máximo 5 activos).
 
@@ -242,7 +242,7 @@ Nota: `railway run` ejecuta el comando en tu máquina con las variables del serv
 4. **Clients / Credenciales → Crear cliente → Aplicación web**:
    - **URI de redirección autorizados**: `https://<tu-dominio>.up.railway.app/api/google/callback`. Debe coincidir exactamente con `APP_URL` + `/api/google/callback`. Si además usarás «Iniciar sesión con Google» ([7.4](#74-acceso-con-google-y-verificación-en-dos-pasos)), añade también `APP_URL` + `/api/auth/google/callback` (las dos URI en el mismo cliente).
 5. Copia el **ID de cliente** y el **secreto** a Railway: `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`, y añade `GOOGLE_WORKSPACE_DOMAIN=tu-dominio.com`. Así, cada archivo creado se comparte automáticamente con tu dominio como editor (`GOOGLE_SHARE_ROLE`), y el resto del equipo puede abrirlo desde la tarjeta. Sin dominio, solo lo ve quien lo crea hasta que lo comparta a mano.
-6. Redespliega. Cada usuario entra en **Mi perfil y plantillas → Google Docs y Sheets → Conectar con Google**.
+6. Redespliega. Cada usuario entra en **Mi perfil → Google Docs y Sheets → Conectar con Google**.
 
 > Los tokens de Google se guardan cifrados con una clave derivada de `SESSION_SECRET`. Si rotas `SESSION_SECRET`, cada usuario tendrá que volver a conectar Google.
 
@@ -305,7 +305,7 @@ Se usa la **WhatsApp Cloud API** oficial de Meta. Pasos:
 
 **Solo con Google.** `AUTH_GOOGLE_ONLY=true` desactiva el acceso con contraseña para todos. `AUTH_ALLOW_ADMIN_PASSWORD=true` mantiene la contraseña solo para administradores como acceso de emergencia (aparece plegado en la pantalla de acceso). Por defecto ambas están sin definir y se admiten los dos métodos.
 
-**Verificación en dos pasos.** Solo afecta al acceso con contraseña. Cada persona puede activarla en *Mi perfil → Verificación en dos pasos* con una app de autenticación (TOTP, 6 dígitos, 30 s) o un código de 6 dígitos por email (10 minutos, un solo uso; requiere SMTP). Al activarla se muestran 10 códigos de recuperación de un solo uso (solo se guarda su HMAC). Es **obligatoria para administradores**: tras la contraseña se les pide configurarla antes de entrar. Hasta completar el segundo paso no existe sesión. Se permiten 5 fallos por cada contraseña correcta y 20 por persona y hora. «Recordar este dispositivo 30 días» omite el segundo paso en ese navegador (se anula al cambiar la contraseña o el método). Si alguien pierde el móvil y los códigos, un administrador puede restablecerla en *Administración → Usuarios*. Los secretos TOTP se guardan cifrados con una clave derivada de `SESSION_SECRET`.
+**Verificación en dos pasos.** Solo afecta al acceso con contraseña. Cada persona puede activarla en *Mi perfil → Verificación en dos pasos* con una app de autenticación (TOTP, 6 dígitos, 30 s) o un código de 6 dígitos por email (10 minutos, un solo uso; requiere SMTP). Al activarla se muestran 10 códigos de recuperación de un solo uso (solo se guarda su HMAC). Es **obligatoria para administradores**: tras la contraseña se les pide configurarla antes de entrar. Hasta completar el segundo paso no existe sesión. Se permiten 5 fallos por cada contraseña correcta y 20 por persona y hora. «Recordar este dispositivo 14 días» omite el segundo paso en ese navegador (se anula al cambiar la contraseña o el método). Si alguien pierde el móvil y los códigos, un administrador puede restablecerla en *Administración → Usuarios*. Los secretos TOTP se guardan cifrados con una clave derivada de `SESSION_SECRET`.
 
 ## Arquitectura (resumen)
 

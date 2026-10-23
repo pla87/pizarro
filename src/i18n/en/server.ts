@@ -229,4 +229,6 @@ export const server: Record<string, string> = {
   "repetición": "repeat",
   "Máximo 50 subtareas.": "Maximum 50 subtasks.",
   "El destinatario debe ser alguien con acceso al proyecto.": "The recipient must be someone with access to the project.",
+  "La contraseña no es correcta.": "The password is not correct.",
+  "Para descargar la copia confirma con tu contraseña.": "To download the backup, confirm with your password.",
 };

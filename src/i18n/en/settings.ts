@@ -30,7 +30,6 @@ export const settings: Record<string, string> = {
   "Ninguna versión coincide con «{query}».": "No version matches “{query}”.",
   "Historial de versiones": "Version history",
   "Versión actual:": "Current version:",
-  "Mi perfil y plantillas": "My profile and templates",
   "Cuenta de Google conectada.": "Google account connected.",
   "Has cancelado la conexión con Google.": "You cancelled the connection with Google.",
   "La conexión con Google ha caducado o no es válida. Vuelve a intentarlo.": "The Google connection has expired or is invalid. Please try again.",
@@ -234,4 +233,7 @@ export const settings: Record<string, string> = {
   "Hacer el proyecto privado": "Make the project private",
   "Hacer privado": "Make private",
   "Salir": "Leave",
+  "Borradores": "Drafts",
+  "Lo que escribes en una tarea sin guardar se conserva en este navegador. Útil en un ordenador compartido: se borra al salir.": "What you type in a task without saving is kept in this browser. Useful on a shared computer: it is deleted when you sign out.",
+  "Borrar los borradores al cerrar sesión": "Delete drafts when signing out",
 };

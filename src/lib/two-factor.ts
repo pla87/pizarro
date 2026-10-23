@@ -96,7 +96,7 @@ export async function verifyEmailCode(ch: Challenge, code: string): Promise<bool
   return count === 1;
 }
 
-async function verifyTotpFor(secretEnc: string | null, code: string, userId: string | null, lastStep: number | null): Promise<boolean> {
+export async function verifyTotpFor(secretEnc: string | null, code: string, userId: string | null, lastStep: number | null): Promise<boolean> {
   if (!secretEnc) return false;
   const step = verifyTotp(decryptSecret(secretEnc), code, Date.now(), { lastStep });
   if (step === null) return false;

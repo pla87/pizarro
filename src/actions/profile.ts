@@ -102,6 +102,16 @@ export async function updateEditorMode(mode: "MARKDOWN" | "WYSIWYG") {
   });
 }
 
+/** «Borrar los borradores al cerrar sesión»: lo ejecuta el navegador al enviar el cierre de sesión. */
+export async function updateClearDraftsOnLogout(enabled: boolean) {
+  return runAction({ name: "profile.updateClearDraftsOnLogout", args: [enabled] }, async () => {
+    const user = await requireUser();
+    await db.user.update({ where: { id: user.id }, data: { clearDraftsOnLogout: z.boolean().parse(enabled) } });
+    // El usuario actual llega al AppShell desde el layout.
+    revalidatePath("/", "layout");
+  });
+}
+
 /** Tema de color del usuario: SYSTEM sigue al sistema operativo. */
 export async function updateTheme(theme: "SYSTEM" | "LIGHT" | "DARK") {
   return runAction({ name: "profile.updateTheme", args: [theme] }, async () => {

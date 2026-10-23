@@ -19,6 +19,8 @@ export interface CurrentUser {
   theme: "SYSTEM" | "LIGHT" | "DARK";
   accent: "BLUE" | "FOREST" | "SIENNA" | "MUSTARD" | "MONO" | "EVA";
   locale: "ES" | "EN";
+  /** Preferencia: borrar los borradores locales al cerrar sesión (lo hace el cliente antes de enviar el cierre). */
+  clearDraftsOnLogout: boolean;
 }
 
 function secret(): string {
@@ -94,7 +96,7 @@ const loadSessionUser = cache(async (): Promise<SessionUser | null> => {
     select: {
       expiresAt: true,
       lastSeenAt: true,
-      user: { select: { id: true, email: true, name: true, role: true, theme: true, accent: true, locale: true, active: true, mustChangePassword: true } },
+      user: { select: { id: true, email: true, name: true, role: true, theme: true, accent: true, locale: true, clearDraftsOnLogout: true, active: true, mustChangePassword: true } },
     },
   });
   if (!session || !session.user.active) return null;

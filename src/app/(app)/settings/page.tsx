@@ -15,7 +15,7 @@ import { TwoFactorSection } from "./TwoFactorSection";
 
 export async function generateMetadata() {
   const t = await getT();
-  return { title: t("Mi perfil y plantillas") };
+  return { title: t("Mi perfil") };
 }
 
 const GOOGLE_MESSAGES: Record<string, { ok: boolean; text: string }> = {
@@ -40,6 +40,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       email: true,
       cardStyle: true,
       editorMode: true,
+      clearDraftsOnLogout: true,
       theme: true,
       accent: true,
       locale: true,
@@ -74,6 +75,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         templates={await userTemplates(user.id)}
         cardStyle={row.cardStyle}
         editorMode={row.editorMode}
+        clearDraftsOnLogout={row.clearDraftsOnLogout}
         theme={row.theme}
         accent={row.accent}
         locale={row.locale}
