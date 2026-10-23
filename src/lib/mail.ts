@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { after } from "next/server";
 import nodemailer from "nodemailer";
 import { logEvent } from "./log";
+import { maskEmailsIn } from "./mask-email";
 
 // Envío de emails: SMTP con nodemailer. Con MAIL_OUTBOX_DIR (solo desarrollo y pruebas) cada email se
 // guarda como JSON en esa carpeta en vez de enviarse.
@@ -78,8 +79,8 @@ export function sendMailInBackground(label: string, send: () => Promise<void>): 
       await send();
       logEvent({ category: "auth", action: "auth.emailSent", message: `Email enviado: ${label}` });
     } catch (err) {
-      console.error("[mail]", label, err);
-      logEvent({ level: "error", category: "auth", action: "auth.emailFailed", message: `Fallo al enviar el email (${label}): ${(err as Error).message}` });
+      console.error("[mail]", label, maskEmailsIn(String(err)));
+      logEvent({ level: "error", category: "auth", action: "auth.emailFailed", message: `Fallo al enviar el email (${label}): ${maskEmailsIn((err as Error).message)}` });
     }
   };
   try {
