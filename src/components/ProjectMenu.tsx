@@ -47,7 +47,7 @@ export function ProjectMenu({ className, textClassName }: { className?: string; 
       wrapperRef={rootRef}
       className={cn("min-w-0", className)}
       label={t("Cambiar de proyecto ({keys})", { keys: sc("Alt+P") })}
-      panelClassName="max-h-[60vh] w-72 max-w-[85vw] rounded-xl border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+      panelClassName="w-72 max-w-[85vw] rounded-xl border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
       trigger={({ open: isOpen, props }) => (
         <button
           type="button"

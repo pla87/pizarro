@@ -10,7 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { T } from "@/i18n/core";
-import { COLUMN_ROLES, PALETTE, type ColumnRoleValue } from "@/lib/constants";
+import { COLUMN_ROLES, PALETTE, swatchBorder, type ColumnRoleValue } from "@/lib/constants";
 import { parseSubtaskLines } from "@/lib/kinds-special";
 import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS, type TemplateDto, type TemplateInput } from "@/lib/project-templates";
 
@@ -56,13 +56,13 @@ function ColorField({ value, onChange, colors }: { value: string; onChange: (c: 
           key={c}
           type="button"
           onClick={() => onChange(c)}
-          className={cn("h-6 w-6 rounded-full", value.toLowerCase() === c && "ring-2 ring-brand-500 ring-offset-1 dark:ring-offset-slate-900")}
+          className={cn("h-6 w-6 rounded-full", swatchBorder(c), value.toLowerCase() === c && "ring-2 ring-brand-500 ring-offset-1 dark:ring-offset-slate-900")}
           style={{ backgroundColor: c }}
           aria-label={t("Color {c}", { c })}
         />
       ))}
       {colors.length > PALETTE.length && (
-        <label className="relative h-6 w-6 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus" title={t("Otro color")}>
+        <label className="relative h-6 w-6 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus" title={t("Otro color")}>
           <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label={t("Elegir otro color")} />
         </label>
       )}

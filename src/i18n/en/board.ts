@@ -16,6 +16,7 @@ export const board: Record<string, string> = {
   "Crear varias tareas pegando una lista": "Create several tasks by pasting a list",
   "Varias tareas": "Several tasks",
   "Nueva tarea": "New task",
+  "Nueva": "New",
   "Crear varias tareas": "Create several tasks",
   "Nueva tarea o captura": "New task or capture",
   // ColumnView
