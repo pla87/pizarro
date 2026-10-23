@@ -11,7 +11,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
 import type { EditorModeValue } from "@/lib/types";
-import { PALETTE } from "@/lib/constants";
+import { PALETTE, swatchBorder } from "@/lib/constants";
 import { describeKindAutomation, MAX_KIND_SUBTASKS, parseSubtaskLines } from "@/lib/kinds-special";
 
 export interface KindRow {
@@ -52,12 +52,12 @@ function ColorField({ value, onChange }: { value: string; onChange: (c: string) 
           key={c}
           type="button"
           onClick={() => onChange(c)}
-          className={cn("h-7 w-7 rounded-full", value.toLowerCase() === c && "ring-2 ring-brand-500 ring-offset-1 dark:ring-offset-slate-900")}
+          className={cn("h-7 w-7 rounded-full", swatchBorder(c), value.toLowerCase() === c && "ring-2 ring-brand-500 ring-offset-1 dark:ring-offset-slate-900")}
           style={{ backgroundColor: c }}
           aria-label={t("Color {name}", { name: c })}
         />
       ))}
-      <label className="relative h-7 w-7 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus" title={t("Otro color")}>
+      <label className="relative h-7 w-7 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus" title={t("Otro color")}>
         <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label={t("Elegir otro color")} />
       </label>
     </div>

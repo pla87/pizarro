@@ -407,11 +407,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-sm font-semibold">{t("Capturas y adjuntos")}</h3>
               <div className="flex items-center gap-1">
-                <label className="btn-secondary cursor-pointer py-1 text-xs has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus sm:hidden">
+                <label className="btn-secondary cursor-pointer py-1 text-xs has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus sm:hidden">
                   <Camera size={15} /> {t("Cámara")}
                   <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { upload(filesFrom(e.target.files)); e.target.value = ""; }} />
                 </label>
-                <label className="btn-secondary cursor-pointer py-1 text-xs has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus">
+                <label className="btn-secondary cursor-pointer py-1 text-xs has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus">
                   <ImagePlus size={15} /> {t("Añadir")}
                   <input type="file" multiple className="sr-only" onChange={(e) => { upload(filesFrom(e.target.files)); e.target.value = ""; }} />
                 </label>
@@ -1018,7 +1018,7 @@ function SubtaskRow({ s, editing, onEdit, onRename, onDraft, onToggle, onRemove 
         />
       ) : (
         <span
-          className={cn("flex-1 rounded-sm text-sm focus-visible:ring-2 focus-visible:ring-focus/50 focus-visible:outline-none", s.done && "text-slate-400 line-through")}
+          className={cn("flex-1 rounded-sm text-sm focus-visible:ring-3 focus-visible:ring-focus/50 focus-visible:outline-none", s.done && "text-slate-400 line-through")}
           tabIndex={0}
           aria-label={t("{title} (Enter o F2 para editar)", { title: s.title })}
           onDoubleClick={startEdit}

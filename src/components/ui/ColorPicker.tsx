@@ -2,7 +2,7 @@
 
 import { Check } from "lucide-react";
 import { useT } from "@/i18n/client";
-import { COLOR_NAME, isWhite, PALETTE } from "@/lib/constants";
+import { COLOR_NAME, isWhite, PALETTE, swatchBorder } from "@/lib/constants";
 import { cn } from "./cn";
 
 export function ColorPicker({ value, onChange, allowNone = true }: { value: string | null; onChange: (c: string | null) => void; allowNone?: boolean }) {
@@ -27,7 +27,7 @@ export function ColorPicker({ value, onChange, allowNone = true }: { value: stri
           key={c}
           type="button"
           onClick={() => onChange(c)}
-          className={cn("flex h-7 w-7 items-center justify-center rounded-full", isWhite(c) && "border border-slate-300 dark:border-slate-500", value === c && "ring-2 ring-brand-500 ring-offset-1 dark:ring-offset-slate-900")}
+          className={cn("flex h-7 w-7 items-center justify-center rounded-full", swatchBorder(c), value === c && "ring-2 ring-brand-500 ring-offset-1 dark:ring-offset-slate-900")}
           style={{ backgroundColor: c }}
           aria-label={t("Color {name}", { name: COLOR_NAME[c] ? t(COLOR_NAME[c]) : c })}
           title={COLOR_NAME[c] ? t(COLOR_NAME[c]) : undefined}
