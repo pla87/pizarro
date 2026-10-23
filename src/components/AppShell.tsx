@@ -15,6 +15,7 @@ import { listTemplates } from "@/actions/templates";
 import type { CurrentUser } from "@/lib/session";
 import { AppBadge } from "./AppBadge";
 import { InstallApp } from "./InstallApp";
+import { clearAllDrafts } from "./board/drafts";
 import { Presence } from "./board/Presence";
 import { PrivateIcon, ProjectMenu, ProjectsContext } from "./ProjectMenu";
 import { UndoButton } from "./UndoButton";
@@ -168,7 +169,7 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
           )}
         </NavLink>
         <NavLink href="/my-tasks" icon={ListChecks} active={pathname === "/my-tasks"}>{t("Mis tareas asignadas")}</NavLink>
-        <NavLink href="/settings" icon={Settings} active={pathname === "/settings"}>{t("Mi perfil y plantillas")}</NavLink>
+        <NavLink href="/settings" icon={Settings} active={pathname === "/settings"}>{t("Mi perfil")}</NavLink>
         {isAdmin && <NavLink href="/admin" icon={Shield} active={pathname.startsWith("/admin")}>{t("Administración")}</NavLink>}
         <NavLink href="/changelog" icon={History} active={pathname === "/changelog"}>{t("Historial de versiones")}</NavLink>
         <InstallApp />
@@ -181,7 +182,7 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
             <div className="truncate text-sm font-medium">{user.name}</div>
             <Link href="/changelog" className="text-xs text-slate-500 hover:underline">v{version}</Link>
           </div>
-          <form action={logout}>
+          <form action={logout} onSubmit={() => user.clearDraftsOnLogout && clearAllDrafts()}>
             <button type="submit" className="btn-icon" title={t("Cerrar sesión")} aria-label={t("Cerrar sesión")}>
               <LogOut size={17} />
             </button>

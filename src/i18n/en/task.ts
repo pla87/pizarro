@@ -5,7 +5,7 @@ export const task: Record<string, string> = {
   "Tarea archivada": "Task archived",
   "¿Borrar definitivamente esta tarea y sus adjuntos?": "Permanently delete this task and its attachments?",
   "La integración con Google no está configurada en el servidor.": "The Google integration is not configured on the server.",
-  "Conecta tu cuenta de Google en «Mi perfil y plantillas» para crear documentos.": "Connect your Google account in “My profile and templates” to create documents.",
+  "Conecta tu cuenta de Google en «Mi perfil» para crear documentos.": "Connect your Google account in “My profile” to create documents.",
   "Hoja de cálculo creada": "Spreadsheet created",
   "Documento creado": "Document created",
   "Archivar": "Archive",

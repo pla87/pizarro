@@ -9,6 +9,8 @@ export interface BeginData {
   method: "TOTP" | "EMAIL";
   secret?: string;
   uri?: string;
+  /** QR de la URI otpauth:// como data: URL (SVG generado en el servidor). */
+  qr?: string;
   /** Alta de una app con email disponible: además se ha enviado un código al email que también hay que escribir. */
   emailCodeSent?: boolean;
 }
@@ -85,8 +87,12 @@ export function TwoFactorEnroll({ emailAvailable, begin, confirm, onCodes, disab
       {info.method === "TOTP" ? (
         <>
           <p className="text-sm text-slate-600 dark:text-slate-300">
-            {t("Añade esta cuenta en tu app de autenticación (Google Authenticator, Aegis, 1Password…) con esta clave y escribe el código de 6 dígitos que te muestre.")}
+            {t("Añade esta cuenta en tu app de autenticación (Google Authenticator, Aegis, 1Password…) escaneando el código QR o con la clave, y escribe el código de 6 dígitos que te muestre.")}
           </p>
+          {info.qr && (
+            // eslint-disable-next-line @next/next/no-img-element -- data: URL generada en el servidor
+            <img src={info.qr} alt={t("Código QR para añadir la cuenta en tu app de autenticación")} width={180} height={180} className="mx-auto h-[180px] w-[180px] rounded-lg bg-white" data-testid="totp-qr" />
+          )}
           <div className="rounded-lg bg-slate-100 p-3 dark:bg-slate-800">
             <div className="text-xs text-slate-500">{t("Clave secreta")}</div>
             <code className="block select-all break-all font-mono text-base tracking-wider" data-testid="totp-secret">{grouped(info.secret ?? "")}</code>
@@ -144,7 +150,7 @@ export function RecoveryCodes({ codes }: { codes: string[] }) {
       <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
         {t("Guarda estos códigos en un sitio seguro. Cada uno sirve una sola vez si pierdes el acceso a tu app o a tu email, y no volverán a mostrarse.")}
       </p>
-      <ul className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-3 font-mono text-sm dark:bg-slate-800" data-testid="recovery-codes">
+      <ul className="mx-auto grid grid-cols-2 justify-items-center gap-1 rounded-lg bg-slate-100 p-3 text-center font-mono text-sm dark:bg-slate-800" data-testid="recovery-codes">
         {codes.map((c) => <li key={c} className="select-all">{c}</li>)}
       </ul>
       <div className="flex gap-2">

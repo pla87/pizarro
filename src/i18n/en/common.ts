@@ -10,7 +10,7 @@ export const common: Record<string, string> = {
   "Avisos": "Notifications",
   "{n} sin leer": "{n} unread",
   "Mis tareas asignadas": "My assigned tasks",
-  "Mi perfil y plantillas": "My profile and templates",
+  "Mi perfil": "My profile",
   "Administración": "Administration",
   "Historial de versiones": "Version history",
   "Cerrar sesión": "Log out",

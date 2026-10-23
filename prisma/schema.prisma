@@ -37,6 +37,8 @@ model User {
   accent         Accent    @default(BLUE)
   /// Idioma de la interfaz.
   locale         Locale    @default(ES)
+  /// Al cerrar sesión se borran los borradores locales de tareas (localStorage) de este navegador.
+  clearDraftsOnLogout Boolean @default(false)
   /// Cómo se editan las descripciones: escribiendo Markdown o con barra de formato.
   editorMode     EditorMode @default(WYSIWYG)
   /// Preferencias de aviso de menciones.

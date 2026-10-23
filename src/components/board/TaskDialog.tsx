@@ -294,7 +294,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       return null;
     }
     if (!board.google.connected) {
-      toast(t("Conecta tu cuenta de Google en «Mi perfil y plantillas» para crear documentos."), "error");
+      toast(t("Conecta tu cuenta de Google en «Mi perfil» para crear documentos."), "error");
       return null;
     }
     const res = await board.track(createAndOpenGoogleFile(task.id, kind, title.trim() || task.title, t));
