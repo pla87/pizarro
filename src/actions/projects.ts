@@ -12,6 +12,7 @@ import { defaultColumns, PALETTE } from "@/lib/constants";
 import { getLocale } from "@/i18n/server";
 import { AppError, forbidden, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
+import { localizeTemplate } from "@/lib/builtin-templates-en";
 import { buildTemplateApplication, parseStoredTemplate, type TemplateData } from "@/lib/project-templates";
 import { requireUser, type CurrentUser } from "@/lib/session";
 import { purgeProject } from "@/lib/project-delete";
@@ -58,10 +59,11 @@ export async function createProject(name: string, options?: { templateId?: strin
       ? await db.projectTemplate.findUnique({ where: { id: v.id.parse(options.templateId) } })
       : null;
     if (options?.templateId && !templateRow) throw new AppError("La plantilla ya no existe.");
-    const template = templateRow ? parseStoredTemplate(templateRow) : null;
-    const last = await db.project.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
     // Sin plantilla, las columnas por defecto salen en el idioma de quien crea el proyecto.
     const locale = await getLocale();
+    // Una plantilla de serie sin modificar se aplica en inglés a quien usa la interfaz en inglés.
+    const template = templateRow ? localizeTemplate(parseStoredTemplate(templateRow), templateRow.builtinKey, locale) : null;
+    const last = await db.project.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
     const project = await db.$transaction(async (tx) => {
       const created = await tx.project.create({
         data: {

@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectOk, loginAs, makeUser } from "./helpers";
+import { createProject } from "../../src/actions/projects";
 import { deleteTemplate, listTemplates, resetTemplate, restoreDefaultTemplates, saveTemplate } from "../../src/actions/templates";
 import { BUILTIN_KEYS, canonicalTemplate } from "../../src/lib/builtin-templates";
 import { seedBuiltinTemplates, templateFingerprint, upgradeBuiltinTemplates } from "../../src/lib/template-store";
@@ -76,5 +77,35 @@ describe("plantillas de proyecto de serie", () => {
     // «Restablecer» deja la huella al día.
     expectOk(await resetTemplate(eventos.id));
     assert.equal((await db.builtinTemplateSeeded.findUniqueOrThrow({ where: { key: "eventos" } })).appliedHash, templateFingerprint(canonicalTemplate("eventos")!));
+  });
+  test("usuario en inglés: plantillas de serie sin tocar en inglés, en el listado y al crear el proyecto; modificadas, tal cual", async () => {
+    await db.projectTemplate.deleteMany();
+    await db.builtinTemplateSeeded.deleteMany();
+    await seedBuiltinTemplates(db);
+    const admin = await makeUser({ role: "ADMIN" });
+    await db.user.update({ where: { id: admin.id }, data: { locale: "EN" } });
+    await loginAs(admin);
+
+    const list = expectOk(await listTemplates());
+    assert.ok(list.some((t) => t.name === "House move"));
+    assert.ok(!list.some((t) => t.name === "Mudanza"));
+
+    const mudanza = list.find((t) => t.builtinKey === "mudanza")!;
+    const created = expectOk(await createProject("Move", { templateId: mudanza.id }));
+    const cols = await db.column.findMany({ where: { projectId: created.id }, orderBy: { position: "asc" } });
+    assert.deepEqual(cols.map((c) => c.name), ["To do", "This week", "Waiting", "Done"]);
+    const kinds = await db.taskKind.findMany({ where: { projectId: created.id }, orderBy: { position: "asc" } });
+    assert.equal(kinds[0]!.name, "Admin and change of address");
+    assert.match(kinds[1]!.descriptionTemplate, /What is being packed/);
+    assert.ok((await db.label.findMany({ where: { projectId: created.id } })).some((l) => l.name === "Kitchen"));
+
+    // Modificada por el administrador: se ofrece y se aplica tal como está guardada.
+    await db.projectTemplate.update({ where: { builtinKey: "viajes" }, data: { name: "Mis viajes" } });
+    const viajes = expectOk(await listTemplates()).find((t) => t.builtinKey === "viajes")!;
+    assert.equal(viajes.name, "Mis viajes");
+    assert.equal(viajes.columns[0]!.name, "Ideas");
+    assert.equal(viajes.kinds[0]!.name, "Transporte");
+    const trip = expectOk(await createProject("Trip", { templateId: viajes.id }));
+    assert.equal((await db.taskKind.findMany({ where: { projectId: trip.id }, orderBy: { position: "asc" } }))[0]!.name, "Transporte");
   });
 });
