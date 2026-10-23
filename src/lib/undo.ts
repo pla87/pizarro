@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import type { Prisma } from "@/generated/prisma/client";
 import { actionContext } from "./action-context";
 import { db } from "./db";
@@ -160,10 +161,10 @@ export type UndoKind = "UNDO" | "REDO";
  */
 export async function saveUndo(
   userId: string, projectId: string, label: string, ops: UndoOp[], taskId: string | null = null,
-  kind: UndoKind = "UNDO", clearRedo = kind === "UNDO",
+  kind: UndoKind = "UNDO", clearRedo = kind === "UNDO", fingerprint: string | null = null,
 ): Promise<void> {
   if (clearRedo) await discardUndo({ userId, projectId, kind: "REDO" });
-  await db.undoEntry.create({ data: { userId, projectId, taskId, kind, label: label.slice(0, 300), ops: ops as unknown as Prisma.InputJsonValue } });
+  await db.undoEntry.create({ data: { userId, projectId, taskId, kind, label: label.slice(0, 300), ops: ops as unknown as Prisma.InputJsonValue, fingerprint } });
   const old = await db.undoEntry.findMany({
     where: { userId, projectId, kind },
     orderBy: { createdAt: "desc" },
@@ -472,4 +473,59 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
   if (filesToRemove.length && !opts.keepFiles) await removeAttachmentFiles(filesToRemove);
   if (releaseFiles.length) await removeReleaseAttachmentFiles(releaseFiles);
   return skipped;
+}
+
+/**
+ * Huella del estado actual de todo lo que `ops` va a tocar (tareas con sus etiquetas, subtareas,
+ * comentarios, adjuntos y enlaces; columnas; releases; lo que no existe cuenta como «ausente»).
+ * Se calcula al crear la entrada contraria y se compara antes de aplicarla: si difiere, otra persona
+ * ha cambiado esas filas entretanto (las acciones propias vacían la pila de rehacer). Task.updatedAt
+ * no cambia con subtareas, comentarios o etiquetas, por eso se incluyen sus filas en la huella.
+ */
+export async function fingerprintOps(projectId: string, ops: UndoOp[]): Promise<string> {
+  const taskIds = new Set<string>();
+  const columnIds = new Set<string>();
+  const releaseIds = new Set<string>();
+  const lookups: { model: "subtask" | "taskComment" | "taskAttachment" | "taskLink"; id: string }[] = [];
+  for (const op of ops) {
+    switch (op.t) {
+      case "task.set": case "task.remove": taskIds.add(op.id); break;
+      case "task.restore": taskIds.add(op.snap.task.id); break;
+      case "subtask.restore": taskIds.add(op.row.taskId); break;
+      case "comment.restore": case "attachment.restore": case "link.restore": taskIds.add(op.row.taskId); break;
+      case "subtask.set": case "subtask.remove": lookups.push({ model: "subtask", id: op.id }); break;
+      case "comment.remove": lookups.push({ model: "taskComment", id: op.id }); break;
+      case "attachment.remove": lookups.push({ model: "taskAttachment", id: op.id }); break;
+      case "link.remove": lookups.push({ model: "taskLink", id: op.id }); break;
+      case "column.set": case "column.remove": columnIds.add(op.id); break;
+      case "column.restore": columnIds.add(op.row.id); break;
+      case "release.remove": releaseIds.add(op.id); break;
+    }
+  }
+  // Las filas hijas que ya no existen se anotan como ausentes; las que existen suman su tarea.
+  const lines: string[] = [];
+  for (const l of lookups) {
+    const row = (await (db[l.model] as unknown as { findUnique: (a: unknown) => Promise<{ taskId: string } | null> }).findUnique({ where: { id: l.id } }));
+    if (row) taskIds.add(row.taskId); else lines.push(`${l.model}:${l.id}:absent`);
+  }
+  const tasks = await db.task.findMany({
+    where: { id: { in: [...taskIds] }, projectId },
+    select: {
+      id: true, updatedAt: true,
+      labels: { select: { labelId: true }, orderBy: { labelId: "asc" } },
+      subtasks: { select: { id: true, title: true, done: true, position: true }, orderBy: { id: "asc" } },
+      comments: { select: { id: true, body: true, editedAt: true }, orderBy: { id: "asc" } },
+      attachments: { select: { id: true }, orderBy: { id: "asc" } },
+      links: { select: { id: true, title: true, url: true }, orderBy: { id: "asc" } },
+    },
+  });
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  for (const id of taskIds) lines.push(`task:${id}:${JSON.stringify(byId.get(id) ?? "absent")}`);
+  const cols = await db.column.findMany({ where: { id: { in: [...columnIds] }, projectId } });
+  const colById = new Map(cols.map((c) => [c.id, c]));
+  for (const id of columnIds) lines.push(`column:${id}:${JSON.stringify(colById.get(id) ?? "absent")}`);
+  const rels = await db.release.findMany({ where: { id: { in: [...releaseIds] }, projectId }, select: { id: true } });
+  const relIds = new Set(rels.map((r) => r.id));
+  for (const id of releaseIds) lines.push(`release:${id}:${relIds.has(id) ? "present" : "absent"}`);
+  return createHash("sha256").update(lines.sort().join("\n")).digest("hex");
 }

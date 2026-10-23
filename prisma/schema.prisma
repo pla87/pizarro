@@ -745,6 +745,8 @@ model UndoEntry {
   kind      UndoKind @default(UNDO)
   label     String
   ops       Json
+  /// Huella de lo que tocan las ops justo después de crear la entrada contraria (rehacer/deshacer): si cambia, alguien más lo modificó y no se aplica.
+  fingerprint String?
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
