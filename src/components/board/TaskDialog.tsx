@@ -218,7 +218,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       try {
         const att = await board.trackRaw(uploadFile(task.id, file, false, t));
         setDetail((d) => (d ? { ...d, attachments: [...d.attachments, att] } : d));
-        board.patchTask(task.id, (t) => ({ attachmentCount: t.attachmentCount + 1 }));
+        board.patchTask(task.id, (t) => (att.isImage ? { imageCount: t.imageCount + 1 } : { fileCount: t.fileCount + 1 }));
       } catch (err) {
         toast((err as Error).message, "error");
       } finally {
@@ -234,8 +234,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     if (!(await confirm({ title: t("Borrar adjunto"), message: question, confirmLabel: t("Borrar"), danger: true }))) return;
     const res = await board.track(deleteAttachment(id));
     if (!res.ok) return toast(res.error, "error");
+    const removed = detail?.attachments.find((x) => x.id === id);
     setDetail((d) => (d ? { ...d, attachments: d.attachments.filter((x) => x.id !== id) } : d));
-    board.patchTask(task.id, (t) => ({ attachmentCount: Math.max(0, t.attachmentCount - 1) }));
+    if (removed) board.patchTask(task.id, (t) => (removed.isImage ? { imageCount: Math.max(0, t.imageCount - 1) } : { fileCount: Math.max(0, t.fileCount - 1) }));
   };
 
   const onPaste = (e: React.ClipboardEvent) => {
@@ -334,6 +335,18 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     save({ linkUrl: value }, { linkUrl: value || null });
   };
 
+
+  // Archivar y Duplicar solo con icono (con tooltip y atajo) para que, con Borrar y Guardar, quepan en una línea
+  // tanto en la columna lateral (~300 px) como en el pie móvil (360 px).
+  const actionButtons = (
+    <>
+      <button className="btn-secondary px-2.5 py-1.5" onClick={archive} aria-label={t("Archivar")} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /></button>
+      <button className="btn-secondary px-2.5 py-1.5" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
+      <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> {t("Borrar")}</button>
+      <button className="btn-primary ml-auto py-1.5" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} /> {t("Guardar")}</button>
+    </>
+  );
+
   return (
     <Modal
       open
@@ -346,10 +359,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       footer={
         mobile ? (
           <>
-            <button className="btn-secondary py-1.5" onClick={archive} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /> {t("Archivar")}</button>
-            <button className="btn-secondary py-1.5" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")}><Copy size={15} /></button>
-            <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> {t("Borrar")}</button>
-            <button className="btn-primary ml-auto py-1.5" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} /> {t("Guardar")}</button>
+            {actionButtons}
           </>
         ) : undefined
       }
@@ -397,11 +407,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-sm font-semibold">{t("Capturas y adjuntos")}</h3>
               <div className="flex items-center gap-1">
-                <label className="btn-ghost cursor-pointer py-1 text-xs has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-500 sm:hidden">
+                <label className="btn-secondary cursor-pointer py-1 text-xs has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus sm:hidden">
                   <Camera size={15} /> {t("Cámara")}
                   <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { upload(filesFrom(e.target.files)); e.target.value = ""; }} />
                 </label>
-                <label className="btn-ghost cursor-pointer py-1 text-xs has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-500">
+                <label className="btn-secondary cursor-pointer py-1 text-xs has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus">
                   <ImagePlus size={15} /> {t("Añadir")}
                   <input type="file" multiple className="sr-only" onChange={(e) => { upload(filesFrom(e.target.files)); e.target.value = ""; }} />
                 </label>
@@ -615,11 +625,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
           )}
           <FollowToggle taskId={task.id} following={detail?.following} />
           {/* En móvil estos botones van en el pie fijo, junto a Guardar. */}
-          <div className="mt-auto flex flex-wrap gap-2 border-t border-slate-200 pt-4 max-md:hidden md:gap-1 md:pt-2.5 dark:border-slate-800">
-            <button className="btn-secondary py-1.5" onClick={archive} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /> {t("Archivar")}</button>
-            <button className="btn-secondary py-1.5" onClick={() => void board.duplicateTask(task.id)} title={t("Crea una copia justo detrás de esta tarea")}><Copy size={15} /> {t("Duplicar")}</button>
-            <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> {t("Borrar")}</button>
-            <button className="btn-primary ml-auto py-1.5" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} /> {t("Guardar")}</button>
+          <div className="mt-auto flex flex-nowrap items-center gap-2 border-t border-slate-200 pt-4 max-md:hidden md:gap-1 md:pt-2.5 dark:border-slate-800">
+            {actionButtons}
           </div>
         </aside>
       </div>
@@ -1011,7 +1018,7 @@ function SubtaskRow({ s, editing, onEdit, onRename, onDraft, onToggle, onRemove 
         />
       ) : (
         <span
-          className={cn("flex-1 rounded-sm text-sm focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:outline-none", s.done && "text-slate-400 line-through")}
+          className={cn("flex-1 rounded-sm text-sm focus-visible:ring-2 focus-visible:ring-focus/50 focus-visible:outline-none", s.done && "text-slate-400 line-through")}
           tabIndex={0}
           aria-label={t("{title} (Enter o F2 para editar)", { title: s.title })}
           onDoubleClick={startEdit}

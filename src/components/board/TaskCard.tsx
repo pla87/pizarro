@@ -2,7 +2,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlignLeft, CalendarClock, Check, CheckSquare, ExternalLink, FileText, GripVertical, Image as ImageIcon, MessageSquare, Repeat } from "lucide-react";
+import { AlignLeft, CalendarClock, Check, CheckSquare, ExternalLink, FileText, GripVertical, Image as ImageIcon, MessageSquare, Paperclip, Repeat } from "lucide-react";
 import { isWhite } from "@/lib/constants";
 import { dueStatus, formatDay } from "@/lib/dates";
 import { memo, useEffect, useRef, useState } from "react";
@@ -30,7 +30,9 @@ export const SortableTaskCard = memo(function SortableTaskCard({ id }: { id: str
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={cn("relative touch-manipulation", isDragging && "opacity-40")}
-      {...(dragHandle ? {} : { ...attributes, ...listeners })}
+      // Sin `attributes`: el contenedor no es enfocable (el Tab va directo a la tarjeta) y el arrastre por teclado
+      // se sustituye por Alt+flechas en la tarjeta. Con ratón arrastra con `listeners`.
+      {...(dragHandle ? {} : listeners)}
     >
       <TaskViewerBubbles taskId={id} />
       <TaskCard
@@ -54,7 +56,7 @@ export const SortableTaskCard = memo(function SortableTaskCard({ id }: { id: str
 });
 
 export const TaskCard = memo(function TaskCard({ task, overlay = false, handle = null }: { task: BoardTask; overlay?: boolean; handle?: React.ReactNode }) {
-  const { users, labels, openTask, toggleSelected, columns, today, kindById, cardStyle, assignToMe, moveToAdjacentColumn, setDueDate, renameTask, duplicateTask } = useBoard();
+  const { users, labels, openTask, toggleSelected, columns, today, kindById, cardStyle, assignToMe, moveToAdjacentColumn, moveWithinColumn, setDueDate, renameTask, duplicateTask } = useBoard();
   const locale = useIntlLocale();
   const t = useT();
   const done = columns.find((c) => c.id === task.columnId)?.isDone ?? false;
@@ -78,6 +80,13 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
       if (e.target === e.currentTarget) openTask(task.id);
       return;
     }
+    // Espacio en la tarjeta (no en el checkbox ni en el enlace): alterna su selección.
+    if (e.key === " " && !overlay && e.target === e.currentTarget && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!e.repeat) toggleSelected(task.id);
+      return;
+    }
     // Atajos de la tarjeta enfocada (escritorio); no mientras se escribe (renombrar, fecha) ni con Ctrl/⌘.
     if (overlay || e.ctrlKey || e.metaKey || e.nativeEvent.isComposing || isTypingTarget(e.target)) return;
     // `e.code` con Alt: en Mac Option+letra produce otro carácter.
@@ -96,6 +105,8 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
     if (e.code === "KeyM") void assignToMe(task.id);
     else if (e.code === "ArrowLeft") void moveToAdjacentColumn(task.id, -1);
     else if (e.code === "ArrowRight") void moveToAdjacentColumn(task.id, 1);
+    else if (e.code === "ArrowUp") void moveWithinColumn(task.id, -1);
+    else if (e.code === "ArrowDown") void moveWithinColumn(task.id, 1);
     else if (e.code === "KeyD") setDueAnchor(e.currentTarget);
     else return;
     e.preventDefault();
@@ -128,6 +139,8 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
             toggleSelected(task.id);
           }}
           onPointerDown={(e) => e.stopPropagation()}
+          // Fuera del Tab (se alterna con Espacio sobre la tarjeta); sigue siendo pulsable con ratón y táctil.
+          tabIndex={-1}
           className={cn(
             "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-opacity",
             isSelected
@@ -196,9 +209,14 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
             <FileText size={13} /> {task.linkCount}
           </span>
         )}
-        {task.attachmentCount > 0 && (
-          <span className="inline-flex items-center gap-0.5">
-            <ImageIcon size={13} /> {task.attachmentCount}
+        {task.imageCount > 0 && (
+          <span className="inline-flex items-center gap-0.5" title={task.imageCount === 1 ? t("1 imagen") : t("{n} imágenes", { n: task.imageCount })}>
+            <ImageIcon size={13} /> {task.imageCount}
+          </span>
+        )}
+        {task.fileCount > 0 && (
+          <span className="inline-flex items-center gap-0.5" title={task.fileCount === 1 ? t("1 archivo") : t("{n} archivos", { n: task.fileCount })}>
+            <Paperclip size={13} /> {task.fileCount}
           </span>
         )}
         {task.linkUrl && (
