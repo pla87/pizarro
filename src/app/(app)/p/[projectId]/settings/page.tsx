@@ -24,7 +24,6 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
       id: true,
       name: true,
       description: true,
-      restricted: true,
       isPrivate: true,
       hiddenKinds: { select: { kindId: true } },
       members: { select: { userId: true, user: { select: { name: true, active: true } } }, orderBy: { user: { name: "asc" } } },
@@ -46,7 +45,7 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
   ]);
   const hidden = new Set(project.hiddenKinds.map((h) => h.kindId));
   const usage = new Map(generalUsage.map((g) => [g.kindId, g._count._all]));
-  // Los administradores eligen miembros de proyectos restringidos; los miembros de un privado añaden a otros usuarios.
+  // Los administradores asignan usuarios a los proyectos de equipo; los miembros de un privado añaden a otros usuarios.
   const users = isAdmin || project.isPrivate
     ? await db.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, role: true } })
     : [];
@@ -62,8 +61,7 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
         id: project.id,
         name: project.name,
         description: project.description,
-        visibility: project.isPrivate ? "PRIVATE" : project.restricted ? "RESTRICTED" : "PUBLIC",
-        memberIds: project.members.map((m) => m.userId),
+        visibility: project.isPrivate ? "PRIVATE" : "TEAM",
         members: project.members.map((m) => ({ id: m.userId, name: m.user.name, active: m.user.active })),
       }}
       labels={project.labels}

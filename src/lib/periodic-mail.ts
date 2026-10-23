@@ -1,7 +1,7 @@
 import "server-only";
 import { reportRecipientAllowed } from "./report-recipient";
 import { intlLocale, makeT, toLocale, type T } from "../i18n/core";
-import { visibleProjectsWhere } from "./access";
+import { visibleProjectsWhere, workingProjectsWhere } from "./access";
 import { appTimeZone } from "./board";
 import { isoToDate, todayIso } from "./dates";
 import { db } from "./db";
@@ -26,7 +26,7 @@ const item = (t: TaskRow, extra: Partial<DigestItem> = {}): DigestItem => ({ tas
 /** Lo ocurrido en las últimas 24 h en los proyectos visibles para la persona, y lo que le toca a ella. */
 export async function gatherDigest(user: { id: string; role: "ADMIN" | "MEMBER" }, now: Date, today: string): Promise<DigestInput> {
   const since = new Date(now.getTime() - DAY_MS);
-  const visible = visibleProjectsWhere(user as CurrentUser);
+  const visible = workingProjectsWhere(user as CurrentUser);
   const live = { project: visible, archivedAt: null };
   const [created, done, comments, assigned, due] = await Promise.all([
     db.task.findMany({ where: { ...live, createdAt: { gte: since } }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: taskSelect }),

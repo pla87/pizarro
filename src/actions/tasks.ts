@@ -882,11 +882,17 @@ const linkSelect = { id: true, kind: true, title: true, url: true } as const;
 export async function createGoogleFile(taskId: string, kind: GoogleFileKind, title: string) {
   return runAction({ name: "tasks.createGoogleFile", args: [taskId, kind, title] }, async (): Promise<TaskLinkInfo> => {
     const user = await requireUser();
-    await assertTaskAccess(user, v.id.parse(taskId));
+    const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
     if (!rateLimit(`google-file:${user.id}`, 20, 60_000)) throw new AppError("Demasiados documentos creados seguidos. Espera un minuto.");
     const fileKind = z.enum(["GOOGLE_DOC", "GOOGLE_SHEET"]).parse(kind);
     const name = v.title.parse(title);
-    const file = await createDriveFile(user.id, fileKind, name);
+    // En un proyecto privado el documento no se comparte con todo el dominio, solo con los miembros del proyecto.
+    const project = await db.project.findUnique({
+      where: { id: projectId },
+      select: { isPrivate: true, members: { where: { user: { active: true }, userId: { not: user.id } }, select: { user: { select: { email: true } } } } },
+    });
+    const share = project?.isPrivate ? ({ type: "users", emails: project.members.map((m) => m.user.email) } as const) : ({ type: "domain" } as const);
+    const file = await createDriveFile(user.id, fileKind, name, share);
     if (!/^https:\/\/(docs|drive)\.google\.com\//.test(file.url)) throw new AppError("Google devolvió un enlace inesperado.");
     const link = await db.taskLink.create({
       data: { taskId, kind: fileKind, title: file.name, url: file.url, externalId: file.id, createdById: user.id },

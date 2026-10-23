@@ -16,7 +16,7 @@ export default async function TemplatesPage() {
   const [rows, kinds, projects] = await Promise.all([
     db.projectTemplate.findMany({ orderBy: [{ position: "asc" }, { createdAt: "asc" }] }),
     listKinds(),
-    listVisibleProjects(user),
+    listVisibleProjects(user, { all: true }),
   ]);
   return (
     <TemplatesAdmin

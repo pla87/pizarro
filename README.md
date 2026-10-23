@@ -12,7 +12,7 @@ Kanban ligero y generador de *release notes* para equipos pequeños (hasta 5 per
 
 | Área | Qué incluye |
 |---|---|
-| Acceso | Login con email y contraseña (bcrypt). Sesiones en base de datos con cookie `HttpOnly` y `SameSite=Lax`. Sin registro público. Roles `ADMIN` y `MEMBER`. Máximo de 5 usuarios activos. |
+| Acceso | Login con email y contraseña (bcrypt). Sesiones en base de datos con cookie `HttpOnly` y `SameSite=Lax`. Sin registro público. Roles `ADMIN` y `MEMBER`. Máximo de 10 usuarios activos. |
 | Proyectos | Selector en la barra lateral. Cada proyecto tiene sus columnas, tareas, etiquetas y releases. Por defecto son visibles para todos; un admin puede **restringir la visibilidad** a usuarios concretos. |
 | Tablero | Columnas configurables por proyecto: crear, renombrar, reordenar, asignar un rol y borrar si están vacías. Arrastrar y soltar entre columnas y dentro de cada una. Selección múltiple y movimiento en lote. |
 | Tarjetas | Tipo (por defecto *Funcionalidad* y *Corrección*; los admins crean más tipos generales y cada proyecto puede tener tipos propios, con su color), color, responsable opcional, etiquetas, enlace externo, checklist, descripción en Markdown y capturas (pegar con Ctrl/⌘+V, archivo o cámara). Se pueden archivar y restaurar. |
@@ -114,7 +114,7 @@ steps:
 | `SEED_ADMIN_EMAIL` | Solo el primer arranque | `admin@tu-dominio.com` | Email del administrador inicial. |
 | `SEED_ADMIN_PASSWORD` | Solo el primer arranque | mínimo 10 caracteres | Contraseña inicial: cámbiala después desde *Mi perfil*. |
 | `SEED_ADMIN_NAME` | No | `Administrador` | Nombre visible del admin inicial. |
-| `MAX_USERS` | No | `5` | Máximo de usuarios activos. |
+| `MAX_USERS` | No | `10` | Máximo de usuarios activos. |
 | `MAX_UPLOAD_MB` | No | `10` | Tamaño máximo por imagen. |
 | `DATABASE_POOL_SIZE` | No | `10` | Conexiones del pool. |
 | `UPLOAD_QUOTA_MB_PER_PROJECT` | No | `2048` | Cuota de adjuntos por proyecto (MB). Pasada la cuota, la subida se rechaza mostrando el uso. |
@@ -125,7 +125,7 @@ steps:
 | `LOG_RETENTION_DAYS` | No | `7` | Días que se conservan los logs de *Administración → Logs* (máx. 90). |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Para Google Docs/Sheets | (de Google Cloud) | Cliente OAuth «Aplicación web». Ver [Google Docs y Sheets](#71-google-docs-y-sheets). |
 | `GOOGLE_WORKSPACE_DOMAIN` | Recomendada con Google | `tu-dominio.com` | Solo admite cuentas de ese dominio y comparte cada archivo nuevo con él, para que todo el equipo pueda abrirlo desde la tarjeta. |
-| `GOOGLE_SHARE_ROLE` | No | `writer` | Rol con el que se comparte con el dominio: `writer`, `commenter`, `reader` o `none` (no compartir). |
+| `GOOGLE_SHARE_ROLE` | No | `writer` | Rol con el que se comparte con el dominio (o, en proyectos privados, con los emails de sus miembros): `writer`, `commenter`, `reader` o `none` (no compartir). |
 | `AUTH_GOOGLE_ONLY` | No | `true` | Solo se entra con Google (necesita `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `APP_URL`; sin ellos no tiene efecto). Ver [Acceso con Google y dos pasos](#74-acceso-con-google-y-verificación-en-dos-pasos). |
 | `AUTH_ALLOW_ADMIN_PASSWORD` | No | `true` | Con `AUTH_GOOGLE_ONLY`, deja entrar con contraseña (y segundo paso) a los administradores: acceso de emergencia. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Para avisos por email | `smtp.gmail.com` / `465` / … | Servidor de correo saliente. Ver [Email](#72-avisos-por-email). |
@@ -241,7 +241,7 @@ Nota: `railway run` ejecuta el comando en tu máquina con las variables del serv
    - **Data access / Acceso a datos**: añade los permisos `openid`, `email` y `https://www.googleapis.com/auth/drive.file`. `drive.file` solo da acceso a los archivos que crea Pizarro, no al resto de tu Drive.
 4. **Clients / Credenciales → Crear cliente → Aplicación web**:
    - **URI de redirección autorizados**: `https://<tu-dominio>.up.railway.app/api/google/callback`. Debe coincidir exactamente con `APP_URL` + `/api/google/callback`. Si además usarás «Iniciar sesión con Google» ([7.4](#74-acceso-con-google-y-verificación-en-dos-pasos)), añade también `APP_URL` + `/api/auth/google/callback` (las dos URI en el mismo cliente).
-5. Copia el **ID de cliente** y el **secreto** a Railway: `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`, y añade `GOOGLE_WORKSPACE_DOMAIN=tu-dominio.com`. Así, cada archivo creado se comparte automáticamente con tu dominio como editor (`GOOGLE_SHARE_ROLE`), y el resto del equipo puede abrirlo desde la tarjeta. Sin dominio, solo lo ve quien lo crea hasta que lo comparta a mano.
+5. Copia el **ID de cliente** y el **secreto** a Railway: `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`, y añade `GOOGLE_WORKSPACE_DOMAIN=tu-dominio.com`. Así, cada archivo creado se comparte automáticamente con tu dominio como editor (`GOOGLE_SHARE_ROLE`), y el resto del equipo puede abrirlo desde la tarjeta. En un proyecto privado el archivo no se comparte con el dominio, solo con los emails de los miembros del proyecto. Sin dominio, solo lo ve quien lo crea hasta que lo comparta a mano.
 6. Redespliega. Cada usuario entra en **Mi perfil y plantillas → Google Docs y Sheets → Conectar con Google**.
 
 > Los tokens de Google se guardan cifrados con una clave derivada de `SESSION_SECRET`. Si rotas `SESSION_SECRET`, cada usuario tendrá que volver a conectar Google.

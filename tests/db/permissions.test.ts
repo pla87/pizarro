@@ -1,38 +1,40 @@
 // Visibilidad de proyectos y permisos de las acciones, contra PostgreSQL real.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { asUser, db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, restoreSession, saveSession, makeTask, makeUser, NOT_FOUND, SESSION_EXPIRED } from "./helpers";
-import { assertProjectAccess, assertTaskAccess, listVisibleProjects, visibleProjectsWhere } from "../../src/lib/access";
+import { asUser, db, expectFail, expectOk, FORBIDDEN, assign, loginAs, makeKind, makeProject, restoreSession, saveSession, makeTask, makeUser, NOT_FOUND, SESSION_EXPIRED } from "./helpers";
+import { assertAssignable, assertProjectAccess, assertTaskAccess, listVisibleProjects, visibleProjectsWhere } from "../../src/lib/access";
 import { addComment, createTask, deleteTask, getTaskDetail, moveTask, updateTask } from "../../src/actions/tasks";
 import { deleteRelease, deployRelease, getReleaseTaskDetails } from "../../src/actions/releases";
-import { createProject, setProjectVisibility } from "../../src/actions/projects";
+import { addProjectMember, createProject, removeProjectMember, setMyProjectPicks, setProjectVisibility } from "../../src/actions/projects";
 
-/** Tres proyectos (público, restringido, privado) con un administrador, dos miembros y un ajeno. */
+/** Tres proyectos (equipo con asignado, equipo sin asignados, privado) con dos administradores, un miembro y un ajeno. */
 async function world() {
   const admin = await makeUser({ role: "ADMIN" });
   const otherAdmin = await makeUser({ role: "ADMIN" });
   const member = await makeUser();
   const outsider = await makeUser();
-  const pub = await makeProject();
-  const restricted = await makeProject({ visibility: "RESTRICTED", members: [member] });
+  const pub = await makeProject({ members: [member] });
+  const unassigned = await makeProject({ members: [] });
   const priv = await makeProject({ visibility: "PRIVATE", owner: admin, members: [member] });
-  return { admin, otherAdmin, member, outsider, pub, restricted, priv };
+  // El administrador trabaja en el de equipo asignado; el otro administrador no ha elegido ninguno.
+  await db.adminProjectPick.create({ data: { projectId: pub.project.id, userId: admin.id } });
+  return { admin, otherAdmin, member, outsider, pub, unassigned, priv };
 }
 
 describe("visibleProjectsWhere / assertProjectAccess / assertTaskAccess", () => {
-  test("público: lo ve todo el mundo; restringido: admins y miembros; privado: solo sus miembros (ni otros admins)", async () => {
+  test("equipo: usuarios asignados y todos los admins; privado: solo sus miembros (ni otros admins)", async () => {
     const w = await world();
-    const ids = [w.pub.project.id, w.restricted.project.id, w.priv.project.id];
+    const ids = [w.pub.project.id, w.unassigned.project.id, w.priv.project.id];
     const visibleTo = async (u: { id: string; role: "ADMIN" | "MEMBER" }) => {
       const user = { ...(await db.user.findUniqueOrThrow({ where: { id: u.id } })), theme: "SYSTEM", accent: "BLUE", locale: "ES" } as never;
       const rows = await db.project.findMany({ where: { id: { in: ids }, ...visibleProjectsWhere(user) }, select: { id: true } });
       return new Set(rows.map((r) => r.id));
     };
-    assert.deepEqual(await visibleTo(w.admin), new Set([w.pub.project.id, w.restricted.project.id, w.priv.project.id]));
-    // Otro administrador ve el restringido pero nunca el privado ajeno.
-    assert.deepEqual(await visibleTo(w.otherAdmin), new Set([w.pub.project.id, w.restricted.project.id]));
-    assert.deepEqual(await visibleTo(w.member), new Set([w.pub.project.id, w.restricted.project.id, w.priv.project.id]));
-    assert.deepEqual(await visibleTo(w.outsider), new Set([w.pub.project.id]));
+    assert.deepEqual(await visibleTo(w.admin), new Set(ids));
+    // Otro administrador ve los de equipo (elegidos o no) pero nunca el privado ajeno.
+    assert.deepEqual(await visibleTo(w.otherAdmin), new Set([w.pub.project.id, w.unassigned.project.id]));
+    assert.deepEqual(await visibleTo(w.member), new Set([w.pub.project.id, w.priv.project.id]));
+    assert.deepEqual(await visibleTo(w.outsider), new Set());
   });
 
   test("listVisibleProjects, assertProjectAccess y assertTaskAccess respetan la visibilidad", async () => {
@@ -41,10 +43,35 @@ describe("visibleProjectsWhere / assertProjectAccess / assertTaskAccess", () => 
     const asCurrent = (u: typeof w.admin) => ({ ...u, theme: "SYSTEM", accent: "BLUE", locale: "ES" }) as never;
     await assert.rejects(assertProjectAccess(asCurrent(w.otherAdmin), w.priv.project.id), (e: Error) => /No encontrado/.test(e.message));
     await assert.rejects(assertTaskAccess(asCurrent(w.outsider), task.id), (e: Error) => /No encontrado/.test(e.message));
+    await assert.rejects(assertProjectAccess(asCurrent(w.outsider), w.pub.project.id), (e: Error) => /No encontrado/.test(e.message));
     await assertProjectAccess(asCurrent(w.member), w.priv.project.id);
     assert.deepEqual(await assertTaskAccess(asCurrent(w.admin), task.id), { projectId: w.priv.project.id, columnId: w.priv.columns.todo });
-    const listed = (await listVisibleProjects(asCurrent(w.otherAdmin))).map((p) => p.id);
-    assert.ok(listed.includes(w.pub.project.id) && !listed.includes(w.priv.project.id));
+    // Un administrador abre cualquier proyecto de equipo aunque no lo tenga elegido.
+    await assertProjectAccess(asCurrent(w.otherAdmin), w.unassigned.project.id);
+  });
+
+  test("listVisibleProjects: el admin solo lista los de equipo que ha elegido y sus privados", async () => {
+    const w = await world();
+    const asCurrent = (u: typeof w.admin) => ({ ...u, theme: "SYSTEM", accent: "BLUE", locale: "ES" }) as never;
+    const ids = async (u: typeof w.admin, opts?: { all?: boolean }) => new Set((await listVisibleProjects(asCurrent(u), opts)).map((p) => p.id));
+    const mine = new Set([w.pub.project.id, w.priv.project.id]);
+    const own = await ids(w.admin);
+    assert.ok([...mine].every((id) => own.has(id)) && !own.has(w.unassigned.project.id));
+    assert.ok((await ids(w.admin, { all: true })).has(w.unassigned.project.id));
+    const other = await ids(w.otherAdmin);
+    assert.ok(!other.has(w.pub.project.id) && !other.has(w.priv.project.id));
+    assert.ok((await ids(w.otherAdmin, { all: true })).has(w.pub.project.id));
+    assert.deepEqual(await ids(w.member), mine);
+    assert.deepEqual(await ids(w.outsider), new Set());
+  });
+
+  test("asignación de tarjetas: privado solo miembros; equipo, asignados y admins", async () => {
+    const w = await world();
+    await assertAssignable(w.pub.project.id, w.member.id);
+    await assertAssignable(w.pub.project.id, w.otherAdmin.id);
+    await assert.rejects(assertAssignable(w.pub.project.id, w.outsider.id), (e: Error) => /No encontrado/.test(e.message));
+    await assertAssignable(w.priv.project.id, w.member.id);
+    await assert.rejects(assertAssignable(w.priv.project.id, w.otherAdmin.id), (e: Error) => /No encontrado/.test(e.message));
   });
 });
 
@@ -86,24 +113,18 @@ describe("acciones de tareas según visibilidad", () => {
     expectOk(await getTaskDetail(task.id));
   });
 
-  test("proyecto restringido: el miembro y los admins operan; el ajeno no", async () => {
+  test("proyecto de equipo: el asignado y los admins operan; el no asignado no", async () => {
     const w = await world();
-    const task = await makeTask(w.restricted);
+    const task = await makeTask(w.pub);
     await loginAs(w.outsider);
     expectFail(await getTaskDetail(task.id), NOT_FOUND);
     expectFail(await addComment(task.id, "hola"), NOT_FOUND);
+    expectFail(await updateTask(task.id, { title: "Cambiada" }), NOT_FOUND);
     await loginAs(w.otherAdmin);
     expectOk(await getTaskDetail(task.id));
     await loginAs(w.member);
     expectOk(await addComment(task.id, "hola"));
-  });
-
-  test("proyecto público: cualquier usuario activo opera", async () => {
-    const w = await world();
-    const task = await makeTask(w.pub);
-    await loginAs(w.outsider);
-    expectOk(await getTaskDetail(task.id));
-    expectOk(await updateTask(task.id, { title: "Cambiada por cualquiera" }));
+    expectOk(await updateTask(task.id, { title: "Cambiada por la asignada" }));
   });
 
   test("el borrado y la edición de comentarios ajenos: solo autor o admin", async () => {
@@ -112,6 +133,7 @@ describe("acciones de tareas según visibilidad", () => {
     await loginAs(w.member);
     const comment = expectOk(await addComment(task.id, "mío"));
     const { deleteComment } = await import("../../src/actions/tasks");
+    await assign(w.pub, w.outsider);
     await loginAs(w.outsider);
     expectFail(await deleteComment(comment.id), /Solo puedes borrar tus comentarios/);
     await loginAs(w.otherAdmin);
@@ -161,8 +183,9 @@ describe("releases", () => {
     expectOk(await deleteRelease(release.id));
   });
 
-  test("deployRelease en un proyecto público mueve la tarea a «En producción»", async () => {
+  test("deployRelease en un proyecto de equipo mueve la tarea a «En producción»", async () => {
     const w = await world();
+    await assign(w.pub, w.outsider);
     const { task, inProd, res } = await releaseOf(w.pub, w.outsider);
     expectOk(res);
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).columnId, inProd.id);
@@ -216,8 +239,8 @@ describe("crear y cambiar la visibilidad de proyectos", () => {
   test("un miembro no admin solo crea proyectos privados (y sin plantilla)", async () => {
     const u = await makeUser();
     await loginAs(u);
-    expectFail(await createProject("Público"), FORBIDDEN);
-    expectFail(await createProject("Público 2", { isPrivate: false }), FORBIDDEN);
+    expectFail(await createProject("Equipo"), FORBIDDEN);
+    expectFail(await createProject("Equipo 2", { isPrivate: false }), FORBIDDEN);
     expectFail(await createProject("Con plantilla", { isPrivate: true, templateId: "x" }), FORBIDDEN);
     const created = expectOk(await createProject("Mi privado", { isPrivate: true }));
     const row = await db.project.findUniqueOrThrow({ where: { id: created.id }, include: { members: true } });
@@ -226,20 +249,68 @@ describe("crear y cambiar la visibilidad de proyectos", () => {
     assert.deepEqual(row.members.map((m) => m.userId), [u.id]);
   });
 
-  test("un administrador puede crear públicos; setProjectVisibility es solo de administradores", async () => {
+  test("un administrador crea proyectos de equipo (los marca como suyos); setProjectVisibility es solo de administradores", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const member = await makeUser();
     await loginAs(admin);
-    const created = expectOk(await createProject("Público admin"));
+    const created = expectOk(await createProject("Equipo admin"));
     assert.equal((await db.project.findUniqueOrThrow({ where: { id: created.id } })).isPrivate, false);
-    expectOk(await setProjectVisibility(created.id, "RESTRICTED", [member.id]));
-    assert.equal((await db.project.findUniqueOrThrow({ where: { id: created.id } })).restricted, true);
+    assert.equal(await db.adminProjectPick.count({ where: { projectId: created.id, userId: admin.id } }), 1);
+    expectOk(await addProjectMember(created.id, member.id));
     await loginAs(member);
-    expectFail(await setProjectVisibility(created.id, "PUBLIC", []), FORBIDDEN);
-    // Tras hacerlo privado, otro administrador deja de verlo.
+    expectFail(await setProjectVisibility(created.id, "PRIVATE"), FORBIDDEN);
+    // Tras hacerlo privado solo queda quien lo hizo: el asignado y otros administradores dejan de verlo.
+    const column = await db.column.findFirstOrThrow({ where: { projectId: created.id } });
+    const task = await db.task.create({ data: { projectId: created.id, columnId: column.id, title: "T", kindId: (await makeKind()).id, position: 1000, assigneeId: member.id } });
     await loginAs(admin);
-    expectOk(await setProjectVisibility(created.id, "PRIVATE", []));
+    expectOk(await setProjectVisibility(created.id, "PRIVATE"));
+    assert.deepEqual((await db.projectMember.findMany({ where: { projectId: created.id } })).map((m) => m.userId), [admin.id]);
+    assert.equal(await db.adminProjectPick.count({ where: { projectId: created.id } }), 0);
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).assigneeId, null);
     const other = await makeUser({ role: "ADMIN" });
-    await asUser(other, async () => expectFail(await setProjectVisibility(created.id, "PUBLIC", []), NOT_FOUND));
+    await asUser(other, async () => expectFail(await setProjectVisibility(created.id, "TEAM"), NOT_FOUND));
+    await loginAs(admin);
+    // De vuelta a equipo: se conserva el miembro administrador como proyecto elegido.
+    expectOk(await setProjectVisibility(created.id, "TEAM"));
+    assert.equal(await db.projectMember.count({ where: { projectId: created.id } }), 0);
+    assert.equal(await db.adminProjectPick.count({ where: { projectId: created.id, userId: admin.id } }), 1);
+  });
+});
+
+describe("asignación de usuarios a proyectos", () => {
+  test("solo administradores gestionan los de equipo; los admins no se asignan; quitar desasigna tarjetas", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const other = await makeUser({ role: "ADMIN" });
+    const user = await makeUser();
+    const f = await makeProject({ members: [] });
+    const task = await makeTask(f);
+    await loginAs(user);
+    expectFail(await addProjectMember(f.project.id, user.id), NOT_FOUND);
+    await loginAs(admin);
+    expectFail(await addProjectMember(f.project.id, other.id), "Los administradores ven todos");
+    expectOk(await addProjectMember(f.project.id, user.id));
+    await db.task.update({ where: { id: task.id }, data: { assigneeId: user.id } });
+    await loginAs(user);
+    expectOk(await getTaskDetail(task.id));
+    await loginAs(admin);
+    expectOk(await removeProjectMember(f.project.id, user.id));
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).assigneeId, null);
+    await loginAs(user);
+    expectFail(await getTaskDetail(task.id), NOT_FOUND);
+  });
+
+  test("setMyProjectPicks: solo admins, solo proyectos de equipo", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const user = await makeUser();
+    const a = await makeProject();
+    const b = await makeProject();
+    const priv = await makeProject({ visibility: "PRIVATE", owner: admin });
+    await loginAs(user);
+    expectFail(await setMyProjectPicks([a.project.id]), FORBIDDEN);
+    await loginAs(admin);
+    expectOk(await setMyProjectPicks([a.project.id, priv.project.id]));
+    assert.deepEqual((await db.adminProjectPick.findMany({ where: { userId: admin.id } })).map((p) => p.projectId), [a.project.id]);
+    expectOk(await setMyProjectPicks([b.project.id]));
+    assert.deepEqual((await db.adminProjectPick.findMany({ where: { userId: admin.id } })).map((p) => p.projectId), [b.project.id]);
   });
 });

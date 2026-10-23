@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, Check, EyeOff, Loader2, Lock, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
+import { CalendarClock, Check, EyeOff, Loader2, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
@@ -22,7 +22,7 @@ import { setGeneralKindEnabled } from "@/actions/project-kinds";
 interface Props {
   isAdmin: boolean;
   currentUserId: string;
-  project: { id: string; name: string; description: string; visibility: "PUBLIC" | "RESTRICTED" | "PRIVATE"; memberIds: string[]; members: { id: string; name: string; active: boolean }[] };
+  project: { id: string; name: string; description: string; visibility: "TEAM" | "PRIVATE"; members: { id: string; name: string; active: boolean }[] };
   labels: LabelOption[];
   kinds: KindRow[];
   /** Todos los tipos generales, con si el proyecto los usa y cuántas tareas tienen aquí. */
@@ -54,7 +54,6 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description);
   const [visibility, setVisibility] = useState(project.visibility);
-  const [members, setMembers] = useState(new Set(project.memberIds));
   const [labels, setLabels] = useState(initialLabels);
   const [confirmName, setConfirmName] = useState("");
   // Los miembros de un proyecto privado lo gestionan aunque no sean administradores.
@@ -97,20 +96,20 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
 
       {!isAdmin && isPrivateProject && (
         <Section title="Visibilidad" description="Proyecto privado: solo lo ven sus miembros, tampoco los administradores. Cualquier miembro puede añadir o quitar miembros.">
-          <MemberManager projectId={project.id} currentUserId={currentUserId} members={project.members} users={users} />
+          <MemberManager projectId={project.id} currentUserId={currentUserId} members={project.members} users={users} isPrivate />
         </Section>
       )}
 
       {isAdmin && (
-        <Section title="Visibilidad" description="Por defecto todos los usuarios ven el proyecto. Puedes limitarlo a usuarios concretos o hacerlo privado.">
+        <Section title="Visibilidad" description="Equipo: lo ven los usuarios asignados y todos los administradores. Privado: solo sus miembros.">
           <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm">
-              <input type="radio" checked={visibility === "PUBLIC"} onChange={() => setVisibility("PUBLIC")} />
-              <UsersIcon size={15} /> {t("Visible para todos los usuarios")}
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="radio" checked={visibility === "RESTRICTED"} onChange={() => setVisibility("RESTRICTED")} />
-              <Lock size={15} /> {t("Solo los usuarios seleccionados (y los administradores)")}
+            <label className="flex items-start gap-2 text-sm">
+              <input type="radio" className="mt-1" checked={visibility === "TEAM"} onChange={() => setVisibility("TEAM")} />
+              <UsersIcon size={15} className="mt-0.5 shrink-0" />
+              <span>
+                {t("Equipo")}
+                <span className="block text-xs text-slate-500">{t("Los usuarios asignados y todos los administradores.")}</span>
+              </span>
             </label>
             <label className="flex items-start gap-2 text-sm">
               <input type="radio" className="mt-1" checked={visibility === "PRIVATE"} onChange={() => setVisibility("PRIVATE")} />
@@ -121,47 +120,25 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
               </span>
             </label>
           </div>
-          {isPrivateProject && visibility === "PRIVATE" && (
+          {visibility === project.visibility && (
             <div className="mt-3">
-              <MemberManager projectId={project.id} currentUserId={currentUserId} members={project.members} users={users} />
+              <div className="mb-1 text-xs font-medium text-slate-500">{isPrivateProject ? t("Miembros") : t("Usuarios asignados")}</div>
+              <MemberManager projectId={project.id} currentUserId={currentUserId} members={project.members} users={isPrivateProject ? users : users.filter((u) => u.role !== "ADMIN")} isPrivate={isPrivateProject} />
+              {!isPrivateProject && <p className="mt-2 text-xs text-slate-500">{t("Los administradores ven todos los proyectos de equipo; eligen en su perfil en cuáles trabajan.")}</p>}
             </div>
           )}
-          {visibility === "RESTRICTED" && (
-            <ul className="mt-3 divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-              {users.map((u) => (
-                <li key={u.id}>
-                  <label className={cn("flex items-center gap-3 px-3 py-2 text-sm", u.role === "ADMIN" && "opacity-60")}>
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 accent-brand-600"
-                      disabled={u.role === "ADMIN"}
-                      checked={u.role === "ADMIN" || members.has(u.id)}
-                      onChange={() =>
-                        setMembers((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(u.id)) next.delete(u.id);
-                          else next.add(u.id);
-                          return next;
-                        })
-                      }
-                    />
-                    {u.name}
-                    {u.role === "ADMIN" && <span className="text-xs text-slate-500">{t("(administrador, siempre tiene acceso)")}</span>}
-                  </label>
-                </li>
-              ))}
-            </ul>
+          {visibility !== project.visibility && (
+            <button
+              className="btn-primary mt-4"
+              disabled={pending}
+              onClick={async () => {
+                if (visibility === "PRIVATE" && !(await confirm({ title: t("Hacer el proyecto privado"), message: t("¿Hacer el proyecto privado? Solo lo verás tú (podrás añadir más miembros después): los demás dejarán de verlo, incluidos los administradores, y se desasignarán sus tarjetas."), confirmLabel: t("Hacer privado"), danger: true }))) return;
+                run(() => setProjectVisibility(project.id, visibility), t("Visibilidad actualizada"), () => router.refresh());
+              }}
+            >
+              {t("Guardar visibilidad")}
+            </button>
           )}
-          <button
-            className="btn-primary mt-4"
-            disabled={pending}
-            onClick={async () => {
-              if (visibility === "PRIVATE" && project.visibility !== "PRIVATE" && !(await confirm({ title: t("Hacer el proyecto privado"), message: t("¿Hacer el proyecto privado? Solo lo verás tú (podrás añadir más miembros después): los demás dejarán de verlo, incluidos los administradores, y se desasignarán sus tarjetas."), confirmLabel: t("Hacer privado"), danger: true }))) return;
-              run(() => setProjectVisibility(project.id, visibility, [...members]), t("Visibilidad actualizada"), () => router.refresh());
-            }}
-          >
-            {t("Guardar visibilidad")}
-          </button>
         </Section>
       )}
 
@@ -234,12 +211,13 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
   );
 }
 
-/** Miembros de un proyecto privado: cualquier miembro añade, quita o sale (el último no puede salir). */
-function MemberManager({ projectId, currentUserId, members, users }: {
+/** Usuarios del proyecto. Privado: cualquier miembro añade, quita o sale (el último no puede salir). Equipo: lo gestionan los administradores. */
+function MemberManager({ projectId, currentUserId, members, users, isPrivate }: {
   projectId: string;
   currentUserId: string;
   members: { id: string; name: string; active: boolean }[];
   users: { id: string; name: string }[];
+  isPrivate: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -262,7 +240,7 @@ function MemberManager({ projectId, currentUserId, members, users }: {
     <div className="space-y-3">
       <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
         {members.map((m) => {
-          const isMe = m.id === currentUserId;
+          const isMe = isPrivate && m.id === currentUserId;
           // El último miembro activo no puede salir: debe borrar el proyecto.
           const lastOne = isMe && activeCount <= 1;
           return (
@@ -292,14 +270,15 @@ function MemberManager({ projectId, currentUserId, members, users }: {
           );
         })}
       </ul>
-      <div className="flex flex-wrap gap-2">
-        <select className="input max-w-xs" aria-label={t("Añadir miembro")} value={candidate} onChange={(e) => setCandidate(e.target.value)}>
+      {members.length === 0 && <p className="text-sm text-slate-500">{t("Nadie asignado.")}</p>}
+      <div className="flex gap-2">
+        <select className="input min-w-0 max-w-xs flex-1" aria-label={t("Añadir miembro")} value={candidate} onChange={(e) => setCandidate(e.target.value)}>
           <option value="">{t("Añadir miembro…")}</option>
           {candidates.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
         <button
           type="button"
-          className="btn-primary"
+          className="btn-primary shrink-0"
           disabled={pending || !candidate}
           onClick={() => run(() => addProjectMember(projectId, candidate), t("Miembro añadido"), () => setCandidate(""))}
         >

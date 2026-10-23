@@ -39,12 +39,12 @@ describe("menciones según la visibilidad", () => {
     assert.equal(await db.notification.count({ where: { taskId: task.id } }), 0);
   });
 
-  test("proyecto restringido: avisa a admins y miembros, no a otros usuarios", async () => {
+  test("proyecto de equipo: avisa a admins y asignados, no a otros usuarios", async () => {
     const author = await makeUser({ role: "ADMIN" });
     const member = await makeUser();
     const admin = await makeUser({ role: "ADMIN" });
     const outsider = await makeUser();
-    const f = await makeProject({ visibility: "RESTRICTED", members: [member] });
+    const f = await makeProject({ visibility: "TEAM", members: [member] });
     const task = await makeTask(f);
     await loginAs(author);
     expectOk(await addComment(task.id, `${mention(member)} ${mention(admin)} ${mention(outsider)}`));
@@ -52,11 +52,11 @@ describe("menciones según la visibilidad", () => {
     assert.deepEqual(got, [member.id, admin.id].sort());
   });
 
-  test("proyecto público: avisa a cualquier usuario activo, pero no a los desactivados ni a uno mismo", async () => {
+  test("proyecto de equipo: avisa a los asignados activos, pero no a los desactivados ni a uno mismo", async () => {
     const author = await makeUser();
     const other = await makeUser();
     const inactive = await makeUser({ active: false });
-    const f = await makeProject();
+    const f = await makeProject({ members: [author, other, inactive] });
     const task = await makeTask(f);
     await loginAs(author);
     expectOk(await addComment(task.id, `${mention(other)} ${mention(inactive)} ${mention(author)}`));

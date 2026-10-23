@@ -71,6 +71,7 @@ model User {
   recoveryCodes     RecoveryCode[]
   loginChallenges   LoginChallenge[]
   memberships       ProjectMember[]
+  projectPicks      AdminProjectPick[]
   privateProjects   Project[]         @relation("PrivateProjects")
   assignedTasks     Task[]            @relation("TaskAssignee")
   createdTasks      Task[]            @relation("TaskCreator")
@@ -199,8 +200,6 @@ model Project {
   id          String   @id @default(cuid())
   name        String
   description String   @default("")
-  /// false: visible para todos los usuarios. true: solo admins y miembros explícitos.
-  restricted  Boolean  @default(false)
   /// Proyecto privado: solo lo ven y usan sus miembros (ProjectMember), ni siquiera los administradores.
   /// Se marca aparte de privateOwnerId para que borrar a quien lo creó no lo haga público.
   isPrivate   Boolean  @default(false)
@@ -211,6 +210,7 @@ model Project {
   updatedAt   DateTime @updatedAt
 
   members      ProjectMember[]
+  adminPicks   AdminProjectPick[]
   columns      Column[]
   tasks        Task[]
   labels       Label[]
@@ -225,7 +225,20 @@ model Project {
   @@index([position])
 }
 
+/// Usuarios asignados al proyecto. En uno de equipo, los no administradores solo lo ven si figuran aquí; en uno privado, solo sus miembros.
 model ProjectMember {
+  projectId String
+  userId    String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId])
+}
+
+/// Proyectos de equipo (no privados) en los que trabaja un administrador: solo esos salen en sus selectores y menús.
+/// Los administradores pueden abrir cualquier proyecto no privado aunque no lo hayan elegido.
+model AdminProjectPick {
   projectId String
   userId    String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)

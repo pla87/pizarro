@@ -13,11 +13,10 @@ async function stillAssignable(projectId: string, userId: string | null): Promis
   if (!userId) return null;
   const [user, project] = await Promise.all([
     db.user.findFirst({ where: { id: userId, active: true }, select: { role: true, memberships: { where: { projectId }, select: { userId: true } } } }),
-    db.project.findUnique({ where: { id: projectId }, select: { isPrivate: true, restricted: true } }),
+    db.project.findUnique({ where: { id: projectId }, select: { isPrivate: true } }),
   ]);
   if (!user || !project) return null;
-  if (project.isPrivate || (project.restricted && user.role !== "ADMIN")) return user.memberships.length ? userId : null;
-  return userId;
+  return user.memberships.length || (!project.isPrivate && user.role === "ADMIN") ? userId : null;
 }
 
 /**

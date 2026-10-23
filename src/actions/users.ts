@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
@@ -89,8 +90,28 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
     if (await db.user.count({ where: { email: data.email, id: { not: user.id } } })) {
       throw new AppError("Ya existe un usuario con ese email.");
     }
+    // Al cambiar de rol, la asignación a proyectos de equipo se traduce: un admin la lleva en AdminProjectPick
+    // y el resto en ProjectMember, así no se pierde ni se gana acceso por el cambio.
+    const roleSwitch: Prisma.PrismaPromise<unknown>[] = [];
+    if (data.role !== user.role) {
+      const teamOnly = { project: { isPrivate: false } };
+      if (data.role === "ADMIN") {
+        const rows = await db.projectMember.findMany({ where: { userId: user.id, ...teamOnly }, select: { projectId: true } });
+        roleSwitch.push(
+          db.adminProjectPick.createMany({ data: rows.map((r) => ({ projectId: r.projectId, userId: user.id })), skipDuplicates: true }),
+          db.projectMember.deleteMany({ where: { userId: user.id, ...teamOnly } }),
+        );
+      } else {
+        const rows = await db.adminProjectPick.findMany({ where: { userId: user.id }, select: { projectId: true } });
+        roleSwitch.push(
+          db.projectMember.createMany({ data: rows.map((r) => ({ projectId: r.projectId, userId: user.id })), skipDuplicates: true }),
+          db.adminProjectPick.deleteMany({ where: { userId: user.id } }),
+        );
+      }
+    }
     await db.$transaction([
       db.user.update({ where: { id: user.id }, data }),
+      ...roleSwitch,
       // Al desactivar o cambiar de rol se cierran sus sesiones.
       ...(data.active !== user.active || data.role !== user.role ? [db.session.deleteMany({ where: { userId: user.id } })] : []),
     ]);

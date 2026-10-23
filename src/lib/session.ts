@@ -61,7 +61,7 @@ export async function createSession(userId: string, opts: { mustChangePassword?:
       ip: clientIp(h).slice(0, 64),
     },
   });
-  // Limpieza oportunista de sesiones caducadas (barato con 5 usuarios).
+  // Limpieza oportunista de sesiones caducadas (barato con pocos usuarios).
   await db.session.deleteMany({ where: { expiresAt: { lt: new Date() } } });
   store.set(sessionCookieName(), token, sessionCookieOptions());
   if (opts.mustChangePassword) store.set(PASSWORD_CHANGE_COOKIE, "1", sessionCookieOptions());

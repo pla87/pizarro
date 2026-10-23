@@ -152,7 +152,19 @@ async function accessToken(userId: string): Promise<string> {
   return tokens.access_token;
 }
 
-export async function createDriveFile(userId: string, kind: GoogleFileKind, name: string) {
+/** Con quién se comparte el archivo: todo el dominio del Workspace o solo unas personas (proyectos privados). */
+export type DriveShareTarget = { type: "domain" } | { type: "users"; emails: string[] };
+
+/** Permisos de Drive que hay que crear según la configuración (GOOGLE_WORKSPACE_DOMAIN, GOOGLE_SHARE_ROLE). */
+export function sharePermissionBodies(target: DriveShareTarget, env: { domain?: string; role?: string } = { domain: process.env.GOOGLE_WORKSPACE_DOMAIN, role: process.env.GOOGLE_SHARE_ROLE }): Record<string, string>[] {
+  const role = env.role ?? "writer";
+  if (role === "none" || !["writer", "commenter", "reader"].includes(role)) return [];
+  if (target.type === "domain") return env.domain ? [{ type: "domain", domain: env.domain, role }] : [];
+  // Un proyecto privado nunca se comparte con el dominio: solo con las direcciones de sus miembros.
+  return [...new Set(target.emails.map((e) => e.trim().toLowerCase()).filter(Boolean))].map((emailAddress) => ({ type: "user", emailAddress, role }));
+}
+
+export async function createDriveFile(userId: string, kind: GoogleFileKind, name: string, share: DriveShareTarget = { type: "domain" }) {
   const token = await accessToken(userId);
   const res = await fetch(`${DRIVE_FILES_URL}?fields=id,name,webViewLink&supportsAllDrives=true`, {
     method: "POST",
@@ -168,29 +180,29 @@ export async function createDriveFile(userId: string, kind: GoogleFileKind, name
   }
   const file = { id: String(json.id), name: String(json.name), url: String(json.webViewLink) };
   logEvent({ category: "google", action: "google.createFile", message: `Archivo de Google (${kind}) creado: «${file.name}»`, userId, details: { kind, fileId: file.id } });
-  await shareFile(token, file.id);
+  await shareFile(token, file.id, share);
   return file;
 }
 
 /**
- * Con drive.file el archivo nace privado en el Drive de quien lo crea. Para que el resto del
- * equipo pueda abrirlo desde la tarjeta, se comparte con el dominio de Workspace
- * (GOOGLE_WORKSPACE_DOMAIN) con el rol GOOGLE_SHARE_ROLE (writer por defecto; "none" lo desactiva).
+ * Con drive.file el archivo nace privado en el Drive de quien lo crea. Para que el resto del equipo pueda abrirlo
+ * desde la tarjeta, se comparte con el dominio de Workspace (GOOGLE_WORKSPACE_DOMAIN) o, en proyectos privados,
+ * solo con los emails de sus miembros, con el rol GOOGLE_SHARE_ROLE (writer por defecto; "none" lo desactiva).
  */
-async function shareFile(token: string, fileId: string): Promise<void> {
-  const domain = process.env.GOOGLE_WORKSPACE_DOMAIN;
-  const role = process.env.GOOGLE_SHARE_ROLE ?? "writer";
-  if (!domain || role === "none" || !["writer", "commenter", "reader"].includes(role)) return;
-  const res = await fetch(`${DRIVE_FILES_URL}/${encodeURIComponent(fileId)}/permissions?sendNotificationEmail=false&supportsAllDrives=true`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "domain", domain, role }),
-    signal: AbortSignal.timeout(10_000),
-  }).catch(() => null);
-  // Si la política del Workspace lo impide, el archivo sigue creado: solo se registra.
-  if (!res?.ok) {
-    console.error("[google] No se pudo compartir el archivo con el dominio", res?.status);
-    logEvent({ level: "warn", category: "google", action: "google.shareFailed", message: `No se pudo compartir el archivo con el dominio (HTTP ${res?.status ?? "sin respuesta"})`, details: { fileId, status: res?.status ?? null } });
+async function shareFile(token: string, fileId: string, target: DriveShareTarget): Promise<void> {
+  for (const body of sharePermissionBodies(target)) {
+    const res = await fetch(`${DRIVE_FILES_URL}/${encodeURIComponent(fileId)}/permissions?sendNotificationEmail=false&supportsAllDrives=true`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10_000),
+    }).catch(() => null);
+    // Si la política del Workspace lo impide, el archivo sigue creado: solo se registra.
+    if (!res?.ok) {
+      const what = body.type === "domain" ? "con el dominio" : "con un miembro del proyecto";
+      console.error(`[google] No se pudo compartir el archivo ${what}`, res?.status);
+      logEvent({ level: "warn", category: "google", action: "google.shareFailed", message: `No se pudo compartir el archivo ${what} (HTTP ${res?.status ?? "sin respuesta"})`, details: { fileId, status: res?.status ?? null } });
+    }
   }
 }
 

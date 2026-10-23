@@ -215,7 +215,6 @@ export const server: Record<string, string> = {
   "Borró un comentario de «{title}»": "Deleted a comment on “{title}”",
   "Quitó el enlace «{title}»": "Removed the link “{title}”",
   "{name} es el único miembro de {count}: confirma que se borren.": "{name} is the only member of {count}: confirm that they will be deleted.",
-  "Solo los proyectos privados tienen miembros propios.": "Only private projects have their own members.",
   "Eres el último miembro: no puedes salir del proyecto, bórralo si ya no lo necesitas.": "You are the last member: you cannot leave the project, delete it if you no longer need it.",
   "Demasiadas conexiones abiertas.": "Too many open connections.",
   "Cuota de adjuntos del proyecto superada: {used} MB usados de {limit} MB.": "Project attachment quota exceeded: {used} MB used of {limit} MB.",
