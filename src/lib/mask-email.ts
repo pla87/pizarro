@@ -1,6 +1,6 @@
 // Enmascarado de emails para los logs (funciones puras, sin BD): solo afecta a lo que se registra, nunca a lo que se envía.
 
-/** «paco@example.com» → «p***@example.com». Sin «@» o con la parte local vacía no se puede mostrar nada del usuario. */
+/** «ana@example.com» → «a***@example.com». Sin «@» o con la parte local vacía no se puede mostrar nada del usuario. */
 export function maskEmail(email: string | null | undefined): string {
   const value = (email ?? "").trim();
   if (!value) return "";
