@@ -48,6 +48,8 @@ export interface BoardApi {
   /** Atajos de tarjeta (ver cardActions.ts): cada uno hace el cambio optimista, avisa y deshace si falla. */
   assignToMe: (id: string) => void;
   moveToAdjacentColumn: (id: string, dir: -1 | 1) => void;
+  /** Sube (-1) o baja (1) la tarjeta un puesto dentro de su columna. */
+  moveWithinColumn: (id: string, dir: -1 | 1) => void;
   setDueDate: (id: string, day: string | null) => Promise<void>;
   /** `true` si se guardó (o no hacía falta). */
   renameTask: (id: string, title: string) => Promise<boolean>;

@@ -224,7 +224,7 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
   return (
     <div
       className={cn(
-        "rounded-lg border border-slate-300 bg-white text-slate-900 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100",
+        "rounded-lg border border-slate-300 bg-white text-slate-900 focus-within:border-focus focus-within:ring-2 focus-within:ring-focus/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100",
         className,
       )}
       onKeyDown={(e) => {

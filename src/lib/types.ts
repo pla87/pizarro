@@ -21,7 +21,9 @@ export interface BoardTask {
   labelIds: string[];
   subtaskTotal: number;
   subtaskDone: number;
-  attachmentCount: number;
+  /** Adjuntos que son imágenes y adjuntos que son otros ficheros (la tarjeta muestra ambos contadores). */
+  imageCount: number;
+  fileCount: number;
   hasDescription: boolean;
   /** YYYY-MM-DD */
   dueDate: string | null;

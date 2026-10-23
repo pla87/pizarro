@@ -82,6 +82,31 @@ export function useCardActions(deps: Deps) {
         toast(t("Movida a «{name}»", { name: target.name }));
       },
 
+      moveWithinColumn: async (id: string, dir: -1 | 1) => {
+        const { getTask, baseItems, patchTask, upsertTask, track, toast } = ref.current;
+        const task = getTask(id);
+        if (!task) return;
+        // Lista completa de la columna (sin filtrar): los vecinos enviados al servidor son los reales.
+        const list = baseItems[task.columnId] ?? [];
+        const index = list.indexOf(id);
+        const target = index + dir;
+        if (index < 0 || target < 0 || target >= list.length) return;
+        const rest = list.filter((x) => x !== id);
+        const prevId = rest[target - 1] ?? null;
+        const nextId = rest[target] ?? null;
+        const position = positionBetween(prevId ? getTask(prevId)?.position : null, nextId ? getTask(nextId)?.position : null);
+        patchTask(id, { position });
+        focusCard(id);
+        const res = await track(moveTask(id, task.columnId, prevId, nextId));
+        if (!res.ok) {
+          upsertTask(task);
+          focusCard(id);
+          return toast(res.error, "error");
+        }
+        patchTask(id, { position: res.data.position });
+        focusCard(id);
+      },
+
       setDueDate: async (id: string, day: string | null) => {
         const { toast, t } = ref.current;
         if (await saveFields(id, { dueDate: day }, { dueDate: day })) toast(day ? t("Fecha límite guardada") : t("Fecha límite quitada"));
