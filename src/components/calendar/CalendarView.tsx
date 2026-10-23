@@ -266,7 +266,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
       aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
       style={kindBadgeStyle(task.kind.color)}
       className={cn(
-        "kind-badge flex w-full min-w-0 cursor-grab items-center gap-1 rounded px-1.5 py-0.5 text-left text-xs leading-5 outline-offset-1 focus-visible:outline-2 focus-visible:outline-brand-500 active:cursor-grabbing",
+        "kind-badge flex w-full min-w-0 cursor-grab items-center gap-1 rounded px-1.5 py-0.5 text-left text-xs leading-5 outline-offset-1 focus-visible:outline-3 focus-visible:outline-focus active:cursor-grabbing",
         task.done && "opacity-55 line-through",
         dragging === task.id && "opacity-40",
       )}
