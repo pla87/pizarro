@@ -1,3 +1,4 @@
+import { visibleProjectsWhere } from "@/lib/access";
 import { userTemplates } from "@/lib/board";
 import { db } from "@/lib/db";
 import { googleEnabled } from "@/lib/google";
@@ -10,12 +11,13 @@ import { deviceLabel } from "@/lib/user-agent";
 import { getT } from "@/i18n/server";
 import { EmailChangeSection } from "./EmailChangeSection";
 import { ProfileSettings } from "./ProfileSettings";
+import { ProjectPicksSection } from "./ProjectPicksSection";
 import { SessionsSection } from "./SessionsSection";
 import { TwoFactorSection } from "./TwoFactorSection";
 
 export async function generateMetadata() {
   const t = await getT();
-  return { title: t("Mi perfil y plantillas") };
+  return { title: t("Mi perfil") };
 }
 
 const GOOGLE_MESSAGES: Record<string, { ok: boolean; text: string }> = {
@@ -40,6 +42,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       email: true,
       cardStyle: true,
       editorMode: true,
+      clearDraftsOnLogout: true,
       theme: true,
       accent: true,
       locale: true,
@@ -64,6 +67,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     }),
     currentSessionId(),
   ]);
+  // Administradores: todos los proyectos de equipo y sus privados, con los que han elegido para trabajar.
+  const pickProjects = user.role === "ADMIN"
+    ? await db.project.findMany({
+        where: visibleProjectsWhere(user),
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+        select: { id: true, name: true, isPrivate: true, adminPicks: { where: { userId: user.id }, select: { userId: true } } },
+      })
+    : [];
   let googleMessage = typeof google === "string" && Object.hasOwn(GOOGLE_MESSAGES, google) ? GOOGLE_MESSAGES[google]! : google ? GOOGLE_MESSAGES.error! : null;
   if (googleMessage) googleMessage = { ...googleMessage, text: t(googleMessage.text) };
   return (
@@ -74,6 +85,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         templates={await userTemplates(user.id)}
         cardStyle={row.cardStyle}
         editorMode={row.editorMode}
+        clearDraftsOnLogout={row.clearDraftsOnLogout}
         theme={row.theme}
         accent={row.accent}
         locale={row.locale}
@@ -94,6 +106,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         google={{ enabled: googleEnabled(), email: row.googleAccount?.email ?? null, message: googleMessage }}
       />
       <div className="mx-auto max-w-3xl space-y-5 px-4 pb-6 md:px-6">
+        {user.role === "ADMIN" && <ProjectPicksSection projects={pickProjects.map((p) => ({ id: p.id, name: p.name, isPrivate: p.isPrivate, picked: p.adminPicks.length > 0 }))} />}
         {emailEnabled() && <EmailChangeSection email={row.email} />}
         <TwoFactorSection method={row.twoFactorMethod} admin={user.role === "ADMIN"} emailAvailable={emailEnabled()} codesLeft={codesLeft} />
         <SessionsSection

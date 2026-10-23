@@ -2,7 +2,7 @@
 
 import { BrandMark } from "@/components/ui/BrandMark";
 import {
-  Archive, Bell, ChevronsUpDown, FolderKanban, History, LayoutDashboard, ListChecks, LogOut, Menu, Plus, Rocket,
+  Archive, Bell, CalendarDays, ChevronsUpDown, FolderKanban, History, LayoutDashboard, ListChecks, LogOut, Menu, Plus, Rocket,
   Settings, Shield, SlidersHorizontal, X,
 } from "lucide-react";
 import Link from "next/link";
@@ -15,6 +15,7 @@ import { listTemplates } from "@/actions/templates";
 import type { CurrentUser } from "@/lib/session";
 import { AppBadge } from "./AppBadge";
 import { InstallApp } from "./InstallApp";
+import { clearAllDrafts } from "./board/drafts";
 import { Presence } from "./board/Presence";
 import { PrivateIcon, ProjectMenu, ProjectsContext } from "./ProjectMenu";
 import { UndoButton } from "./UndoButton";
@@ -117,9 +118,9 @@ function NavLink({ href, icon: Icon, children, active }: { href: string; icon: t
       href={href}
       className={cn(
         // El contorno de foco va por dentro: el menú hace scroll y recortaría uno exterior.
-        "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-500",
+        "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
         active
-          ? "bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-100"
+          ? "bg-brand-50 text-brand-700 shadow-[inset_3px_0_0_var(--color-detail)] dark:bg-brand-500/15 dark:text-brand-100"
           : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
       )}
     >
@@ -168,7 +169,8 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
           )}
         </NavLink>
         <NavLink href="/my-tasks" icon={ListChecks} active={pathname === "/my-tasks"}>{t("Mis tareas asignadas")}</NavLink>
-        <NavLink href="/settings" icon={Settings} active={pathname === "/settings"}>{t("Mi perfil y plantillas")}</NavLink>
+        <NavLink href="/calendar" icon={CalendarDays} active={pathname === "/calendar"}>{t("Calendario")}</NavLink>
+        <NavLink href="/settings" icon={Settings} active={pathname === "/settings"}>{t("Mi perfil")}</NavLink>
         {isAdmin && <NavLink href="/admin" icon={Shield} active={pathname.startsWith("/admin")}>{t("Administración")}</NavLink>}
         <NavLink href="/changelog" icon={History} active={pathname === "/changelog"}>{t("Historial de versiones")}</NavLink>
         <InstallApp />
@@ -181,7 +183,7 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
             <div className="truncate text-sm font-medium">{user.name}</div>
             <Link href="/changelog" className="text-xs text-slate-500 hover:underline">v{version}</Link>
           </div>
-          <form action={logout}>
+          <form action={logout} onSubmit={() => user.clearDraftsOnLogout && clearAllDrafts()}>
             <button type="submit" className="btn-icon" title={t("Cerrar sesión")} aria-label={t("Cerrar sesión")}>
               <LogOut size={17} />
             </button>

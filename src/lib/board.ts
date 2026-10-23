@@ -1,6 +1,7 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { dateToIso } from "./dates";
+import { projectUsersWhere } from "./access";
 import { db } from "./db";
 import type { BoardTask } from "./types";
 
@@ -22,7 +23,9 @@ export const boardTaskSelect = {
   contentUpdatedAt: true,
   labels: { select: { labelId: true } },
   subtasks: { select: { done: true } },
-  _count: { select: { attachments: true, comments: true, links: true } },
+  // Solo el flag de cada adjunto: la tarjeta distingue imágenes de otros ficheros.
+  attachments: { select: { isImage: true } },
+  _count: { select: { comments: true, links: true } },
 } satisfies Prisma.TaskSelect;
 
 /** Igual que boardTaskSelect pero sin la descripción: en el tablero completo solo hace falta saber si la hay. */
@@ -47,7 +50,8 @@ function toBoardTaskWith(t: BoardTaskRow, hasDescription: boolean): BoardTask {
     labelIds: t.labels.map((l) => l.labelId),
     subtaskTotal: t.subtasks.length,
     subtaskDone: t.subtasks.filter((s) => s.done).length,
-    attachmentCount: t._count.attachments,
+    imageCount: t.attachments.filter((a) => a.isImage).length,
+    fileCount: t.attachments.filter((a) => !a.isImage).length,
     hasDescription,
     dueDate: dateToIso(t.dueDate),
     deliverableId: t.deliverableId,
@@ -79,13 +83,9 @@ export async function loadBoardTask(id: string): Promise<BoardTask> {
 }
 
 /** Usuarios activos que pueden ver el proyecto (para el selector de asignación). */
-export async function projectUsers(projectId: string, project: { restricted: boolean; isPrivate: boolean }) {
+export async function projectUsers(projectId: string, project: { isPrivate: boolean }) {
   return db.user.findMany({
-    where: project.isPrivate
-      ? { active: true, memberships: { some: { projectId } } }
-      : project.restricted
-        ? { active: true, OR: [{ role: "ADMIN" }, { memberships: { some: { projectId } } }] }
-        : { active: true },
+    where: { active: true, ...projectUsersWhere(project, projectId) },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });

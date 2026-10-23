@@ -1,7 +1,7 @@
 import { listVisibleProjects } from "@/lib/access";
 import { listKinds } from "@/lib/board";
 import { db } from "@/lib/db";
-import { parseStoredTemplate } from "@/lib/project-templates";
+import { listTemplatesSorted, missingBuiltinKeys } from "@/lib/template-store";
 import { requireAdminPage } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { TemplatesAdmin } from "./TemplatesAdmin";
@@ -13,14 +13,16 @@ export async function generateMetadata() {
 
 export default async function TemplatesPage() {
   const user = await requireAdminPage();
-  const [rows, kinds, projects] = await Promise.all([
-    db.projectTemplate.findMany({ orderBy: [{ position: "asc" }, { createdAt: "asc" }] }),
+  const [templates, missing, kinds, projects] = await Promise.all([
+    listTemplatesSorted(db),
+    missingBuiltinKeys(db),
     listKinds(),
-    listVisibleProjects(user),
+    listVisibleProjects(user, { all: true }),
   ]);
   return (
     <TemplatesAdmin
-      templates={rows.map(parseStoredTemplate)}
+      templates={templates}
+      missingBuiltins={missing.length}
       generalKinds={kinds.map((k) => k.name)}
       projects={projects}
     />

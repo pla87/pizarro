@@ -1,6 +1,6 @@
 // Configuración de la cookie de sesión. Sin dependencias de Node: la usa también proxy.ts.
 
-const SESSION_MAX_AGE_DAYS = 30;
+const SESSION_MAX_AGE_DAYS = 14;
 export const SESSION_MAX_AGE_SECONDS = SESSION_MAX_AGE_DAYS * 24 * 60 * 60;
 
 export function cookieSecure(): boolean {

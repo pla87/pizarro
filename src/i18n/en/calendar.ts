@@ -1,0 +1,21 @@
+// Traducciones al inglés (calendario). Clave: texto exacto en español.
+export const calendar: Record<string, string> = {
+  "Calendario": "Calendar",
+  "Fecha límite cambiada al {date}": "Due date changed to {date}",
+  "Semana del {from} al {to}": "Week of {from} to {to}",
+  "Navegar por meses": "Browse months",
+  "Mes anterior": "Previous month",
+  "Mes siguiente": "Next month",
+  "Deshacer": "Undo",
+  "Filtros del calendario": "Calendar filters",
+  "Todos los proyectos": "All projects",
+  "Cualquier persona": "Anyone",
+  "Yo": "Me",
+  "Ocultar terminadas": "Hide finished",
+  "Hay muchas tareas este mes: se muestran solo las primeras. Filtra por proyecto o persona.": "There are many tasks this month: only the first ones are shown. Filter by project or person.",
+  "No hay tareas ni entregables con fecha en este mes.": "There are no tasks or deliverables with a date this month.",
+  "{done} de {total} tareas": "{done} of {total} tasks",
+  "+{n} entregables más": "+{n} more deliverables",
+  "+{n} más": "+{n} more",
+  "Arrastra una tarea a otro día para cambiar su fecha límite (o Alt+←/→ con ella enfocada).": "Drag a task to another day to change its due date (or Alt+←/→ while it is focused).",
+};

@@ -2,6 +2,42 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.17.0 — 2026-10-23 14:24
+
+Asignación de usuarios a proyectos, botón de rehacer, calendario, plantillas de proyecto por defecto, QR para la verificación en dos pasos, tema Eva retocado y ajustes de seguridad
+
+### Nuevas funcionalidades
+
+- Asignación a proyectos: quien no es administrador solo ve los proyectos a los que está asignado; los administradores eligen en su perfil en cuáles trabajan; nueva pestaña Administración → Proyectos.
+- Botón de rehacer junto al de deshacer (Ctrl/⌘+Mayús+Z, Ctrl/⌘+Y, Alt+Mayús+Z).
+- Calendario: tareas por fecha límite con arrastrar para cambiarla, entregables con avance y estado, filtros y vista por semanas en móvil.
+- 6 plantillas de proyecto por defecto (Vibecoding, Tareas familiares, Producción audiovisual, Negocio, Marketing y contenidos, Organización de eventos), restablecibles y recuperables.
+- Código QR y clave al configurar la verificación en dos pasos.
+- Opción de perfil para borrar los borradores al cerrar sesión.
+
+### Mejoras
+
+- Hasta 10 usuarios.
+- Sesiones y dispositivos recordados de 14 días; descargar una copia de seguridad pide la contraseña.
+- Los Google Docs de proyectos privados solo se comparten con sus miembros.
+- Archivar y Duplicar como iconos: los botones de la tarea caben en una línea.
+- Botones de Cámara y Añadir más visibles en móvil.
+- Las tarjetas distinguen imágenes y archivos con su icono.
+- Teclado: un Tab por tarjeta, Espacio selecciona y Alt+↑/↓ la mueve dentro de la columna.
+- Tema Eva con el morado y el verde del Eva-01 y detalles en naranja; foco y bordes de escritura en verde.
+- Mis tareas muestra claramente el proyecto de cada tarea.
+- «Mi perfil» y «Plantillas de proyecto» como nombres de menú; códigos de recuperación centrados; añadir miembro en una línea en móvil.
+
+### Correcciones
+
+- El menú de Administración ya no tiene scroll vertical en móvil.
+- En una instalación nueva los administradores no veían el proyecto de ejemplo.
+- Correcciones de seguridad y rendimiento de la revisión de código.
+
+### Cambios técnicos / DB
+
+- Migraciones: asignación de proyectos (sin proyectos «visibles para todos»), ajustes de seguridad, rehacer, plantillas por defecto e índices del calendario.
+
 ## v1.16.0 — 2026-10-23 01:41
 
 Cuentas más seguras (acceso con Google, verificación en dos pasos, enlaces por email, sesiones), proyectos privados compartidos, tema Eva, atajos y filtros nuevos, tareas recurrentes, colaboración ampliada y copias de seguridad cifradas

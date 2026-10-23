@@ -25,7 +25,7 @@ export function VerifyForm({ method, emailSent }: { method: "TOTP" | "EMAIL"; em
         </div>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" name="remember" className="size-4 rounded" />
-          {t("Recordar este dispositivo 30 días")}
+          {t("Recordar este dispositivo 14 días")}
         </label>
         {state.error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">{state.error}</p>}
         {note && <p role="status" className={note.ok ? "text-sm text-slate-500" : "text-sm text-red-600 dark:text-red-400"}>{note.text}</p>}

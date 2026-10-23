@@ -6,7 +6,7 @@ import { db } from "./db";
  * proyecto. Una dirección externa solo la acepta un administrador, y nunca en un proyecto privado.
  */
 export async function reportRecipientAllowed(projectId: string, recipient: string, setterRole: "ADMIN" | "MEMBER"): Promise<boolean> {
-  const project = await db.project.findUnique({ where: { id: projectId }, select: { isPrivate: true, restricted: true } });
+  const project = await db.project.findUnique({ where: { id: projectId }, select: { isPrivate: true } });
   if (!project) return false;
   const user = await db.user.findFirst({
     where: { email: { equals: recipient, mode: "insensitive" } },
@@ -14,9 +14,7 @@ export async function reportRecipientAllowed(projectId: string, recipient: strin
   });
   if (user) {
     if (!user.active) return false;
-    if (project.isPrivate) return user.memberships.length > 0;
-    if (project.restricted) return user.role === "ADMIN" || user.memberships.length > 0;
-    return true;
+    return user.memberships.length > 0 || (!project.isPrivate && user.role === "ADMIN");
   }
   return setterRole === "ADMIN" && !project.isPrivate;
 }

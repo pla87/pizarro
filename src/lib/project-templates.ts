@@ -4,6 +4,7 @@ import { z } from "zod";
 import { COLUMN_ROLES, defaultColumns, PALETTE, type ColumnRoleValue } from "./constants";
 import { POSITION_STEP } from "./positions";
 import * as v from "./validation";
+import { MAX_KIND_SUBTASKS } from "./kinds-special";
 
 export const MAX_TEMPLATE_COLUMNS = 20;
 export const MAX_TEMPLATE_KINDS = 30;
@@ -29,6 +30,8 @@ const templateKindSchema = z.object({
   color: v.hexColor,
   titleTemplate: z.string().trim().max(200, "El título automático es demasiado largo.").default(""),
   descriptionTemplate: z.string().max(5000, "El texto inicial es demasiado largo.").default(""),
+  // Subtareas que se añaden al crear una tarea de este tipo.
+  subtaskTemplate: z.array(z.string().trim().min(1).max(200, "Una subtarea es demasiado larga.")).max(MAX_KIND_SUBTASKS, `Máximo ${MAX_KIND_SUBTASKS} subtareas por tipo.`).default([]),
 });
 
 const templateLabelSchema = z.object({ name: itemName, color: z.enum(PALETTE) });
@@ -63,6 +66,16 @@ export type TemplateData = z.output<typeof templateInputSchema>;
 /** Plantilla tal y como la usa la interfaz. */
 export interface TemplateDto extends TemplateData {
   id: string;
+  /** Clave estable si es una plantilla incluida de serie (aunque se haya renombrado). */
+  builtinKey?: string | null;
+  /** Solo plantillas de serie: su contenido ya no coincide con el canónico (se puede restablecer). */
+  builtinModified?: boolean;
+}
+
+/** Orden alfabético con la colación española (sin distinguir mayúsculas ni tildes; números por valor). */
+export function sortTemplates<T extends { name: string }>(list: T[]): T[] {
+  const collator = new Intl.Collator("es", { sensitivity: "base", numeric: true });
+  return [...list].sort((a, b) => collator.compare(a.name, b.name));
 }
 
 /** Resumen de una línea: «5 columnas · 2 tipos propios · 3 etiquetas · 1 general oculto». */
@@ -84,7 +97,7 @@ interface GeneralKind {
 
 interface TemplateApplication {
   columns: { name: string; role: ColumnRoleValue; isDone: boolean; position: number }[];
-  kinds: { name: string; color: string; titleTemplate: string; descriptionTemplate: string; position: number }[];
+  kinds: { name: string; color: string; titleTemplate: string; descriptionTemplate: string; subtaskTemplate: string[]; position: number }[];
   labels: { name: string; color: string }[];
   /** Ids de tipos generales que el proyecto no usará. */
   hiddenKindIds: string[];
@@ -112,6 +125,7 @@ export function buildTemplateApplication(template: TemplateData, generalKinds: G
       color: k.color,
       titleTemplate: k.titleTemplate,
       descriptionTemplate: k.descriptionTemplate,
+      subtaskTemplate: k.subtaskTemplate,
       position: (i + 1) * POSITION_STEP,
     })),
     labels: template.labels.map((l) => ({ name: l.name, color: l.color })),

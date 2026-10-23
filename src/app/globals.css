@@ -15,6 +15,8 @@
   --color-on-brand: #ffffff;
   /* Subtareas hechas: verde neón en el tema azul (más vivo en oscuro). */
   --color-progress: #00c96b;
+  /* Foco con teclado y borde de campos activos: el color principal salvo en los temas que definen otro (Eva). */
+  --color-focus: var(--color-brand-500);
 }
 
 /*
@@ -36,6 +38,10 @@
 
 :root {
   color-scheme: light dark;
+  /* Detalle de acento (barra del ítem activo del menú, barra central del logo): solo lo define Eva (naranja). */
+  --color-detail: transparent;
+  --color-detail-mid: var(--color-on-brand);
+  --mark-mid-opacity: 0.78;
 }
 :root[data-theme="light"] {
   color-scheme: light;
@@ -181,9 +187,9 @@
 }
 
 /*
- * Eva (Evangelion Unit-01): morado EVA como color principal y verde neón para lo destacado
- * (progreso, subtareas hechas, foco). Neutros lavanda en claro y violeta casi negro en oscuro.
- * --color-focus: anillo de foco verde (más oscuro en claro para llegar a 3:1 sobre lavanda).
+ * Eva (Evangelion Unit-01): morado #6848a0 como color principal, verde neón #78c838 para lo destacado
+ * (progreso, subtareas hechas, foco y borde de los campos activos) y un toque naranja #f8a030
+ * (--color-detail). Neutros lavanda en claro y violeta casi negro en oscuro.
  */
 :root[data-accent="eva"] {
   --color-slate-50: #f7f4fc;
@@ -201,27 +207,22 @@
   --color-brand-100: #e6daf6;
   --color-brand-200: #d0b9ee;
   --color-brand-300: #b690e3;
-  --color-brand-500: #7b4bb7;
-  --color-brand-600: #6b3fa0;
-  --color-brand-700: #532f80;
-  --color-progress: #62b51f;
-  --color-focus: #4a9412;
+  --color-brand-500: #7d5cb4;
+  --color-brand-600: #6848a0;
+  --color-brand-700: #503579;
+  --color-progress: #78c838;
+  --color-focus: #78c838;
+  --color-detail: #f8a030;
+  --color-detail-mid: #f8a030;
+  --mark-mid-opacity: 1;
   @variant dark {
     --color-slate-50: #ffffff;
     --color-slate-100: #ffffff;
     --color-brand-500: #9a6ddb;
-    --color-progress: #a6e22e;
-    --color-focus: #a6e22e;
+    --color-progress: #78c838;
+    --color-focus: #78c838;
   }
 }
-:root[data-accent="eva"] :focus-visible {
-  outline-color: var(--color-focus);
-}
-:root[data-accent="eva"] .input:focus {
-  border-color: var(--color-focus);
-  --tw-ring-color: color-mix(in srgb, var(--color-focus) 35%, transparent);
-}
-
 /*
  * Barras de desplazamiento con los colores de la app. Van en @layer base para que
  * las utilidades (p. ej. no-scrollbar) las sobrescriban.
@@ -236,10 +237,10 @@
    * del texto (se veía un destello blanco antes de pasar al del tema).
    */
   * {
-    outline-color: var(--color-brand-500);
+    outline-color: var(--color-focus);
   }
   :focus-visible {
-    outline: 2px solid var(--color-brand-500);
+    outline: 2px solid var(--color-focus);
     outline-offset: 2px;
   }
   @supports not selector(::-webkit-scrollbar) {
@@ -287,7 +288,7 @@ body {
 
 /* Componentes reutilizables */
 @utility btn {
-  @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-50;
+  @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-50;
 }
 @utility btn-primary {
   @apply btn bg-brand-600 text-on-brand hover:bg-brand-700;
@@ -305,7 +306,7 @@ body {
   @apply inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100;
 }
 @utility input {
-  @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100;
+  @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-focus focus:ring-2 focus:ring-focus/30 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100;
 }
 @utility label {
   @apply mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400;

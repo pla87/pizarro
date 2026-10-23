@@ -54,6 +54,8 @@ export async function seed(db: PrismaClient, log: (msg: string) => void = consol
         name: "Proyecto de ejemplo",
         description: "Proyecto creado por el seed inicial. Puedes renombrarlo o borrarlo.",
         position: POSITION_STEP,
+        // Los administradores trabajan en él desde el principio (si no, no les saldría en los menús).
+        adminPicks: { create: (await db.user.findMany({ where: { role: "ADMIN" }, select: { id: true } })).map((u) => ({ userId: u.id })) },
         columns: { create: defaultColumns().map((c, i) => ({ ...c, position: (i + 1) * POSITION_STEP })) },
         labels: {
           create: [

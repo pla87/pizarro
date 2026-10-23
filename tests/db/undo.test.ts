@@ -1,9 +1,9 @@
 // Deshacer (undoLast) de punta a punta contra PostgreSQL real.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
+import { assign, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
 import { addComment, archiveTask, createTask, deleteComment, deleteTask, moveTask, updateTask } from "../../src/actions/tasks";
-import { undoLast } from "../../src/actions/undo";
+import { redoLast, undoLast } from "../../src/actions/undo";
 import { removeProjectMember } from "../../src/actions/projects";
 
 async function setup() {
@@ -33,6 +33,7 @@ describe("deshacer acciones propias", () => {
   test("editar campos: deshacer restaura título, descripción, responsable y etiquetas", async () => {
     const { user, f } = await setup();
     const other = await makeUser();
+    await assign(f, other);
     const label = await db.label.create({ data: { projectId: f.project.id, name: "L1", color: "blue" } });
     const task = await makeTask(f, { title: "Original" });
     await db.task.update({ where: { id: task.id }, data: { description: "desc original", assigneeId: user.id } });
@@ -163,6 +164,7 @@ describe("límites del deshacer", () => {
     expectOk(await updateTask(a.id, { title: "Editada por A" }));
 
     const b = await makeUser();
+    await assign(f, b);
     await loginAs(b);
     expectFail(await undoLast(f.project.id), NOTHING);
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: a.id } })).title, "Editada por A");
@@ -193,6 +195,7 @@ describe("límites del deshacer", () => {
     const task = await makeTask(f, { title: "Se va" });
     expectOk(await updateTask(task.id, { title: "Editada" }));
     const other = await makeUser();
+    await assign(f, other);
     await loginAs(other);
     expectOk(await deleteTask(task.id));
 
@@ -243,5 +246,161 @@ describe("límites del deshacer", () => {
     const task = await makeTask(f);
     for (let i = 0; i < 12; i++) expectOk(await updateTask(task.id, { title: `v${i}` }));
     assert.equal(await db.undoEntry.count({ where: { userId: user.id, projectId: f.project.id } }), 10);
+  });
+});
+
+describe("rehacer", () => {
+  const NOTHING_REDO = /No hay nada que rehacer/;
+  const title = async (id: string) => (await db.task.findUniqueOrThrow({ where: { id } })).title;
+
+  test("deshacer y rehacer restauran el estado de antes de deshacer", async () => {
+    const { f } = await setup();
+    const label = await db.label.create({ data: { projectId: f.project.id, name: "R1", color: "blue" } });
+    const task = await makeTask(f, { title: "Original" });
+    expectFail(await redoLast(f.project.id), NOTHING_REDO);
+    expectOk(await updateTask(task.id, { title: "Cambiado", labelIds: [label.id] }));
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await title(task.id), "Original");
+    assert.equal(await db.taskLabel.count({ where: { taskId: task.id } }), 0);
+
+    const res = expectOk(await redoLast(f.project.id));
+    assert.equal(res.skipped, 0);
+    assert.equal(await title(task.id), "Cambiado");
+    assert.equal(await db.taskLabel.count({ where: { taskId: task.id } }), 1);
+    expectFail(await redoLast(f.project.id), NOTHING_REDO);
+  });
+
+  test("alterna deshacer, rehacer y deshacer", async () => {
+    const { f } = await setup();
+    const task = await makeTask(f, { title: "A" });
+    expectOk(await updateTask(task.id, { title: "B" }));
+    for (let i = 0; i < 3; i++) {
+      expectOk(await undoLast(f.project.id));
+      assert.equal(await title(task.id), "A");
+      expectOk(await redoLast(f.project.id));
+      assert.equal(await title(task.id), "B");
+    }
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await title(task.id), "A");
+    expectFail(await undoLast(f.project.id), NOTHING);
+  });
+
+  test("varias acciones: rehace en el orden en que se deshicieron", async () => {
+    const { f } = await setup();
+    const task = await makeTask(f, { title: "v0" });
+    for (const n of ["v1", "v2", "v3"]) expectOk(await updateTask(task.id, { title: n }));
+    expectOk(await undoLast(f.project.id));
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await title(task.id), "v1");
+    expectOk(await redoLast(f.project.id));
+    assert.equal(await title(task.id), "v2");
+    expectOk(await redoLast(f.project.id));
+    assert.equal(await title(task.id), "v3");
+  });
+
+  test("una acción nueva vacía la pila de rehacer", async () => {
+    const { user, f } = await setup();
+    const task = await makeTask(f, { title: "A" });
+    expectOk(await updateTask(task.id, { title: "B" }));
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await db.undoEntry.count({ where: { userId: user.id, kind: "REDO" } }), 1);
+    expectOk(await updateTask(task.id, { title: "C" }));
+    assert.equal(await db.undoEntry.count({ where: { userId: user.id, kind: "REDO" } }), 0);
+    expectFail(await redoLast(f.project.id), NOTHING_REDO);
+    assert.equal(await title(task.id), "C");
+  });
+
+  test("rehacer borrar y crear: borra y vuelve a crear con sus hijos", async () => {
+    const { user, f } = await setup();
+    const created = expectOk(await createTask({ projectId: f.project.id, columnId: f.columns.todo, title: "Nueva", kindId: f.kindId, subtasks: ["uno", "dos"] }));
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await db.task.count({ where: { id: created.id } }), 0);
+    expectOk(await redoLast(f.project.id));
+    const back = await db.task.findUniqueOrThrow({ where: { id: created.id }, include: { subtasks: true } });
+    assert.equal(back.subtasks.length, 2);
+
+    // Borrar → deshacer → rehacer (vuelve a borrar) → deshacer otra vez.
+    const task = await makeTask(f, { title: "A borrar", subtasks: ["s1"], createdById: user.id });
+    await db.taskComment.create({ data: { taskId: task.id, authorId: user.id, body: "c" } });
+    expectOk(await deleteTask(task.id));
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await db.task.count({ where: { id: task.id } }), 1);
+    expectOk(await redoLast(f.project.id));
+    assert.equal(await db.task.count({ where: { id: task.id } }), 0);
+    expectOk(await undoLast(f.project.id));
+    const again = await db.task.findUniqueOrThrow({ where: { id: task.id }, include: { subtasks: true, comments: true } });
+    assert.equal(again.subtasks.length, 1);
+    assert.equal(again.comments.length, 1);
+  });
+
+  test("comentarios y movimientos se rehacen", async () => {
+    const { f } = await setup();
+    const task = await makeTask(f, { position: 1000 });
+    const c = expectOk(await addComment(task.id, "hola"));
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await db.taskComment.count({ where: { id: c.id } }), 0);
+    expectOk(await redoLast(f.project.id));
+    assert.equal((await db.taskComment.findUniqueOrThrow({ where: { id: c.id } })).body, "hola");
+
+    expectOk(await moveTask(task.id, f.columns.doing, null, null));
+    expectOk(await undoLast(f.project.id));
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).columnId, f.columns.todo);
+    expectOk(await redoLast(f.project.id));
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).columnId, f.columns.doing);
+  });
+
+  test("con una tarea abierta rehace solo las de esa tarea", async () => {
+    const { f } = await setup();
+    const a = await makeTask(f, { title: "A" });
+    const b = await makeTask(f, { title: "B" });
+    expectOk(await updateTask(a.id, { title: "A1" }));
+    expectOk(await updateTask(b.id, { title: "B1" }));
+    expectOk(await undoLast(f.project.id));
+    expectOk(await undoLast(f.project.id));
+    // Contexto de B: rehace lo de B, no lo de A.
+    expectOk(await redoLast(f.project.id, b.id));
+    assert.equal(await title(b.id), "B1");
+    assert.equal(await title(a.id), "A");
+    expectFail(await redoLast(f.project.id, b.id), /nada que rehacer en esta tarea/);
+    // Sin contexto: lo que queda del tablero.
+    expectOk(await redoLast(f.project.id));
+    assert.equal(await title(a.id), "A1");
+  });
+
+  test("la pila de rehacer es de cada usuario y proyecto, y guarda 10", async () => {
+    const { user, f } = await setup();
+    const g = await makeProject();
+    const task = await makeTask(f, { title: "A" });
+    expectOk(await updateTask(task.id, { title: "B" }));
+    expectOk(await undoLast(f.project.id));
+
+    // Otro proyecto y otra persona no ven este rehacer.
+    expectFail(await redoLast(g.project.id), NOTHING_REDO);
+    const second = await makeUser();
+    await assign(f, second);
+    await loginAs(second);
+    expectFail(await redoLast(f.project.id), NOTHING_REDO);
+    // Una acción nueva de otra persona no vacía la pila del primero.
+    const other = await makeTask(f, { title: "X" });
+    expectOk(await updateTask(other.id, { title: "Y" }));
+    await loginAs(user);
+    expectOk(await redoLast(f.project.id));
+    assert.equal(await title(task.id), "B");
+
+    const t2 = await makeTask(f);
+    for (let i = 0; i < 10; i++) expectOk(await updateTask(t2.id, { title: `n${i}` }));
+    for (let i = 0; i < 10; i++) expectOk(await undoLast(f.project.id));
+    assert.equal(await db.undoEntry.count({ where: { userId: user.id, projectId: f.project.id, kind: "REDO" } }), 10);
+  });
+
+  test("lo que ya no existe se salta al rehacer sin fallar", async () => {
+    const { f } = await setup();
+    const task = await makeTask(f, { title: "A" });
+    expectOk(await updateTask(task.id, { title: "B" }));
+    expectOk(await undoLast(f.project.id));
+    await db.task.delete({ where: { id: task.id } });
+    const res = expectOk(await redoLast(f.project.id));
+    assert.equal(res.skipped, 1);
+    assert.equal(await db.task.count({ where: { id: task.id } }), 0);
   });
 });

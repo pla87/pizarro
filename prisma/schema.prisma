@@ -37,6 +37,8 @@ model User {
   accent         Accent    @default(BLUE)
   /// Idioma de la interfaz.
   locale         Locale    @default(ES)
+  /// Al cerrar sesión se borran los borradores locales de tareas (localStorage) de este navegador.
+  clearDraftsOnLogout Boolean @default(false)
   /// Cómo se editan las descripciones: escribiendo Markdown o con barra de formato.
   editorMode     EditorMode @default(WYSIWYG)
   /// Preferencias de aviso de menciones.
@@ -71,6 +73,7 @@ model User {
   recoveryCodes     RecoveryCode[]
   loginChallenges   LoginChallenge[]
   memberships       ProjectMember[]
+  projectPicks      AdminProjectPick[]
   privateProjects   Project[]         @relation("PrivateProjects")
   assignedTasks     Task[]            @relation("TaskAssignee")
   createdTasks      Task[]            @relation("TaskCreator")
@@ -199,8 +202,6 @@ model Project {
   id          String   @id @default(cuid())
   name        String
   description String   @default("")
-  /// false: visible para todos los usuarios. true: solo admins y miembros explícitos.
-  restricted  Boolean  @default(false)
   /// Proyecto privado: solo lo ven y usan sus miembros (ProjectMember), ni siquiera los administradores.
   /// Se marca aparte de privateOwnerId para que borrar a quien lo creó no lo haga público.
   isPrivate   Boolean  @default(false)
@@ -211,6 +212,7 @@ model Project {
   updatedAt   DateTime @updatedAt
 
   members      ProjectMember[]
+  adminPicks   AdminProjectPick[]
   columns      Column[]
   tasks        Task[]
   labels       Label[]
@@ -225,7 +227,20 @@ model Project {
   @@index([position])
 }
 
+/// Usuarios asignados al proyecto. En uno de equipo, los no administradores solo lo ven si figuran aquí; en uno privado, solo sus miembros.
 model ProjectMember {
+  projectId String
+  userId    String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId])
+}
+
+/// Proyectos de equipo (no privados) en los que trabaja un administrador: solo esos salen en sus selectores y menús.
+/// Los administradores pueden abrir cualquier proyecto no privado aunque no lo hayan elegido.
+model AdminProjectPick {
   projectId String
   userId    String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -311,6 +326,7 @@ model Task {
   @@index([assigneeId, archivedAt])
   @@index([deliverableId])
   @@index([kindId])
+  @@index([projectId, dueDate])
 }
 
 model Label {
@@ -440,6 +456,7 @@ model Deliverable {
   tasks       Task[]
 
   @@index([projectId, position])
+  @@index([projectId, dueDate])
 }
 
 enum TaskLinkKind {
@@ -649,8 +666,16 @@ model ProjectTemplate {
   /// [{ name, color }]
   labels      Json     @default("[]")
   position    Float    @default(0)
+  /// Clave estable de las plantillas incluidas de serie (src/lib/builtin-templates.ts); null en las propias.
+  builtinKey  String?  @unique
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+/// Plantillas de serie ya sembradas alguna vez: si el administrador borra una, no se recrea sola al arrancar.
+model BuiltinTemplateSeeded {
+  key      String   @id
+  seededAt DateTime @default(now())
 }
 
 enum CardStyle {
@@ -702,7 +727,13 @@ model ReleaseTemplate {
   @@index([userId, kind, position])
 }
 
-/// Acción deshacible de un usuario en un proyecto (se guardan las 10 últimas). `ops` son las
+/// Pila a la que pertenece una entrada: deshacer o rehacer.
+enum UndoKind {
+  UNDO
+  REDO
+}
+
+/// Acción deshacible de un usuario en un proyecto (se guardan las 10 últimas de cada pila). `ops` son las
 /// operaciones inversas, que se aplican en orden inverso al deshacer (ver src/lib/undo.ts).
 model UndoEntry {
   id        String   @id @default(cuid())
@@ -710,13 +741,15 @@ model UndoEntry {
   projectId String
   /// Tarea a la que afecta (si es solo una): contexto del deshacer con la tarea abierta.
   taskId    String?
+  /// UNDO: lo que hace «Deshacer». REDO: lo que rehace una acción ya deshecha (se vacía con una acción nueva).
+  kind      UndoKind @default(UNDO)
   label     String
   ops       Json
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@index([userId, projectId, createdAt])
+  @@index([userId, projectId, kind, createdAt])
   @@index([userId, taskId, createdAt])
   @@index([projectId])
   @@index([createdAt])

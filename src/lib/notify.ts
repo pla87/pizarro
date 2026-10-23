@@ -2,6 +2,7 @@ import "server-only";
 import { after } from "next/server";
 import type { Prisma } from "@/generated/prisma/client";
 import { intlLocale, makeT, toLocale, type T } from "../i18n/core";
+import { projectUsersWhere } from "./access";
 import { db } from "./db";
 import { appUrl, emailEnabled, escapeHtml, sendMail } from "./mail";
 import { logEvent } from "./log";
@@ -152,11 +153,11 @@ async function deliver(notificationIds: string[]): Promise<void> {
  * Quién puede recibir un aviso entre los mencionados: activos y con acceso al proyecto. Con un proyecto
  * privado, solo sus miembros (y solo los mencionados).
  */
-export function mentionRecipientsWhere(project: { restricted: boolean; isPrivate: boolean }, ids: string[], projectId: string): Prisma.UserWhereInput {
+export function mentionRecipientsWhere(project: { isPrivate: boolean }, ids: string[], projectId: string): Prisma.UserWhereInput {
   return {
     id: { in: ids },
     active: true,
-    ...(project.isPrivate ? { memberships: { some: { projectId } } } : project.restricted ? { OR: [{ role: "ADMIN" }, { memberships: { some: { projectId } } }] } : {}),
+    ...projectUsersWhere(project, projectId),
   };
 }
 
@@ -204,7 +205,7 @@ export async function notifyTask(opts: {
 }): Promise<{ recipients: string[] }> {
   const ids = [...new Set(opts.recipientIds.filter((id) => id !== opts.actorId))];
   if (!ids.length) return { recipients: [] };
-  const project = await db.project.findUnique({ where: { id: opts.projectId }, select: { restricted: true, isPrivate: true } });
+  const project = await db.project.findUnique({ where: { id: opts.projectId }, select: { isPrivate: true } });
   if (!project) return { recipients: [] };
   const recipients = await db.user.findMany({
     where: mentionRecipientsWhere(project, ids, opts.projectId),

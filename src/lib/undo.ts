@@ -8,6 +8,11 @@ import { removeAttachmentFiles, removeReleaseAttachmentFiles } from "./uploads";
 // como una entrada del usuario en ese proyecto. Se conservan las 10 últimas; deshacer aplica la
 // más reciente en orden inverso. Los ficheros de adjuntos borrados se conservan mientras su
 // entrada exista, para poder devolverlos.
+//
+// Rehacer: al deshacer una entrada se captura el estado actual de todo lo que sus operaciones van
+// a tocar (mirrorOps) y se guarda como entrada REDO; rehacerla hace lo mismo a la inversa y deja
+// otra entrada UNDO, así que se puede alternar. Cualquier acción nueva del usuario en el proyecto
+// vacía su pila de rehacer. Cada pila guarda 10 entradas por usuario y proyecto.
 
 export const UNDO_LIMIT = 10;
 export const UNDO_MAX_AGE_DAYS = 7;
@@ -147,11 +152,20 @@ export async function snapshotTasks(ids: string[]): Promise<UndoOp[]> {
   }));
 }
 
-/** Guarda una entrada y descarta las que pasen del límite (liberando sus ficheros pendientes). */
-export async function saveUndo(userId: string, projectId: string, label: string, ops: UndoOp[], taskId: string | null = null): Promise<void> {
-  await db.undoEntry.create({ data: { userId, projectId, taskId, label: label.slice(0, 300), ops: ops as unknown as Prisma.InputJsonValue } });
+export type UndoKind = "UNDO" | "REDO";
+
+/**
+ * Guarda una entrada en la pila `kind` y descarta las que pasen del límite (liberando sus ficheros
+ * pendientes). Una acción nueva (UNDO sin `fromRedo`) vacía además la pila de rehacer del usuario.
+ */
+export async function saveUndo(
+  userId: string, projectId: string, label: string, ops: UndoOp[], taskId: string | null = null,
+  kind: UndoKind = "UNDO", clearRedo = kind === "UNDO",
+): Promise<void> {
+  if (clearRedo) await discardUndo({ userId, projectId, kind: "REDO" });
+  await db.undoEntry.create({ data: { userId, projectId, taskId, kind, label: label.slice(0, 300), ops: ops as unknown as Prisma.InputJsonValue } });
   const old = await db.undoEntry.findMany({
-    where: { userId, projectId },
+    where: { userId, projectId, kind },
     orderBy: { createdAt: "desc" },
     skip: UNDO_LIMIT,
     select: { id: true, ops: true },
@@ -186,6 +200,95 @@ export async function discardUndo(where: Prisma.UndoEntryWhereInput): Promise<nu
   return entries.length;
 }
 
+/**
+ * Estado actual de todo lo que `ops` va a tocar, como operaciones que lo devuelven a ese estado:
+ * aplicarlas con applyUndo deshace lo que haga applyUndo(ops). Se llama justo antes de aplicarlas.
+ * Lo que no existe ahora no se captura (applyUndo lo saltaría igualmente). Las releases no se
+ * pueden recrear, así que `release.remove` no tiene operación de rehacer.
+ */
+export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoOp[]> {
+  const out: UndoOp[] = [];
+  const seen = new Set<string>();
+  const once = (key: string) => (seen.has(key) ? false : (seen.add(key), true));
+  const inProject = { task: { projectId } };
+  for (const op of ops) {
+    switch (op.t) {
+      case "task.set": {
+        if (!once(`task.set:${op.id}:${Object.keys(op.data).join(",")}:${!!op.labelIds}`)) break;
+        const taskOk = await db.task.count({ where: { id: op.id, projectId } });
+        if (taskOk) out.push(...(await captureTasks([op.id], Object.keys(op.data) as TaskField[], !!op.labelIds)));
+        break;
+      }
+      case "task.remove":
+        if (once(`task:${op.id}`) && (await db.task.count({ where: { id: op.id, projectId } }))) out.push(...(await snapshotTasks([op.id])));
+        break;
+      case "task.restore":
+        if (once(`task:${op.snap.task.id}`)) out.push({ t: "task.remove", id: op.snap.task.id });
+        break;
+      case "subtask.set": {
+        if (!once(`subtask.set:${op.id}`)) break;
+        const r = await db.subtask.findFirst({ where: { id: op.id, ...inProject } });
+        if (r) out.push({ t: "subtask.set", id: op.id, data: Object.fromEntries(Object.keys(op.data).map((k) => [k, r[k as keyof typeof r]])) });
+        break;
+      }
+      case "subtask.remove": {
+        const r = once(`subtask:${op.id}`) && (await db.subtask.findFirst({ where: { id: op.id, ...inProject } }));
+        if (r) out.push({ t: "subtask.restore", row: { id: r.id, taskId: r.taskId, title: r.title, done: r.done, position: r.position } });
+        break;
+      }
+      case "subtask.restore":
+        if (once(`subtask:${op.row.id}`)) out.push({ t: "subtask.remove", id: op.row.id });
+        break;
+      case "comment.remove": {
+        const c = once(`comment:${op.id}`) && (await db.taskComment.findFirst({ where: { id: op.id, ...inProject } }));
+        if (c) out.push({ t: "comment.restore", row: { id: c.id, taskId: c.taskId, authorId: c.authorId, body: c.body, createdAt: c.createdAt.toISOString(), editedAt: iso(c.editedAt), parentId: c.parentId } });
+        break;
+      }
+      case "comment.restore":
+        if (once(`comment:${op.row.id}`)) out.push({ t: "comment.remove", id: op.row.id });
+        break;
+      case "attachment.remove": {
+        const a = once(`attachment:${op.id}`) && (await db.taskAttachment.findFirst({ where: { id: op.id, ...inProject } }));
+        if (a) {
+          out.push({
+            t: "attachment.restore",
+            row: { id: a.id, taskId: a.taskId, originalName: a.originalName, mimeType: a.mimeType, isImage: a.isImage, width: a.width, height: a.height, size: a.size, createdById: a.createdById, createdAt: a.createdAt.toISOString() },
+          });
+        }
+        break;
+      }
+      case "attachment.restore":
+        if (once(`attachment:${op.row.id}`)) out.push({ t: "attachment.remove", id: op.row.id });
+        break;
+      case "link.remove": {
+        const l = once(`link:${op.id}`) && (await db.taskLink.findFirst({ where: { id: op.id, ...inProject } }));
+        if (l) out.push({ t: "link.restore", row: { id: l.id, taskId: l.taskId, kind: l.kind, title: l.title, url: l.url, externalId: l.externalId, createdById: l.createdById, createdAt: l.createdAt.toISOString() } });
+        break;
+      }
+      case "link.restore":
+        if (once(`link:${op.row.id}`)) out.push({ t: "link.remove", id: op.row.id });
+        break;
+      case "column.set": {
+        if (!once(`column.set:${op.id}`)) break;
+        const c = await db.column.findFirst({ where: { id: op.id, projectId } });
+        if (c) out.push({ t: "column.set", id: op.id, data: Object.fromEntries(Object.keys(op.data).map((k) => [k, c[k as keyof typeof c]])) });
+        break;
+      }
+      case "column.remove": {
+        const c = once(`column:${op.id}`) && (await db.column.findFirst({ where: { id: op.id, projectId } }));
+        if (c) out.push({ t: "column.restore", row: { id: c.id, projectId: c.projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone } });
+        break;
+      }
+      case "column.restore":
+        if (once(`column:${op.row.id}`)) out.push({ t: "column.remove", id: op.row.id });
+        break;
+      case "release.remove":
+        break;
+    }
+  }
+  return out;
+}
+
 function taskUpdateData(d: TaskData): Prisma.TaskUncheckedUpdateInput {
   const out: Prisma.TaskUncheckedUpdateInput = {};
   for (const [k, v] of Object.entries(d)) {
@@ -197,9 +300,10 @@ function taskUpdateData(d: TaskData): Prisma.TaskUncheckedUpdateInput {
 
 /**
  * Aplica las operaciones inversas (de la última a la primera). Lo que ya no existe se salta;
- * devuelve cuántas operaciones no se pudieron aplicar.
+ * devuelve cuántas operaciones no se pudieron aplicar. Con `keepFiles` no borra los ficheros de los
+ * adjuntos que quita: la entrada contraria (rehacer/deshacer) los retiene y los libera al descartarse.
  */
-export async function applyUndo(projectId: string, ops: UndoOp[]): Promise<number> {
+export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFiles?: boolean } = {}): Promise<number> {
   let skipped = 0;
   const filesToRemove: string[] = [];
   const releaseFiles: string[] = [];
@@ -207,6 +311,18 @@ export async function applyUndo(projectId: string, ops: UndoOp[]): Promise<numbe
   const firstColumn = async () => (await db.column.findFirst({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true } }))?.id;
   /** Una columna borrada entretanto: la tarea va a la primera. */
   const safeColumn = async (id: string | undefined) => (id && columnIds.has(id) ? id : await firstColumn());
+  // Quién puede seguir siendo responsable (activo y con acceso al proyecto) y quién existe aún (autor):
+  // se leen una vez para toda la entrada, no por tarea.
+  const project = await db.project.findUnique({ where: { id: projectId }, select: { isPrivate: true } });
+  const existingIds = new Set((await db.user.findMany({ select: { id: true } })).map((u) => u.id));
+  const assignableIds = new Set(
+    (await db.user.findMany({
+      where: { active: true, ...(project?.isPrivate ? { memberships: { some: { projectId } } } : { OR: [{ role: "ADMIN" }, { memberships: { some: { projectId } } }] }) },
+      select: { id: true },
+    })).map((u) => u.id),
+  );
+  const known = (id: string | null | undefined) => (id && existingIds.has(id) ? id : null);
+  const assignable = (id: string | null | undefined) => (id && assignableIds.has(id) ? id : null);
 
   for (const op of [...ops].reverse()) {
     try {
@@ -218,7 +334,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[]): Promise<numbe
           if (data.columnId) data.columnId = await safeColumn(data.columnId);
           if (data.kindId && !(await db.taskKind.count({ where: { id: data.kindId } }))) delete data.kindId;
           if (data.deliverableId && !(await db.deliverable.count({ where: { id: data.deliverableId } }))) data.deliverableId = null;
-          if (data.assigneeId && !(await db.user.count({ where: { id: data.assigneeId } }))) data.assigneeId = null;
+          if (data.assigneeId) data.assigneeId = assignable(data.assigneeId);
           await db.$transaction([
             db.task.update({ where: { id: op.id }, data: taskUpdateData(data) }),
             ...(op.labelIds
@@ -247,14 +363,12 @@ export async function applyUndo(projectId: string, ops: UndoOp[]): Promise<numbe
           const kindId = kindOk ? t.kindId : (await db.taskKind.findFirst({ where: { OR: [{ projectId: null }, { projectId }] }, orderBy: { position: "asc" }, select: { id: true } }))?.id;
           const columnId = await safeColumn(t.columnId);
           if (!kindId || !columnId) { skipped++; break; }
-          const userIds = new Set((await db.user.findMany({ select: { id: true } })).map((u) => u.id));
-          const known = (id: string | null | undefined) => (id && userIds.has(id) ? id : null);
           const deliverableId = t.deliverableId && (await db.deliverable.count({ where: { id: t.deliverableId } })) ? t.deliverableId : null;
           const labels = await db.label.findMany({ where: { id: { in: s.labelIds }, projectId }, select: { id: true } });
           await db.$transaction([
             db.task.create({
               data: {
-                ...(taskUpdateData({ ...t, columnId, kindId, deliverableId, assigneeId: known(t.assigneeId) }) as Prisma.TaskUncheckedCreateInput),
+                ...(taskUpdateData({ ...t, columnId, kindId, deliverableId, assigneeId: assignable(t.assigneeId) }) as Prisma.TaskUncheckedCreateInput),
                 id: t.id, projectId, title: t.title, position: t.position, createdById: known(t.createdById), createdAt: new Date(t.createdAt),
               },
             }),
@@ -355,7 +469,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[]): Promise<numbe
       skipped++;
     }
   }
-  if (filesToRemove.length) await removeAttachmentFiles(filesToRemove);
+  if (filesToRemove.length && !opts.keepFiles) await removeAttachmentFiles(filesToRemove);
   if (releaseFiles.length) await removeReleaseAttachmentFiles(releaseFiles);
   return skipped;
 }

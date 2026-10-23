@@ -7,19 +7,19 @@ import { PALETTE } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { AppError, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
-import { parseStoredTemplate, templateInputSchema, type TemplateDto, type TemplateInput } from "@/lib/project-templates";
+import { templateInputSchema, type TemplateDto, type TemplateInput } from "@/lib/project-templates";
+import { listTemplatesSorted, resetBuiltinTemplate, restoreBuiltinTemplates } from "@/lib/template-store";
 import { requireAdmin } from "@/lib/session";
 import * as v from "@/lib/validation";
 import { getT } from "@/i18n/server";
 
 const MAX_TEMPLATES = 50;
 
-/** Plantillas de proyecto (solo administradores), en su orden. */
+/** Plantillas de proyecto (solo administradores), por orden alfabético. */
 export async function listTemplates() {
   return runAction({ name: "templates.listTemplates" }, async (): Promise<TemplateDto[]> => {
     await requireAdmin();
-    const rows = await db.projectTemplate.findMany({ orderBy: [{ position: "asc" }, { createdAt: "asc" }] });
-    return rows.map(parseStoredTemplate);
+    return listTemplatesSorted(db);
   });
 }
 
@@ -56,6 +56,25 @@ export async function deleteTemplate(templateId: string) {
   });
 }
 
+/** Restablece una plantilla de serie a su contenido original. */
+export async function resetTemplate(templateId: string) {
+  return runAction({ name: "templates.resetTemplate", args: [templateId] }, async () => {
+    await requireAdmin();
+    if (!(await resetBuiltinTemplate(db, v.id.parse(templateId)))) throw notFound();
+    revalidatePath("/admin/templates");
+  });
+}
+
+/** Recrea las plantillas de serie que se borraron. Devuelve cuántas. */
+export async function restoreDefaultTemplates() {
+  return runAction({ name: "templates.restoreDefaultTemplates" }, async () => {
+    await requireAdmin();
+    const restored = await restoreBuiltinTemplates(db);
+    revalidatePath("/admin/templates");
+    return { restored };
+  });
+}
+
 /** Datos de una plantilla a partir de un proyecto visible: columnas, tipos propios, generales ocultos y etiquetas. */
 export async function templateFromProject(projectId: string) {
   return runAction({ name: "templates.templateFromProject", args: [projectId] }, async (): Promise<TemplateInput> => {
@@ -66,7 +85,7 @@ export async function templateFromProject(projectId: string) {
         name: true,
         description: true,
         columns: { orderBy: { position: "asc" }, select: { name: true, role: true, isDone: true } },
-        kinds: { orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: { name: true, color: true, titleTemplate: true, descriptionTemplate: true } },
+        kinds: { orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: { name: true, color: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true } },
         hiddenKinds: { select: { kind: { select: { name: true } } } },
         labels: { orderBy: { name: "asc" }, select: { name: true, color: true } },
       },

@@ -2,8 +2,10 @@
 
 import { Download, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
-import { createBackupNow } from "@/actions/backups";
+import { useState, useTransition } from "react";
+import { createBackupNow, requestBackupDownload } from "@/actions/backups";
+import { Modal } from "@/components/ui/Modal";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/components/ui/Toast";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
@@ -14,13 +16,31 @@ function kb(bytes: number): string {
 }
 
 /** Panel «Copias de seguridad»: estado de la última copia y de la última prueba de restauración. */
-export function BackupsAdmin({ keyState, status, files }: { keyState: "ok" | "missing" | "invalid"; status: BackupStatus; files: BackupFileInfo[] }) {
+export function BackupsAdmin({ keyState, status, files, canUseCode }: { keyState: "ok" | "missing" | "invalid"; status: BackupStatus; files: BackupFileInfo[]; canUseCode: boolean }) {
   const t = useT();
   const locale = useIntlLocale();
   const router = useRouter();
   const toast = useToast();
   const [pending, start] = useTransition();
   const enabled = keyState === "ok";
+  // Descarga protegida: se pide la contraseña (o un código de la app) y solo entonces se pide el fichero con un token de un solo uso.
+  const [dlOpen, setDlOpen] = useState(false);
+  const [useCode, setUseCode] = useState(false);
+  const [secret, setSecret] = useState("");
+  const [dlError, setDlError] = useState<string | null>(null);
+  const closeDl = () => (setDlOpen(false), setUseCode(false), setSecret(""), setDlError(null));
+  const download = () =>
+    start(async () => {
+      setDlError(null);
+      const res = await requestBackupDownload(useCode ? { code: secret } : { password: secret });
+      if (!res.ok) return setDlError(res.error);
+      closeDl();
+      // La descarga es una navegación a la ruta con el token de un solo uso (válido 60 s).
+      const a = document.createElement("a");
+      a.href = `/api/admin/backups/latest?token=${encodeURIComponent(res.data.token)}`;
+      a.download = "";
+      a.click();
+    });
 
   const create = () =>
     start(async () => {
@@ -82,9 +102,9 @@ export function BackupsAdmin({ keyState, status, files }: { keyState: "ok" | "mi
             {pending ? t("Creando…") : t("Crear copia ahora")}
           </button>
           {files.length > 0 && (
-            <a className="btn-secondary" href="/api/admin/backups/latest" download>
+            <button type="button" className="btn-secondary" onClick={() => setDlOpen(true)}>
               <Download size={16} /> {t("Descargar")}
-            </a>
+            </button>
           )}
         </div>
         <p className="text-xs text-slate-500">{t("El fichero descargado está cifrado: solo se abre con la BACKUP_KEY. Para restaurarlo, mira el README (scripts/restore-backup.ts).")}</p>
@@ -109,6 +129,38 @@ export function BackupsAdmin({ keyState, status, files }: { keyState: "ok" | "mi
           </ul>
         </section>
       )}
+
+      <Modal open={dlOpen} onClose={closeDl} size="sm" title={t("Confirma tu identidad")}>
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            download();
+          }}
+        >
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            {useCode ? t("Escribe el código de 6 dígitos de tu app de autenticación para descargar la copia.") : t("Por seguridad, escribe tu contraseña para descargar la copia.")}
+          </p>
+          <div>
+            <label className="label" htmlFor="backup-secret">{useCode ? t("Código de verificación") : t("Contraseña")}</label>
+            {useCode ? (
+              <input id="backup-secret" className="input" inputMode="numeric" autoComplete="one-time-code" maxLength={8} required autoFocus value={secret} onChange={(e) => setSecret(e.target.value)} />
+            ) : (
+              <PasswordInput id="backup-secret" className="input" autoComplete="current-password" required autoFocus value={secret} onChange={(e) => setSecret(e.target.value)} />
+            )}
+          </div>
+          {dlError && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{dlError}</p>}
+          {canUseCode && (
+            <button type="button" className="text-sm text-brand-700 hover:underline dark:text-brand-300" onClick={() => (setUseCode(!useCode), setSecret(""), setDlError(null))}>
+              {useCode ? t("Usar mi contraseña") : t("Entro con Google y no tengo contraseña: usar un código de mi app")}
+            </button>
+          )}
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-ghost" onClick={closeDl}>{t("Cancelar")}</button>
+            <button className="btn-primary" disabled={pending || !secret}>{pending ? t("Comprobando…") : t("Descargar")}</button>
+          </div>
+        </form>
+      </Modal>
 
       <p className="text-xs text-slate-500">{t("Los adjuntos ya son ficheros del mismo volumen: activa también las copias (snapshots) del volumen en Railway para protegerlos.")}</p>
     </div>

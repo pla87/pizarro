@@ -133,10 +133,11 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     board.upsertTask(task);
     // Los archivos se suben en paralelo tras crear la tarea.
     const results = await Promise.allSettled(files.map((f) => board.trackRaw(uploadFile(task.id, f, true, t))));
-    const ok = results.filter((r) => r.status === "fulfilled").length;
+    const uploaded = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+    const ok = uploaded.length;
     const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
     if (ok) {
-      task = { ...task, attachmentCount: task.attachmentCount + ok };
+      task = { ...task, imageCount: task.imageCount + uploaded.filter((a) => a.isImage).length, fileCount: task.fileCount + uploaded.filter((a) => !a.isImage).length };
       board.upsertTask(task);
     }
     if (failed) toast((failed.reason as Error).message, "error");
@@ -301,11 +302,11 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
                 </button>
               </div>
             ))}
-            <label className="flex h-14 w-20 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-slate-300 text-xs text-slate-500 hover:border-brand-500 has-[:focus-visible]:border-brand-500 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-500 dark:border-slate-700">
+            <label className="flex h-14 w-20 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-slate-300 text-xs text-slate-500 hover:border-brand-500 has-[:focus-visible]:border-focus has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus dark:border-slate-700">
               <ImagePlus size={16} /> {t("Archivo")}
               <input type="file" multiple className="sr-only" onChange={(e) => { addFiles(filesFrom(e.target.files)); e.target.value = ""; }} />
             </label>
-            <label className="flex h-14 w-20 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-slate-300 text-xs text-slate-500 hover:border-brand-500 has-[:focus-visible]:border-brand-500 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-500 sm:hidden dark:border-slate-700">
+            <label className="flex h-14 w-20 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-slate-300 text-xs text-slate-500 hover:border-brand-500 has-[:focus-visible]:border-focus has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus sm:hidden dark:border-slate-700">
               <Camera size={16} /> {t("Cámara")}
               <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { addFiles(filesFrom(e.target.files)); e.target.value = ""; }} />
             </label>

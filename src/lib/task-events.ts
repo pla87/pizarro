@@ -13,7 +13,7 @@ export const TASK_EVENT_RETENTION_DAYS = 365;
 export const TASK_HISTORY_LIMIT = 200;
 
 /** Acciones con etiqueta que no merecen una línea de historial. */
-const IGNORED = new Set(["tasks.reorderSubtask", "undo.undoLast"]);
+const IGNORED = new Set(["tasks.reorderSubtask", "undo.undoLast", "undo.redoLast"]);
 
 const CODES: Record<string, string> = {
   "tasks.createTask": "create",
