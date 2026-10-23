@@ -1,15 +1,17 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Check, Copy, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Copy, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { deleteTemplate, saveTemplate, templateFromProject } from "@/actions/templates";
+import { deleteTemplate, resetTemplate, restoreDefaultTemplates, saveTemplate, templateFromProject } from "@/actions/templates";
 import { cn } from "@/components/ui/cn";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { T } from "@/i18n/core";
 import { COLUMN_ROLES, PALETTE, type ColumnRoleValue } from "@/lib/constants";
+import { parseSubtaskLines } from "@/lib/kinds-special";
 import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS, type TemplateDto, type TemplateInput } from "@/lib/project-templates";
 
 const KIND_COLORS = [...PALETTE, "#84cc16", "#06b6d4", "#d946ef", "#78716c"];
@@ -31,7 +33,7 @@ type Draft = {
   name: string;
   description: string;
   columns: { name: string; role: ColumnRoleValue; isDone: boolean }[];
-  kinds: { name: string; color: string; titleTemplate: string; descriptionTemplate: string }[];
+  kinds: { name: string; color: string; titleTemplate: string; descriptionTemplate: string; subtaskTemplate: string[] }[];
   hiddenGeneralKinds: string[];
   labels: { name: string; color: (typeof PALETTE)[number] }[];
 };
@@ -82,12 +84,15 @@ interface Props {
   templates: TemplateDto[];
   generalKinds: string[];
   projects: { id: string; name: string }[];
+  /** Plantillas de serie que se borraron y se pueden recuperar. */
+  missingBuiltins: number;
 }
 
-export function TemplatesAdmin({ templates, generalKinds, projects }: Props) {
+export function TemplatesAdmin({ templates, generalKinds, projects, missingBuiltins }: Props) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState<{ id: string | null; draft: Draft } | null>(null);
   const [deleting, setDeleting] = useState<TemplateDto | null>(null);
@@ -101,7 +106,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects }: Props) {
     name: tpl.name,
     description: tpl.description ?? "",
     columns: tpl.columns,
-    kinds: (tpl.kinds ?? []).map((k) => ({ name: k.name, color: k.color, titleTemplate: k.titleTemplate ?? "", descriptionTemplate: k.descriptionTemplate ?? "" })),
+    kinds: (tpl.kinds ?? []).map((k) => ({ name: k.name, color: k.color, titleTemplate: k.titleTemplate ?? "", descriptionTemplate: k.descriptionTemplate ?? "", subtaskTemplate: k.subtaskTemplate ?? [] })),
     hiddenGeneralKinds: tpl.hiddenGeneralKinds,
     labels: tpl.labels,
   });
@@ -109,7 +114,9 @@ export function TemplatesAdmin({ templates, generalKinds, projects }: Props) {
   const save = () => {
     if (!editing) return;
     start(async () => {
-      const res = await saveTemplate(editing.draft, editing.id);
+      // Sin líneas vacías ni repetidas en las subtareas predefinidas.
+      const body = { ...editing.draft, kinds: editing.draft.kinds.map((k) => ({ ...k, subtaskTemplate: parseSubtaskLines(k.subtaskTemplate.join("\n")) })) };
+      const res = await saveTemplate(body, editing.id);
       if (!res.ok) return toast(res.error, "error");
       toast(editing.id ? t("Plantilla actualizada") : t("Plantilla creada"));
       setEditing(null);
@@ -123,6 +130,31 @@ export function TemplatesAdmin({ templates, generalKinds, projects }: Props) {
       if (!res.ok) return toast(res.error, "error");
       setPicking(false);
       setEditing({ id: null, draft: toDraft(res.data) });
+    });
+  };
+
+  const reset = async (tpl: TemplateDto) => {
+    const ok = await confirm({
+      title: t("Restablecer «{name}»", { name: tpl.name }),
+      message: t("Se perderán los cambios hechos a esta plantilla y volverá a su contenido original. Los proyectos ya creados no cambian."),
+      confirmLabel: t("Restablecer"),
+      danger: true,
+    });
+    if (!ok) return;
+    start(async () => {
+      const res = await resetTemplate(tpl.id);
+      if (!res.ok) return toast(res.error, "error");
+      toast(t("Plantilla restablecida"));
+      router.refresh();
+    });
+  };
+
+  const restoreDefaults = () => {
+    start(async () => {
+      const res = await restoreDefaultTemplates();
+      if (!res.ok) return toast(res.error, "error");
+      toast(res.data.restored === 1 ? t("1 plantilla recuperada") : t("{n} plantillas recuperadas", { n: res.data.restored }));
+      router.refresh();
     });
   };
 
@@ -151,11 +183,20 @@ export function TemplatesAdmin({ templates, generalKinds, projects }: Props) {
           {templates.map((tpl) => (
             <li key={tpl.id} className="flex items-center gap-3 px-4 py-3">
               <div className="min-w-0">
-                <div className="truncate font-medium">{tpl.name}</div>
+                <div className="flex items-center gap-2">
+                  <span className="truncate font-medium">{tpl.name}</span>
+                  {tpl.builtinKey && <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">{t("Por defecto")}</span>}
+                  {tpl.builtinModified && <span className="shrink-0 text-xs text-amber-700 dark:text-amber-300">{t("modificada")}</span>}
+                </div>
                 {tpl.description && <div className="truncate text-sm text-slate-500">{tpl.description}</div>}
                 <div className="text-xs text-slate-500">{summarizeTemplate(tpl, t)}</div>
               </div>
-              <div className="ml-auto flex items-center">
+              <div className="ml-auto flex shrink-0 items-center">
+                {tpl.builtinModified && (
+                  <button className="btn-secondary mr-1" disabled={pending} onClick={() => void reset(tpl)} aria-label={t("Restablecer {name}", { name: tpl.name })}>
+                    <RotateCcw size={14} /> <span className="hidden sm:inline">{t("Restablecer")}</span>
+                  </button>
+                )}
                 <button className="btn-icon" onClick={() => setEditing({ id: tpl.id, draft: toDraft(tpl) })} aria-label={t("Editar {name}", { name: tpl.name })}><Pencil size={15} /></button>
                 <button className="btn-icon hover:text-red-600" onClick={() => setDeleting(tpl)} aria-label={t("Borrar {name}", { name: tpl.name })}><Trash2 size={15} /></button>
               </div>
@@ -170,6 +211,11 @@ export function TemplatesAdmin({ templates, generalKinds, projects }: Props) {
         <button className="btn-secondary" onClick={() => { setSourceId(projects[0]?.id ?? ""); setPicking(true); }} disabled={projects.length === 0}>
           <Copy size={15} /> {t("Crear desde un proyecto…")}
         </button>
+        {missingBuiltins > 0 && (
+          <button className="btn-secondary" disabled={pending} onClick={restoreDefaults}>
+            <RotateCcw size={15} /> {t("Recuperar plantillas por defecto")}
+          </button>
+        )}
       </div>
 
       {picking && (
@@ -255,11 +301,12 @@ export function TemplatesAdmin({ templates, generalKinds, projects }: Props) {
                       <ColorField value={k.color} onChange={(color) => setKind({ color })} colors={KIND_COLORS} />
                       <input className="input" value={k.titleTemplate} onChange={(e) => setKind({ titleTemplate: e.target.value })} maxLength={200} placeholder={t("Título automático (opcional)")} aria-label={t("Título automático")} />
                       <textarea className="input" rows={2} value={k.descriptionTemplate} onChange={(e) => setKind({ descriptionTemplate: e.target.value })} maxLength={5000} placeholder={t("Texto inicial de la descripción (opcional)")} aria-label={t("Texto inicial de la descripción")} />
+                      <textarea className="input" rows={2} value={k.subtaskTemplate.join("\n")} onChange={(e) => setKind({ subtaskTemplate: e.target.value.split("\n") })} placeholder={t("Subtareas predefinidas (una por línea, opcional)")} aria-label={t("Subtareas predefinidas")} />
                     </li>
                   );
                 })}
               </ul>
-              <button type="button" className="btn-secondary mt-2" disabled={draft.kinds.length >= MAX_TEMPLATE_KINDS} onClick={() => patch({ kinds: [...draft.kinds, { name: "", color: "#6366f1", titleTemplate: "", descriptionTemplate: "" }] })}>
+              <button type="button" className="btn-secondary mt-2" disabled={draft.kinds.length >= MAX_TEMPLATE_KINDS} onClick={() => patch({ kinds: [...draft.kinds, { name: "", color: "#6366f1", titleTemplate: "", descriptionTemplate: "", subtaskTemplate: [] }] })}>
                 <Plus size={15} /> {t("Añadir tipo")}
               </button>
             </section>

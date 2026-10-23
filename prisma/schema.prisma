@@ -651,8 +651,16 @@ model ProjectTemplate {
   /// [{ name, color }]
   labels      Json     @default("[]")
   position    Float    @default(0)
+  /// Clave estable de las plantillas incluidas de serie (src/lib/builtin-templates.ts); null en las propias.
+  builtinKey  String?  @unique
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+/// Plantillas de serie ya sembradas alguna vez: si el administrador borra una, no se recrea sola al arrancar.
+model BuiltinTemplateSeeded {
+  key      String   @id
+  seededAt DateTime @default(now())
 }
 
 enum CardStyle {

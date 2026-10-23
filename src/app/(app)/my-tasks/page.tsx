@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ExternalLink, ListChecks } from "lucide-react";
+import { ExternalLink, Folder, ListChecks } from "lucide-react";
 import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
@@ -102,11 +102,19 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
                 return (
                   <li key={task.id} className="relative flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
                     {task.color && <span className="absolute inset-y-1 left-0 w-1 rounded-r" style={{ backgroundColor: task.color }} aria-hidden />}
+                    {/* Proyecto como chip al principio de la fila: lo primero que se lee. */}
+                    <Link
+                      href={`/p/${projectId}`}
+                      title={task.project.name}
+                      className="inline-flex max-w-[11rem] shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-medium text-slate-700 hover:border-brand-400 hover:text-brand-700 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:text-brand-200"
+                    >
+                      <Folder size={12} className="shrink-0 text-slate-400" aria-hidden />
+                      <span className="truncate">{task.project.name}</span>
+                    </Link>
                     <TypeBadge kind={task.kind} />
                     <Link href={`/p/${projectId}?task=${task.id}`} className="min-w-0 flex-1 basis-40 truncate text-sm font-medium hover:text-brand-600">
                       <MentionText text={task.title} />
                     </Link>
-                    <Link href={`/p/${projectId}`} className="max-w-40 shrink-0 truncate text-xs text-slate-500 hover:underline">{task.project.name}</Link>
                     {task.due && (() => {
                       const st = dueStatus(task.due, task.column.isDone, today);
                       return (

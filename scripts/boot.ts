@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { syncChangelog } from "@/lib/changelog-sync";
 import { seed } from "@/lib/seed";
+import { seedBuiltinTemplates } from "@/lib/template-store";
 
 async function main() {
   try {
@@ -16,6 +17,8 @@ async function main() {
   const n = await syncChangelog(db);
   console.log(`[boot] Changelog sincronizado (${n} versiones).`);
   await seed(db, (m) => console.log(m.replace("[seed]", "[boot]")));
+  const plantillas = await seedBuiltinTemplates(db);
+  if (plantillas.length) console.log(`[boot] Plantillas de proyecto por defecto creadas: ${plantillas.join(", ")}.`);
 }
 
 main()
