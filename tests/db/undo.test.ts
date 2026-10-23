@@ -253,6 +253,21 @@ describe("rehacer", () => {
   const NOTHING_REDO = /No hay nada que rehacer/;
   const title = async (id: string) => (await db.task.findUniqueOrThrow({ where: { id } })).title;
 
+  test("los cambios propios no bloquean deshacer lo rehecho", async () => {
+    const { f } = await setup();
+    const task = await makeTask(f, { title: "A" });
+    expectOk(await updateTask(task.id, { title: "B" }));
+    expectOk(await undoLast(f.project.id));
+    expectOk(await redoLast(f.project.id));
+    assert.equal(await title(task.id), "B");
+    // Otra acción propia sobre la misma tarea y su deshacer: el estado vuelve a «B» y la entrada anterior sigue valiendo.
+    expectOk(await updateTask(task.id, { title: "C" }));
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await title(task.id), "B");
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await title(task.id), "A");
+  });
+
   test("deshacer y rehacer restauran el estado de antes de deshacer", async () => {
     const { f } = await setup();
     const label = await db.label.create({ data: { projectId: f.project.id, name: "R1", color: "blue" } });

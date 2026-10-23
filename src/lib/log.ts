@@ -115,5 +115,8 @@ export async function flushLogs(): Promise<void> {
     }
   } catch (err) {
     console.error("[log] no se pudieron guardar los eventos", err);
+    // Se devuelven a la cola para el siguiente intento (con tope, por si la BD sigue caída).
+    state.queue.unshift(...batch.slice(-MAX_QUEUE * 5));
+    if (state.queue.length > MAX_QUEUE * 10) state.queue.splice(0, state.queue.length - MAX_QUEUE * 10);
   }
 }

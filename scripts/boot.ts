@@ -17,10 +17,15 @@ async function main() {
   const n = await syncChangelog(db);
   console.log(`[boot] Changelog sincronizado (${n} versiones).`);
   await seed(db, (m) => console.log(m.replace("[seed]", "[boot]")));
-  const plantillas = await seedBuiltinTemplates(db);
-  if (plantillas.length) console.log(`[boot] Plantillas de proyecto por defecto creadas: ${plantillas.join(", ")}.`);
-  const actualizadas = await upgradeBuiltinTemplates(db);
-  if (actualizadas.length) console.log(`[boot] Plantillas de proyecto por defecto actualizadas: ${actualizadas.join(", ")}.`);
+  // Las plantillas por defecto no deben impedir que la app arranque.
+  try {
+    const plantillas = await seedBuiltinTemplates(db);
+    if (plantillas.length) console.log(`[boot] Plantillas de proyecto por defecto creadas: ${plantillas.join(", ")}.`);
+    const actualizadas = await upgradeBuiltinTemplates(db);
+    if (actualizadas.length) console.log(`[boot] Plantillas de proyecto por defecto actualizadas: ${actualizadas.join(", ")}.`);
+  } catch (err) {
+    console.error("[boot] No se pudieron preparar las plantillas por defecto:", err);
+  }
 }
 
 main()

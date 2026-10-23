@@ -1,6 +1,7 @@
 import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { logEvent } from "@/lib/log";
+import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { releaseZipName } from "@/lib/release";
 import { getCurrentUser } from "@/lib/session";
@@ -16,8 +17,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
   const start = performance.now();
   const user = await getCurrentUser();
   if (!user) return new Response(t("No autorizado"), { status: 401 });
+  if (!rateLimit(`release-zip:${user.id}`, 10, 60_000)) return new Response(t("Demasiadas peticiones"), { status: 429 });
 
   const { releaseId } = await ctx.params;
+  if (!/^[a-z0-9]{1,40}$/i.test(releaseId)) return new Response(t("No encontrado"), { status: 404 });
   const release = await db.release.findFirst({
     where: { id: releaseId, project: visibleProjectsWhere(user) },
     select: { title: true, projectId: true, attachments: { orderBy: { position: "asc" }, select: { id: true, fileName: true } } },
@@ -25,9 +28,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
   if (!release) return new Response(t("No encontrado"), { status: 404 });
 
   const files: { name: string; data: Uint8Array }[] = [];
+  let total = 0;
   for (const a of release.attachments) {
     try {
-      files.push({ name: a.fileName, data: await readReleaseAttachmentFile(a.id) });
+      const data = await readReleaseAttachmentFile(a.id);
+      total += data.length;
+      // Mismo tope que el ZIP de la release en preparación (se arma en memoria).
+      if (total > 80 * 1024 * 1024) return new Response(t("El archivo supera el tamaño máximo."), { status: 413 });
+      files.push({ name: a.fileName, data });
     } catch {
       // Fichero ausente en disco: se omite en lugar de romper toda la descarga.
     }
@@ -41,7 +49,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
     userId: user.id, userName: user.name, projectId: release.projectId, path: `/api/releases/${releaseId}/attachments`, ip: clientIp(req.headers),
     durationMs: performance.now() - start, details: { releaseId, files: files.length, bytes: zip.length },
   });
-  return new Response(new Uint8Array(zip), {
+  return new Response(new Uint8Array(zip.buffer as ArrayBuffer, zip.byteOffset, zip.length), {
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="${name.replace(/[^\x20-\x7e]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(name)}`,

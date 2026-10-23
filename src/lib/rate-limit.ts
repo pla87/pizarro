@@ -1,10 +1,14 @@
 // Limitador en memoria (suficiente para un único contenedor).
 const buckets = new Map<string, { count: number; resetAt: number }>();
+let lastSweep = 0;
 
 export function rateLimit(key: string, limit: number, windowMs: number): boolean {
   const now = Date.now();
-  if (buckets.size > 5000) {
+  // Limpieza como mucho una vez por segundo (no en cada llamada) y tope duro ante claves masivas.
+  if (buckets.size > 5000 && now - lastSweep > 1000) {
+    lastSweep = now;
     for (const [k, b] of buckets) if (b.resetAt < now) buckets.delete(k);
+    if (buckets.size > 50_000) buckets.clear();
   }
   const bucket = buckets.get(key);
   if (!bucket || bucket.resetAt < now) {

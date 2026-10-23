@@ -19,7 +19,17 @@ export interface ProjectReportPdf {
   taskCount: number;
 }
 
-export async function generateProjectReportPdf(projectId: string, opts: { generatedBy: string; locale: Locale }): Promise<ProjectReportPdf | null> {
+// El render del PDF ocupa la CPU del único proceso: se generan de uno en uno (en cola) para que el resto de la app
+// (tablero, canal en vivo, subidas) siga respondiendo aunque se pidan varios a la vez.
+let reportQueue: Promise<unknown> = Promise.resolve();
+
+export function generateProjectReportPdf(projectId: string, opts: { generatedBy: string; locale: Locale }): Promise<ProjectReportPdf | null> {
+  const run = reportQueue.then(() => buildProjectReportPdf(projectId, opts));
+  reportQueue = run.catch(() => {});
+  return run;
+}
+
+async function buildProjectReportPdf(projectId: string, opts: { generatedBy: string; locale: Locale }): Promise<ProjectReportPdf | null> {
   const t = makeT(opts.locale);
   const project = await db.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, description: true } });
   if (!project) return null;

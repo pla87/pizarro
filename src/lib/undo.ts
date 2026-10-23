@@ -504,17 +504,22 @@ export async function fingerprintOps(projectId: string, ops: UndoOp[]): Promise<
   }
   // Las filas hijas que ya no existen se anotan como ausentes; las que existen suman su tarea.
   const lines: string[] = [];
-  for (const l of lookups) {
-    const row = (await (db[l.model] as unknown as { findUnique: (a: unknown) => Promise<{ taskId: string } | null> }).findUnique({ where: { id: l.id } }));
+  const found = await Promise.all(
+    lookups.map((l) => (db[l.model] as unknown as { findUnique: (a: unknown) => Promise<{ taskId: string } | null> }).findUnique({ where: { id: l.id }, select: { taskId: true } })),
+  );
+  lookups.forEach((l, i) => {
+    const row = found[i];
     if (row) taskIds.add(row.taskId); else lines.push(`${l.model}:${l.id}:absent`);
-  }
+  });
   const tasks = await db.task.findMany({
     where: { id: { in: [...taskIds] }, projectId },
     select: {
-      id: true, updatedAt: true,
+      // Contenido, no la hora de escritura: reescribir lo mismo (p. ej. un deshacer propio) no cuenta como cambio.
+      id: true, title: true, description: true, kindId: true, color: true, linkUrl: true, position: true, columnId: true, assigneeId: true,
+      dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, recurrence: true, recurrenceDay: true,
       labels: { select: { labelId: true }, orderBy: { labelId: "asc" } },
       subtasks: { select: { id: true, title: true, done: true, position: true }, orderBy: { id: "asc" } },
-      comments: { select: { id: true, body: true, editedAt: true }, orderBy: { id: "asc" } },
+      comments: { select: { id: true, editedAt: true }, orderBy: { id: "asc" } },
       attachments: { select: { id: true }, orderBy: { id: "asc" } },
       links: { select: { id: true, title: true, url: true }, orderBy: { id: "asc" } },
     },

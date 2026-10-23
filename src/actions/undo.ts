@@ -35,36 +35,51 @@ async function applyLast(kind: UndoKind, projectId: string, taskId?: string | nu
   const { count } = await db.undoEntry.deleteMany({ where: { id: entry.id } });
   if (!count) throw new AppError(undo ? "Esa acción ya se ha deshecho." : "Esa acción ya se ha rehecho.");
   const ops = entry.ops as unknown as UndoOp[];
+  // Si algo falla a medias, la entrada vuelve a su sitio (con su huella) para poder reintentarlo.
+  const restore = () =>
+    db.undoEntry
+      .create({
+        data: {
+          id: entry.id, userId: entry.userId, projectId: entry.projectId, taskId: entry.taskId, label: entry.label, kind: entry.kind,
+          ops: entry.ops as Prisma.InputJsonValue, fingerprint: entry.fingerprint, createdAt: entry.createdAt,
+        },
+      })
+      .catch(() => {});
+  let current: string | null = null;
+  try {
+    if (entry.fingerprint) current = await fingerprintOps(pid, ops);
+  } catch (err) {
+    await restore();
+    throw err;
+  }
   // Si otra persona ha cambiado lo afectado desde que se creó esta entrada, aplicarla pisaría su trabajo:
   // se descarta (para no bloquear la pila) y se avisa. Las acciones propias ya vacían la pila de rehacer.
-  if (entry.fingerprint && (await fingerprintOps(pid, ops)) !== entry.fingerprint) {
+  if (entry.fingerprint && current !== entry.fingerprint) {
     await discardEntries([{ id: entry.id, ops: entry.ops }]);
     throw new AppError(
       undo ? "Otra persona ha cambiado esto después de rehacerlo: no se puede deshacer." : "Otra persona ha cambiado esto después de deshacerlo: no se puede rehacer.",
     );
   }
-  // Otras entradas con huella (de la misma persona y proyecto) que siguen intactas: este cambio es suyo,
-  // así que tras aplicarlo se les actualiza la huella para que no cuente como ajeno.
-  const siblings = await db.undoEntry.findMany({ where: { userId: user.id, projectId: pid, fingerprint: { not: null }, id: { not: entry.id } }, select: { id: true, ops: true, fingerprint: true } });
-  const intact: typeof siblings = [];
-  for (const s of siblings) if ((await fingerprintOps(pid, s.ops as unknown as UndoOp[])) === s.fingerprint) intact.push(s);
-  // Antes de aplicar, el estado actual de lo que se va a tocar: es lo que hace la entrada contraria.
+  let intact: { id: string; ops: unknown }[];
   let counter: UndoOp[];
   let skipped: number;
   try {
+    // Otras entradas con huella (de la misma persona y proyecto) que siguen intactas: este cambio es suyo,
+    // así que tras aplicarlo se les actualiza la huella para que no cuente como ajeno.
+    const siblings = await db.undoEntry.findMany({ where: { userId: user.id, projectId: pid, fingerprint: { not: null }, id: { not: entry.id } }, select: { id: true, ops: true, fingerprint: true } });
+    const prints = await Promise.all(siblings.map((s) => fingerprintOps(pid, s.ops as unknown as UndoOp[])));
+    intact = siblings.filter((s, i) => prints[i] === s.fingerprint);
+    // Antes de aplicar, el estado actual de lo que se va a tocar: es lo que hace la entrada contraria.
     counter = await mirrorOps(pid, ops);
     skipped = await applyUndo(pid, ops, { keepFiles: true });
   } catch (err) {
-    // Si algo falla a medias, la entrada vuelve a su sitio para poder reintentarlo.
-    await db.undoEntry.create({
-      data: { id: entry.id, userId: entry.userId, projectId: entry.projectId, taskId: entry.taskId, label: entry.label, kind: entry.kind, ops: entry.ops as Prisma.InputJsonValue, createdAt: entry.createdAt },
-    }).catch(() => {});
+    await restore();
     throw err;
   }
   if (counter.length) await saveUndo(user.id, pid, entry.label, counter, entry.taskId, undo ? "REDO" : "UNDO", false, await fingerprintOps(pid, counter));
-  for (const s of intact) {
-    await db.undoEntry.updateMany({ where: { id: s.id }, data: { fingerprint: await fingerprintOps(pid, s.ops as unknown as UndoOp[]) } });
-  }
+  await Promise.all(
+    intact.map(async (s) => db.undoEntry.updateMany({ where: { id: s.id }, data: { fingerprint: await fingerprintOps(pid, s.ops as unknown as UndoOp[]) } })),
+  );
   const [remaining, redoable] = await Promise.all([
     db.undoEntry.count({ where: { userId: user.id, projectId: pid, kind: "UNDO" } }),
     db.undoEntry.count({ where: { userId: user.id, projectId: pid, kind: "REDO" } }),

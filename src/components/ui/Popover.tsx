@@ -123,8 +123,18 @@ export function PopoverPanel({
       if (!panel.contains(e.target as Node)) reposition();
     };
     window.addEventListener("scroll", onScroll, true);
+    // Si cambia el contenido (lista que se filtra o crece), se recoloca; solo cuando cambia su altura
+    // natural, para no entrar en bucle con el max-height que pone `place`.
+    let lastHeight = panel.scrollHeight;
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
+      if (panel.scrollHeight === lastHeight) return;
+      lastHeight = panel.scrollHeight;
+      reposition();
+    });
+    for (const child of Array.from(panel.children)) observer?.observe(child);
     return () => {
       cancelAnimationFrame(frame);
+      observer?.disconnect();
       window.removeEventListener("resize", reposition);
       window.removeEventListener("scroll", onScroll, true);
     };
