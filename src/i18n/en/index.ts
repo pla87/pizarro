@@ -2,6 +2,7 @@
 import { admin } from "./admin";
 import { board } from "./board";
 import { colaboracion } from "./colaboracion";
+import { calendar } from "./calendar";
 import { common } from "./common";
 import { cuentas } from "./cuentas";
 import { proyectos } from "./proyectos";
@@ -9,4 +10,4 @@ import { server } from "./server";
 import { settings } from "./settings";
 import { task } from "./task";
 
-export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos };
+export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar };

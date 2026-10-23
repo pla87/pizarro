@@ -2,7 +2,7 @@
 
 import { BrandMark } from "@/components/ui/BrandMark";
 import {
-  Archive, Bell, ChevronsUpDown, FolderKanban, History, LayoutDashboard, ListChecks, LogOut, Menu, Plus, Rocket,
+  Archive, Bell, CalendarDays, ChevronsUpDown, FolderKanban, History, LayoutDashboard, ListChecks, LogOut, Menu, Plus, Rocket,
   Settings, Shield, SlidersHorizontal, X,
 } from "lucide-react";
 import Link from "next/link";
@@ -169,6 +169,7 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
           )}
         </NavLink>
         <NavLink href="/my-tasks" icon={ListChecks} active={pathname === "/my-tasks"}>{t("Mis tareas asignadas")}</NavLink>
+        <NavLink href="/calendar" icon={CalendarDays} active={pathname === "/calendar"}>{t("Calendario")}</NavLink>
         <NavLink href="/settings" icon={Settings} active={pathname === "/settings"}>{t("Mi perfil")}</NavLink>
         {isAdmin && <NavLink href="/admin" icon={Shield} active={pathname.startsWith("/admin")}>{t("Administración")}</NavLink>}
         <NavLink href="/changelog" icon={History} active={pathname === "/changelog"}>{t("Historial de versiones")}</NavLink>
