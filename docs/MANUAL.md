@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.16.0"
+version: "v1.17.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.16.0
+**Versión de la aplicación:** v1.17.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -14,7 +14,7 @@ Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día 
 
 ## 1. Visión general
 
-Pizarro es un tablero Kanban ligero para un equipo de hasta 5 personas. Su objetivo es cubrir un flujo concreto:
+Pizarro es un tablero Kanban ligero para un equipo de hasta 10 personas. Su objetivo es cubrir un flujo concreto:
 
 1. registrar tareas rápidamente, incluidas capturas de pantalla pegadas desde el portapapeles;
 2. moverlas por columnas hasta el **siguiente salto a producción**;
@@ -26,10 +26,13 @@ Pizarro es un tablero Kanban ligero para un equipo de hasta 5 personas. Su objet
 | Columna | Estado del flujo. Configurable por proyecto. Puede tener un **rol** (*Siguiente salto* o *En producción*). |
 | Tarjeta / tarea | Unidad de trabajo con tipo, color, responsable, etiquetas, enlace, subtareas, descripción y capturas. |
 | Release | Registro histórico de un despliegue: texto final editado y tareas incluidas. |
-| Plantillas | Cabecera y pie estándar de cada usuario, que se insertan en las releases que genera. |
+| Plantillas de release | Cabecera y pie estándar de cada usuario, que se insertan en las releases que genera. |
+| Plantilla de proyecto | Columnas, tipos de tarea (con descripción y subtareas predefinidas) y etiquetas con los que se crea un proyecto nuevo. La gestionan los administradores. |
 | Entregable | Hito del proyecto con fecha objetivo que agrupa tarjetas. Su avance aparece en el informe PDF. |
 | Aviso | Notificación que recibe una persona (mención, asignación, cambio de fecha, comentario en una tarea que sigue…): en la app, por email y, si lo activa, por WhatsApp. |
+| Proyecto de equipo | Proyecto visible para los usuarios **asignados** y para todos los administradores. |
 | Proyecto privado | Proyecto con miembros, visible **solo** para ellos (ni siquiera para los administradores). |
+| Calendario | Vista mensual con las tareas por fecha límite y los entregables (ver 3.11). |
 
 ---
 
@@ -55,7 +58,7 @@ Railway ── servicio "app" (contenedor Docker, un solo proceso Node.js)
    └──────── servicio "Postgres" (PostgreSQL gestionado) ◀── Prisma 7 + driver pg
 ```
 
-La aplicación es un **monolito en un único contenedor**. No hay colas, cachés externas ni servicios adicionales: con 5 usuarios, cada pieza extra sería un coste y un punto de fallo sin beneficio.
+La aplicación es un **monolito en un único contenedor**. No hay colas, cachés externas ni servicios adicionales: con hasta 10 usuarios, cada pieza extra sería un coste y un punto de fallo sin beneficio.
 
 ### 2.2 Estructura del repositorio
 
@@ -84,18 +87,19 @@ La aplicación es un **monolito en un único contenedor**. No hay colas, cachés
 |---|---|---|
 | `User` | email (único), name, passwordHash, role, active, cardStyle, theme, accent, locale, editorMode, preferencias de aviso, `mustChangePassword`, `googleSub`, `twoFactorMethod` (y su secreto cifrado), `dailyDigest*` | Se pueden desactivar o borrar; al borrar a alguien se borran los proyectos privados donde era el único miembro. |
 | `Session` | id = HMAC del token, userId, expiresAt | El token en claro solo vive en la cookie. |
-| `Project` | name, description, restricted, `isPrivate`, position | `restricted = false` → visible para todos. `isPrivate = true` → solo sus miembros. |
-| `ProjectMember` | projectId, userId | Usuarios con acceso a un proyecto restringido o privado. |
+| `Project` | name, description, `isPrivate`, `privateOwnerId`, position | `isPrivate = false` → proyecto de equipo (usuarios asignados y administradores). `isPrivate = true` → solo sus miembros. |
+| `ProjectMember` | projectId, userId | En un proyecto de equipo, los usuarios **asignados**; en uno privado, sus miembros. |
+| `AdminProjectPick` | projectId, userId | Proyectos de equipo en los que trabaja cada administrador (los que salen en sus selectores, menús y calendario). |
 | `Column` | projectId, name, position, role | Índice único parcial: como máximo una columna por rol en cada proyecto. |
 | `Task` | projectId, columnId, kindId, title, description, color, linkUrl, position, assigneeId, archivedAt, `recurrence*` (repetición) | Posición fraccionaria para reordenar actualizando una sola fila. |
 | `Label` / `TaskLabel` | name, color | Etiquetas por proyecto. |
 | `Subtask` | taskId, title, done, position | Subtareas de una tarea (no pasan a las releases). |
-| `UndoEntry` | userId, projectId, label, ops (JSON), createdAt | Las 10 últimas acciones deshacibles de cada usuario en cada proyecto, con sus operaciones inversas. Caducan a los 7 días. Su etiqueta se guarda como plantilla traducible. |
+| `UndoEntry` | userId, projectId, taskId, `kind` (UNDO / REDO), label, ops (JSON), createdAt | Las 10 últimas acciones deshacibles (y las 10 rehacibles) de cada usuario en cada proyecto, con sus operaciones inversas. Una acción nueva vacía las rehacibles. Caducan a los 7 días. Su etiqueta se guarda como plantilla traducible. |
 | `TaskAttachment` | taskId, originalName, width, height, size | El fichero está en `UPLOAD_DIR/<id>.webp` (y `<id>.thumb.webp`). |
 | `Release` / `ReleaseTask` | number (correlativo por proyecto), content (Markdown final), deployedAt, autor · instantánea de título y tipo de cada tarea | La instantánea se conserva aunque la tarea se borre. |
 | `AppVersionLog` | version (única), releasedAt, summary, changes (JSON) | Se sincroniza desde `changelog.json` en cada arranque. |
 | `Deliverable` | projectId, name, description, dueDate, position | Las tareas lo referencian con `deliverableId`. Al borrarlo, quedan sin entregable. |
-| `TaskKind` | name, color, position, projectId (opcional), `subtaskTemplate` (subtareas predefinidas) | Tipos de tarea configurables; sin `projectId` son generales, con él son exclusivos de ese proyecto. Nombre único entre los generales y dentro de cada proyecto. Cada tarea tiene `kindId`. |
+| `TaskKind` | name, color, position, projectId (opcional), `subtaskTemplate` (subtareas predefinidas), título y descripción automáticos | Tipos de tarea configurables; sin `projectId` son generales, con él son exclusivos de ese proyecto. Nombre único entre los generales y dentro de cada proyecto. Cada tarea tiene `kindId`. |
 | `ReleaseTemplate` | userId, kind (HEADER / FOOTER), name, content, position | Cabeceras y pies de release de cada usuario. |
 | `TaskComment` | taskId, authorId, body, `parentId` | Las menciones se guardan como `@[Nombre](user:ID)`. `parentId` enlaza una respuesta con su comentario (un solo nivel). |
 | `Notification` | userId, actorId, taskId, excerpt, readAt, emailSentAt, whatsappSentAt, deliveryError | Un aviso por persona mencionada, con el resultado de cada envío. |
@@ -116,24 +120,24 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 | Medida | Implementación |
 |---|---|
 | Contraseñas | bcrypt (coste 11), entre 10 caracteres y 72 bytes. Tiempo de respuesta constante si el usuario no existe. Los admins no fijan contraseñas ajenas: invitan o fuerzan un cambio por enlace. Los enlaces (invitación 72 h; restablecer y confirmar cambios 30 min) son de un solo uso y se guardan solo como hash. |
-| Sesiones | Token aleatorio de 256 bits en cookie `HttpOnly`, `SameSite=Lax` y `Secure` (con HTTPS, con prefijo `__Host-`). En base de datos solo se guarda su HMAC-SHA256 con `SESSION_SECRET`. Caducidad deslizante de 30 días. Cada persona ve y cierra sus sesiones en **Sesiones abiertas**. |
-| Revocación | Cerrar sesión, cambiar la contraseña, restablecerla, forzar el cambio, desactivar al usuario o cambiarle el rol eliminan sus sesiones. Iniciar sesión cierra la sesión anterior de ese navegador. Las conexiones en vivo (SSE y presencia) se cortan al instante al desactivar al usuario, cambiarle el rol, cerrar sesiones o quitarle el acceso a un proyecto; máximo 10 conexiones en vivo por persona. |
-| Verificación en dos pasos | App TOTP o código por email, con 10 códigos de recuperación (se muestran una vez). Obligatoria para admins con contraseña, opcional para el resto. Los secretos se cifran con una clave derivada de `SESSION_SECRET`. «Recordar este dispositivo 30 días» la omite en ese navegador. Un admin puede reiniciar el segundo paso de otra persona. |
+| Sesiones | Token aleatorio de 256 bits en cookie `HttpOnly`, `SameSite=Lax` y `Secure` (con HTTPS, con prefijo `__Host-`). En base de datos solo se guarda su HMAC-SHA256 con `SESSION_SECRET`. Caducidad deslizante de 14 días. Cada persona ve y cierra sus sesiones en **Sesiones abiertas**. |
+| Revocación | Cerrar sesión, cambiar la contraseña, restablecerla, forzar el cambio, desactivar al usuario o cambiarle el rol eliminan sus sesiones. Iniciar sesión cierra la sesión anterior de ese navegador. Las conexiones en vivo (SSE y presencia) se cortan al instante al desactivar al usuario, cambiarle el rol, cerrar sesiones o quitarle el acceso a un proyecto (incluida la desasignación de un proyecto de equipo); máximo 10 conexiones en vivo por persona. |
+| Verificación en dos pasos | App TOTP o código por email, con 10 códigos de recuperación (se muestran una vez). Obligatoria para admins con contraseña, opcional para el resto. Los secretos se cifran con una clave derivada de `SESSION_SECRET`. «Recordar este dispositivo 14 días» la omite en ese navegador. Un admin puede reiniciar el segundo paso de otra persona. |
 | Inicio con Google | OpenID Connect con PKCE. Solo entran usuarios existentes y activos (por email verificado y, después, por id de Google); opcionalmente limitado a `GOOGLE_WORKSPACE_DOMAIN`. No pide segundo paso propio (vale el de Google). |
 | Avisos de cuenta | Email de aviso al iniciar sesión desde un dispositivo desconocido (no en el primer acceso de una cuenta) y tras cualquier cambio de contraseña o de email. |
 | Fuerza bruta y abuso | Límite de intentos de login por pareja IP+email y por IP (ventana de 15 minutos), de «¿Olvidaste tu contraseña?» y de cambios de contraseña. También hay topes de subidas (60 por minuto y persona), comentarios (30 por minuto, 1000 por tarea), subtareas (100 por tarea), documentos de Google (20 por minuto) y tamaño del ZIP de adjuntos de una release (200 MB). |
 | CSRF | `SameSite=Lax`, verificación de `Origin` integrada en las Server Actions y comprobación explícita de `Origin` en la ruta de subida. |
-| Autorización | Sin registro público. Solo los admins gestionan usuarios. Cualquier usuario puede crear proyectos privados. Cada operación comprueba la visibilidad del proyecto; los privados solo los ven sus miembros. |
+| Autorización | Sin registro público. Solo los admins gestionan usuarios. Cualquier usuario puede crear proyectos privados (máximo 100 por usuario no admin y 10 creaciones por hora). Cada operación comprueba la visibilidad del proyecto: un usuario no admin solo accede a los proyectos de equipo a los que está **asignado** y a sus privados; los admins acceden a todos los de equipo; los privados solo los ven sus miembros. Deshacer y rehacer nunca reasignan una tarjeta a alguien que ha perdido el acceso. |
 | XSS | React escapa todo el contenido. El Markdown se renderiza sin HTML. Los enlaces solo admiten `http(s)` y se abren con `rel="noopener noreferrer"`. CSP estricta con *nonce* distinto en cada petición. |
 | Cabeceras | `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `HSTS`. |
 | Imágenes | Tamaño máximo configurable, límite de píxeles en sharp (protección frente a *decompression bombs*), reconversión siempre a WebP (se descarta cualquier contenido incrustado) y servido solo a usuarios con acceso. |
 | Adjuntos | Cuota por proyecto (`UPLOAD_QUOTA_MB_PER_PROJECT`, 2048 MB por defecto) y cuota total opcional (`UPLOAD_QUOTA_MB_TOTAL`). Limpieza diaria de ficheros huérfanos (de más de 24 h; nunca toca `backups/` y se aborta si más del 50 % parecen huérfanos). |
-| Copias de seguridad | Volcado diario de la base de datos, comprimido (gzip) y cifrado con AES-256-GCM (`BACKUP_KEY`). Ver 4.5. |
+| Copias de seguridad | Volcado diario de la base de datos, comprimido (gzip) y cifrado con AES-256-GCM (`BACKUP_KEY`). Descargar una copia exige tu contraseña (o un código de tu app de autenticación) y usa un enlace de un solo uso que caduca a los 60 s. Ver 4.5. |
 | Contenedor | El proceso Node se ejecuta como el usuario sin privilegios `node`. |
-| Google | OAuth con permiso mínimo `drive.file`: solo da acceso a los archivos que crea Pizarro. Parámetro `state` ligado a la sesión contra CSRF. Tokens cifrados en base de datos. Opcionalmente, restringido a un dominio de Workspace. |
+| Google | OAuth con permiso mínimo `drive.file`: solo da acceso a los archivos que crea Pizarro. Parámetro `state` ligado a la sesión contra CSRF. Tokens cifrados en base de datos. Opcionalmente, restringido a un dominio de Workspace. Los archivos de proyectos de equipo se comparten con el dominio; los de proyectos privados, solo con los miembros del proyecto. |
 | Informes por email | El informe PDF semanal solo puede enviarse a personas con acceso al proyecto (una dirección externa solo la puede fijar un admin y nunca en proyectos privados). Se vuelve a comprobar al enviar. |
 | Registros | Los logs nunca guardan contraseñas, tokens, cookies ni teléfonos (se ocultan por nombre de campo). Una migración de la v1.15 borró las contraseñas que versiones anteriores dejaban en los logs al cambiarlas o restablecerlas. Si alguien escribe en el campo de email del login algo que no es un email (p. ej. una contraseña por error), se registra como «[no es un email]». |
-| Avisos | Solo se avisa a usuarios activos con acceso al proyecto (en un proyecto privado, solo a sus miembros). El email y el WhatsApp no se repiten a la misma persona por la misma tarea en 10 minutos, y cada autor tiene un tope de envíos por hora. El contenido de los emails se escapa y los enlaces apuntan siempre a `APP_URL`. |
+| Avisos | Solo se avisa a usuarios activos con acceso al proyecto (en uno de equipo, los asignados y los admins; en uno privado, solo sus miembros). El email y el WhatsApp no se repiten a la misma persona por la misma tarea en 10 minutos, y cada autor tiene un tope de envíos por hora. El contenido de los emails se escapa y los enlaces apuntan siempre a `APP_URL`. |
 
 ### 2.6 Rendimiento
 
@@ -148,6 +152,7 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 - **Tablero que solo repinta lo necesario:** al cambiar algo se vuelven a dibujar solo las tarjetas afectadas.
 - **Tablero ligero:** al cargar el tablero no se envían las descripciones de las tarjetas (solo si tienen); se piden al abrir cada tarea.
 - **Errores de red:** si una acción del tablero falla por red o tras un despliegue, se avisa, se deshace el cambio optimista solo en las tarjetas afectadas y se recarga el tablero.
+- **Calendario ligero:** solo carga las tareas y entregables del rango de fechas visible, con índices por fecha límite.
 - **Índices y limpieza:** índices para avisos y deshacer; el mantenimiento horario borra avisos leídos de más de 90 días, y cada día se buscan adjuntos huérfanos y se hace la copia de seguridad.
 - **Logs sin duplicados:** las visitas a una misma página de una misma persona se registran como mucho una vez por minuto (los refrescos automáticos no llenan los logs).
 
@@ -161,15 +166,17 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 - **Primer acceso:** con email configurado recibes un **enlace de invitación** (válido 72 h) para elegir tu contraseña. Sin email, el admin te da una contraseña inicial y la app te obliga a cambiarla al entrar.
 - **Cambio forzado:** si un admin usa **Forzar cambio de contraseña**, no puedes hacer nada más hasta elegir una contraseña nueva y distinta de la actual.
 - **¿Olvidaste tu contraseña?** (en la pantalla de acceso, solo con email configurado): escribe tu email y recibirás un enlace (válido 30 min, de un solo uso). La respuesta es siempre la misma exista o no la cuenta. Al usarlo se cierran todas tus sesiones. Tiene límite de intentos.
-- **Mi perfil y plantillas** permite cambiar nombre, contraseña y email:
+- **Mi perfil** permite cambiar nombre, contraseña y email:
   - **Contraseña:** mínimo 10 caracteres y máximo 72 bytes. Con email configurado, el cambio solo se aplica al pulsar el **enlace de confirmación** que recibes (30 min). Tras cualquier cambio llega un email de aviso. Se cierran tus sesiones en los demás dispositivos.
   - **Email:** se confirma desde la nueva dirección y se avisa a la anterior.
-- **Sesiones abiertas:** en el perfil, la lista de dispositivos con sesión. Puedes cerrar una o **cerrar las demás**.
+- **Sesiones abiertas:** en el perfil, la lista de dispositivos con sesión (las sesiones duran 14 días desde la última actividad). Puedes cerrar una o **cerrar las demás**.
+- **Borrar los borradores al cerrar sesión:** opción del perfil que elimina de ese navegador los borradores de tareas (ver 3.4) al cerrar sesión; útil en equipos compartidos.
 - **Aviso de inicio de sesión nuevo:** si entras desde un dispositivo desconocido, recibes un email (no en el primer acceso de una cuenta).
 - **Verificación en dos pasos:** con una **app de autenticación** (TOTP) o con un **código por email**.
   - Es **obligatoria para los administradores** que entran con contraseña: se configura en su primer acceso (si hay email, elegir la app también exige un código enviado por email). Los demás usuarios pueden activarla en el perfil.
-  - Al activarla se muestran **10 códigos de recuperación**, una sola vez: guárdalos.
-  - Casilla **Recordar este dispositivo 30 días** para no repetirla.
+  - Con la app de autenticación, al configurarla se muestran un **código QR** y la **clave** para introducirla a mano.
+  - Al activarla se muestran **10 códigos de recuperación** (centrados en pantalla), una sola vez: guárdalos.
+  - Casilla **Recordar este dispositivo 14 días** para no repetirla.
   - Un admin puede **reiniciar** el segundo paso de otra persona si lo pierde.
   - Con Google no se pide: vale la verificación de Google.
 - El login tiene límite de intentos por pareja IP+email y por IP.
@@ -178,12 +185,12 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 ### 3.2 Proyectos
 
 - Para cambiar de proyecto, pulsa el **nombre del proyecto** en la parte superior del tablero (o en la barra superior en móvil) y elige otro en el desplegable. También sirve el selector de la barra lateral. La app recuerda el último que abriste.
-- Los administradores crean proyectos desde el selector (**Nuevo proyecto**) y pueden elegir una **plantilla** (ver 3.16) y marcarlo como **privado**. Los demás usuarios también pueden crear proyectos, pero **solo privados**. Sin plantilla, el proyecto trae las columnas *Backlog*, *En progreso*, *Siguiente salto a producción*, *En producción* y *Cerrado*; si quien lo crea usa Pizarro en inglés, salen en inglés (*Backlog*, *In progress*, *Next release*, *In production*, *Closed*).
+- Los administradores crean proyectos desde el selector (**Nuevo proyecto**) y pueden elegir una **plantilla** (ver 3.16) y marcarlo como **privado**; los proyectos de equipo que crean se añaden solos a sus «Proyectos en los que trabajo». Los demás usuarios también pueden crear proyectos, pero **solo privados** (máximo 100 y 10 creaciones por hora).
+- **Qué proyectos ves:** un usuario no admin solo ve los proyectos de equipo a los que está **asignado** y sus proyectos privados. Los administradores pueden abrir cualquier proyecto de equipo, pero en **Mi perfil → Proyectos en los que trabajo** eligen cuáles salen en sus selectores, menús y calendario. Si un admin no ha elegido ninguno, la página de inicio le muestra una pista para hacerlo. Al actualizar a la v1.17 se respetó el acceso previo: todos los usuarios quedaron asignados a los antiguos proyectos públicos y los admins con todos marcados. Sin plantilla, el proyecto trae las columnas *Backlog*, *En progreso*, *Siguiente salto a producción*, *En producción* y *Cerrado*; si quien lo crea usa Pizarro en inglés, salen en inglés (*Backlog*, *In progress*, *Next release*, *In production*, *Closed*).
 - **Ajustes del proyecto** contiene:
   - nombre y descripción (admins; en un proyecto privado, cualquier miembro);
-  - **visibilidad** (admins), con tres opciones:
-    - *Visible para todos*;
-    - *Solo los usuarios seleccionados* (y los administradores);
+  - **visibilidad** (admins), con dos opciones:
+    - *Equipo*: lo ven los **usuarios asignados** y todos los administradores. Los usuarios asignados se gestionan aquí (y en **Administración → Proyectos**); quitar la asignación a alguien desasigna sus tarjetas y corta su vista en vivo del proyecto;
     - *Privado*: tiene **miembros** y lo ven **solo ellos**, tampoco los administradores que no sean miembros; no aparece en sus listados, avisos ni asignaciones. Cualquier miembro puede **añadir o quitar miembros**, renombrarlo y borrarlo (escribiendo su nombre). El último miembro no puede salir. Al **borrar a un usuario** se borran los proyectos privados donde era el único miembro; en los demás, simplemente deja de ser miembro. Llevan un **candado** junto a su nombre;
   - etiquetas;
   - **informe semanal por email** (ver 3.9);
@@ -212,30 +219,30 @@ Desde el menú «⋯» de cada columna:
 - **Quién está trabajando:** a la derecha del contador de tarjetas de la cabecera (en móvil, arriba a la derecha) aparecen círculos con las **iniciales** de quienes han hecho cualquier acción en ese tablero (abrir, crear, mover, editar, subir adjuntos…) en los **últimos 5 minutos**, tú incluido; al pasar el ratón se ven sus nombres. Se actualiza cada 20 segundos. Si hay más (cinco en escritorio, tres en móvil), se muestra «+N». Además, cada tarjeta muestra arriba a la izquierda unas **burbujas pequeñas** con quién tiene esa tarea abierta.
 - **Trabajar varios a la vez:** si otra persona tiene abierta la misma tarea, el detalle lo indica («Fulano también tiene abierta esta tarea»). Si cambia el **título o la descripción** mientras tú los editas, al guardar no se pisa su texto: se avisa, la tarea se recarga con sus cambios y vuelves a aplicar los tuyos. El resto de campos (tipo, color, responsable…) se guardan al momento y gana el último cambio.
 - **Guardado:** los cambios del detalle se guardan solos; en la cabecera se ve «Guardando…» y después **«Guardado»** con un check verde.
-- **Deshacer:** el botón con la flecha de volver, justo a la derecha del nombre del tablero (también en móvil), deshace **tu última acción** en ese tablero, y así hasta las **10 últimas** (cuenta como una sola acción crear una tarea con sus adjuntos y subtareas): crear, editar, mover, archivar, recuperar, borrar (con sus adjuntos y subtareas), subtareas, comentarios, adjuntos, enlaces, columnas y desplegar una release (las tareas vuelven a su sitio y la release sale del histórico). En escritorio también **Ctrl/⌘+Z** con el tablero en pantalla. El aviso de lo deshecho sale en tu idioma. Solo deshace lo tuyo; si algo ya no existe (otra persona lo borró), se salta y se avisa. Las acciones de deshacer caducan a los 7 días.
+- **Deshacer y rehacer:** el botón con la flecha de volver, justo a la derecha del nombre del tablero (también en móvil), deshace **tu última acción** en ese tablero, y así hasta las **10 últimas** (cuenta como una sola acción crear una tarea con sus adjuntos y subtareas): crear, editar, mover, archivar, recuperar, borrar (con sus adjuntos y subtareas), subtareas, comentarios, adjuntos, enlaces, columnas y desplegar una release (las tareas vuelven a su sitio y la release sale del histórico). En escritorio también **Ctrl/⌘+Z** con el tablero en pantalla. Junto a él está el botón **Rehacer** (mismos contextos, mismo aspecto y el mismo comportamiento flotante), que repone lo deshecho: **Ctrl/⌘+Mayús+Z** o **Ctrl/⌘+Y** en el contexto actual, y **Alt+Mayús+Z** en el tablero. Cualquier acción nueva vacía lo rehacible; se guardan hasta 10. Deshacer y rehacer nunca reasignan una tarjeta a alguien que ha perdido el acceso. El aviso de lo deshecho sale en tu idioma. Solo deshace lo tuyo; si algo ya no existe (otra persona lo borró), se salta y se avisa. Las acciones de deshacer caducan a los 7 días.
   - **Con una tarea abierta**, el contexto es esa tarea: deshacer solo actúa sobre lo que has hecho en ella (cada subtarea, cada archivo subido, cada cambio), y el detalle se recarga. En escritorio el botón de deshacer sigue usable por encima del fondo oscuro del modal, y Ctrl/⌘+Z también funciona si no estás escribiendo.
-- **Guardar:** el pie del detalle (también en escritorio) tiene **Guardar** (o **Alt+S**): guarda todo lo que estés editando, tal como esté escrito, y cierra. En móvil el pie también muestra siempre **Archivar** y **Borrar**.
-- **Duplicar:** en el detalle (**Duplicar**) o con **Alt+Mayús+D** sobre la tarjeta. Crea una copia titulada «… (copia)» con las subtareas sin marcar, sin comentarios ni adjuntos; se puede deshacer.
+- **Guardar:** el pie del detalle (también en escritorio) tiene **Guardar** (o **Alt+S**): guarda todo lo que estés editando, tal como esté escrito, y cierra. **Archivar** y **Duplicar** son iconos, de modo que **Archivar**, **Duplicar**, **Borrar** y **Guardar** caben en una sola línea; en móvil el pie también los muestra siempre.
+- **Duplicar:** en el detalle (botón con icono, junto al de **Archivar**) o con **Alt+Mayús+D** sobre la tarjeta. Crea una copia titulada «… (copia)» con las subtareas sin marcar, sin comentarios ni adjuntos; se puede deshacer.
 - **Borradores:** mientras creas o editas una tarea, lo escrito se guarda en tu navegador **cada 5 segundos**. Si cierras la página sin cancelar ni guardar, al volver al tablero el modal se reabre con lo que tenías (en *Nueva tarea*, todos los campos salvo los archivos; en una tarea abierta, el título y la descripción en edición). Solo hay borrador si queda **algo sin guardar**: crear, guardar, cancelar o cerrar el modal lo borra, y una tarea abierta sin cambios nunca se reabre.
 - **Persona asignada:** el círculo con iniciales en la esquina inferior derecha de la tarjeta es **la persona asignada** (al pasar el ratón: «Asignada a …»). No indica quién la tiene abierta; eso se ve dentro del detalle y en los círculos de la cabecera.
 - **Filtrar el tablero:** el campo *Filtrar* de la cabecera (o la tecla **/**; en móvil, el icono de lupa) muestra solo las tarjetas cuyo título, tipo, responsable o etiquetas contienen todas las palabras escritas, sin distinguir mayúsculas ni acentos. Se ve cuántas quedan («3 de 27») y los contadores de columna cuentan solo las visibles. Se deseleccionan las tarjetas que quedan ocultas. **Se puede arrastrar con filtro activo**: las tarjetas ocultas conservan su orden. Escape borra el texto.
 - **Filtros rápidos:** el menú **Filtros**, junto al campo de filtro, ofrece **Mis tareas**, **Vencidas**, **Esta semana**, **Etiqueta**, **Tipo** y **Responsable**. Se guardan por usuario y proyecto y **Limpiar filtros** los quita.
-- **Atajos sobre la tarjeta con el foco:** **Alt+M** te asigna la tarea (o te la quita), **Alt+←/→** la mueve a la columna anterior o siguiente, **Alt+D** abre la fecha límite (*Hoy*, *Mañana*, *Próximo lunes*, *Sin fecha*), **F2** renombra en la propia tarjeta y **Alt+Mayús+D** la duplica.
+- **Atajos sobre la tarjeta con el foco:** **Espacio** la selecciona, **Alt+↑/↓** la sube o baja dentro de su columna (se puede deshacer), **Alt+M** te asigna la tarea (o te la quita), **Alt+←/→** la mueve a la columna anterior o siguiente, **Alt+D** abre la fecha límite (*Hoy*, *Mañana*, *Próximo lunes*, *Sin fecha*), **F2** renombra en la propia tarjeta y **Alt+Mayús+D** la duplica.
 - **Tareas repetitivas:** en el detalle, **Repetir**: *diaria*, *semanal* (día de la semana) o *mensual* (día del mes; en meses cortos se ajusta a fin de mes). Al mover la tarea a una columna terminada o archivarla se crea la siguiente: subtareas sin marcar y fecha límite avanzada. Deshacer elimina la nueva. La tarjeta lleva un icono de repetición. El responsable se conserva solo si sigue teniendo acceso al proyecto.
 - **Descartar una tarea nueva:** si cierras *Nueva tarea* (Escape, la X, *Cancelar* o fuera del modal) con algo escrito, se pide confirmación.
 - **Editar:** haz clic en la tarjeta. Los cambios se guardan solos (título y enlace al salir del campo; tipo, color, responsable, etiquetas y columna al cambiarlos).
-- **Descripción con formato:** se guarda como Markdown y, cuando no la estás editando, se ve formateada (títulos, negrita, cursiva, subrayado, tachado, listas, enlaces). Hay dos formas de editarla, a elegir en **Mi perfil y plantillas → Edición de descripciones**:
+- **Descripción con formato:** se guarda como Markdown y, cuando no la estás editando, se ve formateada (títulos, negrita, cursiva, subrayado, tachado, listas, enlaces). Hay dos formas de editarla, a elegir en **Mi perfil → Edición de descripciones**:
   - **Con barra de formato** (por defecto): ves el resultado mientras escribes y aplicas **negrita, cursiva, subrayado, tachado, título, subtítulo, texto normal, lista y lista numerada** con botones (o Ctrl+B / I / U). Si pegas texto en Markdown, se convierte en formato. Al escribir `@` aparece la lista de personas para mencionar (y `@docs` / `@sheets`); la mención se ve como una etiqueta.
   - **Markdown:** escribes los símbolos (`**negrita**`, `*cursiva*`, `~~tachado~~`, `++subrayado++`, `# Título`, `- lista`, `1. lista`); al guardar se ve formateado.
   - En ambos modos, Ctrl/⌘+Enter guarda y Escape cancela.
   - Lo que escribes se guarda tal cual, incluidos `<`, `>`, `&` o comillas, y llega igual al texto de la release (p. ej. `->` no se convierte en `-&gt;`).
 - **Colores de tarjeta:** gris, blanco, rojo, naranja, marrón, amarillo, verde, verde oscuro, turquesa, celeste, índigo, azul marino, violeta y rosa (también para etiquetas).
 - **Subtareas:** añádelas y márcalas. **Doble clic** sobre una, el **lápiz** que aparece al pasar por encima (siempre visible en móvil) o **Enter/F2** con el foco en ella la editan (Enter guarda, Escape cancela) y se **reordenan** arrastrando el icono de seis puntos. Junto al título *Subtareas* hay una barra verde que se llena según la proporción de subtareas hechas (con dos, cada una marca el 50 %, da igual el orden); la tarjeta muestra el progreso (p. ej. `2/4`). Las subtareas **no pasan** al texto de las releases.
-- **Adjuntos:** cualquier tipo de archivo de hasta 10 MB. Pégalos con Ctrl/⌘+V, usa *Añadir* o **arrástralos** sobre la tarea abierta (aparece «Suelta para adjuntar»); también desde la ventana de descargas del navegador. Los que no son imagen se listan con su icono, nombre y tamaño, y se descargan (nunca se abren dentro de Pizarro, por seguridad).
-- **Capturas e imágenes:** al tocar o hacer clic en una imagen se ve **a pantalla completa**; se cierra con la **X**, tocando fuera de la imagen, con Escape o con el botón atrás. Con varias imágenes, las flechas pasan de una a otra. En móvil también tienes el botón **Cámara**, al crear la tarea y en el detalle de una tarea existente. Cada imagen se reduce a 1280 px de ancho como máximo y se guarda como WebP (calidad 75).
+- **Adjuntos:** cualquier tipo de archivo de hasta 10 MB. Pégalos con Ctrl/⌘+V, usa *Añadir* o **arrástralos** sobre la tarea abierta (aparece «Suelta para adjuntar»); también desde la ventana de descargas del navegador. Los que no son imagen se listan con su icono, nombre y tamaño, y se descargan (nunca se abren dentro de Pizarro, por seguridad). En la tarjeta del tablero, un icono de imagen indica cuántas imágenes tiene y un icono de clip/archivo cuántos otros archivos (ambos si hay de las dos clases).
+- **Capturas e imágenes:** al tocar o hacer clic en una imagen se ve **a pantalla completa**; se cierra con la **X**, tocando fuera de la imagen, con Escape o con el botón atrás. Con varias imágenes, las flechas pasan de una a otra. En móvil, **Cámara** y **Añadir** son botones visibles, al crear la tarea y en el detalle de una tarea existente. Cada imagen se reduce a 1280 px de ancho como máximo y se guarda como WebP (calidad 75).
 - **Archivar** oculta la tarjeta del tablero (desde su detalle o, para varias, con **Archivar** en la barra de selección). **Borrar** la elimina con sus adjuntos.
 - **Archivadas:** botón en la cabecera del tablero (escritorio) o entrada **Archivadas** del menú lateral. Abre un listado con filtro de las tareas archivadas: tipo, fecha, columna de la que salieron y, si pasaron por una release, la etiqueta **En release: …**. **Recuperar** la devuelve al final de la columna en la que estaba; si esa columna ya no existe, a la primera columna del proyecto (Backlog).
-- **Teclado y accesibilidad:** el selector de tipo es una sola parada de tabulador y se maneja con las flechas; el tabulador salta la barra de formato del editor (**Alt+F10** entra en ella); el foco es visible en todas partes; todos los desplegables comparten el mismo menú (flechas, Esc, foco) y las confirmaciones son diálogos de la propia app, no ventanas del navegador.
+- **Teclado y accesibilidad:** cada tarjeta es una sola parada de tabulador (la casilla de selección se salta; **Espacio** selecciona la tarjeta con el foco); el selector de tipo es una sola parada de tabulador y se maneja con las flechas; el tabulador salta la barra de formato del editor (**Alt+F10** entra en ella); el foco es visible en todas partes; todos los desplegables comparten el mismo menú (flechas, Esc, foco) y las confirmaciones son diálogos de la propia app, no ventanas del navegador.
 - En escritorio, el detalle de la tarjeta cabe entero en la pantalla: la columna principal y la lateral se desplazan cada una por su lado.
 
 - **Versión nueva:** después de un despliegue, las pestañas abiertas se recargan solas al volver a ellas (o muestran «Hay una versión nueva · Recargar» si estás escribiendo), para no usar acciones de la versión anterior.
@@ -254,7 +261,7 @@ Desde el menú «⋯» de cada columna:
 
 **Tareas fijas («Siempre en la release»).** Al pie de la columna *Siguiente salto a producción* hay una sección plegable que indica cuántas tareas fijas tiene. Al abrirla, se despliega hacia arriba con esas tareas y el botón **+ Añadir**. Son tareas que se repiten en cada despliegue (por ejemplo, «Generar el PDF de la release»): entran preseleccionadas en cada release (con la marca *fija*), pero **no salen de la columna** al marcarla como desplegada. Solo se añaden al usar **Generar Release** de esa columna, no con *Release con selección*. Para convertir una tarea en fija, arrástrala sobre la sección: si está cerrada se abre al mantenerla encima un momento. También se puede marcar o desmarcar una tarea existente de esa columna con *Fija en la release* en su detalle. Si se mueve a otra columna o se archiva, deja de ser fija. Las tareas del panel también se pueden **arrastrar fuera** a cualquier columna y posición (en táctil, con su asa): dejan de ser fijas.
 
-1. Prepara tus plantillas en **Mi perfil y plantillas → Plantillas de release notes**. Puedes tener **varias cabeceras** (por ejemplo, «Contexto para IA» o «Para negocio») y **varios pies** (por ejemplo, «Checklist de cierre»), cada uno con su nombre. Se pueden **reordenar**: la primera de cada tipo es la que se propone por defecto en **Generar release**.
+1. Prepara tus plantillas en **Mi perfil → Plantillas de release notes**. Puedes tener **varias cabeceras** (por ejemplo, «Contexto para IA» o «Para negocio») y **varios pies** (por ejemplo, «Checklist de cierre»), cada uno con su nombre. Se pueden **reordenar**: la primera de cada tipo es la que se propone por defecto en **Generar release**.
 2. En el tablero, pulsa **Generar Release** en la columna *Siguiente salto a producción*.
 3. **Paso 1:** revisa el título, elige la **cabecera** y el **pie** (o «Ninguna») y marca las tareas incluidas. Las releases de cada proyecto están **numeradas** (1, 2, 3…). El título propuesto es `Release AAAA-MM-DD · Proyecto`; si ese día ya hubo releases en el proyecto, lleva el número tras la fecha: `Release AAAA-MM-DD (2) · Proyecto`, `(3)`… El título se guarda en el histórico pero **no forma parte del texto** que se copia o descarga. Por defecto están todas las de la columna; si tenías tarjetas seleccionadas, solo esas.
 4. **Paso 2:** se genera el documento: la **cabecera**, **una sección por tipo de tarea** (generales y luego los del proyecto) y el **pie**:
@@ -325,7 +332,7 @@ Se genera en el idioma de quien lo pide.
   - a **Avisos** (campana con contador en el menú lateral; en móvil, en la barra superior), donde puedes **marcar uno como leído** o todos;
   - por **email**, si el servidor tiene SMTP y la persona no lo ha desactivado (hay preferencias **por tipo de aviso**);
   - por **WhatsApp**, si el servidor lo tiene configurado y la persona lo ha activado con su número (menciones).
-- Cada persona elige sus canales en **Mi perfil y plantillas → Avisos**. Allí también puede activar un **resumen diario por email** y elegir la hora.
+- Cada persona elige sus canales en **Mi perfil → Avisos**. Allí también puede activar un **resumen diario por email** y elegir la hora.
 - La página **Avisos** muestra los 100 últimos y el botón **Cargar más** trae los anteriores. Los avisos ya leídos se borran a los 90 días. Al hacer clic en uno se abre directamente la tarjeta.
 - **Historial de la tarea:** sección plegada **Historial** en el detalle, con los cambios de la tarea (se conserva 365 días).
 - **Informe semanal por email:** en **Ajustes del proyecto** se elige destinatario, día de la semana y hora, y se envía el informe PDF (ver 3.8). Solo puede ir a personas con acceso al proyecto; una dirección externa solo la puede fijar un admin y nunca en proyectos privados. Se vuelve a comprobar en el momento del envío.
@@ -333,17 +340,23 @@ Se genera en el idioma de quien lo pide.
 
 ### 3.10 Google Docs y Sheets
 
-1. Una vez por persona: **Mi perfil y plantillas → Google Docs y Sheets → Conectar con Google**, y acepta el permiso.
+1. Una vez por persona: **Mi perfil → Google Docs y Sheets → Conectar con Google**, y acepta el permiso.
 2. En una tarjeta, escribe `@sheets` o `@docs` en la descripción o en un comentario y elige *Crear Google Sheet* / *Crear Google Doc*. También puedes usar los botones **Nuevo Doc** / **Nuevo Sheet**.
 3. Se crea el archivo en tu Drive con el título de la tarjeta, se abre en otra pestaña y queda en **Documentos de Google** de la tarjeta. Si lo creaste desde el texto, también se inserta su enlace.
-4. Si el servidor tiene `GOOGLE_WORKSPACE_DOMAIN`, el archivo se comparte automáticamente con todo el dominio (por defecto como editor, según `GOOGLE_SHARE_ROLE`), y cualquiera del equipo puede abrirlo desde la tarjeta. Si no, compártelo desde Google como cualquier otro documento.
+4. Si el servidor tiene `GOOGLE_WORKSPACE_DOMAIN`, el archivo de un proyecto de equipo se comparte automáticamente con todo el dominio (por defecto como editor, según `GOOGLE_SHARE_ROLE`); el de un **proyecto privado** se comparte solo con los miembros del proyecto, no con el dominio. Así, quien tenga acceso al proyecto puede abrirlo desde la tarjeta. Si no, compártelo desde Google como cualquier otro documento.
 5. Quitar el enlace de la tarjeta no borra el archivo de Drive.
 
 ### 3.11 Otras vistas
 
-El menú lateral muestra, debajo de las opciones del proyecto: **Avisos**, **Mis tareas asignadas**, **Mi perfil y plantillas**, **Administración** (solo admins), **Historial de versiones** e **Instalar app**.
+El menú lateral muestra, debajo de las opciones del proyecto: **Calendario**, **Avisos**, **Mis tareas asignadas**, **Mi perfil**, **Administración** (solo admins), **Historial de versiones** e **Instalar app**.
 
-- **Mis tareas asignadas:** funciona como una bandeja diaria con tus tarjetas de todos los proyectos a los que tienes acceso, agrupadas en **Vencidas**, **Hoy**, **Esta semana**, **Más adelante** y **Sin fecha**, con filtros. No incluye las ya terminadas (máximo 500).
+- **Mis tareas asignadas:** funciona como una bandeja diaria con tus tarjetas de todos los proyectos a los que tienes acceso, cada fila con un chip del proyecto (icono de carpeta) al principio, agrupadas en **Vencidas**, **Hoy**, **Esta semana**, **Más adelante** y **Sin fecha**, con filtros. No incluye las ya terminadas (máximo 500).
+- **Calendario:** cuadrícula mensual de lunes a domingo.
+  - Cada tarea con fecha límite aparece en su día, coloreada por tipo (con las iniciales del proyecto cuando miras todos); las terminadas se ven atenuadas. Si un día tiene muchas, aparece «+N más».
+  - Un clic abre la tarea. **Arrastrar** una tarea a otro día cambia su fecha límite; con el foco en ella, **Alt+←/→** la mueve ±1 día y **Alt+↑/↓** ±7 días. El botón **Deshacer** (o Ctrl/⌘+Z) revierte el último cambio de fecha.
+  - Los **entregables** salen como bandas durante la semana anterior a su fecha, con su avance y estado (*Completado*, *En plazo*, *En riesgo*, *Retrasado*, *Sin tareas*).
+  - Filtros de proyecto, persona y **Ocultar terminadas**, que se guardan en la URL. «Todos los proyectos» son los proyectos en los que trabajas.
+  - En móvil se muestra como una lista por semanas.
 - **Releases:** histórico del proyecto, con **buscador** por texto en todo el histórico (título y contenido, sin distinguir mayúsculas ni tildes); sin buscar se muestran las 50 últimas con *Cargar más*, opción de copiar o descargar cada release, y de **Borrar release** (la quita del histórico con sus adjuntos; las tareas no cambian) o **Borrar adjuntos** (conserva el texto). Ambas piden confirmación. Cada entrada indica cuántas tareas y adjuntos tiene; al abrirla se ven los nombres de los adjuntos y el botón **Descargar adjuntos** (ZIP).
 - **Historial de versiones:** versión actual de la app y cambios de cada versión, con la **fecha y hora** de su lanzamiento y **buscador** por texto.
 
@@ -364,9 +377,9 @@ El menú lateral muestra, debajo de las opciones del proyecto: **Avisos**, **Mis
 
 ### 3.13 Apariencia
 
-En **Mi perfil y plantillas → Apariencia**, cada persona elige:
+En **Mi perfil → Apariencia**, cada persona elige:
 - **Tema:** *Sistema* (sigue el modo claro u oscuro del dispositivo, por defecto), *Claro* u *Oscuro*. Se aplica al momento y se recuerda en todos tus dispositivos. Las barras de scroll usan los colores de Pizarro en ambos temas.
-- **Tema de color:** *Azul* (por defecto), *Verde bosque*, *Siena*, *Mostaza*, *Blanco y negro* o *Eva* (morado Evangelion con verde neón), en modo claro y oscuro. Cambia **toda la app**: fondos, columnas, tarjetas, bordes, textos secundarios, botones, enlaces y resaltados toman los tonos del tema (salvia y verde profundo; arcilla y terracota; arena y mostaza; o grises puros, con negro en claro y blanco en oscuro). Los temas que no son azules usan blanco puro en los textos más claros del modo oscuro. Las subtareas hechas (casilla y barra) usan un color que contrasta con el tema: verde neón en el azul. El **logo** de Pizarro y el **recuadro de foco** al moverte con el tabulador también usan el color del tema (la pantalla de acceso mantiene el azul).
+- **Tema de color:** *Azul* (por defecto), *Verde bosque*, *Siena*, *Mostaza*, *Blanco y negro* o *Eva* (botones en morado Evangelion #6848a0, resaltados en verde neón #78c838 —anillos de foco, campos con foco, borde del editor de descripción, foco de añadir archivo y progreso— y un pequeño detalle naranja #f8a030 en el elemento activo del menú y la barra central del logo), en modo claro y oscuro. Cambia **toda la app**: fondos, columnas, tarjetas, bordes, textos secundarios, botones, enlaces y resaltados toman los tonos del tema (salvia y verde profundo; arcilla y terracota; arena y mostaza; o grises puros, con negro en claro y blanco en oscuro). Los temas que no son azules usan blanco puro en los textos más claros del modo oscuro. Las subtareas hechas (casilla y barra) usan un color que contrasta con el tema: verde neón en el azul. El **logo** de Pizarro y el **recuadro de foco** al moverte con el tabulador también usan el color del tema (la pantalla de acceso mantiene el azul).
 - **Distintivos de tipo:** cada tipo conserva su color en todos los temas, pero el texto se oscurece en modo claro y se aclara en modo oscuro para que se lea siempre (también con tipos negros, marinos o blancos).
 - **Tarjetas:** *Franja a la izquierda* (por defecto) o *Tarjeta entera del color*, con un tono suave para que el texto se siga leyendo.
 - **Idioma · Language:** *Español* (por defecto) o *English*. Cambia toda la interfaz, los mensajes, las fechas, el informe PDF y el **historial de versiones**. No se traducen los datos (nombres de proyectos, columnas, tipos, tareas), el texto de las releases ni los logs de administración. La pantalla de acceso sale siempre en español.
@@ -408,8 +421,12 @@ Solo en ordenador. Los atajos con Alt usan la tecla física, así que en Mac fun
 | Crear la tarea, guardar la descripción o enviar un comentario | Ctrl+Enter | ⌘+Enter |
 | Cerrar el modal, el menú o cancelar la edición | Esc | Esc |
 | Deshacer la última acción (en una tarea abierta, la de esa tarea) | Ctrl+Z | ⌘+Z |
+| Rehacer en el contexto actual | Ctrl+Mayús+Z o Ctrl+Y | ⌘+⇧+Z o ⌘+Y |
+| Rehacer en el tablero | Alt+Mayús+Z | ⌥+⇧+Z |
 | Nueva tarea con una captura pegada (con el tablero en pantalla) | Ctrl+V | ⌘+V |
 | Abrir la tarjeta con el foco | Enter | Enter |
+| Seleccionar la tarjeta con el foco | Espacio | Espacio |
+| Subir / bajar la tarjeta con el foco en su columna | Alt+↑ / Alt+↓ | ⌥+↑ / ⌥+↓ |
 | Asignarme (o quitarme) la tarjeta con el foco | Alt+M | ⌥+M |
 | Mover la tarjeta con el foco a la columna anterior / siguiente | Alt+← / Alt+→ | ⌥+← / ⌥+→ |
 | Fecha límite de la tarjeta con el foco (Hoy, Mañana, Próximo lunes, Sin fecha) | Alt+D | ⌥+D |
@@ -422,15 +439,19 @@ Solo en ordenador. Los atajos con Alt usan la tecla física, así que en Mac fun
 | Elegir persona o comando en la lista de «@» | ↑ ↓ y Enter o Tab | ↑ ↓ y Enter o Tab |
 | Imagen anterior o siguiente (pantalla completa) | ← → | ← → |
 
-Con un modal abierto, el tabulador recorre solo sus campos (no salta al tablero de debajo). El tabulador salta la barra de formato del editor.
+En el calendario, con el foco en una tarea: Alt+←/→ (±1 día) y Alt+↑/↓ (±7 días). Con un modal abierto, el tabulador recorre solo sus campos (no salta al tablero de debajo). El tabulador salta la barra de formato del editor.
 
 ### 3.16 Administración (admins)
 
-La entrada **Administración** del menú lateral reúne cinco pestañas: **Usuarios**, **Tipos de tarea** (ver 3.14), **Plantillas**, **Copias de seguridad** y **Logs**.
+La entrada **Administración** del menú lateral reúne seis pestañas: **Usuarios**, **Proyectos**, **Tipos de tarea** (ver 3.14), **Plantillas de proyecto**, **Copias de seguridad** y **Logs**. En móvil, el menú de pestañas solo se desplaza en horizontal.
 
-**Plantillas de proyecto:** definen las columnas (nombre, orden, rol especial *Siguiente salto* o *En producción* y si cuentan como terminadas), los tipos de tarea propios (con su automatización), qué tipos generales no usará el proyecto y las etiquetas. **Crear desde un proyecto…** rellena una plantilla a partir de un proyecto existente. Al crear un proyecto se elige la plantilla en *Nuevo proyecto*.
+**Proyectos:** lista los proyectos de equipo (los privados no aparecen) con los usuarios asignados a cada uno; desde ahí se añaden o quitan usuarios. Los mismos usuarios asignados se gestionan en los ajustes de cada proyecto. Quitar una asignación desasigna las tarjetas de esa persona y corta su conexión en vivo con el proyecto.
 
-**Copias de seguridad:** estado de las copias automáticas (última copia, última prueba de restauración, copias conservadas), **Crear copia ahora** y **Descargar** la última (ver 4.5). Solo funciona con `BACKUP_KEY` definida.
+**Plantillas de proyecto:** definen las columnas (nombre, orden, rol especial *Siguiente salto* o *En producción* y si cuentan como terminadas), los tipos de tarea propios (con su automatización, descripción en Markdown y **subtareas predefinidas**), qué tipos generales no usará el proyecto y las etiquetas. **Crear desde un proyecto…** rellena una plantilla a partir de un proyecto existente. Al crear un proyecto se elige la plantilla en *Nuevo proyecto*.
+- Vienen **6 plantillas de serie**: *Vibecoding*, *Tareas familiares*, *Producción audiovisual*, *Negocio*, *Marketing y contenidos* y *Organización de eventos*, con sus columnas, tipos y etiquetas. La lista se ordena alfabéticamente.
+- Las de serie se pueden **editar** o **borrar**. En una modificada, **Restablecer** vuelve a su contenido original; **Recuperar plantillas por defecto** recrea las de serie que se hayan borrado.
+
+**Copias de seguridad:** estado de las copias automáticas (última copia, última prueba de restauración, copias conservadas), **Crear copia ahora** y **Descargar** la última (pide tu contraseña, o un código de tu app de autenticación, y usa un enlace de un solo uso de 60 s; ver 4.5). Solo funciona con `BACKUP_KEY` definida.
 
 **Logs:** registro detallado de la actividad de los últimos 7 días (configurable con `LOG_RETENTION_DAYS`):
 - páginas visitadas, inicios de sesión (también los fallidos, con el email probado y el motivo, nunca la contraseña) y cierres de sesión;
@@ -445,7 +466,7 @@ Cada acción se describe en lenguaje claro: «Creó la tarea «X» en «Backlog�
 
 Se filtra por periodo (1 h, 24 h, 7 días), nivel (Info, Aviso, Error), categoría, usuario y texto. Cada fila se despliega para ver los detalles y la IP. **Descargar CSV** exporta el filtro actual (hasta 20 000 filas). Los registros antiguos se borran solos.
 
-- **Usuarios → Nuevo usuario:** nombre, email y rol. Máximo de 5 usuarios activos (configurable con `MAX_USERS`).
+- **Usuarios → Nuevo usuario:** nombre, email y rol. Máximo de 10 usuarios activos (configurable con `MAX_USERS`).
   - **Con email configurado:** la persona recibe un **enlace de invitación** (72 h) para elegir su contraseña. El admin no la conoce.
   - **Sin email:** el admin escribe una **contraseña inicial** (10 caracteres o más) y la persona debe cambiarla en su primer acceso.
 - **Editar:** nombre, email, rol y estado activo. Al desactivar a un usuario o cambiarle el rol se cierran sus sesiones y sus conexiones en vivo. Un admin no puede quitarse a sí mismo el rol ni desactivarse.
@@ -489,8 +510,8 @@ Tests: `npm test` ejecuta los tests unitarios; `npm run test:db` ejecuta los de 
 
 | Situación | Acción |
 |---|---|
-| Alta de un miembro | *Administración → Usuarios → Nuevo usuario*. Con email configurado, la persona recibe un enlace de invitación (72 h) para elegir su contraseña. Sin email, escribe una contraseña inicial: la persona deberá cambiarla en su primer acceso. |
-| Baja temporal | *Editar → desmarcar «Usuario activo»*. Se cierran sus sesiones y conexiones en vivo. Sus tareas conservan el historial; sigue siendo miembro de sus proyectos privados. |
+| Alta de un miembro | *Administración → Usuarios → Nuevo usuario*, y después asignarle sus proyectos en *Administración → Proyectos* (sin asignaciones, un usuario no admin no ve ningún proyecto de equipo). Con email configurado, la persona recibe un enlace de invitación (72 h) para elegir su contraseña. Sin email, escribe una contraseña inicial: la persona deberá cambiarla en su primer acceso. |
+| Baja temporal | *Editar → desmarcar «Usuario activo»*. Se cierran sus sesiones y conexiones en vivo. Sus tareas conservan el historial; sigue siendo miembro de sus proyectos privados y asignado a los de equipo. |
 | Baja definitiva | Botón **Borrar** (papelera). Se borran los proyectos privados donde era el único miembro (tras confirmarlo); en los demás deja de ser miembro. |
 | Contraseña olvidada | La persona usa **¿Olvidaste tu contraseña?** (con email configurado). Si no, un admin usa **Forzar cambio de contraseña**. No se fijan contraseñas a mano. |
 | Sospecha de cuenta comprometida | **Forzar cambio de contraseña** (cierra sus sesiones) y, si hace falta, reiniciar su verificación en dos pasos. |
@@ -506,9 +527,16 @@ Cambia la variable en Railway y redespliega. Todas las sesiones dejan de ser vá
 - **Copias automáticas cifradas (base de datos):** con `BACKUP_KEY` definida, cada día se vuelca la base de datos (gzip + AES-256-GCM) a `UPLOAD_DIR/backups`. Se conservan **14 diarias y 6 mensuales**. Cada mes se hace una **prueba de restauración** de la última copia. El estado se ve en *Administración → Copias de seguridad*, con **Crear copia ahora** y **Descargar** la última.
   - **Guarda `BACKUP_KEY` también fuera de Railway** (gestor de contraseñas): sin ella las copias no se pueden leer.
   - **Restaurar** en una base **vacía**: `BACKUP_KEY="…" npm run backup:restore -- <fichero>` (con `DATABASE_URL` apuntando a esa base).
-  - Descarga de vez en cuando una copia a un lugar externo: las copias viven en el mismo volumen que los adjuntos.
-- **Manual con `pg_dump`:** `pg_dump "$DATABASE_PUBLIC_URL" -Fc -f tablon.dump`. Restauración: `pg_restore --clean --no-owner -d "$DATABASE_PUBLIC_URL" tablon.dump`. También puedes activar los backups del servicio Postgres en Railway.
+  - Descarga de vez en cuando una copia a un lugar externo: las copias viven en el mismo volumen que los adjuntos. Para descargarla, Pizarro pide tu contraseña (o un código de tu app de autenticación) y genera un enlace de un solo uso válido 60 s.
+- **Manual con `pg_dump`:** `pg_dump "$DATABASE_PUBLIC_URL" -Fc -f tablon.dump`. Restauración: `pg_restore --clean --no-owner -d "$DATABASE_PUBLIC_URL" tablon.dump`. También puedes activar los backups del servicio Postgres en Railway (ver «Copias del volumen en Railway»).
 - **Capturas y adjuntos (volumen):** las copias automáticas no incluyen los ficheros. Activa los **snapshots del volumen** en Railway. Las imágenes y la base de datos deben restaurarse a la misma fecha para que los adjuntos coincidan.
+- **Copias del volumen en Railway:** las copias automáticas de Pizarro no incluyen los adjuntos, así que programa también las copias de Railway.
+  1. Abre el servicio que tiene el volumen y entra en la pestaña **Backups**.
+  2. Pulsa **Edit schedule** y activa **Daily**, **Weekly** y/o **Monthly**. Railway conserva las diarias 6 días, las semanales 1 mes y las mensuales 3 meses.
+  3. Pulsa **Backup now** para hacer una copia inmediata.
+  4. Haz lo mismo en el servicio de **PostgreSQL**.
+  - **Borrar un volumen borra también sus copias.** Por eso, una vez al mes descarga la última copia de Pizarro (pide contraseña) y guárdala, junto con `BACKUP_KEY`, fuera de Railway.
+  - Existe una guía detallada paso a paso para Google Workspace (buzón `avisos@`, cliente OAuth) y para las copias de Railway, en un PDF aparte entregado a la persona propietaria.
 - **Limpieza de huérfanos:** cada día se borran los ficheros de `UPLOAD_DIR` sin registro en la base de datos y con más de 24 h (nunca `backups/`); si más del 50 % parecen huérfanos, se aborta por seguridad.
 
 ### 4.6 Publicar una nueva versión de la app
@@ -566,7 +594,8 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 | «La imagen supera el tamaño máximo» | Imagen de más de `MAX_UPLOAD_MB` | Reduce la imagen o sube el límite. |
 | No aparece «Generar Release» | Ninguna columna tiene el rol *Siguiente salto* | Asígnalo desde el menú «⋯» de la columna. |
 | No se puede «Mover a En producción» | Ninguna columna tiene ese rol | Asígnalo, o elige *Archivar tarjetas* al desplegar. |
-| Un miembro no ve un proyecto | El proyecto está restringido | *Ajustes del proyecto → Visibilidad* → márcalo. |
+| Un usuario no ve un proyecto de equipo | No está asignado al proyecto | *Administración → Proyectos* (o *Ajustes del proyecto*) → asígnalo. |
+| Un admin no ve un proyecto en sus selectores | No lo ha marcado en sus proyectos de trabajo | *Mi perfil → Proyectos en los que trabajo*. |
 | Nadie ve un proyecto privado (ni los admins) | Los privados solo los ven sus miembros | Un miembro puede añadir a más personas desde *Ajustes del proyecto*. |
 | No aparece «¿Olvidaste tu contraseña?» ni llegan invitaciones | No hay SMTP configurado | Configura el email (ver 4.8); mientras tanto el admin da una contraseña inicial. |
 | «Copias de seguridad» no funciona | Falta `BACKUP_KEY` | Genérala con `openssl rand -base64 32`, guárdala fuera de Railway y redespliega. |
@@ -587,7 +616,7 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 | Decisión | Motivo |
 |---|---|
 | Next.js en un solo servicio | Interfaz y API en el mismo despliegue; Server Actions sin capa REST manual. |
-| Sesiones en base de datos frente a JWT | Permiten revocar sesiones (cerrar sesión, desactivar usuarios) y la consulta extra no se nota con 5 usuarios. |
+| Sesiones en base de datos frente a JWT | Permiten revocar sesiones (cerrar sesión, desactivar usuarios) y la consulta extra no se nota con 10 usuarios. |
 | Posiciones fraccionarias | Reordenar sin reescribir toda la columna. |
 | Roles de columna | Permiten renombrar y reordenar columnas sin romper el generador de releases. |
 | Generación de la release en el cliente | Respuesta instantánea y edición libre antes de guardar. |
