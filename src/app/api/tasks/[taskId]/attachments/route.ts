@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { assertTaskAccess } from "@/lib/access";
+import { assertNotArchived, assertTaskAccess } from "@/lib/access";
 import { AppError } from "@/lib/errors";
 import { actionContext } from "@/lib/action-context";
 import { logEvent } from "@/lib/log";
@@ -27,6 +27,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     const user = await requireUser();
     const { taskId } = await ctx.params;
     const { projectId } = await assertTaskAccess(user, taskId);
+    await assertNotArchived(taskId);
     // Tope de subidas por persona: evita llenar el disco o la memoria (sharp) con un bucle.
     if (!rateLimit(`upload:${user.id}`, 60, 60_000)) throw new AppError("Demasiadas peticiones", 429);
 

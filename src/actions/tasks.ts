@@ -4,7 +4,7 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
-import { assertAssignable, assertProjectAccess, assertTaskAccess, visibleProjectsWhere } from "@/lib/access";
+import { assertAssignable, assertNotArchived, assertProjectAccess, assertTaskAccess, visibleProjectsWhere } from "@/lib/access";
 import { appTimeZone, boardTaskSelect, loadBoardTask, toBoardTask } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
 import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents } from "@/lib/action-context";
@@ -13,6 +13,7 @@ import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
 import { rateLimit } from "@/lib/rate-limit";
+import { assertTaskCapacity, assertTaskCreateRate } from "@/lib/caps";
 import { requireUser } from "@/lib/session";
 import * as v from "@/lib/validation";
 import { dateToIso, isoToDate, todayIso } from "@/lib/dates";
@@ -81,17 +82,11 @@ function describeChanges(data: Record<string, unknown>): Label {
   return { k: "{list} y {last}", p: { list: names.slice(0, -1), last: names.at(-1)! } };
 }
 
-/** Campos que cambian al archivar o recuperar una tarea. */
-/** Las tareas archivadas solo se recuperan (restoreTask): no se editan ni se mueven. */
-async function assertNotArchived(taskId: string) {
-  const task = await db.task.findUnique({ where: { id: taskId }, select: { archivedAt: true } });
-  if (task?.archivedAt) throw new AppError("La tarea está archivada. Recupérala para modificarla.");
-}
-
 /** Límites por tarea / usuario, para que nadie sature la base de datos ni la API de Google. */
 const MAX_SUBTASKS = 100;
 const MAX_COMMENTS = 1000;
 
+/** Campos que cambian al archivar o recuperar una tarea. */
 const ARCHIVE_FIELDS: TaskField[] = ["archivedAt", "archivedFromColumnId", "columnId", "position", "evergreen"];
 
 async function lastPosition(columnId: string): Promise<number | null> {
@@ -133,27 +128,31 @@ export async function createTask(input: z.input<typeof createSchema>) {
     await assertKindsInProject([data.kindId], data.projectId);
     // Solo se admite evergreen en la columna de la release.
     const evergreen = data.evergreen && (await db.column.count({ where: { id: data.columnId, role: "NEXT_RELEASE" } })) > 0;
+    assertTaskCreateRate(user.id);
     const position = positionBetween(await lastPosition(data.columnId), null);
-    const task = await db.task.create({
-      data: {
-        projectId: data.projectId,
-        columnId: data.columnId,
-        title: data.title,
-        kindId: data.kindId,
-        description: data.description,
-        assigneeId: data.assigneeId,
-        color: data.color,
-        linkUrl: data.linkUrl,
-        dueDate: data.dueDate ? isoToDate(data.dueDate) : null,
-        deliverableId: data.deliverableId,
-        evergreen,
-        position,
-        createdById: user.id,
-        labels: { create: [...new Set(data.labelIds)].map((labelId) => ({ labelId })) },
-        // Subtareas iniciales en el orden recibido (misma transacción que la tarea).
-        subtasks: { create: data.subtasks.map((title, i) => ({ title, position: (i + 1) * POSITION_STEP })) },
-      },
-      select: { id: true },
+    const task = await db.$transaction(async (tx) => {
+      await assertTaskCapacity(tx, data.projectId);
+      return tx.task.create({
+        data: {
+          projectId: data.projectId,
+          columnId: data.columnId,
+          title: data.title,
+          kindId: data.kindId,
+          description: data.description,
+          assigneeId: data.assigneeId,
+          color: data.color,
+          linkUrl: data.linkUrl,
+          dueDate: data.dueDate ? isoToDate(data.dueDate) : null,
+          deliverableId: data.deliverableId,
+          evergreen,
+          position,
+          createdById: user.id,
+          labels: { create: [...new Set(data.labelIds)].map((labelId) => ({ labelId })) },
+          // Subtareas iniciales en el orden recibido (misma transacción que la tarea).
+          subtasks: { create: data.subtasks.map((title, i) => ({ title, position: (i + 1) * POSITION_STEP })) },
+        },
+        select: { id: true },
+      });
     });
     noteTask(task.id);
     addUndo({ t: "task.remove", id: task.id });
@@ -200,7 +199,10 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
       const kinds = await db.taskKind.findMany({ where: { id: { in: [...new Set(data.tasks.map((t) => t.kindId))] } }, select: { id: true, subtaskTemplate: true } });
       for (const k of kinds) if (k.subtaskTemplate.length) templates.set(k.id, k.subtaskTemplate);
     }
+    assertTaskCreateRate(user.id, data.tasks.length);
     const ids = await db.$transaction(async (tx) => {
+      // Todo o nada: si el lote no cabe, no se crea ninguna.
+      await assertTaskCapacity(tx, data.projectId, data.tasks.length);
       let position = (await tx.task.findFirst({ where: { columnId: data.columnId }, orderBy: { position: "desc" }, select: { position: true } }))?.position ?? null;
       const created = await tx.task.createManyAndReturn({
         data: data.tasks.map((t) => {
@@ -249,6 +251,7 @@ export async function duplicateTask(taskId: string) {
     const user = await requireUser();
     if (!rateLimit(`duplicate:${user.id}`, 60, 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
     const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
+    assertTaskCreateRate(user.id);
     await assertNotArchived(taskId);
     const src = await db.task.findUniqueOrThrow({
       where: { id: taskId },
@@ -271,24 +274,27 @@ export async function duplicateTask(taskId: string) {
       from = (await db.task.findUniqueOrThrow({ where: { id: taskId }, select: { position: true } })).position;
       next = await nextAfter(from);
     }
-    const copy = await db.task.create({
-      data: {
-        projectId,
-        columnId: src.columnId,
-        title,
-        description: src.description,
-        kindId: src.kindId,
-        color: src.color,
-        linkUrl: src.linkUrl,
-        assigneeId: src.assigneeId,
-        dueDate: src.dueDate,
-        deliverableId: src.deliverableId,
-        position: positionBetween(from, next),
-        createdById: user.id,
-        labels: { create: src.labels.map((l) => ({ labelId: l.labelId })) },
-        subtasks: { create: src.subtasks.map((s) => ({ title: s.title, position: s.position })) },
-      },
-      select: { id: true },
+    const copy = await db.$transaction(async (tx) => {
+      await assertTaskCapacity(tx, projectId);
+      return tx.task.create({
+        data: {
+          projectId,
+          columnId: src.columnId,
+          title,
+          description: src.description,
+          kindId: src.kindId,
+          color: src.color,
+          linkUrl: src.linkUrl,
+          assigneeId: src.assigneeId,
+          dueDate: src.dueDate,
+          deliverableId: src.deliverableId,
+          position: positionBetween(from, next),
+          createdById: user.id,
+          labels: { create: src.labels.map((l) => ({ labelId: l.labelId })) },
+          subtasks: { create: src.subtasks.map((s) => ({ title: s.title, position: s.position })) },
+        },
+        select: { id: true },
+      });
     });
     addUndo({ t: "task.remove", id: copy.id });
     describeAction("Duplicó «{title}»", { title: src.title }, { taskId: copy.id });
@@ -720,6 +726,7 @@ export async function addSubtask(taskId: string, title: string) {
   return runAction({ name: "tasks.addSubtask", args: [taskId, title] }, async (): Promise<SubtaskInfo> => {
     const user = await requireUser();
     await assertTaskAccess(user, v.id.parse(taskId));
+    await assertNotArchived(taskId);
     if ((await db.subtask.count({ where: { taskId } })) >= MAX_SUBTASKS) throw new AppError("Una tarea no puede tener más de 100 subtareas.");
     const last = await db.subtask.findFirst({ where: { taskId }, orderBy: { position: "desc" }, select: { position: true } });
     const sub = await db.subtask.create({
@@ -735,6 +742,7 @@ export async function addSubtask(taskId: string, title: string) {
 export async function updateSubtask(subtaskId: string, patch: { title?: string; done?: boolean }) {
   return runAction({ name: "tasks.updateSubtask", args: [subtaskId, patch] }, async () => {
     const sub = await assertSubtaskAccess(subtaskId);
+    await assertNotArchived(sub.taskId);
     const data = z.object({ title: v.title.optional(), done: z.boolean().optional() }).parse(patch);
     addUndo({ t: "subtask.set", id: sub.id, data: { ...(data.title !== undefined ? { title: sub.title } : {}), ...(data.done !== undefined ? { done: sub.done } : {}) } });
     describeAction(
@@ -750,6 +758,7 @@ export async function updateSubtask(subtaskId: string, patch: { title?: string; 
 export async function reorderSubtask(subtaskId: string, prevId: string | null, nextId: string | null) {
   return runAction({ name: "tasks.reorderSubtask", args: [subtaskId, prevId, nextId] }, async (): Promise<{ position: number }> => {
     const sub = await assertSubtaskAccess(subtaskId);
+    await assertNotArchived(sub.taskId);
     addUndo({ t: "subtask.set", id: sub.id, data: { position: sub.position } });
     const neighbour = async (id: string | null) => {
       if (!id) return null;
@@ -776,6 +785,7 @@ export async function reorderSubtask(subtaskId: string, prevId: string | null, n
 export async function deleteSubtask(subtaskId: string) {
   return runAction({ name: "tasks.deleteSubtask", args: [subtaskId] }, async () => {
     const sub = await assertSubtaskAccess(subtaskId);
+    await assertNotArchived(sub.taskId);
     addUndo({ t: "subtask.restore", row: sub });
     describeAction("Borró la subtarea «{subtask}»", { subtask: sub.title }, { subtaskId: sub.id });
     await db.subtask.delete({ where: { id: subtaskId } });
@@ -793,6 +803,7 @@ export async function deleteAttachment(attachmentId: string) {
     if (!att) throw notFound();
     noteProject((await db.task.findUnique({ where: { id: att.taskId }, select: { projectId: true } }))?.projectId);
     noteTask(att.taskId);
+    await assertNotArchived(att.taskId);
     describeAction("Borró el adjunto «{name}» de «{task}»", { name: att.originalName, task: (await taskLabel(att.taskId)).title }, { attachmentId: att.id });
     // El fichero se conserva mientras se pueda deshacer (ver undo.ts).
     addUndo({ t: "attachment.restore", row: { ...att, createdAt: att.createdAt.toISOString() } });
@@ -805,7 +816,7 @@ export async function restoreTask(taskId: string) {
   return runAction({ name: "tasks.restoreTask", args: [taskId] }, async () => {
     const user = await requireUser();
     const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
-    const task = await db.task.findUniqueOrThrow({ where: { id: taskId }, select: { archivedFromColumnId: true } });
+    const task = await db.task.findUniqueOrThrow({ where: { id: taskId }, select: { archivedFromColumnId: true, archivedAt: true } });
     const origin = task.archivedFromColumnId
       ? await db.column.findFirst({ where: { id: task.archivedFromColumnId, projectId }, select: { id: true, name: true } })
       : null;
@@ -813,7 +824,11 @@ export async function restoreTask(taskId: string) {
     if (!column) throw new AppError("El proyecto no tiene columnas.");
     const position = positionBetween(await lastPosition(column.id), null);
     addUndo(...(await captureTasks([taskId], ARCHIVE_FIELDS)));
-    await db.task.update({ where: { id: taskId }, data: { archivedAt: null, archivedFromColumnId: null, columnId: column.id, position } });
+    await db.$transaction(async (tx) => {
+      // Al recuperarla vuelve a contar como activa: si el proyecto está en el tope, no cabe.
+      if (task.archivedAt) await assertTaskCapacity(tx, projectId);
+      await tx.task.update({ where: { id: taskId }, data: { archivedAt: null, archivedFromColumnId: null, columnId: column.id, position } });
+    });
     describeAction("Recuperó «{title}» en «{col}»", { title: (await taskLabel(taskId)).title, col: column.name }, { taskId });
     return { task: await loadBoardTask(taskId), columnName: column.name };
   });
@@ -834,6 +849,7 @@ export async function addComment(taskId: string, body: string, parentId?: string
   return runAction({ name: "tasks.addComment", args: [taskId, body, parentId] }, async (): Promise<CommentInfo> => {
     const user = await requireUser();
     const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
+    await assertNotArchived(taskId);
     const text = commentBody.parse(body);
     if ((await db.taskComment.count({ where: { taskId } })) >= MAX_COMMENTS) throw new AppError("Esta tarea ya tiene el máximo de 1000 comentarios.");
     if (!rateLimit(`comment:${user.id}`, 30, 60_000)) throw new AppError("Demasiados comentarios seguidos. Espera un momento.");
@@ -868,6 +884,7 @@ export async function deleteComment(commentId: string) {
     if (comment.authorId !== user.id && user.role !== "ADMIN") throw new AppError("Solo puedes borrar tus comentarios.", 403);
     noteProject(comment.task.projectId);
     noteTask(comment.taskId);
+    await assertNotArchived(comment.taskId);
     const { task, ...row } = comment;
     addUndo({ t: "comment.restore", row: { ...row, createdAt: row.createdAt.toISOString(), editedAt: row.editedAt?.toISOString() ?? null } });
     describeAction("Borró un comentario de «{title}»", { title: task.title }, { taskId: row.taskId });
@@ -884,6 +901,7 @@ export async function createGoogleFile(taskId: string, kind: GoogleFileKind, tit
   return runAction({ name: "tasks.createGoogleFile", args: [taskId, kind, title] }, async (): Promise<TaskLinkInfo> => {
     const user = await requireUser();
     const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
+    await assertNotArchived(taskId);
     if (!rateLimit(`google-file:${user.id}`, 20, 60_000)) throw new AppError("Demasiados documentos creados seguidos. Espera un minuto.");
     const fileKind = z.enum(["GOOGLE_DOC", "GOOGLE_SHEET"]).parse(kind);
     const name = v.title.parse(title);
@@ -916,6 +934,7 @@ export async function deleteTaskLink(linkId: string) {
     if (!link) throw notFound();
     noteProject(link.task.projectId);
     noteTask(link.taskId);
+    await assertNotArchived(link.taskId);
     const { task: _task, ...row } = link;
     addUndo({ t: "link.restore", row: { ...row, createdAt: row.createdAt.toISOString() } });
     describeAction("Quitó el enlace «{title}»", { title: row.title }, { taskId: row.taskId });

@@ -3,7 +3,8 @@
 const buckets: Map<string, { count: number; resetAt: number }> = ((globalThis as unknown as { __pzRate?: Map<string, { count: number; resetAt: number }> }).__pzRate ??= new Map());
 let lastSweep = 0;
 
-export function rateLimit(key: string, limit: number, windowMs: number): boolean {
+/** `cost`: lo que suma esta llamada al contador (p. ej. las tareas de una creación múltiple). */
+export function rateLimit(key: string, limit: number, windowMs: number, cost = 1): boolean {
   const now = Date.now();
   // Limpieza como mucho una vez por segundo (no en cada llamada) y tope duro ante claves masivas.
   if (buckets.size > 5000 && now - lastSweep > 1000) {
@@ -14,10 +15,10 @@ export function rateLimit(key: string, limit: number, windowMs: number): boolean
   }
   const bucket = buckets.get(key);
   if (!bucket || bucket.resetAt < now) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
-    return true;
+    buckets.set(key, { count: cost, resetAt: now + windowMs });
+    return cost <= limit;
   }
-  bucket.count += 1;
+  bucket.count += cost;
   return bucket.count <= limit;
 }
 

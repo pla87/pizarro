@@ -329,6 +329,8 @@ model Task {
   @@index([deliverableId])
   @@index([kindId])
   @@index([projectId, dueDate])
+  @@index([createdAt])
+  @@index([createdById])
 }
 
 model Label {
@@ -380,6 +382,7 @@ model TaskAttachment {
   createdBy    User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([taskId])
+  @@index([createdById])
 }
 
 model Release {
@@ -397,6 +400,7 @@ model Release {
   attachments ReleaseAttachment[]
 
   @@index([projectId, deployedAt])
+  @@index([createdById])
   @@unique([projectId, number])
 }
 
@@ -480,6 +484,7 @@ model TaskLink {
   createdBy   User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([taskId])
+  @@index([createdById])
 }
 
 /// Cuenta de Google conectada por OAuth (permiso drive.file). Tokens cifrados con AES-256-GCM.
@@ -513,6 +518,8 @@ model TaskComment {
 
   @@index([taskId, createdAt])
   @@index([parentId])
+  @@index([createdAt])
+  @@index([authorId])
 }
 
 enum NotificationType {
@@ -618,6 +625,7 @@ model Notification {
   @@index([userId, readAt, createdAt])
   @@index([taskId])
   @@index([readAt, createdAt])
+  @@index([actorId])
 }
 
 /// Tipo de tarea configurable por los administradores (cada uno es una sección de la release).
