@@ -16,6 +16,7 @@ import type { CurrentUser } from "@/lib/session";
 import { AppBadge } from "./AppBadge";
 import { InstallApp } from "./InstallApp";
 import { clearAllDrafts } from "./board/drafts";
+import { installDragMove } from "./ui/dragMove";
 import { Presence } from "./board/Presence";
 import { PrivateIcon, ProjectMenu, ProjectsContext, useProjectSwitchHref } from "./ProjectMenu";
 import { UndoButton } from "./UndoButton";
@@ -33,6 +34,8 @@ interface Props {
   projects: { id: string; name: string; isPrivate?: boolean }[];
   version: string;
   unread: number;
+  /** Último proyecto visitado (cookie ya validada contra los visibles): se mantiene seleccionado fuera de /p/…. */
+  lastProjectId?: string | null;
   children: React.ReactNode;
 }
 
@@ -46,7 +49,7 @@ export function AppShell(props: Props) {
   );
 }
 
-function Shell({ user, projects, version, unread, children }: Props) {
+function Shell({ user, projects, version, unread, lastProjectId = null, children }: Props) {
   const t = useT();
   const pathname = usePathname();
   // El menú móvil se cierra solo al navegar: queda asociado a la ruta en que se abrió.
@@ -55,7 +58,16 @@ function Shell({ user, projects, version, unread, children }: Props) {
   const setDrawerOpen = (open: boolean) => setDrawerPath(open ? pathname : null);
   useEscapeClose(drawerOpen, () => setDrawerPath(null));
   const projectId = pathname.match(/^\/p\/([^/]+)/)?.[1] ?? null;
-  const current = projects.find((p) => p.id === projectId) ?? null;
+  // En páginas que no son de un proyecto (calendario, avisos, perfil…) sigue seleccionado el último visitado,
+  // para volver a su tablero sin elegirlo de nuevo.
+  const [lastId, setLastId] = useState(lastProjectId);
+  if (projectId && projectId !== lastId && projects.some((p) => p.id === projectId)) setLastId(projectId);
+  const current = projects.find((p) => p.id === (projectId ?? lastId)) ?? null;
+  // Deshacer y presencia son del proyecto que se está viendo, no del recordado.
+  const inProject = Boolean(projectId && current?.id === projectId);
+
+  // Mover/copiar texto arrastrado entre campos (incluido el editor TipTap).
+  useEffect(() => installDragMove(), []);
 
   useEffect(() => {
     // Recuerda el último proyecto para abrirlo directamente en la próxima visita.
@@ -96,9 +108,9 @@ function Shell({ user, projects, version, unread, children }: Props) {
           {/* Deshacer, justo a continuación del nombre del tablero. */}
           <div className="flex min-w-0 flex-1 items-center gap-0.5">
             <ProjectMenu className="min-w-0" />
-            {current && <UndoButton projectId={current.id} className="shrink-0" />}
+            {current && inProject && <UndoButton projectId={current.id} className="shrink-0" />}
           </div>
-          {current && <Presence projectId={current.id} compact />}
+          {current && inProject && <Presence projectId={current.id} compact />}
           {unread > 0 && (
             <Link href="/notifications" className="ml-auto flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white" aria-label={t("{n} avisos sin leer", { n: unread })}>
               <Bell size={13} /> {unread}
@@ -116,6 +128,7 @@ function NavLink({ href, icon: Icon, children, active }: { href: string; icon: t
   return (
     <Link
       href={href}
+      aria-current={active ? "page" : undefined}
       className={cn(
         // El contorno de foco va por dentro: el menú hace scroll y recortaría uno exterior.
         "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium focus-visible:outline-3 focus-visible:-outline-offset-2 focus-visible:outline-focus",

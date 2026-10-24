@@ -621,8 +621,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
           {detail && (
             <p className="text-xs text-slate-500">
               {detail.createdByName
-                ? t("Creada por {name} el {date}", { name: detail.createdByName, date: formatDate(detail.createdAt, "dateShort", locale) })
-                : t("Creada el {date}", { date: formatDate(detail.createdAt, "dateShort", locale) })}
+                ? t("Creada por {name} el {date} a las {time}", { name: detail.createdByName, date: formatDate(detail.createdAt, "dateNumeric", locale), time: formatDate(detail.createdAt, "timeHm", locale) })
+                : t("Creada el {date} a las {time}", { date: formatDate(detail.createdAt, "dateNumeric", locale), time: formatDate(detail.createdAt, "timeHm", locale) })}
             </p>
           )}
           <FollowToggle taskId={task.id} following={detail?.following} />

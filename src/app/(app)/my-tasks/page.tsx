@@ -3,6 +3,7 @@ import { ExternalLink, Folder, ListChecks } from "lucide-react";
 import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
+import { localizeGeneralKind } from "@/lib/kinds-localize";
 import { TypeBadge } from "@/components/ui/TypeBadge";
 import { MentionText } from "@/components/ui/MentionText";
 import { cn } from "@/components/ui/cn";
@@ -26,7 +27,8 @@ const FILTERS: { value: TaskFilter; label: string }[] = [
 export default async function MyTasksPage({ searchParams }: { searchParams: Promise<{ filter?: string | string[] }> }) {
   const user = await requireUserPage();
   const t = await getT();
-  const locale = intlLocale(await getLocale());
+  const uiLocale = await getLocale();
+  const locale = intlLocale(uiLocale);
   const filter = parseFilter((await searchParams).filter);
   const rows = await db.task.findMany({
     // Bandeja de lo pendiente: sin las ya terminadas (columnas «hechas») y con un tope razonable.
@@ -37,7 +39,7 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
     select: {
       id: true,
       title: true,
-      kind: { select: { name: true, color: true } },
+      kind: { select: { id: true, name: true, color: true } },
       color: true,
       linkUrl: true,
       dueDate: true,
@@ -111,7 +113,7 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
                       <Folder size={12} className="shrink-0 text-slate-400" aria-hidden />
                       <span className="truncate">{task.project.name}</span>
                     </Link>
-                    <TypeBadge kind={task.kind} />
+                    <TypeBadge kind={localizeGeneralKind(task.kind, uiLocale)} />
                     <Link href={`/p/${projectId}?task=${task.id}`} className="min-w-0 flex-1 basis-40 truncate text-sm font-medium hover:text-brand-600">
                       <MentionText text={task.title} />
                     </Link>

@@ -15,6 +15,7 @@ import { markdownFromPaste } from "@/lib/markdown-paste";
 import type { UserOption } from "@/lib/types";
 import { Avatar } from "./Avatar";
 import { cn } from "./cn";
+import { registerDragEditor } from "./dragMove";
 import type { MentionCommand } from "./MentionTextarea";
 
 type Option =
@@ -182,6 +183,7 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
 
   useEffect(() => {
     editorRef.current = editor;
+    return editor ? registerDragEditor(editor) : undefined;
   }, [editor]);
 
   useEffect(() => {

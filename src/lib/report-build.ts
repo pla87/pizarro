@@ -1,6 +1,7 @@
 import "server-only";
 import { intlLocale, type Locale, makeT } from "../i18n/core";
 import { appTimeZone, listKinds } from "./board";
+import { localizeGeneralKind, localizeGeneralKinds } from "./kinds-localize";
 import { dateToIso, todayIso } from "./dates";
 import { db } from "./db";
 import { mentionsToPlain } from "./mentions";
@@ -43,7 +44,7 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
       select: {
         id: true,
         title: true,
-        kind: { select: { name: true } },
+        kind: { select: { id: true, name: true } },
         columnId: true,
         dueDate: true,
         deliverableId: true,
@@ -66,11 +67,11 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
     today,
     time: new Intl.DateTimeFormat(locale, { timeZone: appTimeZone(), hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date()),
     columns,
-    kinds: kinds.map((k) => k.name),
+    kinds: localizeGeneralKinds(kinds, opts.locale).map((k) => k.name),
     tasks: tasks.map((task) => ({
       id: task.id,
       title: mentionsToPlain(task.title),
-      kind: task.kind.name,
+      kind: localizeGeneralKind(task.kind, opts.locale).name,
       columnId: task.columnId,
       assigneeName: task.assignee?.name ?? null,
       dueDate: dateToIso(task.dueDate),
