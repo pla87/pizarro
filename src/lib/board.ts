@@ -24,7 +24,7 @@ export const boardTaskSelect = {
   labels: { select: { labelId: true } },
   subtasks: { select: { done: true } },
   // Solo el flag de cada adjunto: la tarjeta distingue imágenes de otros ficheros.
-  attachments: { select: { isImage: true } },
+  attachments: { select: { isImage: true, size: true } },
   _count: { select: { comments: true, links: true } },
 } satisfies Prisma.TaskSelect;
 
@@ -52,6 +52,7 @@ function toBoardTaskWith(t: BoardTaskRow, hasDescription: boolean): BoardTask {
     subtaskDone: t.subtasks.filter((s) => s.done).length,
     imageCount: t.attachments.filter((a) => a.isImage).length,
     fileCount: t.attachments.filter((a) => !a.isImage).length,
+    attachBytes: t.attachments.reduce((n, a) => n + a.size, 0),
     hasDescription,
     dueDate: dateToIso(t.dueDate),
     deliverableId: t.deliverableId,

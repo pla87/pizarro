@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { makeT, type T } from "@/i18n/core";
-import type { AttachmentInfo } from "@/lib/types";
+import type { AttachmentInfo, BoardTask } from "@/lib/types";
 
 const CLIENT_MAX_WIDTH = 1920;
 
@@ -56,6 +56,27 @@ export function formatBytes(bytes: number, locale = "es-ES"): string {
   return `${locale.startsWith("es") ? mb.replace(".", ",") : mb} MB`;
 }
 
+/** Megas legibles con un decimal como mucho: «45», «12,5». */
+export function mbText(bytes: number, locale = "es-ES"): string {
+  const mb = (Math.round((bytes / 1024 / 1024) * 10) / 10).toString();
+  return locale.startsWith("es") ? mb.replace(".", ",") : mb;
+}
+
+/** Fallo de subida; `code` = «task_total» cuando se supera el máximo de adjuntos de la tarea. */
+export class UploadError extends Error {
+  constructor(message: string, public readonly code?: string) {
+    super(message);
+  }
+}
+
+/** Cambio de los contadores de la tarjeta al añadir (+1) o quitar (-1) un adjunto. */
+export function attachmentPatch(task: BoardTask, att: Pick<AttachmentInfo, "isImage" | "size">, sign: 1 | -1 = 1): Partial<BoardTask> {
+  const attachBytes = Math.max(0, task.attachBytes + sign * att.size);
+  return att.isImage
+    ? { imageCount: Math.max(0, task.imageCount + sign), attachBytes }
+    : { fileCount: Math.max(0, task.fileCount + sign), attachBytes };
+}
+
 /** `onCreate`: adjunto de una tarea recién creada (deshacer la creación se lo lleva, no cuenta aparte). */
 export async function uploadFile(taskId: string, file: File, onCreate = false, t: T = makeT("es")): Promise<AttachmentInfo> {
   const body = new FormData();
@@ -65,12 +86,22 @@ export async function uploadFile(taskId: string, file: File, onCreate = false, t
   body.append("file", isImage ? await shrink(file) : file, name);
   const res = await fetch(`/api/tasks/${taskId}/attachments${onCreate ? "?alCrear=1" : ""}`, { method: "POST", body });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.error ?? t("No se pudo subir el archivo."));
+  if (!res.ok) throw new UploadError(json.error ?? t("No se pudo subir el archivo."), json.code);
   return json as AttachmentInfo;
 }
 
 /** Diálogos con zona de soltado abiertos: solo el último (el de más arriba) recibe los archivos. */
 const dropStack: object[] = [];
+
+/** Sin ningún diálogo con zona de soltado abierto: las tarjetas del tablero pueden recibir archivos. */
+export function cardsAcceptFiles(): boolean {
+  return dropStack.length === 0;
+}
+
+/** Un arrastre trae archivos (y no, p. ej., texto o una tarjeta). */
+export function hasFiles(e: { dataTransfer: DataTransfer | null }): boolean {
+  return Array.from(e.dataTransfer?.types ?? []).includes("Files");
+}
 
 /**
  * Arrastrar y soltar archivos en cualquier punto de la ventana mientras el diálogo está abierto.
@@ -130,4 +161,24 @@ export function useFileDrop(onFiles: (files: File[]) => void): boolean {
     };
   }, []);
   return over;
+}
+
+/**
+ * El tablero ignora los archivos soltados fuera de una tarjeta o de un diálogo: sin esto el navegador
+ * abriría el archivo y saldría de la aplicación. Las tarjetas (y los diálogos) los gestionan antes.
+ */
+export function useBlockStrayFileDrops(): void {
+  useEffect(() => {
+    const block = (e: DragEvent) => {
+      if (e.defaultPrevented || !cardsAcceptFiles() || !Array.from(e.dataTransfer?.types ?? []).includes("Files")) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "none";
+    };
+    document.addEventListener("dragover", block);
+    document.addEventListener("drop", block);
+    return () => {
+      document.removeEventListener("dragover", block);
+      document.removeEventListener("drop", block);
+    };
+  }, []);
 }

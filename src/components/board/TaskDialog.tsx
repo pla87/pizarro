@@ -34,7 +34,8 @@ import { FollowToggle } from "./FollowToggle";
 import { TaskHistory } from "./TaskHistory";
 import { TitleField } from "./TitleField";
 import { createAndOpenGoogleFile } from "./google";
-import { filesFrom, formatBytes, uploadFile, useFileDrop } from "./upload";
+import { AttachLimitHint } from "./AttachLimitHint";
+import { attachmentPatch, filesFrom, formatBytes, UploadError, uploadFile, useFileDrop } from "./upload";
 import { formatDate } from "@/lib/format";
 import { draftKey, useDraftAutosave, type EditTaskDraft } from "./drafts";
 import { setUndoTask, UNDONE_EVENT } from "../undo-context";
@@ -87,6 +88,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   const [descVersion, setDescVersion] = useState(0);
   const [link, setLink] = useState(task.linkUrl ?? "");
   const [uploading, setUploading] = useState(0);
+  // Una subida se rechazó por el máximo de adjuntos de la tarea: se resalta el total hasta que se borre algo.
+  const [totalRejected, setTotalRejected] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
 
   useEffect(() => {
@@ -218,8 +221,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       try {
         const att = await board.trackRaw(uploadFile(task.id, file, false, t));
         setDetail((d) => (d ? { ...d, attachments: [...d.attachments, att] } : d));
-        board.patchTask(task.id, (t) => (att.isImage ? { imageCount: t.imageCount + 1 } : { fileCount: t.fileCount + 1 }));
+        board.patchTask(task.id, (t) => attachmentPatch(t, att));
       } catch (err) {
+        if (err instanceof UploadError && err.code === "task_total") setTotalRejected(true);
         toast((err as Error).message, "error");
       } finally {
         setUploading((n) => n - 1);
@@ -236,7 +240,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     if (!res.ok) return toast(res.error, "error");
     const removed = detail?.attachments.find((x) => x.id === id);
     setDetail((d) => (d ? { ...d, attachments: d.attachments.filter((x) => x.id !== id) } : d));
-    if (removed) board.patchTask(task.id, (t) => (removed.isImage ? { imageCount: Math.max(0, t.imageCount - 1) } : { fileCount: Math.max(0, t.fileCount - 1) }));
+    if (removed) board.patchTask(task.id, (t) => attachmentPatch(t, removed, -1));
+    setTotalRejected(false);
   };
 
   const onPaste = (e: React.ClipboardEvent) => {
@@ -418,7 +423,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
                 </label>
               </div>
             </div>
-            <p className="mb-2 truncate text-xs text-slate-500 max-sm:hidden">{t("Pega o arrastra archivos (máx. 20 MB)")}</p>
+            <AttachLimitHint
+              className="mb-2 max-sm:hidden" usedBytes={task.attachBytes} limitMb={board.project.attachMaxMb} fileMaxMb={board.project.fileMaxMb} rejected={totalRejected}
+            />
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {images.map((a, i) => (
                 <div key={a.id} className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">

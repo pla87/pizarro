@@ -24,6 +24,8 @@ export interface BoardTask {
   /** Adjuntos que son imágenes y adjuntos que son otros ficheros (la tarjeta muestra ambos contadores). */
   imageCount: number;
   fileCount: number;
+  /** Suma de los tamaños de todos los adjuntos de la tarea (bytes). */
+  attachBytes: number;
   hasDescription: boolean;
   /** YYYY-MM-DD */
   dueDate: string | null;
@@ -78,7 +80,8 @@ export interface LabelOption {
 }
 
 export interface BoardData {
-  project: { id: string; name: string };
+  /** `attachMaxMb`: tope de adjuntos por tarea (y por paquete de release) del proyecto; `fileMaxMb`: tope por archivo. */
+  project: { id: string; name: string; attachMaxMb: number; fileMaxMb: number };
   columns: BoardColumn[];
   tasks: BoardTask[];
   users: UserOption[];

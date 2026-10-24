@@ -37,7 +37,7 @@ import { useShortcut } from "./shortcuts";
 import { useBoardShortcuts } from "./useBoardShortcuts";
 import { TaskCard } from "./TaskCard";
 import { ReportButton } from "../ReportButton";
-import { imageFilesFrom } from "./upload";
+import { imageFilesFrom, useBlockStrayFileDrops } from "./upload";
 import { draftKey, readDraft, type EditTaskDraft, type NewTaskDraft } from "./drafts";
 import { mentionsToPlain } from "@/lib/mentions";
 
@@ -154,6 +154,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const t = useT();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  useBlockStrayFileDrops();
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [columns, setColumns] = useState(data.columns);
   // Tareas y selección viven en almacenes externos: cada tarjeta se suscribe solo a lo suyo (ver context.ts)

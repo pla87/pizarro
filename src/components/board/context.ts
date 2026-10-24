@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useSyncExternalStore } from "react";
-import type { BoardColumn, BoardTask, CardStyleValue, DeliverableOption, EditorModeValue, KindOption, LabelOption, UserOption } from "@/lib/types";
+import type { BoardColumn, BoardData, BoardTask, CardStyleValue, DeliverableOption, EditorModeValue, KindOption, LabelOption, UserOption } from "@/lib/types";
 
 import { countSelected, tasksById, type BoardStores } from "./stores";
 
@@ -10,7 +10,7 @@ import { countSelected, tasksById, type BoardStores } from "./stores";
  * así que usarlo no obliga a redibujar. El estado rápido va aparte: `useTask(id)`, `useIsSelected(id)`, etc.
  */
 export interface BoardApi {
-  project: { id: string; name: string };
+  project: BoardData["project"];
   users: UserOption[];
   currentUserId: string;
   columns: BoardColumn[];
