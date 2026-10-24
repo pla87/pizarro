@@ -1,6 +1,39 @@
 {
   "versions": [
     {
+      "version": "1.20.1",
+      "date": "2026-10-24",
+      "releasedAt": "2026-10-24T12:04:26+02:00",
+      "summary": "Mover, editar y desplegar más rápidos; el selector Columna deja la tarjeta al final",
+      "changes": {
+        "nuevas": [],
+        "mejoras": [
+          "Mover tarjetas, editar tareas y desplegar releases es más rápido (menos consultas a la base de datos; el despliegue responde sin esperar a copiar los adjuntos al histórico)."
+        ],
+        "correcciones": [
+          "Al cambiar una tarea de columna desde el selector «Columna» del detalle, queda al final de la columna (antes podía quedar arriba)."
+        ],
+        "tecnicos": [
+          "Batería de pruebas de navegador de las acciones del tablero (351 comprobaciones) y pruebas de base de datos que fijan su comportamiento."
+        ]
+      },
+      "en": {
+        "summary": "Faster moving, editing and deploying; the Column selector puts the card at the end",
+        "changes": {
+          "nuevas": [],
+          "mejoras": [
+            "Moving cards, editing tasks and deploying releases is faster (fewer database queries; deploying no longer waits for copying attachments to the history)."
+          ],
+          "correcciones": [
+            "Changing a task's column from the detail's “Column” selector puts it at the end of the column (it could end up at the top)."
+          ],
+          "tecnicos": [
+            "Browser test suite for board actions (351 checks) and database tests that pin their behaviour."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.20.0",
       "date": "2026-10-24",
       "releasedAt": "2026-10-24T10:48:06+02:00",

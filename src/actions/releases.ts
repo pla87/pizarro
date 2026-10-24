@@ -1,6 +1,7 @@
 "use server";
 
 import { readFile } from "node:fs/promises";
+import { after } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { describeAction } from "@/lib/action-context";
@@ -10,8 +11,10 @@ import { assertProjectAccess } from "@/lib/access";
 import { MAX_RELEASE_CONTENT } from "@/lib/constants";
 import { appTimeZone } from "@/lib/board";
 import { AppError } from "@/lib/errors";
+import { logEvent } from "@/lib/log";
 import { POSITION_STEP } from "@/lib/positions";
 import { spawnRecurrences } from "@/lib/recurrence";
+import { setTaskColumnPositions } from "@/lib/task-positions";
 import { attachmentFileNames, zonedDayRange } from "@/lib/release";
 import { requireUser } from "@/lib/session";
 import { attachmentPath, compactImage, removeReleaseAttachmentFiles, saveReleaseAttachmentFile } from "@/lib/uploads";
@@ -50,12 +53,16 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     });
 
     // Deshacer: dónde estaba cada tarea (solo las de este proyecto); la release del histórico se quita (ver más abajo).
-    addUndo(...(await captureTasks(tasks.map((t) => t.id), ["columnId", "position", "archivedAt", "archivedFromColumnId", "evergreen"])));
-
-    let target: { id: string; isDone: boolean } | null = null;
-    if (data.destination === "IN_PRODUCTION") {
-      target = await db.column.findFirst({ where: { projectId: data.projectId, role: "IN_PRODUCTION" }, select: { id: true, isDone: true } });
-      if (!target) throw new AppError("No hay ninguna columna con el rol «En producción». Asígnalo en el menú de una columna o elige archivar.");
+    // La columna de destino se busca a la vez.
+    const [undo, target] = await Promise.all([
+      captureTasks(tasks.map((t) => t.id), ["columnId", "position", "archivedAt", "archivedFromColumnId", "evergreen"]),
+      data.destination === "IN_PRODUCTION"
+        ? db.column.findFirst({ where: { projectId: data.projectId, role: "IN_PRODUCTION" }, select: { id: true, isDone: true } })
+        : null,
+    ]);
+    addUndo(...undo);
+    if (data.destination === "IN_PRODUCTION" && !target) {
+      throw new AppError("No hay ninguna columna con el rol «En producción». Asígnalo en el menú de una columna o elige archivar.");
     }
 
     const result = await db.$transaction(async (tx) => {
@@ -83,9 +90,10 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
         for (const t of tasks) {
           if (t.evergreen) continue; // las fijas se quedan en su columna
           pos += POSITION_STEP;
-          await tx.task.update({ where: { id: t.id }, data: { columnId: target.id, position: pos } });
           moved.push({ id: t.id, columnId: target.id, position: pos });
         }
+        // Una sola sentencia para todas (antes, un UPDATE por tarea: con 500 se acercaba al tope de 5 s de la transacción).
+        await setTaskColumnPositions(moved, target.id, { client: tx });
       } else if (tasks.some((t) => !t.evergreen)) {
         // Se recuerda la columna de cada tarea para poder restaurarla en su sitio.
         await tx.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId" WHERE "id" IN (${Prisma.join(tasks.filter((t) => !t.evergreen).map((t) => t.id))})`;
@@ -106,17 +114,34 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
       },
       { releaseId: result.releaseId, taskIds: tasks.map((t) => t.id) },
     );
-    // Copias compactas de los adjuntos para el histórico; si algo falla se omite, el despliegue ya está hecho.
+    // Copias compactas de los adjuntos para el histórico: tras responder (comprimir imágenes tarda), así el
+    // despliegue no espera. El histórico las muestra unos segundos después; si algo falla queda en el registro.
     if (data.attachments?.length) {
-      await saveReleaseAttachments(result.releaseId, data.attachments, new Set(tasks.map((t) => t.id))).catch((err) =>
-        console.error("[releases] no se pudieron guardar los adjuntos", err),
+      const job = { releaseId: result.releaseId, items: data.attachments, allowed: new Set(tasks.map((t) => t.id)), projectId: data.projectId, userId: user.id, userName: user.name };
+      after(() =>
+        saveReleaseAttachments(job).catch((err) =>
+          logEvent({
+            level: "error", category: "system", action: "releases.saveAttachments",
+            message: `No se pudieron guardar los adjuntos de la release: ${err instanceof Error ? err.message : String(err)}`,
+            userId: job.userId, userName: job.userName, projectId: job.projectId, details: { releaseId: job.releaseId },
+          }),
+        ),
       );
     }
     return { ...result, spawned };
   });
 }
 
-async function saveReleaseAttachments(releaseId: string, items: { taskId: string; code: string }[], allowed: Set<string>) {
+interface AttachmentJob {
+  releaseId: string;
+  items: { taskId: string; code: string }[];
+  allowed: Set<string>;
+  projectId: string;
+  userId: string;
+  userName: string;
+}
+
+async function saveReleaseAttachments({ releaseId, items, allowed, projectId, userId, userName }: AttachmentJob) {
   const valid = items.filter((i) => allowed.has(i.taskId));
   if (new Set(valid.map((i) => i.taskId)).size !== valid.length || new Set(valid.map((i) => i.code)).size !== valid.length) return;
   const tasks = await db.task.findMany({
@@ -124,6 +149,7 @@ async function saveReleaseAttachments(releaseId: string, items: { taskId: string
     select: { id: true, attachments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, originalName: true, isImage: true } } },
   });
   const byId = new Map(tasks.map((t) => [t.id, t.attachments]));
+  const saved: string[] = [];
   let position = 0;
   for (const item of valid) {
     const attachments = byId.get(item.taskId) ?? [];
@@ -139,12 +165,24 @@ async function saveReleaseAttachments(releaseId: string, items: { taskId: string
         });
         rowId = row.id;
         await saveReleaseAttachmentFile(row.id, data, att.isImage ? "webp" : "bin");
+        saved.push(row.id);
       } catch (err) {
-        // Fichero ausente o ilegible: se omite; si ya había fila, se retira para no dejarla sin fichero.
-        console.error("[releases] adjunto omitido", err);
+        // Fichero ausente o ilegible (o la release ya borrada): se omite; si ya había fila, se retira para no dejarla sin fichero.
+        logEvent({
+          level: "error", category: "system", action: "releases.saveAttachments",
+          message: `Adjunto omitido en la release: «${names[i] ?? att.originalName}» (${err instanceof Error ? err.message : String(err)})`,
+          userId, userName, projectId, details: { releaseId, attachmentId: att.id },
+        });
         if (rowId) await db.releaseAttachment.delete({ where: { id: rowId } }).catch(() => {});
       }
     }
+  }
+  // Se guardan después de responder: si mientras tanto se ha borrado o deshecho la release, sus filas ya no
+  // están y los ficheros recién escritos sobran.
+  if (saved.length) {
+    const alive = new Set((await db.releaseAttachment.findMany({ where: { id: { in: saved } }, select: { id: true } })).map((a) => a.id));
+    const gone = saved.filter((id) => !alive.has(id));
+    if (gone.length) await removeReleaseAttachmentFiles(gone);
   }
 }
 

@@ -4,14 +4,15 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
-import { assertAssignable, assertNotArchived, assertProjectAccess, assertTaskAccess, visibleProjectsWhere } from "@/lib/access";
+import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjectAccess, assertTaskAccess, loadTaskWithAccess, visibleProjectsWhere } from "@/lib/access";
 import { appTimeZone, boardTaskSelect, loadBoardTask, toBoardTask } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
 import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents } from "@/lib/action-context";
-import { addUndo, captureTasks, snapshotTasks, type TaskField } from "@/lib/undo";
+import { addUndo, captureTasks, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, type TaskField } from "@/lib/undo";
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
+import { setTaskColumnPositions } from "@/lib/task-positions";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertTaskCapacity, assertTaskCreateRate } from "@/lib/caps";
 import { requireUser } from "@/lib/session";
@@ -63,10 +64,6 @@ async function taskLabel(taskId: string): Promise<{ title: string; column: strin
 
 async function columnName(columnId: string): Promise<string> {
   return (await db.column.findUnique({ where: { id: columnId }, select: { name: true } }))?.name ?? "?";
-}
-
-async function columnIsDone(columnId: string): Promise<boolean> {
-  return (await db.column.findUnique({ where: { id: columnId }, select: { isDone: true } }))?.isDone ?? false;
 }
 
 const CHANGE_LABELS: Record<string, string> = {
@@ -320,7 +317,7 @@ const updateSchema = z.object({
 /** Anota en el historial qué ha cambiado realmente al editar la tarea (una línea por cambio). */
 async function recordUpdateEvents(
   taskId: string,
-  prev: { title: string; description: string; kindId: string; kind: { name: string }; assigneeId: string | null; dueDate: Date | null; color: string | null; linkUrl: string | null; deliverableId: string | null; evergreen: boolean },
+  prev: { title: string; description: string; kindId: string; assigneeId: string | null; dueDate: Date | null; color: string | null; linkUrl: string | null; deliverableId: string | null; evergreen: boolean },
   data: z.infer<typeof updateSchema>,
   dueDate: string | null | undefined,
 ) {
@@ -328,8 +325,9 @@ async function recordUpdateEvents(
   if (data.title !== undefined && data.title !== prev.title) add({ k: "Cambió el título de «{from}» a «{to}»", p: { from: mentionsToPlain(prev.title), to: mentionsToPlain(data.title) } });
   if (data.description !== undefined && data.description !== prev.description) add({ k: "Editó la descripción" });
   if (data.kindId !== undefined && data.kindId !== prev.kindId) {
-    const kind = await db.taskKind.findUnique({ where: { id: data.kindId }, select: { name: true } });
-    add({ k: "Cambió el tipo de «{from}» a «{to}»", p: { from: prev.kind.name, to: kind?.name ?? "?" } });
+    const kinds = await db.taskKind.findMany({ where: { id: { in: [prev.kindId, data.kindId] } }, select: { id: true, name: true } });
+    const name = (id: string) => kinds.find((k) => k.id === id)?.name;
+    add({ k: "Cambió el tipo de «{from}» a «{to}»", p: { from: name(prev.kindId) ?? "?", to: name(data.kindId) ?? "?" } });
   }
   if (data.assigneeId !== undefined && data.assigneeId !== prev.assigneeId) {
     const who = data.assigneeId ? (await db.user.findUnique({ where: { id: data.assigneeId }, select: { name: true } }))?.name ?? "?" : null;
@@ -355,35 +353,44 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
   return runAction({ name: "tasks.updateTask", args: [taskId, patch, since] }, async () => {
     const user = await requireUser();
     const data = updateSchema.parse(patch);
-    const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
-    await assertNotArchived(taskId);
+    // Una sola lectura de la tarea (con el permiso) para todo lo que sigue: archivada, conflicto de edición,
+    // fija, repetición, valores para deshacer y valores anteriores para el historial y los avisos.
+    // Las relaciones (etiquetas) van en una consulta aparte en paralelo: como relación, Prisma la haría después.
+    const id = v.id.parse(taskId);
+    const [task, labels] = await Promise.all([
+      loadTaskWithAccess(user, id, { id: true, ...TASK_UNDO_SELECT }),
+      data.labelIds !== undefined ? db.taskLabel.findMany({ where: { taskId: id }, select: { labelId: true } }) : undefined,
+    ]);
+    const { projectId } = task;
+    assertNotArchivedRow(task);
     const editsText = data.title !== undefined || data.description !== undefined;
     if (editsText && since !== undefined) {
-      const current = await db.task.findUniqueOrThrow({ where: { id: taskId }, select: { contentUpdatedAt: true, contentUpdatedById: true } });
       const base = since ? new Date(since).getTime() : 0;
-      if (current.contentUpdatedAt && current.contentUpdatedById !== user.id && current.contentUpdatedAt.getTime() > base) {
-        const who = current.contentUpdatedById ? (await db.user.findUnique({ where: { id: current.contentUpdatedById }, select: { name: true } }))?.name : null;
+      if (task.contentUpdatedAt && task.contentUpdatedById !== user.id && task.contentUpdatedAt.getTime() > base) {
+        const who = task.contentUpdatedById ? (await db.user.findUnique({ where: { id: task.contentUpdatedById }, select: { name: true } }))?.name : null;
         const t = await getT();
         throw new AppError(who ? t("{who} ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos.", { who }) : t("Otra persona ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos."), 409);
       }
     }
-    if (data.assigneeId) await assertAssignable(projectId, data.assigneeId);
-    if (data.labelIds) await assertLabelsInProject(data.labelIds, projectId);
-    await assertDeliverableInProject(data.deliverableId, projectId);
-    await assertKindsInProject([data.kindId], projectId);
-    // Evergreen solo tiene sentido en la columna de la release.
-    if (data.evergreen) {
-      const ok = await db.task.count({ where: { id: taskId, column: { role: "NEXT_RELEASE" } } });
-      if (!ok) throw new AppError("Solo las tareas de la columna de la release pueden ser fijas.");
-    }
+    // Las comprobaciones van a la vez; si fallan varias, gana la primera en el orden de siempre.
+    const checks = await Promise.allSettled([
+      data.assigneeId ? assertAssignable(projectId, data.assigneeId) : null,
+      data.labelIds ? assertLabelsInProject(data.labelIds, projectId) : null,
+      assertDeliverableInProject(data.deliverableId, projectId),
+      assertKindsInProject([data.kindId], projectId),
+      // Evergreen solo tiene sentido en la columna de la release.
+      data.evergreen ? db.column.count({ where: { id: task.columnId, role: "NEXT_RELEASE" } }).then((ok) => {
+        if (!ok) throw new AppError("Solo las tareas de la columna de la release pueden ser fijas.");
+      }) : null,
+    ]);
+    for (const c of checks) if (c.status === "rejected") throw c.reason;
     const { labelIds, dueDate, recurrence, recurrenceDay, ...rest } = data;
     // Repetición: el día se deja coherente con la regla (semanal 1-7, mensual 1-31) y, si falta, sale de la fecha límite o de hoy.
     let repeat: { recurrence: (typeof RECURRENCES)[number]; recurrenceDay: number | null } | null = null;
     if (recurrence !== undefined || recurrenceDay !== undefined) {
-      const cur = await db.task.findUniqueOrThrow({ where: { id: taskId }, select: { recurrence: true, recurrenceDay: true, dueDate: true } });
-      const rule = recurrence ?? cur.recurrence;
-      const day = recurrenceDay !== undefined ? recurrenceDay : recurrence !== undefined && recurrence !== cur.recurrence ? null : cur.recurrenceDay;
-      repeat = normalizeRecurrence(rule, day, dueDate !== undefined ? dueDate : dateToIso(cur.dueDate), todayIso(appTimeZone()));
+      const rule = recurrence ?? task.recurrence;
+      const day = recurrenceDay !== undefined ? recurrenceDay : recurrence !== undefined && recurrence !== task.recurrence ? null : task.recurrenceDay;
+      repeat = normalizeRecurrence(rule, day, dueDate !== undefined ? dueDate : dateToIso(task.dueDate), todayIso(appTimeZone()));
     }
     const fields = {
       ...rest,
@@ -392,11 +399,8 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
       ...(editsText ? { contentUpdatedAt: new Date(), contentUpdatedById: user.id } : {}),
     };
     const changed = Object.keys(fields).filter((k) => k !== "labelIds") as TaskField[];
-    addUndo(...(await captureTasks([taskId], changed, labelIds !== undefined)));
-    const prev = await db.task.findUniqueOrThrow({
-      where: { id: taskId },
-      select: { title: true, description: true, kindId: true, kind: { select: { name: true } }, assigneeId: true, dueDate: true, color: true, linkUrl: true, deliverableId: true, evergreen: true },
-    });
+    addUndo(taskSetOp(task, changed, labels));
+    const prev = task;
     const newMentions = await db.$transaction(async (tx) => {
       // Menciones nuevas en la descripción (las que ya estaban no vuelven a avisar).
       // Se lee la versión anterior con bloqueo de fila para que dos ediciones simultáneas no avisen dos veces.
@@ -437,13 +441,6 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
   });
 }
 
-/** `true` si `toId` es una columna terminada y ninguna de las de origen lo era (la tarea acaba de terminarse). */
-async function finishedNow(fromIds: string[], toId: string): Promise<boolean> {
-  const cols = await db.column.findMany({ where: { id: { in: [...new Set([...fromIds, toId])] } }, select: { id: true, isDone: true } });
-  const done = new Set(cols.filter((c) => c.isDone).map((c) => c.id));
-  return done.has(toId) && !fromIds.every((id) => done.has(id));
-}
-
 async function neighbourPositions(columnId: string, prevId: string | null, nextId: string | null) {
   const ids = [prevId, nextId].filter((x): x is string => !!x);
   const rows = ids.length
@@ -459,23 +456,47 @@ async function neighbourPositions(columnId: string, prevId: string | null, nextI
 export async function moveTask(taskId: string, columnId: string, prevId: string | null, nextId: string | null) {
   return runAction({ name: "tasks.moveTask", args: [taskId, columnId, prevId, nextId] }, async () => {
     const user = await requireUser();
-    const { projectId, columnId: fromColumnId } = await assertTaskAccess(user, v.id.parse(taskId));
-    await assertNotArchived(taskId);
-    await assertColumnInProject(v.id.parse(columnId), projectId);
+    const id = v.id.parse(taskId);
+    // Es la acción más frecuente del tablero: la tarea (con el permiso), la columna destino y las vecinas se leen
+    // a la vez, y los errores se lanzan después en el mismo orden que si se comprobaran uno a uno.
+    const col = v.id.safeParse(columnId);
+    const prev = v.id.nullable().safeParse(prevId);
+    const next = v.id.nullable().safeParse(nextId);
+    // La columna actual va en su propia consulta (en paralelo) en vez de como relación de la tarea, que Prisma
+    // resolvería con otra consulta después.
+    const columnSelect = { id: true, name: true, isDone: true } as const;
+    const [task, current, target, firstN] = await Promise.all([
+      loadTaskWithAccess(user, id, { archivedAt: true, title: true, position: true, evergreen: true }),
+      db.column.findFirst({ where: { tasks: { some: { id } } }, select: columnSelect }),
+      col.success ? db.column.findUnique({ where: { id: col.data }, select: { projectId: true, name: true, isDone: true } }) : null,
+      col.success && prev.success && next.success ? neighbourPositions(col.data, prev.data, next.data) : null,
+    ]);
+    const { projectId, columnId: fromColumnId } = task;
+    assertNotArchivedRow(task);
+    // Si la tarjeta ha cambiado de columna entre las dos lecturas, se lee la que corresponde (rarísimo).
+    const from = current?.id === fromColumnId ? current : await db.column.findUniqueOrThrow({ where: { id: fromColumnId }, select: columnSelect });
+    v.id.parse(columnId);
+    if (target?.projectId !== projectId) throw new AppError("La columna no existe.");
     prevId = v.id.nullable().parse(prevId);
     nextId = v.id.nullable().parse(nextId);
-    let n = await neighbourPositions(columnId, prevId, nextId);
+    let n = firstN!;
+    let rebalanced = false;
     if (!n.stale && needsRebalance(n.prev, n.next)) {
       await rebalanceColumn(columnId);
+      rebalanced = true;
       n = await neighbourPositions(columnId, prevId, nextId);
     }
-    const position = n.stale ? positionBetween(await lastPosition(columnId), null) : positionBetween(n.prev, n.next);
-    const before = await taskLabel(taskId);
-    addUndo(...(await captureTasks([taskId], ["columnId", "position", "evergreen"])));
+    // Sin vecinas (selector «Columna» del detalle, o columna vacía): al final, como la pinta el tablero.
+    const position = n.stale || (!prevId && !nextId) ? positionBetween(await lastPosition(columnId), null) : positionBetween(n.prev, n.next);
+    const before = { title: mentionsToPlain(task.title), column: from.name };
+    // Deshacer: los valores ya leídos (salvo si se ha renumerado la columna, que puede haber movido esta misma tarjeta).
+    addUndo(...(rebalanced
+      ? await captureTasks([taskId], ["columnId", "position", "evergreen"])
+      : [{ t: "task.set" as const, id: taskId, data: { columnId: fromColumnId, position: task.position, evergreen: task.evergreen } }]));
     await db.task.update({ where: { id: taskId }, data: { columnId, position, evergreen: false } });
     // Recurrente que llega a una columna terminada: nace la siguiente aparición.
-    const spawned = (await finishedNow([fromColumnId], columnId)) ? await spawnRecurrences([taskId], user.id) : [];
-    const to = await columnName(columnId);
+    const spawned = target.isDone && !from.isDone ? await spawnRecurrences([taskId], user.id) : [];
+    const to = target.name;
     describeAction(
       before.column === to ? "Reordenó «{title}» en «{to}»" : "Movió «{title}» de «{from}» a «{to}»",
       { title: before.title, from: before.column, to },
@@ -483,7 +504,7 @@ export async function moveTask(taskId: string, columnId: string, prevId: string 
     );
     // Historial: solo si cambia de columna (reordenar dentro de la misma no cuenta). «done» alimenta el resumen diario.
     if (before.column === to) skipTaskEvents();
-    else recordTaskEvent(taskId, (await columnIsDone(columnId)) ? "done" : "move", { k: "Movió la tarea de «{from}» a «{to}»", p: { from: before.column, to } });
+    else recordTaskEvent(taskId, target.isDone ? "done" : "move", { k: "Movió la tarea de «{from}» a «{to}»", p: { from: before.column, to } });
     return { position, spawned };
   });
 }
@@ -495,30 +516,27 @@ export async function moveTasks(taskIds: string[], columnId: string) {
     const ids = z.array(v.id).min(1).max(500).parse(taskIds);
     const column = await db.column.findFirst({
       where: { id: v.id.parse(columnId), project: visibleProjectsWhere(user) },
-      select: { id: true, projectId: true },
+      select: { id: true, projectId: true, name: true, isDone: true },
     });
     if (!column) throw notFound();
     noteProject(column.projectId);
     const tasks = await db.task.findMany({
       where: { id: { in: ids }, projectId: column.projectId, archivedAt: null },
       orderBy: [{ column: { position: "asc" } }, { position: "asc" }],
-      select: { id: true, columnId: true },
+      select: { id: true, columnId: true, column: { select: { isDone: true } } },
     });
     const toMove = tasks.filter((t) => t.columnId !== column.id);
-    let pos = (await lastPosition(column.id)) ?? 0;
+    const [last, undo] = await Promise.all([lastPosition(column.id), captureTasks(toMove.map((t) => t.id), ["columnId", "position", "evergreen"])]);
+    let pos = last ?? 0;
     const moved = toMove.map((t) => ({ id: t.id, position: (pos += POSITION_STEP) }));
-    addUndo(...(await captureTasks(moved.map((m) => m.id), ["columnId", "position", "evergreen"])));
-    await db.$transaction(moved.map((m) => db.task.update({ where: { id: m.id }, data: { columnId: column.id, position: m.position, evergreen: false } })));
+    addUndo(...undo);
+    await setTaskColumnPositions(moved, column.id, { clearEvergreen: true });
     // Las recurrentes que no estaban en una columna terminada y llegan a una: nace la siguiente aparición.
-    const target = await db.column.findUnique({ where: { id: column.id }, select: { isDone: true } });
     let spawned: BoardTask[] = [];
-    if (target?.isDone) {
-      const doneBefore = new Set((await db.column.findMany({ where: { id: { in: [...new Set(toMove.map((t) => t.columnId))] }, isDone: true }, select: { id: true } })).map((c) => c.id));
-      spawned = await spawnRecurrences(toMove.filter((t) => !doneBefore.has(t.columnId)).map((t) => t.id), user.id);
-    }
-    const colName = await columnName(column.id);
+    if (column.isDone) spawned = await spawnRecurrences(toMove.filter((t) => !t.column.isDone).map((t) => t.id), user.id);
+    const colName = column.name;
     describeAction("Movió {count} a «{col}»", { count: tasksN(moved.length), col: colName }, { taskIds: moved.map((m) => m.id) });
-    const code = target?.isDone ? "done" : "move";
+    const code = column.isDone ? "done" : "move";
     skipTaskEvents();
     for (const m of moved) recordTaskEvent(m.id, code, { k: "Movió la tarea a «{to}»", p: { to: colName } });
     return { columnId: column.id, moved, spawned };
