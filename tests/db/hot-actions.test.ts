@@ -13,6 +13,7 @@ import { moveTask, moveTasks, updateTask } from "../../src/actions/tasks";
 import { deployRelease } from "../../src/actions/releases";
 import { flushLogs } from "../../src/lib/log";
 import { attachmentPath } from "../../src/lib/uploads";
+import { setTaskColumnPositions } from "../../src/lib/task-positions";
 import { POSITION_STEP as STEP } from "../../src/lib/positions";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-hot-"));
@@ -103,7 +104,6 @@ describe("moveTask", () => {
     const since = new Date();
     const { value: res, queries: q } = await counted(() => moveTask(a.id, f.columns.todo, null, null));
     counts.moveTaskReorder = q;
-    // Sin vecinas («stale» con prev/next nulos no aplica): entre null y null.
     const data = expectOk(res);
     assert.deepEqual(norm(await traces(f.project.id, "tasks.moveTask", since), { ...fixtureNames(f), [a.id]: "A" }), {
       undo: [{ kind: "UNDO", label: "{\"k\":\"Reordenó «{title}» en «{to}»\",\"p\":{\"title\":\"A\",\"from\":\"Por hacer\",\"to\":\"Por hacer\"}}", ops: [{ t: "task.set", id: "A", data: { columnId: "TODO", position: 1000, evergreen: false } }], taskId: "A" }],
@@ -120,6 +120,20 @@ describe("moveTask", () => {
     await makeTask(f, { columnId: f.columns.doing, position: 7000 });
     const res = expectOk(await moveTask(a.id, f.columns.doing, gone.id, null));
     assert.equal(res.position, 7000 + STEP);
+  });
+
+  test("vecinas sin hueco: renumera la columna y deshacer guarda el estado de después", async () => {
+    const { f } = await setup();
+    const p = await makeTask(f, { columnId: f.columns.doing, position: 1000 });
+    const n = await makeTask(f, { columnId: f.columns.doing, position: 1000 + 1e-7 });
+    const self = await makeTask(f, { columnId: f.columns.doing, position: 5000 });
+    const since = new Date();
+    // La propia tarjeta está en la columna renumerada: su posición «de antes» es ya la renumerada (3 * STEP).
+    const res = expectOk(await moveTask(self.id, f.columns.doing, p.id, n.id));
+    assert.equal(res.position, 1.5 * STEP);
+    const t = await traces(f.project.id, "tasks.moveTask", since);
+    assert.deepEqual(norm(t.undo.map((u) => u.ops), { ...fixtureNames(f), [self.id]: "SELF" }), [[{ t: "task.set", id: "SELF", data: { columnId: "DOING", position: 3 * STEP, evergreen: false } }]]);
+    assert.deepEqual((await db.task.findMany({ where: { columnId: f.columns.doing }, orderBy: { position: "asc" }, select: { id: true } })).map((r) => r.id), [p.id, self.id, n.id]);
   });
 
   test("a una columna terminada: código «done» y nace la siguiente aparición", async () => {
@@ -337,7 +351,9 @@ describe("deployRelease", () => {
     const atts = await db.releaseAttachment.findMany({ where: { releaseId: data.releaseId }, select: { id: true, fileName: true, isImage: true, position: true } });
     assert.deepEqual(atts.map(({ fileName, isImage, position }) => ({ fileName, isImage, position })), [{ fileName: "F1_captura.webp", isImage: true, position: 0 }]);
     assert.deepEqual(await readdir(path.join(process.env.UPLOAD_DIR!, "releases")), [`${atts[0]!.id}.webp`]);
-    void missing;
+    await flushLogs();
+    const errors = await db.appLog.findMany({ where: { action: "releases.saveAttachments", projectId: f.project.id }, select: { level: true, details: true } });
+    assert.deepEqual(errors.map((e) => [e.level, (e.details as { attachmentId?: string }).attachmentId]), [["error", missing.id]]);
   });
 
   test("archivar: marca archivadas recordando la columna y nacen las recurrentes", async () => {
@@ -367,5 +383,21 @@ describe("deployRelease", () => {
     assert.ok(rows.every((r) => r.columnId === prod.id));
     assert.deepEqual(rows.map((r) => r.position), Array.from({ length: 300 }, (_, i) => (i + 1) * STEP));
     assert.deepEqual(rows.map((r) => r.id), ids);
+  });
+});
+
+describe("setTaskColumnPositions", () => {
+  test("si falta alguna tarea no mueve ninguna (P2025); columna inexistente da P2003", async () => {
+    const f = await makeProject({ members: [] });
+    const a = await makeTask(f, { position: 1000 });
+    await assert.rejects(setTaskColumnPositions([{ id: a.id, position: 5 }, { id: "noexiste", position: 6 }], f.columns.doing), { code: "P2025" });
+    assert.deepEqual(await db.task.findUniqueOrThrow({ where: { id: a.id }, select: { columnId: true, position: true } }), { columnId: f.columns.todo, position: 1000 });
+    await assert.rejects(setTaskColumnPositions([{ id: a.id, position: 5 }], "noexiste"), { code: "P2003" });
+    const before = (await db.task.findUniqueOrThrow({ where: { id: a.id } })).updatedAt;
+    await db.task.update({ where: { id: a.id }, data: { evergreen: true } });
+    await setTaskColumnPositions([{ id: a.id, position: 2.5 }], f.columns.doing, { clearEvergreen: true });
+    const row = await db.task.findUniqueOrThrow({ where: { id: a.id } });
+    assert.deepEqual([row.columnId, row.position, row.evergreen], [f.columns.doing, 2.5, false]);
+    assert.ok(row.updatedAt > before);
   });
 });

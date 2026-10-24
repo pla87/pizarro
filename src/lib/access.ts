@@ -56,14 +56,31 @@ export async function assertProjectAccess(user: CurrentUser, projectId: string):
 
 /** Devuelve el projectId de la tarea si el usuario puede verla. */
 export async function assertTaskAccess(user: CurrentUser, taskId: string): Promise<{ projectId: string; columnId: string }> {
-  const task = await db.task.findFirst({
+  return loadTaskWithAccess(user, taskId, {});
+}
+
+/**
+ * Como assertTaskAccess, pero en la misma consulta trae además los campos de `select` (p. ej. archivedAt,
+ * título o la columna actual): las acciones más usadas se ahorran así varias idas y vueltas a la base de datos.
+ */
+export async function loadTaskWithAccess<S extends Prisma.TaskSelect>(
+  user: CurrentUser,
+  taskId: string,
+  select: S,
+): Promise<Prisma.TaskGetPayload<{ select: S }> & { projectId: string; columnId: string }> {
+  const task = (await db.task.findFirst({
     where: { id: taskId, project: visibleProjectsWhere(user) },
-    select: { projectId: true, columnId: true },
-  });
+    select: { ...(select as Prisma.TaskSelect), projectId: true, columnId: true },
+  })) as unknown as (Prisma.TaskGetPayload<{ select: S }> & { projectId: string; columnId: string }) | null;
   if (!task) throw notFound();
   noteProject(task.projectId);
   noteTask(taskId);
   return task;
+}
+
+/** Mismo error que assertNotArchived, con la fecha ya cargada. */
+export function assertNotArchivedRow(task: { archivedAt: Date | null }): void {
+  if (task.archivedAt) throw new AppError("La tarea está archivada. Recupérala para modificarla.");
 }
 
 /** Lanza error si el usuario no puede ser asignado a tareas del proyecto. */
@@ -80,5 +97,5 @@ export async function assertAssignable(projectId: string, userId: string): Promi
 /** Las tareas archivadas son de solo lectura: solo se recuperan (restoreTask) o se borran. */
 export async function assertNotArchived(taskId: string): Promise<void> {
   const task = await db.task.findUnique({ where: { id: taskId }, select: { archivedAt: true } });
-  if (task?.archivedAt) throw new AppError("La tarea está archivada. Recupérala para modificarla.");
+  if (task) assertNotArchivedRow(task);
 }

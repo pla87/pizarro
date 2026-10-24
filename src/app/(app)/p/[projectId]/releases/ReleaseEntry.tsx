@@ -26,6 +26,13 @@ export function ReleaseEntry({ release }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [attachments, setAttachments] = useState(release.attachments);
+  // Las copias de los adjuntos se guardan unos segundos después del despliegue: al refrescar la página
+  // (router.refresh) llegan más y se muestran sin tener que volver a montar la entrada.
+  const [seen, setSeen] = useState(release.attachments.join("\n"));
+  if (release.attachments.join("\n") !== seen) {
+    setSeen(release.attachments.join("\n"));
+    setAttachments(release.attachments);
+  }
   const [removed, setRemoved] = useState(false);
   const date = new Date(release.deployedAt);
   // Los adjuntos pueden salir en varios paquetes ZIP (tope del proyecto): se consulta el plan al abrir la release.

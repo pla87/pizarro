@@ -110,12 +110,20 @@ export async function captureTasks(ids: string[], fields: readonly TaskField[], 
     where: { id: { in: ids } },
     select: { id: true, ...TASK_SELECT, ...(withLabels ? { labels: { select: { labelId: true } } } : {}) },
   });
-  return rows.map((r) => ({
+  return rows.map((r) => taskSetOp(r, fields, withLabels ? (r as unknown as { labels: { labelId: string }[] }).labels : undefined));
+}
+
+/** Campos que necesita taskSetOp: quien ya ha leído la tarea los incluye en su consulta y se ahorra captureTasks. */
+export const TASK_UNDO_SELECT = TASK_SELECT;
+
+/** Lo mismo que captureTasks para una fila ya leída (con TASK_UNDO_SELECT y, si se pasan, sus etiquetas). */
+export function taskSetOp(row: TaskRowFull & { id: string }, fields: readonly TaskField[], labels?: { labelId: string }[]): UndoOp {
+  return {
     t: "task.set" as const,
-    id: r.id,
-    data: toTaskData(r, fields),
-    ...(withLabels ? { labelIds: (r as unknown as { labels: { labelId: string }[] }).labels.map((l) => l.labelId) } : {}),
-  }));
+    id: row.id,
+    data: toTaskData(row, fields),
+    ...(labels ? { labelIds: labels.map((l) => l.labelId) } : {}),
+  };
 }
 
 /** Instantánea completa de tareas que se van a borrar. */
