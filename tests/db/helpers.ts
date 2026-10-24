@@ -159,3 +159,9 @@ export function expectFail(res: Result<unknown>, message?: RegExp | string): str
 export const NOT_FOUND = /No encontrado o sin acceso/;
 export const FORBIDDEN = /No tienes permiso/;
 export const SESSION_EXPIRED = /Sesión caducada/;
+
+/** Espera a que terminen las tareas lanzadas con `after()` de next/server (ver stubs/server.mjs). */
+export async function afterDone(): Promise<void> {
+  const g = globalThis as unknown as { __pzAfter?: Promise<unknown>[] };
+  while (g.__pzAfter?.length) await Promise.all(g.__pzAfter.splice(0));
+}
