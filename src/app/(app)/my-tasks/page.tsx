@@ -35,7 +35,7 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
     where: { assigneeId: user.id, archivedAt: null, column: { isDone: false }, project: visibleProjectsWhere(user) },
     take: 500,
     // Dentro de cada grupo se ordena por fecha; a igual fecha, por proyecto y posición en el tablero.
-    orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { project: { position: "asc" } }, { column: { position: "asc" } }, { position: "asc" }],
+    orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { project: { position: "asc" } }, { column: { position: "asc" } }, { position: "asc" }, { id: "asc" }],
     select: {
       id: true,
       title: true,

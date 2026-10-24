@@ -238,6 +238,7 @@ export const server: Record<string, string> = {
   "Las copias de seguridad están desactivadas: falta una BACKUP_KEY válida.": "Backups are disabled: a valid BACKUP_KEY is missing.",
   "(copia)": "(copy)",
   "Duplicó «{title}»": "Duplicated “{title}”",
+  "Duplicó «{title}» en «{col}»": "Duplicated “{title}” into “{col}”",
   "repetición": "repeat",
   "Máximo 50 subtareas.": "Maximum 50 subtasks.",
   "El destinatario debe ser alguien con acceso al proyecto.": "The recipient must be someone with access to the project.",

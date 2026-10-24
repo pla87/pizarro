@@ -11,9 +11,23 @@ export function positionBetween(prev?: number | null, next?: number | null): num
   return (prev + next) / 2;
 }
 
-/** true si los vecinos están tan cerca que conviene renumerar la lista. */
+/**
+ * true si entre los dos vecinos no cabe una posición nueva distinta de ambas: están tan cerca que conviene
+ * renumerar la lista, son iguales (empate) o vienen al revés. Nunca debe acabar habiendo dos posiciones iguales.
+ */
 export function needsRebalance(prev?: number | null, next?: number | null): boolean {
-  return prev != null && next != null && Math.abs(next - prev) < MIN_GAP;
+  if (prev == null || next == null) return false;
+  const mid = (prev + next) / 2;
+  return next - prev < MIN_GAP || !(mid > prev && mid < next);
+}
+
+/**
+ * Orden de las tarjetas: por posición y, si dos coincidieran, por id. Es el mismo criterio que usa el
+ * servidor (TASK_ORDER en task-positions.ts): sin desempate, el orden de dos posiciones iguales dependería
+ * de cómo devuelva las filas PostgreSQL y podría cambiar tras cualquier refresco.
+ */
+export function compareTaskOrder(a: { position: number; id: string }, b: { position: number; id: string }): number {
+  return a.position - b.position || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
 // --- Arrastre sobre listas COMPLETAS -------------------------------------------------------

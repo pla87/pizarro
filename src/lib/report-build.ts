@@ -39,7 +39,7 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
     db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, isDone: true } }),
     db.task.findMany({
       where: { projectId, archivedAt: null },
-      orderBy: { position: "asc" },
+      orderBy: [{ position: "asc" }, { id: "asc" }],
       take: 2000,
       select: {
         id: true,
