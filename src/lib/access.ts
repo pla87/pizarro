@@ -3,7 +3,7 @@ import { cache } from "react";
 import type { Prisma } from "@/generated/prisma/client";
 import { noteProject, noteTask } from "./action-context";
 import { db } from "./db";
-import { notFound } from "./errors";
+import { AppError, notFound } from "./errors";
 import type { CurrentUser } from "./session";
 
 /**
@@ -75,4 +75,10 @@ export async function assertAssignable(projectId: string, userId: string): Promi
   if (!user || !project) throw notFound();
   // Privado: solo sus miembros. Equipo: miembros asignados y administradores.
   if (user.memberships.length === 0 && (project.isPrivate || user.role !== "ADMIN")) throw notFound();
+}
+
+/** Las tareas archivadas son de solo lectura: solo se recuperan (restoreTask) o se borran. */
+export async function assertNotArchived(taskId: string): Promise<void> {
+  const task = await db.task.findUnique({ where: { id: taskId }, select: { archivedAt: true } });
+  if (task?.archivedAt) throw new AppError("La tarea está archivada. Recupérala para modificarla.");
 }

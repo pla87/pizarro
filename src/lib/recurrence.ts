@@ -6,6 +6,8 @@ import { appTimeZone, loadBoardTask } from "./board";
 import { nextOccurrenceDue } from "./recurrence-date";
 import { POSITION_STEP } from "./positions";
 import { addUndo } from "./undo";
+import { hasTaskCapacity } from "./caps";
+import { logEvent } from "./log";
 import type { BoardTask } from "./types";
 
 /** El responsable pasa a la siguiente aparición solo si sigue pudiendo tenerla (activo y con acceso). */
@@ -56,6 +58,15 @@ export async function spawnRecurrences(taskIds: string[], actorId: string): Prom
         firstOpen.set(src.projectId, open?.id ?? null);
       }
       columnId = firstOpen.get(src.projectId) ?? src.columnId;
+    }
+    // Proyecto en el tope de tareas activas: no nace la siguiente aparición (y mover la tarjeta no falla).
+    if (!(await hasTaskCapacity(db, src.projectId))) {
+      logEvent({
+        level: "warn", category: "system", action: "recurrence.skippedCap",
+        message: `No se creó la siguiente aparición de «${src.title}»: el proyecto tiene el máximo de tareas activas`,
+        details: { taskId: src.id, projectId: src.projectId },
+      });
+      continue;
     }
     const last = await db.task.findFirst({ where: { columnId }, orderBy: { position: "desc" }, select: { position: true } });
     const dueDate = isoToDate(nextOccurrenceDue(src.recurrence, src.recurrenceDay, dateToIso(src.dueDate), today));

@@ -20,6 +20,7 @@ import * as v from "@/lib/validation";
 import { dateToIso, isoToDate } from "@/lib/dates";
 import type { LabelOption } from "@/lib/types";
 import { revokeProject } from "@/lib/revoke";
+import { assertDeliverableCapacity, assertDeliverableCreateRate, assertLabelCapacity, assertLabelCreateRate } from "@/lib/caps";
 
 /** Crea columnas, tipos propios, tipos generales ocultos y etiquetas de una plantilla en el proyecto (dentro de la transacción). */
 async function applyTemplate(tx: Prisma.TransactionClient, projectId: string, template: TemplateData, locale: "es" | "en") {
@@ -242,9 +243,13 @@ export async function createLabel(projectId: string, input: { name: string; colo
     const user = await requireUser();
     await assertProjectAccess(user, v.id.parse(projectId));
     const data = labelSchema.parse(input);
+    assertLabelCreateRate(user.id);
     const exists = await db.label.count({ where: { projectId, name: data.name } });
     if (exists) throw new AppError("Ya existe una etiqueta con ese nombre.");
-    return db.label.create({ data: { projectId, ...data }, select: { id: true, name: true, color: true } });
+    return db.$transaction(async (tx) => {
+      await assertLabelCapacity(tx, projectId);
+      return tx.label.create({ data: { projectId, ...data }, select: { id: true, name: true, color: true } });
+    });
   });
 }
 
@@ -289,10 +294,14 @@ export async function createDeliverable(projectId: string, input: z.input<typeof
     const user = await requireUser();
     await assertProjectAccess(user, v.id.parse(projectId));
     const data = deliverableSchema.parse(input);
-    const last = await db.deliverable.findFirst({ where: { projectId }, orderBy: { position: "desc" }, select: { position: true } });
-    const d = await db.deliverable.create({
-      data: { projectId, name: data.name, description: data.description, dueDate: data.dueDate ? isoToDate(data.dueDate) : null, position: (last?.position ?? 0) + POSITION_STEP },
-      select: { id: true, name: true, description: true, dueDate: true },
+    assertDeliverableCreateRate(user.id);
+    const d = await db.$transaction(async (tx) => {
+      await assertDeliverableCapacity(tx, projectId);
+      const last = await tx.deliverable.findFirst({ where: { projectId }, orderBy: { position: "desc" }, select: { position: true } });
+      return tx.deliverable.create({
+        data: { projectId, name: data.name, description: data.description, dueDate: data.dueDate ? isoToDate(data.dueDate) : null, position: (last?.position ?? 0) + POSITION_STEP },
+        select: { id: true, name: true, description: true, dueDate: true },
+      });
     });
     return { ...d, dueDate: dateToIso(d.dueDate) };
   });
