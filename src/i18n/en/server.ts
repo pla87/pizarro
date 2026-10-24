@@ -225,6 +225,7 @@ export const server: Record<string, string> = {
   "Desmarcó la subtarea «{subtask}»": "Unchecked the subtask “{subtask}”",
   "Reordenó la subtarea «{subtask}»": "Reordered the subtask “{subtask}”",
   "Borró la subtarea «{subtask}»": "Deleted the subtask “{subtask}”",
+  "Canceló los cambios en «{title}»": "Discarded the changes to “{title}”",
   "Borró el adjunto «{name}» de «{task}»": "Deleted the attachment “{name}” from “{task}”",
   "Recuperó «{title}» en «{col}»": "Restored “{title}” in “{col}”",
   "Comentó en «{title}»": "Commented on “{title}”",
