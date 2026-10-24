@@ -1,5 +1,6 @@
 import "server-only";
 import { headers } from "next/headers";
+import { passwordChangeRequired } from "./auth-policy";
 import { sendNewLoginMail } from "./auth-mail";
 import { registerDevice, TRUST_DEVICE_DAYS } from "./devices";
 import { logEvent } from "./log";
@@ -27,8 +28,8 @@ export async function completeLogin(
   user: LoginUser,
   how: { method: "password" | "google" | "password+2fa"; rememberDevice?: boolean; path: string },
 ): Promise<void> {
-  // Con Google no se pide contraseña, así que tampoco se obliga a cambiarla; la marca queda como estaba para los accesos con contraseña.
-  await createSession(user.id, { mustChangePassword: how.method === "google" ? false : user.mustChangePassword });
+  // La marca se respeta con cualquier método (también Google): quien tiene el cambio pendiente aterriza en /change-password y no puede usar la app hasta elegir contraseña.
+  await createSession(user.id, { mustChangePassword: passwordChangeRequired(how.method, user.mustChangePassword) });
   const ip = clientIp(await headers());
   const device = await registerDevice(user.id, how.rememberDevice ? { trustDays: TRUST_DEVICE_DAYS } : {});
   if (device.alert && emailEnabled()) {

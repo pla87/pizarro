@@ -19,6 +19,8 @@ interface LogFilters {
   q: string;
   /** Incluir las consultas (páginas vistas, aperturas, descargas); por defecto solo se ven los cambios. */
   reads: boolean;
+  /** Solo la descarga CSV: intervalo explícito que sustituye al periodo. */
+  period?: { gte: Date; lt: Date };
 }
 
 /** Acciones que solo consultan datos: se ocultan salvo que se pidan las consultas. */
@@ -69,7 +71,7 @@ export function logWhere(f: LogFilters, memberProjectIds: readonly string[], wit
   const hours = LOG_RANGES.find((r) => r.value === f.range)!.hours;
   const maxMs = logRetentionDays() * 86_400_000;
   const since = new Date(Date.now() - Math.min(hours * 3_600_000, maxMs));
-  const and: Prisma.AppLogWhereInput[] = [{ createdAt: { gte: since } }];
+  const and: Prisma.AppLogWhereInput[] = [{ createdAt: f.period ? { gte: f.period.gte, lt: f.period.lt } : { gte: since } }];
   const visible: Prisma.AppLogWhereInput = { OR: [{ privateProjectId: null }, { privateProjectId: { in: [...memberProjectIds] } }] };
   if ((withLevel && f.level) || f.category || f.q || !withLevel) and.push(visible);
   if (withLevel && f.level) and.push({ level: f.level });

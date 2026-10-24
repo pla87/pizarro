@@ -11,7 +11,7 @@
  * zonas) no se hace nada.
  */
 import type { Editor } from "@tiptap/core";
-import type { Slice } from "@tiptap/pm/model";
+import type { Node as PMNode, Slice } from "@tiptap/pm/model";
 
 const editors = new WeakMap<Element, Editor>();
 
@@ -26,7 +26,7 @@ export function registerDragEditor(editor: Editor): () => void {
 
 type Source =
   | { kind: "field"; el: HTMLInputElement | HTMLTextAreaElement; start: number; end: number; value: string; dropped: boolean; copy: boolean }
-  | { kind: "editor"; editor: Editor; from: number; to: number; docJson: string; slice: Slice; dropped: boolean; copy: boolean };
+  | { kind: "editor"; editor: Editor; from: number; to: number; doc: PMNode; slice: Slice; dropped: boolean; copy: boolean };
 
 const TEXT_INPUT_TYPES = new Set(["text", "search", "url", "tel", "email", "password", ""]);
 
@@ -60,7 +60,7 @@ function sourceOf(target: EventTarget | null): Source | null {
   if (!editor) return null;
   const { from, to } = editor.state.selection;
   if (from === to) return null;
-  return { kind: "editor", editor, from, to, docJson: JSON.stringify(editor.state.doc.toJSON()), slice: editor.state.doc.slice(from, to), dropped: false, copy: false };
+  return { kind: "editor", editor, from, to, doc: editor.state.doc, slice: editor.state.doc.slice(from, to), dropped: false, copy: false };
 }
 
 function sameField(source: Source, target: EventTarget | null): boolean {
@@ -73,7 +73,7 @@ function sameField(source: Source, target: EventTarget | null): boolean {
 function removeFromSource(source: Source): boolean {
   if (source.kind === "editor") {
     const { editor, from, to } = source;
-    if (editor.isDestroyed || JSON.stringify(editor.state.doc.toJSON()) !== source.docJson) return false;
+    if (editor.isDestroyed || editor.state.doc !== source.doc) return false;
     return editor.chain().deleteRange({ from, to }).run();
   }
   const { el, start, end } = source;
@@ -88,7 +88,7 @@ function removeFromSource(source: Source): boolean {
 /** Si el navegador borró el texto copiado del editor de origen, lo vuelve a poner donde estaba. */
 function restoreEditorSource(source: Extract<Source, { kind: "editor" }>): void {
   const { editor, from, slice } = source;
-  if (editor.isDestroyed || JSON.stringify(editor.state.doc.toJSON()) === source.docJson) return;
+  if (editor.isDestroyed || editor.state.doc === source.doc) return;
   editor.view.dispatch(editor.state.tr.replaceRange(from, from, slice));
 }
 

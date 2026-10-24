@@ -14,7 +14,7 @@ import { AppError } from "@/lib/errors";
 import { logEvent } from "@/lib/log";
 import { POSITION_STEP } from "@/lib/positions";
 import { spawnRecurrences } from "@/lib/recurrence";
-import { setTaskColumnPositions } from "@/lib/task-positions";
+import { lastPositionIn, lockColumns, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { attachmentFileNames, zonedDayRange } from "@/lib/release";
 import { requireUser } from "@/lib/session";
 import { attachmentPath, compactImage, removeReleaseAttachmentFiles, saveReleaseAttachmentFile } from "@/lib/uploads";
@@ -48,7 +48,7 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
 
     const tasks = await db.task.findMany({
       where: { id: { in: data.taskIds }, projectId: data.projectId, archivedAt: null },
-      orderBy: [{ column: { position: "asc" } }, { position: "asc" }],
+      orderBy: [{ column: { position: "asc" } }, ...TASK_ORDER],
       select: { id: true, title: true, evergreen: true, kind: { select: { name: true } } },
     });
 
@@ -85,8 +85,8 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
       });
       const moved: { id: string; columnId: string; position: number }[] = [];
       if (target) {
-        const last = await tx.task.findFirst({ where: { columnId: target.id }, orderBy: { position: "desc" }, select: { position: true } });
-        let pos = last?.position ?? 0;
+        await lockColumns(tx, [target.id]);
+        let pos = (await lastPositionIn(tx, target.id)) ?? 0;
         for (const t of tasks) {
           if (t.evergreen) continue; // las fijas se quedan en su columna
           pos += POSITION_STEP;
@@ -151,7 +151,10 @@ async function saveReleaseAttachments({ releaseId, items, allowed, projectId, us
   const byId = new Map(tasks.map((t) => [t.id, t.attachments]));
   const saved: string[] = [];
   let position = 0;
-  for (const item of valid) {
+  // La release ya no está (deshecha o borrada antes de empezar): no hay nada que copiar.
+  const releaseGone = async () => !(await db.release.count({ where: { id: releaseId } }));
+  if (await releaseGone()) return;
+  outer: for (const item of valid) {
     const attachments = byId.get(item.taskId) ?? [];
     const names = attachmentFileNames(item.code, attachments);
     for (const [i, att] of attachments.entries()) {
@@ -167,13 +170,15 @@ async function saveReleaseAttachments({ releaseId, items, allowed, projectId, us
         await saveReleaseAttachmentFile(row.id, data, att.isImage ? "webp" : "bin");
         saved.push(row.id);
       } catch (err) {
-        // Fichero ausente o ilegible (o la release ya borrada): se omite; si ya había fila, se retira para no dejarla sin fichero.
+        if (rowId) await db.releaseAttachment.delete({ where: { id: rowId } }).catch(() => {});
+        // La release se ha borrado o deshecho a mitad: se para aquí, sin un error por cada adjunto restante.
+        if (await releaseGone()) break outer;
+        // Fichero ausente o ilegible: se omite; si ya había fila, se ha retirado para no dejarla sin fichero.
         logEvent({
           level: "error", category: "system", action: "releases.saveAttachments",
           message: `Adjunto omitido en la release: «${names[i] ?? att.originalName}» (${err instanceof Error ? err.message : String(err)})`,
           userId, userName, projectId, details: { releaseId, attachmentId: att.id },
         });
-        if (rowId) await db.releaseAttachment.delete({ where: { id: rowId } }).catch(() => {});
       }
     }
   }

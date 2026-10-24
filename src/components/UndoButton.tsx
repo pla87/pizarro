@@ -17,8 +17,9 @@ import { useFloatingRect } from "./ui/useFloatingRect";
  * seguidas); con una tarea abierta, solo las de esa tarea. Rehacer devuelve lo último deshecho (una
  * acción nueva lo vacía). Con `shortcut`: Ctrl/⌘+Z y Alt+Z deshacen; Ctrl/⌘+Shift+Z, Ctrl/⌘+Y y Alt+Shift+Z
  * rehacen (Alt+ = tablero entero), cuando no se está escribiendo.
+ * Con `inDialog` (cabecera del detalle en móvil, que tapa la del tablero): mismos botones, sin copias flotantes.
  */
-export function UndoButton({ projectId, shortcut = false, className }: { projectId: string; shortcut?: boolean; className?: string }) {
+export function UndoButton({ projectId, shortcut = false, inDialog = false, className }: { projectId: string; shortcut?: boolean; inDialog?: boolean; className?: string }) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
@@ -79,7 +80,7 @@ export function UndoButton({ projectId, shortcut = false, className }: { project
 
   // Con un diálogo de tarea abierto (existente o nueva), el fondo del modal taparía el botón: se dibuja una copia encima, en el mismo sitio.
   const boardModal = useBoardModalOpen();
-  const floating = !!taskId || boardModal;
+  const floating = !inDialog && (!!taskId || boardModal);
   const rect = useFloatingRect(ref, floating);
   const redoRect = useFloatingRect(redoRef, floating);
 
@@ -95,10 +96,10 @@ export function UndoButton({ projectId, shortcut = false, className }: { project
   const redoIcon = busy === "redo" ? spin : <Redo2 size={18} />;
   return (
     <>
-      <button ref={ref} type="button" className={cn("btn-icon", className)} onClick={() => void run(false)} disabled={!!busy} title={undoTitle} aria-label={t("Deshacer la última acción")}>
+      <button ref={ref} type="button" className={cn("btn-icon", className)} onClick={() => void run(false)} disabled={!!busy} title={undoTitle} aria-label={inDialog ? t("Deshacer la última acción en la tarea") : t("Deshacer la última acción")}>
         {undoIcon}
       </button>
-      <button ref={redoRef} type="button" className={cn("btn-icon", className)} onClick={() => void run(true)} disabled={!!busy} title={redoTitle} aria-label={t("Rehacer la última acción")}>
+      <button ref={redoRef} type="button" className={cn("btn-icon", className)} onClick={() => void run(true)} disabled={!!busy} title={redoTitle} aria-label={inDialog ? t("Rehacer la última acción en la tarea") : t("Rehacer la última acción")}>
         {redoIcon}
       </button>
       {floating && rect &&

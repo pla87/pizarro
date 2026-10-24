@@ -4,6 +4,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { actionContext } from "./action-context";
 import { db } from "./db";
 import { assertTaskCapacity } from "./caps";
+import { resolvePositionTies } from "./task-positions";
 import { removeAttachmentFiles, removeReleaseAttachmentFiles } from "./uploads";
 
 // Deshacer: cada acción deshacible deja sus operaciones inversas (addUndo) y runAction las guarda
@@ -164,16 +165,35 @@ export async function snapshotTasks(ids: string[]): Promise<UndoOp[]> {
 
 export type UndoKind = "UNDO" | "REDO";
 
+/** Entrada de historial (TaskEvent) tal como se guarda en la entrada de rehacer para poder recrearla. */
+export interface SavedEvent {
+  taskId: string;
+  projectId: string;
+  userId: string | null;
+  userName: string;
+  code: string;
+  label: string;
+  createdAt: string;
+}
+
 /**
  * Guarda una entrada en la pila `kind` y descarta las que pasen del límite (liberando sus ficheros
  * pendientes). Una acción nueva (UNDO sin `fromRedo`) vacía además la pila de rehacer del usuario.
+ * `history`: ids del historial que registró la acción (se borran al deshacer) o copia para recrearlo al rehacer.
  */
 export async function saveUndo(
   userId: string, projectId: string, label: string, ops: UndoOp[], taskId: string | null = null,
   kind: UndoKind = "UNDO", clearRedo = kind === "UNDO", fingerprint: string | null = null,
+  history: { eventIds?: string[]; events?: SavedEvent[] } = {},
 ): Promise<void> {
   if (clearRedo) await discardUndo({ userId, projectId, kind: "REDO" });
-  await db.undoEntry.create({ data: { userId, projectId, taskId, kind, label: label.slice(0, 300), ops: ops as unknown as Prisma.InputJsonValue, fingerprint } });
+  await db.undoEntry.create({
+    data: {
+      userId, projectId, taskId, kind, label: label.slice(0, 300), ops: ops as unknown as Prisma.InputJsonValue, fingerprint,
+      eventIds: history.eventIds ?? [],
+      ...(history.events?.length ? { events: history.events as unknown as Prisma.InputJsonValue } : {}),
+    },
+  });
   const old = await db.undoEntry.findMany({
     where: { userId, projectId, kind },
     orderBy: { createdAt: "desc" },
@@ -337,6 +357,8 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
   if (returning) await assertTaskCapacity(db, projectId, returning);
   const filesToRemove: string[] = [];
   const releaseFiles: string[] = [];
+  // Tareas que vuelven a una posición guardada: al terminar se comprueba que no coincidan con otra (ver resolvePositionTies).
+  const placed: string[] = [];
   const columnIds = new Set((await db.column.findMany({ where: { projectId }, select: { id: true } })).map((c) => c.id));
   const firstColumn = async () => (await db.column.findFirst({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true } }))?.id;
   /** Una columna borrada entretanto: la tarea va a la primera. */
@@ -365,6 +387,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           if (data.kindId && !(await db.taskKind.count({ where: { id: data.kindId } }))) delete data.kindId;
           if (data.deliverableId && !(await db.deliverable.count({ where: { id: data.deliverableId } }))) data.deliverableId = null;
           if (data.assigneeId) data.assigneeId = assignable(data.assigneeId);
+          if (data.position !== undefined || data.columnId !== undefined) placed.push(op.id);
           await db.$transaction([
             db.task.update({ where: { id: op.id }, data: taskUpdateData(data) }),
             ...(op.labelIds
@@ -409,6 +432,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
             db.taskLink.createMany({ data: s.links.map((l) => ({ ...l, kind: l.kind as Prisma.TaskLinkCreateManyInput["kind"], createdById: known(l.createdById), createdAt: new Date(l.createdAt) })) }),
             db.releaseTask.updateMany({ where: { id: { in: s.releaseTaskIds } }, data: { taskId: t.id } }),
           ]);
+          placed.push(t.id);
           break;
         }
         case "subtask.set": {
@@ -473,6 +497,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           if (await db.task.count({ where: { columnId: op.id, archivedAt: null } })) { skipped++; break; }
           const other = await db.column.findFirst({ where: { projectId, id: { not: op.id } }, orderBy: { position: "asc" }, select: { id: true } });
           if (!other) { skipped++; break; }
+          placed.push(...(await db.task.findMany({ where: { columnId: op.id }, select: { id: true } })).map((r) => r.id));
           await db.$transaction([
             db.task.updateMany({ where: { columnId: op.id }, data: { columnId: other.id } }),
             db.column.deleteMany({ where: { id: op.id, projectId } }),
@@ -499,6 +524,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
       skipped++;
     }
   }
+  await resolvePositionTies(placed);
   if (filesToRemove.length && !opts.keepFiles) await removeAttachmentFiles(filesToRemove);
   if (releaseFiles.length) await removeReleaseAttachmentFiles(releaseFiles);
   return skipped;

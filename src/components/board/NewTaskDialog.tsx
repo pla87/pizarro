@@ -144,6 +144,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     if (failed) toast((failed.reason as Error).message, "error");
     else toast(t("Tarea creada"));
     onClose();
+    board.revealTask(task.id);
   };
 
   // Alt+S crea la tarea (también escribiendo), como Ctrl+Enter. Con dos modales a la vez, el que tiene el foco.

@@ -36,6 +36,31 @@ export async function buildZipPart(entries: ZipEntry[], pkg: ZipPackage): Promis
   return { zip: files.length ? buildZip(files) : Buffer.alloc(0), files: files.length };
 }
 
+// Cada paquete se arma entero en memoria (hasta el tope del proyecto, unos 2× al comprimir): uno a la vez por
+// persona y como mucho dos en todo el servidor, para que varias descargas en paralelo no agoten la RAM.
+const zipSlots = ((globalThis as unknown as { __pzZipSlots?: { users: Set<string>; active: number } }).__pzZipSlots ??= { users: new Set(), active: 0 });
+const MAX_ZIPS_AT_ONCE = 2;
+
+/** Reserva un hueco para armar un ZIP; null si esa persona ya tiene uno en curso o el servidor está lleno. Llama a la función devuelta al terminar. */
+export function acquireZipSlot(userId: string): (() => void) | null {
+  if (zipSlots.users.has(userId) || zipSlots.active >= MAX_ZIPS_AT_ONCE) return null;
+  zipSlots.users.add(userId);
+  zipSlots.active++;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    zipSlots.users.delete(userId);
+    zipSlots.active--;
+  };
+}
+
+/** Tope por petición: el plan tiene el suyo (se consulta al abrir cada release del histórico), los paquetes pedidos por número otro. */
+export function zipRateKey(mode: ZipRequestMode, userId: string): { key: string; limit: number } {
+  if (mode.kind === "plan") return { key: `release-zip-plan:${userId}`, limit: 60 };
+  return mode.explicit ? { key: `release-zip-part:${userId}`, limit: 120 } : { key: `release-zip:${userId}`, limit: 10 };
+}
+
 export type ZipRequestMode = { kind: "plan" } | { kind: "part"; part: number; explicit: boolean };
 
 /** `?plan=1` pide el reparto; `?part=N` (1-based) un paquete; sin nada, el primero. */

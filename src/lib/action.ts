@@ -32,13 +32,13 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
   const ctx: ActionContext = {};
   try {
     result = { ok: true, data: await actionContext.run(ctx, fn) };
-    if (ctx.undo?.length && ctx.projectId) await recordUndo(meta?.name ?? "acción", ctx.projectId, ctx.label ? encodeLabel(ctx.label) : ctx.message, ctx.undo, ctx.taskId ?? null);
+    const tracked = !!meta && !!ctx.projectId && !READ_ACTIONS.includes(meta.name);
+    const user = tracked ? await getCurrentUser().catch(() => null) : null;
+    // El historial se guarda antes que la entrada de deshacer: así ésta recuerda sus ids y deshacer los borra.
+    const eventIds = tracked ? await saveTaskEvents(meta!.name, ctx, ctx.projectId!, user) : [];
+    if (ctx.undo?.length && ctx.projectId) await recordUndo(meta?.name ?? "acción", ctx.projectId, ctx.label ? encodeLabel(ctx.label) : ctx.message, ctx.undo, ctx.taskId ?? null, eventIds);
     // Aviso a las demás pestañas del proyecto (las consultas no cambian nada).
-    if (meta && ctx.projectId && !READ_ACTIONS.includes(meta.name)) {
-      const user = await getCurrentUser().catch(() => null);
-      publishChange({ projectId: ctx.projectId, userId: user?.id ?? null, action: meta.name });
-      await saveTaskEvents(meta.name, ctx, ctx.projectId, user);
-    }
+    if (tracked) publishChange({ projectId: ctx.projectId!, userId: user?.id ?? null, action: meta!.name });
   } catch (err) {
     // Los errores de redirect()/notFound() de Next deben propagarse.
     if (err && typeof err === "object" && "digest" in err && !(err instanceof AppError)) throw err;
@@ -70,10 +70,10 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
 }
 
 /** Guarda lo necesario para deshacer la acción; si falla, la acción ya está hecha y solo se registra. */
-async function recordUndo(name: string, projectId: string, message: string | undefined, ops: UndoOp[], taskId: string | null) {
+async function recordUndo(name: string, projectId: string, message: string | undefined, ops: UndoOp[], taskId: string | null, eventIds: string[]) {
   try {
     const user = await getCurrentUser();
-    if (user) await saveUndo(user.id, projectId, message ?? name, ops, taskId);
+    if (user) await saveUndo(user.id, projectId, message ?? name, ops, taskId, "UNDO", true, null, { eventIds });
   } catch (err) {
     console.error("[undo] no se pudo guardar", err);
   }

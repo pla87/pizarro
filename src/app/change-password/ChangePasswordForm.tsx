@@ -7,7 +7,7 @@ import { logout, setNewPassword } from "@/actions/auth";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useT } from "@/i18n/client";
 
-export function ChangePasswordForm({ email }: { email: string }) {
+export function ChangePasswordForm({ email, googleOnly = false }: { email: string; googleOnly?: boolean }) {
   const t = useT();
   const router = useRouter();
   const [password, setPassword] = useState("");
@@ -30,6 +30,7 @@ export function ChangePasswordForm({ email }: { email: string }) {
       }}
     >
       <p className="text-sm text-slate-500">{t("Por seguridad, antes de seguir tienes que elegir una contraseña nueva, distinta de la actual.")}</p>
+      {googleOnly && <p className="text-sm text-slate-500">{t("En este servidor se entra solo con Google: la contraseña no sirve para iniciar sesión, pero tienes que elegirla para continuar.")}</p>}
       <input type="text" name="username" autoComplete="username" value={email} readOnly hidden />
       <div>
         <label className="label" htmlFor="cp-new">{t("Nueva contraseña (mín. 10)")}</label>

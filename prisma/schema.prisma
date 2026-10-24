@@ -207,8 +207,10 @@ model Project {
   isPrivate   Boolean  @default(false)
   /// Quien creó el proyecto privado (informativo; pasa a null si se borra ese usuario).
   privateOwnerId String?
-  /// Tamaño máximo (MB) del ZIP de adjuntos de una release (se arma en memoria).
+  /// Tamaño máximo (MB) de cada paquete ZIP de adjuntos de una release (se arma en memoria). Nunca menor que taskAttachMaxMb.
   releaseZipMaxMb Int    @default(80)
+  /// Tamaño máximo (MB) de la suma de adjuntos de una tarea.
+  taskAttachMaxMb Int    @default(80)
   position    Float    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -761,6 +763,10 @@ model UndoEntry {
   ops       Json
   /// Huella de lo que tocan las ops justo después de crear la entrada contraria (rehacer/deshacer): si cambia, alguien más lo modificó y no se aplica.
   fingerprint String?
+  /// UNDO: ids de las entradas de historial (TaskEvent) que registró la acción; al deshacer se borran.
+  eventIds  String[] @default([])
+  /// REDO: copia de las entradas de historial borradas al deshacer, para recrearlas al rehacer.
+  events    Json?
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)

@@ -10,9 +10,9 @@ import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { archiveTasks, deleteTasks, makeEvergreen, moveTask, moveTasks } from "@/actions/tasks";
+import { archiveTasks, deleteTasks, duplicateTask, makeEvergreen, moveTask, moveTasks } from "@/actions/tasks";
 import { createBoardCollisionDetection } from "@/lib/collision";
-import { insertBefore, moveOnto, neighboursOf, positionBetween } from "@/lib/positions";
+import { compareTaskOrder, insertBefore, moveOnto, neighboursOf, positionBetween } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardTask, LabelOption } from "@/lib/types";
 import { FilterMenu } from "./FilterMenu";
 import { ProjectMenu } from "../ProjectMenu";
@@ -105,7 +105,8 @@ type Items = Record<string, string[]>;
 
 function groupItems(columns: BoardColumn[], tasks: BoardTask[]): Items {
   const items: Items = Object.fromEntries(columns.map((c) => [c.id, [] as string[]]));
-  for (const t of [...tasks].sort((a, b) => a.position - b.position)) if (!t.evergreen) items[t.columnId]?.push(t.id);
+  // Mismo orden que el servidor (posición y, si coincidieran, id): no depende del orden en que lleguen las tareas.
+  for (const t of [...tasks].sort(compareTaskOrder)) if (!t.evergreen) items[t.columnId]?.push(t.id);
   return items;
 }
 
@@ -114,6 +115,7 @@ const MEASURING = { droppable: { strategy: MeasuringStrategy.Always } };
 // Opciones de los sensores, también constantes: si cambian, cambian los `listeners` de todas las tarjetas.
 const POINTER_OPTIONS = { activationConstraint: { distance: 6 } };
 const KEYBOARD_OPTIONS = { coordinateGetter: sortableKeyboardCoordinates };
+const DROP_ANIMATION = { duration: 150, easing: "ease-out" };
 
 /**
  * Conserva el mismo array de ids en las columnas cuyo contenido no cambió: dnd-kit rehace su contexto (y redibuja
@@ -235,6 +237,37 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const [dragItems, setDragItems] = useState<Items | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const dragOrigin = useRef<{ columnId: string; index: number } | null>(null);
+  // Arrastre con ratón y Ctrl (o Alt/⌥) pulsada al soltar: se suelta una copia y la original se queda.
+  // `mouseDrag`: solo con ratón (ni teclado ni táctil). Se sigue la tecla en vivo para el aviso «+ Duplicar».
+  const mouseDrag = useRef(false);
+  const duplicateRef = useRef(false);
+  const [duplicating, setDuplicating] = useState(false);
+  useEffect(() => {
+    if (!activeId || !mouseDrag.current) return;
+    const sync = (e: KeyboardEvent | PointerEvent) => {
+      const on = e.ctrlKey || e.altKey;
+      duplicateRef.current = on;
+      setDuplicating(on);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Control" && e.key !== "Alt") return;
+      // Alt suelta enfocaría la barra de menús en algunos navegadores.
+      e.preventDefault();
+      sync(e);
+    };
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("keyup", onKey, true);
+    // Captura: llega antes que el pointerup con el que dnd-kit termina el arrastre.
+    window.addEventListener("pointermove", sync, true);
+    window.addEventListener("pointerup", sync, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("keyup", onKey, true);
+      window.removeEventListener("pointermove", sync, true);
+      window.removeEventListener("pointerup", sync, true);
+      setDuplicating(false);
+    };
+  }, [activeId]);
 
   // Mutaciones en vuelo: mientras haya alguna no se sobrescribe el estado con datos del servidor.
   // Si llegan datos en ese momento, se marcan como pendientes y se vuelven a pedir al terminar.
@@ -279,6 +312,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       return { ok: false, error } as T;
     }
   }, [trackRaw, toast, t, refresh]);
+
+  const settle = useCallback(async () => {
+    // Un guardado empezado al perder el foco (clic en un botón) puede no haber arrancado aún: un turno de espera.
+    await new Promise((r) => setTimeout(r, 0));
+    for (let i = 0; i < 200 && pending.current > 0; i++) await new Promise((r) => setTimeout(r, 50));
+  }, []);
 
   const patchTask = useCallback((id: string, patch: Partial<BoardTask> | ((t: BoardTask) => Partial<BoardTask>)) => {
     setTasks((prev) => {
@@ -388,7 +427,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // Tareas evergreen por columna: fuera de la lista ordenable, se muestran en el pie de la columna de la release.
   const evergreenByColumn = useMemo(() => {
     const map: Record<string, string[]> = {};
-    for (const t of [...tasks].sort((a, b) => a.position - b.position)) if (t.evergreen) (map[t.columnId] ??= []).push(t.id);
+    for (const t of [...tasks].sort(compareTaskOrder)) if (t.evergreen) (map[t.columnId] ??= []).push(t.id);
     return map;
   }, [tasks]);
   const shownEvergreen = useMemo(
@@ -417,6 +456,44 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   }, []);
 
   const getTask = useCallback((id: string) => tasksById(stores.tasks.get()).get(id), [stores]);
+  // Móvil: tras crear una tarea se salta a su columna (puede no ser la visible) y la tarjeta se centra con un destello.
+  const showColumnRef = useRef<(columnId: string) => void>(() => {});
+  const revealTask = useCallback((id: string) => {
+    if (!window.matchMedia("(max-width: 767px)").matches) return;
+    const task = getTask(id);
+    if (!task) return;
+    const start = performance.now();
+    // Primero se espera a que el diálogo se cierre y retire su entrada del historial (useBackToClose): si la
+    // pestaña se cambiara antes, ese «atrás» se llevaría la entrada de la columna y volvería a la anterior.
+    const whenClosed = () => {
+      const modalEntry = ((window.history.state ?? {}) as { pzModals?: string[] }).pzModals?.length;
+      if ((modalEntry || document.querySelector("[role=dialog]")) && performance.now() - start < 1500) {
+        requestAnimationFrame(whenClosed);
+        return;
+      }
+      showColumnRef.current(task.columnId);
+      requestAnimationFrame(reveal);
+    };
+    let frames = 0;
+    const reveal = () => {
+      const card = document.querySelector<HTMLElement>(`[data-task-card="${CSS.escape(id)}"]`);
+      // Hasta que la columna se pinte la tarjeta no está o está oculta.
+      if (!card || card.offsetParent === null) {
+        if (++frames < 60) requestAnimationFrame(reveal);
+        return;
+      }
+      const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      card.scrollIntoView({ block: "center", inline: "nearest", behavior: smooth ? "smooth" : "auto" });
+      delete card.dataset.flash;
+      void card.offsetWidth; // reinicia la animación si ya estaba
+      card.dataset.flash = "";
+      // Al terminar la animación (o, si se interrumpe, al rato) se quita la marca.
+      const clear = () => delete card.dataset.flash;
+      card.addEventListener("animationend", clear, { once: true });
+      window.setTimeout(clear, 3000);
+    };
+    requestAnimationFrame(whenClosed);
+  }, [getTask]);
   const cardActions = useCardActions({ currentUserId: data.currentUserId, getTask, sortedColumns, baseItems, patchTask, upsertTask, track, toast, t });
 
   // El contexto solo cambia si cambia su contenido: los datos del servidor llegan como objetos nuevos en cada
@@ -468,6 +545,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       setColumns,
       openTask: setOpenTaskId,
       openNewTask: (columnId, evergreen) => setNewTask({ columnId, evergreen }),
+      revealTask,
       openRelease: (columnId) => {
         // Las evergreen van siempre incluidas y preseleccionadas (se pueden desmarcar en el diálogo).
         const { baseItems: base, evergreenByColumn: evergreen } = latest.current;
@@ -497,9 +575,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         }),
       track,
       trackRaw,
+      settle,
       refresh,
     }),
-    [setTasks, project, users, data.currentUserId, deliverables, kinds, data.cardStyle, data.editorMode, dragHandle, google, data.today, stableColumns, stableLabels, stores, getTask, track, trackRaw, refresh, patchTask, upsertTask, cardActions],
+    [setTasks, revealTask, project, users, data.currentUserId, deliverables, kinds, data.cardStyle, data.editorMode, dragHandle, google, data.today, stableColumns, stableLabels, stores, getTask, track, trackRaw, settle, refresh, patchTask, upsertTask, cardActions],
   );
 
   // --- Movimiento masivo ------------------------------------------------------
@@ -611,6 +690,9 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     else window.history.replaceState(next, "");
     setMobileColumn(columnId);
   };
+  useEffect(() => {
+    showColumnRef.current = showMobileColumn;
+  });
 
   // Deslizar el dedo a los lados cambia de columna en móvil (no al arrastrar una tarjeta ni al hacer scroll vertical).
   const swipe = useRef<{ x: number; y: number; t: number } | null>(null);
@@ -647,8 +729,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     useSensor(KeyboardSensor, KEYBOARD_OPTIONS),
   );
 
-  const onDragStart = ({ active }: DragStartEvent) => {
+  const onDragStart = ({ active, activatorEvent }: DragStartEvent) => {
     const id = String(active.id);
+    const pointer = typeof PointerEvent !== "undefined" && activatorEvent instanceof PointerEvent ? activatorEvent : null;
+    mouseDrag.current = pointer?.pointerType === "mouse";
+    duplicateRef.current = mouseDrag.current && !!(pointer?.ctrlKey || pointer?.altKey);
+    setDuplicating(duplicateRef.current);
     const col = findContainer(baseItems, id);
     if (!col) {
       // Tarea fija: no está en ninguna lista; se arrastra desde un contenedor virtual.
@@ -708,9 +794,18 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, columnId: res.data.columnId, position: res.data.position, evergreen: true } : t)));
   };
 
+  /** Ctrl/Alt al soltar: una copia de la tarea (duplicateTask) en esa columna, entre esas vecinas; la original no se mueve. */
+  const dropCopy = async (id: string, columnId: string, prevId: string | null, nextId: string | null) => {
+    const res = await track(duplicateTask(id, { columnId, prevId, nextId }));
+    if (!res.ok) return toast(res.error, "error");
+    upsertTask(res.data);
+    toast(t("Tarea duplicada"), "undo");
+  };
+
   const onDragEnd = async ({ active, over }: DragEndEvent) => {
     const origin = dragOrigin.current;
     const current = dragItems;
+    const copy = mouseDrag.current && duplicateRef.current;
     cancelDrag();
     if (!over || !current || !origin) return;
     const id = String(active.id);
@@ -718,6 +813,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (overId.startsWith(EVERGREEN_DROPPABLE_PREFIX)) {
       // Soltar una tarea fija en su propio panel no hace nada.
       if (origin.columnId === EVERGREEN_ORIGIN) return;
+      // Copia sobre el panel de fijas: al final de esa columna, como tarea normal.
+      if (copy) return dropCopy(id, overId.slice(EVERGREEN_DROPPABLE_PREFIX.length), null, null);
       return dropOnEvergreen(id, overId.slice(EVERGREEN_DROPPABLE_PREFIX.length));
     }
     const col = findContainer(current, id);
@@ -727,6 +824,11 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       list = moveOnto(list, id, overId);
     }
     const index = list.indexOf(id);
+    // La copia se suelta donde quedaría la tarjeta (también en su mismo sitio: justo detrás de la original).
+    if (copy) {
+      const at = neighboursOf(list, id);
+      return dropCopy(id, col, at.prevId, at.nextId);
+    }
     if (col === origin.columnId && index === origin.index) return;
 
     const { prevId, nextId } = neighboursOf(list, id);
@@ -875,24 +977,27 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           onDragEnd={onDragEnd}
           onDragCancel={cancelDrag}
         >
-          {/* Pestañas de columnas en móvil */}
-          <div data-mobile-tabs className="no-scrollbar flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 md:hidden dark:border-slate-800 dark:bg-slate-900">
+          {/* Móvil: buscador y filtros siempre a mano (fijos a la izquierda) y pestañas de columnas (con scroll lateral). */}
+          <div className="flex items-center gap-1 border-b border-slate-200 bg-white py-2 pl-3 md:hidden dark:border-slate-800 dark:bg-slate-900">
             <button
               type="button"
-              className={cn("btn-icon relative h-8 w-8 shrink-0", filtering && "text-brand-600")}
+              className={cn("btn-icon relative h-8 w-8 shrink-0", query.trim() && "text-brand-600")}
               onClick={() => setMobileSearch((o) => !o)}
-              aria-label={t("Buscar y filtrar")}
+              aria-label={t("Buscar")}
               aria-expanded={mobileSearch || filtering}
             >
               <Search size={16} />
-              {filtering && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-brand-600" aria-hidden />}
+              {query.trim() && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-brand-600" aria-hidden />}
             </button>
-            {sortedColumns.map((c) => (
-              <MobileTab key={c.id} active={c.id === activeMobileColumn} onClick={() => showMobileColumn(c.id)}>
-                {c.name} <span className="opacity-70">{items[c.id]?.length ?? 0}</span>
-              </MobileTab>
-            ))}
-            <NewColumnButton variant="mobile" onCreated={showMobileColumn} />
+            <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} className="shrink-0" />
+            <div data-mobile-tabs className="no-scrollbar ml-0.5 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pr-3">
+              {sortedColumns.map((c) => (
+                <MobileTab key={c.id} active={c.id === activeMobileColumn} onClick={() => showMobileColumn(c.id)}>
+                  {c.name} <span className="opacity-70">{items[c.id]?.length ?? 0}</span>
+                </MobileTab>
+              ))}
+              <NewColumnButton variant="mobile" onCreated={showMobileColumn} />
+            </div>
           </div>
           {/* Móvil y tableta: buscador y filtros (en móvil, solo al pulsar el icono de la lupa o con un filtro activo). */}
           <div className={cn("flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-1.5 lg:hidden dark:border-slate-800 dark:bg-slate-900", !(mobileSearch || filtering) && "max-md:hidden")}>
@@ -916,7 +1021,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
                 className="input h-8 w-full [&::-webkit-search-cancel-button]:hidden pr-3 pl-8 text-sm"
               />
             </div>
-            <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} />
+            {/* En móvil los filtros ya están en la barra de pestañas. */}
+            <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} className="max-md:hidden" />
             <span className="shrink-0 text-xs text-slate-500" aria-live="polite">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : t("{n} tarjetas", { n: tasks.length })}</span>
             {(mobileSearch || filtering) && (
               <button
@@ -953,8 +1059,18 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             ))}
             <NewColumnButton variant="desktop" />
           </div>
-          <DragOverlay dropAnimation={{ duration: 150, easing: "ease-out" }}>
-            {activeTask ? <TaskCard task={activeTask} overlay /> : null}
+          {/* Con Ctrl/Alt la tarjeta no vuelve a su sitio al soltar: la copia aparece donde se suelta. */}
+          <DragOverlay dropAnimation={duplicating ? null : DROP_ANIMATION}>
+            {activeTask ? (
+              <div className={cn("relative", duplicating && "cursor-copy")}>
+                <TaskCard task={activeTask} overlay />
+                {duplicating && (
+                  <span data-duplicate-hint className="pointer-events-none absolute -top-2.5 -right-2 rounded-full bg-brand-600 px-2 py-0.5 text-xs font-semibold text-on-brand shadow-md">
+                    + {t("Duplicar")}
+                  </span>
+                )}
+              </div>
+            ) : null}
           </DragOverlay>
         </DndContext>
 

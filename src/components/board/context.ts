@@ -38,6 +38,8 @@ export interface BoardApi {
   openTask: (id: string) => void;
   /** `evergreen`: crear la tarea como fija en la columna de la release. */
   openNewTask: (columnId?: string, evergreen?: boolean) => void;
+  /** Tras crear una tarea en móvil: muestra su columna y la lleva a la vista con un destello breve (en escritorio, nada). */
+  revealTask: (id: string) => void;
   openRelease: (columnId: string) => void;
   /** Selección actual, lectura puntual. Para dibujar, `useIsSelected` / `useSelectionSize`. */
   getSelected: () => ReadonlySet<string>;
@@ -58,6 +60,8 @@ export interface BoardApi {
   track: <T>(p: Promise<T>) => Promise<T>;
   /** Como `track`, pero deja pasar las excepciones (subidas de archivos). */
   trackRaw: <T>(p: Promise<T>) => Promise<T>;
+  /** Espera a que terminen las mutaciones en curso (p. ej. un guardado al salir de un campo). */
+  settle: () => Promise<void>;
   refresh: () => void;
 }
 

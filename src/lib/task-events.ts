@@ -1,6 +1,7 @@
 import "server-only";
 import type { ActionContext, TaskEventInput } from "./action-context";
 import { db } from "./db";
+import type { SavedEvent } from "./undo";
 import { encodeLabel, decodeLabel, renderLabel } from "./undo-label";
 import type { T } from "../i18n/core";
 
@@ -34,11 +35,11 @@ export function eventsOf(name: string, ctx: Pick<ActionContext, "events" | "labe
   return [{ taskId: ctx.taskId, code: CODES[name] ?? "other", label: ctx.label }];
 }
 
-/** Guarda los eventos de una acción ya hecha. Nunca lanza: el historial no debe romper la acción. */
-export async function saveTaskEvents(name: string, ctx: ActionContext, projectId: string, user: { id: string; name: string } | null): Promise<void> {
+/** Guarda los eventos de una acción ya hecha y devuelve sus ids. Nunca lanza: el historial no debe romper la acción. */
+export async function saveTaskEvents(name: string, ctx: ActionContext, projectId: string, user: { id: string; name: string } | null): Promise<string[]> {
   try {
     const events = eventsOf(name, ctx);
-    if (!events.length) return;
+    if (!events.length) return [];
     // Solo tareas que siguen existiendo (borrar una tarea borra su historial).
     const alive = new Set((await db.task.findMany({ where: { id: { in: [...new Set(events.map((e) => e.taskId))] }, projectId }, select: { id: true } })).map((t) => t.id));
     const data = events.filter((e) => alive.has(e.taskId)).slice(0, 100).map((e) => ({
@@ -49,10 +50,32 @@ export async function saveTaskEvents(name: string, ctx: ActionContext, projectId
       code: e.code,
       label: encodeLabel(e.label),
     }));
-    if (data.length) await db.taskEvent.createMany({ data });
+    if (!data.length) return [];
+    return (await db.taskEvent.createManyAndReturn({ data, select: { id: true } })).map((e) => e.id);
   } catch (err) {
     console.error("[task-events] no se pudo guardar el historial", err);
+    return [];
   }
+}
+
+/** Deshacer: borra del historial las entradas que registró la acción y devuelve una copia para poder rehacerlas. */
+export async function removeTaskEvents(ids: string[], projectId: string): Promise<SavedEvent[]> {
+  if (!ids.length) return [];
+  const rows = await db.taskEvent.findMany({
+    where: { id: { in: ids }, projectId },
+    select: { id: true, taskId: true, projectId: true, userId: true, userName: true, code: true, label: true, createdAt: true },
+  });
+  if (rows.length) await db.taskEvent.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } });
+  return rows.map(({ id: _id, createdAt, ...r }) => ({ ...r, createdAt: createdAt.toISOString() }));
+}
+
+/** Rehacer: recrea las entradas de historial copiadas al deshacer (solo de tareas que existen) y devuelve sus ids nuevos. */
+export async function restoreTaskEvents(events: SavedEvent[], projectId: string): Promise<string[]> {
+  if (!events.length) return [];
+  const alive = new Set((await db.task.findMany({ where: { id: { in: [...new Set(events.map((e) => e.taskId))] }, projectId }, select: { id: true } })).map((t) => t.id));
+  const data = events.filter((e) => alive.has(e.taskId)).map((e) => ({ ...e, createdAt: new Date(e.createdAt) }));
+  if (!data.length) return [];
+  return (await db.taskEvent.createManyAndReturn({ data, select: { id: true } })).map((e) => e.id);
 }
 
 export interface TaskHistoryItem {

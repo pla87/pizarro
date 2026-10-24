@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { insertBefore, moveOnto, needsRebalance, neighboursOf, positionBetween, POSITION_STEP } from "../src/lib/positions";
+import { compareTaskOrder, insertBefore, moveOnto, needsRebalance, neighboursOf, positionBetween, POSITION_STEP } from "../src/lib/positions";
 
 test("posiciones entre vecinos", () => {
   assert.equal(positionBetween(null, null), POSITION_STEP);
@@ -43,4 +43,17 @@ test("arrastrar con filtro entre columnas", () => {
   assert.deepEqual(insertBefore(["t", "x"], "t", "x"), ["t", "x"]);
   const pos = positionBetween(1024, 2048);
   assert.ok(pos > 1024 && pos < 2048);
+});
+
+test("sin hueco también con vecinas iguales, al revés o tan grandes que el punto medio no cabe", () => {
+  assert.equal(needsRebalance(1000, 1000), true);
+  assert.equal(needsRebalance(2000, 1000), true);
+  assert.equal(needsRebalance(1e17, 1e17 + 16), true);
+  assert.equal(needsRebalance(1000, 2000), false);
+});
+
+test("orden de tarjetas: posición y, si coinciden, id (como el servidor)", () => {
+  const list = [{ id: "b", position: 1 }, { id: "a", position: 1 }, { id: "c", position: 0.5 }];
+  assert.deepEqual([...list].sort(compareTaskOrder).map((t) => t.id), ["c", "a", "b"]);
+  assert.deepEqual([...list].reverse().sort(compareTaskOrder).map((t) => t.id), ["c", "a", "b"]);
 });

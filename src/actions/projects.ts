@@ -99,14 +99,19 @@ export async function updateProject(projectId: string, input: { name: string; de
   });
 }
 
-/** Tope (MB) del ZIP de adjuntos de las releases del proyecto. */
-export async function setReleaseZipMaxMb(projectId: string, mb: number) {
-  return runAction({ name: "projects.setReleaseZipMaxMb", args: [projectId, mb] }, async () => {
+/**
+ * Topes (MB) de adjuntos del proyecto, guardados juntos: lo que pueden sumar los adjuntos de una tarea y
+ * el tamaño de cada paquete ZIP de una release (que no puede ser menor que el de la tarea).
+ */
+export async function setAttachmentLimits(projectId: string, taskMb: number, zipMb: number) {
+  return runAction({ name: "projects.setAttachmentLimits", args: [projectId, taskMb, zipMb] }, async () => {
     const user = await requireUser();
-    const value = v.releaseZipMb.parse(mb);
+    const task = v.attachLimitMb.parse(taskMb);
+    const zip = v.attachLimitMb.parse(zipMb);
+    if (zip < task) throw new AppError("El paquete ZIP de una release no puede ser menor que el máximo de adjuntos de una tarea.");
     await findManageableProject(user, projectId);
-    await db.project.update({ where: { id: projectId }, data: { releaseZipMaxMb: value } });
-    describeAction(`Cambió el tamaño máximo del ZIP de adjuntos de las releases a ${value} MB`);
+    await db.project.update({ where: { id: projectId }, data: { taskAttachMaxMb: task, releaseZipMaxMb: zip } });
+    describeAction(`Cambió el máximo de adjuntos por tarea a ${task} MB y el de cada ZIP de release a ${zip} MB`);
     revalidatePath(`/p/${projectId}/settings`);
   });
 }

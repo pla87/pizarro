@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   addSubtask, archiveTask, deleteAttachment, deleteSubtask, deleteTask, deleteTaskLink, getTaskDetail,
-  moveTask, reorderSubtask, updateSubtask, updateTask,
+  moveTask, reorderSubtask, restoreTaskSnapshot, updateSubtask, updateTask,
 } from "@/actions/tasks";
+import { undoLast } from "@/actions/undo";
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -40,6 +41,7 @@ import { formatDate } from "@/lib/format";
 import { draftKey, useDraftAutosave, type EditTaskDraft } from "./drafts";
 import { setUndoTask, UNDONE_EVENT } from "../undo-context";
 import { useIsMobile } from "../ui/useIsMobile";
+import { UndoButton } from "../UndoButton";
 
 export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   task: BoardTask;
@@ -92,11 +94,19 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   const [totalRejected, setTotalRejected] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
 
+  // Cómo estaba la tarea al abrir el diálogo (para «Cancelar»): la tarjeta al montar y el detalle en su primera carga.
+  const initialTask = useRef(task);
+  const initialDetail = useRef<TaskDetail | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+
   useEffect(() => {
     let alive = true;
     getTaskDetail(task.id).then((res) => {
       if (!alive) return;
-      if (res.ok) setDetail(res.data);
+      if (res.ok) {
+        initialDetail.current ??= res.data;
+        setDetail(res.data);
+      }
       else toast(res.error, "error");
     });
     return () => {
@@ -176,6 +186,62 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     onClose();
   };
 
+  /** ¿Algo guardado desde que se abrió el diálogo? (campos, subtareas, adjuntos y enlaces; no los comentarios). */
+  const editedSinceOpen = (): boolean => {
+    const t0 = initialTask.current;
+    const now = board.getTask(task.id) ?? task;
+    const keys = ["title", "kindId", "color", "linkUrl", "assigneeId", "dueDate", "deliverableId", "evergreen", "recurrence", "recurrenceDay", "columnId"] as const;
+    if (keys.some((k) => t0[k] !== now[k])) return true;
+    if ([...t0.labelIds].sort().join() !== [...now.labelIds].sort().join()) return true;
+    const d0 = initialDetail.current;
+    if (!d0 || !detail) return false;
+    if (d0.description !== detail.description) return true;
+    const sig = (d: TaskDetail) => [
+      d.subtasks.map((s) => `${s.id}|${s.title}|${s.done}|${s.position}`).join("\n"),
+      d.attachments.map((a) => a.id).join(),
+      d.links.map((l) => l.id).join(),
+    ].join("\n#\n");
+    return sig(d0) !== sig(detail);
+  };
+
+  /**
+   * Botón Cancelar: deja la tarea como estaba al abrir el diálogo (una sola acción, deshacible) y cierra.
+   * Lo que se esté escribiendo sin confirmar se descarta al cerrar.
+   */
+  const cancelEdits = async () => {
+    if (cancelling) return;
+    setCancelling(true);
+    try {
+      await board.settle();
+      if (!editedSinceOpen()) return onClose();
+      const t0 = initialTask.current;
+      const d0 = initialDetail.current;
+      const res = await tracked(restoreTaskSnapshot(task.id, {
+        title: t0.title, kindId: t0.kindId, color: t0.color as never, linkUrl: t0.linkUrl, assigneeId: t0.assigneeId, labelIds: t0.labelIds,
+        dueDate: t0.dueDate, deliverableId: t0.deliverableId, evergreen: t0.evergreen, recurrence: t0.recurrence, recurrenceDay: t0.recurrenceDay,
+        columnId: t0.columnId, position: t0.position,
+        ...(d0 ? {
+          description: d0.description,
+          subtasks: d0.subtasks.map((s) => ({ id: s.id, title: s.title, done: s.done, position: s.position })),
+          attachmentIds: d0.attachments.map((a) => a.id),
+          links: d0.links.map((l) => ({ id: l.id, kind: l.kind, title: l.title, url: l.url })),
+        } : {}),
+      }, d0 ? d0.textVersion : undefined));
+      if (!res.ok) {
+        toast(res.error, "error");
+        // Otra persona cambió el texto: se recarga con sus cambios y el diálogo sigue abierto.
+        await reload();
+        return;
+      }
+      board.upsertTask(res.data.task);
+      onClose();
+      board.refresh();
+      toast(t("Cambios descartados"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange() });
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   /** Guardado optimista de campos de la tarjeta. */
   const save = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>): Promise<boolean> => {
     const before = board.getTask(task.id);
@@ -234,14 +300,23 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   const images = detail?.attachments.filter((a) => a.isImage) ?? [];
   const files = detail?.attachments.filter((a) => !a.isImage) ?? [];
 
-  const removeAttachment = async (id: string, question: string) => {
-    if (!(await confirm({ title: t("Borrar adjunto"), message: question, confirmLabel: t("Borrar"), danger: true }))) return;
+  // Borrar un adjunto se puede deshacer (el fichero se conserva mientras exista la entrada), así que no se pregunta.
+  const removeAttachment = async (id: string) => {
     const res = await board.track(deleteAttachment(id));
     if (!res.ok) return toast(res.error, "error");
     const removed = detail?.attachments.find((x) => x.id === id);
     setDetail((d) => (d ? { ...d, attachments: d.attachments.filter((x) => x.id !== id) } : d));
     if (removed) board.patchTask(task.id, (t) => attachmentPatch(t, removed, -1));
     setTotalRejected(false);
+    toast(t("Adjunto borrado"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange() });
+  };
+
+  /** Deshace lo último hecho en esta tarea (el botón «Deshacer» de los avisos) y recarga el detalle. */
+  const undoLastChange = async () => {
+    const res = await board.track(undoLast(board.project.id, task.id));
+    if (!res.ok) return toast(res.error, "error");
+    toast(t("Deshecho: {label}", { label: res.data.label }), "undo");
+    await reloadRef.current();
   };
 
   const onPaste = (e: React.ClipboardEvent) => {
@@ -341,14 +416,15 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   };
 
 
-  // Archivar y Duplicar solo con icono (con tooltip y atajo) para que, con Borrar y Guardar, quepan en una línea
+  // Archivar, Duplicar y Borrar solo con icono (con tooltip y atajo) para que, con Cancelar y Guardar, quepan en una línea
   // tanto en la columna lateral (~300 px) como en el pie móvil (360 px).
   const actionButtons = (
     <>
       <button className="btn-secondary px-2.5 py-1.5" onClick={archive} aria-label={t("Archivar")} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /></button>
       <button className="btn-secondary px-2.5 py-1.5" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
-      <button className="btn-ghost py-1.5 text-red-600" onClick={remove}><Trash2 size={15} /> {t("Borrar")}</button>
-      <button className="btn-primary ml-auto py-1.5" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} /> {t("Guardar")}</button>
+      <button className="btn-ghost px-2.5 py-1.5 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
+      <button className="btn-secondary ml-auto px-2.5 py-1.5" onClick={cancelEdits} disabled={cancelling} title={t("Descarta los cambios hechos desde que abriste la tarea y la cierra")}>{t("Cancelar")}</button>
+      <button className="btn-primary py-1.5" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} /> {t("Guardar")}</button>
     </>
   );
 
@@ -372,7 +448,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       header={
         <div className="flex items-start gap-2 border-b border-slate-200 px-5 py-3 dark:border-slate-800">
           <TitleField value={title} onChange={setTitle} onCommit={commitTitle} users={board.users} />
-          <span className="mt-1.5 flex h-5 shrink-0 items-center text-xs" role="status" aria-live="polite">
+          {/* En móvil, sin nada que mostrar no ocupa sitio (el título necesita el ancho junto a deshacer/rehacer). */}
+          <span className={cn("mt-1.5 flex h-5 shrink-0 items-center text-xs", saving === 0 && !justSaved && "max-md:hidden")} role="status" aria-live="polite">
             {saving > 0 ? (
               <span className="flex items-center gap-1 text-slate-500"><Loader2 size={13} className="animate-spin" /> {t("Guardando…")}</span>
             ) : (
@@ -381,6 +458,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
               </span>
             )}
           </span>
+          {/* Móvil: el detalle ocupa la pantalla y tapa la cabecera; deshacer y rehacer (de esta tarea) van aquí. */}
+          {mobile && <UndoButton projectId={board.project.id} inDialog className="shrink-0" />}
           {/* Fuera del orden de Tab (Título → descripción directo); Escape también cierra. */}
           <button type="button" className="btn-icon" tabIndex={-1} onClick={onClose} aria-label={t("Cerrar")}>
             <X size={18} />
@@ -437,7 +516,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
                     type="button"
                     className="absolute top-1 right-1 rounded-md bg-black/60 p-1 text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-md:opacity-100"
                     aria-label={t("Borrar adjunto")}
-                    onClick={() => removeAttachment(a.id, t("¿Borrar esta imagen?"))}
+                    onClick={() => removeAttachment(a.id)}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -461,7 +540,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
                       <a href={`/api/attachments/${a.id}?download=1`} download={a.originalName} className="btn-icon h-7 w-7 shrink-0" aria-label={t("Descargar {name}", { name: a.originalName })} title={t("Descargar")}>
                         <Download size={15} />
                       </a>
-                      <button type="button" className="btn-icon h-7 w-7 shrink-0 text-red-600" aria-label={t("Borrar adjunto")} onClick={() => removeAttachment(a.id, t("¿Borrar este archivo?"))}>
+                      <button type="button" className="btn-icon h-7 w-7 shrink-0 text-red-600" aria-label={t("Borrar adjunto")} onClick={() => removeAttachment(a.id)}>
                         <Trash2 size={15} />
                       </button>
                     </li>
