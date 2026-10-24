@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { listVisibleProjects, visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
@@ -12,8 +13,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     listVisibleProjects(user),
     db.notification.count({ where: { userId: user.id, readAt: null, task: { project: visibleProjectsWhere(user) } } }),
   ]);
+  const last = (await cookies()).get("tablon_last_project")?.value;
+  const lastProjectId = projects.find((p) => p.id === last)?.id ?? null;
   return (
-    <AppShell user={user} projects={projects.map((p) => ({ id: p.id, name: p.name, isPrivate: p.isPrivate }))} version={pkg.version} unread={unread}>
+    <AppShell user={user} projects={projects.map((p) => ({ id: p.id, name: p.name, isPrivate: p.isPrivate }))} version={pkg.version} unread={unread} lastProjectId={lastProjectId}>
       <ClientErrorReporter />
       <VersionWatcher />
       {children}

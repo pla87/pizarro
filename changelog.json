@@ -1,6 +1,57 @@
 {
   "versions": [
     {
+      "version": "1.20.0",
+      "date": "2026-10-24",
+      "releasedAt": "2026-10-24T10:48:06+02:00",
+      "summary": "Límites por proyecto, adjuntos con tope por tarea y releases en varios paquetes, soltar archivos en las tarjetas, tipos generales en inglés y proyecto que se mantiene en el menú",
+      "changes": {
+        "nuevas": [
+          "Arrastra archivos directamente sobre una tarjeta del tablero para adjuntarlos.",
+          "Releases con muchos adjuntos: se descargan en varios paquetes ZIP del tamaño máximo del proyecto, con el menor número posible.",
+          "Límites por proyecto: 50 etiquetas, 100 entregables y 1000 tareas activas."
+        ],
+        "mejoras": [
+          "El tamaño máximo del proyecto limita también la suma de adjuntos de cada tarea; la sección de adjuntos indica el máximo por archivo y el total usado, resaltado si se supera.",
+          "El proyecto sigue elegido en el menú al ir al calendario, avisos, perfil u otras páginas generales.",
+          "Los tipos generales de serie se muestran en inglés a quien usa Pizarro en inglés.",
+          "La fecha de creación de una tarea incluye la hora.",
+          "Arrastrar texto seleccionado a otro campo lo mueve; con Ctrl (⌥ en Mac) lo copia.",
+          "Las tareas archivadas son de solo lectura hasta recuperarlas."
+        ],
+        "correcciones": [
+          "Revisión de seguridad: al cambiar el email de una cuenta se desvincula Google y caducan los enlaces enviados a la dirección anterior; cerrar sesión borra la cookie; los errores del navegador solo se registran con sesión válida."
+        ],
+        "tecnicos": [
+          "Migración: índices por fecha de creación y por autor en tareas, comentarios, adjuntos, enlaces, releases y avisos."
+        ]
+      },
+      "en": {
+        "summary": "Per-project limits, per-task attachment cap and releases in several packages, drop files on cards, general types in English and the project stays selected in the menu",
+        "changes": {
+          "nuevas": [
+            "Drag files straight onto a board card to attach them.",
+            "Releases with many attachments download as several ZIP packages of the project's maximum size, as few as possible.",
+            "Per-project limits: 50 labels, 100 deliverables and 1000 active tasks."
+          ],
+          "mejoras": [
+            "The project's maximum size also caps the sum of each task's attachments; the attachments section shows the per-file maximum and the total used, highlighted when exceeded.",
+            "The project stays selected in the menu when you go to the calendar, notifications, profile or other general pages.",
+            "Built-in general types are shown in English to people using Pizarro in English.",
+            "A task's creation date includes the time.",
+            "Dragging selected text to another field moves it; with Ctrl (⌥ on Mac) it copies it.",
+            "Archived tasks are read-only until restored."
+          ],
+          "correcciones": [
+            "Security review: changing an account's email unlinks Google and expires links sent to the old address; signing out clears the cookie; browser errors are only logged with a valid session."
+          ],
+          "tecnicos": [
+            "Migration: indexes by creation date and author on tasks, comments, attachments, links, releases and notifications."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.19.0",
       "date": "2026-10-23",
       "releasedAt": "2026-10-23T23:09:11+02:00",

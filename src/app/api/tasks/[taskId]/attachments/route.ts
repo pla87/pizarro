@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { assertTaskAccess } from "@/lib/access";
+import { assertNotArchived, assertTaskAccess } from "@/lib/access";
 import { AppError } from "@/lib/errors";
 import { actionContext } from "@/lib/action-context";
 import { logEvent } from "@/lib/log";
@@ -11,6 +11,7 @@ import { quotaExceededFor } from "@/lib/storage-usage";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser, requireUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
+import { createAttachmentWithinLimit, roundMb } from "@/lib/attachment-limit";
 import { MAX_UPLOAD_BYTES, processImage, removeAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveRawAttachmentFile } from "@/lib/uploads";
 import type { AttachmentInfo } from "@/lib/types";
 
@@ -27,6 +28,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     const user = await requireUser();
     const { taskId } = await ctx.params;
     const { projectId } = await assertTaskAccess(user, taskId);
+    await assertNotArchived(taskId);
     // Tope de subidas por persona: evita llenar el disco o la memoria (sharp) con un bucle.
     if (!rateLimit(`upload:${user.id}`, 60, 60_000)) throw new AppError("Demasiadas peticiones", 429);
 
@@ -61,13 +63,22 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
         413,
       );
     }
-    const attachment = await db.taskAttachment.create({
-      data: {
-        taskId, originalName, mimeType, isImage: !!image, width: image?.width ?? null, height: image?.height ?? null,
-        size: storedBytes, createdById: user.id,
-      },
-      select: { id: true, originalName: true, mimeType: true, isImage: true, width: true, height: true, size: true },
-    });
+    // Tope del proyecto para la suma de adjuntos de la tarea (suma y alta atómicas).
+    const created = await createAttachmentWithinLimit(
+      { taskId, originalName, mimeType, isImage: !!image, width: image?.width ?? null, height: image?.height ?? null, size: storedBytes, createdById: user.id },
+      { id: true, originalName: true, mimeType: true, isImage: true, width: true, height: true, size: true },
+    );
+    if (!created.ok) {
+      const t = await getT();
+      throw new AppError(
+        t("Los adjuntos de la tarea superarían el máximo del proyecto ({limit} MB por tarea; ya tiene {used} MB). Puedes cambiarlo en los ajustes del proyecto.", {
+          limit: created.limitMb, used: roundMb(created.usedBytes),
+        }),
+        413,
+        "task_total",
+      );
+    }
+    const attachment = created.attachment;
     try {
       if (image) await saveAttachmentFiles(attachment.id, image);
       else await saveRawAttachmentFile(attachment.id, buffer);
@@ -107,7 +118,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
       details: { taskId: taskIdForLog, file: fileInfo, status: err instanceof AppError ? err.status : 500 },
     });
     const t = await getT();
-    if (err instanceof AppError) return NextResponse.json({ error: t(err.message) }, { status: err.status });
+    if (err instanceof AppError) return NextResponse.json({ error: t(err.message), ...(err.code ? { code: err.code } : {}) }, { status: err.status });
     console.error("[upload]", err);
     return NextResponse.json({ error: t("No se pudo procesar el archivo.") }, { status: 500 });
   }

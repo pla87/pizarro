@@ -1,5 +1,5 @@
 import "server-only";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { AppError } from "./errors";
@@ -152,6 +152,18 @@ export async function readReleaseAttachmentFile(id: string): Promise<Buffer> {
   } catch {
     return await readFile(releaseAttachmentPath(id, "bin"));
   }
+}
+
+/** Tamaño en disco de la copia de histórico de un adjunto; null si falta el fichero. */
+export async function releaseAttachmentFileSize(id: string): Promise<number | null> {
+  for (const kind of ["webp", "bin"] as const) {
+    try {
+      return (await stat(releaseAttachmentPath(id, kind))).size;
+    } catch {
+      // se prueba con la otra extensión
+    }
+  }
+  return null;
 }
 
 /** Reduce un WebP ya guardado a 960px de ancho máximo, calidad ~55, sin metadatos. */

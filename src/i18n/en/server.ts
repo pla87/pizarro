@@ -1,6 +1,13 @@
 // Traducciones al inglés (server). Clave: texto exacto en español.
 export const server: Record<string, string> = {
   // Genéricos (action.ts, errors.ts, session.ts)
+  "Este proyecto ya tiene el máximo de 1000 tareas activas. Archiva o borra alguna.": "This project already has the maximum of 1000 active tasks. Archive or delete some.",
+  "Este proyecto tiene {active} de 1000 tareas activas: no caben {adding} más. Archiva o borra alguna.": "This project has {active} of 1000 active tasks: {adding} more do not fit. Archive or delete some.",
+  "Este proyecto ya tiene el máximo de 50 etiquetas. Borra alguna.": "This project already has the maximum of 50 labels. Delete some.",
+  "Este proyecto ya tiene el máximo de 100 entregables. Borra alguno.": "This project already has the maximum of 100 deliverables. Delete some.",
+  "Demasiadas tareas creadas seguidas. Espera un minuto.": "Too many tasks created in a row. Please wait a minute.",
+  "Demasiadas etiquetas creadas seguidas. Espera un minuto.": "Too many labels created in a row. Please wait a minute.",
+  "Demasiados entregables creados seguidos. Espera un minuto.": "Too many deliverables created in a row. Please wait a minute.",
   "La tarea está archivada. Recupérala para modificarla.": "The task is archived. Restore it to modify it.",
   "Una tarea no puede tener más de 100 subtareas.": "A task cannot have more than 100 subtasks.",
   "Esta tarea ya tiene el máximo de 1000 comentarios.": "This task already has the maximum of 1000 comments.",
@@ -108,8 +115,8 @@ export const server: Record<string, string> = {
   "Origen no permitido.": "Origin not allowed.",
   "Demasiadas peticiones": "Too many requests",
   "Datos no válidos": "Invalid data",
+  "Los adjuntos de la tarea superarían el máximo del proyecto ({limit} MB por tarea; ya tiene {used} MB). Puedes cambiarlo en los ajustes del proyecto.": "The task's attachments would exceed the project maximum ({limit} MB per task; it already has {used} MB). You can change it in the project settings.",
   "No hay adjuntos disponibles": "No attachments available",
-  "Los adjuntos superan el tamaño máximo del ZIP ({mb} MB). Puedes cambiarlo en los ajustes del proyecto.": "The attachments exceed the maximum ZIP size ({mb} MB). You can change it in the project settings.",
   "Tamaño no válido.": "Invalid size.",
   "El mínimo es 10 MB.": "The minimum is 10 MB.",
   "El máximo es 500 MB.": "The maximum is 500 MB.",

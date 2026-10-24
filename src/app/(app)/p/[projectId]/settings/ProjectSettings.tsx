@@ -109,12 +109,12 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
             }}
           >
             <div>
-              <label className="label" htmlFor="p-zip-mb">{t("Tamaño máximo del ZIP de adjuntos (MB)")}</label>
+              <label className="label" htmlFor="p-zip-mb">{t("Tamaño máximo de adjuntos por tarea y por paquete de release (MB)")}</label>
               <input
                 id="p-zip-mb" className="input w-32" type="number" inputMode="numeric" step={1}
                 min={RELEASE_ZIP_MIN_MB} max={RELEASE_ZIP_MAX_MB} value={zipMb} onChange={(e) => setZipMb(e.target.value)} required
               />
-              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto 80). El ZIP se arma en memoria del servidor: súbelo solo si hace falta.", { min: RELEASE_ZIP_MIN_MB, max: RELEASE_ZIP_MAX_MB })}</p>
+              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto 80). Es lo máximo que pueden sumar los adjuntos de una tarea. Si los de una release superan este tamaño, se descargan en varios ZIP de hasta ese tamaño; cada ZIP se arma en memoria del servidor: súbelo solo si hace falta.", { min: RELEASE_ZIP_MIN_MB, max: RELEASE_ZIP_MAX_MB })}</p>
             </div>
             <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
           </form>

@@ -5,7 +5,8 @@ import { addDaysIso, dateToIso, isoToDate, todayIso } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { mentionsToPlain } from "@/lib/mentions";
 import { requireUserPage } from "@/lib/session";
-import { getT } from "@/i18n/server";
+import { getLocale, getT } from "@/i18n/server";
+import { localizeGeneralKind } from "@/lib/kinds-localize";
 import type { Prisma } from "@/generated/prisma/client";
 import { CalendarView, type CalendarDeliverable, type CalendarTask } from "@/components/calendar/CalendarView";
 
@@ -104,18 +105,19 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       title: true,
       dueDate: true,
       project: { select: { id: true, name: true } },
-      kind: { select: { name: true, color: true } },
+      kind: { select: { id: true, name: true, color: true } },
       column: { select: { isDone: true } },
     },
   });
 
+  const locale = await getLocale();
   const tasks: CalendarTask[] = rows.map((r) => ({
     id: r.id,
     title: mentionsToPlain(r.title),
     due: dateToIso(r.dueDate)!,
     projectId: r.project.id,
     projectName: r.project.name,
-    kind: r.kind,
+    kind: { name: localizeGeneralKind(r.kind, locale).name, color: r.kind.color },
     done: r.column.isDone,
   }));
 

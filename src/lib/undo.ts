@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { Prisma } from "@/generated/prisma/client";
 import { actionContext } from "./action-context";
 import { db } from "./db";
+import { assertTaskCapacity } from "./caps";
 import { removeAttachmentFiles, removeReleaseAttachmentFiles } from "./uploads";
 
 // Deshacer: cada acción deshacible deja sus operaciones inversas (addUndo) y runAction las guarda
@@ -299,6 +300,22 @@ function taskUpdateData(d: TaskData): Prisma.TaskUncheckedUpdateInput {
   return out;
 }
 
+/** Tareas activas que aplicar `ops` añadiría: las que se vuelven a crear y las archivadas que se desarchivan. */
+async function countReturningTasks(projectId: string, ops: UndoOp[]): Promise<number> {
+  const restoreIds = new Set<string>();
+  const unarchiveIds = new Set<string>();
+  for (const op of ops) {
+    if (op.t === "task.restore") restoreIds.add(op.snap.task.id);
+    else if (op.t === "task.set" && op.data.archivedAt === null) unarchiveIds.add(op.id);
+  }
+  if (!restoreIds.size && !unarchiveIds.size) return 0;
+  const [existing, archived] = await Promise.all([
+    restoreIds.size ? db.task.count({ where: { id: { in: [...restoreIds] } } }) : 0,
+    unarchiveIds.size ? db.task.count({ where: { id: { in: [...unarchiveIds] }, projectId, archivedAt: { not: null } } }) : 0,
+  ]);
+  return restoreIds.size - existing + archived;
+}
+
 /**
  * Aplica las operaciones inversas (de la última a la primera). Lo que ya no existe se salta;
  * devuelve cuántas operaciones no se pudieron aplicar. Con `keepFiles` no borra los ficheros de los
@@ -306,6 +323,10 @@ function taskUpdateData(d: TaskData): Prisma.TaskUncheckedUpdateInput {
  */
 export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFiles?: boolean } = {}): Promise<number> {
   let skipped = 0;
+  // Tope de tareas activas: si deshacer/rehacer va a crear (o desarchivar) tareas y no caben, falla entero
+  // antes de tocar nada (la entrada se conserva, ver applyLast).
+  const returning = await countReturningTasks(projectId, ops);
+  if (returning) await assertTaskCapacity(db, projectId, returning);
   const filesToRemove: string[] = [];
   const releaseFiles: string[] = [];
   const columnIds = new Set((await db.column.findMany({ where: { projectId }, select: { id: true } })).map((c) => c.id));

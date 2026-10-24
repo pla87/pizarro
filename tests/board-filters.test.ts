@@ -8,7 +8,7 @@ const ctx = { currentUserId: "me", today: "2026-10-22", doneColumnIds: new Set([
 
 const task = (over: Partial<BoardTask>): BoardTask => ({
   id: "t", columnId: "todo", title: "x", kindId: "k1", color: null, linkUrl: null, position: 1, assigneeId: null, labelIds: [],
-  subtaskTotal: 0, subtaskDone: 0, imageCount: 0, fileCount: 0, hasDescription: false, dueDate: null, deliverableId: null, commentCount: 0,
+  subtaskTotal: 0, subtaskDone: 0, imageCount: 0, fileCount: 0, attachBytes: 0, hasDescription: false, dueDate: null, deliverableId: null, commentCount: 0,
   linkCount: 0, evergreen: false, recurrence: "NONE", recurrenceDay: null, textVersion: null, ...over,
 });
 const f = (over: Partial<BoardFilters>): BoardFilters => ({ ...EMPTY_FILTERS, ...over });

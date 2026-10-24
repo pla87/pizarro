@@ -68,3 +68,12 @@ export const MAX_RELEASE_CONTENT = 200_000;
 export const RELEASE_ZIP_DEFAULT_MB = 80;
 export const RELEASE_ZIP_MIN_MB = 10;
 export const RELEASE_ZIP_MAX_MB = 500;
+
+/** Topes por proyecto (que ninguno crezca sin límite) y ritmos máximos de creación por persona y minuto. */
+export const MAX_LABELS_PER_PROJECT = 50;
+export const MAX_DELIVERABLES_PER_PROJECT = 100;
+export const MAX_ACTIVE_TASKS_PER_PROJECT = 1000;
+/** Tareas nuevas por minuto y persona (las creaciones múltiples cuentan una por tarea; debe ser ≥ MAX_BULK_TASKS). */
+export const TASK_CREATE_PER_MINUTE = 300;
+export const LABEL_CREATE_PER_MINUTE = 30;
+export const DELIVERABLE_CREATE_PER_MINUTE = 30;

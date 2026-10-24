@@ -2,7 +2,7 @@
 
 import { ChevronDown, ClipboardCopy, Download, FileArchive, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { deleteRelease, deleteReleaseAttachments } from "@/actions/releases";
 import { copyText, downloadText } from "@/components/ui/clipboard";
 import { cn } from "@/components/ui/cn";
@@ -28,6 +28,22 @@ export function ReleaseEntry({ release }: Props) {
   const [attachments, setAttachments] = useState(release.attachments);
   const [removed, setRemoved] = useState(false);
   const date = new Date(release.deployedAt);
+  // Los adjuntos pueden salir en varios paquetes ZIP (tope del proyecto): se consulta el plan al abrir la release.
+  const [parts, setParts] = useState(1);
+  const hasAttachments = attachments.length > 0;
+  useEffect(() => {
+    if (!open || !hasAttachments) return;
+    let cancelled = false;
+    fetch(`/api/releases/${release.id}/attachments?plan=1`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((plan: { parts: unknown[] } | null) => {
+        if (!cancelled && plan && plan.parts.length > 0) setParts(plan.parts.length);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open, hasAttachments, release.id]);
 
   const remove = async () => {
     if (!(await confirm({ title: t("Borrar release"), message: t("¿Borrar la release «{title}» del histórico? Se borran también sus adjuntos. Las tareas no cambian.", { title: release.title }), confirmLabel: t("Borrar"), danger: true }))) return;
@@ -89,9 +105,11 @@ export function ReleaseEntry({ release }: Props) {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium">{t("Adjuntos ({n})", { n: attachments.length })}</span>
                 <div className="ml-auto flex flex-wrap gap-2">
-                  <a className="btn-secondary py-1.5" href={`/api/releases/${release.id}/attachments`} download>
-                    <FileArchive size={15} /> {t("Descargar adjuntos")}
-                  </a>
+                  {Array.from({ length: parts }, (_, i) => (
+                    <a key={i} className="btn-secondary py-1.5" href={`/api/releases/${release.id}/attachments${parts > 1 ? `?part=${i + 1}` : ""}`} download>
+                      <FileArchive size={15} /> {parts > 1 ? t("Descargar adjuntos ({part}/{total})", { part: i + 1, total: parts }) : t("Descargar adjuntos")}
+                    </a>
+                  ))}
                   <button className="btn-secondary py-1.5 text-red-600 dark:text-red-400" disabled={busy} onClick={removeAttachments}>
                     <Trash2 size={15} /> {t("Borrar adjuntos")}
                   </button>

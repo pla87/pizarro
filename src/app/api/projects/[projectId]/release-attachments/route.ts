@@ -1,16 +1,17 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { z } from "zod";
 import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
-import { attachmentFileNames, isoDate, zipTooLarge } from "@/lib/release";
+import { attachmentFileNames, isoDate } from "@/lib/release";
+import { buildZipPart, planZipEntries, zipPlanBody, zipRequestMode, type ZipEntry } from "@/lib/release-zip";
+import { partSuffix } from "@/lib/zip-plan";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { attachmentPath } from "@/lib/uploads";
 import * as v from "@/lib/validation";
-import { buildZip } from "@/lib/zip";
 
 export const runtime = "nodejs";
 
@@ -31,7 +32,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   if (!isSameOrigin(req)) return new Response(t("Origen no permitido"), { status: 403 });
   const user = await getCurrentUser();
   if (!user) return new Response(t("No autorizado"), { status: 401 });
-  if (!rateLimit(`release-zip:${user.id}`, 10, 60_000)) return new Response(t("Demasiadas peticiones"), { status: 429 });
+  const mode = zipRequestMode(req.url);
+  if (!mode) return new Response(t("Datos no válidos"), { status: 400 });
+  // Una release pide un plan y luego cada paquete: el plan (o la petición sin paquete) cuenta como la descarga;
+  // los paquetes tienen su propio tope, más holgado.
+  const allowed = mode.kind === "part" && mode.explicit ? rateLimit(`release-zip-part:${user.id}`, 120, 60_000) : rateLimit(`release-zip:${user.id}`, 10, 60_000);
+  if (!allowed) return new Response(t("Demasiadas peticiones"), { status: 429 });
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return new Response(t("Datos no válidos"), { status: 400 });
@@ -51,40 +57,38 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   // Todas las tareas deben existir en este proyecto y ser visibles.
   if (tasks.length !== ids.size) return new Response(t("No encontrado"), { status: 404 });
   const byId = new Map(tasks.map((t) => [t.id, t]));
-  // Se arma en memoria (ficheros + ZIP): el tope por proyecto evita picos de memoria en un contenedor pequeño.
+  // Cada paquete se arma en memoria hasta el tope del proyecto; si no cabe todo, salen varios.
   const { releaseZipMaxMb } = await db.project.findUniqueOrThrow({ where: { id: projectId }, select: { releaseZipMaxMb: true } });
-  const maxBytes = releaseZipMaxMb * 1024 * 1024;
 
-  const files: { name: string; data: Uint8Array }[] = [];
-  let total = 0;
+  const entries: ZipEntry[] = [];
   for (const item of items) {
     const attachments = byId.get(item.taskId)!.attachments;
     const names = attachmentFileNames(item.code, attachments);
     for (const [i, a] of attachments.entries()) {
-      try {
-        const data = await readFile(attachmentPath(a.id, a.isImage ? "full" : "file"));
-        // El ZIP se arma en memoria: un tope evita agotar el contenedor.
-        total += data.length;
-        if (total > maxBytes) return new Response(zipTooLarge(t, releaseZipMaxMb), { status: 413 });
-        files.push({ name: names[i]!, data });
-      } catch {
-        // Fichero ausente en disco: se omite en lugar de romper toda la descarga.
-      }
+      const file = attachmentPath(a.id, a.isImage ? "full" : "file");
+      const size = await stat(file).then((st) => st.size, () => null);
+      // Fichero ausente en disco: se omite en lugar de romper toda la descarga.
+      if (size !== null) entries.push({ name: names[i]!, size, read: () => readFile(file) });
     }
   }
-  if (files.length === 0) return new Response(t("No hay adjuntos disponibles"), { status: 404 });
-
-  const zip = buildZip(files);
+  if (entries.length === 0) return new Response(t("No hay adjuntos disponibles"), { status: 404 });
+  const packages = planZipEntries(entries, releaseZipMaxMb);
+  if (mode.kind === "plan") return Response.json(zipPlanBody(packages, releaseZipMaxMb), { headers: { "Cache-Control": "private, no-store" } });
+  const pkg = packages[mode.part - 1];
+  if (!pkg) return new Response(t("No encontrado"), { status: 404 });
+  const { zip, files: fileCount } = await buildZipPart(entries, pkg);
+  if (fileCount === 0) return new Response(t("No hay adjuntos disponibles"), { status: 404 });
   logEvent({
-    category: "api", action: "release.zipDownload", message: `ZIP de adjuntos de release (${files.length} ficheros, ${Math.round(zip.length / 1024)} KB)`,
+    category: "api", action: "release.zipDownload", message: `ZIP de adjuntos de release (paquete ${mode.part}/${packages.length}, ${fileCount} ficheros, ${Math.round(zip.length / 1024)} KB)`,
     userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/release-attachments`, ip: clientIp(req.headers),
-    durationMs: performance.now() - start, details: { tasks: items.length, files: files.length, bytes: zip.length },
+    durationMs: performance.now() - start, details: { tasks: items.length, part: mode.part, parts: packages.length, files: fileCount, bytes: zip.length },
   });
   return new Response(new Uint8Array(zip.buffer as ArrayBuffer, zip.byteOffset, zip.length), {
     headers: {
       "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="release-${isoDate()}-adjuntos.zip"`,
+      "Content-Disposition": `attachment; filename="release-${isoDate()}-adjuntos${partSuffix(mode.part, packages.length)}.zip"`,
       "Cache-Control": "private, no-store",
+      "X-Zip-Parts": String(packages.length),
       "X-Content-Type-Options": "nosniff",
     },
   });

@@ -2,6 +2,33 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.20.0 — 2026-10-24 10:48
+
+Límites por proyecto, adjuntos con tope por tarea y releases en varios paquetes, soltar archivos en las tarjetas, tipos generales en inglés y proyecto que se mantiene en el menú
+
+### Nuevas funcionalidades
+
+- Arrastra archivos directamente sobre una tarjeta del tablero para adjuntarlos.
+- Releases con muchos adjuntos: se descargan en varios paquetes ZIP del tamaño máximo del proyecto, con el menor número posible.
+- Límites por proyecto: 50 etiquetas, 100 entregables y 1000 tareas activas.
+
+### Mejoras
+
+- El tamaño máximo del proyecto limita también la suma de adjuntos de cada tarea; la sección de adjuntos indica el máximo por archivo y el total usado, resaltado si se supera.
+- El proyecto sigue elegido en el menú al ir al calendario, avisos, perfil u otras páginas generales.
+- Los tipos generales de serie se muestran en inglés a quien usa Pizarro en inglés.
+- La fecha de creación de una tarea incluye la hora.
+- Arrastrar texto seleccionado a otro campo lo mueve; con Ctrl (⌥ en Mac) lo copia.
+- Las tareas archivadas son de solo lectura hasta recuperarlas.
+
+### Correcciones
+
+- Revisión de seguridad: al cambiar el email de una cuenta se desvincula Google y caducan los enlaces enviados a la dirección anterior; cerrar sesión borra la cookie; los errores del navegador solo se registran con sesión válida.
+
+### Cambios técnicos / DB
+
+- Migración: índices por fecha de creación y por autor en tareas, comentarios, adjuntos, enlaces, releases y avisos.
+
 ## v1.19.0 — 2026-10-23 23:09
 
 Plantillas en inglés, calendario con varias personas, cambio de proyecto sin perder la página, tope del ZIP por proyecto y correcciones del editor
