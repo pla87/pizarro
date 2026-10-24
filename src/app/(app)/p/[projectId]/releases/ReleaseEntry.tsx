@@ -37,9 +37,9 @@ export function ReleaseEntry({ release }: Props) {
   const date = new Date(release.deployedAt);
   // Los adjuntos pueden salir en varios paquetes ZIP (tope del proyecto): se consulta el plan al abrir la release.
   const [parts, setParts] = useState(1);
-  const hasAttachments = attachments.length > 0;
+  const attachmentCount = attachments.length;
   useEffect(() => {
-    if (!open || !hasAttachments) return;
+    if (!open || !attachmentCount) return;
     let cancelled = false;
     fetch(`/api/releases/${release.id}/attachments?plan=1`)
       .then((r) => (r.ok ? r.json() : null))
@@ -50,7 +50,7 @@ export function ReleaseEntry({ release }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [open, hasAttachments, release.id]);
+  }, [open, attachmentCount, release.id]);
 
   const remove = async () => {
     if (!(await confirm({ title: t("Borrar release"), message: t("¿Borrar la release «{title}» del histórico? Se borran también sus adjuntos. Las tareas no cambian.", { title: release.title }), confirmLabel: t("Borrar"), danger: true }))) return;

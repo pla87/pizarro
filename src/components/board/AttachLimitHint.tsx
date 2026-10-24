@@ -17,7 +17,7 @@ export function AttachLimitHint({ usedBytes, limitMb, fileMaxMb, rejected = fals
 }) {
   const t = useT();
   const locale = useIntlLocale();
-  const full = rejected || usedBytes > limitMb * 1024 * 1024;
+  const full = rejected || usedBytes >= limitMb * 1024 * 1024;
   return (
     <p className={cn("text-xs text-slate-500", className)}>
       {t("Pega o arrastra archivos.")} {t("Máx. {mb} MB por archivo", { mb: fileMaxMb })} ·{" "}

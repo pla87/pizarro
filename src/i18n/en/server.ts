@@ -114,6 +114,7 @@ export const server: Record<string, string> = {
   "Origen no permitido": "Origin not allowed",
   "Origen no permitido.": "Origin not allowed.",
   "Demasiadas peticiones": "Too many requests",
+  "Ya se está preparando otro ZIP. Inténtalo de nuevo en unos segundos.": "Another ZIP is already being prepared. Try again in a few seconds.",
   "Datos no válidos": "Invalid data",
   "Los adjuntos de la tarea superarían el máximo del proyecto ({limit} MB por tarea; ya tiene {used} MB). Puedes cambiarlo en los ajustes del proyecto.": "The task's attachments would exceed the project maximum ({limit} MB per task; it already has {used} MB). You can change it in the project settings.",
   "No hay adjuntos disponibles": "No attachments available",

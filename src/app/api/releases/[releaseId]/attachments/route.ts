@@ -4,7 +4,7 @@ import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { releaseZipName } from "@/lib/release";
-import { buildZipPart, planZipEntries, zipPlanBody, zipRequestMode, type ZipEntry } from "@/lib/release-zip";
+import { acquireZipSlot, buildZipPart, planZipEntries, zipPlanBody, zipRateKey, zipRequestMode, type ZipEntry } from "@/lib/release-zip";
 import { getCurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { readReleaseAttachmentFile, releaseAttachmentFileSize } from "@/lib/uploads";
@@ -20,7 +20,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
   const mode = zipRequestMode(req.url);
   if (!mode) return new Response(t("Datos no válidos"), { status: 400 });
   // El plan (o la petición sin paquete) cuenta como la descarga; cada paquete pedido por número tiene su propio tope.
-  const allowed = mode.kind === "part" && mode.explicit ? rateLimit(`release-zip-part:${user.id}`, 120, 60_000) : rateLimit(`release-zip:${user.id}`, 10, 60_000);
+  const rate = zipRateKey(mode, user.id);
+  const allowed = rateLimit(rate.key, rate.limit, 60_000);
   if (!allowed) return new Response(t("Demasiadas peticiones"), { status: 429 });
 
   const { releaseId } = await ctx.params;
@@ -44,7 +45,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
   if (mode.kind === "plan") return Response.json(zipPlanBody(packages, maxMb), { headers: { "Cache-Control": "private, no-store" } });
   const pkg = packages[mode.part - 1];
   if (!pkg) return new Response(t("No encontrado"), { status: 404 });
-  const { zip, files: fileCount } = await buildZipPart(entries, pkg);
+  // Uno a la vez por persona y pocos en todo el servidor (cada paquete se arma en memoria).
+  const releaseSlot = acquireZipSlot(user.id);
+  if (!releaseSlot) return new Response(t("Ya se está preparando otro ZIP. Inténtalo de nuevo en unos segundos."), { status: 429, headers: { "Retry-After": "5" } });
+  let built: Awaited<ReturnType<typeof buildZipPart>>;
+  try {
+    built = await buildZipPart(entries, pkg);
+  } finally {
+    releaseSlot();
+  }
+  const { zip, files: fileCount } = built;
   if (fileCount === 0) return new Response(t("No hay adjuntos disponibles"), { status: 404 });
 
   const name = releaseZipName(release.title, mode.part, packages.length);
