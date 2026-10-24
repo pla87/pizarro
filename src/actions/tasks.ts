@@ -12,7 +12,7 @@ import { addUndo, captureTasks, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, type
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
-import { setTaskColumnPositions } from "@/lib/task-positions";
+import { lastPositionIn, lockColumns, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertTaskCapacity, assertTaskCreateRate } from "@/lib/caps";
 import { requireUser } from "@/lib/session";
@@ -86,17 +86,6 @@ const MAX_COMMENTS = 1000;
 /** Campos que cambian al archivar o recuperar una tarea. */
 const ARCHIVE_FIELDS: TaskField[] = ["archivedAt", "archivedFromColumnId", "columnId", "position", "evergreen"];
 
-async function lastPosition(columnId: string): Promise<number | null> {
-  const last = await db.task.findFirst({ where: { columnId }, orderBy: { position: "desc" }, select: { position: true } });
-  return last?.position ?? null;
-}
-
-/** Renumera una columna cuando las posiciones fraccionarias se agotan (muy raro). */
-async function rebalanceColumn(columnId: string) {
-  const tasks = await db.task.findMany({ where: { columnId }, orderBy: { position: "asc" }, select: { id: true } });
-  await db.$transaction(tasks.map((t, i) => db.task.update({ where: { id: t.id }, data: { position: (i + 1) * POSITION_STEP } })));
-}
-
 const createSchema = z.object({
   projectId: v.id,
   columnId: v.id,
@@ -126,9 +115,11 @@ export async function createTask(input: z.input<typeof createSchema>) {
     // Solo se admite evergreen en la columna de la release.
     const evergreen = data.evergreen && (await db.column.count({ where: { id: data.columnId, role: "NEXT_RELEASE" } })) > 0;
     assertTaskCreateRate(user.id);
-    const position = positionBetween(await lastPosition(data.columnId), null);
     const task = await db.$transaction(async (tx) => {
       await assertTaskCapacity(tx, data.projectId);
+      // Al final de la columna, con la columna bloqueada: dos altas a la vez no comparten posición.
+      await lockColumns(tx, [data.columnId]);
+      const position = positionBetween(await lastPositionIn(tx, data.columnId), null);
       return tx.task.create({
         data: {
           projectId: data.projectId,
@@ -200,7 +191,8 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
     const ids = await db.$transaction(async (tx) => {
       // Todo o nada: si el lote no cabe, no se crea ninguna.
       await assertTaskCapacity(tx, data.projectId, data.tasks.length);
-      let position = (await tx.task.findFirst({ where: { columnId: data.columnId }, orderBy: { position: "desc" }, select: { position: true } }))?.position ?? null;
+      await lockColumns(tx, [data.columnId]);
+      let position = await lastPositionIn(tx, data.columnId);
       const created = await tx.task.createManyAndReturn({
         data: data.tasks.map((t) => {
           position = positionBetween(position, null);
@@ -233,7 +225,7 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
     });
     addUndo(...ids.map((id) => ({ t: "task.remove" as const, id })));
     describeAction("Creó {count} en «{col}»: {titles}", { count: tasksN(ids.length), col: await columnName(data.columnId), titles: data.tasks.map((t) => `«${t.title}»`).join(", ").slice(0, 600) }, { taskIds: ids });
-    const rows = await db.task.findMany({ where: { id: { in: ids } }, orderBy: { position: "asc" }, select: boardTaskSelect });
+    const rows = await db.task.findMany({ where: { id: { in: ids } }, orderBy: TASK_ORDER, select: boardTaskSelect });
     return rows.map(toBoardTask);
   });
 }
@@ -241,20 +233,25 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
 /**
  * Duplica una tarea: copia título (con « (copia)»), tipo, descripción, etiquetas, responsable, fecha límite,
  * entregable, color, enlace y subtareas (sin marcar); no copia comentarios, adjuntos, historial ni repetición.
- * Queda justo detrás de la original en su columna. Se deshace de una vez (borra la copia).
+ * Queda justo detrás de la original en su columna o, con `target` (Ctrl/Alt al soltar una tarjeta arrastrada),
+ * en esa columna entre las vecinas indicadas, como moveTask. Se deshace de una vez (borra la copia).
  */
-export async function duplicateTask(taskId: string) {
-  return runAction({ name: "tasks.duplicateTask", args: [taskId] }, async () => {
+const duplicateTargetSchema = z.object({ columnId: v.id, prevId: v.id.nullable(), nextId: v.id.nullable() }).nullable().default(null);
+
+export async function duplicateTask(taskId: string, target?: z.input<typeof duplicateTargetSchema>) {
+  return runAction({ name: "tasks.duplicateTask", args: [taskId, target] }, async () => {
     const user = await requireUser();
     if (!rateLimit(`duplicate:${user.id}`, 60, 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
     const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
+    const dest = duplicateTargetSchema.parse(target);
     assertTaskCreateRate(user.id);
     await assertNotArchived(taskId);
+    if (dest) await assertColumnInProject(dest.columnId, projectId);
     const src = await db.task.findUniqueOrThrow({
       where: { id: taskId },
       select: {
         title: true, description: true, kindId: true, color: true, linkUrl: true, assigneeId: true, dueDate: true, deliverableId: true,
-        columnId: true, position: true,
+        columnId: true,
         labels: { select: { labelId: true } },
         subtasks: { orderBy: { position: "asc" }, select: { title: true, position: true } },
       },
@@ -262,21 +259,19 @@ export async function duplicateTask(taskId: string) {
     const t = await getT();
     const suffix = ` ${t("(copia)")}`;
     const title = src.title.length + suffix.length > 200 ? `${src.title.slice(0, 200 - suffix.length).trimEnd()}${suffix}` : `${src.title}${suffix}`;
-    // Entre la original y la siguiente de su columna (si las posiciones se agotan, se renumera la columna).
-    const nextAfter = async (pos: number) => (await db.task.findFirst({ where: { columnId: src.columnId, position: { gt: pos } }, orderBy: { position: "asc" }, select: { position: true } }))?.position ?? null;
-    let from = src.position;
-    let next = await nextAfter(from);
-    if (needsRebalance(from, next)) {
-      await rebalanceColumn(src.columnId);
-      from = (await db.task.findUniqueOrThrow({ where: { id: taskId }, select: { position: true } })).position;
-      next = await nextAfter(from);
-    }
+    const columnId = dest?.columnId ?? src.columnId;
     const copy = await db.$transaction(async (tx) => {
       await assertTaskCapacity(tx, projectId);
+      await lockColumns(tx, [columnId]);
+      // Sin destino, entre la original y la siguiente de su columna; con destino, donde se soltó (si las
+      // posiciones se agotan, se renumera la columna). La original cuenta como una tarea más de la columna.
+      const { position } = dest
+        ? await placeInColumn(tx, columnId, dest.prevId, dest.nextId)
+        : await placeInColumn(tx, columnId, taskId, null);
       return tx.task.create({
         data: {
           projectId,
-          columnId: src.columnId,
+          columnId,
           title,
           description: src.description,
           kindId: src.kindId,
@@ -285,7 +280,7 @@ export async function duplicateTask(taskId: string) {
           assigneeId: src.assigneeId,
           dueDate: src.dueDate,
           deliverableId: src.deliverableId,
-          position: positionBetween(from, next),
+          position,
           createdById: user.id,
           labels: { create: src.labels.map((l) => ({ labelId: l.labelId })) },
           subtasks: { create: src.subtasks.map((s) => ({ title: s.title, position: s.position })) },
@@ -294,7 +289,8 @@ export async function duplicateTask(taskId: string) {
       });
     });
     addUndo({ t: "task.remove", id: copy.id });
-    describeAction("Duplicó «{title}»", { title: src.title }, { taskId: copy.id });
+    if (columnId === src.columnId) describeAction("Duplicó «{title}»", { title: src.title }, { taskId: copy.id });
+    else describeAction("Duplicó «{title}» en «{col}»", { title: src.title, col: await columnName(columnId) }, { taskId: copy.id });
     return loadBoardTask(copy.id);
   });
 }
@@ -441,35 +437,24 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
   });
 }
 
-async function neighbourPositions(columnId: string, prevId: string | null, nextId: string | null) {
-  const ids = [prevId, nextId].filter((x): x is string => !!x);
-  const rows = ids.length
-    ? await db.task.findMany({ where: { id: { in: ids }, columnId }, select: { id: true, position: true } })
-    : [];
-  const prev = prevId ? rows.find((r) => r.id === prevId)?.position : null;
-  const next = nextId ? rows.find((r) => r.id === nextId)?.position : null;
-  // undefined = la vecina indicada ya no está en esa columna (otro usuario la movió).
-  return { prev, next, stale: prev === undefined || next === undefined };
-}
-
-/** Mueve una tarjeta entre dos vecinas (por id) de la columna destino. */
+/**
+ * Mueve una tarjeta entre dos vecinas (por id) de la columna destino. Si entre ellas hay tareas que el cliente
+ * no ve (fijas, archivadas, recién llegadas), queda justo detrás de `prevId`; nunca con la posición de otra.
+ */
 export async function moveTask(taskId: string, columnId: string, prevId: string | null, nextId: string | null) {
   return runAction({ name: "tasks.moveTask", args: [taskId, columnId, prevId, nextId] }, async () => {
     const user = await requireUser();
     const id = v.id.parse(taskId);
-    // Es la acción más frecuente del tablero: la tarea (con el permiso), la columna destino y las vecinas se leen
+    // Es la acción más frecuente del tablero: la tarea (con el permiso) y la columna destino se leen
     // a la vez, y los errores se lanzan después en el mismo orden que si se comprobaran uno a uno.
     const col = v.id.safeParse(columnId);
-    const prev = v.id.nullable().safeParse(prevId);
-    const next = v.id.nullable().safeParse(nextId);
     // La columna actual va en su propia consulta (en paralelo) en vez de como relación de la tarea, que Prisma
-    // resolvería con otra consulta después.
+    // resolvería con otra consulta después. Las vecinas se leen después, con la columna destino bloqueada.
     const columnSelect = { id: true, name: true, isDone: true } as const;
-    const [task, current, target, firstN] = await Promise.all([
+    const [task, current, target] = await Promise.all([
       loadTaskWithAccess(user, id, { archivedAt: true, title: true, position: true, evergreen: true }),
       db.column.findFirst({ where: { tasks: { some: { id } } }, select: columnSelect }),
       col.success ? db.column.findUnique({ where: { id: col.data }, select: { projectId: true, name: true, isDone: true } }) : null,
-      col.success && prev.success && next.success ? neighbourPositions(col.data, prev.data, next.data) : null,
     ]);
     const { projectId, columnId: fromColumnId } = task;
     assertNotArchivedRow(task);
@@ -479,21 +464,19 @@ export async function moveTask(taskId: string, columnId: string, prevId: string 
     if (target?.projectId !== projectId) throw new AppError("La columna no existe.");
     prevId = v.id.nullable().parse(prevId);
     nextId = v.id.nullable().parse(nextId);
-    let n = firstN!;
-    let rebalanced = false;
-    if (!n.stale && needsRebalance(n.prev, n.next)) {
-      await rebalanceColumn(columnId);
-      rebalanced = true;
-      n = await neighbourPositions(columnId, prevId, nextId);
-    }
-    // Sin vecinas (selector «Columna» del detalle, o columna vacía): al final, como la pinta el tablero.
-    const position = n.stale || (!prevId && !nextId) ? positionBetween(await lastPosition(columnId), null) : positionBetween(n.prev, n.next);
     const before = { title: mentionsToPlain(task.title), column: from.name };
-    // Deshacer: los valores ya leídos (salvo si se ha renumerado la columna, que puede haber movido esta misma tarjeta).
-    addUndo(...(rebalanced
-      ? await captureTasks([taskId], ["columnId", "position", "evergreen"])
-      : [{ t: "task.set" as const, id: taskId, data: { columnId: fromColumnId, position: task.position, evergreen: task.evergreen } }]));
-    await db.task.update({ where: { id: taskId }, data: { columnId, position, evergreen: false } });
+    // Sin vecinas (selector «Columna» del detalle, o columna vacía) o con una que ya no está: al final, como la pinta el tablero.
+    const { position, undoPosition } = await db.$transaction(async (tx) => {
+      await lockColumns(tx, [columnId]);
+      const placed = await placeInColumn(tx, columnId, prevId === taskId ? null : prevId, nextId === taskId ? null : nextId, taskId);
+      // Deshacer: la posición ya leída, salvo si se ha renumerado su propia columna (la habrá movido).
+      const undoPosition = placed.rebalanced && fromColumnId === columnId
+        ? (await tx.task.findUniqueOrThrow({ where: { id: taskId }, select: { position: true } })).position
+        : task.position;
+      await tx.task.update({ where: { id: taskId }, data: { columnId, position: placed.position, evergreen: false } });
+      return { position: placed.position, undoPosition };
+    });
+    addUndo({ t: "task.set", id: taskId, data: { columnId: fromColumnId, position: undoPosition, evergreen: task.evergreen } });
     // Recurrente que llega a una columna terminada: nace la siguiente aparición.
     const spawned = target.isDone && !from.isDone ? await spawnRecurrences([taskId], user.id) : [];
     const to = target.name;
@@ -522,15 +505,19 @@ export async function moveTasks(taskIds: string[], columnId: string) {
     noteProject(column.projectId);
     const tasks = await db.task.findMany({
       where: { id: { in: ids }, projectId: column.projectId, archivedAt: null },
-      orderBy: [{ column: { position: "asc" } }, { position: "asc" }],
+      orderBy: [{ column: { position: "asc" } }, ...TASK_ORDER],
       select: { id: true, columnId: true, column: { select: { isDone: true } } },
     });
     const toMove = tasks.filter((t) => t.columnId !== column.id);
-    const [last, undo] = await Promise.all([lastPosition(column.id), captureTasks(toMove.map((t) => t.id), ["columnId", "position", "evergreen"])]);
-    let pos = last ?? 0;
-    const moved = toMove.map((t) => ({ id: t.id, position: (pos += POSITION_STEP) }));
+    const undo = await captureTasks(toMove.map((t) => t.id), ["columnId", "position", "evergreen"]);
+    const moved = await db.$transaction(async (tx) => {
+      await lockColumns(tx, [column.id]);
+      let pos = (await lastPositionIn(tx, column.id)) ?? 0;
+      const list = toMove.map((t) => ({ id: t.id, position: (pos += POSITION_STEP) }));
+      await setTaskColumnPositions(list, column.id, { clearEvergreen: true, client: tx });
+      return list;
+    });
     addUndo(...undo);
-    await setTaskColumnPositions(moved, column.id, { clearEvergreen: true });
     // Las recurrentes que no estaban en una columna terminada y llegan a una: nace la siguiente aparición.
     let spawned: BoardTask[] = [];
     if (column.isDone) spawned = await spawnRecurrences(toMove.filter((t) => !t.column.isDone).map((t) => t.id), user.id);
@@ -553,8 +540,8 @@ export async function makeEvergreen(taskId: string) {
     const result = await db.$transaction(async (tx) => {
       const column = await tx.column.findFirst({ where: { projectId, role: "NEXT_RELEASE" }, select: { id: true } });
       if (!column) throw new AppError("El proyecto no tiene columna de release.");
-      const last = await tx.task.findFirst({ where: { columnId: column.id }, orderBy: { position: "desc" }, select: { position: true } });
-      const position = positionBetween(last?.position ?? null, null);
+      await lockColumns(tx, [column.id]);
+      const position = positionBetween(await lastPositionIn(tx, column.id, taskId), null);
       const task = await tx.task.update({
         where: { id: taskId },
         data: { columnId: column.id, position, evergreen: true },
@@ -900,9 +887,8 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
     if (snap.dueDate !== dateToIso(task.dueDate)) fields.dueDate = snap.dueDate ? isoToDate(snap.dueDate) : null;
     if (snap.columnId !== task.columnId && (await passes(() => assertColumnInProject(snap.columnId, projectId)))) {
       fields.columnId = snap.columnId;
-      // La posición viene del navegador: si ya la ocupa otra tarjeta de esa columna, al final (sin empates).
-      const taken = await db.task.count({ where: { columnId: snap.columnId, position: snap.position, id: { not: id } } });
-      fields.position = taken ? positionBetween(await lastPosition(snap.columnId), null) : snap.position;
+      // La posición viene del navegador: si ya la ocupa otra tarjeta, se desempata al terminar (resolvePositionTies).
+      fields.position = snap.position;
     }
     // La tarea fija solo tiene sentido en la columna de la release: si la columna destino no lo es, no se restaura.
     if (fields.evergreen === true && !(await db.column.count({ where: { id: (fields.columnId as string | undefined) ?? task.columnId, role: "NEXT_RELEASE" } }))) delete fields.evergreen;
@@ -1026,6 +1012,7 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
         await tx.taskAttachment.create({ data: { ...r, taskId: id, createdById: creator, createdAt: new Date(r.createdAt) } });
       }
     });
+    if (fields.columnId !== undefined) await resolvePositionTies([id]);
     describeAction("Canceló los cambios en «{title}»", { title: mentionsToPlain(task.title) }, { taskId: id });
     return { task: await loadBoardTask(id), changed: true };
   });
@@ -1042,11 +1029,12 @@ export async function restoreTask(taskId: string) {
       : null;
     const column = origin ?? (await db.column.findFirst({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true } }));
     if (!column) throw new AppError("El proyecto no tiene columnas.");
-    const position = positionBetween(await lastPosition(column.id), null);
     addUndo(...(await captureTasks([taskId], ARCHIVE_FIELDS)));
     await db.$transaction(async (tx) => {
       // Al recuperarla vuelve a contar como activa: si el proyecto está en el tope, no cabe.
       if (task.archivedAt) await assertTaskCapacity(tx, projectId);
+      await lockColumns(tx, [column.id]);
+      const position = positionBetween(await lastPositionIn(tx, column.id, taskId), null);
       await tx.task.update({ where: { id: taskId }, data: { archivedAt: null, archivedFromColumnId: null, columnId: column.id, position } });
     });
     describeAction("Recuperó «{title}» en «{col}»", { title: (await taskLabel(taskId)).title, col: column.name }, { taskId });

@@ -99,7 +99,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const rows = await db.task.findMany({
     where: { ...base, ...personWhere, ...(hideDone ? { column: { isDone: false } } : {}) },
     take: MAX_TASKS,
-    orderBy: [{ dueDate: "asc" }, { project: { position: "asc" } }, { position: "asc" }],
+    orderBy: [{ dueDate: "asc" }, { project: { position: "asc" } }, { position: "asc" }, { id: "asc" }],
     select: {
       id: true,
       title: true,

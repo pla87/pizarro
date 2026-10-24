@@ -3,6 +3,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { dateToIso } from "./dates";
 import { projectUsersWhere } from "./access";
 import { db } from "./db";
+import { TASK_ORDER } from "./task-positions";
 import type { BoardTask } from "./types";
 
 export const boardTaskSelect = {
@@ -72,7 +73,7 @@ function toBoardTaskWith(t: BoardTaskRow, hasDescription: boolean): BoardTask {
 export async function loadBoardTasks(projectId: string): Promise<BoardTask[]> {
   const where = { projectId, archivedAt: null };
   const [rows, described] = await Promise.all([
-    db.task.findMany({ where, orderBy: { position: "asc" }, select: boardTaskListSelect }),
+    db.task.findMany({ where, orderBy: TASK_ORDER, select: boardTaskListSelect }),
     db.task.findMany({ where: { ...where, description: { not: "" } }, select: { id: true } }),
   ]);
   const withText = new Set(described.map((d) => d.id));

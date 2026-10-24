@@ -65,6 +65,7 @@ export function BulkTaskDialog({ initialColumnId, onClose }: Props) {
     res.data.forEach(board.upsertTask);
     toast(res.data.length === 1 ? t("1 tarea creada") : t("{n} tareas creadas", { n: res.data.length }));
     onClose();
+    if (res.data[0]) board.revealTask(res.data[0].id);
   };
 
   const label = !lines.length

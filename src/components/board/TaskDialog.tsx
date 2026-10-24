@@ -41,6 +41,7 @@ import { formatDate } from "@/lib/format";
 import { draftKey, useDraftAutosave, type EditTaskDraft } from "./drafts";
 import { setUndoTask, UNDONE_EVENT } from "../undo-context";
 import { useIsMobile } from "../ui/useIsMobile";
+import { UndoButton } from "../UndoButton";
 
 export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   task: BoardTask;
@@ -447,7 +448,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       header={
         <div className="flex items-start gap-2 border-b border-slate-200 px-5 py-3 dark:border-slate-800">
           <TitleField value={title} onChange={setTitle} onCommit={commitTitle} users={board.users} />
-          <span className="mt-1.5 flex h-5 shrink-0 items-center text-xs" role="status" aria-live="polite">
+          {/* En móvil, sin nada que mostrar no ocupa sitio (el título necesita el ancho junto a deshacer/rehacer). */}
+          <span className={cn("mt-1.5 flex h-5 shrink-0 items-center text-xs", saving === 0 && !justSaved && "max-md:hidden")} role="status" aria-live="polite">
             {saving > 0 ? (
               <span className="flex items-center gap-1 text-slate-500"><Loader2 size={13} className="animate-spin" /> {t("Guardando…")}</span>
             ) : (
@@ -456,6 +458,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
               </span>
             )}
           </span>
+          {/* Móvil: el detalle ocupa la pantalla y tapa la cabecera; deshacer y rehacer (de esta tarea) van aquí. */}
+          {mobile && <UndoButton projectId={board.project.id} inDialog className="shrink-0" />}
           {/* Fuera del orden de Tab (Título → descripción directo); Escape también cierra. */}
           <button type="button" className="btn-icon" tabIndex={-1} onClick={onClose} aria-label={t("Cerrar")}>
             <X size={18} />

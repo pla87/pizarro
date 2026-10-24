@@ -7,6 +7,7 @@ import { runAction } from "@/lib/action";
 import { assertProjectAccess, visibleProjectsWhere } from "@/lib/access";
 import { AppError, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
+import { lastPositionIn, lockColumns, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { requireUser } from "@/lib/session";
 import { addUndo, captureTasks } from "@/lib/undo";
 import * as v from "@/lib/validation";
@@ -125,9 +126,13 @@ export async function deleteColumn(columnId: string) {
     await db.$transaction(async (tx) => {
       const active = await tx.task.count({ where: { columnId, archivedAt: null } });
       if (active > 0) throw new AppError("La columna todavía tiene tarjetas. Muévelas antes de borrarla.");
-      // Solo se reubican las archivadas. Si alguien suelta una tarjeta activa a la vez,
-      // la clave foránea (Restrict) hace fallar el borrado en lugar de moverla en silencio.
-      await tx.task.updateMany({ where: { columnId, archivedAt: { not: null } }, data: { columnId: other.id } });
+      // Solo se reubican las archivadas, al final de la otra columna y en su orden (sin compartir posición con
+      // las de allí). Si alguien suelta una tarjeta activa a la vez, la clave foránea (Restrict) hace fallar el
+      // borrado en lugar de moverla en silencio.
+      await lockColumns(tx, [other.id]);
+      const rows = await tx.task.findMany({ where: { columnId, archivedAt: { not: null } }, orderBy: TASK_ORDER, select: { id: true } });
+      let pos = (await lastPositionIn(tx, other.id)) ?? 0;
+      await setTaskColumnPositions(rows.map((r) => ({ id: r.id, position: (pos += POSITION_STEP) })), other.id, { client: tx });
       await tx.column.delete({ where: { id: columnId } });
     });
     describeAction("Borró la columna «{name}»", { name: column.name });

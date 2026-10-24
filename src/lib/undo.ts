@@ -4,6 +4,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { actionContext } from "./action-context";
 import { db } from "./db";
 import { assertTaskCapacity } from "./caps";
+import { resolvePositionTies } from "./task-positions";
 import { removeAttachmentFiles, removeReleaseAttachmentFiles } from "./uploads";
 
 // Deshacer: cada acción deshacible deja sus operaciones inversas (addUndo) y runAction las guarda
@@ -356,6 +357,8 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
   if (returning) await assertTaskCapacity(db, projectId, returning);
   const filesToRemove: string[] = [];
   const releaseFiles: string[] = [];
+  // Tareas que vuelven a una posición guardada: al terminar se comprueba que no coincidan con otra (ver resolvePositionTies).
+  const placed: string[] = [];
   const columnIds = new Set((await db.column.findMany({ where: { projectId }, select: { id: true } })).map((c) => c.id));
   const firstColumn = async () => (await db.column.findFirst({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true } }))?.id;
   /** Una columna borrada entretanto: la tarea va a la primera. */
@@ -384,6 +387,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           if (data.kindId && !(await db.taskKind.count({ where: { id: data.kindId } }))) delete data.kindId;
           if (data.deliverableId && !(await db.deliverable.count({ where: { id: data.deliverableId } }))) data.deliverableId = null;
           if (data.assigneeId) data.assigneeId = assignable(data.assigneeId);
+          if (data.position !== undefined || data.columnId !== undefined) placed.push(op.id);
           await db.$transaction([
             db.task.update({ where: { id: op.id }, data: taskUpdateData(data) }),
             ...(op.labelIds
@@ -428,6 +432,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
             db.taskLink.createMany({ data: s.links.map((l) => ({ ...l, kind: l.kind as Prisma.TaskLinkCreateManyInput["kind"], createdById: known(l.createdById), createdAt: new Date(l.createdAt) })) }),
             db.releaseTask.updateMany({ where: { id: { in: s.releaseTaskIds } }, data: { taskId: t.id } }),
           ]);
+          placed.push(t.id);
           break;
         }
         case "subtask.set": {
@@ -492,6 +497,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           if (await db.task.count({ where: { columnId: op.id, archivedAt: null } })) { skipped++; break; }
           const other = await db.column.findFirst({ where: { projectId, id: { not: op.id } }, orderBy: { position: "asc" }, select: { id: true } });
           if (!other) { skipped++; break; }
+          placed.push(...(await db.task.findMany({ where: { columnId: op.id }, select: { id: true } })).map((r) => r.id));
           await db.$transaction([
             db.task.updateMany({ where: { columnId: op.id }, data: { columnId: other.id } }),
             db.column.deleteMany({ where: { id: op.id, projectId } }),
@@ -518,6 +524,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
       skipped++;
     }
   }
+  await resolvePositionTies(placed);
   if (filesToRemove.length && !opts.keepFiles) await removeAttachmentFiles(filesToRemove);
   if (releaseFiles.length) await removeReleaseAttachmentFiles(releaseFiles);
   return skipped;

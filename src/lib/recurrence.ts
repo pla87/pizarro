@@ -5,6 +5,7 @@ import { db } from "./db";
 import { appTimeZone, loadBoardTask } from "./board";
 import { nextOccurrenceDue } from "./recurrence-date";
 import { POSITION_STEP } from "./positions";
+import { lastPositionIn, lockColumns } from "./task-positions";
 import { addUndo } from "./undo";
 import { hasTaskCapacity } from "./caps";
 import { logEvent } from "./log";
@@ -68,30 +69,35 @@ export async function spawnRecurrences(taskIds: string[], actorId: string): Prom
       });
       continue;
     }
-    const last = await db.task.findFirst({ where: { columnId }, orderBy: { position: "desc" }, select: { position: true } });
     const dueDate = isoToDate(nextOccurrenceDue(src.recurrence, src.recurrenceDay, dateToIso(src.dueDate), today));
+    const assigneeId = await stillAssignable(src.projectId, src.assigneeId);
     try {
-      const next = await db.task.create({
-        data: {
-          projectId: src.projectId,
-          columnId,
-          title: src.title,
-          description: src.description,
-          kindId: src.kindId,
-          color: src.color,
-          linkUrl: src.linkUrl,
-          assigneeId: await stillAssignable(src.projectId, src.assigneeId),
-          deliverableId: src.deliverableId,
-          dueDate,
-          recurrence: src.recurrence,
-          recurrenceDay: src.recurrenceDay,
-          recurrenceFromId: src.id,
-          position: (last?.position ?? 0) + POSITION_STEP,
-          createdById: actorId,
-          labels: { create: src.labels.map((l) => ({ labelId: l.labelId })) },
-          subtasks: { create: src.subtasks.map((s) => ({ title: s.title, position: s.position })) },
-        },
-        select: { id: true },
+      // Al final de la columna, con la columna bloqueada (sin compartir posición con otra tarea).
+      const next = await db.$transaction(async (tx) => {
+        await lockColumns(tx, [columnId]);
+        const last = await lastPositionIn(tx, columnId);
+        return tx.task.create({
+          data: {
+            projectId: src.projectId,
+            columnId,
+            title: src.title,
+            description: src.description,
+            kindId: src.kindId,
+            color: src.color,
+            linkUrl: src.linkUrl,
+            assigneeId,
+            deliverableId: src.deliverableId,
+            dueDate,
+            recurrence: src.recurrence,
+            recurrenceDay: src.recurrenceDay,
+            recurrenceFromId: src.id,
+            position: (last ?? 0) + POSITION_STEP,
+            createdById: actorId,
+            labels: { create: src.labels.map((l) => ({ labelId: l.labelId })) },
+            subtasks: { create: src.subtasks.map((s) => ({ title: s.title, position: s.position })) },
+          },
+          select: { id: true },
+        });
       });
       created.push(next.id);
       addUndo({ t: "task.remove", id: next.id });

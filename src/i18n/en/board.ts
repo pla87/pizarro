@@ -228,7 +228,7 @@ export const board: Record<string, string> = {
   "Etiqueta": "Label",
   "Cualquiera": "Anyone",
   "Limpiar filtros": "Clear filters",
-  "Buscar y filtrar": "Search and filter",
+  "Buscar": "Search",
   // Repetición
   "Cada día": "Every day",
   "Cada semana ({day})": "Every week ({day})",

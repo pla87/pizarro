@@ -393,3 +393,24 @@ body {
     transform: translate(-50%, -50%);
   }
 }
+
+/* Tarjeta recién creada (móvil): un destello breve para encontrarla tras saltar a su columna. */
+@keyframes card-flash {
+  0%,
+  35% {
+    box-shadow: 0 0 0 3px var(--color-brand-500);
+    background-color: color-mix(in srgb, var(--color-brand-500) 18%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+[data-task-card][data-flash] {
+  animation: card-flash 1.6s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-task-card][data-flash] {
+    animation-duration: 2.4s;
+    animation-timing-function: steps(2, jump-none);
+  }
+}

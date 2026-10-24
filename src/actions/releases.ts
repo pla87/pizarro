@@ -14,7 +14,7 @@ import { AppError } from "@/lib/errors";
 import { logEvent } from "@/lib/log";
 import { POSITION_STEP } from "@/lib/positions";
 import { spawnRecurrences } from "@/lib/recurrence";
-import { setTaskColumnPositions } from "@/lib/task-positions";
+import { lastPositionIn, lockColumns, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { attachmentFileNames, zonedDayRange } from "@/lib/release";
 import { requireUser } from "@/lib/session";
 import { attachmentPath, compactImage, removeReleaseAttachmentFiles, saveReleaseAttachmentFile } from "@/lib/uploads";
@@ -48,7 +48,7 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
 
     const tasks = await db.task.findMany({
       where: { id: { in: data.taskIds }, projectId: data.projectId, archivedAt: null },
-      orderBy: [{ column: { position: "asc" } }, { position: "asc" }],
+      orderBy: [{ column: { position: "asc" } }, ...TASK_ORDER],
       select: { id: true, title: true, evergreen: true, kind: { select: { name: true } } },
     });
 
@@ -85,8 +85,8 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
       });
       const moved: { id: string; columnId: string; position: number }[] = [];
       if (target) {
-        const last = await tx.task.findFirst({ where: { columnId: target.id }, orderBy: { position: "desc" }, select: { position: true } });
-        let pos = last?.position ?? 0;
+        await lockColumns(tx, [target.id]);
+        let pos = (await lastPositionIn(tx, target.id)) ?? 0;
         for (const t of tasks) {
           if (t.evergreen) continue; // las fijas se quedan en su columna
           pos += POSITION_STEP;
