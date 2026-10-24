@@ -836,7 +836,7 @@ const snapshotSchema = z.object({
   description: v.description.optional(),
   kindId: v.id,
   color: v.color,
-  linkUrl: z.string().max(2000).nullable(),
+  linkUrl: v.linkUrl,
   assigneeId: v.id.nullable(),
   labelIds: z.array(v.id).max(20),
   dueDate: v.dayIso,
@@ -900,7 +900,9 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
     if (snap.dueDate !== dateToIso(task.dueDate)) fields.dueDate = snap.dueDate ? isoToDate(snap.dueDate) : null;
     if (snap.columnId !== task.columnId && (await passes(() => assertColumnInProject(snap.columnId, projectId)))) {
       fields.columnId = snap.columnId;
-      fields.position = snap.position;
+      // La posición viene del navegador: si ya la ocupa otra tarjeta de esa columna, al final (sin empates).
+      const taken = await db.task.count({ where: { columnId: snap.columnId, position: snap.position, id: { not: id } } });
+      fields.position = taken ? positionBetween(await lastPosition(snap.columnId), null) : snap.position;
     }
     // La tarea fija solo tiene sentido en la columna de la release: si la columna destino no lo es, no se restaura.
     if (fields.evergreen === true && !(await db.column.count({ where: { id: (fields.columnId as string | undefined) ?? task.columnId, role: "NEXT_RELEASE" } }))) delete fields.evergreen;
@@ -948,7 +950,7 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
     }
 
     // --- Enlaces de Google
-    const linkCreate: NonNullable<typeof snap.links> = [];
+    const linkCreate: Extract<UndoOp, { t: "link.restore" }>["row"][] = [];
     const linkDelete: string[] = [];
     if (snap.links) {
       const want = new Set(snap.links.map((l) => l.id));
@@ -957,11 +959,19 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
         linkDelete.push(l.id);
         undo.push({ t: "link.restore", row: { id: l.id, taskId: l.taskId, kind: l.kind, title: l.title, url: l.url, externalId: l.externalId, createdById: l.createdById, createdAt: l.createdAt.toISOString() } });
       }
+      // Los borrados se recuperan de las entradas de deshacer del usuario (nunca con datos enviados por el navegador).
       const have = new Set(links.map((l) => l.id));
-      for (const l of snap.links) {
-        if (have.has(l.id)) continue;
-        linkCreate.push(l);
-        undo.push({ t: "link.remove", id: l.id });
+      const missing = new Set(snap.links.map((l) => l.id).filter((x) => !have.has(x)));
+      if (missing.size) {
+        const entries = await db.undoEntry.findMany({ where: { userId: user.id, projectId, taskId: id, kind: "UNDO" }, orderBy: { createdAt: "desc" }, take: 20, select: { ops: true } });
+        for (const e of entries) {
+          for (const op of e.ops as unknown as UndoOp[]) {
+            if (op.t === "link.restore" && missing.delete(op.row.id)) {
+              linkCreate.push(op.row);
+              undo.push({ t: "link.remove", id: op.row.id });
+            }
+          }
+        }
       }
     }
 
@@ -1006,7 +1016,10 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
       for (const s of subUpdate) await tx.subtask.update({ where: { id: s.id }, data: { title: s.title, done: s.done, position: s.position } });
       if (subCreate.length) await tx.subtask.createMany({ data: subCreate.map((s) => ({ ...s, taskId: id })) });
       if (linkDelete.length) await tx.taskLink.deleteMany({ where: { id: { in: linkDelete }, taskId: id } });
-      if (linkCreate.length) await tx.taskLink.createMany({ data: linkCreate.map((l) => ({ ...l, taskId: id, createdById: user.id })) });
+      for (const l of linkCreate) {
+        const creator = l.createdById && (await tx.user.count({ where: { id: l.createdById } })) ? l.createdById : null;
+        await tx.taskLink.create({ data: { ...l, kind: l.kind as Prisma.TaskLinkCreateInput["kind"], taskId: id, createdById: creator, createdAt: new Date(l.createdAt) } });
+      }
       if (attDelete.length) await tx.taskAttachment.deleteMany({ where: { id: { in: attDelete }, taskId: id } });
       for (const r of attRestore) {
         const creator = r.createdById && (await tx.user.count({ where: { id: r.createdById } })) ? r.createdById : null;
