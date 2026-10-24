@@ -2,6 +2,33 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.21.0 — 2026-10-24 19:14
+
+Orden de tarjetas estable, duplicar arrastrando con Ctrl, Cancelar en el detalle, límites separados de adjuntos y de paquetes, y móvil más cómodo
+
+### Nuevas funcionalidades
+
+- Arrastra una tarjeta con Ctrl pulsado al soltar (⌥ en Mac) para crear una copia en ese sitio, también en la misma columna.
+- Botón Cancelar en el detalle de la tarea: deja la tarea como estaba al abrirla, en un solo paso de deshacer.
+- Exportar logs a CSV entre dos fechas (por defecto, el último día).
+
+### Mejoras
+
+- Límites separados en Ajustes del proyecto → Releases: adjuntos de una tarea y cada paquete ZIP (el del paquete nunca es menor).
+- Borrar un adjunto ya no pide confirmación: se puede deshacer desde el aviso.
+- Móvil: Filtrar siempre a mano junto a Buscar, Deshacer y Rehacer también dentro de la tarea, y tras crear una tarea el tablero salta a su columna.
+- Deshacer borra del historial de la tarea lo que había anotado la acción; rehacer lo vuelve a poner.
+- Si un admin forzó el cambio de contraseña, también se pide al entrar con Google.
+
+### Correcciones
+
+- Las tarjetas de una columna ya no se reordenan solas al mover otras: dos tarjetas nunca comparten posición y las que la compartían se han corregido.
+- Revisión de código: un ZIP de adjuntos a la vez por persona, aviso fiable de los paquetes de una release guardada, tope en la cola de imágenes y Cancelar sin confiar en datos del navegador.
+
+### Cambios técnicos / DB
+
+- Migraciones: posiciones sin empates, límite de adjuntos por tarea (Project.taskAttachMaxMb) e historial asociado al deshacer (UndoEntry.eventIds/events).
+
 ## v1.20.1 — 2026-10-24 12:04
 
 Mover, editar y desplegar más rápidos; el selector Columna deja la tarjeta al final

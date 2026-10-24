@@ -1,6 +1,57 @@
 {
   "versions": [
     {
+      "version": "1.21.0",
+      "date": "2026-10-24",
+      "releasedAt": "2026-10-24T19:14:54+02:00",
+      "summary": "Orden de tarjetas estable, duplicar arrastrando con Ctrl, Cancelar en el detalle, límites separados de adjuntos y de paquetes, y móvil más cómodo",
+      "changes": {
+        "nuevas": [
+          "Arrastra una tarjeta con Ctrl pulsado al soltar (⌥ en Mac) para crear una copia en ese sitio, también en la misma columna.",
+          "Botón Cancelar en el detalle de la tarea: deja la tarea como estaba al abrirla, en un solo paso de deshacer.",
+          "Exportar logs a CSV entre dos fechas (por defecto, el último día)."
+        ],
+        "mejoras": [
+          "Límites separados en Ajustes del proyecto → Releases: adjuntos de una tarea y cada paquete ZIP (el del paquete nunca es menor).",
+          "Borrar un adjunto ya no pide confirmación: se puede deshacer desde el aviso.",
+          "Móvil: Filtrar siempre a mano junto a Buscar, Deshacer y Rehacer también dentro de la tarea, y tras crear una tarea el tablero salta a su columna.",
+          "Deshacer borra del historial de la tarea lo que había anotado la acción; rehacer lo vuelve a poner.",
+          "Si un admin forzó el cambio de contraseña, también se pide al entrar con Google."
+        ],
+        "correcciones": [
+          "Las tarjetas de una columna ya no se reordenan solas al mover otras: dos tarjetas nunca comparten posición y las que la compartían se han corregido.",
+          "Revisión de código: un ZIP de adjuntos a la vez por persona, aviso fiable de los paquetes de una release guardada, tope en la cola de imágenes y Cancelar sin confiar en datos del navegador."
+        ],
+        "tecnicos": [
+          "Migraciones: posiciones sin empates, límite de adjuntos por tarea (Project.taskAttachMaxMb) e historial asociado al deshacer (UndoEntry.eventIds/events)."
+        ]
+      },
+      "en": {
+        "summary": "Stable card order, duplicate by dragging with Ctrl, Cancel in the task detail, separate attachment and package limits, and a handier mobile board",
+        "changes": {
+          "nuevas": [
+            "Drag a card holding Ctrl when dropping (⌥ on Mac) to create a copy there, also in the same column.",
+            "Cancel button in the task detail: puts the task back as it was when opened, in a single undo step.",
+            "Export logs to CSV between two dates (the last day by default)."
+          ],
+          "mejoras": [
+            "Separate limits in Project settings → Releases: a task's attachments and each ZIP package (the package limit is never smaller).",
+            "Deleting an attachment no longer asks for confirmation: it can be undone from the notice.",
+            "Mobile: Filter always next to Search, Undo and Redo also inside the task, and after creating a task the board jumps to its column.",
+            "Undo removes what the action had written to the task history; redo puts it back.",
+            "If an admin forced a password change, it is also required when signing in with Google."
+          ],
+          "correcciones": [
+            "Cards in a column no longer reorder themselves when others are moved: two cards never share a position and existing ties have been fixed.",
+            "Code review: one attachments ZIP at a time per person, reliable package count for saved releases, a cap on the image queue and Cancel without trusting browser data."
+          ],
+          "tecnicos": [
+            "Migrations: positions without ties, per-task attachment limit (Project.taskAttachMaxMb) and history linked to undo (UndoEntry.eventIds/events)."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.20.1",
       "date": "2026-10-24",
       "releasedAt": "2026-10-24T12:04:26+02:00",
