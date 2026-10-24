@@ -158,7 +158,11 @@ export async function confirmAccountChange(token: string) {
     if (await db.user.count({ where: { email: data.newEmail, id: { not: row.userId } } })) throw new AppError("Ya existe un usuario con ese email.");
     if (!(await consumeToken(row.id))) throw new AppError(INVALID_LINK);
     const oldEmail = row.user.email;
-    await db.user.update({ where: { id: row.userId }, data: { email: data.newEmail } });
+    await db.$transaction([
+      // La cuenta de Google vinculada era la de la dirección anterior; los enlaces enviados allí dejan de valer.
+      db.user.update({ where: { id: row.userId }, data: { email: data.newEmail, googleSub: null } }),
+      db.authToken.deleteMany({ where: { userId: row.userId, purpose: { in: ["INVITE", "PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } }),
+    ]);
     sendMailInBackground("aviso de email cambiado", () => sendEmailChangedMail(row.user, oldEmail, data.newEmail!));
     logEvent({ category: "auth", action: "auth.emailChanged", message: `${row.user.name} ha confirmado su nuevo email`, userId: row.userId, userName: row.user.name, ip });
     return { kind: "EMAIL" as const };

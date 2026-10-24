@@ -10,6 +10,7 @@ import { appUrl } from "@/lib/mail";
 import { rateLimit } from "@/lib/rate-limit";
 import { safeNextPath } from "@/lib/redirect";
 import { clientIp } from "@/lib/request";
+import { cookieSecure } from "@/lib/session-config";
 
 export const runtime = "nodejs";
 
@@ -24,7 +25,8 @@ export async function GET(req: Request) {
   const ip = clientIp(req.headers);
   const store = await cookies();
   const raw = store.get(GOOGLE_LOGIN_COOKIE)?.value ?? "";
-  store.delete(GOOGLE_LOGIN_COOKIE); // un solo uso, pase lo que pase
+  // Un solo uso, pase lo que pase (con su misma ruta: un delete en «/» no la borraría).
+  store.set(GOOGLE_LOGIN_COOKIE, "", { path: "/api/auth/google", maxAge: 0, httpOnly: true, secure: cookieSecure() });
   const fail = (code: string, message: string, extra: Record<string, unknown> = {}): never => {
     logEvent({ level: "warn", category: "auth", action: "auth.googleLoginFailed", message: `Acceso con Google no completado: ${message}`, path: "/api/auth/google/callback", ip, details: { reason: code, ...extra } });
     redirect(`${appUrl()}/login?error=${code}`);

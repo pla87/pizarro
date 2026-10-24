@@ -1,5 +1,6 @@
 // Limitador en memoria (suficiente para un único contenedor).
-const buckets = new Map<string, { count: number; resetAt: number }>();
+// En globalThis: acciones y rutas pueden empaquetarse por separado y deben compartir los contadores.
+const buckets: Map<string, { count: number; resetAt: number }> = ((globalThis as unknown as { __pzRate?: Map<string, { count: number; resetAt: number }> }).__pzRate ??= new Map());
 let lastSweep = 0;
 
 export function rateLimit(key: string, limit: number, windowMs: number): boolean {
@@ -8,7 +9,8 @@ export function rateLimit(key: string, limit: number, windowMs: number): boolean
   if (buckets.size > 5000 && now - lastSweep > 1000) {
     lastSweep = now;
     for (const [k, b] of buckets) if (b.resetAt < now) buckets.delete(k);
-    if (buckets.size > 50_000) buckets.clear();
+    // Tope duro: se descartan las claves más antiguas (no todas, que borraría también los intentos de login).
+    if (buckets.size > 50_000) for (const k of [...buckets.keys()].slice(0, buckets.size - 40_000)) buckets.delete(k);
   }
   const bucket = buckets.get(key);
   if (!bucket || bucket.resetAt < now) {

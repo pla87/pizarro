@@ -109,8 +109,12 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
         );
       }
     }
+    const emailChanged = data.email !== user.email;
     await db.$transaction([
-      db.user.update({ where: { id: user.id }, data }),
+      // Con otro email, la cuenta de Google vinculada deja de valer (era la de la dirección anterior).
+      db.user.update({ where: { id: user.id }, data: emailChanged ? { ...data, googleSub: null } : data }),
+      // Y los enlaces pendientes enviados a la dirección anterior (invitación, restablecer, confirmar) ya no sirven.
+      ...(emailChanged ? [db.authToken.deleteMany({ where: { userId: user.id, purpose: { in: ["INVITE", "PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } })] : []),
       ...roleSwitch,
       // Al desactivar o cambiar de rol se cierran sus sesiones.
       ...(data.active !== user.active || data.role !== user.role ? [db.session.deleteMany({ where: { userId: user.id } })] : []),

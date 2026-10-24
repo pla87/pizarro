@@ -78,8 +78,9 @@ export async function destroySession(): Promise<void> {
     await db.session.deleteMany({ where: { id } });
     revokeSession(id);
   }
-  store.delete(sessionCookieName());
-  store.delete(PASSWORD_CHANGE_COOKIE);
+  // Borrado con los mismos atributos (Secure incluido): un __Host- sin Secure lo rechazaría el navegador.
+  store.set(sessionCookieName(), "", { ...sessionCookieOptions(), maxAge: 0 });
+  store.set(PASSWORD_CHANGE_COOKIE, "", { ...sessionCookieOptions(), maxAge: 0 });
 }
 
 interface SessionUser extends CurrentUser {
