@@ -12,7 +12,7 @@ import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser, requireUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { createAttachmentWithinLimit, roundMb } from "@/lib/attachment-limit";
-import { MAX_UPLOAD_BYTES, processImage, removeAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveRawAttachmentFile } from "@/lib/uploads";
+import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, MAX_UPLOAD_BYTES, processImage, removeAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveRawAttachmentFile } from "@/lib/uploads";
 import type { AttachmentInfo } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -34,6 +34,8 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
 
     const length = Number(req.headers.get("content-length") ?? 0);
     if (length > MAX_UPLOAD_BYTES + 64 * 1024) throw new AppError("El archivo supera el tamaño máximo.", 413);
+    // Cola de imágenes llena: se rechaza antes de leer el cuerpo (no se sabe si es imagen, pero el servidor está saturado).
+    if (imageQueueFull()) throw new AppError(IMAGE_QUEUE_FULL_MESSAGE, 503);
     const form = await req.formData();
     const file = form.get("file");
     if (!(file instanceof File)) throw new AppError("No se ha recibido ningún archivo.");
@@ -46,7 +48,10 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     // procesarla (p. ej. HEIC sin soporte), se guarda como un archivo cualquiera.
     let image: Awaited<ReturnType<typeof processImage>> | null = null;
     if (/^image\//i.test(file.type) && !/svg/i.test(file.type)) {
-      image = await processImage(buffer).catch(() => null);
+      image = await processImage(buffer).catch((err) => {
+        if (err instanceof AppError && err.status === 503) throw err; // cola llena: no se guarda como archivo normal
+        return null;
+      });
     }
     const originalName = (file.name || "captura").replace(/[^\p{L}\p{N}._ -]/gu, "_").slice(0, 120) || "captura";
     const mimeType = image ? "image/webp" : sanitizeMime(file.type);

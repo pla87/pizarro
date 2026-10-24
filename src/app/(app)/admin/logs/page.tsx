@@ -4,6 +4,7 @@ import { appTimeZone } from "@/lib/board";
 import { db } from "@/lib/db";
 import { flushLogs, logRetentionDays } from "@/lib/log";
 import { isMaskedLog, LOG_RANGES, logQuery, logWhere, memberPrivateProjectIds, parseLogFilters } from "@/lib/log-query";
+import { addDays, dayInZone } from "@/lib/log-range";
 import { requireAdminPage } from "@/lib/session";
 import { cn } from "@/components/ui/cn";
 import { intlLocale } from "@/i18n/core";
@@ -63,6 +64,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const items = rows.slice(0, PAGE_SIZE);
   const counts = Object.fromEntries(levelCounts.map((c) => [c.level, c._count._all]));
   const days = logRetentionDays();
+  const today = dayInZone(new Date(), tz);
 
   return (
     <div className="space-y-4">
@@ -71,12 +73,29 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           {days === 1 ? t("Se conserva 1 día de actividad.") : t("Se conservan {days} días de actividad.", { days })}
           {!filters.reads && " " + t("Se muestran solo los cambios: marca «Incluir consultas» para ver también páginas vistas, tareas abiertas y descargas.")}
         </p>
-        <a
-          href={`/api/admin/logs${logQuery(filters)}`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-        >
-          <Download className="size-4" aria-hidden /> {t("Descargar CSV")}
-        </a>
+        <form method="get" action="/api/admin/logs" className="flex flex-wrap items-end gap-2">
+          {/* Mismos filtros que la lista; el periodo lo sustituye el intervalo de fechas. */}
+          {filters.level && <input type="hidden" name="level" value={filters.level} />}
+          {filters.category && <input type="hidden" name="category" value={filters.category} />}
+          {filters.userId && <input type="hidden" name="user" value={filters.userId} />}
+          {filters.q && <input type="hidden" name="q" value={filters.q} />}
+          {filters.reads && <input type="hidden" name="consultas" value="1" />}
+          <label className="flex flex-col gap-1 text-xs text-slate-500">
+            {t("Desde")}
+            <input type="date" name="desde" defaultValue={addDays(today, -1)} min={addDays(today, -days)} max={today} required className={field} />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-slate-500">
+            {t("Hasta")}
+            <input type="date" name="hasta" defaultValue={today} min={addDays(today, -days)} max={today} required className={field} />
+          </label>
+          <button
+            type="submit"
+            title={t("Máximo {days} días", { days })}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+          >
+            <Download className="size-4" aria-hidden /> {t("Descargar CSV")}
+          </button>
+        </form>
       </div>
 
       <div className="flex flex-wrap gap-2 text-sm">

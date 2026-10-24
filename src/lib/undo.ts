@@ -164,16 +164,35 @@ export async function snapshotTasks(ids: string[]): Promise<UndoOp[]> {
 
 export type UndoKind = "UNDO" | "REDO";
 
+/** Entrada de historial (TaskEvent) tal como se guarda en la entrada de rehacer para poder recrearla. */
+export interface SavedEvent {
+  taskId: string;
+  projectId: string;
+  userId: string | null;
+  userName: string;
+  code: string;
+  label: string;
+  createdAt: string;
+}
+
 /**
  * Guarda una entrada en la pila `kind` y descarta las que pasen del límite (liberando sus ficheros
  * pendientes). Una acción nueva (UNDO sin `fromRedo`) vacía además la pila de rehacer del usuario.
+ * `history`: ids del historial que registró la acción (se borran al deshacer) o copia para recrearlo al rehacer.
  */
 export async function saveUndo(
   userId: string, projectId: string, label: string, ops: UndoOp[], taskId: string | null = null,
   kind: UndoKind = "UNDO", clearRedo = kind === "UNDO", fingerprint: string | null = null,
+  history: { eventIds?: string[]; events?: SavedEvent[] } = {},
 ): Promise<void> {
   if (clearRedo) await discardUndo({ userId, projectId, kind: "REDO" });
-  await db.undoEntry.create({ data: { userId, projectId, taskId, kind, label: label.slice(0, 300), ops: ops as unknown as Prisma.InputJsonValue, fingerprint } });
+  await db.undoEntry.create({
+    data: {
+      userId, projectId, taskId, kind, label: label.slice(0, 300), ops: ops as unknown as Prisma.InputJsonValue, fingerprint,
+      eventIds: history.eventIds ?? [],
+      ...(history.events?.length ? { events: history.events as unknown as Prisma.InputJsonValue } : {}),
+    },
+  });
   const old = await db.undoEntry.findMany({
     where: { userId, projectId, kind },
     orderBy: { createdAt: "desc" },

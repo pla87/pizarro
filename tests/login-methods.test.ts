@@ -265,3 +265,10 @@ test("política: sin Google configurado «solo Google» no tiene efecto (no deja
   assert.equal(policy.passwordLoginAllowed("MEMBER", env), true);
   assert.equal(policy.passwordLoginAllowed("MEMBER", { ...env, GOOGLE_CLIENT_ID: "a", GOOGLE_CLIENT_SECRET: "b" }), true, "falta APP_URL: Google no puede funcionar");
 });
+
+test("passwordChangeRequired: la marca se respeta con cualquier método, también Google", () => {
+  for (const method of ["password", "password+2fa", "google"] as const) {
+    assert.equal(policy.passwordChangeRequired(method, true), true);
+    assert.equal(policy.passwordChangeRequired(method, false), false);
+  }
+});

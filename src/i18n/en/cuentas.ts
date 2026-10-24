@@ -37,6 +37,7 @@ export const cuentas: Record<string, string> = {
   "Última actividad: {date}": "Last activity: {date}",
   "Sesión cerrada": "Session closed",
   // Pantallas de acceso y enlaces
+  "En este servidor se entra solo con Google: la contraseña no sirve para iniciar sesión, pero tienes que elegirla para continuar.": "This server only allows signing in with Google: the password cannot be used to sign in, but you must choose one to continue.",
   "Por seguridad, antes de seguir tienes que elegir una contraseña nueva, distinta de la actual.": "For security, before continuing you must choose a new password, different from the current one.",
   "Guardar contraseña": "Save password",
   "Elige una contraseña nueva": "Choose a new password",

@@ -15,6 +15,12 @@ export function passwordLoginAllowed(role: "ADMIN" | "MEMBER", env: Env = proces
   return role === "ADMIN" && env.AUTH_ALLOW_ADMIN_PASSWORD === "true";
 }
 
+/**
+ * ¿Hay que obligar a elegir una contraseña nueva tras este acceso? Sí siempre que la marca esté puesta, también con Google:
+ * la cuenta conserva una clave inicial o impuesta que no debe seguir vigente (sirve de respaldo y para el acceso de emergencia).
+ */
+export const passwordChangeRequired = (_method: "password" | "google" | "password+2fa", mustChangePassword: boolean): boolean => mustChangePassword;
+
 /** ¿Se enseña el formulario de contraseña en la pantalla de acceso? (con «solo Google», solo si hay acceso de emergencia) */
 export function passwordFormVisible(env: Env = process.env): boolean {
   return !googleOnly(env) || env.AUTH_ALLOW_ADMIN_PASSWORD === "true";
