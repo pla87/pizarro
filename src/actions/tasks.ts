@@ -8,7 +8,7 @@ import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjec
 import { appTimeZone, boardTaskSelect, loadBoardTask, toBoardTask } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
 import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents } from "@/lib/action-context";
-import { addUndo, captureTasks, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, type TaskField } from "@/lib/undo";
+import { addUndo, captureTasks, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, type TaskField, type UndoOp } from "@/lib/undo";
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
@@ -826,6 +826,195 @@ export async function deleteAttachment(attachmentId: string) {
     // El fichero se conserva mientras se pueda deshacer (ver undo.ts).
     addUndo({ t: "attachment.restore", row: { ...att, createdAt: att.createdAt.toISOString() } });
     await db.taskAttachment.delete({ where: { id: att.id } });
+  });
+}
+
+// --- Cancelar la edición ---------------------------------------------------------
+
+const snapshotSchema = z.object({
+  title: v.taskTitle,
+  description: v.description.optional(),
+  kindId: v.id,
+  color: v.color,
+  linkUrl: z.string().max(2000).nullable(),
+  assigneeId: v.id.nullable(),
+  labelIds: z.array(v.id).max(20),
+  dueDate: v.dayIso,
+  deliverableId: v.id.nullable(),
+  evergreen: z.boolean(),
+  recurrence: z.enum(RECURRENCES),
+  recurrenceDay: z.number().int().min(1).max(31).nullable(),
+  columnId: v.id,
+  position: z.number().finite(),
+  // Solo si el detalle estaba cargado al abrir el diálogo; si faltan, no se tocan.
+  subtasks: z.array(z.object({ id: v.id, title: v.title, done: z.boolean(), position: z.number().finite() })).max(MAX_SUBTASKS).optional(),
+  attachmentIds: z.array(v.id).max(1000).optional(),
+  links: z.array(z.object({ id: v.id, kind: z.enum(["GOOGLE_DOC", "GOOGLE_SHEET"]), title: z.string().max(300), url: z.string().max(2000) })).max(100).optional(),
+});
+export type TaskEditSnapshot = z.input<typeof snapshotSchema>;
+
+/** Ejecuta la comprobación y dice si pasó (para saltarse un campo cuyo destino ya no existe, sin fallar). */
+async function passes(check: () => Promise<unknown>): Promise<boolean> {
+  try {
+    await check();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Botón «Cancelar» del detalle: devuelve la tarea a como estaba al abrirlo (`snapshot`) en UNA sola acción
+ * deshacible: campos, etiquetas, columna, subtareas, enlaces y adjuntos (los subidos desde entonces se quitan;
+ * los borrados se recuperan de la pila de deshacer, si siguen en ella). Los comentarios no se tocan.
+ * `since`: versión del texto al abrirlo; si otra persona lo cambió después, no se pisa (como updateTask).
+ * Si no hay nada que restaurar, no hace nada ni deja entrada de deshacer.
+ */
+export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnapshot, since?: string | null) {
+  return runAction({ name: "tasks.restoreTaskSnapshot", args: [taskId, snapshot, since] }, async (): Promise<{ task: BoardTask; changed: boolean }> => {
+    const user = await requireUser();
+    const snap = snapshotSchema.parse(snapshot);
+    const id = v.id.parse(taskId);
+    const [task, labels, subs, atts, links] = await Promise.all([
+      loadTaskWithAccess(user, id, { id: true, ...TASK_UNDO_SELECT }),
+      db.taskLabel.findMany({ where: { taskId: id }, select: { labelId: true } }),
+      snap.subtasks ? db.subtask.findMany({ where: { taskId: id }, select: { id: true, taskId: true, title: true, done: true, position: true } }) : [],
+      snap.attachmentIds ? db.taskAttachment.findMany({ where: { taskId: id } }) : [],
+      snap.links ? db.taskLink.findMany({ where: { taskId: id } }) : [],
+    ]);
+    const { projectId } = task;
+    assertNotArchivedRow(task);
+
+    // --- Campos de la tarjeta: solo lo que difiere, y solo si el destino sigue existiendo.
+    const fields: Record<string, unknown> = {};
+    if (snap.title !== task.title) fields.title = snap.title;
+    if (snap.description !== undefined && snap.description !== task.description) fields.description = snap.description;
+    if (snap.color !== task.color) fields.color = snap.color;
+    if (snap.linkUrl !== task.linkUrl) fields.linkUrl = snap.linkUrl;
+    if (snap.evergreen !== task.evergreen) fields.evergreen = snap.evergreen;
+    if (snap.recurrence !== task.recurrence) fields.recurrence = snap.recurrence;
+    if (snap.recurrenceDay !== task.recurrenceDay) fields.recurrenceDay = snap.recurrenceDay;
+    if (snap.kindId !== task.kindId && (await passes(() => assertKindsInProject([snap.kindId], projectId)))) fields.kindId = snap.kindId;
+    if (snap.assigneeId !== task.assigneeId && (!snap.assigneeId || (await passes(() => assertAssignable(projectId, snap.assigneeId!))))) fields.assigneeId = snap.assigneeId;
+    if (snap.deliverableId !== task.deliverableId && (await passes(() => assertDeliverableInProject(snap.deliverableId, projectId)))) fields.deliverableId = snap.deliverableId;
+    if (snap.dueDate !== dateToIso(task.dueDate)) fields.dueDate = snap.dueDate ? isoToDate(snap.dueDate) : null;
+    if (snap.columnId !== task.columnId && (await passes(() => assertColumnInProject(snap.columnId, projectId)))) {
+      fields.columnId = snap.columnId;
+      fields.position = snap.position;
+    }
+    // La tarea fija solo tiene sentido en la columna de la release: si la columna destino no lo es, no se restaura.
+    if (fields.evergreen === true && !(await db.column.count({ where: { id: (fields.columnId as string | undefined) ?? task.columnId, role: "NEXT_RELEASE" } }))) delete fields.evergreen;
+    const editsText = fields.title !== undefined || fields.description !== undefined;
+    if (editsText && since !== undefined) {
+      // Misma regla que updateTask: no se pisa el texto que otra persona cambió mientras se editaba.
+      const base = since ? new Date(since).getTime() : 0;
+      if (task.contentUpdatedAt && task.contentUpdatedById !== user.id && task.contentUpdatedAt.getTime() > base) {
+        const who = task.contentUpdatedById ? (await db.user.findUnique({ where: { id: task.contentUpdatedById }, select: { name: true } }))?.name : null;
+        const t = await getT();
+        throw new AppError(who ? t("{who} ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos.", { who }) : t("Otra persona ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos."), 409);
+      }
+    }
+    const fieldKeys = Object.keys(fields) as TaskField[];
+    if (editsText) Object.assign(fields, { contentUpdatedAt: new Date(), contentUpdatedById: user.id });
+
+    // Etiquetas: se conservan las que siguen existiendo en el proyecto.
+    const nowLabels = new Set(labels.map((l) => l.labelId));
+    const wantedLabels = snap.labelIds.length ? (await db.label.findMany({ where: { id: { in: snap.labelIds }, projectId }, select: { id: true } })).map((l) => l.id) : [];
+    const labelsChanged = wantedLabels.length !== nowLabels.size || wantedLabels.some((l) => !nowLabels.has(l));
+
+    // --- Subtareas
+    const undo: UndoOp[] = [];
+    const subCreate: NonNullable<typeof snap.subtasks> = [];
+    const subUpdate: { id: string; title: string; done: boolean; position: number }[] = [];
+    const subDelete: string[] = [];
+    if (snap.subtasks) {
+      const want = new Map(snap.subtasks.map((s) => [s.id, s]));
+      for (const s of subs) {
+        const w = want.get(s.id);
+        if (!w) {
+          subDelete.push(s.id);
+          undo.push({ t: "subtask.restore", row: s });
+        } else if (w.title !== s.title || w.done !== s.done || w.position !== s.position) {
+          subUpdate.push(w);
+          undo.push({ t: "subtask.set", id: s.id, data: { title: s.title, done: s.done, position: s.position } });
+        }
+      }
+      const have = new Set(subs.map((s) => s.id));
+      for (const w of snap.subtasks) {
+        if (have.has(w.id)) continue;
+        subCreate.push(w);
+        undo.push({ t: "subtask.remove", id: w.id });
+      }
+    }
+
+    // --- Enlaces de Google
+    const linkCreate: NonNullable<typeof snap.links> = [];
+    const linkDelete: string[] = [];
+    if (snap.links) {
+      const want = new Set(snap.links.map((l) => l.id));
+      for (const l of links) {
+        if (want.has(l.id)) continue;
+        linkDelete.push(l.id);
+        undo.push({ t: "link.restore", row: { id: l.id, taskId: l.taskId, kind: l.kind, title: l.title, url: l.url, externalId: l.externalId, createdById: l.createdById, createdAt: l.createdAt.toISOString() } });
+      }
+      const have = new Set(links.map((l) => l.id));
+      for (const l of snap.links) {
+        if (have.has(l.id)) continue;
+        linkCreate.push(l);
+        undo.push({ t: "link.remove", id: l.id });
+      }
+    }
+
+    // --- Adjuntos: los subidos desde entonces se quitan (su fichero se conserva mientras exista la entrada de deshacer);
+    // los borrados se recuperan de las entradas de deshacer del usuario, que conservan su fila y su fichero.
+    const attDelete: string[] = [];
+    const attRestore: Extract<UndoOp, { t: "attachment.restore" }>["row"][] = [];
+    if (snap.attachmentIds) {
+      const want = new Set(snap.attachmentIds);
+      for (const a of atts) {
+        if (want.has(a.id)) continue;
+        attDelete.push(a.id);
+        undo.push({ t: "attachment.restore", row: { id: a.id, taskId: a.taskId, originalName: a.originalName, mimeType: a.mimeType, isImage: a.isImage, width: a.width, height: a.height, size: a.size, createdById: a.createdById, createdAt: a.createdAt.toISOString() } });
+      }
+      const have = new Set(atts.map((a) => a.id));
+      const missing = new Set(snap.attachmentIds.filter((x) => !have.has(x)));
+      if (missing.size) {
+        const entries = await db.undoEntry.findMany({ where: { userId: user.id, projectId, taskId: id, kind: "UNDO" }, orderBy: { createdAt: "desc" }, take: 20, select: { ops: true } });
+        for (const e of entries) {
+          for (const op of e.ops as unknown as UndoOp[]) {
+            if (op.t === "attachment.restore" && missing.delete(op.row.id)) {
+              attRestore.push(op.row);
+              undo.push({ t: "attachment.remove", id: op.row.id });
+            }
+          }
+        }
+      }
+    }
+
+    if (!fieldKeys.length && !labelsChanged && !undo.length) return { task: await loadBoardTask(id), changed: false };
+
+    // Deshacer: primero los campos (con sus valores actuales y las etiquetas), luego lo de las filas hijas.
+    const touched = editsText ? [...fieldKeys, "contentUpdatedAt", "contentUpdatedById"] as TaskField[] : fieldKeys;
+    addUndo(taskSetOp(task, touched, labelsChanged ? labels : undefined), ...undo);
+    await db.$transaction(async (tx) => {
+      if (Object.keys(fields).length) await tx.task.update({ where: { id }, data: fields });
+      if (labelsChanged) {
+        await tx.taskLabel.deleteMany({ where: { taskId: id } });
+        await tx.taskLabel.createMany({ data: wantedLabels.map((labelId) => ({ taskId: id, labelId })) });
+      }
+      if (subDelete.length) await tx.subtask.deleteMany({ where: { id: { in: subDelete }, taskId: id } });
+      for (const s of subUpdate) await tx.subtask.update({ where: { id: s.id }, data: { title: s.title, done: s.done, position: s.position } });
+      if (subCreate.length) await tx.subtask.createMany({ data: subCreate.map((s) => ({ ...s, taskId: id })) });
+      if (linkDelete.length) await tx.taskLink.deleteMany({ where: { id: { in: linkDelete }, taskId: id } });
+      if (linkCreate.length) await tx.taskLink.createMany({ data: linkCreate.map((l) => ({ ...l, taskId: id, createdById: user.id })) });
+      if (attDelete.length) await tx.taskAttachment.deleteMany({ where: { id: { in: attDelete }, taskId: id } });
+      for (const r of attRestore) {
+        const creator = r.createdById && (await tx.user.count({ where: { id: r.createdById } })) ? r.createdById : null;
+        await tx.taskAttachment.create({ data: { ...r, taskId: id, createdById: creator, createdAt: new Date(r.createdAt) } });
+      }
+    });
+    describeAction("Canceló los cambios en «{title}»", { title: mentionsToPlain(task.title) }, { taskId: id });
+    return { task: await loadBoardTask(id), changed: true };
   });
 }
 

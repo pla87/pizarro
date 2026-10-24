@@ -280,6 +280,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     }
   }, [trackRaw, toast, t, refresh]);
 
+  const settle = useCallback(async () => {
+    // Un guardado empezado al perder el foco (clic en un botón) puede no haber arrancado aún: un turno de espera.
+    await new Promise((r) => setTimeout(r, 0));
+    for (let i = 0; i < 200 && pending.current > 0; i++) await new Promise((r) => setTimeout(r, 50));
+  }, []);
+
   const patchTask = useCallback((id: string, patch: Partial<BoardTask> | ((t: BoardTask) => Partial<BoardTask>)) => {
     setTasks((prev) => {
       let changed = false;
@@ -497,9 +503,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         }),
       track,
       trackRaw,
+      settle,
       refresh,
     }),
-    [setTasks, project, users, data.currentUserId, deliverables, kinds, data.cardStyle, data.editorMode, dragHandle, google, data.today, stableColumns, stableLabels, stores, getTask, track, trackRaw, refresh, patchTask, upsertTask, cardActions],
+    [setTasks, project, users, data.currentUserId, deliverables, kinds, data.cardStyle, data.editorMode, dragHandle, google, data.today, stableColumns, stableLabels, stores, getTask, track, trackRaw, settle, refresh, patchTask, upsertTask, cardActions],
   );
 
   // --- Movimiento masivo ------------------------------------------------------

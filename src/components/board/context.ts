@@ -58,6 +58,8 @@ export interface BoardApi {
   track: <T>(p: Promise<T>) => Promise<T>;
   /** Como `track`, pero deja pasar las excepciones (subidas de archivos). */
   trackRaw: <T>(p: Promise<T>) => Promise<T>;
+  /** Espera a que terminen las mutaciones en curso (p. ej. un guardado al salir de un campo). */
+  settle: () => Promise<void>;
   refresh: () => void;
 }
 

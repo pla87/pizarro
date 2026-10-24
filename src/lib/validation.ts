@@ -12,7 +12,7 @@ export const taskTitle = z
   .min(1, "El título es obligatorio.")
   .max(MAX_TITLE * 2, "Máximo 200 caracteres.")
   .refine((v) => mentionsToPlain(v).length <= MAX_TITLE, "Máximo 200 caracteres.");
-export const releaseZipMb = z
+export const attachLimitMb = z
   .number("Tamaño no válido.")
   .int("Tamaño no válido.")
   .min(RELEASE_ZIP_MIN_MB, `El mínimo es ${RELEASE_ZIP_MIN_MB} MB.`)

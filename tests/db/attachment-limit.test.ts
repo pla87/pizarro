@@ -1,4 +1,4 @@
-// Máximo de adjuntos por tarea (Project.releaseZipMaxMb) contra PostgreSQL real, también con subidas simultáneas.
+// Máximo de adjuntos por tarea (Project.taskAttachMaxMb) contra PostgreSQL real, también con subidas simultáneas.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, makeProject, makeTask } from "./helpers";
@@ -11,7 +11,7 @@ const data = (taskId: string, size: number) => ({ taskId, originalName: "f.bin",
 describe("máximo de adjuntos por tarea", () => {
   test("rechaza lo que pasa del tope del proyecto y acepta lo que justo cabe", async () => {
     const f = await makeProject({ members: [] });
-    await db.project.update({ where: { id: f.project.id }, data: { releaseZipMaxMb: 10 } });
+    await db.project.update({ where: { id: f.project.id }, data: { taskAttachMaxMb: 10 } });
     const task = await makeTask(f);
     const other = await makeTask(f);
     assert.equal((await createAttachmentWithinLimit(data(task.id, 6 * MB), sel)).ok, true);
@@ -30,7 +30,7 @@ describe("máximo de adjuntos por tarea", () => {
 
   test("subidas simultáneas no pasan del tope entre todas", async () => {
     const f = await makeProject({ members: [] });
-    await db.project.update({ where: { id: f.project.id }, data: { releaseZipMaxMb: 10 } });
+    await db.project.update({ where: { id: f.project.id }, data: { taskAttachMaxMb: 10 } });
     const task = await makeTask(f);
     const results = await Promise.all(Array.from({ length: 6 }, () => createAttachmentWithinLimit(data(task.id, 4 * MB), sel)));
     assert.equal(results.filter((r) => r.ok).length, 2);

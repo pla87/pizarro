@@ -18,7 +18,7 @@ type Params = { params: Promise<{ projectId: string }>; searchParams: Promise<{ 
 // Una sola consulta por petición para el título y la página.
 const visibleProject = cache(async (projectId: string) => {
   const user = await getCurrentUser();
-  return user ? db.project.findFirst({ where: { id: projectId, ...visibleProjectsWhere(user) }, select: { id: true, name: true, isPrivate: true, releaseZipMaxMb: true } }) : null;
+  return user ? db.project.findFirst({ where: { id: projectId, ...visibleProjectsWhere(user) }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true } }) : null;
 });
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
@@ -51,7 +51,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
   ]);
 
   const data: BoardData = {
-    project: { id: project.id, name: project.name, attachMaxMb: project.releaseZipMaxMb, fileMaxMb: Math.round(MAX_UPLOAD_BYTES / 1024 / 1024) },
+    project: { id: project.id, name: project.name, attachMaxMb: project.taskAttachMaxMb, fileMaxMb: Math.round(MAX_UPLOAD_BYTES / 1024 / 1024) },
     columns,
     tasks,
     users,
