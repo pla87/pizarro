@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.20.0"
+version: "v1.20.1"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.20.0
+**Versión de la aplicación:** v1.20.1
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -142,6 +142,7 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 ### 2.6 Rendimiento
 
 - **Una ida y vuelta por pantalla:** el tablero carga columnas, tarjetas, usuarios, etiquetas y plantillas con consultas en paralelo.
+- **Acciones del tablero con pocas idas y vueltas:** mover una tarjeta lee la tarea (con el permiso), su columna, la de destino y las vecinas en paralelo y la guarda con una sola escritura; editar una tarea la lee una vez; desplegar una release mueve todas sus tareas con una sola sentencia y prepara las copias de los adjuntos para el histórico después de responder (aparecen unos segundos más tarde; si alguna falla, queda en los logs como `releases.saveAttachments`).
 - **Interfaz optimista:** mover tarjetas, marcar subtareas o editar campos se reflejan al instante; si el servidor rechaza el cambio, se revierte y se muestra el error.
 - **Posiciones fraccionarias:** mover una tarjeta actualiza una sola fila.
 - **Generación de releases en el navegador:** instantánea, sin llamadas al servidor hasta *Marcar como desplegado*.
@@ -370,7 +371,7 @@ El menú lateral muestra, debajo de las opciones del proyecto: **Calendario**, *
 - El tablero muestra una columna cada vez. Cambias de columna con las pestañas superiores, que indican cuántas tarjetas tiene cada una, o **deslizando el dedo a izquierda o derecha** sobre la columna.
 - El botón flotante **+** crea una tarea en la columna visible, con opción de **Cámara** o **Archivo**. El botón *Crear tarea* queda siempre visible abajo del formulario.
 - El botón flotante pequeño de encima crea **varias tareas** pegando una lista (ver 3.4).
-- Para mover tarjetas entre columnas en móvil, usa la selección múltiple o el selector *Columna* del detalle. Para reordenar dentro de la columna, arrastra el asa ⋮⋮ (ver 3.5).
+- Para mover tarjetas entre columnas en móvil, usa la selección múltiple o el selector *Columna* del detalle (la tarjeta queda al final de la columna elegida). Para reordenar dentro de la columna, arrastra el asa ⋮⋮ (ver 3.5).
 - **Botón atrás** (del navegador o del móvil):
   - si hay un modal abierto (tarea, nueva tarea, imagen ampliada…), lo cierra;
   - si no, vuelve a la columna que estabas viendo antes; se recuerdan los últimos 5 cambios de columna, y después atrás sale del tablero como siempre.

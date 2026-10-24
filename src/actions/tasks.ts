@@ -486,7 +486,8 @@ export async function moveTask(taskId: string, columnId: string, prevId: string 
       rebalanced = true;
       n = await neighbourPositions(columnId, prevId, nextId);
     }
-    const position = n.stale ? positionBetween(await lastPosition(columnId), null) : positionBetween(n.prev, n.next);
+    // Sin vecinas (selector «Columna» del detalle, o columna vacía): al final, como la pinta el tablero.
+    const position = n.stale || (!prevId && !nextId) ? positionBetween(await lastPosition(columnId), null) : positionBetween(n.prev, n.next);
     const before = { title: mentionsToPlain(task.title), column: from.name };
     // Deshacer: los valores ya leídos (salvo si se ha renumerado la columna, que puede haber movido esta misma tarjeta).
     addUndo(...(rebalanced

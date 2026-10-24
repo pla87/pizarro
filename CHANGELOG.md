@@ -2,6 +2,22 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.20.1 — 2026-10-24 12:04
+
+Mover, editar y desplegar más rápidos; el selector Columna deja la tarjeta al final
+
+### Mejoras
+
+- Mover tarjetas, editar tareas y desplegar releases es más rápido (menos consultas a la base de datos; el despliegue responde sin esperar a copiar los adjuntos al histórico).
+
+### Correcciones
+
+- Al cambiar una tarea de columna desde el selector «Columna» del detalle, queda al final de la columna (antes podía quedar arriba).
+
+### Cambios técnicos / DB
+
+- Batería de pruebas de navegador de las acciones del tablero (351 comprobaciones) y pruebas de base de datos que fijan su comportamiento.
+
 ## v1.20.0 — 2026-10-24 10:48
 
 Límites por proyecto, adjuntos con tope por tarea y releases en varios paquetes, soltar archivos en las tarjetas, tipos generales en inglés y proyecto que se mantiene en el menú
