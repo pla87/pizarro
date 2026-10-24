@@ -9,7 +9,8 @@ import { db } from "@/lib/db";
 import { getCurrentUser, requireUserPage } from "@/lib/session";
 import { MAX_UPLOAD_BYTES } from "@/lib/uploads";
 import type { BoardData } from "@/lib/types";
-import { getT } from "@/i18n/server";
+import { getLocale, getT } from "@/i18n/server";
+import { localizeGeneralKinds } from "@/lib/kinds-localize";
 import { Board } from "@/components/board/Board";
 
 type Params = { params: Promise<{ projectId: string }>; searchParams: Promise<{ task?: string }> };
@@ -55,7 +56,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
     tasks,
     users,
     labels,
-    kinds,
+    kinds: localizeGeneralKinds(kinds, await getLocale()),
     templates,
     cardStyle: me.cardStyle,
     editorMode: me.editorMode,

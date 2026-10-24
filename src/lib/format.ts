@@ -3,15 +3,19 @@
 
 const APP_TIME_ZONE = process.env.NEXT_PUBLIC_APP_TIMEZONE || "Europe/Madrid";
 
-type Style = "date" | "dateShort" | "dateLong" | "dateTime" | "dateTimeShort" | "time";
+type Style = "date" | "dateShort" | "dateLong" | "dateTime" | "dateTimeShort" | "time" | "timeHm" | "dateNumeric";
 
 const OPTIONS: Record<Style, Intl.DateTimeFormatOptions> = {
   date: { dateStyle: "medium" },
   dateShort: { dateStyle: "short" },
+  /** 24/10/2026: día, mes y año completo, numéricos. */
+  dateNumeric: { day: "2-digit", month: "2-digit", year: "numeric" },
   dateLong: { dateStyle: "long" },
   dateTime: { dateStyle: "medium", timeStyle: "short" },
   dateTimeShort: { dateStyle: "short", timeStyle: "short" },
   time: { timeStyle: "short" },
+  /** Hora con ceros (08:14), en 24 horas. */
+  timeHm: { hour: "2-digit", minute: "2-digit", hourCycle: "h23" },
 };
 
 /** Formatea una fecha (Date o ISO) en la zona horaria de la app. */
