@@ -3,7 +3,7 @@
 
 import { decodeEntities } from "./markdown-entities";
 import { mentionsToPlain } from "./mentions";
-import type { T } from "../i18n/core";
+import { partSuffix } from "./zip-plan";
 
 interface ReleaseKind {
   id: string;
@@ -231,20 +231,15 @@ export function zonedDayRange(dayIso: string, timeZone: string): { start: Date; 
   return { start: midnight(y, m, d), end: midnight(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate()) };
 }
 
-/** Texto del 413 cuando los adjuntos de una release superan el tope del proyecto. */
-export function zipTooLarge(t: T, maxMb: number): string {
-  return t("Los adjuntos superan el tamaño máximo del ZIP ({mb} MB). Puedes cambiarlo en los ajustes del proyecto.", { mb: maxMb });
-}
-
-/** Nombre del ZIP de adjuntos del histórico: título saneado + «-adjuntos.zip». */
-export function releaseZipName(title: string): string {
+/** Nombre del ZIP de adjuntos del histórico: título saneado + «-adjuntos.zip» (con «-1de3» si hay varios paquetes). */
+export function releaseZipName(title: string, part = 1, total = 1): string {
   const base = title
     .replace(/\s+/g, "_")
     .replace(/[^\p{L}\p{N}._-]/gu, "_")
     .replace(/_{2,}/g, "_")
     .replace(/^[_.-]+|[_.-]+$/g, "")
     .slice(0, 80);
-  return `${base || "release"}-adjuntos.zip`;
+  return `${base || "release"}-adjuntos${partSuffix(part, total)}.zip`;
 }
 
 /** Fecha local en formato YYYY-MM-DD. */

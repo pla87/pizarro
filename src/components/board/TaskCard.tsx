@@ -2,7 +2,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlignLeft, CalendarClock, Check, CheckSquare, ExternalLink, FileText, GripVertical, Image as ImageIcon, MessageSquare, Paperclip, Repeat } from "lucide-react";
+import { AlignLeft, Loader2, CalendarClock, Check, CheckSquare, ExternalLink, FileText, GripVertical, Image as ImageIcon, MessageSquare, Paperclip, Repeat } from "lucide-react";
 import { isWhite } from "@/lib/constants";
 import { dueStatus, formatDay } from "@/lib/dates";
 import { memo, useEffect, useRef, useState } from "react";
@@ -13,6 +13,7 @@ import { MentionText } from "../ui/MentionText";
 import { cn } from "../ui/cn";
 import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard, useIsSelected, useTask } from "./context";
+import { useCardFileDrop } from "./useCardFileDrop";
 import { DueDatePopover } from "./DueDatePopover";
 import { recurrenceLabel } from "./recurrence-ui";
 import { focusCard, isTypingTarget } from "./shortcuts";
@@ -71,6 +72,8 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
   // F2: renombrar en la propia tarjeta. Alt+D: fecha límite en un pequeño selector (junto a la tarjeta).
   const [renaming, setRenaming] = useState(false);
   const [dueAnchor, setDueAnchor] = useState<HTMLElement | null>(null);
+  // Soltar archivos sobre la tarjeta (escritorio) los adjunta a la tarea.
+  const fileDrop = useCardFileDrop(task.id, !overlay);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Enter") {
@@ -119,7 +122,9 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
       data-task-card={task.id}
       onClick={() => openTask(task.id)}
       onKeyDown={onKeyDown}
+      {...(overlay ? {} : fileDrop.handlers)}
       className={cn(
+        fileDrop.over && "border-focus ring-2 ring-focus/50",
         "group relative cursor-pointer overflow-hidden rounded-lg border bg-white p-2.5 pl-3 text-left shadow-sm transition-shadow select-none hover:shadow-md dark:bg-slate-900",
         isSelected ? "border-brand-500 ring-2 ring-brand-500/30" : "border-slate-200 dark:border-slate-700/80",
         overlay && "rotate-2 shadow-xl",
@@ -130,6 +135,11 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
       // Estilo «tarjeta entera»: fondo teñido suave (legible en claro y oscuro) y borde del color.
       style={filled && white ? undefined : filled && !isSelected ? { backgroundColor: `${task.color}26`, borderColor: `${task.color}80` } : filled ? { backgroundColor: `${task.color}26` } : undefined}
     >
+      {(fileDrop.over || fileDrop.uploading > 0) && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-1.5 bg-white/95 text-sm font-semibold text-brand-700 dark:bg-slate-900/95 dark:text-brand-300" role="status">
+          {fileDrop.over ? t("Suelta para adjuntar") : (<><Loader2 size={15} className="animate-spin" /> {t("Subiendo…")}</>)}
+        </div>
+      )}
       {task.color && !filled && <span className="absolute inset-y-0 left-0 w-1 ring-1 ring-inset ring-black/10 dark:ring-white/25" style={{ backgroundColor: task.color }} aria-hidden />}
       <div className="flex items-start gap-2">
         <button

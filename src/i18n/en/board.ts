@@ -90,7 +90,6 @@ export const board: Record<string, string> = {
   "Quitar archivo": "Remove file",
   "Archivo": "File",
   "Cámara": "Camera",
-  "o pega o arrastra archivos (máx. 20 MB)": "or paste or drag files (max. 20 MB)",
   "Suelta para adjuntar": "Drop to attach",
   // BulkTaskDialog
   "1 tarea creada": "1 task created",
@@ -141,6 +140,8 @@ export const board: Record<string, string> = {
   "Copiado al portapapeles": "Copied to clipboard",
   "No se pudo copiar": "Could not copy",
   "No se pudieron descargar los adjuntos": "Could not download the attachments",
+  "Adjuntos descargados en {n} paquetes de hasta {mb} MB": "Attachments downloaded in {n} packages of up to {mb} MB",
+  "Algún archivo supera por sí solo los {mb} MB y va en su propio paquete.": "A file on its own exceeds {mb} MB and goes in its own package.",
   "Se guardará la release y {n} tarjeta(s) pasarán a «{name}». ¿Continuar?": "The release will be saved and {n} card(s) will move to “{name}”. Continue?",
   "Se guardará la release y {n} tarjeta(s) pasarán al archivo. ¿Continuar?": "The release will be saved and {n} card(s) will be archived. Continue?",
   "Release registrada como desplegada": "Release recorded as deployed",

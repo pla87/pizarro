@@ -87,6 +87,8 @@ test("rango del día local en una zona horaria", () => {
 test("nombre del ZIP del histórico", () => {
   assert.equal(releaseZipName("Release 2026-10-18 (2) · Proyecto"), "Release_2026-10-18_2_Proyecto-adjuntos.zip");
   assert.equal(releaseZipName("///"), "release-adjuntos.zip");
+  assert.equal(releaseZipName("Release 1", 2, 3), "Release_1-adjuntos-2de3.zip");
+  assert.equal(releaseZipName("Release 1", 1, 1), "Release_1-adjuntos.zip");
 });
 
 test("códigos: prefijo por tipo, colisiones y numeración por tipo", () => {

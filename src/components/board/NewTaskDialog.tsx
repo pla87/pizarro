@@ -14,7 +14,8 @@ import { DescriptionField } from "../ui/DescriptionField";
 import { applyKindTemplate, mergeSubtasks } from "@/lib/kinds-special";
 import { TypeSelector } from "./TaskDialog";
 import type { T } from "@/i18n/core";
-import { filesFrom, isImageFile, uploadFile, useFileDrop } from "./upload";
+import { AttachLimitHint } from "./AttachLimitHint";
+import { attachmentPatch, filesFrom, isImageFile, uploadFile, useFileDrop } from "./upload";
 import { draftKey, useDraftAutosave, type NewTaskDraft } from "./drafts";
 
 interface Props {
@@ -137,7 +138,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     const ok = uploaded.length;
     const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
     if (ok) {
-      task = { ...task, imageCount: task.imageCount + uploaded.filter((a) => a.isImage).length, fileCount: task.fileCount + uploaded.filter((a) => !a.isImage).length };
+      for (const a of uploaded) task = { ...task, ...attachmentPatch(task, a) };
       board.upsertTask(task);
     }
     if (failed) toast((failed.reason as Error).message, "error");
@@ -310,7 +311,9 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
               <Camera size={16} /> {t("Cámara")}
               <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { addFiles(filesFrom(e.target.files)); e.target.value = ""; }} />
             </label>
-            <p className="self-center text-xs text-slate-500 max-sm:hidden">{t("o pega o arrastra archivos (máx. 20 MB)")}</p>
+            <AttachLimitHint
+              className="self-center max-sm:hidden" usedBytes={files.reduce((n, f) => n + f.size, 0)} limitMb={board.project.attachMaxMb} fileMaxMb={board.project.fileMaxMb}
+            />
           </div>
         </div>
       </form>
