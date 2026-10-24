@@ -7,10 +7,11 @@ import { describeAction } from "@/lib/action-context";
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import { requireUser } from "@/lib/session";
+import { removeTaskEvents, restoreTaskEvents } from "@/lib/task-events";
 import { renderStoredLabel } from "@/lib/undo-label";
 import { getT } from "@/i18n/server";
 import { makeT } from "@/i18n/core";
-import { applyUndo, discardEntries, fingerprintOps, mirrorOps, saveUndo, type UndoKind, type UndoOp } from "@/lib/undo";
+import { applyUndo, discardEntries, fingerprintOps, mirrorOps, saveUndo, type SavedEvent, type UndoKind, type UndoOp } from "@/lib/undo";
 import * as v from "@/lib/validation";
 
 type Result = { label: string; remaining: number; skipped: number; redoable: number };
@@ -42,6 +43,7 @@ async function applyLast(kind: UndoKind, projectId: string, taskId?: string | nu
         data: {
           id: entry.id, userId: entry.userId, projectId: entry.projectId, taskId: entry.taskId, label: entry.label, kind: entry.kind,
           ops: entry.ops as Prisma.InputJsonValue, fingerprint: entry.fingerprint, createdAt: entry.createdAt,
+          eventIds: entry.eventIds, ...(entry.events ? { events: entry.events as Prisma.InputJsonValue } : {}),
         },
       })
       .catch(() => {});
@@ -76,7 +78,12 @@ async function applyLast(kind: UndoKind, projectId: string, taskId?: string | nu
     await restore();
     throw err;
   }
-  if (counter.length) await saveUndo(user.id, pid, entry.label, counter, entry.taskId, undo ? "REDO" : "UNDO", false, await fingerprintOps(pid, counter));
+  // Historial: deshacer borra las entradas que registró la acción (y guarda una copia en la de rehacer);
+  // rehacer las recrea y la nueva entrada de deshacer recuerda sus ids.
+  const history = undo
+    ? { events: await removeTaskEvents(entry.eventIds, pid) }
+    : { eventIds: await restoreTaskEvents((entry.events ?? []) as unknown as SavedEvent[], pid) };
+  if (counter.length) await saveUndo(user.id, pid, entry.label, counter, entry.taskId, undo ? "REDO" : "UNDO", false, await fingerprintOps(pid, counter), history);
   await Promise.all(
     intact.map(async (s) => db.undoEntry.updateMany({ where: { id: s.id }, data: { fingerprint: await fingerprintOps(pid, s.ops as unknown as UndoOp[]) } })),
   );

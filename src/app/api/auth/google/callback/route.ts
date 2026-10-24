@@ -58,6 +58,7 @@ export async function GET(req: Request) {
   if (!user) return fail("google_noaccount", "sin cuenta asociada", { email: result.identity.email });
 
   await completeLogin(user, { method: "google", path: "/api/auth/google/callback" });
+  if (user.mustChangePassword) redirect(`${appUrl()}/change-password`);
   const next = safeNextPath(Buffer.from(nextB64 ?? "", "base64url").toString("utf8"));
   redirect(`${appUrl()}${next}`);
 }

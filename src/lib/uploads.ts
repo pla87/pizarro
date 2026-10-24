@@ -58,6 +58,8 @@ interface ProcessedImage {
 /** Redimensiona a 1280px de ancho máximo, WebP calidad 75, y genera una miniatura. */
 export async function processImage(input: Buffer): Promise<ProcessedImage> {
   // Como máximo dos imágenes procesándose a la vez: acota la memoria del contenedor.
+  // Y como mucho MAX_WAITING esperando turno: más allá se rechaza (503) en vez de acumular buffers en memoria.
+  if (imageQueueFull()) throw new AppError(IMAGE_QUEUE_FULL_MESSAGE, 503);
   await acquire();
   try {
     return await processImageNow(input);
@@ -67,6 +69,10 @@ export async function processImage(input: Buffer): Promise<ProcessedImage> {
 }
 
 const MAX_CONCURRENT = 2;
+export const MAX_WAITING = 10;
+export const IMAGE_QUEUE_FULL_MESSAGE = "El servidor está procesando muchas imágenes. Inténtalo de nuevo en unos segundos.";
+/** ¿Hay ya MAX_WAITING imágenes esperando turno? Las rutas lo miran antes de leer el cuerpo de la petición. */
+export const imageQueueFull = (): boolean => running >= MAX_CONCURRENT && queue.length >= MAX_WAITING;
 let running = 0;
 const queue: (() => void)[] = [];
 function acquire(): Promise<void> {
