@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { syncChangelog } from "@/lib/changelog-sync";
 import { seed } from "@/lib/seed";
+import { announceSetup } from "@/lib/setup";
 import { seedBuiltinTemplates, upgradeBuiltinTemplates } from "@/lib/template-store";
 
 async function main() {
@@ -17,6 +18,8 @@ async function main() {
   const n = await syncChangelog(db);
   console.log(`[boot] Changelog sincronizado (${n} versiones).`);
   await seed(db, (m) => console.log(m.replace("[seed]", "[boot]")));
+  // Sin usuarios y sin SEED_ADMIN_*: código de un solo uso para el asistente web /setup (se imprime en este log).
+  await announceSetup(db);
   // Las plantillas por defecto no deben impedir que la app arranque.
   try {
     const plantillas = await seedBuiltinTemplates(db);

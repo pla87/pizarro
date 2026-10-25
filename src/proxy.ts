@@ -28,9 +28,11 @@ function buildCsp(nonce: string): string {
 export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   const isApi = pathname.startsWith("/api/");
-  // Páginas públicas (sin sesión): acceso, contraseña olvidada y enlaces de email.
+  // Páginas públicas (sin sesión): acceso, contraseña olvidada, enlaces de email y el asistente de primer
+  // arranque (/setup se protege con el código del log y da 404 cuando ya hay usuarios).
+  // Sin usuarios, el proxy no consulta la base de datos: manda a /login y esa página redirige a /setup.
   const isLogin =
-    pathname === "/login" || pathname.startsWith("/login/") || pathname === "/forgot-password" || pathname.startsWith("/reset/") || pathname.startsWith("/confirm/");
+    pathname === "/setup" || pathname.startsWith("/setup/") || pathname === "/login" || pathname.startsWith("/login/") || pathname === "/forgot-password" || pathname.startsWith("/reset/") || pathname.startsWith("/confirm/");
   const token = req.cookies.get(sessionCookieName())?.value;
 
   // Nonce nuevo en cada petición de página (las API devuelven JSON/ficheros: sin CSP de documento).

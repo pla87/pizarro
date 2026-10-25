@@ -517,7 +517,7 @@ La guía paso a paso de la primera puesta en marcha está en el `README.md`.
 
 ### 4.2 Variables de entorno
 
-Consulta la tabla completa en el `README.md`. Las imprescindibles son `DATABASE_URL`, `SESSION_SECRET`, `APP_URL` y `UPLOAD_DIR`. Las `SEED_ADMIN_*` solo hacen falta en el primer arranque y conviene borrarlas después. Otras variables opcionales de esta versión:
+Consulta la tabla completa en el `README.md`. Las imprescindibles son `DATABASE_URL`, `SESSION_SECRET`, `APP_URL` y `UPLOAD_DIR`. Las `SEED_ADMIN_*` solo hacen falta en el primer arranque (en un servidor propio con Docker Compose no se usan: el asistente web `/setup` crea el administrador) y conviene borrarlas después. Otras variables opcionales de esta versión:
 
 | Variable | Para qué sirve |
 |---|---|
@@ -621,7 +621,7 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 | Síntoma | Causa probable | Solución |
 |---|---|---|
 | El despliegue no arranca: `SESSION_SECRET debe tener al menos 32 caracteres` | Variable vacía o corta | Genera una con `openssl rand -base64 48`. |
-| `[boot] No hay usuarios. Define SEED_ADMIN_EMAIL…` | Primer arranque sin variables de seed | Añade `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` y redespliega. |
+| `[boot] No hay usuarios: el administrador inicial se crea en el asistente web (/setup)…` | Primer arranque sin variables de seed | En un servidor propio, abre `/setup` con el código que el log imprime en un recuadro (`introduce el código: XXXX-XXXX`). En Railway, añade `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` y redespliega. |
 | El login no mantiene la sesión | `APP_URL` con `https://` pero se accede por `http://` | Accede por HTTPS o ajusta `APP_URL`/`COOKIE_SECURE`. |
 | Las capturas desaparecen tras desplegar | No hay volumen montado o la ruta no coincide | Monta un Volume en `/app/uploads` y comprueba que `UPLOAD_DIR` es igual. |
 | «El archivo supera el tamaño máximo del proyecto (N MB por archivo)» | Archivo mayor que el máximo del proyecto (o que `MAX_UPLOAD_MB`, si está definida) | Reduce el archivo o sube el límite en los ajustes del proyecto (hasta 100 MB; un valor muy alto consume más memoria al subir). |

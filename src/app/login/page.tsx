@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import { db } from "@/lib/db";
+import { isSetupPending } from "@/lib/setup";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { googleOnly, passwordFormVisible } from "@/lib/auth-policy";
 import { googleEnabled } from "@/lib/google";
@@ -30,6 +32,8 @@ const ERRORS: Record<string, string> = {
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string }> }) {
   if (await getCurrentUser()) redirect("/");
   if (await getPendingUser()) redirect("/change-password");
+  // Instalación nueva sin usuarios: el acceso no sirve de nada, se configura en el asistente.
+  if (await isSetupPending(db)) redirect("/setup");
   const t = await getT();
   const { next, error } = await searchParams;
   const message = typeof error === "string" ? ERRORS[Object.hasOwn(ERRORS, error) ? error : "google_failed"]! : null;
