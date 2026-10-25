@@ -72,6 +72,8 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
   const [confirmName, setConfirmName] = useState("");
   // Los miembros de un proyecto privado lo gestionan aunque no sean administradores.
   const isPrivateProject = project.visibility === "PRIVATE";
+  // Al pasar a privado siguen con acceso los asignados y quien lo cambia.
+  const keepCount = project.members.length + (project.members.some((m) => m.id === currentUserId) ? 0 : 1);
   const canManage = isAdmin || isPrivateProject;
 
   const run = (fn: () => Promise<{ ok: true } | { ok: false; error: string }>, success: string, after?: () => void) =>
@@ -194,7 +196,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
               <EyeOff size={15} className="mt-0.5 shrink-0" />
               <span>
                 {t("Privado: solo sus miembros")}
-                <span className="block text-xs text-slate-500">{t("Solo los miembros lo ven y pueden entrar, tampoco los administradores. Tú serás el primer miembro.")}</span>
+                <span className="block text-xs text-slate-500">{t("Solo los miembros lo ven y pueden entrar, tampoco los administradores. Las personas asignadas pasan a ser miembros, y tú también.")}</span>
               </span>
             </label>
           </div>
@@ -210,7 +212,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
               className="btn-primary mt-4"
               disabled={pending}
               onClick={async () => {
-                if (visibility === "PRIVATE" && !(await confirm({ title: t("Hacer el proyecto privado"), message: t("¿Hacer el proyecto privado? Solo lo verás tú (podrás añadir más miembros después): los demás dejarán de verlo, incluidos los administradores, y se desasignarán sus tarjetas."), confirmLabel: t("Hacer privado"), danger: true }))) return;
+                if (visibility === "PRIVATE" && !(await confirm({ title: t("Hacer el proyecto privado"), message: t("¿Hacer el proyecto privado? Seguirán teniendo acceso como miembros las personas asignadas ahora ({n}, contándote a ti) y conservan sus tarjetas. Los administradores que no estén asignados (los que lo veían solo por tenerlo en «Proyectos en los que trabajo») dejarán de verlo y se desasignarán sus tarjetas. Después podrás quitar miembros.", { n: keepCount }), confirmLabel: t("Hacer privado"), danger: true }))) return;
                 run(() => setProjectVisibility(project.id, visibility), t("Visibilidad actualizada"), () => router.refresh());
               }}
             >

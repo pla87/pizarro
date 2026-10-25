@@ -103,6 +103,12 @@ async function backupJob(): Promise<void> {
   await dailyBackupJob();
 }
 
+/** Avisa por email a los administradores si la última copia correcta tiene más de 48 h (como mucho cada 24 h). */
+async function backupAlertJob(): Promise<void> {
+  const { notifyBackupAlertIfDue } = await import("@/lib/backup-alert");
+  await notifyBackupAlertIfDue();
+}
+
 /** Prueba de restauración mensual de la última copia. */
 async function restoreTestJob(): Promise<void> {
   const { monthlyRestoreTestJob } = await import("@/lib/backup");
@@ -135,7 +141,7 @@ async function resumeReleaseCopies(): Promise<void> {
 
 /** Una pasada de mantenimiento; nunca lanza. */
 async function runMaintenance(): Promise<void> {
-  for (const job of [purgeNonImageCopies, purgeOldUndo, purgeOldNotifications, purgeAuthData, purgeOldTaskHistory, purgeOrphanFiles, backupJob, restoreTestJob, sendPeriodicMail]) {
+  for (const job of [purgeNonImageCopies, purgeOldUndo, purgeOldNotifications, purgeAuthData, purgeOldTaskHistory, purgeOrphanFiles, backupJob, backupAlertJob, restoreTestJob, sendPeriodicMail]) {
     try {
       await job();
     } catch (err) {

@@ -58,14 +58,16 @@ const userSelect = { id: true, name: true, email: true, locale: true, active: tr
 /**
  * Cuenta existente a la que corresponde esa identidad de Google: primero por `sub` (estable aunque cambie el email),
  * y si todavía no está enlazada, por email verificado sin distinguir mayúsculas. Nunca se crean cuentas.
- * Una cuenta ya enlazada a OTRO sub no se reasigna.
+ * Una cuenta ya enlazada a OTRO sub no se reasigna. Si un admin la desvinculó (googleRelinkBlocked) devuelve "relink_blocked".
  */
 export async function findUserForGoogle(identity: GoogleIdentity) {
   const bySub = await db.user.findUnique({ where: { googleSub: identity.sub }, select: userSelect });
   if (bySub) return bySub.active ? bySub : null;
-  const byEmail = await db.user.findFirst({ where: { email: { equals: identity.email, mode: "insensitive" } }, select: userSelect });
+  const byEmail = await db.user.findFirst({ where: { email: { equals: identity.email, mode: "insensitive" } }, select: { ...userSelect, googleRelinkBlocked: true } });
   if (!byEmail || !byEmail.active || byEmail.googleSub) return null;
+  // Un admin la desvinculó: no se vuelve a enlazar sola hasta que entre con su contraseña o un admin lo permita.
+  if (byEmail.googleRelinkBlocked) return "relink_blocked" as const;
   // Primer acceso con Google: queda enlazada. La condición evita pisar un enlace hecho en paralelo.
-  const { count } = await db.user.updateMany({ where: { id: byEmail.id, googleSub: null }, data: { googleSub: identity.sub } });
+  const { count } = await db.user.updateMany({ where: { id: byEmail.id, googleSub: null, googleRelinkBlocked: false }, data: { googleSub: identity.sub } });
   return count === 1 ? byEmail : null;
 }

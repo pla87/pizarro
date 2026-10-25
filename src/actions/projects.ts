@@ -139,8 +139,9 @@ export async function setGoogleShareMode(projectId: string, mode: string) {
 /**
  * TEAM: lo ven los usuarios asignados (ProjectMember) y todos los administradores.
  * PRIVATE: solo sus miembros (quien lo marca como privado es el primero; ni el resto de administradores).
- * Al pasar a privado se desasignan las tarjetas de quien pierde el acceso y se quitan las elecciones de los
- * administradores; al pasar a equipo se conservan los miembros (los administradores pasan a «proyecto en el que trabajo»).
+ * Al pasar a privado los usuarios asignados (ProjectMember) se CONSERVAN como miembros y quien lo marca pasa a serlo;
+ * pierden el acceso los administradores que lo veían solo por haberlo elegido en su perfil (se quitan sus elecciones)
+ * y se desasignan únicamente las tarjetas de esas personas; al pasar a equipo se conservan los miembros (los administradores pasan a «proyecto en el que trabajo»).
  * Si ya estaba en ese modo, no cambia nada (los usuarios se gestionan con addProjectMember/removeProjectMember).
  */
 export async function setProjectVisibility(projectId: string, mode: "TEAM" | "PRIVATE") {
@@ -152,13 +153,15 @@ export async function setProjectVisibility(projectId: string, mode: "TEAM" | "PR
     const current = await findManageableProject(user, id);
     if ((visibility === "PRIVATE") === current.isPrivate) return;
     if (visibility === "PRIVATE") {
+      const members = await db.projectMember.findMany({ where: { projectId: id }, select: { userId: true } });
+      const keep = [...new Set([...members.map((m) => m.userId), user.id])];
       await db.$transaction([
         db.project.update({ where: { id }, data: { isPrivate: true, privateOwnerId: user.id } }),
-        db.projectMember.deleteMany({ where: { projectId: id } }),
-        db.projectMember.create({ data: { projectId: id, userId: user.id } }),
+        // Los miembros siguen; quien lo marca como privado entra si no lo era.
+        db.projectMember.createMany({ data: [{ projectId: id, userId: user.id }], skipDuplicates: true }),
         db.adminProjectPick.deleteMany({ where: { projectId: id } }),
-        // Las tarjetas asignadas a quien ya no tiene acceso quedan sin asignar.
-        db.task.updateMany({ where: { projectId: id, assigneeId: { not: user.id } }, data: { assigneeId: null } }),
+        // Las tarjetas asignadas a quien ya no tiene acceso (p. ej. un admin que solo lo veía por su elección) quedan sin asignar.
+        db.task.updateMany({ where: { projectId: id, assigneeId: { not: null, notIn: keep } }, data: { assigneeId: null } }),
       ]);
     } else {
       const admins = await db.projectMember.findMany({ where: { projectId: id, user: { role: "ADMIN" } }, select: { userId: true } });

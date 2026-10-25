@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { passwordChangeRequired } from "./auth-policy";
 import { sendNewLoginMail } from "./auth-mail";
 import { registerDevice, TRUST_DEVICE_DAYS } from "./devices";
+import { db } from "./db";
 import { logEvent } from "./log";
 import { emailEnabled, sendMailInBackground } from "./mail";
 import { clientIp } from "./request";
@@ -37,6 +38,11 @@ export async function completeLogin(
     sendMailInBackground("aviso de nuevo inicio de sesión", () =>
       sendNewLoginMail(user, { when: new Date(), device: deviceLabel(ua, makeT(toLocale(user.locale))), ip: ip === "unknown" ? null : ip }),
     );
+  }
+  // Entrar con la contraseña (y 2FA si la hay) levanta el bloqueo de re-enlazado tras desvincular Google: el siguiente acceso con Google vuelve a enlazar.
+  if (how.method !== "google") {
+    const { count } = await db.user.updateMany({ where: { id: user.id, googleRelinkBlocked: true }, data: { googleRelinkBlocked: false } });
+    if (count > 0) logEvent({ category: "auth", action: "auth.googleRelinkAllowed", message: `${user.name} ha entrado con su contraseña: Google podrá volver a vincularse`, userId: user.id, userName: user.name, path: how.path, ip, details: { by: "password" } });
   }
   logEvent({
     category: "auth", action: "auth.login",
