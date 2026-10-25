@@ -2,6 +2,33 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.22.0 — 2026-10-25 11:42
+
+Ritmo de las tareas fijas, crear tareas en otro proyecto, copiar y borrar la descripción, desvincular Google y endurecimiento tras la auditoría
+
+### Nuevas funcionalidades
+
+- Tareas fijas de la release con ritmo: En todas, Cada dos (releases pares) o Cada tres (múltiplos de 3).
+- Nueva tarea en otro proyecto: desplegable de proyecto junto al título, con sus columnas, tipos, personas y entregables.
+- Botones discretos para copiar (con formato) y borrar la descripción.
+- Administración → Usuarios: Desvincular Google.
+
+### Mejoras
+
+- El aviso «Adjunto borrado» deshace exactamente ese borrado; Ctrl+Z sigue deshaciendo la última acción.
+- Descarga de adjuntos de una release en varios paquetes protegida: si cambian a mitad, se avisa y se puede reintentar.
+- Las copias de adjuntos del histórico se retoman solas si el servidor se reinicia al desplegar.
+- Los adjuntos de hasta 20 MB ya se aceptan de verdad (antes el servidor cortaba en 12 MB).
+
+### Correcciones
+
+- Auditoría externa revisada: desplegar no omite en silencio tareas que ya no están, cuota de adjuntos atómica, identidad de Google verificada al conectar Drive, avisos que no salen si la persona perdió el acceso, comprobación de origen más estricta y varios endurecimientos más.
+- Revisión del lote: copias de release sin duplicados ni filas sin fichero y bloqueos sin interbloqueos.
+
+### Cambios técnicos / DB
+
+- Migraciones: Task.evergreenEvery, Release.attachmentsPending y un nombre único por copia de adjunto en cada release. MAIL_OUTBOX_DIR se ignora en producción salvo MAIL_OUTBOX_IN_PRODUCTION=1.
+
 ## v1.21.0 — 2026-10-24 19:14
 
 Orden de tarjetas estable, duplicar arrastrando con Ctrl, Cancelar en el detalle, límites separados de adjuntos y de paquetes, y móvil más cómodo
