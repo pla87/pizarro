@@ -12,7 +12,7 @@ import { getT } from "@/i18n/server";
 type Client = Prisma.TransactionClient | typeof db;
 
 /** Bloquea la fila del proyecto: dos creaciones a la vez no pueden pasarse del tope (solo tiene efecto dentro de una transacción). */
-async function lockProject(client: Client, projectId: string) {
+export async function lockProject(client: Client, projectId: string) {
   await client.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${projectId} FOR UPDATE`;
 }
 

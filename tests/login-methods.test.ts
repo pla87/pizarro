@@ -231,6 +231,21 @@ test("claims: con dominio de Workspace exige hd y email de ese dominio", () => {
   assert.equal(check({ hd: undefined, email: "ana@correo.example" }, { domain: null }).ok, true, "sin dominio configurado vale cualquier cuenta verificada");
 });
 
+test("conexión de Drive: el id_token se verifica (firma, audiencia, caducidad, dominio) sin nonce", () => {
+  const { nonce: _nonce, ...noNonce } = base;
+  const opts = { clientId: "cid", now: NOW };
+  assert.deepEqual(idt.verifiedConnectEmail(sign(noNonce), [jwk], opts), { ok: true, email: "ana@empresa.test" });
+  assert.deepEqual(idt.verifiedConnectEmail(sign(noNonce), [jwk], { ...opts, domain: "empresa.test" }), { ok: true, email: "ana@empresa.test" });
+  assert.deepEqual(idt.verifiedConnectEmail(sign(noNonce), [jwk], { ...opts, domain: "otra.test" }), { ok: false, reason: "domain" });
+  assert.deepEqual(idt.verifiedConnectEmail(sign({ ...noNonce, aud: "otro" }), [jwk], opts), { ok: false, reason: "audience" });
+  assert.deepEqual(idt.verifiedConnectEmail(sign({ ...noNonce, exp: sec - 600 }), [jwk], opts), { ok: false, reason: "expired" });
+  const other = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  assert.deepEqual(idt.verifiedConnectEmail(sign(noNonce, undefined, other.privateKey), [jwk], opts), { ok: false, reason: "signature" });
+  // Sin firmar (solo base64), como lo daba por bueno la versión anterior.
+  assert.deepEqual(idt.verifiedConnectEmail(`${b64({ alg: "none" })}.${b64(noNonce)}.`, [jwk], opts), { ok: false, reason: "signature" });
+  assert.deepEqual(idt.verifiedConnectEmail(undefined, [jwk], opts), { ok: false, reason: "signature" });
+});
+
 test("claims: sin sub o email no son válidas", () => {
   assert.deepEqual(check({ sub: undefined }), { ok: false, reason: "format" });
   assert.deepEqual(check({ sub: "" }), { ok: false, reason: "format" });

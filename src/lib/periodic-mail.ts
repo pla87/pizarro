@@ -24,18 +24,24 @@ const taskSelect = { id: true, title: true, project: { select: { id: true, name:
 type TaskRow = { id: string; title: string; project: { id: string; name: string } };
 const item = (t: TaskRow, extra: Partial<DigestItem> = {}): DigestItem => ({ taskId: t.id, title: t.title, projectId: t.project.id, projectName: t.project.name, ...extra });
 
-/** Lo ocurrido en las últimas 24 h en los proyectos visibles para la persona, y lo que le toca a ella. */
+/**
+ * Lo ocurrido en las últimas 24 h en los proyectos en los que trabaja la persona (los de sus menús: un admin, los
+ * de equipo que eligió en su perfil y sus privados; ver workingProjectsWhere), y lo que le toca a ella en
+ * cualquier proyecto que pueda ver.
+ */
 export async function gatherDigest(user: { id: string; role: "ADMIN" | "MEMBER" }, now: Date, today: string): Promise<DigestInput> {
   const since = new Date(now.getTime() - DAY_MS);
-  const visible = workingProjectsWhere(user as CurrentUser);
-  const live = { project: visible, archivedAt: null };
+  const working = workingProjectsWhere(user as CurrentUser);
+  const live = { project: working, archivedAt: null };
+  // Lo asignado a la persona sale aunque un admin no haya elegido ese proyecto (sigue pudiendo verlo).
+  const mine = { project: visibleProjectsWhere(user as CurrentUser), archivedAt: null };
   const [created, done, comments, assigned, due] = await Promise.all([
     db.task.findMany({ where: { ...live, createdAt: { gte: since } }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: taskSelect }),
     db.taskEvent.findMany({ where: { code: "done", createdAt: { gte: since }, task: live }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
     db.taskComment.findMany({ where: { createdAt: { gte: since }, OR: [{ authorId: null }, { authorId: { not: user.id } }], task: live }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
-    db.notification.findMany({ where: { userId: user.id, type: "ASSIGNED", createdAt: { gte: since }, task: live }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
+    db.notification.findMany({ where: { userId: user.id, type: "ASSIGNED", createdAt: { gte: since }, task: mine }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
     db.task.findMany({
-      where: { ...live, assigneeId: user.id, column: { isDone: false }, dueDate: { lte: isoToDate(today) } },
+      where: { ...mine, assigneeId: user.id, column: { isDone: false }, dueDate: { lte: isoToDate(today) } },
       orderBy: [{ dueDate: "asc" }, { position: "asc" }],
       take: MAX_ROWS,
       select: { ...taskSelect, dueDate: true },

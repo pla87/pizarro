@@ -67,6 +67,12 @@ function kindPrefixes(names: string[]): string[] {
       const candidate = letters.slice(0, MAX_PREFIX_LETTERS - 1) + String.fromCharCode(65 + i);
       if (!used.has(candidate)) prefix = candidate;
     }
+    // Más de 26 con las mismas letras: dos letras distintas al final (676 más), para no repetir un prefijo
+    // ya usado y mezclar la numeración de dos tipos.
+    for (let i = 0; !prefix && i < 26 * 26; i++) {
+      const candidate = letters.slice(0, MAX_PREFIX_LETTERS - 2) + String.fromCharCode(65 + Math.floor(i / 26)) + String.fromCharCode(65 + (i % 26));
+      if (!used.has(candidate)) prefix = candidate;
+    }
     if (!prefix) prefix = letters.slice(0, MAX_PREFIX_LETTERS);
     used.add(prefix);
     return prefix;

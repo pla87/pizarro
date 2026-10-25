@@ -96,6 +96,8 @@ export const server: Record<string, string> = {
   "No hay ninguna columna con el rol «En producción». Asígnalo en el menú de una columna o elige archivar.": "No column has the “In production” role. Assign it in a column's menu or choose to archive.",
   "Mientras tanto se ha desplegado la release {prev}: vuelve a generar el texto para que los códigos lleven R{number}.": "Release {prev} was deployed in the meantime: regenerate the text so the codes use R{number}.",
   "La release no existe.": "The release doesn't exist.",
+  "Una de las tareas ya no está en el tablero (archivada, borrada o movida a otro proyecto): vuelve a generar la release.": "One of the tasks is no longer on the board (archived, deleted or moved to another project): regenerate the release.",
+  "{n} de las tareas ya no están en el tablero (archivadas, borradas o movidas a otro proyecto): vuelve a generar la release.": "{n} of the tasks are no longer on the board (archived, deleted or moved to another project): regenerate the release.",
   // Subidas y Google
   "Identificador no válido.": "Invalid identifier.",
   "El archivo no es una imagen válida.": "The file is not a valid image.",

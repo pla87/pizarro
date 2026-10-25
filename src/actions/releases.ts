@@ -9,6 +9,7 @@ import { runAction } from "@/lib/action";
 import { assertProjectAccess } from "@/lib/access";
 import { MAX_RELEASE_CONTENT } from "@/lib/constants";
 import { appTimeZone } from "@/lib/board";
+import { lockProject } from "@/lib/caps";
 import { AppError } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
 import { spawnRecurrences } from "@/lib/recurrence";
@@ -50,6 +51,18 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
       orderBy: [{ column: { position: "asc" } }, ...TASK_ORDER],
       select: { id: true, title: true, evergreen: true, kind: { select: { name: true } } },
     });
+    // El texto llega ya generado del cliente: si alguna tarea se ha archivado, borrado o movido de proyecto
+    // mientras tanto, el histórico no coincidiría con lo que dice el texto. Se pide volver a generarlo.
+    const missing = new Set(data.taskIds).size - tasks.length;
+    if (missing > 0) {
+      const t = await getT();
+      throw new AppError(
+        missing === 1
+          ? t("Una de las tareas ya no está en el tablero (archivada, borrada o movida a otro proyecto): vuelve a generar la release.")
+          : t("{n} de las tareas ya no están en el tablero (archivadas, borradas o movidas a otro proyecto): vuelve a generar la release.", { n: missing }),
+        409,
+      );
+    }
 
     // Deshacer: dónde estaba cada tarea (solo las de este proyecto); la release del histórico se quita (ver más abajo).
     // La columna de destino se busca a la vez.
@@ -70,6 +83,9 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
       : null;
 
     const result = await db.$transaction(async (tx) => {
+      // Dos despliegues a la vez del mismo proyecto: el segundo espera aquí y ve el número del primero
+      // (y recibe el aviso de abajo) en lugar de chocar con el índice único con un error genérico.
+      await lockProject(tx, data.projectId);
       const last = await tx.release.findFirst({ where: { projectId: data.projectId }, orderBy: { number: "desc" }, select: { number: true } });
       const number = (last?.number ?? 0) + 1;
       if (data.number && data.number !== number) {
