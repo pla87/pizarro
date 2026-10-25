@@ -96,10 +96,16 @@ async function purgeOrphanFiles(): Promise<number> {
   return report.deleted;
 }
 
-/** Copia de seguridad diaria cifrada (si hay BACKUP_KEY). */
+/** Copia de seguridad diaria cifrada de la base de datos y los ficheros (si hay BACKUP_KEY). */
 async function backupJob(): Promise<void> {
   const { dailyBackupJob } = await import("@/lib/backup");
   await dailyBackupJob();
+}
+
+/** Sube la última copia a los destinos externos (BACKUP_EXTERNAL_DIR / BACKUP_S3_*) si aún no la tienen. */
+async function backupExternalJob(): Promise<void> {
+  const { externalBackupJob } = await import("@/lib/backup");
+  await externalBackupJob();
 }
 
 /** Avisa por email a los administradores si la última copia correcta tiene más de 48 h (como mucho cada 24 h). */
@@ -146,6 +152,7 @@ export const MAINTENANCE_JOBS = [
   { name: "taskHistory", run: () => purgeOldTaskHistory() },
   { name: "orphanFiles", run: () => purgeOrphanFiles(), everyMs: ORPHAN_EVERY_MS },
   { name: "backup", run: () => backupJob() },
+  { name: "backupExternal", run: () => backupExternalJob() },
   { name: "backupAlert", run: () => backupAlertJob() },
   { name: "restoreTest", run: () => restoreTestJob() },
   { name: "periodicMail", run: () => sendPeriodicMail() },

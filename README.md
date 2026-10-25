@@ -123,7 +123,14 @@ steps:
 | `DATABASE_POOL_SIZE` | No | `10` | Conexiones del pool. |
 | `UPLOAD_QUOTA_MB_PER_PROJECT` | No | `2048` | Cuota de adjuntos por proyecto (MB). Pasada la cuota, la subida se rechaza mostrando el uso. |
 | `UPLOAD_QUOTA_MB_TOTAL` | No | (sin límite) | Cuota total de adjuntos de todo el servidor (MB). |
-| `BACKUP_KEY` | Para copias automáticas | `openssl rand -base64 32` | Clave AES-256 (32 bytes en base64) con la que se cifran las copias de la base de datos. Sin ella las copias están desactivadas. **Guárdala fuera de Railway: sin ella las copias no se pueden abrir.** |
+| `BACKUP_KEY` | Para copias automáticas | `openssl rand -base64 32` | Clave AES-256 (32 bytes en base64) con la que se cifran las copias (base de datos y ficheros). Sin ella las copias están desactivadas. **Guárdala fuera del servidor: sin ella las copias no se pueden abrir.** |
+| `BACKUP_LOCAL_FILES` | No | (auto) | Sin definir: la copia local (`UPLOAD_DIR/backups`) incluye los ficheros solo si no hay destino externo. `1`/`0` lo fuerzan. |
+| `BACKUP_EXTERNAL_DIR` | No | `/copias-externas` | Carpeta montada (disco USB, NAS, SFTP montado) a la que se sube cada copia. Ruta absoluta dentro del contenedor. |
+| `BACKUP_S3_ENDPOINT` | Para copias en S3 | `https://<cuenta>.r2.cloudflarestorage.com` | Almacenamiento S3 compatible (Cloudflare R2, Backblaze B2, MinIO…) al que se sube cada copia. Direcciones *path-style*. |
+| `BACKUP_S3_BUCKET` | Para copias en S3 | `pizarro-copias` | Bucket (privado). |
+| `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY` | Para copias en S3 | | Clave de API con lectura, escritura y borrado en ese bucket. Nunca se muestran ni se registran. |
+| `BACKUP_S3_REGION` | No | `auto` | Región de la firma (R2: `auto`; B2: la del endpoint, p. ej. `eu-central-003`; MinIO: `us-east-1`). |
+| `BACKUP_S3_PREFIX` | No | `pizarro` | Prefijo de las claves dentro del bucket. |
 | `COOKIE_SECURE` | No | `true` / `false` | Fuerza el atributo `Secure` de la cookie. |
 | `APP_TIMEZONE` | No | `Europe/Madrid` | Zona horaria para calcular «hoy» en plazos e informes y para las fechas del navegador. Se lee al arrancar: cambiarla solo exige reiniciar. Sin ella vale la zona elegida en el asistente `/setup` (y, si no hay, `Europe/Madrid`). |
 | `HEALTH_MIN_FREE_MB` | No | `200` | `/api/health` responde 503 (`low_disk_space`) si al disco de subidas le queda menos espacio libre. `0` desactiva la comprobación. |
@@ -220,18 +227,9 @@ Nota: `railway run` ejecuta el comando en tu máquina con las variables del serv
 
 ### 6. Copias de seguridad (recomendado)
 
-- **Base de datos (automáticas):** con `BACKUP_KEY` definida, cada día se vuelca toda la base de datos (instantánea consistente `REPEATABLE READ`, sin `pg_dump`) a `UPLOAD_DIR/backups/pizarro-backup-AAAAMMDDTHHMMSSZ.pzbak`: NDJSON → gzip → AES-256-GCM, con un manifiesto (versión, migración, filas por tabla, sha256) dentro del fichero y en un `.json` al lado. Se conservan las últimas 14 diarias y 6 mensuales. Cada mes se hace una **prueba de restauración**: se descifra la última copia y se comprueba la integridad y que las filas coinciden con el manifiesto. Ambos resultados se ven en *Administración → Copias de seguridad* (con *Crear copia ahora* y *Descargar*) y en los logs (categoría *system*).
-- **Dónde se guardan:** en el mismo volumen que los adjuntos. Un fallo del volumen se llevaría copia y adjuntos juntos: descarga de vez en cuando la última copia (botón *Descargar*) y activa también los *Backups/snapshots del volumen* desde su pestaña en Railway; eso protege los adjuntos, que son ficheros del volumen (no se empaquetan en la copia de la base de datos). Opcionalmente, activa los *Backups* del servicio Postgres de Railway.
-- **Restaurar** en una base de datos **vacía** (recién creada, sin arrancar la app):
-
-  ```bash
-  export DATABASE_URL="postgresql://…/base_vacia"
-  npx prisma migrate deploy                    # mismas migraciones que la copia
-  BACKUP_KEY="…" npm run backup:restore -- ruta/pizarro-backup-….pzbak
-  # en el contenedor compilado:  BACKUP_KEY="…" node dist/restore-backup.mjs <fichero>
-  ```
-
-  `scripts/restore-backup.ts` verifica primero toda la copia (clave, integridad, sha256 y cuentas), se niega si la base de datos ya tiene usuarios o proyectos y carga todo en una sola transacción (si falla, no queda nada a medias).
+- **Automáticas (base de datos y ficheros):** con `BACKUP_KEY` definida, cada día se vuelca toda la base de datos (instantánea consistente `REPEATABLE READ`, sin `pg_dump`) a `UPLOAD_DIR/backups/pizarro-backup-AAAAMMDDTHHMMSSZ.pzbak` (NDJSON → gzip → AES-256-GCM, con su manifiesto dentro y en un `.json` al lado) y se copian todos los ficheros de `UPLOAD_DIR` (adjuntos, miniaturas, copias de releases, documentos) a un almacén incremental `backups/files/`: cada fichero se cifra por separado y se guarda una sola vez. Un manifiesto cifrado por copia (`.pzman`) lista el volcado y los ficheros. Se conservan las últimas 14 diarias y 6 mensuales y se borran los ficheros del almacén que ya no nombra ninguna. Cada mes, una **prueba de restauración** restaura la última copia en una base temporal (si el usuario de la base puede crearla; si no, la descifra y la comprueba) y comprueba que están todos sus ficheros. Todo se ve en *Administración → Copias de seguridad* y en los logs (categoría *system*).
+- **Destino externo:** con `BACKUP_S3_*` (R2, B2, MinIO…) y/o `BACKUP_EXTERNAL_DIR`, tras cada copia se sube lo que falte (reanudable) y se aplica la misma retención; firma AWS SigV4 propia, sin SDK. Si la última subida correcta tiene más de 48 h, se avisa como con la copia local. Botón *Copiar ahora a destino externo*.
+- **Restaurar** (sin `git`): `node dist/restore.mjs <origen> [--files] [--force]` en el contenedor, o `npm run backup:restore -- <origen> …` en desarrollo. Origen: `latest`, `s3:latest`, `external:latest`, el nombre de una copia o la ruta de un `.pzman`/`.pzbak`. Sobre una base **vacía**: aplica las migraciones hasta la de la copia, carga los datos en una transacción, aplica el resto de migraciones y restaura los ficheros comprobando su sha256. Pasos en `docs/INSTALL.md` (Docker Compose) y en la sección 4.5 del manual (Railway).
 - **Limpieza de huérfanos:** cada hora se borran de `UPLOAD_DIR` los ficheros (adjuntos, miniaturas, copias de releases) que ninguna fila de la base de datos referencia y tienen más de 24 h. No toca `backups/`, enlaces simbólicos ni ficheros con nombres desconocidos, y se cancela sola si más de la mitad de los ficheros parecen huérfanos.
 
 ---

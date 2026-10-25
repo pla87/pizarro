@@ -1,16 +1,16 @@
 // Parte de las copias de seguridad que habla con PostgreSQL: volcado consistente y restauración.
-// Sin dependencias de Next (lo importan también scripts/restore-backup.ts y la tarea de arranque).
-// Funciona con cualquier cliente de Prisma (o su cliente de transacción) que ofrezca SQL en bruto.
+// Sin dependencias de Next (lo importan también scripts/restore.ts y la prueba de restauración).
+// Funciona con cualquier cliente que ofrezca SQL en bruto: el de Prisma (la app) o el de pg (backup-pg.ts, que usan
+// la herramienta de restauración y la prueba mensual, sin cargar Prisma).
 
-import { Prisma } from "@/generated/prisma/client";
 import { orderTables, readLines, splitDataLine, verifyBackupFile, writeBackupFile, type BackupManifest, type TableBatch } from "./backup-core";
 
-interface RawSql {
+export interface RawSql {
   $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
   $executeRawUnsafe(query: string, ...values: unknown[]): Promise<number>;
 }
-interface Client extends RawSql {
-  $transaction<R>(fn: (tx: RawSql) => Promise<R>, options?: { maxWait?: number; timeout?: number; isolationLevel?: Prisma.TransactionIsolationLevel }): Promise<R>;
+export interface Client extends RawSql {
+  $transaction<R>(fn: (tx: RawSql) => Promise<R>, options?: { maxWait?: number; timeout?: number; isolationLevel?: "RepeatableRead" }): Promise<R>;
 }
 
 const FETCH_ROWS = 500;
@@ -23,7 +23,7 @@ export function quoteIdent(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
 }
 
-async function listTables(sql: RawSql): Promise<string[]> {
+export async function listTables(sql: RawSql): Promise<string[]> {
   const rows = await sql.$queryRawUnsafe<{ t: string }[]>(
     "SELECT table_name AS t FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name",
   );
@@ -80,7 +80,7 @@ export async function dumpDatabase(client: Client, file: string, key: Buffer): P
       }
       return writeBackupFile({ file, key, tables: source(), migration, build: process.env.NEXT_PUBLIC_BUILD_ID ?? null });
     },
-    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, maxWait: 15_000, timeout: 30 * 60_000 },
+    { isolationLevel: "RepeatableRead", maxWait: 15_000, timeout: 30 * 60_000 },
   );
 }
 
@@ -89,17 +89,21 @@ export async function dumpDatabase(client: Client, file: string, key: Buffer): P
  * Verifica antes toda la copia (clave, integridad, sha256 y cuentas) y carga todo en una sola transacción:
  * si algo falla, la base de datos queda como estaba.
  */
-export async function restoreDatabase(client: Client, file: string, key: Buffer, log: (msg: string) => void = () => {}): Promise<BackupManifest> {
-  log("Verificando la copia (descifrado, integridad y cuentas)…");
-  const { manifest } = await verifyBackupFile(file, key);
-  log(`Copia válida: ${manifest.totalRows} filas en ${manifest.tables.length} tablas, hecha el ${manifest.createdAt}.`);
+export async function restoreDatabase(client: Client, file: string, key: Buffer, log: (msg: string) => void = () => {}, opts: { verified?: BackupManifest } = {}): Promise<BackupManifest> {
+  let manifest = opts.verified;
+  if (!manifest) {
+    log("Verificando la copia (descifrado, integridad y cuentas)…");
+    manifest = (await verifyBackupFile(file, key)).manifest;
+    log(`Copia válida: ${manifest.totalRows} filas en ${manifest.tables.length} tablas, hecha el ${manifest.createdAt}.`);
+  }
+  const m = manifest;
 
   const tables = await listTables(client);
-  const missing = manifest.tables.filter((t) => !tables.includes(t.name)).map((t) => t.name);
+  const missing = m.tables.filter((t) => !tables.includes(t.name)).map((t) => t.name);
   if (missing.length) throw new Error(`Faltan tablas en la base de datos (¿migraciones sin aplicar?): ${missing.join(", ")}`);
   const current = await lastMigration(client);
-  if (current !== manifest.migration) {
-    throw new Error(`La base de datos está en la migración «${current ?? "ninguna"}» y la copia en «${manifest.migration ?? "ninguna"}». Aplica la misma versión de la app (prisma migrate deploy) antes de restaurar.`);
+  if (current !== m.migration) {
+    throw new Error(`La base de datos está en la migración «${current ?? "ninguna"}» y la copia en «${m.migration ?? "ninguna"}». Aplica la misma versión de la app (prisma migrate deploy) antes de restaurar.`);
   }
   // «Vacía» = sin datos de usuario. Las migraciones siembran algunas filas (p. ej. los tipos de tarea):
   // esas se reemplazan por las de la copia dentro de la misma transacción.
@@ -135,11 +139,11 @@ export async function restoreDatabase(client: Client, file: string, key: Buffer,
         if (batch.length >= INSERT_ROWS) await flush();
       }
       await flush();
-      for (const t of manifest.tables) {
+      for (const t of m.tables) {
         if ((inserted.get(t.name) ?? 0) !== t.rows) throw new Error(`Tabla ${t.name}: se esperaban ${t.rows} filas y se insertaron ${inserted.get(t.name) ?? 0}.`);
       }
     },
     { maxWait: 15_000, timeout: 60 * 60_000 },
   );
-  return manifest;
+  return m;
 }

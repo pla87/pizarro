@@ -1,5 +1,5 @@
 // Núcleo de las copias de seguridad: formato, cifrado, verificación y retención.
-// Sin dependencias de Next ni de la base de datos (lo usa también scripts/restore-backup.ts y los tests).
+// Sin dependencias de Next ni de la base de datos (lo usan también scripts/restore.ts y los tests).
 //
 // Formato de un fichero .pzbak:
 //   "PZBK1\n" (6 bytes) · IV (12) · AES-256-GCM(gzip(NDJSON)) · etiqueta GCM (16)
@@ -7,7 +7,7 @@
 // dependencias, y una última línea `{"manifest":{…}}` con las cuentas y el sha256 de todas las líneas de datos.
 // Todo queda autenticado por GCM: si cambia un solo byte, o la clave no es la buena, no se descifra.
 
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, type DecipherGCM } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { open, rename, rm } from "node:fs/promises";
 import { Readable } from "node:stream";
@@ -49,10 +49,14 @@ export function parseBackupKey(raw: string | undefined | null): Buffer | null {
 
 // --- Cifrado ----------------------------------------------------------------------------
 
-async function* encryptChunks(source: AsyncIterable<Buffer>, key: Buffer): AsyncGenerator<Buffer> {
+/**
+ * Cifra un flujo con AES-256-GCM: `magic` · IV (12) · datos cifrados · etiqueta (16). La salida mide
+ * siempre `magic.length + 28` bytes más que la entrada (lo usan las subidas a S3, que necesitan el tamaño antes).
+ */
+export async function* encryptChunks(source: AsyncIterable<Buffer>, key: Buffer, magic: Buffer = MAGIC): AsyncGenerator<Buffer> {
   const iv = randomBytes(IV_LEN);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
-  yield MAGIC;
+  yield magic;
   yield iv;
   for await (const chunk of source) {
     const out = cipher.update(chunk);
@@ -61,6 +65,42 @@ async function* encryptChunks(source: AsyncIterable<Buffer>, key: Buffer): Async
   const last = cipher.final();
   if (last.length) yield last;
   yield cipher.getAuthTag();
+}
+
+/** Bytes que añade el cifrado (cabecera, IV y etiqueta) a un contenido de `magic`. */
+export function encryptionOverhead(magic: Buffer = MAGIC): number {
+  return magic.length + IV_LEN + TAG_LEN;
+}
+
+/**
+ * Descifra un flujo cifrado con `encryptChunks` sin conocer su tamaño: retiene siempre los últimos 16 bytes
+ * (la etiqueta). Lanza al final si la etiqueta no cuadra; quien consume no debe dar nada por bueno hasta entonces.
+ */
+export async function* decryptChunks(source: AsyncIterable<Buffer | Uint8Array | string>, key: Buffer, magic: Buffer = MAGIC): AsyncGenerator<Buffer> {
+  const headerLen = magic.length + IV_LEN;
+  let head: Buffer = Buffer.alloc(0);
+  let decipher: DecipherGCM | null = null;
+  let tail: Buffer = Buffer.alloc(0);
+  for await (const raw of source) {
+    let chunk: Buffer = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as Uint8Array);
+    if (!decipher) {
+      head = Buffer.concat([head, chunk]);
+      if (head.length < headerLen) continue;
+      if (!head.subarray(0, magic.length).equals(magic)) throw new Error("Cabecera desconocida (no es un fichero de copia de Pizarro).");
+      decipher = createDecipheriv("aes-256-gcm", key, head.subarray(magic.length, headerLen));
+      chunk = head.subarray(headerLen);
+    }
+    tail = tail.length ? Buffer.concat([tail, chunk]) : chunk;
+    if (tail.length > TAG_LEN) {
+      const out = decipher.update(tail.subarray(0, tail.length - TAG_LEN));
+      tail = Buffer.from(tail.subarray(tail.length - TAG_LEN));
+      if (out.length) yield out;
+    }
+  }
+  if (!decipher || tail.length < TAG_LEN) throw new Error("Fichero de copia demasiado corto.");
+  decipher.setAuthTag(tail);
+  const last = decipher.final();
+  if (last.length) yield last;
 }
 
 /** Descifra un fichero .pzbak. Lanza al terminar si la etiqueta GCM no cuadra (clave incorrecta o fichero alterado). */
@@ -274,6 +314,16 @@ export function parseBackupFileName(name: string): Date | null {
   if (!m) return null;
   const [y, mo, d, h, mi, s] = m.slice(1).map(Number) as [number, number, number, number, number, number];
   return new Date(Date.UTC(y, mo - 1, d, h, mi, s));
+}
+
+const STEM_RE = /^(pizarro-backup-\d{8}T\d{6}Z)\.(?:pzbak|pzbak\.json|pzman)$/;
+
+/**
+ * Raíz común («pizarro-backup-AAAAMMDDTHHMMSSZ») de los ficheros de una misma copia: el volcado `.pzbak`, su
+ * resumen en claro `.pzbak.json` y el manifiesto cifrado `.pzman` (lista de ficheros). null si no es de una copia.
+ */
+export function backupStem(name: string): string | null {
+  return STEM_RE.exec(name)?.[1] ?? null;
 }
 
 /**

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { runAction } from "@/lib/action";
-import { createBackup, backupKey } from "@/lib/backup";
+import { backupDestinationsInfo, backupKey, createBackup, startExternalCopy } from "@/lib/backup";
 import { issueBackupDownloadToken } from "@/lib/backup-download";
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
@@ -21,6 +21,22 @@ export async function createBackupNow() {
     if (!run.ok) throw new AppError(`No se pudo crear la copia: ${run.error ?? "error desconocido"}`);
     revalidatePath("/admin/backups");
     return { file: run.file ?? "", bytes: run.bytes ?? 0 };
+  });
+}
+
+/**
+ * Sube ya la última copia a los destinos externos (en segundo plano: con muchos ficheros puede tardar). El resultado
+ * se ve en la página al recargar y en los logs.
+ */
+export async function copyToExternalNow() {
+  return runAction({ name: "backups.copyToExternalNow" }, async () => {
+    await requireAdmin();
+    if (!backupKey()) throw new AppError("Las copias de seguridad están desactivadas: falta una BACKUP_KEY válida.");
+    const info = backupDestinationsInfo();
+    if (info.external.length === 0) throw new AppError(info.errors[0] ?? "No hay ningún destino externo configurado.");
+    if (!startExternalCopy()) throw new AppError("Ya hay una copia en curso.");
+    revalidatePath("/admin/backups");
+    return { started: true };
   });
 }
 

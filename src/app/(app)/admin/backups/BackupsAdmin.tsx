@@ -1,16 +1,17 @@
 "use client";
 
-import { Download, ShieldAlert, ShieldCheck } from "lucide-react";
+import { CloudUpload, Download, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { createBackupNow, requestBackupDownload } from "@/actions/backups";
+import { copyToExternalNow, createBackupNow, requestBackupDownload } from "@/actions/backups";
 import { Modal } from "@/components/ui/Modal";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/components/ui/Toast";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 import type { BackupAlert } from "@/lib/backup-alert-core";
-import type { BackupFileInfo, BackupRun, BackupStatus } from "@/lib/backup";
+import type { BackupFileInfo, BackupRun, BackupStatus, ExternalRun, RestoreTestRun } from "@/lib/backup";
+import type { DestinationId } from "@/lib/backup-dest";
 import type { JobRunInfo } from "@/lib/jobs";
 
 function kb(bytes: number): string {
@@ -27,6 +28,7 @@ function jobLabel(t: (s: string) => string, name: string): string {
     case "taskHistory": return t("Historial de tareas antiguo");
     case "orphanFiles": return t("Ficheros huérfanos (una vez al día)");
     case "backup": return t("Copia diaria");
+    case "backupExternal": return t("Copia a destino externo");
     case "backupAlert": return t("Aviso de copia atrasada");
     case "restoreTest": return t("Prueba de restauración mensual");
     case "periodicMail": return t("Resúmenes e informes por email");
@@ -35,8 +37,23 @@ function jobLabel(t: (s: string) => string, name: string): string {
   }
 }
 
-/** Panel «Copias de seguridad»: estado de la última copia y de la última prueba de restauración. */
-export function BackupsAdmin({ keyState, alert, status, files, canUseCode, jobs }: { keyState: "ok" | "missing" | "invalid"; status: BackupStatus; alert: BackupAlert; files: BackupFileInfo[]; canUseCode: boolean; jobs: JobRunInfo[] }) {
+export interface DestinationsInfo {
+  local: { label: string; files: boolean };
+  external: { id: DestinationId; label: string }[];
+  errors: string[];
+}
+
+/** Panel «Copias de seguridad»: estado de la última copia, de la copia externa y de la última prueba de restauración. */
+export function BackupsAdmin({ keyState, alert, status, files, canUseCode, jobs, destinations, externalRunning }: {
+  keyState: "ok" | "missing" | "invalid";
+  status: BackupStatus;
+  alert: BackupAlert;
+  files: BackupFileInfo[];
+  canUseCode: boolean;
+  jobs: JobRunInfo[];
+  destinations: DestinationsInfo;
+  externalRunning: boolean;
+}) {
   const t = useT();
   const locale = useIntlLocale();
   const router = useRouter();
@@ -62,6 +79,14 @@ export function BackupsAdmin({ keyState, alert, status, files, canUseCode, jobs 
       a.click();
     });
 
+  const copyExternal = () =>
+    start(async () => {
+      const res = await copyToExternalNow();
+      if (res.ok) toast(t("Copia a destino externo iniciada. Recarga la página en unos minutos para ver el resultado."));
+      else toast(res.error, "error");
+      router.refresh();
+    });
+
   const create = () =>
     start(async () => {
       const res = await createBackupNow();
@@ -70,7 +95,7 @@ export function BackupsAdmin({ keyState, alert, status, files, canUseCode, jobs 
       router.refresh();
     });
 
-  const run = (r: BackupRun | undefined, what: "backup" | "test") => {
+  const run = (r: (BackupRun & Partial<RestoreTestRun>) | undefined, what: "backup" | "test") => {
     if (!r) return <p className="text-sm text-slate-500">{what === "backup" ? t("Aún no se ha hecho ninguna copia.") : t("Aún no se ha hecho ninguna prueba de restauración.")}</p>;
     return (
       <div className="text-sm">
@@ -82,10 +107,34 @@ export function BackupsAdmin({ keyState, alert, status, files, canUseCode, jobs 
           <p className="mt-1 text-slate-500">
             {r.file} · {r.rows} {t("filas")} · {r.tables} {t("tablas")}
             {r.bytes ? ` · ${kb(r.bytes)}` : ""}
+            {r.files !== undefined && ` · ${t("{n} ficheros", { n: r.files })}${r.filesBytes ? ` (${kb(r.filesBytes)})` : ""}`}
+            {what === "backup" && r.filesNew ? ` · ${t("{n} nuevos", { n: r.filesNew })}` : ""}
           </p>
         ) : (
           <p className="mt-1 break-words text-red-600 dark:text-red-400">{r.error}</p>
         )}
+      </div>
+    );
+  };
+
+  const external = (r: ExternalRun | undefined, lastOkAt: string | undefined) => {
+    if (!r) return <p className="text-sm text-slate-500">{t("Aún no se ha subido ninguna copia.")}</p>;
+    return (
+      <div className="text-sm">
+        <p className="flex flex-wrap items-center gap-2">
+          <span className={r.ok ? "badge bg-emerald-50 text-emerald-700 ring-emerald-500/20" : "badge bg-red-50 text-red-700 ring-red-500/20"}>{r.ok ? t("Correcta") : t("Con error")}</span>
+          <span>{formatDate(r.at, "dateTime", locale)}</span>
+        </p>
+        {r.ok ? (
+          <p className="mt-1 text-slate-500">
+            {r.file} · {t("{n} ficheros nuevos", { n: r.uploaded ?? 0 })} · {t("{n} ya estaban", { n: r.skipped ?? 0 })}
+            {r.bytes ? ` · ${kb(r.bytes)}` : ""}
+          </p>
+        ) : (
+          <p className="mt-1 break-words text-red-600 dark:text-red-400">{r.error}</p>
+        )}
+        {r.warning && <p className="mt-1 break-words text-amber-700 dark:text-amber-300">{r.warning}</p>}
+        {!r.ok && lastOkAt && <p className="mt-1 text-slate-500">{t("Última subida correcta: {date}", { date: formatDate(lastOkAt, "dateTime", locale) })}</p>}
       </div>
     );
   };
@@ -95,7 +144,7 @@ export function BackupsAdmin({ keyState, alert, status, files, canUseCode, jobs 
       <div>
         <h2 className="text-lg font-semibold">{t("Copias de seguridad")}</h2>
         <p className="text-sm text-slate-500">
-          {t("Cada día se exporta la base de datos, comprimida y cifrada (AES-256), a la carpeta backups del volumen. Se conservan las últimas 14 diarias y 6 mensuales.")}
+          {t("Cada día se copian la base de datos y los ficheros (adjuntos, miniaturas, documentos), comprimidos y cifrados (AES-256), en la carpeta backups del volumen y, si está configurado, en un destino externo. Los ficheros se guardan una sola vez y cada copia solo añade los nuevos. Se conservan las últimas 14 diarias y 6 mensuales.")}
         </p>
       </div>
 
@@ -103,11 +152,15 @@ export function BackupsAdmin({ keyState, alert, status, files, canUseCode, jobs 
         <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
           <ShieldAlert size={18} className="mt-0.5 shrink-0" />
           <div>
-            <p className="font-semibold">{t("La copia de seguridad está atrasada")}</p>
+            <p className="font-semibold">{alert.reason === "externalNone" || alert.reason === "externalStale" ? t("La copia externa está atrasada") : t("La copia de seguridad está atrasada")}</p>
             <p>
-              {alert.lastAt
-                ? t("La última copia correcta es del {date}, hace más de 48 horas.", { date: formatDate(alert.lastAt, "dateTime", locale) })
-                : t("Todavía no hay ninguna copia correcta, aunque BACKUP_KEY está configurada.")}
+              {alert.reason === "externalNone"
+                ? t("Todavía no se ha subido ninguna copia al destino externo configurado.")
+                : alert.reason === "externalStale" && alert.lastAt
+                  ? t("La última copia subida correctamente al destino externo es del {date}, hace más de 48 horas.", { date: formatDate(alert.lastAt, "dateTime", locale) })
+                  : alert.lastAt
+                    ? t("La última copia correcta es del {date}, hace más de 48 horas.", { date: formatDate(alert.lastAt, "dateTime", locale) })
+                    : t("Todavía no hay ninguna copia correcta, aunque BACKUP_KEY está configurada.")}
             </p>
             <p className="mt-1">{t("Revisa los Logs (categoría sistema) por si hay algún error y prueba «Crear copia ahora».")}</p>
           </div>
@@ -142,13 +195,59 @@ export function BackupsAdmin({ keyState, alert, status, files, canUseCode, jobs 
             </button>
           )}
         </div>
-        <p className="text-xs text-slate-500">{t("El fichero descargado está cifrado: solo se abre con la BACKUP_KEY. Para restaurarlo, mira el README (scripts/restore-backup.ts).")}</p>
+        <p className="text-xs text-slate-500">
+          {destinations.local.files
+            ? t("Destino local: {dir}, con los ficheros.", { dir: destinations.local.label })
+            : t("Destino local: {dir}, solo la base de datos (BACKUP_LOCAL_FILES=0: los ficheros van solo al destino externo).", { dir: destinations.local.label })}
+        </p>
+        <p className="text-xs text-slate-500">{t("«Descargar» baja solo la base de datos, cifrada: se abre con la BACKUP_KEY. Para restaurar una copia completa (base de datos y ficheros) se usa node dist/restore.mjs; los pasos están en docs/INSTALL.md.")}</p>
+      </section>
+
+      <section className="card space-y-2 p-4">
+        <h3 className="text-sm font-semibold">{t("Destino externo")}</h3>
+        {destinations.errors.map((e) => (
+          <p key={e} role="alert" className="break-words text-sm text-red-600 dark:text-red-400">{e}</p>
+        ))}
+        {destinations.external.length === 0 ? (
+          destinations.errors.length === 0 && (
+            <p className="text-sm text-amber-700 dark:text-amber-300">
+              {t("Sin destino externo: las copias están en el mismo disco que protegen. Configura un almacenamiento S3 compatible (BACKUP_S3_*) o una carpeta montada (BACKUP_EXTERNAL_DIR); ver docs/INSTALL.md.")}
+            </p>
+          )
+        ) : (
+          <ul className="space-y-3">
+            {destinations.external.map((d) => (
+              <li key={d.id}>
+                <p className="text-sm font-medium break-all">{d.label}</p>
+                {external(status.external?.[d.id]?.last, status.external?.[d.id]?.lastOkAt)}
+              </li>
+            ))}
+          </ul>
+        )}
+        {destinations.external.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button type="button" className="btn-secondary" onClick={copyExternal} disabled={!enabled || pending || externalRunning}>
+              <CloudUpload size={16} /> {externalRunning ? t("Copiando…") : t("Copiar ahora a destino externo")}
+            </button>
+          </div>
+        )}
+        <p className="text-xs text-slate-500">{t("Tras cada copia diaria se sube a cada destino lo que aún no tenga (si se corta, se reanuda en la siguiente hora). Se avisa si la última subida correcta tiene más de 48 horas.")}</p>
       </section>
 
       <section className="card space-y-2 p-4">
         <h3 className="text-sm font-semibold">{t("Última prueba de restauración")}</h3>
         {run(status.lastRestoreTest, "test")}
-        <p className="text-xs text-slate-500">{t("Cada mes se descifra la última copia y se comprueba que es íntegra y que las filas coinciden con el manifiesto.")}</p>
+        {status.lastRestoreTest?.ok && (
+          <p className="text-xs text-slate-500">
+            {status.lastRestoreTest.mode === "database"
+              ? t("Restaurada de verdad en una base de datos temporal, que después se borra.")
+              : status.lastRestoreTest.limit === "createdb"
+                ? t("Solo se descifró y se comprobó la copia: el usuario de la base de datos no puede crear bases de datos para restaurarla en una temporal.")
+                : t("Solo se descifró y se comprobó la copia.")}
+            {status.lastRestoreTest.objectsChecked !== undefined && ` ${t("Ficheros comprobados en los destinos: {n} (descifrados de muestra: {m}).", { n: status.lastRestoreTest.objectsChecked, m: status.lastRestoreTest.objectsSampled ?? 0 })}`}
+          </p>
+        )}
+        <p className="text-xs text-slate-500">{t("Cada mes se restaura la última copia en una base de datos temporal (si el usuario de la base de datos no puede crearla, se descifra y se comprueba entera) y se comprueba que cada destino tiene todos sus ficheros.")}</p>
       </section>
 
       {files.length > 0 && (
@@ -222,7 +321,6 @@ export function BackupsAdmin({ keyState, alert, status, files, canUseCode, jobs 
         </form>
       </Modal>
 
-      <p className="text-xs text-slate-500">{t("Los adjuntos ya son ficheros del mismo volumen: activa también las copias (snapshots) del volumen en Railway para protegerlos.")}</p>
     </div>
   );
 }
