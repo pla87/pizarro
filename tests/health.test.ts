@@ -53,8 +53,9 @@ test("checkUploads: ruta imposible → no escribible", async () => {
   assert.equal(r.writable, false);
 });
 
-test("excepción no capturada: solo se sale en producción y salvo EXIT_ON_UNCAUGHT_EXCEPTION=0", () => {
-  assert.equal(shouldExitOnUncaught({ NODE_ENV: "production" }), true);
+test("excepción no capturada: solo se sale en producción y con EXIT_ON_UNCAUGHT_EXCEPTION=1", () => {
+  assert.equal(shouldExitOnUncaught({ NODE_ENV: "production" }), false);
+  assert.equal(shouldExitOnUncaught({ NODE_ENV: "production", EXIT_ON_UNCAUGHT_EXCEPTION: "1" }), true);
   assert.equal(shouldExitOnUncaught({ NODE_ENV: "production", EXIT_ON_UNCAUGHT_EXCEPTION: "0" }), false);
   assert.equal(shouldExitOnUncaught({ NODE_ENV: "development" }), false);
 });

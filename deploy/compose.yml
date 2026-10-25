@@ -52,6 +52,8 @@ services:
       # Techo del montón de JavaScript, por debajo del límite del contenedor: un exceso reinicia el proceso
       # en lugar de dejar sin memoria al servidor (sharp y los PDF usan memoria fuera del montón).
       NODE_OPTIONS: --max-old-space-size=${APP_HEAP_MB:-640}
+      # Docker la reinicia sin límite: ante una excepción no capturada es mejor salir y arrancar limpio.
+      EXIT_ON_UNCAUGHT_EXCEPTION: ${EXIT_ON_UNCAUGHT_EXCEPTION:-1}
     volumes:
       - uploads:/app/uploads
     expose:

@@ -174,7 +174,7 @@ docker compose up -d
 - **Salud:** `GET /api/health` responde `{"status":"ok"}` (200) si la base de datos contesta, la carpeta de subidas se puede escribir y quedan al menos `HEALTH_MIN_FREE_MB` (200 MB por defecto) libres en su disco. Si no, 503 con un motivo: `database`, `uploads_not_writable` o `low_disk_space`. Docker la usa para marcar el contenedor como *unhealthy*.
 - **Tareas de fondo:** *Administración → Copias de seguridad → Tareas de mantenimiento* muestra cuándo se ejecutó cada tarea y si falló.
 - **Logs:** *Administración → Logs* (errores de la app, incluidos los no capturados) y `docker compose logs app`.
-- **Excepciones no capturadas:** se anotan en *Logs* y la app se reinicia sola (Docker la vuelve a levantar). `EXIT_ON_UNCAUGHT_EXCEPTION=0` desactiva el reinicio.
+- **Excepciones no capturadas:** se anotan en *Logs* y la app se reinicia sola (Docker la vuelve a levantar). Lo activa `compose.yml` con `EXIT_ON_UNCAUGHT_EXCEPTION=1`; ponlo a `0` para solo registrarlas.
 
 ## 8. Resolución de problemas
 

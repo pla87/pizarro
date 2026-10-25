@@ -6,9 +6,12 @@
 const MAX_REJECTIONS_PER_HOUR = 20;
 const EXIT_GRACE_MS = 2000;
 
-/** ¿Hay que salir tras una excepción no capturada? Solo en producción y salvo EXIT_ON_UNCAUGHT_EXCEPTION=0. */
+/**
+ * ¿Hay que salir tras una excepción no capturada? Solo en producción y con EXIT_ON_UNCAUGHT_EXCEPTION=1 (lo fija el
+ * compose propio, que reinicia sin límite). En Railway los reintentos son limitados: por defecto solo se registra.
+ */
 export function shouldExitOnUncaught(env: Record<string, string | undefined> = process.env): boolean {
-  return env.NODE_ENV === "production" && env.EXIT_ON_UNCAUGHT_EXCEPTION !== "0";
+  return env.NODE_ENV === "production" && env.EXIT_ON_UNCAUGHT_EXCEPTION === "1";
 }
 
 function describe(value: unknown): { message: string; stack?: string } {

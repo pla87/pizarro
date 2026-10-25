@@ -123,7 +123,7 @@ steps:
 | `COOKIE_SECURE` | No | `true` / `false` | Fuerza el atributo `Secure` de la cookie. |
 | `APP_TIMEZONE` | No | `Europe/Madrid` | Zona horaria para calcular «hoy» en plazos e informes y para las fechas del navegador. Se lee al arrancar: cambiarla solo exige reiniciar. |
 | `HEALTH_MIN_FREE_MB` | No | `200` | `/api/health` responde 503 (`low_disk_space`) si al disco de subidas le queda menos espacio libre. `0` desactiva la comprobación. |
-| `EXIT_ON_UNCAUGHT_EXCEPTION` | No | (activado) | En producción, una excepción no capturada se anota en *Logs* y la app sale para que la plataforma la reinicie. `0`: solo anotarla. |
+| `EXIT_ON_UNCAUGHT_EXCEPTION` | No | (desactivado) | `1`: en producción, una excepción no capturada se anota en *Logs* y la app sale para que la plataforma la reinicie (lo fija `deploy/compose.yml`). Sin él, solo se anota. |
 | `GIT_SHA` | No (solo al compilar) | commit | Commit para el identificador de versión (en Railway se usa `RAILWAY_GIT_COMMIT_SHA`). Sin él, la hora de la compilación. |
 | `LOG_RETENTION_DAYS` | No | `7` | Días que se conservan los logs de *Administración → Logs* (máx. 90). |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Para Google Docs/Sheets | (de Google Cloud) | Cliente OAuth «Aplicación web». Ver [Google Docs y Sheets](#71-google-docs-y-sheets). |
