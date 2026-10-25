@@ -190,7 +190,8 @@ export async function resetUserTwoFactor(userId: string) {
  */
 export async function unlinkGoogle(userId: string) {
   return runAction({ name: "users.unlinkGoogle", args: [userId] }, async () => {
-    await requireAdmin();
+    const admin = await requireAdmin();
+    if (admin.id === userId) throw new AppError("No puedes desvincular tu propia cuenta de Google desde aquí.");
     const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, name: true, email: true, locale: true, googleSub: true } });
     if (!user) throw notFound();
     if (!user.googleSub) throw new AppError("Esa persona no tiene una cuenta de Google vinculada.");

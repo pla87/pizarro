@@ -128,6 +128,13 @@ export async function undoEntry(entryId: string) {
     const entry = await db.undoEntry.findFirst({ where: { id: v.id.parse(entryId), userId: user.id, kind: "UNDO" } });
     if (!entry) throw new AppError("Esa acción ya se ha deshecho.");
     await assertProjectAccess(user, entry.projectId);
+    // Fuera de orden solo se deshace un borrado de adjuntos (lo que ofrece el aviso): otras entradas antiguas podrían
+    // pisar cambios posteriores del mismo usuario. Si es la última, vale cualquiera (igual que undoLast).
+    const onlyAttachments = (entry.ops as unknown as UndoOp[]).every((op) => op.t === "attachment.restore");
+    if (!onlyAttachments) {
+      const latest = await db.undoEntry.findFirst({ where: { userId: user.id, projectId: entry.projectId, kind: "UNDO" }, orderBy: { createdAt: "desc" }, select: { id: true } });
+      if (latest?.id !== entry.id) throw new AppError("Esa acción ya no se puede deshacer desde aquí: usa Deshacer.");
+    }
     return applyEntry("UNDO", user, entry.projectId, entry);
   });
 }

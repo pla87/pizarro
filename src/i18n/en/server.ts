@@ -116,6 +116,8 @@ export const server: Record<string, string> = {
   "Origen no permitido": "Origin not allowed",
   "Origen no permitido.": "Origin not allowed.",
   "Demasiadas peticiones": "Too many requests",
+  "No puedes desvincular tu propia cuenta de Google desde aquí.": "You can't unlink your own Google account from here.",
+  "Esa acción ya no se puede deshacer desde aquí: usa Deshacer.": "That action can no longer be undone from here: use Undo.",
   "Ya se está preparando otro ZIP. Inténtalo de nuevo en unos segundos.": "Another ZIP is already being prepared. Try again in a few seconds.",
   "Datos no válidos": "Invalid data",
   "Los adjuntos de la tarea superarían el máximo del proyecto ({limit} MB por tarea; ya tiene {used} MB). Puedes cambiarlo en los ajustes del proyecto.": "The task's attachments would exceed the project maximum ({limit} MB per task; it already has {used} MB). You can change it in the project settings.",

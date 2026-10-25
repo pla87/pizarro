@@ -424,6 +424,7 @@ model ReleaseAttachment {
   createdAt DateTime @default(now())
   release   Release  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
 
+  @@unique([releaseId, fileName])
   @@index([releaseId])
 }
 

@@ -5,7 +5,7 @@ import { Prisma } from "../generated/prisma/client";
 import { db } from "./db";
 import { logEvent } from "./log";
 import { attachmentFileNames } from "./release";
-import { attachmentPath, compactImage, removeReleaseAttachmentFiles, saveReleaseAttachmentFile } from "./uploads";
+import { attachmentPath, compactImage, releaseAttachmentFileSize, removeReleaseAttachmentFiles, saveReleaseAttachmentFile } from "./uploads";
 
 /** Trabajo de copiar los adjuntos de las tareas de una release al histórico; se guarda en `Release.attachmentsPending`. */
 export const pendingJobSchema = z.object({
@@ -52,7 +52,11 @@ async function copyAttachments(releaseId: string, { items, allowed, projectId, u
   const releaseGone = async () => !(await db.release.count({ where: { id: releaseId } }));
   if (await releaseGone()) return;
   // Reanudación: lo ya copiado (por nombre) se omite y las posiciones siguen a las existentes.
-  const existing = await db.releaseAttachment.findMany({ where: { releaseId }, select: { fileName: true, position: true } });
+  // Una fila sin fichero (el proceso murió entre crearla y escribirlo) se retira para volver a copiarla.
+  const rows = await db.releaseAttachment.findMany({ where: { releaseId }, select: { id: true, fileName: true, position: true } });
+  const orphan = (await Promise.all(rows.map(async (r) => ((await releaseAttachmentFileSize(r.id)) === null ? r.id : null)))).filter((x): x is string => !!x);
+  if (orphan.length) await db.releaseAttachment.deleteMany({ where: { id: { in: orphan } } });
+  const existing = rows.filter((r) => !orphan.includes(r.id));
   const done = new Set(existing.map((a) => a.fileName));
   let position = existing.reduce((max, a) => Math.max(max, a.position + 1), 0);
   outer: for (const item of valid) {
@@ -73,6 +77,8 @@ async function copyAttachments(releaseId: string, { items, allowed, projectId, u
         await saveReleaseAttachmentFile(row.id, data, att.isImage ? "webp" : "bin");
         saved.push(row.id);
       } catch (err) {
+        // Otro proceso (el contenedor anterior durante un despliegue) ya la copió: misma release y nombre.
+        if (!rowId && err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") continue;
         if (rowId) await db.releaseAttachment.delete({ where: { id: rowId } }).catch(() => {});
         // La release se ha borrado o deshecho a mitad: se para aquí, sin un error por cada adjunto restante.
         if (await releaseGone()) break outer;
