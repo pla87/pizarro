@@ -1,5 +1,12 @@
 // Traducciones al inglés (task). Clave: texto exacto en español.
 export const task: Record<string, string> = {
+  "Copiado": "Copied",
+  "Copiar descripción": "Copy description",
+  "Borrar descripción": "Clear description",
+  "Descripción borrada": "Description cleared",
+  "Proyecto en el que se crea la tarea": "Project to create the task in",
+  "Tarea creada en «{project}»": "Task created in “{project}”",
+  "Ir al proyecto": "Go to project",
   "Añadir": "Add",
   "Tarea borrada": "Task deleted",
   "Tarea archivada": "Task archived",

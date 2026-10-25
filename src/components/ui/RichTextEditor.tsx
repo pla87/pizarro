@@ -11,6 +11,7 @@ import { useT } from "@/i18n/client";
 import { ListDeleteFix } from "@/lib/editor-keys";
 import { MentionChip } from "@/lib/editor-mention";
 import { normalizeEditorMarkdown } from "@/lib/markdown-entities";
+import { COPY_MARKER } from "@/lib/markdown-copy";
 import { markdownFromPaste } from "@/lib/markdown-paste";
 import type { UserOption } from "@/lib/types";
 import { Avatar } from "./Avatar";
@@ -167,6 +168,18 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
       handlePaste: (_view, event) => {
         const data = event.clipboardData;
         if (!data) return false;
+        // Copiado con «Copiar descripción» de Pizarro: se pega el Markdown original (conserva menciones y subrayado).
+        const own = data.getData("text/html").includes(COPY_MARKER) ? data.getData("text/plain") : "";
+        if (own) {
+          try {
+            if (editorRef.current?.chain().focus().insertContent(own, { contentType: "markdown" }).run()) {
+              event.preventDefault();
+              return true;
+            }
+          } catch {
+            // Markdown que el editor no admite: se pega el HTML con el comportamiento normal.
+          }
+        }
         const text = markdownFromPaste(data.getData("text/plain"), data.getData("text/html"));
         if (!text) return false;
         event.preventDefault();

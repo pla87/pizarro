@@ -19,6 +19,7 @@ import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, User
 import { ColorPicker } from "../ui/ColorPicker";
 import { cn } from "../ui/cn";
 import { DescriptionField } from "../ui/DescriptionField";
+import { DescriptionTools } from "../ui/DescriptionTools";
 import { Markdown } from "../ui/Markdown";
 import type { MentionCommand } from "../ui/MentionTextarea";
 import { Lightbox } from "../ui/Lightbox";
@@ -486,6 +487,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
               setDetail((d) => (d ? { ...d, description } : d));
               save({ description }, { hasDescription: description.trim().length > 0 });
             }}
+            onClear={async () => {
+              setDetail((d) => (d ? { ...d, description: "" } : d));
+              // Pasa por el guardado normal: queda en el historial y se deshace como cualquier cambio.
+              if (await save({ description: "" }, { hasDescription: false })) toast(t("Descripción borrada"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange() });
+            }}
           />
           <Subtasks taskId={task.id} detail={detail} setDetail={setDetail} flushRef={flushSubtasks} />
           <section>
@@ -793,11 +799,13 @@ export function TypeSelector({ kinds, value, onChange }: { kinds: KindOption[]; 
   );
 }
 
-function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftChange, liveRef }: {
+function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, onDraftChange, liveRef }: {
   initial: string | null;
   /** Texto recuperado de un borrador: el editor empieza editándolo. */
   draft?: string;
   onSave: (v: string) => void;
+  /** Borra la descripción guardada (se guarda como cualquier cambio, así que se puede deshacer). */
+  onClear: () => void;
   users: UserOption[];
   onGoogle: (kind: MentionCommand) => Promise<TaskLinkInfo | null>;
   /** Borrador actual en Markdown mientras se edita (con retardo); null al no estar editando. */
@@ -843,10 +851,17 @@ function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftCha
     setEditing(false);
   };
 
+  const clear = () => {
+    setEditing(false);
+    setValue("");
+    if (initial.trim()) onClear();
+  };
+
   return (
     <section>
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">{t("Descripción")}</h3>
+        <DescriptionTools value={value} onClear={clear} className="ml-auto" />
         {!editing && (
           // Fuera del orden de Tab (Título → descripción directo): al tabular, la propia zona de la descripción entra en edición.
           <button className="btn-ghost py-1 text-xs" tabIndex={-1} onClick={() => { setEditing(true); requestAnimationFrame(() => ref.current?.focus()); }}>
