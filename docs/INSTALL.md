@@ -100,8 +100,46 @@ La imagen se construye para la arquitectura del propio servidor (amd64 o arm64, 
 
 ## 4. Copias de seguridad
 
-- **Automáticas:** con `BACKUP_KEY`, cada día se guarda una copia cifrada de la base de datos en el volumen de subidas (`backups/`), se conservan 14 diarias y 6 mensuales y cada mes se prueba la última. Estado en *Administración → Copias de seguridad*.
-- **Los adjuntos no van en esa copia** y la copia vive en el mismo disco. Copia de vez en cuando las dos cosas **fuera del servidor**:
+- **Automáticas:** con `BACKUP_KEY`, cada día se copian, cifrados, la base de datos y **todos los ficheros del volumen de subidas** (adjuntos, miniaturas, copias de releases, documentos) en su carpeta `backups/`. Los ficheros se guardan una sola vez y cada copia solo añade los nuevos. Se conservan 14 diarias y 6 mensuales, y cada mes se restaura la última en una base de datos temporal para comprobar que sirve. Estado en *Administración → Copias de seguridad*.
+- **Fuera del servidor:** esas copias viven en el mismo disco que protegen. Configura además **un destino externo** (sección 4.1 o 4.2): tras cada copia diaria se sube allí lo que falte, con la misma retención, y la app avisa si la última subida correcta tiene más de 48 h.
+- Guarda `.env` (sobre todo `BACKUP_KEY`) **fuera del servidor**: sin la clave, ninguna copia se puede abrir.
+- Con destino externo puedes poner `BACKUP_LOCAL_FILES=0` para que el volumen guarde solo la base de datos y no ocupe el doble con la copia de los ficheros.
+
+### 4.1 Almacenamiento S3 compatible (Cloudflare R2, Backblaze B2, MinIO…)
+
+1. Crea un bucket **privado** y una clave de API con permiso de lectura, escritura y borrado solo en ese bucket (Pizarro borra las copias que ya no toca conservar).
+2. Añade a `.env`:
+
+   ```bash
+   BACKUP_S3_ENDPOINT="https://<id-de-cuenta>.r2.cloudflarestorage.com"   # B2: https://s3.<región>.backblazeb2.com
+   BACKUP_S3_BUCKET="pizarro-copias"
+   BACKUP_S3_ACCESS_KEY_ID="…"
+   BACKUP_S3_SECRET_ACCESS_KEY="…"
+   # Opcionales: región (por defecto «auto»; en B2, la del endpoint, p. ej. eu-central-003) y prefijo dentro del bucket.
+   BACKUP_S3_REGION=""
+   BACKUP_S3_PREFIX="pizarro"
+   ```
+
+3. `docker compose up -d` y, en *Administración → Copias de seguridad*, pulsa **Copiar ahora a destino externo**. Recarga al cabo de unos minutos: debe salir *Correcta*.
+
+Las claves de acceso nunca aparecen en la página ni en los logs. Todo lo que se sube va cifrado con `BACKUP_KEY`: el proveedor no puede leerlo.
+
+### 4.2 Carpeta montada (disco USB, NAS, SFTP montado)
+
+Monta la carpeta en el servidor (p. ej. `/mnt/copias`), dale permiso de escritura al usuario 1000 (`sudo chown 1000:1000 /mnt/copias`) y crea `deploy/compose.override.yml` (Docker Compose lo carga solo):
+
+```yaml
+services:
+  app:
+    volumes:
+      - /mnt/copias:/copias-externas
+```
+
+Añade `BACKUP_EXTERNAL_DIR="/copias-externas"` a `.env` y `docker compose up -d`. Puedes usar a la vez S3 y una carpeta.
+
+### 4.3 Copia manual (opcional)
+
+También puedes sacar a mano un volcado de PostgreSQL y un archivo del volumen:
 
 ```bash
 cd /opt/pizarro/deploy
@@ -111,7 +149,7 @@ docker compose exec -T postgres pg_dump -U pizarro -Fc pizarro > pizarro-$(date 
 docker run --rm -v pizarro_uploads:/data:ro -v "$PWD":/backup alpine tar czf /backup/uploads-$(date +%F).tgz -C /data .
 ```
 
-Guarda los dos ficheros (y `.env`) en otro sitio: otro servidor, un disco externo o un almacenamiento en la nube.
+Guarda los dos ficheros (y `.env`) en otro sitio.
 
 ## 5. Actualizar
 
@@ -153,21 +191,53 @@ docker compose up -d
 
 Restaura la base de datos y los adjuntos **de la misma fecha**.
 
-### 6.3 Desde una copia automática cifrada (`.pzbak`)
+### 6.3 Desde una copia automática (recomendado; sin `git`)
 
-La base de datos tiene que estar **vacía y en la misma migración** que la copia (el `.json` que la acompaña indica `migration` y `build`; `build` empieza por la versión de Pizarro). Con la misma versión de Pizarro que hizo la copia:
+La imagen trae la herramienta `node dist/restore.mjs` y todas las migraciones. Sobre una base de datos **vacía**, verifica la copia, aplica las migraciones hasta la de la copia, carga los datos, aplica las migraciones posteriores y, con `--files`, restaura los ficheros en el volumen de subidas (comprobando cada uno). Vale para copias de esta versión o de cualquier versión anterior; una copia de una versión **más nueva** que la imagen se rechaza (actualiza primero, sección 5).
+
+Origen de la copia (primer argumento):
+
+| Origen | Copia |
+|---|---|
+| `latest` | La más reciente del volumen (`/app/uploads/backups`). |
+| `s3:latest` | La más reciente del almacenamiento S3 (`BACKUP_S3_*` de `.env`). |
+| `external:latest` | La más reciente de la carpeta externa (`BACKUP_EXTERNAL_DIR`). |
+| `s3:pizarro-backup-AAAAMMDDTHHMMSSZ` | Una copia concreta (con `local:`, `s3:` o `external:` delante). |
+| `/ruta/pizarro-backup-….pzman` | Una copia en una carpeta montada en el contenedor (con su `files/` al lado). Un `.pzbak` suelto (p. ej. el de *Descargar*) restaura solo la base de datos. |
+
+Opciones: `--files` (también los ficheros), `--files-only` (solo los ficheros; para reanudar si se cortó), `--list` (ver las copias del origen), `--force` (**borra** la base de destino aunque tenga datos).
+
+**Servidor nuevo o disco perdido.** Instala como en las secciones 2 y 3 con el **mismo `.env`** (la misma `BACKUP_KEY` y el mismo destino externo), pero **no arranques todavía la app**:
+
+```bash
+cd /opt/pizarro/deploy
+docker compose build app
+docker compose up -d postgres
+# Ver las copias disponibles
+docker compose run --rm --no-deps app node dist/restore.mjs s3:latest --list
+# Restaurar la base de datos y los ficheros
+docker compose run --rm --no-deps app node dist/restore.mjs s3:latest --files
+# Arrancar todo
+docker compose up -d
+```
+
+**Volver a una copia anterior en el mismo servidor** (p. ej. tras un borrado por error):
 
 ```bash
 cd /opt/pizarro/deploy
 docker compose stop app
 docker compose exec -T postgres dropdb -U pizarro pizarro
 docker compose exec -T postgres createdb -U pizarro pizarro
-# Solo migraciones (sin arrancar la app, que crearía el administrador inicial):
-docker compose run --rm --no-deps app sh -c "cd migrator && ./node_modules/.bin/prisma migrate deploy"
-# Restaurar (BACKUP_KEY se toma de .env):
-docker compose run --rm --no-deps app node dist/restore-backup.mjs /app/uploads/backups/pizarro-backup-AAAAMMDDTHHMMSSZ.pzbak
+docker compose run --rm --no-deps app node dist/restore.mjs latest --list
+docker compose run --rm --no-deps app node dist/restore.mjs local:pizarro-backup-AAAAMMDDTHHMMSSZ --files
 docker compose up -d
 ```
+
+Notas:
+
+- Si la app llegó a arrancar contra la base nueva, ya tiene el administrador inicial y la restauración se niega: añade `--force` (borra todo lo que tenga esa base).
+- `--files` no borra ficheros que no estén en la copia; los sobrantes los quita la limpieza de huérfanos al día siguiente.
+- Para restaurar un `.pzbak` descargado: `docker compose run --rm --no-deps -v "$PWD":/restaurar app node dist/restore.mjs /restaurar/pizarro-backup-AAAAMMDDTHHMMSSZ.pzbak`.
 
 ## 7. Estado y diagnóstico
 

@@ -189,14 +189,18 @@ export function sendGoogleUnlinkedMail(user: Recipient): Promise<void> {
 }
 
 /** Aviso a los administradores: la última copia de seguridad correcta tiene más de 48 h (o no existe). */
-export function sendBackupAlertMail(admin: Recipient, info: { lastAt: string | null }): Promise<void> {
+export function sendBackupAlertMail(admin: Recipient, info: { lastAt: string | null; external?: boolean }): Promise<void> {
   return send(admin, admin.locale, (t) => ({
-    subject: t("Pizarro: la copia de seguridad está atrasada"),
+    subject: info.external ? t("Pizarro: la copia de seguridad externa está atrasada") : t("Pizarro: la copia de seguridad está atrasada"),
     paragraphs: [
       t("Hola, {name}:", { name: admin.name }),
-      info.lastAt
-        ? t("La última copia de seguridad correcta es del {date}, hace más de 48 horas.", { date: formatDate(info.lastAt, "dateTime", intlLocale(toLocale(admin.locale))) })
-        : t("Todavía no hay ninguna copia de seguridad correcta y la clave BACKUP_KEY está configurada."),
+      info.external
+        ? info.lastAt
+          ? t("La última copia subida correctamente al destino externo es del {date}, hace más de 48 horas.", { date: formatDate(info.lastAt, "dateTime", intlLocale(toLocale(admin.locale))) })
+          : t("Todavía no se ha subido ninguna copia al destino externo configurado.")
+        : info.lastAt
+          ? t("La última copia de seguridad correcta es del {date}, hace más de 48 horas.", { date: formatDate(info.lastAt, "dateTime", intlLocale(toLocale(admin.locale))) })
+          : t("Todavía no hay ninguna copia de seguridad correcta y la clave BACKUP_KEY está configurada."),
       t("Revisa los Logs de Administración y prueba «Crear copia ahora» en Administración → Copias de seguridad."),
     ],
     button: { label: t("Abrir Copias de seguridad"), url: `${appUrl()}/admin/backups` },

@@ -19,6 +19,18 @@ test("aviso de copia: con clave y ninguna copia avisa; sin clave nunca", () => {
   assert.equal(backupAlertFor({ keyOk: false, lastOkAt: now - h(500), now }).active, false);
 });
 
+test("aviso de copia externa: solo si hay destino configurado y tras 48 h sin subida correcta", () => {
+  const local = now - h(2);
+  assert.equal(backupAlertFor({ keyOk: true, lastOkAt: local, now, external: { configured: false, lastOkAt: null } }).active, false);
+  assert.deepEqual(backupAlertFor({ keyOk: true, lastOkAt: local, now, external: { configured: true, lastOkAt: null } }), { active: true, reason: "externalNone", lastAt: null });
+  assert.equal(backupAlertFor({ keyOk: true, lastOkAt: local, now, external: { configured: true, lastOkAt: now - h(30) } }).active, false);
+  const stale = backupAlertFor({ keyOk: true, lastOkAt: local, now, external: { configured: true, lastOkAt: now - h(50) } });
+  assert.deepEqual([stale.reason, stale.lastAt], ["externalStale", new Date(now - h(50)).toISOString()]);
+  // La copia local atrasada tiene prioridad.
+  assert.equal(backupAlertFor({ keyOk: true, lastOkAt: now - h(60), now, external: { configured: true, lastOkAt: null } }).reason, "stale");
+  assert.equal(backupAlertFor({ keyOk: false, lastOkAt: null, now, external: { configured: true, lastOkAt: null } }).active, false);
+});
+
 test("email de aviso: como mucho cada 24 h", () => {
   assert.equal(backupAlertMailDue(null, now), true);
   assert.equal(backupAlertMailDue(now - h(23), now), false);
