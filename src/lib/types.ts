@@ -128,6 +128,8 @@ export interface CommentInfo {
   authorName: string | null;
   /** Comentario raíz al que responde (null = comentario de primer nivel). */
   parentId: string | null;
+  /** Borrado pero conservado (tenía respuestas): sin texto, se muestra como «Comentario borrado». */
+  deleted?: boolean;
 }
 
 /** Contadores de adjuntos de una tarea (los de la tarjeta): se calculan siempre sobre las filas que existen. */
@@ -166,7 +168,12 @@ export interface TaskDetail {
   subtasks: SubtaskInfo[];
   attachments: AttachmentInfo[];
   links: TaskLinkInfo[];
+  /** Los más recientes (ver COMMENTS_PAGE); los anteriores se piden con getOlderComments. */
   comments: CommentInfo[];
+  /** Comentarios (filas) más antiguos que los cargados. */
+  olderComments: number;
+  /** Comentarios vivos de la tarea (sin los borrados que conservan respuestas). */
+  commentCount: number;
   /** Versión del título/descripción cargados (ver BoardTask.textVersion). */
   textVersion: string | null;
   /** El usuario actual sigue la tarea (recibe avisos de comentarios y cambios). */

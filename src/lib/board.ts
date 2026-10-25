@@ -27,7 +27,7 @@ export const boardTaskSelect = {
   subtasks: { select: { done: true } },
   // Solo el flag de cada adjunto: la tarjeta distingue imágenes de otros ficheros.
   attachments: { select: { isImage: true, size: true } },
-  _count: { select: { comments: true, links: true } },
+  _count: { select: { comments: { where: { deletedAt: null } }, links: true } },
 } satisfies Prisma.TaskSelect;
 
 /** Igual que boardTaskSelect pero sin la descripción: en el tablero completo solo hace falta saber si la hay. */

@@ -1,5 +1,8 @@
 // Traducciones al inglés (task). Clave: texto exacto en español.
 export const task: Record<string, string> = {
+  "Comentario borrado": "Deleted comment",
+  "En respuesta a un comentario anterior": "In reply to an earlier comment",
+  "Ver anteriores": "Show earlier",
   "Copiado": "Copied",
   "Copiar descripción": "Copy description",
   "Borrar descripción": "Clear description",

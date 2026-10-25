@@ -15,6 +15,7 @@ import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions"
 import { lastPositionIn, lockColumns, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertTaskCapacity, assertTaskCreateRate } from "@/lib/caps";
+import { getMaxCommentsPerTask } from "@/lib/app-settings";
 import { requireUser } from "@/lib/session";
 import * as v from "@/lib/validation";
 import { dateToIso, isoToDate, todayIso } from "@/lib/dates";
@@ -89,7 +90,9 @@ function describeChanges(data: Record<string, unknown>): Label {
 
 /** Límites por tarea / usuario, para que nadie sature la base de datos ni la API de Google. */
 const MAX_SUBTASKS = 100;
-const MAX_COMMENTS = 1000;
+/** Comentarios que trae la tarea al abrirla, y los que añade cada «Ver anteriores». */
+const COMMENTS_FIRST_PAGE = 20;
+const COMMENTS_MORE_PAGE = 100;
 
 /** Campos que cambian al archivar o recuperar una tarea. */
 const ARCHIVE_FIELDS: TaskField[] = ["archivedAt", "archivedFromColumnId", "columnId", "position", "evergreen", "evergreenEvery"];
@@ -710,10 +713,15 @@ export async function getTaskDetail(taskId: string) {
         subtasks: { orderBy: { position: "asc" }, select: { id: true, title: true, done: true, position: true } },
         attachments: { orderBy: { createdAt: "asc" }, select: { id: true, originalName: true, mimeType: true, isImage: true, size: true, width: true, height: true } },
         links: { orderBy: { createdAt: "asc" }, select: linkSelect },
-        // Los 300 más recientes (si hubiera más, se pierden los antiguos, no los nuevos).
-        comments: { orderBy: { createdAt: "desc" }, take: 300, select: commentSelect },
+        // Solo los más recientes; los anteriores se piden con getOlderComments.
+        comments: { orderBy: COMMENT_ORDER, take: COMMENTS_FIRST_PAGE, select: commentSelect },
       },
     });
+    const oldest = task.comments.at(-1);
+    const [olderComments, commentCount] = await Promise.all([
+      oldest && task.comments.length === COMMENTS_FIRST_PAGE ? db.taskComment.count({ where: olderThan(task.id, oldest) }) : 0,
+      db.taskComment.count({ where: { taskId: task.id, deletedAt: null } }),
+    ]);
     describeAction(`Abrió la tarea «${task.title}»`, { taskId });
     return {
       id: task.id,
@@ -725,6 +733,8 @@ export async function getTaskDetail(taskId: string) {
       attachments: task.attachments,
       links: task.links,
       comments: task.comments.reverse().map(toCommentInfo),
+      olderComments,
+      commentCount,
       following: isFollowing(user.id, { createdById: task.createdById, assigneeId: task.assigneeId, rows: task.followers }),
     };
   });
@@ -1091,10 +1101,36 @@ export async function restoreTask(taskId: string) {
 
 // --- Comentarios y menciones ---------------------------------------------------
 
-const commentSelect = { id: true, body: true, createdAt: true, authorId: true, parentId: true, author: { select: { name: true } } } as const;
+const commentSelect = { id: true, body: true, createdAt: true, authorId: true, parentId: true, deletedAt: true, author: { select: { name: true } } } as const;
+/** Orden estable para paginar con cursor (createdAt puede repetirse: el id desempata). */
+const COMMENT_ORDER: Prisma.TaskCommentOrderByWithRelationInput[] = [{ createdAt: "desc" }, { id: "desc" }];
 
-function toCommentInfo(c: { id: string; body: string; createdAt: Date; authorId: string | null; parentId: string | null; author: { name: string } | null }): CommentInfo {
+function toCommentInfo(c: { id: string; body: string; createdAt: Date; authorId: string | null; parentId: string | null; deletedAt: Date | null; author: { name: string } | null }): CommentInfo {
+  // Un comentario borrado que conserva respuestas no enseña ni texto ni autor.
+  if (c.deletedAt) return { id: c.id, body: "", createdAt: c.createdAt.toISOString(), authorId: null, authorName: null, parentId: c.parentId, deleted: true };
   return { id: c.id, body: c.body, createdAt: c.createdAt.toISOString(), authorId: c.authorId, authorName: c.author?.name ?? null, parentId: c.parentId };
+}
+
+/** Comentarios de la tarea anteriores al cursor, en el orden de COMMENT_ORDER. */
+const olderThan = (taskId: string, c: { createdAt: Date; id: string }): Prisma.TaskCommentWhereInput => ({
+  taskId,
+  OR: [{ createdAt: { lt: c.createdAt } }, { createdAt: c.createdAt, id: { lt: c.id } }],
+});
+
+const commentCursor = z.object({ createdAt: z.iso.datetime(), id: v.id });
+
+/** «Ver anteriores»: los 100 comentarios previos al cursor (el más antiguo que ya se tiene). Solo lectura. */
+export async function getOlderComments(taskId: string, cursor: { createdAt: string; id: string }) {
+  return runAction({ name: "tasks.getOlderComments", args: [taskId, cursor] }, async (): Promise<{ comments: CommentInfo[]; olderComments: number }> => {
+    const user = await requireUser();
+    await assertTaskAccess(user, v.id.parse(taskId));
+    const c = commentCursor.parse(cursor);
+    const from = { createdAt: new Date(c.createdAt), id: c.id };
+    const rows = await db.taskComment.findMany({ where: olderThan(taskId, from), orderBy: COMMENT_ORDER, take: COMMENTS_MORE_PAGE, select: commentSelect });
+    const oldest = rows.at(-1);
+    const olderComments = oldest && rows.length === COMMENTS_MORE_PAGE ? await db.taskComment.count({ where: olderThan(taskId, oldest) }) : 0;
+    return { comments: rows.reverse().map(toCommentInfo), olderComments };
+  });
 }
 
 const commentBody = z.string().trim().min(1, "El comentario está vacío.").max(10_000, "El comentario es demasiado largo.");
@@ -1106,9 +1142,14 @@ export async function addComment(taskId: string, body: string, parentId?: string
     const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
     await assertNotArchived(taskId);
     const text = commentBody.parse(body);
-    if ((await db.taskComment.count({ where: { taskId } })) >= MAX_COMMENTS) throw new AppError("Esta tarea ya tiene el máximo de 1000 comentarios.");
+    // Los comentarios borrados que conservan respuestas no cuentan para el máximo (ajuste de administración).
+    const maxComments = await getMaxCommentsPerTask();
+    if ((await db.taskComment.count({ where: { taskId, deletedAt: null } })) >= maxComments) {
+      const t = await getT();
+      throw new AppError(t("Esta tarea ya tiene el máximo de {n} comentarios.", { n: maxComments }));
+    }
     if (!rateLimit(`comment:${user.id}`, 30, 60_000)) throw new AppError("Demasiados comentarios seguidos. Espera un momento.");
-    const parent = parentId ? await db.taskComment.findFirst({ where: { id: v.id.parse(parentId), taskId }, select: { id: true, parentId: true, authorId: true } }) : null;
+    const parent = parentId ? await db.taskComment.findFirst({ where: { id: v.id.parse(parentId), taskId, deletedAt: null }, select: { id: true, parentId: true, authorId: true } }) : null;
     if (parentId && !parent) throw new AppError("El comentario al que respondes ya no existe.");
     const comment = await db.taskComment.create({ data: { taskId, authorId: user.id, body: text, parentId: parent ? (parent.parentId ?? parent.id) : null }, select: commentSelect });
     addUndo({ t: "comment.remove", id: comment.id });
@@ -1127,23 +1168,57 @@ export async function addComment(taskId: string, body: string, parentId?: string
   });
 }
 
-/** Solo el autor (o un admin) puede borrar un comentario. */
+type CommentRowSource = { id: string; taskId: string; authorId: string | null; body: string; createdAt: Date; editedAt: Date | null; parentId: string | null; deletedAt: Date | null };
+const commentRow = (c: CommentRowSource) => ({
+  id: c.id, taskId: c.taskId, authorId: c.authorId, body: c.body, parentId: c.parentId,
+  createdAt: c.createdAt.toISOString(), editedAt: c.editedAt?.toISOString() ?? null, deletedAt: c.deletedAt?.toISOString() ?? null,
+});
+
+/**
+ * Solo el autor (o un admin) puede borrar un comentario. Si tiene respuestas no se borra la fila (las respuestas
+ * quedarían sueltas): se vacía y se marca como borrado, y el hilo sigue entero. Sin respuestas se borra de verdad;
+ * si era la última respuesta de un comentario ya borrado, ese marcador también se retira.
+ */
 export async function deleteComment(commentId: string) {
-  return runAction({ name: "tasks.deleteComment", args: [commentId] }, async () => {
+  return runAction({ name: "tasks.deleteComment", args: [commentId] }, async (): Promise<{ soft: boolean; removed: string[] }> => {
     const user = await requireUser();
     const comment = await db.taskComment.findFirst({
-      where: { id: v.id.parse(commentId), task: { project: visibleProjectsWhere(user) } },
-      include: { task: { select: { projectId: true, title: true } } },
+      where: { id: v.id.parse(commentId), deletedAt: null, task: { project: visibleProjectsWhere(user) } },
+      include: { task: { select: { projectId: true, title: true } }, parent: true, _count: { select: { replies: true } } },
     });
     if (!comment) throw notFound();
     if (comment.authorId !== user.id && user.role !== "ADMIN") throw new AppError("Solo puedes borrar tus comentarios.", 403);
     noteProject(comment.task.projectId);
     noteTask(comment.taskId);
     await assertNotArchived(comment.taskId);
-    const { task, ...row } = comment;
-    addUndo({ t: "comment.restore", row: { ...row, createdAt: row.createdAt.toISOString(), editedAt: row.editedAt?.toISOString() ?? null } });
-    describeAction("Borró un comentario de «{title}»", { title: task.title }, { taskId: row.taskId });
-    await db.taskComment.delete({ where: { id: comment.id } });
+    describeAction("Borró un comentario de «{title}»", { title: comment.task.title }, { taskId: comment.taskId });
+    // Los avisos ya creados llevan un extracto del texto: se vacía para que no sobreviva al borrado.
+    const scrub = (): Prisma.PrismaPromise<unknown>[] =>
+      comment.authorId
+        ? [db.notification.updateMany({
+            where: {
+              taskId: comment.taskId, actorId: comment.authorId, type: { in: ["COMMENT", "REPLY", "MENTION"] }, excerpt: makeExcerpt(comment.body),
+              createdAt: { gte: comment.createdAt, lte: new Date(comment.createdAt.getTime() + 60_000) },
+            },
+            data: { excerpt: "" },
+          })]
+        : [];
+    if (comment._count.replies > 0) {
+      addUndo({ t: "comment.undelete", id: comment.id, body: comment.body });
+      await db.$transaction([db.taskComment.update({ where: { id: comment.id }, data: { body: "", deletedAt: new Date() } }), ...scrub()]);
+      return { soft: true, removed: [] };
+    }
+    const { task: _task, parent, _count, ...row } = comment;
+    const ops: UndoOp[] = [{ t: "comment.restore", row: commentRow(row) }];
+    const ops2: Prisma.PrismaPromise<unknown>[] = [db.taskComment.delete({ where: { id: comment.id } }), ...scrub()];
+    // Era la última respuesta de un comentario borrado: el marcador ya no sirve. Se restaura primero (las operaciones se aplican de la última a la primera).
+    if (parent?.deletedAt && (await db.taskComment.count({ where: { parentId: parent.id, id: { not: comment.id } } })) === 0) {
+      ops.push({ t: "comment.restore", row: commentRow(parent) });
+      ops2.push(db.taskComment.delete({ where: { id: parent.id } }));
+    }
+    addUndo(...ops);
+    await db.$transaction(ops2);
+    return { soft: false, removed: ops.map((op) => (op.t === "comment.restore" ? op.row.id : "")) };
   });
 }
 

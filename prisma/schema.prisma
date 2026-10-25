@@ -530,6 +530,8 @@ model TaskComment {
   editedAt  DateTime?
   /// Comentario al que responde (un solo nivel: siempre el comentario raíz).
   parentId  String?
+  /// Borrado con respuestas: la fila se queda (vacía) para no romper el hilo; se muestra como «Comentario borrado».
+  deletedAt DateTime?
   task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
   author    User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
   parent    TaskComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)

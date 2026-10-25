@@ -1,6 +1,12 @@
 // Traducciones al inglés (admin). Clave: texto exacto en español.
 export const admin: Record<string, string> = {
   "Administración": "Administration",
+  "Ajustes": "Settings",
+  "Ajuste guardado.": "Setting saved.",
+  "Parámetros generales de la aplicación.": "General application parameters.",
+  "Máximo de comentarios por tarea": "Maximum comments per task",
+  "Una tarea que llega al máximo no admite más comentarios. Entre {min} y {max}; por defecto 500. Los comentarios borrados que conservan respuestas no cuentan. Si lo bajas por debajo de lo que ya tiene una tarea, no se borra nada: solo deja de admitir más.": "A task that reaches the maximum accepts no more comments. Between {min} and {max}; 500 by default. Deleted comments that keep replies do not count. If you lower it below what a task already has, nothing is deleted: it just stops accepting more.",
+  "Debe ser un número entero entre {min} y {max}.": "It must be a whole number between {min} and {max}.",
   "Usuarios": "Users",
   "Tipos de tarea": "Task types",
   "Plantillas": "Templates",
