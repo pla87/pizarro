@@ -19,6 +19,10 @@ RUN npm ci --no-audit --no-fund
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Commit opcional para el identificador de versión (next.config.ts): --build-arg GIT_SHA=<commit>.
+# Railway pasa RAILWAY_GIT_COMMIT_SHA solo si se declara aquí. Sin ninguno de los dos se usa la hora del build.
+ARG GIT_SHA=""
+ARG RAILWAY_GIT_COMMIT_SHA=""
 # prisma generate no conecta a la base de datos; solo necesita la variable definida.
 RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" npm run build
 
@@ -53,7 +57,10 @@ COPY --chown=node:node changelog.json ./
 COPY --chown=node:node scripts/start.sh ./scripts/start.sh
 
 # Las capturas se guardan en /app/uploads: en Railway se monta ahí un Volume desde
-# el panel (Railway no admite la instrucción VOLUME en el Dockerfile).
+# el panel (Railway no admite la instrucción VOLUME en el Dockerfile); con Docker Compose,
+# un volumen con nombre (deploy/compose.yml).
+# Multiarquitectura (amd64 y arm64): la imagen base y los binarios de sharp y Prisma existen para
+# ambas; se construye con `docker buildx build --platform linux/amd64,linux/arm64 .`
 
 # El contenedor arranca como root solo para ajustar los permisos del volumen;
 # scripts/start.sh baja inmediatamente al usuario "node".

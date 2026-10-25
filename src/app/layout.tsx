@@ -3,6 +3,7 @@ import "./globals.css";
 import { getCurrentUser } from "@/lib/session";
 import { I18nProvider } from "@/i18n/client";
 import { getLocale } from "@/i18n/server";
+import { appTimeZone } from "@/lib/format";
 
 export const metadata: Metadata = {
   title: { default: "Pizarro", template: "%s · Pizarro" },
@@ -30,8 +31,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // Acento: BLUE (por defecto) no lleva atributo; el resto se pinta como data-accent.
   const accent = user && user.accent !== "BLUE" ? user.accent.toLowerCase() : undefined;
   const locale = await getLocale();
+  // data-tz: zona horaria de la app para las fechas del navegador (format.ts), leída al arrancar y no al compilar.
   return (
-    <html lang={locale} data-theme={theme} data-accent={accent}>
+    <html lang={locale} data-theme={theme} data-accent={accent} data-tz={appTimeZone()}>
       <body>
         <I18nProvider locale={locale}>{children}</I18nProvider>
       </body>

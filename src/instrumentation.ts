@@ -17,9 +17,15 @@ export async function onRequestError(
   });
 }
 
-// Arranque del servidor: lanza el mantenimiento periódico (solo runtime Node; imports dinámicos para no tocar el bundle edge).
+// Arranque del servidor: registra los errores del proceso y lanza el mantenimiento periódico (solo runtime Node; imports dinámicos para no tocar el bundle edge).
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  try {
+    const { installProcessErrorHandlers } = await import("@/lib/process-errors");
+    installProcessErrorHandlers();
+  } catch (err) {
+    console.error("[instrumentation] no se pudieron registrar los errores del proceso", err);
+  }
   try {
     const { startMaintenance } = await import("@/lib/maintenance");
     startMaintenance();

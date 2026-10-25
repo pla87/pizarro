@@ -607,7 +607,9 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 
 ### 4.9 Monitorización
 
-- **Salud:** `GET /api/health` → `{"status":"ok"}` si la base de datos responde.
+- **Salud:** `GET /api/health` → `{"status":"ok"}` si la base de datos responde, la carpeta de subidas se puede escribir y a su disco le quedan al menos `HEALTH_MIN_FREE_MB` libres (200 MB por defecto; `0` desactiva esta comprobación). Si no, `503` con `{"status":"error","reason":…}` (`database`, `uploads_not_writable` o `low_disk_space`), sin rutas ni detalles.
+- **Tareas de mantenimiento:** *Administración → Copias de seguridad → Tareas de mantenimiento* muestra la última ejecución de cada una (tabla `JobRun`). Solo un proceso las ejecuta a la vez (bloqueo consultivo de PostgreSQL), así que un despliegue solapado no las duplica, y «una vez al día» (ficheros huérfanos) se respeta aunque la app se reinicie.
+- **Errores del proceso:** las promesas rechazadas y las excepciones no capturadas fuera de una petición quedan en *Logs* (`system.unhandledRejection`, `system.uncaughtException`). Tras una excepción no capturada, en producción la app sale para que la plataforma la reinicie (`EXIT_ON_UNCAUGHT_EXCEPTION=0` lo desactiva).
 - **Logs de la app:** *Administración → Logs* (ver 3.16), con la duración de cada acción: es el primer sitio donde mirar si algo va lento o falla.
 - **Logs del contenedor:** en Railway, *Deployments → View logs*. Los errores inesperados también salen ahí con el prefijo `[action]`, `[upload]` o `[uploads]`.
 - **Errores en el navegador:** la pantalla «Algo ha fallado» y cualquier excepción no capturada del navegador se registran en *Logs* (categoría *client*), con la página, el navegador y el código del error para cruzarlo con el del servidor.
@@ -638,6 +640,10 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 | No llegan los WhatsApp | Plantilla sin aprobar, idioma distinto, token caducado o número no verificado (número de prueba) | Revisa los logs `[notify]`, el estado de la plantilla y `WHATSAPP_TEMPLATE_LANG`. |
 | Las páginas tardan en cargar a veces | Servicio en una región lejana, *App Sleeping* activado o conexiones a la base de datos frías | En Railway: pon la app y Postgres en la misma región cercana (p. ej. *EU West*) y desactiva *Serverless / App Sleeping*. Revisa en *Logs* la duración de las acciones. |
 | El informe no marca una tarjeta como hecha | Su columna no cuenta como terminada | Menú «⋯» de la columna → *Contar como terminada*. |
+
+### 4.11 Instalación en un servidor propio (Docker Compose)
+
+Además de Railway, Pizarro se puede instalar en cualquier servidor con Docker 24+ (1 vCPU, 2 GB de RAM): `deploy/compose.yml` levanta Caddy (HTTPS automático para `DOMAIN`), la app (el mismo `Dockerfile`) y PostgreSQL 16, con volúmenes, comprobaciones de salud, reinicio automático y límites de memoria. La guía completa (secretos con `openssl rand`, primer administrador, actualizar, restaurar y problemas frecuentes) está en `docs/INSTALL.md`. Nada de la imagen depende de Railway: la zona horaria del navegador llega del servidor (atributo `data-tz`), así que cambiar `APP_TIMEZONE` solo exige reiniciar, y el identificador de versión es la versión del `package.json` más el commit (`GIT_SHA` o `RAILWAY_GIT_COMMIT_SHA`) o, sin commit, la hora de la compilación.
 
 ---
 

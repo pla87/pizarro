@@ -1,0 +1,16 @@
+# Caddy delante de Pizarro: HTTPS automático (Let's Encrypt) para el dominio de DOMAIN y proxy a la app.
+# Con DOMAIN=":80" sirve solo HTTP (red local, sin certificado); ver docs/INSTALL.md.
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	reverse_proxy app:3000 {
+		# La app toma la IP del cliente de X-Real-IP: se sobrescribe siempre para que el cliente no pueda inventarla.
+		header_up X-Real-IP {remote_host}
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

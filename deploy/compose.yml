@@ -1,0 +1,93 @@
+# Pizarro en un servidor propio: Caddy (HTTPS) + Pizarro + PostgreSQL 16.
+# Uso (desde esta carpeta, con el fichero .env rellenado a partir de .env.example):
+#   docker compose up -d --build
+# Guía completa: docs/INSTALL.md. Este fichero no afecta al despliegue en Railway.
+
+name: pizarro
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?Define DOMAIN en .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    mem_limit: ${CADDY_MEM_LIMIT:-128m}
+    logging: *logging
+
+  app:
+    # Se construye desde el código (la raíz del repositorio). Con una imagen publicada bastaría con «image:».
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        # Opcional: commit del código, para el identificador de versión.
+        GIT_SHA: ${GIT_SHA:-}
+    image: ${PIZARRO_IMAGE:-pizarro:local}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://pizarro:${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env}@postgres:5432/pizarro
+      APP_URL: ${APP_URL:?Define APP_URL en .env}
+      UPLOAD_DIR: /app/uploads
+      PORT: "3000"
+      # Techo del montón de JavaScript, por debajo del límite del contenedor: un exceso reinicia el proceso
+      # en lugar de dejar sin memoria al servidor (sharp y los PDF usan memoria fuera del montón).
+      NODE_OPTIONS: --max-old-space-size=${APP_HEAP_MB:-640}
+    volumes:
+      - uploads:/app/uploads
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # El primer arranque aplica las migraciones: se le da margen.
+      start_period: 120s
+    stop_grace_period: 30s
+    mem_limit: ${APP_MEM_LIMIT:-1g}
+    logging: *logging
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pizarro
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: pizarro
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pizarro -d pizarro"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    shm_size: 128m
+    mem_limit: ${POSTGRES_MEM_LIMIT:-512m}
+    logging: *logging
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:

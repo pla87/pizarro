@@ -11,13 +11,32 @@ import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 import type { BackupAlert } from "@/lib/backup-alert-core";
 import type { BackupFileInfo, BackupRun, BackupStatus } from "@/lib/backup";
+import type { JobRunInfo } from "@/lib/jobs";
 
 function kb(bytes: number): string {
   return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
+/** Nombre legible de cada tarea de mantenimiento (las claves están en lib/maintenance.ts). */
+function jobLabel(t: (s: string) => string, name: string): string {
+  switch (name) {
+    case "nonImageCopies": return t("Copias de ficheros no imagen antiguas");
+    case "undo": return t("Deshacer antiguo");
+    case "notifications": return t("Avisos leídos antiguos");
+    case "authData": return t("Enlaces y dispositivos caducados");
+    case "taskHistory": return t("Historial de tareas antiguo");
+    case "orphanFiles": return t("Ficheros huérfanos (una vez al día)");
+    case "backup": return t("Copia diaria");
+    case "backupAlert": return t("Aviso de copia atrasada");
+    case "restoreTest": return t("Prueba de restauración mensual");
+    case "periodicMail": return t("Resúmenes e informes por email");
+    case "releaseResume": return t("Reanudar copias de adjuntos de releases");
+    default: return name;
+  }
+}
+
 /** Panel «Copias de seguridad»: estado de la última copia y de la última prueba de restauración. */
-export function BackupsAdmin({ keyState, alert, status, files, canUseCode }: { keyState: "ok" | "missing" | "invalid"; status: BackupStatus; alert: BackupAlert; files: BackupFileInfo[]; canUseCode: boolean }) {
+export function BackupsAdmin({ keyState, alert, status, files, canUseCode, jobs }: { keyState: "ok" | "missing" | "invalid"; status: BackupStatus; alert: BackupAlert; files: BackupFileInfo[]; canUseCode: boolean; jobs: JobRunInfo[] }) {
   const t = useT();
   const locale = useIntlLocale();
   const router = useRouter();
@@ -145,6 +164,31 @@ export function BackupsAdmin({ keyState, alert, status, files, canUseCode }: { k
           </ul>
         </section>
       )}
+
+      <section className="card p-4">
+        <h3 className="text-sm font-semibold">{t("Tareas de mantenimiento")}</h3>
+        <p className="mb-2 text-xs text-slate-500">{t("Se ejecutan cada hora en un solo proceso a la vez. Última ejecución de cada una:")}</p>
+        {jobs.length === 0 ? (
+          <p className="text-sm text-slate-500">{t("Aún no se ha ejecutado ninguna (la primera pasada es un minuto después de arrancar).")}</p>
+        ) : (
+          <ul className="divide-y divide-slate-200 text-sm dark:divide-slate-800">
+            {jobs.map((j) => (
+              <li key={j.name} className="py-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                  <span>{jobLabel(t, j.name)}</span>
+                  <span className="flex items-center gap-2 text-slate-500">
+                    {j.lastStartedAt && formatDate(j.lastStartedAt, "dateTimeShort", locale)}
+                    <span className={j.lastOk === false ? "badge bg-red-50 text-red-700 ring-red-500/20" : j.lastOk ? "badge bg-emerald-50 text-emerald-700 ring-emerald-500/20" : "badge bg-slate-50 text-slate-600 ring-slate-500/20"}>
+                      {j.lastOk === false ? t("Con error") : j.lastOk ? t("Correcta") : t("En curso")}
+                    </span>
+                  </span>
+                </div>
+                {j.lastOk === false && j.lastError && <p className="mt-0.5 break-words text-xs text-red-600 dark:text-red-400">{j.lastError}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <Modal open={dlOpen} onClose={closeDl} size="sm" title={t("Confirma tu identidad")}>
         <form
