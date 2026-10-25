@@ -201,3 +201,30 @@ export async function removeReleaseAttachmentFiles(ids: string[]): Promise<void>
     }),
   );
 }
+
+// --- Documentación del proyecto -------------------------------------------------
+
+/** Ficheros de la documentación: UPLOAD_DIR/documents/<id>.bin (siempre por id; el nombre real vive en la base de datos). */
+export function documentPath(id: string): string {
+  if (!/^[a-z0-9]+$/i.test(id)) throw new AppError("Identificador no válido.");
+  return path.join(/*turbopackIgnore: true*/ uploadDir(), "documents", `${id}.bin`);
+}
+
+export async function saveDocumentFile(id: string, data: Buffer): Promise<void> {
+  const file = documentPath(id);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeAtomic(file, data);
+}
+
+export async function removeDocumentFiles(ids: string[]): Promise<void> {
+  // Cada id por separado: un id raro o un fallo no impide borrar los demás.
+  await Promise.all(
+    ids.map(async (id) => {
+      try {
+        await rm(documentPath(id), { force: true });
+      } catch (err) {
+        console.error("[uploads] no se pudieron borrar documentos", err);
+      }
+    }),
+  );
+}

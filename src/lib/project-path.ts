@@ -10,7 +10,7 @@ const KEEP_PARAMS: Record<string, readonly string[]> = {
 };
 
 /** Secciones de /p/[projectId]/… que existen en el proyecto de destino. */
-const SECTIONS = new Set(["releases", "settings"]);
+const SECTIONS = new Set(["releases", "settings", "docs"]);
 
 export interface SwitchProjectOptions {
   /** Si el usuario puede abrir los ajustes del proyecto de destino; si no, se va al tablero. */

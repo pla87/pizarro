@@ -96,6 +96,7 @@ La aplicación es un **monolito en un único contenedor**. No hay colas, cachés
 | `Subtask` | taskId, title, done, position | Subtareas de una tarea (no pasan a las releases). |
 | `UndoEntry` | userId, projectId, taskId, `kind` (UNDO / REDO), label, ops (JSON), createdAt | Las 10 últimas acciones deshacibles (y las 10 rehacibles) de cada usuario en cada proyecto, con sus operaciones inversas. Una acción nueva vacía las rehacibles. Caducan a los 7 días. Su etiqueta se guarda como plantilla traducible. |
 | `TaskAttachment` | taskId, originalName, width, height, size | El fichero está en `UPLOAD_DIR/<id>.webp` (y `<id>.thumb.webp`). |
+| `ProjectDocument` | projectId, name, mimeType, size, `kind` (TEXT / MARKDOWN / PDF / IMAGE / OTHER), createdById, createdAt, updatedAt | Documentación del proyecto. El fichero está en `UPLOAD_DIR/documents/<id>.bin` (las imágenes, ya en WebP). Se borra en cascada con el proyecto. |
 | `Release` / `ReleaseTask` | number (correlativo por proyecto), content (Markdown final), deployedAt, autor · instantánea de título y tipo de cada tarea | La instantánea se conserva aunque la tarea se borre. |
 | `AppVersionLog` | version (única), releasedAt, summary, changes (JSON) | Se sincroniza desde `changelog.json` en cada arranque. |
 | `Deliverable` | projectId, name, description, dueDate, position | Las tareas lo referencian con `deliverableId`. Al borrarlo, quedan sin entregable. |
@@ -133,6 +134,7 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 | Cabeceras | `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `HSTS`. |
 | Imágenes | Tamaño máximo configurable, límite de píxeles en sharp (protección frente a *decompression bombs*), reconversión siempre a WebP (se descarta cualquier contenido incrustado) y servido solo a usuarios con acceso. |
 | Adjuntos | Cuota por proyecto (`UPLOAD_QUOTA_MB_PER_PROJECT`, 2048 MB por defecto) y cuota total opcional (`UPLOAD_QUOTA_MB_TOTAL`). Limpieza diaria de ficheros huérfanos (de más de 24 h; nunca toca `backups/` y se aborta si más del 50 % parecen huérfanos). |
+| Documentación | Se sirve solo a quien ve el proyecto, con `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox` y `X-Frame-Options: SAMEORIGIN` (solo la propia app puede incrustarla). Nada se sirve como HTML: texto y Markdown van como `text/plain` y los pinta el navegador (el Markdown, con el mismo componente seguro que las descripciones); las imágenes se reconvierten a WebP; el SVG, el HTML y cualquier PDF o texto cuyo contenido no lo sea de verdad son «otros» y solo se descargan (como `application/octet-stream`). El tipo se decide al subir y no cambia al renombrar. |
 | Copias de seguridad | Volcado diario de la base de datos, comprimido (gzip) y cifrado con AES-256-GCM (`BACKUP_KEY`). Descargar una copia exige tu contraseña (o un código de tu app de autenticación) y usa un enlace de un solo uso que caduca a los 60 s. Ver 4.5. |
 | Contenedor | El proceso Node se ejecuta como el usuario sin privilegios `node`. |
 | Google | OAuth con permiso mínimo `drive.file`: solo da acceso a los archivos que crea Pizarro. Parámetro `state` ligado a la sesión contra CSRF. Tokens cifrados en base de datos. Opcionalmente, restringido a un dominio de Workspace. Los archivos de proyectos de equipo se comparten con el dominio; los de proyectos privados, solo con los miembros del proyecto. |
@@ -497,6 +499,16 @@ Se filtra por periodo (1 h, 24 h, 7 días), nivel (Info, Aviso, Error), categor�
 - **Forzar cambio de contraseña:** marca la cuenta para cambiar la contraseña, cierra sus sesiones y, con email configurado, envía un enlace de restablecimiento (30 min). Hasta que la persona elige una nueva (distinta) no puede usar la app. Los admins no fijan contraseñas a mano.
 - **Reiniciar la verificación en dos pasos:** quita el segundo paso de la persona (volverá a configurarlo).
 - **Borrar** (papelera): elimina la cuenta para siempre. En los proyectos compartidos sus tareas y comentarios se conservan, sin autor. Si es el único miembro de **proyectos privados**, se muestra un aviso con cuántos son y hay que marcar una casilla de confirmación: se borran con él; en los demás, solo deja de ser miembro. Nadie puede borrarse a sí mismo.
+
+### 3.17 Documentación del proyecto
+
+Entrada **Documentación** del menú lateral (debajo de *Releases*): los archivos de referencia del proyecto (guías y notas, PDF de especificaciones o contratos, capturas) para verlos sin salir de la app. Los ve y los sube cualquiera con acceso al proyecto, con las mismas reglas de visibilidad que el tablero (un proyecto privado solo lo ven sus miembros).
+
+- **Subir:** botón *Subir archivos* (varios a la vez), arrastrando archivos a la página o pegándolos con Ctrl+V (capturas de pantalla incluidas). Se suben de uno en uno y, si alguno falla, se muestra el motivo junto a su nombre.
+- **Qué se puede ver:** texto plano (`.txt`, `.log`, `.csv`, `.json`, `.yml`…), Markdown (`.md`, con el mismo Markdown seguro que las descripciones de las tarjetas), PDF (con el visor del navegador) e imágenes PNG, JPEG, WebP, GIF o AVIF (se reconvierten a WebP, como los adjuntos). Los textos de más de 1 MB solo se descargan. Cualquier otro tipo (Office, ZIP, SVG, HTML…) aparece en la lista y se puede descargar, pero no tiene vista previa. El tipo se decide al subir mirando también el contenido: un «PDF» que no lo es se trata como un archivo cualquiera.
+- **Lista:** nombre, icono de tipo, tamaño, quién lo subió y fecha, con buscador por nombre (sin distinguir mayúsculas ni tildes). Al pulsar un documento se abre el visor con **Descargar**, **Borrar** (pide confirmación; no se puede deshacer) y el lápiz para **Renombrar**.
+- **Límites:** cada archivo, hasta el tamaño máximo de archivo del proyecto (*Ajustes del proyecto*, y `MAX_UPLOAD_MB` si está definida); hasta 200 documentos por proyecto; y su tamaño cuenta en la misma cuota de almacenamiento del proyecto que los adjuntos de tareas (`UPLOAD_QUOTA_MB_PER_PROJECT`). Las subidas comparten el tope de 60 por minuto y persona.
+- **Registro y copias:** se registran las subidas, las descargas explícitas, los renombrados y los borrados (no las visualizaciones). Los ficheros están en `UPLOAD_DIR/documents/`, así que entran en las copias de seguridad que incluyen los adjuntos; borrar el proyecto los borra y la limpieza diaria de huérfanos revisa también esa carpeta.
 
 ---
 

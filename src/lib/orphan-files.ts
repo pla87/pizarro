@@ -19,9 +19,11 @@ export interface OrphanReport {
 }
 
 /** Id de adjunto que corresponde a un nombre de fichero, o null si no es un fichero nuestro. */
-export function parseUploadName(name: string, where: "root" | "releases"): { id: string } | { tmp: true } | null {
+export function parseUploadName(name: string, where: "root" | "releases" | "documents"): { id: string } | { tmp: true } | null {
   if (/\.tmp$/i.test(name)) return { tmp: true };
-  const m = (where === "root" ? /^([a-z0-9]+)(?:\.thumb)?\.(?:webp|bin)$/i : /^([a-z0-9]+)\.(?:webp|bin)$/i).exec(name);
+  const m = (
+    where === "root" ? /^([a-z0-9]+)(?:\.thumb)?\.(?:webp|bin)$/i : where === "documents" ? /^([a-z0-9]+)\.bin$/i : /^([a-z0-9]+)\.(?:webp|bin)$/i
+  ).exec(name);
   return m ? { id: m[1]! } : null;
 }
 
@@ -32,12 +34,12 @@ export function isInside(root: string, target: string): boolean {
 }
 
 /**
- * Borra los ficheros de `dir` (raíz) y `dir/releases` que no estén en los conjuntos de ids conocidos.
+ * Borra los ficheros de `dir` (raíz), `dir/releases` y `dir/documents` que no estén en los conjuntos de ids conocidos.
  * `dryRun` solo cuenta. Nunca lanza por un fichero concreto.
  */
 export async function cleanOrphanFiles(
   dir: string,
-  known: { attachments: Set<string>; releaseAttachments: Set<string> },
+  known: { attachments: Set<string>; releaseAttachments: Set<string>; documents?: Set<string> },
   opts: { now?: number; dryRun?: boolean; minAgeMs?: number } = {},
 ): Promise<OrphanReport> {
   const now = opts.now ?? Date.now();
@@ -51,7 +53,7 @@ export async function cleanOrphanFiles(
   }
 
   const candidates: { file: string; size: number }[] = [];
-  const scan = async (folder: string, where: "root" | "releases", ids: Set<string>) => {
+  const scan = async (folder: string, where: "root" | "releases" | "documents", ids: Set<string>) => {
     let entries;
     try {
       entries = await readdir(folder, { withFileTypes: true });
@@ -80,6 +82,7 @@ export async function cleanOrphanFiles(
   };
   await scan(root, "root", known.attachments);
   await scan(path.join(root, "releases"), "releases", known.releaseAttachments);
+  await scan(path.join(root, "documents"), "documents", known.documents ?? new Set());
 
   report.orphans = candidates.length;
   report.bytes = candidates.reduce((n, c) => n + c.size, 0);
