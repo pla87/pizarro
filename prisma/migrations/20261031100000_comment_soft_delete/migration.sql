@@ -1,0 +1,1 @@
+ALTER TABLE "TaskComment" ADD COLUMN "deletedAt" TIMESTAMP(3);
