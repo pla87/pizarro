@@ -1,6 +1,6 @@
 # Pizarro
 
-Kanban ligero y generador de *release notes* para equipos pequeños (hasta 5 personas). Tiene tableros multiproyecto, capturas pegadas desde el portapapeles y exportación de releases agrupadas por tipo, con cabecera y pie personalizados por usuario.
+Kanban ligero y generador de *release notes* para equipos pequeños (hasta 10 personas por defecto, `MAX_USERS`). Tiene tableros multiproyecto, capturas pegadas desde el portapapeles y exportación de releases agrupadas por tipo, con cabecera y pie personalizados por usuario.
 
 - **Stack:** Next.js 16 (App Router, TypeScript, Tailwind CSS 4) · PostgreSQL · Prisma 7 · `@dnd-kit` · `sharp` · `lucide-react`.
 - **Despliegue:** un único contenedor Docker (monolito) en Railway, con un volumen persistente para las capturas.
@@ -115,7 +115,7 @@ steps:
 | `SEED_ADMIN_PASSWORD` | Solo el primer arranque | mínimo 10 caracteres | Contraseña inicial: cámbiala después desde *Mi perfil*. |
 | `SEED_ADMIN_NAME` | No | `Administrador` | Nombre visible del admin inicial. |
 | `MAX_USERS` | No | `10` | Máximo de usuarios activos. |
-| `MAX_UPLOAD_MB` | No | `20` | Tamaño máximo por adjunto. El tope del cuerpo de la petición se fija al compilar a partir de ella: si la cambias, vuelve a desplegar (en Railway la variable llega también al build). |
+| `MAX_UPLOAD_MB` | No | (sin tope) | Tope opcional, para todo el servidor, del tamaño de un adjunto. El tamaño máximo real es el de cada proyecto (ajustes del proyecto, 20 MB por defecto, hasta 100); si defines esta variable, ningún proyecto la supera. Se lee al subir cada archivo: cambiarla no exige recompilar. El proxy admite siempre hasta 100 MB por petición. |
 | `DATABASE_POOL_SIZE` | No | `10` | Conexiones del pool. |
 | `UPLOAD_QUOTA_MB_PER_PROJECT` | No | `2048` | Cuota de adjuntos por proyecto (MB). Pasada la cuota, la subida se rechaza mostrando el uso. |
 | `UPLOAD_QUOTA_MB_TOTAL` | No | (sin límite) | Cuota total de adjuntos de todo el servidor (MB). |
@@ -125,7 +125,7 @@ steps:
 | `LOG_RETENTION_DAYS` | No | `7` | Días que se conservan los logs de *Administración → Logs* (máx. 90). |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Para Google Docs/Sheets | (de Google Cloud) | Cliente OAuth «Aplicación web». Ver [Google Docs y Sheets](#71-google-docs-y-sheets). |
 | `GOOGLE_WORKSPACE_DOMAIN` | Recomendada con Google | `tu-dominio.com` | Solo admite cuentas de ese dominio y comparte cada archivo nuevo con él, para que todo el equipo pueda abrirlo desde la tarjeta. |
-| `GOOGLE_SHARE_ROLE` | No | `writer` | Rol con el que se comparte con el dominio (o, en proyectos privados, con los emails de sus miembros): `writer`, `commenter`, `reader` o `none` (no compartir). |
+| `GOOGLE_SHARE_ROLE` | No | `writer` | Rol con el que se comparte con el dominio (o, en proyectos privados, con los emails de sus miembros): `writer`, `commenter`, `reader` o `none` (no compartir). Es el valor por defecto: cada proyecto puede elegir otro modo en sus ajustes. |
 | `AUTH_GOOGLE_ONLY` | No | `true` | Solo se entra con Google (necesita `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `APP_URL`; sin ellos no tiene efecto). Ver [Acceso con Google y dos pasos](#74-acceso-con-google-y-verificación-en-dos-pasos). |
 | `AUTH_ALLOW_ADMIN_PASSWORD` | No | `true` | Con `AUTH_GOOGLE_ONLY`, deja entrar con contraseña (y segundo paso) a los administradores: acceso de emergencia. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Para avisos por email | `smtp.gmail.com` / `465` / … | Servidor de correo saliente. Ver [Email](#72-avisos-por-email). |

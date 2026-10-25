@@ -58,6 +58,8 @@ model User {
   mustChangePassword Boolean @default(false)
   /// Identificador estable («sub») de su cuenta de Google, guardado en el primer «Iniciar sesión con Google».
   googleSub      String?   @unique
+  /// Un admin desvinculó su Google: mientras sea true, entrar con Google por email NO vuelve a enlazar la cuenta. Se limpia al entrar con contraseña (+2FA) o con «Permitir Google».
+  googleRelinkBlocked Boolean @default(false)
   /// Verificación en dos pasos para el acceso con contraseña (null = desactivada).
   twoFactorMethod TwoFactorMethod?
   /// Secreto TOTP cifrado (AES-GCM); solo con método TOTP.
@@ -211,6 +213,11 @@ model Project {
   releaseZipMaxMb Int    @default(80)
   /// Tamaño máximo (MB) de la suma de adjuntos de una tarea.
   taskAttachMaxMb Int    @default(80)
+  /// Con quién se comparten los Docs/Sheets creados desde una tarea: DOMAIN_WRITE, DOMAIN_READ, MEMBERS o NONE.
+  /// null = el comportamiento por defecto (GOOGLE_SHARE_ROLE: dominio en los de equipo, miembros en los privados).
+  googleShareMode String?
+  /// Tamaño máximo (MB) de UN adjunto. 1 ≤ fileMaxMb ≤ taskAttachMaxMb ≤ releaseZipMaxMb.
+  fileMaxMb       Int    @default(20)
   position    Float    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -487,6 +494,10 @@ model TaskLink {
   url         String
   externalId  String?
   createdById String?
+  /// Resultado de compartir el archivo al crearlo: SHARED, PARTIAL (alguna persona falló) o NOT_SHARED. null = no se registró.
+  shareStatus String?
+  /// Con PARTIAL, a cuántas personas no se pudo compartir.
+  shareFailed Int          @default(0)
   createdAt   DateTime     @default(now())
   task        Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
   createdBy   User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
@@ -631,6 +642,7 @@ model Notification {
   task           Task?            @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt, createdAt])
+  @@index([userId, createdAt])
   @@index([taskId])
   @@index([readAt, createdAt])
   @@index([actorId])
@@ -781,4 +793,11 @@ model UndoEntry {
   @@index([userId, taskId, createdAt])
   @@index([projectId])
   @@index([createdAt])
+}
+
+/// Estado interno clave-valor (p. ej. cuándo se avisó por última vez de que faltan copias de seguridad), para que un reinicio no repita avisos.
+model AppState {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }

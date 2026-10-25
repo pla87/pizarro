@@ -114,6 +114,10 @@ export interface TaskLinkInfo {
   kind: "GOOGLE_DOC" | "GOOGLE_SHEET";
   title: string;
   url: string;
+  /** Resultado de compartir al crearlo: SHARED, PARTIAL, NOT_SHARED o null (anterior a este registro). */
+  shareStatus: string | null;
+  /** Con PARTIAL, a cuántas personas no se pudo compartir. */
+  shareFailed: number;
 }
 
 export interface CommentInfo {
@@ -125,6 +129,16 @@ export interface CommentInfo {
   /** Comentario raíz al que responde (null = comentario de primer nivel). */
   parentId: string | null;
 }
+
+/** Contadores de adjuntos de una tarea (los de la tarjeta): se calculan siempre sobre las filas que existen. */
+export interface AttachmentTotals {
+  imageCount: number;
+  fileCount: number;
+  attachBytes: number;
+}
+
+/** Respuesta de la subida: el adjunto y los contadores reales de la tarea tras crearlo. */
+export type UploadedAttachment = AttachmentInfo & { totals: AttachmentTotals };
 
 export interface AttachmentInfo {
   id: string;

@@ -54,6 +54,7 @@ export async function GET(req: Request) {
     return fail(result.reason === "domain" ? "google_domain" : result.reason === "email_unverified" ? "google_unverified" : "google_failed", `id_token rechazado (${result.reason})`);
   }
   const user = await findUserForGoogle(result.identity);
+  if (user === "relink_blocked") return fail("google_unlinked", "cuenta desvinculada por un administrador", { email: result.identity.email });
   // Mensaje neutro: no se distingue «no existe», «desactivada» o «enlazada a otra cuenta de Google».
   if (!user) return fail("google_noaccount", "sin cuenta asociada", { email: result.identity.email });
 

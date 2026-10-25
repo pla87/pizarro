@@ -6,6 +6,8 @@ import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { emailEnabled } from "@/lib/mail";
+import { googleEnabled } from "@/lib/google";
+import { effectiveShareMode } from "@/lib/google-share";
 import { ProjectSettings } from "./ProjectSettings";
 import { ReportScheduleSection } from "./ReportScheduleSection";
 
@@ -27,6 +29,8 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
       isPrivate: true,
       releaseZipMaxMb: true,
       taskAttachMaxMb: true,
+      googleShareMode: true,
+      fileMaxMb: true,
       hiddenKinds: { select: { kindId: true } },
       members: { select: { userId: true, user: { select: { name: true, active: true } } }, orderBy: { user: { name: "asc" } } },
       labels: { orderBy: { name: "asc" }, select: { id: true, name: true, color: true } },
@@ -66,6 +70,8 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
         visibility: project.isPrivate ? "PRIVATE" : "TEAM",
         releaseZipMaxMb: project.releaseZipMaxMb,
         taskAttachMaxMb: project.taskAttachMaxMb,
+        googleShareMode: effectiveShareMode(project.googleShareMode, project.isPrivate, { role: process.env.GOOGLE_SHARE_ROLE }),
+        fileMaxMb: project.fileMaxMb,
         members: project.members.map((m) => ({ id: m.userId, name: m.user.name, active: m.user.active })),
       }}
       labels={project.labels}
@@ -74,6 +80,7 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
       deliverables={project.deliverables.map((d) => ({ id: d.id, name: d.name, description: d.description, dueDate: dateToIso(d.dueDate), taskCount: d._count.tasks }))}
       users={users}
       editorMode={editorMode}
+      google={{ enabled: googleEnabled(), domain: process.env.GOOGLE_WORKSPACE_DOMAIN ?? null }}
       reportSchedule={
         <ReportScheduleSection
           projectId={project.id}

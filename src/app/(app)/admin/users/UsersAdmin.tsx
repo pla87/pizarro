@@ -1,10 +1,10 @@
 "use client";
 
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { KeyRound, Link2Off, Pencil, ShieldOff, Trash2, TriangleAlert, UserPlus } from "lucide-react";
+import { KeyRound, Link2, Link2Off, Pencil, ShieldOff, Trash2, TriangleAlert, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { createUser, deleteUser, forcePasswordChange, resetUserTwoFactor, unlinkGoogle, updateUser } from "@/actions/users";
+import { createUser, deleteUser, forcePasswordChange, resetUserTwoFactor, unlinkGoogle, updateUser, allowGoogleRelink } from "@/actions/users";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -22,6 +22,7 @@ interface UserRow {
   mustChangePassword: boolean;
   twoFactor: boolean;
   googleLinked: boolean;
+  googleRelinkBlocked: boolean;
   privateProjects: number;
 }
 
@@ -40,7 +41,7 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable }: { users: U
   const unlink = async (u: UserRow) => {
     const ok = await confirm({
       title: t("Desvincular Google de {name}", { name: u.name }),
-      message: t("Se cerrarán sus sesiones. La próxima vez tendrá que entrar con su contraseña o volver a entrar con Google para vincular la cuenta de nuevo (si entra con Google con el mismo email, se vincula automáticamente). Los documentos de Drive no se ven afectados."),
+      message: t("Se cerrarán sus sesiones. Tendrá que entrar con su contraseña: entrar con Google con el mismo email no vuelve a vincular la cuenta hasta que use su contraseña o tú pulses «Permitir Google». Los documentos de Drive no se ven afectados."),
       confirmLabel: t("Desvincular"),
       danger: true,
     });
@@ -48,6 +49,13 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable }: { users: U
     const res = await unlinkGoogle(u.id);
     if (!res.ok) return toast(res.error, "error");
     toast(t("Google desvinculado: se han cerrado sus sesiones"));
+    router.refresh();
+  };
+
+  const allow = async (u: UserRow) => {
+    const res = await allowGoogleRelink(u.id);
+    if (!res.ok) return toast(res.error, "error");
+    toast(t("Google permitido: podrá volver a vincularse al entrar con Google"));
     router.refresh();
   };
 
@@ -79,6 +87,7 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable }: { users: U
             {u.mustChangePassword && <span className="badge bg-amber-50 text-amber-700 ring-amber-500/20" title={t("Tiene que elegir una contraseña nueva al entrar")}>{t("Contraseña pendiente")}</span>}
             {u.twoFactor && <span className="badge bg-emerald-50 text-emerald-700 ring-emerald-500/20" title={t("Tiene activada la verificación en dos pasos")}>2FA</span>}
             {u.googleLinked && <span className="badge bg-slate-100 text-slate-600 ring-slate-500/20" title={t("Ha entrado con Google")}>Google</span>}
+            {u.googleRelinkBlocked && <span className="badge bg-amber-50 text-amber-700 ring-amber-500/20" title={t("Google desvinculado: no se vuelve a enlazar solo")}>{t("Google bloqueado")}</span>}
             <button className="btn-icon" onClick={() => setEditing(u)} aria-label={t("Editar {name}", { name: u.name })}><Pencil size={16} /></button>
             {u.id !== meId && (
               <button className="btn-icon" onClick={() => setResetting(u)} aria-label={t("Forzar cambio de contraseña de {name}", { name: u.name })} title={t("Forzar cambio de contraseña")}><KeyRound size={16} /></button>
@@ -88,6 +97,9 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable }: { users: U
             )}
             {u.id !== meId && u.googleLinked && (
               <button className="btn-icon" onClick={() => void unlink(u)} aria-label={t("Desvincular Google de {name}", { name: u.name })} title={t("Desvincular Google")}><Link2Off size={16} /></button>
+            )}
+            {u.googleRelinkBlocked && (
+              <button className="btn-icon" onClick={() => void allow(u)} aria-label={t("Permitir Google a {name}", { name: u.name })} title={t("Permitir Google")}><Link2 size={16} /></button>
             )}
             {u.id !== meId && (
               <button className="btn-icon text-red-600 dark:text-red-400" onClick={() => setDeleting(u)} aria-label={t("Borrar {name}", { name: u.name })}><Trash2 size={16} /></button>

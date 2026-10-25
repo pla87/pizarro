@@ -61,7 +61,7 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
     // la última edición (corregir una errata en una tarea cerrada hace meses no la vuelve reciente).
     // Cuenta también el despliegue en una release reciente (mueve a «En producción» sin dejar ese evento).
     Promise.all([
-      db.taskEvent.groupBy({ by: ["taskId"], where: { projectId, code: "done" }, _max: { createdAt: true } }),
+      db.taskEvent.groupBy({ by: ["taskId"], where: { projectId, code: "done", task: { archivedAt: null } }, _max: { createdAt: true } }),
       db.releaseTask.findMany({
         where: { taskId: { not: null }, release: { projectId, deployedAt: { gte: new Date(Date.now() - (RECENT_DONE_DAYS + 1) * 86_400_000) } } },
         select: { taskId: true, release: { select: { deployedAt: true } } },

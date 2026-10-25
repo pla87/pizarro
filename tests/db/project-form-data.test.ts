@@ -8,7 +8,7 @@ describe("getProjectFormData", () => {
   test("devuelve columnas, tipos (generales visibles + propios), personas, entregables y límite del proyecto", async () => {
     const member = await makeUser();
     const f = await makeProject({ members: [member] });
-    await db.project.update({ where: { id: f.project.id }, data: { taskAttachMaxMb: 33 } });
+    await db.project.update({ where: { id: f.project.id }, data: { taskAttachMaxMb: 33, fileMaxMb: 7 } });
     const general = await makeKind(null);
     const hidden = await makeKind(null);
     await db.projectHiddenKind.create({ data: { projectId: f.project.id, kindId: hidden.id } });
@@ -17,6 +17,7 @@ describe("getProjectFormData", () => {
     const data = expectOk(await asUser(member, () => getProjectFormData(f.project.id)));
     assert.equal(data.project.id, f.project.id);
     assert.equal(data.project.attachMaxMb, 33);
+    assert.equal(data.project.fileMaxMb, 7);
     assert.deepEqual(data.columns.map((c) => c.id), [f.columns.todo, f.columns.doing, f.columns.done]);
     const kindIds = data.kinds.map((k) => k.id);
     assert.ok(kindIds.includes(f.kindId) && kindIds.includes(general.id));

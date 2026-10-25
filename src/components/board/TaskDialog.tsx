@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, Camera, Check, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Archive, Camera, Check, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -35,9 +35,10 @@ import { Comments } from "./TaskComments";
 import { FollowToggle } from "./FollowToggle";
 import { TaskHistory } from "./TaskHistory";
 import { TitleField } from "./TitleField";
-import { createAndOpenGoogleFile } from "./google";
+import { createAndOpenGoogleFile, shareWarning } from "./google";
 import { AttachLimitHint } from "./AttachLimitHint";
-import { attachmentPatch, filesFrom, formatBytes, UploadError, uploadFile, useFileDrop } from "./upload";
+import { attachmentTotalsOf } from "@/lib/attachment-totals";
+import { filesFrom, formatBytes, UploadError, uploadFile, useFileDrop } from "./upload";
 import { formatDate } from "@/lib/format";
 import { draftKey, useDraftAutosave, type EditTaskDraft } from "./drafts";
 import { setUndoTask, UNDONE_EVENT } from "../undo-context";
@@ -225,7 +226,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
           description: d0.description,
           subtasks: d0.subtasks.map((s) => ({ id: s.id, title: s.title, done: s.done, position: s.position })),
           attachmentIds: d0.attachments.map((a) => a.id),
-          links: d0.links.map((l) => ({ id: l.id, kind: l.kind, title: l.title, url: l.url })),
+          links: d0.links.map((l) => ({ id: l.id, kind: l.kind, title: l.title, url: l.url, shareStatus: l.shareStatus, shareFailed: l.shareFailed })),
         } : {}),
       }, d0 ? d0.textVersion : undefined));
       if (!res.ok) {
@@ -288,7 +289,6 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       try {
         const att = await board.trackRaw(uploadFile(task.id, file, false, t));
         setDetail((d) => (d ? { ...d, attachments: [...d.attachments, att] } : d));
-        board.patchTask(task.id, (t) => attachmentPatch(t, att));
       } catch (err) {
         if (err instanceof UploadError && err.code === "task_total") setTotalRejected(true);
         toast((err as Error).message, "error");
@@ -298,6 +298,15 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     }
   };
 
+  // Los contadores de la tarjeta (y el aviso «N / M MB en total») salen de la lista de adjuntos que se muestra, no de sumas
+  // y restas sueltas: así subidas, borrados, deshacer, rehacer y «Cancelar» (todos acaban cambiando la lista) no los desajustan.
+  // Solo al cambiar la lista (no en cada refresco), para no pisar lo que traiga el servidor sobre cambios de otras personas.
+  const listedAttachments = detail?.attachments;
+  useEffect(() => {
+    if (listedAttachments) board.patchTask(task.id, attachmentTotalsOf(listedAttachments));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listedAttachments, task.id]);
+
   const images = detail?.attachments.filter((a) => a.isImage) ?? [];
   const files = detail?.attachments.filter((a) => !a.isImage) ?? [];
 
@@ -305,9 +314,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   const removeAttachment = async (id: string) => {
     const res = await board.track(deleteAttachment(id));
     if (!res.ok) return toast(res.error, "error");
-    const removed = detail?.attachments.find((x) => x.id === id);
     setDetail((d) => (d ? { ...d, attachments: d.attachments.filter((x) => x.id !== id) } : d));
-    if (removed) board.patchTask(task.id, (t) => attachmentPatch(t, removed, -1));
     setTotalRejected(false);
     toast(t("Adjunto borrado"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange(res.data.undo.id) });
   };
@@ -387,7 +394,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     }
     setDetail((d) => (d ? { ...d, links: [...d.links, res.link] } : d));
     board.patchTask(task.id, (t) => ({ linkCount: t.linkCount + 1 }));
-    toast(kind === "GOOGLE_SHEET" ? t("Hoja de cálculo creada") : t("Documento creado"));
+    const warning = shareWarning(res.link, t);
+    if (warning) toast(warning, "error");
+    else toast(kind === "GOOGLE_SHEET" ? t("Hoja de cálculo creada") : t("Documento creado"));
     return res.link;
   };
 
@@ -1202,6 +1211,11 @@ function GoogleLinks({ detail, setDetail, onCreate, taskId }: {
               <a href={l.url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate text-sm font-medium hover:text-brand-600">
                 {l.title}
               </a>
+              {shareWarning(l, t) && (
+                <span className="shrink-0 text-amber-600" title={shareWarning(l, t) ?? undefined} aria-label={shareWarning(l, t) ?? undefined} role="img">
+                  <TriangleAlert size={15} />
+                </span>
+              )}
               <button
                 className="btn-icon h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-md:opacity-100"
                 aria-label={t("Quitar enlace")}

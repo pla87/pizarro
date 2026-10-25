@@ -1,6 +1,55 @@
 {
   "versions": [
     {
+      "version": "1.23.0",
+      "date": "2026-10-25",
+      "releasedAt": "2026-10-25T13:56:50+01:00",
+      "summary": "Tamaño máximo de un adjunto por proyecto sin recompilar, contadores de adjuntos exactos, Google bloqueado tras desvincular, aviso de copias atrasadas, Docs compartidos por proyecto y paso a privado sin perder miembros",
+      "changes": {
+        "nuevas": [
+          "Ajustes del proyecto: tamaño máximo de un adjunto (1–100 MB, nunca mayor que el total por tarea) y modo de compartir los documentos de Google.",
+          "Aviso en Administración (y email a los admins) si la última copia de seguridad tiene más de 48 h.",
+          "Administración → Usuarios: Permitir Google para quien tenga Google bloqueado."
+        ],
+        "mejoras": [
+          "Tras desvincular Google, no se vuelve a vincular solo: hace falta entrar con contraseña o que un admin lo permita.",
+          "Pasar un proyecto de Equipo a Privado conserva a sus miembros (los admins que solo lo veían por su perfil pierden el acceso).",
+          "Si un documento de Google se crea pero no se comparte, se avisa y queda marcado en la tarea.",
+          "MAX_UPLOAD_MB se aplica al arrancar: cambiarlo ya no exige recompilar."
+        ],
+        "correcciones": [
+          "El total de adjuntos de una tarea se calcula siempre con los adjuntos reales (no puede quedarse con megas de adjuntos ya borrados).",
+          "Borrar un tipo ya no pasa sus tareas a un tipo general oculto en ese proyecto; el calendario descarta fechas antiguas al recibir datos nuevos."
+        ],
+        "tecnicos": [
+          "Migraciones: Project.fileMaxMb y googleShareMode, TaskLink.shareStatus, User.googleRelinkBlocked, tabla AppState e índice de avisos por fecha."
+        ]
+      },
+      "en": {
+        "summary": "Per-project maximum attachment size without rebuilding, exact attachment counters, Google blocked after unlinking, stale backup alert, per-project Docs sharing and switching to private without losing members",
+        "changes": {
+          "nuevas": [
+            "Project settings: maximum size of one attachment (1–100 MB, never above the per-task total) and Google documents sharing mode.",
+            "Alert in Administration (and email to admins) if the last backup is older than 48 h.",
+            "Administration → Users: Allow Google for people with Google blocked."
+          ],
+          "mejoras": [
+            "After unlinking Google it no longer re-links by itself: the person must sign in with their password or an admin must allow it.",
+            "Switching a project from Team to Private keeps its members (admins who only saw it through their profile lose access).",
+            "If a Google document is created but not shared, you are told and the task marks it.",
+            "MAX_UPLOAD_MB applies at start-up: changing it no longer needs a rebuild."
+          ],
+          "correcciones": [
+            "A task's attachment total is always computed from its real attachments (it can no longer keep megabytes of deleted ones).",
+            "Deleting a type no longer moves its tasks to a general type hidden in that project; the calendar drops stale dates when new data arrives."
+          ],
+          "tecnicos": [
+            "Migrations: Project.fileMaxMb and googleShareMode, TaskLink.shareStatus, User.googleRelinkBlocked, AppState table and a notifications-by-date index."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.22.0",
       "date": "2026-10-25",
       "releasedAt": "2026-10-25T11:42:18+01:00",

@@ -9,6 +9,7 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/components/ui/Toast";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
+import type { BackupAlert } from "@/lib/backup-alert-core";
 import type { BackupFileInfo, BackupRun, BackupStatus } from "@/lib/backup";
 
 function kb(bytes: number): string {
@@ -16,7 +17,7 @@ function kb(bytes: number): string {
 }
 
 /** Panel «Copias de seguridad»: estado de la última copia y de la última prueba de restauración. */
-export function BackupsAdmin({ keyState, status, files, canUseCode }: { keyState: "ok" | "missing" | "invalid"; status: BackupStatus; files: BackupFileInfo[]; canUseCode: boolean }) {
+export function BackupsAdmin({ keyState, alert, status, files, canUseCode }: { keyState: "ok" | "missing" | "invalid"; status: BackupStatus; alert: BackupAlert; files: BackupFileInfo[]; canUseCode: boolean }) {
   const t = useT();
   const locale = useIntlLocale();
   const router = useRouter();
@@ -78,6 +79,21 @@ export function BackupsAdmin({ keyState, status, files, canUseCode }: { keyState
           {t("Cada día se exporta la base de datos, comprimida y cifrada (AES-256), a la carpeta backups del volumen. Se conservan las últimas 14 diarias y 6 mensuales.")}
         </p>
       </div>
+
+      {alert.active && (
+        <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+          <ShieldAlert size={18} className="mt-0.5 shrink-0" />
+          <div>
+            <p className="font-semibold">{t("La copia de seguridad está atrasada")}</p>
+            <p>
+              {alert.lastAt
+                ? t("La última copia correcta es del {date}, hace más de 48 horas.", { date: formatDate(alert.lastAt, "dateTime", locale) })
+                : t("Todavía no hay ninguna copia correcta, aunque BACKUP_KEY está configurada.")}
+            </p>
+            <p className="mt-1">{t("Revisa los Logs (categoría sistema) por si hay algún error y prueba «Crear copia ahora».")}</p>
+          </div>
+        </div>
+      )}
 
       {enabled ? (
         <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">

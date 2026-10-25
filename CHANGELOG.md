@@ -2,6 +2,32 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.23.0 — 2026-10-25 13:56
+
+Tamaño máximo de un adjunto por proyecto sin recompilar, contadores de adjuntos exactos, Google bloqueado tras desvincular, aviso de copias atrasadas, Docs compartidos por proyecto y paso a privado sin perder miembros
+
+### Nuevas funcionalidades
+
+- Ajustes del proyecto: tamaño máximo de un adjunto (1–100 MB, nunca mayor que el total por tarea) y modo de compartir los documentos de Google.
+- Aviso en Administración (y email a los admins) si la última copia de seguridad tiene más de 48 h.
+- Administración → Usuarios: Permitir Google para quien tenga Google bloqueado.
+
+### Mejoras
+
+- Tras desvincular Google, no se vuelve a vincular solo: hace falta entrar con contraseña o que un admin lo permita.
+- Pasar un proyecto de Equipo a Privado conserva a sus miembros (los admins que solo lo veían por su perfil pierden el acceso).
+- Si un documento de Google se crea pero no se comparte, se avisa y queda marcado en la tarea.
+- MAX_UPLOAD_MB se aplica al arrancar: cambiarlo ya no exige recompilar.
+
+### Correcciones
+
+- El total de adjuntos de una tarea se calcula siempre con los adjuntos reales (no puede quedarse con megas de adjuntos ya borrados).
+- Borrar un tipo ya no pasa sus tareas a un tipo general oculto en ese proyecto; el calendario descarta fechas antiguas al recibir datos nuevos.
+
+### Cambios técnicos / DB
+
+- Migraciones: Project.fileMaxMb y googleShareMode, TaskLink.shareStatus, User.googleRelinkBlocked, tabla AppState e índice de avisos por fecha.
+
 ## v1.22.0 — 2026-10-25 11:42
 
 Ritmo de las tareas fijas, crear tareas en otro proyecto, copiar y borrar la descripción, desvincular Google y endurecimiento tras la auditoría

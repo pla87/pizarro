@@ -14,7 +14,7 @@ export default async function UsersPage() {
   const me = await requireAdminPage();
   const users = await db.user.findMany({
     orderBy: [{ active: "desc" }, { name: "asc" }],
-    select: { id: true, name: true, email: true, role: true, active: true, mustChangePassword: true, twoFactorMethod: true, googleSub: true },
+    select: { id: true, name: true, email: true, role: true, active: true, mustChangePassword: true, twoFactorMethod: true, googleSub: true, googleRelinkBlocked: true },
   });
   // De los proyectos privados solo se muestra cuántos tiene cada usuario como único miembro (se borrarían con él).
   const privates = await db.project.findMany({ where: { isPrivate: true }, select: { members: { select: { userId: true } } } });

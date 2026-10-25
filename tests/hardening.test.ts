@@ -5,24 +5,29 @@ import { test } from "node:test";
 process.env.SESSION_SECRET ??= "x".repeat(48);
 process.env.DATABASE_URL ??= "postgresql://test:test@localhost:5432/test";
 
-const { maxUploadMb, proxyBodyLimitBytes } = await import("../src/lib/upload-size");
+const { effectiveFileMaxMb, serverUploadCapMb, FILE_MAX_MAX_MB, MULTIPART_OVERHEAD_BYTES, PROXY_BODY_LIMIT_BYTES } = await import("../src/lib/upload-size");
 const { outboxDir } = await import("../src/lib/mail");
 const { isSameOrigin } = await import("../src/lib/request");
 const { safeMarkdownUrl } = await import("../src/lib/safe-url");
 
 const MB = 1024 * 1024;
 
-test("tope del proxy: siempre por encima de MAX_UPLOAD_MB (más el envoltorio multipart)", () => {
-  assert.equal(maxUploadMb(undefined), 20);
-  assert.equal(maxUploadMb(""), 20);
-  assert.equal(maxUploadMb("abc"), 20);
-  assert.equal(maxUploadMb("0"), 20);
-  assert.equal(maxUploadMb("35"), 35);
-  for (const mb of [1, 12, 20, 35, 2.5]) {
-    const limit = proxyBodyLimitBytes(mb);
-    assert.ok(limit >= mb * MB + 64 * 1024, `${mb} MB: el proxy no puede cortar un archivo que la ruta acepta`);
-    assert.ok(limit <= mb * MB + 2 * MB);
-  }
+test("tope del proxy: fijo, por encima del mayor adjunto posible (100 MB) más el envoltorio multipart", () => {
+  assert.ok(PROXY_BODY_LIMIT_BYTES >= FILE_MAX_MAX_MB * MB + MULTIPART_OVERHEAD_BYTES);
+  assert.ok(PROXY_BODY_LIMIT_BYTES <= FILE_MAX_MAX_MB * MB + 2 * MB);
+});
+
+test("límite de un archivo: el del proyecto, y MAX_UPLOAD_MB (opcional) solo lo recorta", () => {
+  assert.equal(serverUploadCapMb(undefined), null);
+  assert.equal(serverUploadCapMb(""), null);
+  assert.equal(serverUploadCapMb("abc"), null);
+  assert.equal(serverUploadCapMb("0"), null);
+  assert.equal(serverUploadCapMb("35"), 35);
+  assert.equal(effectiveFileMaxMb(20, undefined), 20);
+  assert.equal(effectiveFileMaxMb(60, undefined), 60);
+  assert.equal(effectiveFileMaxMb(60, "35"), 35);
+  assert.equal(effectiveFileMaxMb(10, "35"), 10, "el tope del servidor no sube el del proyecto");
+  assert.equal(effectiveFileMaxMb(10, "no"), 10);
 });
 
 test("buzón de pruebas: se ignora en producción salvo permiso explícito", () => {

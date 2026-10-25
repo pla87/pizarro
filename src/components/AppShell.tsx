@@ -36,6 +36,8 @@ interface Props {
   unread: number;
   /** Último proyecto visitado (cookie ya validada contra los visibles): se mantiene seleccionado fuera de /p/…. */
   lastProjectId?: string | null;
+  /** Copia de seguridad atrasada: punto de aviso junto a «Administración» (solo admins). */
+  backupAlert?: boolean;
   children: React.ReactNode;
 }
 
@@ -49,7 +51,7 @@ export function AppShell(props: Props) {
   );
 }
 
-function Shell({ user, projects, version, unread, lastProjectId = null, children }: Props) {
+function Shell({ user, projects, version, unread, lastProjectId = null, backupAlert = false, children }: Props) {
   const t = useT();
   const pathname = usePathname();
   // El menú móvil se cierra solo al navegar: queda asociado a la ruta en que se abrió.
@@ -75,7 +77,7 @@ function Shell({ user, projects, version, unread, lastProjectId = null, children
   }, [projectId]);
 
   const sidebar = (
-    <Sidebar user={user} projects={projects} current={current} version={version} pathname={pathname} unread={unread} />
+    <Sidebar user={user} projects={projects} current={current} version={version} pathname={pathname} unread={unread} backupAlert={backupAlert} />
   );
 
   return (
@@ -143,8 +145,9 @@ function NavLink({ href, icon: Icon, children, active }: { href: string; icon: t
   );
 }
 
-function Sidebar({ user, projects, current, version, pathname, unread }: {
+function Sidebar({ user, projects, current, version, pathname, unread, backupAlert }: {
   unread: number;
+  backupAlert: boolean;
   user: CurrentUser;
   projects: { id: string; name: string; isPrivate?: boolean }[];
   current: { id: string; name: string; isPrivate?: boolean } | null;
@@ -184,7 +187,10 @@ function Sidebar({ user, projects, current, version, pathname, unread }: {
         <NavLink href="/my-tasks" icon={ListChecks} active={pathname === "/my-tasks"}>{t("Mis tareas asignadas")}</NavLink>
         <NavLink href="/calendar" icon={CalendarDays} active={pathname === "/calendar"}>{t("Calendario")}</NavLink>
         <NavLink href="/settings" icon={Settings} active={pathname === "/settings"}>{t("Mi perfil")}</NavLink>
-        {isAdmin && <NavLink href="/admin" icon={Shield} active={pathname.startsWith("/admin")}>{t("Administración")}</NavLink>}
+        {isAdmin && <NavLink href="/admin" icon={Shield} active={pathname.startsWith("/admin")}>
+          <span className="flex-1">{t("Administración")}</span>
+          {backupAlert && <span className="h-2 w-2 rounded-full bg-amber-500" role="img" aria-label={t("Copia de seguridad atrasada")} title={t("Copia de seguridad atrasada")} />}
+        </NavLink>}
         <NavLink href="/changelog" icon={History} active={pathname === "/changelog"}>{t("Historial de versiones")}</NavLink>
         <InstallApp />
       </nav>

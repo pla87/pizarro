@@ -133,6 +133,13 @@ export async function deleteKind(kindId: string, replacementId: string) {
     if (kind.id === replacement) throw new AppError("Elige otro tipo para las tareas.");
     const target = await db.taskKind.findUnique({ where: { id: replacement }, select: { projectId: true } });
     if (!target || (target.projectId !== null && target.projectId !== kind.projectId)) throw new AppError("El tipo de destino no es válido.");
+    // Un tipo general oculto no puede recibir tareas de un proyecto que lo oculta (luego no se podrían editar ni duplicar).
+    if (target.projectId === null) {
+      const hiddenWhere = kind.projectId
+        ? { kindId: replacement, projectId: kind.projectId }
+        : { kindId: replacement, project: { tasks: { some: { kindId: kind.id } } } };
+      if (await db.projectHiddenKind.count({ where: hiddenWhere })) throw new AppError("Ese tipo está oculto en un proyecto con tareas de este tipo: elige otro o actívalo antes en ese proyecto.");
+    }
     await db.$transaction([
       db.task.updateMany({ where: { kindId: kind.id }, data: { kindId: replacement } }),
       db.taskKind.delete({ where: { id: kind.id } }),
