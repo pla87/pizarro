@@ -1,7 +1,7 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "./db";
-import { hashAuthToken, isTokenUsable, newToken, tokenExpiry, type TokenPurpose } from "./auth-token-core";
+import { authTokenHashes, hashAuthToken, isTokenUsable, newToken, tokenExpiry, type TokenPurpose } from "./auth-token-core";
 
 // Enlaces de un solo uso por email. En la base de datos solo queda el hash del token.
 
@@ -18,8 +18,9 @@ export async function issueAuthToken(userId: string, purpose: TokenPurpose, data
 /** Busca un enlace válido (sin usar ni caducado, de uno de los tipos indicados, de un usuario activo) sin gastarlo. */
 export async function findUsableToken(token: string, purposes: TokenPurpose[]) {
   if (!token || token.length > 100) return null;
-  const row = await db.authToken.findUnique({
-    where: { tokenHash: hashAuthToken(token) },
+  // Con TOKEN_SECRET_PREVIOUS, un enlace emitido antes de rotar la clave sigue sirviendo hasta que caduca.
+  const row = await db.authToken.findFirst({
+    where: { tokenHash: { in: authTokenHashes(token) } },
     select: {
       id: true, userId: true, purpose: true, data: true, expiresAt: true, usedAt: true,
       user: { select: { id: true, name: true, email: true, locale: true, active: true } },

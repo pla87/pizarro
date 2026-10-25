@@ -108,6 +108,9 @@ steps:
 |---|---|---|---|
 | `DATABASE_URL` | Sí | `${{Postgres.DATABASE_URL}}` | Conexión a PostgreSQL. |
 | `SESSION_SECRET` | Sí | 48+ caracteres aleatorios | Clave HMAC para los identificadores de sesión. Si la cambias, se cierran todas las sesiones. |
+| `TOKEN_SECRET` | Recomendada | 48+ caracteres aleatorios | Clave HMAC de los enlaces de email, códigos de recuperación, códigos 2FA por email y dispositivos recordados. Sin ella se usa `SESSION_SECRET`. |
+| `ENCRYPTION_KEY` | Recomendada | 48+ caracteres aleatorios | Clave con la que se cifran (AES-256-GCM) los secretos TOTP y los tokens de Google. Sin ella se usa `SESSION_SECRET`. Con esta y `TOKEN_SECRET` definidas, rotar `SESSION_SECRET` solo cierra las sesiones. Guárdala fuera del servidor. |
+| `TOKEN_SECRET_PREVIOUS` / `ENCRYPTION_KEY_PREVIOUS` | Solo al rotar | la clave anterior | Siguen aceptando lo guardado con la clave anterior. Tras cambiar `ENCRYPTION_KEY`, `node dist/rotate-keys.mjs` (`npm run keys:rotate`) lo re-cifra todo y la anterior se puede quitar. Ver el manual, 4.4. |
 | `APP_URL` | Sí | `https://tablon.up.railway.app` | URL pública. Con `https://` la cookie se marca `Secure` y usa el prefijo `__Host-`. |
 | `UPLOAD_DIR` | Sí | `/app/uploads` | Carpeta de capturas (la ruta del volumen). |
 | `PORT` | No | Lo inyecta Railway | Puerto HTTP (por defecto 3000). |
@@ -247,7 +250,7 @@ Nota: `railway run` ejecuta el comando en tu máquina con las variables del serv
 5. Copia el **ID de cliente** y el **secreto** a Railway: `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`, y añade `GOOGLE_WORKSPACE_DOMAIN=tu-dominio.com`. Así, cada archivo creado se comparte automáticamente con tu dominio como editor (`GOOGLE_SHARE_ROLE`), y el resto del equipo puede abrirlo desde la tarjeta. En un proyecto privado el archivo no se comparte con el dominio, solo con los emails de los miembros del proyecto. Sin dominio, solo lo ve quien lo crea hasta que lo comparta a mano.
 6. Redespliega. Cada usuario entra en **Mi perfil → Google Docs y Sheets → Conectar con Google**.
 
-> Los tokens de Google se guardan cifrados con una clave derivada de `SESSION_SECRET`. Si rotas `SESSION_SECRET`, cada usuario tendrá que volver a conectar Google.
+> Los tokens de Google se guardan cifrados con `ENCRYPTION_KEY` (o, si no está definida, con una clave derivada de `SESSION_SECRET`). Si cambias esa clave sin poner la anterior en `ENCRYPTION_KEY_PREVIOUS`, cada usuario tendrá que volver a conectar Google (ver el manual, 4.4).
 
 #### 7.2 Avisos por email
 
@@ -308,7 +311,7 @@ Se usa la **WhatsApp Cloud API** oficial de Meta. Pasos:
 
 **Solo con Google.** `AUTH_GOOGLE_ONLY=true` desactiva el acceso con contraseña para todos. `AUTH_ALLOW_ADMIN_PASSWORD=true` mantiene la contraseña solo para administradores como acceso de emergencia (aparece plegado en la pantalla de acceso). Por defecto ambas están sin definir y se admiten los dos métodos.
 
-**Verificación en dos pasos.** Solo afecta al acceso con contraseña. Cada persona puede activarla en *Mi perfil → Verificación en dos pasos* con una app de autenticación (TOTP, 6 dígitos, 30 s) o un código de 6 dígitos por email (10 minutos, un solo uso; requiere SMTP). Al activarla se muestran 10 códigos de recuperación de un solo uso (solo se guarda su HMAC). Es **obligatoria para administradores**: tras la contraseña se les pide configurarla antes de entrar. Hasta completar el segundo paso no existe sesión. Se permiten 5 fallos por cada contraseña correcta y 20 por persona y hora. «Recordar este dispositivo 14 días» omite el segundo paso en ese navegador (se anula al cambiar la contraseña o el método). Si alguien pierde el móvil y los códigos, un administrador puede restablecerla en *Administración → Usuarios*. Los secretos TOTP se guardan cifrados con una clave derivada de `SESSION_SECRET`.
+**Verificación en dos pasos.** Solo afecta al acceso con contraseña. Cada persona puede activarla en *Mi perfil → Verificación en dos pasos* con una app de autenticación (TOTP, 6 dígitos, 30 s) o un código de 6 dígitos por email (10 minutos, un solo uso; requiere SMTP). Al activarla se muestran 10 códigos de recuperación de un solo uso (solo se guarda su HMAC). Es **obligatoria para administradores**: tras la contraseña se les pide configurarla antes de entrar. Hasta completar el segundo paso no existe sesión. Se permiten 5 fallos por cada contraseña correcta y 20 por persona y hora. «Recordar este dispositivo 14 días» omite el segundo paso en ese navegador (se anula al cambiar la contraseña o el método). Si alguien pierde el móvil y los códigos, un administrador puede restablecerla en *Administración → Usuarios*. Los secretos TOTP se guardan cifrados con `ENCRYPTION_KEY` (o, sin ella, con una clave derivada de `SESSION_SECRET`).
 
 ## Arquitectura (resumen)
 

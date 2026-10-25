@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./db";
-import { decryptSecret, encryptSecret } from "./crypto";
+import { decryptSecret, decryptSecretInfo, encryptSecret } from "./crypto";
 import { AppError } from "./errors";
 import { logEvent } from "./log";
 import { idTokenKeyId, verifiedConnectEmail } from "./google-id-token";
@@ -116,10 +116,15 @@ export async function connectGoogleAccount(userId: string, code: string): Promis
 
 const reconnectError = () => new AppError("Tu conexión con Google ha caducado. Vuelve a conectarla en «Mi perfil».", 412);
 
-/** Descifra un token; si no se puede (p. ej. SESSION_SECRET rotado) borra la conexión y pide reconectar. */
-async function decryptOrReset(userId: string, value: string): Promise<string> {
+/**
+ * Descifra un token; si no se puede (clave de cifrado cambiada sin ENCRYPTION_KEY_PREVIOUS) borra la conexión y pide
+ * reconectar. Si estaba cifrado con la clave anterior, lo vuelve a cifrar con la actual.
+ */
+async function decryptOrReset(userId: string, value: string, field: "accessTokenEnc" | "refreshTokenEnc"): Promise<string> {
   try {
-    return decryptSecret(value);
+    const { plain, stale } = decryptSecretInfo(value);
+    if (stale) await db.googleAccount.updateMany({ where: { userId, [field]: value }, data: { [field]: encryptSecret(plain) } }).catch(() => {});
+    return plain;
   } catch {
     await db.googleAccount.delete({ where: { userId } }).catch(() => {});
     throw reconnectError();
@@ -130,9 +135,9 @@ async function accessToken(userId: string): Promise<string> {
   const account = await db.googleAccount.findUnique({ where: { userId } });
   if (!account) throw new AppError("Conecta tu cuenta de Google en «Mi perfil» para crear documentos.", 412);
   if (account.accessTokenEnc && account.accessTokenExpiry && account.accessTokenExpiry > new Date()) {
-    return decryptOrReset(userId, account.accessTokenEnc);
+    return decryptOrReset(userId, account.accessTokenEnc, "accessTokenEnc");
   }
-  const refreshToken = await decryptOrReset(userId, account.refreshTokenEnc);
+  const refreshToken = await decryptOrReset(userId, account.refreshTokenEnc, "refreshTokenEnc");
   let tokens: TokenResponse;
   try {
     tokens = await tokenRequest({ refresh_token: refreshToken, grant_type: "refresh_token" });

@@ -114,6 +114,7 @@ export const server: Record<string, string> = {
   "No se pudo crear el archivo en Google Drive.": "The file could not be created in Google Drive.",
   // API
   "No autorizado": "Unauthorized",
+  "Demasiadas descargas del diagnóstico. Espera unos minutos.": "Too many diagnostics downloads. Wait a few minutes.",
   "Prohibido": "Forbidden",
   "No encontrado": "Not found",
   "Archivo no disponible": "File not available",
