@@ -278,7 +278,7 @@ describe("crear y cambiar la visibilidad de proyectos", () => {
 });
 
 describe("topes de adjuntos del proyecto (setAttachmentLimits)", () => {
-  test("valida rangos y que el ZIP no sea menor que el de la tarea, exige gestionar el proyecto y guarda ambos", async () => {
+  test("valida rangos y archivo ≤ tarea ≤ ZIP, exige gestionar el proyecto y guarda los tres", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const member = await makeUser();
     const f = await makeProject({ members: [member] });
@@ -286,26 +286,33 @@ describe("topes de adjuntos del proyecto (setAttachmentLimits)", () => {
     const read = () => db.project.findUniqueOrThrow({ where: { id } });
     assert.equal((await read()).releaseZipMaxMb, 80);
     assert.equal((await read()).taskAttachMaxMb, 80);
+    assert.equal((await read()).fileMaxMb, 20);
     await loginAs(admin);
-    expectFail(await setAttachmentLimits(id, 9, 80), /mínimo/);
-    expectFail(await setAttachmentLimits(id, 80, 501), /máximo/);
-    expectFail(await setAttachmentLimits(id, 501, 500), /máximo/);
-    expectFail(await setAttachmentLimits(id, 80.5, 100), /no válido/);
-    expectFail(await setAttachmentLimits(id, 80, Number.NaN), /no válido/);
-    // El paquete no puede ser menor que el tope de la tarea.
-    expectFail(await setAttachmentLimits(id, 100, 99), /no puede ser menor/);
-    assert.equal((await read()).releaseZipMaxMb, 80);
-    assert.equal((await read()).taskAttachMaxMb, 80);
-    expectOk(await setAttachmentLimits(id, 50, 200));
-    assert.deepEqual([(await read()).taskAttachMaxMb, (await read()).releaseZipMaxMb], [50, 200]);
-    expectOk(await setAttachmentLimits(id, 10, 10));
-    expectOk(await setAttachmentLimits(id, 500, 500));
+    expectFail(await setAttachmentLimits(id, 20, 9, 80), /mínimo/);
+    expectFail(await setAttachmentLimits(id, 20, 80, 501), /máximo/);
+    expectFail(await setAttachmentLimits(id, 20, 501, 500), /máximo/);
+    expectFail(await setAttachmentLimits(id, 20, 80.5, 100), /no válido/);
+    expectFail(await setAttachmentLimits(id, 20, 80, Number.NaN), /no válido/);
+    // Rango del archivo: 1–100 MB, entero.
+    expectFail(await setAttachmentLimits(id, 0, 80, 80), /mínimo es 1 MB/);
+    expectFail(await setAttachmentLimits(id, 101, 200, 200), /máximo es 100 MB/);
+    expectFail(await setAttachmentLimits(id, 2.5, 80, 80), /no válido/);
+    // La tarea no puede ser menor que el archivo, ni el paquete menor que la tarea.
+    expectFail(await setAttachmentLimits(id, 30, 20, 80), /tarea no puede ser menor que el de un archivo/);
+    expectFail(await setAttachmentLimits(id, 20, 100, 99), /no puede ser menor/);
+    assert.deepEqual([(await read()).fileMaxMb, (await read()).taskAttachMaxMb, (await read()).releaseZipMaxMb], [20, 80, 80]);
+    expectOk(await setAttachmentLimits(id, 5, 50, 200));
+    assert.deepEqual([(await read()).fileMaxMb, (await read()).taskAttachMaxMb, (await read()).releaseZipMaxMb], [5, 50, 200]);
+    expectOk(await setAttachmentLimits(id, 10, 10, 10));
+    expectOk(await setAttachmentLimits(id, 1, 500, 500));
+    expectOk(await setAttachmentLimits(id, 100, 500, 500));
     // Un miembro de un proyecto de equipo no puede cambiarlo; un ajeno ni lo ve.
     await loginAs(member);
-    expectFail(await setAttachmentLimits(id, 100, 100), FORBIDDEN);
+    expectFail(await setAttachmentLimits(id, 10, 100, 100), FORBIDDEN);
     await loginAs(await makeUser());
-    expectFail(await setAttachmentLimits(id, 100, 100), NOT_FOUND);
+    expectFail(await setAttachmentLimits(id, 10, 100, 100), NOT_FOUND);
     assert.equal((await read()).taskAttachMaxMb, 500);
+    assert.equal((await read()).fileMaxMb, 100);
   });
 });
 

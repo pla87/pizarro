@@ -4,7 +4,7 @@ import { dateToIso } from "./dates";
 import { projectUsersWhere } from "./access";
 import { db } from "./db";
 import { TASK_ORDER } from "./task-positions";
-import type { BoardTask } from "./types";
+import type { AttachmentTotals, BoardTask } from "./types";
 
 export const boardTaskSelect = {
   id: true,
@@ -80,6 +80,17 @@ export async function loadBoardTasks(projectId: string): Promise<BoardTask[]> {
   ]);
   const withText = new Set(described.map((d) => d.id));
   return rows.map((r) => toBoardTaskWith(r, withText.has(r.id)));
+}
+
+/**
+ * Contadores de adjuntos de una tarea según las filas de TaskAttachment (nunca los ficheros del disco, que se
+ * conservan un tiempo para poder deshacer un borrado). El cliente los usa como valor absoluto, no como suma.
+ */
+export async function attachmentTotals(taskId: string, client: Pick<typeof db, "taskAttachment"> = db): Promise<AttachmentTotals> {
+  const rows = await client.taskAttachment.groupBy({ by: ["isImage"], where: { taskId }, _count: { _all: true }, _sum: { size: true } });
+  const imgs = rows.find((r) => r.isImage);
+  const files = rows.find((r) => !r.isImage);
+  return { imageCount: imgs?._count._all ?? 0, fileCount: files?._count._all ?? 0, attachBytes: (imgs?._sum.size ?? 0) + (files?._sum.size ?? 0) };
 }
 
 export async function loadBoardTask(id: string): Promise<BoardTask> {

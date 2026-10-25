@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { makeT, type T } from "@/i18n/core";
-import type { AttachmentInfo, BoardTask } from "@/lib/types";
+import type { UploadedAttachment } from "@/lib/types";
 
 const CLIENT_MAX_WIDTH = 1920;
 
@@ -69,16 +69,8 @@ export class UploadError extends Error {
   }
 }
 
-/** Cambio de los contadores de la tarjeta al añadir (+1) o quitar (-1) un adjunto. */
-export function attachmentPatch(task: BoardTask, att: Pick<AttachmentInfo, "isImage" | "size">, sign: 1 | -1 = 1): Partial<BoardTask> {
-  const attachBytes = Math.max(0, task.attachBytes + sign * att.size);
-  return att.isImage
-    ? { imageCount: Math.max(0, task.imageCount + sign), attachBytes }
-    : { fileCount: Math.max(0, task.fileCount + sign), attachBytes };
-}
-
 /** `onCreate`: adjunto de una tarea recién creada (deshacer la creación se lo lleva, no cuenta aparte). */
-export async function uploadFile(taskId: string, file: File, onCreate = false, t: T = makeT("es")): Promise<AttachmentInfo> {
+export async function uploadFile(taskId: string, file: File, onCreate = false, t: T = makeT("es")): Promise<UploadedAttachment> {
   const body = new FormData();
   const isImage = isImageFile(file);
   const fallback = isImage ? `${t("captura")}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png` : t("archivo");
@@ -87,7 +79,7 @@ export async function uploadFile(taskId: string, file: File, onCreate = false, t
   const res = await fetch(`/api/tasks/${taskId}/attachments${onCreate ? "?alCrear=1" : ""}`, { method: "POST", body });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new UploadError(json.error ?? t("No se pudo subir el archivo."), json.code);
-  return json as AttachmentInfo;
+  return json as UploadedAttachment;
 }
 
 /** Diálogos con zona de soltado abiertos: solo el último (el de más arriba) recibe los archivos. */

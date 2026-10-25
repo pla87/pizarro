@@ -115,7 +115,7 @@ steps:
 | `SEED_ADMIN_PASSWORD` | Solo el primer arranque | mínimo 10 caracteres | Contraseña inicial: cámbiala después desde *Mi perfil*. |
 | `SEED_ADMIN_NAME` | No | `Administrador` | Nombre visible del admin inicial. |
 | `MAX_USERS` | No | `10` | Máximo de usuarios activos. |
-| `MAX_UPLOAD_MB` | No | `20` | Tamaño máximo por adjunto. El tope del cuerpo de la petición se fija al compilar a partir de ella: si la cambias, vuelve a desplegar (en Railway la variable llega también al build). |
+| `MAX_UPLOAD_MB` | No | (sin tope) | Tope opcional, para todo el servidor, del tamaño de un adjunto. El tamaño máximo real es el de cada proyecto (ajustes del proyecto, 20 MB por defecto, hasta 100); si defines esta variable, ningún proyecto la supera. Se lee al subir cada archivo: cambiarla no exige recompilar. El proxy admite siempre hasta 100 MB por petición. |
 | `DATABASE_POOL_SIZE` | No | `10` | Conexiones del pool. |
 | `UPLOAD_QUOTA_MB_PER_PROJECT` | No | `2048` | Cuota de adjuntos por proyecto (MB). Pasada la cuota, la subida se rechaza mostrando el uso. |
 | `UPLOAD_QUOTA_MB_TOTAL` | No | (sin límite) | Cuota total de adjuntos de todo el servidor (MB). |

@@ -211,6 +211,8 @@ model Project {
   releaseZipMaxMb Int    @default(80)
   /// Tamaño máximo (MB) de la suma de adjuntos de una tarea.
   taskAttachMaxMb Int    @default(80)
+  /// Tamaño máximo (MB) de UN adjunto. 1 ≤ fileMaxMb ≤ taskAttachMaxMb ≤ releaseZipMaxMb.
+  fileMaxMb       Int    @default(20)
   position    Float    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

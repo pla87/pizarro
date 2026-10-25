@@ -126,6 +126,16 @@ export interface CommentInfo {
   parentId: string | null;
 }
 
+/** Contadores de adjuntos de una tarea (los de la tarjeta): se calculan siempre sobre las filas que existen. */
+export interface AttachmentTotals {
+  imageCount: number;
+  fileCount: number;
+  attachBytes: number;
+}
+
+/** Respuesta de la subida: el adjunto y los contadores reales de la tarea tras crearlo. */
+export type UploadedAttachment = AttachmentInfo & { totals: AttachmentTotals };
+
 export interface AttachmentInfo {
   id: string;
   originalName: string;

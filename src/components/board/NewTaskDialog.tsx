@@ -19,7 +19,7 @@ import { applyKindTemplate, mergeSubtasks } from "@/lib/kinds-special";
 import { TypeSelector } from "./TaskDialog";
 import type { T } from "@/i18n/core";
 import { AttachLimitHint } from "./AttachLimitHint";
-import { attachmentPatch, filesFrom, isImageFile, uploadFile, useFileDrop } from "./upload";
+import { filesFrom, isImageFile, uploadFile, useFileDrop } from "./upload";
 import { draftKey, useDraftAutosave, type NewTaskDraft } from "./drafts";
 
 interface Props {
@@ -214,7 +214,9 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     const ok = uploaded.length;
     const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
     if (ok && !elsewhere) {
-      for (const a of uploaded) task = { ...task, ...attachmentPatch(task, a) };
+      // Las subidas van en paralelo: sus respuestas pueden llegar desordenadas; vale la que ya cuenta todas las que se guardaron.
+      const latest = uploaded.reduce((best, a) => (a.totals.imageCount + a.totals.fileCount > best.imageCount + best.fileCount ? a.totals : best), uploaded[0]!.totals);
+      task = { ...task, ...latest };
       board.upsertTask(task);
     }
     if (failed) toast((failed.reason as Error).message, "error");

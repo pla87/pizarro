@@ -11,8 +11,10 @@ import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser, requireUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { createAttachmentWithinLimit, roundMb } from "@/lib/attachment-limit";
-import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, MAX_UPLOAD_BYTES, processImage, removeAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveRawAttachmentFile } from "@/lib/uploads";
-import type { AttachmentInfo } from "@/lib/types";
+import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, processImage, removeAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveRawAttachmentFile } from "@/lib/uploads";
+import { attachmentTotals } from "@/lib/board";
+import { effectiveFileMaxMb, MULTIPART_OVERHEAD_BYTES } from "@/lib/upload-size";
+import type { UploadedAttachment } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -31,15 +33,24 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     // Tope de subidas por persona: evita llenar el disco o la memoria (sharp) con un bucle.
     if (!rateLimit(`upload:${user.id}`, 60, 60_000)) throw new AppError("Demasiadas peticiones", 429);
 
+    // Límite de un archivo: el del proyecto (y, si existe, el tope MAX_UPLOAD_MB del servidor), leído en cada subida.
+    const project = await db.project.findUniqueOrThrow({ where: { id: projectId }, select: { fileMaxMb: true } });
+    const fileMaxMb = effectiveFileMaxMb(project.fileMaxMb);
+    const maxBytes = fileMaxMb * 1024 * 1024;
+    const tooBig = async () => {
+      const t = await getT();
+      return new AppError(t("El archivo supera el tamaño máximo del proyecto ({mb} MB por archivo).", { mb: fileMaxMb }), 413);
+    };
+    // Antes de leer el cuerpo: si la petición ya declara más que el archivo máximo (más el envoltorio multipart), se rechaza.
     const length = Number(req.headers.get("content-length") ?? 0);
-    if (length > MAX_UPLOAD_BYTES + 64 * 1024) throw new AppError("El archivo supera el tamaño máximo.", 413);
+    if (length > maxBytes + MULTIPART_OVERHEAD_BYTES) throw await tooBig();
     // Cola de imágenes llena: se rechaza antes de leer el cuerpo (no se sabe si es imagen, pero el servidor está saturado).
     if (imageQueueFull()) throw new AppError(IMAGE_QUEUE_FULL_MESSAGE, 503);
     const form = await req.formData();
     const file = form.get("file");
     if (!(file instanceof File)) throw new AppError("No se ha recibido ningún archivo.");
     fileInfo = { name: file.name, type: file.type, size: file.size };
-    if (file.size > MAX_UPLOAD_BYTES) throw new AppError("El archivo supera el tamaño máximo.", 413);
+    if (file.size > maxBytes) throw await tooBig();
     if (file.size === 0) throw new AppError("El archivo está vacío.");
 
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -111,7 +122,8 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
         console.error("[undo] no se pudo guardar", err),
       );
     }
-    return NextResponse.json<AttachmentInfo>(attachment, { status: 201 });
+    // Contadores reales de la tarea (solo filas existentes): el cliente los aplica tal cual, sin sumar a ciegas.
+    return NextResponse.json<UploadedAttachment>({ ...attachment, totals: await attachmentTotals(taskId) }, { status: 201 });
   } catch (err) {
     const user = await getCurrentUser().catch(() => null);
     logEvent({

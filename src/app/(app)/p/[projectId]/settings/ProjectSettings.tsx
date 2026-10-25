@@ -16,6 +16,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
 import { isWhite, onColor, PALETTE, RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "@/lib/constants";
+import { FILE_MAX_DEFAULT_MB, FILE_MAX_MAX_MB, FILE_MAX_MIN_MB } from "@/lib/upload-size";
 import type { EditorModeValue, KindOption, LabelOption } from "@/lib/types";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
 import { setGeneralKindEnabled } from "@/actions/project-kinds";
@@ -23,7 +24,7 @@ import { setGeneralKindEnabled } from "@/actions/project-kinds";
 interface Props {
   isAdmin: boolean;
   currentUserId: string;
-  project: { id: string; name: string; description: string; visibility: "TEAM" | "PRIVATE"; releaseZipMaxMb: number; taskAttachMaxMb: number; members: { id: string; name: string; active: boolean }[] };
+  project: { id: string; name: string; description: string; visibility: "TEAM" | "PRIVATE"; releaseZipMaxMb: number; taskAttachMaxMb: number; fileMaxMb: number; members: { id: string; name: string; active: boolean }[] };
   labels: LabelOption[];
   kinds: KindRow[];
   /** Todos los tipos generales, con si el proyecto los usa y cuántas tareas tienen aquí. */
@@ -56,6 +57,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
   const [description, setDescription] = useState(project.description);
   const [zipMb, setZipMb] = useState(String(project.releaseZipMaxMb));
   const [taskMb, setTaskMb] = useState(String(project.taskAttachMaxMb));
+  const [fileMb, setFileMb] = useState(String(project.fileMaxMb));
   const [visibility, setVisibility] = useState(project.visibility);
   const [labels, setLabels] = useState(initialLabels);
   const [confirmName, setConfirmName] = useState("");
@@ -106,20 +108,37 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
             className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
-              if (Number(zipMb) < Number(taskMb)) {
+              const [file, task, zip] = [Number(fileMb), Number(taskMb), Number(zipMb)];
+              if (!Number.isInteger(file) || file < FILE_MAX_MIN_MB || file > FILE_MAX_MAX_MB) {
+                toast(t("El tamaño máximo de un archivo debe estar entre {min} y {max} MB.", { min: FILE_MAX_MIN_MB, max: FILE_MAX_MAX_MB }), "error");
+                return;
+              }
+              if (task < file) {
+                toast(t("El máximo de adjuntos de una tarea no puede ser menor que el de un archivo."), "error");
+                return;
+              }
+              if (zip < task) {
                 toast(t("El paquete ZIP de una release no puede ser menor que el máximo de adjuntos de una tarea."), "error");
                 return;
               }
-              run(async () => setAttachmentLimits(project.id, Number(taskMb), Number(zipMb)), t("Proyecto actualizado"), () => router.refresh());
+              run(async () => setAttachmentLimits(project.id, file, task, zip), t("Proyecto actualizado"), () => router.refresh());
             }}
           >
+            <div>
+              <label className="label" htmlFor="p-file-mb">{t("Tamaño máximo de un adjunto (MB)")}</label>
+              <input
+                id="p-file-mb" className="input w-32" type="number" inputMode="numeric" step={1}
+                min={FILE_MAX_MIN_MB} max={FILE_MAX_MAX_MB} value={fileMb} onChange={(e) => setFileMb(e.target.value)} required
+              />
+              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto {default}), y nunca más que el máximo de adjuntos de una tarea. Cada archivo se carga entero en la memoria del servidor al subirlo: no lo subas más de lo necesario.", { min: FILE_MAX_MIN_MB, max: FILE_MAX_MAX_MB, default: FILE_MAX_DEFAULT_MB })}</p>
+            </div>
             <div>
               <label className="label" htmlFor="p-task-mb">{t("Tamaño máximo de los adjuntos de una tarea (MB)")}</label>
               <input
                 id="p-task-mb" className="input w-32" type="number" inputMode="numeric" step={1}
                 min={RELEASE_ZIP_MIN_MB} max={RELEASE_ZIP_MAX_MB} value={taskMb} onChange={(e) => setTaskMb(e.target.value)} required
               />
-              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto 80). Es lo máximo que pueden sumar todos los adjuntos de una tarea.", { min: RELEASE_ZIP_MIN_MB, max: RELEASE_ZIP_MAX_MB })}</p>
+              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto 80), y nunca menos que el máximo de un adjunto. Es lo máximo que pueden sumar todos los adjuntos de una tarea.", { min: RELEASE_ZIP_MIN_MB, max: RELEASE_ZIP_MAX_MB })}</p>
             </div>
             <div>
               <label className="label" htmlFor="p-zip-mb">{t("Tamaño máximo de cada paquete ZIP de una release (MB)")}</label>

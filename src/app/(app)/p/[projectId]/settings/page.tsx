@@ -27,6 +27,7 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
       isPrivate: true,
       releaseZipMaxMb: true,
       taskAttachMaxMb: true,
+      fileMaxMb: true,
       hiddenKinds: { select: { kindId: true } },
       members: { select: { userId: true, user: { select: { name: true, active: true } } }, orderBy: { user: { name: "asc" } } },
       labels: { orderBy: { name: "asc" }, select: { id: true, name: true, color: true } },
@@ -66,6 +67,7 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
         visibility: project.isPrivate ? "PRIVATE" : "TEAM",
         releaseZipMaxMb: project.releaseZipMaxMb,
         taskAttachMaxMb: project.taskAttachMaxMb,
+        fileMaxMb: project.fileMaxMb,
         members: project.members.map((m) => ({ id: m.userId, name: m.user.name, active: m.user.active })),
       }}
       labels={project.labels}
