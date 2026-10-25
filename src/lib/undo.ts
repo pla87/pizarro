@@ -35,6 +35,7 @@ export interface TaskData {
   archivedAt?: string | null;
   archivedFromColumnId?: string | null;
   evergreen?: boolean;
+  evergreenEvery?: number;
   recurrence?: "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
   recurrenceDay?: number | null;
   contentUpdatedAt?: string | null;
@@ -91,7 +92,7 @@ const date = (s: string | null | undefined) => (s ? new Date(s) : null);
 
 const TASK_SELECT = {
   title: true, description: true, kindId: true, color: true, linkUrl: true, position: true, columnId: true, assigneeId: true,
-  dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, recurrence: true, recurrenceDay: true, contentUpdatedAt: true, contentUpdatedById: true,
+  dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, evergreenEvery: true, recurrence: true, recurrenceDay: true, contentUpdatedAt: true, contentUpdatedById: true,
 } as const;
 type TaskRowFull = Prisma.TaskGetPayload<{ select: typeof TASK_SELECT }>;
 
@@ -573,7 +574,7 @@ export async function fingerprintOps(projectId: string, ops: UndoOp[]): Promise<
     select: {
       // Contenido, no la hora de escritura: reescribir lo mismo (p. ej. un deshacer propio) no cuenta como cambio.
       id: true, title: true, description: true, kindId: true, color: true, linkUrl: true, position: true, columnId: true, assigneeId: true,
-      dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, recurrence: true, recurrenceDay: true,
+      dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, evergreenEvery: true, recurrence: true, recurrenceDay: true,
       labels: { select: { labelId: true }, orderBy: { labelId: "asc" } },
       subtasks: { select: { id: true, title: true, done: true, position: true }, orderBy: { id: "asc" } },
       comments: { select: { id: true, editedAt: true }, orderBy: { id: "asc" } },

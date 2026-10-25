@@ -1,6 +1,5 @@
 "use server";
 
-import { readFile } from "node:fs/promises";
 import { after } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
@@ -11,13 +10,13 @@ import { assertProjectAccess } from "@/lib/access";
 import { MAX_RELEASE_CONTENT } from "@/lib/constants";
 import { appTimeZone } from "@/lib/board";
 import { AppError } from "@/lib/errors";
-import { logEvent } from "@/lib/log";
 import { POSITION_STEP } from "@/lib/positions";
 import { spawnRecurrences } from "@/lib/recurrence";
 import { lastPositionIn, lockColumns, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
-import { attachmentFileNames, zonedDayRange } from "@/lib/release";
+import { zonedDayRange } from "@/lib/release";
+import { runReleaseAttachmentsJob, type PendingJob } from "@/lib/release-attachments";
 import { requireUser } from "@/lib/session";
-import { attachmentPath, compactImage, removeReleaseAttachmentFiles, saveReleaseAttachmentFile } from "@/lib/uploads";
+import { removeReleaseAttachmentFiles } from "@/lib/uploads";
 import { addUndo, captureTasks } from "@/lib/undo";
 import { tasksN } from "@/lib/undo-label";
 import * as v from "@/lib/validation";
@@ -65,6 +64,11 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
       throw new AppError("No hay ninguna columna con el rol «En producción». Asígnalo en el menú de una columna o elige archivar.");
     }
 
+    // Copias de adjuntos para el histórico: el trabajo se guarda con la release (si el servidor se reinicia a mitad, el arranque lo retoma).
+    const job: PendingJob | null = data.attachments?.length
+      ? { items: data.attachments, allowed: tasks.map((t) => t.id), projectId: data.projectId, userId: user.id, userName: user.name }
+      : null;
+
     const result = await db.$transaction(async (tx) => {
       const last = await tx.release.findFirst({ where: { projectId: data.projectId }, orderBy: { number: "desc" }, select: { number: true } });
       const number = (last?.number ?? 0) + 1;
@@ -79,6 +83,7 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
           title: data.title,
           content: data.content,
           createdById: user.id,
+          ...(job ? { attachmentsPending: job } : {}),
           tasks: { create: tasks.map((t) => ({ taskId: t.id, title: mentionsToPlain(t.title), kindName: t.kind.name })) },
         },
         select: { id: true },
@@ -116,79 +121,9 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     );
     // Copias compactas de los adjuntos para el histórico: tras responder (comprimir imágenes tarda), así el
     // despliegue no espera. El histórico las muestra unos segundos después; si algo falla queda en el registro.
-    if (data.attachments?.length) {
-      const job = { releaseId: result.releaseId, items: data.attachments, allowed: new Set(tasks.map((t) => t.id)), projectId: data.projectId, userId: user.id, userName: user.name };
-      after(() =>
-        saveReleaseAttachments(job).catch((err) =>
-          logEvent({
-            level: "error", category: "system", action: "releases.saveAttachments",
-            message: `No se pudieron guardar los adjuntos de la release: ${err instanceof Error ? err.message : String(err)}`,
-            userId: job.userId, userName: job.userName, projectId: job.projectId, details: { releaseId: job.releaseId },
-          }),
-        ),
-      );
-    }
+    if (job) after(() => runReleaseAttachmentsJob(result.releaseId, job));
     return { ...result, spawned };
   });
-}
-
-interface AttachmentJob {
-  releaseId: string;
-  items: { taskId: string; code: string }[];
-  allowed: Set<string>;
-  projectId: string;
-  userId: string;
-  userName: string;
-}
-
-async function saveReleaseAttachments({ releaseId, items, allowed, projectId, userId, userName }: AttachmentJob) {
-  const valid = items.filter((i) => allowed.has(i.taskId));
-  if (new Set(valid.map((i) => i.taskId)).size !== valid.length || new Set(valid.map((i) => i.code)).size !== valid.length) return;
-  const tasks = await db.task.findMany({
-    where: { id: { in: valid.map((i) => i.taskId) } },
-    select: { id: true, attachments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, originalName: true, isImage: true } } },
-  });
-  const byId = new Map(tasks.map((t) => [t.id, t.attachments]));
-  const saved: string[] = [];
-  let position = 0;
-  // La release ya no está (deshecha o borrada antes de empezar): no hay nada que copiar.
-  const releaseGone = async () => !(await db.release.count({ where: { id: releaseId } }));
-  if (await releaseGone()) return;
-  outer: for (const item of valid) {
-    const attachments = byId.get(item.taskId) ?? [];
-    const names = attachmentFileNames(item.code, attachments);
-    for (const [i, att] of attachments.entries()) {
-      let rowId: string | null = null;
-      try {
-        const raw = await readFile(attachmentPath(att.id, att.isImage ? "full" : "file"));
-        const data = att.isImage ? await compactImage(raw) : raw;
-        const row = await db.releaseAttachment.create({
-          data: { releaseId, fileName: names[i]!, size: data.length, isImage: att.isImage, position: position++ },
-          select: { id: true },
-        });
-        rowId = row.id;
-        await saveReleaseAttachmentFile(row.id, data, att.isImage ? "webp" : "bin");
-        saved.push(row.id);
-      } catch (err) {
-        if (rowId) await db.releaseAttachment.delete({ where: { id: rowId } }).catch(() => {});
-        // La release se ha borrado o deshecho a mitad: se para aquí, sin un error por cada adjunto restante.
-        if (await releaseGone()) break outer;
-        // Fichero ausente o ilegible: se omite; si ya había fila, se ha retirado para no dejarla sin fichero.
-        logEvent({
-          level: "error", category: "system", action: "releases.saveAttachments",
-          message: `Adjunto omitido en la release: «${names[i] ?? att.originalName}» (${err instanceof Error ? err.message : String(err)})`,
-          userId, userName, projectId, details: { releaseId, attachmentId: att.id },
-        });
-      }
-    }
-  }
-  // Se guardan después de responder: si mientras tanto se ha borrado o deshecho la release, sus filas ya no
-  // están y los ficheros recién escritos sobran.
-  if (saved.length) {
-    const alive = new Set((await db.releaseAttachment.findMany({ where: { id: { in: saved } }, select: { id: true } })).map((a) => a.id));
-    const gone = saved.filter((id) => !alive.has(id));
-    if (gone.length) await removeReleaseAttachmentFiles(gone);
-  }
 }
 
 const countSchema = z.object({ projectId: v.id, dayIso: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });

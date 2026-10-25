@@ -251,4 +251,6 @@ export const server: Record<string, string> = {
   "La contraseña no es correcta.": "The password is not correct.",
   "Para descargar la copia confirma con tu contraseña.": "To download the backup, confirm with your password.",
   "Has llegado al máximo de proyectos privados.": "You have reached the maximum number of private projects.",
+  "Los adjuntos han cambiado mientras se descargaban. Vuelve a descargarlos.": "The attachments changed while they were downloading. Download them again.",
+  "cadencia en la release": "release cadence",
 };

@@ -5,6 +5,8 @@ import {
   buildReleaseMarkdown,
   computeReleaseCodes,
   defaultReleaseTitle,
+  evergreenDue,
+  nextEvergreenEvery,
   formatReleaseLine,
   releaseFileName,
   releaseZipName,
@@ -166,4 +168,14 @@ test("nombres de adjuntos: los no imagen conservan su extensión", () => {
 test("nombre de fichero con fecha local", () => {
   assert.equal(releaseFileName(new Date(2026, 0, 5, 23, 30), "md"), "release-2026-01-05.md");
   assert.equal(releaseFileName(new Date(2026, 11, 31), "txt"), "release-2026-12-31.txt");
+});
+
+test("evergreenDue: cadencia de las tareas fijas", () => {
+  assert.deepEqual([1, 2, 3, 4, 5, 6].map((n) => evergreenDue(n, 1)), [true, true, true, true, true, true]);
+  assert.deepEqual([1, 2, 3, 4, 5, 6].map((n) => evergreenDue(n, 2)), [false, true, false, true, false, true]);
+  assert.deepEqual([1, 2, 3, 4, 5, 6].map((n) => evergreenDue(n, 3)), [false, false, true, false, false, true]);
+});
+
+test("nextEvergreenEvery cicla 1 > 2 > 3 > 1", () => {
+  assert.deepEqual([1, 2, 3].map(nextEvergreenEvery), [2, 3, 1]);
 });
