@@ -2,6 +2,28 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.24.0 — 2026-10-25 16:11
+
+Comentarios por páginas con tope configurable y borrado que conserva el hilo, avisos de fecha agrupados, títulos con el código de la release y primeros pasos para instalarlo fuera de Railway
+
+### Nuevas funcionalidades
+
+- Al desplegar una release, cada tarea que pasa a producción (o al archivo) lleva delante su código: «R3R1: Respuesta».
+- Administración → Ajustes: máximo de comentarios por tarea (500 por defecto, hasta 1000).
+- Instalación propia con Docker Compose (Caddy con HTTPS automático, Postgres y la app) y guía docs/INSTALL.md.
+
+### Mejoras
+
+- Comentarios: se ven los 20 más recientes y «Ver anteriores» carga 100 más cada vez.
+- Borrar un comentario con respuestas lo deja como «Comentario borrado» sin romper el hilo.
+- Los avisos de cambio de fecha se agrupan: llegan unos 3 minutos después del último cambio, con la fecha final.
+- La zona horaria (APP_TIMEZONE) se aplica al arrancar, también en el navegador, sin recompilar.
+- Mantenimiento en un solo proceso a la vez, con su estado visible en Administración → Copias de seguridad; el control de salud comprueba también el disco.
+
+### Cambios técnicos / DB
+
+- Migraciones: TaskComment.deletedAt, tabla PendingDueNotice y tabla JobRun. Errores no capturados del proceso registrados en los logs.
+
 ## v1.23.0 — 2026-10-25 13:56
 
 Tamaño máximo de un adjunto por proyecto sin recompilar, contadores de adjuntos exactos, Google bloqueado tras desvincular, aviso de copias atrasadas, Docs compartidos por proyecto y paso a privado sin perder miembros

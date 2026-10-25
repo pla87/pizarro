@@ -1,6 +1,51 @@
 {
   "versions": [
     {
+      "version": "1.24.0",
+      "date": "2026-10-25",
+      "releasedAt": "2026-10-25T16:11:21+01:00",
+      "summary": "Comentarios por páginas con tope configurable y borrado que conserva el hilo, avisos de fecha agrupados, títulos con el código de la release y primeros pasos para instalarlo fuera de Railway",
+      "changes": {
+        "nuevas": [
+          "Al desplegar una release, cada tarea que pasa a producción (o al archivo) lleva delante su código: «R3R1: Respuesta».",
+          "Administración → Ajustes: máximo de comentarios por tarea (500 por defecto, hasta 1000).",
+          "Instalación propia con Docker Compose (Caddy con HTTPS automático, Postgres y la app) y guía docs/INSTALL.md."
+        ],
+        "mejoras": [
+          "Comentarios: se ven los 20 más recientes y «Ver anteriores» carga 100 más cada vez.",
+          "Borrar un comentario con respuestas lo deja como «Comentario borrado» sin romper el hilo.",
+          "Los avisos de cambio de fecha se agrupan: llegan unos 3 minutos después del último cambio, con la fecha final.",
+          "La zona horaria (APP_TIMEZONE) se aplica al arrancar, también en el navegador, sin recompilar.",
+          "Mantenimiento en un solo proceso a la vez, con su estado visible en Administración → Copias de seguridad; el control de salud comprueba también el disco."
+        ],
+        "correcciones": [],
+        "tecnicos": [
+          "Migraciones: TaskComment.deletedAt, tabla PendingDueNotice y tabla JobRun. Errores no capturados del proceso registrados en los logs."
+        ]
+      },
+      "en": {
+        "summary": "Paged comments with a configurable cap and deletion that keeps the thread, grouped due-date notices, titles with the release code and first steps to install it outside Railway",
+        "changes": {
+          "nuevas": [
+            "When deploying a release, every task that goes to production (or to the archive) gets its code in front: “R3R1: Reply”.",
+            "Administration → Settings: maximum comments per task (500 by default, up to 1000).",
+            "Self-hosting with Docker Compose (Caddy with automatic HTTPS, Postgres and the app) and the docs/INSTALL.md guide."
+          ],
+          "mejoras": [
+            "Comments: the 20 most recent are shown and “Show earlier” loads 100 more each time.",
+            "Deleting a comment with replies leaves it as “Comment deleted” without breaking the thread.",
+            "Due-date change notices are grouped: they arrive about 3 minutes after the last change, with the final date.",
+            "The time zone (APP_TIMEZONE) applies at start-up, also in the browser, without rebuilding.",
+            "Maintenance runs in one process at a time, with its status in Administration → Backups; the health check also checks the disk."
+          ],
+          "correcciones": [],
+          "tecnicos": [
+            "Migrations: TaskComment.deletedAt, PendingDueNotice table and JobRun table. Uncaught process errors are logged."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.23.0",
       "date": "2026-10-25",
       "releasedAt": "2026-10-25T13:56:50+01:00",
