@@ -9,6 +9,7 @@ import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard, useTask } from "./context";
 import { MentionText } from "../ui/MentionText";
 import { mentionsToPlain } from "@/lib/mentions";
+import { nextEvergreenEvery } from "@/lib/release";
 
 /** Prefijo del id del droppable del panel (el resto es el id de la columna de la release). */
 export const EVERGREEN_DROPPABLE_PREFIX = "evergreen:";
@@ -115,28 +116,56 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
 
 /** Tarjeta compacta del panel: se puede arrastrar a cualquier columna (deja de ser fija al soltarla). */
 function EvergreenCard({ id }: { id: string }) {
-  const { kindById, openTask, dragHandle } = useBoard();
+  const { kindById, openTask, dragHandle, setEvergreenEvery } = useBoard();
   const t = useT();
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({ id });
   const task = useTask(id);
   if (!task) return null;
   // En táctil solo arrastra el asa (igual que las tarjetas normales).
+  const every = task.evergreenEvery;
+  const everyLabel = every === 2 ? t("Cada dos") : every === 3 ? t("Cada tres") : t("En todas");
+  const everyHint = every === 2 ? t("Incluir cada dos releases") : every === 3 ? t("Incluir cada tres releases") : t("Incluir en todas las releases");
+  // div con rol de botón (y no <button>) porque lleva dentro el interruptor de cadencia.
   return (
-    <button
+    <div
       ref={setNodeRef}
-      type="button"
+      role="button"
+      tabIndex={0}
       {...(dragHandle ? {} : { ...attributes, ...listeners })}
       onClick={() => openTask(id)}
       onKeyDown={(e) => {
         // Enter abre la tarea; evita que el KeyboardSensor empiece además un arrastre.
-        if (e.key === "Enter") e.stopPropagation();
+        if (e.key === "Enter" && e.target === e.currentTarget) {
+          e.stopPropagation();
+          openTask(id);
+        }
       }}
       className={cn(
-        "flex w-full touch-manipulation items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-xs shadow-sm hover:shadow-md dark:border-slate-700/80 dark:bg-slate-900",
+        "flex w-full cursor-pointer touch-manipulation items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-xs shadow-sm hover:shadow-md dark:border-slate-700/80 dark:bg-slate-900",
         isDragging && "opacity-40",
       )}
     >
       <span className="min-w-0 flex-1 truncate font-medium" title={mentionsToPlain(task.title)}><MentionText text={task.title} /></span>
+      {/* Cadencia: en todas / cada dos / cada tres releases. Mismo color que la barra de progreso de subtareas. */}
+      <button
+        type="button"
+        aria-label={everyHint}
+        title={everyHint}
+        data-testid="evergreen-every"
+        onPointerDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          void setEvergreenEvery(id, nextEvergreenEvery(every));
+        }}
+        className={cn(
+          "inline-flex h-4 shrink-0 items-center gap-1 rounded-full border border-progress px-1.5 text-[10px] leading-none text-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-progress dark:text-slate-300",
+          every > 1 ? "bg-progress/20 font-semibold" : "bg-transparent opacity-70 hover:opacity-100",
+        )}
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-progress" aria-hidden />
+        {everyLabel}
+      </button>
       <TypeBadge kind={kindById.get(task.kindId)} />
       {dragHandle && (
         <span
@@ -150,6 +179,6 @@ function EvergreenCard({ id }: { id: string }) {
           <GripVertical size={14} />
         </span>
       )}
-    </button>
+    </div>
   );
 }

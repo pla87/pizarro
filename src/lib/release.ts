@@ -67,6 +67,12 @@ function kindPrefixes(names: string[]): string[] {
       const candidate = letters.slice(0, MAX_PREFIX_LETTERS - 1) + String.fromCharCode(65 + i);
       if (!used.has(candidate)) prefix = candidate;
     }
+    // Más de 26 con las mismas letras: dos letras distintas al final (676 más), para no repetir un prefijo
+    // ya usado y mezclar la numeración de dos tipos.
+    for (let i = 0; !prefix && i < 26 * 26; i++) {
+      const candidate = letters.slice(0, MAX_PREFIX_LETTERS - 2) + String.fromCharCode(65 + Math.floor(i / 26)) + String.fromCharCode(65 + (i % 26));
+      if (!used.has(candidate)) prefix = candidate;
+    }
     if (!prefix) prefix = letters.slice(0, MAX_PREFIX_LETTERS);
     used.add(prefix);
     return prefix;
@@ -252,4 +258,17 @@ export function isoDate(date = new Date()): string {
 
 export function releaseFileName(date: Date, ext: "md" | "txt"): string {
   return `release-${isoDate(date)}.${ext}`;
+}
+
+/** Cadencias de una tarea fija: cada cuántas releases entra (1 = todas, 2 = las pares, 3 = múltiplos de 3). */
+export const EVERGREEN_CADENCES = [1, 2, 3] as const;
+
+/** Siguiente cadencia al pulsar el interruptor: 1 → 2 → 3 → 1. */
+export function nextEvergreenEvery(every: number): number {
+  return every === 1 ? 2 : every === 2 ? 3 : 1;
+}
+
+/** ¿Le toca a una tarea fija con esa cadencia entrar en la release con ese número? */
+export function evergreenDue(releaseNumber: number, every: number): boolean {
+  return every <= 1 || releaseNumber % every === 0;
 }

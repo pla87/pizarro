@@ -9,7 +9,7 @@ import { describeAction } from "@/lib/action-context";
 import { AppError, notFound } from "@/lib/errors";
 import { MAX_USERS } from "@/lib/limits";
 import { randomBytes } from "node:crypto";
-import { sendEmailChangedMail, sendInviteMail, sendPasswordResetMail, sendTwoFactorChangedMail } from "@/lib/auth-mail";
+import { sendEmailChangedMail, sendGoogleUnlinkedMail, sendInviteMail, sendPasswordResetMail, sendTwoFactorChangedMail } from "@/lib/auth-mail";
 import { issueAuthToken } from "@/lib/auth-token";
 import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { hashPassword, passwordSchema } from "@/lib/password";
@@ -34,22 +34,35 @@ const createSchema = z.object({
  * sin email, el admin escribe una clave inicial y la persona está obligada a cambiarla al entrar.
  * En ningún caso el admin llega a conocer la contraseña definitiva.
  */
+/**
+ * Lanza si ya hay MAX_USERS usuarios activos. Dentro de una transacción toma antes un candado común a altas y
+ * reactivaciones (pg_advisory_xact_lock), para que dos a la vez no puedan pasarse del tope.
+ */
+async function assertUserSlot(client: Prisma.TransactionClient | typeof db): Promise<void> {
+  if (client !== db) await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:max-users'))::text`;
+  if ((await client.user.count({ where: { active: true } })) >= MAX_USERS) {
+    const t = await getT();
+    throw new AppError(t("Se ha alcanzado el máximo de {n} usuarios activos.", { n: MAX_USERS }));
+  }
+}
+
 export async function createUser(input: z.input<typeof createSchema>) {
   return runAction({ name: "users.createUser", args: [{ name: input.name, email: input.email, role: input.role }] }, async () => {
     const admin = await requireAdmin();
     const data = createSchema.parse(input);
     const invite = emailEnabled();
     const initial = invite ? null : passwordSchema("La contraseña debe tener al menos 10 caracteres.").parse(data.password ?? "");
-    const active = await db.user.count({ where: { active: true } });
-    if (active >= MAX_USERS) {
-      const t = await getT();
-      throw new AppError(t("Se ha alcanzado el máximo de {n} usuarios activos.", { n: MAX_USERS }));
-    }
+    await assertUserSlot(db);
     if (await db.user.count({ where: { email: data.email } })) throw new AppError("Ya existe un usuario con ese email.");
     // Con invitación la contraseña provisional es aleatoria y nadie la conoce.
-    const created = await db.user.create({
-      data: { name: data.name, email: data.email, role: data.role, mustChangePassword: true, passwordHash: await hashPassword(initial ?? randomBytes(32).toString("base64url")) },
-      select: { id: true, name: true, email: true, locale: true },
+    const passwordHash = await hashPassword(initial ?? randomBytes(32).toString("base64url"));
+    // El recuento se repite dentro de la transacción, con el candado: dos altas a la vez no pasan del tope.
+    const created = await db.$transaction(async (tx) => {
+      await assertUserSlot(tx);
+      return tx.user.create({
+        data: { name: data.name, email: data.email, role: data.role, mustChangePassword: true, passwordHash },
+        select: { id: true, name: true, email: true, locale: true },
+      });
     });
     revalidatePath("/admin/users");
     if (!invite) return { invited: false };
@@ -80,45 +93,42 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
     if (user.id === admin.id && (data.role !== "ADMIN" || !data.active)) {
       throw new AppError("No puedes quitarte el rol de administrador ni desactivarte a ti mismo.");
     }
-    if (data.active && !user.active) {
-      const active = await db.user.count({ where: { active: true } });
-      if (active >= MAX_USERS) {
-      const t = await getT();
-      throw new AppError(t("Se ha alcanzado el máximo de {n} usuarios activos.", { n: MAX_USERS }));
-    }
-    }
+    const reactivating = data.active && !user.active;
+    if (reactivating) await assertUserSlot(db);
     if (await db.user.count({ where: { email: data.email, id: { not: user.id } } })) {
       throw new AppError("Ya existe un usuario con ese email.");
     }
     // Al cambiar de rol, la asignación a proyectos de equipo se traduce: un admin la lleva en AdminProjectPick
     // y el resto en ProjectMember, así no se pierde ni se gana acceso por el cambio.
-    const roleSwitch: Prisma.PrismaPromise<unknown>[] = [];
+    const roleSwitch: ((tx: Prisma.TransactionClient) => Promise<unknown>)[] = [];
     if (data.role !== user.role) {
       const teamOnly = { project: { isPrivate: false } };
       if (data.role === "ADMIN") {
         const rows = await db.projectMember.findMany({ where: { userId: user.id, ...teamOnly }, select: { projectId: true } });
         roleSwitch.push(
-          db.adminProjectPick.createMany({ data: rows.map((r) => ({ projectId: r.projectId, userId: user.id })), skipDuplicates: true }),
-          db.projectMember.deleteMany({ where: { userId: user.id, ...teamOnly } }),
+          (tx) => tx.adminProjectPick.createMany({ data: rows.map((r) => ({ projectId: r.projectId, userId: user.id })), skipDuplicates: true }),
+          (tx) => tx.projectMember.deleteMany({ where: { userId: user.id, ...teamOnly } }),
         );
       } else {
         const rows = await db.adminProjectPick.findMany({ where: { userId: user.id }, select: { projectId: true } });
         roleSwitch.push(
-          db.projectMember.createMany({ data: rows.map((r) => ({ projectId: r.projectId, userId: user.id })), skipDuplicates: true }),
-          db.adminProjectPick.deleteMany({ where: { userId: user.id } }),
+          (tx) => tx.projectMember.createMany({ data: rows.map((r) => ({ projectId: r.projectId, userId: user.id })), skipDuplicates: true }),
+          (tx) => tx.adminProjectPick.deleteMany({ where: { userId: user.id } }),
         );
       }
     }
     const emailChanged = data.email !== user.email;
-    await db.$transaction([
+    await db.$transaction(async (tx) => {
+      // Reactivar ocupa una plaza: se vuelve a contar con el candado de altas (ver assertUserSlot).
+      if (reactivating) await assertUserSlot(tx);
       // Con otro email, la cuenta de Google vinculada deja de valer (era la de la dirección anterior).
-      db.user.update({ where: { id: user.id }, data: emailChanged ? { ...data, googleSub: null } : data }),
+      await tx.user.update({ where: { id: user.id }, data: emailChanged ? { ...data, googleSub: null } : data });
       // Y los enlaces pendientes enviados a la dirección anterior (invitación, restablecer, confirmar) ya no sirven.
-      ...(emailChanged ? [db.authToken.deleteMany({ where: { userId: user.id, purpose: { in: ["INVITE", "PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } })] : []),
-      ...roleSwitch,
+      if (emailChanged) await tx.authToken.deleteMany({ where: { userId: user.id, purpose: { in: ["INVITE", "PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } });
+      for (const op of roleSwitch) await op(tx);
       // Al desactivar o cambiar de rol se cierran sus sesiones.
-      ...(data.active !== user.active || data.role !== user.role ? [db.session.deleteMany({ where: { userId: user.id } })] : []),
-    ]);
+      if (data.active !== user.active || data.role !== user.role) await tx.session.deleteMany({ where: { userId: user.id } });
+    });
     // Aviso a la dirección antigua: si alguien se hiciera con la cuenta, el dueño se entera.
     if (data.email !== user.email && emailEnabled()) {
       sendMailInBackground("aviso de email cambiado por un administrador", () => sendEmailChangedMail(user, user.email, data.email));
@@ -170,6 +180,28 @@ export async function resetUserTwoFactor(userId: string) {
     await clearTwoFactor(user.id);
     describeAction(`Restableció la verificación en dos pasos de «${user.name}»`);
     if (emailEnabled()) sendMailInBackground("aviso de verificación en dos pasos restablecida", () => sendTwoFactorChangedMail(user, "reset"));
+    revalidatePath("/admin/users");
+  });
+}
+
+/**
+ * Desvincula la cuenta de Google del acceso (googleSub = null) y cierra sus sesiones. No toca la conexión con
+ * Drive (Docs/Sheets), que es independiente. Si la persona vuelve a entrar con Google con el mismo email, se enlaza de nuevo.
+ */
+export async function unlinkGoogle(userId: string) {
+  return runAction({ name: "users.unlinkGoogle", args: [userId] }, async () => {
+    const admin = await requireAdmin();
+    if (admin.id === userId) throw new AppError("No puedes desvincular tu propia cuenta de Google desde aquí.");
+    const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, name: true, email: true, locale: true, googleSub: true } });
+    if (!user) throw notFound();
+    if (!user.googleSub) throw new AppError("Esa persona no tiene una cuenta de Google vinculada.");
+    await db.$transaction([
+      db.user.update({ where: { id: user.id }, data: { googleSub: null } }),
+      db.session.deleteMany({ where: { userId: user.id } }),
+    ]);
+    revokeUser(user.id);
+    describeAction(`Desvinculó la cuenta de Google de «${user.name}»`);
+    if (emailEnabled()) sendMailInBackground("aviso de Google desvinculado", () => sendGoogleUnlinkedMail(user));
     revalidatePath("/admin/users");
   });
 }

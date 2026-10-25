@@ -134,7 +134,7 @@ export async function setTaskColumnPositions(
   if (!moves.length) return;
   const client = opts.client ?? db;
   const ids = moves.map((m) => m.id);
-  const evergreen = opts.clearEvergreen ? Prisma.sql`, "evergreen" = false` : Prisma.empty;
+  const evergreen = opts.clearEvergreen ? Prisma.sql`, "evergreen" = false, "evergreenEvery" = 1` : Prisma.empty;
   let count: number;
   try {
     count = await client.$executeRaw`

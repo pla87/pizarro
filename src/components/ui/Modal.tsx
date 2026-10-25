@@ -151,7 +151,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
       >
         {header ?? (
           <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-slate-800">
-            <h2 className="truncate text-base font-semibold">{title}</h2>
+            <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{title}</h2>
             <button type="button" className="btn-icon" onClick={onClose} aria-label={t("Cerrar")}>
               <X size={18} />
             </button>

@@ -81,10 +81,14 @@ export type ClaimsResult =
   | { ok: true; sub: string; email: string; name: string | null }
   | { ok: false; reason: ClaimsFailure };
 
-/** Valida iss, aud, exp, nonce, email_verified y, si se configura, el dominio de Workspace (`hd` y email). */
+/**
+ * Valida iss, aud, exp, nonce, email_verified y, si se configura, el dominio de Workspace (`hd` y email).
+ * `nonce: null` solo para la conexión de Drive, que no envía nonce (el código va ligado a `state` y se canjea
+ * con el secreto del cliente); el login siempre pasa el suyo.
+ */
 export function validateIdTokenClaims(
   claims: Record<string, unknown>,
-  opts: { clientId: string; nonce: string; domain?: string | null; now?: number },
+  opts: { clientId: string; nonce: string | null; domain?: string | null; now?: number },
 ): ClaimsResult {
   const nowSec = Math.floor((opts.now ?? Date.now()) / 1000);
   const { iss, aud, azp, exp, iat, sub, email, name, nonce, hd } = claims;
@@ -96,7 +100,7 @@ export function validateIdTokenClaims(
   if (audiences.length > 1 && azp !== opts.clientId) return { ok: false, reason: "audience" };
   if (typeof exp !== "number" || exp + CLOCK_SKEW_SECONDS < nowSec) return { ok: false, reason: "expired" };
   if (typeof iat === "number" && iat - CLOCK_SKEW_SECONDS > nowSec) return { ok: false, reason: "expired" };
-  if (typeof nonce !== "string" || !opts.nonce || nonce !== opts.nonce) return { ok: false, reason: "nonce" };
+  if (opts.nonce !== null && (typeof nonce !== "string" || !opts.nonce || nonce !== opts.nonce)) return { ok: false, reason: "nonce" };
   if (claims.email_verified !== true && claims.email_verified !== "true") return { ok: false, reason: "email_unverified" };
   const domain = opts.domain?.trim().toLowerCase();
   if (domain) {
@@ -104,4 +108,19 @@ export function validateIdTokenClaims(
     if (typeof hd !== "string" || hd.toLowerCase() !== domain || emailDomain !== domain) return { ok: false, reason: "domain" };
   }
   return { ok: true, sub, email: email.trim().toLowerCase(), name: typeof name === "string" && name ? name : null };
+}
+
+/**
+ * Email de la cuenta con la que se conecta Google Drive: el id_token se verifica igual que en el login
+ * (firma, emisor, audiencia, caducidad, email verificado y dominio de Workspace), salvo el nonce.
+ */
+export function verifiedConnectEmail(
+  idToken: string | undefined,
+  keys: Jwk[],
+  opts: { clientId: string; domain?: string | null; now?: number },
+): { ok: true; email: string } | { ok: false; reason: ClaimsFailure | "signature" } {
+  const claims = idToken ? verifyIdTokenSignature(idToken, keys) : null;
+  if (!claims) return { ok: false, reason: "signature" };
+  const checked = validateIdTokenClaims(claims, { ...opts, nonce: null });
+  return checked.ok ? { ok: true, email: checked.email } : { ok: false, reason: checked.reason };
 }

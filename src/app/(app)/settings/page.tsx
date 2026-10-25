@@ -29,6 +29,7 @@ const GOOGLE_MESSAGES: Record<string, { ok: boolean; text: string }> = {
   scope: { ok: false, text: "No se concedió el permiso de Google Drive. Vuelve a intentarlo y acepta el permiso." },
   domain: { ok: false, text: "Usa una cuenta de Google del dominio de la empresa." },
   token: { ok: false, text: "Google no devolvió un acceso permanente. Vuelve a conectar." },
+  identity: { ok: false, text: "Google no confirmó la identidad de la cuenta. Vuelve a intentarlo." },
 };
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ google?: string }> }) {

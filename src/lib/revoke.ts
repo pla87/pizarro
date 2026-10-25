@@ -2,7 +2,9 @@ import "server-only";
 import { dropProjectPresence, dropUserPresence } from "./presence";
 import { revokeProjectStreams, revokeSessionStreams, revokeUserStreams } from "./realtime";
 
-// Puntos de entrada para cortar conexiones en vivo cuando cambia el acceso. Llamar tras confirmar el cambio en BD.
+// Puntos de entrada para cortar conexiones en vivo (SSE y presencia) cuando cambia el acceso. Llamar tras confirmar
+// el cambio en BD. No invalidan sesiones: una sesión deja de valer cuando se borra su fila (cierre de sesión,
+// desactivación, cambio de rol o de contraseña); esto solo corta lo que ya estaba abierto.
 
 /** El usuario ya no debe tener nada abierto: desactivado, rol cambiado, sesiones borradas o usuario borrado. */
 export function revokeUser(userId: string): void {

@@ -7,7 +7,6 @@ import { logEvent } from "@/lib/log";
 import { publishChange } from "@/lib/realtime";
 import { rateLimit } from "@/lib/rate-limit";
 import { saveUndo } from "@/lib/undo";
-import { quotaExceededFor } from "@/lib/storage-usage";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser, requireUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
@@ -56,23 +55,22 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     const originalName = (file.name || "captura").replace(/[^\p{L}\p{N}._ -]/gu, "_").slice(0, 120) || "captura";
     const mimeType = image ? "image/webp" : sanitizeMime(file.type);
     const storedBytes = image ? image.full.length : buffer.length;
-    // Cuota de almacenamiento (por proyecto y, si está configurada, total): se rechaza con el uso actual.
-    const exceeded = await quotaExceededFor(projectId, storedBytes);
-    if (exceeded) {
+    // Tope del proyecto para la suma de adjuntos de la tarea y cuotas de almacenamiento (por proyecto y, si está
+    // configurada, total): sumas y alta atómicas. Si no cabe, se rechaza con el uso actual.
+    const created = await createAttachmentWithinLimit(
+      { taskId, originalName, mimeType, isImage: !!image, width: image?.width ?? null, height: image?.height ?? null, size: storedBytes, createdById: user.id },
+      { id: true, originalName: true, mimeType: true, isImage: true, width: true, height: true, size: true },
+    );
+    if (!created.ok && created.reason === "quota") {
       const t = await getT();
-      const vars = { used: exceeded.usedMb, limit: exceeded.limitMb };
+      const vars = { used: created.quota.usedMb, limit: created.quota.limitMb };
       throw new AppError(
-        exceeded.scope === "project"
+        created.quota.scope === "project"
           ? t("Cuota de adjuntos del proyecto superada: {used} MB usados de {limit} MB.", vars)
           : t("Cuota total de adjuntos del servidor superada: {used} MB usados de {limit} MB.", vars),
         413,
       );
     }
-    // Tope del proyecto para la suma de adjuntos de la tarea (suma y alta atómicas).
-    const created = await createAttachmentWithinLimit(
-      { taskId, originalName, mimeType, isImage: !!image, width: image?.width ?? null, height: image?.height ?? null, size: storedBytes, createdById: user.id },
-      { id: true, originalName: true, mimeType: true, isImage: true, width: true, height: true, size: true },
-    );
     if (!created.ok) {
       const t = await getT();
       throw new AppError(

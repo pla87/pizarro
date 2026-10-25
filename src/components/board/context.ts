@@ -53,6 +53,8 @@ export interface BoardApi {
   /** Sube (-1) o baja (1) la tarjeta un puesto dentro de su columna. */
   moveWithinColumn: (id: string, dir: -1 | 1) => void;
   setDueDate: (id: string, day: string | null) => Promise<void>;
+  /** Cadencia de una tarea fija en las releases (1, 2 o 3). */
+  setEvergreenEvery: (id: string, every: number) => Promise<void>;
   /** `true` si se guardó (o no hacía falta). */
   renameTask: (id: string, title: string) => Promise<boolean>;
   duplicateTask: (id: string) => Promise<void>;

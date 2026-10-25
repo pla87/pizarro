@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { countReleasesOn, deployRelease, getReleaseTaskDetails } from "@/actions/releases";
 import { partSuffix } from "@/lib/zip-plan";
-import { buildReleaseMarkdown, computeReleaseCodes, defaultReleaseTitle, isoDate, releaseFileName, swapTemplateBlock } from "@/lib/release";
+import { buildReleaseMarkdown, computeReleaseCodes, defaultReleaseTitle, evergreenDue, isoDate, releaseFileName, swapTemplateBlock } from "@/lib/release";
 import type { BoardTask, TemplateOption } from "@/lib/types";
 import { useT } from "@/i18n/client";
 import { copyText, downloadText } from "../ui/clipboard";
@@ -42,6 +42,9 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
   const t = useT();
   const [step, setStep] = useState<"select" | "edit">("select");
   const [chosen, setChosen] = useState<Set<string>>(new Set(preselected));
+  /** Si la persona ya marcó o desmarcó alguna tarea, la cadencia de las fijas no vuelve a tocar la selección. */
+  const selectionTouched = useRef(false);
+  const [initialTasks] = useState(tasks);
   const [title, setTitle] = useState(() => defaultReleaseTitle(board.today, board.project.name));
   /** Si el usuario ya tocó el título, no se sustituye por el ordinal del día. */
   const titleEdited = useRef(false);
@@ -106,9 +109,14 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
     countReleasesOn({ projectId: board.project.id, dayIso: day }).then((res) => {
       if (!res.ok) return;
       setReleaseNumber(res.data.nextNumber);
+      // Tareas fijas con cadencia: solo vienen marcadas si a esta release le toca (se pueden marcar a mano).
+      if (!selectionTouched.current) {
+        const notDue = initialTasks.filter((x) => x.evergreen && !evergreenDue(res.data.nextNumber, x.evergreenEvery)).map((x) => x.id);
+        if (notDue.length) setChosen((prev) => new Set([...prev].filter((id) => !notDue.includes(id))));
+      }
       if (!titleEdited.current) setTitle(defaultReleaseTitle(day, board.project.name, res.data.today));
     });
-  }, [board.project.id, board.project.name, board.today]);
+  }, [board.project.id, board.project.name, board.today, initialTasks]);
 
   const generate = async () => {
     // Descripción y adjuntos no viajan con el tablero: se piden al generar.
@@ -159,6 +167,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
   const attachmentTotal = zipItems.reduce((n, i) => n + i.count, 0);
 
   const downloadAttachments = async () => {
+    let changed: string | null = null;
     setZipping(true);
     try {
       const url = `/api/projects/${board.project.id}/release-attachments`;
@@ -167,10 +176,15 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
       // Primero el plan (cuántos paquetes caben en el tope del proyecto) y luego cada paquete, uno tras otro.
       const planRes = await post("?plan=1");
       if (!planRes.ok) throw new Error(planRes.status === 429 ? await planRes.text() : "");
-      const plan = (await planRes.json()) as { parts: { oversize: boolean }[]; maxMb: number };
+      const plan = (await planRes.json()) as { parts: { oversize: boolean }[]; maxMb: number; v?: string };
       const total = plan.parts.length;
       for (let part = 1; part <= total; part++) {
-        const res = await post(`?part=${part}`);
+        // Con el token del plan: si los adjuntos cambian a mitad, el servidor responde 409 en vez de mezclar repartos.
+        const res = await post(`?part=${part}${plan.v ? `&v=${plan.v}` : ""}`);
+        if (res.status === 409) {
+          changed = await res.text();
+          throw new Error(changed);
+        }
         if (!res.ok) throw new Error(res.status === 429 ? await res.text() : "");
         const href = URL.createObjectURL(await res.blob());
         const a = document.createElement("a");
@@ -184,7 +198,9 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
       if (total > 1) toast(t("Adjuntos descargados en {n} paquetes de hasta {mb} MB", { n: total, mb: plan.maxMb }));
       if (plan.parts.some((p) => p.oversize)) toast(t("Algún archivo supera por sí solo los {mb} MB y va en su propio paquete.", { mb: plan.maxMb }), "error");
     } catch (e) {
-      toast(e instanceof Error && e.message ? e.message : t("No se pudieron descargar los adjuntos"), "error");
+      const message = e instanceof Error && e.message ? e.message : t("No se pudieron descargar los adjuntos");
+      // Adjuntos cambiados durante la descarga: se ofrece volver a empezar (nuevo plan y todos los paquetes).
+      toast(message, "error", changed ? { label: t("Reintentar"), onClick: () => void downloadAttachments() } : undefined);
     } finally {
       setZipping(false);
     }
@@ -272,8 +288,8 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">{t("Tareas incluidas")}</span>
             <div className="flex gap-1">
-              <button className="btn-ghost py-1 text-xs" onClick={() => setChosen(new Set(tasks.map((t) => t.id)))}>{t("Todas")}</button>
-              <button className="btn-ghost py-1 text-xs" onClick={() => setChosen(new Set())}>{t("Ninguna")}</button>
+              <button className="btn-ghost py-1 text-xs" onClick={() => { selectionTouched.current = true; setChosen(new Set(tasks.map((t) => t.id))); }}>{t("Todas")}</button>
+              <button className="btn-ghost py-1 text-xs" onClick={() => { selectionTouched.current = true; setChosen(new Set()); }}>{t("Ninguna")}</button>
             </div>
           </div>
           <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
@@ -284,19 +300,20 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
                     type="checkbox"
                     className="h-4 w-4 accent-brand-600"
                     checked={chosen.has(task.id)}
-                    onChange={() =>
+                    onChange={() => {
+                      selectionTouched.current = true;
                       setChosen((prev) => {
                         const next = new Set(prev);
                         if (next.has(task.id)) next.delete(task.id);
                         else next.add(task.id);
                         return next;
-                      })
-                    }
+                      });
+                    }}
                   />
                   <TypeBadge kind={board.kindById.get(task.kindId)} />
                   <span className="min-w-0 flex-1 truncate text-sm"><MentionText text={task.title} /></span>
                   {task.evergreen && (
-                    <span className="shrink-0 rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-500/20 dark:text-brand-300" title={t("Tarea fija en la release: se queda en su columna al desplegar")}>{t("fija")}</span>
+                    <span className="shrink-0 rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-500/20 dark:text-brand-300" title={t("Tarea fija en la release: se queda en su columna al desplegar")}>{t("fija")}{task.evergreenEvery === 2 ? ` · ${t("Cada dos")}` : task.evergreenEvery === 3 ? ` · ${t("Cada tres")}` : ""}</span>
                   )}
                 </label>
               </li>

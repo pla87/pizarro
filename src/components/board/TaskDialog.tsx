@@ -7,7 +7,7 @@ import {
   addSubtask, archiveTask, deleteAttachment, deleteSubtask, deleteTask, deleteTaskLink, getTaskDetail,
   moveTask, reorderSubtask, restoreTaskSnapshot, updateSubtask, updateTask,
 } from "@/actions/tasks";
-import { undoLast } from "@/actions/undo";
+import { undoEntry, undoLast } from "@/actions/undo";
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -19,6 +19,7 @@ import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, User
 import { ColorPicker } from "../ui/ColorPicker";
 import { cn } from "../ui/cn";
 import { DescriptionField } from "../ui/DescriptionField";
+import { DescriptionTools } from "../ui/DescriptionTools";
 import { Markdown } from "../ui/Markdown";
 import type { MentionCommand } from "../ui/MentionTextarea";
 import { Lightbox } from "../ui/Lightbox";
@@ -190,7 +191,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   const editedSinceOpen = (): boolean => {
     const t0 = initialTask.current;
     const now = board.getTask(task.id) ?? task;
-    const keys = ["title", "kindId", "color", "linkUrl", "assigneeId", "dueDate", "deliverableId", "evergreen", "recurrence", "recurrenceDay", "columnId"] as const;
+    const keys = ["title", "kindId", "color", "linkUrl", "assigneeId", "dueDate", "deliverableId", "evergreen", "evergreenEvery", "recurrence", "recurrenceDay", "columnId"] as const;
     if (keys.some((k) => t0[k] !== now[k])) return true;
     if ([...t0.labelIds].sort().join() !== [...now.labelIds].sort().join()) return true;
     const d0 = initialDetail.current;
@@ -218,7 +219,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       const d0 = initialDetail.current;
       const res = await tracked(restoreTaskSnapshot(task.id, {
         title: t0.title, kindId: t0.kindId, color: t0.color as never, linkUrl: t0.linkUrl, assigneeId: t0.assigneeId, labelIds: t0.labelIds,
-        dueDate: t0.dueDate, deliverableId: t0.deliverableId, evergreen: t0.evergreen, recurrence: t0.recurrence, recurrenceDay: t0.recurrenceDay,
+        dueDate: t0.dueDate, deliverableId: t0.deliverableId, evergreen: t0.evergreen, evergreenEvery: t0.evergreenEvery, recurrence: t0.recurrence, recurrenceDay: t0.recurrenceDay,
         columnId: t0.columnId, position: t0.position,
         ...(d0 ? {
           description: d0.description,
@@ -264,7 +265,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     if (columnId === task.columnId) return;
     const before = board.getTask(task.id)!;
     const last = Math.max(0, ...board.getTasks().filter((t) => t.columnId === columnId).map((t) => t.position));
-    board.patchTask(task.id, { columnId, position: last + 1024, evergreen: false });
+    board.patchTask(task.id, { columnId, position: last + 1024, evergreen: false, evergreenEvery: 1 });
     const res = await tracked(moveTask(task.id, columnId, null, null));
     if (!res.ok) {
       board.upsertTask(before);
@@ -308,12 +309,13 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     setDetail((d) => (d ? { ...d, attachments: d.attachments.filter((x) => x.id !== id) } : d));
     if (removed) board.patchTask(task.id, (t) => attachmentPatch(t, removed, -1));
     setTotalRejected(false);
-    toast(t("Adjunto borrado"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange() });
+    toast(t("Adjunto borrado"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange(res.data.undo.id) });
   };
 
-  /** Deshace lo último hecho en esta tarea (el botón «Deshacer» de los avisos) y recarga el detalle. */
-  const undoLastChange = async () => {
-    const res = await board.track(undoLast(board.project.id, task.id));
+  /** Deshace lo último hecho en esta tarea, o la entrada indicada (el botón «Deshacer» de los avisos) y recarga el detalle. */
+  const undoLastChange = async (entryId?: string) => {
+    // Con id (aviso «Adjunto borrado») se deshace exactamente esa entrada, no la última de la tarea.
+    const res = await board.track(entryId ? undoEntry(entryId) : undoLast(board.project.id, task.id));
     if (!res.ok) return toast(res.error, "error");
     toast(t("Deshecho: {label}", { label: res.data.label }), "undo");
     await reloadRef.current();
@@ -486,6 +488,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
               setDetail((d) => (d ? { ...d, description } : d));
               save({ description }, { hasDescription: description.trim().length > 0 });
             }}
+            onClear={async () => {
+              setDetail((d) => (d ? { ...d, description: "" } : d));
+              // Pasa por el guardado normal: queda en el historial y se deshace como cualquier cambio.
+              if (await save({ description: "" }, { hasDescription: false })) toast(t("Descripción borrada"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange() });
+            }}
           />
           <Subtasks taskId={task.id} detail={detail} setDetail={setDetail} flushRef={flushSubtasks} />
           <section>
@@ -570,7 +577,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
                 type="checkbox"
                 className="h-4 w-4 accent-brand-600"
                 checked={task.evergreen}
-                onChange={(e) => save({ evergreen: e.target.checked }, { evergreen: e.target.checked })}
+                onChange={(e) => save({ evergreen: e.target.checked }, e.target.checked ? { evergreen: true } : { evergreen: false, evergreenEvery: 1 })}
               />
               {t("Fija en la release (evergreen)")}
             </label>
@@ -793,11 +800,13 @@ export function TypeSelector({ kinds, value, onChange }: { kinds: KindOption[]; 
   );
 }
 
-function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftChange, liveRef }: {
+function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, onDraftChange, liveRef }: {
   initial: string | null;
   /** Texto recuperado de un borrador: el editor empieza editándolo. */
   draft?: string;
   onSave: (v: string) => void;
+  /** Borra la descripción guardada (se guarda como cualquier cambio, así que se puede deshacer). */
+  onClear: () => void;
   users: UserOption[];
   onGoogle: (kind: MentionCommand) => Promise<TaskLinkInfo | null>;
   /** Borrador actual en Markdown mientras se edita (con retardo); null al no estar editando. */
@@ -843,10 +852,17 @@ function DescriptionEditor({ initial, draft, onSave, users, onGoogle, onDraftCha
     setEditing(false);
   };
 
+  const clear = () => {
+    setEditing(false);
+    setValue("");
+    if (initial.trim()) onClear();
+  };
+
   return (
     <section>
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">{t("Descripción")}</h3>
+        <DescriptionTools value={value} onClear={clear} className="ml-auto" />
         {!editing && (
           // Fuera del orden de Tab (Título → descripción directo): al tabular, la propia zona de la descripción entra en edición.
           <button className="btn-ghost py-1 text-xs" tabIndex={-1} onClick={() => { setEditing(true); requestAnimationFrame(() => ref.current?.focus()); }}>

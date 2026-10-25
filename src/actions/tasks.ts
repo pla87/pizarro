@@ -5,9 +5,9 @@ import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjectAccess, assertTaskAccess, loadTaskWithAccess, visibleProjectsWhere } from "@/lib/access";
-import { appTimeZone, boardTaskSelect, loadBoardTask, toBoardTask } from "@/lib/board";
+import { appTimeZone, boardTaskSelect, listKinds, loadBoardTask, projectUsers, toBoardTask } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
-import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents } from "@/lib/action-context";
+import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { addUndo, captureTasks, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, type TaskField, type UndoOp } from "@/lib/undo";
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
@@ -26,8 +26,10 @@ import { dueChangeExcerpt } from "@/lib/notification-text";
 import { followTask, notifyMentions, notifyTask, taskFollowerIds } from "@/lib/notify";
 import { isFollowing } from "@/lib/followers";
 import { loadTaskHistory } from "@/lib/task-events";
-import type { ArchivedTask, BoardTask, CommentInfo, SubtaskInfo, TaskDetail, TaskLinkInfo } from "@/lib/types";
-import { getT } from "@/i18n/server";
+import { localizeGeneralKinds } from "@/lib/kinds-localize";
+import { MAX_UPLOAD_BYTES } from "@/lib/uploads";
+import type { ArchivedTask, BoardTask, CommentInfo, ProjectFormData, SubtaskInfo, TaskDetail, TaskLinkInfo } from "@/lib/types";
+import { getLocale, getT } from "@/i18n/server";
 
 async function assertColumnInProject(columnId: string, projectId: string) {
   const ok = await db.column.count({ where: { id: columnId, projectId } });
@@ -62,13 +64,18 @@ async function taskLabel(taskId: string): Promise<{ title: string; column: strin
   return { title: t ? mentionsToPlain(t.title) : "(tarea)", column: t?.column.name ?? "?" };
 }
 
+/** Texto de la cadencia de una tarea fija, para el historial. */
+function evergreenEveryLabel(every: number): Label {
+  return { k: every === 2 ? "Cada dos" : every === 3 ? "Cada tres" : "En todas" };
+}
+
 async function columnName(columnId: string): Promise<string> {
   return (await db.column.findUnique({ where: { id: columnId }, select: { name: true } }))?.name ?? "?";
 }
 
 const CHANGE_LABELS: Record<string, string> = {
   title: "título", description: "descripción", kindId: "tipo", color: "color", linkUrl: "enlace",
-  assigneeId: "responsable", labelIds: "etiquetas", dueDate: "fecha límite", deliverableId: "entregable", evergreen: "fija en la release",
+  assigneeId: "responsable", labelIds: "etiquetas", dueDate: "fecha límite", deliverableId: "entregable", evergreen: "fija en la release", evergreenEvery: "cadencia en la release",
   recurrence: "repetición", recurrenceDay: "repetición",
 };
 
@@ -84,7 +91,7 @@ const MAX_SUBTASKS = 100;
 const MAX_COMMENTS = 1000;
 
 /** Campos que cambian al archivar o recuperar una tarea. */
-const ARCHIVE_FIELDS: TaskField[] = ["archivedAt", "archivedFromColumnId", "columnId", "position", "evergreen"];
+const ARCHIVE_FIELDS: TaskField[] = ["archivedAt", "archivedFromColumnId", "columnId", "position", "evergreen", "evergreenEvery"];
 
 const createSchema = z.object({
   projectId: v.id,
@@ -154,6 +161,33 @@ export async function createTask(input: z.input<typeof createSchema>) {
     await notifyMentions({ actorId: user.id, taskId: task.id, projectId: data.projectId, recipientIds: extractMentionIds(data.title).filter((id) => !descMentions.includes(id)), text: data.title });
     if (data.assigneeId) await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId: task.id, projectId: data.projectId, recipientIds: [data.assigneeId], excerpt: makeExcerpt(data.title) });
     return loadBoardTask(task.id);
+  });
+}
+
+/**
+ * Opciones de un proyecto para crear una tarea desde otro tablero: columnas, tipos (con las reglas de los
+ * generales y su traducción), entregables, personas asignables y límites de adjuntos. Exige acceso al proyecto.
+ */
+export async function getProjectFormData(projectId: string) {
+  return runAction({ name: "tasks.getProjectFormData", args: [projectId] }, async (): Promise<ProjectFormData> => {
+    const user = await requireUser();
+    const id = v.id.parse(projectId);
+    await assertProjectAccess(user, id);
+    const project = await db.project.findUniqueOrThrow({ where: { id }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true } });
+    const [columns, users, deliverables, kinds, locale] = await Promise.all([
+      db.column.findMany({ where: { projectId: id }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true } }),
+      projectUsers(id, project),
+      db.deliverable.findMany({ where: { projectId: id }, orderBy: [{ position: "asc" }], select: { id: true, name: true, dueDate: true } }),
+      listKinds(id),
+      getLocale(),
+    ]);
+    return {
+      project: { id: project.id, name: project.name, attachMaxMb: project.taskAttachMaxMb, fileMaxMb: Math.round(MAX_UPLOAD_BYTES / 1024 / 1024) },
+      columns,
+      users,
+      kinds: localizeGeneralKinds(kinds, locale),
+      deliverables: deliverables.map((d) => ({ id: d.id, name: d.name, dueDate: dateToIso(d.dueDate) })),
+    };
   });
 }
 
@@ -306,6 +340,8 @@ const updateSchema = z.object({
   dueDate: v.dayIso.optional(),
   deliverableId: v.id.nullable().optional(),
   evergreen: z.boolean().optional(),
+  /** Cadencia de la tarea fija: 1 = todas las releases, 2 = las pares, 3 = múltiplos de 3. */
+  evergreenEvery: z.number().int().min(1).max(3).optional(),
   recurrence: z.enum(RECURRENCES).optional(),
   recurrenceDay: z.number().int().min(1).max(31).nullable().optional(),
 });
@@ -313,7 +349,7 @@ const updateSchema = z.object({
 /** Anota en el historial qué ha cambiado realmente al editar la tarea (una línea por cambio). */
 async function recordUpdateEvents(
   taskId: string,
-  prev: { title: string; description: string; kindId: string; assigneeId: string | null; dueDate: Date | null; color: string | null; linkUrl: string | null; deliverableId: string | null; evergreen: boolean },
+  prev: { title: string; description: string; kindId: string; assigneeId: string | null; dueDate: Date | null; color: string | null; linkUrl: string | null; deliverableId: string | null; evergreen: boolean; evergreenEvery: number },
   data: z.infer<typeof updateSchema>,
   dueDate: string | null | undefined,
 ) {
@@ -335,6 +371,9 @@ async function recordUpdateEvents(
   if (data.linkUrl !== undefined && (data.linkUrl ?? null) !== prev.linkUrl) others.linkUrl = true;
   if (data.deliverableId !== undefined && data.deliverableId !== prev.deliverableId) others.deliverableId = true;
   if (data.evergreen !== undefined && data.evergreen !== prev.evergreen) others.evergreen = true;
+  if (data.evergreenEvery !== undefined && data.evergreenEvery !== prev.evergreenEvery && (data.evergreen ?? prev.evergreen)) {
+    add({ k: "Cambió la cadencia en la release a «{to}»", p: { to: evergreenEveryLabel(data.evergreenEvery) } });
+  }
   if (data.labelIds !== undefined) others.labelIds = true;
   if (Object.keys(others).length) add({ k: "Cambió {changes}", p: { changes: describeChanges(others) } });
   // Sin cambios reales (p. ej. se guardó el mismo texto): ni siquiera la línea genérica.
@@ -381,6 +420,9 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
     ]);
     for (const c of checks) if (c.status === "rejected") throw c.reason;
     const { labelIds, dueDate, recurrence, recurrenceDay, ...rest } = data;
+    // La cadencia solo existe en una tarea fija: al dejar de serlo (o si no lo es) vuelve a 1.
+    const stillFixed = data.evergreen ?? task.evergreen;
+    if (!stillFixed && (data.evergreenEvery !== undefined || task.evergreenEvery !== 1)) rest.evergreenEvery = 1;
     // Repetición: el día se deja coherente con la regla (semanal 1-7, mensual 1-31) y, si falta, sale de la fecha límite o de hoy.
     let repeat: { recurrence: (typeof RECURRENCES)[number]; recurrenceDay: number | null } | null = null;
     if (recurrence !== undefined || recurrenceDay !== undefined) {
@@ -452,7 +494,7 @@ export async function moveTask(taskId: string, columnId: string, prevId: string 
     // resolvería con otra consulta después. Las vecinas se leen después, con la columna destino bloqueada.
     const columnSelect = { id: true, name: true, isDone: true } as const;
     const [task, current, target] = await Promise.all([
-      loadTaskWithAccess(user, id, { archivedAt: true, title: true, position: true, evergreen: true }),
+      loadTaskWithAccess(user, id, { archivedAt: true, title: true, position: true, evergreen: true, evergreenEvery: true }),
       db.column.findFirst({ where: { tasks: { some: { id } } }, select: columnSelect }),
       col.success ? db.column.findUnique({ where: { id: col.data }, select: { projectId: true, name: true, isDone: true } }) : null,
     ]);
@@ -473,10 +515,10 @@ export async function moveTask(taskId: string, columnId: string, prevId: string 
       const undoPosition = placed.rebalanced && fromColumnId === columnId
         ? (await tx.task.findUniqueOrThrow({ where: { id: taskId }, select: { position: true } })).position
         : task.position;
-      await tx.task.update({ where: { id: taskId }, data: { columnId, position: placed.position, evergreen: false } });
+      await tx.task.update({ where: { id: taskId }, data: { columnId, position: placed.position, evergreen: false, evergreenEvery: 1 } });
       return { position: placed.position, undoPosition };
     });
-    addUndo({ t: "task.set", id: taskId, data: { columnId: fromColumnId, position: undoPosition, evergreen: task.evergreen } });
+    addUndo({ t: "task.set", id: taskId, data: { columnId: fromColumnId, position: undoPosition, evergreen: task.evergreen, ...(task.evergreen ? { evergreenEvery: task.evergreenEvery } : {}) } });
     // Recurrente que llega a una columna terminada: nace la siguiente aparición.
     const spawned = target.isDone && !from.isDone ? await spawnRecurrences([taskId], user.id) : [];
     const to = target.name;
@@ -509,7 +551,7 @@ export async function moveTasks(taskIds: string[], columnId: string) {
       select: { id: true, columnId: true, column: { select: { isDone: true } } },
     });
     const toMove = tasks.filter((t) => t.columnId !== column.id);
-    const undo = await captureTasks(toMove.map((t) => t.id), ["columnId", "position", "evergreen"]);
+    const undo = await captureTasks(toMove.map((t) => t.id), ["columnId", "position", "evergreen", "evergreenEvery"]);
     const moved = await db.$transaction(async (tx) => {
       await lockColumns(tx, [column.id]);
       let pos = (await lastPositionIn(tx, column.id)) ?? 0;
@@ -561,7 +603,7 @@ export async function archiveTask(taskId: string) {
     await assertNotArchived(taskId);
     describeAction("Archivó «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
     addUndo(...(await captureTasks([taskId], ARCHIVE_FIELDS)));
-    await db.task.update({ where: { id: taskId }, data: { archivedAt: new Date(), archivedFromColumnId: columnId, evergreen: false } });
+    await db.task.update({ where: { id: taskId }, data: { archivedAt: new Date(), archivedFromColumnId: columnId, evergreen: false, evergreenEvery: 1 } });
     return { spawned: await spawnRecurrences([taskId], user.id) };
   });
 }
@@ -578,7 +620,7 @@ export async function archiveTasks(taskIds: string[]) {
     noteProject(tasks[0]?.projectId);
     const active = (await db.task.findMany({ where: { id: { in: ids }, archivedAt: null }, select: { id: true } })).map((t) => t.id);
     addUndo(...(await captureTasks(active, ARCHIVE_FIELDS)));
-    await db.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId", "evergreen" = false WHERE "id" IN (${Prisma.join(ids)}) AND "archivedAt" IS NULL`;
+    await db.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId", "evergreen" = false, "evergreenEvery" = 1 WHERE "id" IN (${Prisma.join(ids)}) AND "archivedAt" IS NULL`;
     const spawned = await spawnRecurrences(active, user.id);
     describeAction("Archivó {count}", { count: tasksN(ids.length) }, { taskIds: ids });
     for (const id of ids) recordTaskEvent(id, "archive", { k: "Archivó la tarea" });
@@ -813,6 +855,8 @@ export async function deleteAttachment(attachmentId: string) {
     // El fichero se conserva mientras se pueda deshacer (ver undo.ts).
     addUndo({ t: "attachment.restore", row: { ...att, createdAt: att.createdAt.toISOString() } });
     await db.taskAttachment.delete({ where: { id: att.id } });
+    // Id de la entrada de deshacer, para que el aviso «Deshacer» deshaga justo este borrado.
+    return { undo: trackUndoEntry() };
   });
 }
 
@@ -829,6 +873,7 @@ const snapshotSchema = z.object({
   dueDate: v.dayIso,
   deliverableId: v.id.nullable(),
   evergreen: z.boolean(),
+  evergreenEvery: z.number().int().min(1).max(3).optional(),
   recurrence: z.enum(RECURRENCES),
   recurrenceDay: z.number().int().min(1).max(31).nullable(),
   columnId: v.id,
@@ -879,6 +924,7 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
     if (snap.color !== task.color) fields.color = snap.color;
     if (snap.linkUrl !== task.linkUrl) fields.linkUrl = snap.linkUrl;
     if (snap.evergreen !== task.evergreen) fields.evergreen = snap.evergreen;
+    if (snap.evergreenEvery !== undefined && snap.evergreenEvery !== task.evergreenEvery) fields.evergreenEvery = snap.evergreenEvery;
     if (snap.recurrence !== task.recurrence) fields.recurrence = snap.recurrence;
     if (snap.recurrenceDay !== task.recurrenceDay) fields.recurrenceDay = snap.recurrenceDay;
     if (snap.kindId !== task.kindId && (await passes(() => assertKindsInProject([snap.kindId], projectId)))) fields.kindId = snap.kindId;

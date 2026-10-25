@@ -28,6 +28,7 @@ export const READ_ACTIONS = [
   "tasks.getTaskDetail",
   "tasks.getArchivedTasks",
   "tasks.getTaskHistory",
+  "tasks.getProjectFormData",
   "releases.getReleaseTaskDetails",
   "releases.countReleasesOn",
   "templates.listTemplates",

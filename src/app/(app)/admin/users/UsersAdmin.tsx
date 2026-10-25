@@ -1,12 +1,13 @@
 "use client";
 
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { KeyRound, Pencil, ShieldOff, Trash2, TriangleAlert, UserPlus } from "lucide-react";
+import { KeyRound, Link2Off, Pencil, ShieldOff, Trash2, TriangleAlert, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { createUser, deleteUser, forcePasswordChange, resetUserTwoFactor, updateUser } from "@/actions/users";
+import { createUser, deleteUser, forcePasswordChange, resetUserTwoFactor, unlinkGoogle, updateUser } from "@/actions/users";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
@@ -31,7 +32,24 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable }: { users: U
   const [resetting, setResetting] = useState<UserRow | null>(null);
   const [deleting, setDeleting] = useState<UserRow | null>(null);
   const [resetting2fa, setResetting2fa] = useState<UserRow | null>(null);
+  const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
   const activeCount = users.filter((u) => u.active).length;
+
+  const unlink = async (u: UserRow) => {
+    const ok = await confirm({
+      title: t("Desvincular Google de {name}", { name: u.name }),
+      message: t("Se cerrarán sus sesiones. La próxima vez tendrá que entrar con su contraseña o volver a entrar con Google para vincular la cuenta de nuevo (si entra con Google con el mismo email, se vincula automáticamente). Los documentos de Drive no se ven afectados."),
+      confirmLabel: t("Desvincular"),
+      danger: true,
+    });
+    if (!ok) return;
+    const res = await unlinkGoogle(u.id);
+    if (!res.ok) return toast(res.error, "error");
+    toast(t("Google desvinculado: se han cerrado sus sesiones"));
+    router.refresh();
+  };
 
   return (
     <div>
@@ -67,6 +85,9 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable }: { users: U
             )}
             {u.id !== meId && u.twoFactor && (
               <button className="btn-icon" onClick={() => setResetting2fa(u)} aria-label={t("Restablecer la verificación en dos pasos de {name}", { name: u.name })} title={t("Restablecer la verificación en dos pasos")}><ShieldOff size={16} /></button>
+            )}
+            {u.id !== meId && u.googleLinked && (
+              <button className="btn-icon" onClick={() => void unlink(u)} aria-label={t("Desvincular Google de {name}", { name: u.name })} title={t("Desvincular Google")}><Link2Off size={16} /></button>
             )}
             {u.id !== meId && (
               <button className="btn-icon text-red-600 dark:text-red-400" onClick={() => setDeleting(u)} aria-label={t("Borrar {name}", { name: u.name })}><Trash2 size={16} /></button>

@@ -96,6 +96,8 @@ export const server: Record<string, string> = {
   "No hay ninguna columna con el rol «En producción». Asígnalo en el menú de una columna o elige archivar.": "No column has the “In production” role. Assign it in a column's menu or choose to archive.",
   "Mientras tanto se ha desplegado la release {prev}: vuelve a generar el texto para que los códigos lleven R{number}.": "Release {prev} was deployed in the meantime: regenerate the text so the codes use R{number}.",
   "La release no existe.": "The release doesn't exist.",
+  "Una de las tareas ya no está en el tablero (archivada, borrada o movida a otro proyecto): vuelve a generar la release.": "One of the tasks is no longer on the board (archived, deleted or moved to another project): regenerate the release.",
+  "{n} de las tareas ya no están en el tablero (archivadas, borradas o movidas a otro proyecto): vuelve a generar la release.": "{n} of the tasks are no longer on the board (archived, deleted or moved to another project): regenerate the release.",
   // Subidas y Google
   "Identificador no válido.": "Invalid identifier.",
   "El archivo no es una imagen válida.": "The file is not a valid image.",
@@ -114,6 +116,8 @@ export const server: Record<string, string> = {
   "Origen no permitido": "Origin not allowed",
   "Origen no permitido.": "Origin not allowed.",
   "Demasiadas peticiones": "Too many requests",
+  "No puedes desvincular tu propia cuenta de Google desde aquí.": "You can't unlink your own Google account from here.",
+  "Esa acción ya no se puede deshacer desde aquí: usa Deshacer.": "That action can no longer be undone from here: use Undo.",
   "Ya se está preparando otro ZIP. Inténtalo de nuevo en unos segundos.": "Another ZIP is already being prepared. Try again in a few seconds.",
   "Datos no válidos": "Invalid data",
   "Los adjuntos de la tarea superarían el máximo del proyecto ({limit} MB por tarea; ya tiene {used} MB). Puedes cambiarlo en los ajustes del proyecto.": "The task's attachments would exceed the project maximum ({limit} MB per task; it already has {used} MB). You can change it in the project settings.",
@@ -251,4 +255,6 @@ export const server: Record<string, string> = {
   "La contraseña no es correcta.": "The password is not correct.",
   "Para descargar la copia confirma con tu contraseña.": "To download the backup, confirm with your password.",
   "Has llegado al máximo de proyectos privados.": "You have reached the maximum number of private projects.",
+  "Los adjuntos han cambiado mientras se descargaban. Vuelve a descargarlos.": "The attachments changed while they were downloading. Download them again.",
+  "cadencia en la release": "release cadence",
 };

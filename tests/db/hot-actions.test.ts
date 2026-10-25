@@ -189,7 +189,7 @@ describe("moveTasks", () => {
       columnId: "DONE", moved: [{ id: "A", position: 3000 + STEP }, { id: "B", position: 3000 + 2 * STEP }], spawned: ["NEXT"],
     });
     assert.deepEqual(normSorted(await traces(f.project.id, "tasks.moveTasks", since), { ...fixtureNames(f), [a.id]: "A", [b.id]: "B", [next.id]: "NEXT" }), {
-      undo: [{ kind: "UNDO", label: "{\"k\":\"Movió {count} a «{col}»\",\"p\":{\"count\":{\"k\":\"{n} tareas\",\"p\":{\"n\":2}},\"col\":\"Hecho\"}}", ops: sorted([{ t: "task.set", id: "A", data: { columnId: "TODO", position: 1000, evergreen: false } }, { t: "task.set", id: "B", data: { columnId: "DOING", position: 1000, evergreen: false } }, { t: "task.remove", id: "NEXT" }]), taskId: null }],
+      undo: [{ kind: "UNDO", label: "{\"k\":\"Movió {count} a «{col}»\",\"p\":{\"count\":{\"k\":\"{n} tareas\",\"p\":{\"n\":2}},\"col\":\"Hecho\"}}", ops: sorted([{ t: "task.set", id: "A", data: { columnId: "TODO", position: 1000, evergreen: false, evergreenEvery: 1 } }, { t: "task.set", id: "B", data: { columnId: "DOING", position: 1000, evergreen: false, evergreenEvery: 1 } }, { t: "task.remove", id: "NEXT" }]), taskId: null }],
       events: sorted([
         { taskId: "A", code: "done", label: "{\"k\":\"Movió la tarea a «{to}»\",\"p\":{\"to\":\"Hecho\"}}" },
         { taskId: "B", code: "done", label: "{\"k\":\"Movió la tarea a «{to}»\",\"p\":{\"to\":\"Hecho\"}}" },

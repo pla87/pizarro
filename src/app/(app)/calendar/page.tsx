@@ -142,7 +142,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       people={people}
       meId={user.id}
       filters={{ project: projectIds, person: personIds, hideDone }}
-      truncated={rows.length >= MAX_TASKS}
+      truncated={rows.length >= MAX_TASKS || deliverableRows.length >= MAX_DELIVERABLES}
     />
   );
 }

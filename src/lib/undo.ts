@@ -35,6 +35,7 @@ export interface TaskData {
   archivedAt?: string | null;
   archivedFromColumnId?: string | null;
   evergreen?: boolean;
+  evergreenEvery?: number;
   recurrence?: "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
   recurrenceDay?: number | null;
   contentUpdatedAt?: string | null;
@@ -91,7 +92,7 @@ const date = (s: string | null | undefined) => (s ? new Date(s) : null);
 
 const TASK_SELECT = {
   title: true, description: true, kindId: true, color: true, linkUrl: true, position: true, columnId: true, assigneeId: true,
-  dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, recurrence: true, recurrenceDay: true, contentUpdatedAt: true, contentUpdatedById: true,
+  dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, evergreenEvery: true, recurrence: true, recurrenceDay: true, contentUpdatedAt: true, contentUpdatedById: true,
 } as const;
 type TaskRowFull = Prisma.TaskGetPayload<{ select: typeof TASK_SELECT }>;
 
@@ -185,14 +186,15 @@ export async function saveUndo(
   userId: string, projectId: string, label: string, ops: UndoOp[], taskId: string | null = null,
   kind: UndoKind = "UNDO", clearRedo = kind === "UNDO", fingerprint: string | null = null,
   history: { eventIds?: string[]; events?: SavedEvent[] } = {},
-): Promise<void> {
+): Promise<string> {
   if (clearRedo) await discardUndo({ userId, projectId, kind: "REDO" });
-  await db.undoEntry.create({
+  const created = await db.undoEntry.create({
     data: {
       userId, projectId, taskId, kind, label: label.slice(0, 300), ops: ops as unknown as Prisma.InputJsonValue, fingerprint,
       eventIds: history.eventIds ?? [],
       ...(history.events?.length ? { events: history.events as unknown as Prisma.InputJsonValue } : {}),
     },
+    select: { id: true },
   });
   const old = await db.undoEntry.findMany({
     where: { userId, projectId, kind },
@@ -201,6 +203,7 @@ export async function saveUndo(
     select: { id: true, ops: true },
   });
   if (old.length) await discardEntries(old);
+  return created.id;
 }
 
 /** Ficheros retenidos por las entradas: adjuntos borrados que ya no existen en la base de datos. */
@@ -571,7 +574,7 @@ export async function fingerprintOps(projectId: string, ops: UndoOp[]): Promise<
     select: {
       // Contenido, no la hora de escritura: reescribir lo mismo (p. ej. un deshacer propio) no cuenta como cambio.
       id: true, title: true, description: true, kindId: true, color: true, linkUrl: true, position: true, columnId: true, assigneeId: true,
-      dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, recurrence: true, recurrenceDay: true,
+      dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, evergreenEvery: true, recurrence: true, recurrenceDay: true,
       labels: { select: { labelId: true }, orderBy: { labelId: "asc" } },
       subtasks: { select: { id: true, title: true, done: true, position: true }, orderBy: { id: "asc" } },
       comments: { select: { id: true, editedAt: true }, orderBy: { id: "asc" } },

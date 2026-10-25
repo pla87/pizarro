@@ -295,6 +295,8 @@ model Task {
   archivedFromColumnId String?
   /// Tarea fija de la columna «Siguiente salto»: se incluye en cada release y no sale de la columna al desplegar.
   evergreen     Boolean   @default(false)
+  /// Cadencia de una tarea fija: 1 = todas las releases, 2 = las pares, 3 = múltiplos de 3.
+  evergreenEvery Int      @default(1)
   /// Último cambio de contenido (título, descripción, tipo…) y quién lo hizo: detecta ediciones simultáneas.
   contentUpdatedAt   DateTime?
   contentUpdatedById String?
@@ -400,6 +402,9 @@ model Release {
   createdBy   User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
   tasks       ReleaseTask[]
   attachments ReleaseAttachment[]
+  /// Trabajo pendiente de copiar los adjuntos al histórico ({items, allowed, userId, userName}); se limpia al terminar.
+  /// Si el servidor se reinicia a mitad, el arranque lo retoma.
+  attachmentsPending Json?
 
   @@index([projectId, deployedAt])
   @@index([createdById])
@@ -419,6 +424,7 @@ model ReleaseAttachment {
   createdAt DateTime @default(now())
   release   Release  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
 
+  @@unique([releaseId, fileName])
   @@index([releaseId])
 }
 

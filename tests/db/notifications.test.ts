@@ -4,6 +4,10 @@ import { describe, test } from "node:test";
 import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
 import { addComment, createTask, updateTask } from "../../src/actions/tasks";
 import { mentionToken } from "../../src/lib/mentions";
+import { deliver } from "../../src/lib/notify";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const mention = (u: { id: string; name: string }) => mentionToken(u.name, u.id);
 const recipients = async (taskId: string) => (await db.notification.findMany({ where: { taskId }, select: { userId: true, type: true } })).sort((a, b) => a.userId.localeCompare(b.userId));
@@ -82,5 +86,33 @@ describe("menciones según la visibilidad", () => {
     await loginAs(author);
     expectOk(await addComment(task.id, "sin menciones"));
     assert.deepEqual((await recipients(task.id)).map((n) => [n.userId, n.type]), [[creator.id, "COMMENT"]]);
+  });
+});
+
+describe("envío externo de avisos", () => {
+  test("no sale el email si la persona perdió el acceso al proyecto privado antes del envío", async () => {
+    const author = await makeUser();
+    const stays = await makeUser();
+    const removed = await makeUser();
+    const f = await makeProject({ visibility: "PRIVATE", owner: author, members: [stays, removed] });
+    const task = await makeTask(f);
+    const created = await db.notification.createManyAndReturn({
+      data: [stays, removed].map((u) => ({ userId: u.id, actorId: author.id, taskId: task.id, type: "MENTION" as const, excerpt: "x" })),
+      select: { id: true, userId: true },
+    });
+    await db.projectMember.deleteMany({ where: { projectId: f.project.id, userId: removed.id } });
+    const dir = await mkdtemp(join(tmpdir(), "pz-outbox-"));
+    const prev = process.env.MAIL_OUTBOX_DIR;
+    process.env.MAIL_OUTBOX_DIR = dir;
+    try {
+      await deliver(created.map((c) => c.id));
+    } finally {
+      process.env.MAIL_OUTBOX_DIR = prev ?? "";
+    }
+    const sent = await db.notification.findMany({ where: { id: { in: created.map((c) => c.id) } }, select: { userId: true, emailSentAt: true } });
+    assert.ok(sent.find((n) => n.userId === stays.id)?.emailSentAt, "quien sigue en el proyecto recibe el email");
+    assert.equal(sent.find((n) => n.userId === removed.id)?.emailSentAt, null);
+    assert.equal((await readdir(dir)).filter((n) => n.endsWith(".json")).length, 1);
+    await rm(dir, { recursive: true, force: true });
   });
 });

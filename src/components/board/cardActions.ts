@@ -51,6 +51,10 @@ export function useCardActions(deps: Deps) {
     };
 
     return {
+      /** Cadencia de una tarea fija (1 = todas, 2 = cada dos, 3 = cada tres releases). */
+      setEvergreenEvery: async (id: string, every: number) => {
+        await saveFields(id, { evergreenEvery: every }, { evergreenEvery: every });
+      },
       assignToMe: async (id: string) => {
         const { getTask, currentUserId, toast, t } = ref.current;
         const task = getTask(id);
@@ -69,7 +73,7 @@ export function useCardActions(deps: Deps) {
         // Al final de la columna destino.
         const prevId = baseItems[target.id]?.at(-1) ?? null;
         const position = positionBetween(prevId ? getTask(prevId)?.position : null, null);
-        patchTask(id, { columnId: target.id, position, evergreen: false });
+        patchTask(id, { columnId: target.id, position, evergreen: false, evergreenEvery: 1 });
         focusCard(id);
         const res = await track(moveTask(id, target.id, prevId, null));
         if (!res.ok) {

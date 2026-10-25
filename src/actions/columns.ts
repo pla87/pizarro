@@ -60,7 +60,7 @@ export async function setColumnRole(columnId: string, role: string) {
     // Deshacer: roles de todas las columnas y las tareas fijas que dejarían de serlo.
     const before = await db.column.findMany({ where: { projectId: column.projectId }, select: { id: true, role: true } });
     const fixed = await db.task.findMany({ where: { projectId: column.projectId, evergreen: true }, select: { id: true } });
-    addUndo(...before.map((c) => ({ t: "column.set" as const, id: c.id, data: { role: c.role } })), ...(await captureTasks(fixed.map((t) => t.id), ["evergreen"])));
+    addUndo(...before.map((c) => ({ t: "column.set" as const, id: c.id, data: { role: c.role } })), ...(await captureTasks(fixed.map((t) => t.id), ["evergreen", "evergreenEvery"])));
     describeAction("Cambió el rol de la columna «{name}»", { name: column.name });
     await db.$transaction(async (tx) => {
       if (value !== "NONE") {
@@ -68,8 +68,8 @@ export async function setColumnRole(columnId: string, role: string) {
       }
       await tx.column.update({ where: { id: columnId }, data: { role: value } });
       // Las tareas fijas solo existen en la columna de release: si deja de serlo, pasan a ser normales.
-      if (value !== "NEXT_RELEASE") await tx.task.updateMany({ where: { columnId, evergreen: true }, data: { evergreen: false } });
-      else await tx.task.updateMany({ where: { projectId: column.projectId, evergreen: true, columnId: { not: columnId } }, data: { evergreen: false } });
+      if (value !== "NEXT_RELEASE") await tx.task.updateMany({ where: { columnId, evergreen: true }, data: { evergreen: false, evergreenEvery: 1 } });
+      else await tx.task.updateMany({ where: { projectId: column.projectId, evergreen: true, columnId: { not: columnId } }, data: { evergreen: false, evergreenEvery: 1 } });
     });
   });
 }

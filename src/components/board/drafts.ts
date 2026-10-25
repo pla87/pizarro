@@ -20,6 +20,8 @@ export interface NewTaskDraft {
   evergreen: boolean;
   subtasks: string[];
   subtaskDraft: string;
+  /** Proyecto elegido en el diálogo (si no es el del tablero). */
+  projectId?: string;
 }
 
 export interface EditTaskDraft {

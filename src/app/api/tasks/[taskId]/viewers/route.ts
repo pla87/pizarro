@@ -1,6 +1,7 @@
 import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { leaveTask, noteTaskViewer } from "@/lib/presence";
+import { isSameOrigin } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import * as v from "@/lib/validation";
@@ -27,7 +28,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ taskId: string
 }
 
 /** El diálogo se ha cerrado. */
-export async function DELETE(_req: Request, ctx: { params: Promise<{ taskId: string }> }) {
+export async function DELETE(req: Request, ctx: { params: Promise<{ taskId: string }> }) {
+  // Modifica estado (la presencia): misma comprobación de origen que el resto de rutas que escriben.
+  if (!isSameOrigin(req)) return new Response(null, { status: 403 });
   const found = await load(ctx);
   if (found) leaveTask(found.taskId, found.user.id);
   return new Response(null, { status: 204 });

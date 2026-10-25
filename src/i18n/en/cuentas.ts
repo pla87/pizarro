@@ -126,6 +126,17 @@ export const cuentas: Record<string, string> = {
     "Incorrect or expired code.",
   "Tiene activada la verificación en dos pasos":
     "Has two-step verification enabled",
+  "Desvincular Google de {name}": "Unlink Google from {name}",
+  "Desvincular Google": "Unlink Google",
+  "Desvincular": "Unlink",
+  "Se cerrarán sus sesiones. La próxima vez tendrá que entrar con su contraseña o volver a entrar con Google para vincular la cuenta de nuevo (si entra con Google con el mismo email, se vincula automáticamente). Los documentos de Drive no se ven afectados.":
+    "Their sessions will be closed. Next time they will have to sign in with their password, or sign in with Google again to link the account again (if they sign in with Google using the same email, it is linked automatically). Drive documents are not affected.",
+  "Google desvinculado: se han cerrado sus sesiones": "Google unlinked: their sessions have been closed",
+  "Esa persona no tiene una cuenta de Google vinculada.": "That person has no linked Google account.",
+  "Se ha desvinculado tu cuenta de Google de Pizarro": "Your Google account has been unlinked from Pizarro",
+  "Un administrador ha desvinculado tu cuenta de Google del acceso a Pizarro y se han cerrado tus sesiones. Puedes entrar con tu contraseña o volver a entrar con Google.":
+    "An administrator has unlinked your Google account from Pizarro sign-in and your sessions have been closed. You can sign in with your password or sign in with Google again.",
+  "Si no esperabas este cambio, avisa a un administrador.": "If you were not expecting this change, tell an administrator.",
   "Ha entrado con Google":
     "Has signed in with Google",
   "Restablecer la verificación en dos pasos de {name}":

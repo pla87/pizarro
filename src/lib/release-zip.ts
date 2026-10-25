@@ -1,9 +1,12 @@
 import "server-only";
 import { buildZip } from "./zip";
+import { zipPlanToken } from "./zip-token";
 import { planPackages, zipEntryOverhead, type ZipPackage } from "./zip-plan";
 
 /** Un fichero que puede ir en un ZIP de release: su tamaño ya está comprobado en disco. */
 export interface ZipEntry {
+  /** Id del adjunto (entra en el token de versión del plan). */
+  id: string;
   name: string;
   size: number;
   read: () => Promise<Uint8Array>;
@@ -18,8 +21,8 @@ export function planZipEntries(entries: ZipEntry[], maxMb: number): ZipPackage[]
 }
 
 /** Cuerpo JSON del modo «plan»: cuántos paquetes hay y qué pesa cada uno. */
-export function zipPlanBody(packages: ZipPackage[], maxMb: number) {
-  return { maxMb, parts: packages.map((p) => ({ files: p.items.length, bytes: p.bytes, oversize: p.oversize })) };
+export function zipPlanBody(packages: ZipPackage[], maxMb: number, entries: ZipEntry[]) {
+  return { maxMb, v: zipPlanToken(entries, maxMb), parts: packages.map((p) => ({ files: p.items.length, bytes: p.bytes, oversize: p.oversize })) };
 }
 
 /** Arma en memoria solo un paquete (nunca más que el tope, salvo un fichero suelto mayor). Los ficheros que ya no están se omiten. */
@@ -61,14 +64,22 @@ export function zipRateKey(mode: ZipRequestMode, userId: string): { key: string;
   return mode.explicit ? { key: `release-zip-part:${userId}`, limit: 120 } : { key: `release-zip:${userId}`, limit: 10 };
 }
 
-export type ZipRequestMode = { kind: "plan" } | { kind: "part"; part: number; explicit: boolean };
+export type ZipRequestMode = { kind: "plan" } | { kind: "part"; part: number; explicit: boolean; version: string | null };
 
-/** `?plan=1` pide el reparto; `?part=N` (1-based) un paquete; sin nada, el primero. */
+/** Respuesta 409 cuando el token `?v=` ya no coincide con el reparto actual; null si coincide o no se envió (enlaces antiguos). */
+export function zipVersionConflict(mode: ZipRequestMode, entries: ZipEntry[], maxMb: number, message: string): Response | null {
+  if (mode.kind !== "part" || mode.version === null || mode.version === zipPlanToken(entries, maxMb)) return null;
+  return new Response(message, { status: 409, headers: { "Cache-Control": "private, no-store" } });
+}
+
+/** `?plan=1` pide el reparto; `?part=N` (1-based) un paquete (con `?v=` el token del plan); sin nada, el primero. */
 export function zipRequestMode(url: string): ZipRequestMode | null {
   const sp = new URL(url).searchParams;
   if (sp.get("plan") === "1") return { kind: "plan" };
   const raw = sp.get("part");
-  if (raw === null) return { kind: "part", part: 1, explicit: false };
+  const version = sp.get("v");
+  if (version !== null && !/^[0-9a-f]{16}$/.test(version)) return null;
+  if (raw === null) return { kind: "part", part: 1, explicit: false, version };
   const part = Number(raw);
-  return Number.isInteger(part) && part >= 1 && part <= 1000 ? { kind: "part", part, explicit: true } : null;
+  return Number.isInteger(part) && part >= 1 && part <= 1000 ? { kind: "part", part, explicit: true, version } : null;
 }
