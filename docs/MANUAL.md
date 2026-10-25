@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.22.0"
+version: "v1.23.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.22.0
+**Versión de la aplicación:** v1.23.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -105,6 +105,7 @@ La aplicación es un **monolito en un único contenedor**. No hay colas, cachés
 | `Notification` | userId, actorId, taskId, excerpt, readAt, emailSentAt, whatsappSentAt, deliveryError | Un aviso por persona mencionada, con el resultado de cada envío. |
 | `TaskLink` | taskId, kind (GOOGLE_DOC / GOOGLE_SHEET), title, url | Documentos de Google enlazados a la tarjeta. |
 | `GoogleAccount` | userId, email, refreshTokenEnc, accessTokenEnc, scope | Tokens OAuth cifrados con AES-256-GCM. |
+| `AppState` | clave, valor | Estado interno que debe sobrevivir a reinicios (p. ej. cuándo se avisó por última vez de una copia atrasada). |
 | `AuthToken` | userId, tipo (invitación, restablecer contraseña, confirmar cambio de contraseña o de email), hash, expiresAt, usedAt | Enlaces de un solo uso; solo se guarda el hash del token. |
 | `KnownDevice` | userId, hash del dispositivo, lastSeenAt | Dispositivos ya vistos, para el aviso de inicio de sesión nuevo. |
 | `LoginChallenge` | userId, método, hash del código, expiresAt, intentos | Paso intermedio del inicio de sesión con verificación en dos pasos. |
@@ -472,7 +473,7 @@ La entrada **Administración** del menú lateral reúne seis pestañas: **Usuari
 - Las de serie se pueden **editar** o **borrar**. En una modificada, **Restablecer** vuelve a su contenido original; **Recuperar plantillas por defecto** recrea las de serie que se hayan borrado. Cuando Pizarro mejora una plantilla de serie, se actualiza sola al desplegar si no la has modificado; si la has cambiado, se respeta tu versión.
 - **En inglés:** quien usa Pizarro en inglés ve las plantillas de serie sin modificar con su nombre en inglés, y el proyecto se crea con columnas, tipos (con sus descripciones y subtareas) y etiquetas en inglés. Una plantilla de serie modificada o una propia se ofrece y se aplica tal como está guardada. Los tipos generales (*Funcionalidad*, *Corrección*) son comunes a todos los proyectos y conservan su nombre.
 
-**Copias de seguridad:** estado de las copias automáticas (última copia, última prueba de restauración, copias conservadas), **Crear copia ahora** y **Descargar** la última (pide tu contraseña, o un código de tu app de autenticación, y usa un enlace de un solo uso de 60 s; ver 4.5). Solo funciona con `BACKUP_KEY` definida.
+**Copias de seguridad:** si la última copia correcta tiene más de 48 h (o no hay ninguna con `BACKUP_KEY` definida), sale un aviso destacado en esta pestaña y un punto en la entrada *Administración* del menú, y se envía un email a los administradores como mucho una vez al día (si el email está configurado). Muestra el estado de las copias automáticas (última copia, última prueba de restauración, copias conservadas), **Crear copia ahora** y **Descargar** la última (pide tu contraseña, o un código de tu app de autenticación, y usa un enlace de un solo uso de 60 s; ver 4.5). Solo funciona con `BACKUP_KEY` definida.
 
 **Logs:** registro detallado de la actividad de los últimos 7 días (configurable con `LOG_RETENTION_DAYS`):
 - páginas visitadas, inicios de sesión (también los fallidos, con el email probado y el motivo, nunca la contraseña) y cierres de sesión;
@@ -491,7 +492,7 @@ Se filtra por periodo (1 h, 24 h, 7 días), nivel (Info, Aviso, Error), categor�
   - **Con email configurado:** la persona recibe un **enlace de invitación** (72 h) para elegir su contraseña. El admin no la conoce.
   - **Sin email:** el admin escribe una **contraseña inicial** (10 caracteres o más) y la persona debe cambiarla en su primer acceso.
 - **Editar:** nombre, email, rol y estado activo. Al desactivar a un usuario o cambiarle el rol se cierran sus sesiones y sus conexiones en vivo. Un admin no puede quitarse a sí mismo el rol ni desactivarse.
-- **Desvincular Google:** en usuarios con la cuenta de Google vinculada (no en la tuya), quita ese vínculo, cierra sus sesiones y le avisa por email. La próxima vez entrará con su contraseña; si vuelve a entrar con Google con el mismo email, se vincula de nuevo. No afecta a los documentos de Drive.
+- **Desvincular Google:** en usuarios con la cuenta de Google vinculada (no en la tuya), quita ese vínculo, cierra sus sesiones y le avisa por email. La próxima vez entrará con su contraseña. Mientras tanto Google queda **bloqueado** para esa persona (etiqueta *Google bloqueado*; al intentarlo ve «Tu cuenta de Google está desvinculada…»): se desbloquea cuando entra una vez con su contraseña o cuando un admin pulsa **Permitir Google**, y entonces el siguiente acceso con Google la vincula de nuevo. Sirve si su cuenta de Google pudo verse comprometida. No afecta a los documentos de Drive.
 - **Forzar cambio de contraseña:** marca la cuenta para cambiar la contraseña, cierra sus sesiones y, con email configurado, envía un enlace de restablecimiento (30 min). Hasta que la persona elige una nueva (distinta) no puede usar la app. Los admins no fijan contraseñas a mano.
 - **Reiniciar la verificación en dos pasos:** quita el segundo paso de la persona (volverá a configurarlo).
 - **Borrar** (papelera): elimina la cuenta para siempre. En los proyectos compartidos sus tareas y comentarios se conservan, sin autor. Si es el único miembro de **proyectos privados**, se muestra un aviso con cuántos son y hay que marcar una casilla de confirmación: se borran con él; en los demás, solo deja de ser miembro. Nadie puede borrarse a sí mismo.
