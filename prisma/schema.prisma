@@ -801,3 +801,15 @@ model AppState {
   value     String
   updatedAt DateTime @updatedAt
 }
+
+/// Última ejecución de cada tarea de mantenimiento (lib/maintenance.ts). Sustituye a las marcas en memoria:
+/// sobrevive a los reinicios y la comparten todos los procesos (que se turnan con un bloqueo de Postgres).
+model JobRun {
+  /// Nombre fijo de la tarea, p. ej. «orphanFiles».
+  name           String    @id
+  lastStartedAt  DateTime?
+  lastFinishedAt DateTime?
+  lastOk         Boolean?
+  /// Mensaje del último error (recortado); null si la última ejecución fue bien.
+  lastError      String?
+}

@@ -21,6 +21,7 @@ missing=""
 [ ${#SESSION_SECRET} -ge 32 ] || missing="$missing SESSION_SECRET(>=32)"
 if [ -n "$missing" ]; then
   echo "[start] ERROR: faltan variables de entorno:$missing"
+  echo "[start] Con Docker Compose: revisa el fichero .env junto a compose.yml (docs/INSTALL.md)."
   echo "[start] En Railway: servicio de la app -> Variables. DATABASE_URL debe ser \${{Postgres.DATABASE_URL}}"
   echo "[start] (usa el nombre exacto de tu servicio de base de datos) y aplica los cambios con «Deploy»."
   # Espera antes de salir para no reiniciar en bucle rápido.

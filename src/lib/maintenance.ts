@@ -1,4 +1,7 @@
-// Tareas periódicas de mantenimiento (se arrancan desde instrumentation.ts, una vez por proceso).
+// Tareas periódicas de mantenimiento (se arrancan desde instrumentation.ts, una vez por proceso). Si hay
+// varios procesos, solo uno las ejecuta cada vez (bloqueo de Postgres) y la última ejecución queda en JobRun.
+
+import type { JobDef } from "./jobs";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NON_IMAGE_COPY_DAYS = 7;
@@ -60,13 +63,7 @@ function undoReferencedTokens(ops: unknown[]): Set<string> {
  * Borra de UPLOAD_DIR los ficheros (adjuntos, miniaturas, copias de releases) que ninguna fila de la BD
  * referencia y que tienen más de 24 h. No toca backups/, enlaces simbólicos ni nombres desconocidos.
  */
-const ORPHAN_EVERY_MS = 23 * 60 * 60 * 1000;
-const orphanState = (globalThis as unknown as { __pzOrphans?: { last: number } }).__pzOrphans ??= { last: 0 };
-
 async function purgeOrphanFiles(): Promise<number> {
-  // Recorre todos los adjuntos y la carpeta de subidas: basta con una vez al día.
-  if (Date.now() - orphanState.last < ORPHAN_EVERY_MS) return 0;
-  orphanState.last = Date.now();
   const [{ db }, { logEvent }, { cleanOrphanFiles }, { uploadDir }] = await Promise.all([
     import("@/lib/db"),
     import("@/lib/log"),
@@ -129,25 +126,45 @@ async function sendPeriodicMail(now: Date = new Date()): Promise<number> {
 
 const RESUME_AFTER_MS = 10 * 1000;
 
-/** Retoma las copias de adjuntos de releases interrumpidas por un reinicio; nunca lanza. */
+/** Retoma las copias de adjuntos de releases interrumpidas por un reinicio. */
 async function resumeReleaseCopies(): Promise<void> {
+  const { resumePendingReleaseAttachments } = await import("@/lib/release-attachments");
+  await resumePendingReleaseAttachments();
+}
+
+/** Recorre todos los adjuntos y la carpeta de subidas: basta con una vez al día. */
+const ORPHAN_EVERY_MS = 23 * 60 * 60 * 1000;
+
+/** Tareas de cada pasada, en orden. El nombre es la clave en JobRun (y su etiqueta en Administración). */
+export const MAINTENANCE_JOBS = [
+  { name: "nonImageCopies", run: () => purgeNonImageCopies() },
+  { name: "undo", run: () => purgeOldUndo() },
+  { name: "notifications", run: () => purgeOldNotifications() },
+  { name: "authData", run: () => purgeAuthData() },
+  { name: "taskHistory", run: () => purgeOldTaskHistory() },
+  { name: "orphanFiles", run: () => purgeOrphanFiles(), everyMs: ORPHAN_EVERY_MS },
+  { name: "backup", run: () => backupJob() },
+  { name: "backupAlert", run: () => backupAlertJob() },
+  { name: "restoreTest", run: () => restoreTestJob() },
+  { name: "periodicMail", run: () => sendPeriodicMail() },
+] as const;
+
+/** Ejecuta las tareas bajo el bloqueo `key`: si otro proceso ya lo tiene (p. ej. durante un despliegue), no hace nada. Nunca lanza. */
+async function runLocked(key: "maintenance" | "releaseResume", jobs: readonly JobDef[]): Promise<void> {
   try {
-    const { resumePendingReleaseAttachments } = await import("@/lib/release-attachments");
-    await resumePendingReleaseAttachments();
+    const { withAdvisoryLock, runJob, LOCK_MAINTENANCE, LOCK_RELEASE_RESUME } = await import("@/lib/jobs");
+    const res = await withAdvisoryLock(key === "maintenance" ? LOCK_MAINTENANCE : LOCK_RELEASE_RESUME, async () => {
+      for (const job of jobs) await runJob(job);
+    });
+    if (!res.ran) console.info(`[maintenance] ${key}: otro proceso la está ejecutando; se omite esta pasada`);
   } catch (err) {
-    console.error("[maintenance] reanudar adjuntos de releases", err);
+    console.error(`[maintenance] ${key}`, err);
   }
 }
 
 /** Una pasada de mantenimiento; nunca lanza. */
-async function runMaintenance(): Promise<void> {
-  for (const job of [purgeNonImageCopies, purgeOldUndo, purgeOldNotifications, purgeAuthData, purgeOldTaskHistory, purgeOrphanFiles, backupJob, backupAlertJob, restoreTestJob, sendPeriodicMail]) {
-    try {
-      await job();
-    } catch (err) {
-      console.error("[maintenance]", err);
-    }
-  }
+function runMaintenance(): Promise<void> {
+  return runLocked("maintenance", MAINTENANCE_JOBS);
 }
 
 /** Arranca el temporizador una sola vez por proceso: primera pasada al minuto, luego cada hora. */
@@ -156,7 +173,7 @@ export function startMaintenance(): void {
   if (g.__pzMaintenance) return;
   g.__pzMaintenance = true;
   // Copias de adjuntos de releases que quedaron a medias por un reinicio: se retoman al poco de arrancar (una vez).
-  setTimeout(() => void resumeReleaseCopies(), RESUME_AFTER_MS).unref?.();
+  setTimeout(() => void runLocked("releaseResume", [{ name: "releaseResume", run: resumeReleaseCopies }]), RESUME_AFTER_MS).unref?.();
   setTimeout(() => {
     void runMaintenance();
     setInterval(() => void runMaintenance(), EVERY_MS).unref?.();

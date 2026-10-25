@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type { NextConfig } from "next";
 import { PROXY_BODY_LIMIT_BYTES } from "./src/lib/upload-size";
 
@@ -5,14 +6,19 @@ const isDev = process.env.NODE_ENV !== "production";
 
 // Identificador de esta compilación: el navegador lo compara con el del servidor para detectar
 // que hay una versión nueva desplegada (y recargar antes de llamar a acciones que ya no existen).
-const buildId = (process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 12) || Date.now().toString(36)) + (isDev ? "-dev" : "");
+// Versión del package.json + commit (GIT_SHA, o el que pone Railway) o, sin commit, la hora del build:
+// no depende de ninguna plataforma y cambia en cada compilación distinta.
+const version = (JSON.parse(readFileSync("package.json", "utf8")) as { version?: string }).version ?? "0.0.0";
+const commit = (process.env.GIT_SHA || process.env.RAILWAY_GIT_COMMIT_SHA || "").replace(/[^0-9a-z]/gi, "").slice(0, 12);
+const buildId = `${version}-${commit || Date.now().toString(36)}` + (isDev ? "-dev" : "");
 
 const nextConfig: NextConfig = {
   // Servidor autocontenido (.next/standalone): imagen Docker mucho más pequeña.
   output: "standalone",
   poweredByHeader: false,
   generateBuildId: () => buildId,
-  env: { NEXT_PUBLIC_BUILD_ID: buildId, NEXT_PUBLIC_APP_TIMEZONE: process.env.APP_TIMEZONE || "Europe/Madrid" },
+  // La zona horaria ya no se fija aquí: el navegador la recibe del servidor (data-tz en <html>, ver lib/format.ts).
+  env: { NEXT_PUBLIC_BUILD_ID: buildId },
   reactStrictMode: true,
   serverExternalPackages: ["sharp", "@react-pdf/renderer"],
   experimental: {

@@ -106,10 +106,8 @@ export async function projectUsers(projectId: string, project: { isPrivate: bool
   });
 }
 
-/** Zona horaria de referencia para «hoy» en plazos e informes. */
-export function appTimeZone(): string {
-  return process.env.APP_TIMEZONE || "Europe/Madrid";
-}
+/** Zona horaria de referencia para «hoy» en plazos e informes (la misma que usa el navegador, ver format.ts). */
+export { appTimeZone } from "./format";
 
 /** Tipos de tarea: sin proyecto, solo los generales; con proyecto, los generales y después los de ese proyecto. */
 /** Selección común de los tipos (con su automatización). */
