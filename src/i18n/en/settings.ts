@@ -242,4 +242,12 @@ export const settings: Record<string, string> = {
   "Borradores": "Drafts",
   "Lo que escribes en una tarea sin guardar se conserva en este navegador. Útil en un ordenador compartido: se borra al salir.": "What you type in a task without saving is kept in this browser. Useful on a shared computer: it is deleted when you sign out.",
   "Borrar los borradores al cerrar sesión": "Delete drafts when signing out",
+  "Con quién se comparten los Docs y Sheets que se crean desde las tareas de este proyecto.": "Who the Docs and Sheets created from this project's tasks are shared with.",
+  "Todo el dominio puede editar": "The whole domain can edit",
+  "Todo el dominio puede leer": "The whole domain can read",
+  "Solo las personas del proyecto (editores)": "Only the people in the project (editors)",
+  "No compartir (solo quien lo crea)": "Do not share (only the creator)",
+  "Las opciones de dominio no están disponibles: el servidor no tiene configurado GOOGLE_WORKSPACE_DOMAIN.": "The domain options are not available: the server has no GOOGLE_WORKSPACE_DOMAIN configured.",
+  "Un proyecto privado nunca se comparte con todo el dominio.": "A private project is never shared with the whole domain.",
+  "Si el documento no se puede compartir, se crea igualmente y se avisa en la tarea de que solo lo ve quien lo crea.": "If the document cannot be shared, it is still created and the task warns that only its creator can see it.",
 };

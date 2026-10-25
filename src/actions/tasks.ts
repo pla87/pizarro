@@ -21,6 +21,7 @@ import { dateToIso, isoToDate, todayIso } from "@/lib/dates";
 import { normalizeRecurrence, RECURRENCES } from "@/lib/recurrence-date";
 import { spawnRecurrences } from "@/lib/recurrence";
 import { createDriveFile, type GoogleFileKind } from "@/lib/google";
+import { shareRule } from "@/lib/google-share";
 import { excerpt as makeExcerpt, extractMentionIds, mentionsToPlain } from "@/lib/mentions";
 import { dueChangeExcerpt } from "@/lib/notification-text";
 import { followTask, notifyMentions, notifyTask, taskFollowerIds } from "@/lib/notify";
@@ -881,7 +882,7 @@ const snapshotSchema = z.object({
   // Solo si el detalle estaba cargado al abrir el diálogo; si faltan, no se tocan.
   subtasks: z.array(z.object({ id: v.id, title: v.title, done: z.boolean(), position: z.number().finite() })).max(MAX_SUBTASKS).optional(),
   attachmentIds: z.array(v.id).max(1000).optional(),
-  links: z.array(z.object({ id: v.id, kind: z.enum(["GOOGLE_DOC", "GOOGLE_SHEET"]), title: z.string().max(300), url: z.string().max(2000) })).max(100).optional(),
+  links: z.array(z.object({ id: v.id, kind: z.enum(["GOOGLE_DOC", "GOOGLE_SHEET"]), title: z.string().max(300), url: z.string().max(2000), shareStatus: z.string().max(20).nullish(), shareFailed: z.number().int().min(0).optional() })).max(100).optional(),
 });
 export type TaskEditSnapshot = z.input<typeof snapshotSchema>;
 
@@ -1148,7 +1149,7 @@ export async function deleteComment(commentId: string) {
 
 // --- Documentos de Google ------------------------------------------------------
 
-const linkSelect = { id: true, kind: true, title: true, url: true } as const;
+const linkSelect = { id: true, kind: true, title: true, url: true, shareStatus: true, shareFailed: true } as const;
 
 /** Crea un Google Doc o Sheet en el Drive del usuario y lo enlaza a la tarea. */
 export async function createGoogleFile(taskId: string, kind: GoogleFileKind, title: string) {
@@ -1159,16 +1160,17 @@ export async function createGoogleFile(taskId: string, kind: GoogleFileKind, tit
     if (!rateLimit(`google-file:${user.id}`, 20, 60_000)) throw new AppError("Demasiados documentos creados seguidos. Espera un minuto.");
     const fileKind = z.enum(["GOOGLE_DOC", "GOOGLE_SHEET"]).parse(kind);
     const name = v.title.parse(title);
-    // En un proyecto privado el documento no se comparte con todo el dominio, solo con los miembros del proyecto.
+    // Con quién se comparte lo decide el proyecto (googleShareMode); en uno privado nunca es con el dominio.
     const project = await db.project.findUnique({
       where: { id: projectId },
-      select: { isPrivate: true, members: { where: { user: { active: true }, userId: { not: user.id } }, select: { user: { select: { email: true } } } } },
+      select: { isPrivate: true, googleShareMode: true, members: { where: { user: { active: true }, userId: { not: user.id } }, select: { user: { select: { email: true } } } } },
     });
-    const share = project?.isPrivate ? ({ type: "users", emails: project.members.map((m) => m.user.email) } as const) : ({ type: "domain" } as const);
-    const file = await createDriveFile(user.id, fileKind, name, share);
+    const rule = shareRule(project?.googleShareMode, Boolean(project?.isPrivate), { role: process.env.GOOGLE_SHARE_ROLE });
+    const share = rule.scope === "domain" ? ({ type: "domain" } as const) : rule.scope === "members" ? ({ type: "users", emails: project!.members.map((m) => m.user.email) } as const) : null;
+    const file = await createDriveFile(user.id, fileKind, name, share, rule.role);
     if (!/^https:\/\/(docs|drive)\.google\.com\//.test(file.url)) throw new AppError("Google devolvió un enlace inesperado.");
     const link = await db.taskLink.create({
-      data: { taskId, kind: fileKind, title: file.name, url: file.url, externalId: file.id, createdById: user.id },
+      data: { taskId, kind: fileKind, title: file.name, url: file.url, externalId: file.id, createdById: user.id, shareStatus: file.share.status, shareFailed: file.share.failed },
       select: linkSelect,
     });
     // Deshacer quita el enlace; el archivo sigue en Google Drive.

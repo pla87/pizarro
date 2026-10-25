@@ -20,6 +20,7 @@ import * as v from "@/lib/validation";
 import { dateToIso, isoToDate } from "@/lib/dates";
 import type { LabelOption } from "@/lib/types";
 import { revokeProject } from "@/lib/revoke";
+import { GOOGLE_SHARE_MODES, isDomainMode } from "@/lib/google-share";
 import { assertDeliverableCapacity, assertDeliverableCreateRate, assertLabelCapacity, assertLabelCreateRate } from "@/lib/caps";
 
 /** Crea columnas, tipos propios, tipos generales ocultos y etiquetas de una plantilla en el proyecto (dentro de la transacción). */
@@ -113,6 +114,25 @@ export async function setAttachmentLimits(projectId: string, taskMb: number, zip
     await db.project.update({ where: { id: projectId }, data: { taskAttachMaxMb: task, releaseZipMaxMb: zip } });
     describeAction(`Cambió el máximo de adjuntos por tarea a ${task} MB y el de cada ZIP de release a ${zip} MB`);
     revalidatePath(`/p/${projectId}/settings`);
+  });
+}
+
+/**
+ * Con quién se comparten los Docs/Sheets que se crean desde las tareas del proyecto. Los modos de dominio solo
+ * existen en proyectos de equipo y con GOOGLE_WORKSPACE_DOMAIN configurado (se comprueba aquí, no solo en la pantalla).
+ */
+export async function setGoogleShareMode(projectId: string, mode: string) {
+  return runAction({ name: "projects.setGoogleShareMode", args: [projectId, mode] }, async () => {
+    const user = await requireUser();
+    const parsed = z.enum(GOOGLE_SHARE_MODES).parse(mode);
+    const project = await findManageableProject(user, projectId);
+    if (isDomainMode(parsed)) {
+      if (project.isPrivate) throw new AppError("Un proyecto privado no se puede compartir con todo el dominio.");
+      if (!process.env.GOOGLE_WORKSPACE_DOMAIN) throw new AppError("Compartir con el dominio requiere configurar GOOGLE_WORKSPACE_DOMAIN en el servidor.");
+    }
+    await db.project.update({ where: { id: project.id }, data: { googleShareMode: parsed } });
+    describeAction("Cambió cómo se comparten los documentos de Google");
+    revalidatePath(`/p/${project.id}/settings`);
   });
 }
 

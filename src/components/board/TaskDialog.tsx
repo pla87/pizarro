@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, Camera, Check, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Archive, Camera, Check, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -35,7 +35,7 @@ import { Comments } from "./TaskComments";
 import { FollowToggle } from "./FollowToggle";
 import { TaskHistory } from "./TaskHistory";
 import { TitleField } from "./TitleField";
-import { createAndOpenGoogleFile } from "./google";
+import { createAndOpenGoogleFile, shareWarning } from "./google";
 import { AttachLimitHint } from "./AttachLimitHint";
 import { attachmentPatch, filesFrom, formatBytes, UploadError, uploadFile, useFileDrop } from "./upload";
 import { formatDate } from "@/lib/format";
@@ -225,7 +225,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
           description: d0.description,
           subtasks: d0.subtasks.map((s) => ({ id: s.id, title: s.title, done: s.done, position: s.position })),
           attachmentIds: d0.attachments.map((a) => a.id),
-          links: d0.links.map((l) => ({ id: l.id, kind: l.kind, title: l.title, url: l.url })),
+          links: d0.links.map((l) => ({ id: l.id, kind: l.kind, title: l.title, url: l.url, shareStatus: l.shareStatus, shareFailed: l.shareFailed })),
         } : {}),
       }, d0 ? d0.textVersion : undefined));
       if (!res.ok) {
@@ -387,7 +387,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     }
     setDetail((d) => (d ? { ...d, links: [...d.links, res.link] } : d));
     board.patchTask(task.id, (t) => ({ linkCount: t.linkCount + 1 }));
-    toast(kind === "GOOGLE_SHEET" ? t("Hoja de cálculo creada") : t("Documento creado"));
+    const warning = shareWarning(res.link, t);
+    if (warning) toast(warning, "error");
+    else toast(kind === "GOOGLE_SHEET" ? t("Hoja de cálculo creada") : t("Documento creado"));
     return res.link;
   };
 
@@ -1202,6 +1204,11 @@ function GoogleLinks({ detail, setDetail, onCreate, taskId }: {
               <a href={l.url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate text-sm font-medium hover:text-brand-600">
                 {l.title}
               </a>
+              {shareWarning(l, t) && (
+                <span className="shrink-0 text-amber-600" title={shareWarning(l, t) ?? undefined} aria-label={shareWarning(l, t) ?? undefined} role="img">
+                  <TriangleAlert size={15} />
+                </span>
+              )}
               <button
                 className="btn-icon h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-md:opacity-100"
                 aria-label={t("Quitar enlace")}

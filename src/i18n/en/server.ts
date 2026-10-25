@@ -257,4 +257,7 @@ export const server: Record<string, string> = {
   "Has llegado al máximo de proyectos privados.": "You have reached the maximum number of private projects.",
   "Los adjuntos han cambiado mientras se descargaban. Vuelve a descargarlos.": "The attachments changed while they were downloading. Download them again.",
   "cadencia en la release": "release cadence",
+  "Cambió cómo se comparten los documentos de Google": "Changed how Google documents are shared",
+  "Un proyecto privado no se puede compartir con todo el dominio.": "A private project cannot be shared with the whole domain.",
+  "Compartir con el dominio requiere configurar GOOGLE_WORKSPACE_DOMAIN en el servidor.": "Sharing with the domain requires GOOGLE_WORKSPACE_DOMAIN to be configured on the server.",
 };
