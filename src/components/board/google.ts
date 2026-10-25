@@ -18,7 +18,11 @@ export async function createAndOpenGoogleFile(
   const win = window.open("about:blank", "_blank");
   if (win) {
     win.document.title = t("Creando documento…");
-    win.document.body.innerHTML = `<p style="font-family:system-ui;padding:2rem;color:#475569">${t("Creando el documento en Google Drive…")}</p>`;
+    // Nodos DOM con textContent (nunca innerHTML): el texto no se interpreta como HTML.
+    const p = win.document.createElement("p");
+    p.style.cssText = "font-family:system-ui;padding:2rem;color:#475569";
+    p.textContent = t("Creando el documento en Google Drive…");
+    win.document.body.replaceChildren(p);
   }
   let res: Awaited<ReturnType<typeof createGoogleFile>>;
   try {

@@ -119,6 +119,14 @@ test("códigos: prefijo por tipo, colisiones y numeración por tipo", () => {
   assert.deepEqual([...withO.values()], ["O1", "OT1"]);
 });
 
+test("códigos: muchos tipos con el mismo nombre nunca comparten prefijo", () => {
+  const ks = Array.from({ length: 40 }, (_, i) => ({ id: `k${i}`, name: "Tarea" }));
+  const codes = computeReleaseCodes(ks, ks.map((k) => ({ id: k.id, kindId: k.id })));
+  const prefixes = [...codes.values()].map((c) => c.replace(/\d+$/, ""));
+  assert.equal(new Set(prefixes).size, 40);
+  assert.ok(prefixes.every((p) => /^[A-Z]{1,4}$/.test(p)));
+});
+
 test("descripción sangrada con menciones y adjuntos renombrados", () => {
   const md = buildReleaseMarkdown({
     header: "",

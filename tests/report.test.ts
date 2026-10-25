@@ -75,3 +75,14 @@ test("terminadas recientes y hora", () => {
   assert.equal(r.time, "09:30");
   assert.deepEqual(r.recentDone.map((t) => t.title), ["Hecha vencida"]);
 });
+
+test("terminadas recientes: cuenta la fecha de cierre, no la última edición", () => {
+  const r = buildReport({
+    ...base,
+    // Editada hace poco pero cerrada hace meses: no es reciente. Sin fecha de cierre, vale la última edición.
+    tasks: base.tasks.map((t) => (t.id === "c" ? { ...t, updatedAt: "2026-10-10T08:00:00.000Z", doneAt: "2026-03-01T08:00:00.000Z" } : t)),
+  });
+  assert.deepEqual(r.recentDone, []);
+  const r2 = buildReport({ ...base, tasks: base.tasks.map((t) => (t.id === "c" ? { ...t, updatedAt: "2026-01-01T00:00:00.000Z", doneAt: "2026-10-10T08:00:00.000Z" } : t)) });
+  assert.deepEqual(r2.recentDone.map((t) => t.title), ["Hecha vencida"]);
+});

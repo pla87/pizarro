@@ -14,7 +14,7 @@ export function googleLoginRedirectUri(): string {
 let jwksCache: { keys: Jwk[]; expiresAt: number; fetchedAt: number } | null = null;
 
 /** Claves públicas de Google, en caché según su Cache-Control. Si falta el `kid` pedido se refrescan (como mucho 1 vez por minuto). */
-async function googleKeys(kid: string | null): Promise<Jwk[]> {
+export async function googleKeys(kid: string | null): Promise<Jwk[]> {
   const now = Date.now();
   const fresh = jwksCache && jwksCache.expiresAt > now;
   const unknownKid = kid !== null && jwksCache && !jwksCache.keys.some((k) => k.kid === kid) && now - jwksCache.fetchedAt > 60_000;

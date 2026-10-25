@@ -27,8 +27,10 @@ export interface ReportInput {
     deliverableId: string | null;
     subtaskTotal: number;
     subtaskDone: number;
-    /** Última modificación (ISO): sin fecha de cierre, se usa para «terminadas recientemente». */
+    /** Última modificación (ISO): para «terminadas recientemente» solo si no hay `doneAt`. */
     updatedAt?: string;
+    /** Última vez que pasó a una columna terminada (ISO), según el historial de la tarea. */
+    doneAt?: string | null;
   }[];
   deliverables: { id: string; name: string; description: string; dueDate: string | null }[];
   releases: { number: number; title: string; deployedAt: string; taskCount: number }[];
@@ -178,10 +180,12 @@ export function buildReport(input: ReportInput, tr: T = makeT("es")): Report {
       done: all.filter((t) => t.done && t.kind === kind).length,
     })).filter((x) => x.open + x.done > 0),
     recentDone: input.tasks
-      .filter((t) => isDone(t) && t.updatedAt && daysBetween(t.updatedAt.slice(0, 10), today) <= RECENT_DONE_DAYS)
-      .sort((a, b) => b.updatedAt!.localeCompare(a.updatedAt!))
+      // Fecha de cierre (historial); sin ella (p. ej. creada ya terminada), la última modificación.
+      .map((t) => ({ t, at: t.doneAt ?? t.updatedAt }))
+      .filter(({ t, at }) => isDone(t) && at && daysBetween(at.slice(0, 10), today) <= RECENT_DONE_DAYS)
+      .sort((a, b) => b.at!.localeCompare(a.at!))
       .slice(0, RECENT_DONE_MAX)
-      .map(toReportTask),
+      .map(({ t }) => toReportTask(t)),
     releases: input.releases,
   };
 }

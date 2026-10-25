@@ -91,7 +91,8 @@ async function sendWhatsapp(to: string, m: MentionMessage): Promise<void> {
   }
 }
 
-async function deliver(notificationIds: string[]): Promise<void> {
+/** Envía por email/WhatsApp los avisos indicados (tras responder). Exportada para los tests. */
+export async function deliver(notificationIds: string[]): Promise<void> {
   if (!notificationIds.length || (!emailEnabled() && !whatsappEnabled())) return;
   const rows = await db.notification.findMany({
     where: { id: { in: notificationIds } },
@@ -101,11 +102,29 @@ async function deliver(notificationIds: string[]): Promise<void> {
       excerpt: true,
       user: { select: { id: true, name: true, email: true, locale: true, active: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, notifyWhatsapp: true, whatsappPhone: true } },
       actor: { select: { name: true } },
-      task: { select: { id: true, title: true, project: { select: { id: true, name: true } } } },
+      task: { select: { id: true, title: true, project: { select: { id: true, name: true, isPrivate: true } } } },
     },
   });
+  // El envío sale después de crear el aviso: se vuelve a comprobar que cada persona sigue pudiendo ver el
+  // proyecto (p. ej. la han sacado de un proyecto privado entre medias). Si no, no sale nada por fuera.
+  const allowed = new Set<string>();
+  const byProject = new Map<string, { isPrivate: boolean; userIds: string[] }>();
+  for (const n of rows) {
+    if (!n.task) continue;
+    const entry = byProject.get(n.task.project.id) ?? { isPrivate: n.task.project.isPrivate, userIds: [] };
+    entry.userIds.push(n.user.id);
+    byProject.set(n.task.project.id, entry);
+  }
+  for (const [projectId, { isPrivate, userIds }] of byProject) {
+    const ok = await db.user.findMany({ where: mentionRecipientsWhere({ isPrivate }, userIds, projectId), select: { id: true } });
+    for (const u of ok) allowed.add(`${projectId}:${u.id}`);
+  }
   for (const n of rows) {
     if (!n.task || !n.user.active) continue;
+    if (!allowed.has(`${n.task.project.id}:${n.user.id}`)) {
+      logEvent({ category: "notify", action: "notify.skippedNoAccess", message: `Envío externo omitido: ${n.user.name} ya no tiene acceso al proyecto`, userId: n.user.id, userName: n.user.name, projectId: n.task.project.id, details: { notificationId: n.id, taskId: n.task.id } });
+      continue;
+    }
     const t = makeT(toLocale(n.user.locale));
     const msg: MentionMessage = {
       type: n.type,

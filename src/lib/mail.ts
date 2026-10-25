@@ -10,8 +10,28 @@ import { maskEmailsIn } from "./mask-email";
 // Envío de emails: SMTP con nodemailer. Con MAIL_OUTBOX_DIR (solo desarrollo y pruebas) cada email se
 // guarda como JSON en esa carpeta en vez de enviarse.
 
+let outboxWarned = false;
+
+/**
+ * Carpeta del buzón de pruebas, o null si no se usa. En producción se ignora (los enlaces de acceso y los
+ * códigos acabarían en disco y nadie recibiría los emails) salvo que MAIL_OUTBOX_IN_PRODUCTION=1 lo permita
+ * explícitamente (p. ej. pruebas locales con `npm start`); al ignorarla se avisa en el registro.
+ */
+export function outboxDir(env: NodeJS.ProcessEnv = process.env): string | null {
+  const dir = env.MAIL_OUTBOX_DIR?.trim();
+  if (!dir) return null;
+  if (env.NODE_ENV !== "production" || env.MAIL_OUTBOX_IN_PRODUCTION === "1") return dir;
+  if (!outboxWarned && env === process.env) {
+    outboxWarned = true;
+    const message = "MAIL_OUTBOX_DIR está definida en producción y se ignora: los emails se envían por SMTP (o no se envían si no hay SMTP). Quítala de las variables del servicio.";
+    console.error(`[mail] ${message}`);
+    logEvent({ level: "error", category: "system", action: "mail.outboxIgnored", message });
+  }
+  return null;
+}
+
 export function emailEnabled(): boolean {
-  return Boolean(process.env.MAIL_OUTBOX_DIR || (process.env.SMTP_HOST && process.env.SMTP_FROM));
+  return Boolean(outboxDir() || (process.env.SMTP_HOST && process.env.SMTP_FROM));
 }
 
 /** URL pública de la app; todos los enlaces de los emails salen de aquí, nunca de la petición. */
@@ -51,19 +71,20 @@ export interface MailMessage {
 
 /** Envía un email; lanza si falla. */
 export async function sendMail(m: MailMessage): Promise<void> {
-  const dir = process.env.MAIL_OUTBOX_DIR;
+  const dir = outboxDir();
   if (dir) {
-    await mkdir(dir, { recursive: true });
+    // Llevan enlaces y códigos de acceso: solo legibles por el usuario del proceso.
+    await mkdir(dir, { recursive: true, mode: 0o700 });
     const base = `${Date.now()}-${randomBytes(4).toString("hex")}`;
     // Los adjuntos se guardan como ficheros junto al JSON (que solo anota nombre y tamaño).
     const { attachments, ...rest } = m;
     const saved: { filename: string; bytes: number; file: string }[] = [];
     for (const [i, a] of (attachments ?? []).entries()) {
       const file = `${base}-${i}.attachment`;
-      await writeFile(join(dir, file), a.content);
+      await writeFile(join(dir, file), a.content, { mode: 0o600 });
       saved.push({ filename: a.filename, bytes: a.content.length, file });
     }
-    await writeFile(join(dir, `${base}.json`), JSON.stringify({ from: process.env.SMTP_FROM ?? null, ...rest, ...(saved.length ? { attachments: saved } : {}), createdAt: new Date().toISOString() }, null, 2));
+    await writeFile(join(dir, `${base}.json`), JSON.stringify({ from: process.env.SMTP_FROM ?? null, ...rest, ...(saved.length ? { attachments: saved } : {}), createdAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
     return;
   }
   await mailer().sendMail({ from: process.env.SMTP_FROM, ...m });

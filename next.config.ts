@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { proxyBodyLimitBytes } from "./src/lib/upload-size";
 
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -17,8 +18,9 @@ const nextConfig: NextConfig = {
   experimental: {
     // Las imágenes van por /api/tasks/[id]/attachments; las acciones solo mueven JSON.
     serverActions: { bodySizeLimit: "1mb" },
-    // El proxy almacena el cuerpo de la petición: debe admitir capturas de hasta MAX_UPLOAD_MB.
-    proxyClientMaxBodySize: "12mb",
+    // El proxy almacena el cuerpo de la petición: debe admitir adjuntos de hasta MAX_UPLOAD_MB (más el
+    // envoltorio multipart). Se fija al compilar: si se cambia MAX_UPLOAD_MB, debe estar definida también en el build.
+    proxyClientMaxBodySize: proxyBodyLimitBytes(),
   },
   async headers() {
     return [

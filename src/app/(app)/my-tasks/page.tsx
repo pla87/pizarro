@@ -18,6 +18,9 @@ export async function generateMetadata() {
   return { title: t("Mis tareas") };
 }
 
+/** Tope de tareas que se pintan en la página. */
+const MAX_TASKS = 500;
+
 const FILTERS: { value: TaskFilter; label: string }[] = [
   { value: "all", label: "Todas" },
   { value: "overdue", label: "Vencidas" },
@@ -30,10 +33,11 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
   const uiLocale = await getLocale();
   const locale = intlLocale(uiLocale);
   const filter = parseFilter((await searchParams).filter);
-  const rows = await db.task.findMany({
+  const where = { assigneeId: user.id, archivedAt: null, column: { isDone: false }, project: visibleProjectsWhere(user) };
+  const fetched = await db.task.findMany({
     // Bandeja de lo pendiente: sin las ya terminadas (columnas «hechas») y con un tope razonable.
-    where: { assigneeId: user.id, archivedAt: null, column: { isDone: false }, project: visibleProjectsWhere(user) },
-    take: 500,
+    where,
+    take: MAX_TASKS + 1, // una de más para saber si hay más de las que se muestran
     // Dentro de cada grupo se ordena por fecha; a igual fecha, por proyecto y posición en el tablero.
     orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { project: { position: "asc" } }, { column: { position: "asc" } }, { position: "asc" }, { id: "asc" }],
     select: {
@@ -48,6 +52,9 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
       subtasks: { select: { done: true } },
     },
   });
+  // Más de las que caben: se muestran las primeras y se avisa con el total (nunca se cortan en silencio).
+  const rows = fetched.slice(0, MAX_TASKS);
+  const total = fetched.length > MAX_TASKS ? await db.task.count({ where }) : rows.length;
 
   const today = todayIso(appTimeZone());
   // Una tarea en una columna «hecha» ya no corre prisa: se agrupa como «Sin fecha» aunque conserve su fecha límite.
@@ -67,7 +74,12 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
   return (
     <div className="mx-auto max-w-4xl p-4 md:p-6">
       <h1 className="mb-1 text-xl font-semibold">{t("Mis tareas asignadas")}</h1>
-      <p className="mb-4 text-sm text-slate-500">{t("{n} tarea(s) en todos tus proyectos.", { n: tasks.length })}</p>
+      <p className="mb-4 text-sm text-slate-500">{t("{n} tarea(s) en todos tus proyectos.", { n: total })}</p>
+      {total > tasks.length && (
+        <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
+          {t("Se muestran las primeras {shown} de {total}, por fecha límite. Abre cada proyecto para ver el resto.", { shown: tasks.length, total })}
+        </p>
+      )}
       <nav className="mb-6 flex flex-wrap gap-2" aria-label={t("Filtrar mis tareas")}>
         {FILTERS.map((f) => (
           <Link

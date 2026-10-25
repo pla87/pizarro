@@ -87,7 +87,9 @@ function useCoarsePointer(): boolean {
 function MobileTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
+      type="button"
       onClick={onClick}
+      aria-pressed={active}
       data-active={active || undefined}
       className={cn(
         "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors",

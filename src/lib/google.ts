@@ -3,13 +3,15 @@ import { db } from "./db";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { AppError } from "./errors";
 import { logEvent } from "./log";
+import { idTokenKeyId, verifiedConnectEmail } from "./google-id-token";
+import { googleKeys } from "./google-login";
 
 // Integración con Google Drive mediante OAuth por usuario.
 // Permiso mínimo: drive.file (solo los archivos que crea la propia app).
 
 /** Error de conexión con un código estable para mostrarlo en Ajustes (nunca texto libre en la URL). */
 export class GoogleConnectError extends AppError {
-  constructor(message: string, public readonly code: "scope" | "domain" | "token") {
+  constructor(message: string, public readonly code: "scope" | "domain" | "token" | "identity") {
     super(message);
   }
 }
@@ -80,26 +82,23 @@ async function tokenRequest(body: Record<string, string>): Promise<TokenResponse
   return json as TokenResponse;
 }
 
-/** El id_token llega directamente del endpoint de Google por TLS: basta con leer su contenido. */
-function emailFromIdToken(idToken?: string): string {
-  try {
-    const payload = JSON.parse(Buffer.from(idToken!.split(".")[1]!, "base64url").toString("utf8"));
-    return typeof payload.email === "string" ? payload.email : "";
-  } catch {
-    return "";
-  }
-}
-
 export async function connectGoogleAccount(userId: string, code: string): Promise<string> {
   const tokens = await tokenRequest({ code, grant_type: "authorization_code", redirect_uri: googleRedirectUri() });
   if (!tokens.scope.split(" ").includes("https://www.googleapis.com/auth/drive.file")) {
     throw new GoogleConnectError("No se concedió el permiso de Google Drive.", "scope");
   }
-  const email = emailFromIdToken(tokens.id_token);
+  // El id_token se verifica como en el login (firma con las claves de Google, emisor, audiencia,
+  // caducidad, email verificado y dominio): de él salen el email guardado y la comprobación de dominio.
   const workspace = process.env.GOOGLE_WORKSPACE_DOMAIN;
-  if (workspace && !email.toLowerCase().endsWith(`@${workspace.toLowerCase()}`)) {
-    throw new GoogleConnectError(`Usa una cuenta de ${workspace}.`, "domain");
+  const identity = verifiedConnectEmail(tokens.id_token, tokens.id_token ? await googleKeys(idTokenKeyId(tokens.id_token)) : [], {
+    clientId: process.env.GOOGLE_CLIENT_ID!,
+    domain: workspace,
+  });
+  if (!identity.ok) {
+    if (identity.reason === "domain" && workspace) throw new GoogleConnectError(`Usa una cuenta de ${workspace}.`, "domain");
+    throw new GoogleConnectError(`Google no confirmó la identidad de la cuenta (${identity.reason}).`, "identity");
   }
+  const email = identity.email;
   const existing = await db.googleAccount.findUnique({ where: { userId }, select: { refreshTokenEnc: true } });
   const refresh = tokens.refresh_token ? encryptSecret(tokens.refresh_token) : existing?.refreshTokenEnc;
   if (!refresh) throw new GoogleConnectError("Google no devolvió un token de acceso permanente.", "token");

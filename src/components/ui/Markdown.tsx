@@ -5,14 +5,16 @@ import remarkGfm from "remark-gfm";
 import { useT } from "@/i18n/client";
 import { UNDERLINE_HREF, underlineToLink } from "@/lib/markdown-underline";
 import { mentionsToMarkdown } from "@/lib/mentions";
+import { safeMarkdownUrl } from "@/lib/safe-url";
 
-/** Markdown seguro: react-markdown no interpreta HTML y filtra URLs peligrosas. */
+/** Markdown seguro: react-markdown no interpreta HTML y las URLs pasan por una lista blanca propia. */
 export function Markdown({ children }: { children: string }) {
   const t = useT();
   return (
     <div className="prose-md">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        urlTransform={safeMarkdownUrl}
         components={{
           a: ({ node: _node, href, children, ...props }) =>
             href === UNDERLINE_HREF ? (

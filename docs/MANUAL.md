@@ -340,7 +340,7 @@ Se genera en el idioma de quien lo pide.
   - a **Avisos** (campana con contador en el menú lateral; en móvil, en la barra superior), donde puedes **marcar uno como leído** o todos;
   - por **email**, si el servidor tiene SMTP y la persona no lo ha desactivado (hay preferencias **por tipo de aviso**);
   - por **WhatsApp**, si el servidor lo tiene configurado y la persona lo ha activado con su número (menciones).
-- Cada persona elige sus canales en **Mi perfil → Avisos**. Allí también puede activar un **resumen diario por email** y elegir la hora.
+- Cada persona elige sus canales en **Mi perfil → Avisos**. Allí también puede activar un **resumen diario por email** y elegir la hora. El resumen recoge la actividad de los proyectos en los que trabajas (para un admin, los de equipo que eligió en *Proyectos en los que trabajo* y sus privados) y, de cualquier proyecto que puedas ver, lo que tienes asignado y lo vencido.
 - La página **Avisos** muestra los 100 últimos y el botón **Cargar más** trae los anteriores. Los avisos ya leídos se borran a los 90 días. Al hacer clic en uno se abre directamente la tarjeta.
 - **Historial de la tarea:** sección plegada **Historial** en el detalle, con los cambios de la tarea (se conserva 365 días).
 - **Informe semanal por email:** en **Ajustes del proyecto** se elige destinatario, día de la semana y hora, y se envía el informe PDF (ver 3.8). Solo puede ir a personas con acceso al proyecto; una dirección externa solo la puede fijar un admin y nunca en proyectos privados. Se vuelve a comprobar en el momento del envío.
@@ -358,7 +358,7 @@ Se genera en el idioma de quien lo pide.
 
 El menú lateral muestra, debajo de las opciones del proyecto: **Calendario**, **Avisos**, **Mis tareas asignadas**, **Mi perfil**, **Administración** (solo admins), **Historial de versiones** e **Instalar app**.
 
-- **Mis tareas asignadas:** funciona como una bandeja diaria con tus tarjetas de todos los proyectos a los que tienes acceso, cada fila con un chip del proyecto (icono de carpeta) al principio, agrupadas en **Vencidas**, **Hoy**, **Esta semana**, **Más adelante** y **Sin fecha**, con filtros. No incluye las ya terminadas (máximo 500).
+- **Mis tareas asignadas:** funciona como una bandeja diaria con tus tarjetas de todos los proyectos a los que tienes acceso, cada fila con un chip del proyecto (icono de carpeta) al principio, agrupadas en **Vencidas**, **Hoy**, **Esta semana**, **Más adelante** y **Sin fecha**, con filtros. No incluye las ya terminadas. Muestra como mucho 500; si tienes más, lo indica con el total.
 - **Calendario:** cuadrícula mensual de lunes a domingo.
   - Cada tarea con fecha límite aparece en su día, coloreada por tipo (con las iniciales del proyecto cuando miras todos); las terminadas se ven atenuadas. Si un día tiene muchas, aparece «+N más».
   - Un clic abre la tarea. **Arrastrar** una tarea a otro día cambia su fecha límite; con el foco en ella, **Alt+←/→** la mueve ±1 día y **Alt+↑/↓** ±7 días. El botón **Deshacer** (o Ctrl/⌘+Z) revierte el último cambio de fecha.
@@ -511,9 +511,10 @@ Consulta la tabla completa en el `README.md`. Las imprescindibles son `DATABASE_
 | `BACKUP_KEY` | Clave AES-256 de las copias automáticas. Genérala con `openssl rand -base64 32` y **guárdala también fuera de Railway**: sin ella las copias no se pueden leer. Sin la variable, las copias están desactivadas. |
 | `UPLOAD_QUOTA_MB_PER_PROJECT` | Cuota de adjuntos por proyecto en MB (por defecto 2048). |
 | `UPLOAD_QUOTA_MB_TOTAL` | Cuota total de adjuntos del servidor en MB (opcional; vacío = sin límite). |
+| `MAX_UPLOAD_MB` | Tamaño máximo por adjunto en MB (por defecto 20). También fija, al compilar, el tope del cuerpo de la petición: si la cambias, vuelve a desplegar para que se aplique. |
 | `AUTH_GOOGLE_ONLY` | `true`: solo se entra con Google (necesita la integración de Google configurada). |
 | `AUTH_ALLOW_ADMIN_PASSWORD` | `true`: con `AUTH_GOOGLE_ONLY`, los admins pueden seguir entrando con contraseña y segundo paso (acceso de emergencia). |
-| `MAIL_OUTBOX_DIR` | **Solo desarrollo, nunca en producción:** guarda cada email como un fichero JSON en esa carpeta en lugar de enviarlo. |
+| `MAIL_OUTBOX_DIR` | **Solo desarrollo, nunca en producción:** guarda cada email como un fichero JSON en esa carpeta en lugar de enviarlo. Con `NODE_ENV=production` se ignora (y queda un error en *Logs*) salvo que `MAIL_OUTBOX_IN_PRODUCTION=1`, pensado solo para probar en local la compilación de producción. |
 
 Tests: `npm test` ejecuta los tests unitarios; `npm run test:db` ejecuta los de integración contra una base PostgreSQL temporal que se crea y se borra sola.
 
@@ -538,6 +539,12 @@ Cambia la variable en Railway y redespliega. Todas las sesiones dejan de ser vá
 - **Copias automáticas cifradas (base de datos):** con `BACKUP_KEY` definida, cada día se vuelca la base de datos (gzip + AES-256-GCM) a `UPLOAD_DIR/backups`. Se conservan **14 diarias y 6 mensuales**. Cada mes se hace una **prueba de restauración** de la última copia. El estado se ve en *Administración → Copias de seguridad*, con **Crear copia ahora** y **Descargar** la última.
   - **Guarda `BACKUP_KEY` también fuera de Railway** (gestor de contraseñas): sin ella las copias no se pueden leer.
   - **Restaurar** en una base **vacía**: `BACKUP_KEY="…" npm run backup:restore -- <fichero>` (con `DATABASE_URL` apuntando a esa base).
+  - **La base debe estar en la misma migración que la copia.** El fichero `.json` que acompaña a cada copia indica su migración (`migration`) y la compilación (`build`). La restauración se niega si no coinciden. Para restaurar una copia hecha con una versión anterior de la app:
+    1. Crea una base nueva y vacía y **no arranques la app contra ella** (el arranque crea el administrador inicial y la base deja de estar vacía).
+    2. Desde una copia del código en la versión de la copia (`git checkout` del commit o etiqueta cuya última carpeta de `prisma/migrations/` coincide con `migration`), ejecuta `npx prisma migrate deploy` con `DATABASE_URL` apuntando a esa base.
+    3. Restaura con `npm run backup:restore -- <fichero>` desde esa misma copia del código.
+    4. Despliega la versión actual contra esa base: al arrancar aplica las migraciones pendientes y la deja al día.
+  - La **prueba de restauración** mensual descifra la copia y comprueba su integridad (sha256, recuentos por tabla y manifiesto); **no** la restaura en una base real. Ensaya de vez en cuando la secuencia anterior en una base de pruebas.
   - Descarga de vez en cuando una copia a un lugar externo: las copias viven en el mismo volumen que los adjuntos. Para descargarla, Pizarro pide tu contraseña (o un código de tu app de autenticación) y genera un enlace de un solo uso válido 60 s.
 - **Manual con `pg_dump`:** `pg_dump "$DATABASE_PUBLIC_URL" -Fc -f tablon.dump`. Restauración: `pg_restore --clean --no-owner -d "$DATABASE_PUBLIC_URL" tablon.dump`. También puedes activar los backups del servicio Postgres en Railway (ver «Copias del volumen en Railway»).
 - **Capturas y adjuntos (volumen):** las copias automáticas no incluyen los ficheros. Activa los **snapshots del volumen** en Railway. Las imágenes y la base de datos deben restaurarse a la misma fecha para que los adjuntos coincidan.

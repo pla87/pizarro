@@ -5,7 +5,7 @@ import { localizeGeneralKind, localizeGeneralKinds } from "./kinds-localize";
 import { dateToIso, todayIso } from "./dates";
 import { db } from "./db";
 import { mentionsToPlain } from "./mentions";
-import { buildReport } from "./report";
+import { buildReport, RECENT_DONE_DAYS } from "./report";
 import { renderReportPdf } from "./report-pdf";
 
 // Genera el informe PDF de un proyecto. Lo usan la descarga (API) y el envío semanal por email;
@@ -35,7 +35,7 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
   const project = await db.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, description: true } });
   if (!project) return null;
 
-  const [columns, tasks, deliverables, releases, archivedCount, kinds] = await Promise.all([
+  const [columns, tasks, deliverables, releases, archivedCount, kinds, [doneEvents, released]] = await Promise.all([
     db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, isDone: true } }),
     db.task.findMany({
       where: { projectId, archivedAt: null },
@@ -57,7 +57,24 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
     db.release.findMany({ where: { projectId }, orderBy: { deployedAt: "desc" }, take: 5, select: { number: true, title: true, deployedAt: true, _count: { select: { tasks: true } } } }),
     db.task.count({ where: { projectId, archivedAt: { not: null } } }),
     listKinds(projectId),
+    // Cuándo pasó cada tarea por última vez a una columna terminada: «terminadas recientemente» no depende de
+    // la última edición (corregir una errata en una tarea cerrada hace meses no la vuelve reciente).
+    // Cuenta también el despliegue en una release reciente (mueve a «En producción» sin dejar ese evento).
+    Promise.all([
+      db.taskEvent.groupBy({ by: ["taskId"], where: { projectId, code: "done" }, _max: { createdAt: true } }),
+      db.releaseTask.findMany({
+        where: { taskId: { not: null }, release: { projectId, deployedAt: { gte: new Date(Date.now() - (RECENT_DONE_DAYS + 1) * 86_400_000) } } },
+        select: { taskId: true, release: { select: { deployedAt: true } } },
+      }),
+    ]),
   ]);
+  const doneAt = new Map<string, string>();
+  const noteDone = (taskId: string | null, at: Date | null | undefined) => {
+    const iso = at?.toISOString();
+    if (taskId && iso && iso > (doneAt.get(taskId) ?? "")) doneAt.set(taskId, iso);
+  };
+  for (const e of doneEvents) noteDone(e.taskId, e._max.createdAt);
+  for (const r of released) noteDone(r.taskId, r.release.deployedAt);
 
   const locale = intlLocale(opts.locale);
   const today = todayIso(appTimeZone());
@@ -79,6 +96,7 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
       subtaskTotal: task.subtasks.length,
       subtaskDone: task.subtasks.filter((x) => x.done).length,
       updatedAt: task.updatedAt.toISOString(),
+      doneAt: doneAt.get(task.id) ?? null,
     })),
     deliverables: deliverables.map((d) => ({ ...d, dueDate: dateToIso(d.dueDate) })),
     releases: releases.map((r) => ({ number: r.number, title: r.title, deployedAt: r.deployedAt.toISOString(), taskCount: r._count.tasks })),
