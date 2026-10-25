@@ -111,9 +111,10 @@ steps:
 | `APP_URL` | Sí | `https://tablon.up.railway.app` | URL pública. Con `https://` la cookie se marca `Secure` y usa el prefijo `__Host-`. |
 | `UPLOAD_DIR` | Sí | `/app/uploads` | Carpeta de capturas (la ruta del volumen). |
 | `PORT` | No | Lo inyecta Railway | Puerto HTTP (por defecto 3000). |
-| `SEED_ADMIN_EMAIL` | Solo el primer arranque | `admin@tu-dominio.com` | Email del administrador inicial. |
+| `SEED_ADMIN_EMAIL` | Solo el primer arranque (Railway) | `admin@tu-dominio.com` | Email del administrador inicial. Si no defines `SEED_ADMIN_*`, con la base de datos vacía el servidor imprime en su log un código de un solo uso y el asistente web `/setup` crea el administrador (servidor propio con Docker Compose, ver `docs/INSTALL.md`). |
 | `SEED_ADMIN_PASSWORD` | Solo el primer arranque | mínimo 10 caracteres | Contraseña inicial: cámbiala después desde *Mi perfil*. |
 | `SEED_ADMIN_NAME` | No | `Administrador` | Nombre visible del admin inicial. |
+| `SETUP_TOKEN` | No | 8+ caracteres | Código fijo que el asistente `/setup` acepta además del código del log (que cambia en cada arranque mientras falte la configuración). |
 | `MAX_USERS` | No | `10` | Máximo de usuarios activos. |
 | `MAX_UPLOAD_MB` | No | (sin tope) | Tope opcional, para todo el servidor, del tamaño de un adjunto. El tamaño máximo real es el de cada proyecto (ajustes del proyecto, 20 MB por defecto, hasta 100); si defines esta variable, ningún proyecto la supera. Se lee al subir cada archivo: cambiarla no exige recompilar. El proxy admite siempre hasta 100 MB por petición. |
 | `DATABASE_POOL_SIZE` | No | `10` | Conexiones del pool. |
@@ -121,7 +122,7 @@ steps:
 | `UPLOAD_QUOTA_MB_TOTAL` | No | (sin límite) | Cuota total de adjuntos de todo el servidor (MB). |
 | `BACKUP_KEY` | Para copias automáticas | `openssl rand -base64 32` | Clave AES-256 (32 bytes en base64) con la que se cifran las copias de la base de datos. Sin ella las copias están desactivadas. **Guárdala fuera de Railway: sin ella las copias no se pueden abrir.** |
 | `COOKIE_SECURE` | No | `true` / `false` | Fuerza el atributo `Secure` de la cookie. |
-| `APP_TIMEZONE` | No | `Europe/Madrid` | Zona horaria para calcular «hoy» en plazos e informes y para las fechas del navegador. Se lee al arrancar: cambiarla solo exige reiniciar. |
+| `APP_TIMEZONE` | No | `Europe/Madrid` | Zona horaria para calcular «hoy» en plazos e informes y para las fechas del navegador. Se lee al arrancar: cambiarla solo exige reiniciar. Sin ella vale la zona elegida en el asistente `/setup` (y, si no hay, `Europe/Madrid`). |
 | `HEALTH_MIN_FREE_MB` | No | `200` | `/api/health` responde 503 (`low_disk_space`) si al disco de subidas le queda menos espacio libre. `0` desactiva la comprobación. |
 | `EXIT_ON_UNCAUGHT_EXCEPTION` | No | (desactivado) | `1`: en producción, una excepción no capturada se anota en *Logs* y la app sale para que la plataforma la reinicie (lo fija `deploy/compose.yml`). Sin él, solo se anota. |
 | `GIT_SHA` | No (solo al compilar) | commit | Commit para el identificador de versión (en Railway se usa `RAILWAY_GIT_COMMIT_SHA`). Sin él, la hora de la compilación. |

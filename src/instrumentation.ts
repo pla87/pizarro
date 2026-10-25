@@ -32,4 +32,11 @@ export async function register() {
   } catch (err) {
     console.error("[instrumentation] no se pudo iniciar el mantenimiento", err);
   }
+  // Zona horaria elegida en el asistente de primer arranque: disponible desde la primera acción, no solo tras renderizar el layout.
+  try {
+    const { getInstanceSettings } = await import("@/lib/instance");
+    await getInstanceSettings();
+  } catch (err) {
+    console.error("[instrumentation] no se pudieron cargar los ajustes de la instalación", err);
+  }
 }

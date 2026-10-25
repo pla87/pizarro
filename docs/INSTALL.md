@@ -33,52 +33,68 @@ git clone <URL-del-repositorio> /opt/pizarro
 cd /opt/pizarro/deploy
 ```
 
-### 2.2 Crear el fichero de configuración
+### 2.2 Ejecutar el instalador
+
+```bash
+./install.sh                                # pregunta el dominio (o el modo red local)
+./install.sh --domain pizarro.example.com   # sin preguntas
+./install.sh --local                        # solo red local, por HTTP (ver 3.3)
+```
+
+El script se puede repetir sin riesgo. Hace esto:
+
+1. Comprueba que están Docker 24+ y el plugin `docker compose`.
+2. Pregunta el dominio (o la dirección, en modo local) y crea `deploy/.env` con `DOMAIN` y `APP_URL`.
+3. Genera `POSTGRES_PASSWORD`, `SESSION_SECRET` y `BACKUP_KEY` con aleatorios fuertes (`openssl rand`, o `/dev/urandom` si no hay `openssl`). **Nunca pisa un secreto que ya existe** en el `.env`.
+4. Escribe el **kit de recuperación** `deploy/recovery-kit.txt` (permisos 600) con esos tres secretos y qué hacer si se pierde el servidor.
+5. Ejecuta `docker compose up -d --build` (la primera vez construye la imagen: unos minutos) y espera a que la app esté sana.
+6. Muestra la dirección del asistente de configuración y el **código de un solo uso** que lee del log de la app.
+
+> **Guarda `recovery-kit.txt` FUERA del servidor** (gestor de contraseñas, otro equipo) y bórralo de aquí si quieres. Sin `BACKUP_KEY` las copias no se pueden leer; si se pierde o cambia `SESSION_SECRET`, todo el mundo tiene que volver a entrar y configurar de nuevo su verificación en dos pasos.
+
+Con `--no-start` solo prepara el `.env` y el kit, sin arrancar nada. Necesita permisos para usar Docker (usuario del grupo `docker`, o `sudo ./install.sh`).
+
+#### Alternativa: hacerlo a mano
 
 ```bash
 cp .env.example .env
 chmod 600 .env
-```
-
-Genera los secretos y cópialos en `.env`:
-
-```bash
 echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"
 echo "SESSION_SECRET=$(openssl rand -base64 48)"
 echo "BACKUP_KEY=$(openssl rand -base64 32)"
 ```
 
-Edita `.env` (`nano .env`) y rellena como mínimo:
+Copia esos valores en `.env` (`nano .env`) y rellena como mínimo:
 
 - `DOMAIN`: tu dominio, p. ej. `pizarro.example.com`.
 - `APP_URL`: la URL completa, p. ej. `https://pizarro.example.com`.
-- `POSTGRES_PASSWORD`, `SESSION_SECRET` y `BACKUP_KEY`: los valores generados.
-- `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD`: el primer administrador (ver 2.4).
-- `APP_TIMEZONE`: tu zona horaria (p. ej. `America/Mexico_City`). Cambiarla más tarde solo exige reiniciar.
+- `POSTGRES_PASSWORD`, `SESSION_SECRET` y `BACKUP_KEY`: los valores generados (y guárdalos fuera del servidor).
 
-**Guarda `SESSION_SECRET` y `BACKUP_KEY` fuera del servidor** (en un gestor de contraseñas). Sin `BACKUP_KEY` las copias no se pueden leer; si cambias `SESSION_SECRET`, todo el mundo tiene que volver a entrar y configurar de nuevo su verificación en dos pasos.
+Después arranca con `docker compose up -d --build` y sigue el log con `docker compose logs -f app` (Ctrl+C para salir). `docker compose ps` debe mostrar los tres servicios `healthy` / `running`. Caddy pide el certificado HTTPS en cuanto el dominio resuelve al servidor.
 
-### 2.3 Arrancar
+### 2.3 Asistente de primer arranque
 
-```bash
-docker compose up -d --build
+Con la base de datos vacía y sin `SEED_ADMIN_*` en el `.env`, la app imprime en su log un recuadro como este (el instalador te lo muestra; también con `docker compose logs app | grep "introduce el código"`):
+
+```
+[setup] Abre https://pizarro.example.com/setup e introduce el código: K7QM-4TXD
 ```
 
-La primera vez se construye la imagen (unos minutos). Al arrancar, el contenedor de Pizarro aplica las migraciones de la base de datos, crea el administrador inicial y levanta el servidor. Sigue el arranque con:
+El código es de un solo uso para esta instalación: caduca a las 24 horas y se regenera en cada reinicio mientras falte la configuración. Si prefieres uno fijo, define `SETUP_TOKEN` (8 caracteres o más) en el `.env`. Abre `/setup`:
 
-```bash
-docker compose ps                 # los tres servicios deben quedar «healthy» / «running»
-docker compose logs -f app        # Ctrl+C para salir
-```
+1. **Código** del log. Los intentos fallidos están limitados.
+2. **Organización, idioma y zona horaria** de la instalación. Si `APP_TIMEZONE` está definida en el `.env`, manda sobre la zona elegida.
+3. **Primer administrador:** nombre, email y contraseña (mínimo 10 caracteres).
+4. **Email:** muestra si el servidor tiene SMTP configurado y permite enviar un email de prueba a tu dirección.
+5. **Fin:** vas a *Iniciar sesión*. Al entrar, Pizarro te pide activar la verificación en dos pasos (obligatoria para administradores).
 
-Caddy pide el certificado HTTPS en cuanto el dominio resuelve al servidor. Abre `https://<tu-dominio>`.
+Terminado el asistente, el código se borra y `/setup` responde 404. Mientras no haya usuarios, cualquier otra dirección redirige a `/setup`.
 
-### 2.4 Primer administrador
+Configura el email (`SMTP_*` en `.env`) para tener invitaciones y «¿Olvidaste tu contraseña?», y aplica el cambio con `docker compose up -d`.
 
-1. Entra con `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD`.
-2. Pizarro te pide configurar la **verificación en dos pasos** (obligatoria para administradores) y cambiar la contraseña.
-3. Borra `SEED_ADMIN_PASSWORD` de `.env`: solo se usa cuando la base de datos no tiene usuarios.
-4. Configura el email (`SMTP_*` en `.env`) para tener invitaciones y «¿Olvidaste tu contraseña?», y aplica el cambio con `docker compose up -d`.
+### 2.4 Administrador inicial por variables (alternativa)
+
+Para instalaciones automatizadas puedes saltarte el asistente definiendo `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` y, opcionalmente, `SEED_ADMIN_NAME` en `.env`. Si la base de datos no tiene usuarios, el administrador se crea al arrancar y `/setup` queda desactivado (es lo que usa Railway). Entra con esos datos, configura la verificación en dos pasos, cambia la contraseña y borra `SEED_ADMIN_PASSWORD` del `.env`.
 
 ## 3. Configuración
 
@@ -180,13 +196,15 @@ docker compose up -d
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
-| `docker compose up` dice «Define … en .env» | Falta una variable obligatoria | Rellénala en `.env` (sección 2.2). |
-| `[start] ERROR: faltan variables de entorno: SESSION_SECRET(>=32)` | Secreto vacío o corto | `openssl rand -base64 48` y `docker compose up -d`. |
+| `docker compose up` dice «Define … en .env» | Falta una variable obligatoria | Ejecuta `./install.sh` otra vez (rellena lo que falte sin tocar lo demás) o ponla en `.env`. |
+| No tengo el código de `/setup` | Se imprime en el log al arrancar y caduca a las 24 h | `docker compose restart app` y `docker compose logs app \| grep "introduce el código"`; o define `SETUP_TOKEN` en `.env`. |
+| `/setup` da 404 | Ya hay usuarios (la instalación está configurada) o se definió `SEED_ADMIN_*` | Entra en `/login`. Para empezar de cero hay que vaciar la base de datos. |
+| `[start] ERROR: faltan variables de entorno: SESSION_SECRET(>=32)` | Secreto vacío o corto | `./install.sh` (genera los que falten) o `openssl rand -base64 48` y `docker compose up -d`. |
 | El navegador avisa de certificado no válido | El DNS aún no apunta al servidor o los puertos 80/443 están cerrados | Comprueba el registro DNS y el cortafuegos; mira `docker compose logs caddy`. |
 | La app queda *unhealthy* y `/api/health` dice `low_disk_space` | Disco casi lleno | Libera espacio (`docker system prune` borra imágenes viejas) o amplía el disco. |
 | `/api/health` dice `uploads_not_writable` | El volumen de subidas no se puede escribir | `docker compose restart app` (el arranque corrige el propietario); revisa el disco. |
 | `/api/health` dice `database` | PostgreSQL parado o contraseña distinta | `docker compose ps`; si cambiaste `POSTGRES_PASSWORD` después de la primera instalación, vuelve a la original (la base ya se creó con ella). |
 | La app se reinicia sola a menudo | Falta de memoria o un error | `docker compose logs app` y *Administración → Logs*; sube `APP_MEM_LIMIT`/`APP_HEAP_MB` si hay RAM. |
-| Las fechas salen con otra hora | `APP_TIMEZONE` no es la tuya | Cámbiala en `.env` y `docker compose up -d`. |
+| Las fechas salen con otra hora | La zona elegida en el asistente o `APP_TIMEZONE` no es la tuya | Define `APP_TIMEZONE` en `.env` y `docker compose up -d` (manda sobre la del asistente). |
 | El login no mantiene la sesión | `APP_URL` con `https://` pero se entra por `http://` | Entra por la URL de `APP_URL`. |
 | No llegan emails | SMTP sin configurar o credenciales erróneas | Revisa `SMTP_*` y *Administración → Logs* (`[notify]`). |

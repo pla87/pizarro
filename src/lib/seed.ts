@@ -13,9 +13,33 @@ const DEFAULT_FOOTER_TEMPLATE = `---
 - [ ] Prueba rápida en producción
 - [ ] Comunicado enviado al equipo`;
 
+/** Crea el primer administrador con sus plantillas de release por defecto (seed por variables y asistente /setup). */
+export async function createInitialAdmin(
+  db: Pick<PrismaClient, "user">,
+  data: { email: string; name: string; passwordHash: string; locale?: "ES" | "EN" },
+): Promise<{ id: string }> {
+  return db.user.create({
+    data: {
+      email: data.email,
+      name: data.name,
+      role: "ADMIN",
+      passwordHash: data.passwordHash,
+      ...(data.locale ? { locale: data.locale } : {}),
+      releaseTemplates: {
+        create: [
+          { kind: "HEADER", name: "Contexto para IA", content: DEFAULT_HEADER_TEMPLATE, position: POSITION_STEP },
+          { kind: "FOOTER", name: "Checklist de cierre", content: DEFAULT_FOOTER_TEMPLATE, position: POSITION_STEP },
+        ],
+      },
+    },
+    select: { id: true },
+  });
+}
+
 /**
  * Seed idempotente:
- * - Si no hay usuarios, crea el administrador inicial con SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD.
+ * - Si no hay usuarios, crea el administrador inicial con SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD
+ *   (sin esas variables lo crea el asistente web /setup).
  * - Si no hay proyectos, crea un proyecto de ejemplo con las columnas por defecto.
  */
 export async function seed(db: PrismaClient, log: (msg: string) => void = console.log): Promise<void> {
@@ -26,25 +50,11 @@ export async function seed(db: PrismaClient, log: (msg: string) => void = consol
     const password = process.env.SEED_ADMIN_PASSWORD;
     const name = process.env.SEED_ADMIN_NAME?.trim() || "Administrador";
     if (!email || !password) {
-      log("[seed] No hay usuarios. Define SEED_ADMIN_EMAIL y SEED_ADMIN_PASSWORD para crear el administrador inicial.");
+      log("[seed] No hay usuarios: el administrador inicial se crea en el asistente web (/setup) o con SEED_ADMIN_EMAIL y SEED_ADMIN_PASSWORD.");
       return;
     }
     if (password.length < MIN_PASSWORD) throw new Error(`SEED_ADMIN_PASSWORD debe tener al menos ${MIN_PASSWORD} caracteres.`);
-    admin = await db.user.create({
-      data: {
-        email,
-        name,
-        role: "ADMIN",
-        passwordHash: await hashPassword(password),
-        releaseTemplates: {
-          create: [
-            { kind: "HEADER", name: "Contexto para IA", content: DEFAULT_HEADER_TEMPLATE, position: POSITION_STEP },
-            { kind: "FOOTER", name: "Checklist de cierre", content: DEFAULT_FOOTER_TEMPLATE, position: POSITION_STEP },
-          ],
-        },
-      },
-      select: { id: true },
-    });
+    admin = await createInitialAdmin(db, { email, name, passwordHash: await hashPassword(password) });
     log(`[seed] Administrador inicial creado (${email}).`);
   }
 
