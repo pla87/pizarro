@@ -42,3 +42,14 @@ export async function createAndOpenGoogleFile(
   }
   return { ok: true, link: res.data };
 }
+
+/**
+ * Aviso cuando el documento se creó pero no se compartió como estaba previsto (null si todo fue bien o no consta).
+ * Va en el aviso al crearlo y en el icono de la lista de documentos de la tarea.
+ */
+export function shareWarning(link: Pick<TaskLinkInfo, "shareStatus" | "shareFailed">, t: T): string | null {
+  if (link.shareStatus === "NOT_SHARED") return t("Documento creado, pero no se ha compartido: solo lo ves tú");
+  if (link.shareStatus === "PARTIAL" && link.shareFailed === 1) return t("Documento creado, pero no se pudo compartir con 1 persona");
+  if (link.shareStatus === "PARTIAL") return t("Documento creado, pero no se pudo compartir con {n} personas", { n: link.shareFailed });
+  return null;
+}

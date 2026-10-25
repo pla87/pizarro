@@ -198,6 +198,7 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
   - **Releases** (admins; en un proyecto privado, cualquier miembro): dos límites, entre 10 y 500 MB (80 por defecto cada uno; el del paquete nunca puede ser menor que el de la tarea):
     - **Tamaño máximo de los adjuntos de una tarea:** la suma de los adjuntos de cada tarea; una subida que la supere se rechaza con un aviso que indica el tope;
     - **Tamaño máximo de cada paquete ZIP de una release:** si los adjuntos de la release ocupan más, se descargan en varios ZIP (`release-AAAA-MM-DD-adjuntos-1de3.zip`, …), con el menor número de paquetes posible. Cada ZIP se arma en la memoria del servidor: súbelo solo si hace falta;
+  - **Documentos de Google** (si Google está activado; admins, o cualquier miembro si es privado): con quién se comparten los Docs y Sheets creados desde las tareas (ver 3.10);
   - borrado del proyecto (admins, o cualquier miembro si es privado; pide escribir el nombre para confirmar).
 - **Límites de cada proyecto:** como máximo **50 etiquetas**, **100 entregables** y **1000 tareas activas** (las archivadas no cuentan). Al llegar al tope, crear, duplicar, recuperar una archivada o deshacer un borrado avisa con el límite; archiva o borra tareas para hacer sitio. Al crear varias tareas a la vez, si el lote no cabe entero no se crea ninguna. Si una tarea repetitiva se termina con el proyecto lleno, no se crea la siguiente repetición (queda anotado en los logs). Además, cada persona puede crear como mucho 300 tareas, 30 etiquetas y 30 entregables por minuto.
 
@@ -353,8 +354,14 @@ Se genera en el idioma de quien lo pide.
 1. Una vez por persona: **Mi perfil → Google Docs y Sheets → Conectar con Google**, y acepta el permiso. Pizarro comprueba la identidad que devuelve Google (firma, emisor, destinatario y caducidad); si no la confirma, avisa con «Google no confirmó la identidad…» y no conecta.
 2. En una tarjeta, escribe `@sheets` o `@docs` en la descripción o en un comentario y elige *Crear Google Sheet* / *Crear Google Doc*. También puedes usar los botones **Nuevo Doc** / **Nuevo Sheet**.
 3. Se crea el archivo en tu Drive con el título de la tarjeta, se abre en otra pestaña y queda en **Documentos de Google** de la tarjeta. Si lo creaste desde el texto, también se inserta su enlace.
-4. Si el servidor tiene `GOOGLE_WORKSPACE_DOMAIN`, el archivo de un proyecto de equipo se comparte automáticamente con todo el dominio (por defecto como editor, según `GOOGLE_SHARE_ROLE`); el de un **proyecto privado** se comparte solo con los miembros del proyecto, no con el dominio. Así, quien tenga acceso al proyecto puede abrirlo desde la tarjeta. Si no, compártelo desde Google como cualquier otro documento.
-5. Quitar el enlace de la tarjeta no borra el archivo de Drive.
+4. Con quién se comparte el archivo lo decide cada proyecto, en **Ajustes del proyecto → Documentos de Google** (visible si Google está activado; lo cambian los administradores y, en un proyecto privado, sus miembros):
+   - **Todo el dominio puede editar** / **Todo el dominio puede leer**: solo en proyectos de equipo y si el servidor tiene `GOOGLE_WORKSPACE_DOMAIN`.
+   - **Solo las personas del proyecto (editores)**: se comparte con el email de cada miembro activo.
+   - **No compartir (solo quien lo crea)**.
+
+   Un proyecto privado nunca se comparte con el dominio (el servidor lo rechaza). Los proyectos que no han elegido nada siguen como antes: los de equipo con el dominio, con el rol de `GOOGLE_SHARE_ROLE` (editor por defecto), y los privados con sus miembros; esas variables son el valor por defecto de los proyectos que no han elegido.
+5. Si el archivo se crea pero no se pudo compartir (error de Google, política del Workspace, modo «No compartir» o nadie con quien compartir), la creación sigue valiendo y sale el aviso «Documento creado, pero no se ha compartido: solo lo ves tú» (o «no se pudo compartir con N personas» si falló solo con algunas). En **Documentos de Google** de la tarjeta, ese archivo lleva un icono de advertencia con la explicación, visible para todo el equipo. El fallo queda en el registro de la aplicación (`google.shareFailed`). Si no se compartió, compártelo desde Google como cualquier otro documento.
+6. Quitar el enlace de la tarjeta no borra el archivo de Drive.
 
 ### 3.11 Otras vistas
 
@@ -573,7 +580,7 @@ Son opcionales e independientes. La configuración paso a paso está en el `READ
 
 | Integración | Variables | Qué hace cada usuario |
 |---|---|---|
-| Google Docs/Sheets e inicio de sesión | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_WORKSPACE_DOMAIN` (recomendada), `GOOGLE_SHARE_ROLE`, `AUTH_GOOGLE_ONLY`, `AUTH_ALLOW_ADMIN_PASSWORD` | Conectar su cuenta en *Mi perfil* para Docs/Sheets; el inicio de sesión no requiere conectar nada. |
+| Google Docs/Sheets e inicio de sesión | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_WORKSPACE_DOMAIN` (recomendada), `GOOGLE_SHARE_ROLE` (valor por defecto de cada proyecto; se cambia en *Ajustes del proyecto → Documentos de Google*), `AUTH_GOOGLE_ONLY`, `AUTH_ALLOW_ADMIN_PASSWORD` | Conectar su cuenta en *Mi perfil* para Docs/Sheets; el inicio de sesión no requiere conectar nada. |
 | Email | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Nada (activado por defecto; se puede desactivar). Con email se activan invitaciones, «¿Olvidaste tu contraseña?», confirmaciones y avisos de cuenta. |
 | WhatsApp | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANG` | Activarlo y escribir su número en *Mi perfil*. |
 

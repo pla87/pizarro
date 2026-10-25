@@ -258,4 +258,7 @@ export const board: Record<string, string> = {
   "Incluir en todas las releases": "Include in every release",
   "Incluir cada dos releases": "Include in every other release",
   "Incluir cada tres releases": "Include in every third release",
+  "Documento creado, pero no se ha compartido: solo lo ves tú": "Document created, but not shared: only you can see it",
+  "Documento creado, pero no se pudo compartir con 1 persona": "Document created, but it could not be shared with 1 person",
+  "Documento creado, pero no se pudo compartir con {n} personas": "Document created, but it could not be shared with {n} people",
 };

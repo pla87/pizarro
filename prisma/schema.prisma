@@ -211,6 +211,9 @@ model Project {
   releaseZipMaxMb Int    @default(80)
   /// Tamaño máximo (MB) de la suma de adjuntos de una tarea.
   taskAttachMaxMb Int    @default(80)
+  /// Con quién se comparten los Docs/Sheets creados desde una tarea: DOMAIN_WRITE, DOMAIN_READ, MEMBERS o NONE.
+  /// null = el comportamiento por defecto (GOOGLE_SHARE_ROLE: dominio en los de equipo, miembros en los privados).
+  googleShareMode String?
   position    Float    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -487,6 +490,10 @@ model TaskLink {
   url         String
   externalId  String?
   createdById String?
+  /// Resultado de compartir el archivo al crearlo: SHARED, PARTIAL (alguna persona falló) o NOT_SHARED. null = no se registró.
+  shareStatus String?
+  /// Con PARTIAL, a cuántas personas no se pudo compartir.
+  shareFailed Int          @default(0)
   createdAt   DateTime     @default(now())
   task        Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
   createdBy   User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)

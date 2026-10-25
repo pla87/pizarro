@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
-  createDeliverable, createLabel, deleteDeliverable, deleteLabel, addProjectMember, deleteProject, removeProjectMember, setProjectVisibility, setAttachmentLimits, updateDeliverable, updateLabel, updateProject,
+  createDeliverable, createLabel, deleteDeliverable, deleteLabel, addProjectMember, deleteProject, removeProjectMember, setProjectVisibility, setAttachmentLimits, setGoogleShareMode, updateDeliverable, updateLabel, updateProject,
 } from "@/actions/projects";
 import { formatDay } from "@/lib/dates";
 import { useIntlLocale, useT } from "@/i18n/client";
@@ -16,6 +16,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
 import { isWhite, onColor, PALETTE, RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "@/lib/constants";
+import { GOOGLE_SHARE_MODES, isDomainMode, type GoogleShareMode } from "@/lib/google-share";
 import type { EditorModeValue, KindOption, LabelOption } from "@/lib/types";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
 import { setGeneralKindEnabled } from "@/actions/project-kinds";
@@ -23,7 +24,7 @@ import { setGeneralKindEnabled } from "@/actions/project-kinds";
 interface Props {
   isAdmin: boolean;
   currentUserId: string;
-  project: { id: string; name: string; description: string; visibility: "TEAM" | "PRIVATE"; releaseZipMaxMb: number; taskAttachMaxMb: number; members: { id: string; name: string; active: boolean }[] };
+  project: { id: string; name: string; description: string; visibility: "TEAM" | "PRIVATE"; releaseZipMaxMb: number; taskAttachMaxMb: number; googleShareMode: GoogleShareMode; members: { id: string; name: string; active: boolean }[] };
   labels: LabelOption[];
   kinds: KindRow[];
   /** Todos los tipos generales, con si el proyecto los usa y cuántas tareas tienen aquí. */
@@ -31,9 +32,18 @@ interface Props {
   deliverables: DeliverableRow[];
   users: { id: string; name: string; role: "ADMIN" | "MEMBER" }[];
   editorMode: EditorModeValue;
+  /** Integración con Google: si está activa y el dominio de Workspace configurado (para ofrecer compartir con él). */
+  google: { enabled: boolean; domain: string | null };
   /** Sección «Informe semanal por email» (la monta la página). */
   reportSchedule?: React.ReactNode;
 }
+
+const SHARE_MODE_LABEL: Record<GoogleShareMode, string> = {
+  DOMAIN_WRITE: "Todo el dominio puede editar",
+  DOMAIN_READ: "Todo el dominio puede leer",
+  MEMBERS: "Solo las personas del proyecto (editores)",
+  NONE: "No compartir (solo quien lo crea)",
+};
 
 function Section({ title, description, children, id }: { title: string; description?: string; children: React.ReactNode; id?: string }) {
   const t = useT();
@@ -46,7 +56,7 @@ function Section({ title, description, children, id }: { title: string; descript
   );
 }
 
-export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode, reportSchedule }: Props) {
+export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode, google, reportSchedule }: Props) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
@@ -56,6 +66,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
   const [description, setDescription] = useState(project.description);
   const [zipMb, setZipMb] = useState(String(project.releaseZipMaxMb));
   const [taskMb, setTaskMb] = useState(String(project.taskAttachMaxMb));
+  const [shareMode, setShareMode] = useState<GoogleShareMode>(project.googleShareMode);
   const [visibility, setVisibility] = useState(project.visibility);
   const [labels, setLabels] = useState(initialLabels);
   const [confirmName, setConfirmName] = useState("");
@@ -129,6 +140,33 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
               />
               <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto 80), y nunca menos que el máximo de adjuntos de una tarea. Si los adjuntos de una release superan este tamaño, se descargan en varios ZIP de hasta ese tamaño; cada ZIP se arma en memoria del servidor: súbelo solo si hace falta.", { min: RELEASE_ZIP_MIN_MB, max: RELEASE_ZIP_MAX_MB })}</p>
             </div>
+            <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
+          </form>
+        </Section>
+      )}
+
+      {canManage && google.enabled && (
+        <Section title="Documentos de Google" description="Con quién se comparten los Docs y Sheets que se crean desde las tareas de este proyecto.">
+          <form
+            className="space-y-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              run(async () => setGoogleShareMode(project.id, shareMode), t("Proyecto actualizado"), () => router.refresh());
+            }}
+          >
+            {GOOGLE_SHARE_MODES.map((m) => {
+              // Los modos de dominio solo existen en proyectos de equipo y con un dominio de Workspace configurado.
+              const unavailable = isDomainMode(m) && (isPrivateProject || !google.domain);
+              return (
+                <label key={m} className={cn("flex items-start gap-2 text-sm", unavailable && "opacity-50")}>
+                  <input type="radio" name="google-share" className="mt-1" checked={shareMode === m} disabled={unavailable} onChange={() => setShareMode(m)} />
+                  <span>{t(SHARE_MODE_LABEL[m])}</span>
+                </label>
+              );
+            })}
+            {!google.domain && <p className="text-xs text-slate-500">{t("Las opciones de dominio no están disponibles: el servidor no tiene configurado GOOGLE_WORKSPACE_DOMAIN.")}</p>}
+            {isPrivateProject && <p className="text-xs text-slate-500">{t("Un proyecto privado nunca se comparte con todo el dominio.")}</p>}
+            <p className="text-xs text-slate-500">{t("Si el documento no se puede compartir, se crea igualmente y se avisa en la tarea de que solo lo ve quien lo crea.")}</p>
             <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
           </form>
         </Section>

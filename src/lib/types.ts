@@ -114,6 +114,10 @@ export interface TaskLinkInfo {
   kind: "GOOGLE_DOC" | "GOOGLE_SHEET";
   title: string;
   url: string;
+  /** Resultado de compartir al crearlo: SHARED, PARTIAL, NOT_SHARED o null (anterior a este registro). */
+  shareStatus: string | null;
+  /** Con PARTIAL, a cuántas personas no se pudo compartir. */
+  shareFailed: number;
 }
 
 export interface CommentInfo {

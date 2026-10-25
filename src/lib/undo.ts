@@ -49,7 +49,7 @@ type AttachmentRow = {
   id: string; taskId: string; originalName: string; mimeType: string; isImage: boolean;
   width: number | null; height: number | null; size: number; createdById: string | null; createdAt: string;
 };
-type LinkRow = { id: string; taskId: string; kind: string; title: string; url: string; externalId: string | null; createdById: string | null; createdAt: string };
+type LinkRow = { id: string; taskId: string; kind: string; title: string; url: string; externalId: string | null; createdById: string | null; shareStatus?: string | null; shareFailed?: number; createdAt: string };
 type ColumnRow = { id: string; projectId: string; name: string; position: number; role: string; isDone: boolean };
 
 /** Todo lo necesario para recrear una tarea borrada con sus hijos. */
@@ -158,7 +158,7 @@ export async function snapshotTasks(ids: string[]): Promise<UndoOp[]> {
         id: a.id, taskId: a.taskId, originalName: a.originalName, mimeType: a.mimeType, isImage: a.isImage,
         width: a.width, height: a.height, size: a.size, createdById: a.createdById, createdAt: a.createdAt.toISOString(),
       })),
-      links: r.links.map((l) => ({ id: l.id, taskId: l.taskId, kind: l.kind, title: l.title, url: l.url, externalId: l.externalId, createdById: l.createdById, createdAt: l.createdAt.toISOString() })),
+      links: r.links.map((l) => ({ id: l.id, taskId: l.taskId, kind: l.kind, title: l.title, url: l.url, externalId: l.externalId, createdById: l.createdById, shareStatus: l.shareStatus, shareFailed: l.shareFailed, createdAt: l.createdAt.toISOString() })),
       releaseTaskIds: r.releases.map((x) => x.id),
     },
   }));
