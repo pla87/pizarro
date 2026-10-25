@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n/client";
-import type { BoardTask } from "@/lib/types";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
-import { attachmentPatch, cardsAcceptFiles, filesFrom, hasFiles, uploadFile } from "./upload";
+import { cardsAcceptFiles, filesFrom, hasFiles, uploadFile } from "./upload";
 
 /**
  * Soltar archivos sobre una tarjeta del tablero (escritorio): se adjuntan a esa tarea con la misma ruta
@@ -49,7 +48,7 @@ export function useCardFileDrop(taskId: string, enabled: boolean) {
     for (const file of files) {
       try {
         const att = await board.trackRaw(uploadFile(taskId, file, false, t));
-        board.patchTask(taskId, (task: BoardTask) => attachmentPatch(task, att));
+        board.patchTask(taskId, att.totals);
         ok++;
       } catch (err) {
         errors.push((err as Error).message);

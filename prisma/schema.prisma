@@ -216,6 +216,8 @@ model Project {
   /// Con quién se comparten los Docs/Sheets creados desde una tarea: DOMAIN_WRITE, DOMAIN_READ, MEMBERS o NONE.
   /// null = el comportamiento por defecto (GOOGLE_SHARE_ROLE: dominio en los de equipo, miembros en los privados).
   googleShareMode String?
+  /// Tamaño máximo (MB) de UN adjunto. 1 ≤ fileMaxMb ≤ taskAttachMaxMb ≤ releaseZipMaxMb.
+  fileMaxMb       Int    @default(20)
   position    Float    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

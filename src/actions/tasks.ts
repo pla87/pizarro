@@ -5,7 +5,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjectAccess, assertTaskAccess, loadTaskWithAccess, visibleProjectsWhere } from "@/lib/access";
-import { appTimeZone, boardTaskSelect, listKinds, loadBoardTask, projectUsers, toBoardTask } from "@/lib/board";
+import { appTimeZone, attachmentTotals, boardTaskSelect, listKinds, loadBoardTask, projectUsers, toBoardTask } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
 import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { addUndo, captureTasks, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, type TaskField, type UndoOp } from "@/lib/undo";
@@ -28,7 +28,7 @@ import { followTask, notifyMentions, notifyTask, taskFollowerIds } from "@/lib/n
 import { isFollowing } from "@/lib/followers";
 import { loadTaskHistory } from "@/lib/task-events";
 import { localizeGeneralKinds } from "@/lib/kinds-localize";
-import { MAX_UPLOAD_BYTES } from "@/lib/uploads";
+import { effectiveFileMaxMb } from "@/lib/upload-size";
 import type { ArchivedTask, BoardTask, CommentInfo, ProjectFormData, SubtaskInfo, TaskDetail, TaskLinkInfo } from "@/lib/types";
 import { getLocale, getT } from "@/i18n/server";
 
@@ -174,7 +174,7 @@ export async function getProjectFormData(projectId: string) {
     const user = await requireUser();
     const id = v.id.parse(projectId);
     await assertProjectAccess(user, id);
-    const project = await db.project.findUniqueOrThrow({ where: { id }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true } });
+    const project = await db.project.findUniqueOrThrow({ where: { id }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true, fileMaxMb: true } });
     const [columns, users, deliverables, kinds, locale] = await Promise.all([
       db.column.findMany({ where: { projectId: id }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true } }),
       projectUsers(id, project),
@@ -183,7 +183,7 @@ export async function getProjectFormData(projectId: string) {
       getLocale(),
     ]);
     return {
-      project: { id: project.id, name: project.name, attachMaxMb: project.taskAttachMaxMb, fileMaxMb: Math.round(MAX_UPLOAD_BYTES / 1024 / 1024) },
+      project: { id: project.id, name: project.name, attachMaxMb: project.taskAttachMaxMb, fileMaxMb: effectiveFileMaxMb(project.fileMaxMb) },
       columns,
       users,
       kinds: localizeGeneralKinds(kinds, locale),
@@ -856,8 +856,8 @@ export async function deleteAttachment(attachmentId: string) {
     // El fichero se conserva mientras se pueda deshacer (ver undo.ts).
     addUndo({ t: "attachment.restore", row: { ...att, createdAt: att.createdAt.toISOString() } });
     await db.taskAttachment.delete({ where: { id: att.id } });
-    // Id de la entrada de deshacer, para que el aviso «Deshacer» deshaga justo este borrado.
-    return { undo: trackUndoEntry() };
+    // Id de la entrada de deshacer, para que el aviso «Deshacer» deshaga justo este borrado; y los contadores reales de la tarea.
+    return { undo: trackUndoEntry(), totals: await attachmentTotals(att.taskId) };
   });
 }
 

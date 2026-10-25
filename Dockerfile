@@ -19,9 +19,6 @@ RUN npm ci --no-audit --no-fund
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# El tope del cuerpo que admite el proxy de Next se fija al compilar a partir de MAX_UPLOAD_MB
-# (Railway pasa las variables del servicio como build args si se declaran aquí).
-ARG MAX_UPLOAD_MB
 # prisma generate no conecta a la base de datos; solo necesita la variable definida.
 RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" npm run build
 
