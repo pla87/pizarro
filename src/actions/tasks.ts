@@ -7,7 +7,7 @@ import { runAction } from "@/lib/action";
 import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjectAccess, assertTaskAccess, loadTaskWithAccess, visibleProjectsWhere } from "@/lib/access";
 import { appTimeZone, boardTaskSelect, loadBoardTask, toBoardTask } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
-import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents } from "@/lib/action-context";
+import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { addUndo, captureTasks, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, type TaskField, type UndoOp } from "@/lib/undo";
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
@@ -813,6 +813,8 @@ export async function deleteAttachment(attachmentId: string) {
     // El fichero se conserva mientras se pueda deshacer (ver undo.ts).
     addUndo({ t: "attachment.restore", row: { ...att, createdAt: att.createdAt.toISOString() } });
     await db.taskAttachment.delete({ where: { id: att.id } });
+    // Id de la entrada de deshacer, para que el aviso «Deshacer» deshaga justo este borrado.
+    return { undo: trackUndoEntry() };
   });
 }
 

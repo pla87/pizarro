@@ -175,3 +175,15 @@ export function sendTwoFactorChangedMail(user: Recipient, change: "enabled" | "d
     ],
   }));
 }
+
+/** Aviso de que un administrador ha desvinculado la cuenta de Google del acceso. */
+export function sendGoogleUnlinkedMail(user: Recipient): Promise<void> {
+  return send(user, user.locale, (t) => ({
+    subject: t("Se ha desvinculado tu cuenta de Google de Pizarro"),
+    paragraphs: [
+      t("Hola, {name}:", { name: user.name }),
+      t("Un administrador ha desvinculado tu cuenta de Google del acceso a Pizarro y se han cerrado tus sesiones. Puedes entrar con tu contraseña o volver a entrar con Google."),
+      t("Si no esperabas este cambio, avisa a un administrador."),
+    ],
+  }));
+}

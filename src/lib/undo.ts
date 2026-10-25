@@ -185,14 +185,15 @@ export async function saveUndo(
   userId: string, projectId: string, label: string, ops: UndoOp[], taskId: string | null = null,
   kind: UndoKind = "UNDO", clearRedo = kind === "UNDO", fingerprint: string | null = null,
   history: { eventIds?: string[]; events?: SavedEvent[] } = {},
-): Promise<void> {
+): Promise<string> {
   if (clearRedo) await discardUndo({ userId, projectId, kind: "REDO" });
-  await db.undoEntry.create({
+  const created = await db.undoEntry.create({
     data: {
       userId, projectId, taskId, kind, label: label.slice(0, 300), ops: ops as unknown as Prisma.InputJsonValue, fingerprint,
       eventIds: history.eventIds ?? [],
       ...(history.events?.length ? { events: history.events as unknown as Prisma.InputJsonValue } : {}),
     },
+    select: { id: true },
   });
   const old = await db.undoEntry.findMany({
     where: { userId, projectId, kind },
@@ -201,6 +202,7 @@ export async function saveUndo(
     select: { id: true, ops: true },
   });
   if (old.length) await discardEntries(old);
+  return created.id;
 }
 
 /** Ficheros retenidos por las entradas: adjuntos borrados que ya no existen en la base de datos. */

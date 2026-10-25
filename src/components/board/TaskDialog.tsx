@@ -7,7 +7,7 @@ import {
   addSubtask, archiveTask, deleteAttachment, deleteSubtask, deleteTask, deleteTaskLink, getTaskDetail,
   moveTask, reorderSubtask, restoreTaskSnapshot, updateSubtask, updateTask,
 } from "@/actions/tasks";
-import { undoLast } from "@/actions/undo";
+import { undoEntry, undoLast } from "@/actions/undo";
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -308,12 +308,13 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     setDetail((d) => (d ? { ...d, attachments: d.attachments.filter((x) => x.id !== id) } : d));
     if (removed) board.patchTask(task.id, (t) => attachmentPatch(t, removed, -1));
     setTotalRejected(false);
-    toast(t("Adjunto borrado"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange() });
+    toast(t("Adjunto borrado"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange(res.data.undo.id) });
   };
 
-  /** Deshace lo último hecho en esta tarea (el botón «Deshacer» de los avisos) y recarga el detalle. */
-  const undoLastChange = async () => {
-    const res = await board.track(undoLast(board.project.id, task.id));
+  /** Deshace lo último hecho en esta tarea, o la entrada indicada (el botón «Deshacer» de los avisos) y recarga el detalle. */
+  const undoLastChange = async (entryId?: string) => {
+    // Con id (aviso «Adjunto borrado») se deshace exactamente esa entrada, no la última de la tarea.
+    const res = await board.track(entryId ? undoEntry(entryId) : undoLast(board.project.id, task.id));
     if (!res.ok) return toast(res.error, "error");
     toast(t("Deshecho: {label}", { label: res.data.label }), "undo");
     await reloadRef.current();

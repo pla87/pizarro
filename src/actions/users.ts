@@ -9,7 +9,7 @@ import { describeAction } from "@/lib/action-context";
 import { AppError, notFound } from "@/lib/errors";
 import { MAX_USERS } from "@/lib/limits";
 import { randomBytes } from "node:crypto";
-import { sendEmailChangedMail, sendInviteMail, sendPasswordResetMail, sendTwoFactorChangedMail } from "@/lib/auth-mail";
+import { sendEmailChangedMail, sendGoogleUnlinkedMail, sendInviteMail, sendPasswordResetMail, sendTwoFactorChangedMail } from "@/lib/auth-mail";
 import { issueAuthToken } from "@/lib/auth-token";
 import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { hashPassword, passwordSchema } from "@/lib/password";
@@ -170,6 +170,27 @@ export async function resetUserTwoFactor(userId: string) {
     await clearTwoFactor(user.id);
     describeAction(`Restableció la verificación en dos pasos de «${user.name}»`);
     if (emailEnabled()) sendMailInBackground("aviso de verificación en dos pasos restablecida", () => sendTwoFactorChangedMail(user, "reset"));
+    revalidatePath("/admin/users");
+  });
+}
+
+/**
+ * Desvincula la cuenta de Google del acceso (googleSub = null) y cierra sus sesiones. No toca la conexión con
+ * Drive (Docs/Sheets), que es independiente. Si la persona vuelve a entrar con Google con el mismo email, se enlaza de nuevo.
+ */
+export async function unlinkGoogle(userId: string) {
+  return runAction({ name: "users.unlinkGoogle", args: [userId] }, async () => {
+    await requireAdmin();
+    const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, name: true, email: true, locale: true, googleSub: true } });
+    if (!user) throw notFound();
+    if (!user.googleSub) throw new AppError("Esa persona no tiene una cuenta de Google vinculada.");
+    await db.$transaction([
+      db.user.update({ where: { id: user.id }, data: { googleSub: null } }),
+      db.session.deleteMany({ where: { userId: user.id } }),
+    ]);
+    revokeUser(user.id);
+    describeAction(`Desvinculó la cuenta de Google de «${user.name}»`);
+    if (emailEnabled()) sendMailInBackground("aviso de Google desvinculado", () => sendGoogleUnlinkedMail(user));
     revalidatePath("/admin/users");
   });
 }

@@ -32,6 +32,14 @@ async function applyLast(kind: UndoKind, projectId: string, taskId?: string | nu
       undo ? (tid ? "No hay nada que deshacer en esta tarea." : "No hay nada que deshacer.") : tid ? "No hay nada que rehacer en esta tarea." : "No hay nada que rehacer.",
     );
   }
+  return applyEntry(kind, user, pid, entry);
+}
+
+type Entry = NonNullable<Awaited<ReturnType<typeof db.undoEntry.findFirst>>>;
+
+/** Aplica una entrada concreta de la pila (la última o una elegida) y deja la contraria para alternar. */
+async function applyEntry(kind: UndoKind, user: { id: string }, pid: string, entry: Entry): Promise<Result> {
+  const undo = kind === "UNDO";
   // Se retira primero: dos clics seguidos no aplican dos veces lo mismo.
   const { count } = await db.undoEntry.deleteMany({ where: { id: entry.id } });
   if (!count) throw new AppError(undo ? "Esa acción ya se ha deshecho." : "Esa acción ya se ha rehecho.");
@@ -107,4 +115,19 @@ export async function undoLast(projectId: string, taskId?: string | null) {
 /** Rehace lo último que se deshizo (mismo contexto que undoLast). Una acción nueva vacía esta pila. */
 export async function redoLast(projectId: string, taskId?: string | null) {
   return runAction({ name: "undo.redoLast", args: [projectId, taskId] }, () => applyLast("REDO", projectId, taskId));
+}
+
+
+/**
+ * Deshace exactamente una entrada (la que devolvió una acción, p. ej. el aviso «Adjunto borrado»), aunque
+ * después se hayan hecho otras cambios. Mismas comprobaciones que undoLast; deja su entrada de rehacer.
+ */
+export async function undoEntry(entryId: string) {
+  return runAction({ name: "undo.undoEntry", args: [entryId] }, async () => {
+    const user = await requireUser();
+    const entry = await db.undoEntry.findFirst({ where: { id: v.id.parse(entryId), userId: user.id, kind: "UNDO" } });
+    if (!entry) throw new AppError("Esa acción ya se ha deshecho.");
+    await assertProjectAccess(user, entry.projectId);
+    return applyEntry("UNDO", user, entry.projectId, entry);
+  });
 }

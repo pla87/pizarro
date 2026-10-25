@@ -26,6 +26,8 @@ export interface ActionContext {
   taskId?: string | null;
   /** Historial de tareas: si la acción lo fija, sustituye al que se deduce de la etiqueta; [] = no anotar nada. */
   events?: TaskEventInput[];
+  /** Se rellena con el id de la entrada de deshacer que cree runAction (ver trackUndoEntry). */
+  undoRef?: { id?: string };
 }
 
 export const actionContext = new AsyncLocalStorage<ActionContext>();
@@ -81,4 +83,15 @@ export function recordTaskEvent(taskId: string, code: string, label: Label): voi
 export function skipTaskEvents(): void {
   const store = actionContext.getStore();
   if (store) store.events ??= [];
+}
+
+/**
+ * Referencia que runAction rellenará con el id de la entrada de deshacer de esta acción (se guarda
+ * después de ejecutarla). La acción la devuelve en su resultado y el cliente la lee ya rellena.
+ */
+export function trackUndoEntry(): { id?: string } {
+  const ref: { id?: string } = {};
+  const store = actionContext.getStore();
+  if (store) store.undoRef = ref;
+  return ref;
 }
