@@ -80,6 +80,7 @@ model User {
   assignedTasks     Task[]            @relation("TaskAssignee")
   createdTasks      Task[]            @relation("TaskCreator")
   attachments       TaskAttachment[]
+  documentsCreated  ProjectDocument[]
   releases          Release[]
   googleAccount     GoogleAccount?
   releaseTemplates  ReleaseTemplate[]
@@ -235,6 +236,7 @@ model Project {
   hiddenKinds  ProjectHiddenKind[]
   undoEntries  UndoEntry[]
   reportSchedule ReportSchedule?
+  documents    ProjectDocument[]
   privateOwner User?           @relation("PrivateProjects", fields: [privateOwnerId], references: [id], onDelete: SetNull)
 
   @@index([position])
@@ -397,6 +399,34 @@ model TaskAttachment {
 
   @@index([taskId])
   @@index([createdById])
+}
+
+/// Documentación del proyecto: ficheros subidos para consultarlos (texto, Markdown, PDF, imágenes) o descargarlos.
+/// El fichero vive en UPLOAD_DIR/documents/<id>.bin; el nombre real solo se guarda aquí. `kind` se decide al subir.
+model ProjectDocument {
+  id          String   @id @default(cuid())
+  projectId   String
+  name        String
+  /// MIME del fichero guardado (image/webp para las imágenes, que se convierten).
+  mimeType    String
+  size        Int
+  kind        DocumentKind
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@index([createdById])
+}
+
+enum DocumentKind {
+  TEXT
+  MARKDOWN
+  PDF
+  IMAGE
+  OTHER
 }
 
 model Release {

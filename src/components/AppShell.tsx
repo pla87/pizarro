@@ -2,7 +2,7 @@
 
 import { BrandMark } from "@/components/ui/BrandMark";
 import {
-  Archive, Bell, CalendarDays, ChevronsUpDown, FolderKanban, History, LayoutDashboard, ListChecks, LogOut, Menu, Plus, Rocket,
+  Archive, Bell, CalendarDays, ChevronsUpDown, FileText, FolderKanban, History, LayoutDashboard, ListChecks, LogOut, Menu, Plus, Rocket,
   Settings, Shield, SlidersHorizontal, X,
 } from "lucide-react";
 import Link from "next/link";
@@ -172,6 +172,7 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
           <>
             <NavLink href={`/p/${current.id}`} icon={LayoutDashboard} active={pathname === `/p/${current.id}`}>{t("Tablero")}</NavLink>
             <NavLink href={`/p/${current.id}/releases`} icon={Rocket} active={pathname.startsWith(`/p/${current.id}/releases`)}>{t("Releases")}</NavLink>
+            <NavLink href={`/p/${current.id}/docs`} icon={FileText} active={pathname.startsWith(`/p/${current.id}/docs`)}>{t("Documentación")}</NavLink>
             <ReportButton projectId={current.id} variant="sidebar" />
             <NavLink href={`/p/${current.id}/settings`} icon={SlidersHorizontal} active={pathname.startsWith(`/p/${current.id}/settings`)}>{t("Ajustes del proyecto")}</NavLink>
             <NavLink href={`/p/${current.id}?archivadas=1`} icon={Archive} active={false}>{t("Archivadas")}</NavLink>

@@ -1,0 +1,349 @@
+"use client";
+
+import { AlertCircle, Download, File as FileIcon, FileCode, FileImage, FileText, FileType, Loader2, Pencil, Search, Trash2, Upload, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { deleteDocument, renameDocument } from "@/actions/documents";
+import { filesFrom, formatBytes, useFileDrop } from "@/components/board/upload";
+import { Markdown } from "@/components/ui/Markdown";
+import { Modal } from "@/components/ui/Modal";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useToast } from "@/components/ui/Toast";
+import { cn } from "@/components/ui/cn";
+import { useIntlLocale, useT } from "@/i18n/client";
+import { DOCUMENT_PREVIEW_MAX_BYTES, isPreviewable, type DocumentKindName } from "@/lib/document-kind";
+import type { DocumentRow } from "@/lib/documents";
+import { formatDate } from "@/lib/format";
+
+interface Props {
+  projectId: string;
+  projectName: string;
+  documents: DocumentRow[];
+  fileMaxMb: number;
+  maxCount: number;
+}
+
+interface UploadItem {
+  key: number;
+  name: string;
+  status: "uploading" | "error";
+  error?: string;
+}
+
+const ICONS: Record<DocumentKindName, { icon: typeof FileIcon; className: string }> = {
+  TEXT: { icon: FileText, className: "text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-300" },
+  MARKDOWN: { icon: FileCode, className: "text-sky-600 bg-sky-50 dark:bg-sky-500/15 dark:text-sky-300" },
+  PDF: { icon: FileType, className: "text-red-600 bg-red-50 dark:bg-red-500/15 dark:text-red-300" },
+  IMAGE: { icon: FileImage, className: "text-emerald-600 bg-emerald-50 dark:bg-emerald-500/15 dark:text-emerald-300" },
+  OTHER: { icon: FileIcon, className: "text-slate-400 bg-slate-100 dark:bg-slate-800 dark:text-slate-400" },
+};
+
+/** Minúsculas y sin tildes, para que el buscador no distinga «Guía» de «guia». */
+const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+let nextKey = 1;
+
+export function DocsManager({ projectId, projectName, documents, fileMaxMb, maxCount }: Props) {
+  const t = useT();
+  const locale = useIntlLocale();
+  const router = useRouter();
+  const toast = useToast();
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState("");
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [uploads, setUploads] = useState<UploadItem[]>([]);
+  // Cola de subida en serie: cada archivo es una petición y el servidor aplica sus límites a cada una.
+  const queue = useRef<Promise<void>>(Promise.resolve());
+
+  const kindLabel = (k: DocumentKindName) =>
+    k === "TEXT" ? t("Texto") : k === "MARKDOWN" ? "Markdown" : k === "PDF" ? "PDF" : k === "IMAGE" ? t("Imagen") : t("Otro");
+
+  function uploadFiles(files: File[]) {
+    if (!files.length) return;
+    let pending = files.length;
+    let done = 0;
+    for (const file of files) {
+      const key = nextKey++;
+      // Las capturas pegadas llegan como «image.png»: se les da un nombre con fecha.
+      const name = file.name && file.name !== "image.png" ? file.name : `${t("captura")}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png`;
+      setUploads((u) => [...u, { key, name, status: "uploading" }]);
+      const fail = (error: string) => setUploads((u) => u.map((x) => (x.key === key ? { ...x, status: "error", error } : x)));
+      const send = async () => {
+        if (file.size > fileMaxMb * 1024 * 1024) return fail(t("El archivo supera el tamaño máximo del proyecto ({mb} MB por archivo).", { mb: fileMaxMb }));
+        try {
+          const body = new FormData();
+          body.append("file", file, name);
+          const res = await fetch(`/api/projects/${projectId}/documents`, { method: "POST", body });
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok) return fail(json.error ?? t("No se pudo subir el archivo."));
+          setUploads((u) => u.filter((x) => x.key !== key));
+          done++;
+        } catch {
+          fail(t("No se pudo subir el archivo."));
+        }
+      };
+      queue.current = queue.current.then(send).then(() => {
+        // Al terminar la tanda se refresca la lista y se avisa una sola vez.
+        if (--pending > 0) return;
+        router.refresh();
+        if (done > 0) toast(done === 1 ? t("Documento subido") : t("{n} documentos subidos", { n: done }));
+      });
+    }
+  }
+
+  const dragging = useFileDrop(uploadFiles);
+
+  // Pegar (Ctrl+V) archivos o capturas en cualquier punto de la página, salvo escribiendo en un campo de texto.
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      const target = e.target instanceof Element ? e.target : null;
+      if (target?.closest("input, textarea, [contenteditable='true']") || document.querySelector("[role=dialog]")) return;
+      const files = filesFrom(e.clipboardData?.files);
+      if (!files.length) return;
+      e.preventDefault();
+      uploadFiles(files);
+    }
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  });
+
+  const needle = fold(query.trim());
+  const shown = needle ? documents.filter((d) => fold(d.name).includes(needle)) : documents;
+  const open = documents.find((d) => d.id === openId) ?? null;
+  const full = documents.length >= maxCount;
+
+  return (
+    <div className="mx-auto max-w-4xl p-4 md:p-6">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-semibold">{t("Documentación")}</h1>
+        <button type="button" className="btn-primary" onClick={() => fileInput.current?.click()} disabled={full}>
+          <Upload size={16} /> {t("Subir archivos")}
+        </button>
+        <input
+          ref={fileInput}
+          type="file"
+          multiple
+          className="sr-only"
+          data-testid="docs-file-input"
+          aria-label={t("Subir archivos")}
+          tabIndex={-1}
+          onChange={(e) => {
+            uploadFiles(filesFrom(e.target.files));
+            e.target.value = "";
+          }}
+        />
+      </div>
+      <p className="mb-4 text-sm text-slate-500">
+        {t("Archivos de «{name}» para consultar sin salir de la app: {count} de {max} · máximo {mb} MB por archivo.", { name: projectName, count: documents.length, max: maxCount, mb: fileMaxMb })}
+      </p>
+
+      {dragging && (
+        <div className="pointer-events-none fixed inset-0 z-[60] flex items-center justify-center bg-brand-500/10 backdrop-blur-[1px]" aria-hidden>
+          <div className="rounded-xl border-2 border-dashed border-brand-500 bg-white/90 px-8 py-6 text-sm font-medium text-brand-700 dark:bg-slate-900/90 dark:text-brand-100">
+            {t("Suelta los archivos para subirlos")}
+          </div>
+        </div>
+      )}
+
+      {uploads.length > 0 && (
+        <ul className="mb-4 space-y-1.5" aria-live="polite">
+          {uploads.map((u) => (
+            <li key={u.key} className={cn("card flex items-center gap-2 px-3 py-2 text-sm", u.status === "error" && "border-red-300 dark:border-red-500/50")}>
+              {u.status === "uploading" ? <Loader2 size={16} className="shrink-0 animate-spin text-slate-400" /> : <AlertCircle size={16} className="shrink-0 text-red-500" />}
+              <span className="min-w-0 flex-1 truncate">{u.name}</span>
+              {u.status === "uploading" ? (
+                <span className="shrink-0 text-xs text-slate-500">{t("Subiendo…")}</span>
+              ) : (
+                <>
+                  <span className="min-w-0 shrink text-xs text-red-600 dark:text-red-400" role="alert">{u.error}</span>
+                  <button type="button" className="btn-icon shrink-0" aria-label={t("Descartar")} onClick={() => setUploads((x) => x.filter((i) => i.key !== u.key))}>
+                    <X size={14} />
+                  </button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {documents.length === 0 ? (
+        <div className="card flex flex-col items-center gap-2 p-10 text-center text-sm text-slate-500">
+          <FileText size={32} className="text-slate-300" />
+          <p className="max-w-md">
+            {t("Aquí van los archivos de referencia del proyecto: guías y notas en texto o Markdown, PDF de especificaciones o contratos, capturas e imágenes. Arrastra archivos a esta página, pégalos o usa «Subir archivos». Todo el equipo del proyecto los puede ver y descargar.")}
+          </p>
+          <button type="button" className="btn-secondary mt-2" onClick={() => fileInput.current?.click()}>
+            <Upload size={16} /> {t("Subir archivos")}
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="relative mb-4">
+            <Search size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              className="input pl-9"
+              placeholder={t("Buscar por nombre…")}
+              aria-label={t("Buscar documentos")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+          {shown.length === 0 ? (
+            <p className="card p-6 text-center text-sm text-slate-500">{t("Ningún documento coincide con «{query}».", { query })}</p>
+          ) : (
+            <ul className="card divide-y divide-slate-200 overflow-hidden dark:divide-slate-800" data-testid="docs-list">
+              {shown.map((d) => {
+                const { icon: Icon, className } = ICONS[d.kind];
+                return (
+                  <li key={d.id}>
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-50 focus-visible:bg-slate-50 dark:hover:bg-slate-800/60 dark:focus-visible:bg-slate-800/60"
+                      onClick={() => setOpenId(d.id)}
+                    >
+                      <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", className)} title={kindLabel(d.kind)}>
+                        <Icon size={18} aria-hidden />
+                        <span className="sr-only">{kindLabel(d.kind)}</span>
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{d.name}</span>
+                        <span className="block truncate text-xs text-slate-500">
+                          {formatBytes(d.size, locale)} · {d.createdByName ?? t("Usuario eliminado")} · {formatDate(d.createdAt, "dateNumeric", locale)}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </>
+      )}
+
+      {open && <DocViewer key={open.id} doc={open} onClose={() => setOpenId(null)} />}
+    </div>
+  );
+}
+
+/** Visor en un modal: imagen, PDF del visor del navegador, texto plano o Markdown; el resto solo se descarga. */
+function DocViewer({ doc, onClose }: { doc: DocumentRow; onClose: () => void }) {
+  const t = useT();
+  const locale = useIntlLocale();
+  const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [name, setName] = useState(doc.name);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(doc.name);
+  const [busy, setBusy] = useState(false);
+  const src = `/api/documents/${doc.id}`;
+
+  async function remove() {
+    const ok = await confirm({
+      title: t("Borrar documento"),
+      message: t("¿Borrar «{name}»? No se puede deshacer.", { name }),
+      confirmLabel: t("Borrar"),
+      danger: true,
+    });
+    if (!ok) return;
+    setBusy(true);
+    const res = await deleteDocument(doc.id);
+    setBusy(false);
+    if (!res.ok) return toast(res.error, "error");
+    toast(t("Documento borrado"));
+    onClose();
+    router.refresh();
+  }
+
+  async function rename() {
+    const next = draft.trim();
+    if (!next || next === name) return setEditing(false);
+    setBusy(true);
+    const res = await renameDocument(doc.id, next);
+    setBusy(false);
+    if (!res.ok) return toast(res.error, "error");
+    setName(res.data.name);
+    setEditing(false);
+    router.refresh();
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="xl"
+      title={
+        editing ? (
+          <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); void rename(); }}>
+            <input className="input" value={draft} maxLength={120} autoFocus aria-label={t("Nombre del documento")} onChange={(e) => setDraft(e.target.value)} />
+            <button type="submit" className="btn-primary" disabled={busy}>{t("Guardar")}</button>
+            <button type="button" className="btn-secondary" onClick={() => { setEditing(false); setDraft(name); }}>{t("Cancelar")}</button>
+          </form>
+        ) : (
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate">{name}</span>
+            <button type="button" className="btn-icon shrink-0" aria-label={t("Renombrar")} title={t("Renombrar")} onClick={() => { setDraft(name); setEditing(true); }}>
+              <Pencil size={14} />
+            </button>
+          </span>
+        )
+      }
+      footer={
+        <div className="flex w-full flex-wrap items-center justify-between gap-2">
+          <span className="text-xs text-slate-500">
+            {formatBytes(doc.size, locale)} · {doc.createdByName ?? t("Usuario eliminado")} · {formatDate(doc.createdAt, "dateNumeric", locale)}
+          </span>
+          <span className="flex gap-2">
+            <button type="button" className="btn-danger" onClick={() => void remove()} disabled={busy}>
+              <Trash2 size={16} /> {t("Borrar")}
+            </button>
+            <a className="btn-primary" href={`${src}?download=1`} download>
+              <Download size={16} /> {t("Descargar")}
+            </a>
+          </span>
+        </div>
+      }
+    >
+      <DocPreview doc={doc} name={name} src={src} />
+    </Modal>
+  );
+}
+
+function DocPreview({ doc, name, src }: { doc: DocumentRow; name: string; src: string }) {
+  const t = useT();
+  const textKind = doc.kind === "TEXT" || doc.kind === "MARKDOWN";
+  const tooBig = textKind && doc.size > DOCUMENT_PREVIEW_MAX_BYTES;
+  const [loaded, setLoaded] = useState<{ id: string; text: string | null } | null>(null);
+  useEffect(() => {
+    if (!textKind || tooBig) return;
+    let cancelled = false;
+    fetch(src)
+      .then((r) => (r.ok ? r.text() : null))
+      .catch(() => null)
+      .then((text) => { if (!cancelled) setLoaded({ id: doc.id, text }); });
+    return () => { cancelled = true; };
+  }, [doc.id, src, textKind, tooBig]);
+
+  if (!isPreviewable(doc.kind) || tooBig) {
+    return (
+      <p className="py-10 text-center text-sm text-slate-500">
+        {tooBig ? t("El archivo es demasiado grande para la vista previa (máximo 1 MB). Descárgalo para verlo.") : t("Este tipo de archivo no tiene vista previa. Descárgalo para abrirlo.")}
+      </p>
+    );
+  }
+  if (doc.kind === "IMAGE") {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt={name} className="mx-auto max-h-[70vh] max-w-full rounded object-contain" />;
+  }
+  if (doc.kind === "PDF") {
+    return <iframe src={src} title={name} className="h-[70vh] w-full rounded border border-slate-200 dark:border-slate-700" />;
+  }
+  if (!loaded || loaded.id !== doc.id) return <p className="py-10 text-center text-sm text-slate-500"><Loader2 size={18} className="mx-auto animate-spin" /></p>;
+  if (loaded.text === null) return <p className="py-10 text-center text-sm text-red-600">{t("No se pudo cargar el archivo.")}</p>;
+  return doc.kind === "MARKDOWN" ? (
+    <div data-testid="doc-markdown"><Markdown>{loaded.text}</Markdown></div>
+  ) : (
+    <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap break-words rounded bg-slate-50 p-3 font-mono text-xs dark:bg-slate-900" data-testid="doc-text">{loaded.text}</pre>
+  );
+}

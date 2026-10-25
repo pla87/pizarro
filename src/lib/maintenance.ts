@@ -70,9 +70,10 @@ async function purgeOrphanFiles(): Promise<number> {
     import("@/lib/orphan-files"),
     import("@/lib/upload-dir"),
   ]);
-  const [attachments, releaseAttachments] = await Promise.all([
+  const [attachments, releaseAttachments, documents] = await Promise.all([
     db.taskAttachment.findMany({ select: { id: true } }),
     db.releaseAttachment.findMany({ select: { id: true } }),
+    db.projectDocument.findMany({ select: { id: true } }),
   ]);
   // Entradas de deshacer por tandas: solo se guardan los ids que mencionan, no todos sus datos a la vez.
   const retained = new Set<string>();
@@ -85,6 +86,7 @@ async function purgeOrphanFiles(): Promise<number> {
   const report = await cleanOrphanFiles(uploadDir(), {
     attachments: new Set([...attachments.map((a) => a.id), ...retained]),
     releaseAttachments: new Set([...releaseAttachments.map((a) => a.id), ...retained]),
+    documents: new Set(documents.map((d) => d.id)),
   });
   if (report.aborted) {
     logEvent({ level: "warn", category: "system", action: "uploads.orphansAborted", message: `Limpieza de huérfanos cancelada: ${report.orphans} de ${report.scanned} ficheros parecen huérfanos (demasiados; ¿base de datos equivocada?)`, details: { ...report } });
