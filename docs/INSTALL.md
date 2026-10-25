@@ -61,6 +61,8 @@ cp .env.example .env
 chmod 600 .env
 echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"
 echo "SESSION_SECRET=$(openssl rand -base64 48)"
+echo "TOKEN_SECRET=$(openssl rand -base64 48)"
+echo "ENCRYPTION_KEY=$(openssl rand -base64 48)"
 echo "BACKUP_KEY=$(openssl rand -base64 32)"
 ```
 
@@ -68,7 +70,9 @@ Copia esos valores en `.env` (`nano .env`) y rellena como mínimo:
 
 - `DOMAIN`: tu dominio, p. ej. `pizarro.example.com`.
 - `APP_URL`: la URL completa, p. ej. `https://pizarro.example.com`.
-- `POSTGRES_PASSWORD`, `SESSION_SECRET` y `BACKUP_KEY`: los valores generados (y guárdalos fuera del servidor).
+- `POSTGRES_PASSWORD`, `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y `BACKUP_KEY`: los valores generados.
+
+**Guarda `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y `BACKUP_KEY` fuera del servidor** (en un gestor de contraseñas): son el kit de recuperación. Sin `BACKUP_KEY` las copias no se pueden leer; sin `ENCRYPTION_KEY` (y `TOKEN_SECRET`), al restaurar en otro servidor se pierden la verificación en dos pasos, los códigos de recuperación y las conexiones con Google. Cambiar `SESSION_SECRET` solo obliga a todo el mundo a volver a entrar. `TOKEN_SECRET` y `ENCRYPTION_KEY` son opcionales: si se dejan vacías se usa `SESSION_SECRET` (y entonces cambiarla obliga también a configurar de nuevo el segundo paso). Cómo rotar cada una: `docs/MANUAL.md`, sección 4.4.
 
 Después arranca con `docker compose up -d --build` y sigue el log con `docker compose logs -f app` (Ctrl+C para salir). `docker compose ps` debe mostrar los tres servicios `healthy` / `running`. Caddy pide el certificado HTTPS en cuanto el dominio resuelve al servidor.
 
@@ -190,6 +194,14 @@ docker compose up -d
 - **Salud:** `GET /api/health` responde `{"status":"ok"}` (200) si la base de datos contesta, la carpeta de subidas se puede escribir y quedan al menos `HEALTH_MIN_FREE_MB` (200 MB por defecto) libres en su disco. Si no, 503 con un motivo: `database`, `uploads_not_writable` o `low_disk_space`. Docker la usa para marcar el contenedor como *unhealthy*.
 - **Tareas de fondo:** *Administración → Copias de seguridad → Tareas de mantenimiento* muestra cuándo se ejecutó cada tarea y si falló.
 - **Logs:** *Administración → Logs* (errores de la app, incluidos los no capturados) y `docker compose logs app`.
+- **Diagnóstico para soporte:** si pides ayuda, adjunta el diagnóstico: *Administración → Ajustes → Descargar diagnóstico*, o por consola
+
+  ```bash
+  docker compose exec app node dist/doctor.mjs > diagnostico.json
+  ```
+
+  Es un JSON legible con la versión, la memoria, qué variables están definidas (nunca su valor), el tamaño de la base de datos y las filas por tabla, las migraciones aplicadas y pendientes, el disco, las tareas de fondo, las copias, la comprobación de salud y los errores de las últimas 24 h agrupados por tipo. No contiene datos personales, mensajes de los logs ni claves.
+- **Rotar claves:** tras cambiar `ENCRYPTION_KEY` (con la anterior en `ENCRYPTION_KEY_PREVIOUS`), `docker compose exec app node dist/rotate-keys.mjs` vuelve a cifrar todo con la nueva; después quita la anterior. Detalles en `docs/MANUAL.md`, 4.4.
 - **Excepciones no capturadas:** se anotan en *Logs* y la app se reinicia sola (Docker la vuelve a levantar). Lo activa `compose.yml` con `EXIT_ON_UNCAUGHT_EXCEPTION=1`; ponlo a `0` para solo registrarlas.
 
 ## 8. Resolución de problemas

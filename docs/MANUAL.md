@@ -124,7 +124,7 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 | Contraseñas | bcrypt (coste 11), entre 10 caracteres y 72 bytes. Tiempo de respuesta constante si el usuario no existe. Los admins no fijan contraseñas ajenas: invitan o fuerzan un cambio por enlace. Los enlaces (invitación 72 h; restablecer y confirmar cambios 30 min) son de un solo uso y se guardan solo como hash. |
 | Sesiones | Token aleatorio de 256 bits en cookie `HttpOnly`, `SameSite=Lax` y `Secure` (con HTTPS, con prefijo `__Host-`). En base de datos solo se guarda su HMAC-SHA256 con `SESSION_SECRET`. Caducidad deslizante de 14 días. Cada persona ve y cierra sus sesiones en **Sesiones abiertas**. |
 | Revocación | Cerrar sesión, cambiar la contraseña, restablecerla, forzar el cambio, desactivar al usuario o cambiarle el rol eliminan sus sesiones. Iniciar sesión cierra la sesión anterior de ese navegador. Las conexiones en vivo (SSE y presencia) se cortan al instante al desactivar al usuario, cambiarle el rol, cerrar sesiones o quitarle el acceso a un proyecto (incluida la desasignación de un proyecto de equipo); máximo 10 conexiones en vivo por persona. |
-| Verificación en dos pasos | App TOTP o código por email, con 10 códigos de recuperación (se muestran una vez). Obligatoria para admins con contraseña, opcional para el resto. Los secretos se cifran con una clave derivada de `SESSION_SECRET`. «Recordar este dispositivo 14 días» la omite en ese navegador. Un admin puede reiniciar el segundo paso de otra persona. |
+| Verificación en dos pasos | App TOTP o código por email, con 10 códigos de recuperación (se muestran una vez). Obligatoria para admins con contraseña, opcional para el resto. Los secretos se cifran con `ENCRYPTION_KEY` (o, si no está definida, con una clave derivada de `SESSION_SECRET`). «Recordar este dispositivo 14 días» la omite en ese navegador. Un admin puede reiniciar el segundo paso de otra persona. |
 | Inicio con Google | OpenID Connect con PKCE. Solo entran usuarios existentes y activos (por email verificado y, después, por id de Google); opcionalmente limitado a `GOOGLE_WORKSPACE_DOMAIN`. No pide segundo paso propio (vale el de Google). |
 | Avisos de cuenta | Email de aviso al iniciar sesión desde un dispositivo desconocido (no en el primer acceso de una cuenta) y tras cualquier cambio de contraseña o de email. Al cambiar el email de una cuenta (desde el perfil o por un admin) se desvincula su cuenta de Google y dejan de valer los enlaces pendientes enviados a la dirección anterior (invitación, restablecer, confirmar); si era una invitación con el email mal escrito, hay que volver a enviarla. Cerrar sesión borra la cookie del navegador. |
 | Fuerza bruta y abuso | Límite de intentos de login por pareja IP+email y por IP (ventana de 15 minutos), de «¿Olvidaste tu contraseña?» y de cambios de contraseña. También hay topes de subidas (60 por minuto y persona), comentarios (30 por minuto; por tarea, 500 por defecto, configurable entre 1 y 1000 en *Administración → Ajustes*), subtareas (100 por tarea), documentos de Google (20 por minuto), creación de tareas (300 por minuto y persona), etiquetas y entregables (30 por minuto), suma de adjuntos por tarea y tamaño de cada paquete ZIP de una release (80 MB por defecto cada uno, configurables en cada proyecto entre 10 y 500 MB, y el de un archivo entre 1 y 100 MB; cada persona arma un ZIP a la vez y el servidor como mucho dos), cola de imágenes en proceso (más de 10 esperando: «inténtalo de nuevo en unos segundos») e informes PDF (5 por minuto y persona; se generan de uno en uno para que la app no se frene). |
@@ -533,6 +533,9 @@ Consulta la tabla completa en el `README.md`. Las imprescindibles son `DATABASE_
 
 | Variable | Para qué sirve |
 |---|---|
+| `TOKEN_SECRET` | Clave de los enlaces de email, códigos de recuperación y dispositivos recordados. Sin ella se usa `SESSION_SECRET`. Ver 4.4. |
+| `ENCRYPTION_KEY` | Clave con la que se cifran los secretos de 2FA (TOTP) y las conexiones con Google. Sin ella se usa `SESSION_SECRET`. Ver 4.4. |
+| `TOKEN_SECRET_PREVIOUS` / `ENCRYPTION_KEY_PREVIOUS` | Solo durante una rotación: la clave anterior, para seguir leyendo lo que se guardó con ella. Ver 4.4. |
 | `BACKUP_KEY` | Clave AES-256 de las copias automáticas. Genérala con `openssl rand -base64 32` y **guárdala también fuera de Railway**: sin ella las copias no se pueden leer. Sin la variable, las copias están desactivadas. |
 | `UPLOAD_QUOTA_MB_PER_PROJECT` | Cuota de adjuntos por proyecto en MB (por defecto 2048). |
 | `UPLOAD_QUOTA_MB_TOTAL` | Cuota total de adjuntos del servidor en MB (opcional; vacío = sin límite). |
@@ -555,9 +558,42 @@ Tests: `npm test` ejecuta los tests unitarios; `npm run test:db` ejecuta los de 
 | Una persona pierde su segundo paso | Con sus códigos de recuperación puede entrar; si no los tiene, un admin reinicia su verificación en dos pasos. |
 | Se pierde el acceso de todos los admins | Conéctate a la base de datos y promueve a un usuario existente: `UPDATE "User" SET role='ADMIN' WHERE email='persona@example.com';` |
 
-### 4.4 Rotar `SESSION_SECRET`
+### 4.4 Rotar claves (`SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY`)
 
-Cambia la variable en Railway y redespliega. Todas las sesiones dejan de ser válidas y cada usuario tendrá que volver a entrar. Las conexiones con Google también se invalidan (sus tokens se cifran con una clave derivada de este secreto): cada usuario tendrá que volver a conectarla. También dejan de valer los enlaces de email pendientes, los dispositivos recordados y las **apps de verificación en dos pasos** (su secreto se cifra con la misma clave): antes de rotar, avisa a los administradores; tras rotar, otro administrador les reinicia el segundo paso desde *Administración → Usuarios* y lo vuelven a configurar al entrar. Hazlo si sospechas que el secreto se ha filtrado.
+Pizarro usa tres claves, cada una para una cosa. Así, cambiar una no rompe lo que protegen las otras:
+
+| Clave | Qué protege | Si la cambias sin más… |
+|---|---|---|
+| `SESSION_SECRET` (obligatoria) | Las sesiones abiertas. | Todo el mundo tiene que volver a entrar. Nada más. |
+| `TOKEN_SECRET` (opcional) | Los enlaces de los emails (invitaciones, contraseñas, cambio de email), los códigos de recuperación de la verificación en dos pasos, los códigos enviados por email y los dispositivos recordados. | Dejan de valer los enlaces pendientes, los **códigos de recuperación** y los dispositivos recordados (se vuelve a pedir el segundo paso). |
+| `ENCRYPTION_KEY` (opcional) | Los secretos de las apps de verificación (TOTP) y las conexiones con Google, que se guardan cifrados. | Las apps de verificación dejan de funcionar (un admin tiene que reiniciar el segundo paso de cada persona) y hay que volver a conectar Google. |
+
+Si `TOKEN_SECRET` o `ENCRYPTION_KEY` no están definidas, se usa `SESSION_SECRET` en su lugar, exactamente como en las versiones anteriores: una instalación existente sigue funcionando sin tocar nada. Pero entonces rotar `SESSION_SECRET` lo rompe todo a la vez (sesiones, códigos, 2FA y Google). Por eso conviene separarlas. Todas deben tener al menos 32 caracteres; genera cada una con `openssl rand -base64 48`.
+
+**Separar las claves en una instalación existente (sin perder nada).** Copia el valor **actual** de `SESSION_SECRET` en dos variables nuevas, `TOKEN_SECRET` y `ENCRYPTION_KEY`, y redespliega. No cambia nada para nadie: son la misma clave con otro nombre. A partir de ahí ya puedes rotar `SESSION_SECRET` cuando quieras (siguiente procedimiento). En una instalación nueva, genera las tres desde el principio.
+
+**Rotar solo las sesiones** (p. ej. si sospechas que se ha filtrado `SESSION_SECRET`, o alguien ha dejado una sesión abierta en un equipo ajeno). Requisito: `TOKEN_SECRET` y `ENCRYPTION_KEY` definidas (ver el párrafo anterior).
+1. Genera un valor nuevo y ponlo en `SESSION_SECRET`.
+2. Redespliega. Todo el mundo vuelve a entrar; la verificación en dos pasos, los códigos de recuperación, los dispositivos recordados y Google siguen funcionando.
+
+**Rotar la clave de cifrado** (`ENCRYPTION_KEY`) sin perder la verificación en dos pasos ni Google:
+1. Copia el valor actual de `ENCRYPTION_KEY` en `ENCRYPTION_KEY_PREVIOUS` (si nunca la definiste, copia el de `SESSION_SECRET`: era la clave que se usaba).
+2. Pon un valor nuevo en `ENCRYPTION_KEY` y redespliega. La app lee lo antiguo con la clave anterior y lo vuelve a cifrar con la nueva a medida que se usa.
+3. Para no esperar, vuelve a cifrarlo todo de una vez: `node dist/rotate-keys.mjs` en el contenedor (con Docker Compose: `docker compose exec app node dist/rotate-keys.mjs`; en desarrollo: `npm run keys:rotate`). Con `--dry-run` solo cuenta lo que haría. Se puede repetir sin peligro y con la app en marcha.
+4. Si el comando termina con «0 ilegibles», quita `ENCRYPTION_KEY_PREVIOUS` y redespliega. Si quedan ilegibles, es que se cifraron con otra clave que ya no tienes: esas personas tendrán que configurar de nuevo su segundo paso (un admin lo reinicia en *Administración → Usuarios*) o reconectar Google.
+
+**Rotar `TOKEN_SECRET`** (poco habitual): pon el valor actual en `TOKEN_SECRET_PREVIOUS`, uno nuevo en `TOKEN_SECRET` y redespliega. Mientras la anterior siga definida, los enlaces pendientes, los códigos de recuperación y los dispositivos recordados siguen valiendo (los dispositivos se pasan solos a la clave nueva la próxima vez que se usan). Los enlaces caducan en horas (las invitaciones, en 72 h), pero los **códigos de recuperación no se pueden pasar a la clave nueva** (solo se guarda su huella): antes de quitar `TOKEN_SECRET_PREVIOUS`, pide a quien use la verificación en dos pasos que genere códigos nuevos en *Mi perfil*, o asume que los antiguos dejarán de valer.
+
+**Qué se pierde en cada caso, en resumen:**
+- Solo `SESSION_SECRET`: las sesiones abiertas.
+- `ENCRYPTION_KEY` con `ENCRYPTION_KEY_PREVIOUS` y el comando de rotación: nada.
+- `ENCRYPTION_KEY` sin la anterior: las apps de verificación (TOTP) y las conexiones con Google. La verificación por email no se ve afectada.
+- `TOKEN_SECRET` con `TOKEN_SECRET_PREVIOUS`: nada mientras la anterior siga puesta; al quitarla, los códigos de recuperación no renovados.
+- `TOKEN_SECRET` sin la anterior: los enlaces de email pendientes, los códigos de recuperación y los dispositivos recordados.
+
+**Guarda estas claves fuera del servidor** (en un gestor de contraseñas), junto con el resto del kit de recuperación: `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y `BACKUP_KEY`. Si pierdes el servidor y restauras una copia en otro, necesitas `BACKUP_KEY` para abrir la copia y `ENCRYPTION_KEY` (y `TOKEN_SECRET`) para que la verificación en dos pasos, los códigos de recuperación y Google sigan funcionando; `SESSION_SECRET` puede ser nueva (solo obliga a entrar de nuevo). Si no has definido `TOKEN_SECRET` ni `ENCRYPTION_KEY`, `SESSION_SECRET` hace de las tres: guárdala y reutilízala.
+
+Al cambiar cualquiera de estas variables en Railway o en el `.env` de Docker Compose, hace falta redesplegar o reiniciar la app (`docker compose up -d`).
 
 ### 4.5 Copias de seguridad y restauración
 
@@ -626,6 +662,7 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 - **Logs de la app:** *Administración → Logs* (ver 3.16), con la duración de cada acción: es el primer sitio donde mirar si algo va lento o falla.
 - **Logs del contenedor:** en Railway, *Deployments → View logs*. Los errores inesperados también salen ahí con el prefijo `[action]`, `[upload]` o `[uploads]`.
 - **Errores en el navegador:** la pantalla «Algo ha fallado» y cualquier excepción no capturada del navegador se registran en *Logs* (categoría *client*), con la página, el navegador y el código del error para cruzarlo con el del servidor.
+- **Diagnóstico para soporte:** *Administración → Ajustes → Descargar diagnóstico* (solo admins; 5 descargas cada 10 minutos; queda en *Logs* como `admin.doctor`) descarga un JSON con el estado técnico: versión y compilación, Node, memoria y tiempo encendido, qué variables documentadas están definidas (`set`, `unset` o `invalid`; **nunca su valor**), qué integraciones están activas, tamaño de la base de datos y filas por tabla, migraciones aplicadas y pendientes, espacio del disco de subidas, estado de las tareas de mantenimiento y de las copias, resultado de la comprobación de salud, sesiones activas y cuántos errores y avisos hubo en las últimas 24 h por tipo de acción. **No lleva datos personales**: ni mensajes de los logs, ni emails, ni nombres (se tachan de los mensajes de error), ni claves. Con Docker, lo mismo por consola: `docker compose exec app node dist/doctor.mjs > diagnostico.json`. Revísalo antes de enviarlo si quieres: es texto legible.
 - **Uso del volumen:** visible en la pestaña del volumen. Como referencia, una captura típica ocupa entre 50 y 300 KB.
 
 ### 4.10 Resolución de problemas
@@ -648,7 +685,7 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 | Google devuelve `redirect_uri_mismatch` al iniciar sesión | Falta la URI `/api/auth/google/callback` | Añádela al cliente OAuth (ver 4.7). |
 | «La integración con Google no está configurada» | Faltan `GOOGLE_CLIENT_ID`/`SECRET` o `APP_URL` | Configúralos y redespliega. |
 | Google devuelve `redirect_uri_mismatch` | La URI de redirección del cliente OAuth no coincide | Debe ser exactamente `APP_URL` + `/api/google/callback`. |
-| «Tu conexión con Google ha caducado» | Permiso revocado o `SESSION_SECRET` rotado | Vuelve a conectar en *Mi perfil*. |
+| «Tu conexión con Google ha caducado» | Permiso revocado, o se cambió la clave de cifrado (`ENCRYPTION_KEY`, o `SESSION_SECRET` si aquella no está definida) sin la anterior (ver 4.4) | Vuelve a conectar en *Mi perfil*. |
 | No llegan los emails | Credenciales SMTP o contraseña de aplicación incorrectas | Revisa los logs `[notify]` y la columna `deliveryError`. |
 | No llegan los WhatsApp | Plantilla sin aprobar, idioma distinto, token caducado o número no verificado (número de prueba) | Revisa los logs `[notify]`, el estado de la plantilla y `WHATSAPP_TEMPLATE_LANG`. |
 | Las páginas tardan en cargar a veces | Servicio en una región lejana, *App Sleeping* activado o conexiones a la base de datos frías | En Railway: pon la app y Postgres en la misma región cercana (p. ej. *EU West*) y desactiva *Serverless / App Sleeping*. Revisa en *Logs* la duración de las acciones. |

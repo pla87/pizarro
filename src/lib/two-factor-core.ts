@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
-import { labelledHmac } from "./auth-token-core";
+import { labelledHmac, labelledHmacCandidates } from "./auth-token-core";
 
 // Parte pura de la verificación en dos pasos (sin base de datos): base32, TOTP (RFC 6238, SHA-1),
 // URI otpauth://, códigos de recuperación y códigos por email.
@@ -121,6 +121,8 @@ export function normalizeRecoveryCode(input: string): string | null {
 
 /** Lo único que se guarda del código de recuperación. */
 export const hashRecoveryCode = (code: string): string => labelledHmac("recovery", code);
+/** Hashes posibles de un código de recuperación (clave actual y TOKEN_SECRET_PREVIOUS). */
+export const recoveryCodeHashes = (code: string): string[] => labelledHmacCandidates("recovery", code);
 
 // --- Código de 6 dígitos por email ---
 
@@ -130,3 +132,4 @@ export const generateEmailCode = (): string => String(randomInt(1_000_000)).padS
 
 /** Ligado al desafío concreto: un código no vale para otro inicio de sesión. */
 export const hashEmailCode = (challengeId: string, code: string): string => labelledHmac("2fa-email", `${challengeId}:${code}`);
+export const emailCodeHashes = (challengeId: string, code: string): string[] => labelledHmacCandidates("2fa-email", `${challengeId}:${code}`);

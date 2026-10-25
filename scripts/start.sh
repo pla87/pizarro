@@ -19,6 +19,11 @@ mkdir -p "$UPLOAD_DIR"
 missing=""
 [ -n "$DATABASE_URL" ] || missing="$missing DATABASE_URL"
 [ ${#SESSION_SECRET} -ge 32 ] || missing="$missing SESSION_SECRET(>=32)"
+# Opcionales, pero si se definen deben ser válidas (vacías = se usa SESSION_SECRET).
+for v in TOKEN_SECRET ENCRYPTION_KEY TOKEN_SECRET_PREVIOUS ENCRYPTION_KEY_PREVIOUS; do
+  eval "val=\${$v:-}"
+  [ -z "$val" ] || [ ${#val} -ge 32 ] || missing="$missing $v(>=32)"
+done
 if [ -n "$missing" ]; then
   echo "[start] ERROR: faltan variables de entorno:$missing"
   echo "[start] Con Docker Compose: revisa el fichero .env junto a compose.yml (docs/INSTALL.md)."

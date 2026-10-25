@@ -3,8 +3,8 @@ import { timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import type { Prisma } from "@/generated/prisma/client";
 import { sendTwoFactorCodeMail } from "./auth-mail";
-import { hashAuthToken, newToken } from "./auth-token-core";
-import { decryptSecret } from "./crypto";
+import { authTokenHashes, hashAuthToken, newToken } from "./auth-token-core";
+import { decryptSecretInfo, encryptSecret } from "./crypto";
 import { db } from "./db";
 import { isTrustedDevice, revokeTrustedDevices } from "./devices";
 import { AppError } from "./errors";
@@ -12,7 +12,8 @@ import { emailEnabled } from "./mail";
 import { rateLimit } from "./rate-limit";
 import { cookieSecure } from "./session-config";
 import {
-  EMAIL_CODE_TTL_MS, RECOVERY_CODE_COUNT, generateEmailCode, generateRecoveryCodes, hashEmailCode, hashRecoveryCode, normalizeRecoveryCode, verifyTotp,
+  EMAIL_CODE_TTL_MS, RECOVERY_CODE_COUNT, emailCodeHashes, generateEmailCode, generateRecoveryCodes, hashEmailCode, hashRecoveryCode, normalizeRecoveryCode,
+  recoveryCodeHashes, verifyTotp,
 } from "./two-factor-core";
 
 // Verificación en dos pasos del acceso con contraseña. Estado pendiente: una fila LoginChallenge cuyo token
@@ -62,7 +63,7 @@ export async function startChallenge(userId: string, kind: "LOGIN" | "SETUP", op
 export async function readChallenge(): Promise<Challenge | null> {
   const token = (await cookies()).get(CHALLENGE_COOKIE)?.value;
   if (!token || token.length > 100) return null;
-  const row = await db.loginChallenge.findUnique({ where: { tokenHash: hashAuthToken(token) }, include: challengeInclude });
+  const row = await db.loginChallenge.findFirst({ where: { tokenHash: { in: authTokenHashes(token) } }, include: challengeInclude });
   if (!row || row.kind === "ENROLL" || row.expiresAt.getTime() < Date.now() || !row.user.active) return null;
   return row;
 }
@@ -90,7 +91,7 @@ export async function sendEmailCode(ch: Pick<Challenge, "id">, user: { name: str
 
 export async function verifyEmailCode(ch: Challenge, code: string): Promise<boolean> {
   if (!ch.codeHash || !ch.codeExpiresAt || ch.codeExpiresAt.getTime() < Date.now() || !/^\d{6}$/.test(code)) return false;
-  if (!safeEq(ch.codeHash, hashEmailCode(ch.id, code))) return false;
+  if (!emailCodeHashes(ch.id, code).some((h) => safeEq(ch.codeHash!, h))) return false;
   // Un solo uso: solo una petición consigue gastarlo.
   const { count } = await db.loginChallenge.updateMany({ where: { id: ch.id, codeHash: ch.codeHash }, data: { codeHash: null, codeExpiresAt: null } });
   return count === 1;
@@ -98,16 +99,19 @@ export async function verifyEmailCode(ch: Challenge, code: string): Promise<bool
 
 export async function verifyTotpFor(secretEnc: string | null, code: string, userId: string | null, lastStep: number | null): Promise<boolean> {
   if (!secretEnc) return false;
-  const step = verifyTotp(decryptSecret(secretEnc), code, Date.now(), { lastStep });
+  const { plain, stale } = decryptSecretInfo(secretEnc);
+  const step = verifyTotp(plain, code, Date.now(), { lastStep });
   if (step === null) return false;
   if (userId === null) return true; // alta: el código aún no se «gasta»
+  // Cifrado con la clave anterior o en el formato antiguo: se vuelve a cifrar con la actual (solo si nadie lo ha cambiado).
+  if (stale) await db.user.updateMany({ where: { id: userId, totpSecretEnc: secretEnc }, data: { totpSecretEnc: encryptSecret(plain) } }).catch(() => {});
   // Un paso de 30 s solo se acepta una vez.
   const { count } = await db.user.updateMany({ where: { id: userId, OR: [{ totpLastStep: null }, { totpLastStep: { lt: step } }] }, data: { totpLastStep: step } });
   return count === 1;
 }
 
 async function consumeRecoveryCode(userId: string, code: string): Promise<boolean> {
-  const { count } = await db.recoveryCode.updateMany({ where: { userId, codeHash: hashRecoveryCode(code), usedAt: null }, data: { usedAt: new Date() } });
+  const { count } = await db.recoveryCode.updateMany({ where: { userId, codeHash: { in: recoveryCodeHashes(code) }, usedAt: null }, data: { usedAt: new Date() } });
   return count === 1;
 }
 

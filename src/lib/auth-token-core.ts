@@ -1,4 +1,5 @@
-import { createHmac, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
+import { labelledHmac, labelledHmacCandidates } from "./keyring";
 
 // Parte pura de los enlaces de un solo uso (sin base de datos): generación, hash y caducidad.
 
@@ -15,16 +16,9 @@ export const TOKEN_TTL_MS: Record<TokenPurpose, number> = {
   INVITE: 72 * HOUR,
 };
 
-function secret(): string {
-  const s = process.env.SESSION_SECRET;
-  if (!s || s.length < 32) throw new Error("SESSION_SECRET debe tener al menos 32 caracteres");
-  return s;
-}
-
-/** HMAC con etiqueta de dominio: un valor de un uso nunca coincide con el de otro (sesión, enlace, dispositivo). */
-export function labelledHmac(label: string, value: string): string {
-  return createHmac("sha256", secret()).update(`${label}:${value}`).digest("hex");
-}
+/** HMAC con etiqueta de dominio: un valor de un uso nunca coincide con el de otro (sesión, enlace, dispositivo).
+ * La clave es TOKEN_SECRET (o SESSION_SECRET si no se ha definido); ver lib/keyring.ts. */
+export { labelledHmac, labelledHmacCandidates } from "./keyring";
 
 export const newToken = (): string => randomBytes(32).toString("base64url");
 
@@ -33,6 +27,10 @@ export const hashAuthToken = (token: string): string => labelledHmac("auth-token
 
 /** Idem para la cookie de dispositivo conocido. */
 export const hashDeviceId = (deviceId: string): string => labelledHmac("device", deviceId);
+
+/** Hashes con los que buscar un token o un dispositivo: el de la clave actual y, durante la rotación, el de TOKEN_SECRET_PREVIOUS. */
+export const authTokenHashes = (token: string): string[] => labelledHmacCandidates("auth-token", token);
+export const deviceIdHashes = (deviceId: string): string[] => labelledHmacCandidates("device", deviceId);
 
 export function tokenExpiry(purpose: TokenPurpose, now: number = Date.now()): Date {
   return new Date(now + TOKEN_TTL_MS[purpose]);
