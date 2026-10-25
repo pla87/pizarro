@@ -15,6 +15,7 @@ export async function generateMetadata() {
 // Códigos fijos que deja /api/auth/google/*: nunca texto libre en la URL.
 const ERRORS: Record<string, string> = {
   google_noaccount: "No hay ninguna cuenta con ese email de Google; pide a un administrador que te dé de alta.",
+  google_unlinked: "Tu cuenta de Google está desvinculada. Entra con tu contraseña o pide a un administrador que la permita de nuevo.",
   google_domain: "Usa una cuenta de Google del dominio de la empresa.",
   google_unverified: "Google no ha verificado ese email.",
   google_state: "El inicio de sesión con Google ha caducado o no es válido. Vuelve a intentarlo.",

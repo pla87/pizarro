@@ -1,7 +1,7 @@
 import "server-only";
 import { intlLocale, makeT, toLocale, type T } from "../i18n/core";
 import { formatDate } from "./format";
-import { escapeHtml, sendMail, type MailMessage } from "./mail";
+import { appUrl, escapeHtml, sendMail, type MailMessage } from "./mail";
 import { TOKEN_TTL_MS } from "./auth-token-core";
 import { EMAIL_CODE_TTL_MS } from "./two-factor-core";
 
@@ -182,8 +182,24 @@ export function sendGoogleUnlinkedMail(user: Recipient): Promise<void> {
     subject: t("Se ha desvinculado tu cuenta de Google de Pizarro"),
     paragraphs: [
       t("Hola, {name}:", { name: user.name }),
-      t("Un administrador ha desvinculado tu cuenta de Google del acceso a Pizarro y se han cerrado tus sesiones. Puedes entrar con tu contraseña o volver a entrar con Google."),
+      t("Un administrador ha desvinculado tu cuenta de Google del acceso a Pizarro y se han cerrado tus sesiones. Entra con tu contraseña; después podrás volver a entrar con Google."),
       t("Si no esperabas este cambio, avisa a un administrador."),
     ],
+  }));
+}
+
+/** Aviso a los administradores: la última copia de seguridad correcta tiene más de 48 h (o no existe). */
+export function sendBackupAlertMail(admin: Recipient, info: { lastAt: string | null }): Promise<void> {
+  return send(admin, admin.locale, (t) => ({
+    subject: t("Pizarro: la copia de seguridad está atrasada"),
+    paragraphs: [
+      t("Hola, {name}:", { name: admin.name }),
+      info.lastAt
+        ? t("La última copia de seguridad correcta es del {date}, hace más de 48 horas.", { date: formatDate(info.lastAt, "dateTime", intlLocale(toLocale(admin.locale))) })
+        : t("Todavía no hay ninguna copia de seguridad correcta y la clave BACKUP_KEY está configurada."),
+      t("Revisa los Logs de Administración y prueba «Crear copia ahora» en Administración → Copias de seguridad."),
+    ],
+    button: { label: t("Abrir Copias de seguridad"), url: `${appUrl()}/admin/backups` },
+    note: t("Este aviso se repite como mucho una vez al día mientras el problema continúe."),
   }));
 }

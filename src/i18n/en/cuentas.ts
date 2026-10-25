@@ -129,13 +129,21 @@ export const cuentas: Record<string, string> = {
   "Desvincular Google de {name}": "Unlink Google from {name}",
   "Desvincular Google": "Unlink Google",
   "Desvincular": "Unlink",
-  "Se cerrarán sus sesiones. La próxima vez tendrá que entrar con su contraseña o volver a entrar con Google para vincular la cuenta de nuevo (si entra con Google con el mismo email, se vincula automáticamente). Los documentos de Drive no se ven afectados.":
-    "Their sessions will be closed. Next time they will have to sign in with their password, or sign in with Google again to link the account again (if they sign in with Google using the same email, it is linked automatically). Drive documents are not affected.",
+  "Se cerrarán sus sesiones. Tendrá que entrar con su contraseña: entrar con Google con el mismo email no vuelve a vincular la cuenta hasta que use su contraseña o tú pulses «Permitir Google». Los documentos de Drive no se ven afectados.":
+    "Their sessions will be closed. They will have to sign in with their password: signing in with Google using the same email will not link the account again until they use their password or you click \"Allow Google\". Drive documents are not affected.",
+  "Google permitido: podrá volver a vincularse al entrar con Google": "Google allowed: it can be linked again when they sign in with Google",
+  "Google desvinculado: no se vuelve a enlazar solo": "Google unlinked: it will not link again on its own",
+  "Google bloqueado": "Google blocked",
+  "Permitir Google a {name}": "Allow Google for {name}",
+  "Permitir Google": "Allow Google",
+  "Esa persona no tiene Google bloqueado.": "That person does not have Google blocked.",
+  "Tu cuenta de Google está desvinculada. Entra con tu contraseña o pide a un administrador que la permita de nuevo.":
+    "Your Google account is unlinked. Sign in with your password or ask an administrator to allow it again.",
   "Google desvinculado: se han cerrado sus sesiones": "Google unlinked: their sessions have been closed",
   "Esa persona no tiene una cuenta de Google vinculada.": "That person has no linked Google account.",
   "Se ha desvinculado tu cuenta de Google de Pizarro": "Your Google account has been unlinked from Pizarro",
-  "Un administrador ha desvinculado tu cuenta de Google del acceso a Pizarro y se han cerrado tus sesiones. Puedes entrar con tu contraseña o volver a entrar con Google.":
-    "An administrator has unlinked your Google account from Pizarro sign-in and your sessions have been closed. You can sign in with your password or sign in with Google again.",
+  "Un administrador ha desvinculado tu cuenta de Google del acceso a Pizarro y se han cerrado tus sesiones. Entra con tu contraseña; después podrás volver a entrar con Google.":
+    "An administrator has unlinked your Google account from Pizarro sign-in and your sessions have been closed. Sign in with your password; after that you can sign in with Google again.",
   "Si no esperabas este cambio, avisa a un administrador.": "If you were not expecting this change, tell an administrator.",
   "Ha entrado con Google":
     "Has signed in with Google",

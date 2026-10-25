@@ -259,20 +259,20 @@ describe("crear y cambiar la visibilidad de proyectos", () => {
     expectOk(await addProjectMember(created.id, member.id));
     await loginAs(member);
     expectFail(await setProjectVisibility(created.id, "PRIVATE"), FORBIDDEN);
-    // Tras hacerlo privado solo queda quien lo hizo: el asignado y otros administradores dejan de verlo.
+    // Tras hacerlo privado el asignado sigue como miembro (con su tarjeta); otros administradores dejan de verlo.
     const column = await db.column.findFirstOrThrow({ where: { projectId: created.id } });
     const task = await db.task.create({ data: { projectId: created.id, columnId: column.id, title: "T", kindId: (await makeKind()).id, position: 1000, assigneeId: member.id } });
     await loginAs(admin);
     expectOk(await setProjectVisibility(created.id, "PRIVATE"));
-    assert.deepEqual((await db.projectMember.findMany({ where: { projectId: created.id } })).map((m) => m.userId), [admin.id]);
+    assert.deepEqual((await db.projectMember.findMany({ where: { projectId: created.id } })).map((m) => m.userId).sort(), [admin.id, member.id].sort());
     assert.equal(await db.adminProjectPick.count({ where: { projectId: created.id } }), 0);
-    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).assigneeId, null);
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).assigneeId, member.id);
     const other = await makeUser({ role: "ADMIN" });
     await asUser(other, async () => expectFail(await setProjectVisibility(created.id, "TEAM"), NOT_FOUND));
     await loginAs(admin);
-    // De vuelta a equipo: se conserva el miembro administrador como proyecto elegido.
+    // De vuelta a equipo: el miembro sigue asignado y el administrador pasa a proyecto elegido.
     expectOk(await setProjectVisibility(created.id, "TEAM"));
-    assert.equal(await db.projectMember.count({ where: { projectId: created.id } }), 0);
+    assert.equal(await db.projectMember.count({ where: { projectId: created.id } }), 1);
     assert.equal(await db.adminProjectPick.count({ where: { projectId: created.id, userId: admin.id } }), 1);
   });
 });

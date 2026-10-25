@@ -186,7 +186,8 @@ export async function resetUserTwoFactor(userId: string) {
 
 /**
  * Desvincula la cuenta de Google del acceso (googleSub = null) y cierra sus sesiones. No toca la conexión con
- * Drive (Docs/Sheets), que es independiente. Si la persona vuelve a entrar con Google con el mismo email, se enlaza de nuevo.
+ * Drive (Docs/Sheets), que es independiente. Queda marcada (googleRelinkBlocked): entrar con Google por email NO la
+ * vuelve a enlazar hasta que la persona entre con su contraseña o un admin pulse «Permitir Google» (allowGoogleRelink).
  */
 export async function unlinkGoogle(userId: string) {
   return runAction({ name: "users.unlinkGoogle", args: [userId] }, async () => {
@@ -196,12 +197,25 @@ export async function unlinkGoogle(userId: string) {
     if (!user) throw notFound();
     if (!user.googleSub) throw new AppError("Esa persona no tiene una cuenta de Google vinculada.");
     await db.$transaction([
-      db.user.update({ where: { id: user.id }, data: { googleSub: null } }),
+      db.user.update({ where: { id: user.id }, data: { googleSub: null, googleRelinkBlocked: true } }),
       db.session.deleteMany({ where: { userId: user.id } }),
     ]);
     revokeUser(user.id);
-    describeAction(`Desvinculó la cuenta de Google de «${user.name}»`);
+    describeAction(`Desvinculó la cuenta de Google de «${user.name}» (no se vuelve a enlazar sola)`);
     if (emailEnabled()) sendMailInBackground("aviso de Google desvinculado", () => sendGoogleUnlinkedMail(user));
+    revalidatePath("/admin/users");
+  });
+}
+
+/** Quita el bloqueo de re-enlazado de Google: el próximo acceso con Google por email vuelve a vincular la cuenta. */
+export async function allowGoogleRelink(userId: string) {
+  return runAction({ name: "users.allowGoogleRelink", args: [userId] }, async () => {
+    await requireAdmin();
+    const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, name: true, googleRelinkBlocked: true } });
+    if (!user) throw notFound();
+    if (!user.googleRelinkBlocked) throw new AppError("Esa persona no tiene Google bloqueado.");
+    await db.user.update({ where: { id: user.id }, data: { googleRelinkBlocked: false } });
+    describeAction(`Permitió de nuevo el acceso con Google a «${user.name}»`);
     revalidatePath("/admin/users");
   });
 }
