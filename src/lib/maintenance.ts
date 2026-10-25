@@ -155,6 +155,8 @@ export function startMaintenance(): void {
   const g = globalThis as unknown as { __pzMaintenance?: boolean };
   if (g.__pzMaintenance) return;
   g.__pzMaintenance = true;
+  // Avisos de cambio de fecha agrupados: se revisan cada 30 s (ver due-notices.ts).
+  void import("@/lib/due-notices").then((m) => m.startDueNoticeScheduler()).catch((err) => console.error("[maintenance] avisos de fecha", err));
   // Copias de adjuntos de releases que quedaron a medias por un reinicio: se retoman al poco de arrancar (una vez).
   setTimeout(() => void resumeReleaseCopies(), RESUME_AFTER_MS).unref?.();
   setTimeout(() => {

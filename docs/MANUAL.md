@@ -337,7 +337,7 @@ Se genera en el idioma de quien lo pide.
 - **Cuándo recibes un aviso:**
   - te **mencionan**;
   - te **asignan** una tarea;
-  - cambia la **fecha límite** de una tarea tuya;
+  - cambia la **fecha límite** de una tarea tuya (el aviso sale unos 3 minutos después del último cambio y recoge solo la fecha final, así que mover la tarjeta varias veces seguidas genera un único aviso; si acaba en su fecha original, no se avisa; si la tarea se borra, se archiva o deja de ser tuya mientras tanto, tampoco);
   - hay un **comentario** en una tarea que **sigues**;
   - **responden a tu comentario**.
 - **Seguir una tarea:** botón de seguir / dejar de seguir en el detalle. Quien crea, es asignado o comenta una tarea la sigue.

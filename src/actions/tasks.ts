@@ -23,7 +23,7 @@ import { spawnRecurrences } from "@/lib/recurrence";
 import { createDriveFile, type GoogleFileKind } from "@/lib/google";
 import { shareRule } from "@/lib/google-share";
 import { excerpt as makeExcerpt, extractMentionIds, mentionsToPlain } from "@/lib/mentions";
-import { dueChangeExcerpt } from "@/lib/notification-text";
+import { dropPendingDueChanges, queueDueChange } from "@/lib/due-notices";
 import { followTask, notifyMentions, notifyTask, taskFollowerIds } from "@/lib/notify";
 import { isFollowing } from "@/lib/followers";
 import { loadTaskHistory } from "@/lib/task-events";
@@ -473,8 +473,11 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
     }
     const oldDue = dateToIso(prev.dueDate);
     const assigneeNow = data.assigneeId !== undefined ? data.assigneeId : prev.assigneeId;
+    // Cambio de fecha: no avisa al instante, sino tras unos minutos sin más cambios y con la fecha final
+    // (due-notices.ts). Al cambiar de responsable se descarta lo pendiente de quien ya no lo es.
+    if (assigneeChanged) await dropPendingDueChanges(taskId, data.assigneeId);
     if (dueDate !== undefined && dueDate !== oldDue && assigneeNow && !assigneeChanged) {
-      await notifyTask({ type: "DUE_CHANGED", actorId: user.id, taskId, projectId, recipientIds: [assigneeNow], excerpt: dueChangeExcerpt(oldDue, dueDate) });
+      await queueDueChange({ taskId, recipientId: assigneeNow, actorId: user.id, from: oldDue, to: dueDate });
     }
     return loadBoardTask(taskId);
   });
