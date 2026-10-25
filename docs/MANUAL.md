@@ -295,7 +295,7 @@ Desde el menú «⋯» de cada columna:
 ```
 
    - **Códigos:** cada punto lleva un código con el **número de la release**, la inicial del tipo y un número por tipo: en la release 32, `R32F1`, `R32F2`… `R32C1`. Si dos tipos empiezan por la misma letra, el segundo usa más letras (p. ej. D y DI). Si otra persona despliega una release mientras generas la tuya, al marcarla como desplegada se avisa para volver a generar el texto con el número correcto.
-   - **Títulos con código:** al marcar la release como desplegada, cada tarea que sale de la columna (a *En producción* o al archivo) pasa a llamarse con su código delante: `R32F1: Nueva pantalla de exportación`. Las tareas fijas no se renombran. Si la tarea ya llevaba el código de otra release, se sustituye por el nuevo; si no cabe en 200 caracteres, se recorta el final. Deshacer el despliegue devuelve los títulos originales; la siguiente aparición de una tarea repetitiva nace con el título original, y el texto de la release y el histórico conservan el título sin código.
+   - **Títulos con código:** al marcar la release como desplegada, cada tarea que sale de la columna (a *En producción* o al archivo) pasa a llamarse con su código delante: `R32F1: Nueva pantalla de exportación`. Las tareas fijas no se renombran. Si la tarea ya llevaba el código de otra release, el nuevo se antepone sin quitar el anterior; si no cabe en 210 caracteres, se recorta el final. Deshacer el despliegue devuelve los títulos originales; la siguiente aparición de una tarea repetitiva nace con el título original, y el texto de la release y el histórico conservan el título sin código.
    - **Descripción:** la de cada tarea va debajo de su punto. Las menciones salen como `@Nombre`.
    - **Adjuntos:** se nombran `código_nombre-original.webp` y se listan bajo su punto. Si alguna tarea tiene adjuntos, aparece el botón **Descargar adjuntos (N)**, que baja un ZIP (`release-AAAA-MM-DD-adjuntos.zip`) con todos los ficheros ya renombrados.
 
@@ -338,7 +338,7 @@ Se genera en el idioma de quien lo pide.
 - **Cuándo recibes un aviso:**
   - te **mencionan**;
   - te **asignan** una tarea;
-  - cambia la **fecha límite** de una tarea tuya (el aviso sale unos 3 minutos después del último cambio y recoge solo la fecha final, así que mover la tarjeta varias veces seguidas genera un único aviso; si acaba en su fecha original, no se avisa; si la tarea se borra, se archiva o deja de ser tuya mientras tanto, tampoco);
+  - cambia la **fecha límite** de una tarea tuya (el aviso sale unos 5 minutos después del último cambio y recoge solo la fecha final, así que mover la tarjeta varias veces seguidas genera un único aviso; si acaba en su fecha original, no se avisa; si la tarea se borra, se archiva o deja de ser tuya mientras tanto, tampoco);
   - hay un **comentario** en una tarea que **sigues**;
   - **responden a tu comentario**.
 - **Seguir una tarea:** botón de seguir / dejar de seguir en el detalle. Quien crea, es asignado o comenta una tarea la sigue.

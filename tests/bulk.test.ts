@@ -12,5 +12,5 @@ test("respeta números y guiones que forman parte del título", () => {
 });
 
 test("recorta títulos demasiado largos", () => {
-  assert.equal(parseTaskLines("x".repeat(500))[0]!.length, 200);
+  assert.equal(parseTaskLines("x".repeat(500))[0]!.length, 210);
 });

@@ -60,7 +60,7 @@ export const COLOR_NAME: Record<string, string> = {
   "#0ea5e9": "Celeste", "#6366f1": "Índigo", "#1e3a8a": "Azul marino", "#a855f7": "Violeta", "#ec4899": "Rosa",
 };
 
-export const MAX_TITLE = 200;
+export const MAX_TITLE = 210;
 export const MAX_DESCRIPTION = 20_000;
 export const MAX_TEMPLATE = 20_000;
 export const MAX_RELEASE_CONTENT = 200_000;

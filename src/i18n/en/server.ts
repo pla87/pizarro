@@ -25,6 +25,7 @@ export const server: Record<string, string> = {
   "Sesión caducada. Vuelve a iniciar sesión.": "Session expired. Please sign in again.",
   // Validación
   "El título es obligatorio.": "The title is required.",
+  "Máximo 210 caracteres.": "Maximum 210 characters.",
   "Máximo 200 caracteres.": "Maximum 200 characters.",
   "El nombre es obligatorio.": "The name is required.",
   "Máximo 80 caracteres.": "Maximum 80 characters.",

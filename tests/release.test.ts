@@ -6,6 +6,7 @@ import {
   computeReleaseCodes,
   defaultReleaseTitle,
   evergreenDue,
+  releasesUntilDue,
   nextEvergreenEvery,
   formatReleaseLine,
   releaseFileName,
@@ -14,6 +15,7 @@ import {
   titleWithReleaseCode,
   zonedDayRange,
 } from "../src/lib/release";
+import { MAX_TITLE } from "../src/lib/constants";
 
 const kinds = [
   { id: "k1", name: "Funcionalidad" },
@@ -189,16 +191,28 @@ test("nextEvergreenEvery cicla 1 > 2 > 3 > 1", () => {
   assert.deepEqual([1, 2, 3].map(nextEvergreenEvery), [2, 3, 1]);
 });
 
-test("titleWithReleaseCode antepone el código, sustituye uno anterior y respeta el máximo", () => {
+test("titleWithReleaseCode antepone el código (también si ya había otro) y respeta el máximo", () => {
   assert.equal(titleWithReleaseCode("Respuesta", "R3R1"), "R3R1: Respuesta");
-  // Desplegada otra vez en una release posterior: el código nuevo sustituye al viejo.
-  assert.equal(titleWithReleaseCode("R3R1: Respuesta", "R5F2"), "R5F2: Respuesta");
+  // Desplegada otra vez en una release posterior: el código nuevo se antepone, no sustituye al viejo.
+  assert.equal(titleWithReleaseCode("R3R1: Respuesta", "R5F2"), "R5F2: R3R1: Respuesta");
   // Algo parecido pero sin «: » no es un código.
   assert.equal(titleWithReleaseCode("R3R1 Respuesta", "R5F2"), "R5F2: R3R1 Respuesta");
   // Se recorta el final del título original, no el código.
-  const out = titleWithReleaseCode("x".repeat(300), "R12DI3", 200);
-  assert.equal(out.length, 200);
+  const out = titleWithReleaseCode("x".repeat(300), "R12DI3", 210);
+  assert.equal(out.length, 210);
   assert.ok(out.startsWith("R12DI3: xxx"));
+  // Con un código previo, se recorta el final del original y el código anterior se conserva.
+  const twice = titleWithReleaseCode(`R3F2: ${"x".repeat(300)}`, "R5F1");
+  assert.equal(twice.length, MAX_TITLE);
+  assert.ok(twice.startsWith("R5F1: R3F2: xxx"));
   // Una mención partida por el recorte se descarta entera.
   assert.equal(titleWithReleaseCode("ab @[Ana](user:abc123)", "R1F1", 12), "R1F1: ab");
+});
+
+test("releasesUntilDue: releases que faltan para que toque una tarea fija", () => {
+  assert.deepEqual([1, 2, 3, 4, 5, 6].map((n) => releasesUntilDue(n, 1)), [0, 0, 0, 0, 0, 0]);
+  assert.deepEqual([1, 2, 3, 4, 5, 6].map((n) => releasesUntilDue(n, 2)), [1, 0, 1, 0, 1, 0]);
+  assert.deepEqual([1, 2, 3, 4, 5, 6].map((n) => releasesUntilDue(n, 3)), [2, 1, 0, 2, 1, 0]);
+  // Coherente con evergreenDue.
+  for (const every of [1, 2, 3]) for (let n = 1; n <= 9; n++) assert.equal(releasesUntilDue(n, every) === 0, evergreenDue(n, every));
 });

@@ -184,11 +184,11 @@ test("menciones: trozos de texto y etiquetas", () => {
   assert.deepEqual(splitMentions("sin menciones"), ["sin menciones"]);
 });
 
-test("título: el límite de 200 cuenta el texto visible, no la mención guardada", () => {
+test("título: el límite de 210 cuenta el texto visible, no la mención guardada", () => {
   const mention = mentionToken("Ana", "cl1234567890abcdefghij123");
   assert.ok(mention.length > 30);
-  assert.equal(taskTitle.safeParse(`${"a".repeat(190)} ${mention}`).success, true);
-  assert.equal(taskTitle.safeParse("a".repeat(201)).success, false);
+  assert.equal(taskTitle.safeParse(`${"a".repeat(200)} ${mention}`).success, true);
+  assert.equal(taskTitle.safeParse("a".repeat(211)).success, false);
   assert.equal(taskTitle.safeParse("   ").success, false);
 });
 
