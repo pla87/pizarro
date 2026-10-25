@@ -115,6 +115,12 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
   const [navigating, startNav] = useTransition();
   // Fechas cambiadas aquí y aún no reflejadas en los datos del servidor (cambio optimista).
   const [overrides, setOverrides] = useState<Record<string, string>>({});
+  // Datos nuevos del servidor (ya con el cambio, o con el de otra persona): las fechas optimistas sobran.
+  const [seenTasks, setSeenTasks] = useState(tasks);
+  if (seenTasks !== tasks) {
+    setSeenTasks(tasks);
+    setOverrides({});
+  }
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);

@@ -631,6 +631,7 @@ model Notification {
   task           Task?            @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt, createdAt])
+  @@index([userId, createdAt])
   @@index([taskId])
   @@index([readAt, createdAt])
   @@index([actorId])
