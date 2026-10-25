@@ -100,6 +100,15 @@ export interface BoardData {
   today: string;
 }
 
+/** Opciones de un proyecto para el diálogo «Nueva tarea» cuando se crea en un proyecto distinto del abierto. */
+export interface ProjectFormData {
+  project: BoardData["project"];
+  columns: BoardColumn[];
+  users: UserOption[];
+  kinds: KindOption[];
+  deliverables: DeliverableOption[];
+}
+
 export interface TaskLinkInfo {
   id: string;
   kind: "GOOGLE_DOC" | "GOOGLE_SHEET";

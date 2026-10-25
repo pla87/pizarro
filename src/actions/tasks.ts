@@ -5,7 +5,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjectAccess, assertTaskAccess, loadTaskWithAccess, visibleProjectsWhere } from "@/lib/access";
-import { appTimeZone, boardTaskSelect, loadBoardTask, toBoardTask } from "@/lib/board";
+import { appTimeZone, boardTaskSelect, listKinds, loadBoardTask, projectUsers, toBoardTask } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
 import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { addUndo, captureTasks, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, type TaskField, type UndoOp } from "@/lib/undo";
@@ -26,8 +26,10 @@ import { dueChangeExcerpt } from "@/lib/notification-text";
 import { followTask, notifyMentions, notifyTask, taskFollowerIds } from "@/lib/notify";
 import { isFollowing } from "@/lib/followers";
 import { loadTaskHistory } from "@/lib/task-events";
-import type { ArchivedTask, BoardTask, CommentInfo, SubtaskInfo, TaskDetail, TaskLinkInfo } from "@/lib/types";
-import { getT } from "@/i18n/server";
+import { localizeGeneralKinds } from "@/lib/kinds-localize";
+import { MAX_UPLOAD_BYTES } from "@/lib/uploads";
+import type { ArchivedTask, BoardTask, CommentInfo, ProjectFormData, SubtaskInfo, TaskDetail, TaskLinkInfo } from "@/lib/types";
+import { getLocale, getT } from "@/i18n/server";
 
 async function assertColumnInProject(columnId: string, projectId: string) {
   const ok = await db.column.count({ where: { id: columnId, projectId } });
@@ -159,6 +161,33 @@ export async function createTask(input: z.input<typeof createSchema>) {
     await notifyMentions({ actorId: user.id, taskId: task.id, projectId: data.projectId, recipientIds: extractMentionIds(data.title).filter((id) => !descMentions.includes(id)), text: data.title });
     if (data.assigneeId) await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId: task.id, projectId: data.projectId, recipientIds: [data.assigneeId], excerpt: makeExcerpt(data.title) });
     return loadBoardTask(task.id);
+  });
+}
+
+/**
+ * Opciones de un proyecto para crear una tarea desde otro tablero: columnas, tipos (con las reglas de los
+ * generales y su traducción), entregables, personas asignables y límites de adjuntos. Exige acceso al proyecto.
+ */
+export async function getProjectFormData(projectId: string) {
+  return runAction({ name: "tasks.getProjectFormData", args: [projectId] }, async (): Promise<ProjectFormData> => {
+    const user = await requireUser();
+    const id = v.id.parse(projectId);
+    await assertProjectAccess(user, id);
+    const project = await db.project.findUniqueOrThrow({ where: { id }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true } });
+    const [columns, users, deliverables, kinds, locale] = await Promise.all([
+      db.column.findMany({ where: { projectId: id }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true } }),
+      projectUsers(id, project),
+      db.deliverable.findMany({ where: { projectId: id }, orderBy: [{ position: "asc" }], select: { id: true, name: true, dueDate: true } }),
+      listKinds(id),
+      getLocale(),
+    ]);
+    return {
+      project: { id: project.id, name: project.name, attachMaxMb: project.taskAttachMaxMb, fileMaxMb: Math.round(MAX_UPLOAD_BYTES / 1024 / 1024) },
+      columns,
+      users,
+      kinds: localizeGeneralKinds(kinds, locale),
+      deliverables: deliverables.map((d) => ({ id: d.id, name: d.name, dueDate: dateToIso(d.dueDate) })),
+    };
   });
 }
 
