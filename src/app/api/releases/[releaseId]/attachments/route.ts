@@ -4,7 +4,7 @@ import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { releaseZipName } from "@/lib/release";
-import { acquireZipSlot, buildZipPart, planZipEntries, zipPlanBody, zipRateKey, zipRequestMode, type ZipEntry } from "@/lib/release-zip";
+import { acquireZipSlot, buildZipPart, planZipEntries, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict, type ZipEntry } from "@/lib/release-zip";
 import { getCurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { readReleaseAttachmentFile, releaseAttachmentFileSize } from "@/lib/uploads";
@@ -38,11 +38,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
   for (const a of release.attachments) {
     const size = await releaseAttachmentFileSize(a.id);
     // Fichero ausente en disco: se omite en lugar de romper toda la descarga.
-    if (size !== null) entries.push({ name: a.fileName, size, read: () => readReleaseAttachmentFile(a.id) });
+    if (size !== null) entries.push({ id: a.id, name: a.fileName, size, read: () => readReleaseAttachmentFile(a.id) });
   }
   if (entries.length === 0) return new Response(t("No hay adjuntos disponibles"), { status: 404 });
   const packages = planZipEntries(entries, maxMb);
-  if (mode.kind === "plan") return Response.json(zipPlanBody(packages, maxMb), { headers: { "Cache-Control": "private, no-store" } });
+  if (mode.kind === "plan") return Response.json(zipPlanBody(packages, maxMb, entries), { headers: { "Cache-Control": "private, no-store" } });
+  const conflict = zipVersionConflict(mode, entries, maxMb, t("Los adjuntos han cambiado mientras se descargaban. Vuelve a descargarlos."));
+  if (conflict) return conflict;
   const pkg = packages[mode.part - 1];
   if (!pkg) return new Response(t("No encontrado"), { status: 404 });
   // Uno a la vez por persona y pocos en todo el servidor (cada paquete se arma en memoria).

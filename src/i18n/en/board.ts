@@ -252,4 +252,10 @@ export const board: Record<string, string> = {
   "Descartar": "Discard",
   "Volver a la selección": "Back to the selection",
   "Desplegar la release": "Deploy the release",
+  "Cada dos": "Every other",
+  "Cada tres": "Every third",
+  "En todas": "Every release",
+  "Incluir en todas las releases": "Include in every release",
+  "Incluir cada dos releases": "Include in every other release",
+  "Incluir cada tres releases": "Include in every third release",
 };

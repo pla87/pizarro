@@ -253,3 +253,16 @@ export function isoDate(date = new Date()): string {
 export function releaseFileName(date: Date, ext: "md" | "txt"): string {
   return `release-${isoDate(date)}.${ext}`;
 }
+
+/** Cadencias de una tarea fija: cada cuántas releases entra (1 = todas, 2 = las pares, 3 = múltiplos de 3). */
+export const EVERGREEN_CADENCES = [1, 2, 3] as const;
+
+/** Siguiente cadencia al pulsar el interruptor: 1 → 2 → 3 → 1. */
+export function nextEvergreenEvery(every: number): number {
+  return every === 1 ? 2 : every === 2 ? 3 : 1;
+}
+
+/** ¿Le toca a una tarea fija con esa cadencia entrar en la release con ese número? */
+export function evergreenDue(releaseNumber: number, every: number): boolean {
+  return every <= 1 || releaseNumber % every === 0;
+}

@@ -121,6 +121,18 @@ async function sendPeriodicMail(now: Date = new Date()): Promise<number> {
   return (await sendDueDigests(now)) + (await sendDueReports(now));
 }
 
+const RESUME_AFTER_MS = 10 * 1000;
+
+/** Retoma las copias de adjuntos de releases interrumpidas por un reinicio; nunca lanza. */
+async function resumeReleaseCopies(): Promise<void> {
+  try {
+    const { resumePendingReleaseAttachments } = await import("@/lib/release-attachments");
+    await resumePendingReleaseAttachments();
+  } catch (err) {
+    console.error("[maintenance] reanudar adjuntos de releases", err);
+  }
+}
+
 /** Una pasada de mantenimiento; nunca lanza. */
 async function runMaintenance(): Promise<void> {
   for (const job of [purgeNonImageCopies, purgeOldUndo, purgeOldNotifications, purgeAuthData, purgeOldTaskHistory, purgeOrphanFiles, backupJob, restoreTestJob, sendPeriodicMail]) {
@@ -137,6 +149,8 @@ export function startMaintenance(): void {
   const g = globalThis as unknown as { __pzMaintenance?: boolean };
   if (g.__pzMaintenance) return;
   g.__pzMaintenance = true;
+  // Copias de adjuntos de releases que quedaron a medias por un reinicio: se retoman al poco de arrancar (una vez).
+  setTimeout(() => void resumeReleaseCopies(), RESUME_AFTER_MS).unref?.();
   setTimeout(() => {
     void runMaintenance();
     setInterval(() => void runMaintenance(), EVERY_MS).unref?.();

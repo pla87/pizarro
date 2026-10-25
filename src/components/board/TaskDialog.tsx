@@ -190,7 +190,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
   const editedSinceOpen = (): boolean => {
     const t0 = initialTask.current;
     const now = board.getTask(task.id) ?? task;
-    const keys = ["title", "kindId", "color", "linkUrl", "assigneeId", "dueDate", "deliverableId", "evergreen", "recurrence", "recurrenceDay", "columnId"] as const;
+    const keys = ["title", "kindId", "color", "linkUrl", "assigneeId", "dueDate", "deliverableId", "evergreen", "evergreenEvery", "recurrence", "recurrenceDay", "columnId"] as const;
     if (keys.some((k) => t0[k] !== now[k])) return true;
     if ([...t0.labelIds].sort().join() !== [...now.labelIds].sort().join()) return true;
     const d0 = initialDetail.current;
@@ -218,7 +218,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       const d0 = initialDetail.current;
       const res = await tracked(restoreTaskSnapshot(task.id, {
         title: t0.title, kindId: t0.kindId, color: t0.color as never, linkUrl: t0.linkUrl, assigneeId: t0.assigneeId, labelIds: t0.labelIds,
-        dueDate: t0.dueDate, deliverableId: t0.deliverableId, evergreen: t0.evergreen, recurrence: t0.recurrence, recurrenceDay: t0.recurrenceDay,
+        dueDate: t0.dueDate, deliverableId: t0.deliverableId, evergreen: t0.evergreen, evergreenEvery: t0.evergreenEvery, recurrence: t0.recurrence, recurrenceDay: t0.recurrenceDay,
         columnId: t0.columnId, position: t0.position,
         ...(d0 ? {
           description: d0.description,
@@ -264,7 +264,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     if (columnId === task.columnId) return;
     const before = board.getTask(task.id)!;
     const last = Math.max(0, ...board.getTasks().filter((t) => t.columnId === columnId).map((t) => t.position));
-    board.patchTask(task.id, { columnId, position: last + 1024, evergreen: false });
+    board.patchTask(task.id, { columnId, position: last + 1024, evergreen: false, evergreenEvery: 1 });
     const res = await tracked(moveTask(task.id, columnId, null, null));
     if (!res.ok) {
       board.upsertTask(before);
@@ -570,7 +570,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
                 type="checkbox"
                 className="h-4 w-4 accent-brand-600"
                 checked={task.evergreen}
-                onChange={(e) => save({ evergreen: e.target.checked }, { evergreen: e.target.checked })}
+                onChange={(e) => save({ evergreen: e.target.checked }, e.target.checked ? { evergreen: true } : { evergreen: false, evergreenEvery: 1 })}
               />
               {t("Fija en la release (evergreen)")}
             </label>

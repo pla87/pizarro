@@ -2,14 +2,14 @@
 
 import { ChevronDown, ClipboardCopy, Download, FileArchive, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { deleteRelease, deleteReleaseAttachments } from "@/actions/releases";
 import { copyText, downloadText } from "@/components/ui/clipboard";
 import { cn } from "@/components/ui/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Markdown } from "@/components/ui/Markdown";
 import { useToast } from "@/components/ui/Toast";
-import { releaseFileName } from "@/lib/release";
+import { releaseFileName, releaseZipName } from "@/lib/release";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 
@@ -37,20 +37,65 @@ export function ReleaseEntry({ release }: Props) {
   const date = new Date(release.deployedAt);
   // Los adjuntos pueden salir en varios paquetes ZIP (tope del proyecto): se consulta el plan al abrir la release.
   const [parts, setParts] = useState(1);
+  /** Token de versión del plan: cada paquete lo devuelve para detectar que los adjuntos han cambiado. */
+  const [planToken, setPlanToken] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
   const attachmentCount = attachments.length;
+  const fetchPlan = useCallback(async (): Promise<{ parts: number; v: string | null } | null> => {
+    try {
+      const r = await fetch(`/api/releases/${release.id}/attachments?plan=1`);
+      if (!r.ok) return null;
+      const plan = (await r.json()) as { parts: unknown[]; v?: string };
+      return plan.parts.length > 0 ? { parts: plan.parts.length, v: plan.v ?? null } : null;
+    } catch {
+      return null;
+    }
+  }, [release.id]);
   useEffect(() => {
     if (!open || !attachmentCount) return;
     let cancelled = false;
-    fetch(`/api/releases/${release.id}/attachments?plan=1`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((plan: { parts: unknown[] } | null) => {
-        if (!cancelled && plan && plan.parts.length > 0) setParts(plan.parts.length);
-      })
-      .catch(() => {});
+    void fetchPlan().then((plan) => {
+      if (cancelled || !plan) return;
+      setParts(plan.parts);
+      setPlanToken(plan.v);
+    });
     return () => {
       cancelled = true;
     };
-  }, [open, attachmentCount, release.id]);
+  }, [open, attachmentCount, fetchPlan]);
+
+  /** Descarga un paquete con el token del plan; si los adjuntos han cambiado (409) avisa y ofrece volver a empezar. */
+  const downloadPart = async (part: number, plan: { parts: number; v: string | null } = { parts, v: planToken }) => {
+    setDownloading(true);
+    try {
+      const res = await fetch(`/api/releases/${release.id}/attachments?part=${part}${plan.v ? `&v=${plan.v}` : ""}`);
+      if (res.status === 409) {
+        toast(await res.text(), "error", {
+          label: t("Reintentar"),
+          onClick: async () => {
+            // Vuelve a empezar: nuevo plan y el mismo paquete (si sigue existiendo).
+            const fresh = await fetchPlan();
+            if (fresh) setParts(fresh.parts);
+            if (fresh) setPlanToken(fresh.v);
+            if (fresh) await downloadPart(Math.min(part, fresh.parts), fresh);
+            else toast(t("No se pudieron descargar los adjuntos"), "error");
+          },
+        });
+        return;
+      }
+      if (!res.ok) return toast(res.status === 429 ? await res.text() : t("No se pudieron descargar los adjuntos"), "error");
+      const href = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = releaseZipName(release.title, part, plan.parts);
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(href), 1000);
+    } catch {
+      toast(t("No se pudieron descargar los adjuntos"), "error");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const remove = async () => {
     if (!(await confirm({ title: t("Borrar release"), message: t("¿Borrar la release «{title}» del histórico? Se borran también sus adjuntos. Las tareas no cambian.", { title: release.title }), confirmLabel: t("Borrar"), danger: true }))) return;
@@ -113,9 +158,9 @@ export function ReleaseEntry({ release }: Props) {
                 <span className="text-sm font-medium">{t("Adjuntos ({n})", { n: attachments.length })}</span>
                 <div className="ml-auto flex flex-wrap gap-2">
                   {Array.from({ length: parts }, (_, i) => (
-                    <a key={i} className="btn-secondary py-1.5" href={`/api/releases/${release.id}/attachments${parts > 1 ? `?part=${i + 1}` : ""}`} download>
+                    <button key={i} className="btn-secondary py-1.5" disabled={downloading} onClick={() => void downloadPart(i + 1)}>
                       <FileArchive size={15} /> {parts > 1 ? t("Descargar adjuntos ({part}/{total})", { part: i + 1, total: parts }) : t("Descargar adjuntos")}
-                    </a>
+                    </button>
                   ))}
                   <button className="btn-secondary py-1.5 text-red-600 dark:text-red-400" disabled={busy} onClick={removeAttachments}>
                     <Trash2 size={15} /> {t("Borrar adjuntos")}
