@@ -2,6 +2,29 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.25.0 — 2026-10-25 20:22
+
+Documentación del proyecto, copias completas con destino externo y restauración sin git, asistente de primer arranque e instalador, claves separadas y diagnóstico
+
+### Nuevas funcionalidades
+
+- Documentación del proyecto: nueva sección del menú para subir y consultar al momento textos, Markdown, PDF e imágenes.
+- Copias de seguridad completas: base de datos y todos los ficheros, cifrados, con destino externo opcional (S3 compatible como Cloudflare R2 o Backblaze B2, o una carpeta montada) y botón «Copiar ahora a destino externo».
+- Restaurar una copia sin git, con un solo comando (node dist/restore.mjs); la prueba mensual restaura de verdad en una base temporal.
+- Instalación propia: asistente web del primer arranque (/setup, con código de un solo uso), instalador de un comando (deploy/install.sh) y kit de recuperación.
+- Administración → Ajustes: Descargar diagnóstico para soporte, sin datos personales ni secretos (también node dist/doctor.mjs).
+
+### Mejoras
+
+- Al desplegar, el código de la release se añade delante del título sin quitar el anterior; los títulos admiten 210 caracteres.
+- En el diálogo de release, las tareas fijas «Cada dos» o «Cada tres» indican si toca ahora, en la siguiente o dentro de N.
+- Los avisos de cambio de fecha esperan 5 minutos.
+- Claves separadas opcionales (TOKEN_SECRET y ENCRYPTION_KEY) con rotación gradual: cambiar SESSION_SECRET ya solo cierra las sesiones.
+
+### Cambios técnicos / DB
+
+- Migración: tabla ProjectDocument. Nuevos comandos dist/restore.mjs, dist/rotate-keys.mjs y dist/doctor.mjs; dist/restore-backup.mjs se sustituye por dist/restore.mjs.
+
 ## v1.24.0 — 2026-10-25 16:11
 
 Comentarios por páginas con tope configurable y borrado que conserva el hilo, avisos de fecha agrupados, títulos con el código de la release y primeros pasos para instalarlo fuera de Railway

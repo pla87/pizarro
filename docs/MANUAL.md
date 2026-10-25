@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.24.0"
+version: "v1.25.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.24.0
+**Versión de la aplicación:** v1.25.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -537,6 +537,10 @@ Consulta la tabla completa en el `README.md`. Las imprescindibles son `DATABASE_
 | `ENCRYPTION_KEY` | Clave con la que se cifran los secretos de 2FA (TOTP) y las conexiones con Google. Sin ella se usa `SESSION_SECRET`. Ver 4.4. |
 | `TOKEN_SECRET_PREVIOUS` / `ENCRYPTION_KEY_PREVIOUS` | Solo durante una rotación: la clave anterior, para seguir leyendo lo que se guardó con ella. Ver 4.4. |
 | `BACKUP_KEY` | Clave AES-256 de las copias automáticas. Genérala con `openssl rand -base64 32` y **guárdala también fuera de Railway**: sin ella las copias no se pueden leer. Sin la variable, las copias están desactivadas. |
+| `BACKUP_S3_ENDPOINT`, `BACKUP_S3_BUCKET`, `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY`, `BACKUP_S3_REGION`, `BACKUP_S3_PREFIX` | Destino externo S3 compatible (Cloudflare R2, Backblaze B2, MinIO…) para las copias (ver 4.5). Opcionales; sin ellas, las copias solo quedan en el volumen. |
+| `BACKUP_EXTERNAL_DIR` | Carpeta montada (disco USB, NAS…) como destino externo de las copias. Opcional. |
+| `BACKUP_LOCAL_FILES` | Sin definir: la copia local incluye los ficheros solo si no hay destino externo. `1`/`0` lo fuerzan. |
+| `SETUP_TOKEN` | Solo instalación propia: código fijo que acepta el asistente web del primer arranque (`/setup`), además del que se imprime en el log. Sin uso si ya hay usuarios o con `SEED_ADMIN_*`. |
 | `UPLOAD_QUOTA_MB_PER_PROJECT` | Cuota de adjuntos por proyecto en MB (por defecto 2048). |
 | `UPLOAD_QUOTA_MB_TOTAL` | Cuota total de adjuntos del servidor en MB (opcional; vacío = sin límite). |
 | `MAX_UPLOAD_MB` | Opcional. Tope, para todo el servidor, del tamaño de un adjunto en MB; el máximo real lo fija cada proyecto (20 MB por defecto, hasta 100) y esta variable solo lo recorta. Se lee al subir cada archivo: cambiarla no exige recompilar ni volver a desplegar la imagen. |

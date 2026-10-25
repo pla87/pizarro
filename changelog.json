@@ -1,6 +1,53 @@
 {
   "versions": [
     {
+      "version": "1.25.0",
+      "date": "2026-10-25",
+      "releasedAt": "2026-10-25T20:22:04+01:00",
+      "summary": "Documentación del proyecto, copias completas con destino externo y restauración sin git, asistente de primer arranque e instalador, claves separadas y diagnóstico",
+      "changes": {
+        "nuevas": [
+          "Documentación del proyecto: nueva sección del menú para subir y consultar al momento textos, Markdown, PDF e imágenes.",
+          "Copias de seguridad completas: base de datos y todos los ficheros, cifrados, con destino externo opcional (S3 compatible como Cloudflare R2 o Backblaze B2, o una carpeta montada) y botón «Copiar ahora a destino externo».",
+          "Restaurar una copia sin git, con un solo comando (node dist/restore.mjs); la prueba mensual restaura de verdad en una base temporal.",
+          "Instalación propia: asistente web del primer arranque (/setup, con código de un solo uso), instalador de un comando (deploy/install.sh) y kit de recuperación.",
+          "Administración → Ajustes: Descargar diagnóstico para soporte, sin datos personales ni secretos (también node dist/doctor.mjs)."
+        ],
+        "mejoras": [
+          "Al desplegar, el código de la release se añade delante del título sin quitar el anterior; los títulos admiten 210 caracteres.",
+          "En el diálogo de release, las tareas fijas «Cada dos» o «Cada tres» indican si toca ahora, en la siguiente o dentro de N.",
+          "Los avisos de cambio de fecha esperan 5 minutos.",
+          "Claves separadas opcionales (TOKEN_SECRET y ENCRYPTION_KEY) con rotación gradual: cambiar SESSION_SECRET ya solo cierra las sesiones."
+        ],
+        "correcciones": [],
+        "tecnicos": [
+          "Migración: tabla ProjectDocument. Nuevos comandos dist/restore.mjs, dist/rotate-keys.mjs y dist/doctor.mjs; dist/restore-backup.mjs se sustituye por dist/restore.mjs."
+        ]
+      },
+      "en": {
+        "summary": "Project documentation, full backups with an external destination and restore without git, first-run wizard and installer, separate keys and diagnostics",
+        "changes": {
+          "nuevas": [
+            "Project documentation: a new menu section to upload and view texts, Markdown, PDFs and images at a glance.",
+            "Full backups: database and every file, encrypted, with an optional external destination (S3-compatible such as Cloudflare R2 or Backblaze B2, or a mounted folder) and a “Copy to external destination now” button.",
+            "Restore a backup without git, with a single command (node dist/restore.mjs); the monthly test really restores into a temporary database.",
+            "Self-hosting: first-run web wizard (/setup, with a one-time code), one-command installer (deploy/install.sh) and recovery kit.",
+            "Administration → Settings: Download diagnostics for support, without personal data or secrets (also node dist/doctor.mjs)."
+          ],
+          "mejoras": [
+            "When deploying, the release code is added in front of the title without removing the previous one; titles allow 210 characters.",
+            "In the release dialog, “Every second” or “Every third” pinned tasks show whether they are due now, in the next one or in N.",
+            "Due-date notices wait 5 minutes.",
+            "Optional separate keys (TOKEN_SECRET and ENCRYPTION_KEY) with gradual rotation: changing SESSION_SECRET now only ends sessions."
+          ],
+          "correcciones": [],
+          "tecnicos": [
+            "Migration: ProjectDocument table. New commands dist/restore.mjs, dist/rotate-keys.mjs and dist/doctor.mjs; dist/restore-backup.mjs is replaced by dist/restore.mjs."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.24.0",
       "date": "2026-10-25",
       "releasedAt": "2026-10-25T16:11:21+01:00",
