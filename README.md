@@ -108,20 +108,31 @@ steps:
 |---|---|---|---|
 | `DATABASE_URL` | Sí | `${{Postgres.DATABASE_URL}}` | Conexión a PostgreSQL. |
 | `SESSION_SECRET` | Sí | 48+ caracteres aleatorios | Clave HMAC para los identificadores de sesión. Si la cambias, se cierran todas las sesiones. |
+| `TOKEN_SECRET` | Recomendada | 48+ caracteres aleatorios | Clave HMAC de los enlaces de email, códigos de recuperación, códigos 2FA por email y dispositivos recordados. Sin ella se usa `SESSION_SECRET`. |
+| `ENCRYPTION_KEY` | Recomendada | 48+ caracteres aleatorios | Clave con la que se cifran (AES-256-GCM) los secretos TOTP y los tokens de Google. Sin ella se usa `SESSION_SECRET`. Con esta y `TOKEN_SECRET` definidas, rotar `SESSION_SECRET` solo cierra las sesiones. Guárdala fuera del servidor. |
+| `TOKEN_SECRET_PREVIOUS` / `ENCRYPTION_KEY_PREVIOUS` | Solo al rotar | la clave anterior | Siguen aceptando lo guardado con la clave anterior. Tras cambiar `ENCRYPTION_KEY`, `node dist/rotate-keys.mjs` (`npm run keys:rotate`) lo re-cifra todo y la anterior se puede quitar. Ver el manual, 4.4. |
 | `APP_URL` | Sí | `https://tablon.up.railway.app` | URL pública. Con `https://` la cookie se marca `Secure` y usa el prefijo `__Host-`. |
 | `UPLOAD_DIR` | Sí | `/app/uploads` | Carpeta de capturas (la ruta del volumen). |
 | `PORT` | No | Lo inyecta Railway | Puerto HTTP (por defecto 3000). |
-| `SEED_ADMIN_EMAIL` | Solo el primer arranque | `admin@tu-dominio.com` | Email del administrador inicial. |
+| `SEED_ADMIN_EMAIL` | Solo el primer arranque (Railway) | `admin@tu-dominio.com` | Email del administrador inicial. Si no defines `SEED_ADMIN_*`, con la base de datos vacía el servidor imprime en su log un código de un solo uso y el asistente web `/setup` crea el administrador (servidor propio con Docker Compose, ver `docs/INSTALL.md`). |
 | `SEED_ADMIN_PASSWORD` | Solo el primer arranque | mínimo 10 caracteres | Contraseña inicial: cámbiala después desde *Mi perfil*. |
 | `SEED_ADMIN_NAME` | No | `Administrador` | Nombre visible del admin inicial. |
+| `SETUP_TOKEN` | No | 8+ caracteres | Código fijo que el asistente `/setup` acepta además del código del log (que cambia en cada arranque mientras falte la configuración). |
 | `MAX_USERS` | No | `10` | Máximo de usuarios activos. |
 | `MAX_UPLOAD_MB` | No | (sin tope) | Tope opcional, para todo el servidor, del tamaño de un adjunto. El tamaño máximo real es el de cada proyecto (ajustes del proyecto, 20 MB por defecto, hasta 100); si defines esta variable, ningún proyecto la supera. Se lee al subir cada archivo: cambiarla no exige recompilar. El proxy admite siempre hasta 100 MB por petición. |
 | `DATABASE_POOL_SIZE` | No | `10` | Conexiones del pool. |
 | `UPLOAD_QUOTA_MB_PER_PROJECT` | No | `2048` | Cuota de adjuntos por proyecto (MB). Pasada la cuota, la subida se rechaza mostrando el uso. |
 | `UPLOAD_QUOTA_MB_TOTAL` | No | (sin límite) | Cuota total de adjuntos de todo el servidor (MB). |
-| `BACKUP_KEY` | Para copias automáticas | `openssl rand -base64 32` | Clave AES-256 (32 bytes en base64) con la que se cifran las copias de la base de datos. Sin ella las copias están desactivadas. **Guárdala fuera de Railway: sin ella las copias no se pueden abrir.** |
+| `BACKUP_KEY` | Para copias automáticas | `openssl rand -base64 32` | Clave AES-256 (32 bytes en base64) con la que se cifran las copias (base de datos y ficheros). Sin ella las copias están desactivadas. **Guárdala fuera del servidor: sin ella las copias no se pueden abrir.** |
+| `BACKUP_LOCAL_FILES` | No | (auto) | Sin definir: la copia local (`UPLOAD_DIR/backups`) incluye los ficheros solo si no hay destino externo. `1`/`0` lo fuerzan. |
+| `BACKUP_EXTERNAL_DIR` | No | `/copias-externas` | Carpeta montada (disco USB, NAS, SFTP montado) a la que se sube cada copia. Ruta absoluta dentro del contenedor. |
+| `BACKUP_S3_ENDPOINT` | Para copias en S3 | `https://<cuenta>.r2.cloudflarestorage.com` | Almacenamiento S3 compatible (Cloudflare R2, Backblaze B2, MinIO…) al que se sube cada copia. Direcciones *path-style*. |
+| `BACKUP_S3_BUCKET` | Para copias en S3 | `pizarro-copias` | Bucket (privado). |
+| `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY` | Para copias en S3 | | Clave de API con lectura, escritura y borrado en ese bucket. Nunca se muestran ni se registran. |
+| `BACKUP_S3_REGION` | No | `auto` | Región de la firma (R2: `auto`; B2: la del endpoint, p. ej. `eu-central-003`; MinIO: `us-east-1`). |
+| `BACKUP_S3_PREFIX` | No | `pizarro` | Prefijo de las claves dentro del bucket. |
 | `COOKIE_SECURE` | No | `true` / `false` | Fuerza el atributo `Secure` de la cookie. |
-| `APP_TIMEZONE` | No | `Europe/Madrid` | Zona horaria para calcular «hoy» en plazos e informes y para las fechas del navegador. Se lee al arrancar: cambiarla solo exige reiniciar. |
+| `APP_TIMEZONE` | No | `Europe/Madrid` | Zona horaria para calcular «hoy» en plazos e informes y para las fechas del navegador. Se lee al arrancar: cambiarla solo exige reiniciar. Sin ella vale la zona elegida en el asistente `/setup` (y, si no hay, `Europe/Madrid`). |
 | `HEALTH_MIN_FREE_MB` | No | `200` | `/api/health` responde 503 (`low_disk_space`) si al disco de subidas le queda menos espacio libre. `0` desactiva la comprobación. |
 | `EXIT_ON_UNCAUGHT_EXCEPTION` | No | (desactivado) | `1`: en producción, una excepción no capturada se anota en *Logs* y la app sale para que la plataforma la reinicie (lo fija `deploy/compose.yml`). Sin él, solo se anota. |
 | `GIT_SHA` | No (solo al compilar) | commit | Commit para el identificador de versión (en Railway se usa `RAILWAY_GIT_COMMIT_SHA`). Sin él, la hora de la compilación. |
@@ -216,18 +227,9 @@ Nota: `railway run` ejecuta el comando en tu máquina con las variables del serv
 
 ### 6. Copias de seguridad (recomendado)
 
-- **Base de datos (automáticas):** con `BACKUP_KEY` definida, cada día se vuelca toda la base de datos (instantánea consistente `REPEATABLE READ`, sin `pg_dump`) a `UPLOAD_DIR/backups/pizarro-backup-AAAAMMDDTHHMMSSZ.pzbak`: NDJSON → gzip → AES-256-GCM, con un manifiesto (versión, migración, filas por tabla, sha256) dentro del fichero y en un `.json` al lado. Se conservan las últimas 14 diarias y 6 mensuales. Cada mes se hace una **prueba de restauración**: se descifra la última copia y se comprueba la integridad y que las filas coinciden con el manifiesto. Ambos resultados se ven en *Administración → Copias de seguridad* (con *Crear copia ahora* y *Descargar*) y en los logs (categoría *system*).
-- **Dónde se guardan:** en el mismo volumen que los adjuntos. Un fallo del volumen se llevaría copia y adjuntos juntos: descarga de vez en cuando la última copia (botón *Descargar*) y activa también los *Backups/snapshots del volumen* desde su pestaña en Railway; eso protege los adjuntos, que son ficheros del volumen (no se empaquetan en la copia de la base de datos). Opcionalmente, activa los *Backups* del servicio Postgres de Railway.
-- **Restaurar** en una base de datos **vacía** (recién creada, sin arrancar la app):
-
-  ```bash
-  export DATABASE_URL="postgresql://…/base_vacia"
-  npx prisma migrate deploy                    # mismas migraciones que la copia
-  BACKUP_KEY="…" npm run backup:restore -- ruta/pizarro-backup-….pzbak
-  # en el contenedor compilado:  BACKUP_KEY="…" node dist/restore-backup.mjs <fichero>
-  ```
-
-  `scripts/restore-backup.ts` verifica primero toda la copia (clave, integridad, sha256 y cuentas), se niega si la base de datos ya tiene usuarios o proyectos y carga todo en una sola transacción (si falla, no queda nada a medias).
+- **Automáticas (base de datos y ficheros):** con `BACKUP_KEY` definida, cada día se vuelca toda la base de datos (instantánea consistente `REPEATABLE READ`, sin `pg_dump`) a `UPLOAD_DIR/backups/pizarro-backup-AAAAMMDDTHHMMSSZ.pzbak` (NDJSON → gzip → AES-256-GCM, con su manifiesto dentro y en un `.json` al lado) y se copian todos los ficheros de `UPLOAD_DIR` (adjuntos, miniaturas, copias de releases, documentos) a un almacén incremental `backups/files/`: cada fichero se cifra por separado y se guarda una sola vez. Un manifiesto cifrado por copia (`.pzman`) lista el volcado y los ficheros. Se conservan las últimas 14 diarias y 6 mensuales y se borran los ficheros del almacén que ya no nombra ninguna. Cada mes, una **prueba de restauración** restaura la última copia en una base temporal (si el usuario de la base puede crearla; si no, la descifra y la comprueba) y comprueba que están todos sus ficheros. Todo se ve en *Administración → Copias de seguridad* y en los logs (categoría *system*).
+- **Destino externo:** con `BACKUP_S3_*` (R2, B2, MinIO…) y/o `BACKUP_EXTERNAL_DIR`, tras cada copia se sube lo que falte (reanudable) y se aplica la misma retención; firma AWS SigV4 propia, sin SDK. Si la última subida correcta tiene más de 48 h, se avisa como con la copia local. Botón *Copiar ahora a destino externo*.
+- **Restaurar** (sin `git`): `node dist/restore.mjs <origen> [--files] [--force]` en el contenedor, o `npm run backup:restore -- <origen> …` en desarrollo. Origen: `latest`, `s3:latest`, `external:latest`, el nombre de una copia o la ruta de un `.pzman`/`.pzbak`. Sobre una base **vacía**: aplica las migraciones hasta la de la copia, carga los datos en una transacción, aplica el resto de migraciones y restaura los ficheros comprobando su sha256. Pasos en `docs/INSTALL.md` (Docker Compose) y en la sección 4.5 del manual (Railway).
 - **Limpieza de huérfanos:** cada hora se borran de `UPLOAD_DIR` los ficheros (adjuntos, miniaturas, copias de releases) que ninguna fila de la base de datos referencia y tienen más de 24 h. No toca `backups/`, enlaces simbólicos ni ficheros con nombres desconocidos, y se cancela sola si más de la mitad de los ficheros parecen huérfanos.
 
 ---
@@ -247,7 +249,7 @@ Nota: `railway run` ejecuta el comando en tu máquina con las variables del serv
 5. Copia el **ID de cliente** y el **secreto** a Railway: `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`, y añade `GOOGLE_WORKSPACE_DOMAIN=tu-dominio.com`. Así, cada archivo creado se comparte automáticamente con tu dominio como editor (`GOOGLE_SHARE_ROLE`), y el resto del equipo puede abrirlo desde la tarjeta. En un proyecto privado el archivo no se comparte con el dominio, solo con los emails de los miembros del proyecto. Sin dominio, solo lo ve quien lo crea hasta que lo comparta a mano.
 6. Redespliega. Cada usuario entra en **Mi perfil → Google Docs y Sheets → Conectar con Google**.
 
-> Los tokens de Google se guardan cifrados con una clave derivada de `SESSION_SECRET`. Si rotas `SESSION_SECRET`, cada usuario tendrá que volver a conectar Google.
+> Los tokens de Google se guardan cifrados con `ENCRYPTION_KEY` (o, si no está definida, con una clave derivada de `SESSION_SECRET`). Si cambias esa clave sin poner la anterior en `ENCRYPTION_KEY_PREVIOUS`, cada usuario tendrá que volver a conectar Google (ver el manual, 4.4).
 
 #### 7.2 Avisos por email
 
@@ -308,7 +310,7 @@ Se usa la **WhatsApp Cloud API** oficial de Meta. Pasos:
 
 **Solo con Google.** `AUTH_GOOGLE_ONLY=true` desactiva el acceso con contraseña para todos. `AUTH_ALLOW_ADMIN_PASSWORD=true` mantiene la contraseña solo para administradores como acceso de emergencia (aparece plegado en la pantalla de acceso). Por defecto ambas están sin definir y se admiten los dos métodos.
 
-**Verificación en dos pasos.** Solo afecta al acceso con contraseña. Cada persona puede activarla en *Mi perfil → Verificación en dos pasos* con una app de autenticación (TOTP, 6 dígitos, 30 s) o un código de 6 dígitos por email (10 minutos, un solo uso; requiere SMTP). Al activarla se muestran 10 códigos de recuperación de un solo uso (solo se guarda su HMAC). Es **obligatoria para administradores**: tras la contraseña se les pide configurarla antes de entrar. Hasta completar el segundo paso no existe sesión. Se permiten 5 fallos por cada contraseña correcta y 20 por persona y hora. «Recordar este dispositivo 14 días» omite el segundo paso en ese navegador (se anula al cambiar la contraseña o el método). Si alguien pierde el móvil y los códigos, un administrador puede restablecerla en *Administración → Usuarios*. Los secretos TOTP se guardan cifrados con una clave derivada de `SESSION_SECRET`.
+**Verificación en dos pasos.** Solo afecta al acceso con contraseña. Cada persona puede activarla en *Mi perfil → Verificación en dos pasos* con una app de autenticación (TOTP, 6 dígitos, 30 s) o un código de 6 dígitos por email (10 minutos, un solo uso; requiere SMTP). Al activarla se muestran 10 códigos de recuperación de un solo uso (solo se guarda su HMAC). Es **obligatoria para administradores**: tras la contraseña se les pide configurarla antes de entrar. Hasta completar el segundo paso no existe sesión. Se permiten 5 fallos por cada contraseña correcta y 20 por persona y hora. «Recordar este dispositivo 14 días» omite el segundo paso en ese navegador (se anula al cambiar la contraseña o el método). Si alguien pierde el móvil y los códigos, un administrador puede restablecerla en *Administración → Usuarios*. Los secretos TOTP se guardan cifrados con `ENCRYPTION_KEY` (o, sin ella, con una clave derivada de `SESSION_SECRET`).
 
 ## Arquitectura (resumen)
 

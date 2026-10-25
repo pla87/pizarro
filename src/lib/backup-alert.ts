@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { sendBackupAlertMail } from "./auth-mail";
 import { backupAlertFor, backupAlertMailDue, type BackupAlert } from "./backup-alert-core";
-import { backupKeyState, listBackups, readStatus } from "./backup";
+import { backupDestinationsInfo, backupKeyState, listBackups, readStatus } from "./backup";
 import { db } from "./db";
 import { logEvent } from "./log";
 import { emailEnabled } from "./mail";
@@ -15,7 +15,12 @@ export async function computeBackupAlert(now: number = Date.now()): Promise<Back
   if (!keyOk) return backupAlertFor({ keyOk, lastOkAt: null, now });
   const [status, [latest]] = await Promise.all([readStatus(), listBackups()]);
   const times = [status.lastBackup?.ok ? Date.parse(status.lastBackup.at) : NaN, latest ? Date.parse(latest.at) : NaN].filter(Number.isFinite);
-  return backupAlertFor({ keyOk, lastOkAt: times.length > 0 ? Math.max(...times) : null, now });
+  // Destino externo: cuenta el que lleve más tiempo sin una subida correcta (una configuración incompleta cuenta como «nunca»).
+  const ext = backupDestinationsInfo();
+  const configured = ext.external.length > 0 || ext.errors.length > 0;
+  const extTimes = ext.external.map((d) => Date.parse(status.external?.[d.id]?.lastOkAt ?? ""));
+  const extLast = !configured || ext.errors.length > 0 || extTimes.some((t) => !Number.isFinite(t)) ? null : Math.min(...extTimes);
+  return backupAlertFor({ keyOk, lastOkAt: times.length > 0 ? Math.max(...times) : null, now, external: { configured, lastOkAt: extLast } });
 }
 
 /** Igual, memorizado por petición (el layout y la página de copias lo piden en la misma pasada). */
@@ -48,7 +53,7 @@ export async function notifyBackupAlertIfDue(now: number = Date.now()): Promise<
   let sent = 0;
   for (const a of admins) {
     try {
-      await sendBackupAlertMail(a, { lastAt: alert.lastAt });
+      await sendBackupAlertMail(a, { lastAt: alert.lastAt, external: alert.reason === "externalNone" || alert.reason === "externalStale" });
       sent++;
     } catch (err) {
       console.error("[backup-alert] email", err);

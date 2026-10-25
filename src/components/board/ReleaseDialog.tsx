@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { countReleasesOn, deployRelease, getReleaseTaskDetails } from "@/actions/releases";
 import { partSuffix } from "@/lib/zip-plan";
-import { buildReleaseMarkdown, computeReleaseCodes, defaultReleaseTitle, evergreenDue, isoDate, releaseFileName, swapTemplateBlock } from "@/lib/release";
+import { buildReleaseMarkdown, computeReleaseCodes, defaultReleaseTitle, evergreenDue, isoDate, releaseFileName, releasesUntilDue, swapTemplateBlock } from "@/lib/release";
 import type { BoardTask, TemplateOption } from "@/lib/types";
 import { useT } from "@/i18n/client";
 import { copyText, downloadText } from "../ui/clipboard";
@@ -61,6 +61,8 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
   const [zipItems, setZipItems] = useState<{ taskId: string; code: string; count: number }[]>([]);
   /** Número que tendrá la release (prefijo R32 de los códigos) y con cuál se generó el texto. */
   const [releaseNumber, setReleaseNumber] = useState<number | null>(null);
+  /** Cuándo le toca a una tarea fija respecto a la release que se genera: «ahora», «en la siguiente», «dentro de 2»… */
+  const dueHint = (n: number) => (n === 0 ? t("ahora") : n === 1 ? t("en la siguiente") : t("dentro de {n}", { n }));
   const [generatedNumber, setGeneratedNumber] = useState<number | null>(null);
   const selectedTasks = useMemo(() => tasks.filter((t) => chosen.has(t.id)), [tasks, chosen]);
   const [headerId, setHeaderId] = useState(templates.headers[0]?.id ?? "");
@@ -313,7 +315,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
                   <TypeBadge kind={board.kindById.get(task.kindId)} />
                   <span className="min-w-0 flex-1 truncate text-sm"><MentionText text={task.title} /></span>
                   {task.evergreen && (
-                    <span className="shrink-0 rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-500/20 dark:text-brand-300" title={t("Tarea fija en la release: se queda en su columna al desplegar")}>{t("fija")}{task.evergreenEvery === 2 ? ` · ${t("Cada dos")}` : task.evergreenEvery === 3 ? ` · ${t("Cada tres")}` : ""}</span>
+                    <span className="shrink-0 rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-500/20 dark:text-brand-300" title={t("Tarea fija en la release: se queda en su columna al desplegar")}>{t("fija")}{task.evergreenEvery === 2 ? ` · ${t("Cada dos")}` : task.evergreenEvery === 3 ? ` · ${t("Cada tres")}` : ""}{releaseNumber != null && task.evergreenEvery > 1 ? ` · ${dueHint(releasesUntilDue(releaseNumber, task.evergreenEvery))}` : ""}</span>
                   )}
                 </label>
               </li>

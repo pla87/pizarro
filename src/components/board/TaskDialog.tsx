@@ -14,7 +14,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { dueStatus } from "@/lib/dates";
 import { defaultRecurrenceDay, type RecurrenceRule } from "@/lib/recurrence-date";
-import { isWhite, kindBadgeStyle, onColor } from "@/lib/constants";
+import { isWhite, kindBadgeStyle, MAX_TITLE, onColor } from "@/lib/constants";
 import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
 import { ColorPicker } from "../ui/ColorPicker";
 import { cn } from "../ui/cn";
@@ -1078,7 +1078,7 @@ function Subtasks({ taskId, detail, setDetail, flushRef }: { taskId: string; det
         </SortableContext>
       </DndContext>
       <form onSubmit={add} className="mt-1 flex gap-2">
-        <input className="input py-1.5" placeholder={t("Añadir subtarea…")} value={newTitle} onChange={(e) => setNewTitle(e.target.value)} maxLength={200} disabled={!detail} />
+        <input className="input py-1.5" placeholder={t("Añadir subtarea…")} value={newTitle} onChange={(e) => setNewTitle(e.target.value)} maxLength={MAX_TITLE} disabled={!detail} />
         <button className="btn-secondary py-1.5" disabled={!newTitle.trim()} aria-label={t("Añadir subtarea")}><Plus size={15} /></button>
       </form>
     </section>
@@ -1128,7 +1128,7 @@ function SubtaskRow({ s, editing, onEdit, onRename, onDraft, onToggle, onRemove 
         <input
           className="input min-w-0 flex-1 py-0.5 text-sm"
           value={draft}
-          maxLength={200}
+          maxLength={MAX_TITLE}
           autoFocus
           onFocus={(e) => e.currentTarget.select()}
           onChange={(e) => {

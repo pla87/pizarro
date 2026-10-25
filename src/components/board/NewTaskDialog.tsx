@@ -16,6 +16,7 @@ import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
 import { DescriptionField } from "../ui/DescriptionField";
 import { applyKindTemplate, mergeSubtasks } from "@/lib/kinds-special";
+import { MAX_TITLE } from "@/lib/constants";
 import { TypeSelector } from "./TaskDialog";
 import type { T } from "@/i18n/core";
 import { AttachLimitHint } from "./AttachLimitHint";
@@ -292,7 +293,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       }}>
         <div>
           <label className="label" htmlFor={`${uid}-title`}>{t("Título")}</label>
-          <input id={`${uid}-title`} className="input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} required data-autofocus />
+          <input id={`${uid}-title`} className="input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={MAX_TITLE} required data-autofocus />
         </div>
         <div>
           <div className="label">{t("Tipo")}</div>
@@ -337,7 +338,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
               className="input py-1.5"
               placeholder={t("Añadir subtarea…")}
               value={subtaskDraft}
-              maxLength={200}
+              maxLength={MAX_TITLE}
               onChange={(e) => setSubtaskDraft(e.target.value)}
               onKeyDown={(e) => {
                 // Enter añade la subtarea sin enviar el formulario; Ctrl/Cmd+Enter sigue creando la tarea.

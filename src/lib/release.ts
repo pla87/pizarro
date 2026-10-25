@@ -105,16 +105,14 @@ export function computeReleaseCodes(
   return codes;
 }
 
-/** Código de release al principio de un título («R3F1: »): lo puso un despliegue anterior. */
-const TITLE_CODE_RE = /^R\d{1,5}[A-Z]{1,4}\d{1,4}: /;
-
 /**
- * Título de una tarea al desplegarla: «R3F1: Respuesta». Si ya empieza por el código de otra release
- * se sustituye (no se acumulan), y si no cabe en el máximo se recorta el final del título original.
+ * Título de una tarea al desplegarla: «R3F1: Respuesta». El código nuevo siempre se antepone (si ya
+ * había otro, queda detrás: «R5F1: R3F2: Respuesta») y, si no cabe en el máximo, se recorta el final
+ * del título original.
  */
 export function titleWithReleaseCode(title: string, code: string, max = MAX_TITLE): string {
   const prefix = `${code}: `;
-  let rest = title.replace(TITLE_CODE_RE, "");
+  let rest = title;
   const room = Math.max(0, max - prefix.length);
   if (rest.length > room) {
     // Sin dejar a medias una mención @[Nombre](user:ID) ni un par suplente partido.
@@ -290,4 +288,10 @@ export function nextEvergreenEvery(every: number): number {
 /** ¿Le toca a una tarea fija con esa cadencia entrar en la release con ese número? */
 export function evergreenDue(releaseNumber: number, every: number): boolean {
   return every <= 1 || releaseNumber % every === 0;
+}
+
+/** Cuántas releases faltan para que le toque a una tarea fija con esa cadencia: 0 = la release con ese número, 1 = la siguiente… */
+export function releasesUntilDue(releaseNumber: number, every: number): number {
+  if (every <= 1) return 0;
+  return (every - (releaseNumber % every)) % every;
 }

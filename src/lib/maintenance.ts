@@ -70,9 +70,10 @@ async function purgeOrphanFiles(): Promise<number> {
     import("@/lib/orphan-files"),
     import("@/lib/upload-dir"),
   ]);
-  const [attachments, releaseAttachments] = await Promise.all([
+  const [attachments, releaseAttachments, documents] = await Promise.all([
     db.taskAttachment.findMany({ select: { id: true } }),
     db.releaseAttachment.findMany({ select: { id: true } }),
+    db.projectDocument.findMany({ select: { id: true } }),
   ]);
   // Entradas de deshacer por tandas: solo se guardan los ids que mencionan, no todos sus datos a la vez.
   const retained = new Set<string>();
@@ -85,6 +86,7 @@ async function purgeOrphanFiles(): Promise<number> {
   const report = await cleanOrphanFiles(uploadDir(), {
     attachments: new Set([...attachments.map((a) => a.id), ...retained]),
     releaseAttachments: new Set([...releaseAttachments.map((a) => a.id), ...retained]),
+    documents: new Set(documents.map((d) => d.id)),
   });
   if (report.aborted) {
     logEvent({ level: "warn", category: "system", action: "uploads.orphansAborted", message: `Limpieza de huérfanos cancelada: ${report.orphans} de ${report.scanned} ficheros parecen huérfanos (demasiados; ¿base de datos equivocada?)`, details: { ...report } });
@@ -94,10 +96,16 @@ async function purgeOrphanFiles(): Promise<number> {
   return report.deleted;
 }
 
-/** Copia de seguridad diaria cifrada (si hay BACKUP_KEY). */
+/** Copia de seguridad diaria cifrada de la base de datos y los ficheros (si hay BACKUP_KEY). */
 async function backupJob(): Promise<void> {
   const { dailyBackupJob } = await import("@/lib/backup");
   await dailyBackupJob();
+}
+
+/** Sube la última copia a los destinos externos (BACKUP_EXTERNAL_DIR / BACKUP_S3_*) si aún no la tienen. */
+async function backupExternalJob(): Promise<void> {
+  const { externalBackupJob } = await import("@/lib/backup");
+  await externalBackupJob();
 }
 
 /** Avisa por email a los administradores si la última copia correcta tiene más de 48 h (como mucho cada 24 h). */
@@ -144,6 +152,7 @@ export const MAINTENANCE_JOBS = [
   { name: "taskHistory", run: () => purgeOldTaskHistory() },
   { name: "orphanFiles", run: () => purgeOrphanFiles(), everyMs: ORPHAN_EVERY_MS },
   { name: "backup", run: () => backupJob() },
+  { name: "backupExternal", run: () => backupExternalJob() },
   { name: "backupAlert", run: () => backupAlertJob() },
   { name: "restoreTest", run: () => restoreTestJob() },
   { name: "periodicMail", run: () => sendPeriodicMail() },

@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.24.0"
+version: "v1.25.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.24.0
+**Versión de la aplicación:** v1.25.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -96,6 +96,7 @@ La aplicación es un **monolito en un único contenedor**. No hay colas, cachés
 | `Subtask` | taskId, title, done, position | Subtareas de una tarea (no pasan a las releases). |
 | `UndoEntry` | userId, projectId, taskId, `kind` (UNDO / REDO), label, ops (JSON), createdAt | Las 10 últimas acciones deshacibles (y las 10 rehacibles) de cada usuario en cada proyecto, con sus operaciones inversas. Una acción nueva vacía las rehacibles. Caducan a los 7 días. Su etiqueta se guarda como plantilla traducible. |
 | `TaskAttachment` | taskId, originalName, width, height, size | El fichero está en `UPLOAD_DIR/<id>.webp` (y `<id>.thumb.webp`). |
+| `ProjectDocument` | projectId, name, mimeType, size, `kind` (TEXT / MARKDOWN / PDF / IMAGE / OTHER), createdById, createdAt, updatedAt | Documentación del proyecto. El fichero está en `UPLOAD_DIR/documents/<id>.bin` (las imágenes, ya en WebP). Se borra en cascada con el proyecto. |
 | `Release` / `ReleaseTask` | number (correlativo por proyecto), content (Markdown final), deployedAt, autor · instantánea de título y tipo de cada tarea | La instantánea se conserva aunque la tarea se borre. |
 | `AppVersionLog` | version (única), releasedAt, summary, changes (JSON) | Se sincroniza desde `changelog.json` en cada arranque. |
 | `Deliverable` | projectId, name, description, dueDate, position | Las tareas lo referencian con `deliverableId`. Al borrarlo, quedan sin entregable. |
@@ -123,7 +124,7 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 | Contraseñas | bcrypt (coste 11), entre 10 caracteres y 72 bytes. Tiempo de respuesta constante si el usuario no existe. Los admins no fijan contraseñas ajenas: invitan o fuerzan un cambio por enlace. Los enlaces (invitación 72 h; restablecer y confirmar cambios 30 min) son de un solo uso y se guardan solo como hash. |
 | Sesiones | Token aleatorio de 256 bits en cookie `HttpOnly`, `SameSite=Lax` y `Secure` (con HTTPS, con prefijo `__Host-`). En base de datos solo se guarda su HMAC-SHA256 con `SESSION_SECRET`. Caducidad deslizante de 14 días. Cada persona ve y cierra sus sesiones en **Sesiones abiertas**. |
 | Revocación | Cerrar sesión, cambiar la contraseña, restablecerla, forzar el cambio, desactivar al usuario o cambiarle el rol eliminan sus sesiones. Iniciar sesión cierra la sesión anterior de ese navegador. Las conexiones en vivo (SSE y presencia) se cortan al instante al desactivar al usuario, cambiarle el rol, cerrar sesiones o quitarle el acceso a un proyecto (incluida la desasignación de un proyecto de equipo); máximo 10 conexiones en vivo por persona. |
-| Verificación en dos pasos | App TOTP o código por email, con 10 códigos de recuperación (se muestran una vez). Obligatoria para admins con contraseña, opcional para el resto. Los secretos se cifran con una clave derivada de `SESSION_SECRET`. «Recordar este dispositivo 14 días» la omite en ese navegador. Un admin puede reiniciar el segundo paso de otra persona. |
+| Verificación en dos pasos | App TOTP o código por email, con 10 códigos de recuperación (se muestran una vez). Obligatoria para admins con contraseña, opcional para el resto. Los secretos se cifran con `ENCRYPTION_KEY` (o, si no está definida, con una clave derivada de `SESSION_SECRET`). «Recordar este dispositivo 14 días» la omite en ese navegador. Un admin puede reiniciar el segundo paso de otra persona. |
 | Inicio con Google | OpenID Connect con PKCE. Solo entran usuarios existentes y activos (por email verificado y, después, por id de Google); opcionalmente limitado a `GOOGLE_WORKSPACE_DOMAIN`. No pide segundo paso propio (vale el de Google). |
 | Avisos de cuenta | Email de aviso al iniciar sesión desde un dispositivo desconocido (no en el primer acceso de una cuenta) y tras cualquier cambio de contraseña o de email. Al cambiar el email de una cuenta (desde el perfil o por un admin) se desvincula su cuenta de Google y dejan de valer los enlaces pendientes enviados a la dirección anterior (invitación, restablecer, confirmar); si era una invitación con el email mal escrito, hay que volver a enviarla. Cerrar sesión borra la cookie del navegador. |
 | Fuerza bruta y abuso | Límite de intentos de login por pareja IP+email y por IP (ventana de 15 minutos), de «¿Olvidaste tu contraseña?» y de cambios de contraseña. También hay topes de subidas (60 por minuto y persona), comentarios (30 por minuto; por tarea, 500 por defecto, configurable entre 1 y 1000 en *Administración → Ajustes*), subtareas (100 por tarea), documentos de Google (20 por minuto), creación de tareas (300 por minuto y persona), etiquetas y entregables (30 por minuto), suma de adjuntos por tarea y tamaño de cada paquete ZIP de una release (80 MB por defecto cada uno, configurables en cada proyecto entre 10 y 500 MB, y el de un archivo entre 1 y 100 MB; cada persona arma un ZIP a la vez y el servidor como mucho dos), cola de imágenes en proceso (más de 10 esperando: «inténtalo de nuevo en unos segundos») e informes PDF (5 por minuto y persona; se generan de uno en uno para que la app no se frene). |
@@ -133,6 +134,7 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 | Cabeceras | `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `HSTS`. |
 | Imágenes | Tamaño máximo configurable, límite de píxeles en sharp (protección frente a *decompression bombs*), reconversión siempre a WebP (se descarta cualquier contenido incrustado) y servido solo a usuarios con acceso. |
 | Adjuntos | Cuota por proyecto (`UPLOAD_QUOTA_MB_PER_PROJECT`, 2048 MB por defecto) y cuota total opcional (`UPLOAD_QUOTA_MB_TOTAL`). Limpieza diaria de ficheros huérfanos (de más de 24 h; nunca toca `backups/` y se aborta si más del 50 % parecen huérfanos). |
+| Documentación | Se sirve solo a quien ve el proyecto, con `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox` y `X-Frame-Options: SAMEORIGIN` (solo la propia app puede incrustarla). Nada se sirve como HTML: texto y Markdown van como `text/plain` y los pinta el navegador (el Markdown, con el mismo componente seguro que las descripciones); las imágenes se reconvierten a WebP; el SVG, el HTML y cualquier PDF o texto cuyo contenido no lo sea de verdad son «otros» y solo se descargan (como `application/octet-stream`). El tipo se decide al subir y no cambia al renombrar. |
 | Copias de seguridad | Volcado diario de la base de datos, comprimido (gzip) y cifrado con AES-256-GCM (`BACKUP_KEY`). Descargar una copia exige tu contraseña (o un código de tu app de autenticación) y usa un enlace de un solo uso que caduca a los 60 s. Ver 4.5. |
 | Contenedor | El proceso Node se ejecuta como el usuario sin privilegios `node`. |
 | Google | OAuth con permiso mínimo `drive.file`: solo da acceso a los archivos que crea Pizarro. Parámetro `state` ligado a la sesión contra CSRF. Tokens cifrados en base de datos. Opcionalmente, restringido a un dominio de Workspace. Los archivos de proyectos de equipo se comparten con el dominio; los de proyectos privados, solo con los miembros del proyecto. |
@@ -272,7 +274,7 @@ Desde el menú «⋯» de cada columna:
 
 ### 3.6 Generar una release
 
-**Tareas fijas («Siempre en la release»).** Al pie de la columna *Siguiente salto a producción* hay una sección plegable que indica cuántas tareas fijas tiene. Al abrirla, se despliega hacia arriba con esas tareas y el botón **+ Añadir**. Son tareas que se repiten en cada despliegue (por ejemplo, «Generar el PDF de la release»): entran preseleccionadas en cada release (con la marca *fija*), pero **no salen de la columna** al marcarla como desplegada. Solo se añaden al usar **Generar Release** de esa columna, no con *Release con selección*. Para convertir una tarea en fija, arrástrala sobre la sección: si está cerrada se abre al mantenerla encima un momento. También se puede marcar o desmarcar una tarea existente de esa columna con *Fija en la release* en su detalle. Si se mueve a otra columna o se archiva, deja de ser fija. Cada tarea fija lleva un pequeño interruptor **En todas / Cada dos / Cada tres** (del color de la barra de subtareas): con *Cada dos* solo entra preseleccionada en las releases de número par y con *Cada tres* en las múltiplo de 3 (siempre se puede marcar o desmarcar a mano). Cambiarlo se puede deshacer y queda en el historial; al dejar de ser fija vuelve a *En todas*. Las tareas del panel también se pueden **arrastrar fuera** a cualquier columna y posición (en táctil, con su asa): dejan de ser fijas.
+**Tareas fijas («Siempre en la release»).** Al pie de la columna *Siguiente salto a producción* hay una sección plegable que indica cuántas tareas fijas tiene. Al abrirla, se despliega hacia arriba con esas tareas y el botón **+ Añadir**. Son tareas que se repiten en cada despliegue (por ejemplo, «Generar el PDF de la release»): entran preseleccionadas en cada release (con la marca *fija*), pero **no salen de la columna** al marcarla como desplegada. Solo se añaden al usar **Generar Release** de esa columna, no con *Release con selección*. Para convertir una tarea en fija, arrástrala sobre la sección: si está cerrada se abre al mantenerla encima un momento. También se puede marcar o desmarcar una tarea existente de esa columna con *Fija en la release* en su detalle. Si se mueve a otra columna o se archiva, deja de ser fija. Cada tarea fija lleva un pequeño interruptor **En todas / Cada dos / Cada tres** (del color de la barra de subtareas): con *Cada dos* solo entra preseleccionada en las releases de número par y con *Cada tres* en las múltiplo de 3 (siempre se puede marcar o desmarcar a mano). En el diálogo de generar release, su marca indica cuándo le toca: «fija · Cada tres · ahora», «… en la siguiente» o «… dentro de 2». Cambiarlo se puede deshacer y queda en el historial; al dejar de ser fija vuelve a *En todas*. Las tareas del panel también se pueden **arrastrar fuera** a cualquier columna y posición (en táctil, con su asa): dejan de ser fijas.
 
 1. Prepara tus plantillas en **Mi perfil → Plantillas de release notes**. Puedes tener **varias cabeceras** (por ejemplo, «Contexto para IA» o «Para negocio») y **varios pies** (por ejemplo, «Checklist de cierre»), cada uno con su nombre. Se pueden **reordenar**: la primera de cada tipo es la que se propone por defecto en **Generar release**.
 2. En el tablero, pulsa **Generar Release** en la columna *Siguiente salto a producción*.
@@ -295,7 +297,7 @@ Desde el menú «⋯» de cada columna:
 ```
 
    - **Códigos:** cada punto lleva un código con el **número de la release**, la inicial del tipo y un número por tipo: en la release 32, `R32F1`, `R32F2`… `R32C1`. Si dos tipos empiezan por la misma letra, el segundo usa más letras (p. ej. D y DI). Si otra persona despliega una release mientras generas la tuya, al marcarla como desplegada se avisa para volver a generar el texto con el número correcto.
-   - **Títulos con código:** al marcar la release como desplegada, cada tarea que sale de la columna (a *En producción* o al archivo) pasa a llamarse con su código delante: `R32F1: Nueva pantalla de exportación`. Las tareas fijas no se renombran. Si la tarea ya llevaba el código de otra release, se sustituye por el nuevo; si no cabe en 200 caracteres, se recorta el final. Deshacer el despliegue devuelve los títulos originales; la siguiente aparición de una tarea repetitiva nace con el título original, y el texto de la release y el histórico conservan el título sin código.
+   - **Títulos con código:** al marcar la release como desplegada, cada tarea que sale de la columna (a *En producción* o al archivo) pasa a llamarse con su código delante: `R32F1: Nueva pantalla de exportación`. Las tareas fijas no se renombran. Si la tarea ya llevaba el código de otra release, el nuevo se antepone sin quitar el anterior; si no cabe en 210 caracteres, se recorta el final. Deshacer el despliegue devuelve los títulos originales; la siguiente aparición de una tarea repetitiva nace con el título original, y el texto de la release y el histórico conservan el título sin código.
    - **Descripción:** la de cada tarea va debajo de su punto. Las menciones salen como `@Nombre`.
    - **Adjuntos:** se nombran `código_nombre-original.webp` y se listan bajo su punto. Si alguna tarea tiene adjuntos, aparece el botón **Descargar adjuntos (N)**, que baja un ZIP (`release-AAAA-MM-DD-adjuntos.zip`) con todos los ficheros ya renombrados.
 
@@ -338,7 +340,7 @@ Se genera en el idioma de quien lo pide.
 - **Cuándo recibes un aviso:**
   - te **mencionan**;
   - te **asignan** una tarea;
-  - cambia la **fecha límite** de una tarea tuya (el aviso sale unos 3 minutos después del último cambio y recoge solo la fecha final, así que mover la tarjeta varias veces seguidas genera un único aviso; si acaba en su fecha original, no se avisa; si la tarea se borra, se archiva o deja de ser tuya mientras tanto, tampoco);
+  - cambia la **fecha límite** de una tarea tuya (el aviso sale unos 5 minutos después del último cambio y recoge solo la fecha final, así que mover la tarjeta varias veces seguidas genera un único aviso; si acaba en su fecha original, no se avisa; si la tarea se borra, se archiva o deja de ser tuya mientras tanto, tampoco);
   - hay un **comentario** en una tarea que **sigues**;
   - **responden a tu comentario**.
 - **Seguir una tarea:** botón de seguir / dejar de seguir en el detalle. Quien crea, es asignado o comenta una tarea la sigue.
@@ -498,6 +500,16 @@ Se filtra por periodo (1 h, 24 h, 7 días), nivel (Info, Aviso, Error), categor�
 - **Reiniciar la verificación en dos pasos:** quita el segundo paso de la persona (volverá a configurarlo).
 - **Borrar** (papelera): elimina la cuenta para siempre. En los proyectos compartidos sus tareas y comentarios se conservan, sin autor. Si es el único miembro de **proyectos privados**, se muestra un aviso con cuántos son y hay que marcar una casilla de confirmación: se borran con él; en los demás, solo deja de ser miembro. Nadie puede borrarse a sí mismo.
 
+### 3.17 Documentación del proyecto
+
+Entrada **Documentación** del menú lateral (debajo de *Releases*): los archivos de referencia del proyecto (guías y notas, PDF de especificaciones o contratos, capturas) para verlos sin salir de la app. Los ve y los sube cualquiera con acceso al proyecto, con las mismas reglas de visibilidad que el tablero (un proyecto privado solo lo ven sus miembros).
+
+- **Subir:** botón *Subir archivos* (varios a la vez), arrastrando archivos a la página o pegándolos con Ctrl+V (capturas de pantalla incluidas). Se suben de uno en uno y, si alguno falla, se muestra el motivo junto a su nombre.
+- **Qué se puede ver:** texto plano (`.txt`, `.log`, `.csv`, `.json`, `.yml`…), Markdown (`.md`, con el mismo Markdown seguro que las descripciones de las tarjetas), PDF (con el visor del navegador) e imágenes PNG, JPEG, WebP, GIF o AVIF (se reconvierten a WebP, como los adjuntos). Los textos de más de 1 MB solo se descargan. Cualquier otro tipo (Office, ZIP, SVG, HTML…) aparece en la lista y se puede descargar, pero no tiene vista previa. El tipo se decide al subir mirando también el contenido: un «PDF» que no lo es se trata como un archivo cualquiera.
+- **Lista:** nombre, icono de tipo, tamaño, quién lo subió y fecha, con buscador por nombre (sin distinguir mayúsculas ni tildes). Al pulsar un documento se abre el visor con **Descargar**, **Borrar** (pide confirmación; no se puede deshacer) y el lápiz para **Renombrar**.
+- **Límites:** cada archivo, hasta el tamaño máximo de archivo del proyecto (*Ajustes del proyecto*, y `MAX_UPLOAD_MB` si está definida); hasta 200 documentos por proyecto; y su tamaño cuenta en la misma cuota de almacenamiento del proyecto que los adjuntos de tareas (`UPLOAD_QUOTA_MB_PER_PROJECT`). Las subidas comparten el tope de 60 por minuto y persona.
+- **Registro y copias:** se registran las subidas, las descargas explícitas, los renombrados y los borrados (no las visualizaciones). Los ficheros están en `UPLOAD_DIR/documents/`, así que entran en las copias de seguridad que incluyen los adjuntos; borrar el proyecto los borra y la limpieza diaria de huérfanos revisa también esa carpeta.
+
 ---
 
 ## 4. Procesos operativos
@@ -517,11 +529,18 @@ La guía paso a paso de la primera puesta en marcha está en el `README.md`.
 
 ### 4.2 Variables de entorno
 
-Consulta la tabla completa en el `README.md`. Las imprescindibles son `DATABASE_URL`, `SESSION_SECRET`, `APP_URL` y `UPLOAD_DIR`. Las `SEED_ADMIN_*` solo hacen falta en el primer arranque y conviene borrarlas después. Otras variables opcionales de esta versión:
+Consulta la tabla completa en el `README.md`. Las imprescindibles son `DATABASE_URL`, `SESSION_SECRET`, `APP_URL` y `UPLOAD_DIR`. Las `SEED_ADMIN_*` solo hacen falta en el primer arranque (en un servidor propio con Docker Compose no se usan: el asistente web `/setup` crea el administrador) y conviene borrarlas después. Otras variables opcionales de esta versión:
 
 | Variable | Para qué sirve |
 |---|---|
+| `TOKEN_SECRET` | Clave de los enlaces de email, códigos de recuperación y dispositivos recordados. Sin ella se usa `SESSION_SECRET`. Ver 4.4. |
+| `ENCRYPTION_KEY` | Clave con la que se cifran los secretos de 2FA (TOTP) y las conexiones con Google. Sin ella se usa `SESSION_SECRET`. Ver 4.4. |
+| `TOKEN_SECRET_PREVIOUS` / `ENCRYPTION_KEY_PREVIOUS` | Solo durante una rotación: la clave anterior, para seguir leyendo lo que se guardó con ella. Ver 4.4. |
 | `BACKUP_KEY` | Clave AES-256 de las copias automáticas. Genérala con `openssl rand -base64 32` y **guárdala también fuera de Railway**: sin ella las copias no se pueden leer. Sin la variable, las copias están desactivadas. |
+| `BACKUP_S3_ENDPOINT`, `BACKUP_S3_BUCKET`, `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY`, `BACKUP_S3_REGION`, `BACKUP_S3_PREFIX` | Destino externo S3 compatible (Cloudflare R2, Backblaze B2, MinIO…) para las copias (ver 4.5). Opcionales; sin ellas, las copias solo quedan en el volumen. |
+| `BACKUP_EXTERNAL_DIR` | Carpeta montada (disco USB, NAS…) como destino externo de las copias. Opcional. |
+| `BACKUP_LOCAL_FILES` | Sin definir: la copia local incluye los ficheros solo si no hay destino externo. `1`/`0` lo fuerzan. |
+| `SETUP_TOKEN` | Solo instalación propia: código fijo que acepta el asistente web del primer arranque (`/setup`), además del que se imprime en el log. Sin uso si ya hay usuarios o con `SEED_ADMIN_*`. |
 | `UPLOAD_QUOTA_MB_PER_PROJECT` | Cuota de adjuntos por proyecto en MB (por defecto 2048). |
 | `UPLOAD_QUOTA_MB_TOTAL` | Cuota total de adjuntos del servidor en MB (opcional; vacío = sin límite). |
 | `MAX_UPLOAD_MB` | Opcional. Tope, para todo el servidor, del tamaño de un adjunto en MB; el máximo real lo fija cada proyecto (20 MB por defecto, hasta 100) y esta variable solo lo recorta. Se lee al subir cada archivo: cambiarla no exige recompilar ni volver a desplegar la imagen. |
@@ -543,31 +562,65 @@ Tests: `npm test` ejecuta los tests unitarios; `npm run test:db` ejecuta los de 
 | Una persona pierde su segundo paso | Con sus códigos de recuperación puede entrar; si no los tiene, un admin reinicia su verificación en dos pasos. |
 | Se pierde el acceso de todos los admins | Conéctate a la base de datos y promueve a un usuario existente: `UPDATE "User" SET role='ADMIN' WHERE email='persona@example.com';` |
 
-### 4.4 Rotar `SESSION_SECRET`
+### 4.4 Rotar claves (`SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY`)
 
-Cambia la variable en Railway y redespliega. Todas las sesiones dejan de ser válidas y cada usuario tendrá que volver a entrar. Las conexiones con Google también se invalidan (sus tokens se cifran con una clave derivada de este secreto): cada usuario tendrá que volver a conectarla. También dejan de valer los enlaces de email pendientes, los dispositivos recordados y las **apps de verificación en dos pasos** (su secreto se cifra con la misma clave): antes de rotar, avisa a los administradores; tras rotar, otro administrador les reinicia el segundo paso desde *Administración → Usuarios* y lo vuelven a configurar al entrar. Hazlo si sospechas que el secreto se ha filtrado.
+Pizarro usa tres claves, cada una para una cosa. Así, cambiar una no rompe lo que protegen las otras:
+
+| Clave | Qué protege | Si la cambias sin más… |
+|---|---|---|
+| `SESSION_SECRET` (obligatoria) | Las sesiones abiertas. | Todo el mundo tiene que volver a entrar. Nada más. |
+| `TOKEN_SECRET` (opcional) | Los enlaces de los emails (invitaciones, contraseñas, cambio de email), los códigos de recuperación de la verificación en dos pasos, los códigos enviados por email y los dispositivos recordados. | Dejan de valer los enlaces pendientes, los **códigos de recuperación** y los dispositivos recordados (se vuelve a pedir el segundo paso). |
+| `ENCRYPTION_KEY` (opcional) | Los secretos de las apps de verificación (TOTP) y las conexiones con Google, que se guardan cifrados. | Las apps de verificación dejan de funcionar (un admin tiene que reiniciar el segundo paso de cada persona) y hay que volver a conectar Google. |
+
+Si `TOKEN_SECRET` o `ENCRYPTION_KEY` no están definidas, se usa `SESSION_SECRET` en su lugar, exactamente como en las versiones anteriores: una instalación existente sigue funcionando sin tocar nada. Pero entonces rotar `SESSION_SECRET` lo rompe todo a la vez (sesiones, códigos, 2FA y Google). Por eso conviene separarlas. Todas deben tener al menos 32 caracteres; genera cada una con `openssl rand -base64 48`.
+
+**Separar las claves en una instalación existente (sin perder nada).** Copia el valor **actual** de `SESSION_SECRET` en dos variables nuevas, `TOKEN_SECRET` y `ENCRYPTION_KEY`, y redespliega. No cambia nada para nadie: son la misma clave con otro nombre. A partir de ahí ya puedes rotar `SESSION_SECRET` cuando quieras (siguiente procedimiento). En una instalación nueva, genera las tres desde el principio.
+
+**Rotar solo las sesiones** (p. ej. si sospechas que se ha filtrado `SESSION_SECRET`, o alguien ha dejado una sesión abierta en un equipo ajeno). Requisito: `TOKEN_SECRET` y `ENCRYPTION_KEY` definidas (ver el párrafo anterior).
+1. Genera un valor nuevo y ponlo en `SESSION_SECRET`.
+2. Redespliega. Todo el mundo vuelve a entrar; la verificación en dos pasos, los códigos de recuperación, los dispositivos recordados y Google siguen funcionando.
+
+**Rotar la clave de cifrado** (`ENCRYPTION_KEY`) sin perder la verificación en dos pasos ni Google:
+1. Copia el valor actual de `ENCRYPTION_KEY` en `ENCRYPTION_KEY_PREVIOUS` (si nunca la definiste, copia el de `SESSION_SECRET`: era la clave que se usaba).
+2. Pon un valor nuevo en `ENCRYPTION_KEY` y redespliega. La app lee lo antiguo con la clave anterior y lo vuelve a cifrar con la nueva a medida que se usa.
+3. Para no esperar, vuelve a cifrarlo todo de una vez: `node dist/rotate-keys.mjs` en el contenedor (con Docker Compose: `docker compose exec app node dist/rotate-keys.mjs`; en desarrollo: `npm run keys:rotate`). Con `--dry-run` solo cuenta lo que haría. Se puede repetir sin peligro y con la app en marcha.
+4. Si el comando termina con «0 ilegibles», quita `ENCRYPTION_KEY_PREVIOUS` y redespliega. Si quedan ilegibles, es que se cifraron con otra clave que ya no tienes: esas personas tendrán que configurar de nuevo su segundo paso (un admin lo reinicia en *Administración → Usuarios*) o reconectar Google.
+
+**Rotar `TOKEN_SECRET`** (poco habitual): pon el valor actual en `TOKEN_SECRET_PREVIOUS`, uno nuevo en `TOKEN_SECRET` y redespliega. Mientras la anterior siga definida, los enlaces pendientes, los códigos de recuperación y los dispositivos recordados siguen valiendo (los dispositivos se pasan solos a la clave nueva la próxima vez que se usan). Los enlaces caducan en horas (las invitaciones, en 72 h), pero los **códigos de recuperación no se pueden pasar a la clave nueva** (solo se guarda su huella): antes de quitar `TOKEN_SECRET_PREVIOUS`, pide a quien use la verificación en dos pasos que genere códigos nuevos en *Mi perfil*, o asume que los antiguos dejarán de valer.
+
+**Qué se pierde en cada caso, en resumen:**
+- Solo `SESSION_SECRET`: las sesiones abiertas.
+- `ENCRYPTION_KEY` con `ENCRYPTION_KEY_PREVIOUS` y el comando de rotación: nada.
+- `ENCRYPTION_KEY` sin la anterior: las apps de verificación (TOTP) y las conexiones con Google. La verificación por email no se ve afectada.
+- `TOKEN_SECRET` con `TOKEN_SECRET_PREVIOUS`: nada mientras la anterior siga puesta; al quitarla, los códigos de recuperación no renovados.
+- `TOKEN_SECRET` sin la anterior: los enlaces de email pendientes, los códigos de recuperación y los dispositivos recordados.
+
+**Guarda estas claves fuera del servidor** (en un gestor de contraseñas), junto con el resto del kit de recuperación: `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y `BACKUP_KEY`. Si pierdes el servidor y restauras una copia en otro, necesitas `BACKUP_KEY` para abrir la copia y `ENCRYPTION_KEY` (y `TOKEN_SECRET`) para que la verificación en dos pasos, los códigos de recuperación y Google sigan funcionando; `SESSION_SECRET` puede ser nueva (solo obliga a entrar de nuevo). Si no has definido `TOKEN_SECRET` ni `ENCRYPTION_KEY`, `SESSION_SECRET` hace de las tres: guárdala y reutilízala.
+
+Al cambiar cualquiera de estas variables en Railway o en el `.env` de Docker Compose, hace falta redesplegar o reiniciar la app (`docker compose up -d`).
 
 ### 4.5 Copias de seguridad y restauración
 
-- **Copias automáticas cifradas (base de datos):** con `BACKUP_KEY` definida, cada día se vuelca la base de datos (gzip + AES-256-GCM) a `UPLOAD_DIR/backups`. Se conservan **14 diarias y 6 mensuales**. Cada mes se hace una **prueba de restauración** de la última copia. El estado se ve en *Administración → Copias de seguridad*, con **Crear copia ahora** y **Descargar** la última.
+- **Copias automáticas cifradas (base de datos y ficheros):** con `BACKUP_KEY` definida, cada día se copian la base de datos (gzip + AES-256-GCM) y **todos los ficheros de `UPLOAD_DIR`** (adjuntos, miniaturas, copias de releases, documentos de proyecto) a `UPLOAD_DIR/backups`. Los ficheros se guardan cifrados **una sola vez** en un almacén común (`backups/files/`) y cada copia solo añade los nuevos; un manifiesto cifrado por copia (`.pzman`) dice qué volcado y qué ficheros la forman. Se conservan **14 diarias y 6 mensuales**; los ficheros que ya no nombra ninguna copia conservada se borran. El estado se ve en *Administración → Copias de seguridad*, con **Crear copia ahora** y **Descargar** (solo la base de datos, cifrada; pide tu contraseña o un código de tu app y genera un enlace de un solo uso válido 60 s).
   - **Guarda `BACKUP_KEY` también fuera de Railway** (gestor de contraseñas): sin ella las copias no se pueden leer.
-  - **Restaurar** en una base **vacía**: `BACKUP_KEY="…" npm run backup:restore -- <fichero>` (con `DATABASE_URL` apuntando a esa base).
-  - **La base debe estar en la misma migración que la copia.** El fichero `.json` que acompaña a cada copia indica su migración (`migration`) y la compilación (`build`). La restauración se niega si no coinciden. Para restaurar una copia hecha con una versión anterior de la app:
-    1. Crea una base nueva y vacía y **no arranques la app contra ella** (el arranque crea el administrador inicial y la base deja de estar vacía).
-    2. Desde una copia del código en la versión de la copia (`git checkout` del commit o etiqueta cuya última carpeta de `prisma/migrations/` coincide con `migration`), ejecuta `npx prisma migrate deploy` con `DATABASE_URL` apuntando a esa base.
-    3. Restaura con `npm run backup:restore -- <fichero>` desde esa misma copia del código.
-    4. Despliega la versión actual contra esa base: al arrancar aplica las migraciones pendientes y la deja al día.
-  - La **prueba de restauración** mensual descifra la copia y comprueba su integridad (sha256, recuentos por tabla y manifiesto); **no** la restaura en una base real. Ensaya de vez en cuando la secuencia anterior en una base de pruebas.
-  - Descarga de vez en cuando una copia a un lugar externo: las copias viven en el mismo volumen que los adjuntos. Para descargarla, Pizarro pide tu contraseña (o un código de tu app de autenticación) y genera un enlace de un solo uso válido 60 s.
-- **Manual con `pg_dump`:** `pg_dump "$DATABASE_PUBLIC_URL" -Fc -f tablon.dump`. Restauración: `pg_restore --clean --no-owner -d "$DATABASE_PUBLIC_URL" tablon.dump`. También puedes activar los backups del servicio Postgres en Railway (ver «Copias del volumen en Railway»).
-- **Capturas y adjuntos (volumen):** las copias automáticas no incluyen los ficheros. Activa los **snapshots del volumen** en Railway. Las imágenes y la base de datos deben restaurarse a la misma fecha para que los adjuntos coincidan.
-- **Copias del volumen en Railway:** las copias automáticas de Pizarro no incluyen los adjuntos, así que programa también las copias de Railway.
-  1. Abre el servicio que tiene el volumen y entra en la pestaña **Backups**.
-  2. Pulsa **Edit schedule** y activa **Daily**, **Weekly** y/o **Monthly**. Railway conserva las diarias 6 días, las semanales 1 mes y las mensuales 3 meses.
-  3. Pulsa **Backup now** para hacer una copia inmediata.
-  4. Haz lo mismo en el servicio de **PostgreSQL**.
-  - **Borrar un volumen borra también sus copias.** Por eso, una vez al mes descarga la última copia de Pizarro (pide contraseña) y guárdala, junto con `BACKUP_KEY`, fuera de Railway.
-  - Existe una guía detallada paso a paso para Google Workspace (buzón `avisos@`, cliente OAuth) y para las copias de Railway, en un PDF aparte entregado a la persona propietaria.
+  - `BACKUP_LOCAL_FILES`: sin definir, la copia local incluye los ficheros **solo si no hay destino externo** (si lo hay, en el volumen queda solo la base de datos y los ficheros van al destino externo, para no ocupar el doble). `1` o `0` lo fuerzan. Ojo: sin destino externo, la copia de los ficheros ocupa en el volumen tanto como los propios ficheros.
+- **Destino externo (muy recomendado):** el volumen guarda a la vez los datos y sus copias; si se pierde, se pierde todo. Tras cada copia diaria, Pizarro sube a un **almacenamiento S3 compatible** (Cloudflare R2, Backblaze B2, MinIO…) lo que aún no tenga, y aplica allí la misma retención.
+  1. Crea un bucket privado y una clave de API con permiso de lectura, escritura y borrado **solo en ese bucket**. En R2: *R2 → Create bucket* y *Manage R2 API Tokens → Create API token* (*Object Read & Write*, limitado al bucket).
+  2. En el servicio de la app, *Variables*: `BACKUP_S3_ENDPOINT` (en R2, `https://<id-de-cuenta>.r2.cloudflarestorage.com`; en B2, `https://s3.<región>.backblazeb2.com`), `BACKUP_S3_BUCKET`, `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY` y, opcionales, `BACKUP_S3_REGION` (por defecto `auto`; en B2, la región del endpoint) y `BACKUP_S3_PREFIX` (p. ej. `pizarro`). Despliega.
+  3. En *Administración → Copias de seguridad → Destino externo* pulsa **Copiar ahora a destino externo** y, al cabo de unos minutos, recarga: debe salir *Correcta*. La primera subida lleva todos los ficheros; las siguientes, solo los nuevos. Si se corta, se reanuda en la siguiente pasada (cada hora).
+  - Si hay destino externo y la última subida correcta tiene **más de 48 h**, se avisa en el menú y por email a los administradores, igual que con la copia local.
+  - Fuera de Railway también vale una carpeta montada (disco USB, NAS): `BACKUP_EXTERNAL_DIR` (ver `docs/INSTALL.md`).
+- **Prueba de restauración mensual:** cada mes se restaura de verdad la última copia en una base de datos temporal (`pizarro_restoretest_…`, que se borra al terminar) y se comprueba que cada destino tiene todos los ficheros de su última copia, descifrando unos cuantos al azar. Si el usuario de la base de datos no puede crear bases de datos, solo se descifra y se comprueba la copia entera, y la página lo indica. En Railway el usuario `postgres` sí puede.
+- **Restaurar sin `git`:** la imagen trae la herramienta `node dist/restore.mjs` y todas las migraciones. Restaura en una base de datos **vacía**: aplica las migraciones hasta la de la copia, carga los datos, aplica las migraciones posteriores y, con `--files`, restaura los ficheros (comprobando el sha256 de cada uno). Sirve para copias hechas con esta versión o con cualquier versión anterior; una copia de una versión **más nueva** que la imagen se rechaza.
+  - Orígenes: `latest` (la última del volumen), `s3:latest`, `external:latest`, o una copia concreta por su nombre (`s3:pizarro-backup-20261025T031500Z`). `--list` muestra las que hay.
+  - **Se ha perdido el volumen o la base de datos** (Railway):
+    1. Crea un servicio PostgreSQL nuevo y, si se perdió el volumen, monta uno nuevo en `/app/uploads`.
+    2. Apunta `DATABASE_URL` de la app a la base nueva (`${{NombreDelServicio.DATABASE_URL}}`) y despliega. Al arrancar, la app crea el administrador inicial en la base nueva: por eso el paso 3 lleva `--force`.
+    3. Abre una consola en el contenedor de la app (`railway ssh --service <app>` con la CLI de Railway) y ejecuta `node dist/restore.mjs s3:latest --files --force` (o `latest --files --force` si el volumen sigue entero). `--force` **borra** lo que haya en la base de destino: compruébalo antes.
+    4. Reinicia el servicio (*Restart*) y entra con tus usuarios de siempre.
+  - **Volver a una copia anterior** (p. ej. tras un borrado por error): igual, pero restaurando en una base nueva la copia elegida (`node dist/restore.mjs s3:pizarro-backup-AAAAMMDDTHHMMSSZ`, con `DATABASE_URL="<url de la base nueva>"` delante) y cambiando después `DATABASE_URL` de la app a esa base. Los ficheros no hace falta restaurarlos si el volumen está entero (los adjuntos no cambian una vez subidos); los que faltaran se recuperan con `--files-only`.
+  - Si la restauración de ficheros se corta, repítela con `--files-only`: salta los que ya están bien.
+- **Manual con `pg_dump`:** `pg_dump "$DATABASE_PUBLIC_URL" -Fc -f tablon.dump`. Restauración: `pg_restore --clean --no-owner -d "$DATABASE_PUBLIC_URL" tablon.dump`. Los backups del servicio Postgres y los snapshots del volumen de Railway siguen siendo un complemento útil (pestaña **Backups** de cada servicio: **Edit schedule** y **Backup now**), pero **borrar un volumen borra también sus copias**: el destino externo es lo que protege de eso.
 - **Limpieza de huérfanos:** cada día se borran los ficheros de `UPLOAD_DIR` sin registro en la base de datos y con más de 24 h (nunca `backups/`); si más del 50 % parecen huérfanos, se aborta por seguridad.
 
 ### 4.6 Publicar una nueva versión de la app
@@ -614,6 +667,7 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 - **Logs de la app:** *Administración → Logs* (ver 3.16), con la duración de cada acción: es el primer sitio donde mirar si algo va lento o falla.
 - **Logs del contenedor:** en Railway, *Deployments → View logs*. Los errores inesperados también salen ahí con el prefijo `[action]`, `[upload]` o `[uploads]`.
 - **Errores en el navegador:** la pantalla «Algo ha fallado» y cualquier excepción no capturada del navegador se registran en *Logs* (categoría *client*), con la página, el navegador y el código del error para cruzarlo con el del servidor.
+- **Diagnóstico para soporte:** *Administración → Ajustes → Descargar diagnóstico* (solo admins; 5 descargas cada 10 minutos; queda en *Logs* como `admin.doctor`) descarga un JSON con el estado técnico: versión y compilación, Node, memoria y tiempo encendido, qué variables documentadas están definidas (`set`, `unset` o `invalid`; **nunca su valor**), qué integraciones están activas, tamaño de la base de datos y filas por tabla, migraciones aplicadas y pendientes, espacio del disco de subidas, estado de las tareas de mantenimiento y de las copias, resultado de la comprobación de salud, sesiones activas y cuántos errores y avisos hubo en las últimas 24 h por tipo de acción. **No lleva datos personales**: ni mensajes de los logs, ni emails, ni nombres (se tachan de los mensajes de error), ni claves. Con Docker, lo mismo por consola: `docker compose exec app node dist/doctor.mjs > diagnostico.json`. Revísalo antes de enviarlo si quieres: es texto legible.
 - **Uso del volumen:** visible en la pestaña del volumen. Como referencia, una captura típica ocupa entre 50 y 300 KB.
 
 ### 4.10 Resolución de problemas
@@ -621,7 +675,7 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 | Síntoma | Causa probable | Solución |
 |---|---|---|
 | El despliegue no arranca: `SESSION_SECRET debe tener al menos 32 caracteres` | Variable vacía o corta | Genera una con `openssl rand -base64 48`. |
-| `[boot] No hay usuarios. Define SEED_ADMIN_EMAIL…` | Primer arranque sin variables de seed | Añade `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` y redespliega. |
+| `[boot] No hay usuarios: el administrador inicial se crea en el asistente web (/setup)…` | Primer arranque sin variables de seed | En un servidor propio, abre `/setup` con el código que el log imprime en un recuadro (`introduce el código: XXXX-XXXX`). En Railway, añade `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` y redespliega. |
 | El login no mantiene la sesión | `APP_URL` con `https://` pero se accede por `http://` | Accede por HTTPS o ajusta `APP_URL`/`COOKIE_SECURE`. |
 | Las capturas desaparecen tras desplegar | No hay volumen montado o la ruta no coincide | Monta un Volume en `/app/uploads` y comprueba que `UPLOAD_DIR` es igual. |
 | «El archivo supera el tamaño máximo del proyecto (N MB por archivo)» | Archivo mayor que el máximo del proyecto (o que `MAX_UPLOAD_MB`, si está definida) | Reduce el archivo o sube el límite en los ajustes del proyecto (hasta 100 MB; un valor muy alto consume más memoria al subir). |
@@ -636,7 +690,7 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 | Google devuelve `redirect_uri_mismatch` al iniciar sesión | Falta la URI `/api/auth/google/callback` | Añádela al cliente OAuth (ver 4.7). |
 | «La integración con Google no está configurada» | Faltan `GOOGLE_CLIENT_ID`/`SECRET` o `APP_URL` | Configúralos y redespliega. |
 | Google devuelve `redirect_uri_mismatch` | La URI de redirección del cliente OAuth no coincide | Debe ser exactamente `APP_URL` + `/api/google/callback`. |
-| «Tu conexión con Google ha caducado» | Permiso revocado o `SESSION_SECRET` rotado | Vuelve a conectar en *Mi perfil*. |
+| «Tu conexión con Google ha caducado» | Permiso revocado, o se cambió la clave de cifrado (`ENCRYPTION_KEY`, o `SESSION_SECRET` si aquella no está definida) sin la anterior (ver 4.4) | Vuelve a conectar en *Mi perfil*. |
 | No llegan los emails | Credenciales SMTP o contraseña de aplicación incorrectas | Revisa los logs `[notify]` y la columna `deliveryError`. |
 | No llegan los WhatsApp | Plantilla sin aprobar, idioma distinto, token caducado o número no verificado (número de prueba) | Revisa los logs `[notify]`, el estado de la plantilla y `WHATSAPP_TEMPLATE_LANG`. |
 | Las páginas tardan en cargar a veces | Servicio en una región lejana, *App Sleeping* activado o conexiones a la base de datos frías | En Railway: pon la app y Postgres en la misma región cercana (p. ej. *EU West*) y desactiva *Serverless / App Sleeping*. Revisa en *Logs* la duración de las acciones. |

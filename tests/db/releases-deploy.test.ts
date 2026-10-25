@@ -54,8 +54,8 @@ describe("deployRelease", () => {
     const titles = async () => Object.fromEntries((await db.task.findMany({ where: { id: { in: [a.id, b.id, fija.id] } } })).map((t) => [t.id, t.title]));
     let now = await titles();
     assert.match(now[a.id]!, /^R1[A-Z]+1: Uno$/);
-    // Un código anterior se sustituye, no se acumula; la fija no se renombra.
-    assert.match(now[b.id]!, /^R1[A-Z]+2: Dos$/);
+    // Un código anterior se conserva detrás del nuevo; la fija no se renombra.
+    assert.match(now[b.id]!, /^R1[A-Z]+2: R1F9: Dos$/);
     assert.equal(now[fija.id], "Fija");
     // El texto del histórico conserva el título tal cual lo vio la release.
     const rts = await db.releaseTask.findMany({ where: { releaseId: res.releaseId }, orderBy: { title: "asc" } });

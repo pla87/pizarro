@@ -10,7 +10,7 @@ import { notifyTask } from "./notify";
 // sin nuevos cambios, el planificador crea UN aviso con la fecha final. Si ésta coincide con la original, no avisa.
 
 /** Tiempo sin nuevos cambios de fecha tras el cual se envía el aviso. */
-export const DUE_NOTIFY_DELAY_MS = 3 * 60_000;
+export const DUE_NOTIFY_DELAY_MS = 5 * 60_000;
 /** Cada cuánto mira el planificador si hay avisos que enviar. */
 export const DUE_NOTIFY_POLL_MS = 30_000;
 

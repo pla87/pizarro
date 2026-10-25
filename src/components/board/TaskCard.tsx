@@ -3,7 +3,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AlignLeft, Loader2, CalendarClock, Check, CheckSquare, ExternalLink, FileText, GripVertical, Image as ImageIcon, MessageSquare, Paperclip, Repeat } from "lucide-react";
-import { isWhite } from "@/lib/constants";
+import { isWhite, MAX_TITLE } from "@/lib/constants";
 import { dueStatus, formatDay } from "@/lib/dates";
 import { memo, useEffect, useRef, useState } from "react";
 import type { BoardTask } from "@/lib/types";
@@ -283,7 +283,7 @@ function RenameInput({ title, onDone }: { title: string; onDone: (value: string,
     <input
       ref={ref}
       value={value}
-      maxLength={200}
+      maxLength={MAX_TITLE}
       aria-label={t("Título")}
       onChange={(e) => setValue(e.target.value)}
       onBlur={() => finish(true, false)}

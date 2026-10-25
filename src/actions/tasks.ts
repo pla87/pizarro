@@ -7,6 +7,7 @@ import { runAction } from "@/lib/action";
 import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjectAccess, assertTaskAccess, loadTaskWithAccess, visibleProjectsWhere } from "@/lib/access";
 import { appTimeZone, attachmentTotals, boardTaskSelect, listKinds, loadBoardTask, projectUsers, toBoardTask } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
+import { MAX_TITLE } from "@/lib/constants";
 import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { addUndo, captureTasks, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, type TaskField, type UndoOp } from "@/lib/undo";
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
@@ -296,7 +297,7 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
     });
     const t = await getT();
     const suffix = ` ${t("(copia)")}`;
-    const title = src.title.length + suffix.length > 200 ? `${src.title.slice(0, 200 - suffix.length).trimEnd()}${suffix}` : `${src.title}${suffix}`;
+    const title = src.title.length + suffix.length > MAX_TITLE ? `${src.title.slice(0, MAX_TITLE - suffix.length).trimEnd()}${suffix}` : `${src.title}${suffix}`;
     const columnId = dest?.columnId ?? src.columnId;
     const copy = await db.$transaction(async (tx) => {
       await assertTaskCapacity(tx, projectId);

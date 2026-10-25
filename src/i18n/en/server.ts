@@ -25,6 +25,7 @@ export const server: Record<string, string> = {
   "Sesión caducada. Vuelve a iniciar sesión.": "Session expired. Please sign in again.",
   // Validación
   "El título es obligatorio.": "The title is required.",
+  "Máximo 210 caracteres.": "Maximum 210 characters.",
   "Máximo 200 caracteres.": "Maximum 200 characters.",
   "El nombre es obligatorio.": "The name is required.",
   "Máximo 80 caracteres.": "Maximum 80 characters.",
@@ -114,6 +115,7 @@ export const server: Record<string, string> = {
   "No se pudo crear el archivo en Google Drive.": "The file could not be created in Google Drive.",
   // API
   "No autorizado": "Unauthorized",
+  "Demasiadas descargas del diagnóstico. Espera unos minutos.": "Too many diagnostics downloads. Wait a few minutes.",
   "Prohibido": "Forbidden",
   "No encontrado": "Not found",
   "Archivo no disponible": "File not available",
@@ -254,6 +256,8 @@ export const server: Record<string, string> = {
   "Cuota de adjuntos del proyecto superada: {used} MB usados de {limit} MB.": "Project attachment quota exceeded: {used} MB used of {limit} MB.",
   "Cuota total de adjuntos del servidor superada: {used} MB usados de {limit} MB.": "Total server attachment quota exceeded: {used} MB used of {limit} MB.",
   "Las copias de seguridad están desactivadas: falta una BACKUP_KEY válida.": "Backups are disabled: a valid BACKUP_KEY is missing.",
+  "No hay ningún destino externo configurado.": "No external destination is configured.",
+  "Ya hay una copia en curso.": "A backup is already in progress.",
   "(copia)": "(copy)",
   "Duplicó «{title}»": "Duplicated “{title}”",
   "Duplicó «{title}» en «{col}»": "Duplicated “{title}” into “{col}”",

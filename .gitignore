@@ -16,3 +16,4 @@ dist/
 
 # Capturas de pruebas locales mal dirigidas
 /undefined/
+deploy/recovery-kit.txt

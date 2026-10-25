@@ -1,4 +1,4 @@
-import { backupKeyState, listBackups, readStatus } from "@/lib/backup";
+import { backupDestinationsInfo, backupKeyState, externalCopyRunning, listBackups, readStatus } from "@/lib/backup";
 import { getBackupAlert } from "@/lib/backup-alert";
 import { db } from "@/lib/db";
 import { listJobRuns } from "@/lib/jobs";
@@ -22,5 +22,16 @@ export default async function BackupsPage() {
   };
   jobs.sort((a, b) => rank(a.name) - rank(b.name));
   // Quien entra con Google y no conoce su contraseña puede confirmar la descarga con un código de su app (TOTP).
-  return <BackupsAdmin keyState={backupKeyState()} alert={alert} status={status} files={files} canUseCode={me?.twoFactorMethod === "TOTP"} jobs={jobs} />;
+  return (
+    <BackupsAdmin
+      keyState={backupKeyState()}
+      alert={alert}
+      status={status}
+      files={files}
+      canUseCode={me?.twoFactorMethod === "TOTP"}
+      jobs={jobs}
+      destinations={backupDestinationsInfo()}
+      externalRunning={externalCopyRunning()}
+    />
+  );
 }

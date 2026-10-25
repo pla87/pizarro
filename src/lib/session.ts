@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import { db } from "./db";
 import { AppError, forbidden } from "./errors";
+import { sessionSecret } from "./keyring";
 import { logEvent } from "./log";
 import { revokeSession } from "./revoke";
 import { requestContext } from "./request-context";
@@ -23,14 +24,9 @@ export interface CurrentUser {
   clearDraftsOnLogout: boolean;
 }
 
-function secret(): string {
-  const s = process.env.SESSION_SECRET;
-  if (!s || s.length < 32) throw new Error("SESSION_SECRET debe tener al menos 32 caracteres");
-  return s;
-}
-
+// Solo SESSION_SECRET: rotarla cierra todas las sesiones y nada más (los tokens y el cifrado usan sus propias claves).
 function sessionIdFromToken(token: string): string {
-  return createHmac("sha256", secret()).update(token).digest("hex");
+  return createHmac("sha256", sessionSecret()).update(token).digest("hex");
 }
 
 /** Como mucho cada 5 minutos se anota la última actividad de la sesión (una escritura barata). */

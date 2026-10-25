@@ -2,7 +2,7 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { db } from "./db";
-import { hashDeviceId } from "./auth-token-core";
+import { deviceIdHashes, hashDeviceId } from "./auth-token-core";
 import { cookieSecure } from "./session-config";
 
 // Dispositivos conocidos: una cookie larga y aleatoria (pz_device) identifica el navegador; en la BD solo
@@ -27,6 +27,15 @@ export async function registerDevice(userId: string, opts: { trustDays?: number 
   const trustedUntil = opts.trustDays ? new Date(Date.now() + opts.trustDays * 86_400_000) : undefined;
   const known = await db.knownDevice.updateMany({ where: { userId, deviceHash }, data: { lastSeenAt: new Date(), ...(trustedUntil ? { trustedUntil } : {}) } });
   if (known.count > 0) return { alert: false };
+  // ¿Lo conocíamos con la clave anterior (TOKEN_SECRET_PREVIOUS)? Se pasa a la actual y no se avisa.
+  const old = deviceIdHashes(deviceId).filter((h) => h !== deviceHash);
+  if (old.length) {
+    const prev = await db.knownDevice.findFirst({ where: { userId, deviceHash: { in: old } }, select: { id: true } });
+    if (prev) {
+      await db.knownDevice.update({ where: { id: prev.id }, data: { deviceHash, lastSeenAt: new Date(), ...(trustedUntil ? { trustedUntil } : {}) } }).catch(() => {});
+      return { alert: false };
+    }
+  }
   const others = await db.knownDevice.count({ where: { userId } });
   try {
     await db.knownDevice.create({ data: { userId, deviceHash, trustedUntil } });
@@ -41,7 +50,7 @@ export async function registerDevice(userId: string, opts: { trustDays?: number 
 export async function isTrustedDevice(userId: string): Promise<boolean> {
   const deviceId = (await cookies()).get(DEVICE_COOKIE)?.value;
   if (!deviceId || deviceId.length < 20 || deviceId.length > 100) return false;
-  return (await db.knownDevice.count({ where: { userId, deviceHash: hashDeviceId(deviceId), trustedUntil: { gt: new Date() } } })) > 0;
+  return (await db.knownDevice.count({ where: { userId, deviceHash: { in: deviceIdHashes(deviceId) }, trustedUntil: { gt: new Date() } } })) > 0;
 }
 
 /** Quita la confianza de todos los dispositivos de la cuenta (al cambiar de método, restablecer o cambiar la contraseña). */
