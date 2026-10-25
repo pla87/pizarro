@@ -3,7 +3,7 @@
 Kanban ligero y generador de *release notes* para equipos pequeños (hasta 10 personas por defecto, `MAX_USERS`). Tiene tableros multiproyecto, capturas pegadas desde el portapapeles y exportación de releases agrupadas por tipo, con cabecera y pie personalizados por usuario.
 
 - **Stack:** Next.js 16 (App Router, TypeScript, Tailwind CSS 4) · PostgreSQL · Prisma 7 · `@dnd-kit` · `sharp` · `lucide-react`.
-- **Despliegue:** un único contenedor Docker (monolito) en Railway, con un volumen persistente para las capturas.
+- **Despliegue:** un único contenedor Docker (monolito) en Railway, con un volumen persistente para las capturas. También se instala en un servidor propio con Docker Compose (Caddy + Pizarro + PostgreSQL): ver [docs/INSTALL.md](docs/INSTALL.md).
 - **Documentación:** [Manual de operaciones (PDF)](MANUAL.pdf) · [fuente Markdown](docs/MANUAL.md) · [Changelog](CHANGELOG.md).
 
 ---
@@ -121,7 +121,10 @@ steps:
 | `UPLOAD_QUOTA_MB_TOTAL` | No | (sin límite) | Cuota total de adjuntos de todo el servidor (MB). |
 | `BACKUP_KEY` | Para copias automáticas | `openssl rand -base64 32` | Clave AES-256 (32 bytes en base64) con la que se cifran las copias de la base de datos. Sin ella las copias están desactivadas. **Guárdala fuera de Railway: sin ella las copias no se pueden abrir.** |
 | `COOKIE_SECURE` | No | `true` / `false` | Fuerza el atributo `Secure` de la cookie. |
-| `APP_TIMEZONE` | No | `Europe/Madrid` | Zona horaria para calcular «hoy» en plazos e informes. |
+| `APP_TIMEZONE` | No | `Europe/Madrid` | Zona horaria para calcular «hoy» en plazos e informes y para las fechas del navegador. Se lee al arrancar: cambiarla solo exige reiniciar. |
+| `HEALTH_MIN_FREE_MB` | No | `200` | `/api/health` responde 503 (`low_disk_space`) si al disco de subidas le queda menos espacio libre. `0` desactiva la comprobación. |
+| `EXIT_ON_UNCAUGHT_EXCEPTION` | No | (desactivado) | `1`: en producción, una excepción no capturada se anota en *Logs* y la app sale para que la plataforma la reinicie (lo fija `deploy/compose.yml`). Sin él, solo se anota. |
+| `GIT_SHA` | No (solo al compilar) | commit | Commit para el identificador de versión (en Railway se usa `RAILWAY_GIT_COMMIT_SHA`). Sin él, la hora de la compilación. |
 | `LOG_RETENTION_DAYS` | No | `7` | Días que se conservan los logs de *Administración → Logs* (máx. 90). |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Para Google Docs/Sheets | (de Google Cloud) | Cliente OAuth «Aplicación web». Ver [Google Docs y Sheets](#71-google-docs-y-sheets). |
 | `GOOGLE_WORKSPACE_DOMAIN` | Recomendada con Google | `tu-dominio.com` | Solo admite cuentas de ese dominio y comparte cada archivo nuevo con él, para que todo el equipo pueda abrirlo desde la tarjeta. |

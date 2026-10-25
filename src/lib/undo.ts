@@ -44,7 +44,7 @@ export interface TaskData {
 export type TaskField = keyof TaskData;
 
 type SubtaskRow = { id: string; taskId: string; title: string; done: boolean; position: number };
-type CommentRow = { id: string; taskId: string; authorId: string | null; body: string; createdAt: string; editedAt: string | null; parentId?: string | null };
+type CommentRow = { id: string; taskId: string; authorId: string | null; body: string; createdAt: string; editedAt: string | null; parentId?: string | null; deletedAt?: string | null };
 type AttachmentRow = {
   id: string; taskId: string; originalName: string; mimeType: string; isImage: boolean;
   width: number | null; height: number | null; size: number; createdById: string | null; createdAt: string;
@@ -72,6 +72,9 @@ export type UndoOp =
   | { t: "subtask.restore"; row: SubtaskRow }
   | { t: "comment.remove"; id: string }
   | { t: "comment.restore"; row: CommentRow }
+  /** Borrado «blando» (el comentario tenía respuestas): vuelve el texto y desaparece la marca de borrado. */
+  | { t: "comment.undelete"; id: string; body: string }
+  | { t: "comment.softdelete"; id: string }
   | { t: "attachment.remove"; id: string }
   | { t: "attachment.restore"; row: AttachmentRow }
   | { t: "link.remove"; id: string }
@@ -153,7 +156,7 @@ export async function snapshotTasks(ids: string[]): Promise<UndoOp[]> {
       },
       labelIds: r.labels.map((l) => l.labelId),
       subtasks: r.subtasks.map((s) => ({ id: s.id, taskId: s.taskId, title: s.title, done: s.done, position: s.position })),
-      comments: r.comments.map((c) => ({ id: c.id, taskId: c.taskId, authorId: c.authorId, body: c.body, createdAt: c.createdAt.toISOString(), editedAt: iso(c.editedAt), parentId: c.parentId })),
+      comments: r.comments.map((c) => ({ id: c.id, taskId: c.taskId, authorId: c.authorId, body: c.body, createdAt: c.createdAt.toISOString(), editedAt: iso(c.editedAt), parentId: c.parentId, deletedAt: iso(c.deletedAt) })),
       attachments: r.attachments.map((a) => ({
         id: a.id, taskId: a.taskId, originalName: a.originalName, mimeType: a.mimeType, isImage: a.isImage,
         width: a.width, height: a.height, size: a.size, createdById: a.createdById, createdAt: a.createdAt.toISOString(),
@@ -274,12 +277,20 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
         break;
       case "comment.remove": {
         const c = once(`comment:${op.id}`) && (await db.taskComment.findFirst({ where: { id: op.id, ...inProject } }));
-        if (c) out.push({ t: "comment.restore", row: { id: c.id, taskId: c.taskId, authorId: c.authorId, body: c.body, createdAt: c.createdAt.toISOString(), editedAt: iso(c.editedAt), parentId: c.parentId } });
+        if (c) out.push({ t: "comment.restore", row: { id: c.id, taskId: c.taskId, authorId: c.authorId, body: c.body, createdAt: c.createdAt.toISOString(), editedAt: iso(c.editedAt), parentId: c.parentId, deletedAt: iso(c.deletedAt) } });
         break;
       }
       case "comment.restore":
         if (once(`comment:${op.row.id}`)) out.push({ t: "comment.remove", id: op.row.id });
         break;
+      case "comment.undelete":
+        if (once(`comment:${op.id}`)) out.push({ t: "comment.softdelete", id: op.id });
+        break;
+      case "comment.softdelete": {
+        const c = once(`comment:${op.id}`) && (await db.taskComment.findFirst({ where: { id: op.id, deletedAt: null, ...inProject }, select: { id: true, body: true } }));
+        if (c) out.push({ t: "comment.undelete", id: c.id, body: c.body });
+        break;
+      }
       case "attachment.remove": {
         const a = once(`attachment:${op.id}`) && (await db.taskAttachment.findFirst({ where: { id: op.id, ...inProject } }));
         if (a) {
@@ -430,7 +441,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
             }),
             db.taskLabel.createMany({ data: labels.map((l) => ({ taskId: t.id, labelId: l.id })) }),
             db.subtask.createMany({ data: s.subtasks }),
-            db.taskComment.createMany({ data: s.comments.map((c) => ({ ...c, authorId: known(c.authorId), createdAt: new Date(c.createdAt), editedAt: date(c.editedAt) })) }),
+            db.taskComment.createMany({ data: s.comments.map((c) => ({ ...c, authorId: known(c.authorId), createdAt: new Date(c.createdAt), editedAt: date(c.editedAt), deletedAt: date(c.deletedAt) })) }),
             db.taskAttachment.createMany({ data: s.attachments.map((a) => ({ ...a, createdById: known(a.createdById), createdAt: new Date(a.createdAt) })) }),
             db.taskLink.createMany({ data: s.links.map((l) => ({ ...l, kind: l.kind as Prisma.TaskLinkCreateManyInput["kind"], createdById: known(l.createdById), createdAt: new Date(l.createdAt) })) }),
             db.releaseTask.updateMany({ where: { id: { in: s.releaseTaskIds } }, data: { taskId: t.id } }),
@@ -463,7 +474,17 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           if (!(await db.task.count({ where: { id: r.taskId, projectId } })) || (await db.taskComment.count({ where: { id: r.id } }))) { skipped++; break; }
           const author = r.authorId && (await db.user.count({ where: { id: r.authorId } })) ? r.authorId : null;
           const parentId = r.parentId && (await db.taskComment.count({ where: { id: r.parentId } })) ? r.parentId : null;
-          await db.taskComment.create({ data: { ...r, parentId, authorId: author, createdAt: new Date(r.createdAt), editedAt: date(r.editedAt) } });
+          await db.taskComment.create({ data: { ...r, parentId, authorId: author, createdAt: new Date(r.createdAt), editedAt: date(r.editedAt), deletedAt: date(r.deletedAt) } });
+          break;
+        }
+        case "comment.undelete": {
+          const { count } = await db.taskComment.updateMany({ where: { id: op.id, deletedAt: { not: null }, task: { projectId } }, data: { body: op.body, deletedAt: null } });
+          if (!count) skipped++;
+          break;
+        }
+        case "comment.softdelete": {
+          const { count } = await db.taskComment.updateMany({ where: { id: op.id, deletedAt: null, task: { projectId } }, data: { body: "", deletedAt: new Date() } });
+          if (!count) skipped++;
           break;
         }
         case "attachment.remove": {
@@ -552,7 +573,7 @@ export async function fingerprintOps(projectId: string, ops: UndoOp[]): Promise<
       case "subtask.restore": taskIds.add(op.row.taskId); break;
       case "comment.restore": case "attachment.restore": case "link.restore": taskIds.add(op.row.taskId); break;
       case "subtask.set": case "subtask.remove": lookups.push({ model: "subtask", id: op.id }); break;
-      case "comment.remove": lookups.push({ model: "taskComment", id: op.id }); break;
+      case "comment.remove": case "comment.undelete": case "comment.softdelete": lookups.push({ model: "taskComment", id: op.id }); break;
       case "attachment.remove": lookups.push({ model: "taskAttachment", id: op.id }); break;
       case "link.remove": lookups.push({ model: "taskLink", id: op.id }); break;
       case "column.set": case "column.remove": columnIds.add(op.id); break;
@@ -577,7 +598,7 @@ export async function fingerprintOps(projectId: string, ops: UndoOp[]): Promise<
       dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, evergreenEvery: true, recurrence: true, recurrenceDay: true,
       labels: { select: { labelId: true }, orderBy: { labelId: "asc" } },
       subtasks: { select: { id: true, title: true, done: true, position: true }, orderBy: { id: "asc" } },
-      comments: { select: { id: true, editedAt: true }, orderBy: { id: "asc" } },
+      comments: { select: { id: true, editedAt: true, deletedAt: true }, orderBy: { id: "asc" } },
       attachments: { select: { id: true }, orderBy: { id: "asc" } },
       links: { select: { id: true, title: true, url: true }, orderBy: { id: "asc" } },
     },

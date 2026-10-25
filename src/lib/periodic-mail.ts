@@ -38,7 +38,7 @@ export async function gatherDigest(user: { id: string; role: "ADMIN" | "MEMBER" 
   const [created, done, comments, assigned, due] = await Promise.all([
     db.task.findMany({ where: { ...live, createdAt: { gte: since } }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: taskSelect }),
     db.taskEvent.findMany({ where: { code: "done", createdAt: { gte: since }, task: live }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
-    db.taskComment.findMany({ where: { createdAt: { gte: since }, OR: [{ authorId: null }, { authorId: { not: user.id } }], task: live }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
+    db.taskComment.findMany({ where: { deletedAt: null, createdAt: { gte: since }, OR: [{ authorId: null }, { authorId: { not: user.id } }], task: live }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
     db.notification.findMany({ where: { userId: user.id, type: "ASSIGNED", createdAt: { gte: since }, task: mine }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
     db.task.findMany({
       where: { ...mine, assigneeId: user.id, column: { isDone: false }, dueDate: { lte: isoToDate(today) } },

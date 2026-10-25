@@ -87,6 +87,8 @@ model User {
   comments          TaskComment[]
   notifications     Notification[]    @relation("NotificationRecipient")
   notificationsSent Notification[]    @relation("NotificationActor")
+  pendingDueRecv    PendingDueNotice[] @relation("PendingDueRecipient")
+  pendingDueSent    PendingDueNotice[] @relation("PendingDueActor")
   undoEntries       UndoEntry[]
   followedTasks     TaskFollower[]
 }
@@ -326,6 +328,7 @@ model Task {
   links         TaskLink[]
   comments      TaskComment[]
   notifications Notification[]
+  pendingDueNotices PendingDueNotice[]
   createdBy     User?            @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
   subtasks      Subtask[]
   attachments   TaskAttachment[]
@@ -530,6 +533,8 @@ model TaskComment {
   editedAt  DateTime?
   /// Comentario al que responde (un solo nivel: siempre el comentario raíz).
   parentId  String?
+  /// Borrado con respuestas: la fila se queda (vacía) para no romper el hilo; se muestra como «Comentario borrado».
+  deletedAt DateTime?
   task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
   author    User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
   parent    TaskComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
@@ -645,6 +650,28 @@ model Notification {
   @@index([userId, createdAt])
   @@index([taskId])
   @@index([readAt, createdAt])
+  @@index([actorId])
+}
+
+/// Cambio de fecha límite pendiente de avisar (uno por tarea y destinatario). Se actualiza con cada cambio
+/// (fecha original → última fecha) y se envía un único aviso cuando pasa `sendAfter` sin nuevos cambios.
+model PendingDueNotice {
+  id          String   @id @default(cuid())
+  taskId      String
+  recipientId String
+  actorId     String?
+  /// Fecha original y última fecha puesta (YYYY-MM-DD; null = sin fecha).
+  fromDue     String?
+  toDue       String?
+  sendAfter   DateTime
+  createdAt   DateTime @default(now())
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  recipient   User     @relation("PendingDueRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor       User?    @relation("PendingDueActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@unique([taskId, recipientId])
+  @@index([sendAfter])
+  @@index([recipientId])
   @@index([actorId])
 }
 
@@ -800,4 +827,16 @@ model AppState {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+/// Última ejecución de cada tarea de mantenimiento (lib/maintenance.ts). Sustituye a las marcas en memoria:
+/// sobrevive a los reinicios y la comparten todos los procesos (que se turnan con un bloqueo de Postgres).
+model JobRun {
+  /// Nombre fijo de la tarea, p. ej. «orphanFiles».
+  name           String    @id
+  lastStartedAt  DateTime?
+  lastFinishedAt DateTime?
+  lastOk         Boolean?
+  /// Mensaje del último error (recortado); null si la última ejecución fue bien.
+  lastError      String?
 }

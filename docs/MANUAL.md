@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.23.0"
+version: "v1.24.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.23.0
+**Versión de la aplicación:** v1.24.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -126,7 +126,7 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 | Verificación en dos pasos | App TOTP o código por email, con 10 códigos de recuperación (se muestran una vez). Obligatoria para admins con contraseña, opcional para el resto. Los secretos se cifran con una clave derivada de `SESSION_SECRET`. «Recordar este dispositivo 14 días» la omite en ese navegador. Un admin puede reiniciar el segundo paso de otra persona. |
 | Inicio con Google | OpenID Connect con PKCE. Solo entran usuarios existentes y activos (por email verificado y, después, por id de Google); opcionalmente limitado a `GOOGLE_WORKSPACE_DOMAIN`. No pide segundo paso propio (vale el de Google). |
 | Avisos de cuenta | Email de aviso al iniciar sesión desde un dispositivo desconocido (no en el primer acceso de una cuenta) y tras cualquier cambio de contraseña o de email. Al cambiar el email de una cuenta (desde el perfil o por un admin) se desvincula su cuenta de Google y dejan de valer los enlaces pendientes enviados a la dirección anterior (invitación, restablecer, confirmar); si era una invitación con el email mal escrito, hay que volver a enviarla. Cerrar sesión borra la cookie del navegador. |
-| Fuerza bruta y abuso | Límite de intentos de login por pareja IP+email y por IP (ventana de 15 minutos), de «¿Olvidaste tu contraseña?» y de cambios de contraseña. También hay topes de subidas (60 por minuto y persona), comentarios (30 por minuto, 1000 por tarea), subtareas (100 por tarea), documentos de Google (20 por minuto), creación de tareas (300 por minuto y persona), etiquetas y entregables (30 por minuto), suma de adjuntos por tarea y tamaño de cada paquete ZIP de una release (80 MB por defecto cada uno, configurables en cada proyecto entre 10 y 500 MB, y el de un archivo entre 1 y 100 MB; cada persona arma un ZIP a la vez y el servidor como mucho dos), cola de imágenes en proceso (más de 10 esperando: «inténtalo de nuevo en unos segundos») e informes PDF (5 por minuto y persona; se generan de uno en uno para que la app no se frene). |
+| Fuerza bruta y abuso | Límite de intentos de login por pareja IP+email y por IP (ventana de 15 minutos), de «¿Olvidaste tu contraseña?» y de cambios de contraseña. También hay topes de subidas (60 por minuto y persona), comentarios (30 por minuto; por tarea, 500 por defecto, configurable entre 1 y 1000 en *Administración → Ajustes*), subtareas (100 por tarea), documentos de Google (20 por minuto), creación de tareas (300 por minuto y persona), etiquetas y entregables (30 por minuto), suma de adjuntos por tarea y tamaño de cada paquete ZIP de una release (80 MB por defecto cada uno, configurables en cada proyecto entre 10 y 500 MB, y el de un archivo entre 1 y 100 MB; cada persona arma un ZIP a la vez y el servidor como mucho dos), cola de imágenes en proceso (más de 10 esperando: «inténtalo de nuevo en unos segundos») e informes PDF (5 por minuto y persona; se generan de uno en uno para que la app no se frene). |
 | CSRF | `SameSite=Lax`, verificación de `Origin` integrada en las Server Actions y comprobación explícita de `Origin` en la ruta de subida. |
 | Autorización | Sin registro público. Solo los admins gestionan usuarios. Cualquier usuario puede crear proyectos privados (máximo 100 por usuario no admin y 10 creaciones por hora). Cada operación comprueba la visibilidad del proyecto: un usuario no admin solo accede a los proyectos de equipo a los que está **asignado** y a sus privados; los admins acceden a todos los de equipo; los privados solo los ven sus miembros. Deshacer y rehacer nunca reasignan una tarjeta a alguien que ha perdido el acceso. |
 | XSS | React escapa todo el contenido. El Markdown se renderiza sin HTML. Los enlaces solo admiten `http(s)` y se abren con `rel="noopener noreferrer"`. CSP estricta con *nonce* distinto en cada petición. |
@@ -295,6 +295,7 @@ Desde el menú «⋯» de cada columna:
 ```
 
    - **Códigos:** cada punto lleva un código con el **número de la release**, la inicial del tipo y un número por tipo: en la release 32, `R32F1`, `R32F2`… `R32C1`. Si dos tipos empiezan por la misma letra, el segundo usa más letras (p. ej. D y DI). Si otra persona despliega una release mientras generas la tuya, al marcarla como desplegada se avisa para volver a generar el texto con el número correcto.
+   - **Títulos con código:** al marcar la release como desplegada, cada tarea que sale de la columna (a *En producción* o al archivo) pasa a llamarse con su código delante: `R32F1: Nueva pantalla de exportación`. Las tareas fijas no se renombran. Si la tarea ya llevaba el código de otra release, se sustituye por el nuevo; si no cabe en 200 caracteres, se recorta el final. Deshacer el despliegue devuelve los títulos originales; la siguiente aparición de una tarea repetitiva nace con el título original, y el texto de la release y el histórico conservan el título sin código.
    - **Descripción:** la de cada tarea va debajo de su punto. Las menciones salen como `@Nombre`.
    - **Adjuntos:** se nombran `código_nombre-original.webp` y se listan bajo su punto. Si alguna tarea tiene adjuntos, aparece el botón **Descargar adjuntos (N)**, que baja un ZIP (`release-AAAA-MM-DD-adjuntos.zip`) con todos los ficheros ya renombrados.
 
@@ -333,11 +334,11 @@ Se genera en el idioma de quien lo pide.
 
 ### 3.9 Colaboración: comentarios, avisos, seguimiento e informes
 
-- En el detalle de la tarjeta, sección **Comentarios**. Escribe `@` y el principio de un nombre para elegir a una persona (↑↓ y Enter). También se puede mencionar en la descripción y en el **título** de la tarea. Los comentarios admiten **respuestas** (un solo nivel).
+- En el detalle de la tarjeta, sección **Comentarios**. Escribe `@` y el principio de un nombre para elegir a una persona (↑↓ y Enter). También se puede mencionar en la descripción y en el **título** de la tarea. Los comentarios admiten **respuestas** (un solo nivel). Al abrir la tarea se ven los **20 más recientes**; **Ver anteriores** carga 100 más cada vez (una respuesta cuyo comentario aún no se ha cargado indica «En respuesta a un comentario anterior»). Borrar un comentario sin respuestas lo quita; si tiene respuestas, queda como **«Comentario borrado»** (sin texto ni autor) para no romper el hilo, y desaparece al borrar su última respuesta. Deshacer lo restaura. Cada tarea admite como máximo el número de comentarios fijado en *Administración → Ajustes* (500 por defecto); al llegar se avisa con el límite.
 - **Cuándo recibes un aviso:**
   - te **mencionan**;
   - te **asignan** una tarea;
-  - cambia la **fecha límite** de una tarea tuya;
+  - cambia la **fecha límite** de una tarea tuya (el aviso sale unos 3 minutos después del último cambio y recoge solo la fecha final, así que mover la tarjeta varias veces seguidas genera un único aviso; si acaba en su fecha original, no se avisa; si la tarea se borra, se archiva o deja de ser tuya mientras tanto, tampoco);
   - hay un **comentario** en una tarea que **sigues**;
   - **responden a tu comentario**.
 - **Seguir una tarea:** botón de seguir / dejar de seguir en el detalle. Quien crea, es asignado o comenta una tarea la sigue.
@@ -463,7 +464,7 @@ En el calendario, con el foco en una tarea: Alt+←/→ (±1 día) y Alt+↑/↓
 
 ### 3.16 Administración (admins)
 
-La entrada **Administración** del menú lateral reúne seis pestañas: **Usuarios**, **Proyectos**, **Tipos de tarea** (ver 3.14), **Plantillas de proyecto**, **Copias de seguridad** y **Logs**. En móvil, el menú de pestañas solo se desplaza en horizontal.
+La entrada **Administración** del menú lateral reúne siete pestañas: **Usuarios**, **Proyectos**, **Tipos de tarea** (ver 3.14), **Plantillas de proyecto**, **Copias de seguridad**, **Logs** y **Ajustes** (parámetros generales, como el máximo de comentarios por tarea). En móvil, el menú de pestañas solo se desplaza en horizontal.
 
 **Proyectos:** lista los proyectos de equipo (los privados no aparecen) con los usuarios asignados a cada uno; desde ahí se añaden o quitan usuarios. Los mismos usuarios asignados se gestionan en los ajustes de cada proyecto. Quitar una asignación desasigna las tarjetas de esa persona y corta su conexión en vivo con el proyecto.
 
@@ -607,7 +608,9 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 
 ### 4.9 Monitorización
 
-- **Salud:** `GET /api/health` → `{"status":"ok"}` si la base de datos responde.
+- **Salud:** `GET /api/health` → `{"status":"ok"}` si la base de datos responde, la carpeta de subidas se puede escribir y a su disco le quedan al menos `HEALTH_MIN_FREE_MB` libres (200 MB por defecto; `0` desactiva esta comprobación). Si no, `503` con `{"status":"error","reason":…}` (`database`, `uploads_not_writable` o `low_disk_space`), sin rutas ni detalles.
+- **Tareas de mantenimiento:** *Administración → Copias de seguridad → Tareas de mantenimiento* muestra la última ejecución de cada una (tabla `JobRun`). Solo un proceso las ejecuta a la vez (bloqueo consultivo de PostgreSQL), así que un despliegue solapado no las duplica, y «una vez al día» (ficheros huérfanos) se respeta aunque la app se reinicie.
+- **Errores del proceso:** las promesas rechazadas y las excepciones no capturadas fuera de una petición quedan en *Logs* (`system.unhandledRejection`, `system.uncaughtException`). Con `EXIT_ON_UNCAUGHT_EXCEPTION=1` (lo fija el `compose.yml` de instalación propia), tras una excepción no capturada la app sale para que Docker la reinicie; en Railway, sin esa variable, solo se registra (sus reintentos son limitados).
 - **Logs de la app:** *Administración → Logs* (ver 3.16), con la duración de cada acción: es el primer sitio donde mirar si algo va lento o falla.
 - **Logs del contenedor:** en Railway, *Deployments → View logs*. Los errores inesperados también salen ahí con el prefijo `[action]`, `[upload]` o `[uploads]`.
 - **Errores en el navegador:** la pantalla «Algo ha fallado» y cualquier excepción no capturada del navegador se registran en *Logs* (categoría *client*), con la página, el navegador y el código del error para cruzarlo con el del servidor.
@@ -638,6 +641,10 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 | No llegan los WhatsApp | Plantilla sin aprobar, idioma distinto, token caducado o número no verificado (número de prueba) | Revisa los logs `[notify]`, el estado de la plantilla y `WHATSAPP_TEMPLATE_LANG`. |
 | Las páginas tardan en cargar a veces | Servicio en una región lejana, *App Sleeping* activado o conexiones a la base de datos frías | En Railway: pon la app y Postgres en la misma región cercana (p. ej. *EU West*) y desactiva *Serverless / App Sleeping*. Revisa en *Logs* la duración de las acciones. |
 | El informe no marca una tarjeta como hecha | Su columna no cuenta como terminada | Menú «⋯» de la columna → *Contar como terminada*. |
+
+### 4.11 Instalación en un servidor propio (Docker Compose)
+
+Además de Railway, Pizarro se puede instalar en cualquier servidor con Docker 24+ (1 vCPU, 2 GB de RAM): `deploy/compose.yml` levanta Caddy (HTTPS automático para `DOMAIN`), la app (el mismo `Dockerfile`) y PostgreSQL 16, con volúmenes, comprobaciones de salud, reinicio automático y límites de memoria. La guía completa (secretos con `openssl rand`, primer administrador, actualizar, restaurar y problemas frecuentes) está en `docs/INSTALL.md`. Nada de la imagen depende de Railway: la zona horaria del navegador llega del servidor (atributo `data-tz`), así que cambiar `APP_TIMEZONE` solo exige reiniciar, y el identificador de versión es la versión del `package.json` más el commit (`GIT_SHA` o `RAILWAY_GIT_COMMIT_SHA`) o, sin commit, la hora de la compilación.
 
 ---
 

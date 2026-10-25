@@ -31,8 +31,10 @@ async function stillAssignable(projectId: string, userId: string | null): Promis
  * la misma repetición y la fecha límite que marca la regla. Va al final de la primera columna no terminada
  * o, si la tarea no estaba en una terminada (p. ej. se archivó desde «En curso»), de su misma columna.
  * Deshacer la acción que la provocó quita también la copia (operación inversa anotada aquí).
+ * `titles` (taskId → título) sustituye al guardado: el despliegue de una release antepone un código al título
+ * y la siguiente aparición debe nacer con el original.
  */
-export async function spawnRecurrences(taskIds: string[], actorId: string): Promise<BoardTask[]> {
+export async function spawnRecurrences(taskIds: string[], actorId: string, titles?: Map<string, string>): Promise<BoardTask[]> {
   if (!taskIds.length) return [];
   const sources = await db.task.findMany({
     where: { id: { in: taskIds }, recurrence: { not: "NONE" }, recurrenceNext: null },
@@ -80,7 +82,7 @@ export async function spawnRecurrences(taskIds: string[], actorId: string): Prom
           data: {
             projectId: src.projectId,
             columnId,
-            title: src.title,
+            title: titles?.get(src.id) ?? src.title,
             description: src.description,
             kindId: src.kindId,
             color: src.color,

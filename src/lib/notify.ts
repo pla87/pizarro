@@ -222,6 +222,8 @@ export async function notifyTask(opts: {
   projectId: string;
   recipientIds: string[];
   excerpt: string;
+  /** Fuera de una petición (planificador): el envío externo se hace aquí mismo, sin `after`. */
+  immediate?: boolean;
 }): Promise<{ recipients: string[] }> {
   const ids = [...new Set(opts.recipientIds.filter((id) => id !== opts.actorId))];
   if (!ids.length) return { recipients: [] };
@@ -245,7 +247,11 @@ export async function notifyTask(opts: {
     details: { taskId: opts.taskId, recipients: created.map((c) => c.userId), externalRecipients: [...external] },
   });
   const toDeliver = created.filter((c) => external.has(c.userId)).map((c) => c.id);
-  if (toDeliver.length) after(() => deliver(toDeliver).catch((err) => console.error("[notify] envío", err)));
+  if (toDeliver.length) {
+    const send = () => deliver(toDeliver).catch((err) => console.error("[notify] envío", err));
+    if (opts.immediate) await send();
+    else after(send);
+  }
   return { recipients: created.map((c) => c.userId) };
 }
 

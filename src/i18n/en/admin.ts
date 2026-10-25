@@ -1,6 +1,12 @@
 // Traducciones al inglés (admin). Clave: texto exacto en español.
 export const admin: Record<string, string> = {
   "Administración": "Administration",
+  "Ajustes": "Settings",
+  "Ajuste guardado.": "Setting saved.",
+  "Parámetros generales de la aplicación.": "General application parameters.",
+  "Máximo de comentarios por tarea": "Maximum comments per task",
+  "Una tarea que llega al máximo no admite más comentarios. Entre {min} y {max}; por defecto 500. Los comentarios borrados que conservan respuestas no cuentan. Si lo bajas por debajo de lo que ya tiene una tarea, no se borra nada: solo deja de admitir más.": "A task that reaches the maximum accepts no more comments. Between {min} and {max}; 500 by default. Deleted comments that keep replies do not count. If you lower it below what a task already has, nothing is deleted: it just stops accepting more.",
+  "Debe ser un número entero entre {min} y {max}.": "It must be a whole number between {min} and {max}.",
   "Usuarios": "Users",
   "Tipos de tarea": "Task types",
   "Plantillas": "Templates",
@@ -173,4 +179,20 @@ export const admin: Record<string, string> = {
   "Revisa los Logs de Administración y prueba «Crear copia ahora» en Administración → Copias de seguridad.": "Check the Logs in Administration and try \"Create backup now\" in Administration → Backups.",
   "Abrir Copias de seguridad": "Open Backups",
   "Este aviso se repite como mucho una vez al día mientras el problema continúe.": "This notice repeats at most once a day while the problem continues.",
+  // Tareas de mantenimiento (JobRun)
+  "Tareas de mantenimiento": "Maintenance jobs",
+  "Se ejecutan cada hora en un solo proceso a la vez. Última ejecución de cada una:": "They run every hour, in one process at a time. Last run of each:",
+  "Aún no se ha ejecutado ninguna (la primera pasada es un minuto después de arrancar).": "None has run yet (the first pass is one minute after startup).",
+  "En curso": "Running",
+  "Copias de ficheros no imagen antiguas": "Old non-image file copies",
+  "Deshacer antiguo": "Old undo entries",
+  "Avisos leídos antiguos": "Old read notifications",
+  "Enlaces y dispositivos caducados": "Expired links and devices",
+  "Historial de tareas antiguo": "Old task history",
+  "Ficheros huérfanos (una vez al día)": "Orphan files (once a day)",
+  "Copia diaria": "Daily backup",
+  "Aviso de copia atrasada": "Overdue backup alert",
+  "Prueba de restauración mensual": "Monthly restore test",
+  "Resúmenes e informes por email": "Email digests and reports",
+  "Reanudar copias de adjuntos de releases": "Resume release attachment copies",
 };

@@ -15,3 +15,5 @@ Dockerfile
 dist
 tests
 CHANGELOG.md
+deploy
+**/.env

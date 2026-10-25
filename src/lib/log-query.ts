@@ -26,6 +26,7 @@ interface LogFilters {
 /** Acciones que solo consultan datos: se ocultan salvo que se pidan las consultas. */
 export const READ_ACTIONS = [
   "tasks.getTaskDetail",
+  "tasks.getOlderComments",
   "tasks.getArchivedTasks",
   "tasks.getTaskHistory",
   "tasks.getProjectFormData",
