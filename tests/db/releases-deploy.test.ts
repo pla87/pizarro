@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { deployRelease } from "../../src/actions/releases";
+import { undoLast } from "../../src/actions/undo";
 
 async function setup() {
   const user = await makeUser();
@@ -41,5 +42,28 @@ describe("deployRelease", () => {
     for (const r of results) expectOk(r);
     const numbers = (await db.release.findMany({ where: { projectId: f.project.id }, select: { number: true } })).map((r) => r.number).sort();
     assert.deepEqual(numbers, [1, 2]);
+  });
+
+  test("al desplegar, las tareas que salen llevan el código de la release en el título y deshacer lo restaura", async () => {
+    const { f, prod } = await setup();
+    const a = await makeTask(f, { title: "Uno", columnId: f.columns.done, position: 1000 });
+    const b = await makeTask(f, { title: "R1F9: Dos", columnId: f.columns.done, position: 2000 });
+    const fija = await makeTask(f, { title: "Fija", columnId: f.columns.done, position: 3000 });
+    await db.task.update({ where: { id: fija.id }, data: { evergreen: true } });
+    const res = expectOk(await deployRelease({ projectId: f.project.id, title: "R", content: "Cambios", destination: "IN_PRODUCTION", taskIds: [a.id, b.id, fija.id] }));
+    const titles = async () => Object.fromEntries((await db.task.findMany({ where: { id: { in: [a.id, b.id, fija.id] } } })).map((t) => [t.id, t.title]));
+    let now = await titles();
+    assert.match(now[a.id]!, /^R1[A-Z]+1: Uno$/);
+    // Un código anterior se sustituye, no se acumula; la fija no se renombra.
+    assert.match(now[b.id]!, /^R1[A-Z]+2: Dos$/);
+    assert.equal(now[fija.id], "Fija");
+    // El texto del histórico conserva el título tal cual lo vio la release.
+    const rts = await db.releaseTask.findMany({ where: { releaseId: res.releaseId }, orderBy: { title: "asc" } });
+    assert.deepEqual(rts.map((r) => r.title).sort(), ["Fija", "R1F9: Dos", "Uno"]);
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: a.id } })).columnId, prod.id);
+    expectOk(await undoLast(f.project.id));
+    now = await titles();
+    assert.deepEqual(now, { [a.id]: "Uno", [b.id]: "R1F9: Dos", [fija.id]: "Fija" });
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: a.id } })).columnId, f.columns.done);
   });
 });

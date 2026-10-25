@@ -335,9 +335,9 @@ describe("deployRelease", () => {
         label: "{\"k\":\"Desplegó la release «{title}» con {count}{archived}{fixed}\",\"p\":{\"title\":\"R uno\",\"count\":{\"k\":\"{n} tareas\",\"p\":{\"n\":3}},\"archived\":\"\",\"fixed\":{\"k\":\" (1 fija se queda)\"}}}",
         ops: sorted(
           [
-          { t: "task.set", id: "B", data: { columnId: "TODO", position: 2000, archivedAt: null, archivedFromColumnId: null, evergreen: false } },
-          { t: "task.set", id: "A", data: { columnId: "DOING", position: 1000, archivedAt: null, archivedFromColumnId: null, evergreen: false } },
-          { t: "task.set", id: "E", data: { columnId: "DOING", position: 3000, archivedAt: null, archivedFromColumnId: null, evergreen: true } },
+          { t: "task.set", id: "B", data: { columnId: "TODO", position: 2000, archivedAt: null, archivedFromColumnId: null, evergreen: false, title: "B" } },
+          { t: "task.set", id: "A", data: { columnId: "DOING", position: 1000, archivedAt: null, archivedFromColumnId: null, evergreen: false, title: "A" } },
+          { t: "task.set", id: "E", data: { columnId: "DOING", position: 3000, archivedAt: null, archivedFromColumnId: null, evergreen: true, title: "Fija" } },
           { t: "release.remove", id: "REL" },
         ],
         ),

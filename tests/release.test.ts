@@ -11,6 +11,7 @@ import {
   releaseFileName,
   releaseZipName,
   swapTemplateBlock,
+  titleWithReleaseCode,
   zonedDayRange,
 } from "../src/lib/release";
 
@@ -186,4 +187,18 @@ test("evergreenDue: cadencia de las tareas fijas", () => {
 
 test("nextEvergreenEvery cicla 1 > 2 > 3 > 1", () => {
   assert.deepEqual([1, 2, 3].map(nextEvergreenEvery), [2, 3, 1]);
+});
+
+test("titleWithReleaseCode antepone el código, sustituye uno anterior y respeta el máximo", () => {
+  assert.equal(titleWithReleaseCode("Respuesta", "R3R1"), "R3R1: Respuesta");
+  // Desplegada otra vez en una release posterior: el código nuevo sustituye al viejo.
+  assert.equal(titleWithReleaseCode("R3R1: Respuesta", "R5F2"), "R5F2: Respuesta");
+  // Algo parecido pero sin «: » no es un código.
+  assert.equal(titleWithReleaseCode("R3R1 Respuesta", "R5F2"), "R5F2: R3R1 Respuesta");
+  // Se recorta el final del título original, no el código.
+  const out = titleWithReleaseCode("x".repeat(300), "R12DI3", 200);
+  assert.equal(out.length, 200);
+  assert.ok(out.startsWith("R12DI3: xxx"));
+  // Una mención partida por el recorte se descarta entera.
+  assert.equal(titleWithReleaseCode("ab @[Ana](user:abc123)", "R1F1", 12), "R1F1: ab");
 });

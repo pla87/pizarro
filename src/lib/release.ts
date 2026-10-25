@@ -3,6 +3,7 @@
 
 import { decodeEntities } from "./markdown-entities";
 import { mentionsToPlain } from "./mentions";
+import { MAX_TITLE } from "./constants";
 import { partSuffix } from "./zip-plan";
 
 interface ReleaseKind {
@@ -102,6 +103,24 @@ export function computeReleaseCodes(
     codes.set(t.id, `${release}${prefix}${n}`);
   }
   return codes;
+}
+
+/** Código de release al principio de un título («R3F1: »): lo puso un despliegue anterior. */
+const TITLE_CODE_RE = /^R\d{1,5}[A-Z]{1,4}\d{1,4}: /;
+
+/**
+ * Título de una tarea al desplegarla: «R3F1: Respuesta». Si ya empieza por el código de otra release
+ * se sustituye (no se acumulan), y si no cabe en el máximo se recorta el final del título original.
+ */
+export function titleWithReleaseCode(title: string, code: string, max = MAX_TITLE): string {
+  const prefix = `${code}: `;
+  let rest = title.replace(TITLE_CODE_RE, "");
+  const room = Math.max(0, max - prefix.length);
+  if (rest.length > room) {
+    // Sin dejar a medias una mención @[Nombre](user:ID) ni un par suplente partido.
+    rest = rest.slice(0, room).replace(/@\[[^\]]*(\]\([^)]*)?$/, "").replace(/[\uD800-\uDBFF]$/, "").trimEnd();
+  }
+  return (prefix + rest).slice(0, max);
 }
 
 /**

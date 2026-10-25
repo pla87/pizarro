@@ -8,20 +8,21 @@ import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertProjectAccess } from "@/lib/access";
 import { MAX_RELEASE_CONTENT } from "@/lib/constants";
-import { appTimeZone } from "@/lib/board";
+import { appTimeZone, listKinds } from "@/lib/board";
 import { lockProject } from "@/lib/caps";
 import { AppError } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
 import { spawnRecurrences } from "@/lib/recurrence";
 import { lastPositionIn, lockColumns, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
-import { zonedDayRange } from "@/lib/release";
+import { computeReleaseCodes, titleWithReleaseCode, zonedDayRange } from "@/lib/release";
+import { localizeGeneralKinds } from "@/lib/kinds-localize";
 import { runReleaseAttachmentsJob, type PendingJob } from "@/lib/release-attachments";
 import { requireUser } from "@/lib/session";
 import { removeReleaseAttachmentFiles } from "@/lib/uploads";
 import { addUndo, captureTasks } from "@/lib/undo";
 import { tasksN } from "@/lib/undo-label";
 import * as v from "@/lib/validation";
-import { getT } from "@/i18n/server";
+import { getLocale, getT } from "@/i18n/server";
 import { mentionsToPlain } from "@/lib/mentions";
 
 const deploySchema = z.object({
@@ -49,7 +50,7 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     const tasks = await db.task.findMany({
       where: { id: { in: data.taskIds }, projectId: data.projectId, archivedAt: null },
       orderBy: [{ column: { position: "asc" } }, ...TASK_ORDER],
-      select: { id: true, title: true, evergreen: true, kind: { select: { name: true } } },
+      select: { id: true, title: true, evergreen: true, kindId: true, kind: { select: { name: true } } },
     });
     // El texto llega ya generado del cliente: si alguna tarea se ha archivado, borrado o movido de proyecto
     // mientras tanto, el histórico no coincidiría con lo que dice el texto. Se pide volver a generarlo.
@@ -67,12 +68,16 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     // Deshacer: dónde estaba cada tarea (solo las de este proyecto); la release del histórico se quita (ver más abajo).
     // La columna de destino se busca a la vez.
     const [undo, target] = await Promise.all([
-      captureTasks(tasks.map((t) => t.id), ["columnId", "position", "archivedAt", "archivedFromColumnId", "evergreen"]),
+      captureTasks(tasks.map((t) => t.id), ["columnId", "position", "archivedAt", "archivedFromColumnId", "evergreen", "title"]),
       data.destination === "IN_PRODUCTION"
         ? db.column.findFirst({ where: { projectId: data.projectId, role: "IN_PRODUCTION" }, select: { id: true, isDone: true } })
         : null,
     ]);
     addUndo(...undo);
+    // Orden y tipos del diálogo para que los códigos coincidan con los del texto.
+    const byId = new Map(tasks.map((t) => [t.id, t]));
+    const ordered = [...new Set(data.taskIds)].map((id) => ({ id, kindId: byId.get(id)!.kindId }));
+    const kinds = localizeGeneralKinds(await listKinds(data.projectId), await getLocale());
     if (data.destination === "IN_PRODUCTION" && !target) {
       throw new AppError("No hay ninguna columna con el rol «En producción». Asígnalo en el menú de una columna o elige archivar.");
     }
@@ -92,6 +97,10 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
         const t = await getT();
         throw new AppError(t("Mientras tanto se ha desplegado la release {prev}: vuelve a generar el texto para que los códigos lleven R{number}.", { prev: number - 1, number }));
       }
+      // Los códigos de los títulos se calculan aquí, con los mismos datos y orden que el diálogo (tipos del
+      // proyecto en su idioma, tareas en el orden de taskIds); nunca se usa texto del cliente (los códigos
+      // que envía para el ZIP solo nombran ficheros).
+      const codes = computeReleaseCodes(kinds, ordered, number);
       const release = await tx.release.create({
         data: {
           projectId: data.projectId,
@@ -104,6 +113,17 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
         },
         select: { id: true },
       });
+      // Las tareas que salen (no las fijas) llevan el código de la release delante del título.
+      const changed = tasks
+        .filter((t) => !t.evergreen)
+        .map((t) => [t.id, titleWithReleaseCode(t.title, codes.get(t.id)!)] as const)
+        .filter(([id, title]) => title !== byId.get(id)!.title);
+      if (changed.length) {
+        await tx.$executeRaw`
+          UPDATE "Task" AS t SET "title" = m."title", "updatedAt" = ${new Date()}
+          FROM unnest(${changed.map(([id]) => id)}::text[], ${changed.map(([, title]) => title)}::text[]) AS m("id", "title")
+          WHERE t."id" = m."id"`;
+      }
       const moved: { id: string; columnId: string; position: number }[] = [];
       if (target) {
         await lockColumns(tx, [target.id]);
@@ -123,7 +143,7 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     });
     addUndo({ t: "release.remove", id: result.releaseId });
     // Recurrentes que salen terminadas (columna terminada de destino o archivo): nace su siguiente aparición.
-    const spawned = !target || target.isDone ? await spawnRecurrences(tasks.filter((t) => !t.evergreen).map((t) => t.id), user.id) : [];
+    const spawned = !target || target.isDone ? await spawnRecurrences(tasks.filter((t) => !t.evergreen).map((t) => t.id), user.id, new Map(tasks.map((t) => [t.id, t.title]))) : [];
     const fixed = tasks.filter((t) => t.evergreen).length;
     describeAction(
       "Desplegó la release «{title}» con {count}{archived}{fixed}",
