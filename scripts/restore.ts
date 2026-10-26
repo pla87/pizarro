@@ -60,7 +60,7 @@ async function main() {
   }
 
   const key = parseBackupKey(process.env.BACKUP_KEY);
-  if (!key) fail("BACKUP_KEY no está definida o no es válida (32 bytes en base64). Es la misma clave con la que se hicieron las copias.");
+  if (!key) fail("BACKUP_KEY no está definida o no es válida (32 bytes en base64, o 64 caracteres hexadecimales). Es la misma clave con la que se hicieron las copias.");
   const filesOnly = flags.has("--files-only");
   const databaseUrl = process.env.DATABASE_URL ?? "";
   if (!filesOnly && !databaseUrl) fail("DATABASE_URL no está definida (base de datos de destino).");

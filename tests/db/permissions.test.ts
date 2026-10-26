@@ -278,7 +278,7 @@ describe("crear y cambiar la visibilidad de proyectos", () => {
 });
 
 describe("topes de adjuntos del proyecto (setAttachmentLimits)", () => {
-  test("valida rangos y archivo ≤ tarea ≤ ZIP, exige gestionar el proyecto y guarda los tres", async () => {
+  test("valida rangos, archivo ≤ tarea y archivo ≤ ZIP (la tarea puede superar el ZIP), exige gestionar el proyecto y guarda los tres", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const member = await makeUser();
     const f = await makeProject({ members: [member] });
@@ -297,12 +297,17 @@ describe("topes de adjuntos del proyecto (setAttachmentLimits)", () => {
     expectFail(await setAttachmentLimits(id, 0, 80, 80), /mínimo es 1 MB/);
     expectFail(await setAttachmentLimits(id, 101, 200, 200), /máximo es 100 MB/);
     expectFail(await setAttachmentLimits(id, 2.5, 80, 80), /no válido/);
-    // La tarea no puede ser menor que el archivo, ni el paquete menor que la tarea.
+    // La tarea no puede ser menor que el archivo, ni el paquete menor que el archivo.
     expectFail(await setAttachmentLimits(id, 30, 20, 80), /tarea no puede ser menor que el de un archivo/);
-    expectFail(await setAttachmentLimits(id, 20, 100, 99), /no puede ser menor/);
+    expectFail(await setAttachmentLimits(id, 20, 100, 19), /paquete ZIP.*no puede ser menor que el tamaño máximo de un adjunto/);
+    expectFail(await setAttachmentLimits(id, 100, 200, 99), /paquete ZIP.*no puede ser menor/);
     assert.deepEqual([(await read()).fileMaxMb, (await read()).taskAttachMaxMb, (await read()).releaseZipMaxMb], [20, 80, 80]);
     expectOk(await setAttachmentLimits(id, 5, 50, 200));
     assert.deepEqual([(await read()).fileMaxMb, (await read()).taskAttachMaxMb, (await read()).releaseZipMaxMb], [5, 50, 200]);
+    // El total de una tarea sí puede superar el paquete ZIP: sus archivos se reparten en varios paquetes.
+    expectOk(await setAttachmentLimits(id, 20, 100, 99));
+    assert.deepEqual([(await read()).fileMaxMb, (await read()).taskAttachMaxMb, (await read()).releaseZipMaxMb], [20, 100, 99]);
+    expectOk(await setAttachmentLimits(id, 20, 500, 20));
     expectOk(await setAttachmentLimits(id, 10, 10, 10));
     expectOk(await setAttachmentLimits(id, 1, 500, 500));
     expectOk(await setAttachmentLimits(id, 100, 500, 500));

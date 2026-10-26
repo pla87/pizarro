@@ -1,5 +1,6 @@
 "use client";
 
+import { actionThrowMessage } from "@/lib/stale-action";
 import {
   closestCorners, DndContext, type CollisionDetection, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
   useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent,
@@ -92,7 +93,7 @@ function MobileTab({ active, onClick, children }: { active: boolean; onClick: ()
       aria-pressed={active}
       data-active={active || undefined}
       className={cn(
-        "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors",
+        "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-offset-[-3px]",
         active ? "bg-brand-600 text-on-brand" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
       )}
     >
@@ -305,8 +306,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const track = useCallback(async <T,>(p: Promise<T>): Promise<T> => {
     try {
       return await trackRaw(p);
-    } catch {
-      const error = t("Error inesperado. Inténtalo de nuevo.");
+    } catch (e) {
+      const error = actionThrowMessage(e, t);
       toast(error, "error");
       // Un refresco ya pedido antes del cambio podría traer datos viejos: se fuerza uno nuevo.
       mutationAt.current = 0;

@@ -11,6 +11,7 @@ import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
 import { TypeSelector } from "./TaskDialog";
 import { isWhite, onColor } from "@/lib/constants";
+import { actionThrowResult } from "@/lib/stale-action";
 
 interface Props {
   initialColumnId?: string;
@@ -57,7 +58,7 @@ export function BulkTaskDialog({ initialColumnId, onClose }: Props) {
         labelIds,
         applySubtaskTemplates: templated && withSubtasks,
       }),
-    ).catch(() => ({ ok: false as const, error: t("Error inesperado. Inténtalo de nuevo.") }));
+    ).catch((e) => actionThrowResult(e, t));
     if (!res.ok) {
       setBusy(false);
       return toast(res.error, "error");

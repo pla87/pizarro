@@ -13,6 +13,7 @@ import { MentionTextarea, type MentionCommand } from "../ui/MentionTextarea";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
+import { actionThrowResult } from "@/lib/stale-action";
 
 /** Comentarios de la tarea, con respuestas (un solo nivel: las respuestas salen sangradas bajo su comentario). */
 export function Comments({ taskId, detail, setDetail, users, onGoogle }: {
@@ -43,7 +44,7 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle }: {
     const first = comments[0];
     if (!first || loadingOlder) return;
     setLoadingOlder(true);
-    const res = await board.track(getOlderComments(taskId, { createdAt: first.createdAt, id: first.id })).catch(() => ({ ok: false as const, error: t("Error inesperado. Inténtalo de nuevo.") }));
+    const res = await board.track(getOlderComments(taskId, { createdAt: first.createdAt, id: first.id })).catch((e) => actionThrowResult(e, t));
     setLoadingOlder(false);
     if (!res.ok) return toast(res.error, "error");
     setDetail((d) => {
@@ -57,7 +58,7 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle }: {
     const body = text.trim();
     if (!body || sending) return;
     setSending(true);
-    const res = await board.track(addComment(taskId, body, replyTo?.id ?? null)).catch(() => ({ ok: false as const, error: t("Error inesperado. Inténtalo de nuevo.") }));
+    const res = await board.track(addComment(taskId, body, replyTo?.id ?? null)).catch((e) => actionThrowResult(e, t));
     setSending(false);
     if (!res.ok) return toast(res.error, "error");
     setText("");

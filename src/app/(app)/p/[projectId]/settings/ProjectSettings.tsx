@@ -130,8 +130,8 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
                 toast(t("El máximo de adjuntos de una tarea no puede ser menor que el de un archivo."), "error");
                 return;
               }
-              if (zip < task) {
-                toast(t("El paquete ZIP de una release no puede ser menor que el máximo de adjuntos de una tarea."), "error");
+              if (zip < file) {
+                toast(t("El paquete ZIP de una release no puede ser menor que el tamaño máximo de un adjunto."), "error");
                 return;
               }
               run(async () => setAttachmentLimits(project.id, file, task, zip), t("Proyecto actualizado"), () => router.refresh());
@@ -143,7 +143,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
                 id="p-file-mb" className="input w-32" type="number" inputMode="numeric" step={1}
                 min={FILE_MAX_MIN_MB} max={FILE_MAX_MAX_MB} value={fileMb} onChange={(e) => setFileMb(e.target.value)} required
               />
-              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto {default}), y nunca más que el máximo de adjuntos de una tarea. Cada archivo se carga entero en la memoria del servidor al subirlo: no lo subas más de lo necesario.", { min: FILE_MAX_MIN_MB, max: FILE_MAX_MAX_MB, default: FILE_MAX_DEFAULT_MB })}</p>
+              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto {default}), y nunca más que el máximo de adjuntos de una tarea ni que el paquete ZIP de una release. Cada archivo se carga entero en la memoria del servidor al subirlo: no lo subas más de lo necesario.", { min: FILE_MAX_MIN_MB, max: FILE_MAX_MAX_MB, default: FILE_MAX_DEFAULT_MB })}</p>
             </div>
             <div>
               <label className="label" htmlFor="p-task-mb">{t("Tamaño máximo de los adjuntos de una tarea (MB)")}</label>
@@ -151,7 +151,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
                 id="p-task-mb" className="input w-32" type="number" inputMode="numeric" step={1}
                 min={RELEASE_ZIP_MIN_MB} max={RELEASE_ZIP_MAX_MB} value={taskMb} onChange={(e) => setTaskMb(e.target.value)} required
               />
-              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto 80), y nunca menos que el máximo de un adjunto. Es lo máximo que pueden sumar todos los adjuntos de una tarea.", { min: RELEASE_ZIP_MIN_MB, max: RELEASE_ZIP_MAX_MB })}</p>
+              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto 80), y nunca menos que el máximo de un adjunto. Es lo máximo que pueden sumar todos los adjuntos de una tarea; puede superar el tamaño del paquete ZIP, porque los adjuntos de una tarea se pueden repartir en varios paquetes.", { min: RELEASE_ZIP_MIN_MB, max: RELEASE_ZIP_MAX_MB })}</p>
             </div>
             <div>
               <label className="label" htmlFor="p-zip-mb">{t("Tamaño máximo de cada paquete ZIP de una release (MB)")}</label>
@@ -159,7 +159,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
                 id="p-zip-mb" className="input w-32" type="number" inputMode="numeric" step={1}
                 min={RELEASE_ZIP_MIN_MB} max={RELEASE_ZIP_MAX_MB} value={zipMb} onChange={(e) => setZipMb(e.target.value)} required
               />
-              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto 80), y nunca menos que el máximo de adjuntos de una tarea. Si los adjuntos de una release superan este tamaño, se descargan en varios ZIP de hasta ese tamaño; cada ZIP se arma en memoria del servidor: súbelo solo si hace falta.", { min: RELEASE_ZIP_MIN_MB, max: RELEASE_ZIP_MAX_MB })}</p>
+              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto 80), y nunca menos que el máximo de un adjunto. Si los adjuntos de una release superan este tamaño, se descargan en varios ZIP de hasta ese tamaño (los de una misma tarea pueden quedar en paquetes distintos); cada ZIP se arma en memoria del servidor: súbelo solo si hace falta.", { min: RELEASE_ZIP_MIN_MB, max: RELEASE_ZIP_MAX_MB })}</p>
             </div>
             <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
           </form>

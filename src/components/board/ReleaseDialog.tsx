@@ -18,6 +18,7 @@ import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard } from "./context";
 import { MentionText } from "../ui/MentionText";
 import { mentionsToPlain } from "@/lib/mentions";
+import { actionThrowResult } from "@/lib/stale-action";
 
 interface DeployResult {
   moved: { id: string; columnId: string; position: number }[];
@@ -224,7 +225,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
         attachments: zipItems.map(({ taskId, code }) => ({ taskId, code })),
         number: generatedNumber ?? undefined,
       }),
-    ).catch(() => ({ ok: false as const, error: t("Error inesperado. Inténtalo de nuevo.") }));
+    ).catch((e) => actionThrowResult(e, t));
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
     toast(t("Release registrada como desplegada"));

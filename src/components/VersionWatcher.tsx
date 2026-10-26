@@ -3,12 +3,13 @@
 import { RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useT } from "@/i18n/client";
+import { NEW_VERSION_EVENT } from "@/lib/stale-action";
 
 const CHECK_MS = 5 * 60_000;
 const BUILD = process.env.NEXT_PUBLIC_BUILD_ID ?? "";
 
 /** ¿Hay algo a medias (un modal abierto o un campo con foco)? Entonces no se recarga sola. */
-function busy(): boolean {
+export function busy(): boolean {
   const active = document.activeElement as HTMLElement | null;
   return !!document.querySelector("[role=dialog]") || !!active?.closest("input, textarea, select, [contenteditable=true]");
 }
@@ -53,6 +54,9 @@ export function VersionWatcher() {
       if (!busy()) reloadForNewVersion();
       else setOutdated(true);
     };
+    // Una acción ha fallado por ser de una versión anterior: se avisa ya, sin recargar (puede haber texto sin guardar).
+    const onStale = () => setOutdated(true);
+    window.addEventListener(NEW_VERSION_EVENT, onStale);
     const timer = setInterval(check, CHECK_MS);
     document.addEventListener("visibilitychange", check);
     window.addEventListener("focus", check);
@@ -60,13 +64,14 @@ export function VersionWatcher() {
       clearInterval(timer);
       document.removeEventListener("visibilitychange", check);
       window.removeEventListener("focus", check);
+      window.removeEventListener(NEW_VERSION_EVENT, onStale);
     };
   }, []);
 
   if (!outdated) return null;
   return (
     <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+0.75rem)] z-[60] mx-auto flex max-w-md items-center gap-2 rounded-xl border border-brand-200 bg-white p-2 pl-3 text-sm shadow-xl dark:border-brand-500/40 dark:bg-slate-900">
-      <span className="flex-1">{t("Hay una versión nueva de Pizarro.")}</span>
+      <span className="flex-1">{t("Hay una versión nueva de Pizarro. Recarga para seguir.")}</span>
       <button className="btn-primary px-2.5 py-1.5" onClick={() => window.location.reload()}>
         <RefreshCw size={15} /> {t("Recargar")}
       </button>
