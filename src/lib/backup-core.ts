@@ -40,11 +40,56 @@ export interface TableBatch {
 
 // --- Clave ------------------------------------------------------------------------------
 
-/** BACKUP_KEY: 32 bytes en base64. Devuelve null si no está definida o no es válida. */
+/**
+ * Limpia lo que se cuela al pegar la clave desde un .env o desde el panel de Railway: espacios, saltos de línea,
+ * comillas simples o dobles alrededor y, si se pegó la línea entera, el prefijo `BACKUP_KEY=`.
+ */
+function cleanBackupKey(raw: string): { text: string; quoted: boolean } {
+  let text = raw.trim();
+  let quoted = false;
+  text = text.replace(/^(export\s+)?BACKUP_KEY\s*=\s*/, "");
+  for (;;) {
+    const m = /^["'`“”‘’](.*)["'`“”‘’]$/s.exec(text);
+    if (!m) break;
+    text = (m[1] ?? "").trim();
+    quoted = true;
+  }
+  return { text, quoted };
+}
+
+/**
+ * BACKUP_KEY: 32 bytes en base64 o base64url (`openssl rand -base64 32`) o en hexadecimal de 64 caracteres
+ * (`openssl rand -hex 32`). Se ignoran espacios y comillas de alrededor. Devuelve null si no está definida o no es válida.
+ * Las claves en base64 que ya eran válidas dan exactamente los mismos 32 bytes que antes.
+ */
 export function parseBackupKey(raw: string | undefined | null): Buffer | null {
   if (!raw || !raw.trim()) return null;
-  const key = Buffer.from(raw.trim(), "base64");
+  const { text } = cleanBackupKey(raw);
+  if (/^[0-9a-fA-F]{64}$/.test(text)) return Buffer.from(text, "hex");
+  const key = Buffer.from(text, "base64");
   return key.length === 32 ? key : null;
+}
+
+/** Qué se ha detectado en una BACKUP_KEY no válida (nunca incluye el valor). */
+export type BackupKeyProblem =
+  | { kind: "empty" }
+  | { kind: "hex"; chars: number }
+  | { kind: "base64"; chars: number; bytes: number }
+  | { kind: "other"; chars: number };
+
+/** Para explicar al administrador por qué una BACKUP_KEY no sirve. null si es válida. */
+export type BackupKeyDiagnosis = BackupKeyProblem & { quoted: boolean; spaces: boolean };
+
+export function diagnoseBackupKey(raw: string | undefined | null): BackupKeyDiagnosis | null {
+  if (parseBackupKey(raw)) return null;
+  const { text, quoted } = cleanBackupKey(raw ?? "");
+  const spaces = /\s/.test(text);
+  const base = { quoted, spaces };
+  if (!text) return { kind: "empty", ...base };
+  if (/^[0-9a-fA-F]+$/.test(text) && text.length >= 32) return { kind: "hex", chars: text.length, ...base };
+  const compact = text.replace(/\s+/g, "");
+  if (/^[A-Za-z0-9+/_-]+={0,2}$/.test(compact)) return { kind: "base64", chars: compact.length, bytes: Buffer.from(compact, "base64").length, ...base };
+  return { kind: "other", chars: text.length, ...base };
 }
 
 // --- Cifrado ----------------------------------------------------------------------------

@@ -56,7 +56,7 @@ export const common: Record<string, string> = {
   "Rehacer la última acción en la tarea": "Redo the last action on the task",
   "Deshacer la última acción": "Undo the last action",
   "Deshacer la última acción en la tarea": "Undo the last action on the task",
-  "Hay una versión nueva de Pizarro.": "There is a new version of Pizarro.",
+  "Hay una versión nueva de Pizarro. Recarga para seguir.": "There is a new version of Pizarro. Reload to continue.",
   "Recargar": "Reload",
   "Sin color": "No color",
   "Color {name}": "Color {name}",

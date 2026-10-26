@@ -50,7 +50,7 @@ export function NewColumnButton({ variant, onCreated }: { variant: "desktop" | "
       ) : (
         <button
           onClick={() => setOpen(true)}
-          className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300")}
+          className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full focus-visible:outline-offset-[-3px] bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300")}
           aria-label={t("Añadir columna")}
         >
           <Plus size={16} />

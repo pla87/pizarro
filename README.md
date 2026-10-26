@@ -123,7 +123,7 @@ steps:
 | `DATABASE_POOL_SIZE` | No | `10` | Conexiones del pool. |
 | `UPLOAD_QUOTA_MB_PER_PROJECT` | No | `2048` | Cuota de adjuntos por proyecto (MB). Pasada la cuota, la subida se rechaza mostrando el uso. |
 | `UPLOAD_QUOTA_MB_TOTAL` | No | (sin límite) | Cuota total de adjuntos de todo el servidor (MB). |
-| `BACKUP_KEY` | Para copias automáticas | `openssl rand -base64 32` | Clave AES-256 (32 bytes en base64) con la que se cifran las copias (base de datos y ficheros). Sin ella las copias están desactivadas. **Guárdala fuera del servidor: sin ella las copias no se pueden abrir.** |
+| `BACKUP_KEY` | Para copias automáticas | `openssl rand -base64 32` | Clave AES-256 (32 bytes en base64, o 64 caracteres hexadecimales con `openssl rand -hex 32`) con la que se cifran las copias (base de datos y ficheros). Sin ella las copias están desactivadas. **Guárdala fuera del servidor: sin ella las copias no se pueden abrir.** |
 | `BACKUP_LOCAL_FILES` | No | (auto) | Sin definir: la copia local (`UPLOAD_DIR/backups`) incluye los ficheros solo si no hay destino externo. `1`/`0` lo fuerzan. |
 | `BACKUP_EXTERNAL_DIR` | No | `/copias-externas` | Carpeta montada (disco USB, NAS, SFTP montado) a la que se sube cada copia. Ruta absoluta dentro del contenedor. |
 | `BACKUP_S3_ENDPOINT` | Para copias en S3 | `https://<cuenta>.r2.cloudflarestorage.com` | Almacenamiento S3 compatible (Cloudflare R2, Backblaze B2, MinIO…) al que se sube cada copia. Direcciones *path-style*. |

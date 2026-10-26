@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { backupFileName, fileSha256, parseBackupFileName, parseBackupKey, verifyBackupFile, type BackupManifest } from "./backup-core";
+import { backupFileName, fileSha256, parseBackupFileName, diagnoseBackupKey, parseBackupKey, verifyBackupFile, type BackupManifest } from "./backup-core";
 import { dumpDatabase } from "./backup-db";
 import { DirDestination, externalDestinations, localFilesEnabled, listObjectKeys, listStems, manifestKey, pruneDestination, readManifest, syncBackup, type BackupDestination, type DestinationId } from "./backup-dest";
 import { buildManifest, decodeManifest, encodeManifest, fileNameKey, hashFiles, loadHashIndex, saveHashIndex, scanFiles, type FullManifest } from "./backup-files";
@@ -87,6 +87,11 @@ export interface BackupFileInfo {
 
 export function backupKey(): Buffer | null {
   return parseBackupKey(process.env.BACKUP_KEY);
+}
+
+/** Por qué la BACKUP_KEY no sirve (sin el valor), o null si es válida o no está definida. */
+export function backupKeyProblem() {
+  return backupKeyState() === "invalid" ? diagnoseBackupKey(process.env.BACKUP_KEY) : null;
 }
 
 /** ¿Está configurada la clave? Distingue «sin definir» de «definida pero inválida» para avisar al admin. */

@@ -9,6 +9,7 @@ import {
   backupFileName,
   orderTables,
   parseBackupFileName,
+  diagnoseBackupKey,
   parseBackupKey,
   readLines,
   selectBackupsToKeep,
@@ -35,11 +36,38 @@ async function withTmp<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   }
 }
 
-test("BACKUP_KEY: solo 32 bytes en base64", () => {
+test("BACKUP_KEY: solo 32 bytes (base64, base64url o hexadecimal)", () => {
   assert.equal(parseBackupKey(undefined), null);
   assert.equal(parseBackupKey(""), null);
+  assert.equal(parseBackupKey("   "), null);
   assert.equal(parseBackupKey(randomBytes(16).toString("base64")), null);
+  assert.equal(parseBackupKey(randomBytes(33).toString("base64")), null);
+  assert.equal(parseBackupKey(randomBytes(16).toString("hex")), null);
+  assert.equal(parseBackupKey(randomBytes(33).toString("hex")), null);
+  assert.equal(parseBackupKey("no-es-una-clave"), null);
   assert.equal(parseBackupKey(key.toString("base64"))?.length, 32);
+});
+
+test("BACKUP_KEY: formas aceptadas dan los mismos 32 bytes", () => {
+  // Una clave base64 que ya era válida no cambia de bytes.
+  assert.deepEqual(parseBackupKey(key.toString("base64")), key);
+  assert.deepEqual(parseBackupKey(key.toString("base64url")), key);
+  assert.deepEqual(parseBackupKey(key.toString("hex")), key);
+  assert.deepEqual(parseBackupKey(key.toString("hex").toUpperCase()), key);
+  // Comillas, espacios y saltos de línea de un .env.
+  for (const raw of [`"${key.toString("base64")}"`, `'${key.toString("base64")}'`, `  ${key.toString("base64")}\n`, `"  ${key.toString("hex")} "`, `BACKUP_KEY="${key.toString("base64")}"`, `“${key.toString("base64")}”`]) {
+    assert.deepEqual(parseBackupKey(raw), key, raw);
+  }
+});
+
+test("BACKUP_KEY: diagnóstico sin revelar el valor", () => {
+  assert.equal(diagnoseBackupKey(key.toString("base64")), null);
+  assert.deepEqual(diagnoseBackupKey(randomBytes(20).toString("hex")), { kind: "hex", chars: 40, quoted: false, spaces: false });
+  assert.deepEqual(diagnoseBackupKey(`"${randomBytes(16).toString("base64")}"`), { kind: "base64", chars: 24, bytes: 16, quoted: true, spaces: false });
+  assert.equal(diagnoseBackupKey("a b c d")?.spaces, true);
+  assert.deepEqual(diagnoseBackupKey("¡clave!"), { kind: "other", chars: 7, quoted: false, spaces: false });
+  assert.equal(diagnoseBackupKey("''")?.kind, "empty");
+  assert.ok(!JSON.stringify(diagnoseBackupKey("secreto-secreto-secreto")).includes("secreto"));
 });
 
 test("cifrar y descifrar: ida y vuelta con manifiesto correcto", async () => {
