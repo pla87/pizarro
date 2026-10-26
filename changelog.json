@@ -1,6 +1,49 @@
 {
   "versions": [
     {
+      "version": "1.26.0",
+      "date": "2026-10-26",
+      "releasedAt": "2026-10-26T01:27:34+01:00",
+      "summary": "Papelera de documentos, límites de adjuntos más flexibles, BACKUP_KEY más tolerante y aviso de versión nueva",
+      "changes": {
+        "nuevas": [
+          "Papelera en la documentación del proyecto: lo borrado se puede restaurar durante 7 días y después se elimina solo."
+        ],
+        "mejoras": [
+          "El total de adjuntos de una tarea puede superar el tamaño de un paquete ZIP de release (sus archivos se reparten en varios paquetes); solo cada archivo debe caber en un paquete.",
+          "BACKUP_KEY admite también formato hex y se ignoran comillas y espacios; si no es válida, la página de copias explica por qué sin mostrarla.",
+          "Tras un despliegue, una pestaña antigua avisa «Hay una versión nueva de Pizarro. Recarga para seguir.» en lugar de «Error inesperado»."
+        ],
+        "correcciones": [
+          "El foco con el tabulador se ve completo en las pestañas de Administración y del tablero en móvil.",
+          "Copias: restaurar no vacía una base de datos ajena sin --force, una copia fallida no deja volcados a medias y la subida al destino externo tolera ficheros borrados entretanto."
+        ],
+        "tecnicos": [
+          "Migración: ProjectDocument.deletedAt y deletedById. Nueva tarea de mantenimiento documentsTrashPurge."
+        ]
+      },
+      "en": {
+        "summary": "Documents trash, more flexible attachment limits, more tolerant BACKUP_KEY and new-version notice",
+        "changes": {
+          "nuevas": [
+            "Trash in project documentation: deleted items can be restored for 7 days and are then removed automatically."
+          ],
+          "mejoras": [
+            "A task's attachment total may exceed a release ZIP package size (its files are spread over several packages); only each file must fit in a package.",
+            "BACKUP_KEY also accepts hex and ignores surrounding quotes and spaces; if invalid, the backups page explains why without showing it.",
+            "After a deploy, an old tab shows “There is a new version of Pizarro. Reload to continue.” instead of “Unexpected error”."
+          ],
+          "correcciones": [
+            "Keyboard focus is fully visible on the Administration tabs and the mobile board tabs.",
+            "Backups: restoring does not wipe a foreign database without --force, a failed backup leaves no partial dumps and the external upload tolerates files deleted meanwhile."
+          ],
+          "tecnicos": [
+            "Migration: ProjectDocument.deletedAt and deletedById. New maintenance job documentsTrashPurge."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.25.0",
       "date": "2026-10-25",
       "releasedAt": "2026-10-25T20:22:04+01:00",

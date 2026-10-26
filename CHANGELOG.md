@@ -2,6 +2,29 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.26.0 — 2026-10-26 01:27
+
+Papelera de documentos, límites de adjuntos más flexibles, BACKUP_KEY más tolerante y aviso de versión nueva
+
+### Nuevas funcionalidades
+
+- Papelera en la documentación del proyecto: lo borrado se puede restaurar durante 7 días y después se elimina solo.
+
+### Mejoras
+
+- El total de adjuntos de una tarea puede superar el tamaño de un paquete ZIP de release (sus archivos se reparten en varios paquetes); solo cada archivo debe caber en un paquete.
+- BACKUP_KEY admite también formato hex y se ignoran comillas y espacios; si no es válida, la página de copias explica por qué sin mostrarla.
+- Tras un despliegue, una pestaña antigua avisa «Hay una versión nueva de Pizarro. Recarga para seguir.» en lugar de «Error inesperado».
+
+### Correcciones
+
+- El foco con el tabulador se ve completo en las pestañas de Administración y del tablero en móvil.
+- Copias: restaurar no vacía una base de datos ajena sin --force, una copia fallida no deja volcados a medias y la subida al destino externo tolera ficheros borrados entretanto.
+
+### Cambios técnicos / DB
+
+- Migración: ProjectDocument.deletedAt y deletedById. Nueva tarea de mantenimiento documentsTrashPurge.
+
 ## v1.25.0 — 2026-10-25 20:22
 
 Documentación del proyecto, copias completas con destino externo y restauración sin git, asistente de primer arranque e instalador, claves separadas y diagnóstico
