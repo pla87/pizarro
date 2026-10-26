@@ -22,6 +22,7 @@ import type { T } from "@/i18n/core";
 import { AttachLimitHint } from "./AttachLimitHint";
 import { filesFrom, isImageFile, uploadFile, useFileDrop } from "./upload";
 import { draftKey, useDraftAutosave, type NewTaskDraft } from "./drafts";
+import { actionThrowResult } from "@/lib/stale-action";
 
 interface Props {
   initialColumnId?: string;
@@ -102,7 +103,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       if (id !== board.project.id) setOther(ready);
       return applyForm(ready, keep);
     }
-    const res = await getProjectFormData(id).catch(() => ({ ok: false as const, error: t("Error inesperado. Inténtalo de nuevo.") }));
+    const res = await getProjectFormData(id).catch((e) => actionThrowResult(e, t));
     if (wantedProject.current !== id) return;
     if (!res.ok) {
       toast(res.error, "error");
@@ -200,7 +201,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         evergreen: isReleaseColumn && evergreen,
         subtasks: subtaskTitles,
       }),
-    ).catch(() => ({ ok: false as const, error: t("Error inesperado. Inténtalo de nuevo.") }));
+    ).catch((e) => actionThrowResult(e, t));
     if (!res.ok) {
       setBusy(false);
       return toast(res.error, "error");

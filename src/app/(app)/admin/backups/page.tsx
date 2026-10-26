@@ -1,4 +1,4 @@
-import { backupDestinationsInfo, backupKeyState, externalCopyRunning, listBackups, readStatus } from "@/lib/backup";
+import { backupDestinationsInfo, backupKeyProblem, backupKeyState, externalCopyRunning, listBackups, readStatus } from "@/lib/backup";
 import { getBackupAlert } from "@/lib/backup-alert";
 import { db } from "@/lib/db";
 import { listJobRuns } from "@/lib/jobs";
@@ -25,6 +25,7 @@ export default async function BackupsPage() {
   return (
     <BackupsAdmin
       keyState={backupKeyState()}
+      keyProblem={backupKeyProblem()}
       alert={alert}
       status={status}
       files={files}

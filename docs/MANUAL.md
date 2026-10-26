@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.25.0"
+version: "v1.26.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.25.0
+**Versión de la aplicación:** v1.26.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -96,7 +96,7 @@ La aplicación es un **monolito en un único contenedor**. No hay colas, cachés
 | `Subtask` | taskId, title, done, position | Subtareas de una tarea (no pasan a las releases). |
 | `UndoEntry` | userId, projectId, taskId, `kind` (UNDO / REDO), label, ops (JSON), createdAt | Las 10 últimas acciones deshacibles (y las 10 rehacibles) de cada usuario en cada proyecto, con sus operaciones inversas. Una acción nueva vacía las rehacibles. Caducan a los 7 días. Su etiqueta se guarda como plantilla traducible. |
 | `TaskAttachment` | taskId, originalName, width, height, size | El fichero está en `UPLOAD_DIR/<id>.webp` (y `<id>.thumb.webp`). |
-| `ProjectDocument` | projectId, name, mimeType, size, `kind` (TEXT / MARKDOWN / PDF / IMAGE / OTHER), createdById, createdAt, updatedAt | Documentación del proyecto. El fichero está en `UPLOAD_DIR/documents/<id>.bin` (las imágenes, ya en WebP). Se borra en cascada con el proyecto. |
+| `ProjectDocument` | projectId, name, mimeType, size, `kind` (TEXT / MARKDOWN / PDF / IMAGE / OTHER), createdById, createdAt, updatedAt, `deletedAt` / `deletedById` (papelera: si hay fecha, está borrado y se purga a los 7 días) | Documentación del proyecto. El fichero está en `UPLOAD_DIR/documents/<id>.bin` (las imágenes, ya en WebP). Se borra en cascada con el proyecto. |
 | `Release` / `ReleaseTask` | number (correlativo por proyecto), content (Markdown final), deployedAt, autor · instantánea de título y tipo de cada tarea | La instantánea se conserva aunque la tarea se borre. |
 | `AppVersionLog` | version (única), releasedAt, summary, changes (JSON) | Se sincroniza desde `changelog.json` en cada arranque. |
 | `Deliverable` | projectId, name, description, dueDate, position | Las tareas lo referencian con `deliverableId`. Al borrarlo, quedan sin entregable. |
@@ -198,10 +198,10 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
     - *Privado*: al pasar un proyecto de equipo a privado, las **personas asignadas pasan a ser miembros** (conservan el acceso y sus tarjetas) y quien lo cambia también es miembro; el diálogo de confirmación indica cuántas personas mantienen el acceso. Los administradores que lo veían solo porque lo tenían en *Proyectos en los que trabajo* pierden el acceso y sus tarjetas se desasignan; luego se pueden quitar miembros. Tiene **miembros** y lo ven **solo ellos**, tampoco los administradores que no sean miembros; no aparece en sus listados, avisos ni asignaciones. Cualquier miembro puede **añadir o quitar miembros**, renombrarlo y borrarlo (escribiendo su nombre). El último miembro no puede salir. Al **borrar a un usuario** se borran los proyectos privados donde era el único miembro; en los demás, simplemente deja de ser miembro. Llevan un **candado** junto a su nombre;
   - etiquetas;
   - **informe semanal por email** (ver 3.9);
-  - **Releases** (admins; en un proyecto privado, cualquier miembro): dos límites, entre 10 y 500 MB (80 por defecto cada uno; el del paquete nunca puede ser menor que el de la tarea):
+  - **Releases** (admins; en un proyecto privado, cualquier miembro): tres límites. Las únicas reglas: un archivo nunca puede superar el total de la tarea ni el tamaño de un paquete ZIP. El total de una tarea sí puede superar el del paquete: al descargar la release, sus archivos se reparten en varios ZIP.
     - **Tamaño máximo de un adjunto:** lo que puede pesar cada archivo (de 1 a 100 MB; 20 MB por defecto). Un archivo mayor se rechaza con un aviso que indica el tope del proyecto. Cada archivo se carga entero en la memoria del servidor mientras se sube, así que un valor muy alto significa más memoria por subida: súbelo solo si hace falta. Si el servidor define `MAX_UPLOAD_MB`, esa variable actúa como tope adicional para todos los proyectos;
     - **Tamaño máximo de los adjuntos de una tarea:** la suma de los adjuntos de cada tarea (nunca menos que el de un archivo); una subida que la supere se rechaza con un aviso que indica el tope. Solo cuentan los adjuntos que tiene la tarea: los borrados no suman, aunque aún se puedan recuperar con *Deshacer*;
-    - **Tamaño máximo de cada paquete ZIP de una release:** si los adjuntos de la release ocupan más, se descargan en varios ZIP (`release-AAAA-MM-DD-adjuntos-1de3.zip`, …), con el menor número de paquetes posible. Cada ZIP se arma en la memoria del servidor: súbelo solo si hace falta;
+    - **Tamaño máximo de cada paquete ZIP de una release** (10–500 MB, 80 por defecto; nunca menor que el de un archivo): si los adjuntos de la release ocupan más, se descargan en varios ZIP (`release-AAAA-MM-DD-adjuntos-1de3.zip`, …), con el menor número de paquetes posible. Cada ZIP se arma en la memoria del servidor: súbelo solo si hace falta;
   - **Documentos de Google** (si Google está activado; admins, o cualquier miembro si es privado): con quién se comparten los Docs y Sheets creados desde las tareas (ver 3.10);
   - borrado del proyecto (admins, o cualquier miembro si es privado; pide escribir el nombre para confirmar).
 - **Límites de cada proyecto:** como máximo **50 etiquetas**, **100 entregables** y **1000 tareas activas** (las archivadas no cuentan). Al llegar al tope, crear, duplicar, recuperar una archivada o deshacer un borrado avisa con el límite; archiva o borra tareas para hacer sitio. Al crear varias tareas a la vez, si el lote no cabe entero no se crea ninguna. Si una tarea repetitiva se termina con el proyecto lleno, no se crea la siguiente repetición (queda anotado en los logs). Además, cada persona puede crear como mucho 300 tareas, 30 etiquetas y 30 entregables por minuto.
@@ -506,9 +506,10 @@ Entrada **Documentación** del menú lateral (debajo de *Releases*): los archivo
 
 - **Subir:** botón *Subir archivos* (varios a la vez), arrastrando archivos a la página o pegándolos con Ctrl+V (capturas de pantalla incluidas). Se suben de uno en uno y, si alguno falla, se muestra el motivo junto a su nombre.
 - **Qué se puede ver:** texto plano (`.txt`, `.log`, `.csv`, `.json`, `.yml`…), Markdown (`.md`, con el mismo Markdown seguro que las descripciones de las tarjetas), PDF (con el visor del navegador) e imágenes PNG, JPEG, WebP, GIF o AVIF (se reconvierten a WebP, como los adjuntos). Los textos de más de 1 MB solo se descargan. Cualquier otro tipo (Office, ZIP, SVG, HTML…) aparece en la lista y se puede descargar, pero no tiene vista previa. El tipo se decide al subir mirando también el contenido: un «PDF» que no lo es se trata como un archivo cualquiera.
-- **Lista:** nombre, icono de tipo, tamaño, quién lo subió y fecha, con buscador por nombre (sin distinguir mayúsculas ni tildes). Al pulsar un documento se abre el visor con **Descargar**, **Borrar** (pide confirmación; no se puede deshacer) y el lápiz para **Renombrar**.
-- **Límites:** cada archivo, hasta el tamaño máximo de archivo del proyecto (*Ajustes del proyecto*, y `MAX_UPLOAD_MB` si está definida); hasta 200 documentos por proyecto; y su tamaño cuenta en la misma cuota de almacenamiento del proyecto que los adjuntos de tareas (`UPLOAD_QUOTA_MB_PER_PROJECT`). Las subidas comparten el tope de 60 por minuto y persona.
-- **Registro y copias:** se registran las subidas, las descargas explícitas, los renombrados y los borrados (no las visualizaciones). Los ficheros están en `UPLOAD_DIR/documents/`, así que entran en las copias de seguridad que incluyen los adjuntos; borrar el proyecto los borra y la limpieza diaria de huérfanos revisa también esa carpeta.
+- **Lista:** nombre, icono de tipo, tamaño, quién lo subió y fecha, con buscador por nombre (sin distinguir mayúsculas ni tildes). Al pulsar un documento se abre el visor con **Descargar**, **Borrar** (lo envía a la papelera, sin pedir confirmación; el aviso «Documento enviado a la papelera» trae **Deshacer**) y el lápiz para **Renombrar**.
+- **Papelera:** el botón **Papelera (N)** (solo aparece si hay algo) muestra los documentos borrados, con quién los borró y cuándo, y los días que quedan. Se conservan **7 días** y después se eliminan solos, fila y fichero (tarea diaria `documentsTrashPurge`, visible en *Administración → Copias*). Desde ahí se pueden **Ver** (vista previa), **Restaurar** (vuelve a comprobar el máximo de 200 documentos y la cuota; si no cabe, lo explica y sigue en la papelera) o **Borrar definitivamente** (pide confirmación). La limpieza de huérfanos no toca los ficheros de la papelera, y las copias de seguridad los incluyen.
+- **Límites:** cada archivo, hasta el tamaño máximo de archivo del proyecto (*Ajustes del proyecto*, y `MAX_UPLOAD_MB` si está definida); hasta 200 documentos por proyecto (la papelera no cuenta); y su tamaño, también el de la papelera hasta que se purga, cuenta en la misma cuota de almacenamiento del proyecto que los adjuntos de tareas (`UPLOAD_QUOTA_MB_PER_PROJECT`). Las subidas comparten el tope de 60 por minuto y persona.
+- **Registro y copias:** se registran las subidas, las descargas explícitas, los renombrados, los borrados a la papelera, las restauraciones, los borrados definitivos y las purgas (no las visualizaciones). Los ficheros están en `UPLOAD_DIR/documents/`, así que entran en las copias de seguridad que incluyen los adjuntos; borrar el proyecto los borra y la limpieza diaria de huérfanos revisa también esa carpeta.
 
 ---
 
@@ -536,7 +537,7 @@ Consulta la tabla completa en el `README.md`. Las imprescindibles son `DATABASE_
 | `TOKEN_SECRET` | Clave de los enlaces de email, códigos de recuperación y dispositivos recordados. Sin ella se usa `SESSION_SECRET`. Ver 4.4. |
 | `ENCRYPTION_KEY` | Clave con la que se cifran los secretos de 2FA (TOTP) y las conexiones con Google. Sin ella se usa `SESSION_SECRET`. Ver 4.4. |
 | `TOKEN_SECRET_PREVIOUS` / `ENCRYPTION_KEY_PREVIOUS` | Solo durante una rotación: la clave anterior, para seguir leyendo lo que se guardó con ella. Ver 4.4. |
-| `BACKUP_KEY` | Clave AES-256 de las copias automáticas. Genérala con `openssl rand -base64 32` y **guárdala también fuera de Railway**: sin ella las copias no se pueden leer. Sin la variable, las copias están desactivadas. |
+| `BACKUP_KEY` | Clave AES-256 de las copias automáticas. Genérala con `openssl rand -base64 32` (también vale `openssl rand -hex 32`; se ignoran comillas y espacios alrededor) y **guárdala también fuera de Railway**: sin ella las copias no se pueden leer. Sin la variable, las copias están desactivadas. |
 | `BACKUP_S3_ENDPOINT`, `BACKUP_S3_BUCKET`, `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY`, `BACKUP_S3_REGION`, `BACKUP_S3_PREFIX` | Destino externo S3 compatible (Cloudflare R2, Backblaze B2, MinIO…) para las copias (ver 4.5). Opcionales; sin ellas, las copias solo quedan en el volumen. |
 | `BACKUP_EXTERNAL_DIR` | Carpeta montada (disco USB, NAS…) como destino externo de las copias. Opcional. |
 | `BACKUP_LOCAL_FILES` | Sin definir: la copia local incluye los ficheros solo si no hay destino externo. `1`/`0` lo fuerzan. |
@@ -685,7 +686,8 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 | Un admin no ve un proyecto en sus selectores | No lo ha marcado en sus proyectos de trabajo | *Mi perfil → Proyectos en los que trabajo*. |
 | Nadie ve un proyecto privado (ni los admins) | Los privados solo los ven sus miembros | Un miembro puede añadir a más personas desde *Ajustes del proyecto*. |
 | No aparece «¿Olvidaste tu contraseña?» ni llegan invitaciones | No hay SMTP configurado | Configura el email (ver 4.8); mientras tanto el admin da una contraseña inicial. |
-| «Copias de seguridad» no funciona | Falta `BACKUP_KEY` | Genérala con `openssl rand -base64 32`, guárdala fuera de Railway y redespliega. |
+| «Copias de seguridad» no funciona | Falta `BACKUP_KEY` o no es válida | La página de copias explica qué falla sin mostrar la clave (p. ej. «base64 que decodifica a 16 bytes»). Genérala con `openssl rand -base64 32`, guárdala fuera de Railway y redespliega. |
+| «Hay una versión nueva de Pizarro. Recarga para seguir.» | Esa pestaña se abrió antes de un despliegue | Pulsa **Recargar**. Nunca se recarga sola mientras escribes o tienes un diálogo abierto. |
 | Se rechaza una subida por cuota | Se superó `UPLOAD_QUOTA_MB_PER_PROJECT` o `UPLOAD_QUOTA_MB_TOTAL` | Borra adjuntos o sube la cuota. |
 | Google devuelve `redirect_uri_mismatch` al iniciar sesión | Falta la URI `/api/auth/google/callback` | Añádela al cliente OAuth (ver 4.7). |
 | «La integración con Google no está configurada» | Faltan `GOOGLE_CLIENT_ID`/`SECRET` o `APP_URL` | Configúralos y redespliega. |

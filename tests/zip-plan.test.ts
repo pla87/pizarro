@@ -39,6 +39,17 @@ describe("planPackages", () => {
     assert.ok(p.every((x) => !x.oversize));
   });
 
+  test("los archivos de una misma tarea pueden quedar en paquetes distintos", () => {
+    // Tarea A: 3 archivos de 40 (120 en total, más que el paquete de 100); tarea B: 1 de 50.
+    const owner = ["A", "A", "A", "B"];
+    const p = planPackages(items(40, 40, 40, 50), 100);
+    for (const pk of p) assert.ok(pk.bytes <= 100 && !pk.oversize);
+    const packagesOfA = p.filter((pk) => pk.items.some((i) => owner[i] === "A"));
+    assert.equal(packagesOfA.length, 2);
+    // Ninguno se pierde ni se repite.
+    assert.deepEqual(p.flatMap((x) => x.items).sort((a, b) => a - b), [0, 1, 2, 3]);
+  });
+
   test("es determinista con tamaños iguales", () => {
     const a = planPackages(items(40, 40, 40, 40, 40), 100);
     const b = planPackages(items(40, 40, 40, 40, 40), 100);

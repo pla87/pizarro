@@ -80,7 +80,8 @@ model User {
   assignedTasks     Task[]            @relation("TaskAssignee")
   createdTasks      Task[]            @relation("TaskCreator")
   attachments       TaskAttachment[]
-  documentsCreated  ProjectDocument[]
+  documentsCreated  ProjectDocument[] @relation("DocumentCreatedBy")
+  documentsDeleted  ProjectDocument[] @relation("DocumentDeletedBy")
   releases          Release[]
   googleAccount     GoogleAccount?
   releaseTemplates  ReleaseTemplate[]
@@ -414,11 +415,18 @@ model ProjectDocument {
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  /// Papelera: si no es null, el documento está borrado y se purga (fila y fichero) pasados DOCUMENT_TRASH_DAYS días.
+  deletedAt   DateTime?
+  deletedById String?
   project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy   User?    @relation("DocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  deletedBy   User?    @relation("DocumentDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   @@index([projectId, createdAt])
   @@index([createdById])
+  @@index([deletedById])
+  @@index([deletedAt])
+  @@index([projectId, deletedAt])
 }
 
 enum DocumentKind {

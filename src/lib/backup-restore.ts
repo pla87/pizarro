@@ -100,6 +100,15 @@ export async function databaseState(sql: PgSql): Promise<{ tables: string[]; has
   return { tables, hasUserData };
 }
 
+/** ¿Es una base de Pizarro? Tiene la tabla de migraciones de Prisma y todas las migraciones aplicadas son de esta imagen. */
+async function isPizarroDatabase(sql: PgSql, tables: string[], migrationsDir: string): Promise<boolean> {
+  if (!tables.includes("_prisma_migrations")) return false;
+  const applied = (await sql.$queryRawUnsafe<{ n: string }[]>(`SELECT migration_name AS n FROM "_prisma_migrations"`)).map((r) => r.n);
+  if (!applied.length) return false;
+  const known = new Set(await readdir(migrationsDir));
+  return applied.every((n) => known.has(n));
+}
+
 /** Borra tablas, vistas, secuencias y tipos del esquema public (lo que crean las migraciones). */
 export async function wipeDatabase(sql: PgSql): Promise<void> {
   const list = async (q: string) => (await sql.$queryRawUnsafe<{ n: string }[]>(q)).map((r) => quoteIdent(r.n));
@@ -231,6 +240,11 @@ export async function restoreDatabaseFromDump(opts: { databaseUrl: string; dumpF
   try {
     const state = await databaseState(sql);
     if (state.tables.length) {
+      // Sin --force solo se vacía una base de Pizarro sin datos (sus tablas registradas por sus migraciones):
+      // nunca la base de otra aplicación apuntada por error.
+      if (!opts.force && !(await isPizarroDatabase(sql, state.tables, opts.migrationsDir))) {
+        throw new Error("La base de datos de destino tiene tablas que no son de Pizarro. Restaura sobre una base de datos nueva o, si de verdad quieres BORRAR lo que tiene, añade --force.");
+      }
       if (state.hasUserData && !opts.force) {
         throw new Error("La base de datos de destino NO está vacía (tiene usuarios o proyectos). Restaura sobre una base de datos nueva o, si de verdad quieres BORRAR lo que tiene, añade --force.");
       }

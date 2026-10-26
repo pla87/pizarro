@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { saveMaxCommentsPerTask } from "@/actions/settings";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
+import { actionThrowResult } from "@/lib/stale-action";
 
 // Mismos márgenes que el servidor (src/lib/app-settings.ts, que no se puede importar desde el cliente).
 const MIN = 1;
@@ -22,7 +23,7 @@ export function SettingsAdmin({ maxComments }: { maxComments: number }) {
 
   const save = () =>
     start(async () => {
-      const res = await saveMaxCommentsPerTask(n).catch(() => ({ ok: false as const, error: t("Error inesperado. Inténtalo de nuevo.") }));
+      const res = await saveMaxCommentsPerTask(n).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
       setSaved(res.data.value);
       setText(String(res.data.value));

@@ -38,7 +38,7 @@ export function AdminTabs() {
             href={tab.href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium",
+              "shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium focus-visible:outline-offset-[-3px]",
               active
                 ? "border-brand-600 text-brand-700 dark:text-brand-100"
                 : "border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white",

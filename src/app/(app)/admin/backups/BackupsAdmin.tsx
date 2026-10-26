@@ -11,6 +11,7 @@ import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 import type { BackupAlert } from "@/lib/backup-alert-core";
 import type { BackupFileInfo, BackupRun, BackupStatus, ExternalRun, RestoreTestRun } from "@/lib/backup";
+import type { BackupKeyDiagnosis } from "@/lib/backup-core";
 import type { DestinationId } from "@/lib/backup-dest";
 import type { JobRunInfo } from "@/lib/jobs";
 
@@ -23,6 +24,7 @@ function jobLabel(t: (s: string) => string, name: string): string {
   switch (name) {
     case "nonImageCopies": return t("Copias de ficheros no imagen antiguas");
     case "undo": return t("Deshacer antiguo");
+    case "documentsTrashPurge": return t("Papelera de documentos (una vez al día)");
     case "notifications": return t("Avisos leídos antiguos");
     case "authData": return t("Enlaces y dispositivos caducados");
     case "taskHistory": return t("Historial de tareas antiguo");
@@ -43,9 +45,22 @@ export interface DestinationsInfo {
   errors: string[];
 }
 
+/** Explica qué se ha detectado en una BACKUP_KEY no válida, sin mostrar su valor. */
+function keyProblemText(p: BackupKeyDiagnosis | null, t: (s: string, v?: Record<string, string | number>) => string): string {
+  const found: string[] = [];
+  if (p?.kind === "hex") found.push(t("parece hexadecimal de {n} caracteres (se necesitan exactamente 64)", { n: p.chars }));
+  else if (p?.kind === "base64") found.push(t("parece base64 que decodifica a {n} bytes (se necesitan 32)", { n: p.bytes }));
+  else if (p?.kind === "other") found.push(t("tiene {n} caracteres y no es ni base64 ni hexadecimal", { n: p.chars }));
+  else found.push(t("está vacía una vez quitadas las comillas y los espacios"));
+  if (p?.quoted) found.push(t("tenía comillas alrededor (se ignoran, pero revisa que no falte nada)"));
+  if (p?.spaces) found.push(t("contiene espacios o saltos de línea en medio"));
+  return t("BACKUP_KEY no es válida: {found}. Debe ser de 32 bytes en base64 (openssl rand -base64 32) o 64 caracteres hexadecimales (openssl rand -hex 32). Las copias están desactivadas.", { found: found.join("; ") });
+}
+
 /** Panel «Copias de seguridad»: estado de la última copia, de la copia externa y de la última prueba de restauración. */
-export function BackupsAdmin({ keyState, alert, status, files, canUseCode, jobs, destinations, externalRunning }: {
+export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUseCode, jobs, destinations, externalRunning }: {
   keyState: "ok" | "missing" | "invalid";
+  keyProblem: BackupKeyDiagnosis | null;
   status: BackupStatus;
   alert: BackupAlert;
   files: BackupFileInfo[];
@@ -176,7 +191,7 @@ export function BackupsAdmin({ keyState, alert, status, files, canUseCode, jobs,
           <ShieldAlert size={16} className="mt-0.5 shrink-0" />
           <span>
             {keyState === "invalid"
-              ? t("BACKUP_KEY no es válida: debe ser una clave de 32 bytes en base64 (openssl rand -base64 32). Las copias están desactivadas.")
+              ? keyProblemText(keyProblem, t)
               : t("Las copias de seguridad están desactivadas: define la variable BACKUP_KEY (openssl rand -base64 32) y reinicia.")}
           </span>
         </p>
