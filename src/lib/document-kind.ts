@@ -4,6 +4,8 @@ export type DocumentKindName = "TEXT" | "MARKDOWN" | "PDF" | "IMAGE" | "OTHER";
 
 /** Máximo de documentos por proyecto. */
 export const DOCUMENTS_MAX_PER_PROJECT = 200;
+/** Días que un documento borrado se conserva en la papelera antes de purgarse (fila y fichero). */
+export const DOCUMENT_TRASH_DAYS = 7;
 /** Máximo de bytes de un texto/Markdown que el visor descarga para mostrarlo (más grande: solo descarga). */
 export const DOCUMENT_PREVIEW_MAX_BYTES = 1024 * 1024;
 
