@@ -1,7 +1,7 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { backupFileName, fileSha256, parseBackupFileName, parseBackupKey, verifyBackupFile, type BackupManifest } from "./backup-core";
 import { dumpDatabase } from "./backup-db";
@@ -192,11 +192,12 @@ export async function createBackup(): Promise<BackupRun> {
   if (lock.busy) return { at: new Date().toISOString(), ok: false, error: "Ya hay una copia en curso." };
   lock.busy = true;
   let run: BackupRun;
+  let file: string | null = null;
   try {
     await mkdir(backupsDir(), { recursive: true, mode: 0o700 });
     const name = backupFileName(new Date());
     const stem = name.replace(/\.pzbak$/, "");
-    const file = path.join(backupsDir(), name);
+    file = path.join(backupsDir(), name);
     const { manifest: dbManifest, bytes } = await dumpDatabase(db, file, key);
     const dumpSha = await fileSha256(file);
     // Resumen en claro junto al fichero (solo cuentas, migración y hashes; sin datos).
@@ -207,7 +208,8 @@ export async function createBackup(): Promise<BackupRun> {
     const manifest = buildManifest({ stem, dbFile: name, dbBytes: bytes, dbSha256: dumpSha, db: dbManifest, files });
     const manifestBytes = await encodeManifest(manifest, key);
     const local = localDestination();
-    const sync = await syncBackup(local, manifest, manifestBytes, { size: bytes, open: () => createReadStream(file) }, { key, uploadRoot: uploadDir() });
+    const dumpPath = file;
+    const sync = await syncBackup(local, manifest, manifestBytes, { size: bytes, open: () => createReadStream(dumpPath) }, { key, uploadRoot: uploadDir() });
     const pruned = await pruneDestination(local, key, { extraKeys: (s) => [`${s}.pzbak.json`] });
     if (pruned.gcSkipped) logEvent({ level: "warn", category: "system", action: "backup.gcSkipped", message: `No se limpió el almacén de ficheros local: ${pruned.gcSkipped}` });
     run = {
@@ -223,6 +225,8 @@ export async function createBackup(): Promise<BackupRun> {
     });
   } catch (err) {
     run = { at: new Date().toISOString(), ok: false, error: message(err), durationMs: Date.now() - started };
+    // Un volcado a medias (o sin su manifiesto) no sirve: se borra para no llenar el disco con un reintento por hora.
+    if (file) await Promise.all([rm(file, { force: true }), rm(`${file}.json`, { force: true })]).catch(() => {});
     logEvent({ level: "error", category: "system", action: "backup.failed", message: `Falló la copia de seguridad: ${run.error}`, durationMs: run.durationMs });
   } finally {
     lock.busy = false;
@@ -274,6 +278,7 @@ export async function syncExternal(opts: { force?: boolean } = {}): Promise<Exte
         try {
           pruned = await pruneDestination(dest, key);
           if (pruned.gcSkipped) warning = `No se limpió el almacén: ${pruned.gcSkipped}`;
+          if (sync.missing) warning = [warning, `${sync.missing} ficheros ya borrados no se subieron (se borraron después de la copia)`].filter(Boolean).join(" · ");
         } catch (err) {
           warning = `Retención: ${message(err)}`;
         }

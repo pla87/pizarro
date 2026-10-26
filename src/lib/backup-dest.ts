@@ -231,11 +231,17 @@ function objectBody(entry: ManifestFile, src: ObjectSources): UploadBody {
   return { size: objectSize(entry.s), stream: () => encryptFileObject(file, entry, src.key) };
 }
 
+async function exists(file: string): Promise<boolean> {
+  return stat(file).then(() => true, () => false);
+}
+
 async function* streamFrom(open: () => Promise<AsyncIterable<Buffer>>): AsyncGenerator<Buffer> {
   for await (const c of await open()) yield c;
 }
 
 export interface SyncResult {
+  /** Ficheros del manifiesto que ya no existían al subirlos (borrados después de la copia). */
+  missing?: number;
   uploaded: number;
   skipped: number;
   bytes: number;
@@ -261,6 +267,13 @@ export async function syncBackup(
     result.skipped = uniqueObjects(manifest.files).length - todo.length;
     // Unas pocas subidas a la vez: con miles de ficheros pequeños manda la latencia, no el ancho de banda.
     await mapLimit(todo, dest.id === "s3" ? 4 : 1, async (entry) => {
+      // Fichero borrado de UPLOAD_DIR después de la copia (y sin objeto ya cifrado en el almacén local): se salta
+      // con aviso en lugar de hacer fallar toda la subida hasta la copia del día siguiente.
+      if (!src.store?.keys.has(objectKey(entry.o)) && !(await exists(path.join(src.uploadRoot, ...entry.p.split("/"))))) {
+        result.missing = (result.missing ?? 0) + 1;
+        log(`Fichero ya borrado, se omite: ${entry.p}`);
+        return;
+      }
       const body = objectBody(entry, src);
       await dest.put(objectKey(entry.o), body);
       result.uploaded++;

@@ -202,7 +202,9 @@ export class S3Client {
           try {
             for await (const chunk of body.stream()) {
               sent += chunk.length;
-              if (!req.write(chunk)) await new Promise<void>((r) => req.once("drain", () => r()));
+              if (req.destroyed) throw new Error("La conexión con S3 se cerró durante la subida.");
+              // S3 puede responder (403…) y cerrar antes de terminar: también se deja de esperar entonces.
+              if (!req.write(chunk)) await new Promise<void>((r) => { req.once("drain", r); req.once("close", r); });
             }
             if (sent !== size) throw new Error(`El fichero cambió de tamaño durante la subida (${sent} de ${size} bytes).`);
             req.end();

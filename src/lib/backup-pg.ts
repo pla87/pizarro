@@ -54,6 +54,9 @@ export class PgSql implements Client {
 
 export async function connectPg(url: string): Promise<PgSql> {
   const client = new pg.Client({ connectionString: url });
+  // Sin este oyente, un corte de la conexión inactiva sería una excepción no capturada (y con
+  // EXIT_ON_UNCAUGHT_EXCEPTION=1, un reinicio de la app); la siguiente consulta ya falla con su error.
+  client.on("error", (err) => console.error("[backup-pg] conexión perdida", err.message));
   await client.connect();
   return new PgSql(client);
 }

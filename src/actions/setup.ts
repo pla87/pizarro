@@ -1,5 +1,6 @@
 "use server";
 
+import { timingSafeEqual } from "node:crypto";
 import { headers } from "next/headers";
 import { runAction } from "@/lib/action";
 import { db } from "@/lib/db";
@@ -22,8 +23,11 @@ async function guardCode(code: string, l: Locale): Promise<string> {
   const ip = clientIp(await headers());
   const ipKey = `setup:fail:ip:${ip}`;
   const allKey = "setup:fail:all";
+  // Con SETUP_TOKEN no cuenta el tope global: si no, cualquiera que llegue a /setup podría bloquear al instalador legítimo.
+  const token = process.env.SETUP_TOKEN?.trim() ?? "";
+  const viaToken = token.length >= 8 && Buffer.byteLength(code.trim()) === Buffer.byteLength(token) && timingSafeEqual(Buffer.from(code.trim()), Buffer.from(token));
   // Coste 0: solo consulta si ya está bloqueado, sin sumar.
-  if (!rateLimit(ipKey, 8, WINDOW, 0) || !rateLimit(allKey, 30, WINDOW, 0)) throw new AppError(translate(l, "Demasiados intentos. Espera unos minutos."), 429);
+  if (!viaToken && (!rateLimit(ipKey, 8, WINDOW, 0) || !rateLimit(allKey, 30, WINDOW, 0))) throw new AppError(translate(l, "Demasiados intentos. Espera unos minutos."), 429);
   if (!(await checkSetupCode(db, code))) {
     rateLimit(ipKey, 8, WINDOW);
     rateLimit(allKey, 30, WINDOW);
