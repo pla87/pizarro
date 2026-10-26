@@ -248,7 +248,7 @@ describe("documentación: límites", () => {
 });
 
 describe("documentación: borrar y renombrar", () => {
-  test("borrar quita la fila y el fichero; renombrar solo cambia el nombre mostrado", async () => {
+  test("borrar envía a la papelera; renombrar solo cambia el nombre mostrado", async () => {
     const m = await makeUser();
     const f = await makeProject({ members: [m] });
     const doc = await db.projectDocument.create({ data: row(f.project.id, m.id, 4, "viejo.md") });
@@ -260,10 +260,12 @@ describe("documentación: borrar y renombrar", () => {
       assert.equal(after.name, "nuevo_x_.md");
       assert.equal(after.kind, "TEXT"); // el tipo se decidió al subir y no cambia con el nombre
       expectOk(await deleteDocument(doc.id));
-      expectFail(await deleteDocument(doc.id), NOT_FOUND); // ya no existe
+      expectFail(await deleteDocument(doc.id), NOT_FOUND); // ya está en la papelera
+      expectFail(await renameDocument(doc.id, "otro.md"), NOT_FOUND); // y en la papelera no se renombra
     });
-    assert.equal(await db.projectDocument.count({ where: { id: doc.id } }), 0);
-    await assert.rejects(stat(documentPath(doc.id)));
+    // Borrar envía a la papelera: la fila y el fichero siguen hasta la purga (ver documents-trash.test.ts).
+    assert.ok((await db.projectDocument.findUniqueOrThrow({ where: { id: doc.id } })).deletedAt);
+    await stat(documentPath(doc.id));
   });
 
   test("borrar el proyecto elimina sus documentos y sus ficheros, y no toca los de otros", async () => {

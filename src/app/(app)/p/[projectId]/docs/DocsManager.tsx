@@ -1,9 +1,9 @@
 "use client";
 
-import { AlertCircle, Download, File as FileIcon, FileCode, FileImage, FileText, FileType, Loader2, Pencil, Search, Trash2, Upload, X } from "lucide-react";
+import { AlertCircle, ArrowLeft, Download, Eye, File as FileIcon, FileCode, FileImage, FileText, FileType, Loader2, Pencil, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { deleteDocument, renameDocument } from "@/actions/documents";
+import { deleteDocument, deleteDocumentForever, renameDocument, restoreDocument } from "@/actions/documents";
 import { filesFrom, formatBytes, useFileDrop } from "@/components/board/upload";
 import { Markdown } from "@/components/ui/Markdown";
 import { Modal } from "@/components/ui/Modal";
@@ -11,14 +11,15 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/components/ui/cn";
 import { useIntlLocale, useT } from "@/i18n/client";
-import { DOCUMENT_PREVIEW_MAX_BYTES, isPreviewable, type DocumentKindName } from "@/lib/document-kind";
-import type { DocumentRow } from "@/lib/documents";
+import { DOCUMENT_PREVIEW_MAX_BYTES, DOCUMENT_TRASH_DAYS, isPreviewable, type DocumentKindName } from "@/lib/document-kind";
+import type { DocumentRow, TrashedDocumentRow } from "@/lib/documents";
 import { formatDate } from "@/lib/format";
 
 interface Props {
   projectId: string;
   projectName: string;
   documents: DocumentRow[];
+  trashed: TrashedDocumentRow[];
   fileMaxMb: number;
   maxCount: number;
 }
@@ -43,14 +44,17 @@ const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
 
 let nextKey = 1;
 
-export function DocsManager({ projectId, projectName, documents, fileMaxMb, maxCount }: Props) {
+export function DocsManager({ projectId, projectName, documents, trashed, fileMaxMb, maxCount }: Props) {
   const t = useT();
   const locale = useIntlLocale();
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
   const fileInput = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [showTrash, setShowTrash] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   // Cola de subida en serie: cada archivo es una petición y el servidor aplica sus límites a cada una.
   const queue = useRef<Promise<void>>(Promise.resolve());
@@ -110,15 +114,50 @@ export function DocsManager({ projectId, projectName, documents, fileMaxMb, maxC
   const needle = fold(query.trim());
   const shown = needle ? documents.filter((d) => fold(d.name).includes(needle)) : documents;
   const open = documents.find((d) => d.id === openId) ?? null;
+  const openTrashed = trashed.find((d) => d.id === openId) ?? null;
   const full = documents.length >= maxCount;
+
+  async function restore(d: DocumentRow) {
+    setBusyId(d.id);
+    const res = await restoreDocument(d.id);
+    setBusyId(null);
+    if (!res.ok) return toast(res.error, "error");
+    setOpenId(null);
+    toast(t("Documento restaurado"));
+    router.refresh();
+  }
+
+  async function removeForever(d: DocumentRow) {
+    const ok = await confirm({
+      title: t("Borrar definitivamente"),
+      message: t("¿Borrar «{name}» definitivamente? No se puede deshacer.", { name: d.name }),
+      confirmLabel: t("Borrar definitivamente"),
+      danger: true,
+    });
+    if (!ok) return;
+    setBusyId(d.id);
+    const res = await deleteDocumentForever(d.id);
+    setBusyId(null);
+    if (!res.ok) return toast(res.error, "error");
+    setOpenId(null);
+    toast(t("Documento borrado definitivamente"));
+    router.refresh();
+  }
 
   return (
     <div className="mx-auto max-w-4xl p-4 md:p-6">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">{t("Documentación")}</h1>
-        <button type="button" className="btn-primary" onClick={() => fileInput.current?.click()} disabled={full}>
-          <Upload size={16} /> {t("Subir archivos")}
-        </button>
+        <span className="flex flex-wrap items-center gap-2">
+          {(trashed.length > 0 || showTrash) && (
+            <button type="button" className="btn-secondary" aria-pressed={showTrash} data-testid="docs-trash-toggle" onClick={() => setShowTrash((v) => !v)}>
+              {showTrash ? <ArrowLeft size={16} /> : <Trash2 size={16} />} {showTrash ? t("Volver a la documentación") : t("Papelera ({n})", { n: trashed.length })}
+            </button>
+          )}
+          <button type="button" className="btn-primary" onClick={() => fileInput.current?.click()} disabled={full}>
+            <Upload size={16} /> {t("Subir archivos")}
+          </button>
+        </span>
         <input
           ref={fileInput}
           type="file"
@@ -166,7 +205,48 @@ export function DocsManager({ projectId, projectName, documents, fileMaxMb, maxC
         </ul>
       )}
 
-      {documents.length === 0 ? (
+      {showTrash ? (
+        <section aria-label={t("Papelera")} data-testid="docs-trash">
+          <p className="mb-3 text-sm text-slate-500">
+            {t("Los documentos borrados se conservan {days} días y después se eliminan para siempre. Mientras tanto siguen contando en el espacio del proyecto.", { days: DOCUMENT_TRASH_DAYS })}
+          </p>
+          {trashed.length === 0 ? (
+            <p className="card p-6 text-center text-sm text-slate-500">{t("La papelera está vacía.")}</p>
+          ) : (
+            <ul className="card divide-y divide-slate-200 overflow-hidden dark:divide-slate-800" data-testid="docs-trash-list">
+              {trashed.map((d) => {
+                const { icon: Icon, className } = ICONS[d.kind];
+                return (
+                  <li key={d.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5" data-testid="docs-trash-item">
+                    <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", className)} title={kindLabel(d.kind)}>
+                      <Icon size={18} aria-hidden />
+                      <span className="sr-only">{kindLabel(d.kind)}</span>
+                    </span>
+                    <span className="min-w-0 flex-1 basis-48">
+                      <span className="block truncate text-sm font-medium">{d.name}</span>
+                      <span className="block text-xs text-slate-500">
+                        {formatBytes(d.size, locale)} · {t("Borrado por {name} el {date}", { name: d.deletedByName ?? t("Usuario eliminado"), date: formatDate(d.deletedAt, "dateNumeric", locale) })} ·{" "}
+                        {d.daysLeft === 0 ? t("se elimina hoy") : d.daysLeft === 1 ? t("queda 1 día") : t("quedan {n} días", { n: d.daysLeft })}
+                      </span>
+                    </span>
+                    <span className="flex shrink-0 gap-1.5">
+                      <button type="button" className="btn-secondary" onClick={() => setOpenId(d.id)} disabled={busyId === d.id}>
+                        <Eye size={16} /> {t("Ver")}
+                      </button>
+                      <button type="button" className="btn-secondary" onClick={() => void restore(d)} disabled={busyId === d.id}>
+                        <RotateCcw size={16} /> {t("Restaurar")}
+                      </button>
+                      <button type="button" className="btn-danger" onClick={() => void removeForever(d)} disabled={busyId === d.id}>
+                        <Trash2 size={16} /> {t("Borrar definitivamente")}
+                      </button>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      ) : documents.length === 0 ? (
         <div className="card flex flex-col items-center gap-2 p-10 text-center text-sm text-slate-500">
           <FileText size={32} className="text-slate-300" />
           <p className="max-w-md">
@@ -221,7 +301,10 @@ export function DocsManager({ projectId, projectName, documents, fileMaxMb, maxC
         </>
       )}
 
-      {open && <DocViewer key={open.id} doc={open} onClose={() => setOpenId(null)} />}
+      {open && !showTrash && <DocViewer key={open.id} doc={open} onClose={() => setOpenId(null)} />}
+      {openTrashed && showTrash && (
+        <TrashViewer key={openTrashed.id} doc={openTrashed} busy={busyId === openTrashed.id} onClose={() => setOpenId(null)} onRestore={() => void restore(openTrashed)} />
+      )}
     </div>
   );
 }
@@ -232,7 +315,6 @@ function DocViewer({ doc, onClose }: { doc: DocumentRow; onClose: () => void }) 
   const locale = useIntlLocale();
   const router = useRouter();
   const toast = useToast();
-  const confirm = useConfirm();
   const [name, setName] = useState(doc.name);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(doc.name);
@@ -240,18 +322,20 @@ function DocViewer({ doc, onClose }: { doc: DocumentRow; onClose: () => void }) 
   const src = `/api/documents/${doc.id}`;
 
   async function remove() {
-    const ok = await confirm({
-      title: t("Borrar documento"),
-      message: t("¿Borrar «{name}»? No se puede deshacer.", { name }),
-      confirmLabel: t("Borrar"),
-      danger: true,
-    });
-    if (!ok) return;
     setBusy(true);
     const res = await deleteDocument(doc.id);
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
-    toast(t("Documento borrado"));
+    toast(t("Documento enviado a la papelera"), "undo", {
+      label: t("Deshacer"),
+      onClick: () => {
+        void restoreDocument(doc.id).then((r) => {
+          if (!r.ok) return toast(r.error, "error");
+          toast(t("Documento restaurado"));
+          router.refresh();
+        });
+      },
+    });
     onClose();
     router.refresh();
   }
@@ -345,5 +429,37 @@ function DocPreview({ doc, name, src }: { doc: DocumentRow; name: string; src: s
     <div data-testid="doc-markdown"><Markdown>{loaded.text}</Markdown></div>
   ) : (
     <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap break-words rounded bg-slate-50 p-3 font-mono text-xs dark:bg-slate-900" data-testid="doc-text">{loaded.text}</pre>
+  );
+}
+
+/** Vista previa de un documento de la papelera: solo se puede ver, descargar o restaurar. */
+function TrashViewer({ doc, busy, onClose, onRestore }: { doc: TrashedDocumentRow; busy: boolean; onClose: () => void; onRestore: () => void }) {
+  const t = useT();
+  const locale = useIntlLocale();
+  const src = `/api/documents/${doc.id}`;
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="xl"
+      title={<span className="truncate">{doc.name}</span>}
+      footer={
+        <div className="flex w-full flex-wrap items-center justify-between gap-2">
+          <span className="text-xs text-slate-500">
+            {formatBytes(doc.size, locale)} · {t("Borrado por {name} el {date}", { name: doc.deletedByName ?? t("Usuario eliminado"), date: formatDate(doc.deletedAt, "dateNumeric", locale) })}
+          </span>
+          <span className="flex gap-2">
+            <button type="button" className="btn-secondary" onClick={onRestore} disabled={busy}>
+              <RotateCcw size={16} /> {t("Restaurar")}
+            </button>
+            <a className="btn-primary" href={`${src}?download=1`} download>
+              <Download size={16} /> {t("Descargar")}
+            </a>
+          </span>
+        </div>
+      }
+    >
+      <DocPreview doc={doc} name={doc.name} src={src} />
+    </Modal>
   );
 }

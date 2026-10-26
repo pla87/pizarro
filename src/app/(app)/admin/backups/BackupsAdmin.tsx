@@ -24,6 +24,7 @@ function jobLabel(t: (s: string) => string, name: string): string {
   switch (name) {
     case "nonImageCopies": return t("Copias de ficheros no imagen antiguas");
     case "undo": return t("Deshacer antiguo");
+    case "documentsTrashPurge": return t("Papelera de documentos (una vez al día)");
     case "notifications": return t("Avisos leídos antiguos");
     case "authData": return t("Enlaces y dispositivos caducados");
     case "taskHistory": return t("Historial de tareas antiguo");

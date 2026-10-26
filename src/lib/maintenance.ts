@@ -39,6 +39,12 @@ async function purgeOldUndo(now: Date = new Date()): Promise<number> {
   return discardUndo({ createdAt: { lt: new Date(now.getTime() - UNDO_MAX_AGE_DAYS * DAY_MS) } });
 }
 
+/** Borra de la papelera los documentos con más de DOCUMENT_TRASH_DAYS días (filas y ficheros). */
+async function purgeDocumentsTrash(now: Date = new Date()): Promise<number> {
+  const { purgeTrashedDocuments } = await import("@/lib/documents");
+  return purgeTrashedDocuments(now);
+}
+
 /** Borra los avisos ya leídos de más de 90 días (los no leídos se conservan). */
 async function purgeOldNotifications(now: Date = new Date()): Promise<number> {
   const { db } = await import("@/lib/db");
@@ -143,10 +149,14 @@ async function resumeReleaseCopies(): Promise<void> {
 /** Recorre todos los adjuntos y la carpeta de subidas: basta con una vez al día. */
 const ORPHAN_EVERY_MS = 23 * 60 * 60 * 1000;
 
+/** La papelera de documentos se purga una vez al día. */
+const DOCS_TRASH_EVERY_MS = 23 * 60 * 60 * 1000;
+
 /** Tareas de cada pasada, en orden. El nombre es la clave en JobRun (y su etiqueta en Administración). */
 export const MAINTENANCE_JOBS = [
   { name: "nonImageCopies", run: () => purgeNonImageCopies() },
   { name: "undo", run: () => purgeOldUndo() },
+  { name: "documentsTrashPurge", run: () => purgeDocumentsTrash(), everyMs: DOCS_TRASH_EVERY_MS },
   { name: "notifications", run: () => purgeOldNotifications() },
   { name: "authData", run: () => purgeAuthData() },
   { name: "taskHistory", run: () => purgeOldTaskHistory() },
