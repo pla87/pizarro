@@ -9,7 +9,7 @@ const ctx = { currentUserId: "me", today: "2026-10-22", doneColumnIds: new Set([
 const task = (over: Partial<BoardTask>): BoardTask => ({
   id: "t", columnId: "todo", title: "x", kindId: "k1", color: null, linkUrl: null, position: 1, assigneeId: null, labelIds: [],
   subtaskTotal: 0, subtaskDone: 0, imageCount: 0, fileCount: 0, attachBytes: 0, hasDescription: false, dueDate: null, deliverableId: null, commentCount: 0,
-  linkCount: 0, evergreen: false, evergreenEvery: 1, recurrence: "NONE", recurrenceDay: null, textVersion: null, ...over,
+  linkCount: 0, evergreen: false, evergreenEvery: 1, recurrence: "NONE", recurrenceDay: null, textVersion: null, columnEnteredAt: "2026-10-01T00:00:00.000Z", ...over,
 });
 const f = (over: Partial<BoardFilters>): BoardFilters => ({ ...EMPTY_FILTERS, ...over });
 const match = (t: Partial<BoardTask>, filters: Partial<BoardFilters>) => taskMatchesFilters(task(t), f(filters), ctx);

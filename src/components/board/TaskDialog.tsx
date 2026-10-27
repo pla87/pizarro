@@ -45,11 +45,12 @@ import { setUndoTask, UNDONE_EVENT } from "../undo-context";
 import { useIsMobile } from "../ui/useIsMobile";
 import { UndoButton } from "../UndoButton";
 
-export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
+export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecondBulk, draft }: {
   task: BoardTask;
   onClose: () => void;
   side?: "left" | "right" | "center";
   onAddSecond?: () => void;
+  onAddSecondBulk?: () => void;
   /** Borrador recuperado (la página se cerró con la tarea abierta). */
   draft?: EditTaskDraft | null;
 }) {
@@ -266,7 +267,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
     if (columnId === task.columnId) return;
     const before = board.getTask(task.id)!;
     const last = Math.max(0, ...board.getTasks().filter((t) => t.columnId === columnId).map((t) => t.position));
-    board.patchTask(task.id, { columnId, position: last + 1024, evergreen: false, evergreenEvery: 1 });
+    board.patchTask(task.id, { columnId, position: last + 1024, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() });
     const res = await tracked(moveTask(task.id, columnId, null, null));
     if (!res.ok) {
       board.upsertTask(before);
@@ -445,6 +446,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       onClose={onClose}
       side={side}
       onAddSecond={onAddSecond}
+      onAddSecondBulk={onAddSecondBulk}
       size="xl"
       placement="top"
       // Móvil: pie siempre visible con Archivar, Borrar y Guardar.

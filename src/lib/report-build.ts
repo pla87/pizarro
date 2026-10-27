@@ -6,7 +6,8 @@ import { dateToIso, todayIso } from "./dates";
 import { db } from "./db";
 import { mentionsToPlain } from "./mentions";
 import { buildReport, RECENT_DONE_DAYS } from "./report";
-import { renderReportPdf } from "./report-pdf";
+import { renderReportPdf, renderWeekPlanPdf } from "./report-pdf";
+import { buildWeekPlan, type WeekPlanGroupBy } from "./week-plan";
 
 // Genera el informe PDF de un proyecto. Lo usan la descarga (API) y el envío semanal por email;
 // quien llama comprueba antes que la persona puede ver el proyecto.
@@ -106,4 +107,33 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
   const pdf = await renderReportPdf(report, t, locale);
   const slug = project.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || t("proyecto");
   return { project: { id: project.id, name: project.name }, pdf, today, filename: `${t("informe")}-${slug}-${today}.pdf`, taskCount: tasks.length };
+}
+
+const slugOf = (name: string, fallback: string) => name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || fallback;
+
+/** PDF de la planificación de la semana de una columna con rol WEEKLY_PLAN (por día o por persona). */
+export function generateWeekPlanPdf(
+  projectId: string, columnId: string, opts: { generatedBy: string; locale: Locale; groupBy: WeekPlanGroupBy },
+): Promise<{ pdf: Uint8Array; filename: string; taskCount: number } | null> {
+  const run = reportQueue.then(async () => {
+    const t = makeT(opts.locale);
+    const column = await db.column.findFirst({ where: { id: columnId, projectId, role: "WEEKLY_PLAN" }, select: { name: true, project: { select: { name: true } } } });
+    if (!column) return null;
+    const tasks = await db.task.findMany({
+      where: { projectId, columnId, archivedAt: null },
+      orderBy: [{ position: "asc" }, { id: "asc" }],
+      take: 2000,
+      select: { title: true, dueDate: true, kind: { select: { id: true, name: true } }, assignee: { select: { name: true } } },
+    });
+    const locale = intlLocale(opts.locale);
+    const today = todayIso(appTimeZone());
+    const sections = buildWeekPlan(
+      tasks.map((x) => ({ title: mentionsToPlain(x.title), kind: localizeGeneralKind(x.kind, opts.locale).name, assigneeName: x.assignee?.name ?? null, dueDate: dateToIso(x.dueDate) })),
+      today, opts.groupBy, t, locale,
+    );
+    const pdf = await renderWeekPlanPdf({ project: column.project.name, column: column.name, today, generatedBy: opts.generatedBy, groupBy: opts.groupBy, sections }, t, locale);
+    return { pdf, filename: `${t("semana")}-${slugOf(column.name, t("columna"))}-${today}.pdf`, taskCount: tasks.length };
+  });
+  reportQueue = run.catch(() => {});
+  return run;
 }

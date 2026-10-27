@@ -21,7 +21,7 @@ export default async function Home() {
       {available > 0 && (
         <p className="text-sm">
           {t("Hay {n} proyecto(s) de equipo. Elige en cuáles trabajas en", { n: available })}{" "}
-          <a href="/settings#proyectos" className="font-medium text-brand-600 underline dark:text-brand-300">{t("Mi perfil")}</a>.
+          <a href="/settings?tab=preferencias#proyectos" className="font-medium text-brand-600 underline dark:text-brand-300">{t("Mi perfil")}</a>.
         </p>
       )}
       <p className="text-sm">

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { asUser, db, expectFail, expectOk, makeKind, makeProject, makeUser, NOT_FOUND } from "./helpers";
-import { createTask, getProjectFormData } from "../../src/actions/tasks";
+import { createTask, createTasks, getProjectFormData } from "../../src/actions/tasks";
 
 describe("getProjectFormData", () => {
   test("devuelve columnas, tipos (generales visibles + propios), personas, entregables y límite del proyecto", async () => {
@@ -48,5 +48,31 @@ describe("getProjectFormData", () => {
     // Columna o tipo de otro proyecto: rechazado.
     expectFail(await asUser(member, () => createTask({ projectId: b.project.id, columnId: a.columns.todo, title: "x", kindId: b.kindId })));
     expectFail(await asUser(member, () => createTask({ projectId: b.project.id, columnId: b.columns.todo, title: "x", kindId: a.kindId })));
+  });
+
+  test("varias tareas en otro proyecto: mismas reglas de acceso, columnas y tipos que una sola", async () => {
+    const member = await makeUser();
+    const outsider = await makeUser();
+    const a = await makeProject({ members: [member] });
+    const b = await makeProject({ members: [member] });
+    const priv = await makeProject({ visibility: "PRIVATE", owner: await makeUser({ role: "ADMIN" }) });
+    const rows = expectOk(await asUser(member, () => createTasks({ projectId: b.project.id, columnId: b.columns.todo, tasks: [{ title: "Uno", kindId: b.kindId }, { title: "Dos", kindId: b.kindId }] })));
+    assert.equal(rows.length, 2);
+    assert.equal(await db.task.count({ where: { projectId: b.project.id } }), 2);
+    // Sin acceso al proyecto: no existe para quien pregunta.
+    expectFail(await asUser(outsider, () => createTasks({ projectId: b.project.id, columnId: b.columns.todo, tasks: [{ title: "x", kindId: b.kindId }] })), NOT_FOUND);
+    expectFail(await asUser(member, () => createTasks({ projectId: priv.project.id, columnId: priv.columns.todo, tasks: [{ title: "x", kindId: priv.kindId }] })), NOT_FOUND);
+    // Columna o tipo de otro proyecto: rechazado.
+    expectFail(await asUser(member, () => createTasks({ projectId: b.project.id, columnId: a.columns.todo, tasks: [{ title: "x", kindId: b.kindId }] })));
+    expectFail(await asUser(member, () => createTasks({ projectId: b.project.id, columnId: b.columns.todo, tasks: [{ title: "x", kindId: a.kindId }] })));
+    assert.equal(await db.task.count({ where: { projectId: b.project.id } }), 2);
+  });
+
+  test("getProjectFormData incluye las etiquetas del proyecto", async () => {
+    const member = await makeUser();
+    const f = await makeProject({ members: [member] });
+    const label = await db.label.create({ data: { projectId: f.project.id, name: "Urgente", color: "#ff0000" } });
+    const data = expectOk(await asUser(member, () => getProjectFormData(f.project.id)));
+    assert.deepEqual(data.labels.map((l) => l.id), [label.id]);
   });
 });

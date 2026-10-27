@@ -8,7 +8,7 @@ import { appUrl, emailEnabled, escapeHtml, sendMail } from "./mail";
 import { logEvent } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
 import { excerpt as makeExcerpt, mentionsToPlain } from "./mentions";
-import { dueChangeText, notificationHeadline, type NotificationKind } from "./notification-text";
+import { dueChangeText, notificationHeadline, waitingText, type NotificationKind } from "./notification-text";
 import { followerIds } from "./followers";
 import { rateLimit } from "./rate-limit";
 
@@ -37,7 +37,7 @@ interface MentionMessage {
 /** Email de un aviso: asunto, texto plano y HTML (todo el contenido del usuario va escapado). */
 export function mentionEmail(m: MentionMessage, t: T = makeT("es")) {
   const type = m.type ?? "MENTION";
-  const body = type === "DUE_CHANGED" ? dueChangeText(m.excerpt, t, m.locale ?? "es-ES") : m.excerpt;
+  const body = type === "DUE_CHANGED" ? dueChangeText(m.excerpt, t, m.locale ?? "es-ES") : type === "WAITING" ? waitingText(m.excerpt, t) : m.excerpt;
   const subject = notificationHeadline(type, t, { actor: m.actorName, task: `«${m.taskTitle}»` });
   const text = `${notificationHeadline(type, t, { actor: m.actorName, task: `«${m.taskTitle}»` })} (${m.projectName})${body ? `:\n\n${body}` : ""}\n\n${t("Abrir la tarea")}: ${m.url}\n`;
   const headline = notificationHeadline(type, t, { actor: `<strong>${escapeHtml(m.actorName)}</strong>`, task: `<strong>«${escapeHtml(m.taskTitle)}»</strong>` });
@@ -217,7 +217,8 @@ export async function notifyMentions(opts: {
  */
 export async function notifyTask(opts: {
   type: NotificationKind;
-  actorId: string;
+  /** Quien provoca el aviso; null = el sistema (recordatorios), a quien no se excluye de los destinatarios. */
+  actorId: string | null;
   taskId: string;
   projectId: string;
   recipientIds: string[];
@@ -243,7 +244,7 @@ export async function notifyTask(opts: {
   const external = await externalAllowed(opts.actorId, opts.taskId, created.map((c) => c.userId), createdIds);
   logEvent({
     category: "notify", action: `notify.${opts.type.toLowerCase()}`, message: `${createdIds.length} aviso(s) ${opts.type} creados (${external.size} con envío externo)`,
-    userId: opts.actorId, projectId: opts.projectId,
+    userId: opts.actorId ?? undefined, projectId: opts.projectId,
     details: { taskId: opts.taskId, recipients: created.map((c) => c.userId), externalRecipients: [...external] },
   });
   const toDeliver = created.filter((c) => external.has(c.userId)).map((c) => c.id);
@@ -264,7 +265,7 @@ const MAX_EXTERNAL_PER_HOUR = 40;
  * Los avisos en la app se crean siempre; el email y el WhatsApp (que pueden costar dinero)
  * se limitan: uno por persona y tarea cada 10 minutos y un tope por autor y hora.
  */
-async function externalAllowed(actorId: string, taskId: string, recipientIds: string[], newIds: string[]): Promise<Set<string>> {
+async function externalAllowed(actorId: string | null, taskId: string, recipientIds: string[], newIds: string[]): Promise<Set<string>> {
   const since = new Date(Date.now() - DEDUPE_MINUTES * 60_000);
   const recent = await db.notification.findMany({
     where: {
@@ -280,7 +281,7 @@ async function externalAllowed(actorId: string, taskId: string, recipientIds: st
   const allowed = new Set<string>();
   for (const id of recipientIds) {
     if (skip.has(id)) continue;
-    if (!rateLimit(`notify:${actorId}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000)) {
+    if (!rateLimit(`notify:${actorId ?? "system"}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000)) {
       console.error("[notify] Límite de envíos externos alcanzado para", actorId);
       break;
     }

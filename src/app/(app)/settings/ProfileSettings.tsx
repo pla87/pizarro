@@ -14,6 +14,8 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import { DraftsSection } from "./DraftsSection";
+import { ProfileTabs } from "./ProfileTabs";
+import type { ProfileTab } from "./profile-tabs";
 import type { CardStyleValue, EditorModeValue, TemplateOption } from "@/lib/types";
 
 type ThemeValue = "SYSTEM" | "LIGHT" | "DARK";
@@ -49,6 +51,11 @@ interface Props {
   google: { enabled: boolean; email: string | null; message: { ok: boolean; text: string } | null };
   /** Bloque extra bajo «Avisos» (avisos por email de más tipos y resumen diario). */
   notificationExtras?: React.ReactNode;
+  tab: ProfileTab;
+  /** Pestaña «Cuenta»: cambio de email, verificación en dos pasos y sesiones (secciones del servidor). */
+  accountExtra?: React.ReactNode;
+  /** Pestaña «Preferencias»: proyectos en los que trabaja un administrador. */
+  preferencesExtra?: React.ReactNode;
 }
 
 export function ProfileSettings(props: Props) {
@@ -65,89 +72,107 @@ export function ProfileSettings(props: Props) {
     <div className="mx-auto max-w-3xl space-y-5 p-4 md:p-6">
       <h1 className="text-xl font-semibold">{t("Mi perfil")}</h1>
 
-      <section className="card p-5">
-        <h2 className="font-semibold">{t("Plantillas de release notes")}</h2>
-        <p className="mt-0.5 text-sm text-slate-500">
-          {t("Puedes tener varias cabeceras y varios pies. Al generar una release eliges cuáles usar y se insertan en el texto. Admiten Markdown.")}
-        </p>
-        <TemplateList kind="HEADER" title={t("Cabeceras")} initial={props.templates.headers} placeholder={t("Ej.: instrucciones de contexto para una IA.\n\n> Resume estos cambios para el equipo de negocio.")} />
-        <TemplateList kind="FOOTER" title={t("Pies")} initial={props.templates.footers} placeholder={t("Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción")} />
-      </section>
+      <ProfileTabs active={props.tab} />
 
-      <LanguageSection initial={props.locale} />
-      <AppearanceSection initial={props.cardStyle} initialTheme={props.theme} initialAccent={props.accent} />
-      <EditorModeSection initial={props.editorMode} />
-      <DraftsSection initial={props.clearDraftsOnLogout} />
-      <GoogleSection google={props.google} />
-      <NotificationSection prefs={props.notifications} />
-      {props.notificationExtras}
+      {props.tab === "preferencias" && (
+        <>
+        <section className="card p-5">
+          <h2 className="font-semibold">{t("Plantillas de release notes")}</h2>
+          <p className="mt-0.5 text-sm text-slate-500">
+            {t("Puedes tener varias cabeceras y varios pies. Al generar una release eliges cuáles usar y se insertan en el texto. Admiten Markdown.")}
+          </p>
+          <TemplateList kind="HEADER" title={t("Cabeceras")} initial={props.templates.headers} placeholder={t("Ej.: instrucciones de contexto para una IA.\n\n> Resume estos cambios para el equipo de negocio.")} />
+          <TemplateList kind="FOOTER" title={t("Pies")} initial={props.templates.footers} placeholder={t("Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción")} />
+        </section>
 
-      <section className="card p-5">
-        <h2 className="font-semibold">{t("Perfil")}</h2>
-        <form
-          className="mt-4 space-y-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            start(async () => {
-              const res = await updateProfileName(name);
-              toast(res.ok ? t("Perfil actualizado") : res.error, res.ok ? "success" : "error");
-              if (res.ok) router.refresh();
-            });
-          }}
-        >
-          <div>
-            <div className="label">Email</div>
-            <p className="text-sm">{props.email}</p>
-          </div>
-          <div>
-            <label className="label" htmlFor="pf-name">{t("Nombre visible")}</label>
-            <input id="pf-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required />
-          </div>
-          <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
-        </form>
-      </section>
+        <LanguageSection initial={props.locale} />
+        <AppearanceSection initial={props.cardStyle} initialTheme={props.theme} initialAccent={props.accent} />
+        <EditorModeSection initial={props.editorMode} />
+        <DraftsSection initial={props.clearDraftsOnLogout} />
+        {props.preferencesExtra}
+        </>
+      )}
 
-      <section className="card p-5">
-        <h2 className="font-semibold">{t("Cambiar contraseña")}</h2>
-        <p className="mt-0.5 text-sm text-slate-500">
-          {props.notifications.emailAvailable
-            ? t("Te enviaremos un enlace por email para confirmar el cambio; al confirmarlo se cerrará la sesión en todos los dispositivos.")
-            : t("Se cerrará la sesión en el resto de dispositivos.")}
-        </p>
-        <form
-          className="mt-4 space-y-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (next !== repeat) return toast(t("Las contraseñas nuevas no coinciden."), "error");
-            start(async () => {
-              const res = await changePassword(current, next);
-              toast(res.ok ? (res.data.pending ? t("Te hemos enviado un email: confirma el cambio con el enlace (caduca en 30 minutos).") : t("Contraseña actualizada")) : res.error, res.ok ? "success" : "error");
-              if (res.ok) {
-                setCurrent("");
-                setNext("");
-                setRepeat("");
-              }
-            });
-          }}
-        >
-          <input type="text" name="username" autoComplete="username" value={props.email} readOnly hidden />
-          <div>
-            <label className="label" htmlFor="pw-current">{t("Contraseña actual")}</label>
-            <PasswordInput id="pw-current" className="input" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+      {props.tab === "avisos" && (
+        <>
+        <NotificationSection prefs={props.notifications} />
+        {props.notificationExtras}
+        </>
+      )}
+
+      {props.tab === "cuenta" && (
+        <>
+        <section className="card p-5">
+          <h2 className="font-semibold">{t("Perfil")}</h2>
+          <form
+            className="mt-4 space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              start(async () => {
+                const res = await updateProfileName(name);
+                toast(res.ok ? t("Perfil actualizado") : res.error, res.ok ? "success" : "error");
+                if (res.ok) router.refresh();
+              });
+            }}
+          >
             <div>
-              <label className="label" htmlFor="pw-new">{t("Nueva contraseña (mín. 10)")}</label>
-              <PasswordInput id="pw-new" className="input" autoComplete="new-password" minLength={10} value={next} onChange={(e) => setNext(e.target.value)} required />
+              <div className="label">Email</div>
+              <p className="text-sm">{props.email}</p>
             </div>
             <div>
-              <label className="label" htmlFor="pw-repeat">{t("Repite la nueva")}</label>
-              <PasswordInput id="pw-repeat" className="input" autoComplete="new-password" minLength={10} value={repeat} onChange={(e) => setRepeat(e.target.value)} required />
+              <label className="label" htmlFor="pf-name">{t("Nombre visible")}</label>
+              <input id="pf-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required />
             </div>
-          </div>
-          <button className="btn-primary" disabled={pending}>{t("Cambiar contraseña")}</button>
-        </form>
-      </section>
+            <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
+          </form>
+        </section>
+
+        <section className="card p-5">
+          <h2 className="font-semibold">{t("Cambiar contraseña")}</h2>
+          <p className="mt-0.5 text-sm text-slate-500">
+            {props.notifications.emailAvailable
+              ? t("Te enviaremos un enlace por email para confirmar el cambio; al confirmarlo se cerrará la sesión en todos los dispositivos.")
+              : t("Se cerrará la sesión en el resto de dispositivos.")}
+          </p>
+          <form
+            className="mt-4 space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (next !== repeat) return toast(t("Las contraseñas nuevas no coinciden."), "error");
+              start(async () => {
+                const res = await changePassword(current, next);
+                toast(res.ok ? (res.data.pending ? t("Te hemos enviado un email: confirma el cambio con el enlace (caduca en 30 minutos).") : t("Contraseña actualizada")) : res.error, res.ok ? "success" : "error");
+                if (res.ok) {
+                  setCurrent("");
+                  setNext("");
+                  setRepeat("");
+                }
+              });
+            }}
+          >
+            <input type="text" name="username" autoComplete="username" value={props.email} readOnly hidden />
+            <div>
+              <label className="label" htmlFor="pw-current">{t("Contraseña actual")}</label>
+              <PasswordInput id="pw-current" className="input" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="label" htmlFor="pw-new">{t("Nueva contraseña (mín. 10)")}</label>
+                <PasswordInput id="pw-new" className="input" autoComplete="new-password" minLength={10} value={next} onChange={(e) => setNext(e.target.value)} required />
+              </div>
+              <div>
+                <label className="label" htmlFor="pw-repeat">{t("Repite la nueva")}</label>
+                <PasswordInput id="pw-repeat" className="input" autoComplete="new-password" minLength={10} value={repeat} onChange={(e) => setRepeat(e.target.value)} required />
+              </div>
+            </div>
+            <button className="btn-primary" disabled={pending}>{t("Cambiar contraseña")}</button>
+          </form>
+        </section>
+
+        {props.accountExtra}
+        <GoogleSection google={props.google} />
+        </>
+      )}
     </div>
   );
 }

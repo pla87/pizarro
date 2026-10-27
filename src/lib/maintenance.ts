@@ -132,6 +132,12 @@ async function purgeOldTaskHistory(now: Date = new Date()): Promise<number> {
   return purgeOldTaskEvents(now);
 }
 
+/** Recordatorio a quien tiene tareas esperando demasiado en una columna «Esperando» (ver waiting.ts). */
+async function waitingRemindersJob(now: Date = new Date()): Promise<number> {
+  const { deliverWaitingReminders } = await import("@/lib/waiting");
+  return deliverWaitingReminders(now);
+}
+
 /** Resumen diario y informe semanal por email a quien toca (ver periodic-mail.ts). */
 async function sendPeriodicMail(now: Date = new Date()): Promise<number> {
   const { sendDueDigests, sendDueReports } = await import("@/lib/periodic-mail");
@@ -166,6 +172,7 @@ export const MAINTENANCE_JOBS = [
   { name: "backupAlert", run: () => backupAlertJob() },
   { name: "restoreTest", run: () => restoreTestJob() },
   { name: "periodicMail", run: () => sendPeriodicMail() },
+  { name: "waitingReminders", run: () => waitingRemindersJob() },
 ] as const;
 
 /** Ejecuta las tareas bajo el bloqueo `key`: si otro proceso ya lo tiene (p. ej. durante un despliegue), no hace nada. Nunca lanza. */

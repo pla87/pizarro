@@ -7,6 +7,8 @@ export interface BoardColumn {
   position: number;
   role: ColumnRoleValue;
   isDone: boolean;
+  /** Solo rol WAITING: días hasta el recordatorio (null = por defecto). */
+  waitingDays: number | null;
 }
 
 export interface BoardTask {
@@ -42,6 +44,8 @@ export interface BoardTask {
   recurrenceDay: number | null;
   /** Última edición del título/descripción (para detectar ediciones simultáneas). */
   textVersion: string | null;
+  /** Cuándo entró en su columna actual (ISO): la tarjeta de una columna «Esperando» muestra los días. */
+  columnEnteredAt: string;
 }
 
 export interface KindOption {
@@ -107,6 +111,8 @@ export interface ProjectFormData {
   users: UserOption[];
   kinds: KindOption[];
   deliverables: DeliverableOption[];
+  /** Etiquetas del proyecto (para crear varias tareas en otro proyecto). */
+  labels: LabelOption[];
 }
 
 export interface TaskLinkInfo {

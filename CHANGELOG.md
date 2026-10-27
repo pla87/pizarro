@@ -2,6 +2,35 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.28.0 — 2026-10-27 19:20
+
+Columnas Esperando y Planificación semanal, varias tareas al lado, pestañas en Mi perfil y arreglos del tablero
+
+### Nuevas funcionalidades
+
+- Columnas «Esperando»: tras N días (3 por defecto) en la columna, avisa a la persona asignada (o a quien creó la tarea). Las tarjetas muestran «Esperando N d».
+- Columnas «Planificación semanal»: el menú de la columna genera un PDF de la semana por día o por persona.
+- Los roles Esperando y Planificación semanal se pueden poner en varias columnas del mismo proyecto.
+- Suelta archivos en el hueco libre de una columna o en «Siempre en la release» para crear allí una tarea con ellos adjuntos.
+- Botón «Varias tareas» encima del «+» del diálogo de nueva tarea: abre la creación múltiple al lado, con desplegable de proyecto.
+
+### Mejoras
+
+- El desplegable de proyecto solo aparece en la segunda tarea simultánea, más estrecho y separado del título; la primera siempre se crea en el tablero actual.
+- Mi perfil se divide en pestañas: Cuenta, Preferencias y Avisos.
+- Con tres columnas o más, el tablero ocupa todo el ancho en escritorio.
+- El botón «Nueva tarea» ya no cambia de tamaño al arrastrar archivos sobre él.
+
+### Correcciones
+
+- El anillo de selección de la primera tarjeta de cada columna y del botón «+ Añadir» de las tareas fijas ya no se ve recortado.
+- Deshacer un cambio de rol de columna devuelve el rol a la columna original y mantiene las tareas fijas como fijas.
+
+### Cambios técnicos / DB
+
+- Migración: roles WAITING y WEEKLY_PLAN, Column.waitingDays, Task.columnEnteredAt/waitingNotifiedAt con disparador al cambiar de columna; índice único de rol solo para NEXT_RELEASE e IN_PRODUCTION.
+- Nueva tarea de mantenimiento «Recordatorios de tareas en espera» (cada hora). La restauración de copias borra también las funciones de la base.
+
 ## v1.27.0 — 2026-10-27 12:07
 
 Soltar archivos en Nueva tarea, pestañas de Administración con forma de pestaña, Docker endurecido y guía de prueba en un VPS

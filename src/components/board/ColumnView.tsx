@@ -2,9 +2,9 @@
 
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, Minus, MoreHorizontal, Pencil, Plus, Rocket, Tag, Trash2 } from "lucide-react";
-import { deleteColumn, moveColumn, renameColumn, setColumnDone, setColumnRole } from "@/actions/columns";
-import { COLUMN_ROLE_LABEL, COLUMN_ROLES, type ColumnRoleValue } from "@/lib/constants";
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, FileDown, Hourglass, Minus, MoreHorizontal, Pencil, Plus, Rocket, Tag, Trash2 } from "lucide-react";
+import { deleteColumn, moveColumn, renameColumn, setColumnDone, setColumnRole, setColumnWaitingDays } from "@/actions/columns";
+import { COLUMN_ROLE_LABEL, COLUMN_ROLES, DEFAULT_WAITING_DAYS, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
 import type { BoardColumn } from "@/lib/types";
 import { useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
@@ -15,6 +15,7 @@ import { useBoard, useSelectedCount, useSelectionSize } from "./context";
 import { useShortcut } from "./shortcuts";
 import { EvergreenPanel } from "./EvergreenPanel";
 import { SortableTaskCard } from "./TaskCard";
+import { useFileZone } from "./useFileZone";
 
 interface Props {
   column: BoardColumn;
@@ -38,14 +39,16 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
   const allSelected = taskIds.length > 0 && selectedHere === taskIds.length;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
   const isNextRelease = column.role === "NEXT_RELEASE";
+  // Archivos soltados en el hueco bajo las tarjetas: nueva tarea en esta columna.
+  const fileZone = useFileZone((files) => openNewTask(column.id, false, files));
 
   return (
     <section
       ref={setNodeRef}
       className={cn(
         "flex w-full shrink-0 flex-col rounded-xl bg-slate-100/80 dark:bg-slate-900/60",
-        // Con más de tres columnas, en escritorio se reparten el ancho de la ventana (mínimo 18 rem; si no caben, scroll).
-        total > 3 ? "md:min-w-72 md:flex-1" : "md:w-72",
+        // Con tres columnas o más, en escritorio se reparten el ancho de la ventana (mínimo 18 rem; si no caben, scroll).
+        total >= 3 ? "md:min-w-72 md:flex-1" : "md:w-72",
         mobileHidden && "max-md:hidden",
         isNextRelease && "ring-1 ring-brand-500/30",
       )}
@@ -93,17 +96,20 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
       <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
         <div
           className={cn(
-            "flex min-h-20 flex-1 flex-col gap-2 overflow-y-auto rounded-b-xl px-2 transition-colors",
+            // pt y -mt: margen interior para que el anillo de foco de la primera tarjeta no lo recorte el scroll.
+            "-mt-1.5 flex min-h-20 flex-1 flex-col gap-2 overflow-y-auto rounded-b-xl px-2 pt-1.5 transition-colors",
             // Abajo se deja hueco: con selección lo tapa la barra inferior y en móvil los botones flotantes.
             hasSelection ? "pb-44 md:pb-20" : "pb-32 lg:pb-2",
             isOver && "bg-brand-50/60 dark:bg-brand-500/5",
+            fileZone.over && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10",
           )}
+          {...fileZone.handlers}
         >
           {taskIds.map((id) => (
             <SortableTaskCard key={id} id={id} />
           ))}
           {taskIds.length === 0 && (
-            <p className="py-6 text-center text-xs text-slate-400">{t("Arrastra tarjetas aquí")}</p>
+            <p className="py-6 text-center text-xs text-slate-400">{fileZone.over ? t("Suelta para crear tarea") : t("Arrastra tarjetas aquí")}</p>
           )}
         </div>
       </SortableContext>
@@ -113,7 +119,7 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
 }
 
 function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; index: number; total: number; empty: boolean }) {
-  const { setColumns, track, refresh } = useBoard();
+  const { setColumns, track, refresh, project } = useBoard();
   const toast = useToast();
   const confirm = useConfirm();
   const t = useT();
@@ -158,9 +164,23 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
       },
       () =>
         setColumns((cols) =>
-          cols.map((c) => (c.id === column.id ? { ...c, role } : role !== "NONE" && c.role === role ? { ...c, role: "NONE" } : c)),
+          cols.map((c) => (c.id === column.id ? { ...c, role } : isUniqueColumnRole(role) && c.role === role ? { ...c, role: "NONE" } : c)),
         ),
     );
+
+  // Rol «Esperando»: días hasta el recordatorio.
+  const editWaitingDays = () => {
+    const current = column.waitingDays ?? DEFAULT_WAITING_DAYS;
+    const raw = window.prompt(t("Avisar a la persona asignada tras cuántos días en esta columna (1-{max})", { max: MAX_WAITING_DAYS }), String(current))?.trim();
+    if (!raw) return;
+    const days = Number(raw);
+    if (!Number.isInteger(days) || days < 1 || days > MAX_WAITING_DAYS) return toast(t("Indica un número entero de días."), "error");
+    if (days === current) return;
+    run(() => setColumnWaitingDays(column.id, days), () => setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, waitingDays: days } : c))));
+  };
+
+  // Rol «Planificación semanal»: PDF de la semana, por día o por persona.
+  const weekPdf = (by: "day" | "person") => window.open(`/api/projects/${project.id}/columns/${column.id}/week?by=${by}`, "_blank", "noopener");
 
   const toggleDone = () =>
     run(
@@ -203,6 +223,17 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
           {column.role === r ? "● " : ""}{t(COLUMN_ROLE_LABEL[r])}
         </MenuItem>
       ))}
+      {column.role === "WAITING" && (
+        <MenuItem icon={Hourglass} onClick={editWaitingDays}>
+          {t("Recordar tras {n} d…", { n: column.waitingDays ?? DEFAULT_WAITING_DAYS })}
+        </MenuItem>
+      )}
+      {column.role === "WEEKLY_PLAN" && (
+        <>
+          <MenuItem icon={FileDown} onClick={() => weekPdf("day")}>{t("PDF de la semana (por día)")}</MenuItem>
+          <MenuItem icon={FileDown} onClick={() => weekPdf("person")}>{t("PDF de la semana (por persona)")}</MenuItem>
+        </>
+      )}
       <MenuSeparator />
       <MenuItem icon={CheckCircle2} onClick={toggleDone}>
         {column.isDone ? t("✓ Cuenta como terminada") : t("Contar como terminada")}

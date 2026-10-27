@@ -1,6 +1,61 @@
 {
   "versions": [
     {
+      "version": "1.28.0",
+      "date": "2026-10-27",
+      "releasedAt": "2026-10-27T19:20:48+01:00",
+      "summary": "Columnas Esperando y Planificación semanal, varias tareas al lado, pestañas en Mi perfil y arreglos del tablero",
+      "changes": {
+        "nuevas": [
+          "Columnas «Esperando»: tras N días (3 por defecto) en la columna, avisa a la persona asignada (o a quien creó la tarea). Las tarjetas muestran «Esperando N d».",
+          "Columnas «Planificación semanal»: el menú de la columna genera un PDF de la semana por día o por persona.",
+          "Los roles Esperando y Planificación semanal se pueden poner en varias columnas del mismo proyecto.",
+          "Suelta archivos en el hueco libre de una columna o en «Siempre en la release» para crear allí una tarea con ellos adjuntos.",
+          "Botón «Varias tareas» encima del «+» del diálogo de nueva tarea: abre la creación múltiple al lado, con desplegable de proyecto."
+        ],
+        "mejoras": [
+          "El desplegable de proyecto solo aparece en la segunda tarea simultánea, más estrecho y separado del título; la primera siempre se crea en el tablero actual.",
+          "Mi perfil se divide en pestañas: Cuenta, Preferencias y Avisos.",
+          "Con tres columnas o más, el tablero ocupa todo el ancho en escritorio.",
+          "El botón «Nueva tarea» ya no cambia de tamaño al arrastrar archivos sobre él."
+        ],
+        "correcciones": [
+          "El anillo de selección de la primera tarjeta de cada columna y del botón «+ Añadir» de las tareas fijas ya no se ve recortado.",
+          "Deshacer un cambio de rol de columna devuelve el rol a la columna original y mantiene las tareas fijas como fijas."
+        ],
+        "tecnicos": [
+          "Migración: roles WAITING y WEEKLY_PLAN, Column.waitingDays, Task.columnEnteredAt/waitingNotifiedAt con disparador al cambiar de columna; índice único de rol solo para NEXT_RELEASE e IN_PRODUCTION.",
+          "Nueva tarea de mantenimiento «Recordatorios de tareas en espera» (cada hora). La restauración de copias borra también las funciones de la base."
+        ]
+      },
+      "en": {
+        "summary": "Waiting and Weekly planning columns, bulk create on the side, tabs in My profile and board fixes",
+        "changes": {
+          "nuevas": [
+            "“Waiting” columns: after N days in the column (3 by default) the assignee (or the task creator) gets a reminder. Cards show “Waiting N d”.",
+            "“Weekly planning” columns: the column menu builds a PDF of the week by day or by person.",
+            "The Waiting and Weekly planning roles can be set on several columns of the same project.",
+            "Drop files on a column's free area or on “Always in the release” to create a task there with them attached.",
+            "“Several tasks” button above the “+” of the new task dialog: opens bulk create on the side, with a project picker."
+          ],
+          "mejoras": [
+            "The project picker only shows on the second simultaneous task, narrower and set apart from the title; the first one is always created on the current board.",
+            "My profile is split into tabs: Account, Preferences and Notifications.",
+            "With three or more columns the board fills the full width on desktop.",
+            "The “New task” button no longer changes size while dragging files over it."
+          ],
+          "correcciones": [
+            "The selection ring of the first card in each column and of the pinned tasks “+ Add” button is no longer clipped.",
+            "Undoing a column role change gives the role back to the original column and keeps pinned tasks pinned."
+          ],
+          "tecnicos": [
+            "Migration: WAITING and WEEKLY_PLAN roles, Column.waitingDays, Task.columnEnteredAt/waitingNotifiedAt with a trigger on column change; unique role index only for NEXT_RELEASE and IN_PRODUCTION.",
+            "New maintenance job “Waiting task reminders” (hourly). Backup restore also drops database functions."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.27.0",
       "date": "2026-10-27",
       "releasedAt": "2026-10-27T12:07:12+01:00",
