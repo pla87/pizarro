@@ -91,6 +91,7 @@ export const board: Record<string, string> = {
   "Archivo": "File",
   "Cámara": "Camera",
   "Suelta para adjuntar": "Drop to attach",
+  "Suelta para crear tarea": "Drop to create a task",
   // BulkTaskDialog
   "1 tarea creada": "1 task created",
   "{n} tareas creadas": "{n} tasks created",

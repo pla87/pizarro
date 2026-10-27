@@ -140,7 +140,13 @@ fi
 
 # Secretos: solo los que faltan.
 created=""
-set_if_empty POSTGRES_PASSWORD "$(rand_hex 24)" && created="$created POSTGRES_PASSWORD"
+if set_if_empty POSTGRES_PASSWORD "$(rand_hex 24)"; then
+  created="$created POSTGRES_PASSWORD"
+  # Base de datos nueva: la app usa un rol sin superusuario (deploy/postgres-init). En una instalación
+  # existente no se toca: su base ya se creó sin ese rol (migración manual en docs/INSTALL.md, sección 8).
+  set_if_empty APP_DB_USER "pizarro_app" || true
+  set_if_empty APP_DB_PASSWORD "$(rand_hex 24)" && created="$created APP_DB_PASSWORD"
+fi
 fresh=0
 set_if_empty SESSION_SECRET "$(rand_b64 48)" && created="$created SESSION_SECRET" && fresh=1
 set_if_empty BACKUP_KEY "$(rand_b64 32)" && created="$created BACKUP_KEY"

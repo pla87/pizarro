@@ -27,6 +27,9 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
     mem_limit: ${CADDY_MEM_LIMIT:-128m}
     logging: *logging
 
@@ -45,7 +48,7 @@ services:
         condition: service_healthy
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://pizarro:${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env}@postgres:5432/pizarro
+      DATABASE_URL: postgresql://${APP_DB_USER:-pizarro}:${APP_DB_PASSWORD:-${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env}}@postgres:5432/pizarro
       APP_URL: ${APP_URL:?Define APP_URL en .env}
       UPLOAD_DIR: /app/uploads
       PORT: "3000"
@@ -66,6 +69,16 @@ services:
       # El primer arranque aplica las migraciones: se le da margen.
       start_period: 120s
     stop_grace_period: 30s
+    # Endurecimiento: el código de la imagen es de solo lectura (y de root); solo se escribe en el volumen
+    # de subidas y en /tmp y la caché de Next (tmpfs). start.sh arranca como root solo para ajustar el
+    # volumen y baja a «node» (setpriv): necesita únicamente estas capacidades.
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache:uid=1000,gid=1000
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID, FOWNER, DAC_OVERRIDE]
     mem_limit: ${APP_MEM_LIMIT:-1g}
     logging: *logging
 
@@ -76,8 +89,13 @@ services:
       POSTGRES_USER: pizarro
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env}
       POSTGRES_DB: pizarro
+      # Rol de la aplicación sin superusuario (deploy/postgres-init). Vacío = la app usa el superusuario.
+      APP_DB_USER: ${APP_DB_USER:-}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    security_opt: ["no-new-privileges:true"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pizarro -d pizarro"]
       interval: 10s

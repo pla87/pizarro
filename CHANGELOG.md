@@ -2,6 +2,24 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.27.0 — 2026-10-27 12:07
+
+Soltar archivos en Nueva tarea, pestañas de Administración con forma de pestaña, Docker endurecido y guía de prueba en un VPS
+
+### Nuevas funcionalidades
+
+- Arrastra archivos al botón «Nueva tarea» para abrir el formulario con ellos ya adjuntos.
+- Guía paso a paso para probar la instalación propia en un VPS, con copia a R2 y restauración (docs/PRUEBA-VPS.md).
+
+### Mejoras
+
+- Las pestañas de Administración muestran el foco redondeado arriba y recto abajo, como pestañas.
+- Instalación propia endurecida: código de solo lectura, contenedor sin privilegios extra y rol de base de datos sin superusuario.
+
+### Cambios técnicos / DB
+
+- Dockerfile: el código pertenece a root; solo /app/uploads y /app/.next/cache son del usuario de la app. deploy/postgres-init crea el rol pizarro_app.
+
 ## v1.26.0 — 2026-10-26 01:27
 
 Papelera de documentos, límites de adjuntos más flexibles, BACKUP_KEY más tolerante y aviso de versión nueva

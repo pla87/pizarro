@@ -1,6 +1,43 @@
 {
   "versions": [
     {
+      "version": "1.27.0",
+      "date": "2026-10-27",
+      "releasedAt": "2026-10-27T12:07:12+01:00",
+      "summary": "Soltar archivos en Nueva tarea, pestañas de Administración con forma de pestaña, Docker endurecido y guía de prueba en un VPS",
+      "changes": {
+        "nuevas": [
+          "Arrastra archivos al botón «Nueva tarea» para abrir el formulario con ellos ya adjuntos.",
+          "Guía paso a paso para probar la instalación propia en un VPS, con copia a R2 y restauración (docs/PRUEBA-VPS.md)."
+        ],
+        "mejoras": [
+          "Las pestañas de Administración muestran el foco redondeado arriba y recto abajo, como pestañas.",
+          "Instalación propia endurecida: código de solo lectura, contenedor sin privilegios extra y rol de base de datos sin superusuario."
+        ],
+        "correcciones": [],
+        "tecnicos": [
+          "Dockerfile: el código pertenece a root; solo /app/uploads y /app/.next/cache son del usuario de la app. deploy/postgres-init crea el rol pizarro_app."
+        ]
+      },
+      "en": {
+        "summary": "Drop files on New task, tab-shaped Administration tabs, hardened Docker and a VPS test guide",
+        "changes": {
+          "nuevas": [
+            "Drag files onto the “New task” button to open the form with them already attached.",
+            "Step-by-step guide to test self-hosting on a VPS, with an R2 backup and a restore (docs/PRUEBA-VPS.md)."
+          ],
+          "mejoras": [
+            "Administration tabs show focus rounded at the top and square at the bottom, like tabs.",
+            "Hardened self-hosting: read-only code, container without extra privileges and a non-superuser database role."
+          ],
+          "correcciones": [],
+          "tecnicos": [
+            "Dockerfile: code owned by root; only /app/uploads and /app/.next/cache belong to the app user. deploy/postgres-init creates the pizarro_app role."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.26.0",
       "date": "2026-10-26",
       "releasedAt": "2026-10-26T01:27:34+01:00",

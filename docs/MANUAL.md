@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.26.0"
+version: "v1.27.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.26.0
+**Versión de la aplicación:** v1.27.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -224,7 +224,7 @@ Desde el menú «⋯» de cada columna:
   - **Campos extra** (plegado): responsable, fecha límite, entregable y etiquetas comunes a todas.
   - Las subtareas predefinidas del tipo son opcionales aquí. Hasta 100 tareas de una vez; se añaden al final de la columna en el orden de la lista.
 - **Tipo:** por defecto *Funcionalidad* o *Corrección*. Los administradores pueden crear más tipos generales, y cada proyecto puede tener los suyos (ver 3.14).
-- **Atajo de captura:** pega una imagen (Ctrl/⌘+V) con el tablero en pantalla y se abre *Nueva tarea* con la captura adjunta.
+- **Atajo de captura:** pega una imagen (Ctrl/⌘+V) con el tablero en pantalla y se abre *Nueva tarea* con la captura adjunta. También puedes arrastrar archivos del escritorio sobre el botón *Nueva tarea* de la cabecera (se resalta con «Suelta para crear tarea»): se abre el formulario con ellos ya adjuntos.
 - **Dos tareas a la vez (escritorio):** con una tarea abierta (nueva o existente), el botón **Nueva tarea** de la cabecera sigue activo por encima del fondo oscuro y abre una tarea nueva al lado (por defecto en *Backlog*): las dos quedan juntas y centradas, con el mismo ancho. Se puede trabajar en las dos; Escape o atrás cierran la última abierta.
 - **Crear en otro proyecto:** junto al título *Nueva tarea* hay un desplegable de proyecto (por defecto, el actual). Al elegir otro, las columnas, tipos, personas, entregables y límites de adjuntos pasan a ser los de ese proyecto; la tarea se crea allí, no aparece en el tablero actual y un aviso ofrece **Ir al proyecto**. El borrador recuerda el proyecto elegido.
 - **Quién está trabajando:** a la derecha del contador de tarjetas de la cabecera (en móvil, arriba a la derecha) aparecen círculos con las **iniciales** de quienes han hecho cualquier acción en ese tablero (abrir, crear, mover, editar, subir adjuntos…) en los **últimos 5 minutos**, tú incluido; al pasar el ratón se ven sus nombres. Se actualiza cada 20 segundos. Si hay más (cinco en escritorio, tres en móvil), se muestra «+N». Además, cada tarjeta muestra arriba a la izquierda unas **burbujas pequeñas** con quién tiene esa tarea abierta.
@@ -701,6 +701,8 @@ El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `wh
 ### 4.11 Instalación en un servidor propio (Docker Compose)
 
 Además de Railway, Pizarro se puede instalar en cualquier servidor con Docker 24+ (1 vCPU, 2 GB de RAM): `deploy/compose.yml` levanta Caddy (HTTPS automático para `DOMAIN`), la app (el mismo `Dockerfile`) y PostgreSQL 16, con volúmenes, comprobaciones de salud, reinicio automático y límites de memoria. La guía completa (secretos con `openssl rand`, primer administrador, actualizar, restaurar y problemas frecuentes) está en `docs/INSTALL.md`. Nada de la imagen depende de Railway: la zona horaria del navegador llega del servidor (atributo `data-tz`), así que cambiar `APP_TIMEZONE` solo exige reiniciar, y el identificador de versión es la versión del `package.json` más el commit (`GIT_SHA` o `RAILWAY_GIT_COMMIT_SHA`) o, sin commit, la hora de la compilación.
+
+**Endurecido:** el código de la imagen es de root y no se puede modificar en ejecución; con Compose el contenedor de la app es de solo lectura (salvo subidas, caché y `/tmp`), sin privilegios nuevos y con las capacidades mínimas, y las instalaciones nuevas usan un rol de base de datos sin superusuario (`pizarro_app`, con permiso para crear bases para la prueba de restauración). Cómo migrar una instalación existente: `docs/INSTALL.md`, sección 3.5. Guía paso a paso para una prueba completa en un VPS (instalar, copiar a R2, destruir y restaurar): `docs/PRUEBA-VPS.md`.
 
 ---
 
