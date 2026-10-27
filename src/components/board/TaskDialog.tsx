@@ -45,11 +45,12 @@ import { setUndoTask, UNDONE_EVENT } from "../undo-context";
 import { useIsMobile } from "../ui/useIsMobile";
 import { UndoButton } from "../UndoButton";
 
-export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
+export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecondBulk, draft }: {
   task: BoardTask;
   onClose: () => void;
   side?: "left" | "right" | "center";
   onAddSecond?: () => void;
+  onAddSecondBulk?: () => void;
   /** Borrador recuperado (la página se cerró con la tarea abierta). */
   draft?: EditTaskDraft | null;
 }) {
@@ -445,6 +446,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, draft }: {
       onClose={onClose}
       side={side}
       onAddSecond={onAddSecond}
+      onAddSecondBulk={onAddSecondBulk}
       size="xl"
       placement="top"
       // Móvil: pie siempre visible con Archivar, Borrar y Guardar.

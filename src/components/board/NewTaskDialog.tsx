@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createTask, getProjectFormData } from "@/actions/tasks";
 import { ProjectsContext } from "../ProjectMenu";
+import { ProjectPicker } from "./ProjectPicker";
 import { DescriptionTools } from "../ui/DescriptionTools";
 import type { ProjectFormData } from "@/lib/types";
 import { useT, useIntlLocale } from "@/i18n/client";
@@ -34,6 +35,10 @@ interface Props {
   side?: "left" | "right" | "center";
   /** Escritorio: muestra el «+» para abrir un segundo modal de nueva tarea al lado. */
   onAddSecond?: () => void;
+  /** Escritorio: con `onAddSecond`, añade el botón de «Varias tareas» encima del «+». */
+  onAddSecondBulk?: () => void;
+  /** Muestra el selector de proyecto (solo el segundo diálogo de la pareja); el primero crea siempre en el tablero abierto. */
+  pickProject?: boolean;
   /** Borrador recuperado (la página se cerró con el modal abierto). */
   draft?: NewTaskDraft | null;
   /** Guarda un borrador local cada 5 s (solo el modal principal). */
@@ -44,7 +49,7 @@ function captureTitle(t: T, locale: string): string {
   return t("Captura") + " " + new Date().toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
 }
 
-export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles, onClose: close, side, onAddSecond, draft, autosave = false }: Props) {
+export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles, onClose: close, side, onAddSecond, onAddSecondBulk, pickProject = false, draft, autosave = false }: Props) {
   const t = useT();
   const sc = useShortcut();
   const locale = useIntlLocale();
@@ -58,7 +63,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   // Un borrador solo vale si su tipo y su columna siguen existiendo.
   const d = draft ?? null;
   // Proyecto en el que se crea: por defecto el abierto; un borrador recuerda el elegido (si aún se puede usar).
-  const initialProject = d?.projectId && d.projectId !== board.project.id && projects.some((p) => p.id === d.projectId) ? d.projectId : board.project.id;
+  const initialProject = pickProject && d?.projectId && d.projectId !== board.project.id && projects.some((p) => p.id === d.projectId) ? d.projectId : board.project.id;
   const foreignInit = initialProject !== board.project.id;
   const [projectId, setProjectId] = useState(initialProject);
   // Opciones del proyecto elegido cuando no es el abierto (se piden al servidor y se guardan mientras el diálogo siga abierto).
@@ -66,8 +71,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const formCache = useRef(new Map<string, ProjectFormData>());
   const wantedProject = useRef(initialProject);
   const boardForm = useMemo<ProjectFormData>(
-    () => ({ project: board.project, columns: board.columns, users: board.users, kinds: board.kinds, deliverables: board.deliverables }),
-    [board.project, board.columns, board.users, board.kinds, board.deliverables],
+    () => ({ project: board.project, columns: board.columns, users: board.users, kinds: board.kinds, deliverables: board.deliverables, labels: board.labels }),
+    [board.project, board.columns, board.users, board.kinds, board.deliverables, board.labels],
   );
   const pf = projectId === board.project.id ? boardForm : other?.project.id === projectId ? other : null;
   // Mientras llegan las opciones de otro proyecto se muestran las del abierto, sin poder crear.
@@ -249,23 +254,11 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       onClose={requestClose}
       side={side}
       onAddSecond={onAddSecond}
+      onAddSecondBulk={onAddSecondBulk}
       title={
         <span className="-m-1 flex min-w-0 items-center gap-2 p-1">
           <span className="shrink-0">{t("Nueva tarea")}</span>
-          {projects.length > 1 && (
-            <>
-              <select
-                aria-label={t("Proyecto")}
-                title={t("Proyecto en el que se crea la tarea")}
-                className="input h-8 min-w-0 flex-1 py-0 text-sm font-normal sm:max-w-64 sm:flex-none"
-                value={projectId}
-                onChange={(e) => void selectProject(e.target.value)}
-              >
-                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              {loading && <Loader2 size={14} className="shrink-0 animate-spin text-slate-400" aria-label={t("Cargando…")} />}
-            </>
-          )}
+          {pickProject && <ProjectPicker value={projectId} onChange={(id) => void selectProject(id)} loading={loading} />}
         </span>
       }
       size="md"

@@ -72,6 +72,7 @@ export const common: Record<string, string> = {
   "Documento nuevo enlazado a la tarea": "New document linked to the task",
   "Cerrar": "Close",
   "Abrir otra tarea nueva al lado": "Open another new task alongside",
+  "Abrir «Varias tareas» al lado": "Open \"Several tasks\" alongside",
   "Cargando": "Loading",
   "Ocultar contraseña": "Hide password",
   "Mostrar contraseña": "Show password",

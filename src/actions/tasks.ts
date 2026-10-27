@@ -179,12 +179,13 @@ export async function getProjectFormData(projectId: string) {
     const id = v.id.parse(projectId);
     await assertProjectAccess(user, id);
     const project = await db.project.findUniqueOrThrow({ where: { id }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true, fileMaxMb: true } });
-    const [columns, users, deliverables, kinds, locale] = await Promise.all([
+    const [columns, users, deliverables, kinds, locale, labels] = await Promise.all([
       db.column.findMany({ where: { projectId: id }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true } }),
       projectUsers(id, project),
       db.deliverable.findMany({ where: { projectId: id }, orderBy: [{ position: "asc" }], select: { id: true, name: true, dueDate: true } }),
       listKinds(id),
       getLocale(),
+      db.label.findMany({ where: { projectId: id }, orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),
     ]);
     return {
       project: { id: project.id, name: project.name, attachMaxMb: project.taskAttachMaxMb, fileMaxMb: effectiveFileMaxMb(project.fileMaxMb) },
@@ -192,6 +193,7 @@ export async function getProjectFormData(projectId: string) {
       users,
       kinds: localizeGeneralKinds(kinds, locale),
       deliverables: deliverables.map((d) => ({ id: d.id, name: d.name, dueDate: dateToIso(d.dueDate) })),
+      labels,
     };
   });
 }

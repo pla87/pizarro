@@ -247,7 +247,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
         step === "select" ? (
           <>
             <span className="mr-auto text-xs text-slate-500">
-              {t("Cabecera y pie salen de")} <Link className="text-brand-600 dark:text-brand-300 hover:underline" href="/settings">{t("tus plantillas")}</Link>.
+              {t("Cabecera y pie salen de")} <Link className="text-brand-600 dark:text-brand-300 hover:underline" href="/settings?tab=preferencias">{t("tus plantillas")}</Link>.
             </span>
             <button className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
             <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || loadingDetails}>

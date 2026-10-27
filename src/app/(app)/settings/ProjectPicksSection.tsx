@@ -33,7 +33,7 @@ export function ProjectPicksSection({ projects }: { projects: PickProject[] }) {
     });
 
   return (
-    <section className="card p-5">
+    <section id="proyectos" className="card scroll-mt-4 p-5">
       <h2 className="font-semibold">{t("Proyectos en los que trabajo")}</h2>
       <p className="mt-0.5 text-sm text-slate-500">{t("Solo estos proyectos salen en tus selectores y menús. Como administrador puedes abrir cualquier proyecto de equipo desde Administración.")}</p>
       <ul className="mt-3 max-h-80 divide-y divide-slate-200 overflow-y-auto rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">

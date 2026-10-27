@@ -1,5 +1,8 @@
 // Traducciones al inglés (settings). Clave: texto exacto en español.
 export const settings: Record<string, string> = {
+  "Cuenta": "Account",
+  "Preferencias": "Preferences",
+  "Secciones del perfil": "Profile sections",
   "Mis tareas": "My tasks",
   "Mis tareas asignadas": "My assigned tasks",
   "{n} tarea(s) en todos tus proyectos.": "{n} task(s) across all your projects.",
