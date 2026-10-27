@@ -34,6 +34,7 @@ function jobLabel(t: (s: string) => string, name: string): string {
     case "backupAlert": return t("Aviso de copia atrasada");
     case "restoreTest": return t("Prueba de restauración mensual");
     case "periodicMail": return t("Resúmenes e informes por email");
+    case "waitingReminders": return t("Recordatorios de tareas en espera");
     case "releaseResume": return t("Reanudar copias de adjuntos de releases");
     default: return name;
   }

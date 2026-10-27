@@ -2,6 +2,7 @@ import "server-only";
 import { Document, Font, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { makeT, type T } from "@/i18n/core";
 import { formatDay } from "./dates";
+import type { WeekPlanGroupBy, WeekPlanSection, WeekPlanTask } from "./week-plan";
 import { RECENT_DONE_DAYS, UPCOMING_DAYS, type DeliverableStatus, type Report, type ReportTask } from "./report";
 
 // Sin partición de palabras con guion: en español quedaba «re-sumen».
@@ -286,4 +287,53 @@ function ReportDocument({ r, t, locale }: { r: Report; t: T; locale: string }) {
 
 export function renderReportPdf(report: Report, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
   return renderToBuffer(<ReportDocument r={report} t={t} locale={locale} />);
+}
+
+export interface WeekPlanPdfInput {
+  project: string;
+  column: string;
+  today: string;
+  generatedBy: string;
+  groupBy: WeekPlanGroupBy;
+  sections: WeekPlanSection[];
+}
+
+function WeekPlanDocument({ r, t, locale }: { r: WeekPlanPdfInput; t: T; locale: string }) {
+  const byDay = r.groupBy === "day";
+  const total = r.sections.reduce((n, sec) => n + sec.tasks.length, 0);
+  const cols: Col<WeekPlanTask>[] = [
+    { label: t("Tarea"), width: byDay ? "52%" : "50%", render: (x) => x.title },
+    { label: t("Tipo"), width: "18%", render: (x) => x.kind },
+    byDay
+      ? { label: t("Responsable"), width: "30%", render: (x) => x.assigneeName ?? "—" }
+      : { label: t("Fecha"), width: "32%", render: (x) => (x.dueDate ? formatDay(x.dueDate, r.today, locale) : "—") },
+  ];
+  return (
+    <Document title={`${t("Planificación semanal")} · ${r.project}`} author="Pizarro" creator="Pizarro" producer="Pizarro">
+      <Page size="A4" style={s.page}>
+        <View style={s.header}>
+          <Text style={s.eyebrow}>{t("Planificación semanal")}</Text>
+          <Text style={s.title}>{r.column}</Text>
+          <Text style={s.meta}>
+            {r.project} · {t("Semana del {date}", { date: formatDay(r.today, undefined, locale) })} · {byDay ? t("Por día") : t("Por persona")} · {t("{n} tareas", { n: total })}
+          </Text>
+        </View>
+        {r.sections.length === 0 && <Text style={s.small}>{t("No hay tareas en esta columna.")}</Text>}
+        {r.sections.map((sec) => (
+          <View key={sec.key}>
+            <Text style={s.h3} minPresenceAhead={50}>{sec.label} <Text style={s.small}>({sec.tasks.length})</Text></Text>
+            <Table rows={sec.tasks} cols={cols} />
+          </View>
+        ))}
+        <View style={s.footer} fixed>
+          <Text>{r.project} · {r.column}</Text>
+          <Text render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
+        </View>
+      </Page>
+    </Document>
+  );
+}
+
+export function renderWeekPlanPdf(input: WeekPlanPdfInput, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
+  return renderToBuffer(<WeekPlanDocument r={input} t={t} locale={locale} />);
 }

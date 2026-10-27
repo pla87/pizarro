@@ -2,7 +2,7 @@
 import type { T } from "../i18n/core";
 import { formatDay } from "./dates";
 
-export type NotificationKind = "MENTION" | "ASSIGNED" | "DUE_CHANGED" | "COMMENT" | "REPLY";
+export type NotificationKind = "MENTION" | "ASSIGNED" | "DUE_CHANGED" | "COMMENT" | "REPLY" | "WAITING";
 
 /** Frase de cabecera del aviso, con `{actor}` y `{task}` ya sustituidos por los textos recibidos. */
 export function notificationHeadline(kind: NotificationKind, t: T, vars: { actor: string; task: string }): string {
@@ -10,6 +10,7 @@ export function notificationHeadline(kind: NotificationKind, t: T, vars: { actor
     case "ASSIGNED": return t("{actor} te ha asignado {task}", vars);
     case "DUE_CHANGED": return t("{actor} ha cambiado la fecha límite de {task}", vars);
     case "COMMENT": return t("{actor} ha comentado en {task}", vars);
+    case "WAITING": return t("{task} sigue esperando respuesta", vars);
     case "REPLY": return t("{actor} ha respondido a tu comentario en {task}", vars);
     default: return t("{actor} te ha mencionado en {task}", vars);
   }
@@ -30,4 +31,10 @@ export function dueChangeText(excerpt: string, t: T, locale: string): string {
   const { from, to } = parseDueChange(excerpt);
   const show = (iso: string | null) => (iso ? formatDay(iso, undefined, locale) : t("Sin fecha"));
   return `${show(from)} → ${show(to)}`;
+}
+
+/** El aviso de espera guarda solo los días que lleva la tarea esperando. */
+export function waitingText(excerpt: string, t: T): string {
+  const n = Number.parseInt(excerpt, 10);
+  return Number.isFinite(n) ? t("Lleva {n} d en espera", { n }) : "";
 }

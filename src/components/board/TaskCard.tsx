@@ -2,9 +2,9 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlignLeft, Loader2, CalendarClock, Check, CheckSquare, ExternalLink, FileText, GripVertical, Image as ImageIcon, MessageSquare, Paperclip, Repeat } from "lucide-react";
-import { isWhite, MAX_TITLE } from "@/lib/constants";
-import { dueStatus, formatDay } from "@/lib/dates";
+import { AlignLeft, Loader2, CalendarClock, Check, CheckSquare, ExternalLink, FileText, GripVertical, Hourglass, Image as ImageIcon, MessageSquare, Paperclip, Repeat } from "lucide-react";
+import { DEFAULT_WAITING_DAYS, isWhite, MAX_TITLE } from "@/lib/constants";
+import { daysBetween, dueStatus, formatDay } from "@/lib/dates";
 import { memo, useEffect, useRef, useState } from "react";
 import type { BoardTask } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
@@ -60,7 +60,11 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
   const { users, labels, openTask, toggleSelected, columns, today, kindById, cardStyle, assignToMe, moveToAdjacentColumn, moveWithinColumn, setDueDate, renameTask, duplicateTask } = useBoard();
   const locale = useIntlLocale();
   const t = useT();
-  const done = columns.find((c) => c.id === task.columnId)?.isDone ?? false;
+  const column = columns.find((c) => c.id === task.columnId);
+  const done = column?.isDone ?? false;
+  // Columna «Esperando»: días naturales desde que la tarjeta entró (se resalta al llegar al plazo del recordatorio).
+  const waitingDays = column?.role === "WAITING" ? Math.max(0, daysBetween(task.columnEnteredAt.slice(0, 10), today)) : null;
+  const waitingLate = waitingDays !== null && waitingDays >= (column?.waitingDays ?? DEFAULT_WAITING_DAYS);
   const due = dueStatus(task.dueDate, done, today);
   const assignee = task.assigneeId ? users.find((u) => u.id === task.assigneeId) : null;
   const isSelected = useIsSelected(task.id);
@@ -200,6 +204,14 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
             title={due === "overdue" ? t("Plazo vencido") : t("Fecha límite")}
           >
             <CalendarClock size={12} /> {due === "today" ? t("Hoy") : formatDay(task.dueDate, today, locale)}
+          </span>
+        )}
+        {waitingDays !== null && (
+          <span
+            className={cn("inline-flex items-center gap-0.5 rounded px-1 font-medium", waitingLate && "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300")}
+            title={t("Lleva {n} d en esta columna", { n: waitingDays })}
+          >
+            <Hourglass size={12} /> {t("Esperando {n} d", { n: waitingDays })}
           </span>
         )}
         {repeat && <span title={repeat} className="inline-flex"><Repeat size={13} aria-label={repeat} /></span>}

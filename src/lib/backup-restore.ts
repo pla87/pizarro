@@ -109,7 +109,7 @@ async function isPizarroDatabase(sql: PgSql, tables: string[], migrationsDir: st
   return applied.every((n) => known.has(n));
 }
 
-/** Borra tablas, vistas, secuencias y tipos del esquema public (lo que crean las migraciones). */
+/** Borra tablas, vistas, secuencias, funciones y tipos del esquema public (lo que crean las migraciones). */
 export async function wipeDatabase(sql: PgSql): Promise<void> {
   const list = async (q: string) => (await sql.$queryRawUnsafe<{ n: string }[]>(q)).map((r) => quoteIdent(r.n));
   const views = await list("SELECT viewname AS n FROM pg_views WHERE schemaname = 'public'");
@@ -118,6 +118,11 @@ export async function wipeDatabase(sql: PgSql): Promise<void> {
   if (tables.length) await sql.exec(`DROP TABLE IF EXISTS ${tables.join(", ")} CASCADE`);
   const seqs = await list("SELECT sequencename AS n FROM pg_sequences WHERE schemaname = 'public'");
   if (seqs.length) await sql.exec(`DROP SEQUENCE IF EXISTS ${seqs.join(", ")} CASCADE`);
+  // Funciones propias (p. ej. la del disparador de Task.columnEnteredAt); las de extensiones se quedan.
+  const funcs = (await sql.$queryRawUnsafe<{ n: string }[]>(
+    "SELECT p.oid::regprocedure::text AS n FROM pg_proc p JOIN pg_namespace s ON s.oid = p.pronamespace WHERE s.nspname = 'public' AND p.prokind = 'f' AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')",
+  )).map((r) => r.n);
+  if (funcs.length) await sql.exec(`DROP FUNCTION IF EXISTS ${funcs.join(", ")} CASCADE`);
   const types = await list("SELECT t.typname AS n FROM pg_type t JOIN pg_namespace s ON s.oid = t.typnamespace WHERE s.nspname = 'public' AND t.typtype IN ('e', 'd')");
   if (types.length) await sql.exec(`DROP TYPE IF EXISTS ${types.join(", ")} CASCADE`);
 }

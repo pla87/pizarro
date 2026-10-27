@@ -1,7 +1,7 @@
 // Plantillas de proyecto: esquemas de validación y ayudas puras (sin acceso a base de datos).
 import "./zod-config";
 import { z } from "zod";
-import { COLUMN_ROLES, defaultColumns, PALETTE, type ColumnRoleValue } from "./constants";
+import { COLUMN_ROLES, UNIQUE_COLUMN_ROLES, defaultColumns, PALETTE, type ColumnRoleValue } from "./constants";
 import { POSITION_STEP } from "./positions";
 import * as v from "./validation";
 import { MAX_KIND_SUBTASKS } from "./kinds-special";
@@ -55,9 +55,9 @@ export const templateInputSchema = z
     if (!uniqueNames(t.columns)) ctx.addIssue({ code: "custom", message: "Hay columnas con el mismo nombre.", path: ["columns"] });
     if (!uniqueNames(t.kinds)) ctx.addIssue({ code: "custom", message: "Hay tipos propios con el mismo nombre.", path: ["kinds"] });
     if (!uniqueNames(t.labels)) ctx.addIssue({ code: "custom", message: "Hay etiquetas con el mismo nombre.", path: ["labels"] });
-    for (const role of COLUMN_ROLES) {
-      if (role !== "NONE" && t.columns.filter((c) => c.role === role).length > 1) {
-        ctx.addIssue({ code: "custom", message: "Cada rol especial solo puede usarse en una columna.", path: ["columns"] });
+    for (const role of UNIQUE_COLUMN_ROLES) {
+      if (t.columns.filter((c) => c.role === role).length > 1) {
+        ctx.addIssue({ code: "custom", message: "Los roles «Siguiente salto» y «En producción» solo pueden usarse en una columna.", path: ["columns"] });
       }
     }
   });

@@ -267,7 +267,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     if (columnId === task.columnId) return;
     const before = board.getTask(task.id)!;
     const last = Math.max(0, ...board.getTasks().filter((t) => t.columnId === columnId).map((t) => t.position));
-    board.patchTask(task.id, { columnId, position: last + 1024, evergreen: false, evergreenEvery: 1 });
+    board.patchTask(task.id, { columnId, position: last + 1024, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() });
     const res = await tracked(moveTask(task.id, columnId, null, null));
     if (!res.ok) {
       board.upsertTask(before);
