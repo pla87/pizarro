@@ -38,7 +38,7 @@ import { useShortcut } from "./shortcuts";
 import { useBoardShortcuts } from "./useBoardShortcuts";
 import { TaskCard } from "./TaskCard";
 import { ReportButton } from "../ReportButton";
-import { imageFilesFrom, useBlockStrayFileDrops } from "./upload";
+import { filesFrom, hasFiles, imageFilesFrom, useBlockStrayFileDrops } from "./upload";
 import { draftKey, readDraft, type EditTaskDraft, type NewTaskDraft } from "./drafts";
 import { mentionsToPlain } from "@/lib/mentions";
 
@@ -176,6 +176,9 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const [bulk, setBulk] = useState<{ columnId?: string } | null>(null);
   const [release, setRelease] = useState<{ taskIds: string[]; preselected: string[] } | null>(null);
   const [mobileColumn, setMobileColumn] = useState<string | null>(null);
+  // Arrastrar archivos del escritorio sobre «Nueva tarea» abre el diálogo con ellos adjuntos.
+  const [dropNew, setDropNew] = useState(false);
+  const dropNewDepth = useRef(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -948,8 +951,38 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <button className="btn-secondary" onClick={() => setBulk({})} aria-label={t("Varias tareas")} title={`${t("Crear varias tareas pegando una lista")} (${sc("Alt+Shift+N")})`}>
             <PlusStack size={16} /> <span className="hidden @min-[1240px]:inline">{t("Varias tareas")}</span>
           </button>
-          <button ref={newTaskBtnRef} className="btn-primary" onClick={() => (primaryOpen ? (!secondNew && addSecond()) : setNewTask({}))} aria-label={t("Nueva tarea")} title={`${t("Nueva tarea")} (${sc("Alt+N")})`}>
-            <Plus size={16} /> <span className="@min-[1240px]:hidden">{t("Nueva")}</span><span className="hidden @min-[1240px]:inline">{t("Nueva tarea")}</span>
+          <button
+            ref={newTaskBtnRef}
+            className={cn("btn-primary", dropNew && "ring-2 ring-brand-300 ring-offset-2")}
+            onClick={() => (primaryOpen ? (!secondNew && addSecond()) : setNewTask({}))}
+            aria-label={t("Nueva tarea")}
+            title={dropNew ? t("Suelta para crear tarea") : `${t("Nueva tarea")} (${sc("Alt+N")})`}
+            onDragEnter={(e) => {
+              if (primaryOpen || !hasFiles(e)) return;
+              e.preventDefault();
+              dropNewDepth.current++;
+              setDropNew(true);
+            }}
+            onDragOver={(e) => {
+              if (primaryOpen || !hasFiles(e)) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "copy";
+            }}
+            onDragLeave={(e) => {
+              if (primaryOpen || !hasFiles(e)) return;
+              dropNewDepth.current = Math.max(0, dropNewDepth.current - 1);
+              if (dropNewDepth.current === 0) setDropNew(false);
+            }}
+            onDrop={(e) => {
+              if (primaryOpen || !hasFiles(e)) return;
+              e.preventDefault();
+              dropNewDepth.current = 0;
+              setDropNew(false);
+              const files = filesFrom(e.dataTransfer.files);
+              if (files.length) setNewTask({ files });
+            }}
+          >
+            <Plus size={16} /> <span className="@min-[1240px]:hidden">{dropNew ? t("Suelta para crear tarea") : t("Nueva")}</span><span className="hidden @min-[1240px]:inline">{dropNew ? t("Suelta para crear tarea") : t("Nueva tarea")}</span>
           </button>
           {/* Con un diálogo abierto, una copia encima del fondo difuminado: abre una segunda tarea al lado (como el «+» del modal). */}
           {primaryOpen && newTaskRect &&
