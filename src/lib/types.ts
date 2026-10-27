@@ -107,6 +107,8 @@ export interface ProjectFormData {
   users: UserOption[];
   kinds: KindOption[];
   deliverables: DeliverableOption[];
+  /** Etiquetas del proyecto (para crear varias tareas en otro proyecto). */
+  labels: LabelOption[];
 }
 
 export interface TaskLinkInfo {

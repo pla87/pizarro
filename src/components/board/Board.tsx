@@ -19,6 +19,7 @@ import { FilterMenu } from "./FilterMenu";
 import { ProjectMenu } from "../ProjectMenu";
 import { UndoButton } from "../UndoButton";
 import { setBoardModalOpen } from "../undo-context";
+import { PlusStack } from "../ui/PlusStack";
 import { useFloatingRect } from "../ui/useFloatingRect";
 import { useT } from "@/i18n/client";
 import { useConfirm } from "../ui/ConfirmDialog";
@@ -174,6 +175,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const [editDraft, setEditDraft] = useState<EditTaskDraft | null>(null);
   const [secondNew, setSecondNew] = useState<{ columnId?: string } | null>(null);
   const [bulk, setBulk] = useState<{ columnId?: string } | null>(null);
+  // «Varias tareas» en el hueco del segundo diálogo (a la derecha, con selector de proyecto).
+  const [secondBulk, setSecondBulk] = useState(false);
   const [release, setRelease] = useState<{ taskIds: string[]; preselected: string[] } | null>(null);
   const [mobileColumn, setMobileColumn] = useState<string | null>(null);
   // Arrastrar archivos del escritorio sobre «Nueva tarea» abre el diálogo con ellos adjuntos.
@@ -861,18 +864,24 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   }, [primaryOpen]);
   const newTaskBtnRef = useRef<HTMLButtonElement>(null);
   const newTaskRect = useFloatingRect(newTaskBtnRef, primaryOpen);
+  const secondOpen = !!secondNew || secondBulk;
+  const addSecondBulk = () => setSecondBulk(true);
   const addSecond = () => setSecondNew({ columnId: (sortedColumns.find((c) => c.name.trim().toLowerCase() === "backlog") ?? sortedColumns[0])?.id });
 
   // Atajos de teclado (escritorio). Alt+N con un modal abierto lo comporta como el «+» de al lado.
   useBoardShortcuts({
     newTask: () => {
       if (document.querySelector("[role=dialog]")) {
-        if (primaryOpen && !secondNew && window.matchMedia("(min-width: 1024px)").matches) addSecond();
+        if (primaryOpen && !secondOpen && window.matchMedia("(min-width: 1024px)").matches) addSecond();
         return;
       }
       setNewTask({});
     },
-    bulk: () => setBulk({}),
+    bulk: () => {
+      // Con un diálogo abierto y sitio al lado, «Varias tareas» ocupa el hueco del segundo.
+      if (document.querySelector("[role=dialog]") && primaryOpen && !secondOpen && window.matchMedia("(min-width: 1024px)").matches) return addSecondBulk();
+      setBulk({});
+    },
     search: () => {
       // El buscador de escritorio, o el de móvil/tableta si es el visible.
       const input = [searchRef.current, mobileSearchRef.current].find((el) => el && el.offsetParent !== null);
@@ -954,7 +963,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <button
             ref={newTaskBtnRef}
             className={cn("btn-primary", dropNew && "ring-2 ring-brand-300 ring-offset-2")}
-            onClick={() => (primaryOpen ? (!secondNew && addSecond()) : setNewTask({}))}
+            onClick={() => (primaryOpen ? (!secondOpen && addSecond()) : setNewTask({}))}
             aria-label={t("Nueva tarea")}
             title={dropNew ? t("Suelta para crear tarea") : `${t("Nueva tarea")} (${sc("Alt+N")})`}
             onDragEnter={(e) => {
@@ -990,10 +999,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               <button
                 type="button"
                 tabIndex={-1}
-                className={cn("btn-primary fixed z-[70] whitespace-nowrap shadow-lg", secondNew && "opacity-60")}
+                className={cn("btn-primary fixed z-[70] whitespace-nowrap shadow-lg", secondOpen && "opacity-60")}
                 style={{ left: newTaskRect.left, top: newTaskRect.top, width: newTaskRect.width, height: newTaskRect.height }}
-                onClick={() => !secondNew && addSecond()}
-                aria-disabled={!!secondNew}
+                onClick={() => !secondOpen && addSecond()}
+                aria-disabled={secondOpen}
                 title={t("Abrir otra tarea nueva al lado")}
               >
                 {/* Mismo texto que el botón original: corto cuando la cabecera va justa de sitio. */}
@@ -1150,14 +1159,16 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               setOpenTaskId(null);
               setEditDraft(null);
             }}
-            side={secondNew ? "left" : "center"}
-            onAddSecond={secondNew ? undefined : addSecond}
+            side={secondOpen ? "left" : "center"}
+            onAddSecond={secondOpen ? undefined : addSecond}
+            onAddSecondBulk={secondOpen ? undefined : addSecondBulk}
           />
         )}
         {newTask && (
           <NewTaskDialog
-            side={secondNew ? "left" : "center"}
-            onAddSecond={secondNew ? undefined : addSecond}
+            side={secondOpen ? "left" : "center"}
+            onAddSecond={secondOpen ? undefined : addSecond}
+            onAddSecondBulk={secondOpen ? undefined : addSecondBulk}
             initialColumnId={newTask.columnId}
             initialEvergreen={newTask.evergreen}
             initialFiles={newTask.files}
@@ -1170,9 +1181,11 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <NewTaskDialog
             initialColumnId={secondNew.columnId}
             side={primaryOpen ? "right" : "center"}
+            pickProject
             onClose={() => setSecondNew(null)}
           />
         )}
+        {secondBulk && <BulkTaskDialog side={primaryOpen ? "right" : "center"} pickProject onClose={() => setSecondBulk(false)} />}
         {helpOpen && <ShortcutsHelp onClose={() => setHelpOpen(false)} />}
         {(archivedOpen || wantsArchived) && <ArchivedDialog onClose={closeArchived} />}
         {bulk && <BulkTaskDialog initialColumnId={bulk.columnId} onClose={() => setBulk(null)} />}
@@ -1206,14 +1219,4 @@ function SelectionBarHost(props: Omit<React.ComponentProps<typeof SelectionBar>,
   const count = useSelectionSize();
   if (count === 0) return null;
   return <SelectionBar count={count} {...props} />;
-}
-
-/** Dos «+» superpuestos: crear varias tareas. */
-function PlusStack({ size = 24 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden>
-      <path d="M9 11v9M4.5 15.5h9" />
-      <path d="M16 3v8M12 7h8" />
-    </svg>
-  );
 }

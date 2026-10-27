@@ -11,6 +11,7 @@ import { deviceLabel } from "@/lib/user-agent";
 import { getT } from "@/i18n/server";
 import { EmailChangeSection } from "./EmailChangeSection";
 import { ProfileSettings } from "./ProfileSettings";
+import { parseProfileTab } from "./profile-tabs";
 import { ProjectPicksSection } from "./ProjectPicksSection";
 import { SessionsSection } from "./SessionsSection";
 import { TwoFactorSection } from "./TwoFactorSection";
@@ -32,10 +33,12 @@ const GOOGLE_MESSAGES: Record<string, { ok: boolean; text: string }> = {
   identity: { ok: false, text: "Google no confirmó la identidad de la cuenta. Vuelve a intentarlo." },
 };
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ google?: string }> }) {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ google?: string; tab?: string }> }) {
   const user = await requireUserPage();
   const t = await getT();
-  const { google } = await searchParams;
+  const { google, tab: tabParam } = await searchParams;
+  // El aviso de vuelta de Google se muestra en «Cuenta», donde está esa sección.
+  const tab = google ? "cuenta" : parseProfileTab(tabParam);
   const row = await db.user.findUniqueOrThrow({
     where: { id: user.id },
     select: {
@@ -104,10 +107,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             timeZone={appTimeZone()}
           />
         }
-        google={{ enabled: googleEnabled(), email: row.googleAccount?.email ?? null, message: googleMessage }}
-      />
-      <div className="mx-auto max-w-3xl space-y-5 px-4 pb-6 md:px-6">
-        {user.role === "ADMIN" && <ProjectPicksSection projects={pickProjects.map((p) => ({ id: p.id, name: p.name, isPrivate: p.isPrivate, picked: p.adminPicks.length > 0 }))} />}
+        tab={tab}
+        preferencesExtra={
+          user.role === "ADMIN" ? <ProjectPicksSection projects={pickProjects.map((p) => ({ id: p.id, name: p.name, isPrivate: p.isPrivate, picked: p.adminPicks.length > 0 }))} /> : null
+        }
+        accountExtra={
+          <>
         {emailEnabled() && <EmailChangeSection email={row.email} />}
         <TwoFactorSection method={row.twoFactorMethod} admin={user.role === "ADMIN"} emailAvailable={emailEnabled()} codesLeft={codesLeft} />
         <SessionsSection
@@ -120,7 +125,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             current: s.id === currentId,
           }))}
         />
-      </div>
+          </>
+        }
+        google={{ enabled: googleEnabled(), email: row.googleAccount?.email ?? null, message: googleMessage }}
+      />
     </>
   );
 }

@@ -4,6 +4,7 @@ import { Plus, X } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/i18n/client";
+import { PlusStack } from "./PlusStack";
 import { cn } from "./cn";
 import { useBackToClose } from "./useBackToClose";
 
@@ -24,6 +25,8 @@ interface ModalProps {
   side?: "left" | "right" | "center";
   /** Escritorio (lg+): si se pasa, muestra un «+» fuera del panel (esquina inferior derecha) que lo llama. */
   onAddSecond?: () => void;
+  /** Escritorio (lg+): con `onAddSecond`, un segundo botón encima del «+» que abre «Varias tareas» al lado. */
+  onAddSecondBulk?: () => void;
 }
 
 /** Pila de modales abiertos (el último es el de más arriba): solo él responde a Escape y al clic en el fondo. */
@@ -39,7 +42,7 @@ const SIZE_REM = { sm: "28rem", md: "36rem", lg: "48rem", xl: "64rem" };
 
 const noopSubscribe = () => () => {};
 
-export function Modal({ open, onClose, title, children, footer, size = "md", header, placement = "bottom", panelClassName, side = "center", onAddSecond }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, size = "md", header, placement = "bottom", panelClassName, side = "center", onAddSecond, onAddSecondBulk }: ModalProps) {
   const t = useT();
   // El portal solo existe en el navegador: durante la hidratación se pinta como en el servidor (nada) y
   // justo después aparece. Sin esto, un modal abierto desde el primer render (?task=) daba el error #418.
@@ -162,6 +165,17 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
           <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-slate-800">
             {footer}
           </div>
+        )}
+        {onAddSecond && onAddSecondBulk && side === "center" && (
+          <button
+            type="button"
+            onClick={onAddSecondBulk}
+            className="absolute bottom-[4.25rem] left-full ml-3 hidden h-14 w-14 items-center justify-center rounded-full border border-brand-600 bg-white text-brand-700 shadow-lg shadow-brand-600/20 hover:bg-brand-50 active:scale-95 lg:flex dark:bg-slate-900 dark:text-brand-300 dark:hover:bg-slate-800"
+            aria-label={t("Abrir «Varias tareas» al lado")}
+            title={t("Abrir «Varias tareas» al lado")}
+          >
+            <PlusStack size={26} />
+          </button>
         )}
         {onAddSecond && side === "center" && (
           <button
