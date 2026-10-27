@@ -46,15 +46,20 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     UPLOAD_DIR=/app/uploads
 
-RUN mkdir -p /app/uploads && chown node:node /app /app/uploads
+# El código es de root y no escribible por "node": si alguien lograra ejecutar código en el servidor
+# no podría modificar la propia aplicación. Solo son de "node" las rutas que se escriben en ejecución:
+# las subidas (en Railway, el Volume) y la caché de Next (.next/cache).
+RUN mkdir -p /app/uploads /app/.next/cache && chown node:node /app/uploads /app/.next/cache
 
-COPY --from=build --chown=node:node /app/.next/standalone ./
-COPY --from=build --chown=node:node /app/.next/static ./.next/static
-COPY --from=build --chown=node:node /app/public ./public
-COPY --from=build --chown=node:node /app/dist ./dist
-COPY --from=migrator --chown=node:node /app/migrator ./migrator
-COPY --chown=node:node changelog.json ./
-COPY --chown=node:node scripts/start.sh ./scripts/start.sh
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+COPY --from=build /app/public ./public
+COPY --from=build /app/dist ./dist
+COPY --from=migrator /app/migrator ./migrator
+COPY changelog.json ./
+COPY scripts/start.sh ./scripts/start.sh
+# Sin permiso de escritura para grupo ni otros (los directorios de "node" de arriba siguen siendo suyos).
+RUN chmod -R go-w /app
 
 # Las capturas se guardan en /app/uploads: en Railway se monta ahí un Volume desde
 # el panel (Railway no admite la instrucción VOLUME en el Dockerfile); con Docker Compose,
