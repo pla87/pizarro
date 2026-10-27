@@ -15,6 +15,7 @@ import { useBoard, useSelectedCount, useSelectionSize } from "./context";
 import { useShortcut } from "./shortcuts";
 import { EvergreenPanel } from "./EvergreenPanel";
 import { SortableTaskCard } from "./TaskCard";
+import { useFileZone } from "./useFileZone";
 
 interface Props {
   column: BoardColumn;
@@ -38,14 +39,16 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
   const allSelected = taskIds.length > 0 && selectedHere === taskIds.length;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
   const isNextRelease = column.role === "NEXT_RELEASE";
+  // Archivos soltados en el hueco bajo las tarjetas: nueva tarea en esta columna.
+  const fileZone = useFileZone((files) => openNewTask(column.id, false, files));
 
   return (
     <section
       ref={setNodeRef}
       className={cn(
         "flex w-full shrink-0 flex-col rounded-xl bg-slate-100/80 dark:bg-slate-900/60",
-        // Con más de tres columnas, en escritorio se reparten el ancho de la ventana (mínimo 18 rem; si no caben, scroll).
-        total > 3 ? "md:min-w-72 md:flex-1" : "md:w-72",
+        // Con tres columnas o más, en escritorio se reparten el ancho de la ventana (mínimo 18 rem; si no caben, scroll).
+        total >= 3 ? "md:min-w-72 md:flex-1" : "md:w-72",
         mobileHidden && "max-md:hidden",
         isNextRelease && "ring-1 ring-brand-500/30",
       )}
@@ -93,17 +96,20 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
       <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
         <div
           className={cn(
-            "flex min-h-20 flex-1 flex-col gap-2 overflow-y-auto rounded-b-xl px-2 transition-colors",
+            // pt y -mt: margen interior para que el anillo de foco de la primera tarjeta no lo recorte el scroll.
+            "-mt-1.5 flex min-h-20 flex-1 flex-col gap-2 overflow-y-auto rounded-b-xl px-2 pt-1.5 transition-colors",
             // Abajo se deja hueco: con selección lo tapa la barra inferior y en móvil los botones flotantes.
             hasSelection ? "pb-44 md:pb-20" : "pb-32 lg:pb-2",
             isOver && "bg-brand-50/60 dark:bg-brand-500/5",
+            fileZone.over && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10",
           )}
+          {...fileZone.handlers}
         >
           {taskIds.map((id) => (
             <SortableTaskCard key={id} id={id} />
           ))}
           {taskIds.length === 0 && (
-            <p className="py-6 text-center text-xs text-slate-400">{t("Arrastra tarjetas aquí")}</p>
+            <p className="py-6 text-center text-xs text-slate-400">{fileZone.over ? t("Suelta para crear tarea") : t("Arrastra tarjetas aquí")}</p>
           )}
         </div>
       </SortableContext>

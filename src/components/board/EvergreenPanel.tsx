@@ -7,6 +7,7 @@ import { useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
 import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard, useTask } from "./context";
+import { useFileZone } from "./useFileZone";
 import { MentionText } from "../ui/MentionText";
 import { mentionsToPlain } from "@/lib/mentions";
 import { nextEvergreenEvery } from "@/lib/release";
@@ -67,6 +68,9 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
     return () => clearTimeout(timer);
   }, [hovering, open]);
 
+  // Archivos soltados sobre el panel: nueva tarea fija en esta columna.
+  const fileZone = useFileZone((files) => openNewTask(columnId, true, files));
+
   const toggle = () => {
     const next = !stored;
     memory.set(project.id, next);
@@ -83,11 +87,12 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
       ref={setNodeRef}
       className={cn(
         "shrink-0 rounded-b-xl border-t border-slate-200 transition-colors dark:border-slate-800",
-        hovering && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10",
+        (hovering || fileZone.over) && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10",
       )}
+      {...fileZone.handlers}
     >
       {open && (
-        <div id={`evergreen-${columnId}`} className="max-h-56 space-y-1.5 overflow-y-auto px-2 pt-2 max-lg:pr-16">
+        <div id={`evergreen-${columnId}`} className="-mb-1.5 max-h-56 space-y-1.5 overflow-y-auto px-2 pt-2 pb-1.5 max-lg:pr-16">
           {taskIds.map((id) => <EvergreenCard key={id} id={id} />)}
           {taskIds.length === 0 && <p className="py-2 text-center text-xs text-slate-400">{t("Sin tareas fijas")}</p>}
           <button

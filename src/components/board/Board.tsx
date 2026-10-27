@@ -6,7 +6,7 @@ import {
   useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { Archive, Plus, Search, X } from "lucide-react";
+import { Archive, Plus, Search, Upload, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -550,7 +550,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       },
       setColumns,
       openTask: setOpenTaskId,
-      openNewTask: (columnId, evergreen) => setNewTask({ columnId, evergreen }),
+      openNewTask: (columnId, evergreen, files) => setNewTask({ columnId, evergreen, files }),
       revealTask,
       openRelease: (columnId) => {
         // Las evergreen van siempre incluidas y preseleccionadas (se pueden desmarcar en el diálogo).
@@ -953,7 +953,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           </button>
           <button
             ref={newTaskBtnRef}
-            className={cn("btn-primary", dropNew && "ring-2 ring-brand-300 ring-offset-2")}
+            className={cn("btn-primary", dropNew && "bg-brand-700 ring-2 ring-brand-300 ring-offset-2")}
             onClick={() => (primaryOpen ? (!secondNew && addSecond()) : setNewTask({}))}
             aria-label={t("Nueva tarea")}
             title={dropNew ? t("Suelta para crear tarea") : `${t("Nueva tarea")} (${sc("Alt+N")})`}
@@ -982,7 +982,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               if (files.length) setNewTask({ files });
             }}
           >
-            <Plus size={16} /> <span className="@min-[1240px]:hidden">{dropNew ? t("Suelta para crear tarea") : t("Nueva")}</span><span className="hidden @min-[1240px]:inline">{dropNew ? t("Suelta para crear tarea") : t("Nueva tarea")}</span>
+            {/* Al arrastrar archivos solo cambian el icono y el estilo: el texto no varía para que el botón no cambie de tamaño. */}
+            {dropNew ? <Upload size={16} /> : <Plus size={16} />} <span className="@min-[1240px]:hidden">{t("Nueva")}</span><span className="hidden @min-[1240px]:inline">{t("Nueva tarea")}</span>
           </button>
           {/* Con un diálogo abierto, una copia encima del fondo difuminado: abre una segunda tarea al lado (como el «+» del modal). */}
           {primaryOpen && newTaskRect &&
