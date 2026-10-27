@@ -513,7 +513,13 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           break;
         }
         case "column.set": {
-          const { count } = await db.column.updateMany({ where: { id: op.id, projectId }, data: op.data as Prisma.ColumnUpdateManyMutationInput });
+          // Un rol único (siguiente salto, en producción) solo lo tiene una columna: si otra lo conserva ahora,
+          // se le quita antes; la operación de esa columna en la misma entrada le devuelve el suyo.
+          const uniqueRole = op.data.role === "NEXT_RELEASE" || op.data.role === "IN_PRODUCTION" ? op.data.role : null;
+          const [, { count }] = await db.$transaction([
+            db.column.updateMany({ where: uniqueRole ? { projectId, role: uniqueRole, id: { not: op.id } } : { id: "" }, data: { role: "NONE" } }),
+            db.column.updateMany({ where: { id: op.id, projectId }, data: op.data as Prisma.ColumnUpdateManyMutationInput }),
+          ]);
           if (!count) skipped++;
           break;
         }
