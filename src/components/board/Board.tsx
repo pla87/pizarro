@@ -612,7 +612,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     let pos = Math.max(0, ...tasks.filter((t) => t.columnId === columnId).map((t) => t.position));
     const ordered = sortedColumns.flatMap((c) => (baseItems[c.id] ?? []).filter((id) => selected.has(id) && c.id !== columnId));
     const optimistic = new Map(ordered.map((id) => [id, (pos += 1024)]));
-    setTasks((prev) => prev.map((t) => (optimistic.has(t.id) ? { ...t, columnId, position: optimistic.get(t.id)!, evergreen: false, evergreenEvery: 1 } : t)));
+    setTasks((prev) => prev.map((t) => (optimistic.has(t.id) ? { ...t, columnId, position: optimistic.get(t.id)!, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() } : t)));
     setSelected(new Set());
     const res = await track(moveTasks(ids, columnId));
     if (!res.ok) {
@@ -620,7 +620,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       return toast(res.error, "error");
     }
     const server = new Map(res.data.moved.map((m) => [m.id, m.position]));
-    setTasks((prev) => prev.map((t) => (server.has(t.id) ? { ...t, columnId, position: server.get(t.id)!, evergreen: false, evergreenEvery: 1 } : t)));
+    setTasks((prev) => prev.map((t) => (server.has(t.id) ? { ...t, columnId, position: server.get(t.id)!, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() } : t)));
     res.data.spawned.forEach(upsertTask);
     const name = sortedColumns.find((c) => c.id === columnId)?.name;
     toast(t("{moved} a «{name}»", { moved: res.data.moved.length === 1 ? t("1 tarjeta movida") : t("{n} tarjetas movidas", { n: res.data.moved.length }), name: name ?? "" }));
@@ -840,7 +840,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const { prevId, nextId } = neighboursOf(list, id);
     const position = positionBetween(prevId ? taskById.get(prevId)?.position : null, nextId ? taskById.get(nextId)?.position : null);
     const previous = taskById.get(id)!;
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, columnId: col, position, evergreen: false, evergreenEvery: 1 } : t)));
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, columnId: col, position, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() } : t)));
 
     const res = await track(moveTask(id, col, prevId, nextId));
     if (!res.ok) {

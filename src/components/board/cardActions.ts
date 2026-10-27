@@ -73,7 +73,7 @@ export function useCardActions(deps: Deps) {
         // Al final de la columna destino.
         const prevId = baseItems[target.id]?.at(-1) ?? null;
         const position = positionBetween(prevId ? getTask(prevId)?.position : null, null);
-        patchTask(id, { columnId: target.id, position, evergreen: false, evergreenEvery: 1 });
+        patchTask(id, { columnId: target.id, position, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() });
         focusCard(id);
         const res = await track(moveTask(id, target.id, prevId, null));
         if (!res.ok) {

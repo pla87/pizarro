@@ -23,6 +23,7 @@ export const boardTaskSelect = {
   recurrence: true,
   recurrenceDay: true,
   contentUpdatedAt: true,
+  columnEnteredAt: true,
   labels: { select: { labelId: true } },
   subtasks: { select: { done: true } },
   // Solo el flag de cada adjunto: la tarjeta distingue imágenes de otros ficheros.
@@ -65,6 +66,7 @@ function toBoardTaskWith(t: BoardTaskRow, hasDescription: boolean): BoardTask {
     recurrence: t.recurrence,
     recurrenceDay: t.recurrenceDay,
     textVersion: t.contentUpdatedAt?.toISOString() ?? null,
+    columnEnteredAt: t.columnEnteredAt.toISOString(),
   };
 }
 

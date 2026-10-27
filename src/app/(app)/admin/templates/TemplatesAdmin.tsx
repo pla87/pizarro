@@ -10,12 +10,12 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { T } from "@/i18n/core";
-import { COLUMN_ROLES, PALETTE, swatchBorder, type ColumnRoleValue } from "@/lib/constants";
+import { COLUMN_ROLES, isUniqueColumnRole, PALETTE, swatchBorder, type ColumnRoleValue } from "@/lib/constants";
 import { parseSubtaskLines } from "@/lib/kinds-special";
 import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS, type TemplateDto, type TemplateInput } from "@/lib/project-templates";
 
 const KIND_COLORS = [...PALETTE, "#84cc16", "#06b6d4", "#d946ef", "#78716c"];
-const ROLE_LABEL: Record<ColumnRoleValue, string> = { NONE: "Ninguno", NEXT_RELEASE: "Siguiente salto", IN_PRODUCTION: "En producción" };
+const ROLE_LABEL: Record<ColumnRoleValue, string> = { NONE: "Ninguno", NEXT_RELEASE: "Siguiente salto", IN_PRODUCTION: "En producción", WAITING: "Esperando", WEEKLY_PLAN: "Planificación semanal" };
 
 /** Resumen de una línea: «5 columnas · 2 tipos propios · 3 etiquetas · 1 general oculto». */
 function summarizeTemplate(tpl: Pick<TemplateDto, "columns" | "kinds" | "labels" | "hiddenGeneralKinds" | "hideAllGeneralKinds">, t: T): string {
@@ -267,7 +267,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
               <ul className="space-y-2">
                 {draft.columns.map((c, i) => {
                   const setCol = (p: Partial<typeof c>) => patch({ columns: draft.columns.map((x, j) => (j === i ? { ...x, ...p } : x)) });
-                  const taken = (r: ColumnRoleValue) => r !== "NONE" && draft.columns.some((x, j) => j !== i && x.role === r);
+                  const taken = (r: ColumnRoleValue) => isUniqueColumnRole(r) && draft.columns.some((x, j) => j !== i && x.role === r);
                   return (
                     <li key={i} className="flex flex-wrap items-center gap-2">
                       <input className="input min-w-0 flex-1 basis-40" value={c.name} onChange={(e) => setCol({ name: e.target.value })} maxLength={80} placeholder={t("Nombre")} aria-label={t("Nombre de la columna {n}", { n: i + 1 })} />

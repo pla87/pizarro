@@ -14,12 +14,14 @@ enum Role {
   MEMBER
 }
 
-/// Rol funcional de una columna. Como máximo una columna por proyecto puede
-/// tener cada rol distinto de NONE (índice único parcial en la migración).
+/// Rol funcional de una columna. NEXT_RELEASE e IN_PRODUCTION son únicos por proyecto (índice único
+/// parcial en la migración); WAITING y WEEKLY_PLAN pueden repetirse en varias columnas.
 enum ColumnRole {
   NONE
   NEXT_RELEASE
   IN_PRODUCTION
+  WAITING
+  WEEKLY_PLAN
 }
 
 model User {
@@ -274,6 +276,8 @@ model Column {
   role      ColumnRole @default(NONE)
   /// Las tarjetas de esta columna cuentan como terminadas (informe y plazos).
   isDone    Boolean    @default(false)
+  /// Solo rol WAITING: días en la columna tras los que se avisa a la persona asignada (null = 3).
+  waitingDays Int?
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tasks     Task[]
 
@@ -305,6 +309,10 @@ model Task {
   archivedAt    DateTime?
   /// Columna en la que estaba al archivarse (sin clave foránea: la columna puede borrarse después).
   archivedFromColumnId String?
+  /// Cuándo entró en su columna actual (lo mantiene un disparador de la BD al cambiar columnId) y cuándo se
+  /// avisó de la espera en una columna WAITING (null = aún no; se borra al cambiar de columna).
+  columnEnteredAt   DateTime @default(now())
+  waitingNotifiedAt DateTime?
   /// Tarea fija de la columna «Siguiente salto»: se incluye en cada release y no sale de la columna al desplegar.
   evergreen     Boolean   @default(false)
   /// Cadencia de una tarea fija: 1 = todas las releases, 2 = las pares, 3 = múltiplos de 3.
@@ -590,6 +598,7 @@ enum NotificationType {
   DUE_CHANGED
   COMMENT
   REPLY
+  WAITING
 }
 
 /// Seguimiento de una tarea. Se sigue implícitamente al crearla, tener asignada, comentar o ser mencionado

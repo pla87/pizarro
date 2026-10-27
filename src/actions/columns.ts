@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertProjectAccess, visibleProjectsWhere } from "@/lib/access";
 import { AppError, notFound } from "@/lib/errors";
+import { DEFAULT_WAITING_DAYS, isUniqueColumnRole, MAX_WAITING_DAYS } from "@/lib/constants";
 import { POSITION_STEP } from "@/lib/positions";
 import { lastPositionIn, lockColumns, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { requireUser } from "@/lib/session";
@@ -13,7 +14,7 @@ import { addUndo, captureTasks } from "@/lib/undo";
 import * as v from "@/lib/validation";
 import type { BoardColumn } from "@/lib/types";
 
-const columnSelect = { id: true, name: true, position: true, role: true, isDone: true } as const;
+const columnSelect = { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true } as const;
 
 async function findColumn(columnId: string) {
   const user = await requireUser();
@@ -63,7 +64,8 @@ export async function setColumnRole(columnId: string, role: string) {
     addUndo(...before.map((c) => ({ t: "column.set" as const, id: c.id, data: { role: c.role } })), ...(await captureTasks(fixed.map((t) => t.id), ["evergreen", "evergreenEvery"])));
     describeAction("Cambió el rol de la columna «{name}»", { name: column.name });
     await db.$transaction(async (tx) => {
-      if (value !== "NONE") {
+      // Solo NEXT_RELEASE e IN_PRODUCTION son únicos; WAITING y WEEKLY_PLAN se pueden repetir.
+      if (isUniqueColumnRole(value)) {
         await tx.column.updateMany({ where: { projectId: column.projectId, role: value }, data: { role: "NONE" } });
       }
       await tx.column.update({ where: { id: columnId }, data: { role: value } });
@@ -71,6 +73,19 @@ export async function setColumnRole(columnId: string, role: string) {
       if (value !== "NEXT_RELEASE") await tx.task.updateMany({ where: { columnId, evergreen: true }, data: { evergreen: false, evergreenEvery: 1 } });
       else await tx.task.updateMany({ where: { projectId: column.projectId, evergreen: true, columnId: { not: columnId } }, data: { evergreen: false, evergreenEvery: 1 } });
     });
+  });
+}
+
+/** Días que una tarea puede esperar en una columna WAITING antes de recordárselo a su responsable (null = por defecto). */
+export async function setColumnWaitingDays(columnId: string, days: number | null) {
+  return runAction({ name: "columns.setColumnWaitingDays", args: [columnId, days] }, async () => {
+    const column = await findColumn(columnId);
+    if (column.role !== "WAITING") throw new AppError("Solo las columnas con el rol «Esperando» tienen plazo de espera.");
+    const value = days === null ? null : z.number().int("Indica un número entero de días.").min(1, "Mínimo 1 día.").max(MAX_WAITING_DAYS, `Máximo ${MAX_WAITING_DAYS} días.`).parse(days);
+    const current = await db.column.findUniqueOrThrow({ where: { id: columnId }, select: { waitingDays: true } });
+    addUndo({ t: "column.set", id: column.id, data: { waitingDays: current.waitingDays } });
+    describeAction("Cambió el plazo de espera de la columna «{name}» a {days} d", { name: column.name, days: value ?? DEFAULT_WAITING_DAYS });
+    await db.column.update({ where: { id: columnId }, data: { waitingDays: value } });
   });
 }
 
@@ -121,7 +136,7 @@ export async function deleteColumn(columnId: string) {
     // Se aplican en orden inverso: primero se recrea la columna y luego vuelven sus archivadas.
     addUndo(
       ...archived.map((t) => ({ t: "task.set" as const, id: t.id, data: { columnId: column.id } })),
-      { t: "column.restore", row: { id: column.id, projectId: column.projectId, name: column.name, position: column.position, role: column.role, isDone: column.isDone } },
+      { t: "column.restore", row: { id: column.id, projectId: column.projectId, name: column.name, position: column.position, role: column.role, isDone: column.isDone, waitingDays: column.waitingDays } },
     );
     await db.$transaction(async (tx) => {
       const active = await tx.task.count({ where: { columnId, archivedAt: null } });

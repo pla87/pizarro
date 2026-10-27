@@ -2,9 +2,9 @@
 
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, Minus, MoreHorizontal, Pencil, Plus, Rocket, Tag, Trash2 } from "lucide-react";
-import { deleteColumn, moveColumn, renameColumn, setColumnDone, setColumnRole } from "@/actions/columns";
-import { COLUMN_ROLE_LABEL, COLUMN_ROLES, type ColumnRoleValue } from "@/lib/constants";
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, FileDown, Hourglass, Minus, MoreHorizontal, Pencil, Plus, Rocket, Tag, Trash2 } from "lucide-react";
+import { deleteColumn, moveColumn, renameColumn, setColumnDone, setColumnRole, setColumnWaitingDays } from "@/actions/columns";
+import { COLUMN_ROLE_LABEL, COLUMN_ROLES, DEFAULT_WAITING_DAYS, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
 import type { BoardColumn } from "@/lib/types";
 import { useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
@@ -113,7 +113,7 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
 }
 
 function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; index: number; total: number; empty: boolean }) {
-  const { setColumns, track, refresh } = useBoard();
+  const { setColumns, track, refresh, project } = useBoard();
   const toast = useToast();
   const confirm = useConfirm();
   const t = useT();
@@ -158,9 +158,23 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
       },
       () =>
         setColumns((cols) =>
-          cols.map((c) => (c.id === column.id ? { ...c, role } : role !== "NONE" && c.role === role ? { ...c, role: "NONE" } : c)),
+          cols.map((c) => (c.id === column.id ? { ...c, role } : isUniqueColumnRole(role) && c.role === role ? { ...c, role: "NONE" } : c)),
         ),
     );
+
+  // Rol «Esperando»: días hasta el recordatorio.
+  const editWaitingDays = () => {
+    const current = column.waitingDays ?? DEFAULT_WAITING_DAYS;
+    const raw = window.prompt(t("Avisar a la persona asignada tras cuántos días en esta columna (1-{max})", { max: MAX_WAITING_DAYS }), String(current))?.trim();
+    if (!raw) return;
+    const days = Number(raw);
+    if (!Number.isInteger(days) || days < 1 || days > MAX_WAITING_DAYS) return toast(t("Indica un número entero de días."), "error");
+    if (days === current) return;
+    run(() => setColumnWaitingDays(column.id, days), () => setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, waitingDays: days } : c))));
+  };
+
+  // Rol «Planificación semanal»: PDF de la semana, por día o por persona.
+  const weekPdf = (by: "day" | "person") => window.open(`/api/projects/${project.id}/columns/${column.id}/week?by=${by}`, "_blank", "noopener");
 
   const toggleDone = () =>
     run(
@@ -203,6 +217,17 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
           {column.role === r ? "● " : ""}{t(COLUMN_ROLE_LABEL[r])}
         </MenuItem>
       ))}
+      {column.role === "WAITING" && (
+        <MenuItem icon={Hourglass} onClick={editWaitingDays}>
+          {t("Recordar tras {n} d…", { n: column.waitingDays ?? DEFAULT_WAITING_DAYS })}
+        </MenuItem>
+      )}
+      {column.role === "WEEKLY_PLAN" && (
+        <>
+          <MenuItem icon={FileDown} onClick={() => weekPdf("day")}>{t("PDF de la semana (por día)")}</MenuItem>
+          <MenuItem icon={FileDown} onClick={() => weekPdf("person")}>{t("PDF de la semana (por persona)")}</MenuItem>
+        </>
+      )}
       <MenuSeparator />
       <MenuItem icon={CheckCircle2} onClick={toggleDone}>
         {column.isDone ? t("✓ Cuenta como terminada") : t("Contar como terminada")}
