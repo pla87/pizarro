@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.27.0"
+version: "v1.28.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.27.0
+**Versión de la aplicación:** v1.28.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -23,7 +23,7 @@ Pizarro es un tablero Kanban ligero para un equipo de hasta 10 personas. Su obje
 | Concepto | Descripción |
 |---|---|
 | Proyecto | Espacio de trabajo con sus propias columnas, tareas, etiquetas y releases. |
-| Columna | Estado del flujo. Configurable por proyecto. Puede tener un **rol** (*Siguiente salto* o *En producción*). |
+| Columna | Estado del flujo. Configurable por proyecto. Puede tener un **rol** (*Siguiente salto*, *En producción*, *Esperando* o *Planificación semanal*). |
 | Tarjeta / tarea | Unidad de trabajo con tipo, color, responsable, etiquetas, enlace, subtareas, descripción y capturas. |
 | Release | Registro histórico de un despliegue: texto final editado y tareas incluidas. |
 | Plantillas de release | Cabecera y pie estándar de cada usuario, que se insertan en las releases que genera. |
@@ -90,7 +90,7 @@ La aplicación es un **monolito en un único contenedor**. No hay colas, cachés
 | `Project` | name, description, `isPrivate`, `privateOwnerId`, position | `isPrivate = false` → proyecto de equipo (usuarios asignados y administradores). `isPrivate = true` → solo sus miembros. |
 | `ProjectMember` | projectId, userId | En un proyecto de equipo, los usuarios **asignados**; en uno privado, sus miembros. |
 | `AdminProjectPick` | projectId, userId | Proyectos de equipo en los que trabaja cada administrador (los que salen en sus selectores, menús y calendario). |
-| `Column` | projectId, name, position, role | Índice único parcial: como máximo una columna por rol en cada proyecto. |
+| `Column` | projectId, name, position, role | Índice único parcial: como máximo una columna con *Siguiente salto* y una con *En producción* por proyecto; *Esperando* y *Planificación semanal* se pueden repetir. |
 | `Task` | projectId, columnId, kindId, title, description, color, linkUrl, position, assigneeId, archivedAt, `recurrence*` (repetición) | Posición fraccionaria para reordenar actualizando una sola fila. |
 | `Label` / `TaskLabel` | name, color | Etiquetas por proyecto. |
 | `Subtask` | taskId, title, done, position | Subtareas de una tarea (no pasan a las releases). |
@@ -170,7 +170,7 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 - **Primer acceso:** con email configurado recibes un **enlace de invitación** (válido 72 h) para elegir tu contraseña. Sin email, el admin te da una contraseña inicial y la app te obliga a cambiarla al entrar. Si un admin ha forzado el cambio de contraseña, también se pide al entrar con Google (aunque el servidor solo admita Google, hay que elegirla para continuar).
 - **Cambio forzado:** si un admin usa **Forzar cambio de contraseña**, no puedes hacer nada más hasta elegir una contraseña nueva y distinta de la actual.
 - **¿Olvidaste tu contraseña?** (en la pantalla de acceso, solo con email configurado): escribe tu email y recibirás un enlace (válido 30 min, de un solo uso). La respuesta es siempre la misma exista o no la cuenta. Al usarlo se cierran todas tus sesiones. Tiene límite de intentos.
-- **Mi perfil** permite cambiar nombre, contraseña y email:
+- **Mi perfil** se organiza en tres pestañas (la elegida queda en la dirección, `?tab=`): **Cuenta** (perfil, contraseña, email, verificación en dos pasos, sesiones y Google), **Preferencias** (plantillas de release notes, idioma, apariencia, edición de descripciones, borradores y, para admins, *Proyectos en los que trabajo*) y **Avisos** (menciones, resto de avisos y resumen diario). Permite cambiar nombre, contraseña y email:
   - **Contraseña:** mínimo 10 caracteres y máximo 72 bytes. Con email configurado, el cambio solo se aplica al pulsar el **enlace de confirmación** que recibes (30 min). Tras cualquier cambio llega un email de aviso. Se cierran tus sesiones en los demás dispositivos.
   - **Email:** se confirma desde la nueva dirección y se avisa a la anterior.
 - **Sesiones abiertas:** en el perfil, la lista de dispositivos con sesión (las sesiones duran 14 días desde la última actividad). Puedes cerrar una o **cerrar las demás**.
@@ -211,8 +211,11 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 Desde el menú «⋯» de cada columna:
 
 - **Renombrar**, **Mover a la izquierda o la derecha**.
-- **Rol de la columna**: *Sin rol*, *Siguiente salto* o *En producción*. Si asignas un rol que ya tenía otra columna, esa otra columna pasa a *Sin rol*.
+- **Rol de la columna**: *Sin rol*, *Siguiente salto*, *En producción*, *Esperando* o *Planificación semanal*. *Siguiente salto* y *En producción* son únicos: si asignas uno que ya tenía otra columna, esa otra pasa a *Sin rol* (deshacer se lo devuelve, con sus tareas fijas). Los otros dos se pueden poner en varias columnas.
+  - **Esperando** (tareas que dependen de otra persona): con **Recordar tras N d…** (de 1 a 365 días; 3 por defecto) eliges cuándo avisar. Cuando una tarea lleva ese tiempo en la columna, su responsable (o quien la creó, si no tiene) recibe un aviso en Pizarro y, si lo tiene activado, por email. Se avisa una vez por estancia: si la tarea sale y vuelve, cuenta de nuevo. Las tarjetas muestran «Esperando N d» (en ámbar al cumplirse el plazo). No avisa de tareas archivadas ni en columnas que cuentan como terminadas. Lo revisa cada hora la tarea de mantenimiento *Recordatorios de tareas en espera*.
+  - **Planificación semanal**: el menú de la columna ofrece **PDF de la semana (por día)**, con las tareas de lunes a domingo de la semana actual según su fecha límite y después *Otras fechas* y *Sin fecha*, y **(por persona)**, agrupadas por responsable con *Sin responsable* al final.
 - **Borrar columna**: solo si no tiene tarjetas visibles. Si quedan tarjetas archivadas en ella, pasan a la primera columna del proyecto.
+- **Ancho:** en escritorio, con tres columnas o más se reparten todo el ancho de la ventana (mínimo 18 rem; si no caben, scroll horizontal).
 - **Añadir columna**: en escritorio, la barra vertical estrecha con un «+» al final del tablero; en móvil, el botón redondo «+» al final de las pestañas de columnas. No hay límite de 5; el máximo es 30 por proyecto.
 
 ### 3.4 Tarjetas
@@ -224,9 +227,9 @@ Desde el menú «⋯» de cada columna:
   - **Campos extra** (plegado): responsable, fecha límite, entregable y etiquetas comunes a todas.
   - Las subtareas predefinidas del tipo son opcionales aquí. Hasta 100 tareas de una vez; se añaden al final de la columna en el orden de la lista.
 - **Tipo:** por defecto *Funcionalidad* o *Corrección*. Los administradores pueden crear más tipos generales, y cada proyecto puede tener los suyos (ver 3.14).
-- **Atajo de captura:** pega una imagen (Ctrl/⌘+V) con el tablero en pantalla y se abre *Nueva tarea* con la captura adjunta. También puedes arrastrar archivos del escritorio sobre el botón *Nueva tarea* de la cabecera (se resalta con «Suelta para crear tarea»): se abre el formulario con ellos ya adjuntos.
-- **Dos tareas a la vez (escritorio):** con una tarea abierta (nueva o existente), el botón **Nueva tarea** de la cabecera sigue activo por encima del fondo oscuro y abre una tarea nueva al lado (por defecto en *Backlog*): las dos quedan juntas y centradas, con el mismo ancho. Se puede trabajar en las dos; Escape o atrás cierran la última abierta.
-- **Crear en otro proyecto:** junto al título *Nueva tarea* hay un desplegable de proyecto (por defecto, el actual). Al elegir otro, las columnas, tipos, personas, entregables y límites de adjuntos pasan a ser los de ese proyecto; la tarea se crea allí, no aparece en el tablero actual y un aviso ofrece **Ir al proyecto**. El borrador recuerda el proyecto elegido.
+- **Atajo de captura:** pega una imagen (Ctrl/⌘+V) con el tablero en pantalla y se abre *Nueva tarea* con la captura adjunta. También puedes arrastrar archivos del escritorio sobre el botón *Nueva tarea* de la cabecera (se resalta sin cambiar de tamaño): se abre el formulario con ellos ya adjuntos. Igual si los sueltas en el **hueco libre de una columna**, bajo sus tarjetas (la tarea se crea en esa columna), o en la sección **Siempre en la release** (se crea como tarea fija). La zona se resalta mientras arrastras; soltar sobre una tarjeta sigue adjuntando a esa tarjeta.
+- **Dos tareas a la vez (escritorio):** con una tarea abierta (nueva o existente), el botón **Nueva tarea** de la cabecera sigue activo por encima del fondo oscuro y abre una tarea nueva al lado (por defecto en *Backlog*): las dos quedan juntas y centradas, con el mismo ancho. Se puede trabajar en las dos; Escape o atrás cierran la última abierta. Encima de ese «+» hay otro botón, **Varias tareas**, que abre la creación múltiple en ese mismo hueco de la derecha (también Alt+Mayús+N con un diálogo abierto).
+- **Crear en otro proyecto:** la primera tarea nueva se crea siempre en el tablero actual. En la **segunda tarea simultánea** y en *Varias tareas* abierta al lado hay un desplegable de proyecto junto al título (por defecto, el actual). Al elegir otro, las columnas, tipos, personas, entregables y límites de adjuntos pasan a ser los de ese proyecto; la tarea se crea allí, no aparece en el tablero actual y un aviso ofrece **Ir al proyecto**.
 - **Quién está trabajando:** a la derecha del contador de tarjetas de la cabecera (en móvil, arriba a la derecha) aparecen círculos con las **iniciales** de quienes han hecho cualquier acción en ese tablero (abrir, crear, mover, editar, subir adjuntos…) en los **últimos 5 minutos**, tú incluido; al pasar el ratón se ven sus nombres. Se actualiza cada 20 segundos. Si hay más (cinco en escritorio, tres en móvil), se muestra «+N». Además, cada tarjeta muestra arriba a la izquierda unas **burbujas pequeñas** con quién tiene esa tarea abierta.
 - **Trabajar varios a la vez:** si otra persona tiene abierta la misma tarea, el detalle lo indica («Fulano también tiene abierta esta tarea»). Si cambia el **título o la descripción** mientras tú los editas, al guardar no se pisa su texto: se avisa, la tarea se recarga con sus cambios y vuelves a aplicar los tuyos. El resto de campos (tipo, color, responsable…) se guardan al momento y gana el último cambio.
 - **Guardado:** los cambios del detalle se guardan solos; en la cabecera se ve «Guardando…» y después **«Guardado»** con un check verde.
@@ -470,7 +473,7 @@ La entrada **Administración** del menú lateral reúne siete pestañas: **Usuar
 
 **Proyectos:** lista los proyectos de equipo (los privados no aparecen) con los usuarios asignados a cada uno; desde ahí se añaden o quitan usuarios. Los mismos usuarios asignados se gestionan en los ajustes de cada proyecto. Quitar una asignación desasigna las tarjetas de esa persona y corta su conexión en vivo con el proyecto.
 
-**Plantillas de proyecto:** definen las columnas (nombre, orden, rol especial *Siguiente salto* o *En producción* y si cuentan como terminadas), los tipos de tarea propios (con su automatización, descripción en Markdown y **subtareas predefinidas**), qué tipos generales no usará el proyecto y las etiquetas. **Crear desde un proyecto…** rellena una plantilla a partir de un proyecto existente. Al crear un proyecto se elige la plantilla en *Nuevo proyecto*.
+**Plantillas de proyecto:** definen las columnas (nombre, orden, rol especial (*Siguiente salto*, *En producción*, *Esperando* o *Planificación semanal*) y si cuentan como terminadas), los tipos de tarea propios (con su automatización, descripción en Markdown y **subtareas predefinidas**), qué tipos generales no usará el proyecto y las etiquetas. **Crear desde un proyecto…** rellena una plantilla a partir de un proyecto existente. Al crear un proyecto se elige la plantilla en *Nuevo proyecto*.
 - Vienen **12 plantillas de serie**: *Vibecoding*, *Tareas familiares*, *Producción audiovisual*, *Negocio*, *Marketing y contenidos*, *Organización de eventos*, *Soporte y atención al cliente*, *Selección de personal*, *Reformas y obras*, *Viajes*, *Estudios o tesis* y *Mudanza*, con sus columnas, tipos y etiquetas. La lista se ordena alfabéticamente.
 - **Ocultar todos los tipos generales:** opción de cada plantilla para que el proyecto nuevo solo use los tipos de la plantilla (por ejemplo, en *Tareas familiares* no salen *Mejora*, *Funcionalidad*, etc.). Está activada en todas las de serie salvo *Vibecoding*. Solo afecta a los proyectos que se creen a partir de ahora; en uno ya creado, desmarca los tipos en *Ajustes del proyecto → Tipos de tarea*.
 - Las de serie se pueden **editar** o **borrar**. En una modificada, **Restablecer** vuelve a su contenido original; **Recuperar plantillas por defecto** recrea las de serie que se hayan borrado. Cuando Pizarro mejora una plantilla de serie, se actualiza sola al desplegar si no la has modificado; si la has cambiado, se respeta tu versión.
