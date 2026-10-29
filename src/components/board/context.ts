@@ -52,6 +52,8 @@ export interface BoardApi {
   moveToAdjacentColumn: (id: string, dir: -1 | 1) => void;
   /** Sube (-1) o baja (1) la tarjeta un puesto dentro de su columna. */
   moveWithinColumn: (id: string, dir: -1 | 1) => void;
+  /** Antes de mover tarjetas a otra columna: avisa si salen de una de «Revisión» con subtareas sin marcar. `true` = seguir. */
+  confirmLeaveReview: (taskIds: string[], toColumnId: string) => Promise<boolean>;
   setDueDate: (id: string, day: string | null) => Promise<void>;
   /** Cadencia de una tarea fija en las releases (1, 2 o 3). */
   setEvergreenEvery: (id: string, every: number) => Promise<void>;

@@ -51,7 +51,7 @@ type AttachmentRow = {
   width: number | null; height: number | null; size: number; createdById: string | null; createdAt: string;
 };
 type LinkRow = { id: string; taskId: string; kind: string; title: string; url: string; externalId: string | null; createdById: string | null; shareStatus?: string | null; shareFailed?: number; createdAt: string };
-type ColumnRow = { id: string; projectId: string; name: string; position: number; role: string; isDone: boolean; waitingDays?: number | null };
+type ColumnRow = { id: string; projectId: string; name: string; position: number; role: string; isDone: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null };
 
 /** Todo lo necesario para recrear una tarea borrada con sus hijos. */
 export interface TaskSnapshot {
@@ -80,7 +80,7 @@ export type UndoOp =
   | { t: "attachment.restore"; row: AttachmentRow }
   | { t: "link.remove"; id: string }
   | { t: "link.restore"; row: LinkRow }
-  | { t: "column.set"; id: string; data: { name?: string; position?: number; role?: string; isDone?: boolean; waitingDays?: number | null } }
+  | { t: "column.set"; id: string; data: { name?: string; position?: number; role?: string; isDone?: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null } }
   | { t: "column.remove"; id: string }
   | { t: "column.restore"; row: ColumnRow }
   | { t: "release.remove"; id: string };
@@ -321,7 +321,7 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
       }
       case "column.remove": {
         const c = once(`column:${op.id}`) && (await db.column.findFirst({ where: { id: op.id, projectId } }));
-        if (c) out.push({ t: "column.restore", row: { id: c.id, projectId: c.projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays } });
+        if (c) out.push({ t: "column.restore", row: { id: c.id, projectId: c.projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays, routineTargetColumnId: c.routineTargetColumnId } });
         break;
       }
       case "column.restore":

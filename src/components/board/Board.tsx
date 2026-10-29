@@ -31,6 +31,7 @@ import { ColumnView } from "./ColumnView";
 import { EVERGREEN_DROPPABLE_PREFIX } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
 import { useCardActions } from "./cardActions";
+import { useReviewGuard } from "./reviewGuard";
 import { activeFilterCount, EMPTY_FILTERS, filtersKey, parseStoredFilters, sanitizeFilters, taskMatchesFilters, type BoardFilters } from "./filters";
 import { Presence } from "./Presence";
 import { SelectionBar } from "./SelectionBar";
@@ -503,7 +504,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     };
     requestAnimationFrame(whenClosed);
   }, [getTask]);
-  const cardActions = useCardActions({ currentUserId: data.currentUserId, getTask, sortedColumns, baseItems, patchTask, upsertTask, track, toast, t });
+  const confirmLeaveReview = useReviewGuard(data.project.id, sortedColumns, getTask);
+  const cardActions = useCardActions({ currentUserId: data.currentUserId, getTask, sortedColumns, baseItems, patchTask, upsertTask, track, toast, t, confirmLeaveReview });
 
   // El contexto solo cambia si cambia su contenido: los datos del servidor llegan como objetos nuevos en cada
   // refresco aunque sean iguales, y sin esto todas las tarjetas se redibujarían cada vez.
@@ -542,6 +544,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       upsertTask,
       patchTask,
       ...cardActions,
+      confirmLeaveReview,
       removeTask: (id) => {
         setTasks((prev) => prev.filter((t) => t.id !== id));
         stores.selection.set((prev) => {
@@ -587,7 +590,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       settle,
       refresh,
     }),
-    [setTasks, revealTask, project, users, data.currentUserId, deliverables, kinds, data.cardStyle, data.editorMode, dragHandle, google, data.today, stableColumns, stableLabels, stores, getTask, track, trackRaw, settle, refresh, patchTask, upsertTask, cardActions],
+    [setTasks, revealTask, project, users, data.currentUserId, deliverables, kinds, data.cardStyle, data.editorMode, dragHandle, google, data.today, stableColumns, stableLabels, stores, getTask, track, trackRaw, settle, refresh, patchTask, upsertTask, cardActions, confirmLeaveReview],
   );
 
   // --- Movimiento masivo ------------------------------------------------------
@@ -610,6 +613,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const selected = stores.selection.get();
     const ids = [...selected];
     if (!ids.length) return;
+    if (!(await confirmLeaveReview(ids, columnId))) return;
     const before = new Map(tasks.filter((t) => ids.includes(t.id)).map((t) => [t.id, t]));
     // Optimista: al final de la columna destino, conservando el orden actual.
     let pos = Math.max(0, ...tasks.filter((t) => t.columnId === columnId).map((t) => t.position));
@@ -793,6 +797,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const dropOnEvergreen = async (id: string, columnId: string) => {
     const previous = taskById.get(id);
     if (!previous) return;
+    if (!(await confirmLeaveReview([id], columnId))) return;
     const position = Math.max(0, ...tasks.filter((t) => t.columnId === columnId).map((t) => t.position)) + 1024;
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, columnId, position, evergreen: true } : t)));
     const res = await track(makeEvergreen(id));
@@ -843,6 +848,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const { prevId, nextId } = neighboursOf(list, id);
     const position = positionBetween(prevId ? taskById.get(prevId)?.position : null, nextId ? taskById.get(nextId)?.position : null);
     const previous = taskById.get(id)!;
+    if (col !== origin.columnId && !(await confirmLeaveReview([id], col))) return;
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, columnId: col, position, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() } : t)));
 
     const res = await track(moveTask(id, col, prevId, nextId));

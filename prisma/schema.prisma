@@ -15,13 +15,18 @@ enum Role {
 }
 
 /// Rol funcional de una columna. NEXT_RELEASE e IN_PRODUCTION son únicos por proyecto (índice único
-/// parcial en la migración); WAITING y WEEKLY_PLAN pueden repetirse en varias columnas.
+/// parcial en la migración); WAITING y WEEKLY_PLAN pueden repetirse en varias columnas, igual que CHECKLIST, REVIEW, AGENDA, ROUTINES y DELIVERY.
 enum ColumnRole {
   NONE
   NEXT_RELEASE
   IN_PRODUCTION
   WAITING
   WEEKLY_PLAN
+  CHECKLIST
+  REVIEW
+  AGENDA
+  ROUTINES
+  DELIVERY
 }
 
 model User {
@@ -278,6 +283,10 @@ model Column {
   isDone    Boolean    @default(false)
   /// Solo rol WAITING: días en la columna tras los que se avisa a la persona asignada (null = 3).
   waitingDays Int?
+  /// Solo rol ROUTINES: columna a la que va la siguiente aparición de una tarea recurrente (null = la misma).
+  routineTargetColumnId String?
+  routineTarget Column? @relation("RoutineTarget", fields: [routineTargetColumnId], references: [id], onDelete: SetNull)
+  routineSources Column[] @relation("RoutineTarget")
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tasks     Task[]
 
@@ -325,6 +334,8 @@ model Task {
   /// Semanal: día de la semana (1 = lunes … 7 = domingo). Mensual: día del mes (1-31; en meses cortos, el último día).
   recurrenceDay Int?
   /// Tarea de la que salió esta aparición. Único: de una tarea solo puede salir una siguiente (idempotencia).
+  /// Última columna con rol ROUTINES en la que estuvo (la mantiene un disparador): de ahí sale su siguiente aparición.
+  routineColumnId String?
   recurrenceFromId String?   @unique
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

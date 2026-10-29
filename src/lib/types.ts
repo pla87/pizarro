@@ -9,6 +9,8 @@ export interface BoardColumn {
   isDone: boolean;
   /** Solo rol WAITING: días hasta el recordatorio (null = por defecto). */
   waitingDays: number | null;
+  /** Solo rol ROUTINES: columna destino de la siguiente aparición (null = la misma). */
+  routineTargetColumnId: string | null;
 }
 
 export interface BoardTask {

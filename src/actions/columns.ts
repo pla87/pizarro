@@ -14,7 +14,7 @@ import { addUndo, captureTasks } from "@/lib/undo";
 import * as v from "@/lib/validation";
 import type { BoardColumn } from "@/lib/types";
 
-const columnSelect = { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true } as const;
+const columnSelect = { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true } as const;
 
 async function findColumn(columnId: string) {
   const user = await requireUser();
@@ -86,6 +86,19 @@ export async function setColumnWaitingDays(columnId: string, days: number | null
     addUndo({ t: "column.set", id: column.id, data: { waitingDays: current.waitingDays } });
     describeAction("Cambió el plazo de espera de la columna «{name}» a {days} d", { name: column.name, days: value ?? DEFAULT_WAITING_DAYS });
     await db.column.update({ where: { id: columnId }, data: { waitingDays: value } });
+  });
+}
+
+/** Rutinas: columna a la que va la siguiente aparición de una tarea recurrente de esta columna (null = la misma). */
+export async function setColumnRoutineTarget(columnId: string, targetId: string | null) {
+  return runAction({ name: "columns.setColumnRoutineTarget", args: [columnId, targetId] }, async () => {
+    const column = await findColumn(columnId);
+    if (column.role !== "ROUTINES") throw new AppError("Solo las columnas con el rol «Rutinas» tienen destino de la siguiente aparición.");
+    const value = targetId === null || targetId === columnId ? null : v.id.parse(targetId);
+    if (value && !(await db.column.count({ where: { id: value, projectId: column.projectId } }))) throw notFound();
+    addUndo({ t: "column.set", id: column.id, data: { routineTargetColumnId: column.routineTargetColumnId } });
+    describeAction("Cambió el destino de la siguiente aparición de la columna «{name}»", { name: column.name });
+    await db.column.update({ where: { id: columnId }, data: { routineTargetColumnId: value } });
   });
 }
 
