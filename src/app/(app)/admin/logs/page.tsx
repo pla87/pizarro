@@ -18,6 +18,15 @@ export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 100;
 
+// Las categorías del desplegable se recuerdan 60 s: agrupar toda la tabla de logs en cada vista es caro.
+let categoriesCache: { at: number; rows: { category: string }[] } | null = null;
+async function logCategories(): Promise<{ category: string }[]> {
+  if (categoriesCache && Date.now() - categoriesCache.at < 60_000) return categoriesCache.rows;
+  const rows = (await db.appLog.groupBy({ by: ["category"], orderBy: { category: "asc" } })).map((c) => ({ category: c.category }));
+  categoriesCache = { at: Date.now(), rows };
+  return rows;
+}
+
 const LEVELS = [
   { value: "info", label: "Info", badge: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200" },
   { value: "warn", label: "Aviso", badge: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200" },
@@ -57,7 +66,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     }),
     db.appLog.groupBy({ by: ["level"], where: logWhere(filters, mine, false), _count: { _all: true } }),
-    db.appLog.groupBy({ by: ["category"], orderBy: { category: "asc" } }),
+    logCategories(),
     db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
   const hasMore = rows.length > PAGE_SIZE;

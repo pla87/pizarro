@@ -122,6 +122,8 @@ export const server: Record<string, string> = {
   "Origen no permitido": "Origin not allowed",
   "Origen no permitido.": "Origin not allowed.",
   "Demasiadas peticiones": "Too many requests",
+  "Falta la cabecera Content-Length.": "The Content-Length header is missing.",
+  "Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.": "Too many uploads in progress. Try again in a few seconds.",
   "Ese tipo está oculto en un proyecto con tareas de este tipo: elige otro o actívalo antes en ese proyecto.": "That type is hidden in a project with tasks of this type: choose another or enable it in that project first.",
   "No puedes desvincular tu propia cuenta de Google desde aquí.": "You can't unlink your own Google account from here.",
   "Esa acción ya no se puede deshacer desde aquí: usa Deshacer.": "That action can no longer be undone from here: use Undo.",

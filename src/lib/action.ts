@@ -6,7 +6,7 @@ import { logEvent } from "./log";
 import { READ_ACTIONS } from "./log-query";
 import { publishChange } from "./realtime";
 import { saveTaskEvents } from "./task-events";
-import { saveUndo, type UndoOp } from "./undo";
+import { discardUndo, saveUndo, type UndoOp } from "./undo";
 import { encodeLabel } from "./undo-label";
 import { requestContext } from "./request-context";
 import { getCurrentUser, getPendingUser } from "./session";
@@ -33,15 +33,22 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
   try {
     result = { ok: true, data: await actionContext.run(ctx, fn) };
     const tracked = !!meta && !!ctx.projectId && !READ_ACTIONS.includes(meta.name);
-    const user = tracked ? await getCurrentUser().catch(() => null) : null;
+    const willUndo = !!ctx.undo?.length && !!ctx.projectId;
+    const user = tracked || willUndo ? await getCurrentUser().catch(() => null) : null;
+    // Aviso a las demás pestañas del proyecto (las consultas no cambian nada): ya está confirmada la transacción
+    // principal y publishChange no depende del historial ni del deshacer, así que sale antes de guardarlos.
+    if (tracked) publishChange({ projectId: ctx.projectId!, userId: user?.id ?? null, action: meta!.name });
+    // Al guardar una entrada de deshacer se vacía la pila de rehacer: no depende del historial, va a la vez.
+    let redoError: unknown = null;
+    const redoCleared = willUndo && user
+      ? discardUndo({ userId: user.id, projectId: ctx.projectId!, kind: "REDO" }).then(() => undefined, (err) => { redoError = err; })
+      : Promise.resolve();
     // El historial se guarda antes que la entrada de deshacer: así ésta recuerda sus ids y deshacer los borra.
-    const eventIds = tracked ? await saveTaskEvents(meta!.name, ctx, ctx.projectId!, user) : [];
-    if (ctx.undo?.length && ctx.projectId) {
-      const id = await recordUndo(meta?.name ?? "acción", ctx.projectId, ctx.label ? encodeLabel(ctx.label) : ctx.message, ctx.undo, ctx.taskId ?? null, eventIds);
+    const [eventIds] = await Promise.all([tracked ? saveTaskEvents(meta!.name, ctx, ctx.projectId!, user) : Promise.resolve([] as string[]), redoCleared]);
+    if (willUndo) {
+      const id = await recordUndo(user, meta?.name ?? "acción", ctx.projectId!, ctx.label ? encodeLabel(ctx.label) : ctx.message, ctx.undo!, ctx.taskId ?? null, eventIds, redoError);
       if (id && ctx.undoRef) ctx.undoRef.id = id;
     }
-    // Aviso a las demás pestañas del proyecto (las consultas no cambian nada).
-    if (tracked) publishChange({ projectId: ctx.projectId!, userId: user?.id ?? null, action: meta!.name });
   } catch (err) {
     // Los errores de redirect()/notFound() de Next deben propagarse.
     if (err && typeof err === "object" && "digest" in err && !(err instanceof AppError)) throw err;
@@ -73,10 +80,12 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
 }
 
 /** Guarda lo necesario para deshacer la acción; si falla, la acción ya está hecha y solo se registra. */
-async function recordUndo(name: string, projectId: string, message: string | undefined, ops: UndoOp[], taskId: string | null, eventIds: string[]): Promise<string | null> {
+async function recordUndo(
+  user: { id: string } | null, name: string, projectId: string, message: string | undefined, ops: UndoOp[], taskId: string | null, eventIds: string[], redoError: unknown,
+): Promise<string | null> {
   try {
-    const user = await getCurrentUser();
-    if (user) return await saveUndo(user.id, projectId, message ?? name, ops, taskId, "UNDO", true, null, { eventIds });
+    if (redoError) throw redoError;
+    if (user) return await saveUndo(user.id, projectId, message ?? name, ops, taskId, "UNDO", false, null, { eventIds });
   } catch (err) {
     console.error("[undo] no se pudo guardar", err);
   }

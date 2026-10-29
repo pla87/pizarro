@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { assertNotArchived, assertTaskAccess } from "@/lib/access";
+import { assertNotArchivedRow, loadTaskWithAccess } from "@/lib/access";
 import { AppError } from "@/lib/errors";
 import { actionContext } from "@/lib/action-context";
 import { logEvent } from "@/lib/log";
@@ -13,6 +13,7 @@ import { getT } from "@/i18n/server";
 import { createAttachmentWithinLimit, roundMb } from "@/lib/attachment-limit";
 import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, processImage, removeAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveRawAttachmentFile } from "@/lib/uploads";
 import { attachmentTotals } from "@/lib/board";
+import { acquireUploadSlot, declaredLength } from "@/lib/upload-slots";
 import { effectiveFileMaxMb, MULTIPART_OVERHEAD_BYTES } from "@/lib/upload-size";
 import type { UploadedAttachment } from "@/lib/types";
 
@@ -23,26 +24,32 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
   const start = performance.now();
   const ip = clientIp(req.headers);
   const taskIdForLog = (await ctx.params).taskId;
+  let release: (() => void) | null = null;
   let fileInfo: { name: string; type: string; size: number } | null = null;
   try {
     if (!isSameOrigin(req)) throw new AppError("Origen no permitido.", 403);
     const user = await requireUser();
     const { taskId } = await ctx.params;
-    const { projectId } = await assertTaskAccess(user, taskId);
-    await assertNotArchived(taskId);
+    const task = await loadTaskWithAccess(user, taskId, { archivedAt: true, project: { select: { fileMaxMb: true } } });
+    assertNotArchivedRow(task);
+    const { projectId } = task;
     // Tope de subidas por persona: evita llenar el disco o la memoria (sharp) con un bucle.
     if (!rateLimit(`upload:${user.id}`, 60, 60_000)) throw new AppError("Demasiadas peticiones", 429);
+    // Sin Content-Length no se puede comprobar el tamaño antes de leer el cuerpo.
+    const length = declaredLength(req.headers);
+    if (length === null) throw new AppError("Falta la cabecera Content-Length.", 411);
+    // Como mucho unas pocas subidas a la vez en todo el servidor (cada una se lee entera en memoria).
+    release = acquireUploadSlot();
+    if (!release) throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
 
     // Límite de un archivo: el del proyecto (y, si existe, el tope MAX_UPLOAD_MB del servidor), leído en cada subida.
-    const project = await db.project.findUniqueOrThrow({ where: { id: projectId }, select: { fileMaxMb: true } });
-    const fileMaxMb = effectiveFileMaxMb(project.fileMaxMb);
+    const fileMaxMb = effectiveFileMaxMb(task.project.fileMaxMb);
     const maxBytes = fileMaxMb * 1024 * 1024;
     const tooBig = async () => {
       const t = await getT();
       return new AppError(t("El archivo supera el tamaño máximo del proyecto ({mb} MB por archivo).", { mb: fileMaxMb }), 413);
     };
     // Antes de leer el cuerpo: si la petición ya declara más que el archivo máximo (más el envoltorio multipart), se rechaza.
-    const length = Number(req.headers.get("content-length") ?? 0);
     if (length > maxBytes + MULTIPART_OVERHEAD_BYTES) throw await tooBig();
     // Cola de imágenes llena: se rechaza antes de leer el cuerpo (no se sabe si es imagen, pero el servidor está saturado).
     if (imageQueueFull()) throw new AppError(IMAGE_QUEUE_FULL_MESSAGE, 503);
@@ -133,9 +140,14 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
       details: { taskId: taskIdForLog, file: fileInfo, status: err instanceof AppError ? err.status : 500 },
     });
     const t = await getT();
-    if (err instanceof AppError) return NextResponse.json({ error: t(err.message), ...(err.code ? { code: err.code } : {}) }, { status: err.status });
+    if (err instanceof AppError) {
+      const headers = err.code === "upload_busy" ? { "Retry-After": "5" } : undefined;
+      return NextResponse.json({ error: t(err.message), ...(err.code ? { code: err.code } : {}) }, { status: err.status, headers });
+    }
     console.error("[upload]", err);
     return NextResponse.json({ error: t("No se pudo procesar el archivo.") }, { status: 500 });
+  } finally {
+    release?.();
   }
 }
 
