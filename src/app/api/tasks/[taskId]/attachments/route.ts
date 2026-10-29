@@ -35,11 +35,10 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     const { projectId } = task;
     // Tope de subidas por persona: evita llenar el disco o la memoria (sharp) con un bucle.
     if (!rateLimit(`upload:${user.id}`, 60, 60_000)) throw new AppError("Demasiadas peticiones", 429);
-    // Sin Content-Length no se puede comprobar el tamaño antes de leer el cuerpo.
+    // Sin Content-Length (algún proxy la quita) el tamaño se comprueba al leer el archivo.
     const length = declaredLength(req.headers);
-    if (length === null) throw new AppError("Falta la cabecera Content-Length.", 411);
     // Como mucho unas pocas subidas a la vez en todo el servidor (cada una se lee entera en memoria).
-    release = acquireUploadSlot();
+    release = await acquireUploadSlot();
     if (!release) throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
 
     // Límite de un archivo: el del proyecto (y, si existe, el tope MAX_UPLOAD_MB del servidor), leído en cada subida.
@@ -50,7 +49,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
       return new AppError(t("El archivo supera el tamaño máximo del proyecto ({mb} MB por archivo).", { mb: fileMaxMb }), 413);
     };
     // Antes de leer el cuerpo: si la petición ya declara más que el archivo máximo (más el envoltorio multipart), se rechaza.
-    if (length > maxBytes + MULTIPART_OVERHEAD_BYTES) throw await tooBig();
+    if (length !== null && length > maxBytes + MULTIPART_OVERHEAD_BYTES) throw await tooBig();
     // Cola de imágenes llena: se rechaza antes de leer el cuerpo (no se sabe si es imagen, pero el servidor está saturado).
     if (imageQueueFull()) throw new AppError(IMAGE_QUEUE_FULL_MESSAGE, 503);
     const form = await req.formData();
