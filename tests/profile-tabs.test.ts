@@ -4,6 +4,7 @@ import { parseProfileTab } from "../src/app/(app)/settings/profile-tabs";
 
 test("pestañas de «Mi perfil»: valor válido, y «Cuenta» si falta o es desconocido", () => {
   assert.equal(parseProfileTab("preferencias"), "preferencias");
+  assert.equal(parseProfileTab("plantillas"), "plantillas");
   assert.equal(parseProfileTab("avisos"), "avisos");
   assert.equal(parseProfileTab("cuenta"), "cuenta");
   assert.equal(parseProfileTab(undefined), "cuenta");

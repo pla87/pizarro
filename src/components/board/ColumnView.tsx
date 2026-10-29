@@ -47,8 +47,9 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
       ref={setNodeRef}
       className={cn(
         "flex w-full shrink-0 flex-col rounded-xl bg-slate-100/80 dark:bg-slate-900/60",
-        // Con tres columnas o más, en escritorio se reparten el ancho de la ventana (mínimo 18 rem; si no caben, scroll).
-        total >= 3 ? "md:min-w-72 md:flex-1" : "md:w-72",
+        // Con cuatro columnas o más, en escritorio se reparten el ancho del tablero (mínimo 18 rem; si no caben, scroll).
+        // Con 1-3 miden lo mismo que con 4: (ancho útil - barra «+» de 2.5 rem - 4 huecos de 0.75 rem) / 4. Es CSS puro, sin estado.
+        total >= 4 ? "md:min-w-72 md:flex-1" : "md:w-[calc((100%-5.5rem)/4)] md:min-w-72",
         mobileHidden && "max-md:hidden",
         isNextRelease && "ring-1 ring-brand-500/30",
       )}

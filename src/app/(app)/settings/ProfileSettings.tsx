@@ -76,6 +76,15 @@ export function ProfileSettings(props: Props) {
 
       {props.tab === "preferencias" && (
         <>
+        <LanguageSection initial={props.locale} />
+        <AppearanceSection initial={props.cardStyle} initialTheme={props.theme} initialAccent={props.accent} />
+        <EditorModeSection initial={props.editorMode} />
+        <DraftsSection initial={props.clearDraftsOnLogout} />
+        {props.preferencesExtra}
+        </>
+      )}
+
+      {props.tab === "plantillas" && (
         <section className="card p-5">
           <h2 className="font-semibold">{t("Plantillas de release notes")}</h2>
           <p className="mt-0.5 text-sm text-slate-500">
@@ -84,13 +93,6 @@ export function ProfileSettings(props: Props) {
           <TemplateList kind="HEADER" title={t("Cabeceras")} initial={props.templates.headers} placeholder={t("Ej.: instrucciones de contexto para una IA.\n\n> Resume estos cambios para el equipo de negocio.")} />
           <TemplateList kind="FOOTER" title={t("Pies")} initial={props.templates.footers} placeholder={t("Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción")} />
         </section>
-
-        <LanguageSection initial={props.locale} />
-        <AppearanceSection initial={props.cardStyle} initialTheme={props.theme} initialAccent={props.accent} />
-        <EditorModeSection initial={props.editorMode} />
-        <DraftsSection initial={props.clearDraftsOnLogout} />
-        {props.preferencesExtra}
-        </>
       )}
 
       {props.tab === "avisos" && (
