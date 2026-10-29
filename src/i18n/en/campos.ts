@@ -63,7 +63,7 @@ export const campos: Record<string, string> = {
   "Suma del coste de las tareas de la columna": "Sum of the cost of the column's tasks",
   "Se ha activado el campo Coste": "The Cost field has been turned on",
   "Total": "Total",
-  "«{name}»: {n} tareas con coste": "“{name}”: {n} tasks with a cost",
+  "Tareas con coste en «{name}»: {n}": "Tasks with a cost in “{name}”: {n}",
   // Informe PDF
   "Campos opcionales": "Optional fields",
   "Inicio": "Start",

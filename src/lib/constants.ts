@@ -9,10 +9,10 @@ export function kindBadgeStyle(color: string): CSSProperties {
 
 export const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
 
-export const COLUMN_ROLES = ["NONE", "NEXT_RELEASE", "IN_PRODUCTION", "WAITING", "WEEKLY_PLAN"] as const;
+export const COLUMN_ROLES = ["NONE", "NEXT_RELEASE", "IN_PRODUCTION", "WAITING", "WEEKLY_PLAN", "BUDGET"] as const;
 export type ColumnRoleValue = (typeof COLUMN_ROLES)[number];
 
-/** Roles que solo puede tener una columna por proyecto (WAITING y WEEKLY_PLAN pueden repetirse). */
+/** Roles que solo puede tener una columna por proyecto (WAITING, WEEKLY_PLAN y BUDGET pueden repetirse). */
 export const UNIQUE_COLUMN_ROLES: readonly ColumnRoleValue[] = ["NEXT_RELEASE", "IN_PRODUCTION"];
 export const isUniqueColumnRole = (role: string): boolean => (UNIQUE_COLUMN_ROLES as readonly string[]).includes(role);
 
@@ -26,6 +26,7 @@ export const COLUMN_ROLE_LABEL: Record<ColumnRoleValue, string> = {
   IN_PRODUCTION: "En producción (destino al desplegar)",
   WAITING: "Esperando (avisa si tarda)",
   WEEKLY_PLAN: "Planificación semanal",
+  BUDGET: "Presupuesto (suma el coste)",
 };
 
 export const DEFAULT_COLUMNS: { name: string; nameEn: string; role: ColumnRoleValue; isDone: boolean }[] = [

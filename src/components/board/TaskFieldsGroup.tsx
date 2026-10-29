@@ -52,7 +52,7 @@ export function TaskFieldsGroup({
           </div>
         )}
         {has("cost") && (
-          <div className="min-w-0">
+          <div className="col-span-2 min-w-0">
             <label className="label" htmlFor={`${uid}-cost`}>{t("Coste")}</label>
             <div className="flex items-center gap-2">
               <div className="relative min-w-0 flex-1">
