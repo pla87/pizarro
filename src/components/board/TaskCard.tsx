@@ -3,6 +3,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AlignLeft, Loader2, CalendarClock, Check, CheckSquare, ExternalLink, FileText, GripVertical, Hourglass, Image as ImageIcon, MessageSquare, Paperclip, Repeat } from "lucide-react";
+import { nextOccurrenceDue } from "@/lib/recurrence-date";
 import { DEFAULT_WAITING_DAYS, isWhite, MAX_TITLE } from "@/lib/constants";
 import { daysBetween, dueStatus, formatDay } from "@/lib/dates";
 import { memo, useEffect, useRef, useState } from "react";
@@ -65,6 +66,8 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
   // Columna «Esperando»: días naturales desde que la tarjeta entró (se resalta al llegar al plazo del recordatorio).
   const waitingDays = column?.role === "WAITING" ? Math.max(0, daysBetween(task.columnEnteredAt.slice(0, 10), today)) : null;
   const waitingLate = waitingDays !== null && waitingDays >= (column?.waitingDays ?? DEFAULT_WAITING_DAYS);
+  // Columna «Rutinas»: fecha de la siguiente aparición (la misma regla que aplica el servidor al terminar la tarea).
+  const nextRoutine = column?.role === "ROUTINES" && task.recurrence !== "NONE" ? nextOccurrenceDue(task.recurrence, task.recurrenceDay, task.dueDate, today) : null;
   const due = dueStatus(task.dueDate, done, today);
   const assignee = task.assigneeId ? users.find((u) => u.id === task.assigneeId) : null;
   const isSelected = useIsSelected(task.id);
@@ -212,6 +215,11 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
             title={t("Lleva {n} d en esta columna", { n: waitingDays })}
           >
             <Hourglass size={12} /> {t("Esperando {n} d", { n: waitingDays })}
+          </span>
+        )}
+        {nextRoutine && (
+          <span className="inline-flex items-center gap-0.5 rounded px-1 font-medium text-brand-700 dark:text-brand-300" title={t("Fecha de la siguiente aparición")}>
+            <Repeat size={12} /> {t("Próxima: {date}", { date: formatDay(nextRoutine, today, locale) })}
           </span>
         )}
         {repeat && <span title={repeat} className="inline-flex"><Repeat size={13} aria-label={repeat} /></span>}

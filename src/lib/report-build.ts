@@ -6,7 +6,9 @@ import { dateToIso, todayIso } from "./dates";
 import { db } from "./db";
 import { mentionsToPlain } from "./mentions";
 import { buildReport, RECENT_DONE_DAYS } from "./report";
-import { renderReportPdf, renderWeekPlanPdf } from "./report-pdf";
+import { renderChecklistPdf, renderDeliveryPdf, renderReportPdf, renderWeekPlanPdf } from "./report-pdf";
+import { groupChecklist, type ChecklistGroupBy } from "./checklist";
+import { loadChecklistItems } from "./column-views";
 import { buildWeekPlan, type WeekPlanGroupBy } from "./week-plan";
 
 // Genera el informe PDF de un proyecto. Lo usan la descarga (API) y el envío semanal por email;
@@ -110,6 +112,56 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
 }
 
 const slugOf = (name: string, fallback: string) => name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || fallback;
+
+/** PDF de la lista consolidada de una columna CHECKLIST (por tarjeta o por tipo de tarea). */
+export function generateChecklistPdf(
+  projectId: string, columnId: string, opts: { locale: Locale; by: ChecklistGroupBy },
+): Promise<{ pdf: Uint8Array; filename: string; itemCount: number } | null> {
+  const run = reportQueue.then(async () => {
+    const t = makeT(opts.locale);
+    const data = await loadChecklistItems(projectId, columnId, opts.locale);
+    if (!data) return null;
+    const locale = intlLocale(opts.locale);
+    const today = todayIso(appTimeZone());
+    const groups = groupChecklist(data.items, opts.by, locale);
+    const pdf = await renderChecklistPdf({ project: data.column.projectName, column: data.column.name, today, by: opts.by, groups }, t, locale);
+    return { pdf, filename: `${t("lista")}-${slugOf(data.column.name, t("columna"))}-${today}.pdf`, itemCount: data.items.length };
+  });
+  reportQueue = run.catch(() => {});
+  return run;
+}
+
+/** PDF «Resumen para el cliente» de una columna DELIVERY: sin comentarios, descripciones ni personas. */
+export function generateDeliveryPdf(
+  projectId: string, columnId: string, opts: { locale: Locale },
+): Promise<{ pdf: Uint8Array; filename: string; taskCount: number } | null> {
+  const run = reportQueue.then(async () => {
+    const t = makeT(opts.locale);
+    const column = await db.column.findFirst({ where: { id: columnId, projectId, role: "DELIVERY" }, select: { name: true, project: { select: { name: true } } } });
+    if (!column) return null;
+    const tasks = await db.task.findMany({
+      where: { projectId, columnId, archivedAt: null },
+      orderBy: [{ position: "asc" }, { id: "asc" }],
+      take: 2000,
+      select: {
+        title: true, dueDate: true, kind: { select: { id: true, name: true } },
+        subtasks: { orderBy: [{ position: "asc" }, { id: "asc" }], select: { title: true, done: true } },
+      },
+    });
+    const locale = intlLocale(opts.locale);
+    const today = todayIso(appTimeZone());
+    const pdf = await renderDeliveryPdf({
+      project: column.project.name, column: column.name, today,
+      tasks: tasks.map((x) => ({
+        title: mentionsToPlain(x.title), kind: localizeGeneralKind(x.kind, opts.locale).name, dueDate: dateToIso(x.dueDate),
+        subtaskTotal: x.subtasks.length, doneSubtasks: x.subtasks.filter((s) => s.done).map((s) => mentionsToPlain(s.title)),
+      })),
+    }, t, locale);
+    return { pdf, filename: `${t("entrega")}-${slugOf(column.project.name, t("proyecto"))}-${today}.pdf`, taskCount: tasks.length };
+  });
+  reportQueue = run.catch(() => {});
+  return run;
+}
 
 /** PDF de la planificación de la semana de una columna con rol WEEKLY_PLAN (por día o por persona). */
 export function generateWeekPlanPdf(

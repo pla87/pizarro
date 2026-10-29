@@ -21,6 +21,8 @@ interface Deps {
   track: <R>(p: Promise<R>) => Promise<R>;
   toast: Toast;
   t: T;
+  /** Avisa si salen de una columna de revisión con subtareas sin marcar; `false` = cancelado. */
+  confirmLeaveReview: (taskIds: string[], toColumnId: string) => Promise<boolean>;
 }
 
 /**
@@ -70,6 +72,7 @@ export function useCardActions(deps: Deps) {
         if (!task) return;
         const target = sortedColumns[sortedColumns.findIndex((c) => c.id === task.columnId) + dir];
         if (!target) return;
+        if (!(await ref.current.confirmLeaveReview([id], target.id))) return focusCard(id);
         // Al final de la columna destino.
         const prevId = baseItems[target.id]?.at(-1) ?? null;
         const position = positionBetween(prevId ? getTask(prevId)?.position : null, null);

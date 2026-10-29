@@ -265,6 +265,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
 
   const changeColumn = async (columnId: string) => {
     if (columnId === task.columnId) return;
+    if (!(await board.confirmLeaveReview([task.id], columnId))) return;
     const before = board.getTask(task.id)!;
     const last = Math.max(0, ...board.getTasks().filter((t) => t.columnId === columnId).map((t) => t.position));
     board.patchTask(task.id, { columnId, position: last + 1024, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() });
