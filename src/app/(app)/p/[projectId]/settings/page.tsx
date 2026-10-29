@@ -5,6 +5,7 @@ import { dateToIso } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
 import { getT } from "@/i18n/server";
+import { normalizeTaskFields } from "@/lib/task-fields";
 import { emailEnabled } from "@/lib/mail";
 import { googleEnabled } from "@/lib/google";
 import { effectiveShareMode } from "@/lib/google-share";
@@ -31,6 +32,8 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
       taskAttachMaxMb: true,
       googleShareMode: true,
       fileMaxMb: true,
+      taskFields: true,
+      _count: { select: { columns: { where: { role: "BUDGET" } } } },
       hiddenKinds: { select: { kindId: true } },
       members: { select: { userId: true, user: { select: { name: true, active: true } } }, orderBy: { user: { name: "asc" } } },
       labels: { orderBy: { name: "asc" }, select: { id: true, name: true, color: true } },
@@ -72,6 +75,8 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
         taskAttachMaxMb: project.taskAttachMaxMb,
         googleShareMode: effectiveShareMode(project.googleShareMode, project.isPrivate, { role: process.env.GOOGLE_SHARE_ROLE }),
         fileMaxMb: project.fileMaxMb,
+        taskFields: normalizeTaskFields(project.taskFields),
+        budgetColumns: project._count.columns,
         members: project.members.map((m) => ({ id: m.userId, name: m.user.name, active: m.user.active })),
       }}
       labels={project.labels}

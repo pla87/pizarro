@@ -1,20 +1,22 @@
 "use client";
 
+import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ArrowLeft, ArrowRight, CalendarDays, Check, CheckCircle2, FileDown, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Tag, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, ArrowRight, CalendarDays, Check, CheckCircle2, FileDown, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Tag, Trash2, Wallet } from "lucide-react";
 import { deleteColumn, moveColumn, renameColumn, setColumnDone, setColumnRole, setColumnRoutineTarget, setColumnWaitingDays } from "@/actions/columns";
 import { COLUMN_ROLE_LABEL, COLUMN_ROLES, DEFAULT_WAITING_DAYS, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
 import type { BoardColumn } from "@/lib/types";
-import { useT } from "@/i18n/client";
+import { useIntlLocale, useT } from "@/i18n/client";
+import { budgetSummary, formatEuro } from "@/lib/task-fields";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
 import { Modal } from "../ui/Modal";
+import { BudgetSummaryDialog } from "./BudgetSummaryDialog";
 import { ChecklistDialog } from "./ChecklistDialog";
-import { useBoard, useSelectedCount, useSelectionSize } from "./context";
+import { useBoard, useSelectedCount, useSelectionSize, useTasks } from "./context";
 import { useShortcut } from "./shortcuts";
 import { EvergreenPanel } from "./EvergreenPanel";
 import { SortableTaskCard } from "./TaskCard";
@@ -78,6 +80,7 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
         <span className="rounded-full bg-slate-200 px-1.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
           {taskIds.length}
         </span>
+        {column.role === "BUDGET" && <BudgetTotal columnId={column.id} />}
         <div className="ml-auto flex items-center">
           <button className="btn-icon h-7 w-7" onClick={() => openNewTask(column.id)} aria-label={t("Añadir tarea en {name}", { name: column.name })}>
             <Plus size={16} />
@@ -122,12 +125,26 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
   );
 }
 
+/** Suma del coste de las tareas (no archivadas) de una columna «Presupuesto», en la cabecera. */
+function BudgetTotal({ columnId }: { columnId: string }) {
+  const locale = useIntlLocale();
+  const t = useT();
+  const tasks = useTasks();
+  const sum = budgetSummary(tasks.filter((x) => x.columnId === columnId));
+  return (
+    <span className="shrink-0 rounded-full bg-emerald-100 px-1.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300" title={t("Suma del coste de las tareas de la columna")}>
+      {formatEuro(sum.total / 100, locale)}
+    </span>
+  );
+}
+
 function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; index: number; total: number; empty: boolean }) {
   const { setColumns, track, refresh, project, columns } = useBoard();
   const [dialog, setDialog] = useState<"checklist" | "routine" | null>(null);
   const toast = useToast();
   const confirm = useConfirm();
   const t = useT();
+  const [summaryOpen, setSummaryOpen] = useState(false);
 
   // El menú se cierra solo al elegir una opción (ver Menu).
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, optimistic?: () => void) => {
@@ -164,7 +181,11 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
     run(
       async () => {
         const res = await setColumnRole(column.id, role);
-        if (res.ok) refresh();
+        if (res.ok) {
+          refresh();
+          // «Presupuesto» necesita el campo Coste: el servidor lo activa si no lo estaba.
+          if (res.data?.costEnabled) toast(t("Se ha activado el campo Coste"));
+        }
         return res;
       },
       () =>
@@ -249,6 +270,7 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
         <MenuItem icon={Repeat} onClick={() => setDialog("routine")}>{t("Destino de la siguiente aparición: {name}…", { name: routineTarget?.name ?? t("esta columna") })}</MenuItem>
       )}
       {column.role === "DELIVERY" && <MenuItem icon={FileDown} onClick={() => window.open(columnUrl("delivery"), "_blank", "noopener")}>{t("Resumen para el cliente (PDF)")}</MenuItem>}
+      {column.role === "BUDGET" && <MenuItem icon={Wallet} onClick={() => setSummaryOpen(true)}>{t("Resumen de presupuesto")}</MenuItem>}
       <MenuSeparator />
       <MenuItem icon={CheckCircle2} onClick={toggleDone}>
         {column.isDone ? t("✓ Cuenta como terminada") : t("Contar como terminada")}
@@ -258,6 +280,7 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
         {empty ? t("Borrar columna") : t("Borrar (debe estar vacía)")}
       </MenuItem>
     </Menu>
+    {summaryOpen && <BudgetSummaryDialog column={column} onClose={() => setSummaryOpen(false)} />}
     {dialog === "checklist" && <ChecklistDialog column={column} onClose={() => setDialog(null)} />}
     {dialog === "routine" && <RoutineTargetDialog column={column} onClose={() => setDialog(null)} />}
     </>

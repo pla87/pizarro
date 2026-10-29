@@ -5,6 +5,7 @@ import { COLUMN_ROLES, UNIQUE_COLUMN_ROLES, defaultColumns, PALETTE, type Column
 import { POSITION_STEP } from "./positions";
 import * as v from "./validation";
 import { MAX_KIND_SUBTASKS } from "./kinds-special";
+import { normalizeTaskFields, TASK_FIELDS, type TaskFieldKey } from "./task-fields";
 
 export const MAX_TEMPLATE_COLUMNS = 20;
 export const MAX_TEMPLATE_KINDS = 30;
@@ -50,6 +51,8 @@ export const templateInputSchema = z
     // Oculta todos los tipos generales del proyecto nuevo, sean los que sean (para plantillas ajenas al software).
     hideAllGeneralKinds: z.boolean().default(false),
     labels: z.array(templateLabelSchema).max(MAX_TEMPLATE_LABELS, `Máximo ${MAX_TEMPLATE_LABELS} etiquetas.`),
+    // Campos opcionales de tarea que activa el proyecto nuevo (con una columna «Presupuesto» siempre va el coste).
+    taskFields: z.array(z.enum(TASK_FIELDS)).max(TASK_FIELDS.length).default([]),
   })
   .superRefine((t, ctx) => {
     if (!uniqueNames(t.columns)) ctx.addIssue({ code: "custom", message: "Hay columnas con el mismo nombre.", path: ["columns"] });
@@ -60,7 +63,15 @@ export const templateInputSchema = z
         ctx.addIssue({ code: "custom", message: "Los roles «Siguiente salto» y «En producción» solo pueden usarse en una columna.", path: ["columns"] });
       }
     }
-  });
+  })
+  .transform((t) => ({ ...t, taskFields: templateTaskFields(t) }));
+
+/** Campos opcionales que activa una plantilla: los elegidos (sin repetir) y el coste si hay una columna de presupuesto. */
+export function templateTaskFields(t: { taskFields?: readonly string[]; columns: { role: string }[] }): TaskFieldKey[] {
+  const keys = [...(t.taskFields ?? [])];
+  if (t.columns.some((c) => c.role === "BUDGET")) keys.push("cost");
+  return normalizeTaskFields(keys);
+}
 
 export type TemplateInput = z.input<typeof templateInputSchema>;
 export type TemplateData = z.output<typeof templateInputSchema>;
@@ -104,6 +115,8 @@ interface TemplateApplication {
   labels: { name: string; color: string }[];
   /** Ids de tipos generales que el proyecto no usará. */
   hiddenKindIds: string[];
+  /** Campos opcionales de tarea que se activan en el proyecto. */
+  taskFields: TaskFieldKey[];
 }
 
 /**
@@ -134,11 +147,12 @@ export function buildTemplateApplication(template: TemplateData, generalKinds: G
     })),
     labels: template.labels.map((l) => ({ name: l.name, color: l.color })),
     hiddenKindIds: hidden.map((k) => k.id),
+    taskFields: templateTaskFields({ taskFields: template.taskFields, columns }),
   };
 }
 
 /** Lee el JSON guardado en la base de datos y descarta lo que no cumpla el esquema. */
-export function parseStoredTemplate(row: { id: string; name: string; description: string; columns: unknown; kinds: unknown; hiddenGeneralKinds: unknown; hideAllGeneralKinds?: unknown; labels: unknown }): TemplateDto {
+export function parseStoredTemplate(row: { id: string; name: string; description: string; columns: unknown; kinds: unknown; hiddenGeneralKinds: unknown; hideAllGeneralKinds?: unknown; labels: unknown; taskFields?: unknown }): TemplateDto {
   const parsed = templateInputSchema.safeParse(row);
   if (parsed.success) return { id: row.id, ...parsed.data };
   // Datos corruptos: se devuelve lo que se pueda leer sin romper el listado.
@@ -153,5 +167,6 @@ export function parseStoredTemplate(row: { id: string; name: string; description
     hiddenGeneralKinds: list(v.name, row.hiddenGeneralKinds),
     hideAllGeneralKinds: row.hideAllGeneralKinds === true,
     labels: list(templateLabelSchema, row.labels),
+    taskFields: normalizeTaskFields(Array.isArray(row.taskFields) ? row.taskFields.filter((x): x is string => typeof x === "string") : []),
   };
 }

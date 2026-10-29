@@ -9,7 +9,7 @@ export function kindBadgeStyle(color: string): CSSProperties {
 
 export const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
 
-export const COLUMN_ROLES = ["NONE", "NEXT_RELEASE", "IN_PRODUCTION", "WAITING", "WEEKLY_PLAN", "CHECKLIST", "REVIEW", "AGENDA", "ROUTINES", "DELIVERY"] as const;
+export const COLUMN_ROLES = ["NONE", "NEXT_RELEASE", "IN_PRODUCTION", "WAITING", "WEEKLY_PLAN", "CHECKLIST", "REVIEW", "AGENDA", "ROUTINES", "DELIVERY", "BUDGET"] as const;
 export type ColumnRoleValue = (typeof COLUMN_ROLES)[number];
 
 /** Roles que solo puede tener una columna por proyecto (el resto de roles pueden repetirse). */
@@ -31,6 +31,7 @@ export const COLUMN_ROLE_LABEL: Record<ColumnRoleValue, string> = {
   AGENDA: "Agenda",
   ROUTINES: "Rutinas",
   DELIVERY: "Entrega al cliente",
+  BUDGET: "Presupuesto (suma el coste)",
 };
 
 export const DEFAULT_COLUMNS: { name: string; nameEn: string; role: ColumnRoleValue; isDone: boolean }[] = [

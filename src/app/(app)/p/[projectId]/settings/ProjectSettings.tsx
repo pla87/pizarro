@@ -5,10 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
-  createDeliverable, createLabel, deleteDeliverable, deleteLabel, addProjectMember, deleteProject, removeProjectMember, setProjectVisibility, setAttachmentLimits, setGoogleShareMode, updateDeliverable, updateLabel, updateProject,
+  createDeliverable, createLabel, deleteDeliverable, deleteLabel, addProjectMember, deleteProject, removeProjectMember, setProjectVisibility, setAttachmentLimits, setGoogleShareMode, setTaskFields, updateDeliverable, updateLabel, updateProject,
 } from "@/actions/projects";
 import { formatDay } from "@/lib/dates";
 import { useIntlLocale, useT } from "@/i18n/client";
+import { TaskFieldToggles } from "@/components/TaskFieldToggles";
 import { ColorPicker } from "@/components/ui/ColorPicker";
 import { cn } from "@/components/ui/cn";
 import { Modal } from "@/components/ui/Modal";
@@ -17,6 +18,7 @@ import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
 import { isWhite, onColor, PALETTE, RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "@/lib/constants";
 import { GOOGLE_SHARE_MODES, isDomainMode, type GoogleShareMode } from "@/lib/google-share";
+import type { TaskFieldKey } from "@/lib/task-fields";
 import { FILE_MAX_DEFAULT_MB, FILE_MAX_MAX_MB, FILE_MAX_MIN_MB } from "@/lib/upload-size";
 import type { EditorModeValue, KindOption, LabelOption } from "@/lib/types";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
@@ -25,7 +27,7 @@ import { setGeneralKindEnabled } from "@/actions/project-kinds";
 interface Props {
   isAdmin: boolean;
   currentUserId: string;
-  project: { id: string; name: string; description: string; visibility: "TEAM" | "PRIVATE"; releaseZipMaxMb: number; taskAttachMaxMb: number; googleShareMode: GoogleShareMode; fileMaxMb: number; members: { id: string; name: string; active: boolean }[] };
+  project: { id: string; name: string; description: string; visibility: "TEAM" | "PRIVATE"; releaseZipMaxMb: number; taskAttachMaxMb: number; googleShareMode: GoogleShareMode; fileMaxMb: number; taskFields: TaskFieldKey[]; budgetColumns: number; members: { id: string; name: string; active: boolean }[] };
   labels: LabelOption[];
   kinds: KindRow[];
   /** Todos los tipos generales, con si el proyecto los usa y cuántas tareas tienen aquí. */
@@ -71,6 +73,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
   const [fileMb, setFileMb] = useState(String(project.fileMaxMb));
   const [visibility, setVisibility] = useState(project.visibility);
   const [labels, setLabels] = useState(initialLabels);
+  const [taskFields, setTaskFieldsDraft] = useState<TaskFieldKey[]>(project.taskFields);
   const [confirmName, setConfirmName] = useState("");
   // Los miembros de un proyecto privado lo gestionan aunque no sean administradores.
   const isPrivateProject = project.visibility === "PRIVATE";
@@ -112,6 +115,25 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
             </div>
             <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
           </form>
+        </Section>
+      )}
+
+      {canManage && (
+        <Section title="Campos opcionales de las tareas" description="Activa solo los datos que necesita este proyecto. Al desactivar un campo se oculta, pero los datos de las tareas se conservan.">
+          <TaskFieldToggles
+            value={taskFields}
+            onChange={setTaskFieldsDraft}
+            disabled={pending}
+            lockedCost={project.budgetColumns > 0 ? t("No se puede desactivar mientras el proyecto tenga una columna de presupuesto.") : null}
+          />
+          <button
+            type="button"
+            className="btn-primary mt-3"
+            disabled={pending || (taskFields.length === project.taskFields.length && taskFields.every((f) => project.taskFields.includes(f)))}
+            onClick={() => run(async () => setTaskFields(project.id, taskFields), t("Proyecto actualizado"), () => router.refresh())}
+          >
+            {t("Guardar")}
+          </button>
         </Section>
       )}
 
