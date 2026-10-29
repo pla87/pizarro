@@ -23,6 +23,20 @@ async function stillAssignable(projectId: string, userId: string | null): Promis
 }
 
 /**
+ * Columna ROUTINES de la que cuelga una tarea recurrente (en la que está o la última en la que estuvo) y columna
+ * donde nace su siguiente aparición: la destino configurada o, por defecto, la propia columna de rutinas
+ * (salvo que cuente como terminada: entonces se sigue la regla general). null si no viene de una rutina.
+ */
+async function routineColumnOf(src: { projectId: string; columnId: string; routineColumnId: string | null; column: { role: string } }): Promise<{ columnId: string; targetId: string } | null> {
+  const id = src.column.role === "ROUTINES" ? src.columnId : src.routineColumnId;
+  if (!id) return null;
+  const col = await db.column.findFirst({ where: { id, projectId: src.projectId, role: "ROUTINES" }, select: { id: true, isDone: true, routineTargetColumnId: true } });
+  if (!col) return null;
+  if (col.routineTargetColumnId) return { columnId: col.id, targetId: col.routineTargetColumnId };
+  return col.isDone ? null : { columnId: col.id, targetId: col.id };
+}
+
+/**
  * Crea la siguiente aparición de las tareas recurrentes que se acaban de terminar (movidas a una columna
  * «terminada») o archivar. Es idempotente: `recurrenceFromId` es único, así que de cada tarea solo sale una
  * siguiente, aunque se mueva varias veces, se archive después de terminarla o dos personas lo hagan a la vez.
@@ -42,7 +56,8 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
     select: {
       id: true, projectId: true, columnId: true, title: true, description: true, kindId: true, color: true, linkUrl: true,
       assigneeId: true, dueDate: true, deliverableId: true, recurrence: true, recurrenceDay: true,
-      column: { select: { isDone: true } },
+      routineColumnId: true,
+      column: { select: { isDone: true, role: true } },
       labels: { select: { labelId: true } },
       subtasks: { orderBy: { position: "asc" }, select: { title: true, position: true } },
     },
@@ -55,7 +70,10 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
   for (const src of sources) {
     if (src.recurrence === "NONE") continue;
     let columnId = src.columnId;
-    if (src.column.isDone) {
+    // Rutinas: si la tarea vive (o vivió) en una columna ROUTINES, la siguiente aparición va a su columna destino.
+    const routine = await routineColumnOf(src);
+    if (routine) columnId = routine.targetId;
+    else if (src.column.isDone) {
       if (!firstOpen.has(src.projectId)) {
         const open = await db.column.findFirst({ where: { projectId: src.projectId, isDone: false }, orderBy: { position: "asc" }, select: { id: true } });
         firstOpen.set(src.projectId, open?.id ?? null);
@@ -93,6 +111,7 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
             recurrence: src.recurrence,
             recurrenceDay: src.recurrenceDay,
             recurrenceFromId: src.id,
+            routineColumnId: routine?.columnId ?? null,
             position: (last ?? 0) + POSITION_STEP,
             createdById: actorId,
             labels: { create: src.labels.map((l) => ({ labelId: l.labelId })) },

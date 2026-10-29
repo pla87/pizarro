@@ -2,6 +2,7 @@
 
 import { ListFilter } from "lucide-react";
 import { isWhite, kindBadgeStyle, onColor } from "@/lib/constants";
+import { PRIORITY_COLOR, PRIORITY_LABEL, TASK_PRIORITIES } from "@/lib/task-fields";
 import type { KindOption, LabelOption, UserOption } from "@/lib/types";
 import { useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
@@ -15,13 +16,16 @@ interface Props {
   kinds: KindOption[];
   users: UserOption[];
   currentUserId: string;
+  /** Campos opcionales activados: prioridad y cliente solo se ofrecen si lo están (clientes = valores usados). */
+  priorityEnabled?: boolean;
+  clients?: string[];
   className?: string;
 }
 
 const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
 
 /** Desplegable «Filtros» junto al buscador del tablero: botón de icono con un contador cuando hay filtros activos. */
-export function FilterMenu({ filters, onChange, labels, kinds, users, currentUserId, className }: Props) {
+export function FilterMenu({ filters, onChange, labels, kinds, users, currentUserId, priorityEnabled, clients = [], className }: Props) {
   const t = useT();
   const count = activeFilterCount(filters);
   const set = (patch: Partial<BoardFilters>) => onChange({ ...filters, ...patch });
@@ -81,6 +85,23 @@ export function FilterMenu({ filters, onChange, labels, kinds, users, currentUse
               </Chip>
             );
           })}
+        </Group>
+      )}
+      {priorityEnabled && (
+        <Group title={t("Prioridad")}>
+          {TASK_PRIORITIES.map((p) => {
+            const on = filters.priorities.includes(p);
+            return (
+              <Chip key={p} on={on} onClick={() => set({ priorities: toggle(filters.priorities, p) })} style={on ? { backgroundColor: PRIORITY_COLOR[p], color: "#fff" } : undefined}>
+                {t(PRIORITY_LABEL[p])}
+              </Chip>
+            );
+          })}
+        </Group>
+      )}
+      {clients.length > 0 && (
+        <Group title={t("Cliente")}>
+          {clients.map((c) => <Chip key={c} on={filters.clients.includes(c)} onClick={() => set({ clients: toggle(filters.clients, c) })}>{c}</Chip>)}
         </Group>
       )}
       <div>

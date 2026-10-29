@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { logout } from "@/actions/auth";
 import { useT } from "@/i18n/client";
 import { createProject } from "@/actions/projects";
@@ -16,6 +16,8 @@ import type { CurrentUser } from "@/lib/session";
 import { AppBadge } from "./AppBadge";
 import { InstallApp } from "./InstallApp";
 import { clearAllDrafts } from "./board/drafts";
+import { filesFrom, hasFiles } from "./board/upload";
+import { uploadDocument } from "./docs/uploadDocuments";
 import { installDragMove } from "./ui/dragMove";
 import { Presence } from "./board/Presence";
 import { PrivateIcon, ProjectMenu, ProjectsContext, useProjectSwitchHref } from "./ProjectMenu";
@@ -126,23 +128,80 @@ function Shell({ user, projects, version, unread, lastProjectId = null, backupAl
   );
 }
 
-function NavLink({ href, icon: Icon, children, active }: { href: string; icon: typeof Menu; children: React.ReactNode; active: boolean }) {
+function NavLink({ href, icon: Icon, children, active, extra, highlight = false }: { href: string; icon: typeof Menu; children: React.ReactNode; active: boolean; extra?: Record<string, unknown>; highlight?: boolean }) {
   return (
     <Link
       href={href}
+      {...extra}
       aria-current={active ? "page" : undefined}
       className={cn(
         // El contorno de foco va por dentro: el menú hace scroll y recortaría uno exterior.
         "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium focus-visible:outline-3 focus-visible:-outline-offset-2 focus-visible:outline-focus",
-        active
+        highlight && "bg-brand-100 text-brand-700 outline-2 -outline-offset-2 outline-dashed outline-brand-500 dark:bg-brand-500/25 dark:text-brand-100",
+        !highlight && active
           ? "bg-brand-50 text-brand-700 shadow-[inset_3px_0_0_var(--color-detail)] dark:bg-brand-500/15 dark:text-brand-100"
-          : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
+          : !highlight && "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
       )}
     >
       <Icon size={17} />
       {children}
     </Link>
   );
+}
+
+/** «Documentación»: acepta archivos arrastrados desde el escritorio y los sube a la documentación del proyecto. */
+function DocsNavLink({ projectId, active }: { projectId: string; active: boolean }) {
+  const t = useT();
+  const router = useRouter();
+  const toast = useToast();
+  const [over, setOver] = useState(false);
+  const depth = useRef(0);
+  const open = () => router.push(`/p/${projectId}/docs`);
+
+  async function upload(files: File[]) {
+    toast(files.length === 1 ? t("Subiendo «{name}» a Documentación…", { name: files[0]!.name }) : t("Subiendo {n} archivos a Documentación…", { n: files.length }));
+    let done = 0;
+    let firstError = "";
+    for (const file of files) {
+      const res = await uploadDocument(projectId, file, t);
+      if (res.ok) done++;
+      else firstError ||= res.error;
+    }
+    if (done > 0) {
+      toast(done === 1 ? t("Documento subido") : t("{n} documentos subidos", { n: done }), "success", { label: t("Abrir Documentación"), onClick: open });
+      router.refresh();
+    }
+    if (firstError) toast(files.length > 1 ? t("{n} sin subir: {error}", { n: files.length - done, error: firstError }) : firstError, "error");
+  }
+
+  const extra = {
+    "data-docs-drop": "",
+    onDragEnter: (e: React.DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      depth.current++;
+      setOver(true);
+    },
+    onDragOver: (e: React.DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (!hasFiles(e)) return;
+      depth.current = Math.max(0, depth.current - 1);
+      if (depth.current === 0) setOver(false);
+    },
+    onDrop: (e: React.DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      depth.current = 0;
+      setOver(false);
+      const files = filesFrom(e.dataTransfer.files);
+      if (files.length) void upload(files);
+    },
+  };
+  return <NavLink href={`/p/${projectId}/docs`} icon={FileText} active={active} extra={extra} highlight={over}>{t("Documentación")}</NavLink>;
 }
 
 function Sidebar({ user, projects, current, version, pathname, unread, backupAlert }: {
@@ -172,7 +231,7 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
           <>
             <NavLink href={`/p/${current.id}`} icon={LayoutDashboard} active={pathname === `/p/${current.id}`}>{t("Tablero")}</NavLink>
             <NavLink href={`/p/${current.id}/releases`} icon={Rocket} active={pathname.startsWith(`/p/${current.id}/releases`)}>{t("Releases")}</NavLink>
-            <NavLink href={`/p/${current.id}/docs`} icon={FileText} active={pathname.startsWith(`/p/${current.id}/docs`)}>{t("Documentación")}</NavLink>
+            <DocsNavLink projectId={current.id} active={pathname.startsWith(`/p/${current.id}/docs`)} />
             <ReportButton projectId={current.id} variant="sidebar" />
             <NavLink href={`/p/${current.id}/settings`} icon={SlidersHorizontal} active={pathname.startsWith(`/p/${current.id}/settings`)}>{t("Ajustes del proyecto")}</NavLink>
             <NavLink href={`/p/${current.id}?archivadas=1`} icon={Archive} active={false}>{t("Archivadas")}</NavLink>

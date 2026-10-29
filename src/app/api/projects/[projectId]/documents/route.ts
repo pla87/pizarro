@@ -13,6 +13,7 @@ import { roundMb } from "@/lib/attachment-limit";
 import { confirmDocumentKind, detectDocumentKind, documentMime, sanitizeDocumentName, type DocumentKindName } from "@/lib/document-kind";
 import { createDocumentWithinLimit } from "@/lib/documents";
 import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, processImage, removeDocumentFiles, sanitizeMime, saveDocumentFile } from "@/lib/uploads";
+import { acquireUploadSlot, declaredLength } from "@/lib/upload-slots";
 import { effectiveFileMaxMb, MULTIPART_OVERHEAD_BYTES } from "@/lib/upload-size";
 
 export const runtime = "nodejs";
@@ -22,6 +23,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
   const start = performance.now();
   const ip = clientIp(req.headers);
   const projectIdForLog = (await ctx.params).projectId;
+  let release: (() => void) | null = null;
   let fileInfo: { name: string; type: string; size: number } | null = null;
   try {
     if (!isSameOrigin(req)) throw new AppError("Origen no permitido.", 403);
@@ -30,6 +32,11 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
     await assertProjectAccess(user, projectId);
     // Tope de subidas por persona (comparte cubo con los adjuntos de tareas): evita llenar disco o memoria con un bucle.
     if (!rateLimit(`upload:${user.id}`, 60, 60_000)) throw new AppError("Demasiadas peticiones", 429);
+    // Sin Content-Length (algún proxy la quita) el tamaño se comprueba al leer el archivo.
+    const length = declaredLength(req.headers);
+    // Como mucho unas pocas subidas a la vez en todo el servidor (cada una se lee entera en memoria).
+    release = await acquireUploadSlot();
+    if (!release) throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
 
     const project = await db.project.findUniqueOrThrow({ where: { id: projectId }, select: { fileMaxMb: true } });
     const fileMaxMb = effectiveFileMaxMb(project.fileMaxMb);
@@ -39,8 +46,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
       return new AppError(t("El archivo supera el tamaño máximo del proyecto ({mb} MB por archivo).", { mb: fileMaxMb }), 413);
     };
     // Antes de leer el cuerpo: si la petición ya declara más que el archivo máximo (más el envoltorio multipart), se rechaza.
-    const length = Number(req.headers.get("content-length") ?? 0);
-    if (length > maxBytes + MULTIPART_OVERHEAD_BYTES) throw await tooBig();
+    if (length !== null && length > maxBytes + MULTIPART_OVERHEAD_BYTES) throw await tooBig();
     if (imageQueueFull()) throw new AppError(IMAGE_QUEUE_FULL_MESSAGE, 503);
     const form = await req.formData();
     const file = form.get("file");
@@ -101,9 +107,14 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
       details: { projectId: projectIdForLog, file: fileInfo, status: err instanceof AppError ? err.status : 500 },
     });
     const t = await getT();
-    if (err instanceof AppError) return NextResponse.json({ error: t(err.message), ...(err.code ? { code: err.code } : {}) }, { status: err.status });
+    if (err instanceof AppError) {
+      const headers = err.code === "upload_busy" ? { "Retry-After": "5" } : undefined;
+      return NextResponse.json({ error: t(err.message), ...(err.code ? { code: err.code } : {}) }, { status: err.status, headers });
+    }
     console.error("[documents upload]", err);
     return NextResponse.json({ error: t("No se pudo procesar el archivo.") }, { status: 500 });
+  } finally {
+    release?.();
   }
 }
 

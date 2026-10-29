@@ -24,6 +24,7 @@ export const boardTaskSelect = {
   recurrenceDay: true,
   contentUpdatedAt: true,
   columnEnteredAt: true,
+  cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true, externalUrl: true,
   labels: { select: { labelId: true } },
   subtasks: { select: { done: true } },
   // Solo el flag de cada adjunto: la tarjeta distingue imágenes de otros ficheros.
@@ -67,6 +68,14 @@ function toBoardTaskWith(t: BoardTaskRow, hasDescription: boolean): BoardTask {
     recurrenceDay: t.recurrenceDay,
     textVersion: t.contentUpdatedAt?.toISOString() ?? null,
     columnEnteredAt: t.columnEnteredAt.toISOString(),
+    cost: t.cost?.toFixed(2) ?? null,
+    costPaid: t.costPaid,
+    estimatedHours: t.estimatedHours?.toFixed(2) ?? null,
+    actualHours: t.actualHours?.toFixed(2) ?? null,
+    priority: t.priority,
+    client: t.client,
+    startDate: dateToIso(t.startDate),
+    externalUrl: t.externalUrl,
   };
 }
 
@@ -137,4 +146,10 @@ export async function userTemplates(userId: string) {
   });
   const pick = (kind: "HEADER" | "FOOTER") => rows.filter((r) => r.kind === kind).map(({ id, name, content }) => ({ id, name, content }));
   return { headers: pick("HEADER"), footers: pick("FOOTER") };
+}
+
+/** Clientes distintos ya usados en las tareas del proyecto (para sugerir en el campo «Cliente»). */
+export async function projectClients(projectId: string): Promise<string[]> {
+  const rows = await db.task.findMany({ where: { projectId, client: { not: null } }, distinct: ["client"], select: { client: true }, orderBy: { client: "asc" }, take: 200 });
+  return rows.map((r) => r.client!).filter(Boolean);
 }

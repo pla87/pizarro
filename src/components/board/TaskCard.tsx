@@ -3,7 +3,9 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AlignLeft, Loader2, CalendarClock, Check, CheckSquare, ExternalLink, FileText, GripVertical, Hourglass, Image as ImageIcon, MessageSquare, Paperclip, Repeat } from "lucide-react";
+import { nextOccurrenceDue } from "@/lib/recurrence-date";
 import { DEFAULT_WAITING_DAYS, isWhite, MAX_TITLE } from "@/lib/constants";
+import { formatEuro, PRIORITY_COLOR, PRIORITY_LABEL } from "@/lib/task-fields";
 import { daysBetween, dueStatus, formatDay } from "@/lib/dates";
 import { memo, useEffect, useRef, useState } from "react";
 import type { BoardTask } from "@/lib/types";
@@ -57,7 +59,7 @@ export const SortableTaskCard = memo(function SortableTaskCard({ id }: { id: str
 });
 
 export const TaskCard = memo(function TaskCard({ task, overlay = false, handle = null }: { task: BoardTask; overlay?: boolean; handle?: React.ReactNode }) {
-  const { users, labels, openTask, toggleSelected, columns, today, kindById, cardStyle, assignToMe, moveToAdjacentColumn, moveWithinColumn, setDueDate, renameTask, duplicateTask } = useBoard();
+  const { project, users, labels, openTask, toggleSelected, columns, today, kindById, cardStyle, assignToMe, moveToAdjacentColumn, moveWithinColumn, setDueDate, renameTask, duplicateTask } = useBoard();
   const locale = useIntlLocale();
   const t = useT();
   const column = columns.find((c) => c.id === task.columnId);
@@ -65,6 +67,8 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
   // Columna «Esperando»: días naturales desde que la tarjeta entró (se resalta al llegar al plazo del recordatorio).
   const waitingDays = column?.role === "WAITING" ? Math.max(0, daysBetween(task.columnEnteredAt.slice(0, 10), today)) : null;
   const waitingLate = waitingDays !== null && waitingDays >= (column?.waitingDays ?? DEFAULT_WAITING_DAYS);
+  // Columna «Rutinas»: fecha de la siguiente aparición (la misma regla que aplica el servidor al terminar la tarea).
+  const nextRoutine = column?.role === "ROUTINES" && task.recurrence !== "NONE" ? nextOccurrenceDue(task.recurrence, task.recurrenceDay, task.dueDate, today) : null;
   const due = dueStatus(task.dueDate, done, today);
   const assignee = task.assigneeId ? users.find((u) => u.id === task.assigneeId) : null;
   const isSelected = useIsSelected(task.id);
@@ -72,6 +76,9 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
   const white = isWhite(task.color);
   const taskLabels = task.labelIds.map((id) => labels.find((l) => l.id === id)).filter((l) => !!l);
   const repeat = recurrenceLabel(task, t, locale);
+  // Campos opcionales del proyecto: insignias de prioridad y coste (si hay valor).
+  const showPriority = project.taskFields.includes("priority") && task.priority;
+  const showCost = project.taskFields.includes("cost") && task.cost !== null;
 
   // F2: renombrar en la propia tarjeta. Alt+D: fecha límite en un pequeño selector (junto a la tarjeta).
   const [renaming, setRenaming] = useState(false);
@@ -193,6 +200,23 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
 
       <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
         <TypeBadge kind={kindById.get(task.kindId)} />
+        {showPriority && (
+          <span
+            className="rounded px-1.5 py-px text-[10px] font-semibold text-white"
+            style={{ backgroundColor: PRIORITY_COLOR[task.priority!] }}
+            title={t("Prioridad: {p}", { p: t(PRIORITY_LABEL[task.priority!]) })}
+          >
+            {t(PRIORITY_LABEL[task.priority!])}
+          </span>
+        )}
+        {showCost && (
+          <span
+            className={cn("inline-flex items-center gap-0.5 rounded bg-slate-100 px-1 font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200", task.costPaid && "text-emerald-700 dark:text-emerald-300")}
+            title={task.costPaid ? t("Coste (pagado)") : t("Coste (pendiente de pago)")}
+          >
+            {formatEuro(task.cost, locale)}{task.costPaid && <Check size={11} strokeWidth={3} aria-hidden />}
+          </span>
+        )}
         {task.dueDate && (
           <span
             className={cn(
@@ -212,6 +236,11 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
             title={t("Lleva {n} d en esta columna", { n: waitingDays })}
           >
             <Hourglass size={12} /> {t("Esperando {n} d", { n: waitingDays })}
+          </span>
+        )}
+        {nextRoutine && (
+          <span className="inline-flex items-center gap-0.5 rounded px-1 font-medium text-brand-700 dark:text-brand-300" title={t("Fecha de la siguiente aparición")}>
+            <Repeat size={12} /> {t("Próxima: {date}", { date: formatDay(nextRoutine, today, locale) })}
           </span>
         )}
         {repeat && <span title={repeat} className="inline-flex"><Repeat size={13} aria-label={repeat} /></span>}

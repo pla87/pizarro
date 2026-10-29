@@ -2,8 +2,10 @@ import "server-only";
 import { Document, Font, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { makeT, type T } from "@/i18n/core";
 import { formatDay } from "./dates";
+import type { ChecklistGroup, ChecklistGroupBy } from "./checklist";
 import type { WeekPlanGroupBy, WeekPlanSection, WeekPlanTask } from "./week-plan";
-import { RECENT_DONE_DAYS, UPCOMING_DAYS, type DeliverableStatus, type Report, type ReportTask } from "./report";
+import { RECENT_DONE_DAYS, UPCOMING_DAYS, type DeliverableStatus, type Report, type ReportFieldRow, type ReportTask } from "./report";
+import { formatEuro, formatHours, PRIORITY_LABEL } from "./task-fields";
 
 // Sin partición de palabras con guion: en español quedaba «re-sumen».
 Font.registerHyphenationCallback((word) => [word]);
@@ -141,6 +143,31 @@ function dueCell(today: string, x: Ctx) {
   };
 }
 
+/** Tabla con los campos opcionales activados (coste, horas, prioridad, cliente, inicio, enlace) y sus totales. */
+function FieldsSection({ r, t, locale }: { r: Report; t: T; locale: string }) {
+  const f = r.fields!;
+  const has = (k: string) => (f.enabled as string[]).includes(k);
+  const totals: string[] = [];
+  if (has("cost")) totals.push(t("Coste: {total} · pagado {paid} · pendiente {pending}", { total: formatEuro(f.totals.cost, locale), paid: formatEuro(f.totals.paid, locale), pending: formatEuro(f.totals.pending, locale) }));
+  if (has("hours")) totals.push(t("Horas: {est} estimadas · {act} reales", { est: formatHours(f.totals.estimatedHours, locale), act: formatHours(f.totals.actualHours, locale) }));
+  // Anchos: el título ocupa lo que dejan las demás columnas.
+  const extra: Col<ReportFieldRow>[] = [];
+  if (has("priority")) extra.push({ label: t("Prioridad"), width: "10%", render: (x) => (x.priority ? t(PRIORITY_LABEL[x.priority]) : "—") });
+  if (has("client")) extra.push({ label: t("Cliente"), width: "15%", render: (x) => x.client ?? "—" });
+  if (has("startDate")) extra.push({ label: t("Inicio"), width: "12%", render: (x) => (x.startDate ? formatDay(x.startDate, r.today, locale) : "—") });
+  if (has("cost")) extra.push({ label: t("Coste"), width: "14%", render: (x) => (x.cost === null ? "—" : `${formatEuro(x.cost, locale)}${x.costPaid ? ` (${t("pagado")})` : ""}`) });
+  if (has("hours")) extra.push({ label: t("Horas (est./real)"), width: "12%", render: (x) => `${formatHours(x.estimatedHours, locale) || "—"} / ${formatHours(x.actualHours, locale) || "—"}` });
+  if (has("externalUrl")) extra.push({ label: t("Enlace"), width: "17%", render: (x) => (x.externalUrl ? <Text style={{ fontSize: 7 }}>{x.externalUrl}</Text> : "—") });
+  const used = extra.reduce((n, c) => n + parseInt(c.width, 10), 0);
+  return (
+    <>
+      <Text style={s.h2} minPresenceAhead={70}>{t("Campos opcionales")}</Text>
+      {totals.map((line) => <Text key={line} style={[s.small, { marginBottom: 2, fontFamily: "Helvetica-Bold" }]}>{line}</Text>)}
+      <Table rows={f.rows} cols={[{ label: t("Tarea"), width: `${Math.max(20, 100 - used)}%`, render: (x) => x.title }, ...extra]} />
+    </>
+  );
+}
+
 function ReportDocument({ r, t, locale }: { r: Report; t: T; locale: string }) {
   const x: Ctx = { t, locale };
   const generated = formatDay(r.today, undefined, locale);
@@ -260,6 +287,9 @@ function ReportDocument({ r, t, locale }: { r: Report; t: T; locale: string }) {
           </>
         ) : null}
 
+        {/* Campos opcionales del proyecto */}
+        {r.fields ? <FieldsSection r={r} t={t} locale={locale} /> : null}
+
         {/* Releases */}
         {r.releases.length ? (
           <>
@@ -336,4 +366,105 @@ function WeekPlanDocument({ r, t, locale }: { r: WeekPlanPdfInput; t: T; locale:
 
 export function renderWeekPlanPdf(input: WeekPlanPdfInput, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
   return renderToBuffer(<WeekPlanDocument r={input} t={t} locale={locale} />);
+}
+
+export interface ChecklistPdfInput {
+  project: string;
+  column: string;
+  today: string;
+  by: ChecklistGroupBy;
+  groups: ChecklistGroup[];
+}
+
+function ChecklistDocument({ r, t, locale }: { r: ChecklistPdfInput; t: T; locale: string }) {
+  const total = r.groups.reduce((n, g) => n + g.items.length, 0);
+  const done = r.groups.reduce((n, g) => n + g.items.filter((i) => i.done).length, 0);
+  return (
+    <Document title={`${t("Lista consolidada")} · ${r.project}`} author="Pizarro" creator="Pizarro" producer="Pizarro">
+      <Page size="A4" style={s.page}>
+        <View style={s.header}>
+          <Text style={s.eyebrow}>{t("Lista consolidada")}</Text>
+          <Text style={s.title}>{r.column}</Text>
+          <Text style={s.meta}>
+            {r.project} · {formatDay(r.today, undefined, locale)} · {r.by === "card" ? t("Por tarjeta") : t("Por tipo de tarea")} · {t("{done} de {total} hechas", { done, total })}
+          </Text>
+        </View>
+        {r.groups.length === 0 && <Text style={s.small}>{t("No hay subtareas en esta columna.")}</Text>}
+        {r.groups.map((g) => (
+          <View key={g.key}>
+            <Text style={s.h3} minPresenceAhead={40}>{g.label} <Text style={s.small}>({g.items.filter((i) => i.done).length}/{g.items.length})</Text></Text>
+            {g.items.map((it) => (
+              <View key={it.id} style={{ flexDirection: "row", marginBottom: 2 }} wrap={false}>
+                <Text style={{ width: 16, fontFamily: "Helvetica-Bold", color: it.done ? C.green : C.muted }}>{it.done ? "[x]" : "[ ]"}</Text>
+                <Text style={{ flex: 1, color: it.done ? C.muted : C.text }}>
+                  {it.title}
+                  {r.by === "kind" ? <Text style={s.small}>  ({it.taskTitle})</Text> : null}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ))}
+        <View style={s.footer} fixed>
+          <Text>{r.project} · {r.column}</Text>
+          <Text render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
+        </View>
+      </Page>
+    </Document>
+  );
+}
+
+export function renderChecklistPdf(input: ChecklistPdfInput, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
+  return renderToBuffer(<ChecklistDocument r={input} t={t} locale={locale} />);
+}
+
+/** Tarea tal como se entrega al cliente: sin comentarios, notas internas ni datos de personas. */
+export interface DeliveryTask {
+  title: string;
+  kind: string;
+  dueDate: string | null;
+  subtaskTotal: number;
+  doneSubtasks: string[];
+}
+
+export interface DeliveryPdfInput {
+  project: string;
+  column: string;
+  today: string;
+  tasks: DeliveryTask[];
+}
+
+function DeliveryDocument({ r, t, locale }: { r: DeliveryPdfInput; t: T; locale: string }) {
+  return (
+    <Document title={`${t("Resumen para el cliente")} · ${r.project}`} author="Pizarro" creator="Pizarro" producer="Pizarro">
+      <Page size="A4" style={s.page}>
+        <View style={s.header}>
+          <Text style={s.eyebrow}>{t("Resumen para el cliente")}</Text>
+          <Text style={s.title}>{r.project}</Text>
+          <Text style={s.meta}>{r.column} · {formatDay(r.today, undefined, locale)} · {t("{n} tareas", { n: r.tasks.length })}</Text>
+        </View>
+        {r.tasks.length === 0 && <Text style={s.small}>{t("No hay tareas en esta columna.")}</Text>}
+        {r.tasks.map((x, i) => (
+          <View key={i} style={{ borderBottomWidth: 1, borderBottomColor: C.line, paddingVertical: 6 }} wrap={false}>
+            <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10.5 }}>{x.title}</Text>
+            <Text style={s.small}>
+              {x.kind}
+              {x.dueDate ? ` · ${t("Fecha")}: ${formatDay(x.dueDate, r.today, locale)}` : ""}
+              {x.subtaskTotal > 0 ? ` · ${t("{done} de {total} subtareas hechas", { done: x.doneSubtasks.length, total: x.subtaskTotal })}` : ""}
+            </Text>
+            {x.doneSubtasks.map((title, j) => (
+              <Text key={j} style={{ marginLeft: 8, marginTop: 1 }}>- {title}</Text>
+            ))}
+          </View>
+        ))}
+        <View style={s.footer} fixed>
+          <Text>{r.project}</Text>
+          <Text render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
+        </View>
+      </Page>
+    </Document>
+  );
+}
+
+export function renderDeliveryPdf(input: DeliveryPdfInput, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
+  return renderToBuffer(<DeliveryDocument r={input} t={t} locale={locale} />);
 }

@@ -15,6 +15,7 @@ import { POSITION_STEP } from "@/lib/positions";
 import { localizeTemplate } from "@/lib/builtin-templates-en";
 import { buildTemplateApplication, parseStoredTemplate, type TemplateData } from "@/lib/project-templates";
 import { requireUser, type CurrentUser } from "@/lib/session";
+import { normalizeTaskFields, TASK_FIELDS } from "@/lib/task-fields";
 import { purgeProject } from "@/lib/project-delete";
 import * as v from "@/lib/validation";
 import { dateToIso, isoToDate } from "@/lib/dates";
@@ -31,6 +32,7 @@ async function applyTemplate(tx: Prisma.TransactionClient, projectId: string, te
   if (app.kinds.length) await tx.taskKind.createMany({ data: app.kinds.map((k) => ({ ...k, projectId })) });
   if (app.hiddenKindIds.length) await tx.projectHiddenKind.createMany({ data: app.hiddenKindIds.map((kindId) => ({ projectId, kindId })) });
   if (app.labels.length) await tx.label.createMany({ data: app.labels.map((l) => ({ ...l, projectId })) });
+  if (app.taskFields.length) await tx.project.update({ where: { id: projectId }, data: { taskFields: app.taskFields } });
 }
 
 /**
@@ -97,6 +99,25 @@ export async function updateProject(projectId: string, input: { name: string; de
     await findManageableProject(user, projectId);
     await db.project.update({ where: { id: projectId }, data });
     revalidatePath("/", "layout");
+  });
+}
+
+/**
+ * Campos opcionales de las tareas que usa el proyecto (coste, horas, prioridad, cliente, fecha de inicio, enlace
+ * externo). Desactivar uno solo lo oculta: los datos se conservan. El coste no se puede desactivar mientras el
+ * proyecto tenga una columna con el rol «Presupuesto».
+ */
+export async function setTaskFields(projectId: string, fields: string[]) {
+  return runAction({ name: "projects.setTaskFields", args: [projectId, fields] }, async () => {
+    const user = await requireUser();
+    const wanted = normalizeTaskFields(z.array(z.enum(TASK_FIELDS)).max(TASK_FIELDS.length).parse(fields));
+    const project = await findManageableProject(user, projectId);
+    if (!wanted.includes("cost") && (await db.column.count({ where: { projectId: project.id, role: "BUDGET" } }))) {
+      throw new AppError("El coste no se puede desactivar mientras el proyecto tenga una columna de presupuesto.");
+    }
+    await db.project.update({ where: { id: project.id }, data: { taskFields: wanted } });
+    describeAction("Cambió los campos opcionales de las tareas");
+    revalidatePath(`/p/${project.id}`, "layout");
   });
 }
 

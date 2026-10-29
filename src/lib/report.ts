@@ -1,6 +1,7 @@
 // Cálculo del informe de estado de un proyecto. Funciones puras (sin BD) para poder testearlas.
 import { makeT, type T } from "../i18n/core";
 import { daysBetween } from "./dates";
+import { centsToAmount, sumCents, type TaskFieldKey, type TaskFieldValues } from "./task-fields";
 
 export const UPCOMING_DAYS = 14;
 const RISK_DAYS = 7;
@@ -31,11 +32,40 @@ export interface ReportInput {
     updatedAt?: string;
     /** Última vez que pasó a una columna terminada (ISO), según el historial de la tarea. */
     doneAt?: string | null;
+    /** Valores de los campos opcionales (si el proyecto los usa). */
+    fields?: TaskFieldValues;
   }[];
   deliverables: { id: string; name: string; description: string; dueDate: string | null }[];
   releases: { number: number; title: string; deployedAt: string; taskCount: number }[];
   archivedCount: number;
+  /** Campos opcionales que el proyecto tiene activados (el informe solo incluye esos). */
+  taskFields?: TaskFieldKey[];
 }
+
+/** Una tarea con algún campo opcional relleno, para la tabla «Campos opcionales» del informe. */
+export interface ReportFieldRow {
+  title: string;
+  column: string;
+  priority: TaskFieldValues["priority"];
+  client: string | null;
+  startDate: string | null;
+  dueDate: string | null;
+  cost: string | null;
+  costPaid: boolean;
+  estimatedHours: string | null;
+  actualHours: string | null;
+  externalUrl: string | null;
+}
+
+export interface ReportFields {
+  enabled: TaskFieldKey[];
+  rows: ReportFieldRow[];
+  /** Coste de las tareas: pagado, pendiente y total (decimales «12.50»); horas sumadas. */
+  totals: { cost: string; paid: string; pending: string; estimatedHours: string; actualHours: string };
+}
+
+/** Máximo de filas de la tabla de campos opcionales del PDF. */
+export const MAX_FIELD_ROWS = 300;
 
 export type DeliverableStatus = "Completado" | "Retrasado" | "En riesgo" | "En plazo" | "Sin fecha" | "Sin tareas";
 
@@ -75,6 +105,8 @@ export interface Report {
   /** Terminadas con actividad en los últimos 14 días (más recientes primero). */
   recentDone: ReportTask[];
   releases: ReportInput["releases"];
+  /** null si el proyecto no tiene ningún campo opcional activado. */
+  fields: ReportFields | null;
 }
 
 const pct = (part: number, total: number) => (total ? Math.round((part / total) * 100) : 0);
@@ -187,5 +219,42 @@ export function buildReport(input: ReportInput, tr: T = makeT("es")): Report {
       .slice(0, RECENT_DONE_MAX)
       .map(({ t }) => toReportTask(t)),
     releases: input.releases,
+    fields: buildReportFields(input, columnById),
+  };
+}
+
+/** Campos opcionales activados: totales de coste y horas y las tareas que tienen algún valor. */
+function buildReportFields(input: ReportInput, columnById: Map<string, { name: string }>): ReportFields | null {
+  const enabled = input.taskFields ?? [];
+  if (!enabled.length) return null;
+  const with_ = input.tasks.filter((t) => t.fields);
+  const has = (k: TaskFieldKey) => enabled.includes(k);
+  const costOf = (t: (typeof with_)[number]) => (has("cost") ? t.fields!.cost : null);
+  const total = sumCents(with_.map(costOf));
+  const paid = sumCents(with_.filter((t) => t.fields!.costPaid).map(costOf));
+  const hours = (pick: "estimatedHours" | "actualHours") => (has("hours") ? sumCents(with_.map((t) => t.fields![pick])) : 0);
+  const rows = with_
+    .map((t) => {
+      const f = t.fields!;
+      return {
+        title: t.title,
+        column: columnById.get(t.columnId)?.name ?? "—",
+        priority: has("priority") ? f.priority : null,
+        client: has("client") ? f.client : null,
+        startDate: has("startDate") ? f.startDate : null,
+        dueDate: t.dueDate,
+        cost: costOf(t),
+        costPaid: has("cost") && f.costPaid,
+        estimatedHours: has("hours") ? f.estimatedHours : null,
+        actualHours: has("hours") ? f.actualHours : null,
+        externalUrl: has("externalUrl") ? f.externalUrl : null,
+      };
+    })
+    .filter((r) => r.priority || r.client || r.startDate || r.cost !== null || r.estimatedHours !== null || r.actualHours !== null || r.externalUrl)
+    .slice(0, MAX_FIELD_ROWS);
+  return {
+    enabled,
+    rows,
+    totals: { cost: centsToAmount(total), paid: centsToAmount(paid), pending: centsToAmount(total - paid), estimatedHours: centsToAmount(hours("estimatedHours")), actualHours: centsToAmount(hours("actualHours")) },
   };
 }

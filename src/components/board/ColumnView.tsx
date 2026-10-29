@@ -1,17 +1,22 @@
 "use client";
 
+import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, FileDown, Hourglass, Minus, MoreHorizontal, Pencil, Plus, Rocket, Tag, Trash2 } from "lucide-react";
-import { deleteColumn, moveColumn, renameColumn, setColumnDone, setColumnRole, setColumnWaitingDays } from "@/actions/columns";
+import { ArrowLeft, ArrowRight, CalendarDays, Check, CheckCircle2, FileDown, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Tag, Trash2, Wallet } from "lucide-react";
+import { deleteColumn, moveColumn, renameColumn, setColumnDone, setColumnRole, setColumnRoutineTarget, setColumnWaitingDays } from "@/actions/columns";
 import { COLUMN_ROLE_LABEL, COLUMN_ROLES, DEFAULT_WAITING_DAYS, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
 import type { BoardColumn } from "@/lib/types";
-import { useT } from "@/i18n/client";
+import { useIntlLocale, useT } from "@/i18n/client";
+import { budgetSummary, formatEuro } from "@/lib/task-fields";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
-import { useBoard, useSelectedCount, useSelectionSize } from "./context";
+import { Modal } from "../ui/Modal";
+import { BudgetSummaryDialog } from "./BudgetSummaryDialog";
+import { ChecklistDialog } from "./ChecklistDialog";
+import { useBoard, useSelectedCount, useSelectionSize, useTasks } from "./context";
 import { useShortcut } from "./shortcuts";
 import { EvergreenPanel } from "./EvergreenPanel";
 import { SortableTaskCard } from "./TaskCard";
@@ -47,8 +52,9 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
       ref={setNodeRef}
       className={cn(
         "flex w-full shrink-0 flex-col rounded-xl bg-slate-100/80 dark:bg-slate-900/60",
-        // Con tres columnas o más, en escritorio se reparten el ancho de la ventana (mínimo 18 rem; si no caben, scroll).
-        total >= 3 ? "md:min-w-72 md:flex-1" : "md:w-72",
+        // Con cuatro columnas o más, en escritorio se reparten el ancho del tablero (mínimo 18 rem; si no caben, scroll).
+        // Con 1-3 miden lo mismo que con 4: (ancho útil - barra «+» de 2.5 rem - 4 huecos de 0.75 rem) / 4. Es CSS puro, sin estado.
+        total >= 4 ? "md:min-w-72 md:flex-1" : "md:w-[calc((100%-5.5rem)/4)] md:min-w-72",
         mobileHidden && "max-md:hidden",
         isNextRelease && "ring-1 ring-brand-500/30",
       )}
@@ -74,6 +80,7 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
         <span className="rounded-full bg-slate-200 px-1.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
           {taskIds.length}
         </span>
+        {column.role === "BUDGET" && <BudgetTotal columnId={column.id} />}
         <div className="ml-auto flex items-center">
           <button className="btn-icon h-7 w-7" onClick={() => openNewTask(column.id)} aria-label={t("Añadir tarea en {name}", { name: column.name })}>
             <Plus size={16} />
@@ -118,11 +125,26 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
   );
 }
 
+/** Suma del coste de las tareas (no archivadas) de una columna «Presupuesto», en la cabecera. */
+function BudgetTotal({ columnId }: { columnId: string }) {
+  const locale = useIntlLocale();
+  const t = useT();
+  const tasks = useTasks();
+  const sum = budgetSummary(tasks.filter((x) => x.columnId === columnId));
+  return (
+    <span className="shrink-0 rounded-full bg-emerald-100 px-1.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300" title={t("Suma del coste de las tareas de la columna")}>
+      {formatEuro(sum.total / 100, locale)}
+    </span>
+  );
+}
+
 function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; index: number; total: number; empty: boolean }) {
-  const { setColumns, track, refresh, project } = useBoard();
+  const { setColumns, track, refresh, project, columns } = useBoard();
+  const [dialog, setDialog] = useState<"checklist" | "routine" | null>(null);
   const toast = useToast();
   const confirm = useConfirm();
   const t = useT();
+  const [summaryOpen, setSummaryOpen] = useState(false);
 
   // El menú se cierra solo al elegir una opción (ver Menu).
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, optimistic?: () => void) => {
@@ -159,7 +181,11 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
     run(
       async () => {
         const res = await setColumnRole(column.id, role);
-        if (res.ok) refresh();
+        if (res.ok) {
+          refresh();
+          // «Presupuesto» necesita el campo Coste: el servidor lo activa si no lo estaba.
+          if (res.data?.costEnabled) toast(t("Se ha activado el campo Coste"));
+        }
         return res;
       },
       () =>
@@ -182,6 +208,9 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
   // Rol «Planificación semanal»: PDF de la semana, por día o por persona.
   const weekPdf = (by: "day" | "person") => window.open(`/api/projects/${project.id}/columns/${column.id}/week?by=${by}`, "_blank", "noopener");
 
+  const columnUrl = (path: string) => `/api/projects/${project.id}/columns/${column.id}/${path}`;
+  const routineTarget = columns.find((c) => c.id === column.routineTargetColumnId);
+
   const toggleDone = () =>
     run(
       () => setColumnDone(column.id, !column.isDone),
@@ -196,6 +225,7 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
   };
 
   return (
+    <>
     <Menu
       align="end"
       label={t("Opciones de columna")}
@@ -234,6 +264,13 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
           <MenuItem icon={FileDown} onClick={() => weekPdf("person")}>{t("PDF de la semana (por persona)")}</MenuItem>
         </>
       )}
+      {column.role === "CHECKLIST" && <MenuItem icon={ListChecks} onClick={() => setDialog("checklist")}>{t("Ver lista")}</MenuItem>}
+      {column.role === "AGENDA" && <MenuItem icon={CalendarDays} onClick={() => window.location.assign(columnUrl("ics"))}>{t("Exportar a calendario (.ics)")}</MenuItem>}
+      {column.role === "ROUTINES" && (
+        <MenuItem icon={Repeat} onClick={() => setDialog("routine")}>{t("Destino de la siguiente aparición: {name}…", { name: routineTarget?.name ?? t("esta columna") })}</MenuItem>
+      )}
+      {column.role === "DELIVERY" && <MenuItem icon={FileDown} onClick={() => window.open(columnUrl("delivery"), "_blank", "noopener")}>{t("Resumen para el cliente (PDF)")}</MenuItem>}
+      {column.role === "BUDGET" && <MenuItem icon={Wallet} onClick={() => setSummaryOpen(true)}>{t("Resumen de presupuesto")}</MenuItem>}
       <MenuSeparator />
       <MenuItem icon={CheckCircle2} onClick={toggleDone}>
         {column.isDone ? t("✓ Cuenta como terminada") : t("Contar como terminada")}
@@ -243,5 +280,51 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
         {empty ? t("Borrar columna") : t("Borrar (debe estar vacía)")}
       </MenuItem>
     </Menu>
+    {summaryOpen && <BudgetSummaryDialog column={column} onClose={() => setSummaryOpen(false)} />}
+    {dialog === "checklist" && <ChecklistDialog column={column} onClose={() => setDialog(null)} />}
+    {dialog === "routine" && <RoutineTargetDialog column={column} onClose={() => setDialog(null)} />}
+    </>
+  );
+}
+
+/** Rutinas: a qué columna va la siguiente aparición de una tarea recurrente de esta columna. */
+function RoutineTargetDialog({ column, onClose }: { column: BoardColumn; onClose: () => void }) {
+  const { columns, setColumns, track, refresh } = useBoard();
+  const toast = useToast();
+  const t = useT();
+  const [value, setValue] = useState(column.routineTargetColumnId ?? column.id);
+
+  const save = async () => {
+    const target = value === column.id ? null : value;
+    onClose();
+    if (target === column.routineTargetColumnId) return;
+    setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, routineTargetColumnId: target } : c)));
+    const res = await track(setColumnRoutineTarget(column.id, target));
+    if (!res.ok) {
+      toast(res.error, "error");
+      refresh();
+    }
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title={t("Destino de la siguiente aparición")}
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
+          <button className="btn-primary" onClick={save}>{t("Guardar")}</button>
+        </>
+      }
+    >
+      <p className="mb-3 text-sm text-slate-600 dark:text-slate-400">{t("Cuando una tarea recurrente de esta columna se termine o se archive, su siguiente aparición se creará en:")}</p>
+      <select className="input w-full" value={value} onChange={(e) => setValue(e.target.value)} aria-label={t("Columna destino")}>
+        {[...columns].sort((a, b) => a.position - b.position).map((c) => (
+          <option key={c.id} value={c.id}>{c.id === column.id ? t("{name} (esta columna)", { name: c.name }) : c.name}</option>
+        ))}
+      </select>
+    </Modal>
   );
 }

@@ -27,7 +27,7 @@ import { Modal } from "../ui/Modal";
 import { applyKindTemplate } from "@/lib/kinds-special";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { useToast } from "../ui/Toast";
-import { useBoard } from "./context";
+import { boardClients, useBoard } from "./context";
 import { isTypingTarget, useShortcut } from "./shortcuts";
 import { weekdayName } from "./recurrence-ui";
 import { TaskViewers } from "./TaskViewers";
@@ -40,6 +40,7 @@ import { AttachLimitHint } from "./AttachLimitHint";
 import { attachmentTotalsOf } from "@/lib/attachment-totals";
 import { filesFrom, formatBytes, UploadError, uploadFile, useFileDrop } from "./upload";
 import { formatDate } from "@/lib/format";
+import { fieldsError, fieldsFormOf, fieldsPatch, TaskFieldsGroup, type FieldsForm } from "./TaskFieldsGroup";
 import { draftKey, useDraftAutosave, type EditTaskDraft } from "./drafts";
 import { setUndoTask, UNDONE_EVENT } from "../undo-context";
 import { useIsMobile } from "../ui/useIsMobile";
@@ -92,6 +93,16 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // Se incrementa al cambiar la descripción desde fuera del editor para que se remonte con el texto nuevo.
   const [descVersion, setDescVersion] = useState(0);
   const [link, setLink] = useState(task.linkUrl ?? "");
+  // Campos opcionales del proyecto: formulario local que se guarda al salir de cada campo.
+  const enabledFields = board.project.taskFields;
+  const [fieldsForm, setFieldsForm] = useState<FieldsForm>(() => fieldsFormOf(task));
+  const savedFieldsSig = JSON.stringify(fieldsFormOf(task));
+  const [shownFields, setShownFields] = useState(savedFieldsSig);
+  if (shownFields !== savedFieldsSig) {
+    // Cambió desde fuera (deshacer, otra persona): se muestra lo guardado.
+    setShownFields(savedFieldsSig);
+    setFieldsForm(fieldsFormOf(task));
+  }
   const [uploading, setUploading] = useState(0);
   // Una subida se rechazó por el máximo de adjuntos de la tarea: se resalta el total hasta que se borre algo.
   const [totalRejected, setTotalRejected] = useState(false);
@@ -176,6 +187,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     if (desc !== null && desc !== (detail?.description ?? "")) patch.description = desc;
     const linkValue = link.trim();
     if (linkValue !== (task.linkUrl ?? "")) patch.linkUrl = linkValue;
+    if (!(await commitFields(fieldsForm))) return;
     if (patch.title !== undefined || patch.description !== undefined || patch.linkUrl !== undefined) {
       if (patch.description !== undefined) setDetail((d) => (d ? { ...d, description: desc! } : d));
       const ok = await save(patch, {
@@ -189,11 +201,26 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     onClose();
   };
 
+  /** Guarda los campos opcionales que difieren de lo guardado. `true` si no había nada que guardar o se guardó. */
+  const commitFields = async (next: FieldsForm): Promise<boolean> => {
+    const current = board.getTask(task.id) ?? task;
+    const patch = fieldsPatch(next, fieldsFormOf(current), enabledFields);
+    if (!Object.keys(patch).length) return true;
+    const err = fieldsError(next, enabledFields, current.dueDate, t);
+    if (err) {
+      toast(err, "error");
+      return false;
+    }
+    const ok = await save(patch as Parameters<typeof updateTask>[1], patch as Partial<BoardTask>);
+    if (!ok) setFieldsForm(fieldsFormOf(board.getTask(task.id) ?? current));
+    return ok;
+  };
+
   /** ¿Algo guardado desde que se abrió el diálogo? (campos, subtareas, adjuntos y enlaces; no los comentarios). */
   const editedSinceOpen = (): boolean => {
     const t0 = initialTask.current;
     const now = board.getTask(task.id) ?? task;
-    const keys = ["title", "kindId", "color", "linkUrl", "assigneeId", "dueDate", "deliverableId", "evergreen", "evergreenEvery", "recurrence", "recurrenceDay", "columnId"] as const;
+    const keys = ["title", "kindId", "color", "linkUrl", "assigneeId", "dueDate", "deliverableId", "evergreen", "evergreenEvery", "recurrence", "recurrenceDay", "columnId", "cost", "costPaid", "estimatedHours", "actualHours", "priority", "client", "startDate", "externalUrl"] as const;
     if (keys.some((k) => t0[k] !== now[k])) return true;
     if ([...t0.labelIds].sort().join() !== [...now.labelIds].sort().join()) return true;
     const d0 = initialDetail.current;
@@ -223,6 +250,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         title: t0.title, kindId: t0.kindId, color: t0.color as never, linkUrl: t0.linkUrl, assigneeId: t0.assigneeId, labelIds: t0.labelIds,
         dueDate: t0.dueDate, deliverableId: t0.deliverableId, evergreen: t0.evergreen, evergreenEvery: t0.evergreenEvery, recurrence: t0.recurrence, recurrenceDay: t0.recurrenceDay,
         columnId: t0.columnId, position: t0.position,
+        cost: t0.cost, costPaid: t0.costPaid, estimatedHours: t0.estimatedHours, actualHours: t0.actualHours, priority: t0.priority, client: t0.client, startDate: t0.startDate, externalUrl: t0.externalUrl,
         ...(d0 ? {
           description: d0.description,
           subtasks: d0.subtasks.map((s) => ({ id: s.id, title: s.title, done: s.done, position: s.position })),
@@ -265,6 +293,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
 
   const changeColumn = async (columnId: string) => {
     if (columnId === task.columnId) return;
+    if (!(await board.confirmLeaveReview([task.id], columnId))) return;
     const before = board.getTask(task.id)!;
     const last = Math.max(0, ...board.getTasks().filter((t) => t.columnId === columnId).map((t) => t.position));
     board.patchTask(task.id, { columnId, position: last + 1024, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() });
@@ -629,6 +658,14 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               )}
             </div>
           </Field>
+          <TaskFieldsGroup
+            enabled={enabledFields}
+            value={fieldsForm}
+            onChange={(p) => setFieldsForm((f) => ({ ...f, ...p }))}
+            onCommit={(next) => void commitFields(next)}
+            dueDate={task.dueDate}
+            clients={boardClients(board.getTasks())}
+          />
           <Field label={t("Repetir")}>
             <div className="flex gap-1">
               <select className="input md:py-1.5" value={task.recurrence} onChange={(e) => changeRecurrence(e.target.value as RecurrenceRule)}>

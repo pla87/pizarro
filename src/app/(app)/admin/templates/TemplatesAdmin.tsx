@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, Check, Copy, Pencil, Plus, RotateCcw, Trash2, X } f
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { deleteTemplate, resetTemplate, restoreDefaultTemplates, saveTemplate, templateFromProject } from "@/actions/templates";
+import { TaskFieldToggles } from "@/components/TaskFieldToggles";
 import { cn } from "@/components/ui/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/Modal";
@@ -12,10 +13,11 @@ import { useT } from "@/i18n/client";
 import type { T } from "@/i18n/core";
 import { COLUMN_ROLES, isUniqueColumnRole, PALETTE, swatchBorder, type ColumnRoleValue } from "@/lib/constants";
 import { parseSubtaskLines } from "@/lib/kinds-special";
+import { normalizeTaskFields, type TaskFieldKey } from "@/lib/task-fields";
 import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS, type TemplateDto, type TemplateInput } from "@/lib/project-templates";
 
 const KIND_COLORS = [...PALETTE, "#84cc16", "#06b6d4", "#d946ef", "#78716c"];
-const ROLE_LABEL: Record<ColumnRoleValue, string> = { NONE: "Ninguno", NEXT_RELEASE: "Siguiente salto", IN_PRODUCTION: "En producción", WAITING: "Esperando", WEEKLY_PLAN: "Planificación semanal" };
+const ROLE_LABEL: Record<ColumnRoleValue, string> = { NONE: "Ninguno", NEXT_RELEASE: "Siguiente salto", IN_PRODUCTION: "En producción", WAITING: "Esperando", WEEKLY_PLAN: "Planificación semanal", CHECKLIST: "Lista consolidada", REVIEW: "Revisión con requisitos", AGENDA: "Agenda", ROUTINES: "Rutinas", DELIVERY: "Entrega al cliente", BUDGET: "Presupuesto" };
 
 /** Resumen de una línea: «5 columnas · 2 tipos propios · 3 etiquetas · 1 general oculto». */
 function summarizeTemplate(tpl: Pick<TemplateDto, "columns" | "kinds" | "labels" | "hiddenGeneralKinds" | "hideAllGeneralKinds">, t: T): string {
@@ -38,6 +40,7 @@ type Draft = {
   hiddenGeneralKinds: string[];
   hideAllGeneralKinds: boolean;
   labels: { name: string; color: (typeof PALETTE)[number] }[];
+  taskFields: TaskFieldKey[];
 };
 
 const EMPTY: Draft = {
@@ -48,6 +51,7 @@ const EMPTY: Draft = {
   hiddenGeneralKinds: [],
   hideAllGeneralKinds: false,
   labels: [],
+  taskFields: [],
 };
 
 function ColorField({ value, onChange, colors }: { value: string; onChange: (c: string) => void; colors: readonly string[] }) {
@@ -113,6 +117,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
     hiddenGeneralKinds: tpl.hiddenGeneralKinds,
     hideAllGeneralKinds: tpl.hideAllGeneralKinds ?? false,
     labels: tpl.labels,
+    taskFields: normalizeTaskFields(tpl.taskFields ?? []),
   });
 
   const save = () => {
@@ -341,6 +346,16 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                   </label>
                 ))}
               </div>
+            </section>
+
+            <section>
+              <h3 className="mb-1 text-sm font-semibold">{t("Campos opcionales de las tareas")}</h3>
+              <p className="mb-1 text-xs text-slate-500">{t("Los proyectos creados con esta plantilla tendrán activados estos campos.")}</p>
+              <TaskFieldToggles
+                value={draft.columns.some((c) => c.role === "BUDGET") ? normalizeTaskFields([...draft.taskFields, "cost"]) : draft.taskFields}
+                onChange={(taskFields) => patch({ taskFields })}
+                lockedCost={draft.columns.some((c) => c.role === "BUDGET") ? t("Hay una columna de presupuesto: el coste siempre se activa.") : null}
+              />
             </section>
 
             <section>

@@ -10,11 +10,12 @@ import { DEFAULT_WAITING_DAYS, isUniqueColumnRole, MAX_WAITING_DAYS } from "@/li
 import { POSITION_STEP } from "@/lib/positions";
 import { lastPositionIn, lockColumns, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { requireUser } from "@/lib/session";
+import { normalizeTaskFields } from "@/lib/task-fields";
 import { addUndo, captureTasks } from "@/lib/undo";
 import * as v from "@/lib/validation";
 import type { BoardColumn } from "@/lib/types";
 
-const columnSelect = { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true } as const;
+const columnSelect = { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true } as const;
 
 async function findColumn(columnId: string) {
   const user = await requireUser();
@@ -63,8 +64,12 @@ export async function setColumnRole(columnId: string, role: string) {
     const fixed = await db.task.findMany({ where: { projectId: column.projectId, evergreen: true }, select: { id: true } });
     addUndo(...before.map((c) => ({ t: "column.set" as const, id: c.id, data: { role: c.role } })), ...(await captureTasks(fixed.map((t) => t.id), ["evergreen", "evergreenEvery"])));
     describeAction("Cambió el rol de la columna «{name}»", { name: column.name });
+    // Una columna de presupuesto suma el coste de sus tareas: el campo Coste se activa si no lo estaba.
+    const project = value === "BUDGET" ? await db.project.findUniqueOrThrow({ where: { id: column.projectId }, select: { taskFields: true } }) : null;
+    const enablesCost = project !== null && !project.taskFields.includes("cost");
     await db.$transaction(async (tx) => {
-      // Solo NEXT_RELEASE e IN_PRODUCTION son únicos; WAITING y WEEKLY_PLAN se pueden repetir.
+      if (enablesCost) await tx.project.update({ where: { id: column.projectId }, data: { taskFields: normalizeTaskFields([...project!.taskFields, "cost"]) } });
+      // Solo NEXT_RELEASE e IN_PRODUCTION son únicos; WAITING, WEEKLY_PLAN y BUDGET se pueden repetir.
       if (isUniqueColumnRole(value)) {
         await tx.column.updateMany({ where: { projectId: column.projectId, role: value }, data: { role: "NONE" } });
       }
@@ -73,6 +78,7 @@ export async function setColumnRole(columnId: string, role: string) {
       if (value !== "NEXT_RELEASE") await tx.task.updateMany({ where: { columnId, evergreen: true }, data: { evergreen: false, evergreenEvery: 1 } });
       else await tx.task.updateMany({ where: { projectId: column.projectId, evergreen: true, columnId: { not: columnId } }, data: { evergreen: false, evergreenEvery: 1 } });
     });
+    return { costEnabled: enablesCost };
   });
 }
 
@@ -86,6 +92,19 @@ export async function setColumnWaitingDays(columnId: string, days: number | null
     addUndo({ t: "column.set", id: column.id, data: { waitingDays: current.waitingDays } });
     describeAction("Cambió el plazo de espera de la columna «{name}» a {days} d", { name: column.name, days: value ?? DEFAULT_WAITING_DAYS });
     await db.column.update({ where: { id: columnId }, data: { waitingDays: value } });
+  });
+}
+
+/** Rutinas: columna a la que va la siguiente aparición de una tarea recurrente de esta columna (null = la misma). */
+export async function setColumnRoutineTarget(columnId: string, targetId: string | null) {
+  return runAction({ name: "columns.setColumnRoutineTarget", args: [columnId, targetId] }, async () => {
+    const column = await findColumn(columnId);
+    if (column.role !== "ROUTINES") throw new AppError("Solo las columnas con el rol «Rutinas» tienen destino de la siguiente aparición.");
+    const value = targetId === null || targetId === columnId ? null : v.id.parse(targetId);
+    if (value && !(await db.column.count({ where: { id: value, projectId: column.projectId } }))) throw notFound();
+    addUndo({ t: "column.set", id: column.id, data: { routineTargetColumnId: column.routineTargetColumnId } });
+    describeAction("Cambió el destino de la siguiente aparición de la columna «{name}»", { name: column.name });
+    await db.column.update({ where: { id: columnId }, data: { routineTargetColumnId: value } });
   });
 }
 

@@ -14,7 +14,7 @@ interface ModalProps {
   title?: React.ReactNode;
   children: React.ReactNode;
   footer?: React.ReactNode;
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: "sm" | "md" | "lg" | "xl" | "2xl";
   /** Contenido que reemplaza la cabecera estándar. */
   header?: React.ReactNode;
   /** En móvil: "bottom" (por defecto) es una hoja inferior; "top" ancla el panel arriba para que el teclado no lo tape. */
@@ -27,6 +27,8 @@ interface ModalProps {
   onAddSecond?: () => void;
   /** Escritorio (lg+): con `onAddSecond`, un segundo botón encima del «+» que abre «Varias tareas» al lado. */
   onAddSecondBulk?: () => void;
+  /** Con `onAddSecond`, muestra también en móvil los dos botones redondos flotantes (como los del tablero). */
+  mobileAdd?: boolean;
 }
 
 /** Pila de modales abiertos (el último es el de más arriba): solo él responde a Escape y al clic en el fondo. */
@@ -36,13 +38,17 @@ let savedOverflow = "";
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
 
-const SIZES = { sm: "sm:max-w-md", md: "sm:max-w-xl", lg: "sm:max-w-3xl", xl: "sm:max-w-5xl" };
+const SIZES = { sm: "sm:max-w-md", md: "sm:max-w-xl", lg: "sm:max-w-3xl", xl: "sm:max-w-5xl", "2xl": "sm:max-w-[90rem]" };
 /** Ancho máximo de cada tamaño (para combinarlo con el límite de media pantalla en lg). */
-const SIZE_REM = { sm: "28rem", md: "36rem", lg: "48rem", xl: "64rem" };
+const SIZE_REM = { sm: "28rem", md: "36rem", lg: "48rem", xl: "64rem", "2xl": "90rem" };
+
+/** Botones redondos de «Nueva tarea» (grande, relleno) y «Varias tareas» (más pequeño): los mismos en móvil y escritorio. */
+const NEW_BTN = "h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-on-brand shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95";
+const BULK_BTN = "h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-brand-600 shadow-lg hover:bg-slate-50 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:text-brand-300";
 
 const noopSubscribe = () => () => {};
 
-export function Modal({ open, onClose, title, children, footer, size = "md", header, placement = "bottom", panelClassName, side = "center", onAddSecond, onAddSecondBulk }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, size = "md", header, placement = "bottom", panelClassName, side = "center", onAddSecond, onAddSecondBulk, mobileAdd = false }: ModalProps) {
   const t = useT();
   // El portal solo existe en el navegador: durante la hidratación se pinta como en el servidor (nada) y
   // justo después aparece. Sin esto, un modal abierto desde el primer render (?task=) daba el error #418.
@@ -170,18 +176,18 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
           <button
             type="button"
             onClick={onAddSecondBulk}
-            className="absolute bottom-[4.25rem] left-full ml-3 hidden h-14 w-14 items-center justify-center rounded-full border border-brand-600 bg-white text-brand-700 shadow-lg shadow-brand-600/20 hover:bg-brand-50 active:scale-95 lg:flex dark:bg-slate-900 dark:text-brand-300 dark:hover:bg-slate-800"
+            className={cn("absolute bottom-[4.25rem] left-full ml-[1.125rem]", BULK_BTN, "hidden lg:flex")}
             aria-label={t("Abrir «Varias tareas» al lado")}
             title={t("Abrir «Varias tareas» al lado")}
           >
-            <PlusStack size={26} />
+            <PlusStack size={22} />
           </button>
         )}
         {onAddSecond && side === "center" && (
           <button
             type="button"
             onClick={onAddSecond}
-            className="absolute bottom-0 left-full ml-3 hidden h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-on-brand shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95 lg:flex"
+            className={cn("absolute bottom-0 left-full ml-3", NEW_BTN, "hidden lg:flex")}
             aria-label={t("Abrir otra tarea nueva al lado")}
             title={t("Abrir otra tarea nueva al lado")}
           >
@@ -189,6 +195,19 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
           </button>
         )}
       </div>
+      {/* Móvil: los mismos dos botones redondos que el tablero, por encima de la hoja (no hay hueco al lado). */}
+      {mobileAdd && onAddSecond && side === "center" && (
+        <>
+          {onAddSecondBulk && (
+            <button type="button" onClick={onAddSecondBulk} className={cn("fixed right-[1.625rem] bottom-[calc(env(safe-area-inset-bottom)+9.5rem)]", BULK_BTN, "flex lg:hidden")} aria-label={t("Crear varias tareas")}>
+              <PlusStack size={22} />
+            </button>
+          )}
+          <button type="button" onClick={onAddSecond} className={cn("fixed right-5 bottom-[calc(env(safe-area-inset-bottom)+5.25rem)]", NEW_BTN, "flex lg:hidden")} aria-label={t("Nueva tarea o captura")}>
+            <Plus size={26} />
+          </button>
+        </>
+      )}
     </div>,
     document.body,
   );

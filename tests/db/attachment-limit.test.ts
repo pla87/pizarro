@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, makeProject, makeTask } from "./helpers";
 import { createAttachmentWithinLimit } from "../../src/lib/attachment-limit";
+import { storageUsage } from "../../src/lib/storage-usage";
 
 const MB = 1024 * 1024;
 const sel = { id: true, size: true } as const;
@@ -53,6 +54,26 @@ describe("máximo de adjuntos por tarea", () => {
     } finally {
       if (prev === undefined) delete process.env.UPLOAD_QUOTA_MB_PER_PROJECT;
       else process.env.UPLOAD_QUOTA_MB_PER_PROJECT = prev;
+    }
+  });
+
+  test("storageUsage solo suma el servidor entero si hay cuota total", async () => {
+    const f = await makeProject({ members: [] });
+    const task = await makeTask(f);
+    assert.equal((await createAttachmentWithinLimit(data(task.id, 2 * MB), sel)).ok, true);
+    const prev = process.env.UPLOAD_QUOTA_MB_TOTAL;
+    try {
+      delete process.env.UPLOAD_QUOTA_MB_TOTAL;
+      const without = await storageUsage(f.project.id);
+      assert.equal(without.project, 2 * MB);
+      assert.equal(without.total, 0);
+      process.env.UPLOAD_QUOTA_MB_TOTAL = "5000";
+      const withTotal = await storageUsage(f.project.id);
+      assert.equal(withTotal.project, 2 * MB);
+      assert.ok(withTotal.total >= 2 * MB);
+    } finally {
+      if (prev === undefined) delete process.env.UPLOAD_QUOTA_MB_TOTAL;
+      else process.env.UPLOAD_QUOTA_MB_TOTAL = prev;
     }
   });
 });

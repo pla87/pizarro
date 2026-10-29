@@ -14,7 +14,8 @@ import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
 import { useShortcut } from "./shortcuts";
 import { useToast } from "../ui/Toast";
-import { useBoard } from "./context";
+import { boardClients, useBoard, useTasks } from "./context";
+import { EMPTY_FIELDS_FORM, fieldsError, fieldsForCreate, TaskFieldsGroup, type FieldsForm } from "./TaskFieldsGroup";
 import { DescriptionField } from "../ui/DescriptionField";
 import { applyKindTemplate, mergeSubtasks } from "@/lib/kinds-special";
 import { MAX_TITLE } from "@/lib/constants";
@@ -30,6 +31,8 @@ interface Props {
   /** Crear la tarea como fija en la release (solo si la columna es la de la release). */
   initialEvergreen?: boolean;
   initialFiles?: File[];
+  /** Descripción con la que se abre (p. ej. el enlace al documento desde el que se crea la tarea). */
+  initialDescription?: string;
   onClose: () => void;
   /** Escritorio: posición en pantalla cuando hay dos modales a la vez. */
   side?: "left" | "right" | "center";
@@ -49,7 +52,7 @@ function captureTitle(t: T, locale: string): string {
   return t("Captura") + " " + new Date().toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
 }
 
-export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles, onClose: close, side, onAddSecond, onAddSecondBulk, pickProject = false, draft, autosave = false }: Props) {
+export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles, initialDescription, onClose: close, side, onAddSecond, onAddSecondBulk, pickProject = false, draft, autosave = false }: Props) {
   const t = useT();
   const sc = useShortcut();
   const locale = useIntlLocale();
@@ -70,9 +73,10 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const [other, setOther] = useState<ProjectFormData | null>(null);
   const formCache = useRef(new Map<string, ProjectFormData>());
   const wantedProject = useRef(initialProject);
+  const boardTasks = useTasks();
   const boardForm = useMemo<ProjectFormData>(
-    () => ({ project: board.project, columns: board.columns, users: board.users, kinds: board.kinds, deliverables: board.deliverables, labels: board.labels }),
-    [board.project, board.columns, board.users, board.kinds, board.deliverables, board.labels],
+    () => ({ project: board.project, columns: board.columns, users: board.users, kinds: board.kinds, deliverables: board.deliverables, labels: board.labels, clients: boardClients(boardTasks) }),
+    [board.project, board.columns, board.users, board.kinds, board.deliverables, board.labels, boardTasks],
   );
   const pf = projectId === board.project.id ? boardForm : other?.project.id === projectId ? other : null;
   // Mientras llegan las opciones de otro proyecto se muestran las del abierto, sin poder crear.
@@ -84,11 +88,13 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const [assigneeId, setAssigneeId] = useState(foreignInit ? "" : (d?.assigneeId ?? ""));
   const [dueDate, setDueDate] = useState(d?.dueDate ?? "");
   const [deliverableId, setDeliverableId] = useState(foreignInit ? "" : (d?.deliverableId ?? ""));
-  const [description, setDescription] = useState(d?.description ?? "");
+  const [description, setDescription] = useState(d?.description ?? initialDescription ?? "");
   const [files, setFiles] = useState<File[]>(initialFiles ?? []);
   const [subtasks, setSubtasks] = useState<string[]>(d?.subtasks ?? []);
   const [subtaskDraft, setSubtaskDraft] = useState(d?.subtaskDraft ?? "");
   const [evergreen, setEvergreen] = useState(foreignInit ? false : (d?.evergreen ?? !!initialEvergreen));
+  // Campos opcionales del proyecto elegido (no van en el borrador local).
+  const [fieldsForm, setFieldsForm] = useState<FieldsForm>(EMPTY_FIELDS_FORM);
 
   /** Ajusta las opciones al proyecto de `f`: conserva lo que siga existiendo en él y, si no, usa su primera columna / tipo. */
   const applyForm = (f: ProjectFormData, keep: { kindId: string; columnId: string; assigneeId: string; deliverableId: string }) => {
@@ -156,7 +162,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   // Escape, clic fuera, X o «Cancelar» con contenido escrito piden confirmación; crear no.
   const confirming = useRef(false);
   const requestClose = async () => {
-    const dirty = !!(title.trim() || description.trim() || subtasks.length || subtaskDraft.trim());
+    const dirty = !!(title.trim() || (description.trim() && description !== initialDescription) || subtasks.length || subtaskDraft.trim());
     if (dirty) {
       // Una sola confirmación a la vez (Escape o clics repetidos no las apilan).
       if (confirming.current) return;
@@ -195,6 +201,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (busy || loading || !title.trim() || !columnId) return;
+    const fieldsErr = fieldsError(fieldsForm, form.project.taskFields, dueDate, t);
+    if (fieldsErr) return toast(fieldsErr, "error");
     setBusy(true);
     // Una subtarea a medio escribir también se guarda al crear.
     const pending = subtaskDraft.trim().slice(0, 200);
@@ -205,6 +213,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         assigneeId: assigneeId || null, dueDate: dueDate || null, deliverableId: deliverableId || null,
         evergreen: isReleaseColumn && evergreen,
         subtasks: subtaskTitles,
+        ...fieldsForCreate(fieldsForm, form.project.taskFields),
       }),
     ).catch((e) => actionThrowResult(e, t));
     if (!res.ok) {
@@ -373,6 +382,14 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
             <input id={`${uid}-due`} type="date" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </div>
         </div>
+        <TaskFieldsGroup
+          enabled={form.project.taskFields}
+          value={fieldsForm}
+          onChange={(p) => setFieldsForm((f) => ({ ...f, ...p }))}
+          dueDate={dueDate || null}
+          clients={form.clients}
+          disabled={loading}
+        />
         {isReleaseColumn && (
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={evergreen} onChange={(e) => setEvergreen(e.target.checked)} />

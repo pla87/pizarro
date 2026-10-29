@@ -29,7 +29,7 @@ async function userOf(id: string) {
 function uploadReq(projectId: string, file: File | null, headers: Record<string, string> = {}) {
   const body = new FormData();
   if (file) body.append("file", file);
-  return new Request(`http://localhost/api/projects/${projectId}/documents`, { method: "POST", body, headers: { origin: "http://localhost", host: "localhost", ...headers } });
+  return new Request(`http://localhost/api/projects/${projectId}/documents`, { method: "POST", body, headers: { origin: "http://localhost", "content-length": "1", host: "localhost", ...headers } });
 }
 const params = (projectId: string) => ({ params: Promise.resolve({ projectId }) });
 

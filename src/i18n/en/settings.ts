@@ -2,6 +2,7 @@
 export const settings: Record<string, string> = {
   "Cuenta": "Account",
   "Preferencias": "Preferences",
+  "Plantillas": "Templates",
   "Secciones del perfil": "Profile sections",
   "Mis tareas": "My tasks",
   "Mis tareas asignadas": "My assigned tasks",

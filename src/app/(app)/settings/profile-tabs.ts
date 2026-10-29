@@ -2,6 +2,7 @@
 export const PROFILE_TABS = [
   { id: "cuenta", label: "Cuenta" },
   { id: "preferencias", label: "Preferencias" },
+  { id: "plantillas", label: "Plantillas" },
   { id: "avisos", label: "Avisos" },
 ] as const;
 

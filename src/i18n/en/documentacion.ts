@@ -6,6 +6,12 @@ export const documentacion: Record<string, string> = {
   "Descartar": "Dismiss",
   "Documento subido": "Document uploaded",
   "{n} documentos subidos": "{n} documents uploaded",
+  "Reducir imagen": "Zoom out",
+  "Ampliar imagen": "Zoom in",
+  "Subiendo «{name}» a Documentación…": "Uploading “{name}” to Documentation…",
+  "Subiendo {n} archivos a Documentación…": "Uploading {n} files to Documentation…",
+  "Abrir Documentación": "Open Documentation",
+  "{n} sin subir: {error}": "{n} not uploaded: {error}",
   "Suelta los archivos para subirlos": "Drop the files to upload them",
   "Archivos de «{name}» para consultar sin salir de la app: {count} de {max} · máximo {mb} MB por archivo.":
     "Files of “{name}” to read without leaving the app: {count} of {max} · up to {mb} MB per file.",

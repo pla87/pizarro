@@ -10,10 +10,11 @@ import { useT } from "@/i18n/client";
 import { Modal } from "../ui/Modal";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
-import { useBoard } from "./context";
+import { boardClients, useBoard, useTasks } from "./context";
 import { TypeSelector } from "./TaskDialog";
 import { ProjectPicker } from "./ProjectPicker";
 import { isWhite, onColor } from "@/lib/constants";
+import { MAX_CLIENT, PRIORITY_LABEL, TASK_PRIORITIES } from "@/lib/task-fields";
 import { actionThrowResult } from "@/lib/stale-action";
 
 interface Props {
@@ -35,9 +36,10 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
   const [other, setOther] = useState<ProjectFormData | null>(null);
   const formCache = useRef(new Map<string, ProjectFormData>());
   const wantedProject = useRef(board.project.id);
+  const boardTasks = useTasks();
   const boardForm = useMemo<ProjectFormData>(
-    () => ({ project: board.project, columns: board.columns, users: board.users, kinds: board.kinds, deliverables: board.deliverables, labels: board.labels }),
-    [board.project, board.columns, board.users, board.kinds, board.deliverables, board.labels],
+    () => ({ project: board.project, columns: board.columns, users: board.users, kinds: board.kinds, deliverables: board.deliverables, labels: board.labels, clients: boardClients(boardTasks) }),
+    [board.project, board.columns, board.users, board.kinds, board.deliverables, board.labels, boardTasks],
   );
   const pf = projectId === board.project.id ? boardForm : other?.project.id === projectId ? other : null;
   // Mientras llegan las opciones de otro proyecto se muestran las del abierto, sin poder crear.
@@ -55,6 +57,8 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
   const [deliverableId, setDeliverableId] = useState("");
   const [labelIds, setLabelIds] = useState<string[]>([]);
   const [withSubtasks, setWithSubtasks] = useState(false);
+  const [priority, setPriority] = useState("");
+  const [client, setClient] = useState("");
   const [busy, setBusy] = useState(false);
 
   /** Ajusta las opciones al proyecto de `f`: la columna, el tipo, etc. del proyecto anterior no valen. */
@@ -66,6 +70,8 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
     setDeliverableId("");
     setLabelIds([]);
     setWithSubtasks(false);
+    setPriority("");
+    setClient("");
   };
   const selectProject = async (id: string) => {
     if (id === projectId) return;
@@ -95,7 +101,9 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
   const missingKind = lines.some((l) => !kindOf(l));
   // Solo se ofrece si algún tipo elegido tiene subtareas predefinidas.
   const templated = lines.some((l) => (kindById.get(kindOf(l))?.subtaskTemplate.length ?? 0) > 0);
-  const extras = [assigneeId, dueDate, deliverableId].filter(Boolean).length + (labelIds.length ? 1 : 0);
+  const priorityOn = form.project.taskFields.includes("priority");
+  const clientOn = form.project.taskFields.includes("client");
+  const extras = [assigneeId, dueDate, deliverableId, priorityOn && priority, clientOn && client.trim()].filter(Boolean).length + (labelIds.length ? 1 : 0);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,6 +119,8 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
         deliverableId: deliverableId || null,
         labelIds,
         applySubtaskTemplates: templated && withSubtasks,
+        ...(priorityOn && priority ? { priority: priority as (typeof TASK_PRIORITIES)[number] } : {}),
+        ...(clientOn && client.trim() ? { client: client.trim() } : {}),
       }),
     ).catch((e) => actionThrowResult(e, t));
     if (!res.ok) {
@@ -250,6 +260,22 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
                 {form.deliverables.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
+            {priorityOn && (
+              <div className="min-w-0">
+                <label className="label truncate" htmlFor="bt-priority">{t("Prioridad (opcional)")}</label>
+                <select id="bt-priority" className="input" value={priority} onChange={(e) => setPriority(e.target.value)}>
+                  <option value="">{t("Sin prioridad")}</option>
+                  {TASK_PRIORITIES.map((p) => <option key={p} value={p}>{t(PRIORITY_LABEL[p])}</option>)}
+                </select>
+              </div>
+            )}
+            {clientOn && (
+              <div className="min-w-0">
+                <label className="label truncate" htmlFor="bt-client">{t("Cliente (opcional)")}</label>
+                <input id="bt-client" className="input" value={client} maxLength={MAX_CLIENT} list="bt-clients" autoComplete="off" onChange={(e) => setClient(e.target.value)} />
+                <datalist id="bt-clients">{form.clients.map((c) => <option key={c} value={c} />)}</datalist>
+              </div>
+            )}
             {form.labels.length > 0 && (
               <div className="col-span-2">
                 <div className="label">{t("Etiquetas (opcional)")}</div>
