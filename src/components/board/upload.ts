@@ -135,6 +135,8 @@ export function useFileDrop(onFiles: (files: File[]) => void): boolean {
       if (!has(e)) return;
       e.preventDefault();
       reset();
+      // Soltado sobre «Documentación» del menú: lo gestiona el menú (sube a la documentación del proyecto).
+      if (e.target instanceof Element && e.target.closest("[data-docs-drop]")) return;
       const files = filesFrom(e.dataTransfer?.files);
       if (files.length) cb.current(files);
     };

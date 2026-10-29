@@ -30,6 +30,8 @@ interface Props {
   /** Crear la tarea como fija en la release (solo si la columna es la de la release). */
   initialEvergreen?: boolean;
   initialFiles?: File[];
+  /** Descripción con la que se abre (p. ej. el enlace al documento desde el que se crea la tarea). */
+  initialDescription?: string;
   onClose: () => void;
   /** Escritorio: posición en pantalla cuando hay dos modales a la vez. */
   side?: "left" | "right" | "center";
@@ -49,7 +51,7 @@ function captureTitle(t: T, locale: string): string {
   return t("Captura") + " " + new Date().toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
 }
 
-export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles, onClose: close, side, onAddSecond, onAddSecondBulk, pickProject = false, draft, autosave = false }: Props) {
+export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles, initialDescription, onClose: close, side, onAddSecond, onAddSecondBulk, pickProject = false, draft, autosave = false }: Props) {
   const t = useT();
   const sc = useShortcut();
   const locale = useIntlLocale();
@@ -84,7 +86,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const [assigneeId, setAssigneeId] = useState(foreignInit ? "" : (d?.assigneeId ?? ""));
   const [dueDate, setDueDate] = useState(d?.dueDate ?? "");
   const [deliverableId, setDeliverableId] = useState(foreignInit ? "" : (d?.deliverableId ?? ""));
-  const [description, setDescription] = useState(d?.description ?? "");
+  const [description, setDescription] = useState(d?.description ?? initialDescription ?? "");
   const [files, setFiles] = useState<File[]>(initialFiles ?? []);
   const [subtasks, setSubtasks] = useState<string[]>(d?.subtasks ?? []);
   const [subtaskDraft, setSubtaskDraft] = useState(d?.subtaskDraft ?? "");
@@ -156,7 +158,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   // Escape, clic fuera, X o «Cancelar» con contenido escrito piden confirmación; crear no.
   const confirming = useRef(false);
   const requestClose = async () => {
-    const dirty = !!(title.trim() || description.trim() || subtasks.length || subtaskDraft.trim());
+    const dirty = !!(title.trim() || (description.trim() && description !== initialDescription) || subtasks.length || subtaskDraft.trim());
     if (dirty) {
       // Una sola confirmación a la vez (Escape o clics repetidos no las apilan).
       if (confirming.current) return;
