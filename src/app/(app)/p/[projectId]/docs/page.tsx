@@ -13,7 +13,7 @@ export async function generateMetadata() {
   return { title: t("Documentación") };
 }
 
-export default async function ProjectDocsPage({ params }: { params: Promise<{ projectId: string }> }) {
+export default async function ProjectDocsPage({ params, searchParams }: { params: Promise<{ projectId: string }>; searchParams: Promise<{ doc?: string | string[] }> }) {
   const user = await requireUserPage();
   const { projectId } = await params;
   const project = await db.project.findFirst({
@@ -21,7 +21,12 @@ export default async function ProjectDocsPage({ params }: { params: Promise<{ pr
     select: { id: true, name: true, fileMaxMb: true },
   });
   if (!project) notFound();
-  const [documents, trashed] = await Promise.all([listProjectDocuments(user, project.id), listTrashedDocuments(user, project.id)]);
+  const [documents, trashed, me, { doc }] = await Promise.all([
+    listProjectDocuments(user, project.id),
+    listTrashedDocuments(user, project.id),
+    db.user.findUniqueOrThrow({ where: { id: user.id }, select: { editorMode: true } }),
+    searchParams,
+  ]);
 
   return (
     <DocsManager
@@ -31,6 +36,9 @@ export default async function ProjectDocsPage({ params }: { params: Promise<{ pr
       trashed={trashed}
       fileMaxMb={effectiveFileMaxMb(project.fileMaxMb)}
       maxCount={DOCUMENTS_MAX_PER_PROJECT}
+      currentUserId={user.id}
+      editorMode={me.editorMode}
+      initialOpenId={typeof doc === "string" && documents.some((d) => d.id === doc) ? doc : null}
     />
   );
 }

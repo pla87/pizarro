@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { deleteDocument, deleteDocumentForever, renameDocument, restoreDocument } from "@/actions/documents";
 import { filesFrom, formatBytes, useFileDrop } from "@/components/board/upload";
+import { uploadDocument, documentUploadName } from "@/components/docs/uploadDocuments";
+import { useDocTaskDialogs } from "@/components/docs/useDocTaskDialogs";
+import { ZoomImage } from "@/components/docs/ZoomImage";
 import { Markdown } from "@/components/ui/Markdown";
 import { Modal } from "@/components/ui/Modal";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -13,6 +16,7 @@ import { cn } from "@/components/ui/cn";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { DOCUMENT_PREVIEW_MAX_BYTES, DOCUMENT_TRASH_DAYS, isPreviewable, type DocumentKindName } from "@/lib/document-kind";
 import type { DocumentRow, TrashedDocumentRow } from "@/lib/documents";
+import type { EditorModeValue } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 
 interface Props {
@@ -22,6 +26,10 @@ interface Props {
   trashed: TrashedDocumentRow[];
   fileMaxMb: number;
   maxCount: number;
+  currentUserId: string;
+  editorMode: EditorModeValue;
+  /** Documento que se abre al entrar (enlace `?doc=`). */
+  initialOpenId?: string | null;
 }
 
 interface UploadItem {
@@ -44,7 +52,7 @@ const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
 
 let nextKey = 1;
 
-export function DocsManager({ projectId, projectName, documents, trashed, fileMaxMb, maxCount }: Props) {
+export function DocsManager({ projectId, projectName, documents, trashed, fileMaxMb, maxCount, currentUserId, editorMode, initialOpenId = null }: Props) {
   const t = useT();
   const locale = useIntlLocale();
   const router = useRouter();
@@ -52,7 +60,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
   const confirm = useConfirm();
   const fileInput = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(initialOpenId);
   const [showTrash, setShowTrash] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
@@ -68,23 +76,13 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
     let done = 0;
     for (const file of files) {
       const key = nextKey++;
-      // Las capturas pegadas llegan como «image.png»: se les da un nombre con fecha.
-      const name = file.name && file.name !== "image.png" ? file.name : `${t("captura")}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png`;
+      const name = documentUploadName(file, t);
       setUploads((u) => [...u, { key, name, status: "uploading" }]);
-      const fail = (error: string) => setUploads((u) => u.map((x) => (x.key === key ? { ...x, status: "error", error } : x)));
       const send = async () => {
-        if (file.size > fileMaxMb * 1024 * 1024) return fail(t("El archivo supera el tamaño máximo del proyecto ({mb} MB por archivo).", { mb: fileMaxMb }));
-        try {
-          const body = new FormData();
-          body.append("file", file, name);
-          const res = await fetch(`/api/projects/${projectId}/documents`, { method: "POST", body });
-          const json = await res.json().catch(() => ({}));
-          if (!res.ok) return fail(json.error ?? t("No se pudo subir el archivo."));
-          setUploads((u) => u.filter((x) => x.key !== key));
-          done++;
-        } catch {
-          fail(t("No se pudo subir el archivo."));
-        }
+        const res = await uploadDocument(projectId, file, t, fileMaxMb);
+        if (!res.ok) return setUploads((u) => u.map((x) => (x.key === key ? { ...x, status: "error", error: res.error } : x)));
+        setUploads((u) => u.filter((x) => x.key !== key));
+        done++;
       };
       queue.current = queue.current.then(send).then(() => {
         // Al terminar la tanda se refresca la lista y se avisa una sola vez.
@@ -301,7 +299,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
         </>
       )}
 
-      {open && !showTrash && <DocViewer key={open.id} doc={open} onClose={() => setOpenId(null)} />}
+      {open && !showTrash && <DocViewer key={open.id} doc={open} projectId={projectId} currentUserId={currentUserId} editorMode={editorMode} onClose={() => setOpenId(null)} />}
       {openTrashed && showTrash && (
         <TrashViewer key={openTrashed.id} doc={openTrashed} busy={busyId === openTrashed.id} onClose={() => setOpenId(null)} onRestore={() => void restore(openTrashed)} />
       )}
@@ -310,7 +308,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
 }
 
 /** Visor en un modal: imagen, PDF del visor del navegador, texto plano o Markdown; el resto solo se descarga. */
-function DocViewer({ doc, onClose }: { doc: DocumentRow; onClose: () => void }) {
+function DocViewer({ doc, projectId, currentUserId, editorMode, onClose }: { doc: DocumentRow; projectId: string; currentUserId: string; editorMode: EditorModeValue; onClose: () => void }) {
   const t = useT();
   const locale = useIntlLocale();
   const router = useRouter();
@@ -320,6 +318,9 @@ function DocViewer({ doc, onClose }: { doc: DocumentRow; onClose: () => void }) 
   const [draft, setDraft] = useState(doc.name);
   const [busy, setBusy] = useState(false);
   const src = `/api/documents/${doc.id}`;
+  const second = useDocTaskDialogs({ projectId, currentUserId, editorMode, doc: { id: doc.id, name } });
+  // PDF e imágenes: visor grande, casi a toda la altura; deja margen a los lados para los botones y el diálogo de al lado.
+  const big = doc.kind === "PDF" || doc.kind === "IMAGE";
 
   async function remove() {
     setBusy(true);
@@ -353,10 +354,16 @@ function DocViewer({ doc, onClose }: { doc: DocumentRow; onClose: () => void }) 
   }
 
   return (
+    <>
     <Modal
       open
       onClose={onClose}
-      size="xl"
+      size={big ? "2xl" : "xl"}
+      panelClassName={big ? "h-[92dvh] sm:h-[calc(100dvh-2rem)] sm:max-h-none" : undefined}
+      side={second.open ? "left" : "center"}
+      onAddSecond={second.open ? undefined : second.onAddSecond}
+      onAddSecondBulk={second.open ? undefined : second.onAddSecondBulk}
+      mobileAdd
       title={
         editing ? (
           <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); void rename(); }}>
@@ -391,6 +398,8 @@ function DocViewer({ doc, onClose }: { doc: DocumentRow; onClose: () => void }) 
     >
       <DocPreview doc={doc} name={name} src={src} />
     </Modal>
+    {second.dialogs}
+    </>
   );
 }
 
@@ -417,11 +426,10 @@ function DocPreview({ doc, name, src }: { doc: DocumentRow; name: string; src: s
     );
   }
   if (doc.kind === "IMAGE") {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={src} alt={name} className="mx-auto max-h-[70vh] max-w-full rounded object-contain" />;
+    return <ZoomImage src={src} alt={name} />;
   }
   if (doc.kind === "PDF") {
-    return <iframe src={src} title={name} className="h-[70vh] w-full rounded border border-slate-200 dark:border-slate-700" />;
+    return <iframe src={src} title={name} className="h-full min-h-[60vh] w-full rounded border border-slate-200 dark:border-slate-700" />;
   }
   if (!loaded || loaded.id !== doc.id) return <p className="py-10 text-center text-sm text-slate-500"><Loader2 size={18} className="mx-auto animate-spin" /></p>;
   if (loaded.text === null) return <p className="py-10 text-center text-sm text-red-600">{t("No se pudo cargar el archivo.")}</p>;
