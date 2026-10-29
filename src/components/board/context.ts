@@ -88,6 +88,11 @@ export function useTasks(): BoardTask[] {
   return useSyncExternalStore(stores.tasks.subscribe, stores.tasks.get, stores.tasks.get);
 }
 
+/** Clientes distintos de las tareas del tablero (sugerencias del campo opcional «Cliente»), por orden alfabético. */
+export function boardClients(tasks: readonly BoardTask[]): string[] {
+  return [...new Set(tasks.map((x) => x.client).filter((c): c is string => Boolean(c)))].sort((a, b) => a.localeCompare(b));
+}
+
 /** ¿Está seleccionada esta tarjeta? Solo se redibuja la tarjeta cuyo estado cambia. */
 export function useIsSelected(id: string): boolean {
   const { stores } = useBoard();

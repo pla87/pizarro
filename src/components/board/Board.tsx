@@ -15,6 +15,7 @@ import { archiveTasks, deleteTasks, duplicateTask, makeEvergreen, moveTask, move
 import { createBoardCollisionDetection } from "@/lib/collision";
 import { compareTaskOrder, insertBefore, moveOnto, neighboursOf, positionBetween } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardTask, LabelOption } from "@/lib/types";
+import { TASK_PRIORITIES } from "@/lib/task-fields";
 import { FilterMenu } from "./FilterMenu";
 import { ProjectMenu } from "../ProjectMenu";
 import { UndoButton } from "../UndoButton";
@@ -397,10 +398,20 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const baseItems = useStableItems(useMemo(() => groupItems(columns, tasks), [columns, tasks]));
   // Filtro del buscador: por título, tipo, responsable y etiquetas (todas las palabras deben aparecer).
   const terms = useMemo(() => normalize(query).split(/\s+/).filter(Boolean), [query]);
+  // Campos opcionales: prioridad y cliente filtran (y se buscan) solo si el proyecto los tiene activados.
+  const priorityEnabled = data.project.taskFields.includes("priority");
+  const clientEnabled = data.project.taskFields.includes("client");
+  const clientOptions = useMemo(
+    () => (clientEnabled ? [...new Set(tasks.map((x) => x.client).filter((c): c is string => Boolean(c)))].sort((a, b) => a.localeCompare(b)) : []),
+    [clientEnabled, tasks],
+  );
   // Filtros rápidos sin lo que ya no existe (etiqueta borrada, persona que dejó el proyecto…).
   const activeFilters = useMemo(
-    () => sanitizeFilters(filters, { labels: new Set(labels.map((l) => l.id)), kinds: new Set(data.kinds.map((k) => k.id)), users: new Set(data.users.map((u) => u.id)) }),
-    [filters, labels, data.kinds, data.users],
+    () => sanitizeFilters(filters, {
+      labels: new Set(labels.map((l) => l.id)), kinds: new Set(data.kinds.map((k) => k.id)), users: new Set(data.users.map((u) => u.id)),
+      priorities: new Set(priorityEnabled ? TASK_PRIORITIES : []), clients: new Set(clientOptions),
+    }),
+    [filters, labels, data.kinds, data.users, priorityEnabled, clientOptions],
   );
   const filterCount = activeFilterCount(activeFilters);
   const filtering = terms.length > 0 || filterCount > 0;
@@ -413,12 +424,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const ids = new Set<string>();
     for (const task of tasks) {
       const hay = normalize(
-        [mentionsToPlain(task.title), kindName.get(task.kindId), task.assigneeId ? userName.get(task.assigneeId) : "", ...task.labelIds.map((id) => labelName.get(id))].join(" "),
+        [mentionsToPlain(task.title), kindName.get(task.kindId), task.assigneeId ? userName.get(task.assigneeId) : "", ...task.labelIds.map((id) => labelName.get(id)), clientEnabled ? task.client : ""].join(" "),
       );
       if (terms.every((w) => hay.includes(w)) && taskMatchesFilters(task, activeFilters, { currentUserId: data.currentUserId, today: data.today, doneColumnIds })) ids.add(task.id);
     }
     return ids;
-  }, [filtering, terms, tasks, data.kinds, data.users, data.currentUserId, data.today, labels, columns, activeFilters]);
+  }, [filtering, terms, tasks, data.kinds, data.users, data.currentUserId, data.today, labels, columns, activeFilters, clientEnabled]);
   // `dragItems` lleva siempre las listas COMPLETAS (también con filtro): al soltar, los vecinos que se
   // envían al servidor son los reales, de modo que las tarjetas ocultas conservan su orden relativo.
   const items = useStableItems(useMemo(() => {
@@ -947,7 +958,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               </button>
             )}
           </div>
-          <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} className="-ml-1.5 shrink-0" />
+          <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="-ml-1.5 shrink-0" />
           {filterCount > 0 && (
             <button type="button" className="-ml-1 text-xs text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline dark:hover:text-slate-300" onClick={() => changeFilters(EMPTY_FILTERS)}>
               {t("Limpiar filtros")}
@@ -1035,7 +1046,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               <Search size={16} />
               {query.trim() && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-brand-600" aria-hidden />}
             </button>
-            <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} className="shrink-0" />
+            <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="shrink-0" />
             <div data-mobile-tabs className="no-scrollbar ml-0.5 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pr-3">
               {sortedColumns.map((c) => (
                 <MobileTab key={c.id} active={c.id === activeMobileColumn} onClick={() => showMobileColumn(c.id)}>
@@ -1068,7 +1079,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               />
             </div>
             {/* En móvil los filtros ya están en la barra de pestañas. */}
-            <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} className="max-md:hidden" />
+            <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="max-md:hidden" />
             <span className="shrink-0 text-xs text-slate-500" aria-live="polite">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : t("{n} tarjetas", { n: tasks.length })}</span>
             {(mobileSearch || filtering) && (
               <button

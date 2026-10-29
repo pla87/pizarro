@@ -3,7 +3,8 @@ import { Document, Font, Page, StyleSheet, Text, View, renderToBuffer } from "@r
 import { makeT, type T } from "@/i18n/core";
 import { formatDay } from "./dates";
 import type { WeekPlanGroupBy, WeekPlanSection, WeekPlanTask } from "./week-plan";
-import { RECENT_DONE_DAYS, UPCOMING_DAYS, type DeliverableStatus, type Report, type ReportTask } from "./report";
+import { RECENT_DONE_DAYS, UPCOMING_DAYS, type DeliverableStatus, type Report, type ReportFieldRow, type ReportTask } from "./report";
+import { formatEuro, formatHours, PRIORITY_LABEL } from "./task-fields";
 
 // Sin partición de palabras con guion: en español quedaba «re-sumen».
 Font.registerHyphenationCallback((word) => [word]);
@@ -141,6 +142,31 @@ function dueCell(today: string, x: Ctx) {
   };
 }
 
+/** Tabla con los campos opcionales activados (coste, horas, prioridad, cliente, inicio, enlace) y sus totales. */
+function FieldsSection({ r, t, locale }: { r: Report; t: T; locale: string }) {
+  const f = r.fields!;
+  const has = (k: string) => (f.enabled as string[]).includes(k);
+  const totals: string[] = [];
+  if (has("cost")) totals.push(t("Coste: {total} · pagado {paid} · pendiente {pending}", { total: formatEuro(f.totals.cost, locale), paid: formatEuro(f.totals.paid, locale), pending: formatEuro(f.totals.pending, locale) }));
+  if (has("hours")) totals.push(t("Horas: {est} estimadas · {act} reales", { est: formatHours(f.totals.estimatedHours, locale), act: formatHours(f.totals.actualHours, locale) }));
+  // Anchos: el título ocupa lo que dejan las demás columnas.
+  const extra: Col<ReportFieldRow>[] = [];
+  if (has("priority")) extra.push({ label: t("Prioridad"), width: "10%", render: (x) => (x.priority ? t(PRIORITY_LABEL[x.priority]) : "—") });
+  if (has("client")) extra.push({ label: t("Cliente"), width: "15%", render: (x) => x.client ?? "—" });
+  if (has("startDate")) extra.push({ label: t("Inicio"), width: "12%", render: (x) => (x.startDate ? formatDay(x.startDate, r.today, locale) : "—") });
+  if (has("cost")) extra.push({ label: t("Coste"), width: "14%", render: (x) => (x.cost === null ? "—" : `${formatEuro(x.cost, locale)}${x.costPaid ? ` (${t("pagado")})` : ""}`) });
+  if (has("hours")) extra.push({ label: t("Horas (est./real)"), width: "12%", render: (x) => `${formatHours(x.estimatedHours, locale) || "—"} / ${formatHours(x.actualHours, locale) || "—"}` });
+  if (has("externalUrl")) extra.push({ label: t("Enlace"), width: "17%", render: (x) => (x.externalUrl ? <Text style={{ fontSize: 7 }}>{x.externalUrl}</Text> : "—") });
+  const used = extra.reduce((n, c) => n + parseInt(c.width, 10), 0);
+  return (
+    <>
+      <Text style={s.h2} minPresenceAhead={70}>{t("Campos opcionales")}</Text>
+      {totals.map((line) => <Text key={line} style={[s.small, { marginBottom: 2, fontFamily: "Helvetica-Bold" }]}>{line}</Text>)}
+      <Table rows={f.rows} cols={[{ label: t("Tarea"), width: `${Math.max(20, 100 - used)}%`, render: (x) => x.title }, ...extra]} />
+    </>
+  );
+}
+
 function ReportDocument({ r, t, locale }: { r: Report; t: T; locale: string }) {
   const x: Ctx = { t, locale };
   const generated = formatDay(r.today, undefined, locale);
@@ -259,6 +285,9 @@ function ReportDocument({ r, t, locale }: { r: Report; t: T; locale: string }) {
             />
           </>
         ) : null}
+
+        {/* Campos opcionales del proyecto */}
+        {r.fields ? <FieldsSection r={r} t={t} locale={locale} /> : null}
 
         {/* Releases */}
         {r.releases.length ? (

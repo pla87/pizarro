@@ -10,6 +10,7 @@ import { POSITION_STEP } from "@/lib/positions";
 import { templateInputSchema, type TemplateDto, type TemplateInput } from "@/lib/project-templates";
 import { listTemplatesSorted, resetBuiltinTemplate, restoreBuiltinTemplates } from "@/lib/template-store";
 import { requireAdmin } from "@/lib/session";
+import { normalizeTaskFields } from "@/lib/task-fields";
 import * as v from "@/lib/validation";
 import { getLocale, getT } from "@/i18n/server";
 
@@ -29,7 +30,7 @@ export async function saveTemplate(input: TemplateInput, templateId?: string | n
   return runAction({ name: "templates.saveTemplate", args: [input, templateId] }, async () => {
     await requireAdmin();
     const data = templateInputSchema.parse(input);
-    const row = { name: data.name, description: data.description, columns: data.columns, kinds: data.kinds, hiddenGeneralKinds: data.hiddenGeneralKinds, hideAllGeneralKinds: data.hideAllGeneralKinds, labels: data.labels };
+    const row = { name: data.name, description: data.description, columns: data.columns, kinds: data.kinds, hiddenGeneralKinds: data.hiddenGeneralKinds, hideAllGeneralKinds: data.hideAllGeneralKinds, labels: data.labels, taskFields: data.taskFields };
     if (templateId) {
       const id = v.id.parse(templateId);
       if (!(await db.projectTemplate.count({ where: { id } }))) throw notFound();
@@ -89,6 +90,7 @@ export async function templateFromProject(projectId: string) {
         kinds: { orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: { name: true, color: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true } },
         hiddenKinds: { select: { kind: { select: { name: true } } } },
         labels: { orderBy: { name: "asc" }, select: { name: true, color: true } },
+        taskFields: true,
       },
     });
     if (!project) throw notFound();
@@ -100,6 +102,7 @@ export async function templateFromProject(projectId: string) {
       kinds: project.kinds.map((k) => ({ ...k, color: k.color.toLowerCase() })),
       hiddenGeneralKinds: project.hiddenKinds.map((h) => h.kind.name),
       labels: project.labels.map((l) => ({ name: l.name, color: (palette.includes(l.color) ? l.color : PALETTE[0]) as (typeof PALETTE)[number] })),
+      taskFields: normalizeTaskFields(project.taskFields),
     };
   });
 }

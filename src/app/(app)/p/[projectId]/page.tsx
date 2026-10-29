@@ -7,6 +7,7 @@ import { dateToIso, todayIso } from "@/lib/dates";
 import { googleEnabled } from "@/lib/google";
 import { db } from "@/lib/db";
 import { getCurrentUser, requireUserPage } from "@/lib/session";
+import { normalizeTaskFields } from "@/lib/task-fields";
 import { effectiveFileMaxMb } from "@/lib/upload-size";
 import type { BoardData } from "@/lib/types";
 import { getLocale, getT } from "@/i18n/server";
@@ -18,7 +19,7 @@ type Params = { params: Promise<{ projectId: string }>; searchParams: Promise<{ 
 // Una sola consulta por petición para el título y la página.
 const visibleProject = cache(async (projectId: string) => {
   const user = await getCurrentUser();
-  return user ? db.project.findFirst({ where: { id: projectId, ...visibleProjectsWhere(user) }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true, fileMaxMb: true } }) : null;
+  return user ? db.project.findFirst({ where: { id: projectId, ...visibleProjectsWhere(user) }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true, fileMaxMb: true, taskFields: true } }) : null;
 });
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
@@ -51,7 +52,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
   ]);
 
   const data: BoardData = {
-    project: { id: project.id, name: project.name, attachMaxMb: project.taskAttachMaxMb, fileMaxMb: effectiveFileMaxMb(project.fileMaxMb) },
+    project: { id: project.id, name: project.name, attachMaxMb: project.taskAttachMaxMb, fileMaxMb: effectiveFileMaxMb(project.fileMaxMb), taskFields: normalizeTaskFields(project.taskFields) },
     columns,
     tasks,
     users,

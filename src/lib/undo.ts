@@ -41,6 +41,15 @@ export interface TaskData {
   recurrenceDay?: number | null;
   contentUpdatedAt?: string | null;
   contentUpdatedById?: string | null;
+  /** Campos opcionales (lib/task-fields.ts): decimales como texto, fecha en ISO. */
+  cost?: string | null;
+  costPaid?: boolean;
+  estimatedHours?: string | null;
+  actualHours?: string | null;
+  priority?: "BAJA" | "MEDIA" | "ALTA" | "URGENTE" | null;
+  client?: string | null;
+  startDate?: string | null;
+  externalUrl?: string | null;
 }
 export type TaskField = keyof TaskData;
 
@@ -97,6 +106,7 @@ const date = (s: string | null | undefined) => (s ? new Date(s) : null);
 const TASK_SELECT = {
   title: true, description: true, kindId: true, color: true, linkUrl: true, position: true, columnId: true, assigneeId: true,
   dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, evergreenEvery: true, recurrence: true, recurrenceDay: true, contentUpdatedAt: true, contentUpdatedById: true,
+  cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true, externalUrl: true,
 } as const;
 type TaskRowFull = Prisma.TaskGetPayload<{ select: typeof TASK_SELECT }>;
 
@@ -104,7 +114,8 @@ function toTaskData(row: TaskRowFull, fields: readonly TaskField[]): TaskData {
   const out: Record<string, unknown> = {};
   for (const f of fields) {
     const v = row[f];
-    out[f] = v instanceof Date ? v.toISOString() : v;
+    // Los decimales (Prisma.Decimal) viajan como texto «12.50».
+    out[f] = v instanceof Date ? v.toISOString() : v !== null && typeof v === "object" && "toFixed" in v ? (v as { toFixed(n: number): string }).toFixed(2) : v;
   }
   return out as TaskData;
 }
@@ -334,10 +345,16 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
   return out;
 }
 
+/** Una columna de presupuesto exige el campo Coste: si al deshacer vuelve una, se reactiva. */
+async function ensureCostField(projectId: string): Promise<void> {
+  const p = await db.project.findUnique({ where: { id: projectId }, select: { taskFields: true } });
+  if (p && !p.taskFields.includes("cost")) await db.project.update({ where: { id: projectId }, data: { taskFields: [...p.taskFields, "cost"] } });
+}
+
 function taskUpdateData(d: TaskData): Prisma.TaskUncheckedUpdateInput {
   const out: Prisma.TaskUncheckedUpdateInput = {};
   for (const [k, v] of Object.entries(d)) {
-    if (k === "dueDate" || k === "archivedAt" || k === "contentUpdatedAt") (out as Record<string, unknown>)[k] = date(v as string | null);
+    if (k === "dueDate" || k === "startDate" || k === "archivedAt" || k === "contentUpdatedAt") (out as Record<string, unknown>)[k] = date(v as string | null);
     else (out as Record<string, unknown>)[k] = v;
   }
   return out;
@@ -522,6 +539,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
             db.column.updateMany({ where: { id: op.id, projectId }, data: op.data as Prisma.ColumnUpdateManyMutationInput }),
           ]);
           if (!count) skipped++;
+          else if (op.data.role === "BUDGET") await ensureCostField(projectId);
           break;
         }
         case "column.remove": {
@@ -539,6 +557,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
         case "column.restore": {
           if (await db.column.count({ where: { id: op.row.id } })) { skipped++; break; }
           await db.column.create({ data: { ...op.row, projectId, role: op.row.role as Prisma.ColumnCreateInput["role"] } });
+          if (op.row.role === "BUDGET") await ensureCostField(projectId);
           columnIds.add(op.row.id);
           break;
         }
@@ -603,6 +622,7 @@ export async function fingerprintOps(projectId: string, ops: UndoOp[]): Promise<
       // Contenido, no la hora de escritura: reescribir lo mismo (p. ej. un deshacer propio) no cuenta como cambio.
       id: true, title: true, description: true, kindId: true, color: true, linkUrl: true, position: true, columnId: true, assigneeId: true,
       dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, evergreenEvery: true, recurrence: true, recurrenceDay: true,
+      cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true, externalUrl: true,
       labels: { select: { labelId: true }, orderBy: { labelId: "asc" } },
       subtasks: { select: { id: true, title: true, done: true, position: true }, orderBy: { id: "asc" } },
       comments: { select: { id: true, editedAt: true, deletedAt: true }, orderBy: { id: "asc" } },

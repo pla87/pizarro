@@ -15,13 +15,22 @@ enum Role {
 }
 
 /// Rol funcional de una columna. NEXT_RELEASE e IN_PRODUCTION son únicos por proyecto (índice único
-/// parcial en la migración); WAITING y WEEKLY_PLAN pueden repetirse en varias columnas.
+/// parcial en la migración); WAITING, WEEKLY_PLAN y BUDGET pueden repetirse en varias columnas.
 enum ColumnRole {
   NONE
   NEXT_RELEASE
   IN_PRODUCTION
   WAITING
   WEEKLY_PLAN
+  BUDGET
+}
+
+/// Prioridad opcional de una tarea (campo opcional «prioridad» del proyecto).
+enum TaskPriority {
+  BAJA
+  MEDIA
+  ALTA
+  URGENTE
 }
 
 model User {
@@ -224,6 +233,8 @@ model Project {
   googleShareMode String?
   /// Tamaño máximo (MB) de UN adjunto. 1 ≤ fileMaxMb ≤ taskAttachMaxMb ≤ releaseZipMaxMb.
   fileMaxMb       Int    @default(20)
+  /// Campos opcionales de las tareas que el proyecto tiene activados (ver lib/task-fields.ts); los datos se conservan al desactivar.
+  taskFields  String[] @default([])
   position    Float    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -315,6 +326,16 @@ model Task {
   waitingNotifiedAt DateTime?
   /// Tarea fija de la columna «Siguiente salto»: se incluye en cada release y no sale de la columna al desplegar.
   evergreen     Boolean   @default(false)
+  /// Campos opcionales (se muestran si el proyecto los activa en taskFields): coste con su estado de pago,
+  /// horas, prioridad, cliente, fecha de inicio y enlace externo.
+  cost           Decimal?  @db.Decimal(12, 2)
+  costPaid       Boolean   @default(false)
+  estimatedHours Decimal?  @db.Decimal(7, 2)
+  actualHours    Decimal?  @db.Decimal(7, 2)
+  priority       TaskPriority?
+  client         String?
+  startDate      DateTime? @db.Date
+  externalUrl    String?
   /// Cadencia de una tarea fija: 1 = todas las releases, 2 = las pares, 3 = múltiplos de 3.
   evergreenEvery Int      @default(1)
   /// Último cambio de contenido (título, descripción, tipo…) y quién lo hizo: detecta ediciones simultáneas.
@@ -354,6 +375,7 @@ model Task {
   @@index([deliverableId])
   @@index([kindId])
   @@index([projectId, dueDate])
+  @@index([projectId, client])
   @@index([createdAt])
   @@index([createdById])
 }
@@ -771,6 +793,8 @@ model ProjectTemplate {
   hideAllGeneralKinds Boolean @default(false)
   /// [{ name, color }]
   labels      Json     @default("[]")
+  /// Campos opcionales de tarea que activa el proyecto creado con la plantilla.
+  taskFields  String[] @default([])
   position    Float    @default(0)
   /// Clave estable de las plantillas incluidas de serie (src/lib/builtin-templates.ts); null en las propias.
   builtinKey  String?  @unique

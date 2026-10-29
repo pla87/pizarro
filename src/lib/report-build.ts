@@ -3,6 +3,7 @@ import { intlLocale, type Locale, makeT } from "../i18n/core";
 import { appTimeZone, listKinds } from "./board";
 import { localizeGeneralKind, localizeGeneralKinds } from "./kinds-localize";
 import { dateToIso, todayIso } from "./dates";
+import { normalizeTaskFields } from "./task-fields";
 import { db } from "./db";
 import { mentionsToPlain } from "./mentions";
 import { buildReport, RECENT_DONE_DAYS } from "./report";
@@ -33,7 +34,7 @@ export function generateProjectReportPdf(projectId: string, opts: { generatedBy:
 
 async function buildProjectReportPdf(projectId: string, opts: { generatedBy: string; locale: Locale }): Promise<ProjectReportPdf | null> {
   const t = makeT(opts.locale);
-  const project = await db.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, description: true } });
+  const project = await db.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, description: true, taskFields: true } });
   if (!project) return null;
 
   const [columns, tasks, deliverables, releases, archivedCount, kinds, [doneEvents, released]] = await Promise.all([
@@ -52,6 +53,7 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
         assignee: { select: { name: true } },
         updatedAt: true,
         subtasks: { select: { done: true } },
+        cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true, externalUrl: true,
       },
     }),
     db.deliverable.findMany({ where: { projectId }, orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { position: "asc" }], select: { id: true, name: true, description: true, dueDate: true } }),
@@ -98,10 +100,15 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
       subtaskDone: task.subtasks.filter((x) => x.done).length,
       updatedAt: task.updatedAt.toISOString(),
       doneAt: doneAt.get(task.id) ?? null,
+      fields: {
+        cost: task.cost?.toFixed(2) ?? null, costPaid: task.costPaid, estimatedHours: task.estimatedHours?.toFixed(2) ?? null, actualHours: task.actualHours?.toFixed(2) ?? null,
+        priority: task.priority, client: task.client, startDate: dateToIso(task.startDate), externalUrl: task.externalUrl,
+      },
     })),
     deliverables: deliverables.map((d) => ({ ...d, dueDate: dateToIso(d.dueDate) })),
     releases: releases.map((r) => ({ number: r.number, title: r.title, deployedAt: r.deployedAt.toISOString(), taskCount: r._count.tasks })),
     archivedCount,
+    taskFields: normalizeTaskFields(project.taskFields),
   }, t);
 
   const pdf = await renderReportPdf(report, t, locale);

@@ -1,5 +1,6 @@
 // Tipos serializables que viajan del servidor al cliente.
 import type { ColumnRoleValue } from "./constants";
+import type { TaskFieldKey, TaskFieldValues } from "./task-fields";
 
 export interface BoardColumn {
   id: string;
@@ -11,7 +12,7 @@ export interface BoardColumn {
   waitingDays: number | null;
 }
 
-export interface BoardTask {
+export interface BoardTask extends TaskFieldValues {
   id: string;
   columnId: string;
   title: string;
@@ -87,7 +88,7 @@ export interface LabelOption {
 
 export interface BoardData {
   /** `attachMaxMb`: tope de adjuntos por tarea (y por paquete de release) del proyecto; `fileMaxMb`: tope por archivo. */
-  project: { id: string; name: string; attachMaxMb: number; fileMaxMb: number };
+  project: { id: string; name: string; attachMaxMb: number; fileMaxMb: number; taskFields: TaskFieldKey[] };
   columns: BoardColumn[];
   tasks: BoardTask[];
   users: UserOption[];
@@ -113,6 +114,8 @@ export interface ProjectFormData {
   deliverables: DeliverableOption[];
   /** Etiquetas del proyecto (para crear varias tareas en otro proyecto). */
   labels: LabelOption[];
+  /** Clientes ya usados en el proyecto (sugerencias del campo opcional «Cliente»). */
+  clients: string[];
 }
 
 export interface TaskLinkInfo {

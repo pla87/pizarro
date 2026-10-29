@@ -5,7 +5,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjectAccess, assertTaskAccess, loadTaskWithAccess, visibleProjectsWhere } from "@/lib/access";
-import { appTimeZone, attachmentTotals, boardTaskSelect, listKinds, loadBoardTask, projectUsers, toBoardTask } from "@/lib/board";
+import { appTimeZone, attachmentTotals, boardTaskSelect, listKinds, loadBoardTask, projectClients, projectUsers, toBoardTask } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
 import { MAX_TITLE } from "@/lib/constants";
 import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
@@ -30,6 +30,8 @@ import { followTask, notifyMentions, notifyTask, taskFollowerIds } from "@/lib/n
 import { isFollowing } from "@/lib/followers";
 import { loadTaskHistory } from "@/lib/task-events";
 import { localizeGeneralKinds } from "@/lib/kinds-localize";
+import { normalizeTaskFields } from "@/lib/task-fields";
+import { assertFieldsEnabled, assertStartBeforeDue, enabledTaskFields, fieldData, fieldKeyOf, onlyChangedFields, patchedFieldKeys, pickTaskFields, taskFieldSchema, taskFieldShape } from "@/lib/task-field-input";
 import { effectiveFileMaxMb } from "@/lib/upload-size";
 import type { ArchivedTask, BoardTask, CommentInfo, ProjectFormData, SubtaskInfo, TaskDetail, TaskLinkInfo } from "@/lib/types";
 import { getLocale, getT } from "@/i18n/server";
@@ -80,6 +82,8 @@ const CHANGE_LABELS: Record<string, string> = {
   title: "título", description: "descripción", kindId: "tipo", color: "color", linkUrl: "enlace",
   assigneeId: "responsable", labelIds: "etiquetas", dueDate: "fecha límite", deliverableId: "entregable", evergreen: "fija en la release", evergreenEvery: "cadencia en la release",
   recurrence: "repetición", recurrenceDay: "repetición",
+  cost: "coste", costPaid: "pago", estimatedHours: "horas estimadas", actualHours: "horas reales", priority: "prioridad",
+  client: "cliente", startDate: "fecha de inicio", externalUrl: "enlace de referencia",
 };
 
 /** «tipo, responsable y fecha límite» a partir de los campos cambiados. */
@@ -112,6 +116,7 @@ const createSchema = z.object({
   deliverableId: v.id.nullable().default(null),
   evergreen: z.boolean().default(false),
   subtasks: z.array(v.title).max(50).default([]),
+  ...taskFieldShape,
 });
 
 export async function createTask(input: z.input<typeof createSchema>) {
@@ -124,6 +129,12 @@ export async function createTask(input: z.input<typeof createSchema>) {
     if (data.assigneeId) await assertAssignable(data.projectId, data.assigneeId);
     await assertDeliverableInProject(data.deliverableId, data.projectId);
     await assertKindsInProject([data.kindId], data.projectId);
+    const optional = pickTaskFields(data);
+    if (patchedFieldKeys(optional).length) {
+      const enabled = await enabledTaskFields(data.projectId);
+      assertFieldsEnabled(enabled, optional);
+      assertStartBeforeDue(enabled, data.startDate, data.dueDate);
+    }
     // Solo se admite evergreen en la columna de la release.
     const evergreen = data.evergreen && (await db.column.count({ where: { id: data.columnId, role: "NEXT_RELEASE" } })) > 0;
     assertTaskCreateRate(user.id);
@@ -145,6 +156,7 @@ export async function createTask(input: z.input<typeof createSchema>) {
           dueDate: data.dueDate ? isoToDate(data.dueDate) : null,
           deliverableId: data.deliverableId,
           evergreen,
+          ...fieldData(optional),
           position,
           createdById: user.id,
           labels: { create: [...new Set(data.labelIds)].map((labelId) => ({ labelId })) },
@@ -178,22 +190,24 @@ export async function getProjectFormData(projectId: string) {
     const user = await requireUser();
     const id = v.id.parse(projectId);
     await assertProjectAccess(user, id);
-    const project = await db.project.findUniqueOrThrow({ where: { id }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true, fileMaxMb: true } });
-    const [columns, users, deliverables, kinds, locale, labels] = await Promise.all([
+    const project = await db.project.findUniqueOrThrow({ where: { id }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true, fileMaxMb: true, taskFields: true } });
+    const [columns, users, deliverables, kinds, locale, labels, clients] = await Promise.all([
       db.column.findMany({ where: { projectId: id }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true } }),
       projectUsers(id, project),
       db.deliverable.findMany({ where: { projectId: id }, orderBy: [{ position: "asc" }], select: { id: true, name: true, dueDate: true } }),
       listKinds(id),
       getLocale(),
       db.label.findMany({ where: { projectId: id }, orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),
+      project.taskFields.includes("client") ? projectClients(id) : [],
     ]);
     return {
-      project: { id: project.id, name: project.name, attachMaxMb: project.taskAttachMaxMb, fileMaxMb: effectiveFileMaxMb(project.fileMaxMb) },
+      project: { id: project.id, name: project.name, attachMaxMb: project.taskAttachMaxMb, fileMaxMb: effectiveFileMaxMb(project.fileMaxMb), taskFields: normalizeTaskFields(project.taskFields) },
       columns,
       users,
       kinds: localizeGeneralKinds(kinds, locale),
       deliverables: deliverables.map((d) => ({ id: d.id, name: d.name, dueDate: dateToIso(d.dueDate) })),
       labels,
+      clients,
     };
   });
 }
@@ -206,6 +220,9 @@ const createManySchema = z.object({
   labelIds: z.array(v.id).max(20).default([]),
   dueDate: v.dayIso.default(null),
   deliverableId: v.id.nullable().default(null),
+  /** Campos opcionales que admite el alta masiva (si el proyecto los tiene activados). */
+  priority: v.taskPriority.optional(),
+  client: v.taskClient.optional(),
   /** Añade a cada tarea las subtareas predefinidas de su tipo. */
   applySubtaskTemplates: z.boolean().default(false),
 });
@@ -221,6 +238,8 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
     if (data.assigneeId) await assertAssignable(data.projectId, data.assigneeId);
     await assertDeliverableInProject(data.deliverableId, data.projectId);
     await assertKindsInProject(data.tasks.map((t) => t.kindId), data.projectId);
+    const optional = pickTaskFields({ priority: data.priority, client: data.client });
+    if (patchedFieldKeys(optional).length) assertFieldsEnabled(await enabledTaskFields(data.projectId), optional);
     const labelIds = [...new Set(data.labelIds)];
     const dueDate = data.dueDate ? isoToDate(data.dueDate) : null;
     const templates = new Map<string, string[]>();
@@ -245,6 +264,7 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
             assigneeId: data.assigneeId,
             dueDate,
             deliverableId: data.deliverableId,
+            ...fieldData(optional),
             position,
             createdById: user.id,
           };
@@ -292,6 +312,7 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
       where: { id: taskId },
       select: {
         title: true, description: true, kindId: true, color: true, linkUrl: true, assigneeId: true, dueDate: true, deliverableId: true,
+        cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true, externalUrl: true,
         columnId: true,
         labels: { select: { labelId: true } },
         subtasks: { orderBy: { position: "asc" }, select: { title: true, position: true } },
@@ -321,6 +342,8 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
           assigneeId: src.assigneeId,
           dueDate: src.dueDate,
           deliverableId: src.deliverableId,
+          cost: src.cost, costPaid: src.costPaid, estimatedHours: src.estimatedHours, actualHours: src.actualHours,
+          priority: src.priority, client: src.client, startDate: src.startDate, externalUrl: src.externalUrl,
           position,
           createdById: user.id,
           labels: { create: src.labels.map((l) => ({ labelId: l.labelId })) },
@@ -359,6 +382,7 @@ async function recordUpdateEvents(
   prev: { title: string; description: string; kindId: string; assigneeId: string | null; dueDate: Date | null; color: string | null; linkUrl: string | null; deliverableId: string | null; evergreen: boolean; evergreenEvery: number },
   data: z.infer<typeof updateSchema>,
   dueDate: string | null | undefined,
+  optional: Record<string, unknown> = {},
 ) {
   const add = (label: Label) => recordTaskEvent(taskId, "update", label);
   if (data.title !== undefined && data.title !== prev.title) add({ k: "Cambió el título de «{from}» a «{to}»", p: { from: mentionsToPlain(prev.title), to: mentionsToPlain(data.title) } });
@@ -382,6 +406,7 @@ async function recordUpdateEvents(
     add({ k: "Cambió la cadencia en la release a «{to}»", p: { to: evergreenEveryLabel(data.evergreenEvery) } });
   }
   if (data.labelIds !== undefined) others.labelIds = true;
+  for (const k of Object.keys(optional)) others[k] = true;
   if (Object.keys(others).length) add({ k: "Cambió {changes}", p: { changes: describeChanges(others) } });
   // Sin cambios reales (p. ej. se guardó el mismo texto): ni siquiera la línea genérica.
   skipTaskEvents();
@@ -391,10 +416,11 @@ async function recordUpdateEvents(
  * `since`: cuándo se cargó el título/descripción que se está editando. Si otra persona los ha
  * cambiado después, no se pisa su texto: se avisa para recargar.
  */
-export async function updateTask(taskId: string, patch: z.input<typeof updateSchema>, since?: string | null) {
+export async function updateTask(taskId: string, patch: z.input<typeof updateSchema> & z.input<typeof taskFieldSchema>, since?: string | null) {
   return runAction({ name: "tasks.updateTask", args: [taskId, patch, since] }, async () => {
     const user = await requireUser();
     const data = updateSchema.parse(patch);
+    const optionalIn = taskFieldSchema.parse(patch);
     // Una sola lectura de la tarea (con el permiso) para todo lo que sigue: archivada, conflicto de edición,
     // fija, repetición, valores para deshacer y valores anteriores para el historial y los avisos.
     // Las relaciones (etiquetas) van en una consulta aparte en paralelo: como relación, Prisma la haría después.
@@ -426,6 +452,15 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
       }) : null,
     ]);
     for (const c of checks) if (c.status === "rejected") throw c.reason;
+    // Campos opcionales: solo los que cambian de verdad y solo los que el proyecto tiene activados.
+    const optional = onlyChangedFields(task, optionalIn);
+    if (patchedFieldKeys(optional).length || optionalIn.startDate !== undefined || data.dueDate !== undefined) {
+      const enabled = await enabledTaskFields(projectId);
+      assertFieldsEnabled(enabled, optional);
+      if (optionalIn.startDate !== undefined || data.dueDate !== undefined) {
+        assertStartBeforeDue(enabled, optionalIn.startDate !== undefined ? optionalIn.startDate : dateToIso(task.startDate), data.dueDate !== undefined ? data.dueDate : dateToIso(task.dueDate));
+      }
+    }
     const { labelIds, dueDate, recurrence, recurrenceDay, ...rest } = data;
     // La cadencia solo existe en una tarea fija: al dejar de serlo (o si no lo es) vuelve a 1.
     const stillFixed = data.evergreen ?? task.evergreen;
@@ -440,6 +475,7 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
     const fields = {
       ...rest,
       ...(repeat ?? {}),
+      ...fieldData(optional),
       ...(dueDate !== undefined ? { dueDate: dueDate ? isoToDate(dueDate) : null } : {}),
       ...(editsText ? { contentUpdatedAt: new Date(), contentUpdatedById: user.id } : {}),
     };
@@ -462,8 +498,8 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
       }
       return added;
     });
-    describeAction("Modificó «{title}»: {changes}", { title: mentionsToPlain(data.title ?? prev.title), changes: describeChanges(data) }, { taskId });
-    await recordUpdateEvents(taskId, prev, data, dueDate);
+    describeAction("Modificó «{title}»: {changes}", { title: mentionsToPlain(data.title ?? prev.title), changes: describeChanges({ ...data, ...optional }) }, { taskId });
+    await recordUpdateEvents(taskId, prev, data, dueDate, optional);
     if (newMentions.length) {
       await notifyMentions({ actorId: user.id, taskId, projectId, recipientIds: newMentions, text: data.description ?? "" });
     }
@@ -895,6 +931,8 @@ const snapshotSchema = z.object({
   recurrenceDay: z.number().int().min(1).max(31).nullable(),
   columnId: v.id,
   position: z.number().finite(),
+  // Campos opcionales del proyecto: si faltan (o el proyecto ya no los tiene activados), no se tocan.
+  ...taskFieldShape,
   // Solo si el detalle estaba cargado al abrir el diálogo; si faltan, no se tocan.
   subtasks: z.array(z.object({ id: v.id, title: v.title, done: z.boolean(), position: z.number().finite() })).max(MAX_SUBTASKS).optional(),
   attachmentIds: z.array(v.id).max(1000).optional(),
@@ -948,6 +986,12 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
     if (snap.assigneeId !== task.assigneeId && (!snap.assigneeId || (await passes(() => assertAssignable(projectId, snap.assigneeId!))))) fields.assigneeId = snap.assigneeId;
     if (snap.deliverableId !== task.deliverableId && (await passes(() => assertDeliverableInProject(snap.deliverableId, projectId)))) fields.deliverableId = snap.deliverableId;
     if (snap.dueDate !== dateToIso(task.dueDate)) fields.dueDate = snap.dueDate ? isoToDate(snap.dueDate) : null;
+    const optionalSnap = onlyChangedFields(task, pickTaskFields(snap));
+    if (patchedFieldKeys(optionalSnap).length) {
+      const enabled = await enabledTaskFields(projectId);
+      for (const k of patchedFieldKeys(optionalSnap)) if (!enabled.includes(fieldKeyOf(k))) delete optionalSnap[k];
+      Object.assign(fields, fieldData(optionalSnap));
+    }
     if (snap.columnId !== task.columnId && (await passes(() => assertColumnInProject(snap.columnId, projectId)))) {
       fields.columnId = snap.columnId;
       // La posición viene del navegador: si ya la ocupa otra tarjeta, se desempata al terminar (resolvePositionTies).

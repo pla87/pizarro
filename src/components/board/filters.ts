@@ -18,13 +18,17 @@ export interface BoardFilters {
   kindIds: string[];
   /** "" = cualquiera, NO_ASSIGNEE o el id de una persona. */
   assigneeId: string;
+  /** Campo opcional «prioridad»: cualquiera de estas. */
+  priorities: string[];
+  /** Campo opcional «cliente»: cualquiera de estos (texto exacto). */
+  clients: string[];
 }
 
-export const EMPTY_FILTERS: BoardFilters = { mine: false, overdue: false, week: false, labelIds: [], kindIds: [], assigneeId: "" };
+export const EMPTY_FILTERS: BoardFilters = { mine: false, overdue: false, week: false, labelIds: [], kindIds: [], assigneeId: "", priorities: [], clients: [] };
 
 /** Cuántos filtros hay activos (cada grupo cuenta una vez). */
 export function activeFilterCount(f: BoardFilters): number {
-  return [f.mine, f.overdue, f.week, f.labelIds.length > 0, f.kindIds.length > 0, f.assigneeId !== ""].filter(Boolean).length;
+  return [f.mine, f.overdue, f.week, f.labelIds.length > 0, f.kindIds.length > 0, f.assigneeId !== "", f.priorities.length > 0, f.clients.length > 0].filter(Boolean).length;
 }
 
 export function filtersKey(userId: string, projectId: string): string {
@@ -46,6 +50,8 @@ export function parseStoredFilters(raw: string | null): BoardFilters {
       labelIds: strings(v.labelIds),
       kindIds: strings(v.kindIds),
       assigneeId: typeof v.assigneeId === "string" ? v.assigneeId : "",
+      priorities: strings(v.priorities, 4),
+      clients: strings(v.clients, 200),
     };
   } catch {
     return EMPTY_FILTERS;
@@ -53,12 +59,15 @@ export function parseStoredFilters(raw: string | null): BoardFilters {
 }
 
 /** Quita lo que ya no existe (etiqueta borrada, tipo oculto, persona que dejó el proyecto) para que no oculte tarjetas sin motivo visible. */
-export function sanitizeFilters(f: BoardFilters, valid: { labels: Set<string>; kinds: Set<string>; users: Set<string> }): BoardFilters {
+export function sanitizeFilters(f: BoardFilters, valid: { labels: Set<string>; kinds: Set<string>; users: Set<string>; priorities?: Set<string>; clients?: Set<string> }): BoardFilters {
   const labelIds = f.labelIds.filter((id) => valid.labels.has(id));
   const kindIds = f.kindIds.filter((id) => valid.kinds.has(id));
   const assigneeId = f.assigneeId === NO_ASSIGNEE || valid.users.has(f.assigneeId) ? f.assigneeId : "";
-  if (labelIds.length === f.labelIds.length && kindIds.length === f.kindIds.length && assigneeId === f.assigneeId) return f;
-  return { ...f, labelIds, kindIds, assigneeId };
+  // Prioridad y cliente solo filtran si el proyecto tiene activado el campo (valid.priorities / valid.clients vacíos = desactivado).
+  const priorities = valid.priorities ? f.priorities.filter((p) => valid.priorities!.has(p)) : f.priorities;
+  const clients = valid.clients ? f.clients.filter((c) => valid.clients!.has(c)) : f.clients;
+  if (labelIds.length === f.labelIds.length && kindIds.length === f.kindIds.length && assigneeId === f.assigneeId && priorities.length === f.priorities.length && clients.length === f.clients.length) return f;
+  return { ...f, labelIds, kindIds, assigneeId, priorities, clients };
 }
 
 interface FilterContext {
@@ -79,6 +88,8 @@ export function taskMatchesFilters(task: BoardTask, f: BoardFilters, ctx: Filter
   }
   if (f.labelIds.length && !task.labelIds.some((id) => f.labelIds.includes(id))) return false;
   if (f.kindIds.length && !f.kindIds.includes(task.kindId)) return false;
+  if (f.priorities.length && !(task.priority && f.priorities.includes(task.priority))) return false;
+  if (f.clients.length && !(task.client && f.clients.includes(task.client))) return false;
   if (f.assigneeId === NO_ASSIGNEE ? task.assigneeId !== null : f.assigneeId !== "" && task.assigneeId !== f.assigneeId) return false;
   return true;
 }

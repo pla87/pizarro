@@ -1,6 +1,7 @@
 import "./zod-config";
 import { z } from "zod";
 import { mentionsToPlain } from "./mentions";
+import { MAX_CLIENT, MAX_COST, MAX_HOURS, TASK_PRIORITIES } from "./task-fields";
 import { FILE_MAX_MAX_MB, FILE_MAX_MIN_MB } from "./upload-size";
 import { COLUMN_ROLES, HEX_COLOR_RE, MAX_DESCRIPTION, MAX_TITLE, PALETTE, RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "./constants";
 
@@ -58,3 +59,33 @@ export const phoneE164 = z
   .transform((v) => v.replace(/[\s()-]/g, ""))
   .refine((v) => v === "" || /^\+[1-9]\d{7,14}$/.test(v), "Usa el formato internacional, p. ej. +34600111222.")
   .transform((v) => (v === "" ? null : v));
+
+// --- Campos opcionales de las tareas (lib/task-fields.ts) ---
+
+/** Decimal no negativo con hasta dos decimales (acepta coma o punto); "" o null lo quita. Sale como texto «12.50». */
+function decimalField(max: number, message: string) {
+  return z
+    .union([z.string(), z.number()])
+    .nullable()
+    .transform((val, ctx) => {
+      if (val === null) return null;
+      const raw = typeof val === "number" ? String(val) : val.trim().replace(",", ".");
+      if (raw === "") return null;
+      if (!/^\d{1,10}(\.\d{1,2})?$/.test(raw) || Number(raw) > max) {
+        ctx.addIssue({ code: "custom", message });
+        return z.NEVER;
+      }
+      return Number(raw).toFixed(2);
+    });
+}
+export const taskCost = decimalField(MAX_COST, "El coste debe ser un importe entre 0 y 9.999.999.999,99.");
+export const taskHours = decimalField(MAX_HOURS, "Las horas deben ser un número entre 0 y 99.999,99.");
+export const taskPriority = z.enum(TASK_PRIORITIES).nullable();
+export const taskClient = z
+  .string()
+  .trim()
+  .max(MAX_CLIENT, "El cliente admite como máximo 120 caracteres.")
+  .transform((c) => (c === "" ? null : c))
+  .nullable();
+/** Enlace externo: solo http(s). */
+export const externalUrl = linkUrl;
