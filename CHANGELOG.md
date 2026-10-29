@@ -2,6 +2,34 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.29.0 — 2026-10-30 00:10
+
+Campos opcionales y columna Presupuesto, cinco columnas especiales nuevas, visor de documentación ampliado y mejoras de rendimiento
+
+### Nuevas funcionalidades
+
+- Campos opcionales por proyecto (Ajustes del proyecto): coste con «pagado», horas estimadas y reales, prioridad, cliente, fecha de inicio y enlace de referencia. Se ven en el detalle, en la tarjeta y en los filtros.
+- Columna «Presupuesto»: suma el coste de sus tareas en la cabecera y ofrece un resumen Pagado / Pendiente / Total. Activa el campo Coste, que no se puede desactivar mientras exista.
+- Columna «Lista consolidada»: reúne las subtareas de todas sus tarjetas en una sola lista marcable, con copia como texto y PDF.
+- Columna «Revisión con requisitos»: avisa antes de sacar una tarjeta con subtareas sin marcar.
+- Columna «Agenda»: exporta sus tareas con fecha a un calendario (.ics).
+- Columna «Rutinas»: muestra la próxima aparición de cada tarea recurrente y elige a qué columna va la siguiente.
+- Columna «Entrega al cliente»: PDF de resumen sin comentarios ni datos internos.
+- Documentación: zoom con clic en las imágenes, botones de nueva tarea y varias tareas en el visor, y soltar archivos sobre «Documentación» del menú para subirlos.
+
+### Mejoras
+
+- El visor de PDF e imágenes ocupa casi toda la pantalla y deja sitio para abrir una tarea al lado.
+- El botón «Varias tareas» es más pequeño que el de «Nueva tarea», como en el móvil.
+- Con 1 a 3 columnas, cada una mide lo mismo que con 4 (un cuarto del ancho).
+- Mi perfil tiene una pestaña propia para las plantillas de release notes.
+- Abrir una tarea y varias acciones sobre tareas hacen menos consultas; las subidas simultáneas hacen cola para no agotar la memoria.
+
+### Cambios técnicos / DB
+
+- Migraciones: campos opcionales (Project.taskFields y columnas de Task), roles BUDGET, CHECKLIST, REVIEW, AGENDA, ROUTINES y DELIVERY, Column.routineTargetColumnId y Task.routineColumnId con disparador.
+- Como mucho 3 subidas procesándose a la vez en el servidor (el resto espera hasta 60 s). La suma global de almacenamiento solo se calcula si hay cuota global. INSTALL.md: no exponer el puerto 3000 sin el proxy.
+
 ## v1.28.0 — 2026-10-27 19:20
 
 Columnas Esperando y Planificación semanal, varias tareas al lado, pestañas en Mi perfil y arreglos del tablero
