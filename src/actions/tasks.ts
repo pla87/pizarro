@@ -283,10 +283,11 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
   return runAction({ name: "tasks.duplicateTask", args: [taskId, target] }, async () => {
     const user = await requireUser();
     if (!rateLimit(`duplicate:${user.id}`, 60, 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
-    const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
+    const task = await loadTaskWithAccess(user, v.id.parse(taskId), { archivedAt: true });
+    const { projectId } = task;
     const dest = duplicateTargetSchema.parse(target);
     assertTaskCreateRate(user.id);
-    await assertNotArchived(taskId);
+    assertNotArchivedRow(task);
     if (dest) await assertColumnInProject(dest.columnId, projectId);
     const src = await db.task.findUniqueOrThrow({
       where: { id: taskId },
@@ -586,8 +587,9 @@ export async function moveTasks(taskIds: string[], columnId: string) {
 export async function makeEvergreen(taskId: string) {
   return runAction({ name: "tasks.makeEvergreen", args: [taskId] }, async () => {
     const user = await requireUser();
-    const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
-    await assertNotArchived(taskId);
+    const task = await loadTaskWithAccess(user, v.id.parse(taskId), { archivedAt: true });
+    assertNotArchivedRow(task);
+    const { projectId } = task;
     addUndo(...(await captureTasks([taskId], ["columnId", "position", "evergreen"])));
     const result = await db.$transaction(async (tx) => {
       const column = await tx.column.findFirst({ where: { projectId, role: "NEXT_RELEASE" }, select: { id: true } });
@@ -609,8 +611,9 @@ export async function makeEvergreen(taskId: string) {
 export async function archiveTask(taskId: string) {
   return runAction({ name: "tasks.archiveTask", args: [taskId] }, async () => {
     const user = await requireUser();
-    const { columnId } = await assertTaskAccess(user, v.id.parse(taskId));
-    await assertNotArchived(taskId);
+    const task = await loadTaskWithAccess(user, v.id.parse(taskId), { archivedAt: true });
+    assertNotArchivedRow(task);
+    const { columnId } = task;
     describeAction("Archivó «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
     addUndo(...(await captureTasks([taskId], ARCHIVE_FIELDS)));
     await db.task.update({ where: { id: taskId }, data: { archivedAt: new Date(), archivedFromColumnId: columnId, evergreen: false, evergreenEvery: 1 } });
@@ -703,11 +706,13 @@ export async function deleteTasks(taskIds: string[]) {
 export async function getTaskDetail(taskId: string) {
   return runAction({ name: "tasks.getTaskDetail", args: [taskId] }, async (): Promise<TaskDetail> => {
     const user = await requireUser();
-    await assertTaskAccess(user, v.id.parse(taskId));
-    const task = await db.task.findUniqueOrThrow({
-      where: { id: taskId },
+    const id = v.id.parse(taskId);
+    // El acceso va dentro de la propia consulta (mismo filtro que assertTaskAccess); el recuento de comentarios, en paralelo.
+    const [task, commentCount] = await Promise.all([db.task.findFirst({
+      where: { id, project: visibleProjectsWhere(user) },
       select: {
         id: true,
+        projectId: true,
         title: true,
         description: true,
         createdAt: true,
@@ -722,12 +727,12 @@ export async function getTaskDetail(taskId: string) {
         // Solo los más recientes; los anteriores se piden con getOlderComments.
         comments: { orderBy: COMMENT_ORDER, take: COMMENTS_FIRST_PAGE, select: commentSelect },
       },
-    });
+    }), db.taskComment.count({ where: { taskId: id, deletedAt: null } })]);
+    if (!task) throw notFound();
+    noteProject(task.projectId);
+    noteTask(id);
     const oldest = task.comments.at(-1);
-    const [olderComments, commentCount] = await Promise.all([
-      oldest && task.comments.length === COMMENTS_FIRST_PAGE ? db.taskComment.count({ where: olderThan(task.id, oldest) }) : 0,
-      db.taskComment.count({ where: { taskId: task.id, deletedAt: null } }),
-    ]);
+    const olderComments = oldest && task.comments.length === COMMENTS_FIRST_PAGE ? await db.taskComment.count({ where: olderThan(task.id, oldest) }) : 0;
     describeAction(`Abrió la tarea «${task.title}»`, { taskId });
     return {
       id: task.id,
@@ -789,8 +794,7 @@ async function assertSubtaskAccess(subtaskId: string) {
 export async function addSubtask(taskId: string, title: string) {
   return runAction({ name: "tasks.addSubtask", args: [taskId, title] }, async (): Promise<SubtaskInfo> => {
     const user = await requireUser();
-    await assertTaskAccess(user, v.id.parse(taskId));
-    await assertNotArchived(taskId);
+    assertNotArchivedRow(await loadTaskWithAccess(user, v.id.parse(taskId), { archivedAt: true }));
     if ((await db.subtask.count({ where: { taskId } })) >= MAX_SUBTASKS) throw new AppError("Una tarea no puede tener más de 100 subtareas.");
     const last = await db.subtask.findFirst({ where: { taskId }, orderBy: { position: "desc" }, select: { position: true } });
     const sub = await db.subtask.create({
@@ -1145,8 +1149,9 @@ const commentBody = z.string().trim().min(1, "El comentario está vacío.").max(
 export async function addComment(taskId: string, body: string, parentId?: string | null) {
   return runAction({ name: "tasks.addComment", args: [taskId, body, parentId] }, async (): Promise<CommentInfo> => {
     const user = await requireUser();
-    const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
-    await assertNotArchived(taskId);
+    const task = await loadTaskWithAccess(user, v.id.parse(taskId), { archivedAt: true });
+    assertNotArchivedRow(task);
+    const { projectId } = task;
     const text = commentBody.parse(body);
     // Los comentarios borrados que conservan respuestas no cuentan para el máximo (ajuste de administración).
     const maxComments = await getMaxCommentsPerTask();
@@ -1236,8 +1241,9 @@ const linkSelect = { id: true, kind: true, title: true, url: true, shareStatus: 
 export async function createGoogleFile(taskId: string, kind: GoogleFileKind, title: string) {
   return runAction({ name: "tasks.createGoogleFile", args: [taskId, kind, title] }, async (): Promise<TaskLinkInfo> => {
     const user = await requireUser();
-    const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
-    await assertNotArchived(taskId);
+    const task = await loadTaskWithAccess(user, v.id.parse(taskId), { archivedAt: true });
+    assertNotArchivedRow(task);
+    const { projectId } = task;
     if (!rateLimit(`google-file:${user.id}`, 20, 60_000)) throw new AppError("Demasiados documentos creados seguidos. Espera un minuto.");
     const fileKind = z.enum(["GOOGLE_DOC", "GOOGLE_SHEET"]).parse(kind);
     const name = v.title.parse(title);
