@@ -94,7 +94,7 @@ El código es de un solo uso para esta instalación: caduca a las 24 horas y se 
 
 Terminado el asistente, el código se borra y `/setup` responde 404. Mientras no haya usuarios, cualquier otra dirección redirige a `/setup`.
 
-Configura el email para tener invitaciones y «¿Olvidaste tu contraseña?»: desde *Administración → Ajustes → Avisos por email* (sin tocar el servidor) o con `SMTP_*` en `.env` (sección 3.5).
+Configura el email para tener invitaciones y «¿Olvidaste tu contraseña?»: desde *Administración → Ajustes → Avisos por email* (sin tocar el servidor) o con `SMTP_*` en `.env` (sección 3.6).
 
 ### 2.4 Administrador inicial por variables (alternativa)
 
@@ -120,7 +120,7 @@ En `.env`: `DOMAIN=":80"` y `APP_URL="http://<ip-del-servidor>"`. Caddy sirve so
 
 La imagen se construye para la arquitectura del propio servidor (amd64 o arm64, p. ej. Raspberry Pi 5). Para preparar una imagen de las dos a la vez desde otra máquina: `docker buildx build --platform linux/amd64,linux/arm64 -t <registro>/pizarro:<versión> --push ..` y pon ese nombre en `PIZARRO_IMAGE`.
 
-### 3.5 Email y Google desde Administración → Ajustes
+### 3.6 Email y Google desde Administración → Ajustes
 
 Dos cosas distintas, configurables desde Pizarro (como administrador) sin editar `.env`. Si defines las variables en el servidor, mandan sobre lo guardado en Ajustes y la pantalla se muestra de solo lectura. Los secretos se guardan cifrados con `ENCRYPTION_KEY` y entran en la rotación de claves y en las copias; no se muestran de nuevo ni aparecen en el registro ni en el diagnóstico.
 
@@ -140,7 +140,7 @@ El botón *Enviar email de prueba* manda un mensaje a tu dirección. Equivalente
 
 Equivalente por variables: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `GOOGLE_WORKSPACE_DOMAIN`. Los cambios guardados en Ajustes se aplican en segundos, sin reiniciar.
 
-### 3.6 Endurecimiento del contenedor y rol de la base de datos
+### 3.5 Endurecimiento del contenedor y rol de la base de datos
 
 - **Código de solo lectura.** En la imagen el código es de `root`: el proceso de la app (usuario `node`) solo puede escribir en el volumen de subidas, en `/tmp` y en la caché de Next. `deploy/compose.yml` añade `read_only: true`, `no-new-privileges` y elimina todas las capacidades de Linux salvo las cinco que usa `scripts/start.sh` para ajustar el volumen y bajar a `node`. Comprobación: `docker compose exec app sh -c 'touch /app/server.js'` debe fallar.
 - **Rol de base de datos sin superusuario.** En una instalación **nueva**, `install.sh` define `APP_DB_USER=pizarro_app` y `APP_DB_PASSWORD` en `.env`; al crear la base, `deploy/postgres-init/10-app-role.sh` crea ese rol (sin superusuario, con `CREATEDB` para la prueba mensual de restauración, y dueño de la base). La app se conecta con él; `pizarro` queda solo para administrar PostgreSQL.
