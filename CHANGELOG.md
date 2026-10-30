@@ -2,6 +2,39 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.31.0 — 2026-10-30 13:19
+
+Recuperar el acceso sin email, todo el calendario se arrastra, proyectos para admins y correcciones de la revisión
+
+### Nuevas funcionalidades
+
+- Sin email configurado, «Forzar cambio de contraseña» genera un enlace de un solo uso (30 minutos) que el admin copia y entrega; con email también puede copiarlo en vez de enviarlo.
+- Comando de emergencia `node dist/reset-link.mjs <email>` para cuando ningún admin puede entrar (ver INSTALL.md).
+- Calendario: las franjas de tareas con inicio y fin se arrastran para moverlas o se estiran por sus bordes; los entregables también se arrastran. Con deshacer.
+- «Ver proyectos existentes» para administradores: lista los proyectos de equipo y permite añadirlos a sus proyectos de trabajo.
+- Administración → Proyectos: un admin puede elegir proyectos para sí mismo y para otros admins pulsando su nombre.
+
+### Mejoras
+
+- La siguiente aparición de una tarea recurrente copia coste (sin pagar), horas estimadas, prioridad y cliente, y desplaza la fecha de inicio.
+- El .ics de la columna Agenda exporta rangos de inicio a fin.
+- Los «+N» del calendario abren la lista de franjas o entregables ocultos; en móvil aparecen los rangos que acaban después del mes.
+- Los días «Esperando» se cuentan en días naturales de la zona de la app, igual en la tarjeta y en el aviso.
+
+### Correcciones
+
+- Convertir una columna en «Esperando» ya no dispara avisos de tareas antiguas; restaurar una tarea archivada reinicia su espera.
+- Deshacer el borrado de una columna recupera los destinos de Rutinas; un destino no puede ser una columna terminada ni otra de Rutinas.
+- El PDF de entrega al cliente muestra las menciones sin «@».
+- El .ics ya no borra guiones bajos ni asteriscos dentro de palabras o enlaces.
+- Deshacer entradas anteriores a la v1.30 vuelve a funcionar; restaurar una tarea conserva su origen de repetición y de Rutinas.
+- Los documentos se revalidan siempre, así que quitar el acceso a un proyecto surte efecto al momento.
+- Los nombres de archivo de las releases usan la fecha de la zona de la app.
+
+### Cambios técnicos / DB
+
+- Nuevas acciones moveDeliverable y setAdminProjectPick; página /projects. Menos consultas en subtareas, documentos y sugerencias de clientes.
+
 ## v1.30.0 — 2026-10-30 12:25
 
 Un solo enlace externo, rangos en el calendario, recuperar el acceso sin email y un tablero más ligero en tiempo real
