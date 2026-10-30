@@ -289,4 +289,10 @@ export const cuentas: Record<string, string> = {
   "Para confirmar que la cuenta es tuya, escribe también el código que te hemos enviado por email.": "To confirm the account is yours, also enter the code we sent you by email.",
   "El código del email no es correcto o ha caducado.": "The email code is incorrect or has expired.",
   "Código QR para añadir la cuenta en tu app de autenticación": "QR code to add the account in your authenticator app",
+  "Este servidor no tiene configurado el envío de emails": "This server does not have email sending configured",
+  "Por eso no podemos enviarte un enlace para elegir una contraseña nueva. Estas son las opciones:": "So we cannot send you a link to choose a new password. These are your options:",
+  "Entra con tu cuenta de Google, si tu email está dado de alta.": "Sign in with your Google account, if your email is registered.",
+  "Pide a un administrador que te fuerce el cambio de contraseña (Administración → Usuarios → Forzar cambio de contraseña).": "Ask an administrator to force a password change for you (Administration → Users → Force password change).",
+  "Si eres quien administra el servidor: la sección «Altas, bajas y contraseñas» del manual explica cómo recuperar el acceso, o configura el envío de emails (SMTP).": "If you run the server: the \"Altas, bajas y contraseñas\" (adding, removing users and passwords) section of the manual explains how to regain access, or configure email sending (SMTP).",
+  "No hay email ni inicio de sesión con Google configurados: quien olvide su contraseña no puede recuperarla por su cuenta y tendrá que pedirte que le fuerces el cambio de contraseña.": "Neither email nor Google sign-in is configured: anyone who forgets their password cannot recover it on their own and will have to ask you to force a password change.",
 };

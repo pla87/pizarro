@@ -1,12 +1,13 @@
 "use client";
 
 import { useDndContext, useDraggable, useDroppable } from "@dnd-kit/core";
-import { ChevronUp, GripVertical, Plus } from "lucide-react";
+import { ChevronUp, GripVertical, Loader2, Plus } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
 import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard, useTask } from "./context";
+import { useCardFileDrop } from "./useCardFileDrop";
 import { useFileZone } from "./useFileZone";
 import { MentionText } from "../ui/MentionText";
 import { mentionsToPlain } from "@/lib/mentions";
@@ -124,6 +125,8 @@ function EvergreenCard({ id }: { id: string }) {
   const { kindById, openTask, dragHandle, setEvergreenEvery } = useBoard();
   const t = useT();
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({ id });
+  // Archivos soltados sobre la tarea: se adjuntan a ella (y no abren la tarea nueva del panel).
+  const fileDrop = useCardFileDrop(id, true);
   const task = useTask(id);
   if (!task) return null;
   // En táctil solo arrastra el asa (igual que las tarjetas normales).
@@ -137,6 +140,8 @@ function EvergreenCard({ id }: { id: string }) {
       role="button"
       tabIndex={0}
       {...(dragHandle ? {} : { ...attributes, ...listeners })}
+      data-file-target={id}
+      {...fileDrop.handlers}
       onClick={() => openTask(id)}
       onKeyDown={(e) => {
         // Enter abre la tarea; evita que el KeyboardSensor empiece además un arrastre.
@@ -146,10 +151,16 @@ function EvergreenCard({ id }: { id: string }) {
         }
       }}
       className={cn(
-        "flex w-full cursor-pointer touch-manipulation items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-xs shadow-sm hover:shadow-md dark:border-slate-700/80 dark:bg-slate-900",
+        fileDrop.over && "border-focus ring-2 ring-focus/50",
+        "relative flex w-full cursor-pointer touch-manipulation items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-xs shadow-sm hover:shadow-md dark:border-slate-700/80 dark:bg-slate-900",
         isDragging && "opacity-40",
       )}
     >
+      {(fileDrop.over || fileDrop.uploading > 0) && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-1.5 rounded-md bg-white/95 text-xs font-semibold text-brand-700 dark:bg-slate-900/95 dark:text-brand-300" role="status">
+          {fileDrop.over ? t("Suelta para adjuntar") : (<><Loader2 size={13} className="animate-spin" /> {t("Subiendo…")}</>)}
+        </div>
+      )}
       <span className="min-w-0 flex-1 truncate font-medium" title={mentionsToPlain(task.title)}><MentionText text={task.title} /></span>
       {/* Cadencia: en todas / cada dos / cada tres releases. Mismo color que la barra de progreso de subtareas. */}
       <button

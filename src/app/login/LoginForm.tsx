@@ -9,7 +9,6 @@ import { useT } from "@/i18n/client";
 
 interface Props {
   next: string;
-  canReset: boolean;
   /** Botón «Iniciar sesión con Google». */
   google: boolean;
   /** Formulario de email y contraseña. */
@@ -30,7 +29,7 @@ function GoogleLogo() {
   );
 }
 
-export function LoginForm({ next, canReset, google, password, emergency, notice }: Props) {
+export function LoginForm({ next, google, password, emergency, notice }: Props) {
   const t = useT();
   const [state, action, pending] = useActionState<LoginState, FormData>(login, {});
   // Controlado: React restablece los formularios tras cada acción y se perdería el email.
@@ -51,11 +50,10 @@ export function LoginForm({ next, canReset, google, password, emergency, notice 
         {pending && <Loader2 size={16} className="animate-spin" />}
         {t("Entrar")}
       </button>
-      {canReset && (
-        <p className="text-center text-sm">
-          <Link href="/forgot-password" className="text-brand-700 hover:underline dark:text-brand-300">{t("¿Olvidaste tu contraseña?")}</Link>
-        </p>
-      )}
+      {/* Siempre visible: sin email configurado, /forgot-password explica las alternativas. */}
+      <p className="text-center text-sm">
+        <Link href="/forgot-password" className="text-brand-700 hover:underline dark:text-brand-300">{t("¿Olvidaste tu contraseña?")}</Link>
+      </p>
     </form>
   );
   const googleHref = `/api/auth/google/start${next ? `?next=${encodeURIComponent(next)}` : ""}`;

@@ -4,7 +4,6 @@ import { isSetupPending } from "@/lib/setup";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { googleOnly, passwordFormVisible } from "@/lib/auth-policy";
 import { googleEnabled } from "@/lib/google";
-import { emailEnabled } from "@/lib/mail";
 import { getCurrentUser, getPendingUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { LoginForm } from "./LoginForm";
@@ -41,7 +40,6 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     <AuthCard title={t("Iniciar sesión")}>
       <LoginForm
         next={typeof next === "string" ? next : ""}
-        canReset={emailEnabled()}
         google={googleEnabled()}
         password={passwordFormVisible()}
         emergency={googleOnly()}

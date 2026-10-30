@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { MAX_USERS } from "@/lib/limits";
+import { googleEnabled } from "@/lib/google";
 import { emailEnabled } from "@/lib/mail";
 import { requireAdminPage } from "@/lib/session";
 import { getT } from "@/i18n/server";
@@ -21,5 +22,5 @@ export default async function UsersPage() {
   const sole = new Map<string, number>();
   for (const p of privates) if (p.members.length === 1) sole.set(p.members[0]!.userId, (sole.get(p.members[0]!.userId) ?? 0) + 1);
   const rows = users.map(({ twoFactorMethod, googleSub, ...u }) => ({ ...u, twoFactor: twoFactorMethod !== null, googleLinked: googleSub !== null, privateProjects: sole.get(u.id) ?? 0 }));
-  return <UsersAdmin users={rows} meId={me.id} maxUsers={MAX_USERS} emailAvailable={emailEnabled()} />;
+  return <UsersAdmin users={rows} meId={me.id} maxUsers={MAX_USERS} emailAvailable={emailEnabled()} noRecovery={!emailEnabled() && !googleEnabled()} />;
 }
