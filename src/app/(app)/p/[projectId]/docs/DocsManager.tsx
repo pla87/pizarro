@@ -319,7 +319,7 @@ function DocViewer({ doc, projectId, currentUserId, editorMode, onClose }: { doc
   const [busy, setBusy] = useState(false);
   const src = `/api/documents/${doc.id}`;
   const big = doc.kind === "PDF" || doc.kind === "IMAGE";
-  const second = useDocTaskDialogs({ projectId, currentUserId, editorMode, doc: { id: doc.id, name }, viewerWidth: MODAL_SIZE_REM[big ? "2xl" : "xl"] });
+  const second = useDocTaskDialogs({ projectId, currentUserId, editorMode, doc: { id: doc.id, name, kind: doc.kind }, viewerWidth: MODAL_SIZE_REM[big ? "2xl" : "xl"] });
   // PDF e imágenes: visor grande, casi a toda la altura; deja margen a los lados para los botones y el diálogo de al lado.
 
   async function remove() {
