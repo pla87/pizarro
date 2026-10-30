@@ -1,7 +1,7 @@
 // Plantillas de proyecto: esquemas de validación y ayudas puras (sin acceso a base de datos).
 import "./zod-config";
 import { z } from "zod";
-import { COLUMN_ROLES, UNIQUE_COLUMN_ROLES, defaultColumns, PALETTE, type ColumnRoleValue } from "./constants";
+import { COLUMN_ROLES, MAX_DESCRIPTION, UNIQUE_COLUMN_ROLES, defaultColumns, PALETTE, type ColumnRoleValue } from "./constants";
 import { POSITION_STEP } from "./positions";
 import * as v from "./validation";
 import { MAX_KIND_SUBTASKS } from "./kinds-special";
@@ -30,7 +30,7 @@ const templateKindSchema = z.object({
   name: itemName,
   color: v.hexColor,
   titleTemplate: z.string().trim().max(200, "El título automático es demasiado largo.").default(""),
-  descriptionTemplate: z.string().max(5000, "El texto inicial es demasiado largo.").default(""),
+  descriptionTemplate: z.string().max(MAX_DESCRIPTION, "El texto inicial es demasiado largo.").default(""),
   // Subtareas que se añaden al crear una tarea de este tipo.
   subtaskTemplate: z.array(z.string().trim().min(1).max(200, "Una subtarea es demasiado larga.")).max(MAX_KIND_SUBTASKS, `Máximo ${MAX_KIND_SUBTASKS} subtareas por tipo.`).default([]),
 });

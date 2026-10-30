@@ -88,21 +88,27 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
       ref={setNodeRef}
       className={cn(
         "shrink-0 rounded-b-xl border-t border-slate-200 transition-colors dark:border-slate-800",
-        (hovering || fileZone.over) && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10",
+        hovering && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10",
       )}
       {...fileZone.handlers}
     >
       {open && (
         <div id={`evergreen-${columnId}`} className="-mb-1.5 max-h-56 space-y-1.5 overflow-y-auto px-2 pt-2 pb-1.5 max-lg:pr-16">
           {taskIds.map((id) => <EvergreenCard key={id} id={id} />)}
-          {taskIds.length === 0 && <p className="py-2 text-center text-xs text-slate-400">{t("Sin tareas fijas")}</p>}
-          <button
-            type="button"
-            onClick={() => openNewTask(columnId, true)}
-            className="btn-ghost w-full justify-center py-1 text-xs"
+          {/* Único hueco que acepta archivos (tarea fija nueva): el de debajo de las filas; entre filas no hace nada. */}
+          <div
+            data-file-zone
+            className={cn("space-y-1.5 rounded-md transition-colors", fileZone.over && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10")}
           >
-            <Plus size={13} /> {t("Añadir")}
-          </button>
+            {taskIds.length === 0 && <p className="py-2 text-center text-xs text-slate-400">{t("Sin tareas fijas")}</p>}
+            <button
+              type="button"
+              onClick={() => openNewTask(columnId, true)}
+              className="btn-ghost w-full justify-center py-1 text-xs"
+            >
+              <Plus size={13} /> {t("Añadir")}
+            </button>
+          </div>
         </div>
       )}
       <button
@@ -110,7 +116,9 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
         onClick={toggle}
         aria-expanded={open}
         aria-controls={`evergreen-${columnId}`}
-        className="flex w-full items-center gap-1.5 rounded-b-xl px-3 py-2 max-lg:pr-20 text-xs font-medium text-slate-600 hover:bg-slate-200/60 dark:text-slate-300 dark:hover:bg-slate-800/60"
+        // Plegado, la cabecera es el único destino de archivos del panel.
+        {...(open ? {} : { "data-file-zone": true })}
+        className={cn("flex w-full items-center gap-1.5 rounded-b-xl px-3 py-2 max-lg:pr-20 text-xs font-medium text-slate-600 hover:bg-slate-200/60 dark:text-slate-300 dark:hover:bg-slate-800/60", !open && fileZone.over && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10")}
       >
         <span>{t("Siempre en la release")}</span>
         <span className="rounded-full bg-slate-200 px-1.5 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">{taskIds.length}</span>

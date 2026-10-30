@@ -249,6 +249,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const [dragItems, setDragItems] = useState<Items | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const dragOrigin = useRef<{ columnId: string; index: number } | null>(null);
+  // Al soltar una tarjeta en otra columna no se anima el overlay (se decide en onDragEnd, en el mismo render que lo retira).
+  const [skipDropAnimation, setSkipDropAnimation] = useState(false);
   // Arrastre con ratón y Ctrl (o Alt/⌥) pulsada al soltar: se suelta una copia y la original se queda.
   // `mouseDrag`: solo con ratón (ni teclado ni táctil). Se sigue la tecla en vivo para el aviso «+ Duplicar».
   const mouseDrag = useRef(false);
@@ -791,6 +793,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     mouseDrag.current = pointer?.pointerType === "mouse";
     duplicateRef.current = mouseDrag.current && !!(pointer?.ctrlKey || pointer?.altKey);
     setDuplicating(duplicateRef.current);
+    setSkipDropAnimation(false);
     const col = findContainer(baseItems, id);
     if (!col) {
       // Tarea fija: no está en ninguna lista; se arrastra desde un contenedor virtual.
@@ -863,6 +866,9 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const origin = dragOrigin.current;
     const current = dragItems;
     const copy = mouseDrag.current && duplicateRef.current;
+    // La animación de soltado lleva el overlay al nodo original de la tarjeta; al cambiar de columna ese nodo se
+    // desmonta y dnd-kit mide su hueco de ORIGEN: la tarjeta parecería volver atrás antes de aparecer en destino.
+    if (origin && current && findContainer(current, String(active.id)) !== origin.columnId) setSkipDropAnimation(true);
     cancelDrag();
     if (!over || !current || !origin) return;
     const id = String(active.id);
@@ -1154,8 +1160,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             ))}
             <NewColumnButton variant="desktop" />
           </div>
-          {/* Con Ctrl/Alt la tarjeta no vuelve a su sitio al soltar: la copia aparece donde se suelta. */}
-          <DragOverlay dropAnimation={duplicating ? null : DROP_ANIMATION}>
+          {/* Sin animación de soltado con Ctrl/Alt (la copia aparece donde se suelta) ni al cambiar de columna (la tarjeta ya está en destino). */}
+          <DragOverlay dropAnimation={duplicating || skipDropAnimation ? null : DROP_ANIMATION}>
             {activeTask ? (
               <div className={cn("relative", duplicating && "cursor-copy")}>
                 <TaskCard task={activeTask} overlay />

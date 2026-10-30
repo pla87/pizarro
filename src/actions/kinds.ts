@@ -6,6 +6,7 @@ import { assertProjectAccess } from "@/lib/access";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { AppError, notFound } from "@/lib/errors";
+import { MAX_DESCRIPTION } from "@/lib/constants";
 import { POSITION_STEP } from "@/lib/positions";
 import { requireAdmin, requireUser } from "@/lib/session";
 import * as v from "@/lib/validation";
@@ -17,7 +18,7 @@ const kindSchema = z.object({
   color: v.hexColor,
   // Automatización opcional al elegir el tipo (vacío = ninguna).
   titleTemplate: z.string().trim().max(200, "Máximo 200 caracteres.").default(""),
-  descriptionTemplate: z.string().trim().max(2000, "Máximo 2000 caracteres.").default(""),
+  descriptionTemplate: z.string().trim().max(MAX_DESCRIPTION, "La descripción es demasiado larga.").default(""),
   // Subtareas que se añaden al crear una tarea de este tipo (sin vacías ni repetidas).
   subtaskTemplate: z
     .array(z.string().trim().min(1).max(200, "Máximo 200 caracteres."))

@@ -11,7 +11,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { T } from "@/i18n/core";
-import { COLUMN_ROLES, isUniqueColumnRole, PALETTE, swatchBorder, type ColumnRoleValue } from "@/lib/constants";
+import { COLUMN_ROLES, isUniqueColumnRole, MAX_DESCRIPTION, PALETTE, swatchBorder, type ColumnRoleValue } from "@/lib/constants";
 import { parseSubtaskLines } from "@/lib/kinds-special";
 import { normalizeTaskFields, type TaskFieldKey } from "@/lib/task-fields";
 import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS, type TemplateDto, type TemplateInput } from "@/lib/project-templates";
@@ -309,7 +309,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                       </div>
                       <ColorField value={k.color} onChange={(color) => setKind({ color })} colors={KIND_COLORS} />
                       <input className="input" value={k.titleTemplate} onChange={(e) => setKind({ titleTemplate: e.target.value })} maxLength={200} placeholder={t("Título automático (opcional)")} aria-label={t("Título automático")} />
-                      <textarea className="input" rows={2} value={k.descriptionTemplate} onChange={(e) => setKind({ descriptionTemplate: e.target.value })} maxLength={5000} placeholder={t("Texto inicial de la descripción (opcional)")} aria-label={t("Texto inicial de la descripción")} />
+                      <textarea className="input" rows={2} value={k.descriptionTemplate} onChange={(e) => setKind({ descriptionTemplate: e.target.value })} maxLength={MAX_DESCRIPTION} placeholder={t("Texto inicial de la descripción (opcional)")} aria-label={t("Texto inicial de la descripción")} />
                       <textarea className="input" rows={2} value={k.subtaskTemplate.join("\n")} onChange={(e) => setKind({ subtaskTemplate: e.target.value.split("\n") })} placeholder={t("Subtareas predefinidas (una por línea, opcional)")} aria-label={t("Subtareas predefinidas")} />
                     </li>
                   );

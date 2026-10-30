@@ -108,16 +108,21 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
             // Abajo se deja hueco: con selección lo tapa la barra inferior y en móvil los botones flotantes.
             hasSelection ? "pb-44 md:pb-20" : "pb-32 lg:pb-2",
             isOver && "bg-brand-50/60 dark:bg-brand-500/5",
-            fileZone.over && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10",
           )}
           {...fileZone.handlers}
         >
           {taskIds.map((id) => (
             <SortableTaskCard key={id} id={id} />
           ))}
-          {taskIds.length === 0 && (
-            <p className="py-6 text-center text-xs text-slate-400">{fileZone.over ? t("Suelta para crear tarea") : t("Arrastra tarjetas aquí")}</p>
-          )}
+          {/* Único hueco que acepta archivos para crear una tarea: lo que queda libre bajo la última tarjeta (los huecos entre tarjetas no). */}
+          <div
+            data-file-zone
+            className={cn("min-h-10 flex-1 rounded-lg transition-colors", fileZone.over && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10")}
+          >
+            {taskIds.length === 0 && (
+              <p className="py-6 text-center text-xs text-slate-400">{fileZone.over ? t("Suelta para crear tarea") : t("Arrastra tarjetas aquí")}</p>
+            )}
+          </div>
         </div>
       </SortableContext>
       {isNextRelease && <EvergreenPanel columnId={column.id} taskIds={evergreenIds} />}
