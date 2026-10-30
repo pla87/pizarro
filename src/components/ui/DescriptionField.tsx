@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Bold, Code, Code2, Heading2, Heading3, IndentDecrease, IndentIncrease, Italic, Link2, List, ListChecks, ListOrdered, Minus, Quote, Strikethrough, Underline } from "lucide-react";
+import { Bold, Code, Code2, Heading2, Heading3, IndentDecrease, IndentIncrease, Italic, Link2, List, ListOrdered, Minus, Quote, Strikethrough, Underline } from "lucide-react";
 import { useCallback, useImperativeHandle, useMemo, useRef } from "react";
 import { useT } from "@/i18n/client";
 import { indentLines, insertLink, insertRule, toggleCodeBlock, toggleLinePrefix, toggleWrap, type EditResult } from "@/lib/markdown-edit";
@@ -60,23 +60,22 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
     () => [
       { title: "Negrita (Ctrl+B)", icon: Bold, run: () => run((v, s, e) => toggleWrap(v, s, e, "**", "**", "negrita")) },
       { title: "Cursiva (Ctrl+I)", icon: Italic, run: () => run((v, s, e) => toggleWrap(v, s, e, "*", "*", "cursiva")) },
-      { title: "Subrayado (Ctrl+U)", icon: Underline, secondary: true, run: () => run((v, s, e) => toggleWrap(v, s, e, "++", "++", "subrayado")) },
-      { title: "Tachado", icon: Strikethrough, secondary: true, run: () => run((v, s, e) => toggleWrap(v, s, e, "~~", "~~", "tachado")) },
+      { title: "Subrayado (Ctrl+U)", icon: Underline, run: () => run((v, s, e) => toggleWrap(v, s, e, "++", "++", "subrayado")) },
+      { title: "Tachado", icon: Strikethrough, run: () => run((v, s, e) => toggleWrap(v, s, e, "~~", "~~", "tachado")) },
       null,
       { title: "Título", icon: Heading2, run: () => run((v, s, e) => toggleLinePrefix(v, s, e, "h2")) },
-      { title: "Subtítulo", icon: Heading3, secondary: true, run: () => run((v, s, e) => toggleLinePrefix(v, s, e, "h3")) },
+      { title: "Subtítulo", icon: Heading3, run: () => run((v, s, e) => toggleLinePrefix(v, s, e, "h3")) },
       null,
       { title: "Lista", icon: List, run: () => run((v, s, e) => toggleLinePrefix(v, s, e, "ul")) },
       { title: "Lista numerada", icon: ListOrdered, run: () => run((v, s, e) => toggleLinePrefix(v, s, e, "ol")) },
-      { title: "Lista de tareas", icon: ListChecks, run: () => run((v, s, e) => toggleLinePrefix(v, s, e, "task")) },
       { title: "Aumentar sangría (Tab)", icon: IndentIncrease, run: () => run((v, s, e) => indentLines(v, s, e, 1)) },
       { title: "Reducir sangría (Mayús+Tab)", icon: IndentDecrease, run: () => run((v, s, e) => indentLines(v, s, e, -1)) },
       null,
-      { title: "Cita", icon: Quote, secondary: true, run: () => run((v, s, e) => toggleLinePrefix(v, s, e, "quote")) },
-      { title: "Código", icon: Code, secondary: true, run: () => run((v, s, e) => toggleWrap(v, s, e, "`", "`", "código")) },
-      { title: "Bloque de código", icon: Code2, secondary: true, run: () => run(toggleCodeBlock) },
-      { title: "Línea horizontal", icon: Minus, secondary: true, run: () => run(insertRule) },
-      { title: "Enlace (Ctrl+K)", icon: Link2, secondary: true, run: () => run(insertLink) },
+      { title: "Cita", icon: Quote, run: () => run((v, s, e) => toggleLinePrefix(v, s, e, "quote")) },
+      { title: "Código", icon: Code, run: () => run((v, s, e) => toggleWrap(v, s, e, "`", "`", "código")) },
+      { title: "Bloque de código", icon: Code2, run: () => run(toggleCodeBlock) },
+      { title: "Línea horizontal", icon: Minus, run: () => run(insertRule) },
+      { title: "Enlace (Ctrl+K)", icon: Link2, run: () => run(insertLink) },
     ],
     [run],
   );

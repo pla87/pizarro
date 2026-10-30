@@ -3,7 +3,7 @@
 import type { Editor } from "@tiptap/core";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { Markdown } from "@tiptap/markdown";
-import { AtSign, Bold, Check, Code, Code2, FileSpreadsheet, FileText, Heading2, Heading3, IndentDecrease, IndentIncrease, Italic, Link2, List, ListChecks, ListOrdered, Minus, Pilcrow, Quote, Strikethrough, Underline, Unlink, X } from "lucide-react";
+import { AtSign, Bold, Check, Code, Code2, FileSpreadsheet, FileText, Heading2, Heading3, IndentDecrease, IndentIncrease, Italic, Link2, List, ListOrdered, Minus, Pilcrow, Quote, Strikethrough, Underline, Unlink, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/i18n/client";
@@ -228,7 +228,6 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
       p: (ed?.isActive("paragraph") && !ed.isActive("bulletList") && !ed.isActive("orderedList")) ?? false,
       ul: ed?.isActive("bulletList") ?? false,
       ol: ed?.isActive("orderedList") ?? false,
-      task: ed?.isActive("taskList") ?? false,
       quote: ed?.isActive("blockquote") ?? false,
       code: ed?.isActive("code") ?? false,
       codeBlock: ed?.isActive("codeBlock") ?? false,
@@ -257,25 +256,24 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
     ? [
         { title: "Negrita (Ctrl+B)", icon: Bold, pressed: active?.bold, run: () => editor.chain().focus().toggleBold().run() },
         { title: "Cursiva (Ctrl+I)", icon: Italic, pressed: active?.italic, run: () => editor.chain().focus().toggleItalic().run() },
-        { title: "Subrayado (Ctrl+U)", icon: Underline, pressed: active?.underline, secondary: true, run: () => editor.chain().focus().toggleUnderline().run() },
-        { title: "Tachado", icon: Strikethrough, pressed: active?.strike, secondary: true, run: () => editor.chain().focus().toggleStrike().run() },
+        { title: "Subrayado (Ctrl+U)", icon: Underline, pressed: active?.underline, run: () => editor.chain().focus().toggleUnderline().run() },
+        { title: "Tachado", icon: Strikethrough, pressed: active?.strike, run: () => editor.chain().focus().toggleStrike().run() },
         null,
         { title: "Título", icon: Heading2, pressed: active?.h2, run: () => editor.chain().focus().toggleHeading({ level: 2 }).run() },
-        { title: "Subtítulo", icon: Heading3, pressed: active?.h3, secondary: true, run: () => editor.chain().focus().toggleHeading({ level: 3 }).run() },
-        { title: "Texto normal", icon: Pilcrow, pressed: active?.p, secondary: true, run: () => editor.chain().focus().setParagraph().run() },
+        { title: "Subtítulo", icon: Heading3, pressed: active?.h3, run: () => editor.chain().focus().toggleHeading({ level: 3 }).run() },
+        { title: "Texto normal", icon: Pilcrow, pressed: active?.p, run: () => editor.chain().focus().setParagraph().run() },
         null,
         { title: "Lista", icon: List, pressed: active?.ul, run: () => editor.chain().focus().toggleBulletList().run() },
         { title: "Lista numerada", icon: ListOrdered, pressed: active?.ol, run: () => editor.chain().focus().toggleOrderedList().run() },
-        { title: "Lista de tareas", icon: ListChecks, pressed: active?.task, run: () => editor.chain().focus().toggleTaskList().run() },
         // Tab y Mayús+Tab hacen lo mismo dentro de una lista; fuera de ella los botones no hacen nada.
         { title: "Aumentar sangría (Tab)", icon: IndentIncrease, run: () => indent(editor, 1) },
         { title: "Reducir sangría (Mayús+Tab)", icon: IndentDecrease, run: () => indent(editor, -1) },
         null,
-        { title: "Cita", icon: Quote, pressed: active?.quote, secondary: true, run: () => editor.chain().focus().toggleBlockquote().run() },
-        { title: "Código", icon: Code, pressed: active?.code, secondary: true, run: () => editor.chain().focus().toggleCode().run() },
-        { title: "Bloque de código", icon: Code2, pressed: active?.codeBlock, secondary: true, run: () => editor.chain().focus().toggleCodeBlock().run() },
-        { title: "Línea horizontal", icon: Minus, secondary: true, run: () => editor.chain().focus().setHorizontalRule().run() },
-        { title: "Enlace (Ctrl+K)", icon: Link2, pressed: active?.link, secondary: true, run: openLink },
+        { title: "Cita", icon: Quote, pressed: active?.quote, run: () => editor.chain().focus().toggleBlockquote().run() },
+        { title: "Código", icon: Code, pressed: active?.code, run: () => editor.chain().focus().toggleCode().run() },
+        { title: "Bloque de código", icon: Code2, pressed: active?.codeBlock, run: () => editor.chain().focus().toggleCodeBlock().run() },
+        { title: "Línea horizontal", icon: Minus, run: () => editor.chain().focus().setHorizontalRule().run() },
+        { title: "Enlace (Ctrl+K)", icon: Link2, pressed: active?.link, run: openLink },
       ]
     : [];
 

@@ -242,10 +242,10 @@ function ModeCard({ checked, onSelect, title, text }: { checked: boolean; onSele
       role="radio"
       aria-checked={checked}
       onClick={onSelect}
-      className={`rounded-lg border p-3 text-left transition-colors ${checked ? "border-brand-500 bg-brand-50 ring-1 ring-brand-500 dark:bg-brand-950/30" : "border-slate-200 hover:border-slate-300 dark:border-slate-700"}`}
+      className={`rounded-lg border p-3 text-left transition-colors ${checked ? "border-brand-500 bg-brand-50 ring-1 ring-brand-500 dark:bg-brand-500/20" : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-transparent dark:hover:border-slate-600"}`}
     >
-      <span className="block text-sm font-semibold">{title}</span>
-      <span className="mt-1 block text-xs text-slate-500">{text}</span>
+      <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</span>
+      <span className="mt-1 block text-xs text-slate-600 dark:text-slate-300">{text}</span>
     </button>
   );
 }
