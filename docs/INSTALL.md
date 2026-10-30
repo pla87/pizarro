@@ -120,6 +120,20 @@ En `.env`: `DOMAIN=":80"` y `APP_URL="http://<ip-del-servidor>"`. Caddy sirve so
 
 La imagen se construye para la arquitectura del propio servidor (amd64 o arm64, p. ej. Raspberry Pi 5). Para preparar una imagen de las dos a la vez desde otra máquina: `docker buildx build --platform linux/amd64,linux/arm64 -t <registro>/pizarro:<versión> --push ..` y pon ese nombre en `PIZARRO_IMAGE`.
 
+### 3.5 Endurecimiento del contenedor y rol de la base de datos
+
+- **Código de solo lectura.** En la imagen el código es de `root`: el proceso de la app (usuario `node`) solo puede escribir en el volumen de subidas, en `/tmp` y en la caché de Next. `deploy/compose.yml` añade `read_only: true`, `no-new-privileges` y elimina todas las capacidades de Linux salvo las cinco que usa `scripts/start.sh` para ajustar el volumen y bajar a `node`. Comprobación: `docker compose exec app sh -c 'touch /app/server.js'` debe fallar.
+- **Rol de base de datos sin superusuario.** En una instalación **nueva**, `install.sh` define `APP_DB_USER=pizarro_app` y `APP_DB_PASSWORD` en `.env`; al crear la base, `deploy/postgres-init/10-app-role.sh` crea ese rol (sin superusuario, con `CREATEDB` para la prueba mensual de restauración, y dueño de la base). La app se conecta con él; `pizarro` queda solo para administrar PostgreSQL.
+  Con ese rol, los comandos de las secciones 4.3 y 6 que usan `-U pizarro` para **restaurar** (`dropdb`, `createdb`, `pg_restore`) deben usar `-U pizarro_app`, para que los objetos queden a su nombre.
+- **Instalaciones existentes (paso manual y opcional).** Siguen funcionando igual (la app usa `pizarro`). Para migrarlas: haz una copia (sección 4.3), añade a `deploy/.env` `APP_DB_USER="pizarro_app"` y `APP_DB_PASSWORD="<aleatoria: openssl rand -hex 24>"`, y ejecuta
+  ```bash
+  cd /opt/pizarro/deploy
+  docker compose up -d postgres      # recrea el contenedor con las variables nuevas
+  docker compose exec -T postgres sh /docker-entrypoint-initdb.d/10-app-role.sh
+  docker compose up -d app
+  ```
+  El script es idempotente: crea el rol y le pasa la propiedad de la base y sus tablas. Para volver atrás, quita las dos variables de `.env` y `docker compose up -d`.
+
 ### 3.6 Email y Google desde Administración → Ajustes
 
 Dos cosas distintas, configurables desde Pizarro (como administrador) sin editar `.env`. Si defines las variables en el servidor, mandan sobre lo guardado en Ajustes y la pantalla se muestra de solo lectura. Los secretos se guardan cifrados con `ENCRYPTION_KEY` y entran en la rotación de claves y en las copias; no se muestran de nuevo ni aparecen en el registro ni en el diagnóstico.
@@ -139,20 +153,6 @@ El botón *Enviar email de prueba* manda un mensaje a tu dirección. Equivalente
 4. Copia el ID y el secreto en Pizarro. Opcional: «Dominio de Workspace permitido» (vacío = cualquier cuenta de Google, incluido Gmail).
 
 Equivalente por variables: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `GOOGLE_WORKSPACE_DOMAIN`. Los cambios guardados en Ajustes se aplican en segundos, sin reiniciar.
-
-### 3.5 Endurecimiento del contenedor y rol de la base de datos
-
-- **Código de solo lectura.** En la imagen el código es de `root`: el proceso de la app (usuario `node`) solo puede escribir en el volumen de subidas, en `/tmp` y en la caché de Next. `deploy/compose.yml` añade `read_only: true`, `no-new-privileges` y elimina todas las capacidades de Linux salvo las cinco que usa `scripts/start.sh` para ajustar el volumen y bajar a `node`. Comprobación: `docker compose exec app sh -c 'touch /app/server.js'` debe fallar.
-- **Rol de base de datos sin superusuario.** En una instalación **nueva**, `install.sh` define `APP_DB_USER=pizarro_app` y `APP_DB_PASSWORD` en `.env`; al crear la base, `deploy/postgres-init/10-app-role.sh` crea ese rol (sin superusuario, con `CREATEDB` para la prueba mensual de restauración, y dueño de la base). La app se conecta con él; `pizarro` queda solo para administrar PostgreSQL.
-  Con ese rol, los comandos de las secciones 4.3 y 6 que usan `-U pizarro` para **restaurar** (`dropdb`, `createdb`, `pg_restore`) deben usar `-U pizarro_app`, para que los objetos queden a su nombre.
-- **Instalaciones existentes (paso manual y opcional).** Siguen funcionando igual (la app usa `pizarro`). Para migrarlas: haz una copia (sección 4.3), añade a `deploy/.env` `APP_DB_USER="pizarro_app"` y `APP_DB_PASSWORD="<aleatoria: openssl rand -hex 24>"`, y ejecuta
-  ```bash
-  cd /opt/pizarro/deploy
-  docker compose up -d postgres      # recrea el contenedor con las variables nuevas
-  docker compose exec -T postgres sh /docker-entrypoint-initdb.d/10-app-role.sh
-  docker compose up -d app
-  ```
-  El script es idempotente: crea el rol y le pasa la propiedad de la base y sus tablas. Para volver atrás, quita las dos variables de `.env` y `docker compose up -d`.
 
 ## 4. Copias de seguridad
 
