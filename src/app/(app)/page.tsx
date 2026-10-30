@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { FolderKanban } from "lucide-react";
 import { listVisibleProjects } from "@/lib/access";
@@ -20,8 +21,8 @@ export default async function Home() {
       <p className="font-medium text-slate-700 dark:text-slate-300">{t("Todavía no tienes acceso a ningún proyecto.")}</p>
       {available > 0 && (
         <p className="text-sm">
-          {t("Hay {n} proyecto(s) de equipo. Elige en cuáles trabajas en", { n: available })}{" "}
-          <a href="/settings?tab=preferencias#proyectos" className="font-medium text-brand-600 underline dark:text-brand-300">{t("Mi perfil")}</a>.
+          {t("Hay {n} proyecto(s) de equipo.", { n: available })}{" "}
+          <Link href="/projects" className="font-medium text-brand-600 underline dark:text-brand-300">{t("Ver proyectos existentes")}</Link>.
         </p>
       )}
       <p className="text-sm">
