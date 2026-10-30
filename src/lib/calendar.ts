@@ -95,6 +95,23 @@ export function bandsForWeek(weekDays: string[], deliverables: { id: string; due
   return bands;
 }
 
+/** ¿La tarea se dibuja como rango? Necesita fecha de inicio anterior a la límite (con inicio == límite es un solo día). */
+export const isRange = (start: string | null | undefined, due: string | null | undefined): boolean => Boolean(start && due && start < due);
+
+/** Bandas de tareas con rango (inicio → límite, ambos incluidos) que cruzan una semana, por inicio y luego por fin. */
+export function rangeBandsForWeek(weekDays: string[], ranges: { id: string; start: string; due: string }[]): Band[] {
+  const first = weekDays[0]!;
+  const last = weekDays[weekDays.length - 1]!;
+  const bands: Band[] = [];
+  for (const r of [...ranges].sort((a, b) => a.start.localeCompare(b.start) || a.due.localeCompare(b.due) || a.id.localeCompare(b.id))) {
+    if (!isRange(r.start, r.due) || r.start > last || r.due < first) continue;
+    const from = r.start < first ? first : r.start;
+    const to = r.due > last ? last : r.due;
+    bands.push({ id: r.id, colStart: daysBetween(first, from) + 1, colEnd: daysBetween(first, to) + 1, continuesLeft: r.start < first, endsHere: r.due <= last });
+  }
+  return bands;
+}
+
 /**
  * Semanas con contenido para la vista móvil: solo los días del mes que tienen algo (`hasItems`);
  * las semanas vacías se omiten. `start`/`end` son los límites de la semana completa.

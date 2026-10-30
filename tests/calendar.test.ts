@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bandsForWeek, groupByDay, groupWeeks, monthGrid, parseMonth, parsePersonParam, shiftMonth } from "../src/lib/calendar";
+import { bandsForWeek, isRange, rangeBandsForWeek, groupByDay, groupWeeks, monthGrid, parseMonth, parsePersonParam, shiftMonth } from "../src/lib/calendar";
 import { deliverableStatus } from "../src/lib/report";
 
 test("parseMonth valida y cae al mes de hoy", () => {
@@ -62,6 +62,33 @@ test("bandsForWeek: banda de 7 días que acaba en la fecha objetivo", () => {
   assert.deepEqual(bands, [
     { id: "x", colStart: 1, colEnd: 4, continuesLeft: true, endsHere: true },
     { id: "z", colStart: 3, colEnd: 7, continuesLeft: false, endsHere: false },
+  ]);
+});
+
+test("isRange: solo con inicio anterior a la fecha límite", () => {
+  assert.equal(isRange("2026-10-01", "2026-10-05"), true);
+  assert.equal(isRange("2026-10-05", "2026-10-05"), false);
+  assert.equal(isRange("2026-10-06", "2026-10-05"), false);
+  assert.equal(isRange(null, "2026-10-05"), false);
+  assert.equal(isRange("2026-10-01", null), false);
+});
+
+test("rangeBandsForWeek: recorta a la semana y marca continuaciones", () => {
+  const week = monthGrid("2026-10").weeks[2]!.map((d) => d.iso); // 12-18 oct
+  const bands = rangeBandsForWeek(week, [
+    { id: "dentro", start: "2026-10-13", due: "2026-10-15" },
+    { id: "antes", start: "2026-10-08", due: "2026-10-12" }, // acaba el primer día
+    { id: "cruza", start: "2026-10-16", due: "2026-10-22" }, // sigue en la semana siguiente
+    { id: "larga", start: "2026-10-01", due: "2026-10-30" }, // ocupa toda la semana
+    { id: "fuera", start: "2026-10-19", due: "2026-10-21" },
+    { id: "pasada", start: "2026-10-01", due: "2026-10-11" },
+    { id: "uno", start: "2026-10-14", due: "2026-10-14" }, // un solo día: no es rango
+  ]);
+  assert.deepEqual(bands, [
+    { id: "larga", colStart: 1, colEnd: 7, continuesLeft: true, endsHere: false },
+    { id: "antes", colStart: 1, colEnd: 1, continuesLeft: true, endsHere: true },
+    { id: "dentro", colStart: 2, colEnd: 4, continuesLeft: false, endsHere: true },
+    { id: "cruza", colStart: 5, colEnd: 7, continuesLeft: false, endsHere: false },
   ]);
 });
 
