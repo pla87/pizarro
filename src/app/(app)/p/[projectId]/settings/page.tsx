@@ -53,8 +53,9 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
   // Gestionan el proyecto los administradores y, si es privado, sus miembros (como en las acciones).
   const canManage = isAdmin || project.isPrivate;
   const tab = parseProjectSettingsTab(tabParam, canManage);
-  const releaseTemplates = await projectReleaseTemplates(project.id);
-  const [generalKinds, generalUsage] = await Promise.all([
+  // Las cabeceras y pies solo se leen cuando se abre la pestaña Releases, que es donde se editan.
+  const [releaseTemplates, generalKinds, generalUsage] = await Promise.all([
+    tab === "releases" ? projectReleaseTemplates(project.id) : Promise.resolve({ headers: [], footers: [] }),
     listKinds(),
     db.task.groupBy({ by: ["kindId"], where: { projectId: project.id }, _count: { _all: true } }),
   ]);

@@ -11,7 +11,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { T } from "@/i18n/core";
-import { COLUMN_ROLES, isUniqueColumnRole, MAX_DESCRIPTION, PALETTE, swatchBorder, type ColumnRoleValue } from "@/lib/constants";
+import { COLUMN_ROLES, isUniqueColumnRole, MAX_DESCRIPTION, MAX_RELEASE_TEMPLATES_PER_KIND, MAX_TEMPLATE, PALETTE, swatchBorder, type ColumnRoleValue } from "@/lib/constants";
 import { parseSubtaskLines } from "@/lib/kinds-special";
 import { normalizeTaskFields, type TaskFieldKey } from "@/lib/task-fields";
 import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS, type TemplateDto, type TemplateInput } from "@/lib/project-templates";
@@ -41,6 +41,7 @@ type Draft = {
   hideAllGeneralKinds: boolean;
   labels: { name: string; color: (typeof PALETTE)[number] }[];
   taskFields: TaskFieldKey[];
+  releaseTemplates: { kind: "HEADER" | "FOOTER"; name: string; content: string }[];
 };
 
 const EMPTY: Draft = {
@@ -52,6 +53,7 @@ const EMPTY: Draft = {
   hideAllGeneralKinds: false,
   labels: [],
   taskFields: [],
+  releaseTemplates: [],
 };
 
 function ColorField({ value, onChange, colors }: { value: string; onChange: (c: string) => void; colors: readonly string[] }) {
@@ -87,6 +89,13 @@ function move<T>(list: T[], i: number, dir: -1 | 1): T[] {
   return copy;
 }
 
+/** Intercambia dos elementos de la lista (para subir y bajar dentro de un mismo tipo). */
+function swapWith<T>(list: T[], i: number, j: number): T[] {
+  const copy = [...list];
+  [copy[i], copy[j]] = [copy[j]!, copy[i]!];
+  return copy;
+}
+
 interface Props {
   templates: TemplateDto[];
   generalKinds: string[];
@@ -118,6 +127,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
     hideAllGeneralKinds: tpl.hideAllGeneralKinds ?? false,
     labels: tpl.labels,
     taskFields: normalizeTaskFields(tpl.taskFields ?? []),
+    releaseTemplates: (tpl.releaseTemplates ?? []).map((r) => ({ kind: r.kind, name: r.name, content: r.content ?? "" })),
   });
 
   const save = () => {
@@ -230,7 +240,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
       {picking && (
         <Modal open onClose={() => setPicking(false)} title={t("Crear desde un proyecto")} size="sm">
           <div className="space-y-3">
-            <p className="text-sm">{t("Se copiarán sus columnas, tipos propios, tipos generales ocultos y etiquetas.")}</p>
+            <p className="text-sm">{t("Se copiarán sus columnas, tipos propios, tipos generales ocultos, etiquetas y plantillas de release.")}</p>
             <select className="input" value={sourceId} onChange={(e) => setSourceId(e.target.value)} aria-label={t("Proyecto")}>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
@@ -356,6 +366,37 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                 onChange={(taskFields) => patch({ taskFields })}
                 lockedCost={draft.columns.some((c) => c.role === "BUDGET") ? t("Hay una columna de presupuesto: el coste siempre se activa.") : null}
               />
+            </section>
+
+            <section>
+              <h3 className="mb-1 text-sm font-semibold">{t("Plantillas de release notes")}</h3>
+              <p className="mb-2 text-xs text-slate-500">{t("Cabeceras y pies de release que se copiarán al proyecto nuevo. Admiten Markdown.")}</p>
+              {(["HEADER", "FOOTER"] as const).map((kind) => {
+                const items = draft.releaseTemplates.map((r, index) => ({ r, index })).filter((x) => x.r.kind === kind);
+                const setRel = (index: number, p: Partial<Draft["releaseTemplates"][number]>) => patch({ releaseTemplates: draft.releaseTemplates.map((x, j) => (j === index ? { ...x, ...p } : x)) });
+                const title = kind === "HEADER" ? t("Cabeceras") : t("Pies");
+                return (
+                  <div key={kind} className="mb-3">
+                    <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</h4>
+                    <ul className="space-y-3">
+                      {items.map(({ r, index }, pos) => (
+                        <li key={index} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                          <div className="flex items-center gap-2">
+                            <input className="input min-w-0 flex-1" value={r.name} onChange={(e) => setRel(index, { name: e.target.value })} maxLength={60} placeholder={t("Nombre")} aria-label={t("Nombre de la plantilla de release {n}", { n: pos + 1 })} />
+                            <button type="button" className="btn-icon" disabled={pos === 0} onClick={() => patch({ releaseTemplates: swapWith(draft.releaseTemplates, index, items[pos - 1]!.index) })} aria-label={t("Subir")}><ArrowUp size={15} /></button>
+                            <button type="button" className="btn-icon" disabled={pos === items.length - 1} onClick={() => patch({ releaseTemplates: swapWith(draft.releaseTemplates, index, items[pos + 1]!.index) })} aria-label={t("Bajar")}><ArrowDown size={15} /></button>
+                            <button type="button" className="btn-icon hover:text-red-600" onClick={() => patch({ releaseTemplates: draft.releaseTemplates.filter((_, j) => j !== index) })} aria-label={t("Quitar plantilla de release")}><Trash2 size={15} /></button>
+                          </div>
+                          <textarea className="input field-sizing-content min-h-20 font-mono text-[13px]" value={r.content} onChange={(e) => setRel(index, { content: e.target.value })} maxLength={MAX_TEMPLATE} placeholder={t("Contenido (Markdown)")} aria-label={t("Contenido de la plantilla de release {n}", { n: pos + 1 })} />
+                        </li>
+                      ))}
+                    </ul>
+                    <button type="button" className="btn-secondary mt-2" disabled={items.length >= MAX_RELEASE_TEMPLATES_PER_KIND} onClick={() => patch({ releaseTemplates: [...draft.releaseTemplates, { kind, name: "", content: "" }] })}>
+                      <Plus size={15} /> {kind === "HEADER" ? t("Añadir cabecera") : t("Añadir pie")}
+                    </button>
+                  </div>
+                );
+              })}
             </section>
 
             <section>

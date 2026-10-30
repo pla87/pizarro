@@ -1,7 +1,7 @@
 // Plantillas de proyecto: esquemas de validación y ayudas puras (sin acceso a base de datos).
 import "./zod-config";
 import { z } from "zod";
-import { COLUMN_ROLES, MAX_DESCRIPTION, UNIQUE_COLUMN_ROLES, defaultColumns, PALETTE, type ColumnRoleValue } from "./constants";
+import { COLUMN_ROLES, MAX_DESCRIPTION, MAX_RELEASE_TEMPLATES_PER_KIND, MAX_TEMPLATE, UNIQUE_COLUMN_ROLES, defaultColumns, PALETTE, type ColumnRoleValue } from "./constants";
 import { POSITION_STEP } from "./positions";
 import * as v from "./validation";
 import { MAX_KIND_SUBTASKS } from "./kinds-special";
@@ -35,6 +35,12 @@ const templateKindSchema = z.object({
   subtaskTemplate: z.array(z.string().trim().min(1).max(200, "Una subtarea es demasiado larga.")).max(MAX_KIND_SUBTASKS, `Máximo ${MAX_KIND_SUBTASKS} subtareas por tipo.`).default([]),
 });
 
+const templateReleaseSchema = z.object({
+  kind: z.enum(["HEADER", "FOOTER"]),
+  name: v.name.max(60, "Máximo 60 caracteres."),
+  content: z.string().max(MAX_TEMPLATE, "La plantilla es demasiado larga.").default(""),
+});
+
 const templateLabelSchema = z.object({ name: itemName, color: z.enum(PALETTE) });
 
 /** Forma de los datos de una plantilla (lo que se guarda y lo que edita el administrador). */
@@ -53,11 +59,18 @@ export const templateInputSchema = z
     labels: z.array(templateLabelSchema).max(MAX_TEMPLATE_LABELS, `Máximo ${MAX_TEMPLATE_LABELS} etiquetas.`),
     // Campos opcionales de tarea que activa el proyecto nuevo (con una columna «Presupuesto» siempre va el coste).
     taskFields: z.array(z.enum(TASK_FIELDS)).max(TASK_FIELDS.length).default([]),
+    // Cabeceras y pies de release del proyecto (hasta 20 de cada tipo).
+    releaseTemplates: z.array(templateReleaseSchema).max(MAX_RELEASE_TEMPLATES_PER_KIND * 2).default([]),
   })
   .superRefine((t, ctx) => {
     if (!uniqueNames(t.columns)) ctx.addIssue({ code: "custom", message: "Hay columnas con el mismo nombre.", path: ["columns"] });
     if (!uniqueNames(t.kinds)) ctx.addIssue({ code: "custom", message: "Hay tipos propios con el mismo nombre.", path: ["kinds"] });
     if (!uniqueNames(t.labels)) ctx.addIssue({ code: "custom", message: "Hay etiquetas con el mismo nombre.", path: ["labels"] });
+    for (const kind of ["HEADER", "FOOTER"] as const) {
+      if (t.releaseTemplates.filter((r) => r.kind === kind).length > MAX_RELEASE_TEMPLATES_PER_KIND) {
+        ctx.addIssue({ code: "custom", message: `Máximo ${MAX_RELEASE_TEMPLATES_PER_KIND} plantillas de release de cada tipo.`, path: ["releaseTemplates"] });
+      }
+    }
     for (const role of UNIQUE_COLUMN_ROLES) {
       if (t.columns.filter((c) => c.role === role).length > 1) {
         ctx.addIssue({ code: "custom", message: "Los roles «Siguiente salto» y «En producción» solo pueden usarse en una columna.", path: ["columns"] });
@@ -73,6 +86,7 @@ export function templateTaskFields(t: { taskFields?: readonly string[]; columns:
   return normalizeTaskFields(keys);
 }
 
+export type TemplateReleaseTemplate = z.output<typeof templateReleaseSchema>;
 export type TemplateInput = z.input<typeof templateInputSchema>;
 export type TemplateData = z.output<typeof templateInputSchema>;
 
@@ -117,6 +131,8 @@ interface TemplateApplication {
   hiddenKindIds: string[];
   /** Campos opcionales de tarea que se activan en el proyecto. */
   taskFields: TaskFieldKey[];
+  /** Cabeceras y pies de release, con su posición dentro de cada tipo. */
+  releaseTemplates: { kind: "HEADER" | "FOOTER"; name: string; content: string; position: number }[];
 }
 
 /**
@@ -148,11 +164,14 @@ export function buildTemplateApplication(template: TemplateData, generalKinds: G
     labels: template.labels.map((l) => ({ name: l.name, color: l.color })),
     hiddenKindIds: hidden.map((k) => k.id),
     taskFields: templateTaskFields({ taskFields: template.taskFields, columns }),
+    releaseTemplates: (["HEADER", "FOOTER"] as const).flatMap((kind) =>
+      (template.releaseTemplates ?? []).filter((r) => r.kind === kind).slice(0, MAX_RELEASE_TEMPLATES_PER_KIND).map((r, i) => ({ ...r, position: (i + 1) * POSITION_STEP })),
+    ),
   };
 }
 
 /** Lee el JSON guardado en la base de datos y descarta lo que no cumpla el esquema. */
-export function parseStoredTemplate(row: { id: string; name: string; description: string; columns: unknown; kinds: unknown; hiddenGeneralKinds: unknown; hideAllGeneralKinds?: unknown; labels: unknown; taskFields?: unknown }): TemplateDto {
+export function parseStoredTemplate(row: { id: string; name: string; description: string; columns: unknown; kinds: unknown; hiddenGeneralKinds: unknown; hideAllGeneralKinds?: unknown; labels: unknown; taskFields?: unknown; releaseTemplates?: unknown }): TemplateDto {
   const parsed = templateInputSchema.safeParse(row);
   if (parsed.success) return { id: row.id, ...parsed.data };
   // Datos corruptos: se devuelve lo que se pueda leer sin romper el listado.
@@ -167,6 +186,7 @@ export function parseStoredTemplate(row: { id: string; name: string; description
     hiddenGeneralKinds: list(v.name, row.hiddenGeneralKinds),
     hideAllGeneralKinds: row.hideAllGeneralKinds === true,
     labels: list(templateLabelSchema, row.labels),
+    releaseTemplates: list(templateReleaseSchema, row.releaseTemplates),
     taskFields: normalizeTaskFields(Array.isArray(row.taskFields) ? row.taskFields.filter((x): x is string => typeof x === "string") : []),
   };
 }

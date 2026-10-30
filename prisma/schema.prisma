@@ -806,6 +806,8 @@ model ProjectTemplate {
   labels      Json     @default("[]")
   /// Campos opcionales de tarea que activa el proyecto creado con la plantilla.
   taskFields  String[] @default([])
+  /// Cabeceras y pies de release que se copian al proyecto: [{ kind: "HEADER" | "FOOTER", name, content }] en orden.
+  releaseTemplates Json @default("[]")
   position    Float    @default(0)
   /// Clave estable de las plantillas incluidas de serie (src/lib/builtin-templates.ts); null en las propias.
   builtinKey  String?  @unique
