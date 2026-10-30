@@ -2,6 +2,31 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.34.0 — 2026-10-30 18:41
+
+Guía de Google paso a paso con logo y páginas públicas, barra de formato en una línea y adjuntar el documento abierto
+
+### Nuevas funcionalidades
+
+- Guía paso a paso del acceso con Google, pantalla por pantalla de Google Cloud (Branding, Audience, Data Access, Clients), con botones para copiar cada dato y el logo de Pizarro (120×120) para descargar.
+- Páginas públicas de privacidad y condiciones (/privacy y /terms), enlazadas desde la pantalla de acceso, con un email de contacto público opcional.
+- Al crear una tarea desde Documentación, botón «Adjuntar «documento»» para añadir el documento abierto como adjunto.
+
+### Mejoras
+
+- La barra de formato ocupa siempre una sola línea: lo que no cabe pasa a «Más formatos». Se quita el botón de lista de tareas (para eso están las subtareas).
+- Si hay 5 PDF esperando, los nuevos se rechazan con «inténtalo en un momento»; el informe semanal que falla se reintenta como mucho una vez por hora.
+- El comando de emergencia de contraseñas queda apuntado en el registro de actividad.
+
+### Correcciones
+
+- Las tarjetas de opciones de Avisos por email se leen bien en todos los temas.
+- Color de fondo en tema oscuro del calendario.
+
+### Cambios técnicos / DB
+
+- public/pizarro-logo-120.png; AppState google.publicContactEmail; acción de registro auth.resetLinkCli.
+
 ## v1.33.0 — 2026-10-30 16:33
 
 Email y acceso con Google configurables desde Pizarro, más formato Markdown y plantillas de release para todo el proyecto
