@@ -1,5 +1,5 @@
 // Formulario de los campos opcionales de una tarea: valores en texto y conversión a parche del servidor (sin React).
-import { startAfterDue, type TaskFieldKey, type TaskFieldValues } from "./task-fields";
+import { startAfterDue, TASK_PRIORITIES, type TaskFieldKey, type TaskFieldValues } from "./task-fields";
 
 /** Valores de los campos opcionales en un formulario: todo texto ("" = sin valor). */
 export interface FieldsForm {
@@ -38,6 +38,26 @@ export function fieldsPatch(form: FieldsForm, base: FieldsForm, enabled: readonl
     if (!enabled.includes(KEY_OF[k]) || form[k] === base[k]) continue;
     out[k] = typeof form[k] === "boolean" ? form[k] : (form[k] as string).trim() === "" ? null : (form[k] as string);
   }
+  return out;
+}
+
+/** Valores para el borrador local: solo los campos activados (el resto queda vacío). */
+export function fieldsForDraft(form: FieldsForm, enabled: readonly TaskFieldKey[]): FieldsForm {
+  const out: FieldsForm = { ...EMPTY_FIELDS_FORM };
+  for (const k of Object.keys(out) as (keyof FieldsForm)[]) if (enabled.includes(KEY_OF[k])) (out as unknown as Record<string, string | boolean>)[k] = form[k];
+  return out;
+}
+
+/** Del borrador local (JSON no fiable) al formulario: ignora lo que no tenga el tipo esperado. */
+export function fieldsFromDraft(raw: unknown): FieldsForm {
+  const out: FieldsForm = { ...EMPTY_FIELDS_FORM };
+  if (!raw || typeof raw !== "object") return out;
+  const r = raw as Record<string, unknown>;
+  for (const k of Object.keys(out) as (keyof FieldsForm)[]) {
+    const v = r[k];
+    if (typeof EMPTY_FIELDS_FORM[k] === "boolean" ? typeof v === "boolean" : typeof v === "string" && v.length <= 2000) (out as unknown as Record<string, string | boolean>)[k] = v as string | boolean;
+  }
+  if (out.priority && !(TASK_PRIORITIES as readonly string[]).includes(out.priority)) out.priority = "";
   return out;
 }
 

@@ -5,7 +5,7 @@ import { budgetSummary, centsToAmount, formatEuro, normalizeTaskFields, startAft
 import { templateTaskFields } from "../src/lib/project-templates";
 import { buildReport, type ReportInput } from "../src/lib/report";
 import { EMPTY_FILTERS, taskMatchesFilters } from "../src/components/board/filters";
-import { fieldsError, fieldsPatch, EMPTY_FIELDS_FORM } from "../src/lib/fields-form";
+import { fieldsError, fieldsForDraft, fieldsFromDraft, fieldsPatch, EMPTY_FIELDS_FORM } from "../src/lib/fields-form";
 import type { BoardTask } from "../src/lib/types";
 
 test("coste y horas: coma o punto, dos decimales, sin negativos ni exponentes", () => {
@@ -29,6 +29,16 @@ test("prioridad, cliente y enlace", () => {
   assert.equal(linkUrl.parse("https://example.com/a?b=1"), "https://example.com/a?b=1");
   assert.equal(linkUrl.parse(""), null);
   for (const bad of ["javascript:alert(1)", "ftp://example.com", "example.com", "https://a b"]) assert.equal(linkUrl.safeParse(bad).success, false, bad);
+});
+
+test("borrador: solo guarda los campos activados y sanea lo que lee", () => {
+  const form = { ...EMPTY_FIELDS_FORM, cost: "5", costPaid: true, priority: "ALTA", client: "Acme", startDate: "2026-10-01", estimatedHours: "2" };
+  const saved = fieldsForDraft(form, ["cost", "client"]);
+  assert.deepEqual(saved, { ...EMPTY_FIELDS_FORM, cost: "5", costPaid: true, client: "Acme" });
+  assert.deepEqual(fieldsFromDraft(JSON.parse(JSON.stringify(saved))), saved);
+  assert.deepEqual(fieldsFromDraft(undefined), EMPTY_FIELDS_FORM);
+  assert.deepEqual(fieldsFromDraft("x"), EMPTY_FIELDS_FORM);
+  assert.deepEqual(fieldsFromDraft({ cost: 5, costPaid: "si", priority: "NOPE", client: "Acme", extra: "x" }), { ...EMPTY_FIELDS_FORM, client: "Acme" });
 });
 
 test("fecha de inicio frente a fecha límite", () => {
