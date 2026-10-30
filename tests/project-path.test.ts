@@ -26,6 +26,8 @@ test("subrutas más profundas caen al índice de la sección", () => {
 test("sin permiso para los ajustes del destino, vuelve al tablero", () => {
   assert.equal(projectSwitchPath("/p/A/settings", "", "B", { canOpenSettings: false }), "/p/B");
   assert.equal(projectSwitchPath("/p/A/settings", "", "B", { canOpenSettings: true }), "/p/B/settings");
+  // Se conserva la pestaña de ajustes (la página abre la primera disponible si el usuario no ve esa).
+  assert.equal(projectSwitchPath("/p/A/settings", "?tab=releases&x=1", "B"), "/p/B/settings?tab=releases");
 });
 
 test("rutas desconocidas o fuera de un proyecto van al tablero", () => {

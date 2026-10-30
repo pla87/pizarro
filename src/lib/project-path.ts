@@ -7,6 +7,8 @@
 const KEEP_PARAMS: Record<string, readonly string[]> = {
   "": ["archivadas"],
   releases: ["q"],
+  // La pestaña activa; si no existe para el usuario en el destino, los ajustes abren la primera disponible.
+  settings: ["tab"],
 };
 
 /** Secciones de /p/[projectId]/… que existen en el proyecto de destino. */

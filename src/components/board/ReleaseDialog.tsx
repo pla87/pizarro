@@ -155,8 +155,8 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
       releaseTasks.filter((t) => t.attachments.length).map((t) => ({ taskId: t.id, code: codes.get(t.id)!, count: t.attachments.length })),
     );
     const md = buildReleaseMarkdown({
-      header: templateText(templates.headers, headerId),
-      footer: templateText(templates.footers, footerId),
+      header: templateText(allTemplates("header"), headerId),
+      footer: templateText(allTemplates("footer"), footerId),
       kinds: board.kinds,
       tasks: releaseTasks,
       releaseNumber,
