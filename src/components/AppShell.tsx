@@ -1,6 +1,7 @@
 "use client";
 
 import { BrandMark } from "@/components/ui/BrandMark";
+import { useFocusRingScroll } from "@/components/ui/useFocusRingScroll";
 import {
   Archive, Bell, CalendarDays, ChevronsUpDown, FileText, FolderKanban, History, LayoutDashboard, ListChecks, LogOut, Menu, Plus, Rocket,
   Settings, Shield, SlidersHorizontal, X,
@@ -54,6 +55,7 @@ export function AppShell(props: Props) {
 }
 
 function Shell({ user, projects, version, unread, lastProjectId = null, backupAlert = false, children }: Props) {
+  useFocusRingScroll();
   const t = useT();
   const pathname = usePathname();
   // El menú móvil se cierra solo al navegar: queda asociado a la ruta en que se abrió.
@@ -226,7 +228,7 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
         <ProjectSwitcher projects={projects} current={current} isAdmin={isAdmin} />
       </div>
 
-      <nav className="mt-3 flex-1 space-y-0.5 overflow-y-auto px-3">
+      <nav className="mt-2 flex-1 space-y-0.5 overflow-y-auto px-3 py-1">
         {current && (
           <>
             <NavLink href={`/p/${current.id}`} icon={LayoutDashboard} active={pathname === `/p/${current.id}`}>{t("Tablero")}</NavLink>

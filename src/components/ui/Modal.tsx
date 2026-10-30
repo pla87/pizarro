@@ -100,7 +100,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
         // Trampa de foco: Tab desde el último campo vuelve al primero (y Mayús+Tab al revés), sin salir al tablero de debajo.
         const panel = panelRef.current;
         if (!panel) return;
-        const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.offsetParent !== null || el === document.activeElement);
+        const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => (el.offsetParent !== null && el.tabIndex >= 0) || el === document.activeElement);
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
         const current = document.activeElement;
