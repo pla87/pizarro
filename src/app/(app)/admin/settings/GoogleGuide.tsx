@@ -91,7 +91,7 @@ export function GoogleGuide({ view, open }: { view: GoogleSettingsView; open: bo
           )}
           {appDomain.kind === "shared" && (
             <>
-              <p className="text-amber-600 dark:text-amber-400">{t("Tu dirección ({host}) es un subdominio de un servicio de alojamiento compartido. Google pide como dominio autorizado un dominio que sea tuyo, y de los de alojamiento compartido no suele aceptarlo. No estoy seguro de la regla exacta de Google en cada caso: lo más fiable es usar un dominio propio (y poner su dirección en APP_URL). Si pruebas con este, el dominio sería:", { host: appDomain.host })}</p>
+              <p className="text-amber-600 dark:text-amber-400">{t("Tu dirección ({host}) es un subdominio de un servicio de alojamiento compartido. Como ese servicio está en la lista de sufijos públicos, Google suele aceptar como dominio autorizado la dirección completa (abajo). Si la rechaza, o para que la pantalla de Google muestre tu marca, usa un dominio propio y pon su dirección en APP_URL. Dominio a escribir:", { host: appDomain.host })}</p>
               <CopyRow label={t("Dominio autorizado")} value={appDomain.domain} />
             </>
           )}
