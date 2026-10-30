@@ -1,3 +1,4 @@
+import { appTimeZone } from "@/lib/format";
 import { readFile, stat } from "node:fs/promises";
 import { z } from "zod";
 import { visibleProjectsWhere } from "@/lib/access";
@@ -98,7 +99,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   return new Response(new Uint8Array(zip.buffer as ArrayBuffer, zip.byteOffset, zip.length), {
     headers: {
       "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="release-${isoDate()}-adjuntos${partSuffix(mode.part, packages.length)}.zip"`,
+      "Content-Disposition": `attachment; filename="release-${isoDate(new Date(), appTimeZone())}-adjuntos${partSuffix(mode.part, packages.length)}.zip"`,
       "Cache-Control": "private, no-store",
       "X-Zip-Parts": String(packages.length),
       "X-Content-Type-Options": "nosniff",
