@@ -736,7 +736,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
                   </button>
                 );
               })}
-              <Link href={`/p/${board.project.id}/settings#labels`} className="px-1 py-0.5 text-xs text-brand-600 dark:text-brand-300 hover:underline">
+              <Link href={`/p/${board.project.id}/settings?tab=tablero#labels`} className="px-1 py-0.5 text-xs text-brand-600 dark:text-brand-300 hover:underline">
                 {t("Gestionar")}
               </Link>
             </div>

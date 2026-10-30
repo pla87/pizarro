@@ -309,4 +309,8 @@ export const board: Record<string, string> = {
   "Agenda": "Agenda",
   "Rutinas": "Routines",
   "Entrega al cliente": "Client delivery",
+  "Tuyas": "Yours",
+  "Del proyecto": "From the project",
+  "y de las": "and the",
+  "plantillas del proyecto": "project templates",
 };

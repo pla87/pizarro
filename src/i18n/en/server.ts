@@ -292,4 +292,5 @@ export const server: Record<string, string> = {
   "El destino no puede ser una columna terminada ni otra columna de rutinas.": "The destination cannot be a done column or another Routines column.",
   "Solo las columnas con el rol «Rutinas» tienen destino de la siguiente aparición.": "Only columns with the “Routines” role have a next occurrence destination.",
   "Cambió el destino de la siguiente aparición de la columna «{name}»": "Changed the next occurrence destination of column “{name}”",
+  "Máximo 20 plantillas de este tipo en el proyecto.": "Maximum 20 templates of this type in the project.",
 };

@@ -97,6 +97,8 @@ export interface BoardData {
   labels: LabelOption[];
   kinds: KindOption[];
   templates: { headers: TemplateOption[]; footers: TemplateOption[] };
+  /** Cabeceras y pies definidos en los ajustes del proyecto: salen tras los del usuario. */
+  projectTemplates: { headers: TemplateOption[]; footers: TemplateOption[] };
   cardStyle: CardStyleValue;
   /** Cómo edita descripciones el usuario actual. */
   editorMode: EditorModeValue;

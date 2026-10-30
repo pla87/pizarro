@@ -32,11 +32,13 @@ interface Props {
   tasks: BoardTask[];
   preselected: string[];
   templates: { headers: TemplateOption[]; footers: TemplateOption[] };
+  /** Los del proyecto: van después de los del usuario y no cuentan para la selección por defecto. */
+  projectTemplates: { headers: TemplateOption[]; footers: TemplateOption[] };
   onClose: () => void;
   onDeployed: (result: DeployResult) => void;
 }
 
-export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeployed }: Props) {
+export function ReleaseDialog({ tasks, preselected, templates, projectTemplates, onClose, onDeployed }: Props) {
   const board = useBoard();
   const now = useMemo(() => new Date(), []);
   const toast = useToast();
@@ -69,11 +71,14 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
   const selectedTasks = useMemo(() => tasks.filter((t) => chosen.has(t.id)), [tasks, chosen]);
   const [headerId, setHeaderId] = useState(templates.headers[0]?.id ?? "");
   const [footerId, setFooterId] = useState(templates.footers[0]?.id ?? "");
+  /** Del usuario primero y luego los del proyecto: así se buscan por id. */
+  const allTemplates = (which: "header" | "footer") =>
+    which === "header" ? [...templates.headers, ...projectTemplates.headers] : [...templates.footers, ...projectTemplates.footers];
   const templateText = (list: TemplateOption[], id: string) => list.find((t) => t.id === id)?.content ?? "";
 
   /** Cambia la cabecera o el pie; en el paso 2 se sustituye en el texto ya editado. */
   const chooseTemplate = (which: "header" | "footer", id: string) => {
-    const list = which === "header" ? templates.headers : templates.footers;
+    const list = allTemplates(which);
     const prevId = which === "header" ? headerId : footerId;
     if (which === "header") setHeaderId(id);
     else setFooterId(id);
@@ -87,7 +92,8 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
   const templatePickers = (
     <div className="grid gap-2 sm:grid-cols-2">
       {(["header", "footer"] as const).map((which) => {
-        const list = which === "header" ? templates.headers : templates.footers;
+        const own = which === "header" ? templates.headers : templates.footers;
+        const proj = which === "header" ? projectTemplates.headers : projectTemplates.footers;
         return (
           <div key={which}>
             <label className="label" htmlFor={`rel-${which}`}>{which === "header" ? t("Cabecera") : t("Pie")}</label>
@@ -98,7 +104,14 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
               onChange={(e) => chooseTemplate(which, e.target.value)}
             >
               <option value="">{t("Ninguna")}</option>
-              {list.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              {proj.length === 0 ? (
+                own.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)
+              ) : (
+                <>
+                  {own.length > 0 && <optgroup label={t("Tuyas")}>{own.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>}
+                  <optgroup label={t("Del proyecto")}>{proj.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>
+                </>
+              )}
             </select>
           </div>
         );
@@ -248,7 +261,8 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
         step === "select" ? (
           <>
             <span className="mr-auto text-xs text-slate-500">
-              {t("Cabecera y pie salen de")} <Link className="text-brand-600 dark:text-brand-300 hover:underline" href="/settings?tab=plantillas">{t("tus plantillas")}</Link>.
+              {t("Cabecera y pie salen de")} <Link className="text-brand-600 dark:text-brand-300 hover:underline" href="/settings?tab=plantillas">{t("tus plantillas")}</Link>
+              {projectTemplates.headers.length + projectTemplates.footers.length > 0 && <> {t("y de las")} <Link className="text-brand-600 dark:text-brand-300 hover:underline" href={`/p/${board.project.id}/settings?tab=releases`}>{t("plantillas del proyecto")}</Link></>}.
             </span>
             <button className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
             <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || loadingDetails}>
