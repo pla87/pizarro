@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { FieldsForm } from "@/lib/fields-form";
 
 // Borradores locales de las tareas que se están creando o editando: se guardan cada 5 s en el
 // navegador (por usuario y proyecto). Si la página se cierra sin cancelar ni guardar, al volver
@@ -22,6 +23,8 @@ export interface NewTaskDraft {
   subtaskDraft: string;
   /** Proyecto elegido en el diálogo (si no es el del tablero). */
   projectId?: string;
+  /** Campos opcionales activados (coste, horas, prioridad, cliente, inicio). */
+  fields?: FieldsForm;
 }
 
 export interface EditTaskDraft {

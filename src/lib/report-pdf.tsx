@@ -157,7 +157,6 @@ function FieldsSection({ r, t, locale }: { r: Report; t: T; locale: string }) {
   if (has("startDate")) extra.push({ label: t("Inicio"), width: "12%", render: (x) => (x.startDate ? formatDay(x.startDate, r.today, locale) : "—") });
   if (has("cost")) extra.push({ label: t("Coste"), width: "14%", render: (x) => (x.cost === null ? "—" : `${formatEuro(x.cost, locale)}${x.costPaid ? ` (${t("pagado")})` : ""}`) });
   if (has("hours")) extra.push({ label: t("Horas (est./real)"), width: "12%", render: (x) => `${formatHours(x.estimatedHours, locale) || "—"} / ${formatHours(x.actualHours, locale) || "—"}` });
-  if (has("externalUrl")) extra.push({ label: t("Enlace"), width: "17%", render: (x) => (x.externalUrl ? <Text style={{ fontSize: 7 }}>{x.externalUrl}</Text> : "—") });
   const used = extra.reduce((n, c) => n + parseInt(c.width, 10), 0);
   return (
     <>

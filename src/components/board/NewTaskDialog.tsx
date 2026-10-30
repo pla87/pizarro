@@ -15,7 +15,8 @@ import { Modal } from "../ui/Modal";
 import { useShortcut } from "./shortcuts";
 import { useToast } from "../ui/Toast";
 import { boardClients, useBoard, useTasks } from "./context";
-import { EMPTY_FIELDS_FORM, fieldsError, fieldsForCreate, TaskFieldsGroup, type FieldsForm } from "./TaskFieldsGroup";
+import { fieldsError, fieldsForCreate, TaskFieldsGroup, type FieldsForm } from "./TaskFieldsGroup";
+import { fieldsForDraft, fieldsFromDraft } from "@/lib/fields-form";
 import { DescriptionField } from "../ui/DescriptionField";
 import { applyKindTemplate, mergeSubtasks } from "@/lib/kinds-special";
 import { MAX_TITLE } from "@/lib/constants";
@@ -93,8 +94,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const [subtasks, setSubtasks] = useState<string[]>(d?.subtasks ?? []);
   const [subtaskDraft, setSubtaskDraft] = useState(d?.subtaskDraft ?? "");
   const [evergreen, setEvergreen] = useState(foreignInit ? false : (d?.evergreen ?? !!initialEvergreen));
-  // Campos opcionales del proyecto elegido (no van en el borrador local).
-  const [fieldsForm, setFieldsForm] = useState<FieldsForm>(EMPTY_FIELDS_FORM);
+  // Campos opcionales del proyecto elegido (el borrador guarda los activados).
+  const [fieldsForm, setFieldsForm] = useState<FieldsForm>(() => fieldsFromDraft(d?.fields));
 
   /** Ajusta las opciones al proyecto de `f`: conserva lo que siga existiendo en él y, si no, usa su primera columna / tipo. */
   const applyForm = (f: ProjectFormData, keep: { kindId: string; columnId: string; assigneeId: string; deliverableId: string }) => {
@@ -153,7 +154,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       ? undefined
       : !title.trim() && !description.trim() && !subtasks.length && !subtaskDraft.trim()
         ? null
-        : ({ title, kindId, description, columnId, assigneeId, dueDate, deliverableId, evergreen, subtasks, subtaskDraft, projectId } satisfies NewTaskDraft),
+        : ({ title, kindId, description, columnId, assigneeId, dueDate, deliverableId, evergreen, subtasks, subtaskDraft, projectId, fields: fieldsForDraft(fieldsForm, form.project.taskFields) } satisfies NewTaskDraft),
   );
   const onClose = () => {
     if (autosave) discardDraft();

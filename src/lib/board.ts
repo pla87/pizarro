@@ -24,7 +24,7 @@ export const boardTaskSelect = {
   recurrenceDay: true,
   contentUpdatedAt: true,
   columnEnteredAt: true,
-  cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true, externalUrl: true,
+  cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
   labels: { select: { labelId: true } },
   subtasks: { select: { done: true } },
   // Solo el flag de cada adjunto: la tarjeta distingue imágenes de otros ficheros.
@@ -75,7 +75,6 @@ function toBoardTaskWith(t: BoardTaskRow, hasDescription: boolean): BoardTask {
     priority: t.priority,
     client: t.client,
     startDate: dateToIso(t.startDate),
-    externalUrl: t.externalUrl,
   };
 }
 

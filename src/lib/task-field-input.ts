@@ -7,7 +7,7 @@ import { FIELD_COLUMNS, normalizeTaskFields, startAfterDue, TASK_FIELDS, type Ta
 import * as v from "./validation";
 
 // Validación y aplicación de los campos opcionales de las tareas (coste, horas, prioridad, cliente,
-// fecha de inicio, enlace externo). Solo se pueden escribir los que el proyecto tiene activados.
+// fecha de inicio). Solo se pueden escribir los que el proyecto tiene activados.
 
 /** Forma común de los campos opcionales en createTask / updateTask. */
 export const taskFieldShape = {
@@ -18,14 +18,13 @@ export const taskFieldShape = {
   priority: v.taskPriority.optional(),
   client: v.taskClient.optional(),
   startDate: v.dayIso.optional(),
-  externalUrl: v.externalUrl.optional(),
 };
 export const taskFieldSchema = z.object(taskFieldShape);
 export type TaskFieldPatch = z.infer<typeof taskFieldSchema>;
 
 /** Nombre (en español, clave de traducción) de cada interruptor para los errores. */
 const FIELD_NAME: Record<TaskFieldKey, string> = {
-  cost: "coste", hours: "horas", priority: "prioridad", client: "cliente", startDate: "fecha de inicio", externalUrl: "enlace de referencia",
+  cost: "coste", hours: "horas", priority: "prioridad", client: "cliente", startDate: "fecha de inicio",
 };
 
 /** Interruptor al que pertenece cada campo de tarea. */

@@ -13,13 +13,11 @@ export const campos: Record<string, string> = {
   "Prioridad": "Priority",
   "Cliente": "Client",
   "Fecha de inicio": "Start date",
-  "Enlace de referencia": "Reference link",
   "Importe en € de la tarea y si está pagado.": "Amount in € for the task and whether it is paid.",
   "Horas estimadas y horas reales (de 0,25 en 0,25).": "Estimated and actual hours (in steps of 0.25).",
   "Baja, media, alta o urgente, con insignia en la tarjeta.": "Low, medium, high or urgent, with a badge on the card.",
   "Texto corto (hasta 120 caracteres) con sugerencias de los clientes ya usados.": "Short text (up to 120 characters) with suggestions from the clients already used.",
   "Debe ser anterior o igual a la fecha límite.": "Must be on or before the due date.",
-  "Enlace http o https a otra herramienta (distinto del enlace externo de la tarea: PR, commit o incidencia).": "http or https link to another tool (separate from the task's external link: PR, commit or issue).",
   // Prioridades
   "Baja": "Low",
   "Media": "Medium",
@@ -69,7 +67,6 @@ export const campos: Record<string, string> = {
   "Inicio": "Start",
   "pagado": "paid",
   "Horas (est./real)": "Hours (est./actual)",
-  "Enlace": "Link",
   "Coste: {total} · pagado {paid} · pendiente {pending}": "Cost: {total} · paid {paid} · pending {pending}",
   "Horas: {est} estimadas · {act} reales": "Hours: {est} estimated · {act} actual",
 };

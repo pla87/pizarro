@@ -1,5 +1,4 @@
-import { visibleProjectsWhere } from "@/lib/access";
-import { db } from "@/lib/db";
+import { canAccessProject, projectOfTask } from "@/lib/access-cache";
 import { leaveTask, noteTaskViewer } from "@/lib/presence";
 import { isSameOrigin } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
@@ -14,15 +13,15 @@ async function load(ctx: { params: Promise<{ taskId: string }> }) {
   if (!user) return null;
   const parsed = v.id.safeParse((await ctx.params).taskId);
   if (!parsed.success) return null;
-  const task = await db.task.findFirst({ where: { id: parsed.data, project: visibleProjectsWhere(user) }, select: { id: true } });
-  return task ? { user, taskId: task.id } : null;
+  // Proyecto de la tarea y acceso, ambos con caché breve (se consulta cada 20 s por diálogo abierto).
+  const projectId = await projectOfTask(parsed.data);
+  return projectId && (await canAccessProject(user, projectId)) ? { user, taskId: parsed.data } : null;
 }
 
 /** El diálogo de la tarea avisa de que sigue abierto y recibe quién más la tiene abierta. No se registra en los logs. */
 export async function GET(_req: Request, ctx: { params: Promise<{ taskId: string }> }) {
-  const t = await getT();
   const found = await load(ctx);
-  if (!found) return new Response(t("No encontrado"), { status: 404 });
+  if (!found) return new Response((await getT())("No encontrado"), { status: 404 });
   const others = noteTaskViewer(found.taskId, found.user.id, found.user.name);
   return Response.json({ others }, { headers: { "Cache-Control": "no-store" } });
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { takePrefetchedTaskDetail } from "./taskDetailPrefetch";
 import { Archive, Camera, Check, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -115,7 +116,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
 
   useEffect(() => {
     let alive = true;
-    getTaskDetail(task.id).then((res) => {
+    (takePrefetchedTaskDetail(task.id) ?? getTaskDetail(task.id)).then((res) => {
       if (!alive) return;
       if (res.ok) {
         initialDetail.current ??= res.data;
@@ -220,7 +221,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const editedSinceOpen = (): boolean => {
     const t0 = initialTask.current;
     const now = board.getTask(task.id) ?? task;
-    const keys = ["title", "kindId", "color", "linkUrl", "assigneeId", "dueDate", "deliverableId", "evergreen", "evergreenEvery", "recurrence", "recurrenceDay", "columnId", "cost", "costPaid", "estimatedHours", "actualHours", "priority", "client", "startDate", "externalUrl"] as const;
+    const keys = ["title", "kindId", "color", "linkUrl", "assigneeId", "dueDate", "deliverableId", "evergreen", "evergreenEvery", "recurrence", "recurrenceDay", "columnId", "cost", "costPaid", "estimatedHours", "actualHours", "priority", "client", "startDate"] as const;
     if (keys.some((k) => t0[k] !== now[k])) return true;
     if ([...t0.labelIds].sort().join() !== [...now.labelIds].sort().join()) return true;
     const d0 = initialDetail.current;
@@ -250,7 +251,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         title: t0.title, kindId: t0.kindId, color: t0.color as never, linkUrl: t0.linkUrl, assigneeId: t0.assigneeId, labelIds: t0.labelIds,
         dueDate: t0.dueDate, deliverableId: t0.deliverableId, evergreen: t0.evergreen, evergreenEvery: t0.evergreenEvery, recurrence: t0.recurrence, recurrenceDay: t0.recurrenceDay,
         columnId: t0.columnId, position: t0.position,
-        cost: t0.cost, costPaid: t0.costPaid, estimatedHours: t0.estimatedHours, actualHours: t0.actualHours, priority: t0.priority, client: t0.client, startDate: t0.startDate, externalUrl: t0.externalUrl,
+        cost: t0.cost, costPaid: t0.costPaid, estimatedHours: t0.estimatedHours, actualHours: t0.actualHours, priority: t0.priority, client: t0.client, startDate: t0.startDate,
         ...(d0 ? {
           description: d0.description,
           subtasks: d0.subtasks.map((s) => ({ id: s.id, title: s.title, done: s.done, position: s.position })),
@@ -740,7 +741,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               </Link>
             </div>
           </Field>
-          <Field label={t("Enlace externo (PR, commit, issue)")}>
+          <Field label={t("Enlace externo")}>
             <div className="flex gap-1">
               <input
                 className="input md:py-1.5"

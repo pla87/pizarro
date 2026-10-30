@@ -1,5 +1,6 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
+import { needOwnRefresh } from "./action-context";
 import { db } from "./db";
 import { needsRebalance, positionBetween, POSITION_STEP } from "./positions";
 
@@ -40,6 +41,8 @@ export async function lastPositionIn(tx: Tx, columnId: string, exclude?: string)
 
 /** Renumera la columna (1024, 2048…) conservando el orden; deshace también cualquier empate. */
 export async function rebalanceColumn(tx: Tx, columnId: string): Promise<void> {
+  // Cambia posiciones de otras tarjetas que el resultado de la acción no incluye.
+  needOwnRefresh();
   await tx.$executeRaw`
     UPDATE "Task" AS t SET "position" = r.rn * ${POSITION_STEP}::float8, "updatedAt" = ${new Date()}
     FROM (SELECT "id", ROW_NUMBER() OVER (ORDER BY "position", "id") AS rn FROM "Task" WHERE "columnId" = ${columnId}) AS r

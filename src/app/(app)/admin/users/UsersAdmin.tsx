@@ -26,7 +26,7 @@ interface UserRow {
   privateProjects: number;
 }
 
-export function UsersAdmin({ users, meId, maxUsers, emailAvailable }: { users: UserRow[]; meId: string; maxUsers: number; emailAvailable: boolean }) {
+export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery }: { users: UserRow[]; meId: string; maxUsers: number; emailAvailable: boolean; noRecovery?: boolean }) {
   const t = useT();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
@@ -70,6 +70,11 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable }: { users: U
           <UserPlus size={16} /> {t("Nuevo usuario")}
         </button>
       </div>
+      {noRecovery && (
+        <p role="note" className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+          {t("No hay email ni inicio de sesión con Google configurados: quien olvide su contraseña no puede recuperarla por su cuenta y tendrá que pedirte que le fuerces el cambio de contraseña.")}
+        </p>
+      )}
       <ul className="card divide-y divide-slate-200 dark:divide-slate-800">
         {users.map((u) => (
           <li key={u.id} className={cn("flex items-center gap-3 px-4 py-3", !u.active && "opacity-50")}>

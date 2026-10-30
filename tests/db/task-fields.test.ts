@@ -7,7 +7,7 @@ import { createTask, createTasks, duplicateTask, restoreTaskSnapshot, updateTask
 import { redoLast, undoLast } from "../../src/actions/undo";
 
 /** Proyecto con todos los campos activados y una persona administradora que lo gestiona. */
-async function setup(fields: string[] = ["cost", "hours", "priority", "client", "startDate", "externalUrl"]) {
+async function setup(fields: string[] = ["cost", "hours", "priority", "client", "startDate"]) {
   const admin = await makeUser({ role: "ADMIN" });
   const f = await makeProject({ members: [] });
   await db.project.update({ where: { id: f.project.id }, data: { taskFields: fields } });
@@ -69,15 +69,15 @@ describe("validación de los campos", () => {
 
   test("prioridad solo BAJA/MEDIA/ALTA/URGENTE; cliente hasta 120 caracteres; enlace solo http(s)", async () => {
     const { f } = await setup();
-    const t = expectOk(await createTask({ ...base(f), priority: "URGENTE", client: "  Acme  ", externalUrl: "https://example.com/x" }));
-    assert.deepEqual([t.priority, t.client, t.externalUrl], ["URGENTE", "Acme", "https://example.com/x"]);
+    const t = expectOk(await createTask({ ...base(f), priority: "URGENTE", client: "  Acme  ", linkUrl: "https://example.com/x" }));
+    assert.deepEqual([t.priority, t.client, t.linkUrl], ["URGENTE", "Acme", "https://example.com/x"]);
     expectFail(await createTask({ ...base(f), priority: "NOPE" as never }));
     expectFail(await createTask({ ...base(f), client: "x".repeat(121) }), /120/);
     assert.equal(expectOk(await createTask({ ...base(f), client: "x".repeat(120) })).client?.length, 120);
     for (const url of ["javascript:alert(1)", "ftp://example.com", "example.com", "data:text/html,hi"]) {
-      expectFail(await updateTask(t.id, { externalUrl: url }), /http/);
+      expectFail(await updateTask(t.id, { linkUrl: url }), /http/);
     }
-    assert.equal(expectOk(await updateTask(t.id, { client: "", externalUrl: "" })).client, null);
+    assert.equal(expectOk(await updateTask(t.id, { client: "", linkUrl: "" })).client, null);
   });
 
   test("la fecha de inicio no puede ser posterior a la fecha límite (al crear y al editar cualquiera de las dos)", async () => {
@@ -158,13 +158,13 @@ describe("historial y deshacer", () => {
 
   test("borrar la tarea y deshacer recupera los campos opcionales", async () => {
     const { f } = await setup();
-    const t = expectOk(await createTask({ ...base(f), cost: "7.25", estimatedHours: "2", priority: "ALTA", client: "Acme", externalUrl: "https://example.com", startDate: "2026-12-01" }));
+    const t = expectOk(await createTask({ ...base(f), cost: "7.25", estimatedHours: "2", priority: "ALTA", client: "Acme", linkUrl: "https://example.com", startDate: "2026-12-01" }));
     const { deleteTask } = await import("../../src/actions/tasks");
     expectOk(await deleteTask(t.id));
     assert.equal(await db.task.count({ where: { id: t.id } }), 0);
     expectOk(await undoLast(f.project.id));
     const r = await db.task.findUniqueOrThrow({ where: { id: t.id } });
-    assert.deepEqual([r.cost?.toFixed(2), r.estimatedHours?.toFixed(2), r.priority, r.client, r.externalUrl, r.startDate?.toISOString().slice(0, 10)], ["7.25", "2.00", "ALTA", "Acme", "https://example.com", "2026-12-01"]);
+    assert.deepEqual([r.cost?.toFixed(2), r.estimatedHours?.toFixed(2), r.priority, r.client, r.linkUrl, r.startDate?.toISOString().slice(0, 10)], ["7.25", "2.00", "ALTA", "Acme", "https://example.com", "2026-12-01"]);
   });
 
   test("«Cancelar» en el detalle devuelve también los campos opcionales", async () => {
@@ -175,7 +175,7 @@ describe("historial y deshacer", () => {
     const res = expectOk(await restoreTaskSnapshot(t.id, {
       title: open.title, kindId: open.kindId, color: null, linkUrl: null, assigneeId: null, labelIds: [], dueDate: null, deliverableId: null, evergreen: false,
       recurrence: "NONE", recurrenceDay: null, columnId: open.columnId, position: open.position,
-      cost: "10.00", costPaid: false, estimatedHours: null, actualHours: null, priority: "BAJA", client: null, startDate: null, externalUrl: null,
+      cost: "10.00", costPaid: false, estimatedHours: null, actualHours: null, priority: "BAJA", client: null, startDate: null,
     }));
     assert.equal(res.changed, true);
     assert.deepEqual([res.task.cost, res.task.priority, res.task.client], ["10.00", "BAJA", null]);

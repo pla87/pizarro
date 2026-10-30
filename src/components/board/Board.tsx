@@ -1,5 +1,6 @@
 "use client";
 
+import { prefetchTaskDetail } from "./taskDetailPrefetch";
 import { actionThrowMessage } from "@/lib/stale-action";
 import {
   closestCorners, DndContext, type CollisionDetection, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
@@ -298,17 +299,37 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       refresh();
     }
   }, [refresh]);
+  // Avisos del servidor (SSE) pendientes de decidir y ids de cambios propios (los que devolvieron mis acciones):
+  // el aviso de un cambio propio no refresca (el tablero ya aplicó el resultado); cualquier otro, sí.
+  const incoming = useRef<(string | null)[]>([]);
+  const ownChanges = useRef(new Set<string>());
+  const drainIncoming = useCallback(() => {
+    if (pending.current > 0 || !incoming.current.length) return;
+    const foreign = incoming.current.some((cid) => !cid || !ownChanges.current.has(cid));
+    for (const cid of incoming.current) if (cid) ownChanges.current.delete(cid);
+    incoming.current = [];
+    if (foreign) refresh();
+  }, [refresh]);
   // Contador de operaciones en curso (evita refrescos intermedios). Sin capturar errores: lo usan las subidas, que informan por excepción.
   const trackRaw = useCallback(async <T,>(p: Promise<T>): Promise<T> => {
     mutationAt.current = performance.now();
     pending.current++;
     try {
-      return await p;
+      const res = await p;
+      // Acción con cambio publicado: se anota su id para no refrescar con su propio aviso.
+      const cid = res && typeof res === "object" && "cid" in res ? (res as { cid?: unknown }).cid : null;
+      if (typeof cid === "string") {
+        ownChanges.current.add(cid);
+        // Acotado: los ids que nunca llegan por el canal (sin conexión) no se acumulan.
+        if (ownChanges.current.size > 200) ownChanges.current.delete(ownChanges.current.values().next().value as string);
+      }
+      return res;
     } finally {
       pending.current--;
       flushStale();
+      drainIncoming();
     }
-  }, [flushStale]);
+  }, [flushStale, drainIncoming]);
   // Para server actions: si lanzan (sin red, acción inexistente tras un despliegue) se avisa, se refresca
   // desde el servidor para deshacer lo optimista y se devuelve un fallo como el de cualquier acción.
   const track = useCallback(async <T,>(p: Promise<T>): Promise<T> => {
@@ -369,19 +390,27 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (typeof EventSource === "undefined") return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const source = new EventSource(`/api/projects/${data.project.id}/events`);
-    source.addEventListener("change", () => {
+    source.addEventListener("change", (e) => {
+      let cid: string | null = null;
+      try {
+        const parsed = JSON.parse((e as MessageEvent<string>).data) as { cid?: unknown };
+        if (typeof parsed.cid === "string") cid = parsed.cid;
+      } catch {
+        // Aviso ilegible: se trata como ajeno y se refresca.
+      }
+      incoming.current.push(cid);
       if (timer) clearTimeout(timer);
+      // Con acciones en vuelo se decide al terminar la última (trackRaw), cuando ya se conocen sus ids.
       timer = setTimeout(() => {
         timer = null;
-        if (pending.current > 0) staleRefresh.current = true;
-        else refresh();
+        drainIncoming();
       }, 200);
     });
     return () => {
       if (timer) clearTimeout(timer);
       source.close();
     };
-  }, [data.project.id, refresh]);
+  }, [data.project.id, drainIncoming]);
 
   // Refresco ligero de respaldo (por si el canal de avisos no llega).
   useEffect(() => {
@@ -566,7 +595,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         });
       },
       setColumns,
-      openTask: setOpenTaskId,
+      openTask: (id) => {
+        prefetchTaskDetail(id);
+        setOpenTaskId(id);
+      },
       openNewTask: (columnId, evergreen, files) => setNewTask({ columnId, evergreen, files }),
       revealTask,
       openRelease: (columnId) => {

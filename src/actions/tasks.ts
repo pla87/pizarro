@@ -83,7 +83,7 @@ const CHANGE_LABELS: Record<string, string> = {
   assigneeId: "responsable", labelIds: "etiquetas", dueDate: "fecha límite", deliverableId: "entregable", evergreen: "fija en la release", evergreenEvery: "cadencia en la release",
   recurrence: "repetición", recurrenceDay: "repetición",
   cost: "coste", costPaid: "pago", estimatedHours: "horas estimadas", actualHours: "horas reales", priority: "prioridad",
-  client: "cliente", startDate: "fecha de inicio", externalUrl: "enlace de referencia",
+  client: "cliente", startDate: "fecha de inicio",
 };
 
 /** «tipo, responsable y fecha límite» a partir de los campos cambiados. */
@@ -313,7 +313,7 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
       where: { id: taskId },
       select: {
         title: true, description: true, kindId: true, color: true, linkUrl: true, assigneeId: true, dueDate: true, deliverableId: true,
-        cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true, externalUrl: true,
+        cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
         columnId: true,
         labels: { select: { labelId: true } },
         subtasks: { orderBy: { position: "asc" }, select: { title: true, position: true } },
@@ -344,7 +344,7 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
           dueDate: src.dueDate,
           deliverableId: src.deliverableId,
           cost: src.cost, costPaid: src.costPaid, estimatedHours: src.estimatedHours, actualHours: src.actualHours,
-          priority: src.priority, client: src.client, startDate: src.startDate, externalUrl: src.externalUrl,
+          priority: src.priority, client: src.client, startDate: src.startDate,
           position,
           createdById: user.id,
           labels: { create: src.labels.map((l) => ({ labelId: l.labelId })) },

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { undoLast } from "@/actions/undo";
 import { updateTask } from "@/actions/tasks";
-import { PERSON_UNASSIGNED, bandsForWeek, groupByDay, groupWeeks, shiftMonth, type CalendarDay } from "@/lib/calendar";
+import { PERSON_UNASSIGNED, bandsForWeek, groupByDay, groupWeeks, isRange, rangeBandsForWeek, shiftMonth, type CalendarDay } from "@/lib/calendar";
 import { kindBadgeStyle } from "@/lib/constants";
 import { addDaysIso, daysBetween, formatDay } from "@/lib/dates";
 import { deliverableStatus, type DeliverableStatus } from "@/lib/report";
@@ -21,6 +21,8 @@ export interface CalendarTask {
   title: string;
   /** Fecha límite (YYYY-MM-DD). */
   due: string;
+  /** Fecha de inicio (solo si el proyecto la tiene activada): con inicio anterior a la fecha límite se dibuja como rango. */
+  start: string | null;
   projectId: string;
   projectName: string;
   kind: { name: string; color: string };
@@ -65,6 +67,8 @@ interface Props {
 const MAX_CHIPS = 3;
 /** Bandas de entregable visibles por semana. */
 const MAX_BANDS = 3;
+/** Bandas de tareas con rango visibles por semana. */
+const MAX_RANGES = 4;
 
 const STATUS_STYLE: Record<DeliverableStatus, string> = {
   Completado: "border-green-500/60 bg-green-100 text-green-900 dark:bg-green-950/60 dark:text-green-200",
@@ -142,6 +146,19 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
     for (const [day, list] of map) map.set(day, [...list].sort((a, b) => Number(a.done) - Number(b.done)));
     return map;
   }, [items]);
+
+  // Las tareas con rango se dibujan como banda y no como chip (no se arrastran: su fecha límite se cambia en la tarea).
+  const ranged = useMemo(() => items.filter((x) => isRange(x.start, x.due)), [items]);
+  const rangedById = useMemo(() => new Map(ranged.map((x) => [x.id, x])), [ranged]);
+  const chipsByDay = useMemo(() => {
+    if (!ranged.length) return byDay;
+    const map = new Map<string, typeof items>();
+    for (const [day, list] of byDay) {
+      const rest = list.filter((x) => !rangedById.has(x.id));
+      if (rest.length) map.set(day, rest);
+    }
+    return map;
+  }, [byDay, ranged.length, rangedById]);
 
   // Entregables con su estado; los terminados desaparecen con «ocultar terminadas».
   const dels = useMemo(
@@ -309,6 +326,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
   const total = items.length;
   const empty = total === 0 && dels.length === 0;
   const mobileWeeks = groupWeeks(weeks, (iso) => byDay.has(iso) || delByDay.has(iso));
+  const shortDay = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString(locale, { day: "numeric", month: "short", timeZone: "UTC" });
   const weekLabel = (start: string, end: string) => {
     const f = (iso: string, withMonth: boolean) => new Date(`${iso}T00:00:00Z`).toLocaleDateString(locale, withMonth ? { day: "numeric", month: "short", timeZone: "UTC" } : { day: "numeric", timeZone: "UTC" });
     return t("Semana del {from} al {to}", { from: f(start, start.slice(0, 7) !== end.slice(0, 7)), to: f(end, true) });
@@ -435,6 +453,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
           </div>
           {weeks.map((week) => {
             const bands = bandsForWeek(week.map((d) => d.iso), dels.map((d) => ({ id: d.id, dueDate: d.due })));
+            const rangeBands = ranged.length ? rangeBandsForWeek(week.map((d) => d.iso), ranged.map((x) => ({ id: x.id, start: x.start!, due: x.due }))) : [];
             return (
               <div key={week[0]!.iso} className="border-b border-slate-200 last:border-b-0 dark:border-slate-800">
                 {bands.length > 0 && (
@@ -465,9 +484,34 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
                     {bands.length > MAX_BANDS && <span className="col-span-7 px-1 text-[11px] text-slate-500">{t("+{n} entregables más", { n: bands.length - MAX_BANDS })}</span>}
                   </div>
                 )}
+                {rangeBands.length > 0 && (
+                  <div className="grid grid-cols-7 gap-y-0.5 px-0.5 pt-1" aria-label={t("Tareas con rango de fechas")}>
+                    {rangeBands.slice(0, MAX_RANGES).map((b) => {
+                      const task = rangedById.get(b.id)!;
+                      return (
+                        <Link
+                          key={b.id}
+                          href={`/p/${task.projectId}?task=${task.id}`}
+                          style={{ gridColumn: `${b.colStart} / ${b.colEnd + 1}`, ...kindBadgeStyle(task.kind.color) }}
+                          title={`${task.title} · ${task.kind.name}${showProject ? ` · ${task.projectName}` : ""} · ${shortDay(task.start!)} → ${shortDay(task.due)}`}
+                          className={cn(
+                            "kind-badge flex h-5 min-w-0 items-center gap-1 overflow-hidden px-1.5 text-xs leading-5 hover:brightness-95",
+                            b.continuesLeft ? "rounded-l-none" : "rounded-l",
+                            b.endsHere ? "rounded-r" : "rounded-r-none",
+                            task.done && "opacity-55 line-through",
+                          )}
+                        >
+                          {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" aria-label={task.projectName}>{initials(task.projectName)}</span>}
+                          <span className="truncate">{task.title}</span>
+                        </Link>
+                      );
+                    })}
+                    {rangeBands.length > MAX_RANGES && <span className="col-span-7 px-1 text-[11px] text-slate-500">{t("+{n} tareas con rango más", { n: rangeBands.length - MAX_RANGES })}</span>}
+                  </div>
+                )}
                 <div className="grid grid-cols-7">
                   {week.map((day, i) => {
-                    const list = byDay.get(day.iso) ?? [];
+                    const list = chipsByDay.get(day.iso) ?? [];
                     const shown = list.length > MAX_CHIPS ? list.slice(0, MAX_CHIPS - 1) : list;
                     const hidden = list.length - shown.length;
                     const isToday = day.iso === today;
@@ -574,6 +618,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
                           className={cn("kind-badge flex min-w-0 items-center gap-1.5 rounded px-2 py-1.5 text-sm", task.done && "opacity-55 line-through")}
                         >
                           <span className="min-w-0 flex-1 truncate">{task.title}</span>
+                          {isRange(task.start, task.due) && <span className="shrink-0 text-xs tabular-nums opacity-80">{shortDay(task.start!)} → {shortDay(task.due)}</span>}
                           {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" title={task.projectName} aria-label={task.projectName}>{initials(task.projectName)}</span>}
                         </Link>
                       </li>

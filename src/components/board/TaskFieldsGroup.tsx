@@ -89,12 +89,6 @@ export function TaskFieldsGroup({
             }} />
           </div>
         )}
-        {has("externalUrl") && (
-          <div className="col-span-2 min-w-0">
-            <label className="label" htmlFor={`${uid}-url`}>{t("Enlace de referencia")}</label>
-            <input id={`${uid}-url`} type="url" inputMode="url" className="input py-1" placeholder="https://" value={value.externalUrl} maxLength={2000} onChange={(e) => onChange({ externalUrl: e.target.value })} />
-          </div>
-        )}
       </div>
       {error && <p className="mt-1.5 text-xs text-red-600 dark:text-red-400" role="alert">{error}</p>}
     </fieldset>
