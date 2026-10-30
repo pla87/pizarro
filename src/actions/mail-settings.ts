@@ -8,7 +8,7 @@ import { logEvent } from "@/lib/log";
 import { loadMailConfig, saveMailSettings as persist } from "@/lib/mail-config";
 import { sendMail } from "@/lib/mail";
 import { envMailConfig, sanitizeSmtpError, validateMailSettings, type MailSettingsInput } from "@/lib/mail-settings-core";
-import { maskEmail } from "@/lib/mask-email";
+import { maskEmail, maskEmailsIn } from "@/lib/mask-email";
 import { rateLimit } from "@/lib/rate-limit";
 import { requireAdmin } from "@/lib/session";
 import { getT } from "@/i18n/server";
@@ -63,8 +63,9 @@ export async function sendMailTest() {
       });
     } catch (err) {
       const message = sanitizeSmtpError(err, [config.pass, config.user]);
-      logEvent({ level: "warn", category: "system", action: "settings.mailTestFailed", message: `Falló el email de prueba: ${message}`, userId: admin.id, userName: admin.name });
-      throw new AppError(`${t("No se pudo enviar el email de prueba.")} ${message}`);
+      logEvent({ level: "warn", category: "system", action: "settings.mailTestFailed", message: `Falló el email de prueba: ${maskEmailsIn(message)}`, userId: admin.id, userName: admin.name });
+      // Los mensajes internos conocidos se traducen; los del servidor SMTP salen tal cual.
+      throw new AppError(`${t("No se pudo enviar el email de prueba.")} ${t(message)}`);
     }
     describeAction("Envió un email de prueba a {to}", { to: maskEmail(admin.email) });
     return { to: admin.email };

@@ -303,7 +303,14 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
     },
     [overrides, toast, t, today, locale, router],
   );
-  const moveTask = useCallback((task: CalendarTask, to: string) => saveTask(task, { start: overrides[task.id]?.start ?? task.start, due: to }), [saveTask, overrides]);
+  // Un chip (sin rango) se mueve entero: el inicio, si lo tiene, acompaña a la fecha límite.
+  const moveTask = useCallback(
+    (task: CalendarTask, to: string) => {
+      const cur = overrides[task.id] ?? { start: task.start, due: task.due };
+      return saveTask(task, { start: isRange(cur.start, cur.due) ? cur.start : cur.start ? to : null, due: to });
+    },
+    [saveTask, overrides],
+  );
 
   const saveDeliverable = useCallback(
     async (d: CalendarDeliverable, to: string) => {
@@ -363,7 +370,8 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
   useEffect(() => {
     if (!openDay) return;
     const onDown = (e: PointerEvent) => {
-      if (!(e.target as HTMLElement).closest?.("[data-day-popover]")) setOpenDay(null);
+      // Los botones «+N más» alternan el panel por su cuenta (si no, cerrar y reabrir en el mismo clic).
+      if (!(e.target as HTMLElement).closest?.("[data-day-popover], [data-day-toggle]")) setOpenDay(null);
     };
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpenDay(null);
     document.addEventListener("pointerdown", onDown);
@@ -519,8 +527,8 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
   const total = items.length;
   const empty = total === 0 && dels.length === 0;
   // Móvil: una tarea con rango que termina después del mes se muestra en su día de inicio (o el 1 si empezó antes).
-  const gridEnd = weeks[weeks.length - 1]![6]!.iso;
-  const mobileByDay = groupByDay(items, (x) => (isRange(x.start, x.due) && x.due > gridEnd ? (x.start! < `${month}-01` ? `${month}-01` : x.start!) : x.due));
+  const monthEnd = `${month}-31`; // cota de cadena: mayor que cualquier día del mes y menor que el 1 del siguiente
+  const mobileByDay = groupByDay(items, (x) => (isRange(x.start, x.due) && x.due > monthEnd ? (x.start! < `${month}-01` ? `${month}-01` : x.start!) : x.due));
   const mobileWeeks = groupWeeks(weeks, (iso) => mobileByDay.has(iso) || delByDay.has(iso));
   const mobileEmpty = !empty && mobileWeeks.length === 0;
   const shortDay = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString(locale, { day: "numeric", month: "short", timeZone: "UTC" });
@@ -687,7 +695,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
                     })}
                     {bands.length > MAX_BANDS && (
                       <div className="relative col-span-7">
-                        <button type="button" onClick={() => setOpenDay(openDay === `d:${week[0]!.iso}` ? null : `d:${week[0]!.iso}`)} aria-expanded={openDay === `d:${week[0]!.iso}`} className="rounded px-1 text-[11px] font-medium text-brand-700 hover:bg-slate-100 dark:text-brand-300 dark:hover:bg-slate-800">
+                        <button type="button" data-day-toggle onClick={() => setOpenDay(openDay === `d:${week[0]!.iso}` ? null : `d:${week[0]!.iso}`)} aria-expanded={openDay === `d:${week[0]!.iso}`} className="rounded px-1 text-[11px] font-medium text-brand-700 hover:bg-slate-100 dark:text-brand-300 dark:hover:bg-slate-800">
                           {t("+{n} entregables más", { n: bands.length - MAX_BANDS })}
                         </button>
                         {openDay === `d:${week[0]!.iso}` && (
@@ -741,7 +749,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
                     })}
                     {rangeBands.length > MAX_RANGES && (
                       <div className="relative col-span-7">
-                        <button type="button" onClick={() => setOpenDay(openDay === `r:${week[0]!.iso}` ? null : `r:${week[0]!.iso}`)} aria-expanded={openDay === `r:${week[0]!.iso}`} className="rounded px-1 text-[11px] font-medium text-brand-700 hover:bg-slate-100 dark:text-brand-300 dark:hover:bg-slate-800">
+                        <button type="button" data-day-toggle onClick={() => setOpenDay(openDay === `r:${week[0]!.iso}` ? null : `r:${week[0]!.iso}`)} aria-expanded={openDay === `r:${week[0]!.iso}`} className="rounded px-1 text-[11px] font-medium text-brand-700 hover:bg-slate-100 dark:text-brand-300 dark:hover:bg-slate-800">
                           {t("+{n} tareas con rango más", { n: rangeBands.length - MAX_RANGES })}
                         </button>
                         {openDay === `r:${week[0]!.iso}` && (
@@ -804,6 +812,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
                           {hidden > 0 && (
                             <button
                               type="button"
+                              data-day-toggle
                               onClick={() => setOpenDay(openDay === day.iso ? null : day.iso)}
                               aria-expanded={openDay === day.iso}
                               className="w-full rounded px-1.5 py-0.5 text-left text-xs font-medium text-brand-700 hover:bg-slate-100 dark:text-brand-300 dark:hover:bg-slate-800"

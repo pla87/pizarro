@@ -1,5 +1,16 @@
 // Traducciones al inglés (server). Clave: texto exacto en español.
 export const server: Record<string, string> = {
+  // Plantillas de release del proyecto y changelog (project-templates.ts, changelog.ts)
+  "Hay columnas con el mismo nombre.": "There are columns with the same name.",
+  "Hay tipos propios con el mismo nombre.": "There are custom types with the same name.",
+  "Hay etiquetas con el mismo nombre.": "There are labels with the same name.",
+  "El título automático es demasiado largo.": "The automatic title is too long.",
+  "El texto inicial es demasiado largo.": "The initial text is too long.",
+  "Una subtarea es demasiado larga.": "A subtask is too long.",
+  "Máximo 500 caracteres.": "Maximum 500 characters.",
+  "Debe haber al menos una columna.": "There must be at least one column.",
+  "Versión SemVer no válida": "Invalid SemVer version",
+  "Fecha YYYY-MM-DD no válida": "Invalid YYYY-MM-DD date",
   // Genéricos (action.ts, errors.ts, session.ts)
   "No se pudo enviar el email de prueba.": "The test email could not be sent.",
   "Envió un email de prueba a {to}": "Sent a test email to {to}",
@@ -298,9 +309,17 @@ export const server: Record<string, string> = {
   "cadencia en la release": "release cadence",
   "Cambió cómo se comparten los documentos de Google": "Changed how Google documents are shared",
   "Un proyecto privado no se puede compartir con todo el dominio.": "A private project cannot be shared with the whole domain.",
-  "Compartir con el dominio requiere configurar GOOGLE_WORKSPACE_DOMAIN en el servidor.": "Sharing with the domain requires GOOGLE_WORKSPACE_DOMAIN to be configured on the server.",
+  "Compartir con el dominio requiere configurar el dominio de Workspace (Administración → Ajustes → Acceso con Google, o GOOGLE_WORKSPACE_DOMAIN en el servidor).": "Sharing with the domain requires the Workspace domain to be set (Administration → Settings → Google sign-in, or GOOGLE_WORKSPACE_DOMAIN on the server).",
   "El destino no puede ser una columna terminada ni otra columna de rutinas.": "The destination cannot be a done column or another Routines column.",
   "Solo las columnas con el rol «Rutinas» tienen destino de la siguiente aparición.": "Only columns with the “Routines” role have a next occurrence destination.",
   "Cambió el destino de la siguiente aparición de la columna «{name}»": "Changed the next occurrence destination of column “{name}”",
   "Máximo 20 plantillas de este tipo en el proyecto.": "Maximum 20 templates of this type in the project.",
+  "Escribe la contraseña de nuevo al cambiar de servidor o usuario": "Enter the password again when you change the server or user",
+  "Error desconocido": "Unknown error",
+  "Google está configurado en el servidor (variables GOOGLE_*) y no se puede cambiar aquí.": "Google is configured on the server (GOOGLE_* variables) and cannot be changed here.",
+  "El ID de cliente de Google no es válido.": "The Google client ID is not valid.",
+  "El dominio de Workspace no es válido (por ejemplo empresa.com).": "The Workspace domain is not valid (for example company.com).",
+  "El secreto de cliente no es válido.": "The client secret is not valid.",
+  "Escribe el secreto de nuevo al cambiar el ID de cliente": "Enter the secret again when you change the client ID",
+  "Falta el secreto de cliente de Google.": "The Google client secret is missing.",
 };

@@ -3,12 +3,13 @@
 import type { Editor } from "@tiptap/core";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { Markdown } from "@tiptap/markdown";
-import StarterKit from "@tiptap/starter-kit";
-import { AtSign, Bold, FileSpreadsheet, FileText, Heading2, Heading3, Italic, List, ListOrdered, Pilcrow, Strikethrough, Underline } from "lucide-react";
-import { createElement, useEffect, useRef, useState } from "react";
+import { AtSign, Bold, Check, Code, Code2, FileSpreadsheet, FileText, Heading2, Heading3, IndentDecrease, IndentIncrease, Italic, Link2, List, ListChecks, ListOrdered, Minus, Pilcrow, Quote, Strikethrough, Underline, Unlink, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/i18n/client";
 import { ListDeleteFix } from "@/lib/editor-keys";
+import { formatExtensions } from "@/lib/editor-extensions";
+import { safeMarkdownUrl } from "@/lib/safe-url";
 import { MentionChip } from "@/lib/editor-mention";
 import { normalizeEditorMarkdown } from "@/lib/markdown-entities";
 import { COPY_MARKER } from "@/lib/markdown-copy";
@@ -17,6 +18,7 @@ import type { UserOption } from "@/lib/types";
 import { Avatar } from "./Avatar";
 import { cn } from "./cn";
 import { registerDragEditor } from "./dragMove";
+import { FormatToolbar, type FormatItems } from "./FormatToolbar";
 import type { MentionCommand } from "./MentionTextarea";
 
 type Option =
@@ -52,6 +54,13 @@ interface Props {
   onCommand?: (command: MentionCommand) => void;
 }
 
+/** Sangra (1) o desangra (-1) el elemento de lista o de tareas bajo el cursor; fuera de una lista no hace nada. */
+function indent(editor: Editor, direction: 1 | -1) {
+  const chain = editor.chain().focus();
+  const type = editor.isActive("taskItem") ? "taskItem" : "listItem";
+  (direction === 1 ? chain.sinkListItem(type) : chain.liftListItem(type)).run();
+}
+
 /** Editor con barra de formato (TipTap). Lee y guarda siempre Markdown. */
 export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeholder, autoFocus, className, users, onCommand }: Props) {
   const t = useT();
@@ -69,6 +78,8 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
     mentionData.current = { users, onCommand };
   });
   const [popup, setPopup] = useState<Popup | null>(null);
+  // Barra del enlace (dirección): se abre con el botón o con Ctrl+K.
+  const [linkUrl, setLinkUrl] = useState<string | null>(null);
   // Espejo síncrono del popup para el manejo de teclado y clic.
   const popupRef = useRef<{ popup: Popup; run: (o: Option) => void } | null>(null);
 
@@ -76,8 +87,7 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
     immediatelyRender: false,
     autofocus: autoFocus ? "end" : false,
     extensions: [
-      // El subrayado ya viene en StarterKit y se serializa como ++texto++.
-      StarterKit.configure({ heading: { levels: [2, 3] }, link: { openOnClick: false } }),
+      ...formatExtensions(),
       Markdown,
       ListDeleteFix,
       // Los refs solo se leen dentro de callbacks (nunca durante el render).
@@ -218,23 +228,55 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
       p: (ed?.isActive("paragraph") && !ed.isActive("bulletList") && !ed.isActive("orderedList")) ?? false,
       ul: ed?.isActive("bulletList") ?? false,
       ol: ed?.isActive("orderedList") ?? false,
+      task: ed?.isActive("taskList") ?? false,
+      quote: ed?.isActive("blockquote") ?? false,
+      code: ed?.isActive("code") ?? false,
+      codeBlock: ed?.isActive("codeBlock") ?? false,
+      link: ed?.isActive("link") ?? false,
+      inList: (ed?.isActive("listItem") || ed?.isActive("taskItem")) ?? false,
     }),
   });
 
-  const buttons = editor
-    ? ([
-        ["Negrita (Ctrl+B)", Bold, active?.bold, () => editor.chain().focus().toggleBold().run()],
-        ["Cursiva (Ctrl+I)", Italic, active?.italic, () => editor.chain().focus().toggleItalic().run()],
-        ["Subrayado (Ctrl+U)", Underline, active?.underline, () => editor.chain().focus().toggleUnderline().run()],
-        ["Tachado", Strikethrough, active?.strike, () => editor.chain().focus().toggleStrike().run()],
+  const openLink = () => {
+    if (!editor) return;
+    setLinkUrl((editor.getAttributes("link").href as string | undefined) ?? "");
+  };
+  const applyLink = () => {
+    if (!editor || linkUrl === null) return;
+    const raw = linkUrl.trim();
+    // Misma lista blanca de direcciones que el render: lo que no pasa se descarta en vez de guardarse inservible.
+    const href = raw ? safeMarkdownUrl(/^[a-z][a-z0-9+.-]*:/i.test(raw) || raw.startsWith("/") || raw.startsWith("#") ? raw : `https://${raw}`) : "";
+    if (!href) editor.chain().focus().unsetLink().run();
+    // Sin texto seleccionado (y fuera de un enlace) se inserta la propia dirección como texto del enlace.
+    else if (editor.state.selection.empty && !editor.isActive("link")) editor.chain().focus().insertContent({ type: "text", text: href, marks: [{ type: "link", attrs: { href } }] }).run();
+    else editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
+    setLinkUrl(null);
+  };
+
+  const items: FormatItems = editor
+    ? [
+        { title: "Negrita (Ctrl+B)", icon: Bold, pressed: active?.bold, run: () => editor.chain().focus().toggleBold().run() },
+        { title: "Cursiva (Ctrl+I)", icon: Italic, pressed: active?.italic, run: () => editor.chain().focus().toggleItalic().run() },
+        { title: "Subrayado (Ctrl+U)", icon: Underline, pressed: active?.underline, secondary: true, run: () => editor.chain().focus().toggleUnderline().run() },
+        { title: "Tachado", icon: Strikethrough, pressed: active?.strike, secondary: true, run: () => editor.chain().focus().toggleStrike().run() },
         null,
-        ["Título", Heading2, active?.h2, () => editor.chain().focus().toggleHeading({ level: 2 }).run()],
-        ["Subtítulo", Heading3, active?.h3, () => editor.chain().focus().toggleHeading({ level: 3 }).run()],
-        ["Texto normal", Pilcrow, active?.p, () => editor.chain().focus().setParagraph().run()],
+        { title: "Título", icon: Heading2, pressed: active?.h2, run: () => editor.chain().focus().toggleHeading({ level: 2 }).run() },
+        { title: "Subtítulo", icon: Heading3, pressed: active?.h3, secondary: true, run: () => editor.chain().focus().toggleHeading({ level: 3 }).run() },
+        { title: "Texto normal", icon: Pilcrow, pressed: active?.p, secondary: true, run: () => editor.chain().focus().setParagraph().run() },
         null,
-        ["Lista", List, active?.ul, () => editor.chain().focus().toggleBulletList().run()],
-        ["Lista numerada", ListOrdered, active?.ol, () => editor.chain().focus().toggleOrderedList().run()],
-      ] as const)
+        { title: "Lista", icon: List, pressed: active?.ul, run: () => editor.chain().focus().toggleBulletList().run() },
+        { title: "Lista numerada", icon: ListOrdered, pressed: active?.ol, run: () => editor.chain().focus().toggleOrderedList().run() },
+        { title: "Lista de tareas", icon: ListChecks, pressed: active?.task, run: () => editor.chain().focus().toggleTaskList().run() },
+        // Tab y Mayús+Tab hacen lo mismo dentro de una lista; fuera de ella los botones no hacen nada.
+        { title: "Aumentar sangría (Tab)", icon: IndentIncrease, run: () => indent(editor, 1) },
+        { title: "Reducir sangría (Mayús+Tab)", icon: IndentDecrease, run: () => indent(editor, -1) },
+        null,
+        { title: "Cita", icon: Quote, pressed: active?.quote, secondary: true, run: () => editor.chain().focus().toggleBlockquote().run() },
+        { title: "Código", icon: Code, pressed: active?.code, secondary: true, run: () => editor.chain().focus().toggleCode().run() },
+        { title: "Bloque de código", icon: Code2, pressed: active?.codeBlock, secondary: true, run: () => editor.chain().focus().toggleCodeBlock().run() },
+        { title: "Línea horizontal", icon: Minus, secondary: true, run: () => editor.chain().focus().setHorizontalRule().run() },
+        { title: "Enlace (Ctrl+K)", icon: Link2, pressed: active?.link, secondary: true, run: openLink },
+      ]
     : [];
 
   return (
@@ -251,6 +293,19 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
           e.currentTarget.querySelector<HTMLElement>("[role=toolbar] button")?.focus();
           return;
         }
+        if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
+          e.preventDefault();
+          openLink();
+          return;
+        }
+        if (e.key === "Escape" && linkUrl !== null) {
+          // Cierra solo la barra del enlace: no debe llegar al onCancel del contenedor.
+          e.preventDefault();
+          e.stopPropagation();
+          setLinkUrl(null);
+          editorRef.current?.commands.focus();
+          return;
+        }
         if (e.key === "Escape" && handlers.current.onCancel) {
           e.preventDefault();
           handlers.current.onCancel();
@@ -260,50 +315,32 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
         }
       }}
     >
-      <div
-        role="toolbar"
-        aria-label={t("Formato")}
-        className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 p-1 dark:border-slate-800"
-        onKeyDown={(e) => {
-          // Los botones no están en el orden de Tab: se recorren con las flechas (Alt+F10 entra); Tab o Escape vuelven al texto.
-          const items = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
-          const index = items.indexOf(document.activeElement as HTMLButtonElement);
-          if (index < 0) return;
-          if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-            e.preventDefault();
-            items[(index + (e.key === "ArrowRight" ? 1 : -1) + items.length) % items.length]!.focus();
-          } else if (e.key === "Home" || e.key === "End") {
-            e.preventDefault();
-            items[e.key === "Home" ? 0 : items.length - 1]!.focus();
-          } else if (e.key === "Escape" || (e.key === "Tab" && !e.shiftKey)) {
-            e.preventDefault();
-            e.stopPropagation();
-            editorRef.current?.commands.focus();
-          }
-        }}
-      >
-        {buttons.map((b, i) =>
-          b === null ? (
-            <span key={i} className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" aria-hidden />
-          ) : (
-            <button
-              key={b[0]}
-              type="button"
-              title={t(b[0])}
-              aria-label={t(b[0]).replace(/ \(.*\)$/, "")}
-              aria-pressed={Boolean(b[2])}
-              // Fuera del orden de Tab (Título → descripción directo); se alcanzan con Alt+F10 y las flechas, o con el ratón.
-              tabIndex={-1}
-              // mousedown no debe quitar el foco al editor
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={b[3]}
-              className={cn("btn-icon h-7 w-7", b[2] && "bg-brand-50 text-brand-700 dark:bg-brand-500/20 dark:text-brand-100")}
-            >
-              {createElement(b[1], { size: 15 })}
-            </button>
-          ),
-        )}
-      </div>
+      <FormatToolbar items={items} onLeave={() => editorRef.current?.commands.focus()} className="border-b border-slate-200 p-1 dark:border-slate-800" />
+      {linkUrl !== null && (
+        <div className="flex items-center gap-1 border-b border-slate-200 p-1 dark:border-slate-800">
+          <input
+            className="input h-7 min-w-0 flex-1 py-0 text-xs"
+            type="url"
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                e.stopPropagation();
+                applyLink();
+              }
+            }}
+            placeholder="https://"
+            aria-label={t("Dirección del enlace")}
+            autoFocus
+          />
+          <button type="button" className="btn-icon h-7 w-7" onClick={applyLink} title={t("Aplicar enlace")} aria-label={t("Aplicar enlace")}><Check size={15} /></button>
+          {active?.link && (
+            <button type="button" className="btn-icon h-7 w-7" onClick={() => { editor?.chain().focus().extendMarkRange("link").unsetLink().run(); setLinkUrl(null); }} title={t("Quitar enlace")} aria-label={t("Quitar enlace")}><Unlink size={15} /></button>
+          )}
+          <button type="button" className="btn-icon h-7 w-7" onClick={() => { setLinkUrl(null); editor?.commands.focus(); }} title={t("Cancelar")} aria-label={t("Cancelar")}><X size={15} /></button>
+        </div>
+      )}
       <EditorContent editor={editor} />
       {popup && popup.items.length > 0 && typeof document !== "undefined" &&
         createPortal(

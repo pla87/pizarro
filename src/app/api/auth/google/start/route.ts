@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { googleEnabled } from "@/lib/google";
+import { googleConfig, googleWorkspaceDomain } from "@/lib/google-config";
 import { GOOGLE_LOGIN_COOKIE, buildLoginAuthUrl, newPkce, randomToken } from "@/lib/google-id-token";
 import { googleLoginRedirectUri } from "@/lib/google-login";
 import { logEvent } from "@/lib/log";
@@ -31,11 +32,11 @@ export async function GET(req: Request) {
   });
   logEvent({ category: "auth", action: "auth.googleLoginStart", message: "Inicio de «Iniciar sesión con Google»", path: "/api/auth/google/start", ip });
   redirect(buildLoginAuthUrl({
-    clientId: process.env.GOOGLE_CLIENT_ID!,
+    clientId: googleConfig().clientId,
     redirectUri: googleLoginRedirectUri(),
     state,
     nonce,
     challenge: pkce.challenge,
-    domain: process.env.GOOGLE_WORKSPACE_DOMAIN,
+    domain: googleWorkspaceDomain(),
   }));
 }

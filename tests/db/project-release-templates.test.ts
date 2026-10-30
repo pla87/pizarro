@@ -1,7 +1,7 @@
 // Cabeceras y pies de release del proyecto: permisos, orden, topes y datos del diálogo «Generar release».
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeUser, NOT_FOUND } from "./helpers";
+import { db, expectFail, expectOk, loginAs, makeProject, makeUser, NOT_FOUND } from "./helpers";
 import {
   createProjectReleaseTemplate, deleteProjectReleaseTemplate, moveProjectReleaseTemplate, updateProjectReleaseTemplate,
 } from "../../src/actions/project-release-templates";
@@ -13,23 +13,28 @@ import { MAX_RELEASE_TEMPLATES_PER_KIND, MAX_TEMPLATE } from "../../src/lib/cons
 const names = (list: { name: string }[]) => list.map((x) => x.name);
 
 describe("plantillas de release del proyecto", () => {
-  test("permisos: admin en equipo; miembros solo en privados; ajenos no ven ni el proyecto", async () => {
+  test("permisos: cualquier miembro con acceso gestiona; los ajenos no ven ni el proyecto", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const member = await makeUser();
     const outsider = await makeUser();
     const team = await makeProject({ members: [member] });
     const priv = await makeProject({ visibility: "PRIVATE", owner: member, members: [member] });
 
-    // Equipo: un miembro no administrador no gestiona los ajustes del proyecto.
+    // Equipo: un miembro no administrador también gestiona las plantillas del proyecto.
     await loginAs(member);
-    expectFail(await createProjectReleaseTemplate(team.project.id, "HEADER", { name: "A", content: "x" }), FORBIDDEN);
-    await loginAs(admin);
     const tpl = expectOk(await createProjectReleaseTemplate(team.project.id, "HEADER", { name: "A", content: "x" }));
+    expectOk(await updateProjectReleaseTemplate(tpl.id, { name: "B", content: "y" }));
+    assert.equal((await db.projectReleaseTemplate.findUniqueOrThrow({ where: { id: tpl.id } })).name, "B");
+    await loginAs(admin);
+    expectOk(await moveProjectReleaseTemplate(tpl.id, 1));
+    await loginAs(outsider);
+    expectFail(await createProjectReleaseTemplate(team.project.id, "HEADER", { name: "N", content: "" }), NOT_FOUND);
+    expectFail(await updateProjectReleaseTemplate(tpl.id, { name: "N", content: "" }), NOT_FOUND);
+    expectFail(await moveProjectReleaseTemplate(tpl.id, 1), NOT_FOUND);
+    expectFail(await deleteProjectReleaseTemplate(tpl.id), NOT_FOUND);
+    assert.equal((await db.projectReleaseTemplate.findUniqueOrThrow({ where: { id: tpl.id } })).name, "B");
     await loginAs(member);
-    expectFail(await updateProjectReleaseTemplate(tpl.id, { name: "B", content: "y" }), FORBIDDEN);
-    expectFail(await moveProjectReleaseTemplate(tpl.id, 1), FORBIDDEN);
-    expectFail(await deleteProjectReleaseTemplate(tpl.id), FORBIDDEN);
-    assert.equal((await db.projectReleaseTemplate.findUniqueOrThrow({ where: { id: tpl.id } })).name, "A");
+    expectOk(await deleteProjectReleaseTemplate(tpl.id));
 
     // Privado: gestiona cualquier miembro; un administrador ajeno ni siquiera lo ve.
     const own = expectOk(await createProjectReleaseTemplate(priv.project.id, "FOOTER", { name: "Pie", content: "- [ ] ok" }));
@@ -37,9 +42,6 @@ describe("plantillas de release del proyecto", () => {
     await loginAs(admin);
     expectFail(await createProjectReleaseTemplate(priv.project.id, "FOOTER", { name: "N", content: "" }), NOT_FOUND);
     expectFail(await deleteProjectReleaseTemplate(own.id), NOT_FOUND);
-    await loginAs(outsider);
-    expectFail(await createProjectReleaseTemplate(team.project.id, "HEADER", { name: "N", content: "" }), NOT_FOUND);
-    expectFail(await updateProjectReleaseTemplate(tpl.id, { name: "N", content: "" }), NOT_FOUND);
     await loginAs(member);
     expectOk(await deleteProjectReleaseTemplate(own.id));
     assert.equal(await db.projectReleaseTemplate.count({ where: { projectId: priv.project.id } }), 0);

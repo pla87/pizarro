@@ -55,3 +55,14 @@ test("nunca se ocultan todos los tipos si no hay propios", () => {
   const withOwn = templateInputSchema.parse({ ...base, kinds: [{ name: "Bug", color: "#ff0000" }], hiddenGeneralKinds: ["Mejora", "Tarea"] });
   assert.equal(buildTemplateApplication(withOwn, [{ id: "a", name: "Mejora" }, { id: "b", name: "Tarea" }]).hiddenKindIds.length, 2);
 });
+
+test("plantillas de release: por defecto vacías, topes por tipo y posiciones por tipo", () => {
+  assert.deepEqual(templateInputSchema.parse(base).releaseTemplates, []);
+  const mk = (kind: "HEADER" | "FOOTER", n: number) => Array.from({ length: n }, (_, i) => ({ kind, name: `R${i}`, content: "- [ ] x" }));
+  assert.equal(templateInputSchema.safeParse({ ...base, releaseTemplates: [...mk("HEADER", 20), ...mk("FOOTER", 20)] }).success, true);
+  assert.equal(templateInputSchema.safeParse({ ...base, releaseTemplates: mk("HEADER", 21) }).success, false);
+  assert.equal(templateInputSchema.safeParse({ ...base, releaseTemplates: [{ kind: "OTRO", name: "x", content: "" }] }).success, false);
+  const t = templateInputSchema.parse({ ...base, releaseTemplates: [{ kind: "FOOTER", name: "F1", content: "" }, { kind: "HEADER", name: "H1", content: "a" }, { kind: "HEADER", name: "H2", content: "b" }] });
+  const app = buildTemplateApplication(t, []);
+  assert.deepEqual(app.releaseTemplates.map((r) => [r.kind, r.name, r.position]), [["HEADER", "H1", POSITION_STEP], ["HEADER", "H2", 2 * POSITION_STEP], ["FOOTER", "F1", POSITION_STEP]]);
+});

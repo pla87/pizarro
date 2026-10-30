@@ -2,6 +2,34 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.33.0 — 2026-10-30 16:33
+
+Email y acceso con Google configurables desde Pizarro, más formato Markdown y plantillas de release para todo el proyecto
+
+### Nuevas funcionalidades
+
+- Acceso con Google configurable desde Administración → Ajustes (ID y secreto de cliente cifrado, dominio opcional, URIs para copiar y pasos en Google Cloud), sin variables del servidor.
+- Avisos por email más claros: «Gmail de un administrador (uso familiar)» o «Servicio de correo de la empresa» con proveedores ya preparados (Workspace, Brevo, Mailchimp/Mandrill, SendGrid, Amazon SES, Mailgun, Microsoft 365) y botón para desactivar el envío.
+- Barra de formato en todas las descripciones, también en modo Markdown: aumentar y reducir sangría (también con Tab y Mayús+Tab en listas), lista de tareas, cita, código, bloque de código, línea separadora y enlace (Ctrl+K).
+- Las plantillas de proyecto de Administración incluyen cabeceras y pies de release.
+
+### Mejoras
+
+- Cualquier miembro del proyecto puede gestionar sus plantillas de release.
+- Al cambiar de proyecto en los ajustes se mantiene la pestaña.
+
+### Correcciones
+
+- Las cabeceras y pies «Del proyecto» elegidos al generar una release ya no salen vacíos.
+- Mover en el calendario una tarea de un solo día hacia atrás ya no falla.
+- Los botones «+N» del calendario se cierran al volver a pulsarlos; en móvil se ven los rangos que acaban en los días del mes siguiente.
+- Al cambiar servidor o usuario del correo, o el ID de cliente de Google, hay que volver a escribir la contraseña o el secreto.
+- Más mensajes de error traducidos al inglés.
+
+### Cambios técnicos / DB
+
+- Migración: ProjectTemplate.releaseTemplates. Secreto de Google cifrado en AppState (rotación de claves y diagnóstico). Comprobación de traducciones también para errores del servidor.
+
 ## v1.32.0 — 2026-10-30 14:18
 
 Email configurable desde Pizarro, ajustes del proyecto en pestañas con plantillas de release propias y arreglos del tablero

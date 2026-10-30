@@ -7,6 +7,7 @@ import { applyNewPassword } from "@/lib/account";
 import { runAction } from "@/lib/action";
 import { sendEmailChangedMail, sendPasswordResetMail } from "@/lib/auth-mail";
 import { passwordLoginAllowed } from "@/lib/auth-policy";
+import { googlePolicyEnv } from "@/lib/google-config";
 import { consumeToken, findUsableToken, issueAuthToken } from "@/lib/auth-token";
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
@@ -64,7 +65,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   }
 
   // Con «solo Google» la contraseña correcta tampoco abre la puerta (salvo el acceso de emergencia de los administradores).
-  if (!passwordLoginAllowed(user.role)) {
+  if (!passwordLoginAllowed(user.role, googlePolicyEnv())) {
     logEvent({
       level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión con contraseña rechazado (${shownEmail}): solo se admite Google`,
       userId: user.id, userName: user.name, path: "/login", ip, details: { email: shownEmail, reason: "google_only" },

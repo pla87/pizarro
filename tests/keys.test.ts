@@ -179,7 +179,7 @@ describe("comando de rotación (rotate-keys)", () => {
   const env = { SESSION_SECRET: SESSION, ENCRYPTION_KEY: ENC2, ENCRYPTION_KEY_PREVIOUS: ENC };
 
   test("cubre todos los campos cifrados del esquema", () => {
-    assert.deepEqual(ENCRYPTED_FIELDS.map((f) => `${f.model}.${f.field}`), ["user.totpSecretEnc", "loginChallenge.pendingSecretEnc", "googleAccount.refreshTokenEnc", "googleAccount.accessTokenEnc", "appState.value"]);
+    assert.deepEqual(ENCRYPTED_FIELDS.map((f) => `${f.model}.${f.field}`), ["user.totpSecretEnc", "loginChallenge.pendingSecretEnc", "googleAccount.refreshTokenEnc", "googleAccount.accessTokenEnc", "appState.value", "appState.value"]);
   });
 
   test("re-cifra lo antiguo con la clave actual, deja lo que ya está al día y cuenta lo ilegible", async () => {
@@ -194,7 +194,7 @@ describe("comando de rotación (rotate-keys)", () => {
       loginChallenge: [],
       googleAccount: [{ id: "g1", refreshTokenEnc: legacyEncrypt("R1", ENC), accessTokenEnc: keyring.encryptSecret("A1", prevEnv) }],
       // La contraseña SMTP guardada en Ajustes; las demás filas de AppState no se tocan.
-      appState: [{ key: "mail.passEnc", value: keyring.encryptSecret("smtp-pass", prevEnv) }, { key: "mail.host", value: "smtp.example.com" }],
+      appState: [{ key: "mail.passEnc", value: keyring.encryptSecret("smtp-pass", prevEnv) }, { key: "google.clientSecretEnc", value: keyring.encryptSecret("g-secret", prevEnv) }, { key: "mail.host", value: "smtp.example.com" }],
     };
     const u3Before = data.user[2]!.totpSecretEnc;
     const db = fakeDb(data);
@@ -205,7 +205,7 @@ describe("comando de rotación (rotate-keys)", () => {
     assert.ok(data.user[1]!.totpSecretEnc!.startsWith("v1."));
 
     const counts = await rotateEncryptedSecrets(db, { env });
-    assert.deepEqual(counts.map((c) => [c.total, c.current, c.rotated, c.unreadable]), [[4, 1, 2, 1], [0, 0, 0, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0]]);
+    assert.deepEqual(counts.map((c) => [c.total, c.current, c.rotated, c.unreadable]), [[4, 1, 2, 1], [0, 0, 0, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0]]);
     // Todo lo legible queda con la clave nueva y se abre SIN la anterior.
     const onlyNew = { SESSION_SECRET: SESSION, ENCRYPTION_KEY: ENC2 };
     assert.equal(keyring.decryptSecret(data.user[0]!.totpSecretEnc!, onlyNew), "T1");
@@ -214,10 +214,11 @@ describe("comando de rotación (rotate-keys)", () => {
     assert.equal(keyring.decryptSecret(data.googleAccount[0]!.refreshTokenEnc!, onlyNew), "R1");
     assert.equal(keyring.decryptSecret(data.googleAccount[0]!.accessTokenEnc!, onlyNew), "A1");
     assert.equal(keyring.decryptSecret(data.appState[0]!.value!, onlyNew), "smtp-pass");
-    assert.equal(data.appState[1]!.value, "smtp.example.com");
+    assert.equal(keyring.decryptSecret(data.appState[1]!.value!, onlyNew), "g-secret");
+    assert.equal(data.appState[2]!.value, "smtp.example.com");
     // Repetirlo no cambia nada.
     const again = await rotateEncryptedSecrets(db, { env: onlyNew });
-    assert.deepEqual(again.map((c) => c.rotated), [0, 0, 0, 0, 0]);
+    assert.deepEqual(again.map((c) => c.rotated), [0, 0, 0, 0, 0, 0]);
   });
 
   test("si la app cambia el valor mientras tanto, no se pisa", async () => {

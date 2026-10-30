@@ -205,7 +205,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
                 </label>
               );
             })}
-            {!google.domain && <p className="text-xs text-slate-500">{t("Las opciones de dominio no están disponibles: el servidor no tiene configurado GOOGLE_WORKSPACE_DOMAIN.")}</p>}
+            {!google.domain && <p className="text-xs text-slate-500">{t("Las opciones de dominio no están disponibles: falta el dominio de Workspace en Administración → Ajustes → Acceso con Google.")}</p>}
             {isPrivateProject && <p className="text-xs text-slate-500">{t("Un proyecto privado nunca se comparte con todo el dominio.")}</p>}
             <p className="text-xs text-slate-500">{t("Si el documento no se puede compartir, se crea igualmente y se avisa en la tarea de que solo lo ve quien lo crea.")}</p>
             <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
@@ -361,12 +361,10 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
 
       {tab === "releases" && (
         <>
-      {canManage && (
         <Section id="plantillas" title="Plantillas de release notes del proyecto" description="Cabeceras y pies compartidos por todo el equipo. En «Generar release» salen después de las plantillas de cada persona, en este orden, bajo «Del proyecto». Admiten Markdown.">
-          <ReleaseTemplateList showDefault={false} actions={PROJECT_TEMPLATE_ACTIONS(project.id)} kind="HEADER" title={t("Cabeceras")} initial={releaseTemplates.headers} placeholder={t("Ej.: instrucciones de contexto para una IA.\n\n> Resume estos cambios para el equipo de negocio.")} />
-          <ReleaseTemplateList showDefault={false} actions={PROJECT_TEMPLATE_ACTIONS(project.id)} kind="FOOTER" title={t("Pies")} initial={releaseTemplates.footers} placeholder={t("Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción")} />
+          <ReleaseTemplateList editorMode={editorMode} showDefault={false} actions={PROJECT_TEMPLATE_ACTIONS(project.id)} kind="HEADER" title={t("Cabeceras")} initial={releaseTemplates.headers} placeholder={t("Ej.: instrucciones de contexto para una IA.\n\n> Resume estos cambios para el equipo de negocio.")} />
+          <ReleaseTemplateList editorMode={editorMode} showDefault={false} actions={PROJECT_TEMPLATE_ACTIONS(project.id)} kind="FOOTER" title={t("Pies")} initial={releaseTemplates.footers} placeholder={t("Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción")} />
         </Section>
-      )}
 
         </>
       )}

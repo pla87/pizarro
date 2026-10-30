@@ -49,6 +49,7 @@ const contentOf = (data: TemplateData) => ({
   hiddenGeneralKinds: data.hiddenGeneralKinds,
   hideAllGeneralKinds: data.hideAllGeneralKinds,
   labels: data.labels,
+  releaseTemplates: data.releaseTemplates,
 });
 
 /** Anota la huella del contenido canónico aplicado a la plantilla de serie `key`. */

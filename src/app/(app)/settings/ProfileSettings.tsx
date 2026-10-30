@@ -91,8 +91,8 @@ export function ProfileSettings(props: Props) {
           <p className="mt-0.5 text-sm text-slate-500">
             {t("Puedes tener varias cabeceras y varios pies. Al generar una release eliges cuáles usar y se insertan en el texto. Admiten Markdown.")}
           </p>
-          <ReleaseTemplateList actions={USER_TEMPLATE_ACTIONS} kind="HEADER" title={t("Cabeceras")} initial={props.templates.headers} placeholder={t("Ej.: instrucciones de contexto para una IA.\n\n> Resume estos cambios para el equipo de negocio.")} />
-          <ReleaseTemplateList actions={USER_TEMPLATE_ACTIONS} kind="FOOTER" title={t("Pies")} initial={props.templates.footers} placeholder={t("Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción")} />
+          <ReleaseTemplateList editorMode={props.editorMode} actions={USER_TEMPLATE_ACTIONS} kind="HEADER" title={t("Cabeceras")} initial={props.templates.headers} placeholder={t("Ej.: instrucciones de contexto para una IA.\n\n> Resume estos cambios para el equipo de negocio.")} />
+          <ReleaseTemplateList editorMode={props.editorMode} actions={USER_TEMPLATE_ACTIONS} kind="FOOTER" title={t("Pies")} initial={props.templates.footers} placeholder={t("Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción")} />
         </section>
       )}
 
@@ -274,7 +274,7 @@ function GoogleSection({ google }: { google: Props["google"] }) {
       )}
       <div className="mt-4">
         {!google.enabled ? (
-          <p className="text-sm text-slate-500">{t("Un administrador debe configurar")} <code>GOOGLE_CLIENT_ID</code> {t("y")} <code>GOOGLE_CLIENT_SECRET</code> {t("en el servidor.")}</p>
+          <p className="text-sm text-slate-500">{t("Un administrador debe configurar el acceso con Google en Administración → Ajustes.")}</p>
         ) : google.email ? (
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm">{t("Conectada como")} <strong>{google.email}</strong></span>

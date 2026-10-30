@@ -22,6 +22,7 @@ import { dateToIso, isoToDate } from "@/lib/dates";
 import type { LabelOption } from "@/lib/types";
 import { revokeProject } from "@/lib/revoke";
 import { GOOGLE_SHARE_MODES, isDomainMode } from "@/lib/google-share";
+import { googleWorkspaceDomain } from "@/lib/google-config";
 import { assertDeliverableCapacity, assertDeliverableCreateRate, assertLabelCapacity, assertLabelCreateRate } from "@/lib/caps";
 
 /** Crea columnas, tipos propios, tipos generales ocultos y etiquetas de una plantilla en el proyecto (dentro de la transacción). */
@@ -32,6 +33,7 @@ async function applyTemplate(tx: Prisma.TransactionClient, projectId: string, te
   if (app.kinds.length) await tx.taskKind.createMany({ data: app.kinds.map((k) => ({ ...k, projectId })) });
   if (app.hiddenKindIds.length) await tx.projectHiddenKind.createMany({ data: app.hiddenKindIds.map((kindId) => ({ projectId, kindId })) });
   if (app.labels.length) await tx.label.createMany({ data: app.labels.map((l) => ({ ...l, projectId })) });
+  if (app.releaseTemplates.length) await tx.projectReleaseTemplate.createMany({ data: app.releaseTemplates.map((r) => ({ ...r, projectId })) });
   if (app.taskFields.length) await tx.project.update({ where: { id: projectId }, data: { taskFields: app.taskFields } });
 }
 
@@ -138,7 +140,7 @@ export async function setGoogleShareMode(projectId: string, mode: string) {
     const project = await findManageableProject(user, projectId);
     if (isDomainMode(parsed)) {
       if (project.isPrivate) throw new AppError("Un proyecto privado no se puede compartir con todo el dominio.");
-      if (!process.env.GOOGLE_WORKSPACE_DOMAIN) throw new AppError("Compartir con el dominio requiere configurar GOOGLE_WORKSPACE_DOMAIN en el servidor.");
+      if (!googleWorkspaceDomain()) throw new AppError("Compartir con el dominio requiere configurar el dominio de Workspace (Administración → Ajustes → Acceso con Google, o GOOGLE_WORKSPACE_DOMAIN en el servidor).");
     }
     await db.project.update({ where: { id: project.id }, data: { googleShareMode: parsed } });
     describeAction("Cambió cómo se comparten los documentos de Google");
@@ -378,7 +380,7 @@ async function findDeliverable(deliverableId: string) {
   const user = await requireUser();
   const d = await db.deliverable.findFirst({
     where: { id: v.id.parse(deliverableId), project: visibleProjectsWhere(user) },
-    select: { id: true, projectId: true },
+    select: { id: true, projectId: true, dueDate: true },
   });
   if (!d) throw notFound();
   noteProject(d.projectId);
@@ -402,9 +404,8 @@ export async function moveDeliverable(deliverableId: string, dueDate: string) {
     const d = await findDeliverable(deliverableId);
     const day = v.dayIso.parse(dueDate);
     if (!day) throw new AppError("Fecha no válida.");
-    const prev = await db.deliverable.findUniqueOrThrow({ where: { id: d.id }, select: { dueDate: true } });
     await db.deliverable.update({ where: { id: d.id }, data: { dueDate: isoToDate(day) } });
-    return { from: dateToIso(prev.dueDate) };
+    return { from: dateToIso(d.dueDate) };
   });
 }
 

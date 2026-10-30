@@ -340,6 +340,16 @@ body {
 .prose-md th, .prose-md td { @apply border border-slate-200 px-2 py-1 dark:border-slate-700; }
 .prose-md hr { @apply my-4 border-slate-200 dark:border-slate-800; }
 .prose-md input[type="checkbox"] { @apply mr-1.5 align-middle; }
+/* Listas de tareas: la de react-markdown (.contains-task-list) y la del editor con barra (TipTap, data-type="taskList"). */
+.prose-md ul.contains-task-list, .prose-md ul[data-type="taskList"] { @apply list-none pl-0; }
+.prose-md ul.contains-task-list ul, .prose-md ul[data-type="taskList"] ul, .prose-md ul.contains-task-list ol, .prose-md ul[data-type="taskList"] ol { @apply pl-5; }
+.prose-md ul.contains-task-list ul.contains-task-list, .prose-md ul[data-type="taskList"] ul[data-type="taskList"] { @apply pl-5; }
+.prose-md ul[data-type="taskList"] > li { @apply flex items-start gap-2; }
+.prose-md ul[data-type="taskList"] > li > label { @apply mt-[0.2rem] shrink-0 select-none; }
+.prose-md ul[data-type="taskList"] > li > label input { @apply m-0 h-4 w-4 cursor-pointer; }
+.prose-md ul[data-type="taskList"] > li > div { @apply min-w-0 flex-1; }
+.prose-md ul[data-type="taskList"] > li > div > p { @apply my-0; }
+.prose-md ul[data-type="taskList"] > li[data-checked="true"] > div { @apply text-slate-500 line-through; }
 .prose-md > :first-child { @apply mt-0; }
 .prose-md .mention-chip { @apply rounded bg-brand-50 px-1 py-0.5 font-medium text-brand-700 dark:bg-brand-500/20 dark:text-brand-100; }
 .prose-md .mention-chip.ProseMirror-selectednode { @apply ring-2 ring-brand-500/50; }

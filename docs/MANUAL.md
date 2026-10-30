@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.32.0"
+version: "v1.33.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.32.0
+**Versión de la aplicación:** v1.33.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -188,7 +188,7 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 
 ### 3.2 Proyectos
 
-**Ajustes del proyecto** se organizan en pestañas (la elegida queda en la dirección, `?tab=`): **General** (nombre, visibilidad y miembros, documentos de Google, borrar), **Tablero** (campos opcionales, entregables, tipos de tarea, etiquetas, columnas), **Adjuntos y límites** (tamaños máximos), **Releases** (plantillas de release del proyecto, ver 3.6) e **Informes** (informe semanal por email). Quien no gestiona el proyecto (un miembro sin rol de admin en un proyecto de equipo) solo ve *Tablero* e *Informes*.
+**Ajustes del proyecto** se organizan en pestañas (la elegida queda en la dirección, `?tab=`): **General** (nombre, visibilidad y miembros, documentos de Google, borrar), **Tablero** (campos opcionales, entregables, tipos de tarea, etiquetas, columnas), **Adjuntos y límites** (tamaños máximos), **Releases** (plantillas de release del proyecto, ver 3.6) e **Informes** (informe semanal por email). Quien no gestiona el proyecto (un miembro sin rol de admin en un proyecto de equipo) ve *Tablero*, *Releases* (solo las plantillas) e *Informes*. Al cambiar de proyecto desde los ajustes se mantiene la pestaña.
 
 - Para cambiar de proyecto, pulsa el **nombre del proyecto** en la parte superior del tablero (o en la barra superior en móvil) y elige otro en el desplegable. También sirve el selector de la barra lateral. Te quedas en la misma página: desde los **ajustes** de un proyecto pasas a los ajustes del otro, desde las **releases** a sus releases (con el texto buscado) y desde el **tablero** a su tablero. La app recuerda el último que abriste: aunque vayas a *Calendario*, *Avisos*, *Mis tareas*, *Mi perfil* u otra página general, el proyecto sigue elegido en el menú, con sus entradas (*Tablero*, *Releases*, *Ajustes del proyecto*, *Archivadas*) para volver directamente.
 - Los administradores crean proyectos desde el selector (**Nuevo proyecto**) y pueden elegir una **plantilla** (ver 3.16) y marcarlo como **privado**; al crearlo se abren primero sus **ajustes** (columnas, tipos, miembros…), con el botón **Ir al tablero** arriba; los proyectos de equipo que crean se añaden solos a sus «Proyectos en los que trabajo». Los demás usuarios también pueden crear proyectos, pero **solo privados** (máximo 100 y 10 creaciones por hora).
@@ -259,7 +259,7 @@ Desde el menú «⋯» de cada columna:
 - **Descartar una tarea nueva:** si cierras *Nueva tarea* (Escape, la X, *Cancelar* o fuera del modal) con algo escrito, se pide confirmación.
 - **Editar:** haz clic en la tarjeta. Los cambios se guardan solos (título y enlace al salir del campo; tipo, color, responsable, etiquetas y columna al cambiarlos).
 - **Copiar y borrar la descripción:** junto al título *Descripción* hay dos iconos discretos (solo si hay texto). **Copiar** lleva la descripción al portapapeles con su formato (al pegarla en Docs, Gmail o en otra tarea de Pizarro se mantienen negritas, listas y títulos) y también como Markdown. **Borrar** la vacía; en una tarea se puede deshacer desde el aviso.
-- **Descripción con formato:** se guarda como Markdown y, cuando no la estás editando, se ve formateada (títulos, negrita, cursiva, subrayado, tachado, listas, enlaces). Hay dos formas de editarla, a elegir en **Mi perfil → Edición de descripciones**:
+- **Descripción con formato:** se guarda como Markdown y, cuando no la estás editando, se ve formateada (títulos, negrita, cursiva, subrayado, tachado, listas, listas de tareas `- [ ]`, citas, código, líneas separadoras, enlaces). Todas las descripciones (tareas, tipos de tarea, plantillas de release) tienen la misma **barra de formato**, también en modo Markdown: negrita, cursiva, subrayado, tachado, títulos, listas, lista de tareas, **aumentar y reducir sangría**, cita, código, bloque de código, línea separadora y enlace (Ctrl/⌘+K). En una lista, **Tab** y **Mayús+Tab** aumentan o reducen la sangría; fuera de una lista, Tab sigue pasando al siguiente campo. Alt+F10 lleva a la barra (flechas para moverse, Esc para volver al texto). En móvil, los formatos menos usados están en **Más formatos**. Hay dos formas de editarla, a elegir en **Mi perfil → Edición de descripciones**:
   - **Con barra de formato** (por defecto): ves el resultado mientras escribes y aplicas **negrita, cursiva, subrayado, tachado, título, subtítulo, texto normal, lista y lista numerada** con botones (o Ctrl+B / I / U). Si pegas texto en Markdown, se convierte en formato, también en el móvil (aunque el teclado lo pegue envuelto en HTML sin formato). **Supr** o **Retroceso** con texto seleccionado borran toda la selección, también cuando abarca varios elementos de una lista. Al escribir `@` aparece la lista de personas para mencionar (y `@docs` / `@sheets`); la mención se ve como una etiqueta.
   - **Markdown:** escribes los símbolos (`**negrita**`, `*cursiva*`, `~~tachado~~`, `++subrayado++`, `# Título`, `- lista`, `1. lista`); al guardar se ve formateado.
   - En ambos modos, Ctrl/⌘+Enter guarda y Escape cancela.
@@ -291,7 +291,7 @@ Desde el menú «⋯» de cada columna:
 
 **Tareas fijas («Siempre en la release»).** Al pie de la columna *Siguiente salto a producción* hay una sección plegable que indica cuántas tareas fijas tiene. Al abrirla, se despliega hacia arriba con esas tareas y el botón **+ Añadir**. Son tareas que se repiten en cada despliegue (por ejemplo, «Generar el PDF de la release»): entran preseleccionadas en cada release (con la marca *fija*), pero **no salen de la columna** al marcarla como desplegada. Solo se añaden al usar **Generar Release** de esa columna, no con *Release con selección*. Para convertir una tarea en fija, arrástrala sobre la sección: si está cerrada se abre al mantenerla encima un momento. También se puede marcar o desmarcar una tarea existente de esa columna con *Fija en la release* en su detalle. Si se mueve a otra columna o se archiva, deja de ser fija. Cada tarea fija lleva un pequeño interruptor **En todas / Cada dos / Cada tres** (del color de la barra de subtareas): con *Cada dos* solo entra preseleccionada en las releases de número par y con *Cada tres* en las múltiplo de 3 (siempre se puede marcar o desmarcar a mano). En el diálogo de generar release, su marca indica cuándo le toca: «fija · Cada tres · ahora», «… en la siguiente» o «… dentro de 2». Cambiarlo se puede deshacer y queda en el historial; al dejar de ser fija vuelve a *En todas*. Las tareas del panel también se pueden **arrastrar fuera** a cualquier columna y posición (en táctil, con su asa): dejan de ser fijas.
 
-1. Prepara tus plantillas en **Mi perfil → Plantillas**. Puedes tener **varias cabeceras** (por ejemplo, «Contexto para IA» o «Para negocio») y **varios pies** (por ejemplo, «Checklist de cierre»), cada uno con su nombre. Se pueden **reordenar**: la primera de cada tipo es la que se propone por defecto en **Generar release**. Además, cada proyecto puede tener **sus propias cabeceras y pies** (*Ajustes del proyecto → Releases*; hasta 20 de cada tipo y 20 000 caracteres cada una; las gestionan los admins, o cualquier miembro en un proyecto privado). En los desplegables de *Generar release* salen **después** de las tuyas, en el orden fijado en el proyecto, agrupadas como *Tuyas* y *Del proyecto*.
+1. Prepara tus plantillas en **Mi perfil → Plantillas**. Puedes tener **varias cabeceras** (por ejemplo, «Contexto para IA» o «Para negocio») y **varios pies** (por ejemplo, «Checklist de cierre»), cada uno con su nombre. Se pueden **reordenar**: la primera de cada tipo es la que se propone por defecto en **Generar release**. Además, cada proyecto puede tener **sus propias cabeceras y pies** (*Ajustes del proyecto → Releases*; hasta 20 de cada tipo y 20 000 caracteres cada una; las gestiona cualquier miembro del proyecto). En los desplegables de *Generar release* salen **después** de las tuyas, en el orden fijado en el proyecto, agrupadas como *Tuyas* y *Del proyecto*.
 2. En el tablero, pulsa **Generar Release** en la columna *Siguiente salto a producción*.
 3. **Paso 1:** revisa el título, elige la **cabecera** y el **pie** (o «Ninguna») y marca las tareas incluidas. Las releases de cada proyecto están **numeradas** (1, 2, 3…). El título propuesto es `Release AAAA-MM-DD · Proyecto`; si ese día ya hubo releases en el proyecto, lleva el número tras la fecha: `Release AAAA-MM-DD (2) · Proyecto`, `(3)`… El título se guarda en el histórico pero **no forma parte del texto** que se copia o descarga. Por defecto están todas las de la columna; si tenías tarjetas seleccionadas, solo esas.
 4. **Paso 2:** se genera el documento: la **cabecera**, **una sección por tipo de tarea** (generales y luego los del proyecto) y el **pie**:
@@ -485,7 +485,7 @@ La entrada **Administración** del menú lateral reúne siete pestañas: **Usuar
 
 **Proyectos:** lista los proyectos de equipo (los privados no aparecen) con los usuarios asignados a cada uno; desde ahí se añaden o quitan usuarios. Los mismos usuarios asignados se gestionan en los ajustes de cada proyecto. Quitar una asignación desasigna las tarjetas de esa persona y corta su conexión en vivo con el proyecto.
 
-**Plantillas de proyecto:** definen las columnas (nombre, orden, rol especial (*Siguiente salto*, *En producción*, *Esperando* o *Planificación semanal*) y si cuentan como terminadas), los tipos de tarea propios (con su automatización, descripción en Markdown y **subtareas predefinidas**), qué tipos generales no usará el proyecto y las etiquetas. **Crear desde un proyecto…** rellena una plantilla a partir de un proyecto existente. Al crear un proyecto se elige la plantilla en *Nuevo proyecto*.
+**Plantillas de proyecto:** definen las columnas (nombre, orden, rol especial (*Siguiente salto*, *En producción*, *Esperando* o *Planificación semanal*) y si cuentan como terminadas), los tipos de tarea propios (con su automatización, descripción en Markdown y **subtareas predefinidas**), qué tipos generales no usará el proyecto, las etiquetas y las **cabeceras y pies de release** del proyecto. **Crear desde un proyecto…** rellena una plantilla a partir de un proyecto existente. Al crear un proyecto se elige la plantilla en *Nuevo proyecto*.
 - Vienen **12 plantillas de serie**: *Vibecoding*, *Tareas familiares*, *Producción audiovisual*, *Negocio*, *Marketing y contenidos*, *Organización de eventos*, *Soporte y atención al cliente*, *Selección de personal*, *Reformas y obras*, *Viajes*, *Estudios o tesis* y *Mudanza*, con sus columnas, tipos y etiquetas. La lista se ordena alfabéticamente.
 - **Ocultar todos los tipos generales:** opción de cada plantilla para que el proyecto nuevo solo use los tipos de la plantilla (por ejemplo, en *Tareas familiares* no salen *Mejora*, *Funcionalidad*, etc.). Está activada en todas las de serie salvo *Vibecoding*. Solo afecta a los proyectos que se creen a partir de ahora; en uno ya creado, desmarca los tipos en *Ajustes del proyecto → Tipos de tarea*.
 - Las de serie se pueden **editar** o **borrar**. En una modificada, **Restablecer** vuelve a su contenido original; **Recuperar plantillas por defecto** recrea las de serie que se hayan borrado. Cuando Pizarro mejora una plantilla de serie, se actualiza sola al desplegar si no la has modificado; si la has cambiado, se respeta tu versión.
@@ -655,19 +655,37 @@ Son opcionales e independientes. La configuración paso a paso está en el `READ
 
 | Integración | Variables | Qué hace cada usuario |
 |---|---|---|
-| Google Docs/Sheets e inicio de sesión | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_WORKSPACE_DOMAIN` (recomendada), `GOOGLE_SHARE_ROLE` (valor por defecto de cada proyecto; se cambia en *Ajustes del proyecto → Documentos de Google*), `AUTH_GOOGLE_ONLY`, `AUTH_ALLOW_ADMIN_PASSWORD` | Conectar su cuenta en *Mi perfil* para Docs/Sheets; el inicio de sesión no requiere conectar nada. |
-| Email | Ninguna: un admin lo configura en *Administración → Ajustes → Envío de emails*. Opcionalmente `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, que tienen prioridad (la sección queda de solo lectura). | Nada (activado por defecto; se puede desactivar). Con email se activan invitaciones, «¿Olvidaste tu contraseña?», confirmaciones y avisos. |
+| Google Docs/Sheets e inicio de sesión | Ninguna: un admin lo configura en *Administración → Ajustes → Acceso con Google* (ver 4.8). Opcionalmente `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_WORKSPACE_DOMAIN`, que tienen prioridad, `GOOGLE_SHARE_ROLE` (valor por defecto de cada proyecto; se cambia en *Ajustes del proyecto → Documentos de Google*), `AUTH_GOOGLE_ONLY`, `AUTH_ALLOW_ADMIN_PASSWORD` | Conectar su cuenta en *Mi perfil* para Docs/Sheets; el inicio de sesión no requiere conectar nada. |
+| Email | Ninguna: un admin lo configura en *Administración → Ajustes → Avisos por email* (ver 4.8). Opcionalmente `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, que tienen prioridad (la sección queda de solo lectura). | Nada (activado por defecto; se puede desactivar). Con email se activan invitaciones, «¿Olvidaste tu contraseña?», confirmaciones y avisos. |
 | WhatsApp | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANG` | Activarlo y escribir su número en *Mi perfil*. |
 
 Para el **inicio de sesión con Google**, añade al cliente OAuth una segunda URI de redirección autorizada: `https://<dominio>/api/auth/google/callback` (además de `APP_URL` + `/api/google/callback`, la de Drive).
 
 El resultado de cada envío queda en la tabla `Notification` (`emailSentAt`, `whatsappSentAt`, `deliveryError`) y en los logs con el prefijo `[notify]`. En los logs, el destinatario aparece enmascarado (`p***@dominio`); el email se envía a la dirección completa.
 
-### 4.8 Enviar emails con Gmail o Google Workspace
+### 4.8 Avisos por email y acceso con Google (Administración → Ajustes)
 
-**Desde Pizarro (recomendado):** *Administración → Ajustes → Envío de emails*. Pulsa **Usar Gmail** (rellena `smtp.gmail.com`, puerto 465, SSL/TLS), escribe el usuario (la cuenta de Gmail o Workspace que enviará los avisos), la **contraseña de aplicación** (cuenta de Google → Seguridad → Verificación en 2 pasos → Contraseñas de aplicación; no la contraseña normal) y el remitente. Guarda y pulsa **Enviar email de prueba** (llega a tu propio email; si falla, muestra el error del servidor de correo). La contraseña se guarda cifrada con `ENCRYPTION_KEY` (se re-cifra al rotar claves) y no vuelve a mostrarse: **Reemplazar** o **Quitar**. Dejar el servidor vacío desactiva el envío. También sirve otro proveedor SMTP (puerto 587 con STARTTLS).
+Son dos cosas distintas, cada una en su tarjeta:
 
-**Con variables del servidor** (tienen prioridad sobre lo anterior):
+**1. Avisos por email** (cómo envía Pizarro los avisos, invitaciones y enlaces de contraseña). Dos opciones:
+
+- **Gmail de un administrador (uso familiar):** los avisos salen del Gmail de un admin. Pasos: en esa cuenta de Google activa la *verificación en 2 pasos*; en `myaccount.google.com/apppasswords` crea una **contraseña de aplicación**; en Pizarro escribe la dirección de Gmail y pega esa contraseña (no la normal). Pizarro usa `smtp.gmail.com`, puerto 465 (SSL).
+- **Servicio de correo de la empresa:** el servicio de envío de la empresa o del proyecto. Elige el proveedor y se rellenan servidor, puerto y seguridad, con una pista de qué usuario y contraseña pide: **Google Workspace** (buzón con contraseña de aplicación en `smtp.gmail.com:465`, o *SMTP relay* `smtp-relay.gmail.com:587` con autenticación), **Brevo** (`smtp-relay.brevo.com:587`, usuario y clave SMTP de Brevo), **Mailchimp Transactional/Mandrill** (`smtp.mandrillapp.com:587`, clave API), **SendGrid** (`smtp.sendgrid.net:587`, usuario `apikey` y la clave), **Amazon SES** (`email-smtp.<región>.amazonaws.com:587`, credenciales SMTP de SES), **Mailgun** (`smtp.mailgun.org:587`) o **Microsoft 365** (`smtp.office365.com:587`). También vale cualquier otro servidor SMTP.
+
+Después, **Enviar email de prueba** (llega a tu email; si falla, muestra el error). La contraseña se guarda cifrada con `ENCRYPTION_KEY` y no vuelve a mostrarse (**Reemplazar** / **Quitar**); al cambiar de servidor, puerto o usuario hay que escribirla de nuevo. **Desactivar el envío de emails** lo apaga. Si el servidor tiene variables `SMTP_*`, mandan ellas y la tarjeta queda de solo lectura.
+
+**2. Acceso con Google** (botón «Iniciar sesión con Google» para personas que ya tienen usuario en Pizarro con ese mismo email; también activa Docs/Sheets). Se configura dentro de Pizarro, sin depender de dónde esté instalado (solo hace falta `APP_URL`). Google no cobra por esto: no hace falta facturación en Google Cloud.
+
+1. En `console.cloud.google.com` crea un proyecto (gratis).
+2. **Pantalla de consentimiento OAuth:** *Interno* si solo entrarán cuentas de tu Google Workspace; *Externo* si entrarán cuentas @gmail. En *Externo*, mientras esté en modo *Pruebas* solo pueden entrar las cuentas que añadas como usuarios de prueba (hasta 100); para el inicio de sesión basta con publicarla, sin verificación de Google (los permisos de Docs/Sheets sí pueden pedir verificación).
+3. **Credenciales → Crear credenciales → ID de cliente de OAuth → Aplicación web.** En *URI de redirección autorizados* pega las dos que muestra Pizarro (botones de copiar): `…/api/auth/google/callback` (inicio de sesión) y `…/api/google/callback` (Docs/Sheets).
+4. Copia el **ID de cliente** y el **secreto** en la tarjeta. El secreto se guarda cifrado; al cambiar el ID hay que escribirlo de nuevo. **Dominio de Workspace permitido** es opcional: vacío = cualquier cuenta de Google (Gmail incluido).
+
+La tarjeta indica si está **Activo**. Las variables `GOOGLE_*` del servidor, si existen, tienen prioridad. Los cambios se aplican en segundos, sin reiniciar.
+
+#### Enviar emails con Google Workspace mediante variables del servidor
+
+Con variables del servidor (tienen prioridad sobre la tarjeta):
 
 1. Crea un buzón dedicado, por ejemplo `avisos@tu-dominio.com`.
 2. Activa en esa cuenta la **verificación en 2 pasos** de Google.
