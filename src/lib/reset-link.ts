@@ -24,5 +24,22 @@ export async function createResetLink(email: string, opts: { appUrl: string; res
     twoFactorCleared = !!user.twoFactorMethod;
   }
   const token = await issueAuthToken(user.id, "PASSWORD_RESET");
+  // Rastro en el registro de actividad (Administración → Logs). Se escribe la fila directamente: log.ts es «server-only»
+  // y su cola en memoria no llegaría a vaciarse antes de que el script termine. Nunca lleva el enlace ni el token.
+  try {
+    await db.appLog.create({
+      data: {
+        level: "info",
+        category: "auth",
+        action: "auth.resetLinkCli",
+        message: `Enlace de restablecimiento generado desde la consola para «${user.name}»${opts.reset2fa ? " y verificación en dos pasos reiniciada" : ""}`,
+        userId: user.id,
+        userName: user.name,
+        details: { reset2fa: Boolean(opts.reset2fa), twoFactorCleared },
+      },
+    });
+  } catch (err) {
+    console.error("[reset-link] No se pudo anotar en el registro de actividad:", err instanceof Error ? err.message : err);
+  }
   return { ok: true, url: `${opts.appUrl.replace(/\/$/, "")}/reset/${token}`, name: user.name, twoFactorCleared };
 }
