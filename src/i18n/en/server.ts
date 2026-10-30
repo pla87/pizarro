@@ -1,7 +1,16 @@
 // Traducciones al inglés (server). Clave: texto exacto en español.
 export const server: Record<string, string> = {
   // Genéricos (action.ts, errors.ts, session.ts)
-  "El PDF tardó demasiado; inténtalo de nuevo": "The PDF took too long; please try again.",
+  "No se pudo enviar el email de prueba.": "The test email could not be sent.",
+  "Envió un email de prueba a {to}": "Sent a test email to {to}",
+  "El servidor SMTP no es válido.": "The SMTP server is not valid.",
+  "El puerto debe estar entre 1 y 65535.": "The port must be between 1 and 65535.",
+  "El usuario no es válido.": "The user is not valid.",
+  "El nombre del remitente es demasiado largo.": "The sender name is too long.",
+  "El email del remitente no es válido.": "The sender email is not valid.",
+  "La contraseña no es válida.": "The password is not valid.",
+  "El envío de emails está configurado en el servidor (variables SMTP_*) y no se puede cambiar aquí.": "Email sending is set on the server (SMTP_* variables) and cannot be changed here.",
+  "El PDF tardó demasiado; inténtalo de nuevo":"The PDF took too long; please try again.",
   "Este proyecto ya tiene el máximo de 1000 tareas activas. Archiva o borra alguna.": "This project already has the maximum of 1000 active tasks. Archive or delete some.",
   "Este proyecto tiene {active} de 1000 tareas activas: no caben {adding} más. Archiva o borra alguna.": "This project has {active} of 1000 active tasks: {adding} more do not fit. Archive or delete some.",
   "Este proyecto ya tiene el máximo de 50 etiquetas. Borra alguna.": "This project already has the maximum of 50 labels. Delete some.",

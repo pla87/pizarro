@@ -39,4 +39,11 @@ export async function register() {
   } catch (err) {
     console.error("[instrumentation] no se pudieron cargar los ajustes de la instalación", err);
   }
+  // Configuración del envío de emails guardada en Administración: emailEnabled() es síncrona y lee esta copia en memoria.
+  try {
+    const { refreshMailConfig } = await import("@/lib/mail-config");
+    await refreshMailConfig();
+  } catch (err) {
+    console.error("[instrumentation] no se pudo cargar la configuración de email", err);
+  }
 }

@@ -153,22 +153,25 @@ describe("cifrado de secretos (ENCRYPTION_KEY)", () => {
 
 /** BD en memoria con la forma mínima que usa la rotación. */
 function fakeDb(data: Record<string, Record<string, string | null>[]>) {
-  const delegate = (model: string) => ({
-    async findMany({ where, select }: { where: Record<string, unknown>; select: Record<string, true> }) {
-      const field = Object.keys(select).find((k) => k !== "id")!;
-      // Sin filtro (columna obligatoria) o «no nulo»: en los dos casos solo interesan las filas con valor.
-      assert.ok(Object.keys(where).length === 0 || Object.keys(where)[0] === field);
-      return (data[model] ?? [])
-        .filter((r) => r[field] != null)
-        .map((r) => Object.fromEntries(Object.keys(select).map((k) => [k, r[k] ?? null])) as { id: string } & Record<string, string | null>);
-    },
-    async updateMany({ where, data: patch }: { where: Record<string, unknown>; data: Record<string, string> }) {
-      const rows = (data[model] ?? []).filter((r) => Object.entries(where).every(([k, v]) => r[k] === v));
-      for (const r of rows) Object.assign(r, patch);
-      return { count: rows.length };
-    },
-  });
-  return { user: delegate("user"), loginChallenge: delegate("loginChallenge"), googleAccount: delegate("googleAccount") };
+  const delegate = (model: string) => {
+    const idField = model === "appState" ? "key" : "id";
+    return {
+      async findMany({ where, select }: { where: Record<string, unknown>; select: Record<string, true> }) {
+        const field = Object.keys(select).find((k) => k !== idField)!;
+        // Filtros fijos (p. ej. la clave de AppState) y «no nulo» sobre el campo cifrado.
+        const fixed = Object.entries(where).filter(([k]) => k !== field);
+        return (data[model] ?? [])
+          .filter((r) => r[field] != null && fixed.every(([k, v]) => r[k] === v))
+          .map((r) => Object.fromEntries(Object.keys(select).map((k) => [k, r[k] ?? null])) as Record<string, string | null>);
+      },
+      async updateMany({ where, data: patch }: { where: Record<string, unknown>; data: Record<string, string> }) {
+        const rows = (data[model] ?? []).filter((r) => Object.entries(where).every(([k, v]) => r[k] === v));
+        for (const r of rows) Object.assign(r, patch);
+        return { count: rows.length };
+      },
+    };
+  };
+  return { user: delegate("user"), loginChallenge: delegate("loginChallenge"), googleAccount: delegate("googleAccount"), appState: delegate("appState") };
 }
 
 describe("comando de rotación (rotate-keys)", () => {
@@ -176,7 +179,7 @@ describe("comando de rotación (rotate-keys)", () => {
   const env = { SESSION_SECRET: SESSION, ENCRYPTION_KEY: ENC2, ENCRYPTION_KEY_PREVIOUS: ENC };
 
   test("cubre todos los campos cifrados del esquema", () => {
-    assert.deepEqual(ENCRYPTED_FIELDS.map((f) => `${f.model}.${f.field}`), ["user.totpSecretEnc", "loginChallenge.pendingSecretEnc", "googleAccount.refreshTokenEnc", "googleAccount.accessTokenEnc"]);
+    assert.deepEqual(ENCRYPTED_FIELDS.map((f) => `${f.model}.${f.field}`), ["user.totpSecretEnc", "loginChallenge.pendingSecretEnc", "googleAccount.refreshTokenEnc", "googleAccount.accessTokenEnc", "appState.value"]);
   });
 
   test("re-cifra lo antiguo con la clave actual, deja lo que ya está al día y cuenta lo ilegible", async () => {
@@ -190,17 +193,19 @@ describe("comando de rotación (rotate-keys)", () => {
       ],
       loginChallenge: [],
       googleAccount: [{ id: "g1", refreshTokenEnc: legacyEncrypt("R1", ENC), accessTokenEnc: keyring.encryptSecret("A1", prevEnv) }],
+      // La contraseña SMTP guardada en Ajustes; las demás filas de AppState no se tocan.
+      appState: [{ key: "mail.passEnc", value: keyring.encryptSecret("smtp-pass", prevEnv) }, { key: "mail.host", value: "smtp.example.com" }],
     };
     const u3Before = data.user[2]!.totpSecretEnc;
     const db = fakeDb(data);
 
     const dry = await rotateEncryptedSecrets(db, { dryRun: true, env });
-    assert.deepEqual(dry[0], { label: ENCRYPTED_FIELDS[0].label, total: 4, current: 1, rotated: 2, unreadable: 1 });
+    assert.deepEqual(dry[0], { label: ENCRYPTED_FIELDS[0]!.label, total: 4, current: 1, rotated: 2, unreadable: 1 });
     // En seco no se toca nada.
     assert.ok(data.user[1]!.totpSecretEnc!.startsWith("v1."));
 
     const counts = await rotateEncryptedSecrets(db, { env });
-    assert.deepEqual(counts.map((c) => [c.total, c.current, c.rotated, c.unreadable]), [[4, 1, 2, 1], [0, 0, 0, 0], [1, 0, 1, 0], [1, 0, 1, 0]]);
+    assert.deepEqual(counts.map((c) => [c.total, c.current, c.rotated, c.unreadable]), [[4, 1, 2, 1], [0, 0, 0, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0]]);
     // Todo lo legible queda con la clave nueva y se abre SIN la anterior.
     const onlyNew = { SESSION_SECRET: SESSION, ENCRYPTION_KEY: ENC2 };
     assert.equal(keyring.decryptSecret(data.user[0]!.totpSecretEnc!, onlyNew), "T1");
@@ -208,13 +213,15 @@ describe("comando de rotación (rotate-keys)", () => {
     assert.equal(data.user[2]!.totpSecretEnc, u3Before);
     assert.equal(keyring.decryptSecret(data.googleAccount[0]!.refreshTokenEnc!, onlyNew), "R1");
     assert.equal(keyring.decryptSecret(data.googleAccount[0]!.accessTokenEnc!, onlyNew), "A1");
+    assert.equal(keyring.decryptSecret(data.appState[0]!.value!, onlyNew), "smtp-pass");
+    assert.equal(data.appState[1]!.value, "smtp.example.com");
     // Repetirlo no cambia nada.
     const again = await rotateEncryptedSecrets(db, { env: onlyNew });
-    assert.deepEqual(again.map((c) => c.rotated), [0, 0, 0, 0]);
+    assert.deepEqual(again.map((c) => c.rotated), [0, 0, 0, 0, 0]);
   });
 
   test("si la app cambia el valor mientras tanto, no se pisa", async () => {
-    const data = { user: [{ id: "u1", totpSecretEnc: keyring.encryptSecret("T1", prevEnv) }], loginChallenge: [], googleAccount: [] };
+    const data = { user: [{ id: "u1", totpSecretEnc: keyring.encryptSecret("T1", prevEnv) }], loginChallenge: [], googleAccount: [], appState: [] };
     const db = fakeDb(data);
     const realUpdate = db.user.updateMany;
     db.user.updateMany = async (args) => {

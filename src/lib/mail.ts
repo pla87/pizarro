@@ -5,10 +5,13 @@ import { join } from "node:path";
 import { after } from "next/server";
 import nodemailer from "nodemailer";
 import { logEvent } from "./log";
+import { loadMailConfig, peekMailConfig, savedMailEnabled } from "./mail-config";
+import type { MailConfig } from "./mail-settings-core";
 import { maskEmailsIn } from "./mask-email";
 
-// Envío de emails: SMTP con nodemailer. Con MAIL_OUTBOX_DIR (solo desarrollo y pruebas) cada email se
-// guarda como JSON en esa carpeta en vez de enviarse.
+// Envío de emails: SMTP con nodemailer. La configuración sale de las variables SMTP_* del servidor o, si no hay, de lo
+// que un administrador guarda en Administración → Ajustes (lib/mail-config.ts). Con MAIL_OUTBOX_DIR (solo desarrollo y
+// pruebas) cada email se guarda como JSON en esa carpeta en vez de enviarse.
 
 let outboxWarned = false;
 
@@ -31,7 +34,7 @@ export function outboxDir(env: NodeJS.ProcessEnv = process.env): string | null {
 }
 
 export function emailEnabled(): boolean {
-  return Boolean(outboxDir() || (process.env.SMTP_HOST && process.env.SMTP_FROM));
+  return Boolean(outboxDir() || savedMailEnabled());
 }
 
 /** URL pública de la app; todos los enlaces de los emails salen de aquí, nunca de la petición. */
@@ -41,18 +44,26 @@ export function appUrl(): string {
 
 export const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-let transport: ReturnType<typeof nodemailer.createTransport> | null = null;
-function mailer() {
-  const port = Number(process.env.SMTP_PORT ?? 465);
-  transport ??= nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port,
-    secure: port === 465,
-    auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
-    connectionTimeout: 10_000,
-    socketTimeout: 15_000,
-  });
-  return transport;
+let transport: { t: ReturnType<typeof nodemailer.createTransport>; signature: string } | null = null;
+/** Transporte de nodemailer; se rehace cuando cambia la configuración (al guardar los ajustes o cambiar las variables). */
+function mailer(c: MailConfig) {
+  const signature = JSON.stringify(c);
+  if (!transport || transport.signature !== signature) {
+    transport?.t.close();
+    transport = {
+      signature,
+      t: nodemailer.createTransport({
+        host: c.host,
+        port: c.port,
+        secure: c.secure,
+        requireTLS: c.requireTLS,
+        auth: c.user ? { user: c.user, pass: c.pass } : undefined,
+        connectionTimeout: 10_000,
+        socketTimeout: 15_000,
+      }),
+    };
+  }
+  return transport.t;
 }
 
 export interface MailAttachment {
@@ -72,6 +83,8 @@ export interface MailMessage {
 /** Envía un email; lanza si falla. */
 export async function sendMail(m: MailMessage): Promise<void> {
   const dir = outboxDir();
+  // Con el buzón de pruebas no se toca la BD: solo se anota el remitente conocido.
+  const config = dir ? peekMailConfig() : await loadMailConfig();
   if (dir) {
     // Llevan enlaces y códigos de acceso: solo legibles por el usuario del proceso.
     await mkdir(dir, { recursive: true, mode: 0o700 });
@@ -84,10 +97,11 @@ export async function sendMail(m: MailMessage): Promise<void> {
       await writeFile(join(dir, file), a.content, { mode: 0o600 });
       saved.push({ filename: a.filename, bytes: a.content.length, file });
     }
-    await writeFile(join(dir, `${base}.json`), JSON.stringify({ from: process.env.SMTP_FROM ?? null, ...rest, ...(saved.length ? { attachments: saved } : {}), createdAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
+    await writeFile(join(dir, `${base}.json`), JSON.stringify({ from: config.from || null, ...rest, ...(saved.length ? { attachments: saved } : {}), createdAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
     return;
   }
-  await mailer().sendMail({ from: process.env.SMTP_FROM, ...m });
+  if (!config.host) throw new Error("El envío de emails no está configurado.");
+  await mailer(config).sendMail({ from: config.from, ...m });
 }
 
 /**
