@@ -3,15 +3,16 @@
 import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { useT } from "@/i18n/client";
+import { useIntlLocale, useT } from "@/i18n/client";
 import { createKind, deleteKind, moveKind, updateKind } from "@/actions/kinds";
 import { cn } from "@/components/ui/cn";
 import { DescriptionField } from "@/components/ui/DescriptionField";
+import { DescriptionTools, descriptionTooLong } from "@/components/ui/DescriptionTools";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
 import type { EditorModeValue } from "@/lib/types";
-import { PALETTE, swatchBorder } from "@/lib/constants";
+import { MAX_DESCRIPTION, PALETTE, swatchBorder } from "@/lib/constants";
 import { describeKindAutomation, MAX_KIND_SUBTASKS, parseSubtaskLines } from "@/lib/kinds-special";
 
 export interface KindRow {
@@ -27,7 +28,7 @@ export interface KindRow {
 
 /** `subtasks`: texto del cuadro, una subtarea por línea. */
 const EMPTY_FORM = { name: "", color: "#6366f1", titleTemplate: "", descriptionTemplate: "", subtasks: "" };
-const DESC_MAX = 2000;
+const DESC_MAX = MAX_DESCRIPTION;
 const NO_USERS: never[] = [];
 
 /** Markdown a texto plano de una línea para la vista previa de la lista. */
@@ -78,6 +79,7 @@ interface Props {
 
 export function KindsManager({ kinds, projectId, otherKinds = [], embedded = false, editorMode = "MARKDOWN" }: Props) {
   const t = useT();
+  const locale = useIntlLocale();
   const router = useRouter();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -147,11 +149,11 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
           open
           onClose={() => setEditing(null)}
           title={editing === "new" ? t("Nuevo tipo de tarea") : t("Editar tipo de tarea")}
-          size="sm"
+          size="lg"
           footer={
             <>
               <button type="button" className="btn-secondary" onClick={() => setEditing(null)}><X size={15} /> {t("Cancelar")}</button>
-              <button type="submit" form="kind-form" className="btn-primary" disabled={pending || !form.name.trim()}><Check size={15} /> {t("Guardar")}</button>
+              <button type="submit" form="kind-form" className="btn-primary" disabled={pending || !form.name.trim() || form.descriptionTemplate.length > DESC_MAX}><Check size={15} /> {t("Guardar")}</button>
             </>
           }
         >
@@ -160,8 +162,9 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
             className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
+              if (form.descriptionTemplate.length > DESC_MAX) return toast(descriptionTooLong(t, locale, DESC_MAX), "error");
               const { subtasks, ...fields } = form;
-              const payload = { ...fields, descriptionTemplate: form.descriptionTemplate.slice(0, DESC_MAX), subtaskTemplate: parseSubtaskLines(subtasks) };
+              const payload = { ...fields, descriptionTemplate: form.descriptionTemplate, subtaskTemplate: parseSubtaskLines(subtasks) };
               run(
                 () => (editing === "new" ? createKind(payload, projectId ?? null) : updateKind(editing, payload)),
                 editing === "new" ? t("Tipo creado") : t("Tipo actualizado"),
@@ -188,8 +191,11 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
                 <input id="kind-title-tpl" className="input" value={form.titleTemplate} onChange={(e) => setForm({ ...form, titleTemplate: e.target.value })} maxLength={200} />
               </div>
               <div>
-                <label className="label" htmlFor="kind-desc-tpl">{t("Texto inicial de la descripción")}</label>
-                <DescriptionField id="kind-desc-tpl" mode={editorMode} textareaClassName="input field-sizing-content min-h-20" value={form.descriptionTemplate} onValueChange={(v) => setForm({ ...form, descriptionTemplate: v })} users={NO_USERS} maxLength={DESC_MAX} />
+                <div className="flex items-center justify-between gap-2">
+                  <label className="label" htmlFor="kind-desc-tpl">{t("Texto inicial de la descripción")}</label>
+                  <DescriptionTools value={form.descriptionTemplate} onClear={() => setForm({ ...form, descriptionTemplate: "" })} className="mb-1" max={DESC_MAX} />
+                </div>
+                <DescriptionField id="kind-desc-tpl" mode={editorMode} textareaClassName="input field-sizing-content min-h-20" value={form.descriptionTemplate} onValueChange={(v) => setForm({ ...form, descriptionTemplate: v })} users={NO_USERS} />
               </div>
               <div>
                 <label className="label" htmlFor="kind-subtasks-tpl">{t("Subtareas predefinidas")}</label>

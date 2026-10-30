@@ -5,6 +5,7 @@ export const task: Record<string, string> = {
   "Ver anteriores": "Show earlier",
   "Copiado": "Copied",
   "Copiar descripción": "Copy description",
+  "La descripción supera el límite de {max} caracteres.": "The description exceeds the limit of {max} characters.",
   "Borrar descripción": "Clear description",
   "Descripción borrada": "Description cleared",
   "Proyecto en el que se crea la tarea": "Project to create the task in",

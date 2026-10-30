@@ -6,7 +6,7 @@ import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createTask, getProjectFormData } from "@/actions/tasks";
 import { ProjectsContext } from "../ProjectMenu";
 import { ProjectPicker } from "./ProjectPicker";
-import { DescriptionTools } from "../ui/DescriptionTools";
+import { DescriptionTools, descriptionTooLong } from "../ui/DescriptionTools";
 import type { ProjectFormData } from "@/lib/types";
 import { useT, useIntlLocale } from "@/i18n/client";
 import { useConfirm } from "../ui/ConfirmDialog";
@@ -19,7 +19,7 @@ import { fieldsError, fieldsForCreate, TaskFieldsGroup, type FieldsForm } from "
 import { fieldsForDraft, fieldsFromDraft } from "@/lib/fields-form";
 import { DescriptionField } from "../ui/DescriptionField";
 import { applyKindTemplate, mergeSubtasks } from "@/lib/kinds-special";
-import { MAX_TITLE } from "@/lib/constants";
+import { MAX_DESCRIPTION, MAX_TITLE } from "@/lib/constants";
 import { TypeSelector } from "./TaskDialog";
 import type { T } from "@/i18n/core";
 import { AttachLimitHint } from "./AttachLimitHint";
@@ -202,6 +202,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (busy || loading || !title.trim() || !columnId) return;
+    if (description.length > MAX_DESCRIPTION) return toast(descriptionTooLong(t, locale, MAX_DESCRIPTION), "error");
     const fieldsErr = fieldsError(fieldsForm, form.project.taskFields, dueDate, t);
     if (fieldsErr) return toast(fieldsErr, "error");
     setBusy(true);
@@ -318,9 +319,9 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         <div>
           <div className="flex items-center justify-between gap-2">
             <label className="label" htmlFor={`${uid}-desc`}>{t("Descripción (opcional)")}</label>
-            <DescriptionTools value={description} onClear={() => setDescription("")} className="mb-1" />
+            <DescriptionTools value={description} onClear={() => setDescription("")} className="mb-1" max={MAX_DESCRIPTION} />
           </div>
-          <DescriptionField id={`${uid}-desc`} mode={board.editorMode} textareaClassName="input field-sizing-content min-h-14" value={description} onValueChange={setDescription} users={form.users} maxLength={20000} placeholder={t("Markdown · @persona para avisar")} />
+          <DescriptionField id={`${uid}-desc`} mode={board.editorMode} textareaClassName="input field-sizing-content min-h-14" value={description} onValueChange={setDescription} users={form.users} placeholder={t("Markdown · @persona para avisar")} />
         </div>
         <div>
           <label className="label" htmlFor={`${uid}-subtask`}>{t("Subtareas (opcional)")}</label>
