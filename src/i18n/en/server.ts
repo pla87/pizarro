@@ -1,6 +1,7 @@
 // Traducciones al inglés (server). Clave: texto exacto en español.
 export const server: Record<string, string> = {
   // Genéricos (action.ts, errors.ts, session.ts)
+  "El PDF tardó demasiado; inténtalo de nuevo": "The PDF took too long; please try again.",
   "Este proyecto ya tiene el máximo de 1000 tareas activas. Archiva o borra alguna.": "This project already has the maximum of 1000 active tasks. Archive or delete some.",
   "Este proyecto tiene {active} de 1000 tareas activas: no caben {adding} más. Archiva o borra alguna.": "This project has {active} of 1000 active tasks: {adding} more do not fit. Archive or delete some.",
   "Este proyecto ya tiene el máximo de 50 etiquetas. Borra alguna.": "This project already has the maximum of 50 labels. Delete some.",
