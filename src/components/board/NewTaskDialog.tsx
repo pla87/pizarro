@@ -154,7 +154,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       ? undefined
       : !title.trim() && !description.trim() && !subtasks.length && !subtaskDraft.trim()
         ? null
-        : ({ title, kindId, description, columnId, assigneeId, dueDate, deliverableId, evergreen, subtasks, subtaskDraft, projectId, fields: fieldsForDraft(fieldsForm, form.project.taskFields) } satisfies NewTaskDraft),
+        : ({ title, kindId, description, columnId, assigneeId, dueDate, deliverableId, evergreen, subtasks, subtaskDraft, projectId, fields: loading ? fieldsForm : fieldsForDraft(fieldsForm, form.project.taskFields) } satisfies NewTaskDraft),
   );
   const onClose = () => {
     if (autosave) discardDraft();

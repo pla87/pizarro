@@ -19,6 +19,7 @@ test("menciones", () => {
   const text = `Hola ${mentionToken("Ana [QA]", "abc123")} y ${mentionToken("Luis", "def456")} y otra vez ${mentionToken("Ana", "abc123")}`;
   assert.deepEqual(extractMentionIds(text), ["abc123", "def456"]);
   assert.equal(mentionsToPlain("x @[Ana](user:abc123) y"), "x @Ana y");
+  assert.equal(mentionsToPlain("x @[Ana](user:abc123) y", false), "x Ana y");
   assert.equal(mentionsToMarkdown("@[Ana](user:abc123)"), "[@Ana](#mention-abc123)");
   assert.deepEqual(extractMentionIds("@[Ana](user:../../x) @[B](javascript:1)"), []);
   assert.equal(excerpt("a".repeat(300)).length, 180);

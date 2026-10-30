@@ -1,5 +1,6 @@
 "use client";
 
+import { appTimeZone } from "@/lib/format";
 import { ChevronDown, ClipboardCopy, Download, FileArchive, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -142,10 +143,10 @@ export function ReleaseEntry({ release }: Props) {
             <button className="btn-secondary py-1.5" onClick={async () => toast(await copyText(release.content) ? t("Copiado al portapapeles") : t("No se pudo copiar"))}>
               <ClipboardCopy size={15} /> {t("Copiar")}
             </button>
-            <button className="btn-secondary py-1.5" onClick={() => downloadText(release.content, releaseFileName(date, "md"), "text/markdown")}>
+            <button className="btn-secondary py-1.5" onClick={() => downloadText(release.content, releaseFileName(date, "md", appTimeZone()), "text/markdown")}>
               <Download size={15} /> .md
             </button>
-            <button className="btn-secondary py-1.5" onClick={() => downloadText(release.content, releaseFileName(date, "txt"), "text/plain")}>
+            <button className="btn-secondary py-1.5" onClick={() => downloadText(release.content, releaseFileName(date, "txt", appTimeZone()), "text/plain")}>
               <Download size={15} /> .txt
             </button>
             <button className="btn-secondary py-1.5 text-red-600 dark:text-red-400 sm:ml-auto" disabled={busy} onClick={remove}>

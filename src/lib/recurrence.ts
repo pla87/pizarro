@@ -1,6 +1,6 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
-import { dateToIso, isoToDate, todayIso } from "./dates";
+import { addDaysIso, daysBetween, dateToIso, isoToDate, todayIso } from "./dates";
 import { db } from "./db";
 import { appTimeZone, loadBoardTask } from "./board";
 import { nextOccurrenceDue } from "./recurrence-date";
@@ -55,7 +55,7 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
     orderBy: [{ column: { position: "asc" } }, { position: "asc" }],
     select: {
       id: true, projectId: true, columnId: true, title: true, description: true, kindId: true, color: true, linkUrl: true,
-      assigneeId: true, dueDate: true, deliverableId: true, recurrence: true, recurrenceDay: true,
+      assigneeId: true, dueDate: true, startDate: true, cost: true, estimatedHours: true, priority: true, client: true, deliverableId: true, recurrence: true, recurrenceDay: true,
       routineColumnId: true,
       column: { select: { isDone: true, role: true } },
       labels: { select: { labelId: true } },
@@ -89,7 +89,12 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
       });
       continue;
     }
-    const dueDate = isoToDate(nextOccurrenceDue(src.recurrence, src.recurrenceDay, dateToIso(src.dueDate), today));
+    const dueIso = nextOccurrenceDue(src.recurrence, src.recurrenceDay, dateToIso(src.dueDate), today);
+    const dueDate = isoToDate(dueIso);
+    // La fecha de inicio se desplaza los mismos días que la límite (sin límite no hay referencia: queda vacía).
+    const oldDue = dateToIso(src.dueDate);
+    const oldStart = dateToIso(src.startDate);
+    const startDate = oldStart && oldDue && dueIso ? isoToDate(addDaysIso(oldStart, daysBetween(oldDue, dueIso))) : null;
     const assigneeId = await stillAssignable(src.projectId, src.assigneeId);
     try {
       // Al final de la columna, con la columna bloqueada (sin compartir posición con otra tarea).
@@ -108,6 +113,13 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
             assigneeId,
             deliverableId: src.deliverableId,
             dueDate,
+            startDate,
+            cost: src.cost,
+            costPaid: false,
+            estimatedHours: src.estimatedHours,
+            actualHours: null,
+            priority: src.priority,
+            client: src.client,
             recurrence: src.recurrence,
             recurrenceDay: src.recurrenceDay,
             recurrenceFromId: src.id,

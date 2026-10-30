@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
-import { moveTask } from "../../src/actions/tasks";
+import { moveTask, restoreTask } from "../../src/actions/tasks";
 import { setColumnRole, setColumnWaitingDays } from "../../src/actions/columns";
 import { undoLast } from "../../src/actions/undo";
 import { deliverWaitingReminders } from "../../src/lib/waiting";
@@ -58,10 +58,12 @@ describe("roles de columna repetibles", () => {
 describe("recordatorio de tareas en espera", () => {
   test("avisa una vez a la persona asignada al cumplirse los días (3 por defecto), no antes ni dos veces", async () => {
     const { assignee, task } = await setup();
+    // Mediodía UTC: el día natural es el mismo en cualquier zona horaria razonable.
     const entered = new Date(Date.now() - 10 * DAY);
+    entered.setUTCHours(12, 0, 0, 0);
     await db.task.update({ where: { id: task.id }, data: { columnEnteredAt: entered } });
-    // A los 2 días y medio todavía no.
-    assert.equal(await deliverWaitingReminders(new Date(entered.getTime() + 2.5 * DAY)), 0);
+    // A los 2 días y 7 horas (mismo día natural que 2 días) todavía no.
+    assert.equal(await deliverWaitingReminders(new Date(entered.getTime() + 2.3 * DAY)), 0);
     assert.equal((await reminders(task.id)).length, 0);
     // A los 3 días sale.
     const at = new Date(entered.getTime() + 3 * DAY);
@@ -75,6 +77,44 @@ describe("recordatorio de tareas en espera", () => {
     assert.equal(await deliverWaitingReminders(at), 0);
     assert.equal(await deliverWaitingReminders(new Date(entered.getTime() + 9 * DAY)), 0);
     assert.equal((await reminders(task.id)).length, 1);
+  });
+
+  test("si el aviso falla, se libera la reclamación para reintentarlo", async () => {
+    const { task } = await setup();
+    await db.task.update({ where: { id: task.id }, data: { columnEnteredAt: new Date(Date.now() - 5 * DAY) } });
+    // Se fuerza el fallo de notifyTask con una restricción temporal que rechaza cualquier notificación nueva.
+    const original = console.error;
+    console.error = () => {};
+    await db.$executeRawUnsafe(`ALTER TABLE "Notification" ADD CONSTRAINT "tmp_fail" CHECK (false) NOT VALID`);
+    try {
+      assert.equal(await deliverWaitingReminders(new Date()), 0);
+    } finally {
+      await db.$executeRawUnsafe(`ALTER TABLE "Notification" DROP CONSTRAINT "tmp_fail"`);
+      console.error = original;
+    }
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).waitingNotifiedAt, null);
+    assert.equal(await deliverWaitingReminders(new Date()), 1);
+  });
+
+  test("al poner el rol Esperando a una columna, las tareas de dentro empiezan a contar desde ahora", async () => {
+    const { f, task } = await setup();
+    // La columna deja de ser Esperando y la tarea queda vieja con un aviso ya enviado.
+    await db.column.update({ where: { id: f.columns.doing }, data: { role: "NONE" } });
+    await db.task.update({ where: { id: task.id }, data: { columnEnteredAt: new Date(Date.now() - 30 * DAY), waitingNotifiedAt: new Date() } });
+    expectOk(await setColumnRole(f.columns.doing, "WAITING"));
+    const after = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+    assert.ok(Date.now() - after.columnEnteredAt.getTime() < 60_000);
+    assert.equal(after.waitingNotifiedAt, null);
+    assert.equal(await deliverWaitingReminders(new Date()), 0);
+  });
+
+  test("recuperar una tarea archivada reinicia su espera", async () => {
+    const { f, task } = await setup();
+    await db.task.update({ where: { id: task.id }, data: { columnEnteredAt: new Date(Date.now() - 30 * DAY), waitingNotifiedAt: new Date(), archivedAt: new Date(), archivedFromColumnId: f.columns.doing } });
+    expectOk(await restoreTask(task.id));
+    const after = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+    assert.ok(Date.now() - after.columnEnteredAt.getTime() < 60_000);
+    assert.equal(after.waitingNotifiedAt, null);
   });
 
   test("respeta waitingDays de la columna y avisa al creador si no hay responsable", async () => {

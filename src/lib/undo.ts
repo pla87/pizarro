@@ -49,6 +49,9 @@ export interface TaskData {
   priority?: "BAJA" | "MEDIA" | "ALTA" | "URGENTE" | null;
   client?: string | null;
   startDate?: string | null;
+  /** Recurrencia: de qué tarea salió y la columna de rutinas de la que cuelga. */
+  recurrenceFromId?: string | null;
+  routineColumnId?: string | null;
 }
 export type TaskField = keyof TaskData;
 
@@ -105,7 +108,7 @@ const date = (s: string | null | undefined) => (s ? new Date(s) : null);
 const TASK_SELECT = {
   title: true, description: true, kindId: true, color: true, linkUrl: true, position: true, columnId: true, assigneeId: true,
   dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, evergreenEvery: true, recurrence: true, recurrenceDay: true, contentUpdatedAt: true, contentUpdatedById: true,
-  cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
+  cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true, recurrenceFromId: true, routineColumnId: true,
 } as const;
 type TaskRowFull = Prisma.TaskGetPayload<{ select: typeof TASK_SELECT }>;
 
@@ -350,9 +353,18 @@ async function ensureCostField(projectId: string): Promise<void> {
   if (p && !p.taskFields.includes("cost")) await db.project.update({ where: { id: projectId }, data: { taskFields: [...p.taskFields, "cost"] } });
 }
 
-function taskUpdateData(d: TaskData): Prisma.TaskUncheckedUpdateInput {
+/** Campos que taskUpdateData acepta: las entradas antiguas pueden traer otros (p. ej. externalUrl) y se ignoran. */
+const TASK_DATA_KEYS: ReadonlySet<string> = new Set<keyof TaskData>([
+  "title", "description", "kindId", "color", "linkUrl", "position", "columnId", "assigneeId", "dueDate", "deliverableId",
+  "archivedAt", "archivedFromColumnId", "evergreen", "evergreenEvery", "recurrence", "recurrenceDay", "contentUpdatedAt",
+  "contentUpdatedById", "cost", "costPaid", "estimatedHours", "actualHours", "priority", "client", "startDate",
+  "recurrenceFromId", "routineColumnId",
+]);
+
+export function taskUpdateData(d: TaskData): Prisma.TaskUncheckedUpdateInput {
   const out: Prisma.TaskUncheckedUpdateInput = {};
   for (const [k, v] of Object.entries(d)) {
+    if (!TASK_DATA_KEYS.has(k)) continue;
     if (k === "dueDate" || k === "startDate" || k === "archivedAt" || k === "contentUpdatedAt") (out as Record<string, unknown>)[k] = date(v as string | null);
     else (out as Record<string, unknown>)[k] = v;
   }
@@ -447,12 +459,14 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           const kindId = kindOk ? t.kindId : (await db.taskKind.findFirst({ where: { OR: [{ projectId: null }, { projectId }] }, orderBy: { position: "asc" }, select: { id: true } }))?.id;
           const columnId = await safeColumn(t.columnId);
           if (!kindId || !columnId) { skipped++; break; }
+          // La tarea de la que salió puede haberse borrado (clave foránea): entonces se queda sin origen.
+          const recurrenceFromId = t.recurrenceFromId && (await db.task.count({ where: { id: t.recurrenceFromId } })) ? t.recurrenceFromId : null;
           const deliverableId = t.deliverableId && (await db.deliverable.count({ where: { id: t.deliverableId } })) ? t.deliverableId : null;
           const labels = await db.label.findMany({ where: { id: { in: s.labelIds }, projectId }, select: { id: true } });
           await db.$transaction([
             db.task.create({
               data: {
-                ...(taskUpdateData({ ...t, columnId, kindId, deliverableId, assigneeId: assignable(t.assigneeId) }) as Prisma.TaskUncheckedCreateInput),
+                ...(taskUpdateData({ ...t, columnId, kindId, deliverableId, assigneeId: assignable(t.assigneeId), recurrenceFromId }) as Prisma.TaskUncheckedCreateInput),
                 id: t.id, projectId, title: t.title, position: t.position, createdById: known(t.createdById), createdAt: new Date(t.createdAt),
               },
             }),
@@ -555,7 +569,9 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
         }
         case "column.restore": {
           if (await db.column.count({ where: { id: op.row.id } })) { skipped++; break; }
-          await db.column.create({ data: { ...op.row, projectId, role: op.row.role as Prisma.ColumnCreateInput["role"] } });
+          // El destino de rutinas puede haberse borrado entre tanto: entonces la columna vuelve sin él.
+          const routineTargetColumnId = op.row.routineTargetColumnId && (await db.column.count({ where: { id: op.row.routineTargetColumnId, projectId } })) ? op.row.routineTargetColumnId : null;
+          await db.column.create({ data: { ...op.row, routineTargetColumnId, projectId, role: op.row.role as Prisma.ColumnCreateInput["role"] } });
           if (op.row.role === "BUDGET") await ensureCostField(projectId);
           columnIds.add(op.row.id);
           break;

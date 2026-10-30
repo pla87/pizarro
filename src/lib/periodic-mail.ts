@@ -78,7 +78,7 @@ export async function sendDueDigests(now: Date = new Date()): Promise<number> {
     if (claim.count !== 1) continue;
     const t0 = performance.now();
     try {
-      const digest = buildDigest(await gatherDigest(u, now, todayIso(tz)));
+      const digest = buildDigest(await gatherDigest(u, now, todayIso(tz, now)));
       if (digest.empty) continue; // sin novedades no se manda nada (el día queda reservado)
       const t: T = makeT(toLocale(u.locale));
       await sendMail({ to: u.email, ...digestEmail(digest, { name: u.name, baseUrl: appUrl() }, t) });

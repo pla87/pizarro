@@ -51,6 +51,20 @@ test("markdownToPlain deja texto plano legible", () => {
   assert.equal(markdownToPlain(md), "Título\nnegrita y cursiva con enlace (https://example.com) y @Ana\n- uno\n[ ] dos\ncódigo");
 });
 
+test("markdownToPlain solo quita énfasis en límite de palabra", () => {
+  assert.equal(markdownToPlain("ver https://example.com/a_b_c/d_e y snake_case_name"), "ver https://example.com/a_b_c/d_e y snake_case_name");
+  assert.equal(markdownToPlain("2*3*4 = 24"), "2*3*4 = 24");
+  assert.equal(markdownToPlain("_cursiva_ y *otra* y **negrita** y __negrita__"), "cursiva y otra y negrita y negrita");
+  assert.equal(markdownToPlain("(_entre paréntesis_), **con, coma**."), "(entre paréntesis), con, coma.");
+});
+
+test("buildIcs: un evento con rango termina el día siguiente al último día", () => {
+  const ics = buildIcs({ name: "X", now: new Date("2026-10-18T10:00:00Z"), events: [{ uid: "a", date: "2026-10-20", endDate: "2026-10-22", summary: "R" }, { uid: "b", date: "2026-10-20", summary: "S" }] });
+  const [first, second] = ics.split("BEGIN:VEVENT").slice(1);
+  assert.match(first!, /DTSTART;VALUE=DATE:20261020\r\nDTEND;VALUE=DATE:20261023\r\n/);
+  assert.match(second!, /DTSTART;VALUE=DATE:20261020\r\nDTEND;VALUE=DATE:20261021\r\n/);
+});
+
 const item = (id: string, taskId: string, taskTitle: string, kindId: string, kindName: string, done = false): ChecklistItem => ({ id, title: `Sub ${id}`, done, taskId, taskTitle, kindId, kindName });
 const items = [
   item("1", "a", "Tarjeta A", "k2", "Mejora"),

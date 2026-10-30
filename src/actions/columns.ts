@@ -74,6 +74,8 @@ export async function setColumnRole(columnId: string, role: string) {
         await tx.column.updateMany({ where: { projectId: column.projectId, role: value }, data: { role: "NONE" } });
       }
       await tx.column.update({ where: { id: columnId }, data: { role: value } });
+      // Una columna que pasa a «Esperando» cuenta la espera desde ahora: sin esto, las tareas antiguas recibirían de golpe un aviso cada una.
+      if (value === "WAITING" && column.role !== "WAITING") await tx.task.updateMany({ where: { columnId, archivedAt: null }, data: { columnEnteredAt: new Date(), waitingNotifiedAt: null } });
       // Las tareas fijas solo existen en la columna de release: si deja de serlo, pasan a ser normales.
       if (value !== "NEXT_RELEASE") await tx.task.updateMany({ where: { columnId, evergreen: true }, data: { evergreen: false, evergreenEvery: 1 } });
       else await tx.task.updateMany({ where: { projectId: column.projectId, evergreen: true, columnId: { not: columnId } }, data: { evergreen: false, evergreenEvery: 1 } });
@@ -101,7 +103,11 @@ export async function setColumnRoutineTarget(columnId: string, targetId: string 
     const column = await findColumn(columnId);
     if (column.role !== "ROUTINES") throw new AppError("Solo las columnas con el rol «Rutinas» tienen destino de la siguiente aparición.");
     const value = targetId === null || targetId === columnId ? null : v.id.parse(targetId);
-    if (value && !(await db.column.count({ where: { id: value, projectId: column.projectId } }))) throw notFound();
+    if (value) {
+      const target = await db.column.findFirst({ where: { id: value, projectId: column.projectId }, select: { isDone: true, role: true } });
+      if (!target) throw notFound();
+      if (target.isDone || target.role === "ROUTINES") throw new AppError("El destino no puede ser una columna terminada ni otra columna de rutinas.");
+    }
     addUndo({ t: "column.set", id: column.id, data: { routineTargetColumnId: column.routineTargetColumnId } });
     describeAction("Cambió el destino de la siguiente aparición de la columna «{name}»", { name: column.name });
     await db.column.update({ where: { id: columnId }, data: { routineTargetColumnId: value } });
@@ -153,9 +159,12 @@ export async function deleteColumn(columnId: string) {
     // Deshacer: la columna (se recrea primero) y la columna de sus archivadas.
     const archived = await db.task.findMany({ where: { columnId, archivedAt: { not: null } }, select: { id: true } });
     // Se aplican en orden inverso: primero se recrea la columna y luego vuelven sus archivadas.
+    // Las columnas de rutinas que apuntaban a esta (el borrado deja su destino en null) se vuelven a apuntar al final.
+    const pointing = await db.column.findMany({ where: { projectId: column.projectId, routineTargetColumnId: columnId }, select: { id: true } });
     addUndo(
+      ...pointing.map((c) => ({ t: "column.set" as const, id: c.id, data: { routineTargetColumnId: column.id } })),
       ...archived.map((t) => ({ t: "task.set" as const, id: t.id, data: { columnId: column.id } })),
-      { t: "column.restore", row: { id: column.id, projectId: column.projectId, name: column.name, position: column.position, role: column.role, isDone: column.isDone, waitingDays: column.waitingDays } },
+      { t: "column.restore", row: { id: column.id, projectId: column.projectId, name: column.name, position: column.position, role: column.role, isDone: column.isDone, waitingDays: column.waitingDays, routineTargetColumnId: column.routineTargetColumnId } },
     );
     await db.$transaction(async (tx) => {
       const active = await tx.task.count({ where: { columnId, archivedAt: null } });

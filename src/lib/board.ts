@@ -149,6 +149,6 @@ export async function userTemplates(userId: string) {
 
 /** Clientes distintos ya usados en las tareas del proyecto (para sugerir en el campo «Cliente»). */
 export async function projectClients(projectId: string): Promise<string[]> {
-  const rows = await db.task.findMany({ where: { projectId, client: { not: null } }, distinct: ["client"], select: { client: true }, orderBy: { client: "asc" }, take: 200 });
+  const rows = await db.task.groupBy({ by: ["client"], where: { projectId, client: { not: null } }, orderBy: { client: "asc" }, take: 200 });
   return rows.map((r) => r.client!).filter(Boolean);
 }

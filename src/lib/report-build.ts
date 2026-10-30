@@ -87,6 +87,7 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
     project: { name: project.name, description: project.description },
     generatedBy: opts.generatedBy,
     today,
+    timeZone: appTimeZone(),
     time: new Intl.DateTimeFormat(locale, { timeZone: appTimeZone(), hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date()),
     columns,
     kinds: localizeGeneralKinds(kinds, opts.locale).map((k) => k.name),
@@ -160,8 +161,8 @@ export function generateDeliveryPdf(
     const pdf = await renderDeliveryPdf({
       project: column.project.name, column: column.name, today,
       tasks: tasks.map((x) => ({
-        title: mentionsToPlain(x.title), kind: localizeGeneralKind(x.kind, opts.locale).name, dueDate: dateToIso(x.dueDate),
-        subtaskTotal: x.subtasks.length, doneSubtasks: x.subtasks.filter((s) => s.done).map((s) => mentionsToPlain(s.title)),
+        title: mentionsToPlain(x.title, false), kind: localizeGeneralKind(x.kind, opts.locale).name, dueDate: dateToIso(x.dueDate),
+        subtaskTotal: x.subtasks.length, doneSubtasks: x.subtasks.filter((s) => s.done).map((s) => mentionsToPlain(s.title, false)),
       })),
     }, t, locale);
     return { pdf, filename: `${t("entrega")}-${slugOf(column.project.name, t("proyecto"))}-${today}.pdf`, taskCount: tasks.length };
