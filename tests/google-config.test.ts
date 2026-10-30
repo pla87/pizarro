@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { EMPTY_GOOGLE_SETTINGS, googleRedirectUris, isGoogleActive, resolveGoogleConfig, validateGoogleSettings } from "../src/lib/google-config-core";
+import { EMPTY_GOOGLE_SETTINGS, appDomainInfo, googleRedirectUris, isGoogleActive, resolveGoogleConfig, validateGoogleSettings } from "../src/lib/google-config-core";
 
-const saved = { clientId: "bd-id.apps.googleusercontent.com", workspaceDomain: "bd.example", hasSecret: true };
+const saved = { clientId: "bd-id.apps.googleusercontent.com", workspaceDomain: "bd.example", hasSecret: true, publicContactEmail: "" };
 
 describe("configuración de Google (parte pura)", () => {
   test("precedencia: ID y secreto del servidor mandan; el dominio del servidor manda sobre el guardado", () => {
@@ -37,5 +37,20 @@ describe("configuración de Google (parte pura)", () => {
     assert.equal(validateGoogleSettings({ clientId: "a b c d e", workspaceDomain: "" }).ok, false);
     assert.equal(validateGoogleSettings({ clientId: "", workspaceDomain: "sin punto" }).ok, false);
     assert.equal(validateGoogleSettings({ clientId: "", workspaceDomain: "" }).ok, true);
+  });
+
+  test("email de contacto público: opcional y validado", () => {
+    assert.equal(validateGoogleSettings({ clientId: "", workspaceDomain: "", publicContactEmail: "no-es-email" }).ok, false);
+    assert.deepEqual(validateGoogleSettings({ clientId: "", workspaceDomain: "", publicContactEmail: " a@example.com " }), { ok: true, value: { clientId: "", workspaceDomain: "", publicContactEmail: "a@example.com" } });
+    assert.equal(validateGoogleSettings({ clientId: "", workspaceDomain: "", publicContactEmail: "" }).ok, true);
+  });
+
+  test("dominio autorizado a partir de APP_URL", () => {
+    assert.deepEqual(appDomainInfo("https://pizarro.empresa.com/"), { host: "pizarro.empresa.com", domain: "empresa.com", kind: "ok" });
+    assert.equal(appDomainInfo("https://tablon.empresa.co.uk").domain, "empresa.co.uk");
+    assert.deepEqual(appDomainInfo("https://pizarro-prod.up.railway.app"), { host: "pizarro-prod.up.railway.app", domain: "pizarro-prod.up.railway.app", kind: "shared" });
+    assert.equal(appDomainInfo("http://localhost:3000").kind, "local");
+    assert.equal(appDomainInfo("http://192.168.1.5:3000").kind, "local");
+    assert.equal(appDomainInfo(undefined).kind, "none");
   });
 });

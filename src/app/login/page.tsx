@@ -38,7 +38,14 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const { next, error } = await searchParams;
   const message = typeof error === "string" ? ERRORS[Object.hasOwn(ERRORS, error) ? error : "google_failed"]! : null;
   return (
-    <AuthCard title={t("Iniciar sesión")}>
+    <AuthCard
+      title={t("Iniciar sesión")}
+      footer={
+        <>
+          <a className="underline" href="/privacy">{t("Privacidad")}</a> · <a className="underline" href="/terms">{t("Condiciones")}</a>
+        </>
+      }
+    >
       <LoginForm
         next={typeof next === "string" ? next : ""}
         google={googleEnabled()}
