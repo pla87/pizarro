@@ -9,6 +9,8 @@ import * as usersActions from "../../src/actions/users";
 import { forcePasswordChange, updateUser } from "../../src/actions/users";
 import { getCurrentUser, getPendingUser } from "../../src/lib/session";
 import { hashPassword } from "../../src/lib/password";
+import { createResetLink } from "../../src/lib/reset-link";
+import { findUsableToken, consumeToken } from "../../src/lib/auth-token";
 
 describe("miembros de proyectos privados", () => {
   test("un miembro añade y quita miembros; quien no lo es recibe «no encontrado»", async () => {
@@ -175,5 +177,66 @@ describe("contraseñas y cambio forzado", () => {
     expectFail(await forcePasswordChange(other.id), FORBIDDEN);
     expectFail(await updateUser(other.id, { name: "x", email: other.email, role: "ADMIN", active: true }), FORBIDDEN);
     assert.equal((await db.user.findUniqueOrThrow({ where: { id: other.id } })).role, "MEMBER");
+  });
+});
+
+describe("enlace de restablecimiento sin email", () => {
+  const tokenOf = (url: string) => url.split("/reset/")[1]!;
+
+  test("el admin obtiene un enlace de un solo uso para otra persona, no para sí mismo, y el token no queda en claro", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const target = await makeUser();
+    await loginAs(admin);
+    expectFail(await forcePasswordChange(admin.id, { copyLink: true }), /Mi perfil/);
+    const res = expectOk(await forcePasswordChange(target.id, { copyLink: true })) as { link: string | null };
+    assert.match(res.link ?? "", /\/reset\/[\w-]{20,}$/);
+    const token = tokenOf(res.link!);
+    const row = await db.authToken.findFirstOrThrow({ where: { userId: target.id, purpose: "PASSWORD_RESET" } });
+    assert.notEqual(row.tokenHash, token);
+    assert.equal((await db.user.findUniqueOrThrow({ where: { id: target.id } })).mustChangePassword, true);
+
+    const usable = await findUsableToken(token, ["PASSWORD_RESET"]);
+    assert.equal(usable?.userId, target.id);
+    assert.equal(await consumeToken(usable!.id), true);
+    // Una segunda vez ya no sirve.
+    assert.equal(await consumeToken(usable!.id), false);
+    assert.equal(await findUsableToken(token, ["PASSWORD_RESET"]), null);
+
+    const member = await makeUser();
+    await loginAs(member);
+    expectFail(await forcePasswordChange(target.id, { copyLink: true }), FORBIDDEN);
+  });
+
+  test("el enlace caduca a los 30 minutos", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const target = await makeUser();
+    await loginAs(admin);
+    const res = expectOk(await forcePasswordChange(target.id, { copyLink: true })) as { link: string | null };
+    const row = await db.authToken.findFirstOrThrow({ where: { userId: target.id, purpose: "PASSWORD_RESET" } });
+    const mins = (row.expiresAt.getTime() - Date.now()) / 60_000;
+    assert.ok(mins > 29 && mins <= 30, `caduca en ${mins} min`);
+    await db.authToken.update({ where: { id: row.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
+    assert.equal(await findUsableToken(tokenOf(res.link!), ["PASSWORD_RESET"]), null);
+  });
+
+  test("createResetLink (CLI): genera el enlace, rechaza desactivados y desconocidos, y solo borra el 2FA con reset2fa", async () => {
+    const user = await makeUser();
+    await db.user.update({ where: { id: user.id }, data: { twoFactorMethod: "TOTP", totpSecretEnc: "x" } });
+    const a = await createResetLink(user.email.toUpperCase(), { appUrl: "https://app.example.com/" });
+    assert.ok(a.ok && a.url.startsWith("https://app.example.com/reset/") && !a.twoFactorCleared);
+    assert.equal((await db.user.findUniqueOrThrow({ where: { id: user.id } })).twoFactorMethod, "TOTP");
+    const b = await createResetLink(user.email!, { appUrl: "https://app.example.com", reset2fa: true });
+    assert.ok(b.ok && b.twoFactorCleared);
+    assert.equal((await db.user.findUniqueOrThrow({ where: { id: user.id } })).twoFactorMethod, null);
+    // El enlace nuevo sustituye al anterior.
+    assert.equal(await findUsableToken(tokenOf((a as { url: string }).url), ["PASSWORD_RESET"]), null);
+    assert.equal((await findUsableToken(tokenOf((b as { url: string }).url), ["PASSWORD_RESET"]))?.userId, user.id);
+
+    const off = await makeUser({ active: false });
+    const c = await createResetLink(off.email!, { appUrl: "https://app.example.com" });
+    assert.ok(!c.ok && /desactivado/.test(c.error));
+    assert.equal(await db.authToken.count({ where: { userId: off.id } }), 0);
+    const d = await createResetLink("nadie@example.com", { appUrl: "https://app.example.com" });
+    assert.ok(!d.ok);
   });
 });

@@ -24,7 +24,7 @@ export default async function ForgotPasswordPage() {
           <p>{t("Por eso no podemos enviarte un enlace para elegir una contraseña nueva. Estas son las opciones:")}</p>
           <ul className="list-disc space-y-2 pl-5">
             {googleEnabled() && <li>{t("Entra con tu cuenta de Google, si tu email está dado de alta.")}</li>}
-            <li>{t("Pide a un administrador que te fuerce el cambio de contraseña (Administración → Usuarios → Forzar cambio de contraseña).")}</li>
+            <li>{t("Pide a un administrador que te genere un enlace para elegir una contraseña nueva (Administración → Usuarios → Forzar cambio de contraseña). Te lo pasará por otro canal; sirve una sola vez y caduca en 30 minutos.")}</li>
             <li>{t("Si eres quien administra el servidor: la sección «Altas, bajas y contraseñas» del manual explica cómo recuperar el acceso, o configura el envío de emails (SMTP).")}</li>
           </ul>
           {googleEnabled() && <a href="/api/auth/google/start" className="btn-secondary w-full">{t("Iniciar sesión con Google")}</a>}

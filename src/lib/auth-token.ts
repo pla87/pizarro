@@ -1,19 +1,11 @@
 import "server-only";
-import type { Prisma } from "@/generated/prisma/client";
 import { db } from "./db";
-import { authTokenHashes, hashAuthToken, isTokenUsable, newToken, tokenExpiry, type TokenPurpose } from "./auth-token-core";
+import { authTokenHashes, isTokenUsable } from "./auth-token-core";
+import type { TokenPurpose } from "./auth-token-core";
+
+export { issueAuthToken } from "./auth-token-issue";
 
 // Enlaces de un solo uso por email. En la base de datos solo queda el hash del token.
-
-/** Crea un enlace nuevo y devuelve el token en claro (para el email). Sustituye al anterior pendiente del mismo tipo. */
-export async function issueAuthToken(userId: string, purpose: TokenPurpose, data?: Prisma.InputJsonValue): Promise<string> {
-  const token = newToken();
-  await db.$transaction([
-    db.authToken.deleteMany({ where: { userId, purpose } }),
-    db.authToken.create({ data: { userId, purpose, tokenHash: hashAuthToken(token), data, expiresAt: tokenExpiry(purpose) } }),
-  ]);
-  return token;
-}
 
 /** Busca un enlace válido (sin usar ni caducado, de uno de los tipos indicados, de un usuario activo) sin gastarlo. */
 export async function findUsableToken(token: string, purposes: TokenPurpose[]) {

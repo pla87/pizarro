@@ -10,6 +10,7 @@ import { cn } from "@/components/ui/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
+import { copyText } from "@/components/ui/clipboard";
 import { useT } from "@/i18n/client";
 
 type Role = "ADMIN" | "MEMBER";
@@ -198,30 +199,50 @@ function ForcePasswordChange({ user, emailAvailable, onClose }: { user: UserRow;
   const router = useRouter();
   const toast = useToast();
   const [pending, start] = useTransition();
+  const [link, setLink] = useState<string | null>(null);
+  const run = (copyLink: boolean) =>
+    start(async () => {
+      const res = await forcePasswordChange(user.id, { copyLink });
+      if (!res.ok) return toast(res.error, "error");
+      router.refresh();
+      if (res.data.link) return setLink(res.data.link);
+      toast(res.data.emailed ? t("Cambio forzado: se han cerrado sus sesiones y le hemos enviado un enlace por email") : t("Cambio forzado: se han cerrado sus sesiones"));
+      onClose();
+    });
+  if (link) {
+    return (
+      <Modal open onClose={onClose} title={t("Enlace para {name}", { name: user.name })} size="sm">
+        <div className="space-y-3 text-sm">
+          <p>{t("Sus sesiones están cerradas. Con este enlace elegirá una contraseña nueva.")}</p>
+          <input className="input font-mono text-xs" value={link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={t("Enlace de restablecimiento")} data-testid="reset-link" />
+          <p className="text-amber-700 dark:text-amber-300">{t("Envíaselo por un canal de confianza; caduca en 30 minutos y sirve una sola vez. No volverá a mostrarse.")}</p>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-secondary" onClick={onClose}>{t("Cerrar")}</button>
+            <button type="button" className="btn-primary" onClick={async () => ((await copyText(link)) ? toast(t("Enlace copiado")) : toast(t("No se pudo copiar"), "error"))}>{t("Copiar enlace")}</button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
   return (
     <Modal open onClose={onClose} title={t("Forzar cambio de contraseña de {name}", { name: user.name })} size="sm">
       <form
         className="space-y-3 text-sm"
         onSubmit={(e) => {
           e.preventDefault();
-          start(async () => {
-            const res = await forcePasswordChange(user.id);
-            if (!res.ok) return toast(res.error, "error");
-            toast(res.data.emailed ? t("Cambio forzado: se han cerrado sus sesiones y le hemos enviado un enlace por email") : t("Cambio forzado: se han cerrado sus sesiones"));
-            router.refresh();
-            onClose();
-          });
+          run(false);
         }}
       >
         <p>{t("Se cerrarán todas sus sesiones y tendrá que elegir una contraseña nueva la próxima vez que entre. Tú no escribes ninguna contraseña.")}</p>
         <p className="text-slate-500">
           {emailAvailable
             ? t("Le enviaremos un enlace por email (válido 30 minutos) para elegirla.")
-            : t("El envío de emails no está configurado: entrará con su contraseña actual y, antes de usar la app, se le pedirá una nueva.")}
+            : t("El envío de emails no está configurado: se generará un enlace de un solo uso (válido 30 minutos) para que se lo pases tú por un canal de confianza. Así puede recuperar el acceso aunque no recuerde la contraseña actual.")}
         </p>
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
-          <button className="btn-primary" disabled={pending}>{t("Forzar cambio")}</button>
+          {emailAvailable && <button type="button" className="btn-secondary" disabled={pending} onClick={() => run(true)}>{t("Copiar enlace en lugar de enviarlo")}</button>}
+          <button className="btn-primary" disabled={pending}>{emailAvailable ? t("Forzar cambio") : t("Generar enlace")}</button>
         </div>
       </form>
     </Modal>
