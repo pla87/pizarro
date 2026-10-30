@@ -513,7 +513,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       }
     >
       <div ref={rootRef} onPaste={onPaste} className="grid gap-6 md:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="min-w-0 space-y-6 md:max-h-[calc(100dvh-9rem)] md:overflow-y-auto md:pr-2">
+        {/* Margen negativo con relleno igual: deja sitio al anillo de foco (3 px + 2 de separación) que el scroll recortaría. */}
+        <div className="min-w-0 space-y-6 md:-m-2 md:max-h-[calc(100dvh-8rem)] md:overflow-y-auto md:p-2">
           <TaskViewers taskId={task.id} />
           <DescriptionEditor
             key={detail ? `loaded-${descVersion}` : "loading"}

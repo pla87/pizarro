@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { canonicalRedirect } from "@/lib/canonical-url";
 import { PASSWORD_CHANGE_COOKIE, sessionCookieName, sessionCookieOptions } from "@/lib/session-config";
 
 const isDev = process.env.NODE_ENV !== "production";
@@ -27,6 +28,9 @@ function buildCsp(nonce: string): string {
 // en el servidor. También renueva la caducidad de la cookie al navegar y fija la CSP con nonce.
 export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
+  // Opcional (CANONICAL_REDIRECT=1): las direcciones distintas de APP_URL redirigen (308) a ella.
+  const canonical = canonicalRedirect({ enabled: process.env.CANONICAL_REDIRECT, appUrl: process.env.APP_URL, host: req.headers.get("host"), method: req.method, pathname, search });
+  if (canonical) return NextResponse.redirect(canonical, 308);
   const isApi = pathname.startsWith("/api/");
   // Páginas públicas (sin sesión): acceso, política de privacidad y condiciones, contraseña olvidada, enlaces de email y el asistente de primer
   // arranque (/setup se protege con el código del log y da 404 cuando ya hay usuarios).

@@ -201,7 +201,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
             return (
               <li key={r.id}>
                 <details className="group">
-                  <summary className="cursor-pointer list-none px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800/50 [&::-webkit-details-marker]:hidden">
+                  <summary className="cursor-pointer list-none px-3 focus-visible:outline-offset-[-3px] py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800/50 [&::-webkit-details-marker]:hidden">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="font-mono text-xs text-slate-500">{formatTime(r.createdAt, tz, locale)}</span>
                       <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", level.badge)}>{t(level.label)}</span>

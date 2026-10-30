@@ -158,6 +158,25 @@ Si falla: `redirect_uri_mismatch` (la URI no es idéntica: `https`, sin barra fi
 
 Equivalente por variables: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `GOOGLE_WORKSPACE_DOMAIN`. Los cambios guardados en Ajustes se aplican en segundos, sin reiniciar.
 
+### 3.7 Dominio propio (Railway)
+
+Para servir Pizarro en `pizarro.example.com` (sustituye `example.com` por tu dominio) en lugar de la dirección `*.up.railway.app`:
+
+1. **Añadir el dominio en Railway.** Servicio de Pizarro → *Settings* → *Networking* → *Custom Domain* → escribe `pizarro.example.com` y confirma.
+2. **Crear los registros DNS.** Railway muestra un registro `CNAME` (nombre `pizarro`, valor algo como `xxxx.up.railway.app`) y, si lo pide, un registro `TXT` de verificación. Créalos en el panel de tu proveedor de DNS tal cual se muestran (si el proveedor añade solo el dominio, escribe únicamente `pizarro` como nombre). Si usas Cloudflare, déjalos sin proxy (nube gris) hasta que el certificado esté emitido.
+3. **Esperar al certificado.** Railway lo emite solo (Let's Encrypt) cuando el DNS propaga; puede tardar de unos minutos a unas horas. El dominio pasa a *Active* en el panel.
+4. **Cambiar `APP_URL`.** En *Variables* del servicio pon `APP_URL=https://pizarro.example.com` (con `https://` y sin barra final) y vuelve a desplegar (*Redeploy*). Las variables se leen al arrancar.
+
+Qué cambia:
+
+- **Las sesiones de la dirección antigua terminan.** Las cookies son de cada dirección: en el dominio nuevo todo el mundo tiene que iniciar sesión otra vez. La dirección antigua sigue funcionando con sus propias cookies, salvo que actives la redirección opcional (más abajo).
+- **Google.** Si usas el acceso con Google o Docs/Sheets, en Google Cloud (*Google Auth Platform*) actualiza: las URI de redirección autorizadas del cliente (`https://pizarro.example.com/api/auth/google/callback` y `https://pizarro.example.com/api/google/callback`), la *Application home page*, los enlaces de privacidad (`https://pizarro.example.com/privacy`) y condiciones (`https://pizarro.example.com/terms`) y el dominio autorizado (`example.com`, sin subdominios). *Administración → Ajustes → Acceso con Google* muestra las direcciones ya calculadas a partir de `APP_URL`. Mientras no lo hagas, entrar con Google fallará con `redirect_uri_mismatch`.
+- **Emails.** Los enlaces de los emails (invitaciones, recuperar contraseña, avisos) se construyen con `APP_URL`; los enviados antes del cambio siguen apuntando a la dirección antigua.
+- **PWA.** Si alguien instaló Pizarro como aplicación (móvil o escritorio), esa instalación queda ligada a la dirección antigua: que la desinstale y la instale otra vez desde el dominio nuevo.
+- **Integraciones.** Cualquier servicio externo que llame a Pizarro (webhooks, calendarios suscritos por URL) debe usar la dirección nueva.
+
+**Redirección opcional.** Pizarro no obliga a usar el host de `APP_URL`: responde en cualquier dirección que llegue al servicio. Para que quien entre por la dirección antigua pase automáticamente a la nueva, define `CANONICAL_REDIRECT=1` (y redespliega). Las peticiones de páginas (GET/HEAD) a un host distinto del de `APP_URL` reciben una redirección 308 al mismo camino y consulta en `APP_URL`; no se tocan `/api/*` (comprobaciones de salud, callbacks de Google), las peticiones internas (`localhost`) ni las que no son GET. Si `APP_URL` está mal escrita se redirige a una dirección inexistente: compruébala antes de activarlo y quítalo (o corrige `APP_URL`) si te quedas sin acceso.
+
 ## 4. Copias de seguridad
 
 - **Automáticas:** con `BACKUP_KEY`, cada día se copian, cifrados, la base de datos y **todos los ficheros del volumen de subidas** (adjuntos, miniaturas, copias de releases, documentos) en su carpeta `backups/`. Los ficheros se guardan una sola vez y cada copia solo añade los nuevos. Se conservan 14 diarias y 6 mensuales, y cada mes se restaura la última en una base de datos temporal para comprobar que sirve. Estado en *Administración → Copias de seguridad*.

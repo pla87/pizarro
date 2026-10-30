@@ -219,7 +219,7 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
                   <li key={`${i}-${title}`} className="flex items-center gap-2 px-2 py-1">
                     <span className="min-w-0 flex-1 truncate text-sm">{title}</span>
                     <select
-                      className="shrink-0 rounded-md border border-slate-300 bg-white py-0.5 pr-6 pl-1.5 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
+                      className="shrink-0 rounded-md border border-slate-300 bg-white py-0.5 pr-6 pl-1.5 text-xs font-medium focus-visible:outline-offset-0 dark:border-slate-700 dark:bg-slate-900"
                       style={kind ? { color: kind.color } : undefined}
                       value={kindOf(title)}
                       onChange={(e) => setOverrides((o) => ({ ...o, [title]: e.target.value }))}
