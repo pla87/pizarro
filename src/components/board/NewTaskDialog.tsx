@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, File as FileIcon, ImagePlus, Loader2, Plus, X } from "lucide-react";
+import { Camera, File as FileIcon, ImagePlus, Loader2, Paperclip, Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createTask, getProjectFormData } from "@/actions/tasks";
@@ -23,7 +23,8 @@ import { MAX_DESCRIPTION, MAX_TITLE } from "@/lib/constants";
 import { TypeSelector } from "./TaskDialog";
 import type { T } from "@/i18n/core";
 import { AttachLimitHint } from "./AttachLimitHint";
-import { filesFrom, isImageFile, uploadFile, useFileDrop } from "./upload";
+import { filesFrom, formatBytes, isImageFile, uploadFile, useFileDrop } from "./upload";
+import { documentDownloadName, type DocumentKindName } from "@/lib/document-kind";
 import { draftKey, useDraftAutosave, type NewTaskDraft } from "./drafts";
 import { actionThrowResult } from "@/lib/stale-action";
 
@@ -34,6 +35,8 @@ interface Props {
   initialFiles?: File[];
   /** Descripción con la que se abre (p. ej. el enlace al documento desde el que se crea la tarea). */
   initialDescription?: string;
+  /** Documento abierto en el visor desde el que se crea la tarea: ofrece un botón para adjuntarlo. */
+  attachDocument?: { id: string; name: string; kind?: DocumentKindName };
   onClose: () => void;
   /** Escritorio: posición en pantalla cuando hay dos modales a la vez. */
   side?: "left" | "right" | "center";
@@ -53,7 +56,7 @@ function captureTitle(t: T, locale: string): string {
   return t("Captura") + " " + new Date().toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
 }
 
-export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles, initialDescription, onClose: close, side, onAddSecond, onAddSecondBulk, pickProject = false, draft, autosave = false }: Props) {
+export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles, initialDescription, attachDocument, onClose: close, side, onAddSecond, onAddSecondBulk, pickProject = false, draft, autosave = false }: Props) {
   const t = useT();
   const sc = useShortcut();
   const locale = useIntlLocale();
@@ -191,6 +194,34 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   };
 
   const dropping = useFileDrop(addFiles);
+
+  // Adjuntar el documento del visor: se descarga con la sesión y entra como un archivo más (mismos límites que los demás).
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docLoading, setDocLoading] = useState(false);
+  const docAttached = !!docFile && files.includes(docFile);
+  const attachOpenDocument = async () => {
+    if (!attachDocument || docLoading || docAttached) return;
+    const name = attachDocument.name;
+    const fileMax = form.project.fileMaxMb * 1024 * 1024;
+    if (files.length >= 10) return toast(t("Ya hay 10 archivos adjuntos, el máximo por tarea."), "error");
+    setDocLoading(true);
+    try {
+      const res = await fetch(`/api/documents/${attachDocument.id}`, { credentials: "same-origin" });
+      if (!res.ok) throw new Error(t("No se pudo descargar el documento."));
+      const blob = await res.blob();
+      if (blob.size > fileMax) return toast(t("«{name}» pesa {size} y el máximo por archivo es {mb} MB.", { name, size: formatBytes(blob.size, locale), mb: form.project.fileMaxMb }), "error");
+      if (files.reduce((n, f) => n + f.size, 0) + blob.size > form.project.attachMaxMb * 1024 * 1024) {
+        return toast(t("«{name}» no cabe: se superaría el máximo de {mb} MB de adjuntos de la tarea.", { name, mb: form.project.attachMaxMb }), "error");
+      }
+      const file = new File([blob], documentDownloadName(name, attachDocument.kind ?? "OTHER"), { type: blob.type || "application/octet-stream" });
+      setDocFile(file);
+      setFiles((prev) => [...prev, file].slice(0, 10));
+    } catch (e) {
+      toast(e instanceof Error && e.message ? e.message : t("No se pudo descargar el documento."), "error");
+    } finally {
+      setDocLoading(false);
+    }
+  };
 
   const addSubtaskDraft = () => {
     const text = subtaskDraft.trim();
@@ -427,6 +458,19 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
               <Camera size={16} /> {t("Cámara")}
               <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { addFiles(filesFrom(e.target.files)); e.target.value = ""; }} />
             </label>
+            {attachDocument && (
+              <button
+                type="button"
+                data-testid="attach-open-document"
+                onClick={() => void attachOpenDocument()}
+                disabled={docAttached || docLoading}
+                title={docAttached ? t("«{name}» ya está adjunto", { name: attachDocument.name }) : t("Adjuntar «{name}»", { name: attachDocument.name })}
+                className="flex h-14 max-w-48 min-w-20 items-center gap-1.5 rounded-lg border-2 border-dashed border-slate-300 px-2 text-left text-xs text-slate-600 hover:border-brand-500 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-default disabled:opacity-50 disabled:hover:border-slate-300 dark:border-slate-700 dark:text-slate-300 dark:disabled:hover:border-slate-700"
+              >
+                {docLoading ? <Loader2 size={16} className="shrink-0 animate-spin" /> : <Paperclip size={16} className="shrink-0" />}
+                <span className="line-clamp-2 break-all">{t("Adjuntar «{name}»", { name: attachDocument.name })}</span>
+              </button>
+            )}
             <AttachLimitHint
               className="self-center max-sm:hidden" usedBytes={files.reduce((n, f) => n + f.size, 0)} limitMb={form.project.attachMaxMb} fileMaxMb={form.project.fileMaxMb}
             />

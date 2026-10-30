@@ -45,6 +45,7 @@ const priorityOf = (title: string, index: number) => {
 };
 
 // Medidas de la fila (px): botón h-7 w-7, hueco gap-0.5 y separador de 1px con mx-1.
+const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 const BTN = 28;
 const GAP = 2;
 const SEP = 9;
@@ -64,8 +65,7 @@ export function FormatToolbar({ items, onLeave, className }: { items: FormatItem
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ right: number; top: number } | null>(null);
 
-  const useIsoLayout = typeof window === "undefined" ? useEffect : useLayoutEffect;
-  useIsoLayout(() => {
+  useIsoLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const measure = () => {
@@ -104,7 +104,8 @@ export function FormatToolbar({ items, onLeave, className }: { items: FormatItem
     return { shown: set, hidden: buttons.filter((x) => !set.has(x.i)).map((x) => x.b) };
   }, [items, width]);
 
-  const closeMenu = (focusMore = false) => {
+  const menuOpen = open && hidden.length > 0;
+  const closeMenu =(focusMore = false) => {
     setOpen(false);
     if (focusMore) moreRef.current?.focus();
   };
@@ -137,9 +138,6 @@ export function FormatToolbar({ items, onLeave, className }: { items: FormatItem
     // solo al abrir (pos pasa de null a un valor)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, pos === null]);
-  useEffect(() => {
-    if (hidden.length === 0) setOpen(false);
-  }, [hidden.length]);
 
   const hiddenPressed = hidden.some((b) => b.pressed);
   // Separadores: solo entre dos grupos que tengan algún botón visible.
@@ -209,7 +207,7 @@ export function FormatToolbar({ items, onLeave, className }: { items: FormatItem
           title={t("Más formatos")}
           aria-label={t("Más formatos")}
           aria-haspopup="menu"
-          aria-expanded={open}
+          aria-expanded={menuOpen}
           tabIndex={-1}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => setOpen((o) => !o)}
@@ -218,7 +216,7 @@ export function FormatToolbar({ items, onLeave, className }: { items: FormatItem
           <MoreHorizontal size={15} />
         </button>
       )}
-      {open && hidden.length > 0 && pos &&
+      {menuOpen && pos &&
         createPortal(
           <div
             ref={menuRef}
