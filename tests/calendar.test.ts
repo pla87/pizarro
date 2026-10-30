@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bandsForWeek, isRange, rangeBandsForWeek, groupByDay, groupWeeks, monthGrid, parseMonth, parsePersonParam, shiftMonth } from "../src/lib/calendar";
+import { bandsForWeek, columnAt, dragRange, isRange, rangeBandsForWeek, groupByDay, groupWeeks, monthGrid, parseMonth, parsePersonParam, shiftMonth } from "../src/lib/calendar";
 import { deliverableStatus } from "../src/lib/report";
 
 test("parseMonth valida y cae al mes de hoy", () => {
@@ -127,4 +127,31 @@ test("parsePersonParam: enlaces antiguos (me, none, un id)", () => {
   assert.deepEqual(parsePersonParam("abc123", "me1"), ["abc123"]);
   // «me» y el id propio se funden en una sola entrada.
   assert.deepEqual(parsePersonParam("me,me1,none,unassigned", "me1"), ["me1", "unassigned"]);
+});
+
+test("dragRange: mover conserva la duración y desplaza ambas fechas", () => {
+  const r = { start: "2026-10-10", due: "2026-10-14" };
+  assert.deepEqual(dragRange(r, "move", "2026-10-11", "2026-10-11"), r);
+  assert.deepEqual(dragRange(r, "move", "2026-10-11", "2026-10-14"), { start: "2026-10-13", due: "2026-10-17" });
+  // Hacia atrás y cruzando mes y año.
+  assert.deepEqual(dragRange(r, "move", "2026-10-12", "2026-10-02"), { start: "2026-09-30", due: "2026-10-04" });
+  assert.deepEqual(dragRange({ start: "2026-12-30", due: "2027-01-02" }, "move", "2026-12-30", "2027-01-01"), { start: "2027-01-01", due: "2027-01-04" });
+});
+
+test("dragRange: los bordes cambian una sola fecha y nunca se cruzan", () => {
+  const r = { start: "2026-10-10", due: "2026-10-14" };
+  assert.deepEqual(dragRange(r, "start", "2026-10-10", "2026-10-07"), { start: "2026-10-07", due: "2026-10-14" });
+  assert.deepEqual(dragRange(r, "start", "2026-10-10", "2026-10-20"), { start: "2026-10-14", due: "2026-10-14" });
+  assert.deepEqual(dragRange(r, "end", "2026-10-14", "2026-10-18"), { start: "2026-10-10", due: "2026-10-18" });
+  assert.deepEqual(dragRange(r, "end", "2026-10-14", "2026-10-01"), { start: "2026-10-10", due: "2026-10-10" });
+});
+
+test("columnAt reparte la fila en columnas iguales y se ajusta a los extremos", () => {
+  assert.equal(columnAt(100, 100, 700), 0);
+  assert.equal(columnAt(199, 100, 700), 0);
+  assert.equal(columnAt(200, 100, 700), 1);
+  assert.equal(columnAt(799, 100, 700), 6);
+  assert.equal(columnAt(50, 100, 700), 0);
+  assert.equal(columnAt(5000, 100, 700), 6);
+  assert.equal(columnAt(10, 0, 0), 0);
 });

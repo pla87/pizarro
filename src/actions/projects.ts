@@ -381,6 +381,18 @@ export async function updateDeliverable(deliverableId: string, input: z.input<ty
   });
 }
 
+/** Cambia solo la fecha objetivo de un entregable (arrastrarlo en el calendario); devuelve la anterior para poder deshacerlo. */
+export async function moveDeliverable(deliverableId: string, dueDate: string) {
+  return runAction({ name: "projects.moveDeliverable", args: [deliverableId, dueDate] }, async () => {
+    const d = await findDeliverable(deliverableId);
+    const day = v.dayIso.parse(dueDate);
+    if (!day) throw new AppError("Fecha no válida.");
+    const prev = await db.deliverable.findUniqueOrThrow({ where: { id: d.id }, select: { dueDate: true } });
+    await db.deliverable.update({ where: { id: d.id }, data: { dueDate: isoToDate(day) } });
+    return { from: dateToIso(prev.dueDate) };
+  });
+}
+
 /** Las tarjetas del entregable no se borran: quedan sin entregable. */
 export async function deleteDeliverable(deliverableId: string) {
   return runAction({ name: "projects.deleteDeliverable", args: [deliverableId] }, async () => {
