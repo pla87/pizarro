@@ -26,6 +26,8 @@ export interface ActionContext {
   taskId?: string | null;
   /** Historial de tareas: si la acción lo fija, sustituye al que se deduce de la etiqueta; [] = no anotar nada. */
   events?: TaskEventInput[];
+  /** La acción cambió datos que el cliente no recibe en su resultado (p. ej. posiciones de otras tarjetas): su propia pestaña también debe refrescarse. */
+  refreshOwnTab?: boolean;
   /** Se rellena con el id de la entrada de deshacer que cree runAction (ver trackUndoEntry). */
   undoRef?: { id?: string };
 }
@@ -94,4 +96,10 @@ export function trackUndoEntry(): { id?: string } {
   const store = actionContext.getStore();
   if (store) store.undoRef = ref;
   return ref;
+}
+
+/** Avisa de que la acción tocó datos ajenos a su resultado: la pestaña que la lanzó no puede saltarse el refresco. */
+export function needOwnRefresh(): void {
+  const store = actionContext.getStore();
+  if (store) store.refreshOwnTab = true;
 }

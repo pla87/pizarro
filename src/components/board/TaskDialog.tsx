@@ -1,5 +1,6 @@
 "use client";
 
+import { takePrefetchedTaskDetail } from "./taskDetailPrefetch";
 import { Archive, Camera, Check, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -115,7 +116,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
 
   useEffect(() => {
     let alive = true;
-    getTaskDetail(task.id).then((res) => {
+    (takePrefetchedTaskDetail(task.id) ?? getTaskDetail(task.id)).then((res) => {
       if (!alive) return;
       if (res.ok) {
         initialDetail.current ??= res.data;

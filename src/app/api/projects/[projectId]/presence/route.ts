@@ -1,4 +1,4 @@
-import { visibleProjectsWhere } from "@/lib/access";
+import { canAccessProject } from "@/lib/access-cache";
 import { db } from "@/lib/db";
 import { activeUsers, openTaskViewers } from "@/lib/presence";
 import { getCurrentUser } from "@/lib/session";
@@ -13,13 +13,14 @@ export const dynamic = "force-dynamic";
  * personas que la tienen abierta ahora (círculos de las tarjetas). No se registra en los logs.
  */
 export async function GET(_req: Request, ctx: { params: Promise<{ projectId: string }> }) {
-  const t = await getT();
+  // El idioma (otra lectura de la sesión) solo hace falta para los mensajes de error.
   const user = await getCurrentUser();
-  if (!user) return new Response(t("No autorizado"), { status: 401 });
+  if (!user) return new Response((await getT())("No autorizado"), { status: 401 });
   const parsed = v.id.safeParse((await ctx.params).projectId);
-  if (!parsed.success) return new Response(t("No encontrado"), { status: 404 });
-  const project = await db.project.findFirst({ where: { id: parsed.data, ...visibleProjectsWhere(user) }, select: { id: true } });
-  if (!project) return new Response(t("No encontrado"), { status: 404 });
+  if (!parsed.success) return new Response((await getT())("No encontrado"), { status: 404 });
+  // Acceso con caché breve (se consulta cada 15 s por pestaña); la sesión sí se comprueba siempre.
+  if (!(await canAccessProject(user, parsed.data))) return new Response((await getT())("No encontrado"), { status: 404 });
+  const project = { id: parsed.data };
   const users = activeUsers(project.id).map(({ id, name }) => ({ id, name }));
   // Tareas abiertas por otras personas, solo las de este proyecto (una consulta, y solo si hay alguna).
   const open = openTaskViewers(user.id);
