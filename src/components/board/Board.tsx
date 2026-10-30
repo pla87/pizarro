@@ -1,5 +1,6 @@
 "use client";
 
+import { prefetchTaskDetail } from "./taskDetailPrefetch";
 import { actionThrowMessage } from "@/lib/stale-action";
 import {
   closestCorners, DndContext, type CollisionDetection, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
@@ -594,7 +595,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         });
       },
       setColumns,
-      openTask: setOpenTaskId,
+      openTask: (id) => {
+        prefetchTaskDetail(id);
+        setOpenTaskId(id);
+      },
       openNewTask: (columnId, evergreen, files) => setNewTask({ columnId, evergreen, files }),
       revealTask,
       openRelease: (columnId) => {
