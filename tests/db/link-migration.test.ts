@@ -13,15 +13,17 @@ describe("migración unificar_enlace_externo", () => {
     try {
       await db.$transaction(async (tx) => {
         await tx.$executeRawUnsafe(`SET LOCAL search_path TO mig_enlace`);
-        await tx.$executeRawUnsafe(`CREATE TABLE "Task" ("id" TEXT PRIMARY KEY, "linkUrl" TEXT, "externalUrl" TEXT)`);
+        await tx.$executeRawUnsafe(`CREATE TABLE "Task" ("id" TEXT PRIMARY KEY, "linkUrl" TEXT, "externalUrl" TEXT, "description" TEXT NOT NULL DEFAULT '')`);
         await tx.$executeRawUnsafe(`CREATE TABLE "Project" ("id" TEXT PRIMARY KEY, "taskFields" TEXT[])`);
         await tx.$executeRawUnsafe(`CREATE TABLE "ProjectTemplate" ("id" TEXT PRIMARY KEY, "taskFields" TEXT[])`);
-        await tx.$executeRawUnsafe(`INSERT INTO "Task" VALUES ('a', NULL, 'https://example.com/ref'), ('b', 'https://example.com/pr', 'https://example.com/ref'), ('c', 'https://example.com/pr', NULL), ('d', NULL, NULL)`);
+        await tx.$executeRawUnsafe(`INSERT INTO "Task" VALUES ('a', NULL, 'https://example.com/ref', ''), ('b', 'https://example.com/pr', 'https://example.com/ref', 'Texto'), ('c', 'https://example.com/pr', NULL, ''), ('d', NULL, NULL, ''), ('e', 'https://example.com/x', 'https://example.com/ref', '')`);
         await tx.$executeRawUnsafe(`INSERT INTO "Project" VALUES ('p1', ARRAY['cost','externalUrl','startDate']), ('p2', ARRAY[]::TEXT[])`);
         await tx.$executeRawUnsafe(`INSERT INTO "ProjectTemplate" VALUES ('t1', ARRAY['externalUrl'])`);
         for (const stmt of sql.split(";").map((s) => s.replace(/^\s*--.*$/gm, "").trim()).filter(Boolean)) await tx.$executeRawUnsafe(stmt);
-        const rows = await tx.$queryRawUnsafe<{ id: string; linkUrl: string | null }[]>(`SELECT "id", "linkUrl" FROM "Task" ORDER BY "id"`);
-        assert.deepEqual(rows.map((r) => r.linkUrl), ["https://example.com/ref", "https://example.com/pr", "https://example.com/pr", null]);
+        const rows = await tx.$queryRawUnsafe<{ id: string; linkUrl: string | null; description: string }[]>(`SELECT "id", "linkUrl", "description" FROM "Task" ORDER BY "id"`);
+        assert.deepEqual(rows.map((r) => r.linkUrl), ["https://example.com/ref", "https://example.com/pr", "https://example.com/pr", null, "https://example.com/x"]);
+        // Con los dos enlaces, el de referencia no se pierde: pasa al final de la descripción.
+        assert.deepEqual(rows.map((r) => r.description), ["", "Texto\n\nEnlace de referencia: https://example.com/ref", "", "", "Enlace de referencia: https://example.com/ref"]);
         const cols = await tx.$queryRawUnsafe<{ column_name: string }[]>(`SELECT column_name FROM information_schema.columns WHERE table_schema = 'mig_enlace' AND table_name = 'Task'`);
         assert.ok(!cols.some((c) => c.column_name === "externalUrl"));
         const projects = await tx.$queryRawUnsafe<{ id: string; taskFields: string[] }[]>(`SELECT * FROM "Project" ORDER BY "id"`);
