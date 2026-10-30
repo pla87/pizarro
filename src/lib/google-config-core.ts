@@ -90,7 +90,7 @@ export function validateGoogleSettings(input: GoogleSettingsInput): { ok: true; 
   return { ok: true, value: contact === undefined ? { clientId, workspaceDomain } : { clientId, workspaceDomain, publicContactEmail: contact } };
 }
 
-const isPlainEmail = (s: string) => s.length <= 200 && /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]{2,}$/.test(s);
+export const isPlainEmail = (s: string) => s.length <= 200 && /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]{2,}$/.test(s);
 
 // Sufijos públicos habituales de alojamiento compartido: cualquiera puede tener un subdominio, pero el dominio
 // no es de nadie, así que Google no lo acepta como «dominio autorizado» de una aplicación.

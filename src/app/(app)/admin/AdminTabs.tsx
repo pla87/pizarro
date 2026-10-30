@@ -13,6 +13,7 @@ const TABS = [
   { href: "/admin/templates", label: "Plantillas de proyecto" },
   { href: "/admin/backups", label: "Copias de seguridad" },
   { href: "/admin/logs", label: "Logs" },
+  { href: "/admin/legal", label: "Textos legales" },
   { href: "/admin/settings", label: "Ajustes" },
 ];
 
