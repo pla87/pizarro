@@ -3,7 +3,7 @@
 import { after } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
-import { describeAction } from "@/lib/action-context";
+import { describeAction, needOwnRefresh } from "@/lib/action-context";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertProjectAccess } from "@/lib/access";
@@ -46,6 +46,8 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     const user = await requireUser();
     const data = deploySchema.parse(input);
     await assertProjectAccess(user, data.projectId);
+    // Cambia títulos (códigos de release), columnas y tareas fijas de muchas tarjetas: esta pestaña también recarga.
+    needOwnRefresh();
 
     const tasks = await db.task.findMany({
       where: { id: { in: data.taskIds }, projectId: data.projectId, archivedAt: null },
