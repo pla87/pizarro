@@ -286,6 +286,35 @@ export async function setMyProjectPicks(projectIds: string[]) {
   });
 }
 
+/**
+ * Añade o quita un proyecto de equipo a los proyectos de trabajo de un administrador. Solo administradores:
+ * cada uno puede tocar los suyos y los de otros administradores activos. Idempotente.
+ */
+export async function setAdminProjectPick(projectId: string, adminId: string, picked: boolean) {
+  return runAction({ name: "projects.setAdminProjectPick", args: [projectId, adminId, picked] }, async () => {
+    const user = await requireUser();
+    if (user.role !== "ADMIN") throw forbidden();
+    const id = v.id.parse(projectId);
+    const targetId = v.id.parse(adminId);
+    const want = z.boolean().parse(picked);
+    const project = await db.project.findFirst({ where: { id, isPrivate: false }, select: { id: true, name: true } });
+    if (!project) throw notFound();
+    const target = await db.user.findFirst({ where: { id: targetId, active: true, role: "ADMIN" }, select: { id: true, name: true } });
+    if (!target) throw new AppError("Usuario no válido.");
+    if (want) {
+      await db.adminProjectPick.upsert({
+        where: { projectId_userId: { projectId: project.id, userId: target.id } },
+        create: { projectId: project.id, userId: target.id },
+        update: {},
+      });
+    } else {
+      await db.adminProjectPick.deleteMany({ where: { projectId: project.id, userId: target.id } });
+    }
+    describeAction(`${want ? "Añadió" : "Quitó"} «${project.name}» ${want ? "a" : "de"} los proyectos en los que trabaja ${target.id === user.id ? "(él mismo)" : `«${target.name}»`}`);
+    revalidatePath("/", "layout");
+  });
+}
+
 // --- Etiquetas ---------------------------------------------------------------
 
 const labelSchema = z.object({ name: v.name.max(40, "Máximo 40 caracteres."), color: z.enum(PALETTE) });
@@ -378,6 +407,18 @@ export async function updateDeliverable(deliverableId: string, input: z.input<ty
       where: { id: d.id },
       data: { name: data.name, description: data.description, dueDate: data.dueDate ? isoToDate(data.dueDate) : null },
     });
+  });
+}
+
+/** Cambia solo la fecha objetivo de un entregable (arrastrarlo en el calendario); devuelve la anterior para poder deshacerlo. */
+export async function moveDeliverable(deliverableId: string, dueDate: string) {
+  return runAction({ name: "projects.moveDeliverable", args: [deliverableId, dueDate] }, async () => {
+    const d = await findDeliverable(deliverableId);
+    const day = v.dayIso.parse(dueDate);
+    if (!day) throw new AppError("Fecha no válida.");
+    const prev = await db.deliverable.findUniqueOrThrow({ where: { id: d.id }, select: { dueDate: true } });
+    await db.deliverable.update({ where: { id: d.id }, data: { dueDate: isoToDate(day) } });
+    return { from: dateToIso(prev.dueDate) };
   });
 }
 

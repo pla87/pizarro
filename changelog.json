@@ -1,6 +1,69 @@
 {
   "versions": [
     {
+      "version": "1.31.0",
+      "date": "2026-10-30",
+      "releasedAt": "2026-10-30T13:19:42+01:00",
+      "summary": "Recuperar el acceso sin email, todo el calendario se arrastra, proyectos para admins y correcciones de la revisión",
+      "changes": {
+        "nuevas": [
+          "Sin email configurado, «Forzar cambio de contraseña» genera un enlace de un solo uso (30 minutos) que el admin copia y entrega; con email también puede copiarlo en vez de enviarlo.",
+          "Comando de emergencia `node dist/reset-link.mjs <email>` para cuando ningún admin puede entrar (ver INSTALL.md).",
+          "Calendario: las franjas de tareas con inicio y fin se arrastran para moverlas o se estiran por sus bordes; los entregables también se arrastran. Con deshacer.",
+          "«Ver proyectos existentes» para administradores: lista los proyectos de equipo y permite añadirlos a sus proyectos de trabajo.",
+          "Administración → Proyectos: un admin puede elegir proyectos para sí mismo y para otros admins pulsando su nombre."
+        ],
+        "mejoras": [
+          "La siguiente aparición de una tarea recurrente copia coste (sin pagar), horas estimadas, prioridad y cliente, y desplaza la fecha de inicio.",
+          "El .ics de la columna Agenda exporta rangos de inicio a fin.",
+          "Los «+N» del calendario abren la lista de franjas o entregables ocultos; en móvil aparecen los rangos que acaban después del mes.",
+          "Los días «Esperando» se cuentan en días naturales de la zona de la app, igual en la tarjeta y en el aviso."
+        ],
+        "correcciones": [
+          "Convertir una columna en «Esperando» ya no dispara avisos de tareas antiguas; restaurar una tarea archivada reinicia su espera.",
+          "Deshacer el borrado de una columna recupera los destinos de Rutinas; un destino no puede ser una columna terminada ni otra de Rutinas.",
+          "El PDF de entrega al cliente muestra las menciones sin «@».",
+          "El .ics ya no borra guiones bajos ni asteriscos dentro de palabras o enlaces.",
+          "Deshacer entradas anteriores a la v1.30 vuelve a funcionar; restaurar una tarea conserva su origen de repetición y de Rutinas.",
+          "Los documentos se revalidan siempre, así que quitar el acceso a un proyecto surte efecto al momento.",
+          "Los nombres de archivo de las releases usan la fecha de la zona de la app."
+        ],
+        "tecnicos": [
+          "Nuevas acciones moveDeliverable y setAdminProjectPick; página /projects. Menos consultas en subtareas, documentos y sugerencias de clientes."
+        ]
+      },
+      "en": {
+        "summary": "Account recovery without email, everything in the calendar can be dragged, projects for admins and review fixes",
+        "changes": {
+          "nuevas": [
+            "Without email, “Force password change” generates a one-time link (30 minutes) that the admin copies and hands over; with email it can also be copied instead of sent.",
+            "Emergency command `node dist/reset-link.mjs <email>` for when no admin can sign in (see INSTALL.md).",
+            "Calendar: bands of tasks with a start and an end can be dragged to move them or stretched by their edges; deliverables can be dragged too. With undo.",
+            "“See existing projects” for admins: lists the team projects and lets them add them to their work projects.",
+            "Administration → Projects: an admin can pick projects for themselves and for other admins by clicking their name."
+          ],
+          "mejoras": [
+            "The next occurrence of a recurring task copies cost (unpaid), estimated hours, priority and client, and shifts the start date.",
+            "The Agenda column .ics exports start-to-end ranges.",
+            "The calendar “+N” counters open the list of hidden bands or deliverables; on mobile, ranges ending after the month are shown.",
+            "“Waiting” days are counted as calendar days in the app time zone, the same on the card and in the reminder."
+          ],
+          "correcciones": [
+            "Turning a column into “Waiting” no longer triggers reminders for old tasks; restoring an archived task restarts its wait.",
+            "Undoing a column deletion restores Routines targets; a target cannot be a done column or another Routines column.",
+            "The client delivery PDF shows mentions without “@”.",
+            "The .ics no longer removes underscores or asterisks inside words or links.",
+            "Undoing entries from before v1.30 works again; restoring a task keeps its recurrence and Routines origin.",
+            "Documents are always revalidated, so removing access to a project takes effect immediately.",
+            "Release file names use the app time zone date."
+          ],
+          "tecnicos": [
+            "New actions moveDeliverable and setAdminProjectPick; /projects page. Fewer queries for subtasks, documents and client suggestions."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.30.0",
       "date": "2026-10-30",
       "releasedAt": "2026-10-30T12:25:36+01:00",

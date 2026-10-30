@@ -49,7 +49,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ documentId: str
   const etag = `"${doc.id}-${size.toString(36)}-${Math.floor(mtimeMs).toString(36)}"`;
   const headers: Record<string, string> = {
     ETag: etag,
-    "Cache-Control": download ? "private, no-cache" : "private, max-age=86400",
+    // Siempre se revalida (el ETag evita reenviar el fichero): a quien pierda el acceso no le queda una copia en caché.
+    "Cache-Control": "private, max-age=0, must-revalidate",
     Vary: "Cookie",
     "X-Content-Type-Options": "nosniff",
     // Se puede incrustar solo desde la propia app (el visor de PDF); nunca desde otro sitio.

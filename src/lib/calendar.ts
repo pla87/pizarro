@@ -112,6 +112,29 @@ export function rangeBandsForWeek(weekDays: string[], ranges: { id: string; star
   return bands;
 }
 
+/** Qué se arrastra de una banda: toda ella, su borde izquierdo (inicio) o el derecho (fin). */
+export type RangeDragMode = "move" | "start" | "end";
+
+/**
+ * Fechas de un rango tras arrastrarlo: `grabbed` es el día bajo el puntero al empezar y `hover` el de ahora.
+ * Mover conserva la duración (ambas fechas se desplazan lo mismo); los bordes cambian solo su fecha,
+ * y nunca cruzan al otro (inicio <= fin): al llegar al otro borde se queda en un solo día.
+ */
+export function dragRange(origin: { start: string; due: string }, mode: RangeDragMode, grabbed: string, hover: string): { start: string; due: string } {
+  if (mode === "move") {
+    const delta = daysBetween(grabbed, hover);
+    return delta ? { start: addDaysIso(origin.start, delta), due: addDaysIso(origin.due, delta) } : { ...origin };
+  }
+  if (mode === "start") return { start: hover > origin.due ? origin.due : hover, due: origin.due };
+  return { start: origin.start, due: hover < origin.start ? origin.start : hover };
+}
+
+/** Columna (0..cols-1) que corresponde a la coordenada x dentro de una fila de `width` px que empieza en `left`; se ajusta a los extremos. */
+export function columnAt(x: number, left: number, width: number, cols: number = 7): number {
+  if (!(width > 0)) return 0;
+  return Math.min(cols - 1, Math.max(0, Math.floor(((x - left) / width) * cols)));
+}
+
 /**
  * Semanas con contenido para la vista móvil: solo los días del mes que tienen algo (`hasItems`);
  * las semanas vacías se omiten. `start`/`end` son los límites de la semana completa.

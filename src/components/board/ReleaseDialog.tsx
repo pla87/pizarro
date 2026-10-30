@@ -1,5 +1,6 @@
 "use client";
 
+import { appTimeZone } from "@/lib/format";
 import { ArrowLeft, Check, ClipboardCopy, Download, Eye, FileArchive, FileText, Loader2, Pencil, Rocket } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -192,7 +193,7 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
         const href = URL.createObjectURL(await res.blob());
         const a = document.createElement("a");
         a.href = href;
-        a.download = `release-${isoDate(now)}-adjuntos${partSuffix(part, total)}.zip`;
+        a.download = `release-${isoDate(now, appTimeZone())}-adjuntos${partSuffix(part, total)}.zip`;
         a.click();
         setTimeout(() => URL.revokeObjectURL(href), 1000);
         // Pausa corta para que el navegador no agrupe ni descarte las descargas seguidas.
@@ -260,10 +261,10 @@ export function ReleaseDialog({ tasks, preselected, templates, onClose, onDeploy
             <button className="btn-secondary" onClick={copy}>
               {copied ? <Check size={15} /> : <ClipboardCopy size={15} />} {t("Copiar todo")}
             </button>
-            <button className="btn-secondary" onClick={() => downloadText(content, releaseFileName(now, "md"), "text/markdown")}>
+            <button className="btn-secondary" onClick={() => downloadText(content, releaseFileName(now, "md", appTimeZone()), "text/markdown")}>
               <Download size={15} /> .md
             </button>
-            <button className="btn-secondary" onClick={() => downloadText(content, releaseFileName(now, "txt"), "text/plain")}>
+            <button className="btn-secondary" onClick={() => downloadText(content, releaseFileName(now, "txt", appTimeZone()), "text/plain")}>
               <FileText size={15} /> .txt
             </button>
             {attachmentTotal > 0 && (

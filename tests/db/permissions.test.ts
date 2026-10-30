@@ -5,7 +5,7 @@ import { asUser, db, expectFail, expectOk, FORBIDDEN, assign, loginAs, makeKind,
 import { assertAssignable, assertProjectAccess, assertTaskAccess, listVisibleProjects, visibleProjectsWhere } from "../../src/lib/access";
 import { addComment, createTask, deleteTask, getTaskDetail, moveTask, updateTask } from "../../src/actions/tasks";
 import { deleteRelease, deployRelease, getReleaseTaskDetails } from "../../src/actions/releases";
-import { addProjectMember, createProject, removeProjectMember, setMyProjectPicks, setAttachmentLimits, setProjectVisibility } from "../../src/actions/projects";
+import { addProjectMember, createProject, removeProjectMember, setMyProjectPicks, setAdminProjectPick, setAttachmentLimits, setProjectVisibility } from "../../src/actions/projects";
 
 /** Tres proyectos (equipo con asignado, equipo sin asignados, privado) con dos administradores, un miembro y un ajeno. */
 async function world() {
@@ -356,5 +356,30 @@ describe("asignación de usuarios a proyectos", () => {
     assert.deepEqual((await db.adminProjectPick.findMany({ where: { userId: admin.id } })).map((p) => p.projectId), [a.project.id]);
     expectOk(await setMyProjectPicks([b.project.id]));
     assert.deepEqual((await db.adminProjectPick.findMany({ where: { userId: admin.id } })).map((p) => p.projectId), [b.project.id]);
+  });
+
+  test("setAdminProjectPick: solo admins, objetivo admin activo y proyecto de equipo", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const other = await makeUser({ role: "ADMIN" });
+    const inactive = await makeUser({ role: "ADMIN", active: false });
+    const user = await makeUser();
+    const a = await makeProject();
+    const priv = await makeProject({ visibility: "PRIVATE", owner: admin });
+    const picks = async (uid: string) => (await db.adminProjectPick.findMany({ where: { userId: uid } })).map((p) => p.projectId);
+    await loginAs(user);
+    expectFail(await setAdminProjectPick(a.project.id, user.id, true), FORBIDDEN);
+    expectFail(await setAdminProjectPick(a.project.id, other.id, true), FORBIDDEN);
+    await loginAs(admin);
+    expectOk(await setAdminProjectPick(a.project.id, admin.id, true));
+    expectOk(await setAdminProjectPick(a.project.id, admin.id, true));
+    expectOk(await setAdminProjectPick(a.project.id, other.id, true));
+    assert.deepEqual(await picks(admin.id), [a.project.id]);
+    assert.deepEqual(await picks(other.id), [a.project.id]);
+    expectOk(await setAdminProjectPick(a.project.id, other.id, false));
+    assert.deepEqual(await picks(other.id), []);
+    assert.deepEqual(await picks(admin.id), [a.project.id]);
+    expectFail(await setAdminProjectPick(a.project.id, user.id, true), "Usuario no válido.");
+    expectFail(await setAdminProjectPick(a.project.id, inactive.id, true), "Usuario no válido.");
+    expectFail(await setAdminProjectPick(priv.project.id, admin.id, true), NOT_FOUND);
   });
 });

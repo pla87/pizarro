@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { addProjectMember, removeProjectMember } from "@/actions/projects";
+import { addProjectMember, removeProjectMember, setAdminProjectPick } from "@/actions/projects";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
@@ -31,7 +31,7 @@ export function ProjectsAdmin({ projects, users }: { projects: Row[]; users: Adm
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-500">
-        {t("Proyectos de equipo y las personas asignadas. Quien no es administrador solo ve los proyectos a los que está asignado; los administradores ven todos y eligen en su perfil en cuáles trabajan. Los proyectos privados no aparecen aquí.")}
+        {t("Proyectos de equipo y las personas asignadas. Quien no es administrador solo ve los proyectos a los que está asignado; los administradores ven todos y eligen en cuáles trabajan (en su perfil, o aquí pulsando su nombre). Los proyectos privados no aparecen aquí.")}
       </p>
       {projects.length === 0 && <p className="card p-5 text-sm text-slate-500">{t("No hay proyectos de equipo.")}</p>}
       <ul className="space-y-3">
@@ -90,12 +90,24 @@ function ProjectCard({ project, users, byId }: { project: Row; users: AdminUser[
             </button>
           </li>
         ))}
-        {admins.map((u) => (
-          <li key={u.id} className="inline-flex max-w-full items-center rounded-full border border-dashed border-slate-300 px-2.5 py-0.5 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">
-            <span className="truncate">{u.name}</span>
-            <span className="ml-1 shrink-0 text-xs text-slate-500">{pickedAdmins.has(u.id) ? t("(admin, ve todos; lo tiene elegido)") : t("(admin, ve todos)")}</span>
-          </li>
-        ))}
+        {admins.map((u) => {
+          const on = pickedAdmins.has(u.id);
+          return (
+            <li key={u.id} className="max-w-full">
+              <button
+                type="button"
+                aria-pressed={on}
+                disabled={pending}
+                title={on ? t("Quitar «{project}» de los proyectos en los que trabaja {name}", { project: project.name, name: u.name }) : t("Añadir «{project}» a los proyectos en los que trabaja {name}", { project: project.name, name: u.name })}
+                className={`inline-flex max-w-full items-center rounded-full border border-dashed px-2.5 py-0.5 text-sm hover:bg-slate-50 disabled:opacity-60 dark:hover:bg-slate-800 ${on ? "border-brand-500 text-slate-700 dark:text-slate-200" : "border-slate-300 text-slate-500 dark:border-slate-700"}`}
+                onClick={() => run(() => setAdminProjectPick(project.id, u.id, !on), on ? t("Proyecto quitado de sus proyectos de trabajo") : t("Proyecto añadido a sus proyectos de trabajo"))}
+              >
+                <span className="truncate">{u.name}</span>
+                <span className="ml-1 shrink-0 text-xs text-slate-500">{on ? t("(admin, ve todos; elegido)") : t("(admin, ve todos; no elegido)")}</span>
+              </button>
+            </li>
+          );
+        })}
         {members.length === 0 && admins.length === 0 && <li className="text-sm text-slate-500">{t("Nadie asignado.")}</li>}
       </ul>
       <div className="mt-3 flex gap-2">

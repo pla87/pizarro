@@ -86,3 +86,10 @@ test("terminadas recientes: cuenta la fecha de cierre, no la última edición", 
   const r2 = buildReport({ ...base, tasks: base.tasks.map((t) => (t.id === "c" ? { ...t, updatedAt: "2026-01-01T00:00:00.000Z", doneAt: "2026-10-10T08:00:00.000Z" } : t)) });
   assert.deepEqual(r2.recentDone.map((t) => t.title), ["Hecha vencida"]);
 });
+
+test("terminadas recientes: el día de cierre se cuenta en la zona horaria de la app", () => {
+  const withDoneAt = (timeZone?: string) => buildReport({ ...base, timeZone, tasks: base.tasks.map((t) => (t.id === "c" ? { ...t, doneAt: "2026-10-03T23:30:00.000Z" } : t)) });
+  // 23:30 UTC ya es el 4 de octubre en Madrid (14 días antes de «hoy»: dentro); en UTC es el 3 (15 días: fuera).
+  assert.deepEqual(withDoneAt("Europe/Madrid").recentDone.map((t) => t.title), ["Hecha vencida"]);
+  assert.deepEqual(withDoneAt("UTC").recentDone, []);
+});

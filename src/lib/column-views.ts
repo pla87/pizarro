@@ -44,20 +44,24 @@ export async function loadPendingSubtasks(projectId: string, taskIds: string[]):
 
 /** Calendario .ics con las tareas no archivadas de una columna AGENDA que tienen fecha límite. */
 export async function buildColumnIcs(projectId: string, columnId: string): Promise<{ ics: string; filename: string; count: number } | null> {
-  const column = await db.column.findFirst({ where: { id: columnId, projectId, role: "AGENDA" }, select: { name: true, project: { select: { name: true } } } });
+  const column = await db.column.findFirst({ where: { id: columnId, projectId, role: "AGENDA" }, select: { name: true, project: { select: { name: true, taskFields: true } } } });
   if (!column) return null;
   const tasks = await db.task.findMany({
     where: { projectId, columnId, archivedAt: null, dueDate: { not: null } },
     orderBy: [{ dueDate: "asc" }, { position: "asc" }],
     take: 2000,
-    select: { id: true, title: true, description: true, dueDate: true },
+    select: { id: true, title: true, description: true, dueDate: true, startDate: true },
   });
   const base = appUrl();
   const ics = buildIcs({
     name: `${column.project.name} · ${column.name}`,
     events: tasks.flatMap((x) => {
-      const date = dateToIso(x.dueDate);
-      return date ? [{ uid: `${x.id}@pizarro`, date, summary: mentionsToPlain(x.title), description: x.description ? markdownToPlain(x.description) : undefined, url: `${base}/p/${projectId}?task=${x.id}` }] : [];
+      const due = dateToIso(x.dueDate);
+      // Con el campo «Fecha de inicio» activo y una fecha de inicio anterior, el evento abarca de inicio a límite.
+      const start = column.project.taskFields.includes("startDate") ? dateToIso(x.startDate) : null;
+      const range = due && start && start < due;
+      const date = range ? start : due;
+      return date ? [{ uid: `${x.id}@pizarro`, date, endDate: range ? due! : undefined, summary: mentionsToPlain(x.title), description: x.description ? markdownToPlain(x.description) : undefined, url: `${base}/p/${projectId}?task=${x.id}` }] : [];
     }),
   });
   const slug = column.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "agenda";

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { DOCUMENTS_MAX_PER_PROJECT } from "@/lib/document-kind";
-import { listProjectDocuments, listTrashedDocuments } from "@/lib/documents";
+import { listProjectDocumentsOf, listTrashedDocumentsOf } from "@/lib/documents";
 import { requireUserPage } from "@/lib/session";
 import { effectiveFileMaxMb } from "@/lib/upload-size";
 import { getT } from "@/i18n/server";
@@ -22,8 +22,8 @@ export default async function ProjectDocsPage({ params, searchParams }: { params
   });
   if (!project) notFound();
   const [documents, trashed, me, { doc }] = await Promise.all([
-    listProjectDocuments(user, project.id),
-    listTrashedDocuments(user, project.id),
+    listProjectDocumentsOf(project.id),
+    listTrashedDocumentsOf(project.id),
     db.user.findUniqueOrThrow({ where: { id: user.id }, select: { editorMode: true } }),
     searchParams,
   ]);

@@ -1,6 +1,7 @@
 // Generador de release notes. Función pura: se usa en el navegador (instantáneo)
 // y en los tests.
 
+import { isoInZone } from "./dates";
 import { decodeEntities } from "./markdown-entities";
 import { mentionsToPlain } from "./mentions";
 import { MAX_TITLE } from "./constants";
@@ -265,16 +266,17 @@ export function releaseZipName(title: string, part = 1, total = 1): string {
   return `${base || "release"}-adjuntos${partSuffix(part, total)}.zip`;
 }
 
-/** Fecha local en formato YYYY-MM-DD. */
-export function isoDate(date = new Date()): string {
+/** Fecha en formato YYYY-MM-DD: en la zona horaria indicada (la de la app) o, sin ella, la local del navegador. */
+export function isoDate(date = new Date(), timeZone?: string): string {
+  if (timeZone) return isoInZone(date, timeZone);
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
 
-export function releaseFileName(date: Date, ext: "md" | "txt"): string {
-  return `release-${isoDate(date)}.${ext}`;
+export function releaseFileName(date: Date, ext: "md" | "txt", timeZone?: string): string {
+  return `release-${isoDate(date, timeZone)}.${ext}`;
 }
 
 /** Cadencias de una tarea fija: cada cuántas releases entra (1 = todas, 2 = las pares, 3 = múltiplos de 3). */

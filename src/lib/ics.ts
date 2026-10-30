@@ -5,8 +5,10 @@ import { mentionsToPlain } from "./mentions";
 export interface IcsEvent {
   /** Identificador estable (sobrescribe el evento al volver a importar). */
   uid: string;
-  /** YYYY-MM-DD: evento de día completo. */
+  /** YYYY-MM-DD: evento de día completo (el primer día si es un rango). */
   date: string;
+  /** YYYY-MM-DD: último día (incluido) de un rango de días completos; sin él, el evento dura solo `date`. */
+  endDate?: string;
   summary: string;
   /** Texto plano. */
   description?: string;
@@ -49,8 +51,9 @@ export function markdownToPlain(md: string): string {
     .replace(/<[^>\n]+>/g, "")
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/^\s*>\s?/gm, "")
-    .replace(/(\*\*|__)(.+?)\1/g, "$2")
-    .replace(/(\*|_)(.+?)\1/g, "$2")
+    // Énfasis solo en límite de palabra: no toca guiones bajos de URL ni de snake_case, ni 2*3*4.
+    .replace(/(?<![\p{L}\p{N}_*])(\*\*|__)(?=\S)(.+?)(?<=\S)\1(?![\p{L}\p{N}_*])/gu, "$2")
+    .replace(/(?<![\p{L}\p{N}_*])([*_])(?=[^\s*_])(.+?)(?<=[^\s*_])\1(?![\p{L}\p{N}_*])/gu, "$2")
     .replace(/~~(.+?)~~/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/^\s*[-*+]\s+\[( |x)\]\s+/gim, (_m, c: string) => (c === " " ? "[ ] " : "[x] "))
@@ -72,8 +75,8 @@ export function buildIcs(opts: { name: string; events: IcsEvent[]; now?: Date; p
       `UID:${escapeIcsText(e.uid)}`,
       `DTSTAMP:${stamp}`,
       `DTSTART;VALUE=DATE:${compact(e.date)}`,
-      // En eventos de día completo DTEND es exclusivo: el día siguiente.
-      `DTEND;VALUE=DATE:${compact(addDaysIso(e.date, 1))}`,
+      // En eventos de día completo DTEND es exclusivo: el día siguiente al último.
+      `DTEND;VALUE=DATE:${compact(addDaysIso(e.endDate && e.endDate > e.date ? e.endDate : e.date, 1))}`,
       `SUMMARY:${escapeIcsText(e.summary)}`,
     );
     if (e.description) lines.push(`DESCRIPTION:${escapeIcsText(e.description)}`);

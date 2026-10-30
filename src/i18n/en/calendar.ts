@@ -24,5 +24,7 @@ export const calendar: Record<string, string> = {
   "Tareas con rango de fechas": "Tasks with a date range",
   "+{n} tareas con rango más": "+{n} more ranged tasks",
   "+{n} más": "+{n} more",
-  "Arrastra una tarea a otro día para cambiar su fecha límite (o Alt+←/→ con ella enfocada).": "Drag a task to another day to change its due date (or Alt+←/→ while it is focused).",
+  "Arrastra una tarea, un rango o un entregable para cambiar sus fechas; en un rango, arrastra también sus bordes (o Alt+←/→ con él enfocado; Alt+Mayús+←/→ cambia su fin).": "Drag a task, a range or a deliverable to change its dates; for a range, you can also drag its edges (or Alt+←/→ while it is focused; Alt+Shift+←/→ changes its end).",
+  "Rango cambiado: {from} → {to}": "Range changed: {from} → {to}",
+  "Entregable movido al {date}": "Deliverable moved to {date}",
 };

@@ -316,7 +316,17 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: strin
           </Link>
         ))}
         {isAdmin && (
-          <MenuItem icon={Plus} className="mt-1 rounded-md border-t border-slate-200 text-brand-600 dark:border-slate-800" onClick={() => setCreating(true)}>
+          <Link
+            href="/projects"
+            role="menuitem"
+            tabIndex={-1}
+            className="mt-1 block rounded-md border-t border-slate-200 px-2.5 py-2 text-sm text-brand-600 hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none dark:border-slate-800 dark:hover:bg-slate-800 dark:focus-visible:bg-slate-800"
+          >
+            {t("Ver proyectos existentes")}
+          </Link>
+        )}
+        {isAdmin && (
+          <MenuItem icon={Plus} className="rounded-md text-brand-600" onClick={() => setCreating(true)}>
             {t("Nuevo proyecto")}
           </MenuItem>
         )}

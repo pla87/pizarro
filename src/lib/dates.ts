@@ -5,8 +5,16 @@ type DueStatus = "none" | "done" | "overdue" | "today" | "soon" | "ok";
 const SOON_DAYS = 3;
 
 /** "Hoy" en la zona horaria indicada, como YYYY-MM-DD. */
-export function todayIso(timeZone?: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+export function todayIso(timeZone?: string, now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+}
+
+/** Día natural (YYYY-MM-DD) de un instante en la zona horaria indicada (no el día UTC). */
+export const isoInZone = (date: Date, timeZone?: string): string => todayIso(timeZone, date);
+
+/** Días naturales (en la zona indicada) entre un instante y otro: la regla de «lleva N días» de tarjeta y recordatorio. */
+export function calendarDaysSince(from: Date, now: Date, timeZone?: string): number {
+  return daysBetween(isoInZone(from, timeZone), isoInZone(now, timeZone));
 }
 
 /** Date (UTC medianoche, como la devuelve Prisma para @db.Date) → YYYY-MM-DD. */
