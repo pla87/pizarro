@@ -12,7 +12,8 @@ import { requestContext } from "./request-context";
 import { getCurrentUser, getPendingUser } from "./session";
 import { toLocale, translate } from "@/i18n/core";
 
-type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string };
+/** `cid`: id del cambio publicado a las demás pestañas (solo en acciones que cambian datos de un proyecto). */
+type ActionResult<T = undefined> = { ok: true; data: T; cid?: string } | { ok: false; error: string };
 
 /** Nombre y argumentos de la acción, para el registro de actividad. */
 interface ActionMeta {
@@ -37,7 +38,7 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
     const user = tracked || willUndo ? await getCurrentUser().catch(() => null) : null;
     // Aviso a las demás pestañas del proyecto (las consultas no cambian nada): ya está confirmada la transacción
     // principal y publishChange no depende del historial ni del deshacer, así que sale antes de guardarlos.
-    if (tracked) publishChange({ projectId: ctx.projectId!, userId: user?.id ?? null, action: meta!.name });
+    if (tracked) result.cid = publishChange({ projectId: ctx.projectId!, userId: user?.id ?? null, action: meta!.name });
     // Al guardar una entrada de deshacer se vacía la pila de rehacer: no depende del historial, va a la vez.
     let redoError: unknown = null;
     const redoCleared = willUndo && user

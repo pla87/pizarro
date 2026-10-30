@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 
 // Avisos en tiempo (casi) real: cada cambio en un proyecto se anuncia a las pestañas que lo
 // tienen abierto (/api/projects/[id]/events) y estas se refrescan. En memoria: una sola instancia.
@@ -8,6 +9,8 @@ interface ProjectChange {
   userId: string | null;
   action: string;
   at: number;
+  /** Id único del cambio: quien lo hizo lo recibe en el resultado de su acción y no se refresca por su propio aviso. */
+  cid: string;
 }
 
 type Listener = (change: ProjectChange) => void;
@@ -23,10 +26,12 @@ export function subscribeProject(projectId: string, listener: Listener): () => v
   };
 }
 
-export function publishChange(change: Omit<ProjectChange, "at">): void {
+/** Anuncia un cambio y devuelve su id (aunque no haya nadie escuchando: la acción lo necesita para su resultado). */
+export function publishChange(change: Omit<ProjectChange, "at" | "cid">): string {
+  const cid = randomUUID();
   const set = channels.get(change.projectId);
-  if (!set) return;
-  const full = { ...change, at: Date.now() };
+  if (!set) return cid;
+  const full = { ...change, at: Date.now(), cid };
   for (const l of set) {
     try {
       l(full);
@@ -34,6 +39,7 @@ export function publishChange(change: Omit<ProjectChange, "at">): void {
       // Un oyente roto (pestaña cerrada) no afecta al resto.
     }
   }
+  return cid;
 }
 
 // --- Registro de conexiones abiertas ----------------------------------------------

@@ -55,7 +55,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
         return;
       }
       send("retry: 3000\n\n");
-      const unsubscribe = subscribeProject(project.id, (c) => send(`event: change\ndata: ${JSON.stringify({ userId: c.userId, action: c.action, at: c.at })}\n\n`));
+      const unsubscribe = subscribeProject(project.id, (c) => send(`event: change\ndata: ${JSON.stringify({ userId: c.userId, action: c.action, at: c.at, cid: c.cid })}\n\n`));
       // Comentario periódico: mantiene viva la conexión a través de proxies.
       const ping = setInterval(() => send(": ping\n\n"), PING_MS);
       let checking = false;
