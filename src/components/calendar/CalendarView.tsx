@@ -801,7 +801,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
                         className={cn(
                           "relative min-h-28 min-w-0 border-l border-slate-200 p-1 first:border-l-0 dark:border-slate-800",
                           !day.inMonth && "bg-slate-50/70 dark:bg-slate-900/40",
-                          dragOver === day.iso && "bg-brand-50 ring-2 ring-inset ring-brand-500 dark:bg-brand-950/40",
+                          dragOver === day.iso && "bg-brand-50 ring-2 ring-inset ring-brand-500 dark:bg-brand-500/20",
                         )}
                       >
                         <div className={cn("mb-1 flex h-5 items-center justify-end text-xs", day.inMonth ? "text-slate-600 dark:text-slate-300" : "text-slate-400 dark:text-slate-600")}>

@@ -10,13 +10,14 @@ import { PairLeftWidthContext } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import { actionThrowMessage } from "@/lib/stale-action";
+import type { DocumentKindName } from "@/lib/document-kind";
 import type { EditorModeValue, ProjectFormData } from "@/lib/types";
 
 interface Opts {
   projectId: string;
   currentUserId: string;
   editorMode: EditorModeValue;
-  doc: { id: string; name: string };
+  doc: { id: string; name: string; kind?: DocumentKindName };
   /** Ancho normal del visor (para colocar la pareja). */
   viewerWidth: string;
 }
@@ -89,7 +90,7 @@ export function useDocTaskDialogs({ projectId, currentUserId, editorMode, doc, v
     <BoardContext.Provider value={api}>
     <PairLeftWidthContext.Provider value={viewerWidth}>
       {second === "new" ? (
-        <NewTaskDialog side="right" pickProject initialColumnId={api.columns[0]?.id} initialDescription={link} onClose={() => setSecond(null)} />
+        <NewTaskDialog side="right" pickProject initialColumnId={api.columns[0]?.id} initialDescription={link} attachDocument={doc} onClose={() => setSecond(null)} />
       ) : (
         <BulkTaskDialog side="right" pickProject onClose={() => setSecond(null)} />
       )}

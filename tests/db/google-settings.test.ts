@@ -4,7 +4,7 @@ import { afterEach, describe, test } from "node:test";
 import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeUser } from "./helpers";
 import { saveGoogleSettings } from "../../src/actions/google-settings";
 import { decryptSecret } from "../../src/lib/crypto";
-import { googleConfig, getGoogleSettingsView, googlePolicyEnv, refreshGoogleConfig } from "../../src/lib/google-config";
+import { googleConfig, getGoogleSettingsView, getPublicContactEmail, googlePolicyEnv, refreshGoogleConfig } from "../../src/lib/google-config";
 import { googleEnabled } from "../../src/lib/google";
 import { flushLogs } from "../../src/lib/log";
 import { googleOnly } from "../../src/lib/auth-policy";
@@ -126,5 +126,20 @@ describe("ajustes de Google", () => {
     process.env.GOOGLE_CLIENT_SECRET = "";
     process.env.GOOGLE_WORKSPACE_DOMAIN = "";
     assert.equal(googleConfig().source, "db");
+  });
+
+  test("email de contacto público: se guarda, se valida y lo lee la página pública", async () => {
+    await clean();
+    await admin();
+    assert.equal(await getPublicContactEmail(), "");
+    expectFail(await saveGoogleSettings({ clientId: "", workspaceDomain: "", publicContactEmail: "no-es-email" }), /contacto/);
+    const res = expectOk(await saveGoogleSettings({ clientId: "", workspaceDomain: "", publicContactEmail: " privacidad@example.com " }));
+    assert.equal(res.settings.publicContactEmail, "privacidad@example.com");
+    assert.equal(await getPublicContactEmail(), "privacidad@example.com");
+    // Sin el campo no se toca; vacío lo borra.
+    expectOk(await saveGoogleSettings({ clientId: "", workspaceDomain: "" }));
+    assert.equal(await getPublicContactEmail(), "privacidad@example.com");
+    expectOk(await saveGoogleSettings({ clientId: "", workspaceDomain: "", publicContactEmail: "" }));
+    assert.equal(await getPublicContactEmail(), "");
   });
 });

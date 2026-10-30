@@ -41,11 +41,19 @@ export class PdfTimeoutError extends AppError {
   }
 }
 
+/** Con tantos renders ya esperando turno, los nuevos se rechazan al instante (503) en vez de apilarse sin fin. */
+export const PDF_MAX_WAITING = 5;
+export const PDF_BUSY_MESSAGE = "Hay muchos PDF generándose; inténtalo en un momento.";
+let waitingRenders = 0;
+
 /** Ejecuta un render en la cola (de uno en uno) con tiempo máximo; `timeoutMs` es inyectable para los tests. */
 export function queuedRender<T>(render: () => Promise<T>, timeoutMs: number = PDF_RENDER_TIMEOUT_MS): Promise<T> {
+  if (waitingRenders >= PDF_MAX_WAITING) return Promise.reject(new AppError(PDF_BUSY_MESSAGE, 503, "pdf_busy"));
+  waitingRenders++;
   const run = reportQueue.then(
     () =>
       new Promise<T>((resolve, reject) => {
+        waitingRenders--;
         const timer = setTimeout(() => reject(new PdfTimeoutError()), timeoutMs);
         render().then(
           (v) => { clearTimeout(timer); resolve(v); },

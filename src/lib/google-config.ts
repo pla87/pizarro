@@ -3,8 +3,8 @@ import { db } from "./db";
 import { AppError } from "./errors";
 import { decryptSecret, encryptSecret } from "./keyring";
 import {
-  EMPTY_GOOGLE_SETTINGS, envGoogleCredentials, GOOGLE_CLIENT_ID_KEY, GOOGLE_DOMAIN_KEY, GOOGLE_KEYS, GOOGLE_SECRET_KEY, googleRedirectUris, isGoogleActive,
-  parseGoogleSettings, resolveGoogleConfig, type GoogleConfig, type GoogleSettings, type GoogleSettingsInput,
+  appDomainInfo, EMPTY_GOOGLE_SETTINGS, envGoogleCredentials, GOOGLE_CLIENT_ID_KEY, GOOGLE_CONTACT_KEY, GOOGLE_DOMAIN_KEY, GOOGLE_KEYS, GOOGLE_SECRET_KEY, googleRedirectUris, isGoogleActive,
+  parseGoogleSettings, resolveGoogleConfig, type AppDomainInfo, type GoogleConfig, type GoogleSettings, type GoogleSettingsInput,
 } from "./google-config-core";
 
 // Configuración de Google (acceso con Google y Docs/Sheets): variables GOOGLE_* del servidor (mandan) o lo que un
@@ -91,6 +91,9 @@ export interface GoogleSettingsView {
   /** Falta APP_URL: sin ella no hay URL de redirección ni acceso con Google. */
   appUrlMissing: boolean;
   redirectUris: { login: string; docs: string } | null;
+  /** Datos para la guía de Google Cloud (pantalla «Marca»). */
+  appUrl: string;
+  appDomain: AppDomainInfo;
 }
 
 export async function getGoogleSettingsView(): Promise<GoogleSettingsView> {
@@ -103,6 +106,8 @@ export async function getGoogleSettingsView(): Promise<GoogleSettingsView> {
     active: googleEnabled(),
     appUrlMissing: !process.env.APP_URL?.trim(),
     redirectUris: googleRedirectUris(process.env.APP_URL),
+    appUrl: (process.env.APP_URL ?? "").trim().replace(/\/$/, ""),
+    appDomain: appDomainInfo(process.env.APP_URL),
   };
 }
 
@@ -124,6 +129,7 @@ export async function saveGoogleSettings(
   let secretChange: "set" | "cleared" | "unchanged" = "unchanged";
   await db.$transaction(async (tx) => {
     const entries: [string, string][] = [[GOOGLE_CLIENT_ID_KEY, input.clientId], [GOOGLE_DOMAIN_KEY, input.workspaceDomain]];
+    if (input.publicContactEmail !== undefined) entries.push([GOOGLE_CONTACT_KEY, input.publicContactEmail]);
     for (const [key, value] of entries) await tx.appState.upsert({ where: { key }, create: { key, value }, update: { value } });
     if (disabling) {
       await tx.appState.deleteMany({ where: { key: GOOGLE_SECRET_KEY } });
@@ -140,4 +146,10 @@ export async function saveGoogleSettings(
   await refreshGoogleConfig();
   const { settings: after } = await readSaved();
   return { secretChange, before, after };
+}
+
+/** Email de contacto público para /privacy y /terms (vacío si no hay). Lectura directa: son páginas poco visitadas. */
+export async function getPublicContactEmail(): Promise<string> {
+  const row = await db.appState.findUnique({ where: { key: GOOGLE_CONTACT_KEY }, select: { value: true } }).catch(() => null);
+  return row?.value.trim() ?? "";
 }

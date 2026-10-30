@@ -3,7 +3,7 @@ import { describe, test } from "node:test";
 
 process.env.SESSION_SECRET ??= "x".repeat(48);
 process.env.DATABASE_URL ??= "postgresql://none:none@localhost:5432/none";
-const { queuedRender, PdfTimeoutError } = await import("../src/lib/report-build");
+const { queuedRender, PdfTimeoutError, PDF_MAX_WAITING } = await import("../src/lib/report-build");
 
 describe("cola de renders PDF", () => {
   test("los renders se ejecutan de uno en uno y en orden", async () => {
@@ -24,5 +24,19 @@ describe("cola de renders PDF", () => {
   test("un render que falla no bloquea la cola", async () => {
     await assert.rejects(queuedRender(async () => { throw new Error("boom"); }), /boom/);
     assert.equal(await queuedRender(async () => 7), 7);
+  });
+
+  test("con 5 renders esperando, el siguiente se rechaza al instante con 503", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const blocker = queuedRender(() => gate.then(() => "primero"), 5000);
+    await new Promise((r) => setTimeout(r, 5)); // el primero ya ocupa el turno: no cuenta como espera
+    const waiting = Array.from({ length: PDF_MAX_WAITING }, (_, i) => queuedRender(async () => i, 5000));
+    await assert.rejects(queuedRender(async () => "sobra"), (err: Error) => (err as Error & { status: number }).status === 503 && err.message === "Hay muchos PDF generándose; inténtalo en un momento.");
+    release();
+    assert.equal(await blocker, "primero");
+    assert.deepEqual(await Promise.all(waiting), [0, 1, 2, 3, 4]);
+    // Vacía la cola, vuelve a aceptar.
+    assert.equal(await queuedRender(async () => "otra"), "otra");
   });
 });

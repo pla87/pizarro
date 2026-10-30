@@ -1,6 +1,53 @@
 {
   "versions": [
     {
+      "version": "1.34.0",
+      "date": "2026-10-30",
+      "releasedAt": "2026-10-30T18:41:26+01:00",
+      "summary": "Guía de Google paso a paso con logo y páginas públicas, barra de formato en una línea y adjuntar el documento abierto",
+      "changes": {
+        "nuevas": [
+          "Guía paso a paso del acceso con Google, pantalla por pantalla de Google Cloud (Branding, Audience, Data Access, Clients), con botones para copiar cada dato y el logo de Pizarro (120×120) para descargar.",
+          "Páginas públicas de privacidad y condiciones (/privacy y /terms), enlazadas desde la pantalla de acceso, con un email de contacto público opcional.",
+          "Al crear una tarea desde Documentación, botón «Adjuntar «documento»» para añadir el documento abierto como adjunto."
+        ],
+        "mejoras": [
+          "La barra de formato ocupa siempre una sola línea: lo que no cabe pasa a «Más formatos». Se quita el botón de lista de tareas (para eso están las subtareas).",
+          "Si hay 5 PDF esperando, los nuevos se rechazan con «inténtalo en un momento»; el informe semanal que falla se reintenta como mucho una vez por hora.",
+          "El comando de emergencia de contraseñas queda apuntado en el registro de actividad."
+        ],
+        "correcciones": [
+          "Las tarjetas de opciones de Avisos por email se leen bien en todos los temas.",
+          "Color de fondo en tema oscuro del calendario."
+        ],
+        "tecnicos": [
+          "public/pizarro-logo-120.png; AppState google.publicContactEmail; acción de registro auth.resetLinkCli."
+        ]
+      },
+      "en": {
+        "summary": "Step-by-step Google guide with logo and public pages, one-line formatting toolbar and attaching the open document",
+        "changes": {
+          "nuevas": [
+            "Step-by-step Google sign-in guide, screen by screen in Google Cloud (Branding, Audience, Data Access, Clients), with copy buttons for every value and the Pizarro logo (120×120) to download.",
+            "Public privacy and terms pages (/privacy and /terms), linked from the sign-in screen, with an optional public contact email.",
+            "When creating a task from Documentation, an “Attach «document»” button adds the open document as an attachment."
+          ],
+          "mejoras": [
+            "The formatting toolbar always fits on one line: what doesn't fit goes into “More formats”. The task list button is removed (use subtasks).",
+            "With 5 PDFs waiting, new ones are rejected with “try again in a moment”; a failing weekly report is retried at most once an hour.",
+            "The emergency password command is recorded in the activity log."
+          ],
+          "correcciones": [
+            "The Email notices option cards are readable in every theme.",
+            "Calendar background colour in the dark theme."
+          ],
+          "tecnicos": [
+            "public/pizarro-logo-120.png; AppState google.publicContactEmail; log action auth.resetLinkCli."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.33.0",
       "date": "2026-10-30",
       "releasedAt": "2026-10-30T16:33:44+01:00",

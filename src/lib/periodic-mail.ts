@@ -105,6 +105,20 @@ export function reportMail(opts: { projectName: string; url: string }, t: T) {
   return { subject, text, html };
 }
 
+// Si el envío de un informe falla (SMTP caído, PDF atascado…), no se reintenta en cada pasada del mantenimiento:
+// como mucho una vez por hora y proyecto. Se guarda en memoria; al reiniciar el servidor se vuelve a intentar.
+export const REPORT_RETRY_MS = 60 * 60 * 1000;
+const reportFailures = new Map<string, number>();
+
+/** ¿Se puede (re)intentar ya el informe de este proyecto? */
+export function reportRetryAllowed(projectId: string, now: Date): boolean {
+  const failedAt = reportFailures.get(projectId);
+  return failedAt === undefined || now.getTime() - failedAt >= REPORT_RETRY_MS;
+}
+
+export const noteReportFailure = (projectId: string, now: Date) => void reportFailures.set(projectId, now.getTime());
+export const clearReportFailure = (projectId: string) => void reportFailures.delete(projectId);
+
 /** Envía los informes semanales cuyo día y hora han llegado. Devuelve cuántos ha enviado. */
 export async function sendDueReports(now: Date = new Date()): Promise<number> {
   if (!emailEnabled()) return 0;
@@ -113,6 +127,7 @@ export async function sendDueReports(now: Date = new Date()): Promise<number> {
   let sent = 0;
   for (const s of schedules) {
     if (!reportDue(now, tz, s)) continue;
+    if (!reportRetryAllowed(s.projectId, now)) continue;
     // La persona que lo configuró debe seguir activa y con acceso al proyecto (si no, no se manda nada de un proyecto que ya no ve).
     const creator = s.createdById ? await db.user.findFirst({ where: { id: s.createdById, active: true }, select: { id: true, name: true, role: true, locale: true } }) : null;
     const allowed = creator ? await db.project.count({ where: { id: s.projectId, ...visibleProjectsWhere(creator as CurrentUser) } }) : 0;
@@ -134,8 +149,10 @@ export async function sendDueReports(now: Date = new Date()): Promise<number> {
       const mail = reportMail({ projectName: report.project.name, url: `${appUrl()}/p/${s.projectId}` }, makeT(locale));
       await sendMail({ to: s.recipient, ...mail, attachments: [{ filename: report.filename, content: Buffer.from(report.pdf), contentType: "application/pdf" }] });
       sent++;
+      clearReportFailure(s.projectId);
       logEvent({ ...base, action: "report.scheduledSent", message: `Informe semanal de «${report.project.name}» enviado a ${maskEmail(s.recipient)}`, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient), bytes: report.pdf.length, locale: intlLocale(locale) } });
     } catch (err) {
+      noteReportFailure(s.projectId, now);
       await db.reportSchedule.updateMany({ where: { projectId: s.projectId, lastSentAt: now }, data: { lastSentAt: s.lastSentAt } });
       logEvent({ ...base, level: "error", action: "report.scheduledFailed", message: `Fallo al enviar el informe semanal a ${maskEmail(s.recipient)}: ${maskEmailsIn((err as Error).message)}`, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient) } });
     }
