@@ -68,8 +68,14 @@ describe("ajustes de email", () => {
     await clean();
     await admin();
     expectOk(await saveMailSettings({ ...form, password: "primera" }));
-    expectOk(await saveMailSettings({ ...form, port: 587, secure: false, password: "" }));
+    // Mismo servidor, puerto y usuario: se conserva. Si cambian, hay que volver a escribirla (no se manda al nuevo destino).
+    expectOk(await saveMailSettings({ ...form, fromName: "Otro", password: "" }));
     assert.equal(decryptSecret((await savedPass())!), "primera");
+    expectFail(await saveMailSettings({ ...form, port: 587, secure: false, password: "" }), /Escribe la contraseña de nuevo/);
+    expectFail(await saveMailSettings({ ...form, host: "smtp.otro.example" }), /Escribe la contraseña de nuevo/);
+    expectFail(await saveMailSettings({ ...form, user: "otro@example.com" }), /Escribe la contraseña de nuevo/);
+    assert.equal(decryptSecret((await savedPass())!), "primera");
+    expectOk(await saveMailSettings({ ...form, port: 587, secure: false, password: "primera" }));
     const cfg = await loadMailConfig();
     assert.equal(cfg.port, 587);
     assert.equal(cfg.secure, false);

@@ -22,6 +22,7 @@ import { dateToIso, isoToDate } from "@/lib/dates";
 import type { LabelOption } from "@/lib/types";
 import { revokeProject } from "@/lib/revoke";
 import { GOOGLE_SHARE_MODES, isDomainMode } from "@/lib/google-share";
+import { googleWorkspaceDomain } from "@/lib/google-config";
 import { assertDeliverableCapacity, assertDeliverableCreateRate, assertLabelCapacity, assertLabelCreateRate } from "@/lib/caps";
 
 /** Crea columnas, tipos propios, tipos generales ocultos y etiquetas de una plantilla en el proyecto (dentro de la transacción). */
@@ -138,7 +139,7 @@ export async function setGoogleShareMode(projectId: string, mode: string) {
     const project = await findManageableProject(user, projectId);
     if (isDomainMode(parsed)) {
       if (project.isPrivate) throw new AppError("Un proyecto privado no se puede compartir con todo el dominio.");
-      if (!process.env.GOOGLE_WORKSPACE_DOMAIN) throw new AppError("Compartir con el dominio requiere configurar GOOGLE_WORKSPACE_DOMAIN en el servidor.");
+      if (!googleWorkspaceDomain()) throw new AppError("Compartir con el dominio requiere configurar el dominio de Workspace (Administración → Ajustes → Acceso con Google, o GOOGLE_WORKSPACE_DOMAIN en el servidor).");
     }
     await db.project.update({ where: { id: project.id }, data: { googleShareMode: parsed } });
     describeAction("Cambió cómo se comparten los documentos de Google");

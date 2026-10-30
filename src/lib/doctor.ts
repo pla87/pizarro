@@ -1,4 +1,5 @@
 import { readFile, readdir, statfs } from "node:fs/promises";
+import { envGoogleCredentials } from "./google-config-core";
 import os from "node:os";
 import path from "node:path";
 import pkg from "../../package.json";
@@ -107,8 +108,19 @@ export async function collectDiagnostics(opts: DoctorOptions): Promise<Record<st
     features.email = Boolean(features.email) || emailInApp;
     features.emailSource = features.smtp ? "env" : emailInApp ? "app" : features.mailOutbox ? "outbox" : "none";
   }, ctx);
+  // Google configurado en Administración → Ajustes (sin valores: solo si hay ID, secreto y dominio). Las variables GOOGLE_* mandan.
+  await section(async () => {
+    const rows = await db.appState.findMany({ where: { key: { in: ["google.clientId", "google.clientSecretEnc", "google.workspaceDomain"] } }, select: { key: true, value: true } });
+    const has = (k: string) => rows.some((r) => r.key === k && r.value.trim() !== "");
+    const inApp = has("google.clientId") && has("google.clientSecretEnc");
+    const features = report.features as Record<string, unknown>;
+    features.googleInApp = inApp;
+    features.googleSource = envGoogleCredentials() ? "env" : inApp ? "app" : "none";
+    features.google = (envGoogleCredentials() || inApp) && Boolean(process.env.APP_URL);
+    features.googleWorkspaceDomain = Boolean(features.googleWorkspaceDomain) || has("google.workspaceDomain");
+  }, ctx);
 
-  report.health = await section(async () => {
+  report.health =await section(async () => {
     const [dbOk, up] = await Promise.all([db.$queryRaw`SELECT 1`.then(() => true, () => false), checkUploads(uploads)]);
     return { ...evaluateHealth({ dbOk, uploads: up, minFreeBytes: minFreeBytes() }), dbOk, uploadsWritable: up.writable };
   }, ctx);

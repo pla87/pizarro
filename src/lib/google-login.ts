@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "./db";
+import { googleConfig, googleWorkspaceDomain } from "./google-config";
 import { idTokenKeyId, validateIdTokenClaims, verifyIdTokenSignature, type ClaimsFailure, type Jwk } from "./google-id-token";
 
 // «Iniciar sesión con Google»: parte con red y base de datos. La lógica pura (URL, firma, claims) está en google-id-token.ts.
@@ -36,8 +37,8 @@ export async function exchangeAndVerify(code: string, verifier: string, nonce: s
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      client_id: googleConfig().clientId,
+      client_secret: googleConfig().clientSecret,
       code,
       code_verifier: verifier,
       grant_type: "authorization_code",
@@ -49,7 +50,7 @@ export async function exchangeAndVerify(code: string, verifier: string, nonce: s
   if (!res.ok || typeof json.id_token !== "string") return { ok: false, reason: "exchange" };
   const claims = verifyIdTokenSignature(json.id_token, await googleKeys(idTokenKeyId(json.id_token)));
   if (!claims) return { ok: false, reason: "signature" };
-  const checked = validateIdTokenClaims(claims, { clientId: process.env.GOOGLE_CLIENT_ID!, nonce, domain: process.env.GOOGLE_WORKSPACE_DOMAIN });
+  const checked = validateIdTokenClaims(claims, { clientId: googleConfig().clientId, nonce, domain: googleWorkspaceDomain() });
   return checked.ok ? { ok: true, identity: checked } : { ok: false, reason: checked.reason };
 }
 

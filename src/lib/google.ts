@@ -5,6 +5,7 @@ import { AppError } from "./errors";
 import { logEvent } from "./log";
 import { idTokenKeyId, verifiedConnectEmail } from "./google-id-token";
 import { googleKeys } from "./google-login";
+import { googleConfig, googleEnabled, googleWorkspaceDomain } from "./google-config";
 import { shareStatusOf, type ShareStatus } from "./google-share";
 
 // Integración con Google Drive mediante OAuth por usuario.
@@ -30,9 +31,7 @@ export const GOOGLE_MIME = {
 } as const;
 export type GoogleFileKind = keyof typeof GOOGLE_MIME;
 
-export function googleEnabled(): boolean {
-  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.APP_URL);
-}
+export { googleEnabled };
 
 function googleRedirectUri(): string {
   return `${process.env.APP_URL!.replace(/\/$/, "")}/api/google/callback`;
@@ -40,7 +39,7 @@ function googleRedirectUri(): string {
 
 export function googleAuthUrl(state: string): string {
   const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID!,
+    client_id: googleConfig().clientId,
     redirect_uri: googleRedirectUri(),
     response_type: "code",
     scope: GOOGLE_SCOPES.join(" "),
@@ -51,7 +50,8 @@ export function googleAuthUrl(state: string): string {
     state,
   });
   // Limita la elección de cuenta al dominio de Workspace, si se configura.
-  if (process.env.GOOGLE_WORKSPACE_DOMAIN) params.set("hd", process.env.GOOGLE_WORKSPACE_DOMAIN);
+  const domain = googleWorkspaceDomain();
+  if (domain) params.set("hd", domain);
   return `${AUTH_URL}?${params}`;
 }
 
@@ -68,8 +68,8 @@ async function tokenRequest(body: Record<string, string>): Promise<TokenResponse
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      client_id: googleConfig().clientId,
+      client_secret: googleConfig().clientSecret,
       ...body,
     }),
     signal: AbortSignal.timeout(10_000),
@@ -90,9 +90,9 @@ export async function connectGoogleAccount(userId: string, code: string): Promis
   }
   // El id_token se verifica como en el login (firma con las claves de Google, emisor, audiencia,
   // caducidad, email verificado y dominio): de él salen el email guardado y la comprobación de dominio.
-  const workspace = process.env.GOOGLE_WORKSPACE_DOMAIN;
+  const workspace = googleWorkspaceDomain();
   const identity = verifiedConnectEmail(tokens.id_token, tokens.id_token ? await googleKeys(idTokenKeyId(tokens.id_token)) : [], {
-    clientId: process.env.GOOGLE_CLIENT_ID!,
+    clientId: googleConfig().clientId,
     domain: workspace,
   });
   if (!identity.ok) {
@@ -161,7 +161,7 @@ async function accessToken(userId: string): Promise<string> {
 export type DriveShareTarget = { type: "domain" } | { type: "users"; emails: string[] };
 
 /** Permisos de Drive que hay que crear para ese destino y rol (el dominio sale de GOOGLE_WORKSPACE_DOMAIN). */
-export function sharePermissionBodies(target: DriveShareTarget, env: { domain?: string; role?: string } = { domain: process.env.GOOGLE_WORKSPACE_DOMAIN, role: "writer" }): Record<string, string>[] {
+export function sharePermissionBodies(target: DriveShareTarget, env: { domain?: string; role?: string } = { domain: googleWorkspaceDomain(), role: "writer" }): Record<string, string>[] {
   const role = env.role ?? "writer";
   if (role === "none" || !["writer", "commenter", "reader"].includes(role)) return [];
   if (target.type === "domain") return env.domain ? [{ type: "domain", domain: env.domain, role }] : [];
@@ -199,7 +199,7 @@ export async function createDriveFile(userId: string, kind: GoogleFileKind, name
  * miembros del proyecto, según el modo del proyecto. Devuelve cuántos permisos se crearon y cuántos fallaron.
  */
 async function shareFile(token: string, fileId: string, target: DriveShareTarget, role: string): Promise<ShareOutcome> {
-  const bodies = sharePermissionBodies(target, { domain: process.env.GOOGLE_WORKSPACE_DOMAIN, role });
+  const bodies = sharePermissionBodies(target, { domain: googleWorkspaceDomain(), role });
   let failed = 0;
   // En paralelo: con muchos miembros, uno detrás de otro podía tardar más de un minuto.
   await Promise.all(bodies.map(async (body) => {
