@@ -3,7 +3,7 @@ export const PROJECT_SETTINGS_TABS = [
   { id: "general", label: "General", manageOnly: true },
   { id: "tablero", label: "Tablero", manageOnly: false },
   { id: "adjuntos", label: "Adjuntos y límites", manageOnly: true },
-  { id: "releases", label: "Releases", manageOnly: true },
+  { id: "releases", label: "Releases", manageOnly: false },
   { id: "informes", label: "Informes", manageOnly: false },
 ] as const;
 

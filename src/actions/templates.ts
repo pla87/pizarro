@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { visibleProjectsWhere } from "@/lib/access";
 import { runAction } from "@/lib/action";
-import { PALETTE } from "@/lib/constants";
+import { MAX_RELEASE_TEMPLATES_PER_KIND, PALETTE } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { AppError, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
@@ -30,7 +30,7 @@ export async function saveTemplate(input: TemplateInput, templateId?: string | n
   return runAction({ name: "templates.saveTemplate", args: [input, templateId] }, async () => {
     await requireAdmin();
     const data = templateInputSchema.parse(input);
-    const row = { name: data.name, description: data.description, columns: data.columns, kinds: data.kinds, hiddenGeneralKinds: data.hiddenGeneralKinds, hideAllGeneralKinds: data.hideAllGeneralKinds, labels: data.labels, taskFields: data.taskFields };
+    const row = { name: data.name, description: data.description, columns: data.columns, kinds: data.kinds, hiddenGeneralKinds: data.hiddenGeneralKinds, hideAllGeneralKinds: data.hideAllGeneralKinds, labels: data.labels, taskFields: data.taskFields, releaseTemplates: data.releaseTemplates };
     if (templateId) {
       const id = v.id.parse(templateId);
       if (!(await db.projectTemplate.count({ where: { id } }))) throw notFound();
@@ -91,6 +91,7 @@ export async function templateFromProject(projectId: string) {
         hiddenKinds: { select: { kind: { select: { name: true } } } },
         labels: { orderBy: { name: "asc" }, select: { name: true, color: true } },
         taskFields: true,
+        releaseTemplates: { orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: { kind: true, name: true, content: true } },
       },
     });
     if (!project) throw notFound();
@@ -103,6 +104,8 @@ export async function templateFromProject(projectId: string) {
       hiddenGeneralKinds: project.hiddenKinds.map((h) => h.kind.name),
       labels: project.labels.map((l) => ({ name: l.name, color: (palette.includes(l.color) ? l.color : PALETTE[0]) as (typeof PALETTE)[number] })),
       taskFields: normalizeTaskFields(project.taskFields),
+      // Máximo 20 de cada tipo (el tope de la plantilla, igual que el del proyecto).
+      releaseTemplates: (["HEADER", "FOOTER"] as const).flatMap((kind) => project.releaseTemplates.filter((r) => r.kind === kind).slice(0, MAX_RELEASE_TEMPLATES_PER_KIND)),
     };
   });
 }

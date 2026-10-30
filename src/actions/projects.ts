@@ -33,6 +33,7 @@ async function applyTemplate(tx: Prisma.TransactionClient, projectId: string, te
   if (app.kinds.length) await tx.taskKind.createMany({ data: app.kinds.map((k) => ({ ...k, projectId })) });
   if (app.hiddenKindIds.length) await tx.projectHiddenKind.createMany({ data: app.hiddenKindIds.map((kindId) => ({ projectId, kindId })) });
   if (app.labels.length) await tx.label.createMany({ data: app.labels.map((l) => ({ ...l, projectId })) });
+  if (app.releaseTemplates.length) await tx.projectReleaseTemplate.createMany({ data: app.releaseTemplates.map((r) => ({ ...r, projectId })) });
   if (app.taskFields.length) await tx.project.update({ where: { id: projectId }, data: { taskFields: app.taskFields } });
 }
 

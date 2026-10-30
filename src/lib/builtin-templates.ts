@@ -360,6 +360,8 @@ export function comparable(t: TemplateData): string {
     hidden: t.hiddenGeneralKinds,
     hideAll: t.hideAllGeneralKinds,
     labels: t.labels.map((l) => [l.name, l.color]),
+    // Solo si hay: las plantillas de serie no tienen y su huella guardada no debe cambiar.
+    ...(t.releaseTemplates?.length ? { releases: t.releaseTemplates.map((r) => [r.kind, r.name, r.content]) } : {}),
   });
 }
 

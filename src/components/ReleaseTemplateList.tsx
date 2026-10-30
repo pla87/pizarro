@@ -3,11 +3,14 @@
 import { ArrowDown, ArrowUp, Check, Eye, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useState, useTransition } from "react";
 import { cn } from "@/components/ui/cn";
+import { DescriptionField } from "@/components/ui/DescriptionField";
 import { Markdown } from "@/components/ui/Markdown";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
-import type { TemplateOption } from "@/lib/types";
+import type { EditorModeValue, TemplateOption } from "@/lib/types";
+
+const NO_USERS: never[] = [];
 
 type Result<T = void> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -20,7 +23,7 @@ export interface ReleaseTemplateActions {
 }
 
 /** Lista editable de cabeceras o pies de release (alta, edición con vista previa, orden y borrado). */
-export function ReleaseTemplateList({ kind, title, initial, placeholder, actions, showDefault = true }: { kind: "HEADER" | "FOOTER"; title: string; initial: TemplateOption[]; placeholder: string; actions: ReleaseTemplateActions; /** Marca la primera como «Por defecto» (solo las del usuario: las del proyecto no se eligen solas). */ showDefault?: boolean }) {
+export function ReleaseTemplateList({ kind, title, initial, placeholder, actions, showDefault = true, editorMode = "MARKDOWN" }: { editorMode?: EditorModeValue; kind: "HEADER" | "FOOTER"; title: string; initial: TemplateOption[]; placeholder: string; actions: ReleaseTemplateActions; /** Marca la primera como «Por defecto» (solo las del usuario: las del proyecto no se eligen solas). */ showDefault?: boolean }) {
   const t = useT();
   const toast = useToast();
   const confirm = useConfirm();
@@ -114,6 +117,8 @@ export function ReleaseTemplateList({ kind, title, initial, placeholder, actions
       {editing !== null && (
         <div className="mt-3 space-y-2 rounded-lg border border-brand-500/40 p-3">
           <input className="input" placeholder={t("Nombre (p. ej. «Para el equipo de negocio»)")} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60} autoFocus />
+          {/* La vista previa solo hace falta al escribir Markdown: el editor con barra ya muestra el resultado. */}
+          {editorMode === "MARKDOWN" && (
           <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 text-xs dark:bg-slate-800">
             {[false, true].map((p) => (
               <button
@@ -125,10 +130,11 @@ export function ReleaseTemplateList({ kind, title, initial, placeholder, actions
               </button>
             ))}
           </div>
-          {preview ? (
+          )}
+          {preview && editorMode === "MARKDOWN" ? (
             <div className="min-h-24 rounded-lg border border-slate-200 p-3 dark:border-slate-800"><Markdown>{form.content}</Markdown></div>
           ) : (
-            <textarea className="input field-sizing-content min-h-28 font-mono text-[13px]" value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} maxLength={20000} placeholder={placeholder} />
+            <DescriptionField mode={editorMode} textareaClassName="input field-sizing-content min-h-28 font-mono text-[13px]" value={form.content} onValueChange={(content) => setForm((f) => ({ ...f, content: content.slice(0, 20000) }))} users={NO_USERS} placeholder={placeholder} />
           )}
           <div className="flex gap-2">
             <button className="btn-primary py-1.5" onClick={save} disabled={pending || !form.name.trim()}><Check size={15} /> {t("Guardar")}</button>

@@ -13,11 +13,12 @@ export async function generateMetadata() {
 
 export default async function TemplatesPage() {
   const user = await requireAdminPage();
-  const [templates, missing, kinds, projects] = await Promise.all([
+  const [templates, missing, kinds, projects, me] = await Promise.all([
     listTemplatesSorted(db),
     missingBuiltinKeys(db),
     listKinds(),
     listVisibleProjects(user, { all: true }),
+    db.user.findUnique({ where: { id: user.id }, select: { editorMode: true } }),
   ]);
   return (
     <TemplatesAdmin
@@ -25,6 +26,7 @@ export default async function TemplatesPage() {
       missingBuiltins={missing.length}
       generalKinds={kinds.map((k) => k.name)}
       projects={projects}
+      editorMode={me?.editorMode ?? "MARKDOWN"}
     />
   );
 }

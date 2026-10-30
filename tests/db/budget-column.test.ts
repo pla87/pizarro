@@ -5,7 +5,7 @@ import { db, expectFail, expectOk, loginAs, makeProject, makeUser } from "./help
 import { setColumnRole } from "../../src/actions/columns";
 import { createProject, setTaskFields } from "../../src/actions/projects";
 import { redoLast, undoLast } from "../../src/actions/undo";
-import { saveTemplate } from "../../src/actions/templates";
+import { saveTemplate, templateFromProject } from "../../src/actions/templates";
 
 const fieldsOf = async (projectId: string) => (await db.project.findUniqueOrThrow({ where: { id: projectId } })).taskFields;
 
@@ -95,5 +95,37 @@ describe("plantillas con campos opcionales", () => {
     const { id } = expectOk(await saveTemplate(template({ columns: [{ name: "Ideas", role: "NONE", isDone: false }] })));
     const project = expectOk(await createProject("Sin campos", { templateId: id }));
     assert.deepEqual(await fieldsOf(project.id), []);
+  });
+});
+
+describe("plantillas con plantillas de release", () => {
+  test("se guardan, se copian al crear el proyecto y «Crear desde un proyecto» las captura", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    const releaseTemplates = [
+      { kind: "FOOTER" as const, name: "Checklist", content: "- [ ] Migraciones" },
+      { kind: "HEADER" as const, name: "Contexto", content: "> Resume esto" },
+      { kind: "HEADER" as const, name: "Otra", content: "" },
+    ];
+    const { id } = expectOk(await saveTemplate({
+      name: `Con releases ${Math.random().toString(36).slice(2, 8)}`,
+      columns: [{ name: "Ideas", role: "NONE", isDone: false }],
+      kinds: [], hiddenGeneralKinds: [], labels: [], releaseTemplates,
+    }));
+    const stored = await db.projectTemplate.findUniqueOrThrow({ where: { id } });
+    assert.equal((stored.releaseTemplates as unknown[]).length, 3);
+
+    const project = expectOk(await createProject("Con releases", { templateId: id }));
+    const rows = await db.projectReleaseTemplate.findMany({ where: { projectId: project.id }, orderBy: [{ kind: "asc" }, { position: "asc" }] });
+    assert.deepEqual(rows.map((r) => [r.kind, r.name, r.content]), [["HEADER", "Contexto", "> Resume esto"], ["HEADER", "Otra", ""], ["FOOTER", "Checklist", "- [ ] Migraciones"]]);
+
+    // Capturar desde el proyecto devuelve las mismas (cabeceras antes que pies, en su orden).
+    const captured = expectOk(await templateFromProject(project.id));
+    assert.deepEqual(captured.releaseTemplates, [releaseTemplates[1], releaseTemplates[2], releaseTemplates[0]]);
+
+    // Una plantilla sin ellas no crea nada.
+    const bare = expectOk(await saveTemplate({ name: `Sin ${Math.random().toString(36).slice(2, 8)}`, columns: [{ name: "A", role: "NONE", isDone: false }], kinds: [], hiddenGeneralKinds: [], labels: [] }));
+    const p2 = expectOk(await createProject("Sin releases", { templateId: bare.id }));
+    assert.equal(await db.projectReleaseTemplate.count({ where: { projectId: p2.id } }), 0);
   });
 });
