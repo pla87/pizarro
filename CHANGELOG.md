@@ -2,6 +2,35 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.32.0 — 2026-10-30 14:18
+
+Email configurable desde Pizarro, ajustes del proyecto en pestañas con plantillas de release propias y arreglos del tablero
+
+### Nuevas funcionalidades
+
+- Envío de emails configurable desde Administración → Ajustes (servidor SMTP, botón «Usar Gmail», contraseña cifrada y email de prueba), sin tocar las variables del servidor.
+- Cabeceras y pies de release propios de cada proyecto (Ajustes del proyecto → Releases), que salen en «Generar release» después de los tuyos, en el orden del proyecto.
+- Ajustes del proyecto en pestañas: General, Tablero, Adjuntos y límites, Releases e Informes.
+
+### Mejoras
+
+- Al abrir una tarea desde Documentación, el visor conserva su ancho si caben los dos y la pareja queda centrada.
+- El texto inicial de los tipos de tarea admite 20 000 caracteres, como las descripciones; si un texto pasa del límite se avisa en color de resaltado junto a copiar y borrar.
+- El modal de editar tipo de tarea es más ancho.
+- Los avisos de «Esperando» ya no se quedan cortos con muchas tareas, y los PDF tienen un tiempo máximo de 90 s para no bloquear a los siguientes.
+
+### Correcciones
+
+- Al soltar una tarjeta en otra columna ya no parece volver a su sitio.
+- Soltar archivos entre dos tarjetas ya no crea una tarea: solo en el hueco libre bajo la última.
+- El diálogo y la caja de descripción ya no cambian de tamaño al aparecer los iconos de copiar y borrar.
+- El texto inicial de los tipos de tarea ya no se corta en silencio a 2000 caracteres.
+- Al quitar el rol Esperando o Rutinas a una columna se borran sus ajustes (deshacer los recupera).
+
+### Cambios técnicos / DB
+
+- Migración: ProjectReleaseTemplate. Ajustes de email en AppState con la contraseña cifrada (incluida en la rotación de claves y en el diagnóstico). Avisos de espera por lotes con SQL; cola de PDF con tiempo máximo.
+
 ## v1.31.0 — 2026-10-30 13:19
 
 Recuperar el acceso sin email, todo el calendario se arrastra, proyectos para admins y correcciones de la revisión
