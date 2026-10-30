@@ -7,10 +7,12 @@ import { deleteTemplate, resetTemplate, restoreDefaultTemplates, saveTemplate, t
 import { TaskFieldToggles } from "@/components/TaskFieldToggles";
 import { cn } from "@/components/ui/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { DescriptionField } from "@/components/ui/DescriptionField";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { T } from "@/i18n/core";
+import type { EditorModeValue } from "@/lib/types";
 import { COLUMN_ROLES, isUniqueColumnRole, MAX_DESCRIPTION, MAX_RELEASE_TEMPLATES_PER_KIND, MAX_TEMPLATE, PALETTE, swatchBorder, type ColumnRoleValue } from "@/lib/constants";
 import { parseSubtaskLines } from "@/lib/kinds-special";
 import { normalizeTaskFields, type TaskFieldKey } from "@/lib/task-fields";
@@ -102,9 +104,13 @@ interface Props {
   projects: { id: string; name: string }[];
   /** Plantillas de serie que se borraron y se pueden recuperar. */
   missingBuiltins: number;
+  /** Editor de descripciones del administrador (Markdown o con barra), para los textos de las plantillas. */
+  editorMode: EditorModeValue;
 }
 
-export function TemplatesAdmin({ templates, generalKinds, projects, missingBuiltins }: Props) {
+const NO_USERS: never[] = [];
+
+export function TemplatesAdmin({ templates, generalKinds, projects, missingBuiltins, editorMode }: Props) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
@@ -319,7 +325,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                       </div>
                       <ColorField value={k.color} onChange={(color) => setKind({ color })} colors={KIND_COLORS} />
                       <input className="input" value={k.titleTemplate} onChange={(e) => setKind({ titleTemplate: e.target.value })} maxLength={200} placeholder={t("Título automático (opcional)")} aria-label={t("Título automático")} />
-                      <textarea className="input" rows={2} value={k.descriptionTemplate} onChange={(e) => setKind({ descriptionTemplate: e.target.value })} maxLength={MAX_DESCRIPTION} placeholder={t("Texto inicial de la descripción (opcional)")} aria-label={t("Texto inicial de la descripción")} />
+                      <DescriptionField mode={editorMode} textareaClassName="input field-sizing-content min-h-14" value={k.descriptionTemplate} onValueChange={(v) => setKind({ descriptionTemplate: v.slice(0, MAX_DESCRIPTION) })} users={NO_USERS} placeholder={t("Texto inicial de la descripción (opcional)")} />
                       <textarea className="input" rows={2} value={k.subtaskTemplate.join("\n")} onChange={(e) => setKind({ subtaskTemplate: e.target.value.split("\n") })} placeholder={t("Subtareas predefinidas (una por línea, opcional)")} aria-label={t("Subtareas predefinidas")} />
                     </li>
                   );
@@ -387,7 +393,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                             <button type="button" className="btn-icon" disabled={pos === items.length - 1} onClick={() => patch({ releaseTemplates: swapWith(draft.releaseTemplates, index, items[pos + 1]!.index) })} aria-label={t("Bajar")}><ArrowDown size={15} /></button>
                             <button type="button" className="btn-icon hover:text-red-600" onClick={() => patch({ releaseTemplates: draft.releaseTemplates.filter((_, j) => j !== index) })} aria-label={t("Quitar plantilla de release")}><Trash2 size={15} /></button>
                           </div>
-                          <textarea className="input field-sizing-content min-h-20 font-mono text-[13px]" value={r.content} onChange={(e) => setRel(index, { content: e.target.value })} maxLength={MAX_TEMPLATE} placeholder={t("Contenido (Markdown)")} aria-label={t("Contenido de la plantilla de release {n}", { n: pos + 1 })} />
+                          <DescriptionField mode={editorMode} textareaClassName="input field-sizing-content min-h-20 font-mono text-[13px]" value={r.content} onValueChange={(v) => setRel(index, { content: v.slice(0, MAX_TEMPLATE) })} users={NO_USERS} placeholder={t("Contenido (Markdown)")} />
                         </li>
                       ))}
                     </ul>

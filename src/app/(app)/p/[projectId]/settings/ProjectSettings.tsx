@@ -362,8 +362,8 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
       {tab === "releases" && (
         <>
         <Section id="plantillas" title="Plantillas de release notes del proyecto" description="Cabeceras y pies compartidos por todo el equipo. En «Generar release» salen después de las plantillas de cada persona, en este orden, bajo «Del proyecto». Admiten Markdown.">
-          <ReleaseTemplateList showDefault={false} actions={PROJECT_TEMPLATE_ACTIONS(project.id)} kind="HEADER" title={t("Cabeceras")} initial={releaseTemplates.headers} placeholder={t("Ej.: instrucciones de contexto para una IA.\n\n> Resume estos cambios para el equipo de negocio.")} />
-          <ReleaseTemplateList showDefault={false} actions={PROJECT_TEMPLATE_ACTIONS(project.id)} kind="FOOTER" title={t("Pies")} initial={releaseTemplates.footers} placeholder={t("Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción")} />
+          <ReleaseTemplateList editorMode={editorMode} showDefault={false} actions={PROJECT_TEMPLATE_ACTIONS(project.id)} kind="HEADER" title={t("Cabeceras")} initial={releaseTemplates.headers} placeholder={t("Ej.: instrucciones de contexto para una IA.\n\n> Resume estos cambios para el equipo de negocio.")} />
+          <ReleaseTemplateList editorMode={editorMode} showDefault={false} actions={PROJECT_TEMPLATE_ACTIONS(project.id)} kind="FOOTER" title={t("Pies")} initial={releaseTemplates.footers} placeholder={t("Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción")} />
         </Section>
 
         </>
