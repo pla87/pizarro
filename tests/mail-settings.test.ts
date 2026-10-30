@@ -46,7 +46,7 @@ describe("ajustes de email (parte pura)", () => {
     assert.equal(validateMailSettings({ ...ok, host: "a b" }).ok, false);
     assert.equal(validateMailSettings({ ...ok, port: 0 }).ok, false);
     assert.equal(validateMailSettings({ ...ok, fromAddress: "x" }).ok, false);
-    assert.deepEqual(validateMailSettings({ ...ok, host: "" }), { ok: true, value: { host: "", port: 465, secure: true, user: "", fromName: "", fromAddress: "" } });
+    assert.deepEqual(validateMailSettings({ ...ok, host: "" }), { ok: true, value: { host: "", port: 465, secure: true, user: "", fromName: "", fromAddress: "", mode: "gmail" } });
   });
 
   test("el error de SMTP se limpia: sin secretos, una línea y acotado", () => {

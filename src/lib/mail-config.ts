@@ -1,9 +1,10 @@
 import "server-only";
 import { db } from "./db";
+import { AppError } from "./errors";
 import { decryptSecret, encryptSecret } from "./keyring";
 import {
-  EMPTY_MAIL_SETTINGS, envMailConfig, MAIL_FROM_ADDRESS_KEY, MAIL_FROM_NAME_KEY, MAIL_HOST_KEY, MAIL_KEYS, MAIL_PASS_KEY, MAIL_PORT_KEY, MAIL_SECURE_KEY, MAIL_USER_KEY,
-  NO_MAIL_CONFIG, parseMailSettings, resolveMailConfig, type MailConfig, type MailSettings, type MailSettingsInput,
+  EMPTY_MAIL_SETTINGS, envMailConfig, MAIL_FROM_ADDRESS_KEY, MAIL_FROM_NAME_KEY, MAIL_HOST_KEY, MAIL_KEYS, MAIL_MODE_KEY, MAIL_PASS_KEY, MAIL_PORT_KEY, MAIL_SECURE_KEY, MAIL_USER_KEY,
+  NO_MAIL_CONFIG, parseMailMode, parseMailSettings, resolveMailConfig, type MailConfig, type MailSettings, type MailSettingsInput,
 } from "./mail-settings-core";
 
 // Configuración del envío de emails: variables SMTP_* del servidor (mandan) o lo que un administrador guarda en
@@ -120,6 +121,11 @@ export async function saveMailSettings(
   const disabling = input.host === "";
   let passwordChange: "set" | "cleared" | "unchanged" = "unchanged";
   const pass = opts.password ?? "";
+  // Cambiar de servidor, puerto o usuario con la contraseña guardada la enviaría al nuevo destino: hay que escribirla de nuevo.
+  const target = before.host !== input.host.trim() || before.port !== input.port || before.user !== input.user.trim();
+  if (!disabling && before.hasPassword && before.host !== "" && target && pass === "" && !opts.clearPassword) {
+    throw new AppError("Escribe la contraseña de nuevo al cambiar de servidor o usuario");
+  }
   const entries: [string, string][] = [
     [MAIL_HOST_KEY, input.host],
     [MAIL_PORT_KEY, String(input.port)],
@@ -127,6 +133,7 @@ export async function saveMailSettings(
     [MAIL_USER_KEY, input.user],
     [MAIL_FROM_NAME_KEY, input.fromName],
     [MAIL_FROM_ADDRESS_KEY, input.fromAddress],
+    [MAIL_MODE_KEY, input.mode ?? parseMailMode("", input.host)],
   ];
   await db.$transaction(async (tx) => {
     for (const [key, value] of entries) await tx.appState.upsert({ where: { key }, create: { key, value }, update: { value } });
