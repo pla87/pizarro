@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { isSetupPending } from "@/lib/setup";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { googleOnly, passwordFormVisible } from "@/lib/auth-policy";
+import { googlePolicyEnv } from "@/lib/google-config";
 import { googleEnabled } from "@/lib/google";
 import { getCurrentUser, getPendingUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
@@ -41,8 +42,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <LoginForm
         next={typeof next === "string" ? next : ""}
         google={googleEnabled()}
-        password={passwordFormVisible()}
-        emergency={googleOnly()}
+        password={passwordFormVisible(googlePolicyEnv())}
+        emergency={googleOnly(googlePolicyEnv())}
         notice={message ? t(message) : null}
       />
     </AuthCard>

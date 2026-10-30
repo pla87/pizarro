@@ -94,7 +94,7 @@ El código es de un solo uso para esta instalación: caduca a las 24 horas y se 
 
 Terminado el asistente, el código se borra y `/setup` responde 404. Mientras no haya usuarios, cualquier otra dirección redirige a `/setup`.
 
-Configura el email (`SMTP_*` en `.env`) para tener invitaciones y «¿Olvidaste tu contraseña?», y aplica el cambio con `docker compose up -d`.
+Configura el email para tener invitaciones y «¿Olvidaste tu contraseña?»: desde *Administración → Ajustes → Avisos por email* (sin tocar el servidor) o con `SMTP_*` en `.env` (sección 3.5).
 
 ### 2.4 Administrador inicial por variables (alternativa)
 
@@ -120,7 +120,27 @@ En `.env`: `DOMAIN=":80"` y `APP_URL="http://<ip-del-servidor>"`. Caddy sirve so
 
 La imagen se construye para la arquitectura del propio servidor (amd64 o arm64, p. ej. Raspberry Pi 5). Para preparar una imagen de las dos a la vez desde otra máquina: `docker buildx build --platform linux/amd64,linux/arm64 -t <registro>/pizarro:<versión> --push ..` y pon ese nombre en `PIZARRO_IMAGE`.
 
-### 3.5 Endurecimiento del contenedor y rol de la base de datos
+### 3.5 Email y Google desde Administración → Ajustes
+
+Dos cosas distintas, configurables desde Pizarro (como administrador) sin editar `.env`. Si defines las variables en el servidor, mandan sobre lo guardado en Ajustes y la pantalla se muestra de solo lectura. Los secretos se guardan cifrados con `ENCRYPTION_KEY` y entran en la rotación de claves y en las copias; no se muestran de nuevo ni aparecen en el registro ni en el diagnóstico.
+
+**1. Avisos por email** (invitaciones, recuperar contraseña, avisos e informes). Dos opciones:
+
+- *Gmail de un administrador (uso familiar):* activa la verificación en dos pasos en esa cuenta de Google, crea una contraseña de aplicación en `myaccount.google.com/apppasswords` y pégala en Pizarro junto con la dirección de Gmail (usa `smtp.gmail.com`, puerto 465, SSL/TLS).
+- *Servicio de correo de la empresa:* elige el proveedor y Pizarro rellena servidor, puerto y conexión; tú pones usuario y contraseña (cada preajuste explica cuáles). Disponibles: Google Workspace (buzón con contraseña de aplicación en `smtp.gmail.com:465`, o relay en `smtp-relay.gmail.com:587`), Brevo, Mailchimp Transactional (Mandrill), SendGrid (usuario `apikey`), Amazon SES (cambia la región), Mailgun y Outlook/Microsoft 365 (`smtp.office365.com:587`).
+
+El botón *Enviar email de prueba* manda un mensaje a tu dirección. Equivalente por variables: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` y `SMTP_FROM`. Si cambias el servidor, el puerto o el usuario, hay que escribir la contraseña de nuevo.
+
+**2. Acceso con Google** (entrar con «Iniciar sesión con Google» las personas que ya existen en Pizarro con el mismo email; también conecta Docs y Sheets). No envía emails. Necesita `APP_URL` en `.env` (la dirección pública, con `https://`). En *Ajustes → Acceso con Google* verás las dos direcciones de redirección con botón de copiar:
+
+1. En `console.cloud.google.com` crea un proyecto (gratis, no hace falta facturación).
+2. *APIs y servicios → Pantalla de consentimiento de OAuth*: «Interno» si todos son de tu organización de Google Workspace; «Externo» si usan Gmail. Un «Externo» en modo *Prueba* admite solo 100 usuarios de prueba añadidos a mano y los permisos de Drive caducan a los 7 días: para el acceso con Google basta publicarlo («En producción»), porque los permisos básicos (openid, email, perfil) no necesitan verificación; los de Drive (Docs y Sheets) pueden requerirla si es «Externo».
+3. *Credenciales → ID de cliente de OAuth → Aplicación web*, y pega en «URI de redirección autorizados» `APP_URL/api/auth/google/callback` y `APP_URL/api/google/callback`.
+4. Copia el ID y el secreto en Pizarro. Opcional: «Dominio de Workspace permitido» (vacío = cualquier cuenta de Google, incluido Gmail).
+
+Equivalente por variables: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `GOOGLE_WORKSPACE_DOMAIN`. Los cambios guardados en Ajustes se aplican en segundos, sin reiniciar.
+
+### 3.6 Endurecimiento del contenedor y rol de la base de datos
 
 - **Código de solo lectura.** En la imagen el código es de `root`: el proceso de la app (usuario `node`) solo puede escribir en el volumen de subidas, en `/tmp` y en la caché de Next. `deploy/compose.yml` añade `read_only: true`, `no-new-privileges` y elimina todas las capacidades de Linux salvo las cinco que usa `scripts/start.sh` para ajustar el volumen y bajar a `node`. Comprobación: `docker compose exec app sh -c 'touch /app/server.js'` debe fallar.
 - **Rol de base de datos sin superusuario.** En una instalación **nueva**, `install.sh` define `APP_DB_USER=pizarro_app` y `APP_DB_PASSWORD` en `.env`; al crear la base, `deploy/postgres-init/10-app-role.sh` crea ese rol (sin superusuario, con `CREATEDB` para la prueba mensual de restauración, y dueño de la base). La app se conecta con él; `pizarro` queda solo para administrar PostgreSQL.
@@ -315,4 +335,4 @@ Notas:
 | La app se reinicia sola a menudo | Falta de memoria o un error | `docker compose logs app` y *Administración → Logs*; sube `APP_MEM_LIMIT`/`APP_HEAP_MB` si hay RAM. |
 | Las fechas salen con otra hora | La zona elegida en el asistente o `APP_TIMEZONE` no es la tuya | Define `APP_TIMEZONE` en `.env` y `docker compose up -d` (manda sobre la del asistente). |
 | El login no mantiene la sesión | `APP_URL` con `https://` pero se entra por `http://` | Entra por la URL de `APP_URL`. |
-| No llegan emails | SMTP sin configurar o credenciales erróneas | Revisa `SMTP_*` y *Administración → Logs* (`[notify]`). |
+| No llegan emails | Email sin configurar o credenciales erróneas | Revisa *Administración → Ajustes → Avisos por email* (o `SMTP_*`) y *Administración → Logs* (`[notify]`). |

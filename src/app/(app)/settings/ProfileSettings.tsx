@@ -274,7 +274,7 @@ function GoogleSection({ google }: { google: Props["google"] }) {
       )}
       <div className="mt-4">
         {!google.enabled ? (
-          <p className="text-sm text-slate-500">{t("Un administrador debe configurar")} <code>GOOGLE_CLIENT_ID</code> {t("y")} <code>GOOGLE_CLIENT_SECRET</code> {t("en el servidor.")}</p>
+          <p className="text-sm text-slate-500">{t("Un administrador debe configurar el acceso con Google en Administración → Ajustes.")}</p>
         ) : google.email ? (
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm">{t("Conectada como")} <strong>{google.email}</strong></span>

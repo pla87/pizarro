@@ -8,6 +8,7 @@ import { getT } from "@/i18n/server";
 import { normalizeTaskFields } from "@/lib/task-fields";
 import { emailEnabled } from "@/lib/mail";
 import { googleEnabled } from "@/lib/google";
+import { googleWorkspaceDomain } from "@/lib/google-config";
 import { effectiveShareMode } from "@/lib/google-share";
 import { ProjectSettings } from "./ProjectSettings";
 import { parseProjectSettingsTab } from "./project-settings-tabs";
@@ -93,7 +94,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
       deliverables={project.deliverables.map((d) => ({ id: d.id, name: d.name, description: d.description, dueDate: dateToIso(d.dueDate), taskCount: d._count.tasks }))}
       users={users}
       editorMode={editorMode}
-      google={{ enabled: googleEnabled(), domain: process.env.GOOGLE_WORKSPACE_DOMAIN ?? null }}
+      google={{ enabled: googleEnabled(), domain: googleWorkspaceDomain() ?? null }}
       reportSchedule={
         <ReportScheduleSection
           projectId={project.id}

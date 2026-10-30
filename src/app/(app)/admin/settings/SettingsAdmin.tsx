@@ -8,13 +8,15 @@ import { useT } from "@/i18n/client";
 import type { MailSettingsView } from "@/lib/mail-config";
 import { actionThrowResult } from "@/lib/stale-action";
 import { MailSettingsSection } from "./MailSettingsSection";
+import { GoogleSettingsSection } from "./GoogleSettingsSection";
+import type { GoogleSettingsView } from "@/lib/google-config";
 
 // Mismos márgenes que el servidor (src/lib/app-settings.ts, que no se puede importar desde el cliente).
 const MIN = 1;
 const MAX = 1000;
 
 /** «Ajustes»: parámetros generales de la aplicación. */
-export function SettingsAdmin({ maxComments, mail }: { maxComments: number; mail: MailSettingsView }) {
+export function SettingsAdmin({ maxComments, mail, google }: { maxComments: number; mail: MailSettingsView; google: GoogleSettingsView }) {
   const t = useT();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -86,6 +88,7 @@ export function SettingsAdmin({ maxComments, mail }: { maxComments: number; mail
         </div>
       </section>
       <MailSettingsSection initial={mail.settings} env={mail.env} outbox={mail.outbox} />
+      <GoogleSettingsSection view={google} />
       <section className="card space-y-3 p-5">
         <div>
           <h2 className="text-sm font-semibold">{t("Diagnóstico para soporte")}</h2>

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { googleOnly } from "@/lib/auth-policy";
+import { googlePolicyEnv } from "@/lib/google-config";
 import { getCurrentUser, getPendingUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { ChangePasswordForm } from "./ChangePasswordForm";
@@ -17,7 +18,7 @@ export default async function ChangePasswordPage() {
   const t = await getT();
   return (
     <AuthCard title={t("Elige una contraseña nueva")}>
-      <ChangePasswordForm email={user.email} googleOnly={googleOnly()} />
+      <ChangePasswordForm email={user.email} googleOnly={googleOnly(googlePolicyEnv())} />
     </AuthCard>
   );
 }

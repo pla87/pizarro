@@ -205,7 +205,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
                 </label>
               );
             })}
-            {!google.domain && <p className="text-xs text-slate-500">{t("Las opciones de dominio no están disponibles: el servidor no tiene configurado GOOGLE_WORKSPACE_DOMAIN.")}</p>}
+            {!google.domain && <p className="text-xs text-slate-500">{t("Las opciones de dominio no están disponibles: falta el dominio de Workspace en Administración → Ajustes → Acceso con Google.")}</p>}
             {isPrivateProject && <p className="text-xs text-slate-500">{t("Un proyecto privado nunca se comparte con todo el dominio.")}</p>}
             <p className="text-xs text-slate-500">{t("Si el documento no se puede compartir, se crea igualmente y se avisa en la tarea de que solo lo ve quien lo crea.")}</p>
             <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>

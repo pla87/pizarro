@@ -46,4 +46,11 @@ export async function register() {
   } catch (err) {
     console.error("[instrumentation] no se pudo cargar la configuración de email", err);
   }
+  // Ídem para el acceso con Google guardado en Administración (googleEnabled() es síncrona).
+  try {
+    const { refreshGoogleConfig } = await import("@/lib/google-config");
+    await refreshGoogleConfig();
+  } catch (err) {
+    console.error("[instrumentation] no se pudo cargar la configuración de Google", err);
+  }
 }

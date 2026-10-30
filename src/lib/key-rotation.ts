@@ -1,5 +1,6 @@
 import { decryptSecretInfo, encryptSecret } from "./keyring";
 import { MAIL_PASS_KEY } from "./mail-settings-core";
+import { GOOGLE_SECRET_KEY } from "./google-config-core";
 
 // Re-cifrado de todos los secretos guardados con la clave actual (node dist/rotate-keys.mjs). Sin «server-only»:
 // lo usa el script de línea de órdenes. Cada valor se actualiza solo si nadie lo ha cambiado mientras tanto.
@@ -20,6 +21,7 @@ export const ENCRYPTED_FIELDS: readonly EncryptedField[] = [
   { model: "googleAccount", field: "refreshTokenEnc", nullable: false, label: "Google: tokens permanentes" },
   { model: "googleAccount", field: "accessTokenEnc", nullable: true, label: "Google: tokens de acceso" },
   { model: "appState", field: "value", nullable: false, idField: "key", where: { key: MAIL_PASS_KEY }, label: "Email: contraseña SMTP guardada en Ajustes" },
+  { model: "appState", field: "value", nullable: false, idField: "key", where: { key: GOOGLE_SECRET_KEY }, label: "Google: secreto de cliente guardado en Ajustes" },
 ];
 
 type Row = Record<string, string | null>;
