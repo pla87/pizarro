@@ -2,6 +2,27 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.35.0 — 2026-10-30 19:53
+
+Textos legales editables, dominio propio, selector de color con teclado y anillos de foco sin recortar
+
+### Nuevas funcionalidades
+
+- Textos legales editables: nueva pestaña Administración → Textos legales con la política de privacidad y las condiciones en Markdown (español e inglés), vista previa, restaurar el texto por defecto, nombre del responsable y email de contacto.
+- Guía para usar un dominio propio en Railway y redirección opcional al dominio principal (CANONICAL_REDIRECT=1).
+
+### Mejoras
+
+- El selector de color se maneja con el teclado: Tab entra en el color elegido, las flechas se mueven, Espacio o Enter eligen y el siguiente Tab sale.
+
+### Correcciones
+
+- Los anillos de foco ya no se recortan en el diálogo de tarea (Historial, Guardar…), en Varias tareas, en el menú lateral, en los registros ni al llegar al borde de una zona con scroll.
+
+### Cambios técnicos / DB
+
+- AppState legal.* para los textos legales; src/lib/canonical-url.ts.
+
 ## v1.34.0 — 2026-10-30 18:41
 
 Guía de Google paso a paso con logo y páginas públicas, barra de formato en una línea y adjuntar el documento abierto

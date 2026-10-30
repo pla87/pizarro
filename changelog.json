@@ -1,6 +1,45 @@
 {
   "versions": [
     {
+      "version": "1.35.0",
+      "date": "2026-10-30",
+      "releasedAt": "2026-10-30T19:53:02+01:00",
+      "summary": "Textos legales editables, dominio propio, selector de color con teclado y anillos de foco sin recortar",
+      "changes": {
+        "nuevas": [
+          "Textos legales editables: nueva pestaña Administración → Textos legales con la política de privacidad y las condiciones en Markdown (español e inglés), vista previa, restaurar el texto por defecto, nombre del responsable y email de contacto.",
+          "Guía para usar un dominio propio en Railway y redirección opcional al dominio principal (CANONICAL_REDIRECT=1)."
+        ],
+        "mejoras": [
+          "El selector de color se maneja con el teclado: Tab entra en el color elegido, las flechas se mueven, Espacio o Enter eligen y el siguiente Tab sale."
+        ],
+        "correcciones": [
+          "Los anillos de foco ya no se recortan en el diálogo de tarea (Historial, Guardar…), en Varias tareas, en el menú lateral, en los registros ni al llegar al borde de una zona con scroll."
+        ],
+        "tecnicos": [
+          "AppState legal.* para los textos legales; src/lib/canonical-url.ts."
+        ]
+      },
+      "en": {
+        "summary": "Editable legal texts, custom domain, keyboard colour picker and unclipped focus rings",
+        "changes": {
+          "nuevas": [
+            "Editable legal texts: new Administration → Legal texts tab with the privacy policy and terms in Markdown (Spanish and English), preview, restore default text, operator name and contact email.",
+            "Guide to use your own domain on Railway and optional redirect to the main domain (CANONICAL_REDIRECT=1)."
+          ],
+          "mejoras": [
+            "The colour picker works with the keyboard: Tab enters on the chosen colour, arrows move, Space or Enter pick and the next Tab leaves."
+          ],
+          "correcciones": [
+            "Focus rings are no longer clipped in the task dialog (History, Save…), Several tasks, the side menu, the logs or at the edge of a scrolling area."
+          ],
+          "tecnicos": [
+            "AppState legal.* for legal texts; src/lib/canonical-url.ts."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.34.0",
       "date": "2026-10-30",
       "releasedAt": "2026-10-30T18:41:26+01:00",

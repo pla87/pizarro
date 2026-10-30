@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.34.0"
+version: "v1.35.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.34.0
+**Versión de la aplicación:** v1.35.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -264,7 +264,7 @@ Desde el menú «⋯» de cada columna:
   - **Markdown:** escribes los símbolos (`**negrita**`, `*cursiva*`, `~~tachado~~`, `++subrayado++`, `# Título`, `- lista`, `1. lista`); al guardar se ve formateado.
   - En ambos modos, Ctrl/⌘+Enter guarda y Escape cancela.
   - Lo que escribes se guarda tal cual, incluidos `<`, `>`, `&` o comillas, y llega igual al texto de la release (p. ej. `->` no se convierte en `-&gt;`).
-- **Colores de tarjeta:** gris, blanco, rojo, naranja, marrón, amarillo, verde, verde oscuro, turquesa, celeste, índigo, azul marino, violeta y rosa (también para etiquetas).
+- **Colores de tarjeta:** gris, blanco, rojo, naranja, marrón, amarillo, verde, verde oscuro, turquesa, celeste, índigo, azul marino, violeta y rosa (también para etiquetas). Con el teclado: **Tab** entra en el color elegido, las **flechas** (e Inicio/Fin) se mueven entre colores, **Espacio** o **Enter** eligen, y el siguiente Tab sale.
 - **Fecha de creación:** al pie del detalle, «Creada por X el 24/10/2026 a las 08:14» (zona horaria de la app).
 - **Arrastrar texto:** si seleccionas texto y lo arrastras con el ratón a otro campo (título, descripción, comentario…), se **mueve**; manteniendo **Ctrl** (⌥ en Mac) se **copia** y se queda también en el origen.
 - **Subtareas:** añádelas y márcalas. **Doble clic** sobre una, el **lápiz** que aparece al pasar por encima (siempre visible en móvil) o **Enter/F2** con el foco en ella la editan (Enter guarda, Escape cancela) y se **reordenan** arrastrando el icono de seis puntos. Junto al título *Subtareas* hay una barra verde que se llena según la proporción de subtareas hechas (con dos, cada una marca el 50 %, da igual el orden); la tarjeta muestra el progreso (p. ej. `2/4`). Las subtareas **no pasan** al texto de las releases.
@@ -481,7 +481,7 @@ En el calendario, con el foco en una tarea: Alt+←/→ (±1 día) y Alt+↑/↓
 
 ### 3.16 Administración (admins)
 
-La entrada **Administración** del menú lateral reúne siete pestañas: **Usuarios**, **Proyectos**, **Tipos de tarea** (ver 3.14), **Plantillas de proyecto**, **Copias de seguridad**, **Logs** y **Ajustes** (parámetros generales, como el máximo de comentarios por tarea). En móvil, el menú de pestañas solo se desplaza en horizontal.
+La entrada **Administración** del menú lateral reúne ocho pestañas: **Usuarios**, **Proyectos**, **Tipos de tarea** (ver 3.14), **Plantillas de proyecto**, **Copias de seguridad**, **Logs**, **Textos legales** (ver 4.8) y **Ajustes** (parámetros generales, como el máximo de comentarios por tarea). En móvil, el menú de pestañas solo se desplaza en horizontal.
 
 **Proyectos:** lista los proyectos de equipo (los privados no aparecen) con los usuarios asignados a cada uno; desde ahí se añaden o quitan usuarios. Los mismos usuarios asignados se gestionan en los ajustes de cada proyecto. Quitar una asignación desasigna las tarjetas de esa persona y corta su conexión en vivo con el proyecto.
 
@@ -686,7 +686,7 @@ La tarjeta trae una **guía desplegable de 7 pasos**, uno por pantalla de *Googl
 6. **De vuelta en Pizarro:** pega el **ID de cliente** y el **secreto** (se guarda cifrado; al cambiar el ID hay que escribirlo de nuevo) y guarda. **Dominio de Workspace permitido** es opcional: vacío = cualquier cuenta de Google. Prueba cerrando sesión y entrando con Google con una cuenta cuyo email exista en Pizarro.
 7. **Si falla:** `redirect_uri_mismatch` (la URI debe coincidir exactamente), acceso bloqueado o app no verificada (modo *Pruebas* sin ese usuario, o permisos sensibles), «No hay ninguna cuenta con ese email» (crea antes el usuario en Pizarro), restricción de dominio.
 
-Las páginas **/privacy** y **/terms** son públicas (enlazadas en la pantalla de acceso) y muestran el **email de contacto público** que se puede poner en esta misma tarjeta.
+Las páginas **/privacy** y **/terms** son públicas (enlazadas en la pantalla de acceso). Su texto se edita en **Administración → Textos legales**: para cada página, una versión en español y otra opcional en inglés (Markdown con la barra de formato, hasta 50 000 caracteres), **Vista previa**, **Ver página pública**, **Partir del texto por defecto** y **Restaurar texto por defecto**. Ahí también se ponen el **nombre del responsable** y el **email de contacto público** (el mismo que en esta tarjeta), que el texto usa con `{responsable}` y `{email}`. Si quien visita usa inglés y solo hay texto propio en español, se muestra el español. La página indica la fecha de la última actualización. Solo los admins pueden editarlos y queda en el registro.
 
 La tarjeta indica si está **Activo**. Las variables `GOOGLE_*` del servidor, si existen, tienen prioridad. Los cambios se aplican en segundos, sin reiniciar.
 
@@ -746,6 +746,10 @@ Los PDF (informe, plan semanal, lista, entrega) tienen un tiempo máximo de 90 s
 | No llegan los WhatsApp | Plantilla sin aprobar, idioma distinto, token caducado o número no verificado (número de prueba) | Revisa los logs `[notify]`, el estado de la plantilla y `WHATSAPP_TEMPLATE_LANG`. |
 | Las páginas tardan en cargar a veces | Servicio en una región lejana, *App Sleeping* activado o conexiones a la base de datos frías | En Railway: pon la app y Postgres en la misma región cercana (p. ej. *EU West*) y desactiva *Serverless / App Sleeping*. Revisa en *Logs* la duración de las acciones. |
 | El informe no marca una tarjeta como hecha | Su columna no cuenta como terminada | Menú «⋯» de la columna → *Contar como terminada*. |
+
+### 4.10b Dominio propio
+
+Para usar, por ejemplo, `pizarro.example.com` en vez de la dirección de Railway: en Railway, *servicio → Settings → Networking → Custom Domain*, añade el dominio y crea en tu proveedor de DNS el registro **CNAME** (y el **TXT** de verificación si lo pide) que muestra Railway; espera a que salga el certificado. Después cambia **`APP_URL`** a `https://pizarro.example.com` y redespliega. Consecuencias: las sesiones abiertas en la dirección antigua terminan (cada dirección tiene sus cookies); hay que actualizar en Google Cloud la página principal, privacidad, condiciones, dominio autorizado y las dos URI de redirección (*Ajustes → Acceso con Google* muestra las nuevas); los emails ya enlazan al dominio nuevo; si alguien instaló la app, que la vuelva a instalar. La dirección antigua sigue funcionando; con **`CANONICAL_REDIRECT=1`** redirige (308) al dominio de `APP_URL`, salvo `/api/*`. Pasos detallados en `docs/INSTALL.md`, sección 3.7.
 
 ### 4.11 Instalación en un servidor propio (Docker Compose)
 
