@@ -16,8 +16,16 @@ export const cuentas: Record<string, string> = {
   "Se cerrarán todas sus sesiones y tendrá que elegir una contraseña nueva la próxima vez que entre. Tú no escribes ninguna contraseña.":
     "All their sessions will be closed and they will have to choose a new password next time they sign in. You don't type any password.",
   "Le enviaremos un enlace por email (válido 30 minutos) para elegirla.": "We'll email them a link (valid for 30 minutes) to choose it.",
-  "El envío de emails no está configurado: entrará con su contraseña actual y, antes de usar la app, se le pedirá una nueva.":
-    "Email sending isn't configured: they will sign in with their current password and, before using the app, be asked for a new one.",
+  "El envío de emails no está configurado: se generará un enlace de un solo uso (válido 30 minutos) para que se lo pases tú por un canal de confianza. Así puede recuperar el acceso aunque no recuerde la contraseña actual.":
+    "Email sending isn't configured: a one-time link (valid for 30 minutes) will be generated for you to pass on through a trusted channel. This way they can regain access even if they don't remember their current password.",
+  "Generar enlace": "Generate link",
+  "Copiar enlace": "Copy link",
+  "Copiar enlace en lugar de enviarlo": "Copy the link instead of sending it",
+  "Enlace copiado": "Link copied",
+  "Enlace de restablecimiento": "Reset link",
+  "Enlace para {name}": "Link for {name}",
+  "Sus sesiones están cerradas. Con este enlace elegirá una contraseña nueva.": "Their sessions are closed. With this link they will choose a new password.",
+  "Envíaselo por un canal de confianza; caduca en 30 minutos y sirve una sola vez. No volverá a mostrarse.": "Send it through a trusted channel; it expires in 30 minutes and works only once. It won't be shown again.",
   "Forzar cambio": "Force change",
   // Perfil
   "Cambiar email": "Change email",
@@ -292,7 +300,7 @@ export const cuentas: Record<string, string> = {
   "Este servidor no tiene configurado el envío de emails": "This server does not have email sending configured",
   "Por eso no podemos enviarte un enlace para elegir una contraseña nueva. Estas son las opciones:": "So we cannot send you a link to choose a new password. These are your options:",
   "Entra con tu cuenta de Google, si tu email está dado de alta.": "Sign in with your Google account, if your email is registered.",
-  "Pide a un administrador que te fuerce el cambio de contraseña (Administración → Usuarios → Forzar cambio de contraseña).": "Ask an administrator to force a password change for you (Administration → Users → Force password change).",
+  "Pide a un administrador que te genere un enlace para elegir una contraseña nueva (Administración → Usuarios → Forzar cambio de contraseña). Te lo pasará por otro canal; sirve una sola vez y caduca en 30 minutos.": "Ask an administrator to generate a link for you to choose a new password (Administration → Users → Force password change). They will pass it to you through another channel; it works only once and expires in 30 minutes.",
   "Si eres quien administra el servidor: la sección «Altas, bajas y contraseñas» del manual explica cómo recuperar el acceso, o configura el envío de emails (SMTP).": "If you run the server: the \"Altas, bajas y contraseñas\" (adding, removing users and passwords) section of the manual explains how to regain access, or configure email sending (SMTP).",
   "No hay email ni inicio de sesión con Google configurados: quien olvide su contraseña no puede recuperarla por su cuenta y tendrá que pedirte que le fuerces el cambio de contraseña.": "Neither email nor Google sign-in is configured: anyone who forgets their password cannot recover it on their own and will have to ask you to force a password change.",
 };

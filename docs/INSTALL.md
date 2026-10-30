@@ -288,6 +288,16 @@ Notas:
 
   Es un JSON legible con la versión, la memoria, qué variables están definidas (nunca su valor), el tamaño de la base de datos y las filas por tabla, las migraciones aplicadas y pendientes, el disco, las tareas de fondo, las copias, la comprobación de salud y los errores de las últimas 24 h agrupados por tipo. No contiene datos personales, mensajes de los logs ni claves.
 - **Rotar claves:** tras cambiar `ENCRYPTION_KEY` (con la anterior en `ENCRYPTION_KEY_PREVIOUS`), `docker compose exec app node dist/rotate-keys.mjs` vuelve a cifrar todo con la nueva; después quita la anterior. Detalles en `docs/MANUAL.md`, 4.4.
+- **Recuperar el acceso sin email:** si alguien olvida su contraseña, un administrador abre *Administración → Usuarios → Forzar cambio de contraseña*; sin email configurado la app muestra un enlace de un solo uso (30 minutos) para pasárselo por un canal de confianza. Si **ningún administrador puede entrar** (olvidó la contraseña o perdió el móvil de la verificación en dos pasos), genera el enlace desde la consola del servidor:
+
+  ```bash
+  # Docker Compose
+  docker compose exec app node dist/reset-link.mjs persona@example.com
+  # añade --reset-2fa para borrar también su verificación en dos pasos
+  docker compose exec app node dist/reset-link.mjs persona@example.com --reset-2fa
+  ```
+
+  Imprime `APP_URL/reset/<token>`: ábrelo en el navegador y elige la contraseña nueva. Sirve una sola vez y caduca a los 30 minutos; un usuario desactivado se rechaza. En **Railway** el código vive dentro del contenedor del servicio (donde existe `dist/`), así que hay que ejecutar la orden allí: con la CLI, `railway ssh` (o el terminal del servicio en el panel) y dentro `node dist/reset-link.mjs persona@example.com`. `railway run` no es lo adecuado: ejecuta en tu máquina (con las variables de Railway), donde normalmente no existe `dist/` ni se alcanza la base de datos interna.
 - **Excepciones no capturadas:** se anotan en *Logs* y la app se reinicia sola (Docker la vuelve a levantar). Lo activa `compose.yml` con `EXIT_ON_UNCAUGHT_EXCEPTION=1`; ponlo a `0` para solo registrarlas.
 
 ## 8. Resolución de problemas

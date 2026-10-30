@@ -13,6 +13,7 @@ import { sendEmailChangedMail, sendGoogleUnlinkedMail, sendInviteMail, sendPassw
 import { issueAuthToken } from "@/lib/auth-token";
 import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { hashPassword, passwordSchema } from "@/lib/password";
+import { rateLimit } from "@/lib/rate-limit";
 import { purgeProject } from "@/lib/project-delete";
 import { discardUndo } from "@/lib/undo";
 import { requireAdmin } from "@/lib/session";
@@ -143,18 +144,26 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
  * «Forzar cambio de contraseña»: el admin no escribe ninguna clave. La persona queda obligada a elegir una
  * nueva, se cierran sus sesiones y, con email configurado, recibe un enlace de restablecimiento (30 min).
  */
-export async function forcePasswordChange(userId: string) {
-  return runAction({ name: "users.forcePasswordChange", args: [userId] }, async () => {
+export async function forcePasswordChange(userId: string, opts?: { copyLink?: boolean }) {
+  return runAction({ name: "users.forcePasswordChange", args: [userId, !!opts?.copyLink] }, async () => {
     const admin = await requireAdmin();
+    if (!rateLimit(`force-password:${admin.id}`, 20, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
     const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, name: true, email: true, locale: true } });
     if (!user) throw notFound();
     if (user.id === admin.id) throw new AppError("Para cambiar tu propia contraseña usa «Mi perfil».");
+    // Sin email (o si el admin lo pide) el enlace no se envía: se le devuelve para que lo pase por otro canal.
+    const showLink = !emailEnabled() || !!opts?.copyLink;
     await db.$transaction([
       db.user.update({ where: { id: user.id }, data: { mustChangePassword: true } }),
       db.session.deleteMany({ where: { userId: user.id } }),
     ]);
     revokeUser(user.id);
-    if (!emailEnabled()) return { emailed: false };
+    // El token nunca se registra: describeAction solo dice qué se hizo.
+    if (showLink) {
+      const token = await issueAuthToken(user.id, "PASSWORD_RESET");
+      describeAction(`Generó un enlace de restablecimiento de contraseña para «${user.name}»`);
+      return { emailed: false, link: `${appUrl()}/reset/${token}` as string | null };
+    }
     try {
       const token = await issueAuthToken(user.id, "PASSWORD_RESET");
       await sendPasswordResetMail(user, `${appUrl()}/reset/${token}`);
@@ -162,7 +171,7 @@ export async function forcePasswordChange(userId: string) {
       console.error("[users] enlace de restablecimiento", err);
       throw new AppError("Se ha forzado el cambio, pero no se pudo enviar el email con el enlace.");
     }
-    return { emailed: true };
+    return { emailed: true, link: null as string | null };
   });
 }
 
