@@ -239,4 +239,22 @@ describe("enlace de restablecimiento sin email", () => {
     const d = await createResetLink("nadie@example.com", { appUrl: "https://app.example.com" });
     assert.ok(!d.ok);
   });
+
+  test("createResetLink (CLI): deja rastro en el registro de actividad, sin el token", async () => {
+    const user = await makeUser({ name: "Persona Uno" });
+    await db.appLog.deleteMany({ where: { action: "auth.resetLinkCli" } });
+    const a = await createResetLink(user.email!, { appUrl: "https://app.example.com" });
+    const b = await createResetLink(user.email!, { appUrl: "https://app.example.com", reset2fa: true });
+    assert.ok(a.ok && b.ok);
+    const rows = await db.appLog.findMany({ where: { action: "auth.resetLinkCli" }, orderBy: { createdAt: "asc" } });
+    assert.equal(rows.length, 2);
+    assert.ok(rows.every((r) => r.category === "auth" && r.level === "info" && r.userId === user.id));
+    assert.equal(rows[0]!.message, "Enlace de restablecimiento generado desde la consola para «Persona Uno»");
+    assert.equal(rows[1]!.message, "Enlace de restablecimiento generado desde la consola para «Persona Uno» y verificación en dos pasos reiniciada");
+    const dump = JSON.stringify(rows);
+    for (const r of [a, b]) assert.equal(dump.includes(tokenOf((r as { url: string }).url)), false);
+    // Un fallo (usuario desconocido) no deja rastro.
+    await createResetLink("nadie@example.com", { appUrl: "https://app.example.com" });
+    assert.equal(await db.appLog.count({ where: { action: "auth.resetLinkCli" } }), 2);
+  });
 });

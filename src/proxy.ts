@@ -28,11 +28,11 @@ function buildCsp(nonce: string): string {
 export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   const isApi = pathname.startsWith("/api/");
-  // Páginas públicas (sin sesión): acceso, contraseña olvidada, enlaces de email y el asistente de primer
+  // Páginas públicas (sin sesión): acceso, política de privacidad y condiciones, contraseña olvidada, enlaces de email y el asistente de primer
   // arranque (/setup se protege con el código del log y da 404 cuando ya hay usuarios).
   // Sin usuarios, el proxy no consulta la base de datos: manda a /login y esa página redirige a /setup.
   const isLogin =
-    pathname === "/setup" || pathname.startsWith("/setup/") || pathname === "/login" || pathname.startsWith("/login/") || pathname === "/forgot-password" || pathname.startsWith("/reset/") || pathname.startsWith("/confirm/");
+    pathname === "/setup" || pathname.startsWith("/setup/") || pathname === "/login" || pathname.startsWith("/login/") || pathname === "/forgot-password" || pathname === "/privacy" || pathname === "/terms" || pathname.startsWith("/reset/") || pathname.startsWith("/confirm/");
   const token = req.cookies.get(sessionCookieName())?.value;
 
   // Nonce nuevo en cada petición de página (las API devuelven JSON/ficheros: sin CSP de documento).
@@ -90,5 +90,5 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api/auth/google/|api/health|_next/static|_next/image|favicon.ico|icon.svg|icons/|apple-touch-icon.png|sw.js|manifest.webmanifest).*)"],
+  matcher: ["/((?!api/auth/google/|api/health|_next/static|_next/image|favicon.ico|icon.svg|icons/|apple-touch-icon.png|pizarro-logo-120.png|sw.js|manifest.webmanifest).*)"],
 };

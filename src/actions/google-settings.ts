@@ -31,6 +31,7 @@ export async function saveGoogleSettings(form: GoogleSettingsForm) {
       was: Boolean(before.clientId),
       clientIdChanged: before.clientId !== after.clientId,
       domain: after.workspaceDomain || null,
+      contactChanged: before.publicContactEmail !== after.publicContactEmail,
       authChange: secretChange,
     });
     revalidatePath("/admin/settings");
