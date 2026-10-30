@@ -9,7 +9,7 @@ import { uploadDocument, documentUploadName } from "@/components/docs/uploadDocu
 import { useDocTaskDialogs } from "@/components/docs/useDocTaskDialogs";
 import { ZoomImage } from "@/components/docs/ZoomImage";
 import { Markdown } from "@/components/ui/Markdown";
-import { Modal } from "@/components/ui/Modal";
+import { MODAL_SIZE_REM, Modal } from "@/components/ui/Modal";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/components/ui/cn";
@@ -318,9 +318,9 @@ function DocViewer({ doc, projectId, currentUserId, editorMode, onClose }: { doc
   const [draft, setDraft] = useState(doc.name);
   const [busy, setBusy] = useState(false);
   const src = `/api/documents/${doc.id}`;
-  const second = useDocTaskDialogs({ projectId, currentUserId, editorMode, doc: { id: doc.id, name } });
-  // PDF e imágenes: visor grande, casi a toda la altura; deja margen a los lados para los botones y el diálogo de al lado.
   const big = doc.kind === "PDF" || doc.kind === "IMAGE";
+  const second = useDocTaskDialogs({ projectId, currentUserId, editorMode, doc: { id: doc.id, name }, viewerWidth: MODAL_SIZE_REM[big ? "2xl" : "xl"] });
+  // PDF e imágenes: visor grande, casi a toda la altura; deja margen a los lados para los botones y el diálogo de al lado.
 
   async function remove() {
     setBusy(true);
@@ -361,6 +361,7 @@ function DocViewer({ doc, projectId, currentUserId, editorMode, onClose }: { doc
       size={big ? "2xl" : "xl"}
       panelClassName={big ? "h-[92dvh] sm:h-[calc(100dvh-2rem)] sm:max-h-none" : undefined}
       side={second.open ? "left" : "center"}
+      pairLeftWidth={MODAL_SIZE_REM[big ? "2xl" : "xl"]}
       onAddSecond={second.open ? undefined : second.onAddSecond}
       onAddSecondBulk={second.open ? undefined : second.onAddSecondBulk}
       mobileAdd

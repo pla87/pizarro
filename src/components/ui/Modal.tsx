@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, X } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/i18n/client";
 import { PlusStack } from "./PlusStack";
@@ -23,6 +23,12 @@ interface ModalProps {
   panelClassName?: string;
   /** Escritorio (lg+): "left"/"right" colocan el modal en una mitad de la pantalla (pareja de modales); "center" por defecto. */
   side?: "left" | "right" | "center";
+  /**
+   * Pareja (side "left"/"right"): ancho normal del modal de la izquierda (p. ej. "64rem" del visor de documentos); se pasa
+   * igual a los dos. La pareja se centra junta: la izquierda conserva ese ancho si cabe y solo se encoge si no hay sitio
+   * (hasta media pantalla). Por defecto 44rem, como en el tablero.
+   */
+  pairLeftWidth?: string;
   /** Escritorio (lg+): si se pasa, muestra un «+» fuera del panel (esquina inferior derecha) que lo llama. */
   onAddSecond?: () => void;
   /** Escritorio (lg+): con `onAddSecond`, un segundo botón encima del «+» que abre «Varias tareas» al lado. */
@@ -42,14 +48,23 @@ const SIZES = { sm: "sm:max-w-md", md: "sm:max-w-xl", lg: "sm:max-w-3xl", xl: "s
 /** Ancho máximo de cada tamaño (para combinarlo con el límite de media pantalla en lg). */
 const SIZE_REM = { sm: "28rem", md: "36rem", lg: "48rem", xl: "64rem", "2xl": "90rem" };
 
+/** Ancho de cada tamaño, para `pairLeftWidth`. */
+export const MODAL_SIZE_REM = SIZE_REM;
+/** Permite fijar `pairLeftWidth` a los modales de una pareja sin pasarlo por cada diálogo. */
+export const PairLeftWidthContext = createContext<string | undefined>(undefined);
+/** Ancho del modal de la derecha de una pareja. */
+const PAIR_RIGHT = "44rem";
+
 /** Botones redondos de «Nueva tarea» (grande, relleno) y «Varias tareas» (más pequeño): los mismos en móvil y escritorio. */
 const NEW_BTN = "h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-on-brand shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95";
 const BULK_BTN = "h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-brand-600 shadow-lg hover:bg-slate-50 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:text-brand-300";
 
 const noopSubscribe = () => () => {};
 
-export function Modal({ open, onClose, title, children, footer, size = "md", header, placement = "bottom", panelClassName, side = "center", onAddSecond, onAddSecondBulk, mobileAdd = false }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, size = "md", header, placement = "bottom", panelClassName, side = "center", pairLeftWidth: pairLeftProp, onAddSecond, onAddSecondBulk, mobileAdd = false }: ModalProps) {
   const t = useT();
+  const pairLeftCtx = useContext(PairLeftWidthContext);
+  const pairLeftWidth = pairLeftProp ?? pairLeftCtx ?? PAIR_RIGHT;
   // El portal solo existe en el navegador: durante la hidratación se pinta como en el servidor (nada) y
   // justo después aparece. Sin esto, un modal abierto desde el primer render (?task=) daba el error #418.
   const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false);
@@ -122,17 +137,28 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
   }, [open]);
 
   const top = placement === "top";
+  // Anchos de la pareja (100% = ancho del contenedor, hueco de 1rem y 1rem de margen a cada lado): la izquierda mantiene su
+  // ancho normal si caben las dos; si no, cede hasta media pantalla; la derecha toma lo que queda (máx. 44rem).
+  const pairStyle =
+    side === "center"
+      ? undefined
+      : ({
+          "--wl": `max(min(${pairLeftWidth}, calc(100% - 3rem - ${PAIR_RIGHT})), min(${pairLeftWidth}, calc(50% - 1.5rem)))`,
+          "--wr": `min(${PAIR_RIGHT}, calc(100% - 3rem - var(--wl)))`,
+          "--x0": "calc((100% - var(--wl) - var(--wr) - 1rem) / 2)",
+        } as React.CSSProperties);
   if (!open || !hydrated) return null;
   return createPortal(
     <div
       className={cn(
         "fixed inset-0 z-50 flex justify-center sm:items-center sm:p-4",
         top ? "items-start pt-[env(safe-area-inset-top)] sm:pt-4" : "items-end",
-        // Pareja de modales: cada uno ocupa una mitad y se pega al centro (hueco total ≈ 1rem).
-        side === "left" && "lg:right-1/2 lg:justify-end lg:pr-2",
+        // Pareja de modales: los dos paneles forman un bloque centrado (anchos y márgenes en CSS, ver --wl/--wr/--x0).
+        side !== "center" && "lg:justify-start lg:p-0",
         // El segundo modal no tapa al primero: solo su panel recibe clics.
-        side === "right" && "lg:pointer-events-none lg:left-1/2 lg:justify-start lg:pl-2",
+        side === "right" && "lg:pointer-events-none",
       )}
+      style={pairStyle}
     >
       {/* Un solo fondo para la pareja (lo pone el modal de la izquierda o el único); cierra el de más arriba. */}
       {side !== "right" && (
@@ -153,8 +179,10 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
           top ? "max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top))] rounded-b-2xl sm:max-h-[calc(100dvh-2rem)]" : "max-h-[92dvh] rounded-t-2xl",
           SIZES[size],
           side === "center" && onAddSecond && "lg:max-w-[min(var(--mw),calc(100vw-9rem))]", // hueco para el «+»
-          // En pareja, mismo ancho los dos: juntos en el centro forman un bloque centrado.
-          side !== "center" && "lg:w-[min(44rem,calc(50vw-1.5rem))] lg:max-w-none lg:pointer-events-auto",
+          // En pareja, los dos juntos forman un bloque centrado.
+          side !== "center" && "lg:max-w-none lg:pointer-events-auto",
+          side === "left" && "lg:ml-[var(--x0)] lg:w-[var(--wl)]",
+          side === "right" && "lg:ml-[calc(var(--x0)+var(--wl)+1rem)] lg:w-[var(--wr)]",
           panelClassName,
         )}
       >
