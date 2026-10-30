@@ -144,7 +144,7 @@ function LegalEditor({ kind, title, href, settings, editorMode, responsible, ema
         <button className="btn-secondary py-1.5" onClick={() => setPreview((p) => !p)}>{preview ? t("Volver a editar") : t("Vista previa")}</button>
         <button className="btn-secondary py-1.5" onClick={() => set(lang, defaultLegalMarkdown(kind, lang))} disabled={preview}>{t("Partir del texto por defecto")}</button>
         <button className="btn-secondary py-1.5" onClick={() => set(lang, "")} disabled={!text[lang]}>{t("Restaurar texto por defecto")}</button>
-        <span className="text-xs text-slate-400">{text[lang].length.toLocaleString()} / {LEGAL_MAX.toLocaleString()}</span>
+        <span className="text-xs text-slate-400">{text[lang].length} / {LEGAL_MAX}</span>
       </div>
       {preview && picked.source === "custom-es-fallback" && <p className="text-xs text-amber-600">{t("Sin texto en inglés, los lectores en inglés verán el texto en español.")}</p>}
       <p className="text-xs text-slate-500">
