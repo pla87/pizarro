@@ -35,6 +35,11 @@ export const toDocumentRow = (r: Row): DocumentRow => ({
 /** Documentación del proyecto sin la papelera, la más reciente primero. Sin acceso al proyecto: «no encontrado». */
 export async function listProjectDocuments(user: CurrentUser, projectId: string): Promise<DocumentRow[]> {
   if (!(await db.project.count({ where: { id: projectId, ...visibleProjectsWhere(user) } }))) throw notFound();
+  return listProjectDocumentsOf(projectId);
+}
+
+/** Sin comprobar el acceso: solo para quien ya lo ha comprobado (p. ej. la página, que lee el proyecto antes). */
+export async function listProjectDocumentsOf(projectId: string): Promise<DocumentRow[]> {
   const rows = await db.projectDocument.findMany({ where: { projectId, deletedAt: null }, orderBy: { createdAt: "desc" }, take: DOCUMENTS_MAX_PER_PROJECT + 50, select: SELECT });
   return rows.map(toDocumentRow);
 }
@@ -56,6 +61,11 @@ export const trashDaysLeft = (deletedAt: Date, now: Date = new Date()): number =
 /** Papelera del proyecto: lo borrado más reciente primero. Sin acceso al proyecto: «no encontrado». */
 export async function listTrashedDocuments(user: CurrentUser, projectId: string, now: Date = new Date()): Promise<TrashedDocumentRow[]> {
   if (!(await db.project.count({ where: { id: projectId, ...visibleProjectsWhere(user) } }))) throw notFound();
+  return listTrashedDocumentsOf(projectId, now);
+}
+
+/** Sin comprobar el acceso (ver listProjectDocumentsOf). */
+export async function listTrashedDocumentsOf(projectId: string, now: Date = new Date()): Promise<TrashedDocumentRow[]> {
   const rows = await db.projectDocument.findMany({
     where: { projectId, deletedAt: { not: null } },
     orderBy: { deletedAt: "desc" },

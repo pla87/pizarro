@@ -289,6 +289,7 @@ export const server: Record<string, string> = {
   "Cambió cómo se comparten los documentos de Google": "Changed how Google documents are shared",
   "Un proyecto privado no se puede compartir con todo el dominio.": "A private project cannot be shared with the whole domain.",
   "Compartir con el dominio requiere configurar GOOGLE_WORKSPACE_DOMAIN en el servidor.": "Sharing with the domain requires GOOGLE_WORKSPACE_DOMAIN to be configured on the server.",
+  "El destino no puede ser una columna terminada ni otra columna de rutinas.": "The destination cannot be a done column or another Routines column.",
   "Solo las columnas con el rol «Rutinas» tienen destino de la siguiente aparición.": "Only columns with the “Routines” role have a next occurrence destination.",
   "Cambió el destino de la siguiente aparición de la columna «{name}»": "Changed the next occurrence destination of column “{name}”",
 };
