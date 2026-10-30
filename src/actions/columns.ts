@@ -60,9 +60,16 @@ export async function setColumnRole(columnId: string, role: string) {
     const column = await findColumn(columnId);
     const value = v.columnRole.parse(role);
     // Deshacer: roles de todas las columnas y las tareas fijas que dejarían de serlo.
-    const before = await db.column.findMany({ where: { projectId: column.projectId }, select: { id: true, role: true } });
+    const before = await db.column.findMany({ where: { projectId: column.projectId }, select: { id: true, role: true, waitingDays: true, routineTargetColumnId: true } });
+    // Si la columna deja de ser «Esperando» o «Rutinas», se borra su plazo de espera o su destino (y el deshacer los devuelve).
+    const clearWaiting = column.role === "WAITING" && value !== "WAITING";
+    const clearRoutine = column.role === "ROUTINES" && value !== "ROUTINES";
     const fixed = await db.task.findMany({ where: { projectId: column.projectId, evergreen: true }, select: { id: true } });
-    addUndo(...before.map((c) => ({ t: "column.set" as const, id: c.id, data: { role: c.role } })), ...(await captureTasks(fixed.map((t) => t.id), ["evergreen", "evergreenEvery"])));
+    addUndo(...before.map((c) => ({
+      t: "column.set" as const,
+      id: c.id,
+      data: { role: c.role, ...(c.id === columnId && clearWaiting ? { waitingDays: c.waitingDays } : {}), ...(c.id === columnId && clearRoutine ? { routineTargetColumnId: c.routineTargetColumnId } : {}) },
+    })), ...(await captureTasks(fixed.map((t) => t.id), ["evergreen", "evergreenEvery"])));
     describeAction("Cambió el rol de la columna «{name}»", { name: column.name });
     // Una columna de presupuesto suma el coste de sus tareas: el campo Coste se activa si no lo estaba.
     const project = value === "BUDGET" ? await db.project.findUniqueOrThrow({ where: { id: column.projectId }, select: { taskFields: true } }) : null;
@@ -73,7 +80,7 @@ export async function setColumnRole(columnId: string, role: string) {
       if (isUniqueColumnRole(value)) {
         await tx.column.updateMany({ where: { projectId: column.projectId, role: value }, data: { role: "NONE" } });
       }
-      await tx.column.update({ where: { id: columnId }, data: { role: value } });
+      await tx.column.update({ where: { id: columnId }, data: { role: value, ...(clearWaiting ? { waitingDays: null } : {}), ...(clearRoutine ? { routineTargetColumnId: null } : {}) } });
       // Una columna que pasa a «Esperando» cuenta la espera desde ahora: sin esto, las tareas antiguas recibirían de golpe un aviso cada una.
       if (value === "WAITING" && column.role !== "WAITING") await tx.task.updateMany({ where: { columnId, archivedAt: null }, data: { columnEnteredAt: new Date(), waitingNotifiedAt: null } });
       // Las tareas fijas solo existen en la columna de release: si deja de serlo, pasan a ser normales.

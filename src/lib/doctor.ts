@@ -98,6 +98,15 @@ export async function collectDiagnostics(opts: DoctorOptions): Promise<Record<st
     env: envPresence(),
     features: configFlags(),
   };
+  // Email configurado en Administración → Ajustes (sin valores: solo si hay servidor y remitente guardados). Las variables SMTP_* mandan.
+  await section(async () => {
+    const rows = await db.appState.findMany({ where: { key: { in: ["mail.host", "mail.fromAddress"] } }, select: { key: true, value: true } });
+    const emailInApp = ["mail.host", "mail.fromAddress"].every((k) => rows.some((r) => r.key === k && r.value.trim() !== ""));
+    const features = report.features as Record<string, unknown>;
+    features.emailInApp = emailInApp;
+    features.email = Boolean(features.email) || emailInApp;
+    features.emailSource = features.smtp ? "env" : emailInApp ? "app" : features.mailOutbox ? "outbox" : "none";
+  }, ctx);
 
   report.health = await section(async () => {
     const [dbOk, up] = await Promise.all([db.$queryRaw`SELECT 1`.then(() => true, () => false), checkUploads(uploads)]);

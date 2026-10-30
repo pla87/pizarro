@@ -1,6 +1,6 @@
 import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
-import { generateProjectReportPdf } from "@/lib/report-build";
+import { generateProjectReportPdf, PdfTimeoutError } from "@/lib/report-build";
 import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
@@ -32,6 +32,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
       level: "error", category: "api", action: "report.pdfFailed", message: `Fallo al generar el informe PDF de «${project.name}»: ${err instanceof Error ? err.message : String(err)}`,
       userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/report`, ip: clientIp(_req.headers), durationMs: performance.now() - start,
     });
+    if (err instanceof PdfTimeoutError) return new Response(t(err.message), { status: err.status });
     throw err;
   }
   if (!report) return new Response(t("No encontrado"), { status: 404 });

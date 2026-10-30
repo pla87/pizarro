@@ -5,14 +5,16 @@ import { useState, useTransition } from "react";
 import { saveMaxCommentsPerTask } from "@/actions/settings";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
+import type { MailSettingsView } from "@/lib/mail-config";
 import { actionThrowResult } from "@/lib/stale-action";
+import { MailSettingsSection } from "./MailSettingsSection";
 
 // Mismos márgenes que el servidor (src/lib/app-settings.ts, que no se puede importar desde el cliente).
 const MIN = 1;
 const MAX = 1000;
 
 /** «Ajustes»: parámetros generales de la aplicación. */
-export function SettingsAdmin({ maxComments }: { maxComments: number }) {
+export function SettingsAdmin({ maxComments, mail }: { maxComments: number; mail: MailSettingsView }) {
   const t = useT();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -83,6 +85,7 @@ export function SettingsAdmin({ maxComments }: { maxComments: number }) {
           {!valid && <span className="text-xs text-red-600">{t("Debe ser un número entero entre {min} y {max}.", { min: MIN, max: MAX })}</span>}
         </div>
       </section>
+      <MailSettingsSection initial={mail.settings} env={mail.env} outbox={mail.outbox} />
       <section className="card space-y-3 p-5">
         <div>
           <h2 className="text-sm font-semibold">{t("Diagnóstico para soporte")}</h2>
