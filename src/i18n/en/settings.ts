@@ -258,4 +258,11 @@ export const settings: Record<string, string> = {
   "Las opciones de dominio no están disponibles: el servidor no tiene configurado GOOGLE_WORKSPACE_DOMAIN.": "The domain options are not available: the server has no GOOGLE_WORKSPACE_DOMAIN configured.",
   "Un proyecto privado nunca se comparte con todo el dominio.": "A private project is never shared with the whole domain.",
   "Si el documento no se puede compartir, se crea igualmente y se avisa en la tarea de que solo lo ve quien lo crea.": "If the document cannot be shared, it is still created and the task warns that only its creator can see it.",
+  "Secciones del proyecto": "Project sections",
+  "Adjuntos y límites": "Attachments and limits",
+  "Informes": "Reports",
+  "Tamaños máximos": "Maximum sizes",
+  "Límites de los adjuntos de las tareas y de los paquetes ZIP al generar o descargar una release.": "Limits for task attachments and for the ZIP packages when generating or downloading a release.",
+  "Plantillas de release notes del proyecto": "Project release notes templates",
+  "Cabeceras y pies compartidos por todo el equipo. En «Generar release» salen después de las plantillas de cada persona, en este orden, bajo «Del proyecto». Admiten Markdown.": "Headers and footers shared by the whole team. In “Generate release” they appear after each person's own templates, in this order, under “From the project”. They support Markdown.",
 };

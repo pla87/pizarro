@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { visibleProjectsWhere } from "@/lib/access";
-import { appTimeZone, listKinds } from "@/lib/board";
+import { appTimeZone, listKinds, projectReleaseTemplates } from "@/lib/board";
 import { dateToIso } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
@@ -10,6 +10,7 @@ import { emailEnabled } from "@/lib/mail";
 import { googleEnabled } from "@/lib/google";
 import { effectiveShareMode } from "@/lib/google-share";
 import { ProjectSettings } from "./ProjectSettings";
+import { parseProjectSettingsTab } from "./project-settings-tabs";
 import { ReportScheduleSection } from "./ReportScheduleSection";
 
 export async function generateMetadata() {
@@ -17,9 +18,10 @@ export async function generateMetadata() {
   return { title: t("Ajustes del proyecto") };
 }
 
-export default async function ProjectSettingsPage({ params }: { params: Promise<{ projectId: string }> }) {
+export default async function ProjectSettingsPage({ params, searchParams }: { params: Promise<{ projectId: string }>; searchParams: Promise<{ tab?: string }> }) {
   const user = await requireUserPage();
   const { projectId } = await params;
+  const { tab: tabParam } = await searchParams;
   const isAdmin = user.role === "ADMIN";
   const project = await db.project.findFirst({
     where: { id: projectId, ...visibleProjectsWhere(user) },
@@ -48,6 +50,10 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
     },
   });
   if (!project) notFound();
+  // Gestionan el proyecto los administradores y, si es privado, sus miembros (como en las acciones).
+  const canManage = isAdmin || project.isPrivate;
+  const tab = parseProjectSettingsTab(tabParam, canManage);
+  const releaseTemplates = await projectReleaseTemplates(project.id);
   const [generalKinds, generalUsage] = await Promise.all([
     listKinds(),
     db.task.groupBy({ by: ["kindId"], where: { projectId: project.id }, _count: { _all: true } }),
@@ -65,6 +71,8 @@ export default async function ProjectSettingsPage({ params }: { params: Promise<
   return (
     <ProjectSettings
       isAdmin={isAdmin}
+      tab={tab}
+      releaseTemplates={releaseTemplates}
       currentUserId={user.id}
       project={{
         id: project.id,

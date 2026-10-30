@@ -1244,6 +1244,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             tasks={release.taskIds.map((id) => taskById.get(id)).filter((t): t is BoardTask => !!t)}
             preselected={release.preselected}
             templates={data.templates}
+            projectTemplates={data.projectTemplates}
             onClose={() => setRelease(null)}
             onDeployed={(result) => {
               setRelease(null);

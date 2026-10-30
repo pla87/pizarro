@@ -256,6 +256,7 @@ model Project {
   undoEntries  UndoEntry[]
   reportSchedule ReportSchedule?
   documents    ProjectDocument[]
+  releaseTemplates ProjectReleaseTemplate[]
   privateOwner User?           @relation("PrivateProjects", fields: [privateOwnerId], references: [id], onDelete: SetNull)
 
   @@index([position])
@@ -867,6 +868,20 @@ model ReleaseTemplate {
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, kind, position])
+}
+
+/// Cabeceras y pies de release del proyecto: los gestiona quien puede editar sus ajustes y salen en «Generar release» tras los del usuario.
+model ProjectReleaseTemplate {
+  id        String       @id @default(cuid())
+  projectId String
+  kind      TemplateKind
+  name      String
+  content   String
+  position  Float
+  createdAt DateTime     @default(now())
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, kind, position])
 }
 
 /// Pila a la que pertenece una entrada: deshacer o rehacer.

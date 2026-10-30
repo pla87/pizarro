@@ -1,7 +1,7 @@
 "use client";
 
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { ArrowDown, ArrowUp, Bell, Check, Eye, Link2, Monitor, Moon, Palette, Pencil, PenLine, Plus, Sun, Trash2, X, Languages } from "lucide-react";
+import { Bell, Check, Link2, Monitor, Moon, Palette, PenLine, Sun, Languages } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
@@ -9,14 +9,15 @@ import {
   updateAccent, updateEditorMode, updateProfileName, updateReleaseTemplate, updateTheme, updateLocale,
 } from "@/actions/profile";
 import { cn } from "@/components/ui/cn";
-import { Markdown } from "@/components/ui/Markdown";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
+import { ReleaseTemplateList } from "@/components/ReleaseTemplateList";
 import { DraftsSection } from "./DraftsSection";
 import { ProfileTabs } from "./ProfileTabs";
 import type { ProfileTab } from "./profile-tabs";
 import type { CardStyleValue, EditorModeValue, TemplateOption } from "@/lib/types";
+
+const USER_TEMPLATE_ACTIONS = { create: createReleaseTemplate, update: updateReleaseTemplate, move: moveReleaseTemplate, remove: deleteReleaseTemplate };
 
 type ThemeValue = "SYSTEM" | "LIGHT" | "DARK";
 type AccentValue = "BLUE" | "FOREST" | "SIENNA" | "MUSTARD" | "MONO" | "EVA";
@@ -90,8 +91,8 @@ export function ProfileSettings(props: Props) {
           <p className="mt-0.5 text-sm text-slate-500">
             {t("Puedes tener varias cabeceras y varios pies. Al generar una release eliges cuáles usar y se insertan en el texto. Admiten Markdown.")}
           </p>
-          <TemplateList kind="HEADER" title={t("Cabeceras")} initial={props.templates.headers} placeholder={t("Ej.: instrucciones de contexto para una IA.\n\n> Resume estos cambios para el equipo de negocio.")} />
-          <TemplateList kind="FOOTER" title={t("Pies")} initial={props.templates.footers} placeholder={t("Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción")} />
+          <ReleaseTemplateList actions={USER_TEMPLATE_ACTIONS} kind="HEADER" title={t("Cabeceras")} initial={props.templates.headers} placeholder={t("Ej.: instrucciones de contexto para una IA.\n\n> Resume estos cambios para el equipo de negocio.")} />
+          <ReleaseTemplateList actions={USER_TEMPLATE_ACTIONS} kind="FOOTER" title={t("Pies")} initial={props.templates.footers} placeholder={t("Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción")} />
         </section>
       )}
 
@@ -348,126 +349,6 @@ function NotificationSection({ prefs }: { prefs: Props["notifications"] }) {
         <button className="btn-primary" disabled={pending}>{t("Guardar avisos")}</button>
       </form>
     </section>
-  );
-}
-
-function TemplateList({ kind, title, initial, placeholder }: { kind: "HEADER" | "FOOTER"; title: string; initial: TemplateOption[]; placeholder: string }) {
-  const t = useT();
-  const toast = useToast();
-  const confirm = useConfirm();
-  const [items, setItems] = useState(initial);
-  const [editing, setEditing] = useState<string | "new" | null>(null);
-  const [form, setForm] = useState({ name: "", content: "" });
-  const [preview, setPreview] = useState(false);
-  const [pending, start] = useTransition();
-
-  // Sube/baja una plantilla; la primera es la que «Generar release» elige por defecto.
-  const move = (id: string, dir: -1 | 1) =>
-    start(async () => {
-      const index = items.findIndex((x) => x.id === id);
-      const target = index + dir;
-      if (index < 0 || target < 0 || target >= items.length) return;
-      const previous = items;
-      const next = items.slice();
-      [next[index], next[target]] = [next[target]!, next[index]!];
-      setItems(next);
-      const res = await moveReleaseTemplate(id, dir);
-      if (!res.ok) {
-        setItems(previous);
-        toast(res.error, "error");
-      }
-    });
-
-  const open = (tpl?: TemplateOption) => {
-    setEditing(tpl ? tpl.id : "new");
-    setForm(tpl ? { name: tpl.name, content: tpl.content } : { name: "", content: "" });
-    setPreview(false);
-  };
-
-  const save = () =>
-    start(async () => {
-      if (editing === "new") {
-        const res = await createReleaseTemplate(kind, form);
-        if (!res.ok) return toast(res.error, "error");
-        setItems((l) => [...l, res.data]);
-      } else if (editing) {
-        const res = await updateReleaseTemplate(editing, form);
-        if (!res.ok) return toast(res.error, "error");
-        setItems((l) => l.map((x) => (x.id === editing ? { ...x, name: form.name.trim(), content: form.content } : x)));
-      }
-      setEditing(null);
-      toast(t("Plantilla guardada"));
-    });
-
-  return (
-    <div className="mt-5">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        {editing === null && (
-          <button className="btn-ghost py-1 text-xs" onClick={() => open()}>
-            <Plus size={14} /> {t("Añadir")}
-          </button>
-        )}
-      </div>
-      <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-        {items.map((tpl, i) => (
-          <li key={tpl.id} className="flex items-start gap-2 px-3 py-2">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                {tpl.name}
-                {i === 0 && items.length > 1 && <span className="badge bg-brand-50 text-brand-700 ring-brand-200 dark:bg-brand-500/15 dark:text-brand-200 dark:ring-brand-500/40">{t("Por defecto")}</span>}
-              </div>
-              <p className="line-clamp-2 font-mono text-xs whitespace-pre-wrap text-slate-500">{tpl.content || t("(vacía)")}</p>
-            </div>
-            {items.length > 1 && (
-              <>
-                <button className="btn-icon h-7 w-7" disabled={i === 0 || pending} onClick={() => move(tpl.id, -1)} aria-label={t("Subir {name}", { name: tpl.name })}><ArrowUp size={14} /></button>
-                <button className="btn-icon h-7 w-7" disabled={i === items.length - 1 || pending} onClick={() => move(tpl.id, 1)} aria-label={t("Bajar {name}", { name: tpl.name })}><ArrowDown size={14} /></button>
-              </>
-            )}
-            <button className="btn-icon h-7 w-7" onClick={() => open(tpl)} aria-label={t("Editar {name}", { name: tpl.name })}><Pencil size={14} /></button>
-            <button
-              className="btn-icon h-7 w-7 hover:text-red-600"
-              aria-label={t("Borrar {name}", { name: tpl.name })}
-              onClick={async () => {
-                if (!(await confirm({ title: t("Borrar plantilla"), message: t("¿Borrar «{name}»?", { name: tpl.name }), confirmLabel: t("Borrar"), danger: true }))) return;
-                const res = await deleteReleaseTemplate(tpl.id);
-                if (!res.ok) return toast(res.error, "error");
-                setItems((l) => l.filter((x) => x.id !== tpl.id));
-              }}
-            >
-              <Trash2 size={14} />
-            </button>
-          </li>
-        ))}
-        {items.length === 0 && <li className="px-3 py-2 text-sm text-slate-500">{t("Ninguna todavía.")}</li>}
-      </ul>
-      {editing !== null && (
-        <div className="mt-3 space-y-2 rounded-lg border border-brand-500/40 p-3">
-          <input className="input" placeholder={t("Nombre (p. ej. «Para el equipo de negocio»)")} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60} autoFocus />
-          <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 text-xs dark:bg-slate-800">
-            {[false, true].map((p) => (
-              <button
-                key={String(p)}
-                onClick={() => setPreview(p)}
-                className={cn("flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1 font-medium", preview === p ? "bg-white shadow-sm dark:bg-slate-900" : "text-slate-500")}
-              >
-                {p ? <><Eye size={13} /> {t("Vista previa")}</> : <><Pencil size={13} /> {t("Editar")}</>}
-              </button>
-            ))}
-          </div>
-          {preview ? (
-            <div className="min-h-24 rounded-lg border border-slate-200 p-3 dark:border-slate-800"><Markdown>{form.content}</Markdown></div>
-          ) : (
-            <textarea className="input field-sizing-content min-h-28 font-mono text-[13px]" value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} maxLength={20000} placeholder={placeholder} />
-          )}
-          <div className="flex gap-2">
-            <button className="btn-primary py-1.5" onClick={save} disabled={pending || !form.name.trim()}><Check size={15} /> {t("Guardar")}</button>
-            <button className="btn-ghost py-1.5" onClick={() => setEditing(null)}><X size={15} /> {t("Cancelar")}</button>
-          </div>
-        </div>
-      )}
-    </div>
   );
 }
 
