@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { taskClient, taskCost, taskHours, taskPriority, externalUrl } from "../src/lib/validation";
+import { taskClient, taskCost, taskHours, taskPriority, linkUrl } from "../src/lib/validation";
 import { budgetSummary, centsToAmount, formatEuro, normalizeTaskFields, startAfterDue, sumCents } from "../src/lib/task-fields";
 import { templateTaskFields } from "../src/lib/project-templates";
 import { buildReport, type ReportInput } from "../src/lib/report";
 import { EMPTY_FILTERS, taskMatchesFilters } from "../src/components/board/filters";
-import { fieldsError, fieldsPatch, EMPTY_FIELDS_FORM } from "../src/lib/fields-form";
+import { fieldsError, fieldsForDraft, fieldsFromDraft, fieldsPatch, EMPTY_FIELDS_FORM } from "../src/lib/fields-form";
 import type { BoardTask } from "../src/lib/types";
 
 test("coste y horas: coma o punto, dos decimales, sin negativos ni exponentes", () => {
@@ -26,9 +26,19 @@ test("prioridad, cliente y enlace", () => {
   assert.equal(taskClient.parse("  Acme  "), "Acme");
   assert.equal(taskClient.parse(""), null);
   assert.equal(taskClient.safeParse("x".repeat(121)).success, false);
-  assert.equal(externalUrl.parse("https://example.com/a?b=1"), "https://example.com/a?b=1");
-  assert.equal(externalUrl.parse(""), null);
-  for (const bad of ["javascript:alert(1)", "ftp://example.com", "example.com", "https://a b"]) assert.equal(externalUrl.safeParse(bad).success, false, bad);
+  assert.equal(linkUrl.parse("https://example.com/a?b=1"), "https://example.com/a?b=1");
+  assert.equal(linkUrl.parse(""), null);
+  for (const bad of ["javascript:alert(1)", "ftp://example.com", "example.com", "https://a b"]) assert.equal(linkUrl.safeParse(bad).success, false, bad);
+});
+
+test("borrador: solo guarda los campos activados y sanea lo que lee", () => {
+  const form = { ...EMPTY_FIELDS_FORM, cost: "5", costPaid: true, priority: "ALTA", client: "Acme", startDate: "2026-10-01", estimatedHours: "2" };
+  const saved = fieldsForDraft(form, ["cost", "client"]);
+  assert.deepEqual(saved, { ...EMPTY_FIELDS_FORM, cost: "5", costPaid: true, client: "Acme" });
+  assert.deepEqual(fieldsFromDraft(JSON.parse(JSON.stringify(saved))), saved);
+  assert.deepEqual(fieldsFromDraft(undefined), EMPTY_FIELDS_FORM);
+  assert.deepEqual(fieldsFromDraft("x"), EMPTY_FIELDS_FORM);
+  assert.deepEqual(fieldsFromDraft({ cost: 5, costPaid: "si", priority: "NOPE", client: "Acme", extra: "x" }), { ...EMPTY_FIELDS_FORM, client: "Acme" });
 });
 
 test("fecha de inicio frente a fecha límite", () => {
@@ -66,21 +76,20 @@ test("plantillas: una columna de presupuesto fuerza el coste", () => {
 });
 
 test("formulario de campos: solo cambios en campos activados; vacío = null", () => {
-  const form = { ...EMPTY_FIELDS_FORM, cost: "5", priority: "ALTA", client: "  ", externalUrl: "https://example.com" };
+  const form = { ...EMPTY_FIELDS_FORM, cost: "5", priority: "ALTA", client: "  " };
   assert.deepEqual(fieldsPatch(form, EMPTY_FIELDS_FORM, ["cost", "priority"]), { cost: "5", priority: "ALTA" });
   assert.deepEqual(fieldsPatch({ ...EMPTY_FIELDS_FORM }, { ...EMPTY_FIELDS_FORM, cost: "5" }, ["cost"]), { cost: null });
   assert.deepEqual(fieldsPatch({ ...EMPTY_FIELDS_FORM, costPaid: true }, EMPTY_FIELDS_FORM, ["cost"]), { costPaid: true });
   const t = (s: string) => s;
   assert.ok(fieldsError({ ...EMPTY_FIELDS_FORM, startDate: "2026-02-01" }, ["startDate"], "2026-01-01", t));
   assert.equal(fieldsError({ ...EMPTY_FIELDS_FORM, startDate: "2026-02-01" }, [], "2026-01-01", t), null);
-  assert.ok(fieldsError({ ...EMPTY_FIELDS_FORM, externalUrl: "javascript:x" }, ["externalUrl"], null, t));
 });
 
 const task = (over: Partial<BoardTask>): BoardTask => ({
   id: "t", columnId: "todo", title: "x", kindId: "k1", color: null, linkUrl: null, position: 1, assigneeId: null, labelIds: [],
   subtaskTotal: 0, subtaskDone: 0, imageCount: 0, fileCount: 0, attachBytes: 0, hasDescription: false, dueDate: null, deliverableId: null, commentCount: 0,
   linkCount: 0, evergreen: false, evergreenEvery: 1, recurrence: "NONE", recurrenceDay: null, textVersion: null, columnEnteredAt: "2026-10-01T00:00:00.000Z",
-  cost: null, costPaid: false, estimatedHours: null, actualHours: null, priority: null, client: null, startDate: null, externalUrl: null, ...over,
+  cost: null, costPaid: false, estimatedHours: null, actualHours: null, priority: null, client: null, startDate: null, ...over,
 });
 
 test("filtros por prioridad y cliente", () => {
@@ -100,7 +109,7 @@ const reportBase = (over: Partial<ReportInput>): ReportInput => ({
 });
 const rt = (id: string, fields: Partial<NonNullable<ReportInput["tasks"][number]["fields"]>>) => ({
   id, title: id, kind: "Tarea", columnId: "c1", assigneeName: null, dueDate: null, deliverableId: null, subtaskTotal: 0, subtaskDone: 0,
-  fields: { cost: null, costPaid: false, estimatedHours: null, actualHours: null, priority: null, client: null, startDate: null, externalUrl: null, ...fields },
+  fields: { cost: null, costPaid: false, estimatedHours: null, actualHours: null, priority: null, client: null, startDate: null, ...fields },
 });
 
 test("informe: sin campos activados no hay sección; con ellos, totales y filas solo de lo activado", () => {

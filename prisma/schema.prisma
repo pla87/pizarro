@@ -336,7 +336,7 @@ model Task {
   /// Tarea fija de la columna «Siguiente salto»: se incluye en cada release y no sale de la columna al desplegar.
   evergreen     Boolean   @default(false)
   /// Campos opcionales (se muestran si el proyecto los activa en taskFields): coste con su estado de pago,
-  /// horas, prioridad, cliente, fecha de inicio y enlace externo.
+  /// horas, prioridad, cliente y fecha de inicio.
   cost           Decimal?  @db.Decimal(12, 2)
   costPaid       Boolean   @default(false)
   estimatedHours Decimal?  @db.Decimal(7, 2)
@@ -344,7 +344,6 @@ model Task {
   priority       TaskPriority?
   client         String?
   startDate      DateTime? @db.Date
-  externalUrl    String?
   /// Cadencia de una tarea fija: 1 = todas las releases, 2 = las pares, 3 = múltiplos de 3.
   evergreenEvery Int      @default(1)
   /// Último cambio de contenido (título, descripción, tipo…) y quién lo hizo: detecta ediciones simultáneas.

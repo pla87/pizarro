@@ -55,7 +55,7 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
         assignee: { select: { name: true } },
         updatedAt: true,
         subtasks: { select: { done: true } },
-        cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true, externalUrl: true,
+        cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
       },
     }),
     db.deliverable.findMany({ where: { projectId }, orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { position: "asc" }], select: { id: true, name: true, description: true, dueDate: true } }),
@@ -104,7 +104,7 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
       doneAt: doneAt.get(task.id) ?? null,
       fields: {
         cost: task.cost?.toFixed(2) ?? null, costPaid: task.costPaid, estimatedHours: task.estimatedHours?.toFixed(2) ?? null, actualHours: task.actualHours?.toFixed(2) ?? null,
-        priority: task.priority, client: task.client, startDate: dateToIso(task.startDate), externalUrl: task.externalUrl,
+        priority: task.priority, client: task.client, startDate: dateToIso(task.startDate),
       },
     })),
     deliverables: deliverables.map((d) => ({ ...d, dueDate: dateToIso(d.dueDate) })),

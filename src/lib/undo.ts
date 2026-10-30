@@ -49,7 +49,6 @@ export interface TaskData {
   priority?: "BAJA" | "MEDIA" | "ALTA" | "URGENTE" | null;
   client?: string | null;
   startDate?: string | null;
-  externalUrl?: string | null;
 }
 export type TaskField = keyof TaskData;
 
@@ -106,7 +105,7 @@ const date = (s: string | null | undefined) => (s ? new Date(s) : null);
 const TASK_SELECT = {
   title: true, description: true, kindId: true, color: true, linkUrl: true, position: true, columnId: true, assigneeId: true,
   dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, evergreenEvery: true, recurrence: true, recurrenceDay: true, contentUpdatedAt: true, contentUpdatedById: true,
-  cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true, externalUrl: true,
+  cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
 } as const;
 type TaskRowFull = Prisma.TaskGetPayload<{ select: typeof TASK_SELECT }>;
 
@@ -622,7 +621,7 @@ export async function fingerprintOps(projectId: string, ops: UndoOp[]): Promise<
       // Contenido, no la hora de escritura: reescribir lo mismo (p. ej. un deshacer propio) no cuenta como cambio.
       id: true, title: true, description: true, kindId: true, color: true, linkUrl: true, position: true, columnId: true, assigneeId: true,
       dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, evergreenEvery: true, recurrence: true, recurrenceDay: true,
-      cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true, externalUrl: true,
+      cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
       labels: { select: { labelId: true }, orderBy: { labelId: "asc" } },
       subtasks: { select: { id: true, title: true, done: true, position: true }, orderBy: { id: "asc" } },
       comments: { select: { id: true, editedAt: true, deletedAt: true }, orderBy: { id: "asc" } },

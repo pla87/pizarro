@@ -9,7 +9,6 @@ const HINT: Record<TaskFieldKey, string> = {
   priority: "Baja, media, alta o urgente, con insignia en la tarjeta.",
   client: "Texto corto (hasta 120 caracteres) con sugerencias de los clientes ya usados.",
   startDate: "Debe ser anterior o igual a la fecha límite.",
-  externalUrl: "Enlace http o https a otra herramienta (distinto del enlace externo de la tarea: PR, commit o incidencia).",
 };
 
 /** Interruptores de los campos opcionales de las tareas (ajustes del proyecto y plantillas). */

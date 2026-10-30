@@ -96,15 +96,18 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const personWhere: Prisma.TaskWhereInput = personIds.length
     ? { OR: [...(assigneeIds.length ? [{ assigneeId: { in: assigneeIds } }] : []), ...(personIds.includes(PERSON_UNASSIGNED) ? [{ assigneeId: null }] : [])] }
     : {};
+  // También las tareas con rango que terminan después del mes mostrado pero empiezan dentro (solo si el proyecto tiene fecha de inicio).
+  const overlapsEnd: Prisma.TaskWhereInput = { project: { AND: [projectWhere, { taskFields: { has: "startDate" } }] }, archivedAt: null, startDate: { lte: range.lte }, dueDate: { gt: range.lte } };
   const rows = await db.task.findMany({
-    where: { ...base, ...personWhere, ...(hideDone ? { column: { isDone: false } } : {}) },
+    where: { AND: [{ OR: [base, overlapsEnd] }, personWhere, hideDone ? { column: { isDone: false } } : {}] },
     take: MAX_TASKS,
     orderBy: [{ dueDate: "asc" }, { project: { position: "asc" } }, { position: "asc" }, { id: "asc" }],
     select: {
       id: true,
       title: true,
       dueDate: true,
-      project: { select: { id: true, name: true } },
+      startDate: true,
+      project: { select: { id: true, name: true, taskFields: true } },
       kind: { select: { id: true, name: true, color: true } },
       column: { select: { isDone: true } },
     },
@@ -115,6 +118,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     id: r.id,
     title: mentionsToPlain(r.title),
     due: dateToIso(r.dueDate)!,
+    // El rango solo se dibuja si el proyecto tiene activada la fecha de inicio.
+    start: r.project.taskFields.includes("startDate") ? dateToIso(r.startDate) : null,
     projectId: r.project.id,
     projectName: r.project.name,
     kind: { name: localizeGeneralKind(r.kind, locale).name, color: r.kind.color },

@@ -21,6 +21,8 @@ export const calendar: Record<string, string> = {
   "No hay tareas ni entregables con fecha en este mes.": "There are no tasks or deliverables with a date this month.",
   "{done} de {total} tareas": "{done} of {total} tasks",
   "+{n} entregables más": "+{n} more deliverables",
+  "Tareas con rango de fechas": "Tasks with a date range",
+  "+{n} tareas con rango más": "+{n} more ranged tasks",
   "+{n} más": "+{n} more",
   "Arrastra una tarea a otro día para cambiar su fecha límite (o Alt+←/→ con ella enfocada).": "Drag a task to another day to change its due date (or Alt+←/→ while it is focused).",
 };

@@ -50,7 +50,6 @@ export const task: Record<string, string> = {
   "Sin entregable": "No deliverable",
   "Etiquetas": "Labels",
   "Gestionar": "Manage",
-  "Enlace externo (PR, commit, issue)": "External link (PR, commit, issue)",
   "Abrir enlace": "Open link",
   "Creada por {name} el {date} a las {time}": "Created by {name} on {date} at {time}",
   "Creada el {date} a las {time}": "Created on {date} at {time}",

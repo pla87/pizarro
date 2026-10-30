@@ -54,7 +54,6 @@ export interface ReportFieldRow {
   costPaid: boolean;
   estimatedHours: string | null;
   actualHours: string | null;
-  externalUrl: string | null;
 }
 
 export interface ReportFields {
@@ -247,10 +246,9 @@ function buildReportFields(input: ReportInput, columnById: Map<string, { name: s
         costPaid: has("cost") && f.costPaid,
         estimatedHours: has("hours") ? f.estimatedHours : null,
         actualHours: has("hours") ? f.actualHours : null,
-        externalUrl: has("externalUrl") ? f.externalUrl : null,
       };
     })
-    .filter((r) => r.priority || r.client || r.startDate || r.cost !== null || r.estimatedHours !== null || r.actualHours !== null || r.externalUrl)
+    .filter((r) => r.priority || r.client || r.startDate || r.cost !== null || r.estimatedHours !== null || r.actualHours !== null)
     .slice(0, MAX_FIELD_ROWS);
   return {
     enabled,
