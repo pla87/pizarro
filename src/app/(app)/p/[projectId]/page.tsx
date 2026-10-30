@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { visibleProjectsWhere } from "@/lib/access";
-import { appTimeZone, listKinds, loadBoardTasks, projectUsers, userTemplates } from "@/lib/board";
+import { appTimeZone, listKinds, loadBoardTasks, projectReleaseTemplates, projectUsers, userTemplates } from "@/lib/board";
 import { dateToIso, todayIso } from "@/lib/dates";
 import { googleEnabled } from "@/lib/google";
 import { db } from "@/lib/db";
@@ -37,7 +37,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
   if (!project) notFound();
 
   // Todas las consultas en paralelo: una sola ida y vuelta efectiva.
-  const [columns, tasks, users, labels, me, deliverables, kinds, templates] = await Promise.all([
+  const [columns, tasks, users, labels, me, deliverables, kinds, templates, projectTemplates] = await Promise.all([
     db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true } }),
     loadBoardTasks(projectId),
     projectUsers(projectId, project),
@@ -49,6 +49,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
     db.deliverable.findMany({ where: { projectId }, orderBy: [{ position: "asc" }], select: { id: true, name: true, dueDate: true } }),
     listKinds(projectId),
     userTemplates(user.id),
+    projectReleaseTemplates(projectId),
   ]);
 
   const data: BoardData = {
@@ -59,6 +60,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
     labels,
     kinds: localizeGeneralKinds(kinds, await getLocale()),
     templates,
+    projectTemplates,
     cardStyle: me.cardStyle,
     editorMode: me.editorMode,
     currentUserId: user.id,

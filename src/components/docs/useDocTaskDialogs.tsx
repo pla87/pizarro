@@ -6,6 +6,7 @@ import { BoardContext, type BoardApi } from "@/components/board/context";
 import { createBoardStores } from "@/components/board/stores";
 import { BulkTaskDialog } from "@/components/board/BulkTaskDialog";
 import { NewTaskDialog } from "@/components/board/NewTaskDialog";
+import { PairLeftWidthContext } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import { actionThrowMessage } from "@/lib/stale-action";
@@ -16,6 +17,8 @@ interface Opts {
   currentUserId: string;
   editorMode: EditorModeValue;
   doc: { id: string; name: string };
+  /** Ancho normal del visor (para colocar la pareja). */
+  viewerWidth: string;
 }
 
 /** Un «tablero» mínimo para los diálogos de tareas fuera del tablero: las opciones del proyecto y nada de tarjetas. */
@@ -55,7 +58,7 @@ function stubBoard(form: ProjectFormData, currentUserId: string, editorMode: Edi
  * «Nueva tarea» y «Varias tareas» abiertos al lado de un visor de documentos, con el visor abierto (como la pareja
  * de diálogos del tablero). Devuelve los manejadores de los botones redondos, si hay un diálogo abierto y los diálogos.
  */
-export function useDocTaskDialogs({ projectId, currentUserId, editorMode, doc }: Opts) {
+export function useDocTaskDialogs({ projectId, currentUserId, editorMode, doc, viewerWidth }: Opts) {
   const t = useT();
   const toast = useToast();
   const [second, setSecond] = useState<"new" | "bulk" | null>(null);
@@ -84,11 +87,13 @@ export function useDocTaskDialogs({ projectId, currentUserId, editorMode, doc }:
 
   const dialogs = api && second && (
     <BoardContext.Provider value={api}>
+    <PairLeftWidthContext.Provider value={viewerWidth}>
       {second === "new" ? (
         <NewTaskDialog side="right" pickProject initialColumnId={api.columns[0]?.id} initialDescription={link} onClose={() => setSecond(null)} />
       ) : (
         <BulkTaskDialog side="right" pickProject onClose={() => setSecond(null)} />
       )}
+    </PairLeftWidthContext.Provider>
     </BoardContext.Provider>
   );
 

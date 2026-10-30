@@ -147,6 +147,17 @@ export async function userTemplates(userId: string) {
   return { headers: pick("HEADER"), footers: pick("FOOTER") };
 }
 
+/** Cabeceras y pies de release definidos en el proyecto, en el orden que se les dio. */
+export async function projectReleaseTemplates(projectId: string) {
+  const rows = await db.projectReleaseTemplate.findMany({
+    where: { projectId },
+    orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+    select: { id: true, kind: true, name: true, content: true },
+  });
+  const pick = (kind: "HEADER" | "FOOTER") => rows.filter((r) => r.kind === kind).map(({ id, name, content }) => ({ id, name, content }));
+  return { headers: pick("HEADER"), footers: pick("FOOTER") };
+}
+
 /** Clientes distintos ya usados en las tareas del proyecto (para sugerir en el campo «Cliente»). */
 export async function projectClients(projectId: string): Promise<string[]> {
   const rows = await db.task.groupBy({ by: ["client"], where: { projectId, client: { not: null } }, orderBy: { client: "asc" }, take: 200 });

@@ -20,7 +20,13 @@ import { isWhite, onColor, PALETTE, RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } fro
 import { GOOGLE_SHARE_MODES, isDomainMode, type GoogleShareMode } from "@/lib/google-share";
 import type { TaskFieldKey } from "@/lib/task-fields";
 import { FILE_MAX_DEFAULT_MB, FILE_MAX_MAX_MB, FILE_MAX_MIN_MB } from "@/lib/upload-size";
-import type { EditorModeValue, KindOption, LabelOption } from "@/lib/types";
+import type { EditorModeValue, KindOption, LabelOption, TemplateOption } from "@/lib/types";
+import { ReleaseTemplateList } from "@/components/ReleaseTemplateList";
+import {
+  createProjectReleaseTemplate, deleteProjectReleaseTemplate, moveProjectReleaseTemplate, updateProjectReleaseTemplate,
+} from "@/actions/project-release-templates";
+import { ProjectSettingsTabs } from "./ProjectSettingsTabs";
+import type { ProjectSettingsTab } from "./project-settings-tabs";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
 import { setGeneralKindEnabled } from "@/actions/project-kinds";
 
@@ -39,7 +45,17 @@ interface Props {
   google: { enabled: boolean; domain: string | null };
   /** Sección «Informe semanal por email» (la monta la página). */
   reportSchedule?: React.ReactNode;
+  /** Cabeceras y pies de release del proyecto. */
+  releaseTemplates: { headers: TemplateOption[]; footers: TemplateOption[] };
+  tab: ProjectSettingsTab;
 }
+
+const PROJECT_TEMPLATE_ACTIONS = (projectId: string) => ({
+  create: (kind: "HEADER" | "FOOTER", input: { name: string; content: string }) => createProjectReleaseTemplate(projectId, kind, input),
+  update: updateProjectReleaseTemplate,
+  move: moveProjectReleaseTemplate,
+  remove: deleteProjectReleaseTemplate,
+});
 
 const SHARE_MODE_LABEL: Record<GoogleShareMode, string> = {
   DOMAIN_WRITE: "Todo el dominio puede editar",
@@ -59,7 +75,7 @@ function Section({ title, description, children, id }: { title: string; descript
   );
 }
 
-export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode, google, reportSchedule }: Props) {
+export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode, google, reportSchedule, releaseTemplates, tab }: Props) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
@@ -96,6 +112,10 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
         <Link href={`/p/${project.id}`} className="btn-primary">{t("Ir al tablero")}</Link>
       </div>
 
+      <ProjectSettingsTabs projectId={project.id} active={tab} canManage={canManage} />
+
+      {tab === "general" && (
+        <>
       {canManage && (
         <Section title="General">
           <form
@@ -113,103 +133,6 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
               <label className="label" htmlFor="p-desc">{t("Descripción")}</label>
               <textarea id="p-desc" className="input" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={2000} />
             </div>
-            <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
-          </form>
-        </Section>
-      )}
-
-      {canManage && (
-        <Section title="Campos opcionales de las tareas" description="Activa solo los datos que necesita este proyecto. Al desactivar un campo se oculta, pero los datos de las tareas se conservan.">
-          <TaskFieldToggles
-            value={taskFields}
-            onChange={setTaskFieldsDraft}
-            disabled={pending}
-            lockedCost={project.budgetColumns > 0 ? t("No se puede desactivar mientras el proyecto tenga una columna de presupuesto.") : null}
-          />
-          <button
-            type="button"
-            className="btn-primary mt-3"
-            disabled={pending || (taskFields.length === project.taskFields.length && taskFields.every((f) => project.taskFields.includes(f)))}
-            onClick={() => run(async () => setTaskFields(project.id, taskFields), t("Proyecto actualizado"), () => router.refresh())}
-          >
-            {t("Guardar")}
-          </button>
-        </Section>
-      )}
-
-      {canManage && (
-        <Section title="Releases" description="Límites al generar o descargar una release.">
-          <form
-            className="space-y-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const [file, task, zip] = [Number(fileMb), Number(taskMb), Number(zipMb)];
-              if (!Number.isInteger(file) || file < FILE_MAX_MIN_MB || file > FILE_MAX_MAX_MB) {
-                toast(t("El tamaño máximo de un archivo debe estar entre {min} y {max} MB.", { min: FILE_MAX_MIN_MB, max: FILE_MAX_MAX_MB }), "error");
-                return;
-              }
-              if (task < file) {
-                toast(t("El máximo de adjuntos de una tarea no puede ser menor que el de un archivo."), "error");
-                return;
-              }
-              if (zip < file) {
-                toast(t("El paquete ZIP de una release no puede ser menor que el tamaño máximo de un adjunto."), "error");
-                return;
-              }
-              run(async () => setAttachmentLimits(project.id, file, task, zip), t("Proyecto actualizado"), () => router.refresh());
-            }}
-          >
-            <div>
-              <label className="label" htmlFor="p-file-mb">{t("Tamaño máximo de un adjunto (MB)")}</label>
-              <input
-                id="p-file-mb" className="input w-32" type="number" inputMode="numeric" step={1}
-                min={FILE_MAX_MIN_MB} max={FILE_MAX_MAX_MB} value={fileMb} onChange={(e) => setFileMb(e.target.value)} required
-              />
-              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto {default}), y nunca más que el máximo de adjuntos de una tarea ni que el paquete ZIP de una release. Cada archivo se carga entero en la memoria del servidor al subirlo: no lo subas más de lo necesario.", { min: FILE_MAX_MIN_MB, max: FILE_MAX_MAX_MB, default: FILE_MAX_DEFAULT_MB })}</p>
-            </div>
-            <div>
-              <label className="label" htmlFor="p-task-mb">{t("Tamaño máximo de los adjuntos de una tarea (MB)")}</label>
-              <input
-                id="p-task-mb" className="input w-32" type="number" inputMode="numeric" step={1}
-                min={RELEASE_ZIP_MIN_MB} max={RELEASE_ZIP_MAX_MB} value={taskMb} onChange={(e) => setTaskMb(e.target.value)} required
-              />
-              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto 80), y nunca menos que el máximo de un adjunto. Es lo máximo que pueden sumar todos los adjuntos de una tarea; puede superar el tamaño del paquete ZIP, porque los adjuntos de una tarea se pueden repartir en varios paquetes.", { min: RELEASE_ZIP_MIN_MB, max: RELEASE_ZIP_MAX_MB })}</p>
-            </div>
-            <div>
-              <label className="label" htmlFor="p-zip-mb">{t("Tamaño máximo de cada paquete ZIP de una release (MB)")}</label>
-              <input
-                id="p-zip-mb" className="input w-32" type="number" inputMode="numeric" step={1}
-                min={RELEASE_ZIP_MIN_MB} max={RELEASE_ZIP_MAX_MB} value={zipMb} onChange={(e) => setZipMb(e.target.value)} required
-              />
-              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto 80), y nunca menos que el máximo de un adjunto. Si los adjuntos de una release superan este tamaño, se descargan en varios ZIP de hasta ese tamaño (los de una misma tarea pueden quedar en paquetes distintos); cada ZIP se arma en memoria del servidor: súbelo solo si hace falta.", { min: RELEASE_ZIP_MIN_MB, max: RELEASE_ZIP_MAX_MB })}</p>
-            </div>
-            <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
-          </form>
-        </Section>
-      )}
-
-      {canManage && google.enabled && (
-        <Section title="Documentos de Google" description="Con quién se comparten los Docs y Sheets que se crean desde las tareas de este proyecto.">
-          <form
-            className="space-y-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              run(async () => setGoogleShareMode(project.id, shareMode), t("Proyecto actualizado"), () => router.refresh());
-            }}
-          >
-            {GOOGLE_SHARE_MODES.map((m) => {
-              // Los modos de dominio solo existen en proyectos de equipo y con un dominio de Workspace configurado.
-              const unavailable = isDomainMode(m) && (isPrivateProject || !google.domain);
-              return (
-                <label key={m} className={cn("flex items-start gap-2 text-sm", unavailable && "opacity-50")}>
-                  <input type="radio" name="google-share" className="mt-1" checked={shareMode === m} disabled={unavailable} onChange={() => setShareMode(m)} />
-                  <span>{t(SHARE_MODE_LABEL[m])}</span>
-                </label>
-              );
-            })}
-            {!google.domain && <p className="text-xs text-slate-500">{t("Las opciones de dominio no están disponibles: el servidor no tiene configurado GOOGLE_WORKSPACE_DOMAIN.")}</p>}
-            {isPrivateProject && <p className="text-xs text-slate-500">{t("Un proyecto privado nunca se comparte con todo el dominio.")}</p>}
-            <p className="text-xs text-slate-500">{t("Si el documento no se puede compartir, se crea igualmente y se avisa en la tarea de que solo lo ve quien lo crea.")}</p>
             <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
           </form>
         </Section>
@@ -263,6 +186,77 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
         </Section>
       )}
 
+      {canManage && google.enabled && (
+        <Section title="Documentos de Google" description="Con quién se comparten los Docs y Sheets que se crean desde las tareas de este proyecto.">
+          <form
+            className="space-y-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              run(async () => setGoogleShareMode(project.id, shareMode), t("Proyecto actualizado"), () => router.refresh());
+            }}
+          >
+            {GOOGLE_SHARE_MODES.map((m) => {
+              // Los modos de dominio solo existen en proyectos de equipo y con un dominio de Workspace configurado.
+              const unavailable = isDomainMode(m) && (isPrivateProject || !google.domain);
+              return (
+                <label key={m} className={cn("flex items-start gap-2 text-sm", unavailable && "opacity-50")}>
+                  <input type="radio" name="google-share" className="mt-1" checked={shareMode === m} disabled={unavailable} onChange={() => setShareMode(m)} />
+                  <span>{t(SHARE_MODE_LABEL[m])}</span>
+                </label>
+              );
+            })}
+            {!google.domain && <p className="text-xs text-slate-500">{t("Las opciones de dominio no están disponibles: el servidor no tiene configurado GOOGLE_WORKSPACE_DOMAIN.")}</p>}
+            {isPrivateProject && <p className="text-xs text-slate-500">{t("Un proyecto privado nunca se comparte con todo el dominio.")}</p>}
+            <p className="text-xs text-slate-500">{t("Si el documento no se puede compartir, se crea igualmente y se avisa en la tarea de que solo lo ve quien lo crea.")}</p>
+            <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
+          </form>
+        </Section>
+      )}
+
+      {canManage && (
+        <Section title="Borrar proyecto" description="Borra el proyecto con todas sus columnas, tarjetas, adjuntos y releases. No se puede deshacer.">
+          <div className="flex flex-wrap gap-2">
+            <input
+              className="input max-w-xs"
+              placeholder={t("Escribe «{name}» para confirmar", { name: project.name })}
+              aria-label={t("Escribe «{name}» para confirmar", { name: project.name })}
+              value={confirmName}
+              onChange={(e) => setConfirmName(e.target.value)}
+            />
+            <button
+              className="btn-danger"
+              disabled={pending || confirmName !== project.name}
+              onClick={() => run(() => deleteProject(project.id, confirmName), t("Proyecto borrado"), () => { router.push("/"); router.refresh(); })}
+            >
+              <Trash2 size={15} /> {t("Borrar proyecto")}
+            </button>
+          </div>
+        </Section>
+      )}
+        </>
+      )}
+
+      {tab === "tablero" && (
+        <>
+      {canManage && (
+        <Section title="Campos opcionales de las tareas" description="Activa solo los datos que necesita este proyecto. Al desactivar un campo se oculta, pero los datos de las tareas se conservan.">
+          <TaskFieldToggles
+            value={taskFields}
+            onChange={setTaskFieldsDraft}
+            disabled={pending}
+            lockedCost={project.budgetColumns > 0 ? t("No se puede desactivar mientras el proyecto tenga una columna de presupuesto.") : null}
+          />
+          <button
+            type="button"
+            className="btn-primary mt-3"
+            disabled={pending || (taskFields.length === project.taskFields.length && taskFields.every((f) => project.taskFields.includes(f)))}
+            onClick={() => run(async () => setTaskFields(project.id, taskFields), t("Proyecto actualizado"), () => router.refresh())}
+          >
+            {t("Guardar")}
+          </button>
+        </Section>
+      )}
+
       <Section
         id="deliverables"
         title="Entregables"
@@ -302,31 +296,86 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
         </p>
       </Section>
 
-      {reportSchedule}
-
       <Section title="Tarjetas archivadas">
         <p className="text-sm text-slate-500">{t("Las tarjetas archivadas se consultan y recuperan desde el botón «Archivadas» del tablero.")}</p>
       </Section>
 
+        </>
+      )}
+
+      {tab === "adjuntos" && (
+        <>
       {canManage && (
-        <Section title="Borrar proyecto" description="Borra el proyecto con todas sus columnas, tarjetas, adjuntos y releases. No se puede deshacer.">
-          <div className="flex flex-wrap gap-2">
-            <input
-              className="input max-w-xs"
-              placeholder={t("Escribe «{name}» para confirmar", { name: project.name })}
-              aria-label={t("Escribe «{name}» para confirmar", { name: project.name })}
-              value={confirmName}
-              onChange={(e) => setConfirmName(e.target.value)}
-            />
-            <button
-              className="btn-danger"
-              disabled={pending || confirmName !== project.name}
-              onClick={() => run(() => deleteProject(project.id, confirmName), t("Proyecto borrado"), () => { router.push("/"); router.refresh(); })}
-            >
-              <Trash2 size={15} /> {t("Borrar proyecto")}
-            </button>
-          </div>
+        <Section title="Tamaños máximos" description="Límites de los adjuntos de las tareas y de los paquetes ZIP al generar o descargar una release.">
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const [file, task, zip] = [Number(fileMb), Number(taskMb), Number(zipMb)];
+              if (!Number.isInteger(file) || file < FILE_MAX_MIN_MB || file > FILE_MAX_MAX_MB) {
+                toast(t("El tamaño máximo de un archivo debe estar entre {min} y {max} MB.", { min: FILE_MAX_MIN_MB, max: FILE_MAX_MAX_MB }), "error");
+                return;
+              }
+              if (task < file) {
+                toast(t("El máximo de adjuntos de una tarea no puede ser menor que el de un archivo."), "error");
+                return;
+              }
+              if (zip < file) {
+                toast(t("El paquete ZIP de una release no puede ser menor que el tamaño máximo de un adjunto."), "error");
+                return;
+              }
+              run(async () => setAttachmentLimits(project.id, file, task, zip), t("Proyecto actualizado"), () => router.refresh());
+            }}
+          >
+            <div>
+              <label className="label" htmlFor="p-file-mb">{t("Tamaño máximo de un adjunto (MB)")}</label>
+              <input
+                id="p-file-mb" className="input w-32" type="number" inputMode="numeric" step={1}
+                min={FILE_MAX_MIN_MB} max={FILE_MAX_MAX_MB} value={fileMb} onChange={(e) => setFileMb(e.target.value)} required
+              />
+              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto {default}), y nunca más que el máximo de adjuntos de una tarea ni que el paquete ZIP de una release. Cada archivo se carga entero en la memoria del servidor al subirlo: no lo subas más de lo necesario.", { min: FILE_MAX_MIN_MB, max: FILE_MAX_MAX_MB, default: FILE_MAX_DEFAULT_MB })}</p>
+            </div>
+            <div>
+              <label className="label" htmlFor="p-task-mb">{t("Tamaño máximo de los adjuntos de una tarea (MB)")}</label>
+              <input
+                id="p-task-mb" className="input w-32" type="number" inputMode="numeric" step={1}
+                min={RELEASE_ZIP_MIN_MB} max={RELEASE_ZIP_MAX_MB} value={taskMb} onChange={(e) => setTaskMb(e.target.value)} required
+              />
+              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto 80), y nunca menos que el máximo de un adjunto. Es lo máximo que pueden sumar todos los adjuntos de una tarea; puede superar el tamaño del paquete ZIP, porque los adjuntos de una tarea se pueden repartir en varios paquetes.", { min: RELEASE_ZIP_MIN_MB, max: RELEASE_ZIP_MAX_MB })}</p>
+            </div>
+            <div>
+              <label className="label" htmlFor="p-zip-mb">{t("Tamaño máximo de cada paquete ZIP de una release (MB)")}</label>
+              <input
+                id="p-zip-mb" className="input w-32" type="number" inputMode="numeric" step={1}
+                min={RELEASE_ZIP_MIN_MB} max={RELEASE_ZIP_MAX_MB} value={zipMb} onChange={(e) => setZipMb(e.target.value)} required
+              />
+              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto 80), y nunca menos que el máximo de un adjunto. Si los adjuntos de una release superan este tamaño, se descargan en varios ZIP de hasta ese tamaño (los de una misma tarea pueden quedar en paquetes distintos); cada ZIP se arma en memoria del servidor: súbelo solo si hace falta.", { min: RELEASE_ZIP_MIN_MB, max: RELEASE_ZIP_MAX_MB })}</p>
+            </div>
+            <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
+          </form>
         </Section>
+      )}
+
+        </>
+      )}
+
+      {tab === "releases" && (
+        <>
+      {canManage && (
+        <Section id="plantillas" title="Plantillas de release notes del proyecto" description="Cabeceras y pies compartidos por todo el equipo. En «Generar release» salen después de las plantillas de cada persona, en este orden, bajo «Del proyecto». Admiten Markdown.">
+          <ReleaseTemplateList showDefault={false} actions={PROJECT_TEMPLATE_ACTIONS(project.id)} kind="HEADER" title={t("Cabeceras")} initial={releaseTemplates.headers} placeholder={t("Ej.: instrucciones de contexto para una IA.\n\n> Resume estos cambios para el equipo de negocio.")} />
+          <ReleaseTemplateList showDefault={false} actions={PROJECT_TEMPLATE_ACTIONS(project.id)} kind="FOOTER" title={t("Pies")} initial={releaseTemplates.footers} placeholder={t("Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción")} />
+        </Section>
+      )}
+
+        </>
+      )}
+
+      {tab === "informes" && (
+        <>
+      {reportSchedule}
+
+        </>
       )}
     </div>
   );

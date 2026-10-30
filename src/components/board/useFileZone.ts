@@ -4,7 +4,7 @@ import { filesFrom, hasFiles } from "./upload";
 /**
  * Zona del tablero que acepta archivos soltados desde fuera (escritorio) para crear una tarea.
  * Eventos de arrastre nativos, aparte de dnd-kit. Las tarjetas con su propio destino de archivos
- * (useCardFileDrop) detienen el evento antes de llegar aquí, así que solo cuenta el hueco libre.
+ * (useCardFileDrop) detienen el evento antes de llegar aquí; de lo demás, solo cuenta el elemento [data-file-zone].
  */
 export function useFileZone(onFiles: (files: File[]) => void) {
   const [over, setOver] = useState(false);
@@ -21,6 +21,10 @@ export function useFileZone(onFiles: (files: File[]) => void) {
     };
   }, [over]);
 
+  // Solo cuenta el hueco marcado con data-file-zone (el espacio libre bajo las tarjetas): los huecos entre tarjetas
+  // no crean nada. Aun así se cancela el evento para que el navegador no abra el archivo.
+  const inZone = (e: React.DragEvent) => !!(e.target as HTMLElement).closest?.("[data-file-zone]");
+
   const handlers = {
     // En captura: sobre una tarjeta el destino es la tarjeta, no la zona.
     onDragOverCapture: (e: React.DragEvent) => {
@@ -29,7 +33,12 @@ export function useFileZone(onFiles: (files: File[]) => void) {
     },
     onDragOver: (e: React.DragEvent) => {
       if (!hasFiles(e)) return;
-      e.preventDefault(); // necesario para que el navegador admita el drop
+      e.preventDefault(); // necesario para que el navegador admita el drop (y no abra el archivo)
+      if (!inZone(e)) {
+        e.dataTransfer.dropEffect = "none";
+        setOver(false);
+        return;
+      }
       e.dataTransfer.dropEffect = "copy";
       setOver(true);
     },
@@ -43,6 +52,7 @@ export function useFileZone(onFiles: (files: File[]) => void) {
       if (!hasFiles(e)) return;
       e.preventDefault();
       setOver(false);
+      if (!inZone(e)) return;
       const files = filesFrom(e.dataTransfer.files);
       if (files.length) onFiles(files);
     },

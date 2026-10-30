@@ -7,14 +7,14 @@ import type { Prisma } from "@/generated/prisma/client";
 import { describeAction, noteProject } from "@/lib/action-context";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
-import { assertProjectAccess, visibleProjectsWhere } from "@/lib/access";
+import { assertProjectAccess, findManageableProject, visibleProjectsWhere } from "@/lib/access";
 import { defaultColumns, PALETTE } from "@/lib/constants";
 import { getLocale } from "@/i18n/server";
 import { AppError, forbidden, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
 import { localizeTemplate } from "@/lib/builtin-templates-en";
 import { buildTemplateApplication, parseStoredTemplate, type TemplateData } from "@/lib/project-templates";
-import { requireUser, type CurrentUser } from "@/lib/session";
+import { requireUser } from "@/lib/session";
 import { normalizeTaskFields, TASK_FIELDS } from "@/lib/task-fields";
 import { purgeProject } from "@/lib/project-delete";
 import * as v from "@/lib/validation";
@@ -34,20 +34,6 @@ async function applyTemplate(tx: Prisma.TransactionClient, projectId: string, te
   if (app.labels.length) await tx.label.createMany({ data: app.labels.map((l) => ({ ...l, projectId })) });
   if (app.taskFields.length) await tx.project.update({ where: { id: projectId }, data: { taskFields: app.taskFields } });
 }
-
-/**
- * Proyecto sobre el que el usuario puede actuar (renombrar, borrar, cambiar miembros): los administradores
- * en cualquier proyecto que vean; el resto, solo en privados de los que son miembros (las
- * consultas ya filtran por visibilidad, así que un privado ajeno no existe para nadie).
- */
-async function findManageableProject(user: CurrentUser, projectId: string) {
-  const project = await db.project.findFirst({ where: { id: v.id.parse(projectId), ...visibleProjectsWhere(user) }, select: { id: true, name: true, isPrivate: true } });
-  if (!project) throw notFound();
-  noteProject(project.id, project.isPrivate);
-  if (user.role !== "ADMIN" && !project.isPrivate) throw forbidden();
-  return project;
-}
-
 
 export async function createProject(name: string, options?: { templateId?: string | null; isPrivate?: boolean }) {
   return runAction({ name: "projects.createProject", args: [name, options] }, async () => {

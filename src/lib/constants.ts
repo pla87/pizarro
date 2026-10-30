@@ -87,6 +87,8 @@ export const RELEASE_ZIP_MAX_MB = 500;
 
 /** Topes por proyecto (que ninguno crezca sin límite) y ritmos máximos de creación por persona y minuto. */
 export const MAX_LABELS_PER_PROJECT = 50;
+/** Cabeceras o pies de release del proyecto (por tipo). */
+export const MAX_RELEASE_TEMPLATES_PER_KIND = 20;
 export const MAX_DELIVERABLES_PER_PROJECT = 100;
 export const MAX_ACTIVE_TASKS_PER_PROJECT = 1000;
 /** Tareas nuevas por minuto y persona (las creaciones múltiples cuentan una por tarea; debe ser ≥ MAX_BULK_TASKS). */

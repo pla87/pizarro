@@ -20,7 +20,8 @@ import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, User
 import { ColorPicker } from "../ui/ColorPicker";
 import { cn } from "../ui/cn";
 import { DescriptionField } from "../ui/DescriptionField";
-import { DescriptionTools } from "../ui/DescriptionTools";
+import { DescriptionTools, descriptionTooLong } from "../ui/DescriptionTools";
+import { MAX_DESCRIPTION } from "@/lib/constants";
 import { Markdown } from "../ui/Markdown";
 import type { MentionCommand } from "../ui/MentionTextarea";
 import { Lightbox } from "../ui/Lightbox";
@@ -185,6 +186,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     const patch: { title?: string; description?: string; linkUrl?: string } = {};
     if (value && value !== task.title) patch.title = value;
     const desc = descLive.current;
+    if (desc !== null && desc.length > MAX_DESCRIPTION) return toast(descriptionTooLong(t, locale, MAX_DESCRIPTION), "error");
     if (desc !== null && desc !== (detail?.description ?? "")) patch.description = desc;
     const linkValue = link.trim();
     if (linkValue !== (task.linkUrl ?? "")) patch.linkUrl = linkValue;
@@ -736,7 +738,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
                   </button>
                 );
               })}
-              <Link href={`/p/${board.project.id}/settings#labels`} className="px-1 py-0.5 text-xs text-brand-600 dark:text-brand-300 hover:underline">
+              <Link href={`/p/${board.project.id}/settings?tab=tablero#labels`} className="px-1 py-0.5 text-xs text-brand-600 dark:text-brand-300 hover:underline">
                 {t("Gestionar")}
               </Link>
             </div>
@@ -864,6 +866,8 @@ function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, o
   liveRef?: React.MutableRefObject<string | null>;
 }) {
   const t = useT();
+  const locale = useIntlLocale();
+  const toast = useToast();
   const { editorMode } = useBoard();
   const [value, setValue] = useState(draft ?? initial ?? "");
   const [editing, setEditing] = useState(draft !== undefined);
@@ -893,6 +897,8 @@ function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, o
   }
 
   const finish = () => {
+    // Pasarse del límite no se guarda: se queda editando con el aviso del recuento.
+    if (value.length > MAX_DESCRIPTION) return toast(descriptionTooLong(t, locale, MAX_DESCRIPTION), "error");
     setEditing(false);
     if (value !== initial) onSave(value);
   };
@@ -911,7 +917,7 @@ function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, o
     <section>
       <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">{t("Descripción")}</h3>
-        <DescriptionTools value={value} onClear={clear} className="ml-auto" />
+        <DescriptionTools value={value} onClear={clear} className="ml-auto" max={MAX_DESCRIPTION} />
         {!editing && (
           // Fuera del orden de Tab (Título → descripción directo): al tabular, la propia zona de la descripción entra en edición.
           <button className="btn-ghost py-1 text-xs" tabIndex={-1} onClick={() => { setEditing(true); requestAnimationFrame(() => ref.current?.focus()); }}>
@@ -932,7 +938,6 @@ function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, o
               const link = await onGoogle(kind);
               if (link) setValue((v) => `${v.trimEnd()}\n\n${kind === "GOOGLE_SHEET" ? t("Hoja") : t("Documento")}: [${link.title.replace(/[\[\]]/g, "")}](${link.url})\n`);
             }}
-            maxLength={20000}
             placeholder={t("Markdown · @persona · @docs / @sheets")}
             onCancel={cancel}
             onSubmit={finish}

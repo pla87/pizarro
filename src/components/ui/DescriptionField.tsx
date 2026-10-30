@@ -20,7 +20,6 @@ interface Props {
   onValueChange: (v: string) => void;
   users: UserOption[];
   placeholder?: string;
-  maxLength?: number;
   autoFocus?: boolean;
   onCommand?: (kind: MentionCommand) => void;
   onSubmit?: () => void;
@@ -30,7 +29,7 @@ interface Props {
 }
 
 /** Campo de descripción: textarea con Markdown o editor con barra de formato, según el perfil. */
-export function DescriptionField({ id, mode, value, onValueChange, users, placeholder, maxLength, autoFocus, onCommand, onSubmit, onCancel, textareaRef, textareaClassName }: Props) {
+export function DescriptionField({ id, mode, value, onValueChange, users, placeholder, autoFocus, onCommand, onSubmit, onCancel, textareaRef, textareaClassName }: Props) {
   const t = useT();
   if (mode === "WYSIWYG") {
     return <RichTextEditor id={id} value={value} onChange={onValueChange} onSubmit={onSubmit} onCancel={onCancel} placeholder={placeholder} autoFocus={autoFocus} users={users} onCommand={onCommand} />;
@@ -45,7 +44,6 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
         onValueChange={onValueChange}
         users={users}
         onCommand={onCommand}
-        maxLength={maxLength}
         placeholder={placeholder}
         autoFocus={autoFocus}
         onKeyDown={(e) => {

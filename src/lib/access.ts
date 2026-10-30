@@ -3,7 +3,8 @@ import { cache } from "react";
 import type { Prisma } from "@/generated/prisma/client";
 import { noteProject, noteTask } from "./action-context";
 import { db } from "./db";
-import { AppError, notFound } from "./errors";
+import { AppError, forbidden, notFound } from "./errors";
+import * as v from "./validation";
 import type { CurrentUser } from "./session";
 
 /**
@@ -52,6 +53,19 @@ export async function assertProjectAccess(user: CurrentUser, projectId: string):
   const found = await db.project.count({ where: { id: projectId, ...visibleProjectsWhere(user) } });
   if (!found) throw notFound();
   noteProject(projectId);
+}
+
+/**
+ * Proyecto sobre el que el usuario puede actuar (renombrar, borrar, cambiar miembros): los administradores
+ * en cualquier proyecto que vean; el resto, solo en privados de los que son miembros (las
+ * consultas ya filtran por visibilidad, así que un privado ajeno no existe para nadie).
+ */
+export async function findManageableProject(user: CurrentUser, projectId: string) {
+  const project = await db.project.findFirst({ where: { id: v.id.parse(projectId), ...visibleProjectsWhere(user) }, select: { id: true, name: true, isPrivate: true } });
+  if (!project) throw notFound();
+  noteProject(project.id, project.isPrivate);
+  if (user.role !== "ADMIN" && !project.isPrivate) throw forbidden();
+  return project;
 }
 
 /** Devuelve el projectId de la tarea si el usuario puede verla. */
