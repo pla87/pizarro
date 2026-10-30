@@ -1,6 +1,53 @@
 {
   "versions": [
     {
+      "version": "1.30.0",
+      "date": "2026-10-30",
+      "releasedAt": "2026-10-30T12:25:36+01:00",
+      "summary": "Un solo enlace externo, rangos en el calendario, recuperar el acceso sin email y un tablero más ligero en tiempo real",
+      "changes": {
+        "nuevas": [
+          "Calendario: con el campo «Fecha de inicio» activo, las tareas con inicio y fecha límite se dibujan como una franja de varios días (en móvil, «inicio → fin»).",
+          "Recuperar el acceso: «¿Olvidaste tu contraseña?» aparece siempre; si el servidor no envía emails, explica las alternativas (Google o pedir a un admin que fuerce el cambio). Administración → Usuarios avisa si no hay ni email ni Google.",
+          "Suelta archivos sobre una tarea de «Siempre en la release» para adjuntárselos; fuera de una tarea, dentro del panel, se crea una tarea fija con ellos."
+        ],
+        "mejoras": [
+          "Un solo «Enlace externo» por tarea: el campo opcional «Enlace de referencia» se integra en él.",
+          "El borrador de tarea nueva guarda también los campos opcionales.",
+          "La pestaña que mueve, edita, duplica, archiva o borra tareas ya no recarga todo el tablero por su propio aviso en tiempo real.",
+          "El detalle de una tarea empieza a cargarse al pulsarla, así que se abre antes.",
+          "La presencia y los avisos en tiempo real comprueban los permisos con menos consultas."
+        ],
+        "correcciones": [],
+        "tecnicos": [
+          "Migración: Task.externalUrl pasa a linkUrl si estaba vacío (si había dos enlaces distintos, el de referencia se añade al final de la descripción) y se quita de taskFields.",
+          "Las acciones devuelven el id del cambio publicado (cid) en una lista de acciones revisadas; caché de acceso de 30 s para presencia y visores, vaciada al revocar."
+        ]
+      },
+      "en": {
+        "summary": "A single external link, calendar ranges, account recovery without email and a lighter real-time board",
+        "changes": {
+          "nuevas": [
+            "Calendar: with the “Start date” field enabled, tasks with a start and a due date are drawn as a band across several days (on mobile, “start → end”).",
+            "Account recovery: “Forgot your password?” is always shown; if the server cannot send emails it explains the alternatives (Google or asking an admin to force a change). Administration → Users warns when neither email nor Google is set up.",
+            "Drop files on a task in “Always in the release” to attach them; elsewhere inside the panel a pinned task is created with them."
+          ],
+          "mejoras": [
+            "A single “External link” per task: the optional “Reference link” field is merged into it.",
+            "The new task draft also keeps the optional fields.",
+            "The tab that moves, edits, duplicates, archives or deletes tasks no longer reloads the whole board for its own real-time notice.",
+            "A task's detail starts loading when you click it, so it opens sooner.",
+            "Presence and real-time notices check permissions with fewer queries."
+          ],
+          "correcciones": [],
+          "tecnicos": [
+            "Migration: Task.externalUrl moves to linkUrl when that was empty (if there were two different links, the reference one is appended to the description) and is removed from taskFields.",
+            "Actions return the published change id (cid) for a reviewed list of actions; 30 s access cache for presence and viewers, cleared on revocation."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.29.0",
       "date": "2026-10-30",
       "releasedAt": "2026-10-30T00:10:23+01:00",

@@ -2,6 +2,29 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.30.0 — 2026-10-30 12:25
+
+Un solo enlace externo, rangos en el calendario, recuperar el acceso sin email y un tablero más ligero en tiempo real
+
+### Nuevas funcionalidades
+
+- Calendario: con el campo «Fecha de inicio» activo, las tareas con inicio y fecha límite se dibujan como una franja de varios días (en móvil, «inicio → fin»).
+- Recuperar el acceso: «¿Olvidaste tu contraseña?» aparece siempre; si el servidor no envía emails, explica las alternativas (Google o pedir a un admin que fuerce el cambio). Administración → Usuarios avisa si no hay ni email ni Google.
+- Suelta archivos sobre una tarea de «Siempre en la release» para adjuntárselos; fuera de una tarea, dentro del panel, se crea una tarea fija con ellos.
+
+### Mejoras
+
+- Un solo «Enlace externo» por tarea: el campo opcional «Enlace de referencia» se integra en él.
+- El borrador de tarea nueva guarda también los campos opcionales.
+- La pestaña que mueve, edita, duplica, archiva o borra tareas ya no recarga todo el tablero por su propio aviso en tiempo real.
+- El detalle de una tarea empieza a cargarse al pulsarla, así que se abre antes.
+- La presencia y los avisos en tiempo real comprueban los permisos con menos consultas.
+
+### Cambios técnicos / DB
+
+- Migración: Task.externalUrl pasa a linkUrl si estaba vacío (si había dos enlaces distintos, el de referencia se añade al final de la descripción) y se quita de taskFields.
+- Las acciones devuelven el id del cambio publicado (cid) en una lista de acciones revisadas; caché de acceso de 30 s para presencia y visores, vaciada al revocar.
+
 ## v1.29.0 — 2026-10-30 00:10
 
 Campos opcionales y columna Presupuesto, cinco columnas especiales nuevas, visor de documentación ampliado y mejoras de rendimiento
