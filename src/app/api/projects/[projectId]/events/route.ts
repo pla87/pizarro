@@ -14,6 +14,12 @@ const RECHECK_MS = 60_000;
 
 /** ¿La sesión sigue viva, el usuario activo y el proyecto visible para él? (consultas baratas, sin cookies) */
 async function stillAllowed(sessionId: string, projectId: string): Promise<boolean> {
+  // Camino corriente (miembro del proyecto): una sola consulta con la sesión, el usuario y su pertenencia.
+  const member = await db.session.count({
+    where: { id: sessionId, expiresAt: { gt: new Date() }, user: { active: true, memberships: { some: { projectId } } } },
+  });
+  if (member > 0) return true;
+  // Administradores en proyectos de equipo sin ser miembros: la comprobación completa.
   const session = await db.session.findUnique({
     where: { id: sessionId },
     select: { expiresAt: true, user: { select: { id: true, role: true, active: true } } },

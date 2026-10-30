@@ -1,13 +1,15 @@
 import "server-only";
+import { forgetProjectAccess, forgetUserAccess } from "./access-cache";
 import { dropProjectPresence, dropUserPresence } from "./presence";
 import { revokeProjectStreams, revokeSessionStreams, revokeUserStreams } from "./realtime";
 
 // Puntos de entrada para cortar conexiones en vivo (SSE y presencia) cuando cambia el acceso. Llamar tras confirmar
-// el cambio en BD. No invalidan sesiones: una sesión deja de valer cuando se borra su fila (cierre de sesión,
+// el cambio en BD. También vacían la caché de acceso (access-cache.ts). No invalidan sesiones: una sesión deja de valer cuando se borra su fila (cierre de sesión,
 // desactivación, cambio de rol o de contraseña); esto solo corta lo que ya estaba abierto.
 
 /** El usuario ya no debe tener nada abierto: desactivado, rol cambiado, sesiones borradas o usuario borrado. */
 export function revokeUser(userId: string): void {
+  forgetUserAccess(userId);
   revokeUserStreams(userId);
   dropUserPresence(userId);
 }
@@ -19,6 +21,7 @@ export function revokeSession(sessionId: string): void {
 
 /** Han cambiado quién ve el proyecto (visibilidad o miembros) o se ha borrado. */
 export function revokeProject(projectId: string): void {
+  forgetProjectAccess(projectId);
   revokeProjectStreams(projectId);
   dropProjectPresence(projectId);
 }

@@ -38,7 +38,9 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
     const user = tracked || willUndo ? await getCurrentUser().catch(() => null) : null;
     // Aviso a las demás pestañas del proyecto (las consultas no cambian nada): ya está confirmada la transacción
     // principal y publishChange no depende del historial ni del deshacer, así que sale antes de guardarlos.
-    if (tracked) result.cid = publishChange({ projectId: ctx.projectId!, userId: user?.id ?? null, action: meta!.name });
+    const cid = tracked ? publishChange({ projectId: ctx.projectId!, userId: user?.id ?? null, action: meta!.name }) : undefined;
+    // Sin id si la acción tocó más de lo que devuelve: la pestaña que la lanzó también se refresca con su propio aviso.
+    if (cid && !ctx.refreshOwnTab) result.cid = cid;
     // Al guardar una entrada de deshacer se vacía la pila de rehacer: no depende del historial, va a la vez.
     let redoError: unknown = null;
     const redoCleared = willUndo && user
