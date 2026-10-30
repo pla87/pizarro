@@ -1,5 +1,16 @@
 // Traducciones al inglés (server). Clave: texto exacto en español.
 export const server: Record<string, string> = {
+  // Plantillas de release del proyecto y changelog (project-templates.ts, changelog.ts)
+  "Hay columnas con el mismo nombre.": "There are columns with the same name.",
+  "Hay tipos propios con el mismo nombre.": "There are custom types with the same name.",
+  "Hay etiquetas con el mismo nombre.": "There are labels with the same name.",
+  "El título automático es demasiado largo.": "The automatic title is too long.",
+  "El texto inicial es demasiado largo.": "The initial text is too long.",
+  "Una subtarea es demasiado larga.": "A subtask is too long.",
+  "Máximo 500 caracteres.": "Maximum 500 characters.",
+  "Debe haber al menos una columna.": "There must be at least one column.",
+  "Versión SemVer no válida": "Invalid SemVer version",
+  "Fecha YYYY-MM-DD no válida": "Invalid YYYY-MM-DD date",
   // Genéricos (action.ts, errors.ts, session.ts)
   "No se pudo enviar el email de prueba.": "The test email could not be sent.",
   "Envió un email de prueba a {to}": "Sent a test email to {to}",

@@ -378,7 +378,7 @@ async function findDeliverable(deliverableId: string) {
   const user = await requireUser();
   const d = await db.deliverable.findFirst({
     where: { id: v.id.parse(deliverableId), project: visibleProjectsWhere(user) },
-    select: { id: true, projectId: true },
+    select: { id: true, projectId: true, dueDate: true },
   });
   if (!d) throw notFound();
   noteProject(d.projectId);
@@ -402,9 +402,8 @@ export async function moveDeliverable(deliverableId: string, dueDate: string) {
     const d = await findDeliverable(deliverableId);
     const day = v.dayIso.parse(dueDate);
     if (!day) throw new AppError("Fecha no válida.");
-    const prev = await db.deliverable.findUniqueOrThrow({ where: { id: d.id }, select: { dueDate: true } });
     await db.deliverable.update({ where: { id: d.id }, data: { dueDate: isoToDate(day) } });
-    return { from: dateToIso(prev.dueDate) };
+    return { from: dateToIso(d.dueDate) };
   });
 }
 
