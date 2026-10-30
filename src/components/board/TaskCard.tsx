@@ -6,7 +6,8 @@ import { AlignLeft, Loader2, CalendarClock, Check, CheckSquare, ExternalLink, Fi
 import { nextOccurrenceDue } from "@/lib/recurrence-date";
 import { DEFAULT_WAITING_DAYS, isWhite, MAX_TITLE } from "@/lib/constants";
 import { formatEuro, PRIORITY_COLOR, PRIORITY_LABEL } from "@/lib/task-fields";
-import { daysBetween, dueStatus, formatDay } from "@/lib/dates";
+import { daysBetween, dueStatus, formatDay, isoInZone } from "@/lib/dates";
+import { appTimeZone } from "@/lib/format";
 import { memo, useEffect, useRef, useState } from "react";
 import type { BoardTask } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
@@ -65,7 +66,7 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
   const column = columns.find((c) => c.id === task.columnId);
   const done = column?.isDone ?? false;
   // Columna «Esperando»: días naturales desde que la tarjeta entró (se resalta al llegar al plazo del recordatorio).
-  const waitingDays = column?.role === "WAITING" ? Math.max(0, daysBetween(task.columnEnteredAt.slice(0, 10), today)) : null;
+  const waitingDays = column?.role === "WAITING" ? Math.max(0, daysBetween(isoInZone(new Date(task.columnEnteredAt), appTimeZone()), today)) : null;
   const waitingLate = waitingDays !== null && waitingDays >= (column?.waitingDays ?? DEFAULT_WAITING_DAYS);
   // Columna «Rutinas»: fecha de la siguiente aparición (la misma regla que aplica el servidor al terminar la tarea).
   const nextRoutine = column?.role === "ROUTINES" && task.recurrence !== "NONE" ? nextOccurrenceDue(task.recurrence, task.recurrenceDay, task.dueDate, today) : null;

@@ -11,8 +11,8 @@ export function extractMentionIds(text: string): string[] {
 }
 
 /** Texto legible para emails, WhatsApp y extractos: @[Ana](user:x) → @Ana. */
-export function mentionsToPlain(text: string): string {
-  return text.replace(MENTION_RE, "@$1");
+export function mentionsToPlain(text: string, withAt = true): string {
+  return text.replace(MENTION_RE, withAt ? "@$1" : "$1");
 }
 
 /** Para renderizar con Markdown: la mención pasa a ser un enlace interno #mention-ID. */

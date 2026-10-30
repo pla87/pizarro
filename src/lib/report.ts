@@ -1,6 +1,6 @@
 // Cálculo del informe de estado de un proyecto. Funciones puras (sin BD) para poder testearlas.
 import { makeT, type T } from "../i18n/core";
-import { daysBetween } from "./dates";
+import { daysBetween, isoInZone } from "./dates";
 import { centsToAmount, sumCents, type TaskFieldKey, type TaskFieldValues } from "./task-fields";
 
 export const UPCOMING_DAYS = 14;
@@ -15,6 +15,8 @@ export interface ReportInput {
   today: string;
   /** Hora de generación (HH:mm, zona de la app). */
   time?: string;
+  /** Zona horaria de la app: los instantes de cierre se pasan a día natural en ella (por defecto UTC). */
+  timeZone?: string;
   columns: { id: string; name: string; isDone: boolean }[];
   /** Nombres de los tipos de tarea, en su orden. */
   kinds: string[];
@@ -213,7 +215,7 @@ export function buildReport(input: ReportInput, tr: T = makeT("es")): Report {
     recentDone: input.tasks
       // Fecha de cierre (historial); sin ella (p. ej. creada ya terminada), la última modificación.
       .map((t) => ({ t, at: t.doneAt ?? t.updatedAt }))
-      .filter(({ t, at }) => isDone(t) && at && daysBetween(at.slice(0, 10), today) <= RECENT_DONE_DAYS)
+      .filter(({ t, at }) => isDone(t) && at && daysBetween(isoInZone(new Date(at), input.timeZone ?? "UTC"), today) <= RECENT_DONE_DAYS)
       .sort((a, b) => b.at!.localeCompare(a.at!))
       .slice(0, RECENT_DONE_MAX)
       .map(({ t }) => toReportTask(t)),

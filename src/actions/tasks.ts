@@ -818,9 +818,10 @@ async function assertSubtaskAccess(subtaskId: string) {
   const user = await requireUser();
   const sub = await db.subtask.findFirst({
     where: { id: v.id.parse(subtaskId), task: { project: visibleProjectsWhere(user) } },
-    select: { id: true, taskId: true, title: true, done: true, position: true, task: { select: { projectId: true } } },
+    select: { id: true, taskId: true, title: true, done: true, position: true, task: { select: { projectId: true, archivedAt: true } } },
   });
   if (!sub) throw notFound();
+  assertNotArchivedRow(sub.task);
   noteProject(sub.task.projectId);
   noteTask(sub.taskId);
   const { task: _task, ...row } = sub;
@@ -846,7 +847,6 @@ export async function addSubtask(taskId: string, title: string) {
 export async function updateSubtask(subtaskId: string, patch: { title?: string; done?: boolean }) {
   return runAction({ name: "tasks.updateSubtask", args: [subtaskId, patch] }, async () => {
     const sub = await assertSubtaskAccess(subtaskId);
-    await assertNotArchived(sub.taskId);
     const data = z.object({ title: v.title.optional(), done: z.boolean().optional() }).parse(patch);
     addUndo({ t: "subtask.set", id: sub.id, data: { ...(data.title !== undefined ? { title: sub.title } : {}), ...(data.done !== undefined ? { done: sub.done } : {}) } });
     describeAction(
@@ -862,7 +862,6 @@ export async function updateSubtask(subtaskId: string, patch: { title?: string; 
 export async function reorderSubtask(subtaskId: string, prevId: string | null, nextId: string | null) {
   return runAction({ name: "tasks.reorderSubtask", args: [subtaskId, prevId, nextId] }, async (): Promise<{ position: number }> => {
     const sub = await assertSubtaskAccess(subtaskId);
-    await assertNotArchived(sub.taskId);
     addUndo({ t: "subtask.set", id: sub.id, data: { position: sub.position } });
     const neighbour = async (id: string | null) => {
       if (!id) return null;
@@ -889,7 +888,6 @@ export async function reorderSubtask(subtaskId: string, prevId: string | null, n
 export async function deleteSubtask(subtaskId: string) {
   return runAction({ name: "tasks.deleteSubtask", args: [subtaskId] }, async () => {
     const sub = await assertSubtaskAccess(subtaskId);
-    await assertNotArchived(sub.taskId);
     addUndo({ t: "subtask.restore", row: sub });
     describeAction("Borró la subtarea «{subtask}»", { subtask: sub.title }, { subtaskId: sub.id });
     await db.subtask.delete({ where: { id: subtaskId } });
@@ -1146,7 +1144,8 @@ export async function restoreTask(taskId: string) {
       if (task.archivedAt) await assertTaskCapacity(tx, projectId);
       await lockColumns(tx, [column.id]);
       const position = positionBetween(await lastPositionIn(tx, column.id, taskId), null);
-      await tx.task.update({ where: { id: taskId }, data: { archivedAt: null, archivedFromColumnId: null, columnId: column.id, position } });
+      // columnEnteredAt/waitingNotifiedAt a mano: si la columna no cambia, el disparador no actúa.
+      await tx.task.update({ where: { id: taskId }, data: { archivedAt: null, archivedFromColumnId: null, columnId: column.id, position, columnEnteredAt: new Date(), waitingNotifiedAt: null } });
     });
     describeAction("Recuperó «{title}» en «{col}»", { title: (await taskLabel(taskId)).title, col: column.name }, { taskId });
     return { task: await loadBoardTask(taskId), columnName: column.name };
