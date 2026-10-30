@@ -1,7 +1,7 @@
 // Campos opcionales de las tareas: cada proyecto activa los que necesita (Project.taskFields).
 // Sin dependencias de Node: lo usan el servidor y el cliente.
 
-export const TASK_FIELDS = ["cost", "hours", "priority", "client", "startDate", "externalUrl"] as const;
+export const TASK_FIELDS = ["cost", "hours", "priority", "client", "startDate"] as const;
 export type TaskFieldKey = (typeof TASK_FIELDS)[number];
 
 export const isTaskFieldKey = (k: string): k is TaskFieldKey => (TASK_FIELDS as readonly string[]).includes(k);
@@ -17,7 +17,6 @@ export const TASK_FIELD_LABEL: Record<TaskFieldKey, string> = {
   priority: "Prioridad",
   client: "Cliente",
   startDate: "Fecha de inicio",
-  externalUrl: "Enlace de referencia",
 };
 
 export const TASK_PRIORITIES = ["BAJA", "MEDIA", "ALTA", "URGENTE"] as const;
@@ -42,7 +41,6 @@ export interface TaskFieldValues {
   priority: TaskPriorityValue | null;
   client: string | null;
   startDate: string | null;
-  externalUrl: string | null;
 }
 
 /** ¿La fecha de inicio es posterior a la fecha límite? (solo si hay las dos). */
@@ -57,7 +55,6 @@ export const FIELD_COLUMNS: Record<TaskFieldKey, (keyof TaskFieldValues)[]> = {
   priority: ["priority"],
   client: ["client"],
   startDate: ["startDate"],
-  externalUrl: ["externalUrl"],
 };
 
 /** Importe con símbolo del euro y formato del idioma: 1.234,50 €. */

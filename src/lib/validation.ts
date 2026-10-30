@@ -87,5 +87,3 @@ export const taskClient = z
   .max(MAX_CLIENT, "El cliente admite como máximo 120 caracteres.")
   .transform((c) => (c === "" ? null : c))
   .nullable();
-/** Enlace externo: solo http(s). */
-export const externalUrl = linkUrl;

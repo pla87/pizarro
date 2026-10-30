@@ -10,10 +10,9 @@ export interface FieldsForm {
   priority: string;
   client: string;
   startDate: string;
-  externalUrl: string;
 }
 
-export const EMPTY_FIELDS_FORM: FieldsForm = { cost: "", costPaid: false, estimatedHours: "", actualHours: "", priority: "", client: "", startDate: "", externalUrl: "" };
+export const EMPTY_FIELDS_FORM: FieldsForm = { cost: "", costPaid: false, estimatedHours: "", actualHours: "", priority: "", client: "", startDate: "" };
 
 /** De una tarea al formulario. */
 export function fieldsFormOf(task: Partial<TaskFieldValues>): FieldsForm {
@@ -25,12 +24,11 @@ export function fieldsFormOf(task: Partial<TaskFieldValues>): FieldsForm {
     priority: task.priority ?? "",
     client: task.client ?? "",
     startDate: task.startDate ?? "",
-    externalUrl: task.externalUrl ?? "",
   };
 }
 
 const KEY_OF: Record<keyof FieldsForm, TaskFieldKey> = {
-  cost: "cost", costPaid: "cost", estimatedHours: "hours", actualHours: "hours", priority: "priority", client: "client", startDate: "startDate", externalUrl: "externalUrl",
+  cost: "cost", costPaid: "cost", estimatedHours: "hours", actualHours: "hours", priority: "priority", client: "client", startDate: "startDate",
 };
 
 /** Parche para el servidor: solo los campos activados que difieren de `base` ("" se envía como null). */
@@ -49,6 +47,5 @@ export const fieldsForCreate = (form: FieldsForm, enabled: readonly TaskFieldKey
 /** Mensaje de error de los campos (null si todo bien); lo muestra el grupo y bloquea el guardado. */
 export function fieldsError(form: FieldsForm, enabled: readonly TaskFieldKey[], dueDate: string | null | undefined, t: (s: string) => string): string | null {
   if (enabled.includes("startDate") && startAfterDue(form.startDate, dueDate)) return t("La fecha de inicio no puede ser posterior a la fecha límite.");
-  if (enabled.includes("externalUrl") && form.externalUrl.trim() !== "" && !/^https?:\/\/[^\s]+$/i.test(form.externalUrl.trim())) return t("El enlace debe empezar por http:// o https://");
   return null;
 }
