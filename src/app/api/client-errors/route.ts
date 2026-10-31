@@ -14,16 +14,18 @@ const schema = z.object({
   path: z.string().max(500).optional(),
 });
 
+const ANON_MAX_BODY = 8_192;
+
 /** Errores del navegador (pantalla «Algo ha fallado», excepciones no capturadas) → Administración → Logs. */
 export async function POST(req: Request) {
   if (!isSameOrigin(req)) return new Response(null, { status: 403 });
   const ip = clientIp(req.headers);
-  if (!rateLimit(`client-errors:${ip}`, 20, 60_000)) return new Response(null, { status: 429 });
-  // Solo sesiones válidas y cuerpos pequeños: sin esto, cualquiera con una cookie inventada llenaría los logs.
+  // Sin sesión también se acepta (la pantalla de acceso, la verificación en dos pasos o una sesión caducada fallan sin ella
+  // y su error es justo el que hay que ver), con un límite más estricto por IP y un cuerpo más pequeño.
   const user = await getCurrentUser().catch(() => null);
-  if (!user) return new Response(null, { status: 401 });
+  if (!rateLimit(`client-errors:${user ? "u" : "anon"}:${ip}`, user ? 20 : 10, 60_000)) return new Response(null, { status: 429 });
   const raw = await req.text().catch(() => "");
-  if (raw.length > 16_384) return new Response(null, { status: 413 });
+  if (raw.length > (user ? 16_384 : ANON_MAX_BODY)) return new Response(null, { status: 413 });
   let body: unknown = null;
   try {
     body = JSON.parse(raw);
@@ -35,12 +37,12 @@ export async function POST(req: Request) {
     level: "error",
     category: "client",
     action: `client.${e.source}`,
-    message: `Error en el navegador${e.path ? ` en ${e.path}` : ""}: ${e.message}`,
-    userId: user.id,
-    userName: user.name,
+    message: `Error en el navegador${user ? "" : " (sin sesión)"}${e.path ? ` en ${e.path}` : ""}: ${e.message}`,
+    userId: user?.id ?? null,
+    userName: user?.name ?? null,
     path: e.path ?? null,
     ip,
-    details: { digest: e.digest, stack: e.stack, userAgent: req.headers.get("user-agent")?.slice(0, 300) },
+    details: { anonymous: !user, digest: e.digest, stack: e.stack, userAgent: req.headers.get("user-agent")?.slice(0, 300) },
   });
   return new Response(null, { status: 204 });
 }

@@ -17,6 +17,9 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   generateBuildId: () => buildId,
+  // Protección frente a desajuste de versión: Next añade el identificador a las peticiones del navegador y, si el servidor
+  // responde con otro (despliegue nuevo), hace una navegación completa en vez de usar código y acciones que ya no existen.
+  deploymentId: buildId.replace(/[^a-zA-Z0-9_-]/g, "-"),
   // La zona horaria ya no se fija aquí: el navegador la recibe del servidor (data-tz en <html>, ver lib/format.ts).
   env: { NEXT_PUBLIC_BUILD_ID: buildId },
   reactStrictMode: true,
