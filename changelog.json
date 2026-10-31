@@ -1,6 +1,45 @@
 {
   "versions": [
     {
+      "version": "1.35.1",
+      "date": "2026-10-31",
+      "releasedAt": "2026-10-31T14:16:09+01:00",
+      "summary": "Las apps instaladas se recuperan solas tras una actualización",
+      "changes": {
+        "nuevas": [
+          "Las pantallas de error ofrecen «Reintentar», «Recargar» y «Volver a iniciar sesión» (limpia la sesión y vuelve a la pantalla de acceso)."
+        ],
+        "mejoras": [
+          "Tras una actualización, una página de acceso o de verificación en dos pasos que se quedó abierta (por ejemplo en la app instalada) se recarga sola en vez de fallar.",
+          "Los errores del navegador en las páginas de acceso también quedan en Administración → Logs, marcados «(sin sesión)»."
+        ],
+        "correcciones": [
+          "En la app instalada, iniciar sesión justo después de una actualización mostraba «Algo ha fallado» y no llegaba a pedir el segundo paso."
+        ],
+        "tecnicos": [
+          "deploymentId de Next para detectar versiones distintas; /api/client-errors, /api/version y /api/auth/reset accesibles sin sesión (con límites)."
+        ]
+      },
+      "en": {
+        "summary": "Installed apps recover on their own after an update",
+        "changes": {
+          "nuevas": [
+            "Error screens offer “Retry”, “Reload” and “Sign in again” (clears the session and returns to the sign-in screen)."
+          ],
+          "mejoras": [
+            "After an update, a sign-in or two-step verification page left open (for example in the installed app) reloads on its own instead of failing.",
+            "Browser errors on the sign-in pages are also recorded in Administration → Logs, marked “(no session)”."
+          ],
+          "correcciones": [
+            "In the installed app, signing in right after an update showed “Something went wrong” and never asked for the second step."
+          ],
+          "tecnicos": [
+            "Next deploymentId to detect a different version; /api/client-errors, /api/version and /api/auth/reset reachable without a session (with limits)."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.35.0",
       "date": "2026-10-30",
       "releasedAt": "2026-10-30T19:53:02+01:00",
