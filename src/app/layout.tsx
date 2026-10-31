@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { getCurrentUser } from "@/lib/session";
+import { ClientErrorReporter } from "@/components/ClientErrorReporter";
+import { VersionWatcher } from "@/components/VersionWatcher";
 import { I18nProvider } from "@/i18n/client";
 import { getLocale } from "@/i18n/server";
 import { appTimeZone } from "@/lib/format";
@@ -43,7 +45,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={locale} data-theme={theme} data-accent={accent} data-tz={appTimeZone()}>
       <body>
-        <I18nProvider locale={locale}>{children}</I18nProvider>
+        <I18nProvider locale={locale}>
+          {/* En el layout raíz (no solo en la app con sesión): acceso, verificación en dos pasos y demás pantallas públicas también
+              deben recargarse tras un despliegue y dejar rastro de sus errores. */}
+          <ClientErrorReporter />
+          <VersionWatcher />
+          {children}
+        </I18nProvider>
       </body>
     </html>
   );

@@ -36,7 +36,9 @@ export function proxy(req: NextRequest) {
   // arranque (/setup se protege con el código del log y da 404 cuando ya hay usuarios).
   // Sin usuarios, el proxy no consulta la base de datos: manda a /login y esa página redirige a /setup.
   const isLogin =
-    pathname === "/setup" || pathname.startsWith("/setup/") || pathname === "/login" || pathname.startsWith("/login/") || pathname === "/forgot-password" || pathname === "/privacy" || pathname === "/terms" || pathname.startsWith("/reset/") || pathname.startsWith("/confirm/");
+    pathname === "/setup" || pathname.startsWith("/setup/") || pathname === "/login" || pathname.startsWith("/login/") || pathname === "/forgot-password" || pathname === "/privacy" || pathname === "/terms" || pathname.startsWith("/reset/") || pathname.startsWith("/confirm/") ||
+    // Públicas también: informe de errores del navegador (la pantalla de acceso no tiene sesión), versión en curso y salida limpia.
+    pathname === "/api/client-errors" || pathname === "/api/version" || pathname === "/api/auth/reset";
   const token = req.cookies.get(sessionCookieName())?.value;
 
   // Nonce nuevo en cada petición de página (las API devuelven JSON/ficheros: sin CSP de documento).
