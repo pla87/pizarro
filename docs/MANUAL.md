@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.35.0"
+version: "v1.35.1"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.35.0
+**Versión de la aplicación:** v1.35.1
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -412,6 +412,8 @@ El menú lateral muestra, debajo de las opciones del proyecto: **Calendario**, *
   - **Android y Chrome de escritorio:** muestra el aviso de instalación.
   - **iPhone y iPad:** explica cómo hacerlo. En **Safari**, pulsa *Compartir → Añadir a pantalla de inicio*.
   - La app se abre a pantalla completa con su icono y mantiene la sesión.
+
+**Actualizaciones con la app instalada:** al publicarse una versión nueva, Pizarro lo detecta y recarga la página (también la de acceso y la de verificación en dos pasos, si se quedaron abiertas). Si aun así aparece «Algo ha fallado», la pantalla ofrece **Reintentar**, **Recargar** y **Volver a iniciar sesión** (borra la sesión y las cookies de verificación de ese dispositivo y lleva a la pantalla de acceso); cerrar la app y volver a abrirla también lo arregla. Estos errores quedan en *Administración → Logs*, aunque no haya sesión («(sin sesión)»).
 
 ### 3.13 Apariencia
 

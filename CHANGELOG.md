@@ -2,6 +2,27 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.35.1 — 2026-10-31 14:16
+
+Las apps instaladas se recuperan solas tras una actualización
+
+### Nuevas funcionalidades
+
+- Las pantallas de error ofrecen «Reintentar», «Recargar» y «Volver a iniciar sesión» (limpia la sesión y vuelve a la pantalla de acceso).
+
+### Mejoras
+
+- Tras una actualización, una página de acceso o de verificación en dos pasos que se quedó abierta (por ejemplo en la app instalada) se recarga sola en vez de fallar.
+- Los errores del navegador en las páginas de acceso también quedan en Administración → Logs, marcados «(sin sesión)».
+
+### Correcciones
+
+- En la app instalada, iniciar sesión justo después de una actualización mostraba «Algo ha fallado» y no llegaba a pedir el segundo paso.
+
+### Cambios técnicos / DB
+
+- deploymentId de Next para detectar versiones distintas; /api/client-errors, /api/version y /api/auth/reset accesibles sin sesión (con límites).
+
 ## v1.35.0 — 2026-10-30 19:53
 
 Textos legales editables, dominio propio, selector de color con teclado y anillos de foco sin recortar

@@ -1,13 +1,17 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useMemo, useState, useTransition } from "react";
 import { cancelSecondStep, resendLoginCode, verifyLoginCode, type VerifyState } from "@/actions/two-factor";
+import { reloadForNewVersion } from "@/components/VersionWatcher";
 import { useT } from "@/i18n/client";
+import { guardFormAction } from "@/lib/guard-action";
 
 export function VerifyForm({ method, emailSent }: { method: "TOTP" | "EMAIL"; emailSent: boolean }) {
   const t = useT();
-  const [state, action, pending] = useActionState<VerifyState, FormData>(verifyLoginCode, {});
+  // guardFormAction: tras un despliegue esta página puede ser de la versión anterior; entonces se recarga en vez de romper.
+  const guarded = useMemo(() => guardFormAction(verifyLoginCode, t, reloadForNewVersion), [t]);
+  const [state, action, pending] = useActionState<VerifyState, FormData>(guarded, {});
   const [resending, startResend] = useTransition();
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(emailSent ? { ok: true, text: t("Te hemos enviado un código a tu email.") } : null);
 

@@ -1,5 +1,8 @@
 "use client";
 
+import { isStaleActionError } from "@/lib/stale-action";
+import { reloadForNewVersion } from "./VersionWatcher";
+
 type Source = "error-boundary" | "global-error" | "window" | "promise";
 
 const sent = new Map<string, number>();
@@ -23,4 +26,17 @@ export function reportClientError(source: Source, error: unknown, digest?: strin
   } catch {
     // Informar de un error nunca debe provocar otro.
   }
+}
+
+/**
+ * Para las pantallas de error (error.tsx, global-error.tsx): si el fallo viene de una versión anterior del código
+ * (acción o fragmento que el servidor ya no tiene tras un despliegue) se recarga la página entera en vez de enseñar
+ * el error; si no, se registra. Devuelve true si ha pedido la recarga.
+ */
+export function handleBoundaryError(source: Source, error: Error & { digest?: string }): boolean {
+  if (isStaleActionError(error) || /Loading chunk|ChunkLoadError|Failed to fetch dynamically imported module/i.test(error.message ?? "")) {
+    if (reloadForNewVersion()) return true;
+  }
+  reportClientError(source, error, error.digest);
+  return false;
 }

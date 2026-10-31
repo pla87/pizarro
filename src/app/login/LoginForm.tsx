@@ -3,9 +3,11 @@
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { login, type LoginState } from "@/actions/auth";
+import { reloadForNewVersion } from "@/components/VersionWatcher";
 import { useT } from "@/i18n/client";
+import { guardFormAction } from "@/lib/guard-action";
 
 interface Props {
   next: string;
@@ -31,7 +33,9 @@ function GoogleLogo() {
 
 export function LoginForm({ next, google, password, emergency, notice }: Props) {
   const t = useT();
-  const [state, action, pending] = useActionState<LoginState, FormData>(login, {});
+  // guardFormAction: tras un despliegue esta página puede ser de la versión anterior; entonces se recarga en vez de romper.
+  const guarded = useMemo(() => guardFormAction(login, t, reloadForNewVersion), [t]);
+  const [state, action, pending] = useActionState<LoginState, FormData>(guarded, {});
   // Controlado: React restablece los formularios tras cada acción y se perdería el email.
   const [email, setEmail] = useState("");
   const form = (
