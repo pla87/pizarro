@@ -349,6 +349,10 @@ async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser,
         for (const x of data.tasks) {
           if (x.recurrenceFromRef) await tx.task.update({ where: { id: taskIds.get(x.ref)! }, data: { recurrenceFromId: taskIds.get(x.recurrenceFromRef)! } });
         }
+        // Prisma pone la fecha de modificación al insertar aunque se indique: se restituye la del archivo.
+        if (data.tasks.length) {
+          await tx.$executeRaw`UPDATE "Task" AS t SET "updatedAt" = d.u::timestamp FROM unnest(${data.tasks.map((x) => taskIds.get(x.ref)!)}::text[], ${data.tasks.map((x) => x.updatedAt)}::text[]) AS d(id, u) WHERE t."id" = d.id`;
+        }
         await insertChunks(
           data.tasks.flatMap((x) => x.labelRefs.map((l) => ({ taskId: taskIds.get(x.ref)!, labelId: labelIds.get(l)! }))),
           (rows) => tx.taskLabel.createMany({ data: rows, skipDuplicates: true }),
@@ -398,6 +402,9 @@ async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser,
         await insertChunks(releaseTaskRows, (rows) => tx.releaseTask.createMany({ data: rows }));
         await insertChunks(releaseAttachmentRows, (rows) => tx.releaseAttachment.createMany({ data: rows }));
         await insertChunks(documentRows, (rows) => tx.projectDocument.createMany({ data: rows }));
+        if (documentRows.length) {
+          await tx.$executeRaw`UPDATE "ProjectDocument" AS t SET "updatedAt" = d.u::timestamp FROM unnest(${documentRows.map((r) => r.id!)}::text[], ${documentRows.map((r) => (r.updatedAt as Date).toISOString())}::text[]) AS d(id, u) WHERE t."id" = d.id`;
+        }
         await insertChunks(
           data.events.map((e) => ({ taskId: taskIds.get(e.taskRef)!, projectId, userId: uid(e.user), userName: e.userName, code: e.code, label: e.label, createdAt: date(e.createdAt) })),
           (rows) => tx.taskEvent.createMany({ data: rows }),

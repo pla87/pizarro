@@ -147,7 +147,12 @@ export async function buildProjectExport(projectId: string, options: ExportOptio
   const kindList = [...project.kinds.map((k) => ({ ...k, scope: "project" as const })), ...generalUsed.map((k) => ({ ...k, scope: "general" as const }))];
   const kindRef = new Map(kindList.map((k, i) => [k.id, `k${i + 1}`]));
 
-  const mention = (text: string) => mapMentions(text, (name, id) => `@[${name}](user:${users.ref(id)})`);
+  // Las menciones se dejan como están y se reescriben al final, cuando se sabe qué personas existen.
+  const mentionIds = new Set<string>();
+  const mention = (text: string) => {
+    mapMentions(text, (name, id) => { mentionIds.add(id); return name; });
+    return text;
+  };
 
   // Tareas.
   const tasks: ProjectExportData["tasks"] = [];
@@ -313,8 +318,15 @@ export async function buildProjectExport(projectId: string, options: ExportOptio
   }
 
   // Personas citadas (las que ya no existen se omiten: sus refs quedan sin resolver y al importar salen como texto).
-  const userRows = await db.user.findMany({ where: { id: { in: users.entries().map(([id]) => id) } }, select: { id: true, name: true, email: true } });
+  const userRows = await db.user.findMany({ where: { id: { in: [...new Set([...users.entries().map(([id]) => id), ...mentionIds])] } }, select: { id: true, name: true, email: true } });
   const userById = new Map(userRows.map((u) => [u.id, u]));
+  // Menciones: la de una persona que existe lleva su ref; la de una que ya no, queda como texto.
+  const fixMentions = (text: string) => mapMentions(text, (name, id) => (userById.has(id) ? `@[${name}](user:${users.ref(id)})` : `@${name}`));
+  for (const t of tasks) {
+    t.title = fixMentions(t.title);
+    t.description = fixMentions(t.description);
+    for (const c of t.comments) c.body = fixMentions(c.body);
+  }
   const userList = users.entries().flatMap(([id, ref]) => {
     const u = userById.get(id);
     return u ? [{ ref, name: u.name, email: u.email }] : [];
