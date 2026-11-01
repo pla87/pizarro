@@ -138,12 +138,20 @@ export async function toView(job: JobRow, t: T): Promise<TransferJobView> {
   };
 }
 
-/** Trabajos de la persona de las últimas 24 h (o aún vivos), los más recientes primero. */
+/** Cuánto sigue en la lista una exportación caducada (para que se vea que caducó y se pueda volver a exportar). */
+const EXPIRED_SHOWN_MS = 24 * 60 * 60 * 1000;
+
+/** Trabajos vivos, los terminados hace menos de 24 h, las exportaciones listas hasta que caducan y las caducadas hace menos de 24 h; los más recientes primero. */
 export async function listRecentJobs(userId: string, filter: { kind?: TransferKind; projectId?: string } = {}, now: Date = new Date()): Promise<JobRow[]> {
   return db.projectTransferJob.findMany({
     where: {
       userId, ...(filter.kind ? { kind: filter.kind } : {}), ...(filter.projectId ? { projectId: filter.projectId } : {}),
-      OR: [{ status: { in: ["QUEUED", "RUNNING"] } }, { createdAt: { gt: new Date(now.getTime() - TRANSFER_TTL_MS) } }],
+      OR: [
+        { status: { in: ["QUEUED", "RUNNING"] } },
+        { status: "DONE", expiresAt: { gt: now } },
+        { status: { in: ["DONE", "FAILED"] }, finishedAt: { gt: new Date(now.getTime() - TRANSFER_TTL_MS) } },
+        { status: "EXPIRED", expiresAt: { gt: new Date(now.getTime() - EXPIRED_SHOWN_MS) } },
+      ],
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: 20,
@@ -262,13 +270,17 @@ export async function executeJob(job: JobRow): Promise<void> {
   const now = new Date();
   await db.projectTransferJob
     .updateMany({
-      where: { id: job.id, status: "RUNNING" },
+      // Con el mismo startedAt que reservó este trabajador: un duplicado rezagado (el trabajo ya se retomó) no pisa al vigente.
+      where: { id: job.id, status: "RUNNING", startedAt: job.startedAt },
       data: error === null
         ? { status: "DONE", finishedAt: now, expiresAt: new Date(now.getTime() + TRANSFER_TTL_MS), result: result as Prisma.InputJsonValue, projectId, error: null, progress: { phase: job.kind === "EXPORT" ? "comprimir" : "base de datos", done: 1, total: 1 } }
         : { status: "FAILED", finishedAt: now, expiresAt: new Date(now.getTime() + TRANSFER_TTL_MS), error },
     })
     .catch((err) => console.error("[transfer] no se pudo anotar el final", err));
 }
+
+/** Temporal del intento actual de una exportación (junto al archivo final, para renombrarlo sin salir del sistema de ficheros). */
+const exportTmpFile = (job: { id: string; attempts: number }) => path.join(exportsDir(), `${job.id}.${job.attempts}.tmp`);
 
 async function runExport(job: JobRow, progress: ReturnType<typeof progressWriter>): Promise<ExportJobResult> {
   const options = job.options as unknown as ExportOptions;
@@ -290,10 +302,10 @@ async function runExport(job: JobRow, progress: ReturnType<typeof progressWriter
   progress.set({ phase: "archivos", done: 0, total: 0 });
   let size: number;
   try {
-    size = await writeProjectExport(built, dest, (done, total) => progress.set({ phase: "archivos", done, total }));
-    progress.set({ phase: "comprimir" });
+    // «archivos» mientras se vuelcan los adjuntos al ZIP; al terminar el último pasa a «comprimir» (cerrar, comprobar y renombrar).
+    size = await writeProjectExport(built, dest, (done, total) => progress.set(total > 0 && done >= total ? { phase: "comprimir" } : { phase: "archivos", done, total }), exportTmpFile(job));
   } catch (err) {
-    await rm(dest, { force: true }).catch(() => {});
+    await rm(exportTmpFile(job), { force: true }).catch(() => {});
     throw err;
   }
   const u = await db.user.findUnique({ where: { id: job.userId }, select: { name: true } });
@@ -386,7 +398,7 @@ export async function recoverInterruptedJobs(now: Date = new Date(), staleMs: nu
       : await db.projectTransferJob.updateMany({ where: guard, data: { status: "FAILED", error: INTERRUPTED, finishedAt: now, expiresAt: new Date(now.getTime() + TRANSFER_TTL_MS) } });
     if (res.count === 0) continue;
     touched++;
-    if (job.kind === "EXPORT") await rm(path.join(exportsDir(), `${job.id}.pizarro.zip.tmp`), { force: true }).catch(() => {});
+    if (job.kind === "EXPORT") await rm(exportTmpFile(job), { force: true }).catch(() => {});
     else await rm(String((job.options as { tempFile?: string }).tempFile ?? ""), { force: true }).catch(() => {});
     logEvent({
       level: "warn", category: "system", action: "projects.transferInterrupted",

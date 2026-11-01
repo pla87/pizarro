@@ -4,8 +4,12 @@
 
 /** Signos que, al principio del trozo dictado, se pegan a la palabra anterior (sin espacio delante). */
 const CLOSING = /^[.,;:!?)\]»”%]/;
-/** Caracteres tras los que no hace falta espacio: abrir paréntesis o comillas, espacio, salto de línea, ¿ ¡. */
-const OPENING_END = /[\s([{«“¿¡"'\-/]$/;
+/**
+ * Caracteres tras los que no hace falta espacio: abrir paréntesis o comillas, espacio, salto de línea, ¿ ¡.
+ * Las comillas rectas, el guion y la barra solo cuentan como «de apertura» al principio o tras un espacio:
+ * en «hola"» o «a-b» cierran o unen, y lo dictado después sí lleva espacio.
+ */
+const OPENING_END = /(?:[\s([{«“¿¡]|(?:^|\s)["'\-/])$/;
 /** Tras una línea vacía o un marcador de lista, cita o título de Markdown empieza frase. */
 const SENTENCE_START = /^(?:\s*|\s*(?:[-*+>]|\d+[.)]|#{1,6})\s*)$/;
 

@@ -14,7 +14,7 @@ import { DISK_MARGIN_BYTES, assertDiskRoom } from "../../src/lib/disk-space";
 import { buildProjectExport } from "../../src/lib/project-export/export";
 import { writeProjectExport } from "../../src/lib/project-export/write";
 import {
-  MAX_JOBS_PER_USER, claimNextJob, createExportJob, createImportJob, executeJob, exportsDir, getJobFor, purgeTransferJobs, recoverInterruptedJobs,
+  MAX_JOBS_PER_USER, claimNextJob, listRecentJobs, createExportJob, createImportJob, executeJob, exportsDir, getJobFor, purgeTransferJobs, recoverInterruptedJobs,
   runNextTransferJob, startTransferWorker, transferConcurrency,
 } from "../../src/lib/transfer-jobs";
 
@@ -231,16 +231,39 @@ describe("permisos de estado y descarga", () => {
     await loginAs(stranger);
     assert.equal((await downloadRoute(get(), ctx(job.id))).status, 404);
     await loginAs(admin);
+    // Un administrador ve el estado, pero no descarga el archivo de otra persona.
     assert.equal((await statusRoute(get(), ctx(job.id))).status, 200);
-    assert.equal((await downloadRoute(get(), ctx(job.id))).status, 200);
+    assert.equal((await downloadRoute(get(), ctx(job.id))).status, 404);
     await loginAs(otherAdmin);
-    assert.equal((await downloadRoute(get(), ctx(job.id))).status, 200);
+    assert.equal((await downloadRoute(get(), ctx(job.id))).status, 404);
 
     // El dueño que deja de gestionar el proyecto ya no se lleva el archivo.
     await db.project.update({ where: { id: f.project.id }, data: { privateOwnerId: admin.id } });
     await db.projectMember.deleteMany({ where: { projectId: f.project.id, userId: owner.id } });
     await loginAs(owner);
     assert.equal((await downloadRoute(get(), ctx(job.id))).status, 404);
+  });
+
+  test("un administrador sacado de un proyecto privado ya no descarga su propia exportación; si el proyecto se borra, 404", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const other = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ visibility: "PRIVATE", owner: admin });
+    await makeTask(f);
+    const job = await createExportJob(admin.id, f.project.id, { attachments: false, scope: "all" });
+    assert.equal(await runNextTransferJob(), job.id);
+    await loginAs(admin);
+    assert.equal((await downloadRoute(get(), ctx(job.id))).status, 200);
+    await db.project.update({ where: { id: f.project.id }, data: { privateOwnerId: other.id } });
+    await db.projectMember.deleteMany({ where: { projectId: f.project.id, userId: admin.id } });
+    assert.equal((await downloadRoute(get(), ctx(job.id))).status, 404);
+
+    const g = await makeProject({ members: [] });
+    await makeTask(g);
+    const job2 = await createExportJob(admin.id, g.project.id, { attachments: false, scope: "all" });
+    assert.equal(await runNextTransferJob(), job2.id);
+    assert.equal((await downloadRoute(get(), ctx(job2.id))).status, 200);
+    await db.project.delete({ where: { id: g.project.id } });
+    assert.equal((await downloadRoute(get(), ctx(job2.id))).status, 404);
   });
 
   test("la lista es solo la propia, con filtro de tipo y de proyecto; el aviso se marca como visto una vez", async () => {
@@ -389,5 +412,39 @@ describe("trabajador en segundo plano", () => {
     const end = Date.now() + 15_000;
     while (Date.now() < end && (await db.projectTransferJob.findUniqueOrThrow({ where: { id: second.id } })).status !== "DONE") await new Promise((r) => setTimeout(r, 100));
     assert.equal((await db.projectTransferJob.findUniqueOrThrow({ where: { id: second.id } })).status, "DONE");
+  });
+});
+
+describe("lista reciente y trabajadores duplicados", () => {
+  test("una exportación lista sigue en la lista hasta que caduca; las caducadas, 24 h más", async () => {
+    const u = await makeUser({ role: "ADMIN" });
+    const now = new Date();
+    const h = (n: number) => new Date(now.getTime() + n * 3_600_000);
+    const mk = (status: "DONE" | "EXPIRED" | "FAILED", createdAt: Date, finishedAt: Date, expiresAt: Date) =>
+      db.projectTransferJob.create({ data: { userId: u.id, kind: "EXPORT", status, createdAt, finishedAt, expiresAt, progress: {} } });
+    const vivaLarga = await mk("DONE", h(-23), h(-1), h(23)); // terminó hace 1 h
+    const hecha = await mk("DONE", h(-30), h(-5), h(19)); // encolada hace 30 h, pero sigue válida
+    const caducadaPoco = await mk("EXPIRED", h(-50), h(-26), h(-2));
+    const caducadaMucho = await mk("EXPIRED", h(-80), h(-56), h(-32));
+    const fallidaVieja = await mk("FAILED", h(-30), h(-29), h(-5));
+    const ids = (await listRecentJobs(u.id, {}, now)).map((j) => j.id);
+    assert.ok(ids.includes(vivaLarga.id));
+    assert.ok(ids.includes(hecha.id));
+    assert.ok(ids.includes(caducadaPoco.id));
+    assert.equal(ids.includes(caducadaMucho.id), false);
+    assert.equal(ids.includes(fallidaVieja.id), false);
+  });
+
+  test("un trabajador rezagado (otro ya retomó el trabajo) no pisa el estado del vigente", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const { job } = await exportJob(admin.id);
+    const claimed = (await claimNextJob())!;
+    // El trabajo se retomó: otra reserva con otro startedAt.
+    await db.projectTransferJob.update({ where: { id: job.id }, data: { startedAt: new Date(claimed.startedAt!.getTime() + 5000) } });
+    await executeJob(claimed);
+    const row = await db.projectTransferJob.findUniqueOrThrow({ where: { id: job.id } });
+    assert.equal(row.status, "RUNNING");
+    assert.equal(row.result, null);
+    assert.deepEqual((await readdir(exportsDir())).filter((n) => n.startsWith(job.id) && n.endsWith(".tmp")), []);
   });
 });

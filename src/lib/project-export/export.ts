@@ -172,6 +172,9 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
   let commentCount = 0;
   let subtaskCount = 0;
   let commentSeq = 0;
+  // Cota inferior del tamaño de project.json (los caracteres de los textos, que en UTF-8 nunca pesan menos): si ya pasa
+  // del tope, falla antes de examinar los adjuntos de las tareas siguientes, que es lo que tarda.
+  let textChars = 0;
   for (let i = 0; i < orderedIds.length; i += CHUNK) {
     const ids = orderedIds.slice(i, i + CHUNK);
     const rows = await db.task.findMany({
@@ -186,6 +189,12 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
       },
     });
     const byId = new Map(rows.map((r) => [r.id, r]));
+    for (const r of rows) {
+      textChars += r.title.length + r.description.length;
+      for (const c of r.comments) textChars += c.body.length;
+      for (const s of r.subtasks) textChars += s.title.length;
+    }
+    if (textChars > MAX_PROJECT_JSON_BYTES) throw new AppError("El proyecto es demasiado grande para exportarlo (el contenido supera 64 MB). Prueba con «Solo el tablero».", 413);
     for (const id of ids) {
       const t = byId.get(id);
       if (!t) continue;
