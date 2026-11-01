@@ -145,7 +145,7 @@ Dos cosas distintas, configurables desde Pizarro (como administrador) sin editar
 
 El botón *Enviar email de prueba* manda un mensaje a tu dirección. Equivalente por variables: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` y `SMTP_FROM`. Si cambias el servidor, el puerto o el usuario, hay que escribir la contraseña de nuevo.
 
-**2. Acceso con Google** (entrar con «Iniciar sesión con Google» las personas que ya existen en Pizarro con el mismo email; también conecta Docs y Sheets). No envía emails. Necesita `APP_URL` en `.env` (la dirección pública, con `https://`). En *Ajustes → Acceso con Google* hay una guía desplegable, un paso por pantalla de Google Cloud, con las direcciones y el dominio listos para copiar. Resumen (Google Cloud usa ahora la interfaz «Google Auth Platform»: Overview, Branding, Audience, Clients, Data Access, Verification Center y Settings):
+**2. Acceso con Google** (entrar con «Iniciar sesión con Google» las personas que ya existen en Pizarro con el mismo email; también conecta Docs y Sheets). No envía emails. Necesita `APP_URL` en `.env` (la dirección pública, con `https://`). Antes de empezar decide con qué dirección van a entrar tus usuarios (la del servidor o un dominio propio): ver 3.7, «Paso 0». Ajustes muestra arriba la «Dirección pública de Pizarro» (`APP_URL`) y avisa si estás entrando por otra distinta. En *Ajustes → Acceso con Google* hay una guía desplegable, un paso por pantalla de Google Cloud, con las direcciones y el dominio listos para copiar. Resumen (Google Cloud usa ahora la interfaz «Google Auth Platform»: Overview, Branding, Audience, Clients, Data Access, Verification Center y Settings):
 
 1. **Proyecto.** En `console.cloud.google.com` crea o elige un proyecto (gratis, sin facturación) y abre *Google Auth Platform* (*Get started* la primera vez).
 2. **Branding.** Nombre de la aplicación («Pizarro»); email de asistencia; logotipo (opcional: déjalo vacío si la app es «Externa» y está en producción, porque subir un logotipo obliga a que Google la verifique; en `/pizarro-logo-120.png` hay un PNG de 120×120 de Pizarro); *Application home page* = `APP_URL`; *Privacy policy link* = `APP_URL/privacy` y *Terms of service link* = `APP_URL/terms` (páginas públicas de Pizarro; el email de contacto que muestran se pone en *Ajustes → Acceso con Google → Email de contacto público*); *Authorized domains* = el dominio principal de `APP_URL` sin subdominios (Ajustes lo calcula y lo muestra); email de contacto del desarrollador. Si `APP_URL` es un subdominio de un alojamiento compartido (`*.up.railway.app`, `*.vercel.app`…), ese servicio está en la lista de sufijos públicos y Google suele aceptar la dirección completa como dominio autorizado (Ajustes la muestra); si la rechaza, o para mostrar tu marca, usa un dominio propio. Con `localhost` o una IP no funciona.
@@ -158,7 +158,24 @@ Si falla: `redirect_uri_mismatch` (la URI no es idéntica: `https`, sin barra fi
 
 Equivalente por variables: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `GOOGLE_WORKSPACE_DOMAIN`. Los cambios guardados en Ajustes se aplican en segundos, sin reiniciar.
 
-### 3.7 Dominio propio (Railway)
+### 3.7 Dominio propio o dirección del servidor
+
+**Paso 0 · ¿Dominio propio o la dirección del servidor?** (es también el «Paso 0» de la guía en *Ajustes → Acceso con Google*). La dirección que elijas es `APP_URL`, y de ella salen todos los valores que hay que dar de alta en Google: página principal, enlaces de privacidad (`/privacy`) y condiciones (`/terms`), dominio autorizado y URI de redirección.
+
+- **La dirección del servidor** (por ejemplo `*.up.railway.app` en Railway, o la IP en una red local): funciona sin comprar nada. Google suele aceptar la dirección completa como dominio autorizado (con `localhost` o una IP no funciona). Se ve menos profesional y, si luego cambias a un dominio propio, hay que actualizar Google (ver «Cambiar de una opción a otra»).
+- **Un dominio propio** (`pizarro.example.com`), recomendado para clientes. Pasos: añadir el dominio en el alojamiento, crear el registro DNS, esperar al HTTPS, poner `APP_URL` y redesplegar, y después hacer los pasos de Google con los valores nuevos. El dominio autorizado de Google es el dominio registrable (`example.com`), sin subdominios.
+  - En **Railway**: ver «Dominio propio en Railway» (abajo).
+  - Con **Docker Compose**: crea un registro DNS `A` (y `AAAA` si hay IPv6) de `pizarro.example.com` hacia la IP del servidor, con los puertos 80 y 443 abiertos. En `deploy/.env` pon `DOMAIN="pizarro.example.com"` y `APP_URL="https://pizarro.example.com"` (el instalador `./install.sh --domain pizarro.example.com` lo escribe por ti; Caddy usa `DOMAIN` y pide el certificado de Let's Encrypt solo en cuanto el DNS resuelve). Después `docker compose up -d` (se recrean los contenedores con los valores nuevos).
+
+**Cambiar de una opción a otra más adelante** (por ejemplo de `*.up.railway.app` a un dominio propio), sin cortar el acceso con Google:
+
+1. Pon `APP_URL` en la dirección nueva y redespliega (Railway: *Variables* → *Redeploy*; Docker Compose: `deploy/.env` y `docker compose up -d`).
+2. Entra por la dirección nueva en *Administración → Ajustes → Acceso con Google*: arriba verás la «Dirección pública de Pizarro» y las direcciones de redirección ya calculadas. Si entras por una dirección distinta de `APP_URL`, un aviso lo indica y se muestran las URI de las dos (la de `APP_URL` y la que usas) para poder dar de alta ambas durante el cambio.
+3. En Google Cloud **añade** las URI de redirección nuevas sin quitar las antiguas (Google admite varias a la vez), y cambia la página principal, los enlaces de privacidad y condiciones y los dominios autorizados.
+4. Comprueba que «Iniciar sesión con Google» funciona con la dirección nueva y entonces quita las URI antiguas.
+5. Avisa a tu gente: tienen que iniciar sesión otra vez, y quien instaló Pizarro como aplicación debe desinstalarla e instalarla de nuevo desde la dirección nueva.
+
+#### Dominio propio en Railway
 
 Para servir Pizarro en `pizarro.example.com` (sustituye `example.com` por tu dominio) en lugar de la dirección `*.up.railway.app`:
 
