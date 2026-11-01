@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { getBackupAlert } from "@/lib/backup-alert";
 import { listVisibleProjects, visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
+import { getUpdateNotice } from "@/lib/update-check";
 import { requireUserPage } from "@/lib/session";
 import { AppShell } from "@/components/AppShell";
 import pkg from "../../../package.json";
@@ -14,10 +15,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   ]);
   // Punto de aviso en «Administración» si la copia de seguridad está atrasada (solo se consulta a los admins).
   const backupAlert = user.role === "ADMIN" ? (await getBackupAlert().catch(() => null))?.active === true : false;
+  // Punto discreto si hay una versión nueva sin descartar (consulta cacheada 12 h; nunca falla).
+  const updateAvailable = user.role === "ADMIN" ? (await getUpdateNotice()) !== null : false;
   const last = (await cookies()).get("tablon_last_project")?.value;
   const lastProjectId = projects.find((p) => p.id === last)?.id ?? null;
   return (
-    <AppShell user={user} projects={projects.map((p) => ({ id: p.id, name: p.name, isPrivate: p.isPrivate }))} version={pkg.version} unread={unread} lastProjectId={lastProjectId} backupAlert={backupAlert}>
+    <AppShell user={user} projects={projects.map((p) => ({ id: p.id, name: p.name, isPrivate: p.isPrivate }))} version={pkg.version} unread={unread} lastProjectId={lastProjectId} backupAlert={backupAlert} updateAvailable={updateAvailable}>
       {children}
     </AppShell>
   );

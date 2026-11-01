@@ -1,0 +1,17 @@
+# Construir la imagen de Pizarro en este servidor, desde el código, en vez de descargar la publicada.
+# Se añade a compose.yml:
+#   docker compose -f compose.yml -f compose.build.yml up -d --build
+# o, una vez, en deploy/.env:  COMPOSE_FILE="compose.yml:compose.build.yml"  (install.sh --build lo hace solo).
+# Si usas también compose.override.yml, añádelo a la lista: COMPOSE_FILE="compose.yml:compose.build.yml:compose.override.yml".
+# Necesita unos 2 GB de RAM libres y varios minutos. Guía: docs/INSTALL.md.
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        # Opcional: commit del código, para el identificador de versión.
+        GIT_SHA: ${GIT_SHA:-}
+    image: ${PIZARRO_IMAGE:-pizarro:local}
+    pull_policy: never

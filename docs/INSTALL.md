@@ -23,16 +23,39 @@ En el servidor, como root (o con `sudo` disponible):
 curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com
 ```
 
-Opciones: `--local` (solo red local, por HTTP y sin dominio), `--dir /opt/pizarro` (carpeta; por defecto esa), `--ref <rama|tag>` (versión; por defecto `main`; para producción usa una etiqueta de versión cuando exista), `--no-start`, `--yes` (instala Docker sin preguntar) y `--help`. Sin `--domain` ni `--local`, el script los pregunta.
+Opciones: `--local` (solo red local, por HTTP y sin dominio), `--dir /opt/pizarro` (carpeta; por defecto esa), `--version X.Y.Z` (instala esa versión; sin ella, la última publicada), `--ref <rama|tag>` (código de una rama o etiqueta; una rama se construye en el servidor), `--build` (construye la imagen en el servidor en vez de descargarla, ver «Construir la imagen en tu servidor»), `--no-start`, `--yes` (instala Docker sin preguntar) y `--help`. Sin `--domain` ni `--local`, el script los pregunta.
 
 El script:
 
 1. Comprueba Linux (x86_64 o arm64) y que eres root o tienes `sudo`.
 2. Comprueba Docker y el plugin `docker compose`. Si faltan, **te pregunta** si los instala con el script oficial de `get.docker.com` (con `--yes` no pregunta). Si dices que no, se detiene.
-3. Descarga el código de GitHub (sin necesitar `git`), comprueba que está completo y lo deja en la carpeta de instalación.
-4. Ejecuta `deploy/install.sh`: crea `deploy/.env` con secretos aleatorios, arranca los contenedores, espera a que la app esté sana y muestra la dirección, el código de `/setup` y el kit de recuperación.
+3. Averigua la última versión publicada (o usa la que pidas con `--version`), descarga el código de esa etiqueta de GitHub (sin necesitar `git`), comprueba que está completo y lo deja en la carpeta de instalación. Si todavía no hay ninguna versión publicada, usa `main` y construye la imagen en el servidor.
+4. Ejecuta `deploy/install.sh`: descarga la **imagen ya construida** (ver «La imagen ya construida»), crea `deploy/.env` con secretos aleatorios, arranca los contenedores, espera a que la app esté sana y muestra la dirección, el código de `/setup` y el kit de recuperación.
 
-Repetir el mismo comando **actualiza** Pizarro: prepara el código nuevo aparte y lo cambia de golpe (si se interrumpe, la instalación anterior sigue intacta), y conserva `deploy/.env`, `deploy/recovery-kit.txt` y los datos (que viven en volúmenes de Docker, fuera de la carpeta). Si al actualizar pasas un `--domain` (o `--local`) distinto del que ya está en `deploy/.env`, el script avisa y mantiene el actual; para cambiarlo, edita `DOMAIN` y `APP_URL` en `deploy/.env` y ejecuta `docker compose up -d` en `deploy/`. Haz antes una copia (sección 4). Si prefieres revisar el script antes de ejecutarlo, descárgalo con `curl -fsSLO <url>`, léelo y lánzalo con `sh get.sh --domain …`.
+Repetir el mismo comando **actualiza** Pizarro a la última versión (sección 5): prepara el código nuevo aparte y lo cambia de golpe (si se interrumpe, la instalación anterior sigue intacta), y conserva `deploy/.env`, `deploy/recovery-kit.txt` y los datos (que viven en volúmenes de Docker, fuera de la carpeta). Si al actualizar pasas un `--domain` (o `--local`) distinto del que ya está en `deploy/.env`, el script avisa y mantiene el actual; para cambiarlo, edita `DOMAIN` y `APP_URL` en `deploy/.env` y ejecuta `docker compose up -d` en `deploy/`. Haz antes una copia (sección 4). Si prefieres revisar el script antes de ejecutarlo, descárgalo con `curl -fsSLO <url>`, léelo y lánzalo con `sh get.sh --domain …`.
+
+### La imagen ya construida
+
+Cada versión de Pizarro se publica como una **imagen Docker ya construida** en GitHub (`ghcr.io/pla87/pizarro:X.Y.Z`, y `latest` para la última). Una imagen es el programa empaquetado y listo para arrancar, con todo lo que necesita dentro. Antes, cada servidor tenía que fabricarla desde el código; ahora la descarga hecha. Eso da cuatro ventajas:
+
+- **Instalar y actualizar es más rápido:** son unos minutos de descarga en lugar de una compilación larga. No hay que construir nada en el servidor del cliente.
+- **Hace falta menos máquina:** compilar la aplicación consume bastante memoria y procesador. Ya no se necesita ese pico: basta con lo que gasta Pizarro funcionando.
+- **Es exactamente lo que se probó:** todos los servidores ejecutan el mismo paquete, construido una sola vez con las comprobaciones pasadas, y no una compilación distinta en cada máquina.
+- **Volver atrás es inmediato:** las versiones anteriores siguen publicadas; volver a una es cambiar el número de versión (sección 5), sin recompilar.
+
+La imagen funciona en servidores normales (amd64) y en arm64 (p. ej. Raspberry Pi 5). Pizarro en Railway no la usa (ver sección 5).
+
+#### Construir la imagen en tu servidor
+
+Si prefieres construirla tú (o has modificado el código, o no hay salida a GitHub), añade `deploy/compose.build.yml`:
+
+```bash
+cd /opt/pizarro/deploy
+./install.sh --build                                          # o, desde cero: get.sh … --build
+docker compose up -d --build                                  # las veces siguientes
+```
+
+`--build` apunta `COMPOSE_FILE="compose.yml:compose.build.yml"` en `deploy/.env`, así que `docker compose` usa ese fichero adicional sin que lo repitas. Necesita unos 2 GB de RAM libres y varios minutos. Para volver a la imagen publicada: `./install.sh --unpin` (quita esa línea).
 
 ### Railway
 
@@ -120,7 +143,7 @@ docker compose version
 
 ```bash
 sudo mkdir -p /opt/pizarro && sudo chown "$USER" /opt/pizarro
-git clone <URL-del-repositorio> /opt/pizarro
+git clone https://github.com/pla87/pizarro.git /opt/pizarro
 cd /opt/pizarro/deploy
 ```
 
@@ -130,6 +153,8 @@ cd /opt/pizarro/deploy
 ./install.sh                                # pregunta el dominio (o el modo red local)
 ./install.sh --domain pizarro.example.com   # sin preguntas
 ./install.sh --local                        # solo red local, por HTTP (ver 3.3)
+./install.sh --version 1.38.0               # fija esa versión de la imagen (ver sección 5)
+./install.sh --build                        # construye la imagen aquí en vez de descargarla
 ```
 
 El script se puede repetir sin riesgo. Hace esto:
@@ -138,7 +163,7 @@ El script se puede repetir sin riesgo. Hace esto:
 2. Pregunta el dominio (o la dirección, en modo local) y crea `deploy/.env` con `DOMAIN` y `APP_URL`.
 3. Genera `POSTGRES_PASSWORD`, `SESSION_SECRET` y `BACKUP_KEY` con aleatorios fuertes (`openssl rand`, o `/dev/urandom` si no hay `openssl`). **Nunca pisa un secreto que ya existe** en el `.env`.
 4. Escribe el **kit de recuperación** `deploy/recovery-kit.txt` (permisos 600) con esos tres secretos y qué hacer si se pierde el servidor.
-5. Ejecuta `docker compose up -d --build` (la primera vez construye la imagen: unos minutos) y espera a que la app esté sana.
+5. Descarga la imagen publicada (`docker compose pull app`), ejecuta `docker compose up -d` y espera a que la app esté sana. Con `--build` construye la imagen en el servidor en su lugar.
 6. Muestra la dirección del asistente de configuración y el **código de un solo uso** que lee del log de la app.
 
 > **Guarda `recovery-kit.txt` FUERA del servidor** (gestor de contraseñas, otro equipo) y bórralo de aquí si quieres. Sin `BACKUP_KEY` las copias no se pueden leer; si se pierde o cambia `SESSION_SECRET`, todo el mundo tiene que volver a entrar y configurar de nuevo su verificación en dos pasos.
@@ -165,7 +190,7 @@ Copia esos valores en `.env` (`nano .env`) y rellena como mínimo:
 
 **Guarda `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y `BACKUP_KEY` fuera del servidor** (en un gestor de contraseñas): son el kit de recuperación. Sin `BACKUP_KEY` las copias no se pueden leer; sin `ENCRYPTION_KEY` (y `TOKEN_SECRET`), al restaurar en otro servidor se pierden la verificación en dos pasos, los códigos de recuperación y las conexiones con Google. Cambiar `SESSION_SECRET` solo obliga a todo el mundo a volver a entrar. `TOKEN_SECRET` y `ENCRYPTION_KEY` son opcionales: si se dejan vacías se usa `SESSION_SECRET` (y entonces cambiarla obliga también a configurar de nuevo el segundo paso). Cómo rotar cada una: `docs/MANUAL.md`, sección 4.4.
 
-Después arranca con `docker compose up -d --build` y sigue el log con `docker compose logs -f app` (Ctrl+C para salir). `docker compose ps` debe mostrar los tres servicios `healthy` / `running`. Caddy pide el certificado HTTPS en cuanto el dominio resuelve al servidor.
+Después arranca con `docker compose up -d` (descarga la imagen publicada) y sigue el log con `docker compose logs -f app` (Ctrl+C para salir). `docker compose ps` debe mostrar los tres servicios `healthy` / `running`. Caddy pide el certificado HTTPS en cuanto el dominio resuelve al servidor.
 
 ### 2.3 Asistente de primer arranque
 
@@ -209,7 +234,7 @@ En `.env`: `DOMAIN=":80"` y `APP_URL="http://<ip-del-servidor>"`. Caddy sirve so
 
 ### 3.4 Arquitecturas
 
-La imagen se construye para la arquitectura del propio servidor (amd64 o arm64, p. ej. Raspberry Pi 5). Para preparar una imagen de las dos a la vez desde otra máquina: `docker buildx build --platform linux/amd64,linux/arm64 -t <registro>/pizarro:<versión> --push ..` y pon ese nombre en `PIZARRO_IMAGE`.
+La imagen publicada incluye **amd64 y arm64** (servidores normales y, por ejemplo, una Raspberry Pi 5): Docker descarga la que corresponde a tu máquina. Para preparar tu propia imagen de las dos a la vez desde otra máquina: `docker buildx build --platform linux/amd64,linux/arm64 -t <registro>/pizarro:<versión> --push ..` y pon ese nombre en `PIZARRO_IMAGE`.
 
 ### 3.5 Endurecimiento del contenedor y rol de la base de datos
 
@@ -340,18 +365,40 @@ Guarda los dos ficheros (y `.env`) en otro sitio.
 
 ## 5. Actualizar
 
+Antes de actualizar, haz una copia (sección 4). Las migraciones de la base de datos se aplican solas al arrancar la versión nueva, y tus datos y tu `deploy/.env` no se tocan.
+
+**Servidor propio, la forma más sencilla:** repite el comando de instalación. Averigua la última versión publicada, descarga su código y su imagen, y conserva tu configuración y tus datos:
+
+```bash
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh
+```
+
+(No hace falta repetir `--domain`: se conserva el de `deploy/.env`.)
+
+**Solo la imagen** (más rápido, si no necesitas cambios en `deploy/`; sigue la etiqueta `latest`):
+
 ```bash
 cd /opt/pizarro/deploy
-# 1. Copia (ver sección 4)
-docker compose exec -T postgres pg_dump -U pizarro -Fc pizarro > antes-de-actualizar-$(date +%F).dump
-# 2. Código nuevo
-git -C /opt/pizarro pull
-# 3. Reconstruir y arrancar: las migraciones se aplican solas al arrancar
-docker compose up -d --build
+docker compose pull app
+docker compose up -d
 docker compose logs -f app
 ```
 
-Si la versión nueva no arranca, vuelve a la anterior (`git -C /opt/pizarro checkout <versión-anterior>` y `docker compose up -d --build`) y, si ya había migrado la base de datos, restaura la copia del paso 1 (sección 6).
+Esto solo funciona si no fijaste una versión (ver abajo): una instalación fijada con `PIZARRO_IMAGE` se queda en esa versión hasta que la cambies.
+
+**Fijar una versión o volver a una anterior:**
+
+```bash
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --version 1.37.0
+```
+
+Instala el código de la etiqueta `v1.37.0` y fija la imagen `ghcr.io/pla87/pizarro:1.37.0` (`PIZARRO_IMAGE` en `deploy/.env`). Las versiones publicadas están en <https://github.com/pla87/pizarro/releases>. Para volver a seguir siempre la última: repite el comando sin `--version`. Si la versión nueva no arranca, vuelve a la anterior así y, si ya había migrado la base de datos, restaura la copia de antes (sección 6): una versión anterior puede no entender una base migrada por otra posterior.
+
+**Railway** sigue construyendo desde el repositorio de GitHub con su `Dockerfile` (no usa la imagen publicada): para actualizar, en Railway pulsa *Redeploy* sobre el último commit (o activa el despliegue automático de la rama que usas). Para quedarte en una versión, apunta el servicio a su etiqueta (`vX.Y.Z`) en vez de a `main`.
+
+**Aviso de versión nueva.** Pizarro consulta a GitHub, como mucho cada 12 horas, cuál es la última release publicada. Si es más nueva que la que corre, los administradores ven un aviso discreto en Administración (y un punto junto a «Administración» en el menú) con enlaces a las novedades y a esta sección; se puede ocultar y no vuelve a salir hasta la siguiente versión. Solo se pide un dato público (la última versión); no se envía nada de tu instalación. Sin conexión o con el límite de GitHub agotado no pasa nada: simplemente no hay aviso. Para desactivarlo, `UPDATE_CHECK=0` en `deploy/.env` (y `docker compose up -d`) o en las variables de Railway.
+
+**Publicar una versión (mantenedores).** `npm run version:bump -- minor` registra la versión y, tras fusionar en `main`, `npm run release:tag` crea la etiqueta anotada `vX.Y.Z` en el commit actual (se niega si hay cambios sin confirmar o si la etiqueta ya existe) y `git push origin vX.Y.Z` la sube. Eso lanza `.github/workflows/release.yml`: construye la imagen para amd64 y arm64, la publica en GHCR como `X.Y.Z` y `latest`, y crea la GitHub Release con el resumen y los cambios de esa versión tomados de `changelog.json`.
 
 ## 6. Restaurar
 

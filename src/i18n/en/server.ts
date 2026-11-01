@@ -328,4 +328,5 @@ export const server: Record<string, string> = {
   "El secreto de cliente no es válido.": "The client secret is not valid.",
   "Escribe el secreto de nuevo al cambiar el ID de cliente": "Enter the secret again when you change the client ID",
   "Falta el secreto de cliente de Google.": "The Google client secret is missing.",
+  "Versión no válida.": "Invalid version.",
 };
