@@ -447,8 +447,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     );
   };
 
-  const commitTitle = () => {
-    const value = title.trim();
+  // `next`: título recién escrito (el dictado sin campo visible lo cambia sin pasar por un estado ya renderizado).
+  const commitTitle = (next?: string) => {
+    const value = (next ?? title).trim();
     if (!value) return setTitle(task.title);
     if (value !== task.title) save({ title: value }, { title: value });
   };
@@ -512,7 +513,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         </div>
       }
     >
-      <div ref={rootRef} onPaste={onPaste} className="grid gap-6 md:grid-cols-[minmax(0,1fr)_20rem]">
+      <div ref={rootRef} onPaste={onPaste} className="grid gap-6 md:grid-cols-[minmax(0,1fr)_16.5rem]">
         {/* Margen negativo con relleno igual: deja sitio al anillo de foco (3 px + 2 de separación) que el scroll recortaría. */}
         <div className="min-w-0 space-y-6 md:-m-2 md:max-h-[calc(100dvh-8rem)] md:overflow-y-auto md:p-2">
           <TaskViewers taskId={task.id} />
@@ -611,7 +612,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         {/* El margen negativo con relleno igual deja sitio al anillo de foco (3 px + 2 de separación) que el scroll recortaría. */}
         <aside className="flex flex-col gap-4 text-sm md:-m-2 md:max-h-[calc(100dvh-8rem)] md:gap-2.5 md:overflow-y-auto md:p-2">
           <Field label={t("Columna")}>
-            <select className="input md:py-1.5" value={task.columnId} onChange={(e) => changeColumn(e.target.value)}>
+            <select className="input min-w-0 truncate md:py-1.5" title={board.columns.find((c) => c.id === task.columnId)?.name} value={task.columnId} onChange={(e) => changeColumn(e.target.value)}>
               {board.columns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
@@ -631,7 +632,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           </Field>
           <Field label={t("Asignada a (opcional)")}>
             <select
-              className="input md:py-1.5"
+              className="input min-w-0 truncate md:py-1.5"
+              title={board.users.find((u) => u.id === task.assigneeId)?.name}
               value={task.assigneeId ?? ""}
               onChange={(e) => save({ assigneeId: e.target.value || null }, { assigneeId: e.target.value || null })}
             >
@@ -672,7 +674,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           />
           <Field label={t("Repetir")}>
             <div className="flex gap-1">
-              <select className="input md:py-1.5" value={task.recurrence} onChange={(e) => changeRecurrence(e.target.value as RecurrenceRule)}>
+              <select className="input min-w-0 md:py-1.5" value={task.recurrence} onChange={(e) => changeRecurrence(e.target.value as RecurrenceRule)}>
                 <option value="NONE">{t("No se repite")}</option>
                 <option value="DAILY">{t("Cada día")}</option>
                 <option value="WEEKLY">{t("Cada semana")}</option>
@@ -705,7 +707,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           </Field>
           <Field label={t("Entregable")}>
             <select
-              className="input md:py-1.5"
+              className="input min-w-0 truncate md:py-1.5"
+              title={board.deliverables.find((d) => d.id === task.deliverableId)?.name}
               value={task.deliverableId ?? ""}
               onChange={(e) => save({ deliverableId: e.target.value || null }, { deliverableId: e.target.value || null })}
             >
@@ -714,7 +717,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             </select>
           </Field>
           <Field label={t("Color")}>
-            {/* Escritorio: swatches más pequeños y juntos para que quepan en una sola fila. */}
+            {/* Escritorio: swatches más pequeños y juntos para ocupar menos alto; según el ancho de la columna pueden seguir pasando a una segunda fila. */}
             <div className="md:[&>div]:gap-1 md:[&_button]:h-[22px] md:[&_button]:w-[22px]">
               <ColorPicker value={task.color} onChange={(color) => save({ color: color as never }, { color })} />
             </div>

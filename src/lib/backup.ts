@@ -179,7 +179,8 @@ const message = (err: unknown) => (err instanceof Error ? err.message : String(e
  * (caché por ruta, tamaño y fecha en backups/files-index.json).
  */
 async function collectFiles(key: Buffer) {
-  const exclude = [backupsDir()];
+  // Exportaciones (pueden pesar GB y caducan en 24 h) e importaciones en curso son temporales: no entran en la copia.
+  const exclude = [backupsDir(), path.join(uploadDir(), "exports"), path.join(uploadDir(), "imports")];
   const extDir = process.env.BACKUP_EXTERNAL_DIR?.trim();
   if (extDir && path.isAbsolute(extDir)) exclude.push(extDir);
   const scanned = await scanFiles(uploadDir(), exclude);

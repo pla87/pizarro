@@ -5,6 +5,7 @@ import { Bold, Code, Code2, Heading2, Heading3, IndentDecrease, IndentIncrease, 
 import { useCallback, useImperativeHandle, useMemo, useRef } from "react";
 import { useT } from "@/i18n/client";
 import { indentLines, insertLink, insertRule, toggleCodeBlock, toggleLinePrefix, toggleWrap, type EditResult } from "@/lib/markdown-edit";
+import { DictationButton, insertIntoField } from "./DictationButton";
 import { FormatToolbar, type FormatItems } from "./FormatToolbar";
 import { MentionTextarea, type MentionCommand } from "./MentionTextarea";
 import { applyTextareaEdit } from "./textarea-edit";
@@ -85,7 +86,12 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
   }
   return (
     <div ref={root} className="contents">
-      <FormatToolbar items={items} onLeave={() => inner.current?.focus()} className="mb-1" />
+      <FormatToolbar
+        items={items}
+        onLeave={() => inner.current?.focus()}
+        className="mb-1"
+        trailing={<DictationButton variant="toolbar" tabIndex={-1} onText={(s) => insertIntoField(inner.current, s, onValueChange)} />}
+      />
       <MentionTextarea
         ref={inner}
         id={id}

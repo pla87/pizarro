@@ -5,7 +5,7 @@ import type { EditResult } from "@/lib/markdown-edit";
  * que cambia con `execCommand`, que dispara el evento `input` y, con él, el onChange de React. Si el navegador no lo admite,
  * se asigna el valor entero por `onValueChange`.
  */
-export function applyTextareaEdit(el: HTMLTextAreaElement, edit: EditResult, onValueChange: (v: string) => void): void {
+export function applyTextareaEdit(el: HTMLTextAreaElement | HTMLInputElement, edit: EditResult, onValueChange: (v: string) => void): void {
   const old = el.value;
   const next = edit.value;
   if (old !== next) {

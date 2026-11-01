@@ -7,6 +7,7 @@ import { createTasks, getProjectFormData } from "@/actions/tasks";
 import type { ProjectFormData } from "@/lib/types";
 import { MAX_BULK_TASKS, parseTaskLines } from "@/lib/bulk";
 import { useT } from "@/i18n/client";
+import { DictationButton, insertIntoField } from "../ui/DictationButton";
 import { Modal } from "../ui/Modal";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
@@ -48,6 +49,7 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
   const kindById = useMemo(() => new Map(form.kinds.map((k) => [k.id, k])), [form.kinds]);
   const [columnId, setColumnId] = useState(initialColumnId ?? board.columns[0]?.id ?? "");
   const [text, setText] = useState("");
+  const textRef = useRef<HTMLTextAreaElement>(null);
   // Hay que elegir el tipo; solo se preselecciona si no hay alternativa.
   const [kindId, setKindId] = useState(board.kinds.length === 1 ? board.kinds[0]!.id : "");
   // Tipo distinto para líneas concretas (por título).
@@ -177,8 +179,13 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
           </select>
         </div>
         <div>
-          <label className="label" htmlFor="bt-text">{t("Tareas (una por línea)")}</label>
+          <div className="flex items-center justify-between gap-2">
+            <label className="label" htmlFor="bt-text">{t("Tareas (una por línea)")}</label>
+            {/* Cada frase dictada (hasta una pausa) es una tarea nueva. */}
+            <DictationButton onText={(s) => insertIntoField(textRef.current, s, setText, true)} className="-mt-1" />
+          </div>
           <textarea
+            ref={textRef}
             id="bt-text"
             className="input field-sizing-content max-h-60 min-h-28"
             value={text}

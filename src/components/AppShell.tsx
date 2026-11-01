@@ -26,6 +26,7 @@ import { UndoButton } from "./UndoButton";
 import { Avatar } from "./ui/Avatar";
 import { ReportButton } from "./ReportButton";
 import { ImportProjectPanel } from "./ImportProjectPanel";
+import { TransferJobWatcher } from "./transfer/TransferJobWatcher";
 import { cn } from "./ui/cn";
 import { Menu as DropdownMenu, MenuItem } from "./ui/Menu";
 import { Modal } from "./ui/Modal";
@@ -49,6 +50,7 @@ export function AppShell(props: Props) {
   return (
     <ToastProvider>
       <ConfirmProvider>
+        <TransferJobWatcher />
         <Shell {...props} />
       </ConfirmProvider>
     </ToastProvider>
@@ -381,7 +383,7 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
     });
   };
   return (
-    <Modal open onClose={importBusy ? () => {} : onClose} title={t("Nuevo proyecto")} size="sm">
+    <Modal open onClose={importBusy ? () => {} : onClose} title={t("Nuevo proyecto")} size={importing ? "md" : "sm"}>
       {importing ? (
         <ImportProjectPanel
           isPrivate={isPrivate}
@@ -391,7 +393,7 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
           privateToggle={
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={isPrivate} disabled={importBusy} onChange={(e) => setIsPrivate(e.target.checked)} />
-              {t("Proyecto privado (solo sus miembros; empiezas siendo el único)")}
+              <span className="whitespace-nowrap">{t("Crear como proyecto privado inicialmente")}</span>
             </label>
           }
         />
@@ -417,22 +419,24 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
         {isAdmin ? (
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
-            {t("Proyecto privado (solo sus miembros; empiezas siendo el único)")}
+            <span className="whitespace-nowrap">{t("Crear como proyecto privado inicialmente")}</span>
           </label>
         ) : (
           <p className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
             <PrivateIcon /> {t("Será un proyecto privado: solo lo verás tú hasta que añadas más miembros.")}
           </p>
         )}
-        <div className="flex justify-end gap-2">
-          <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
-          <button type="submit" className="btn-primary" disabled={pending || !!target || !name.trim()}>{t("Crear")}</button>
+        <div className="flex items-center justify-between gap-2">
+          {isAdmin ? (
+            <button type="button" className="shrink-0 whitespace-nowrap text-sm text-slate-500 underline hover:text-brand-600" onClick={() => setImporting(true)}>
+              {t("Importar desde un archivo…")}
+            </button>
+          ) : <span />}
+          <div className="flex gap-2">
+            <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
+            <button type="submit" className="btn-primary" disabled={pending || !!target || !name.trim()}>{t("Crear")}</button>
+          </div>
         </div>
-        {isAdmin && (
-          <button type="button" className="text-xs text-slate-500 underline hover:text-brand-600" onClick={() => setImporting(true)}>
-            {t("Importar desde un archivo…")}
-          </button>
-        )}
       </form>
       )}
     </Modal>

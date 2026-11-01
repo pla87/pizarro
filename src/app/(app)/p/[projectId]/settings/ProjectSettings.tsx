@@ -222,10 +222,13 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
 
       {canManage && (
         <Section title="Borrar proyecto" description="Borra el proyecto con todas sus columnas, tarjetas, adjuntos y releases. No se puede deshacer.">
+          <p className="mb-2 text-sm">
+            {t("Escribe")} <strong className="break-all font-mono">{project.name}</strong> {t("para confirmar")}
+          </p>
           <div className="flex flex-wrap gap-2">
             <input
               className="input max-w-xs"
-              placeholder={t("Escribe «{name}» para confirmar", { name: project.name })}
+              placeholder={t("Nombre del proyecto")}
               aria-label={t("Escribe «{name}» para confirmar", { name: project.name })}
               value={confirmName}
               onChange={(e) => setConfirmName(e.target.value)}

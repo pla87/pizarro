@@ -4,6 +4,97 @@ Esta guía instala Pizarro en un servidor propio (un VPS, un miniordenador en la
 
 > Pizarro está pensado para **un solo proceso** (una réplica). Las tareas de fondo se turnan con un bloqueo en la base de datos, así que un solapamiento breve durante una actualización no duplica nada, pero no lo escales a varias réplicas.
 
+## Instalación en un paso
+
+Dos caminos. Elige uno; los dos acaban en el mismo asistente `/setup`.
+
+| | Railway (nube) | Servidor propio (un comando) |
+|---|---|---|
+| Para quién | Sin servidor ni Linux a mano | Tienes un VPS o un equipo Linux |
+| Tiempo | 5–10 minutos | 5–10 minutos (la primera vez construye la imagen) |
+| Necesitas | Cuenta de Railway | Linux x86_64 o arm64, 2 GB de RAM, puertos 80/443 y un dominio con DNS ya apuntando al servidor (o red local sin dominio) |
+| Obtienes | Pizarro + PostgreSQL + volumen de adjuntos, con HTTPS | Pizarro + PostgreSQL 16 + Caddy (HTTPS automático) en Docker Compose |
+
+### Servidor propio con un comando
+
+En el servidor, como root (o con `sudo` disponible):
+
+```bash
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com
+```
+
+Opciones: `--local` (solo red local, por HTTP y sin dominio), `--dir /opt/pizarro` (carpeta; por defecto esa), `--ref <rama|tag>` (versión; por defecto `main`; para producción usa una etiqueta de versión cuando exista), `--no-start`, `--yes` (instala Docker sin preguntar) y `--help`. Sin `--domain` ni `--local`, el script los pregunta.
+
+El script:
+
+1. Comprueba Linux (x86_64 o arm64) y que eres root o tienes `sudo`.
+2. Comprueba Docker y el plugin `docker compose`. Si faltan, **te pregunta** si los instala con el script oficial de `get.docker.com` (con `--yes` no pregunta). Si dices que no, se detiene.
+3. Descarga el código de GitHub (sin necesitar `git`), comprueba que está completo y lo deja en la carpeta de instalación.
+4. Ejecuta `deploy/install.sh`: crea `deploy/.env` con secretos aleatorios, arranca los contenedores, espera a que la app esté sana y muestra la dirección, el código de `/setup` y el kit de recuperación.
+
+Repetir el mismo comando **actualiza** Pizarro: prepara el código nuevo aparte y lo cambia de golpe (si se interrumpe, la instalación anterior sigue intacta), y conserva `deploy/.env`, `deploy/recovery-kit.txt` y los datos (que viven en volúmenes de Docker, fuera de la carpeta). Si al actualizar pasas un `--domain` (o `--local`) distinto del que ya está en `deploy/.env`, el script avisa y mantiene el actual; para cambiarlo, edita `DOMAIN` y `APP_URL` en `deploy/.env` y ejecuta `docker compose up -d` en `deploy/`. Haz antes una copia (sección 4). Si prefieres revisar el script antes de ejecutarlo, descárgalo con `curl -fsSLO <url>`, léelo y lánzalo con `sh get.sh --domain …`.
+
+### Railway
+
+El repositorio ya trae `railway.json` (builder Dockerfile, comando de arranque, healthcheck en `/api/health`, una réplica). Hay dos formas:
+
+**A. Con la plantilla publicada** (cuando exista el enlace «Deploy on Railway» de la plantilla de Pizarro): pulsa el botón, acepta las variables propuestas, espera al despliegue y sigue en «Primeros pasos». Los secretos se generan solos.
+
+**B. A mano** (la guía completa está en el README, «Guía de despliegue en Railway»):
+
+1. *New Project → Deploy PostgreSQL* (servicio `Postgres`).
+2. *+ New → GitHub Repo*: el repositorio de Pizarro (o tu fork). Railway usa el `Dockerfile` y el `railway.json`.
+3. Variables del servicio de la app:
+
+   | Variable | Valor | Origen |
+   |---|---|---|
+   | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` | Referencia al servicio Postgres (nombre exacto de tu servicio) |
+   | `SESSION_SECRET` | 48+ caracteres | **Generar:** `openssl rand -base64 48` |
+   | `TOKEN_SECRET` | 48+ caracteres | **Generar** (recomendada; otra distinta) |
+   | `ENCRYPTION_KEY` | 48+ caracteres | **Generar** (recomendada; otra distinta) |
+   | `BACKUP_KEY` | 32 bytes en base64 | **Generar:** `openssl rand -base64 32` (activa las copias diarias cifradas) |
+   | `APP_URL` | `https://<tu-dominio>` | **Debes ponerla:** *Settings → Networking → Generate Domain* o tu dominio propio |
+   | `UPLOAD_DIR` | `/app/uploads` | Fija |
+
+   No definas `SEED_ADMIN_*`: así el primer administrador se crea en `/setup` con un código de un solo uso, que aparece en los logs del despliegue (`introduce el código:`). `PORT` lo inyecta Railway.
+4. Volumen: clic derecho en el servicio → *Attach Volume* → *Mount path* `/app/uploads`. Sin él, los adjuntos y las copias locales se pierden en cada despliegue.
+5. *Settings → Networking → Generate Domain* si aún no lo hiciste, ajusta `APP_URL` y pulsa *Deploy*. El healthcheck es `/api/health` (ya en `railway.json`; el primer arranque aplica migraciones, por eso el margen de 120 s).
+
+Guarda `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y `BACKUP_KEY` fuera de Railway (gestor de contraseñas): sin `BACKUP_KEY` las copias no se pueden leer y sin `ENCRYPTION_KEY` todos pierden la verificación en dos pasos.
+
+#### Publicar la plantilla de Railway (solo el propietario del proyecto)
+
+Una plantilla se crea desde la cuenta de Railway del propietario; no se puede hacer desde el repositorio.
+
+1. En Railway crea un proyecto limpio con los dos servicios de arriba (Postgres + el repositorio) **ya funcionando**, con el volumen en `/app/uploads`.
+2. Abre *Workspace Settings → Templates* (o `railway.com/new/template`) y pulsa **Create template**. Elige *Generate from existing project* y selecciona ese proyecto.
+3. Revisa cada servicio. En el servicio de Pizarro, en *Variables*, pon estos valores por defecto (la plantilla los resuelve al desplegar):
+
+   ```env
+   DATABASE_URL=${{Postgres.DATABASE_URL}}
+   SESSION_SECRET=${{secret(48)}}
+   TOKEN_SECRET=${{secret(48)}}
+   ENCRYPTION_KEY=${{secret(48)}}
+   BACKUP_KEY=${{secret(64, "0123456789abcdef")}}
+   APP_URL=https://${{RAILWAY_PUBLIC_DOMAIN}}
+   UPLOAD_DIR=/app/uploads
+   ```
+
+   `secret(longitud)` y `secret(longitud, "alfabeto")` son las funciones de plantilla de Railway; `BACKUP_KEY` en hexadecimal (64 caracteres = 32 bytes) también vale para la app. `${{RAILWAY_PUBLIC_DOMAIN}}` es la variable que Railway rellena cuando el servicio tiene un dominio generado: activa *Generate Domain* en la plantilla. **Esta sintaxis está escrita de memoria: verifícala en la documentación de plantillas de Railway y haz un despliegue de prueba antes de publicar** (si `APP_URL` quedara mal, es lo único que habría que corregir a mano).
+4. En el servicio de Pizarro configura el volumen (`/app/uploads`) y la descripción de cada variable (por ejemplo: «No la cambies después: invalida sesiones»).
+5. Pulsa *Create template* y copia el enlace. Pon el botón «Deploy on Railway» en el README apuntando a ese enlace.
+6. Prueba la plantilla en un proyecto nuevo de una cuenta limpia: comprueba que arranca, que `/setup` pide el código del log y que `APP_URL` es correcta.
+
+### Primeros pasos tras instalar
+
+1. **Asistente `/setup`:** abre `<tu dirección>/setup`, escribe el código (en el resumen del instalador o en los logs del despliegue), elige organización, idioma y zona horaria y crea el primer administrador. Después activa la verificación en dos pasos (obligatoria para administradores). Detalle en 2.3.
+2. **Email:** *Administración → Ajustes → Avisos por email*. Sin él no hay invitaciones ni «¿Olvidaste tu contraseña?». Detalle y proveedores en 3.6.
+3. **Entrar con Google (opcional):** *Administración → Ajustes → Acceso con Google*; la guía desplegable te lleva paso a paso por Google Cloud con las direcciones listas para copiar. Resumen en 3.6, punto 2.
+4. **Copias de seguridad:** con `BACKUP_KEY` definida se hacen copias diarias cifradas dentro del servidor; añade un destino **externo** (S3 compatible o carpeta montada, sección 4.1 y 4.2) y guarda el kit de recuperación fuera del servidor.
+5. **Invita al equipo** desde *Administración → Usuarios*.
+
+---
+
 ## 1. Requisitos
 
 | | Mínimo |

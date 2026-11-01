@@ -2,13 +2,14 @@
 
 import { useDndContext, useDraggable, useDroppable } from "@dnd-kit/core";
 import { ChevronUp, GripVertical, Loader2, Plus } from "lucide-react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
 import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard, useTask } from "./context";
 import { useCardFileDrop } from "./useCardFileDrop";
 import { useFileZone } from "./useFileZone";
+import { hasFiles } from "./upload";
 import { MentionText } from "../ui/MentionText";
 import { mentionsToPlain } from "@/lib/mentions";
 import { nextEvergreenEvery } from "@/lib/release";
@@ -17,6 +18,8 @@ import { nextEvergreenEvery } from "@/lib/release";
 export const EVERGREEN_DROPPABLE_PREFIX = "evergreen:";
 /** Tiempo con una tarjeta encima de la barra plegada antes de que se abra sola. */
 const SPRING_OPEN_MS = 300;
+/** Tiempo con un archivo del escritorio encima de la barra plegada antes de que se abra sola (para soltarlo en una tarea). */
+const FILE_SPRING_OPEN_MS = 1000;
 
 /** Clave de localStorage del estado plegado/desplegado, por proyecto. */
 const storageKey = (projectId: string) => `pizarro:evergreen-open:${projectId}`;
@@ -57,7 +60,30 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
   const { setNodeRef, isOver } = useDroppable({ id: EVERGREEN_DROPPABLE_PREFIX + columnId });
   const dragging = useDndContext().active !== null;
   const [sprung, setSprung] = useState(false);
-  const open = stored || (sprung && dragging);
+  // Archivo del escritorio sobre la barra plegada más de un segundo: se abre para poder soltarlo en una tarea concreta.
+  const [fileSprung, setFileSprung] = useState(false);
+  const fileTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearFileTimer = () => {
+    if (fileTimer.current) clearTimeout(fileTimer.current);
+    fileTimer.current = null;
+  };
+  useEffect(() => clearFileTimer, []);
+  // Tras soltar el archivo (en el panel o en una tarjeta de dentro, que corta la propagación) o cancelar el arrastre, la
+  // apertura temporal se deshace y el panel vuelve a su estado guardado. En captura, para verlo aunque alguien pare el evento.
+  useEffect(() => {
+    if (!fileSprung) return;
+    const reset = () => {
+      clearFileTimer();
+      setFileSprung(false);
+    };
+    document.addEventListener("drop", reset, true);
+    document.addEventListener("dragend", reset, true);
+    return () => {
+      document.removeEventListener("drop", reset, true);
+      document.removeEventListener("dragend", reset, true);
+    };
+  }, [fileSprung]);
+  const open = stored || (sprung && dragging) || fileSprung;
   const hovering = isOver && dragging;
   useEffect(() => {
     if (!dragging) return;
@@ -71,6 +97,28 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
 
   // Archivos soltados sobre el panel: nueva tarea fija en esta columna.
   const fileZone = useFileZone((files) => openNewTask(columnId, true, files));
+  const zoneHandlers = fileZone.handlers;
+  const handlers = {
+    ...zoneHandlers,
+    onDragOver: (e: React.DragEvent) => {
+      zoneHandlers.onDragOver(e);
+      if (hasFiles(e) && !open && !fileTimer.current) fileTimer.current = setTimeout(() => {
+        fileTimer.current = null;
+        setFileSprung(true);
+      }, FILE_SPRING_OPEN_MS);
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      zoneHandlers.onDragLeave(e);
+      if (!hasFiles(e) || (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget))) return;
+      // Sale sin soltar: si se abrió sola, vuelve a plegarse.
+      clearFileTimer();
+      setFileSprung(false);
+    },
+    onDrop: (e: React.DragEvent) => {
+      zoneHandlers.onDrop(e);
+      clearFileTimer();
+    },
+  };
 
   const toggle = () => {
     const next = !stored;
@@ -90,7 +138,7 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
         "shrink-0 rounded-b-xl border-t border-slate-200 transition-colors dark:border-slate-800",
         hovering && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10",
       )}
-      {...fileZone.handlers}
+      {...handlers}
     >
       {open && (
         <div id={`evergreen-${columnId}`} className="-mb-1.5 max-h-56 space-y-1.5 overflow-y-auto px-2 pt-2 pb-1.5 max-lg:pr-16">

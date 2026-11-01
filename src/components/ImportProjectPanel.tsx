@@ -4,6 +4,10 @@ import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n/client";
+import { announceQueued } from "./transfer/client";
+import { TransferJobs } from "./transfer/TransferJobs";
+import { TransferProgress } from "./transfer/TransferProgress";
+import { useTransferJob } from "./transfer/useTransferJob";
 
 interface Summary {
   projectId: string;
@@ -29,6 +33,15 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
+  // La importación en sí es un trabajo en segundo plano: tras subir el archivo se sigue su progreso por su id.
+  const [jobId, setJobId] = useState<string | null>(null);
+  const { job, gone } = useTransferJob(jobId, (done) => {
+    setJobId(null);
+    if (done.status === "DONE" && done.result && "counts" in done.result) {
+      setSummary(done.result as Summary);
+      router.refresh();
+    } else setError(done.error ?? t("No se pudo importar el proyecto."));
+  });
   const busy = progress !== null || processing;
   // El diálogo avisa de que hay una importación en curso: mientras dure no se puede cerrar ni cambiar lo elegido.
   useEffect(() => {
@@ -52,15 +65,15 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
     req.onload = () => {
       setProgress(null);
       setProcessing(false);
-      let body: { ok?: boolean; summary?: Summary; error?: string } = {};
+      let body: { ok?: boolean; jobId?: string; error?: string } = {};
       try {
         body = JSON.parse(req.responseText);
       } catch {
         // respuesta que no es JSON (p. ej. un proxy): se enseña el error genérico
       }
-      if (req.status >= 200 && req.status < 300 && body.summary) {
-        setSummary(body.summary);
-        router.refresh();
+      if (req.status >= 200 && req.status < 300 && body.jobId) {
+        setJobId(body.jobId);
+        announceQueued();
       } else setError(body.error ?? t("No se pudo importar el proyecto."));
     };
     req.onerror = () => {
@@ -74,6 +87,18 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
     };
     req.send(file);
   };
+
+  if (jobId && !summary) {
+    return (
+      <div className="space-y-4" data-testid="import-progress">
+        <p className="text-sm text-slate-600 dark:text-slate-300">{t("Importando el proyecto en el servidor. Puedes cerrar esta ventana: te avisaremos cuando termine.")}</p>
+        {gone ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{t("No se pudo importar el proyecto.")}</p> : job ? <TransferProgress job={job} /> : <p className="text-sm text-slate-500">{t("Procesando el archivo…")}</p>}
+        <div className="flex justify-end">
+          <button type="button" className="btn-secondary" onClick={onClose}>{t("Cerrar")}</button>
+        </div>
+      </div>
+    );
+  }
 
   if (summary) {
     const c = summary.counts;
@@ -114,7 +139,7 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
   return (
     <form onSubmit={submit} className="space-y-4">
       <p className="text-sm text-slate-600 dark:text-slate-300">
-        {t("Crea un proyecto nuevo a partir de un archivo .pizarro.zip exportado desde Pizarro. El nombre sale del archivo y las personas se emparejan por email con usuarios activos.")}
+        {t("Crea un proyecto a partir de un archivo .pizarro.zip exportado desde Pizarro. Las personas se emparejan por email. El nombre sale del archivo y puedes cambiarlo después en Ajustes del proyecto.")}
       </p>
       <div>
         <label className="label" htmlFor="import-file">{t("Archivo .pizarro.zip")}</label>
@@ -124,7 +149,6 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
         />
       </div>
       {privateToggle}
-      <p className="-mt-2 text-xs text-slate-500">{isPrivate ? t("Se creará como proyecto privado (solo tú lo verás).") : t("Se creará como proyecto de equipo.")}</p>
       {progress !== null && (
         <div role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label={t("Subiendo…")} className="h-2 overflow-hidden rounded bg-slate-200 dark:bg-slate-700">
           <div className="h-full bg-brand-600 transition-[width]" style={{ width: `${progress}%` }} />
@@ -132,10 +156,14 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
       )}
       {processing && <p className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300"><Loader2 size={15} className="animate-spin" /> {t("Procesando el archivo…")}</p>}
       {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-      <div className="flex justify-end gap-2">
-        <button type="button" className="btn-secondary" disabled={processing} onClick={() => (progress !== null ? xhr.current?.abort() : onBack())}>{progress !== null ? t("Cancelar") : t("Volver")}</button>
-        <button type="submit" className="btn-primary" disabled={!file || busy}>{t("Importar")}</button>
+      <div className="flex items-center justify-between gap-3">
+        <p className="min-w-0 text-xs text-slate-500">{isPrivate ? t("Se creará como proyecto privado (solo tú lo verás).") : t("Se creará como proyecto de equipo.")}</p>
+        <div className="flex shrink-0 gap-2">
+          <button type="button" className="btn-secondary" disabled={processing} onClick={() => (progress !== null ? xhr.current?.abort() : onBack())}>{progress !== null ? t("Cancelar") : t("Volver")}</button>
+          <button type="submit" className="btn-primary" disabled={!file || busy}>{t("Importar")}</button>
+        </div>
       </div>
+      <TransferJobs kind="IMPORT" title={t("Importaciones recientes (24 h)")} />
     </form>
   );
 }

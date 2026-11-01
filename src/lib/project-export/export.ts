@@ -18,7 +18,7 @@ import {
 } from "./types";
 
 /** Tope de project.json: se arma en memoria. */
-const MAX_PROJECT_JSON_BYTES = 256 * 1024 * 1024;
+const MAX_PROJECT_JSON_BYTES = 64 * 1024 * 1024;
 const CHUNK = 400;
 
 export interface ProjectExport {
@@ -81,9 +81,10 @@ async function hashSource(open: () => AsyncIterable<Buffer>): Promise<{ sha: str
 /** Lee un fichero del disco por trozos (Buffer). */
 const diskStream = (file: string) => () => createReadStream(file) as unknown as AsyncIterable<Buffer>;
 
-/** Registra un fichero y devuelve su huella; null si ya no está en disco. */
-async function addFile(files: Map<string, FileInfo>, open: () => AsyncIterable<Buffer>, exists: () => Promise<boolean>): Promise<FileInfo | null> {
+/** Registra un fichero y devuelve su huella; null si ya no está en disco. `tick` avisa de cada fichero examinado (progreso). */
+async function addFile(files: Map<string, FileInfo>, open: () => AsyncIterable<Buffer>, exists: () => Promise<boolean>, tick?: () => void): Promise<FileInfo | null> {
   try {
+    tick?.();
     if (!(await exists())) return null;
     const { sha, size, crc } = await hashSource(open);
     const prev = files.get(sha);
@@ -103,9 +104,9 @@ const isoOrNull = (d: Date | null | undefined) => (d ? d.toISOString() : null);
  * Reúne el proyecto y arma el plan del ZIP (nada se escribe todavía: las entradas con ficheros se leen del disco al emitirlas).
  * Sin comprobar permisos: quien llama ya lo hizo.
  */
-export async function buildProjectExport(projectId: string, options: ExportOptions, now: Date = new Date()): Promise<ProjectExport> {
+export async function buildProjectExport(projectId: string, options: ExportOptions, now: Date = new Date(), onFile?: () => void): Promise<ProjectExport> {
   // Todas las lecturas ven la misma foto de la base de datos: una edición simultánea no deja referencias colgadas.
-  return db.$transaction((tx) => buildInSnapshot(tx, projectId, options, now), { isolationLevel: "RepeatableRead", timeout: 30 * 60_000, maxWait: 60_000 });
+  return db.$transaction((tx) => buildInSnapshot(tx, projectId, options, now, onFile), { isolationLevel: "RepeatableRead", timeout: 30 * 60_000, maxWait: 60_000 });
 }
 
 /** Referencia que debería existir; si no, el archivo saldría roto y es mejor fallar con un mensaje claro. */
@@ -115,7 +116,7 @@ function must<T>(map: Map<string, T>, key: string): T {
   return v;
 }
 
-async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, options: ExportOptions, now: Date): Promise<ProjectExport> {
+async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, options: ExportOptions, now: Date, onFile?: () => void): Promise<ProjectExport> {
   const project = await db.project.findUnique({
     where: { id: projectId },
     select: {
@@ -171,6 +172,9 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
   let commentCount = 0;
   let subtaskCount = 0;
   let commentSeq = 0;
+  // Cota inferior del tamaño de project.json (los caracteres de los textos, que en UTF-8 nunca pesan menos): si ya pasa
+  // del tope, falla antes de examinar los adjuntos de las tareas siguientes, que es lo que tarda.
+  let textChars = 0;
   for (let i = 0; i < orderedIds.length; i += CHUNK) {
     const ids = orderedIds.slice(i, i + CHUNK);
     const rows = await db.task.findMany({
@@ -185,6 +189,12 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
       },
     });
     const byId = new Map(rows.map((r) => [r.id, r]));
+    for (const r of rows) {
+      textChars += r.title.length + r.description.length;
+      for (const c of r.comments) textChars += c.body.length;
+      for (const s of r.subtasks) textChars += s.title.length;
+    }
+    if (textChars > MAX_PROJECT_JSON_BYTES) throw new AppError("El proyecto es demasiado grande para exportarlo (el contenido supera 64 MB). Prueba con «Solo el tablero».", 413);
     for (const id of ids) {
       const t = byId.get(id);
       if (!t) continue;
@@ -193,7 +203,7 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
       if (options.attachments) {
         for (const a of t.attachments) {
           const file = attachmentPath(a.id, a.isImage ? "full" : "file");
-          const info = await addFile(files, diskStream(file), async () => (await stat(file)).isFile());
+          const info = await addFile(files, diskStream(file), async () => (await stat(file)).isFile(), onFile);
           if (!info) {
             missingFiles++;
             continue;
@@ -273,7 +283,7 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
       if (options.attachments) {
         for (const a of r.attachments) {
           const open = () => (async function* () { yield await readReleaseAttachmentFile(a.id); })();
-          const info = await addFile(files, open, async () => true);
+          const info = await addFile(files, open, async () => true, onFile);
           if (!info) {
             missingFiles++;
             continue;
@@ -301,7 +311,7 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
     const rows = await db.projectDocument.findMany({ where: { projectId, deletedAt: null }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
     for (const d of rows) {
       const file = documentPath(d.id);
-      const info = await addFile(files, diskStream(file), async () => (await stat(file)).isFile());
+      const info = await addFile(files, diskStream(file), async () => (await stat(file)).isFile(), onFile);
       if (!info) {
         missingFiles++;
         continue;
@@ -383,7 +393,7 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
   projectDataSchema.parse(data);
 
   const projectJson = Buffer.from(JSON.stringify(data), "utf8");
-  if (projectJson.length > MAX_PROJECT_JSON_BYTES) throw new AppError("El proyecto es demasiado grande para exportarlo. Prueba con «Solo el tablero».", 413);
+  if (projectJson.length > MAX_PROJECT_JSON_BYTES) throw new AppError("El proyecto es demasiado grande para exportarlo (el contenido supera 64 MB). Prueba con «Solo el tablero».", 413);
 
   const counts: ExportCounts = {
     columns: data.columns.length, kinds: data.kinds.length, labels: data.labels.length, deliverables: data.deliverables.length,
