@@ -137,6 +137,7 @@ export const proyectos: Record<string, string> = {
   "Reuniendo los datos del proyecto…": "Gathering the project data…",
   "Archivos {done} de {total}": "Files {done} of {total}",
   "Archivos…": "Files…",
+  "Leyendo adjuntos ({done} de {total})": "Reading attachments ({done} of {total})",
   "Cerrando el archivo…": "Finishing the file…",
   "Validando el archivo ({done} de {total})": "Validating the file ({done} of {total})",
   "Validando el archivo…": "Validating the file…",

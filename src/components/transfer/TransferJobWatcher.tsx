@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { useT } from "@/i18n/client";
 import { useToast } from "@/components/ui/Toast";
-import { TRANSFER_QUEUED_EVENT, ackJob, isFinal, shownJobs, type TransferJobView } from "./client";
+import { TRANSFER_QUEUED_EVENT, ackJob, isFinal, shownJobs, watchingJobs, type TransferJobView } from "./client";
 import { downloadUrl } from "./TransferJobs";
 
 const POLL_MS = 4000;
@@ -36,7 +36,7 @@ export function TransferJobWatcher() {
       if (stopped) return;
       const { t, toast, router } = latest.current;
       for (const job of jobs) {
-        if (!isFinal(job.status) || job.notified || shownJobs.has(job.id) || job.status === "EXPIRED") continue;
+        if (!isFinal(job.status) || job.notified || shownJobs.has(job.id) || watchingJobs.has(job.id) || job.status === "EXPIRED") continue;
         ackJob(job.id);
         if (job.status === "FAILED") {
           toast(job.kind === "EXPORT" ? t("No se pudo exportar el proyecto.") + (job.error ? ` ${job.error}` : "") : t("No se pudo importar el proyecto.") + (job.error ? ` ${job.error}` : ""), "error");

@@ -12,7 +12,7 @@ export function usePhaseLabel() {
     const { phase, done, total } = job.progress;
     const counted = total && done !== undefined ? { done: Math.min(done, total), total } : null;
     switch (phase) {
-      case "datos": return t("Reuniendo los datos del proyecto…");
+      case "datos": return counted ? t("Leyendo adjuntos ({done} de {total})", counted) : t("Reuniendo los datos del proyecto…");
       case "archivos": return counted ? t("Archivos {done} de {total}", counted) : t("Archivos…");
       case "comprimir": return t("Cerrando el archivo…");
       case "validar": return counted ? t("Validando el archivo ({done} de {total})", counted) : t("Validando el archivo…");

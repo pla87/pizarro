@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ackJob, fetchJob, isFinal, type TransferJobView } from "./client";
+import { ackJob, fetchJob, isFinal, watchingJobs, type TransferJobView } from "./client";
 
 const POLL_MS = 2000;
 
@@ -17,6 +17,7 @@ export function useTransferJob(id: string | null, onFinal?: (job: TransferJobVie
   });
   useEffect(() => {
     if (!id) return;
+    watchingJobs.add(id);
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const tick = async () => {
@@ -38,6 +39,7 @@ export function useTransferJob(id: string | null, onFinal?: (job: TransferJobVie
     void tick();
     return () => {
       stopped = true;
+      watchingJobs.delete(id);
       clearTimeout(timer);
     };
   }, [id]);

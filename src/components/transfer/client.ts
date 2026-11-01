@@ -8,6 +8,9 @@ export const TRANSFER_QUEUED_EVENT = "pz:transfer-queued";
 /** Trabajos cuyo final ya se ha enseñado en un panel: el aviso emergente no los repite. */
 export const shownJobs = new Set<string>();
 
+/** Trabajos que un panel abierto está consultando ahora mismo: el vigilante no avisa de ellos (el panel ya lo enseña). */
+export const watchingJobs = new Set<string>();
+
 export const isFinal = (s: TransferJobView["status"]) => s === "DONE" || s === "FAILED" || s === "EXPIRED";
 
 export function announceQueued(): void {

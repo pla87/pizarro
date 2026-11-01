@@ -188,7 +188,10 @@ function progressWriter(jobId: string) {
   let last = 0;
   let latest: TransferProgress = {};
   let chain: Promise<unknown> = Promise.resolve();
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const flush = () => {
+    clearTimeout(timer);
+    timer = undefined;
     last = Date.now();
     const value = latest as Prisma.InputJsonValue;
     chain = chain.then(() => db.projectTransferJob.updateMany({ where: { id: jobId, status: "RUNNING" }, data: { progress: value } })).catch(() => {});
@@ -197,11 +200,14 @@ function progressWriter(jobId: string) {
     set(p: TransferProgress) {
       const phaseChanged = p.phase !== latest.phase;
       latest = p;
-      if (phaseChanged || Date.now() - last >= 500) flush();
+      const wait = 500 - (Date.now() - last);
+      if (phaseChanged || wait <= 0) flush();
+      else timer ??= setTimeout(flush, wait); // el último valor no se pierde si llega dentro del intervalo
     },
     /** Latido: escribe el último progreso (y con ello `updatedAt`) aunque no haya cambiado. */
     beat: flush,
     async settle() {
+      clearTimeout(timer);
       await chain;
     },
   };
@@ -271,7 +277,10 @@ async function runExport(job: JobRow, progress: ReturnType<typeof progressWriter
   progress.set({ phase: "datos" });
   const project = await db.project.findUnique({ where: { id: job.projectId }, select: { id: true, name: true } });
   if (!project) throw new AppError("El proyecto ya no existe.", 404);
-  const built = await buildProjectExport(project.id, options);
+  // La fase «datos» incluye leer y resumir cada adjunto: avanza por ficheros (el total sale de los recuentos previos).
+  const total = options.attachments ? (await estimateProjectExport(project.id, options)).attachments : 0;
+  let seen = 0;
+  const built = await buildProjectExport(project.id, options, new Date(), total ? () => progress.set({ phase: "datos", done: Math.min(++seen, total), total }) : undefined);
   const dir = exportsDir();
   await mkdir(dir, { recursive: true });
   // Con el tamaño exacto ya conocido: la comprobación definitiva de espacio, antes de escribir nada.
