@@ -65,3 +65,15 @@ test("enlaces Markdown: lista blanca de esquemas", () => {
     assert.equal(safeMarkdownUrl(bad), "", JSON.stringify(bad));
   }
 });
+
+test("/api/auth/reset rechaza la petición iniciada desde otro sitio y acepta la del mismo origen", async () => {
+  const { GET } = await import("../src/app/api/auth/reset/route");
+  const cross = GET(new Request("http://localhost/api/auth/reset", { headers: { "sec-fetch-site": "cross-site" } }));
+  assert.equal(cross.status, 403);
+  assert.equal(cross.headers.get("set-cookie"), null);
+  for (const site of ["same-origin", "none", null]) {
+    const res = GET(new Request("http://localhost/api/auth/reset", { headers: site ? { "sec-fetch-site": site } : {} }));
+    assert.equal(res.status, 303);
+    assert.equal(res.headers.get("location"), "/login");
+  }
+});
