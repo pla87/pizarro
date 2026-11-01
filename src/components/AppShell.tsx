@@ -426,7 +426,7 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
         )}
         <div className="flex items-center justify-between gap-2">
           {isAdmin ? (
-            <button type="button" className="text-sm text-slate-500 underline hover:text-brand-600" onClick={() => setImporting(true)}>
+            <button type="button" className="shrink-0 whitespace-nowrap text-sm text-slate-500 underline hover:text-brand-600" onClick={() => setImporting(true)}>
               {t("Importar desde un archivo…")}
             </button>
           ) : <span />}
