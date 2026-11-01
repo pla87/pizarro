@@ -1,6 +1,61 @@
 {
   "versions": [
     {
+      "version": "1.36.0",
+      "date": "2026-11-01",
+      "releasedAt": "2026-11-01T19:24:01+01:00",
+      "summary": "Exportar e importar proyectos, textos legales RGPD, diálogos fijos con el teclado del móvil y correcciones de la revisión",
+      "changes": {
+        "nuevas": [
+          "Exportar un proyecto (Ajustes del proyecto → General): con o sin adjuntos, y solo el tablero o todo el histórico (tareas archivadas, releases e historial). Descarga un archivo .pizarro.zip.",
+          "Importar un proyecto desde ese archivo con «Importar desde un archivo…» en «Nuevo proyecto»: se crea un proyecto nuevo y las personas se asocian por email.",
+          "Textos legales por defecto completos según el RGPD y la LOPDGDD, en español e inglés, para revisar por un profesional."
+        ],
+        "mejoras": [
+          "En el móvil, con el teclado abierto, los diálogos se quedan fijos en la zona visible y solo se desplaza su contenido.",
+          "«Nuevo Doc» y «Nuevo Sheet» van en la misma línea.",
+          "Los selectores de color de tipos y plantillas también se manejan con el teclado."
+        ],
+        "correcciones": [
+          "Con muchos PDF en cola se muestra el aviso «Hay muchos PDF generándose» en vez de un error genérico.",
+          "En modo Markdown, el botón de cursiva ya no convierte la negrita en cursiva, y Mayús+Tab funciona con listas sangradas con tabuladores.",
+          "El menú «Más formatos» se mantiene dentro de la pantalla y no se abre solo.",
+          "Con Google configurado en el servidor ya se pueden guardar el dominio y el email de contacto público.",
+          "Al cambiar servidor, puerto o usuario del correo aparece el campo de contraseña para escribirla de nuevo.",
+          "Los registros ya no guardan enlaces de restablecimiento ni de confirmación."
+        ],
+        "tecnicos": [
+          "Migración: TaskComment.authorName. Formato pizarro-project v1 (manifest.json, project.json y files/<sha256>) con comprobación de huellas y versión. PROJECT_IMPORT_MAX_MB (500 por defecto)."
+        ]
+      },
+      "en": {
+        "summary": "Export and import projects, GDPR legal texts, mobile dialogs fixed with the keyboard open and review fixes",
+        "changes": {
+          "nuevas": [
+            "Export a project (Project settings → General): with or without attachments, and the board only or the whole history (archived tasks, releases and history). Downloads a .pizarro.zip file.",
+            "Import a project from that file with “Import from a file…” in “New project”: a new project is created and people are matched by email.",
+            "Complete default legal texts following GDPR and the Spanish LOPDGDD, in Spanish and English, to be reviewed by a professional."
+          ],
+          "mejoras": [
+            "On mobile, with the keyboard open, dialogs stay fixed in the visible area and only their content scrolls.",
+            "“New Doc” and “New Sheet” sit on the same line.",
+            "Colour pickers for types and templates also work with the keyboard."
+          ],
+          "correcciones": [
+            "With many PDFs queued, the “Many PDFs are being generated” notice is shown instead of a generic error.",
+            "In Markdown mode the italic button no longer turns bold into italic, and Shift+Tab works with tab-indented lists.",
+            "The “More formats” menu stays inside the screen and no longer opens by itself.",
+            "With Google configured on the server, the domain and public contact email can now be saved.",
+            "Changing the mail server, port or user shows the password field to type it again.",
+            "Logs no longer store reset or confirmation links."
+          ],
+          "tecnicos": [
+            "Migration: TaskComment.authorName. pizarro-project v1 format (manifest.json, project.json and files/<sha256>) with checksum and version checks. PROJECT_IMPORT_MAX_MB (500 by default)."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.35.1",
       "date": "2026-10-31",
       "releasedAt": "2026-10-31T14:16:09+01:00",

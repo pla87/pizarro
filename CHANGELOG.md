@@ -2,6 +2,35 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.36.0 — 2026-11-01 19:24
+
+Exportar e importar proyectos, textos legales RGPD, diálogos fijos con el teclado del móvil y correcciones de la revisión
+
+### Nuevas funcionalidades
+
+- Exportar un proyecto (Ajustes del proyecto → General): con o sin adjuntos, y solo el tablero o todo el histórico (tareas archivadas, releases e historial). Descarga un archivo .pizarro.zip.
+- Importar un proyecto desde ese archivo con «Importar desde un archivo…» en «Nuevo proyecto»: se crea un proyecto nuevo y las personas se asocian por email.
+- Textos legales por defecto completos según el RGPD y la LOPDGDD, en español e inglés, para revisar por un profesional.
+
+### Mejoras
+
+- En el móvil, con el teclado abierto, los diálogos se quedan fijos en la zona visible y solo se desplaza su contenido.
+- «Nuevo Doc» y «Nuevo Sheet» van en la misma línea.
+- Los selectores de color de tipos y plantillas también se manejan con el teclado.
+
+### Correcciones
+
+- Con muchos PDF en cola se muestra el aviso «Hay muchos PDF generándose» en vez de un error genérico.
+- En modo Markdown, el botón de cursiva ya no convierte la negrita en cursiva, y Mayús+Tab funciona con listas sangradas con tabuladores.
+- El menú «Más formatos» se mantiene dentro de la pantalla y no se abre solo.
+- Con Google configurado en el servidor ya se pueden guardar el dominio y el email de contacto público.
+- Al cambiar servidor, puerto o usuario del correo aparece el campo de contraseña para escribirla de nuevo.
+- Los registros ya no guardan enlaces de restablecimiento ni de confirmación.
+
+### Cambios técnicos / DB
+
+- Migración: TaskComment.authorName. Formato pizarro-project v1 (manifest.json, project.json y files/<sha256>) con comprobación de huellas y versión. PROJECT_IMPORT_MAX_MB (500 por defecto).
+
 ## v1.35.1 — 2026-10-31 14:16
 
 Las apps instaladas se recuperan solas tras una actualización
