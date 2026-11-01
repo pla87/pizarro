@@ -2,7 +2,7 @@
 
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n/client";
 
 interface Summary {
@@ -19,7 +19,7 @@ interface Summary {
  * «Importar desde un archivo…» del diálogo de nuevo proyecto: sube un .pizarro.zip (el cuerpo de la petición es el
  * archivo, con barra de progreso) y enseña el resumen. `isPrivate` es lo que se ha elegido en el diálogo.
  */
-export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose }: { isPrivate: boolean; privateToggle: React.ReactNode; onBack: () => void; onClose: () => void }) {
+export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, onBusyChange }: { isPrivate: boolean; privateToggle: React.ReactNode; onBack: () => void; onClose: () => void; onBusyChange?: (busy: boolean) => void }) {
   const t = useT();
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
@@ -30,6 +30,11 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose }
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const busy = progress !== null || processing;
+  // El diálogo avisa de que hay una importación en curso: mientras dure no se puede cerrar ni cambiar lo elegido.
+  useEffect(() => {
+    onBusyChange?.(busy);
+    return () => onBusyChange?.(false);
+  }, [busy, onBusyChange]);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();

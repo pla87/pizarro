@@ -110,12 +110,12 @@ async function validateArchive(zip: ZipFile): Promise<ProjectArchive> {
   return { zip, manifest, data, files };
 }
 
-const dup = (what: string, values: string[], lower = false) => {
+/** Repetidos (distingue mayúsculas: las restricciones únicas de la base de datos también). */
+const dup = (what: string, values: string[]) => {
   const seen = new Set<string>();
   for (const v of values) {
-    const k = lower ? v.toLowerCase() : v;
-    if (seen.has(k)) throw new ArchiveError("El archivo tiene datos repetidos.", `project.json repite ${what}: ${v.slice(0, 60)}`);
-    seen.add(k);
+    if (seen.has(v)) throw new ArchiveError("El archivo tiene datos repetidos.", `project.json repite ${what}: ${v.slice(0, 60)}`);
+    seen.add(v);
   }
   return seen;
 };
@@ -157,7 +157,7 @@ export function validateRefs(data: ProjectExportData, fileShas: Set<string>): vo
   const fromRefs = data.tasks.map((t) => t.recurrenceFromRef).filter((r): r is string => !!r);
   dup("la tarea de la que sale una repetición", fromRefs);
   for (const r of data.releases) {
-    dup("un adjunto de la release", r.attachments.map((a) => a.fileName), true);
+    dup("un adjunto de la release", r.attachments.map((a) => a.fileName));
     for (const x of r.tasks) need(tasks, x.taskRef, "una tarea");
     for (const a of r.attachments) need(fileShas, a.file, "un fichero");
   }

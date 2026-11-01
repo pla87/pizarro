@@ -104,14 +104,26 @@ const isoOrNull = (d: Date | null | undefined) => (d ? d.toISOString() : null);
  * Sin comprobar permisos: quien llama ya lo hizo.
  */
 export async function buildProjectExport(projectId: string, options: ExportOptions, now: Date = new Date()): Promise<ProjectExport> {
+  // Todas las lecturas ven la misma foto de la base de datos: una edición simultánea no deja referencias colgadas.
+  return db.$transaction((tx) => buildInSnapshot(tx, projectId, options, now), { isolationLevel: "RepeatableRead", timeout: 30 * 60_000, maxWait: 60_000 });
+}
+
+/** Referencia que debería existir; si no, el archivo saldría roto y es mejor fallar con un mensaje claro. */
+function must<T>(map: Map<string, T>, key: string): T {
+  const v = map.get(key);
+  if (v === undefined) throw new AppError("El proyecto cambió mientras se exportaba y el archivo habría quedado incompleto. Vuelve a intentarlo.", 409);
+  return v;
+}
+
+async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, options: ExportOptions, now: Date): Promise<ProjectExport> {
   const project = await db.project.findUnique({
     where: { id: projectId },
     select: {
       name: true, description: true, isPrivate: true, taskFields: true, releaseZipMaxMb: true, taskAttachMaxMb: true, fileMaxMb: true, googleShareMode: true,
       reportSchedule: { select: { enabled: true, weekday: true, hour: true } },
-      releaseTemplates: { orderBy: [{ kind: "asc" }, { position: "asc" }, { id: "asc" }], select: { kind: true, name: true, content: true, position: true } },
+      releaseTemplates: { orderBy: [{ kind: "asc" }, { position: "asc" }, { createdAt: "asc" }, { id: "asc" }], select: { kind: true, name: true, content: true, position: true, createdAt: true } },
       columns: { orderBy: [{ position: "asc" }, { id: "asc" }], select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true } },
-      kinds: { orderBy: [{ position: "asc" }, { createdAt: "asc" }, { id: "asc" }], select: { id: true, name: true, color: true, position: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true } },
+      kinds: { orderBy: [{ position: "asc" }, { createdAt: "asc" }, { id: "asc" }], select: { id: true, name: true, color: true, position: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true, createdAt: true } },
       hiddenKinds: { select: { kind: { select: { name: true } } } },
       labels: { orderBy: [{ name: "asc" }, { id: "asc" }], select: { id: true, name: true, color: true } },
       deliverables: { orderBy: [{ position: "asc" }, { createdAt: "asc" }, { id: "asc" }], select: { id: true, name: true, description: true, dueDate: true, position: true, createdAt: true } },
@@ -141,7 +153,7 @@ export async function buildProjectExport(projectId: string, options: ExportOptio
     ? await db.taskKind.findMany({
         where: { id: { in: [...usedKindIds] }, projectId: null },
         orderBy: [{ position: "asc" }, { createdAt: "asc" }, { id: "asc" }],
-        select: { id: true, name: true, color: true, position: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true },
+        select: { id: true, name: true, color: true, position: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true, createdAt: true },
       })
     : [];
   const kindList = [...project.kinds.map((k) => ({ ...k, scope: "project" as const })), ...generalUsed.map((k) => ({ ...k, scope: "general" as const }))];
@@ -198,8 +210,8 @@ export async function buildProjectExport(projectId: string, options: ExportOptio
         ref: taskRef.get(id)!,
         title: mention(t.title),
         description: mention(t.description),
-        columnRef: columnRef.get(t.columnId)!,
-        kindRef: kindRef.get(t.kindId)!,
+        columnRef: must(columnRef, t.columnId),
+        kindRef: must(kindRef, t.kindId),
         color: t.color,
         linkUrl: t.linkUrl,
         position: t.position,
@@ -222,12 +234,15 @@ export async function buildProjectExport(projectId: string, options: ExportOptio
         recurrence: t.recurrence,
         recurrenceDay: t.recurrenceDay,
         recurrenceFromRef: t.recurrenceFromId ? (taskRef.get(t.recurrenceFromId) ?? null) : null,
+        routineColumnRef: t.routineColumnId ? (columnRef.get(t.routineColumnId) ?? null) : null,
+        waitingNotifiedAt: isoOrNull(t.waitingNotifiedAt),
         contentUpdatedAt: isoOrNull(t.contentUpdatedAt),
+        contentUpdatedByRef: users.ref(t.contentUpdatedById),
         createdAt: iso(t.createdAt),
         updatedAt: iso(t.updatedAt),
         labelRefs: t.labels.map((l) => labelRef.get(l.labelId)).filter((r): r is string => !!r).sort(),
         subtasks: t.subtasks.map((s) => ({ title: s.title, done: s.done, position: s.position })),
-        followers: t.followers.map((f) => ({ user: users.ref(f.userId)!, muted: f.muted })),
+        followers: t.followers.map((f) => ({ user: users.ref(f.userId)!, muted: f.muted, createdAt: iso(f.createdAt) })),
         comments: t.comments.map((c) => ({
           ref: commentRefs.get(c.id)!,
           author: users.ref(c.authorId),
@@ -345,14 +360,14 @@ export async function buildProjectExport(projectId: string, options: ExportOptio
       googleShareMode: (project.googleShareMode as ProjectExportData["project"]["googleShareMode"]) ?? null,
     },
     reportSchedule: project.reportSchedule,
-    releaseTemplates: project.releaseTemplates,
+    releaseTemplates: project.releaseTemplates.map((r) => ({ kind: r.kind, name: r.name, content: r.content, position: r.position, createdAt: iso(r.createdAt) })),
     columns: project.columns.map((c) => ({
       ref: columnRef.get(c.id)!, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays,
       routineTargetRef: c.routineTargetColumnId ? (columnRef.get(c.routineTargetColumnId) ?? null) : null,
     })),
     kinds: kindList.map((k) => ({
       ref: kindRef.get(k.id)!, name: k.name, color: k.color, position: k.position, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate,
-      subtaskTemplate: k.subtaskTemplate, scope: k.scope,
+      subtaskTemplate: k.subtaskTemplate, scope: k.scope, createdAt: iso(k.createdAt),
     })),
     hiddenGeneralKinds: project.hiddenKinds.map((h) => h.kind.name).sort(),
     labels: project.labels.map((l) => ({ ref: labelRef.get(l.id)!, name: l.name, color: l.color })),
@@ -384,6 +399,7 @@ export async function buildProjectExport(projectId: string, options: ExportOptio
     appVersion: pkg.version,
     exportedAt: now.toISOString(),
     options: { attachments: options.attachments, scope: options.scope },
+    timeZone: appTimeZone(),
     counts,
     checksums,
   };
