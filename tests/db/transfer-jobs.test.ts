@@ -106,7 +106,7 @@ describe("ciclo de vida", () => {
     const tampered = Buffer.from(bytes);
     const at = tampered.indexOf(Buffer.from('"title"'));
     assert.ok(at > 0);
-    tampered[at + 2] ^= 0x01;
+    tampered[at + 2] = tampered[at + 2]! ^ 0x01;
     const temp = path.join(work, `bad${++seq}.tmp`);
     await writeFile(temp, tampered);
     const bad = await createImportJob(admin.id, temp, size, false);
