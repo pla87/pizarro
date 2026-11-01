@@ -10,8 +10,9 @@ import type { ProjectExport } from "./export";
  * Escribe el ZIP de una exportación en `dest` (primero en un temporal junto a él y luego se renombra, así nunca queda un
  * archivo a medias con el nombre final). `onFile(hechos, total)` avisa al terminar cada fichero adjunto. Si falla, borra el temporal.
  */
-export async function writeProjectExport(built: ProjectExport, dest: string, onFile?: (done: number, total: number) => void): Promise<number> {
-  const tmp = `${dest}.tmp`;
+export async function writeProjectExport(built: ProjectExport, dest: string, onFile?: (done: number, total: number) => void, tmpPath?: string): Promise<number> {
+  // `tmpPath`: nombre propio del temporal (p. ej. uno por intento), para que dos ejecuciones del mismo trabajo no pisen el mismo fichero.
+  const tmp = tmpPath ?? `${dest}.tmp`;
   const total = built.entries.filter((e) => !Buffer.isBuffer(e.body)).length;
   let done = 0;
   const entries: StreamZipEntry[] = built.entries.map((e) => {

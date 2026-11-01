@@ -22,19 +22,25 @@ function subscribe(cb: () => void) {
     window.removeEventListener("storage", onStorage);
   };
 }
+// Copia en memoria: si localStorage está bloqueado (ventana privada, datos bloqueados) la preferencia sigue valiendo
+// mientras la página esté abierta, en vez de volver al valor por defecto al instante.
+const memory = new Map<string, string | null>();
 function read(key: string): string | null {
   try {
-    return localStorage.getItem(key);
+    const v = localStorage.getItem(key);
+    memory.set(key, v);
+    return v;
   } catch {
-    return null;
+    return memory.get(key) ?? null;
   }
 }
 function write(key: string, value: string | null) {
+  memory.set(key, value);
   try {
     if (value === null) localStorage.removeItem(key);
     else localStorage.setItem(key, value);
   } catch {
-    // Sin almacenamiento (ventana privada, datos bloqueados): la preferencia solo dura mientras la página siga abierta.
+    /* sin almacenamiento: solo queda la copia en memoria */
   }
   emit();
 }

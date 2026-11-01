@@ -447,8 +447,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     );
   };
 
-  const commitTitle = () => {
-    const value = title.trim();
+  // `next`: título recién escrito (el dictado sin campo visible lo cambia sin pasar por un estado ya renderizado).
+  const commitTitle = (next?: string) => {
+    const value = (next ?? title).trim();
     if (!value) return setTitle(task.title);
     if (value !== task.title) save({ title: value }, { title: value });
   };
@@ -716,7 +717,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             </select>
           </Field>
           <Field label={t("Color")}>
-            {/* Escritorio: swatches más pequeños y juntos para que quepan en una sola fila. */}
+            {/* Escritorio: swatches más pequeños y juntos para ocupar menos alto; según el ancho de la columna pueden seguir pasando a una segunda fila. */}
             <div className="md:[&>div]:gap-1 md:[&_button]:h-[22px] md:[&_button]:w-[22px]">
               <ColorPicker value={task.color} onChange={(color) => save({ color: color as never }, { color })} />
             </div>

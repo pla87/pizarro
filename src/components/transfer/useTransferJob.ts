@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ackJob, fetchJob, isFinal, watchingJobs, type TransferJobView } from "./client";
+import { ackJob, announceQueued, fetchJob, isFinal, watchingJobs, type TransferJobView } from "./client";
 
 const POLL_MS = 2000;
 
@@ -41,6 +41,8 @@ export function useTransferJob(id: string | null, onFinal?: (job: TransferJobVie
       stopped = true;
       watchingJobs.delete(id);
       clearTimeout(timer);
+      // Si el panel se cierra con el trabajo aún en curso, el vigilante vuelve a consultar: no se le escapa un final justo ahora.
+      announceQueued();
     };
   }, [id]);
   return state.id === id ? { job: state.job, gone: state.gone } : { job: null, gone: false };

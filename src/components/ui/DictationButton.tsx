@@ -180,7 +180,19 @@ export function DictationButton({ onText, variant = "field", tabIndex, className
 /** Inserta la frase dictada en el cursor (o sobre la selección) de un input o textarea, conservando el deshacer del navegador. */
 export function insertIntoField(el: HTMLInputElement | HTMLTextAreaElement | null, spoken: string, onValueChange: (v: string) => void, newLine = false) {
   if (!el) return;
-  const edit = insertDictation(el.value, el.selectionStart ?? el.value.length, el.selectionEnd ?? el.value.length, spoken, newLine);
+  const start = el.selectionStart ?? el.value.length;
+  const end = el.selectionEnd ?? el.value.length;
+  let edit = insertDictation(el.value, start, end, spoken, newLine);
+  // maxLength: el dictado no lo salta (un cambio programático no lo comprueba el navegador). Se recorta lo dictado hasta que quepa.
+  const max = el.maxLength;
+  if (max >= 0) {
+    let s = spoken;
+    while (edit && edit.value.length > max && s.trim()) {
+      s = s.slice(0, Math.max(0, s.length - (edit.value.length - max))).trimEnd();
+      edit = insertDictation(el.value, start, end, s, newLine);
+    }
+    if (edit && edit.value.length > max) edit = null;
+  }
   if (edit) applyTextareaEdit(el, edit, onValueChange);
 }
 

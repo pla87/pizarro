@@ -13,7 +13,7 @@ import { getT } from "@/i18n/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Descarga del archivo de una exportación lista, en flujo y con Content-Length. Quien la pidió (si aún gestiona el proyecto) o un administrador. */
+/** Descarga del archivo de una exportación lista, en flujo y con Content-Length. Solo quien la pidió y mientras siga gestionando el proyecto (un administrador ve el estado, pero no se lleva el archivo de otra persona). */
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   return actionContext.run({}, async () => {
     const t = await getT();
@@ -25,8 +25,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     try {
       const job = await getJobFor(user, (await ctx.params).id);
       if (job.kind !== "EXPORT") throw new AppError("No encontrado o sin acceso.", 404);
-      // Quien dejó de poder gestionar el proyecto (lo sacaron, lo hicieron privado…) ya no se lleva el archivo.
-      if (user.role !== "ADMIN") await findManageableProject(user, job.projectId ?? "");
+      if (job.userId !== user.id) throw new AppError("No encontrado o sin acceso.", 404);
+      // Quien dejó de poder gestionar el proyecto (lo sacaron, lo hicieron privado, se borró…) ya no se lleva el archivo, tampoco un administrador.
+      if (!job.projectId) throw new AppError("No encontrado o sin acceso.", 404);
+      await findManageableProject(user, job.projectId);
       if (job.status === "EXPIRED" || (job.expiresAt && job.expiresAt.getTime() < Date.now())) throw new AppError("El archivo de esta exportación ha caducado. Vuelve a exportar el proyecto.", 410);
       const f = exportFileOf(job);
       if (!f) throw new AppError("La exportación todavía no está lista.", 409);

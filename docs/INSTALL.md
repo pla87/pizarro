@@ -20,7 +20,7 @@ Dos caminos. Elige uno; los dos acaban en el mismo asistente `/setup`.
 En el servidor, como root (o con `sudo` disponible):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com
 ```
 
 Opciones: `--local` (solo red local, por HTTP y sin dominio), `--dir /opt/pizarro` (carpeta; por defecto esa), `--ref <rama|tag>` (versión; por defecto `main`; para producción usa una etiqueta de versión cuando exista), `--no-start`, `--yes` (instala Docker sin preguntar) y `--help`. Sin `--domain` ni `--local`, el script los pregunta.
@@ -32,7 +32,7 @@ El script:
 3. Descarga el código de GitHub (sin necesitar `git`), comprueba que está completo y lo deja en la carpeta de instalación.
 4. Ejecuta `deploy/install.sh`: crea `deploy/.env` con secretos aleatorios, arranca los contenedores, espera a que la app esté sana y muestra la dirección, el código de `/setup` y el kit de recuperación.
 
-Repetir el mismo comando **actualiza** Pizarro: sustituye el código y conserva `deploy/.env`, `deploy/recovery-kit.txt` y los datos (que viven en volúmenes de Docker, fuera de la carpeta). Haz antes una copia (sección 4). Si prefieres revisar el script antes de ejecutarlo, descárgalo con `curl -fsSLO <url>`, léelo y lánzalo con `sh get.sh --domain …`.
+Repetir el mismo comando **actualiza** Pizarro: prepara el código nuevo aparte y lo cambia de golpe (si se interrumpe, la instalación anterior sigue intacta), y conserva `deploy/.env`, `deploy/recovery-kit.txt` y los datos (que viven en volúmenes de Docker, fuera de la carpeta). Si al actualizar pasas un `--domain` (o `--local`) distinto del que ya está en `deploy/.env`, el script avisa y mantiene el actual; para cambiarlo, edita `DOMAIN` y `APP_URL` en `deploy/.env` y ejecuta `docker compose up -d` en `deploy/`. Haz antes una copia (sección 4). Si prefieres revisar el script antes de ejecutarlo, descárgalo con `curl -fsSLO <url>`, léelo y lánzalo con `sh get.sh --domain …`.
 
 ### Railway
 
