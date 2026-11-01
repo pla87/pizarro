@@ -53,6 +53,15 @@ test("idioma por defecto según la interfaz", () => {
   assert.equal(dictationLang("en-GB"), "en-US");
 });
 
+test("comillas rectas, guion y barra solo abren al principio o tras un espacio", () => {
+  assert.equal(dictationChunk('dijo "', "", "hola"), "hola"); // apertura: pegado
+  assert.equal(dictationChunk('"', "", "hola"), "hola");
+  assert.equal(dictationChunk('dijo "hola"', "", "y adiós"), " y adiós"); // cierre: con espacio
+  assert.equal(dictationChunk("a-", "", "b"), " b");
+  assert.equal(dictationChunk("uno /", "", "dos"), "dos");
+  assert.equal(dictationChunk("rojo/", "", "azul"), " azul");
+});
+
 test("modo líneas: cada trozo en su línea", () => {
   assert.equal(insertDictation("", 0, 0, "comprar pan", true)?.value, "Comprar pan");
   assert.equal(insertDictation("Comprar pan", 11, 11, "llamar a Ana", true)?.value, "Comprar pan\nLlamar a Ana");

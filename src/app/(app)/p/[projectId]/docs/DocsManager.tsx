@@ -66,6 +66,15 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   // Cola de subida en serie: cada archivo es una petición y el servidor aplica sus límites a cada una.
   const queue = useRef<Promise<void>>(Promise.resolve());
+  const searchInput = useRef<HTMLInputElement>(null);
+  const pendingFocus = useRef<{ gone: string; next: string | null } | null>(null);
+  useEffect(() => {
+    const p = pendingFocus.current;
+    if (!p || documents.some((x) => x.id === p.gone)) return;
+    pendingFocus.current = null;
+    const next = p.next ? document.querySelector<HTMLElement>(`[data-doc-open="${p.next}"]`) : null;
+    (next ?? searchInput.current)?.focus();
+  }, [documents]);
 
   const kindLabel = (k: DocumentKindName) =>
     k === "TEXT" ? t("Texto") : k === "MARKDOWN" ? "Markdown" : k === "PDF" ? "PDF" : k === "IMAGE" ? t("Imagen") : t("Otro");
@@ -117,10 +126,18 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
 
   /** Envía a la papelera desde la lista, sin abrir el visor; mismo aviso con Deshacer que el botón Borrar del visor. */
   async function trashFromList(d: DocumentRow) {
+    // La fila desaparece de la lista: el foco pasa a la siguiente (o a la anterior, o al buscador) cuando llegue la lista nueva.
+    const at = shown.findIndex((x) => x.id === d.id);
+    const neighbour = shown[at + 1] ?? shown[at - 1] ?? null;
     setBusyId(d.id);
-    const res = await deleteDocument(d.id);
-    setBusyId(null);
+    let res: Awaited<ReturnType<typeof deleteDocument>>;
+    try {
+      res = await deleteDocument(d.id);
+    } finally {
+      setBusyId(null);
+    }
     if (!res.ok) return toast(res.error, "error");
+    pendingFocus.current = { gone: d.id, next: neighbour?.id ?? null };
     toast(t("Documento enviado a la papelera"), "undo", {
       label: t("Deshacer"),
       onClick: () => {
@@ -278,6 +295,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
           <div className="relative mb-4">
             <Search size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
             <input
+              ref={searchInput}
               type="search"
               className="input pl-9"
               placeholder={t("Buscar por nombre…")}
@@ -296,7 +314,8 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
                   <li key={d.id} className="flex items-center hover:bg-slate-50 focus-within:bg-slate-50 dark:hover:bg-slate-800/60 dark:focus-within:bg-slate-800/60">
                     <button
                       type="button"
-                      className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pl-3 text-left focus-visible:bg-slate-50 "
+                      className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pl-3 text-left focus-visible:bg-slate-50 dark:focus-visible:bg-slate-800/60"
+                      data-doc-open={d.id}
                       onClick={() => setOpenId(d.id)}
                     >
                       <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", className)} title={kindLabel(d.kind)}>

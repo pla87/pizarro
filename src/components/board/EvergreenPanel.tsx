@@ -68,6 +68,21 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
     fileTimer.current = null;
   };
   useEffect(() => clearFileTimer, []);
+  // Tras soltar el archivo (en el panel o en una tarjeta de dentro, que corta la propagación) o cancelar el arrastre, la
+  // apertura temporal se deshace y el panel vuelve a su estado guardado. En captura, para verlo aunque alguien pare el evento.
+  useEffect(() => {
+    if (!fileSprung) return;
+    const reset = () => {
+      clearFileTimer();
+      setFileSprung(false);
+    };
+    document.addEventListener("drop", reset, true);
+    document.addEventListener("dragend", reset, true);
+    return () => {
+      document.removeEventListener("drop", reset, true);
+      document.removeEventListener("dragend", reset, true);
+    };
+  }, [fileSprung]);
   const open = stored || (sprung && dragging) || fileSprung;
   const hovering = isOver && dragging;
   useEffect(() => {
@@ -87,7 +102,10 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
     ...zoneHandlers,
     onDragOver: (e: React.DragEvent) => {
       zoneHandlers.onDragOver(e);
-      if (hasFiles(e) && !open && !fileTimer.current) fileTimer.current = setTimeout(() => setFileSprung(true), FILE_SPRING_OPEN_MS);
+      if (hasFiles(e) && !open && !fileTimer.current) fileTimer.current = setTimeout(() => {
+        fileTimer.current = null;
+        setFileSprung(true);
+      }, FILE_SPRING_OPEN_MS);
     },
     onDragLeave: (e: React.DragEvent) => {
       zoneHandlers.onDragLeave(e);

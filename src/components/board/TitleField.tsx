@@ -9,6 +9,7 @@ import { MentionText } from "../ui/MentionText";
 import { DictationButton, insertIntoField } from "../ui/DictationButton";
 import { MentionTextarea } from "../ui/MentionTextarea";
 
+const TITLE_MAX = 400;
 const CLASSES = "field-sizing-content w-full min-w-0 resize-none rounded-md bg-transparent px-1 py-0.5 text-lg font-semibold outline-none focus:bg-slate-50 dark:focus:bg-slate-800";
 
 /**
@@ -18,7 +19,7 @@ const CLASSES = "field-sizing-content w-full min-w-0 resize-none rounded-md bg-t
 export function TitleField({ value, onChange, onCommit, users }: {
   value: string;
   onChange: (value: string) => void;
-  onCommit: () => void;
+  onCommit: (value?: string) => void;
   users: UserOption[];
 }) {
   const t = useT();
@@ -31,7 +32,12 @@ export function TitleField({ value, onChange, onCommit, users }: {
     <DictationButton
       onText={(s) => {
         if (ref.current) insertIntoField(ref.current, s, setTitle);
-        else setTitle(insertDictation(value, value.length, value.length, s)?.value ?? value);
+        else {
+          // Sin campo (menciones pintadas) no habrá blur que guarde: se guarda aquí con el valor nuevo.
+          const next = (insertDictation(value, value.length, value.length, s)?.value ?? value).replace(/\n/g, "").slice(0, TITLE_MAX);
+          onChange(next);
+          if (next !== value) onCommit(next);
+        }
       }}
     />
   );
@@ -62,7 +68,7 @@ export function TitleField({ value, onChange, onCommit, users }: {
             }
           }}
           rows={1}
-          maxLength={400}
+          maxLength={TITLE_MAX}
           className={CLASSES}
           wrapperClassName="min-w-0 flex-1"
           aria-label={t("Título")}
