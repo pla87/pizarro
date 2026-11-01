@@ -40,15 +40,74 @@ export function ExportProject({ projectId }: { projectId: string }) {
     return () => { cancelled = true; };
   }, [open, projectId, query]);
 
-  const download = () => {
-    const a = document.createElement("a");
-    a.href = `/api/projects/${projectId}/export?${query}`;
-    a.download = "";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    toast(t("Preparando la descarga del proyecto…"));
+  const [busy, setBusy] = useState(false);
+
+  /** Nombre del fichero según la cabecera Content-Disposition (filename* si viene, si no filename). */
+  const nameFrom = (res: Response): string => {
+    const cd = res.headers.get("Content-Disposition") ?? "";
+    const star = /filename\*=UTF-8''([^;]+)/i.exec(cd)?.[1];
+    if (star) {
+      try {
+        return decodeURIComponent(star);
+      } catch {
+        // cae en filename
+      }
+    }
+    return /filename="([^"]+)"/i.exec(cd)?.[1] ?? "proyecto.pizarro.zip";
+  };
+
+  const download = async () => {
+    if (busy) return;
+    setBusy(true);
     setOpen(false);
+    // Con la API de acceso a ficheros (Chromium) se guarda en flujo, sin tener el archivo entero en memoria. El selector
+    // exige un gesto reciente, así que se abre antes de pedir el archivo; en el resto de navegadores se junta un Blob.
+    type Picker = (o: { suggestedName: string; types?: { description: string; accept: Record<string, string[]> }[] }) => Promise<FileSystemFileHandle>;
+    const picker = (window as unknown as { showSaveFilePicker?: Picker }).showSaveFilePicker;
+    let handle: FileSystemFileHandle | null = null;
+    try {
+      if (picker) {
+        try {
+          handle = await picker({ suggestedName: "proyecto.pizarro.zip", types: [{ description: "Pizarro", accept: { "application/zip": [".zip"] } }] });
+        } catch (err) {
+          if (err instanceof DOMException && err.name === "AbortError") return; // cancelado: no se pide nada
+          handle = null; // sin selector utilizable: se descarga con Blob
+        }
+      }
+      toast(t("Preparando la descarga del proyecto…"));
+      const res = await fetch(`/api/projects/${projectId}/export?${query}`);
+      if (!res.ok) {
+        let message = t("No se pudo exportar el proyecto.");
+        try {
+          const body = (await res.json()) as { error?: string };
+          if (body.error) message = body.error;
+        } catch {
+          // respuesta que no es JSON (p. ej. un proxy): mensaje genérico
+        }
+        (handle as (FileSystemFileHandle & { remove?: () => Promise<void> }) | null)?.remove?.().catch(() => {});
+        toast(message, "error");
+        return;
+      }
+      if (handle && res.body) {
+        const writable = await handle.createWritable();
+        await res.body.pipeTo(writable);
+      } else {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = nameFrom(res);
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      }
+      toast(t("Proyecto exportado."));
+    } catch {
+      toast(t("No se pudo exportar el proyecto."), "error");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const choice = (name: string, value: string, current: string, set: (v: never) => void, label: string, hint: string) => (
@@ -63,7 +122,7 @@ export function ExportProject({ projectId }: { projectId: string }) {
 
   return (
     <>
-      <button type="button" className="btn-secondary" onClick={() => setOpen(true)}>
+      <button type="button" className="btn-secondary" disabled={busy} onClick={() => setOpen(true)}>
         <Download size={15} /> {t("Exportar proyecto")}
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={t("Exportar proyecto")} size="md">
@@ -91,7 +150,7 @@ export function ExportProject({ projectId }: { projectId: string }) {
           </p>
           <div className="flex justify-end gap-2">
             <button type="button" className="btn-secondary" onClick={() => setOpen(false)}>{t("Cancelar")}</button>
-            <button type="button" className="btn-primary" onClick={download}>{t("Exportar")}</button>
+            <button type="button" className="btn-primary" disabled={busy} onClick={download}>{t("Exportar")}</button>
           </div>
         </div>
       </Modal>
