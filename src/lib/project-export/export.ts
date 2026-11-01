@@ -18,7 +18,7 @@ import {
 } from "./types";
 
 /** Tope de project.json: se arma en memoria. */
-const MAX_PROJECT_JSON_BYTES = 256 * 1024 * 1024;
+const MAX_PROJECT_JSON_BYTES = 64 * 1024 * 1024;
 const CHUNK = 400;
 
 export interface ProjectExport {
@@ -383,7 +383,7 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
   projectDataSchema.parse(data);
 
   const projectJson = Buffer.from(JSON.stringify(data), "utf8");
-  if (projectJson.length > MAX_PROJECT_JSON_BYTES) throw new AppError("El proyecto es demasiado grande para exportarlo. Prueba con «Solo el tablero».", 413);
+  if (projectJson.length > MAX_PROJECT_JSON_BYTES) throw new AppError("El proyecto es demasiado grande para exportarlo (el contenido supera 64 MB). Prueba con «Solo el tablero».", 413);
 
   const counts: ExportCounts = {
     columns: data.columns.length, kinds: data.kinds.length, labels: data.labels.length, deliverables: data.deliverables.length,

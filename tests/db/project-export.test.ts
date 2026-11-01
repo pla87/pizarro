@@ -295,6 +295,8 @@ describe("importar: validación del archivo", () => {
     // Entradas con nombre peligroso o desconocido.
     await reject([...built.entries, entry("../evil.txt", Buffer.from("x"))], /Nombre de entrada no válido|ZIP válido/);
     await reject([...built.entries, entry("otro.txt", Buffer.from("x"))], /entrada inesperada/);
+    // project.json por encima del máximo de 64 MB.
+    await reject([built.entries[0]!, entry("project.json", Buffer.alloc(65 * 1024 * 1024, 32)), ...built.entries.slice(2)], /supera el máximo de 64 MB/);
     // Falta el manifiesto.
     await reject(built.entries.slice(1), /falta manifest/);
     assert.equal(await db.project.count(), before); // nada creado
