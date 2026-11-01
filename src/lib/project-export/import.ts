@@ -22,7 +22,6 @@ import {
 } from "../uploads";
 import { mapMentions } from "./mentions";
 import { openProjectArchive, type ProjectArchive } from "./read";
-import type { ProjectExportData } from "./types";
 
 export interface ImportUser {
   id: string;

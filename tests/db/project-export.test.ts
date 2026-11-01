@@ -117,7 +117,7 @@ async function richProject() {
   const raw = await db.taskAttachment.create({ data: { taskId: t1.id, originalName: "notas.txt", mimeType: "text/plain", isImage: false, size: 11, createdById: member.id } });
   await saveRawAttachmentFile(raw.id, Buffer.from("hola mundo!!"));
 
-  const t2 = await db.task.create({ data: { projectId, columnId: next.id, kindId: general.id, title: "Evergreen", position: 1000, evergreen: true, evergreenEvery: 2, recurrenceFromId: t1.id } });
+  await db.task.create({ data: { projectId, columnId: next.id, kindId: general.id, title: "Evergreen", position: 1000, evergreen: true, evergreenEvery: 2, recurrenceFromId: t1.id } });
   const t3 = await db.task.create({ data: { projectId, columnId: routines.id, kindId: f.kindId, title: "Archivada", position: 1000, archivedAt: new Date("2026-10-20T00:00:00Z"), archivedFromColumnId: f.columns.doing } });
   await db.taskComment.create({ data: { taskId: t3.id, authorId: member.id, body: "Comentario en archivada" } });
   await db.taskEvent.createMany({

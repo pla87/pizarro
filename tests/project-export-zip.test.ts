@@ -70,7 +70,7 @@ test("el lector rechaza nombres peligrosos, duplicados, cifrado y CRC erróneo",
 
   const ok = await collect([buf("dato")]);
   const flipped = Buffer.from(ok);
-  flipped[30 + "f/dato.txt".length] ^= 0xff; // un byte del contenido
+  flipped[30 + "f/dato.txt".length] = flipped[30 + "f/dato.txt".length]! ^ 0xff; // un byte del contenido
   const z = await open("crc.zip", flipped);
   await assert.rejects(z.readAll(z.entries[0]!, 100), /CRC/);
   await z.close();

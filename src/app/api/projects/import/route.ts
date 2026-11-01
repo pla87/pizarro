@@ -6,6 +6,7 @@ import { pipeline } from "node:stream/promises";
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { AppError } from "@/lib/errors";
+import { ArchiveError } from "@/lib/project-export/errors";
 import { logEvent } from "@/lib/log";
 import { importMaxBytes } from "@/lib/project-export/config";
 import { importProjectFile } from "@/lib/project-export/import";
@@ -85,7 +86,7 @@ export async function POST(req: Request) {
     return Response.json({ ok: true, summary }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
   } catch (err) {
     const status = err instanceof AppError ? err.status : 500;
-    const known = err instanceof AppError ? err : err instanceof ZipReadError ? new AppError(`El archivo está dañado (${err.message})`) : null;
+    const known = err instanceof AppError ? err : err instanceof ZipReadError ? new ArchiveError("El archivo está dañado.", err.message) : null;
     logEvent({
       level: known ? "warn" : "error", category: "api", action: "projects.importFailed",
       message: `Fallo al importar un proyecto: ${err instanceof Error ? err.message : String(err)}`,
@@ -93,7 +94,8 @@ export async function POST(req: Request) {
     });
     if (known) {
       const headers = known.code === "upload_busy" ? { "Retry-After": "5" } : undefined;
-      return Response.json({ error: t(known.message), ...(known.code ? { code: known.code } : {}) }, { status: known.status, headers });
+      const message = known instanceof ArchiveError ? `${t(known.base)}${known.detail ? ` (${known.detail})` : ""}` : t(known.message);
+      return Response.json({ error: message, ...(known.code ? { code: known.code } : {}) }, { status: known.status, headers });
     }
     console.error("[project import]", err);
     return Response.json({ error: t("No se pudo importar el proyecto.") }, { status: 500 });

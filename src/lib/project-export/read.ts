@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { MAX_ACTIVE_TASKS_PER_PROJECT, MAX_DELIVERABLES_PER_PROJECT, MAX_LABELS_PER_PROJECT, isUniqueColumnRole } from "../constants";
 import { DOCUMENTS_MAX_PER_PROJECT } from "../document-kind";
 import { AppError } from "../errors";
+import { ArchiveError } from "./errors";
 import { ZipFile, ZipReadError, type ZipEntryInfo } from "../zip-read";
 import { LIMITS, manifestSchema, projectDataSchema, EXPORT_FORMAT, type ExportManifest, type ProjectExportData } from "./types";
 import { assertSupportedVersion, upgrade } from "./upgrade";
@@ -29,14 +30,14 @@ function parseJson(buf: Buffer, what: string): unknown {
   try {
     return JSON.parse(buf.toString("utf8"));
   } catch {
-    throw new AppError(`${what} no es un JSON válido.`);
+    throw new ArchiveError("El archivo contiene un JSON no válido.", what);
   }
 }
 
 /** Primer fallo del esquema como «ruta: mensaje», para poder localizar el problema. */
-function schemaMessage(what: string, issues: { path: PropertyKey[]; message: string }[]): string {
+function schemaError(what: string, issues: { path: PropertyKey[]; message: string }[]): ArchiveError {
   const first = issues[0];
-  return `${what} no es válido (${first ? `${first.path.map(String).join(".") || "raíz"}: ${first.message}` : "forma incorrecta"}).`;
+  return new ArchiveError("El archivo no es válido.", `${what} no es válido: ${first ? `${first.path.map(String).join(".") || "raíz"}: ${first.message}` : "forma incorrecta"}`);
 }
 
 /**
@@ -49,14 +50,14 @@ export async function openProjectArchive(file: string): Promise<ProjectArchive> 
   try {
     zip = await ZipFile.open(file);
   } catch (err) {
-    if (err instanceof ZipReadError) throw new AppError(`El archivo no es un ZIP válido (${err.message})`);
+    if (err instanceof ZipReadError) throw new ArchiveError("El archivo no es un ZIP válido.", err.message);
     throw new AppError("No se pudo leer el archivo.");
   }
   try {
     return await validateArchive(zip);
   } catch (err) {
     await zip.close();
-    if (err instanceof ZipReadError) throw new AppError(`El archivo está dañado (${err.message})`);
+    if (err instanceof ZipReadError) throw new ArchiveError("El archivo está dañado.", err.message);
     throw err;
   }
 }
@@ -66,7 +67,7 @@ async function validateArchive(zip: ZipFile): Promise<ProjectArchive> {
   for (const e of zip.entries) {
     if (e.name === "manifest.json" || e.name === "project.json") continue;
     const m = FILE_ENTRY.exec(e.name);
-    if (!m) throw new AppError(`El archivo contiene una entrada inesperada: ${e.name.slice(0, 60)}`);
+    if (!m) throw new ArchiveError("El archivo contiene una entrada inesperada.", e.name.slice(0, 60));
     files.set(m[1]!, e);
   }
   if (files.size > LIMITS.files) throw new AppError("El archivo tiene demasiados ficheros.");
@@ -82,7 +83,7 @@ async function validateArchive(zip: ZipFile): Promise<ProjectArchive> {
   // La versión se mira antes que la forma del manifiesto: una versión futura puede haberla cambiado.
   assertSupportedVersion({ formatVersion: Number((rawManifest as { formatVersion?: unknown }).formatVersion) });
   const parsedManifest = manifestSchema.safeParse(rawManifest);
-  if (!parsedManifest.success) throw new AppError(schemaMessage("manifest.json", parsedManifest.error.issues));
+  if (!parsedManifest.success) throw schemaError("manifest.json", parsedManifest.error.issues);
   let manifest = parsedManifest.data;
 
   // Todas las sumas, en los dos sentidos: nada sin declarar y nada declarado que falte.
@@ -95,15 +96,15 @@ async function validateArchive(zip: ZipFile): Promise<ProjectArchive> {
     const entry = zip.find(name)!;
     const expected = manifest.checksums[name]!;
     const m = FILE_ENTRY.exec(name);
-    if (m && m[1] !== expected) throw new AppError(`La suma de control de ${name.slice(0, 80)} no coincide con su nombre.`);
-    if ((await sha256Of(zip, entry)) !== expected) throw new AppError(`El fichero ${name === "project.json" ? name : "adjunto"} está dañado o ha sido modificado (suma SHA-256 distinta).`);
+    if (m && m[1] !== expected) throw new ArchiveError("Una suma de control no coincide con el nombre del fichero.", name.slice(0, 80));
+    if ((await sha256Of(zip, entry)) !== expected) throw new ArchiveError("Un fichero del archivo está dañado o ha sido modificado (suma SHA-256 distinta).", name === "project.json" ? name : name.slice(0, 20));
   }
 
   const rawData = parseJson(await zip.readAll(projectEntry, MAX_PROJECT_JSON_BYTES), "project.json");
   const upgraded = upgrade(manifest, rawData);
   manifest = upgraded.manifest;
   const parsed = projectDataSchema.safeParse(upgraded.data);
-  if (!parsed.success) throw new AppError(schemaMessage("project.json", parsed.error.issues));
+  if (!parsed.success) throw schemaError("project.json", parsed.error.issues);
   const data = parsed.data;
   validateRefs(data, new Set(files.keys()));
   return { zip, manifest, data, files };
@@ -113,7 +114,7 @@ const dup = (what: string, values: string[], lower = false) => {
   const seen = new Set<string>();
   for (const v of values) {
     const k = lower ? v.toLowerCase() : v;
-    if (seen.has(k)) throw new AppError(`project.json repite ${what}: ${v.slice(0, 60)}`);
+    if (seen.has(k)) throw new ArchiveError("El archivo tiene datos repetidos.", `project.json repite ${what}: ${v.slice(0, 60)}`);
     seen.add(k);
   }
   return seen;
@@ -132,14 +133,14 @@ export function validateRefs(data: ProjectExportData, fileShas: Set<string>): vo
   dup("el número de una release", data.releases.map((r) => String(r.number)));
   dup("un documento", data.documents.map((d) => d.ref));
   for (const role of data.columns.map((c) => c.role).filter(isUniqueColumnRole)) {
-    if (data.columns.filter((c) => c.role === role).length > 1) throw new AppError(`project.json tiene varias columnas con el rol único ${role}.`);
+    if (data.columns.filter((c) => c.role === role).length > 1) throw new ArchiveError("El archivo tiene varias columnas con un rol único.", `project.json: ${role}`);
   }
   if (data.labels.length > MAX_LABELS_PER_PROJECT) throw new AppError("El proyecto tiene más etiquetas de las permitidas.");
   if (data.deliverables.length > MAX_DELIVERABLES_PER_PROJECT) throw new AppError("El proyecto tiene más entregables de los permitidos.");
   if (data.documents.length > DOCUMENTS_MAX_PER_PROJECT) throw new AppError("El proyecto tiene más documentos de los permitidos.");
   if (data.tasks.filter((t) => !t.archivedAt).length > MAX_ACTIVE_TASKS_PER_PROJECT) throw new AppError("El proyecto tiene más tareas activas de las permitidas.");
   const need = (set: Set<string>, value: string | null, what: string) => {
-    if (value !== null && !set.has(value)) throw new AppError(`project.json hace referencia a ${what} que no existe.`);
+    if (value !== null && !set.has(value)) throw new ArchiveError("El archivo hace referencia a algo que no existe.", `project.json hace referencia a ${what} que no existe`);
   };
   for (const c of data.columns) need(columns, c.routineTargetRef, "una columna");
   for (const t of data.tasks) {
