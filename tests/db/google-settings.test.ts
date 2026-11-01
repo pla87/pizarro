@@ -120,7 +120,21 @@ describe("ajustes de Google", () => {
     assert.equal(view.envCredentials, true);
     assert.equal(JSON.stringify(view).includes("de-entorno"), false);
     assert.equal(JSON.stringify(view).includes("env-id"), false);
-    expectFail(await saveGoogleSettings({ ...form }), /configurado en el servidor/);
+    // Con credenciales del servidor se guardan el dominio (no fijado por el servidor) y el contacto; el ID y el secreto, nunca.
+    process.env.GOOGLE_WORKSPACE_DOMAIN = "";
+    const r = expectOk(await saveGoogleSettings({ clientId: "9999999999-otro.apps.googleusercontent.com", workspaceDomain: "nuevo.example", publicContactEmail: "privacidad@example.com", secret: "intento" }));
+    assert.equal(r.settings.workspaceDomain, "nuevo.example");
+    assert.equal(r.settings.publicContactEmail, "privacidad@example.com");
+    assert.equal(r.settings.clientId, form.clientId);
+    assert.equal(decryptSecret((await savedSecret())!), "de-la-bd");
+    // Sin publicContactEmail en el formulario no se pisa el guardado.
+    expectOk(await saveGoogleSettings({ clientId: "", workspaceDomain: "otro.example" }));
+    assert.equal(await getPublicContactEmail(), "privacidad@example.com");
+    // Con GOOGLE_WORKSPACE_DOMAIN en el servidor, el dominio del formulario no se guarda.
+    process.env.GOOGLE_WORKSPACE_DOMAIN = "env.example";
+    expectOk(await saveGoogleSettings({ clientId: "", workspaceDomain: "ignorado.example" }));
+    assert.equal((await getGoogleSettingsView()).settings.workspaceDomain, "otro.example");
+    expectFail(await saveGoogleSettings({ clientId: "", workspaceDomain: "", publicContactEmail: "no-es-email" }), /contacto/);
     // Sin variables vuelve a mandar lo guardado.
     process.env.GOOGLE_CLIENT_ID = "";
     process.env.GOOGLE_CLIENT_SECRET = "";

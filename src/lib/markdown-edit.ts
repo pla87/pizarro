@@ -69,7 +69,8 @@ function applyEdits(value: string, edits: Edit[], start: number, end: number): E
   return { value: out, start: map(start), end: map(end) };
 }
 
-const indentOf = (text: string) => /^ */.exec(text)![0].length;
+// Cuenta espacios y tabuladores (un carácter cada uno), igual que `listMarker` (que usa \s*).
+const indentOf = (text: string) => /^[ \t]*/.exec(text)![0].length;
 
 /** Marcador de lista de una línea (sangría y anchura del marcador), o null. */
 export function listMarker(text: string): { indent: number; width: number } | null {
@@ -136,17 +137,38 @@ export function indentLines(value: string, start: number, end: number, direction
     if (delta > 0) edits.push({ at: l.from, remove: 0, insert: " ".repeat(delta) });
     else if (indentOf(l.text) > 0) edits.push({ at: l.from, remove: Math.min(-delta, indentOf(l.text)), insert: "" });
   }
+  // Si ninguna línea cambia (p. ej. una sangría que no se puede quitar), no hay nada que hacer.
+  if (edits.every((e) => e.remove === 0 && e.insert === "")) return null;
   return applyEdits(value, edits, start, end);
 }
+
+/** Longitud de la racha de `*` que termina (por la izquierda) o empieza (por la derecha) en `pos`. */
+function starRun(value: string, pos: number, dir: -1 | 1): number {
+  let n = 0;
+  while (value[dir === -1 ? pos - 1 - n : pos + n] === "*") n++;
+  return n;
+}
+
+/**
+ * ¿Es `before`/`after` el envoltorio cursiva de un solo `*`? Una racha par de asteriscos (`**x**`) es negrita, no cursiva:
+ * quitarle un asterisco la rompería. Con una racha impar (`*x*`, `***x***`) sí hay una cursiva que quitar.
+ */
+const isItalicMark = (before: string, after: string) => before === "*" && after === "*";
 
 /** Envuelve la selección con `before`/`after` (la quita si ya está envuelta). Sin selección, deja el cursor entre ambos. */
 export function toggleWrap(value: string, start: number, end: number, before: string, after: string = before, placeholder = ""): EditResult {
   const selected = value.slice(start, end);
-  const around = value.slice(Math.max(0, start - before.length), start) === before && value.slice(end, end + after.length) === after;
+  const italic = isItalicMark(before, after);
+  const around =
+    value.slice(Math.max(0, start - before.length), start) === before &&
+    value.slice(end, end + after.length) === after &&
+    (!italic || (starRun(value, start, -1) % 2 === 1 && starRun(value, end, 1) % 2 === 1));
   if (around && start >= before.length) {
     return { value: value.slice(0, start - before.length) + selected + value.slice(end + after.length), start: start - before.length, end: end - before.length };
   }
-  if (selected.startsWith(before) && selected.endsWith(after) && selected.length >= before.length + after.length) {
+  const runStart = /^\*+/.exec(selected)?.[0].length ?? 0;
+  const runEnd = /\*+$/.exec(selected)?.[0].length ?? 0;
+  if (selected.startsWith(before) && selected.endsWith(after) && selected.length >= before.length + after.length && (!italic || (runStart % 2 === 1 && runEnd % 2 === 1 && runStart + runEnd < selected.length + 1))) {
     const inner = selected.slice(before.length, selected.length - after.length);
     return { value: value.slice(0, start) + inner + value.slice(end), start, end: start + inner.length };
   }

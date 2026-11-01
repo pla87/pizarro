@@ -44,6 +44,9 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
     mode !== saved.mode || effective.host !== saved.host || effective.port !== saved.port || effective.secure !== saved.secure || effective.user !== saved.user ||
     effective.fromName !== saved.fromName || effective.fromAddress !== saved.fromAddress || password !== "" || clearPassword;
 
+  // Con la contraseña guardada, cambiar de servidor, puerto o usuario obliga a escribirla de nuevo (si no, iría al nuevo destino).
+  const targetChanged = saved.hasPassword && saved.host !== "" && (effective.host !== saved.host.trim() || effective.port !== saved.port || effective.user.trim() !== saved.user);
+
   const apply = (s: MailSettings) => {
     setSaved(s);
     setMode(s.mode);
@@ -121,7 +124,7 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
   const passwordField = (
     <div className="block text-sm">
       <label htmlFor="mail-pass" className="font-medium">{gmail ? t("Contraseña de aplicación") : t("Contraseña")}</label>
-      {saved.hasPassword && !replacing && !clearPassword ? (
+      {saved.hasPassword && !replacing && !clearPassword && !targetChanged ? (
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <span className="rounded-md bg-slate-100 px-2 py-1 text-xs dark:bg-slate-800">{t("guardada")}</span>
           <button type="button" className="btn-secondary px-2 py-1 text-xs" onClick={() => setReplacing(true)}>{t("Reemplazar")}</button>
@@ -135,6 +138,7 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
       ) : (
         <input id="mail-pass" className="input mt-1 w-full" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" maxLength={500} placeholder={saved.hasPassword ? t("Contraseña nueva") : ""} />
       )}
+      {targetChanged && !clearPassword && <p className="mt-1 text-xs text-amber-600">{t("Escribe la contraseña de nuevo al cambiar de servidor, puerto o usuario.")}</p>}
     </div>
   );
 

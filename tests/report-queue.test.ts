@@ -40,3 +40,14 @@ describe("cola de renders PDF", () => {
     assert.equal(await queuedRender(async () => "otra"), "otra");
   });
 });
+
+describe("isPdfQueueError", () => {
+  test("reconoce el tiempo agotado y la cola llena, y no otros errores", async () => {
+    const { isPdfQueueError } = await import("../src/lib/report-build");
+    const { AppError } = await import("../src/lib/errors");
+    assert.equal(isPdfQueueError(new PdfTimeoutError()), true);
+    assert.equal(isPdfQueueError(new AppError("x", 503, "pdf_busy")), true);
+    assert.equal(isPdfQueueError(new AppError("x", 400)), false);
+    assert.equal(isPdfQueueError(new Error("boom")), false);
+  });
+});

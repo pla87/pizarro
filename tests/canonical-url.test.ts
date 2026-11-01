@@ -29,3 +29,13 @@ describe("redirección al dominio canónico", () => {
     assert.equal(canonicalRedirect({ ...base, method: "HEAD" }), "https://pizarro.example.com/board/1?a=1&b=2");
   });
 });
+
+test("con x-forwarded-host se compara ese (el primero), no Host", () => {
+  const internal = { ...base, host: "10.0.0.5:3000" };
+  assert.equal(canonicalRedirect({ ...internal, forwardedHost: "pizarro.example.com" }), null);
+  assert.equal(canonicalRedirect({ ...internal, forwardedHost: "pizarro.example.com, proxy.interno" }), null);
+  assert.equal(canonicalRedirect({ ...internal, forwardedHost: "pizarro-prod.up.railway.app" }), "https://pizarro.example.com/board/1?a=1&b=2");
+  assert.equal(canonicalRedirect({ ...base, host: "pizarro.example.com", forwardedHost: "otro.up.railway.app" }), "https://pizarro.example.com/board/1?a=1&b=2");
+  assert.equal(canonicalRedirect({ ...base, forwardedHost: "localhost:3000" }), null);
+  assert.equal(canonicalRedirect({ ...base, forwardedHost: "" }), "https://pizarro.example.com/board/1?a=1&b=2");
+});
