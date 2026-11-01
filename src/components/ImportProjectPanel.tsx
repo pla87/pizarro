@@ -19,7 +19,7 @@ interface Summary {
  * «Importar desde un archivo…» del diálogo de nuevo proyecto: sube un .pizarro.zip (el cuerpo de la petición es el
  * archivo, con barra de progreso) y enseña el resumen. `isPrivate` es lo que se ha elegido en el diálogo.
  */
-export function ImportProjectPanel({ isPrivate, onBack, onClose }: { isPrivate: boolean; onBack: () => void; onClose: () => void }) {
+export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose }: { isPrivate: boolean; privateToggle: React.ReactNode; onBack: () => void; onClose: () => void }) {
   const t = useT();
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
@@ -117,8 +117,9 @@ export function ImportProjectPanel({ isPrivate, onBack, onClose }: { isPrivate: 
           id="import-file" ref={input} type="file" accept=".zip,application/zip" className="input" disabled={busy}
           onChange={(e) => { setFile(e.target.files?.[0] ?? null); setError(null); }}
         />
-        <p className="mt-1 text-xs text-slate-500">{isPrivate ? t("Se creará como proyecto privado (solo tú lo verás).") : t("Se creará como proyecto de equipo.")}</p>
       </div>
+      {privateToggle}
+      <p className="-mt-2 text-xs text-slate-500">{isPrivate ? t("Se creará como proyecto privado (solo tú lo verás).") : t("Se creará como proyecto de equipo.")}</p>
       {progress !== null && (
         <div role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label={t("Subiendo…")} className="h-2 overflow-hidden rounded bg-slate-200 dark:bg-slate-700">
           <div className="h-full bg-brand-600 transition-[width]" style={{ width: `${progress}%` }} />

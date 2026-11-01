@@ -381,15 +381,17 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   return (
     <Modal open onClose={onClose} title={t("Nuevo proyecto")} size="sm">
       {importing ? (
-        <div className="space-y-4">
-          {isAdmin && (
+        <ImportProjectPanel
+          isPrivate={isPrivate}
+          onBack={() => setImporting(false)}
+          onClose={onClose}
+          privateToggle={
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
               {t("Proyecto privado (solo sus miembros; empiezas siendo el único)")}
             </label>
-          )}
-          <ImportProjectPanel isPrivate={isPrivate} onBack={() => setImporting(false)} onClose={onClose} />
-        </div>
+          }
+        />
       ) : (
       <form onSubmit={submit} className="space-y-4">
         <div>
