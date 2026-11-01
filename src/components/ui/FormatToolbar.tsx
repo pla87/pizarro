@@ -1,7 +1,7 @@
 "use client";
 
 import { MoreHorizontal } from "lucide-react";
-import { createElement, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { LucideIcon } from "lucide-react";
@@ -112,38 +112,55 @@ export function FormatToolbar({ items, onLeave, className }: { items: FormatItem
     if (focusMore) moreRef.current?.focus();
   };
 
+  // Sin menú no hay posición guardada (así no reaparece un instante en el sitio anterior al reabrirlo).
+  if (!menuOpen && pos) setPos(null);
+
+  // Colocación con el tamaño real del menú si ya está pintado (si no, una estimación): se llama al abrir, al repintar el
+  // menú por primera vez, y al desplazarse o cambiar el tamaño.
+  const place = useCallback(() => {
+    const r = moreRef.current?.getBoundingClientRect();
+    if (!r) return;
+    // Dentro del área visible (sin la barra de desplazamiento ni el teclado del móvil): ni se sale por la izquierda ni por abajo.
+    const cw = document.documentElement.clientWidth;
+    const ch = document.documentElement.clientHeight;
+    const vv = window.visualViewport;
+    const visTop = vv ? vv.offsetTop : 0;
+    const visBottom = vv ? vv.offsetTop + vv.height : ch;
+    const menuW = menuRef.current?.offsetWidth ?? 176;
+    const menuH = menuRef.current?.scrollHeight ?? hidden.length * 32 + 8;
+    const right = Math.max(8, Math.min(cw - r.right, cw - menuW - 8));
+    const below = visBottom - r.bottom - 4 - 8;
+    const above = r.top - visTop - 4 - 8;
+    if (menuH > below && above > below) setPos({ right, bottom: ch - r.top + 4, maxHeight: Math.max(80, above) });
+    else setPos({ right, top: r.bottom + 4, maxHeight: Math.max(80, below) });
+  }, [hidden.length]);
+
   // El menú se cierra al hacer clic fuera; se recoloca al desplazarse o cambiar el tamaño.
   useEffect(() => {
     if (!open) return;
-    const place = () => {
-      const r = moreRef.current?.getBoundingClientRect();
-      if (!r) return;
-      // Dentro del área visible (sin la barra de desplazamiento): ni se sale por la izquierda ni por abajo.
-      const cw = document.documentElement.clientWidth;
-      const ch = document.documentElement.clientHeight;
-      const menuW = menuRef.current?.offsetWidth ?? 176;
-      const menuH = menuRef.current?.scrollHeight ?? hidden.length * 32 + 8;
-      const right = Math.max(8, Math.min(cw - r.right, cw - menuW - 8));
-      const below = ch - r.bottom - 4 - 8;
-      const above = r.top - 4 - 8;
-      if (menuH > below && above > below) setPos({ right, bottom: ch - r.top + 4, maxHeight: Math.max(80, above) });
-      else setPos({ right, top: r.bottom + 4, maxHeight: Math.max(80, below) });
-    };
     place();
     const onDown = (e: MouseEvent) => {
       const target = e.target as Node;
       if (menuRef.current?.contains(target) || moreRef.current?.contains(target)) return;
       setOpen(false);
     };
+    const vv = window.visualViewport;
     document.addEventListener("mousedown", onDown);
     window.addEventListener("resize", place);
     window.addEventListener("scroll", place, true);
+    vv?.addEventListener("resize", place);
     return () => {
       document.removeEventListener("mousedown", onDown);
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", place, true);
+      vv?.removeEventListener("resize", place);
     };
-  }, [open, hidden.length]);
+  }, [open, place]);
+  // Primera pintura del menú: se vuelve a medir con su tamaño real (antes de que se vea) para voltearlo o ajustarlo.
+  useIsoLayoutEffect(() => {
+    if (menuOpen && pos !== null) place();
+    // solo cuando el menú aparece (pos pasa de null a un valor)
+  }, [menuOpen, pos === null]);
   // Al abrirse el menú, el foco pasa a su primera opción.
   useEffect(() => {
     if (open && pos) menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();

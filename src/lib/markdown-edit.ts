@@ -159,16 +159,18 @@ const isItalicMark = (before: string, after: string) => before === "*" && after 
 export function toggleWrap(value: string, start: number, end: number, before: string, after: string = before, placeholder = ""): EditResult {
   const selected = value.slice(start, end);
   const italic = isItalicMark(before, after);
+  // Con asteriscos sueltos dentro («*a* b *c*»), los de los extremos no son una pareja: no se quitan, se envuelve.
+  const innerStars = (str: string) => /(?<!\*)\*(?!\*)/.test(str);
   const around =
     value.slice(Math.max(0, start - before.length), start) === before &&
     value.slice(end, end + after.length) === after &&
-    (!italic || (starRun(value, start, -1) % 2 === 1 && starRun(value, end, 1) % 2 === 1));
+    (!italic || (starRun(value, start, -1) % 2 === 1 && starRun(value, end, 1) % 2 === 1 && !innerStars(selected)));
   if (around && start >= before.length) {
     return { value: value.slice(0, start - before.length) + selected + value.slice(end + after.length), start: start - before.length, end: end - before.length };
   }
   const runStart = /^\*+/.exec(selected)?.[0].length ?? 0;
   const runEnd = /\*+$/.exec(selected)?.[0].length ?? 0;
-  if (selected.startsWith(before) && selected.endsWith(after) && selected.length >= before.length + after.length && (!italic || (runStart % 2 === 1 && runEnd % 2 === 1 && runStart + runEnd < selected.length + 1))) {
+  if (selected.startsWith(before) && selected.endsWith(after) && selected.length >= before.length + after.length && (!italic || (runStart % 2 === 1 && runEnd % 2 === 1 && runStart + runEnd < selected.length + 1 && !innerStars(selected.slice(1, -1))))) {
     const inner = selected.slice(before.length, selected.length - after.length);
     return { value: value.slice(0, start) + inner + value.slice(end), start, end: start + inner.length };
   }

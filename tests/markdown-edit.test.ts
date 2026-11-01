@@ -114,3 +114,13 @@ test("indentLines: líneas sangradas con tabulador se desangran, y sin cambios d
   assert.equal(indentLines("- a\n- b", 6, 6, -1), null);
   assert.deepEqual(listMarker("\t- a"), { indent: 1, width: 2 });
 });
+
+test("toggleWrap: cursiva con asteriscos sueltos dentro no quita los de los extremos, envuelve", () => {
+  const v = "*a* b *c*";
+  assert.equal(toggleWrap(v, 0, v.length, "*").value, "**a* b *c**");
+  // seleccionando solo el interior de «*a* b *c*» tampoco se desenvuelve
+  assert.equal(toggleWrap(v, 1, v.length - 1, "*").value, "**a* b *c**");
+  // lo normal sigue funcionando
+  assert.equal(toggleWrap("*hola*", 0, 6, "*").value, "hola");
+  assert.equal(toggleWrap("***x***", 0, 7, "*").value, "**x**");
+});
