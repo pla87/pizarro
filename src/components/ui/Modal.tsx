@@ -40,7 +40,31 @@ interface ModalProps {
 /** Pila de modales abiertos (el último es el de más arriba): solo él responde a Escape y al clic en el fondo. */
 const modalStack: { close: () => void }[] = [];
 let scrollLocks = 0;
-let savedOverflow = "";
+let savedBody: { overflow: string; position: string; top: string; width: string; htmlOverflow: string; scrollY: number } | null = null;
+
+/** Bloquea el scroll del fondo. En móvil `overflow: hidden` no basta (Android deja desplazar la página con el teclado abierto): se fija el body y se recuerda el scroll. */
+function lockBodyScroll() {
+  const b = document.body.style;
+  const h = document.documentElement.style;
+  savedBody = { overflow: b.overflow, position: b.position, top: b.top, width: b.width, htmlOverflow: h.overflow, scrollY: window.scrollY };
+  b.overflow = "hidden";
+  h.overflow = "hidden";
+  b.position = "fixed";
+  b.top = `-${savedBody.scrollY}px`;
+  b.width = "100%";
+}
+
+function unlockBodyScroll() {
+  if (!savedBody) return;
+  const b = document.body.style;
+  b.overflow = savedBody.overflow;
+  b.position = savedBody.position;
+  b.top = savedBody.top;
+  b.width = savedBody.width;
+  document.documentElement.style.overflow = savedBody.htmlOverflow;
+  window.scrollTo(0, savedBody.scrollY);
+  savedBody = null;
+}
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
 
@@ -76,17 +100,31 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
 
   useBackToClose(open, () => onCloseRef.current());
 
-  // Con placement "top", la altura sigue al viewport visual: se encoge al abrir el teclado.
-  const [viewportH, setViewportH] = useState<number | null>(null);
+  // En móvil el contenedor sigue al viewport visual (alto y desplazamiento): con el teclado abierto el diálogo ocupa justo
+  // la zona visible y no se puede "subir" dejando ver el tablero debajo.
+  const [vv, setVv] = useState<{ h: number; top: number } | null>(null);
   useEffect(() => {
-    if (!open || placement !== "top") return;
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const sync = () => setViewportH(Math.round(vv.height));
+    if (!open) return;
+    const v = window.visualViewport;
+    if (!v) return;
+    const mq = window.matchMedia("(max-width: 639px)");
+    const sync = () => {
+      // Solo en móvil, y solo si el viewport visual difiere del layout (teclado abierto); si no, el CSS normal basta.
+      const differs = mq.matches && Math.abs(v.height - window.innerHeight) > 1;
+      setVv((prev) => {
+        if (!differs) return prev === null ? prev : null;
+        const next = { h: Math.round(v.height), top: Math.round(v.offsetTop) };
+        return prev && prev.h === next.h && prev.top === next.top ? prev : next;
+      });
+    };
     sync();
-    vv.addEventListener("resize", sync);
-    return () => vv.removeEventListener("resize", sync);
-  }, [open, placement]);
+    v.addEventListener("resize", sync);
+    v.addEventListener("scroll", sync);
+    return () => {
+      v.removeEventListener("resize", sync);
+      v.removeEventListener("scroll", sync);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -121,8 +159,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
       }
     };
     document.addEventListener("keydown", onKey);
-    if (scrollLocks++ === 0) savedOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    if (scrollLocks++ === 0) lockBodyScroll();
     // Enfoca el primer campo, o el panel.
     requestAnimationFrame(() => {
       const first = panelRef.current?.querySelector<HTMLElement>("[data-autofocus]");
@@ -131,7 +168,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
     return () => {
       document.removeEventListener("keydown", onKey);
       modalStack.splice(modalStack.indexOf(entry), 1);
-      if (--scrollLocks === 0) document.body.style.overflow = savedOverflow;
+      if (--scrollLocks === 0) unlockBodyScroll();
       previous?.focus?.();
     };
   }, [open]);
@@ -151,14 +188,14 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
   return createPortal(
     <div
       className={cn(
-        "fixed inset-0 z-50 flex justify-center sm:items-center sm:p-4",
+        "fixed inset-0 z-50 flex justify-center overscroll-contain sm:items-center sm:p-4",
         top ? "items-start pt-[env(safe-area-inset-top)] sm:pt-4" : "items-end",
         // Pareja de modales: los dos paneles forman un bloque centrado (anchos y márgenes en CSS, ver --wl/--wr/--x0).
         side !== "center" && "lg:justify-start lg:p-0",
         // El segundo modal no tapa al primero: solo su panel recibe clics.
         side === "right" && "lg:pointer-events-none",
       )}
-      style={pairStyle}
+      style={vv ? { ...pairStyle, top: vv.top, height: vv.h, bottom: "auto" } : pairStyle}
     >
       {/* Un solo fondo para la pareja (lo pone el modal de la izquierda o el único); cierra el de más arriba. */}
       {side !== "right" && (
@@ -173,10 +210,10 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
-        style={{ "--mw": SIZE_REM[size], ...(top && viewportH ? { "--vvh": `${viewportH}px` } : {}) } as React.CSSProperties}
+        style={{ "--mw": SIZE_REM[size], ...(vv ? { "--vvh": `${vv.h}px` } : {}) } as React.CSSProperties}
         className={cn(
           "relative flex w-full flex-col border border-slate-200 bg-white shadow-2xl outline-none sm:rounded-2xl dark:border-slate-600/70 dark:bg-slate-900",
-          top ? "max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top))] rounded-b-2xl sm:max-h-[calc(100dvh-2rem)]" : "max-h-[92dvh] rounded-t-2xl",
+          top ? "max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top))] rounded-b-2xl sm:max-h-[calc(100dvh-2rem)]" : "max-h-[min(92dvh,var(--vvh,100dvh))] rounded-t-2xl",
           SIZES[size],
           side === "center" && onAddSecond && "lg:max-w-[min(var(--mw),calc(100vw-9rem))]", // hueco para el «+»
           // En pareja, los dos juntos forman un bloque centrado.
@@ -194,7 +231,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
             </button>
           </div>
         )}
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
         {footer && (
           <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-slate-800">
             {footer}
