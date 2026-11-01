@@ -144,6 +144,12 @@ async function sendPeriodicMail(now: Date = new Date()): Promise<number> {
   return (await sendDueDigests(now)) + (await sendDueReports(now));
 }
 
+/** Borra los archivos de exportación de proyectos con más de 24 h (y marca esos trabajos como caducados). */
+async function purgeTransfers(now: Date = new Date()): Promise<number> {
+  const { purgeTransferJobs } = await import("@/lib/transfer-jobs");
+  return purgeTransferJobs(now);
+}
+
 const RESUME_AFTER_MS = 10 * 1000;
 
 /** Retoma las copias de adjuntos de releases interrumpidas por un reinicio. */
@@ -164,6 +170,7 @@ export const MAINTENANCE_JOBS = [
   { name: "undo", run: () => purgeOldUndo() },
   { name: "documentsTrashPurge", run: () => purgeDocumentsTrash(), everyMs: DOCS_TRASH_EVERY_MS },
   { name: "notifications", run: () => purgeOldNotifications() },
+  { name: "transferJobs", run: () => purgeTransfers() },
   { name: "authData", run: () => purgeAuthData() },
   { name: "taskHistory", run: () => purgeOldTaskHistory() },
   { name: "orphanFiles", run: () => purgeOrphanFiles(), everyMs: ORPHAN_EVERY_MS },
@@ -200,6 +207,8 @@ export function startMaintenance(): void {
   g.__pzMaintenance = true;
   // Avisos de cambio de fecha agrupados: se revisan cada 30 s (ver due-notices.ts).
   void import("@/lib/due-notices").then((m) => m.startDueNoticeScheduler()).catch((err) => console.error("[maintenance] avisos de fecha", err));
+  // Exportaciones e importaciones de proyectos en segundo plano: cola propia y recuperación de las interrumpidas.
+  void import("@/lib/transfer-jobs").then((m) => m.startTransferWorker()).catch((err) => console.error("[maintenance] transferencias de proyectos", err));
   // Copias de adjuntos de releases que quedaron a medias por un reinicio: se retoman al poco de arrancar (una vez).
   setTimeout(() => void runLocked("releaseResume", [{ name: "releaseResume", run: resumeReleaseCopies }]), RESUME_AFTER_MS).unref?.();
   setTimeout(() => {

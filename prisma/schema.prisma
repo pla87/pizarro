@@ -86,6 +86,7 @@ model User {
   updatedAt      DateTime  @updatedAt
 
   sessions          Session[]
+  transferJobs      ProjectTransferJob[]
   authTokens        AuthToken[]
   knownDevices      KnownDevice[]
   recoveryCodes     RecoveryCode[]
@@ -940,4 +941,50 @@ model JobRun {
   lastOk         Boolean?
   /// Mensaje del último error (recortado); null si la última ejecución fue bien.
   lastError      String?
+}
+
+enum TransferKind {
+  EXPORT
+  IMPORT
+}
+
+enum TransferStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+  EXPIRED
+}
+
+/// Exportación o importación de un proyecto que se hace en segundo plano (lib/transfer-jobs.ts): una cola propia,
+/// con progreso consultable y, en las exportaciones, el fichero listo para descargar durante 24 h.
+model ProjectTransferJob {
+  id         String         @id @default(cuid())
+  kind       TransferKind
+  status     TransferStatus @default(QUEUED)
+  userId     String
+  /// Proyecto exportado; en una importación, el proyecto creado (null hasta que existe).
+  projectId  String?
+  /// Opciones: exportación {attachments, scope}; importación {isPrivate, tempFile, bytes}.
+  options    Json           @default("{}")
+  /// {phase, done, total}.
+  progress   Json           @default("{}")
+  /// Exportación {file, size, name, ...}; importación: el resumen.
+  result     Json?
+  error      String?
+  /// Veces que se ha retomado tras un reinicio.
+  attempts   Int            @default(0)
+  /// Cuándo se avisó a la persona de que terminó (aviso emergente), para no repetirlo.
+  notifiedAt DateTime?
+  createdAt  DateTime       @default(now())
+  /// Última escritura: sirve de latido para detectar trabajos que murieron con el proceso.
+  updatedAt  DateTime       @default(now()) @updatedAt
+  startedAt  DateTime?
+  finishedAt DateTime?
+  expiresAt  DateTime?
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@index([projectId])
 }
