@@ -37,7 +37,17 @@ export const LIMITS = {
 
 const ref = z.string().min(1).max(40);
 const iso = z.string().datetime({ offset: true });
-const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+/** Día real del calendario (no «2026-02-31»). */
+const day = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((s) => {
+    const d = new Date(`${s}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+  }, "día no válido");
+/** Entero que cabe en una columna Int de PostgreSQL. */
+const INT_MAX = 2147483647;
+const int = () => z.number().int().max(INT_MAX);
 const text = (max: number) => z.string().max(max);
 const decimal = z.string().regex(/^\d{1,10}(\.\d{1,2})?$/);
 const sha = z.string().regex(/^[0-9a-f]{64}$/);
@@ -66,6 +76,8 @@ const kindSchema = z.object({
   titleTemplate: text(MAX_TEMPLATE),
   descriptionTemplate: text(MAX_TEMPLATE),
   subtaskTemplate: z.array(text(300)).max(50),
+  /** Para conservar el orden entre tipos con la misma posición (opcional: archivos de 1.36 no lo traen). */
+  createdAt: iso.optional(),
   /** project = tipo propio del proyecto; general = tipo general usado por sus tareas (al importar se empareja por nombre). */
   scope: z.enum(["project", "general"]),
 });
@@ -78,9 +90,9 @@ const attachmentSchema = z.object({
   originalName: text(300),
   mimeType: text(200),
   isImage: z.boolean(),
-  width: z.number().int().nullable(),
-  height: z.number().int().nullable(),
-  size: z.number().int().min(0),
+  width: int().nullable(),
+  height: int().nullable(),
+  size: int().min(0),
   createdBy: person,
   createdAt: iso,
   /** SHA-256 del fichero en files/<sha>. */
@@ -129,12 +141,17 @@ const taskSchema = z.object({
   recurrenceDay: z.number().int().min(1).max(31).nullable(),
   /** Tarea de la que salió esta aparición (solo si también está en el archivo). */
   recurrenceFromRef: ref.nullable(),
+  /** Última columna ROUTINES en la que estuvo (de ahí sale su siguiente aparición). */
+  routineColumnRef: ref.nullable().optional(),
+  /** Cuándo se avisó de la espera en una columna WAITING (evita avisos repetidos tras importar). */
+  waitingNotifiedAt: iso.nullable().optional(),
+  contentUpdatedByRef: person.optional(),
   contentUpdatedAt: iso.nullable(),
   createdAt: iso,
   updatedAt: iso,
   labelRefs: z.array(ref).max(200),
   subtasks: z.array(z.object({ title: text(500), done: z.boolean(), position: z.number().finite() })).max(LIMITS.perTask),
-  followers: z.array(z.object({ user: ref, muted: z.boolean() })).max(LIMITS.users),
+  followers: z.array(z.object({ user: ref, muted: z.boolean(), createdAt: iso.optional() })).max(LIMITS.users),
   comments: z.array(commentSchema).max(LIMITS.perTask * 5),
   attachments: z.array(attachmentSchema).max(LIMITS.perTask),
   links: z.array(z.object({ kind: z.enum(["GOOGLE_DOC", "GOOGLE_SHEET"]), title: text(300), url: text(2000), createdBy: person, createdAt: iso })).max(LIMITS.perTask),
@@ -142,20 +159,20 @@ const taskSchema = z.object({
 
 const releaseSchema = z.object({
   ref,
-  number: z.number().int().min(1),
+  number: int().min(1),
   title: text(300),
   content: text(MAX_RELEASE_CONTENT * 2),
   createdBy: person,
   deployedAt: iso,
   tasks: z.array(z.object({ taskRef: ref.nullable(), title: text(500), kindName: text(80) })).max(LIMITS.tasks),
-  attachments: z.array(z.object({ fileName: text(300), size: z.number().int().min(0), isImage: z.boolean(), position: z.number().int().min(0), createdAt: iso, file: sha })).max(LIMITS.perTask * 10),
+  attachments: z.array(z.object({ fileName: text(300), size: int().min(0), isImage: z.boolean(), position: int().min(0), createdAt: iso, file: sha })).max(LIMITS.perTask * 10),
 });
 
 const documentSchema = z.object({
   ref,
   name: text(300),
   mimeType: text(200),
-  size: z.number().int().min(0),
+  size: int().min(0),
   kind: z.enum(["TEXT", "MARKDOWN", "PDF", "IMAGE", "OTHER"]),
   createdBy: person,
   createdAt: iso,
@@ -187,7 +204,7 @@ export const projectDataSchema = z.object({
   }),
   /** Informe semanal: sin destinatario (al importar lo recibe quien importa). */
   reportSchedule: z.object({ enabled: z.boolean(), weekday: z.number().int().min(1).max(7), hour: z.number().int().min(0).max(23) }).nullable(),
-  releaseTemplates: z.array(z.object({ kind: z.enum(["HEADER", "FOOTER"]), name: text(200), content: text(MAX_TEMPLATE), position: z.number().finite() })).max(100),
+  releaseTemplates: z.array(z.object({ kind: z.enum(["HEADER", "FOOTER"]), name: text(200), content: text(MAX_TEMPLATE), position: z.number().finite(), createdAt: iso.optional() })).max(100),
   columns: z.array(columnSchema).min(1).max(200),
   kinds: z.array(kindSchema).max(500),
   /** Nombres de los tipos generales que el proyecto no usa. */
@@ -211,11 +228,13 @@ export type ExportCounts = Record<(typeof COUNT_KEYS)[number], number>;
 
 export const manifestSchema = z.object({
   format: z.literal(EXPORT_FORMAT),
-  formatVersion: z.number().int().min(1),
+  formatVersion: int().min(1),
   appVersion: text(40),
   exportedAt: iso,
   options: z.object({ attachments: z.boolean(), scope: z.enum(EXPORT_SCOPES) }),
-  counts: z.record(z.string(), z.number().int().min(0)),
+  counts: z.record(z.string(), int().min(0)),
+  /** Zona horaria de la instancia que exporta (el día y la hora del informe semanal van en ella). */
+  timeZone: text(80).optional(),
   /** SHA-256 (hex) de cada fichero del ZIP salvo manifest.json: «project.json» y «files/<sha>». */
   checksums: z.record(z.string(), sha),
 });

@@ -87,6 +87,11 @@ export const proyectos: Record<string, string> = {
   "Importada desde un archivo.": "Imported from a file.",
   // Mensajes del servidor al exportar e importar
   "No se pudo exportar el proyecto.": "The project could not be exported.",
+  "El proyecto cambió mientras se exportaba y el archivo habría quedado incompleto. Vuelve a intentarlo.": "The project changed while it was being exported and the file would have been incomplete. Try again.",
+  "Proyecto exportado.": "Project exported.",
+  "{n} títulos eran más largos de lo permitido y se han recortado.": "{n} titles were longer than allowed and have been shortened.",
+  "{n} enlaces de Google no tenían una dirección válida de Google y no se han importado.": "{n} Google links did not have a valid Google address and were not imported.",
+  "El informe semanal se programó en la zona horaria {from} y aquí se usa {to}: revisa el día y la hora.": "The weekly report was scheduled in the {from} time zone and this server uses {to}: check the day and hour.",
   "No se pudo importar el proyecto.": "The project could not be imported.",
   "El archivo supera el tamaño máximo de importación ({mb} MB).": "The file exceeds the maximum import size ({mb} MB).",
   "El proyecto es demasiado grande para exportarlo. Prueba con «Solo el tablero».": "The project is too large to export. Try “Board only”.",

@@ -4,12 +4,13 @@ import type { Prisma } from "@/generated/prisma/client";
 import { getT } from "@/i18n/server";
 import { visibleProjectsWhere } from "../access";
 import { FILE_MAX_MAX_MB, FILE_MAX_MIN_MB, effectiveFileMaxMb } from "../upload-size";
-import { RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "../constants";
+import { MAX_TITLE, RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "../constants";
 import { isoToDate } from "../dates";
 import { db } from "../db";
 import { confirmDocumentKind, documentMime, sanitizeDocumentName } from "../document-kind";
 import { AppError, forbidden } from "../errors";
 import { googleWorkspaceDomain } from "../google-config";
+import { appTimeZone } from "../format";
 import { isDomainMode } from "../google-share";
 import { mentionToken } from "../mentions";
 import { POSITION_STEP } from "../positions";
@@ -52,6 +53,24 @@ const MAX_FILE_BYTES = (FILE_MAX_MAX_MB + 4) * 1024 * 1024;
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 const date = (iso: string) => new Date(iso);
 const dateOrNull = (iso: string | null) => (iso ? new Date(iso) : null);
+/** Enlaces de Google admitidos (los mismos que al crearlos desde la tarea). */
+const GOOGLE_URL_RE = /^https:\/\/(docs|drive)\.google\.com\//;
+const MAX_FILE_NAME = 200;
+
+/** Nombre de fichero sin separadores de ruta ni NUL; con nombre de reserva si queda vacío, «.» o «..». */
+export function safeFileName(raw: string, fallback = "archivo"): string {
+  const name = raw.replace(/[\\/\0]/g, "_").trim().slice(0, MAX_FILE_NAME);
+  return name && name !== "." && name !== ".." ? name : fallback;
+}
+
+/** Distancia mínima entre dos posiciones que el archivo trae iguales (conserva su orden relativo). */
+const nextUp = (n: number) => n + Math.max(Math.abs(n) * 2 ** -40, 2 ** -30);
+
+/** Recorta un título al máximo de la aplicación sin dejar a medias una mención @[Nombre](user:id). */
+export function capTitle(title: string, max = MAX_TITLE): string {
+  if (title.length <= max) return title;
+  return title.slice(0, max).replace(/@\[[^\]\n]*(\]\([^)\s]*)?$/, "").trimEnd();
+}
 
 async function insertChunks<T>(rows: T[], insert: (chunk: T[]) => Promise<unknown>): Promise<void> {
   for (let i = 0; i < rows.length; i += CHUNK) await insert(rows.slice(i, i + CHUNK));
@@ -85,9 +104,10 @@ export async function importProjectFile(file: string, user: ImportUser, opts: { 
   }
 }
 
-async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser, opts: { isPrivate: boolean }): Promise<ImportSummary> {
+async function runImport({ zip, data, files, manifest }: ProjectArchive, user: ImportUser, opts: { isPrivate: boolean }): Promise<ImportSummary> {
   const t = await getT();
   const warnings: string[] = [];
+  const zipTimeZone = manifest.timeZone;
 
   // --- Personas: por email contra usuarios activos. En un proyecto privado solo vale quien importa.
   const wantedEmails = [...new Set(data.users.map((u) => u.email.trim().toLowerCase()))];
@@ -108,25 +128,30 @@ async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser,
     : [...new Set([...userMap.values()].filter((m): m is { id: string; role: "ADMIN" | "MEMBER" } => !!m && m.role !== "ADMIN" && m.id !== user.id).map((m) => m.id))];
   const text = (s: string) => mapMentions(s, (name, ref) => { const id = uid(ref); return id ? mentionToken(name, id) : `@${name}`; });
 
-  // --- Cuota: comprobación previa con lo declarado (la definitiva se repite dentro de la transacción).
-  const declared = [
-    ...data.tasks.flatMap((x) => x.attachments.map((a) => a.size)),
-    ...data.releases.flatMap((r) => r.attachments.map((a) => a.size)),
-    ...data.documents.map((d) => d.size),
-  ].reduce((n, s) => n + s, 0);
-  const preQuota = checkQuota(await storageUsage("none"), declared);
-  if (preQuota) throw quotaError(t, preQuota);
-
   const projectId = newId();
   const fileMaxMb = clamp(data.project.fileMaxMb, FILE_MAX_MIN_MB, FILE_MAX_MAX_MB);
   const taskMaxMb = clamp(data.project.taskAttachMaxMb, Math.max(fileMaxMb, RELEASE_ZIP_MIN_MB), RELEASE_ZIP_MAX_MB);
   const zipMaxMb = clamp(data.project.releaseZipMaxMb, Math.max(fileMaxMb, RELEASE_ZIP_MIN_MB), RELEASE_ZIP_MAX_MB);
   const fileMaxBytes = effectiveFileMaxMb(fileMaxMb) * 1024 * 1024;
 
+  // --- Cuota: el tamaño que cuenta es el REAL de cada entrada del ZIP (no el que declara el JSON), y cada referencia suma
+  // su copia aunque varias apunten al mismo fichero. Comprobación previa aquí; la definitiva se repite dentro de la transacción.
+  const realSize = (sha: string) => files.get(sha)!.size;
+  const usageBase = await storageUsage("none");
+  const refShas = [...data.tasks.flatMap((x) => x.attachments.map((a) => a.file)), ...data.releases.flatMap((r) => r.attachments.map((a) => a.file)), ...data.documents.map((d) => d.file)];
+  const preQuota = checkQuota(usageBase, refShas.map(realSize).filter((n) => n <= fileMaxBytes).reduce((n, s) => n + s, 0));
+  if (preQuota) throw quotaError(t, preQuota);
+  /** Bytes ya escritos en disco: se aborta en cuanto se pasa la cuota, antes de seguir llenando el disco. */
+  let writtenBytes = 0;
+  const assertRoom = (more: number) => {
+    const q = checkQuota(usageBase, writtenBytes + more);
+    if (q) throw quotaError(t, q);
+  };
+
   // --- Ficheros: se escriben antes (con los ids ya decididos) y, si algo falla, se borran.
   const written = { attachments: [] as string[], releaseAttachments: [] as string[], documents: [] as string[] };
   const loadFile = async (sha: string): Promise<Buffer> => zip.readAll(files.get(sha)!, MAX_FILE_BYTES);
-  const tooBig = (what: string, size: number) => size > fileMaxBytes && (warnings.push(t("«{name}» supera el tamaño máximo de archivo del proyecto y no se ha importado.", { name: what })), true);
+  const tooBig = (what: string, sha: string) => realSize(sha) > fileMaxBytes && (warnings.push(t("«{name}» supera el tamaño máximo de archivo del proyecto y no se ha importado.", { name: what })), true);
 
   type AttRow = Prisma.TaskAttachmentCreateManyInput;
   const attachmentRows: AttRow[] = [];
@@ -134,10 +159,11 @@ async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser,
   try {
     for (const task of data.tasks) {
       for (const a of task.attachments) {
-        if (tooBig(a.originalName, a.size)) continue;
+        if (tooBig(a.originalName, a.file)) continue;
+        assertRoom(realSize(a.file));
         const id = newId();
         const buf = await loadFile(a.file);
-        const name = a.originalName.replace(/[\\/\0]/g, "_").slice(0, 200) || "archivo";
+        const name = safeFileName(a.originalName);
         if (a.isImage) {
           let image;
           try {
@@ -149,6 +175,8 @@ async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser,
           }
           await saveAttachmentFiles(id, image);
           written.attachments.push(id);
+          writtenBytes += image.full.length;
+          assertRoom(0);
           attachmentRows.push({
             id, taskId: taskIds.get(task.ref)!, originalName: name, mimeType: "image/webp", isImage: true, width: image.width, height: image.height,
             size: image.full.length, createdById: uid(a.createdBy), createdAt: date(a.createdAt),
@@ -156,6 +184,8 @@ async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser,
         } else {
           await saveRawAttachmentFile(id, buf);
           written.attachments.push(id);
+          writtenBytes += buf.length;
+          assertRoom(0);
           attachmentRows.push({
             id, taskId: taskIds.get(task.ref)!, originalName: name, mimeType: sanitizeMime(a.mimeType), isImage: false, width: null, height: null,
             size: buf.length, createdById: uid(a.createdBy), createdAt: date(a.createdAt),
@@ -167,8 +197,10 @@ async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser,
     const releaseIds = new Map(data.releases.map((r) => [r.ref, newId()]));
     const releaseAttachmentRows: Prisma.ReleaseAttachmentCreateManyInput[] = [];
     for (const r of data.releases) {
+      const usedNames = new Set<string>();
       for (const a of r.attachments) {
-        if (tooBig(a.fileName, a.size)) continue;
+        if (tooBig(a.fileName, a.file)) continue;
+        assertRoom(realSize(a.file));
         const id = newId();
         let buf = await loadFile(a.file);
         if (a.isImage) {
@@ -182,13 +214,23 @@ async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser,
         }
         await saveReleaseAttachmentFile(id, buf, a.isImage ? "webp" : "bin");
         written.releaseAttachments.push(id);
-        releaseAttachmentRows.push({ id, releaseId: releaseIds.get(r.ref)!, fileName: a.fileName, size: buf.length, isImage: a.isImage, position: a.position, createdAt: date(a.createdAt) });
+        writtenBytes += buf.length;
+        assertRoom(0);
+        // Nombre sin separadores de ruta y único dentro de la release (restricción de la base de datos).
+        let fileName = safeFileName(a.fileName, "adjunto");
+        for (let n = 2; usedNames.has(fileName); n++) {
+          const tail = ` (${n})`;
+          fileName = `${safeFileName(a.fileName, "adjunto").slice(0, MAX_FILE_NAME - tail.length)}${tail}`;
+        }
+        usedNames.add(fileName);
+        releaseAttachmentRows.push({ id, releaseId: releaseIds.get(r.ref)!, fileName, size: buf.length, isImage: a.isImage, position: a.position, createdAt: date(a.createdAt) });
       }
     }
 
     const documentRows: Prisma.ProjectDocumentCreateManyInput[] = [];
     for (const d of data.documents) {
-      if (tooBig(d.name, d.size)) continue;
+      if (tooBig(d.name, d.file)) continue;
+      assertRoom(realSize(d.file));
       const id = newId();
       const buf = await loadFile(d.file);
       const name = sanitizeDocumentName(d.name);
@@ -204,6 +246,8 @@ async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser,
       }
       await saveDocumentFile(id, stored);
       written.documents.push(id);
+      writtenBytes += stored.length;
+      assertRoom(0);
       documentRows.push({
         id, projectId, name, mimeType: documentMime(kind, sanitizeMime(d.mimeType)), size: stored.length, kind, createdById: uid(d.createdBy),
         createdAt: date(d.createdAt), updatedAt: date(d.updatedAt),
@@ -221,6 +265,8 @@ async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser,
     const kindIds = new Map<string, string>();
     const ownKindByName = new Map<string, string>();
     const kindRows: Prisma.TaskKindCreateManyInput[] = [];
+    const importedAt = Date.now() - 1_000_000;
+    const kindIndex = new Map(data.kinds.map((k, i) => [k.ref, i]));
     for (const k of [...data.kinds].sort((a, b) => (a.scope === b.scope ? 0 : a.scope === "project" ? -1 : 1))) {
       const lower = k.name.toLowerCase();
       const existing = k.scope === "general" ? generalByName.get(lower) : undefined;
@@ -230,7 +276,10 @@ async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser,
       const id = newId();
       kindIds.set(k.ref, id);
       ownKindByName.set(lower, id);
-      kindRows.push({ id, projectId, name: k.name, color: k.color, position: k.position, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate, subtaskTemplate: k.subtaskTemplate });
+      kindRows.push({ id, projectId, name: k.name, color: k.color, position: k.position, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate, subtaskTemplate: k.subtaskTemplate,
+        // Sin fecha en el archivo, orden creciente según el del archivo (desempata tipos con la misma posición).
+        createdAt: k.createdAt ? date(k.createdAt) : new Date(importedAt + kindIndex.get(k.ref)!),
+      });
     }
     const labelIds = new Map(data.labels.map((l) => [l.ref, newId()]));
     const deliverableIds = new Map(data.deliverables.map((d) => [d.ref, newId()]));
@@ -240,16 +289,35 @@ async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser,
     if (data.columns.some((c) => c.role === "BUDGET") && !fields.includes("cost")) fields.unshift("cost");
     const shareMode = data.project.googleShareMode && isDomainMode(data.project.googleShareMode) && (opts.isPrivate || !googleWorkspaceDomain()) ? null : data.project.googleShareMode;
 
+    // Posiciones iguales dentro de una columna: se separan lo mínimo conservando el orden del archivo.
+    const taskPos = new Map<string, number>();
+    const byColumn = new Map<string, typeof data.tasks>();
+    for (const x of data.tasks) byColumn.set(x.columnRef, [...(byColumn.get(x.columnRef) ?? []), x]);
+    for (const list of byColumn.values()) {
+      let last = -Infinity;
+      for (const x of [...list].sort((a, b) => a.position - b.position)) {
+        const pos = x.position > last ? x.position : nextUp(last);
+        taskPos.set(x.ref, pos);
+        last = pos;
+      }
+    }
+    let cappedTitles = 0;
+    const title = (raw: string) => {
+      const mapped = text(raw);
+      if (mapped.length <= MAX_TITLE) return mapped;
+      cappedTitles++;
+      return capTitle(mapped);
+    };
     const taskRows: Prisma.TaskCreateManyInput[] = data.tasks.map((x) => ({
       id: taskIds.get(x.ref)!,
       projectId,
       columnId: columnIds.get(x.columnRef)!,
-      title: text(x.title),
+      title: title(x.title),
       description: text(x.description),
       kindId: kindIds.get(x.kindRef)!,
       color: x.color,
       linkUrl: x.linkUrl && /^https?:\/\/\S+$/i.test(x.linkUrl) ? x.linkUrl : null,
-      position: x.position,
+      position: taskPos.get(x.ref)!,
       assigneeId: uid(x.assignee),
       createdById: uid(x.createdBy),
       dueDate: x.dueDate ? isoToDate(x.dueDate) : null,
@@ -269,9 +337,27 @@ async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser,
       recurrence: x.recurrence,
       recurrenceDay: x.recurrenceDay,
       contentUpdatedAt: dateOrNull(x.contentUpdatedAt),
+      contentUpdatedById: uid(x.contentUpdatedByRef ?? null),
+      routineColumnId: x.routineColumnRef ? (columnIds.get(x.routineColumnRef) ?? null) : null,
+      waitingNotifiedAt: dateOrNull(x.waitingNotifiedAt ?? null),
       createdAt: date(x.createdAt),
       updatedAt: date(x.updatedAt),
     }));
+
+    if (cappedTitles) warnings.push(t("{n} títulos eran más largos de lo permitido y se han recortado.", { n: cappedTitles }));
+    const linkRows: Prisma.TaskLinkCreateManyInput[] = [];
+    let badLinks = 0;
+    for (const x of data.tasks) {
+      for (const l of x.links) {
+        if (!/^https?:\/\/\S+$/i.test(l.url) || !GOOGLE_URL_RE.test(l.url)) { badLinks++; continue; }
+        linkRows.push({ taskId: taskIds.get(x.ref)!, kind: l.kind, title: l.title, url: l.url, createdById: uid(l.createdBy), createdAt: date(l.createdAt) });
+      }
+    }
+    if (badLinks) warnings.push(t("{n} enlaces de Google no tenían una dirección válida de Google y no se han importado.", { n: badLinks }));
+    const tzFrom = zipTimeZone;
+    if (data.reportSchedule && tzFrom && tzFrom !== appTimeZone()) {
+      warnings.push(t("El informe semanal se programó en la zona horaria {from} y aquí se usa {to}: revisa el día y la hora.", { from: tzFrom, to: appTimeZone() }));
+    }
 
     const commentRows: (Prisma.TaskCommentCreateManyInput & { parentRef: string | null; ref: string })[] = [];
     const noteRows: Prisma.TaskCommentCreateManyInput[] = [];
@@ -303,8 +389,6 @@ async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser,
 
     await db.$transaction(
       async (tx) => {
-        // Mismo candado que las subidas: la cuota se comprueba al final con todo lo escrito.
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:attachment-quota'))::text`;
         await tx.project.create({
           data: {
             id: projectId,
@@ -325,7 +409,7 @@ async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser,
         else await tx.adminProjectPick.create({ data: { projectId, userId: user.id } });
         if (memberIds.length) await tx.projectMember.createMany({ data: memberIds.map((userId) => ({ projectId, userId })) });
         if (data.reportSchedule) await tx.reportSchedule.create({ data: { projectId, recipient: user.email, createdById: user.id, ...data.reportSchedule } });
-        if (data.releaseTemplates.length) await tx.projectReleaseTemplate.createMany({ data: data.releaseTemplates.map((r) => ({ ...r, projectId })) });
+        if (data.releaseTemplates.length) await tx.projectReleaseTemplate.createMany({ data: data.releaseTemplates.map((r, i) => ({ kind: r.kind, name: r.name, content: r.content, position: r.position, projectId, createdAt: r.createdAt ? date(r.createdAt) : new Date(importedAt + i) })) });
 
         await tx.column.createMany({
           data: data.columns.map((c) => ({ id: columnIds.get(c.ref)!, projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays })),
@@ -345,12 +429,13 @@ async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser,
         }
 
         await insertChunks(taskRows, (rows) => tx.task.createMany({ data: rows }));
-        for (const x of data.tasks) {
-          if (x.recurrenceFromRef) await tx.task.update({ where: { id: taskIds.get(x.ref)! }, data: { recurrenceFromId: taskIds.get(x.recurrenceFromRef)! } });
+        const chained = data.tasks.filter((x) => x.recurrenceFromRef);
+        if (chained.length) {
+          await tx.$executeRaw`UPDATE "Task" AS t SET "recurrenceFromId" = d.f FROM unnest(${chained.map((x) => taskIds.get(x.ref)!)}::text[], ${chained.map((x) => taskIds.get(x.recurrenceFromRef!)!)}::text[]) AS d(id, f) WHERE t."id" = d.id`;
         }
         // Prisma pone la fecha de modificación al insertar aunque se indique: se restituye la del archivo.
         if (data.tasks.length) {
-          await tx.$executeRaw`UPDATE "Task" AS t SET "updatedAt" = d.u::timestamp FROM unnest(${data.tasks.map((x) => taskIds.get(x.ref)!)}::text[], ${data.tasks.map((x) => x.updatedAt)}::text[]) AS d(id, u) WHERE t."id" = d.id`;
+          await tx.$executeRaw`UPDATE "Task" AS t SET "updatedAt" = d.u::timestamp FROM unnest(${data.tasks.map((x) => taskIds.get(x.ref)!)}::text[], ${data.tasks.map((x) => date(x.updatedAt).toISOString())}::text[]) AS d(id, u) WHERE t."id" = d.id`;
         }
         await insertChunks(
           data.tasks.flatMap((x) => x.labelRefs.map((l) => ({ taskId: taskIds.get(x.ref)!, labelId: labelIds.get(l)! }))),
@@ -367,15 +452,13 @@ async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser,
               const userId = uid(f.user);
               if (!userId || seen.has(userId)) return [];
               seen.add(userId);
-              return [{ taskId: taskIds.get(x.ref)!, userId, muted: f.muted }];
+              return [{ taskId: taskIds.get(x.ref)!, userId, muted: f.muted, ...(f.createdAt ? { createdAt: date(f.createdAt) } : {}) }];
             });
           }),
           (rows) => tx.taskFollower.createMany({ data: rows }),
         );
         await insertChunks(
-          data.tasks.flatMap((x) =>
-            x.links.flatMap((l) => (/^https?:\/\/\S+$/i.test(l.url) ? [{ taskId: taskIds.get(x.ref)!, kind: l.kind, title: l.title, url: l.url, createdById: uid(l.createdBy), createdAt: date(l.createdAt) }] : [])),
-          ),
+          linkRows,
           (rows) => tx.taskLink.createMany({ data: rows }),
         );
 
@@ -409,6 +492,8 @@ async function runImport({ zip, data, files }: ProjectArchive, user: ImportUser,
           (rows) => tx.taskEvent.createMany({ data: rows }),
         );
 
+        // Mismo candado que las subidas, solo ahora: así una importación larga no las bloquea. Cuota definitiva con todo lo escrito.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:attachment-quota'))::text`;
         const quota = await quotaExceededFor(projectId, 0, tx);
         if (quota) throw quotaError(t, quota);
       },
