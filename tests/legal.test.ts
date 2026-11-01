@@ -15,6 +15,24 @@ describe("textos legales: lógica pura", () => {
     assert.match(defaultLegalMarkdown("privacy", "es"), /\{responsable\}/);
   });
 
+  test("los textos por defecto cubren los apartados RGPD y no dejan marcadores desconocidos", () => {
+    for (const l of ["es", "en"] as const) {
+      const priv = defaultLegalMarkdown("privacy", l);
+      assert.match(priv, /aepd\.es/);
+      assert.match(priv, /pz_device/);
+      assert.match(priv, /\{responsable\}/);
+    }
+    assert.match(defaultLegalMarkdown("privacy", "es"), /Plazos de conservación/);
+    assert.match(defaultLegalMarkdown("privacy", "en"), /Retention periods/);
+    assert.match(defaultLegalMarkdown("terms", "es"), /Ley aplicable/);
+    assert.match(defaultLegalMarkdown("terms", "en"), /Governing law/);
+    for (const kind of ["privacy", "terms"] as const)
+      for (const l of ["es", "en"] as const) {
+        const unknown = [...defaultLegalMarkdown(kind, l).matchAll(/\{(\w+)\}/g)].map((m) => m[1]).filter((k) => k !== "responsable" && k !== "email");
+        assert.deepEqual(unknown, []);
+      }
+  });
+
   test("los marcadores se sustituyen; sin valores queda «el administrador de esta instalación»", () => {
     assert.equal(fillLegalPlaceholders("Lo opera {responsable} ({email})", "es", "Empresa Ejemplo", "privacidad@example.com"), "Lo opera Empresa Ejemplo (privacidad@example.com)");
     assert.equal(fillLegalPlaceholders("{responsable} / {email}", "es", "", ""), "el administrador de esta instalación / el administrador de esta instalación");
