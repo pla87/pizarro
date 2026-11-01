@@ -26,6 +26,7 @@ import { UndoButton } from "./UndoButton";
 import { Avatar } from "./ui/Avatar";
 import { ReportButton } from "./ReportButton";
 import { ImportProjectPanel } from "./ImportProjectPanel";
+import { TransferJobWatcher } from "./transfer/TransferJobWatcher";
 import { cn } from "./ui/cn";
 import { Menu as DropdownMenu, MenuItem } from "./ui/Menu";
 import { Modal } from "./ui/Modal";
@@ -49,6 +50,7 @@ export function AppShell(props: Props) {
   return (
     <ToastProvider>
       <ConfirmProvider>
+        <TransferJobWatcher />
         <Shell {...props} />
       </ConfirmProvider>
     </ToastProvider>

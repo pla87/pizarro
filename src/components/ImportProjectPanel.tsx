@@ -4,6 +4,10 @@ import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n/client";
+import { announceQueued } from "./transfer/client";
+import { TransferJobs } from "./transfer/TransferJobs";
+import { TransferProgress } from "./transfer/TransferProgress";
+import { useTransferJob } from "./transfer/useTransferJob";
 
 interface Summary {
   projectId: string;
@@ -29,6 +33,15 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
+  // La importación en sí es un trabajo en segundo plano: tras subir el archivo se sigue su progreso por su id.
+  const [jobId, setJobId] = useState<string | null>(null);
+  const { job, gone } = useTransferJob(jobId, (done) => {
+    setJobId(null);
+    if (done.status === "DONE" && done.result && "counts" in done.result) {
+      setSummary(done.result as Summary);
+      router.refresh();
+    } else setError(done.error ?? t("No se pudo importar el proyecto."));
+  });
   const busy = progress !== null || processing;
   // El diálogo avisa de que hay una importación en curso: mientras dure no se puede cerrar ni cambiar lo elegido.
   useEffect(() => {
@@ -52,15 +65,15 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
     req.onload = () => {
       setProgress(null);
       setProcessing(false);
-      let body: { ok?: boolean; summary?: Summary; error?: string } = {};
+      let body: { ok?: boolean; jobId?: string; error?: string } = {};
       try {
         body = JSON.parse(req.responseText);
       } catch {
         // respuesta que no es JSON (p. ej. un proxy): se enseña el error genérico
       }
-      if (req.status >= 200 && req.status < 300 && body.summary) {
-        setSummary(body.summary);
-        router.refresh();
+      if (req.status >= 200 && req.status < 300 && body.jobId) {
+        setJobId(body.jobId);
+        announceQueued();
       } else setError(body.error ?? t("No se pudo importar el proyecto."));
     };
     req.onerror = () => {
@@ -74,6 +87,18 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
     };
     req.send(file);
   };
+
+  if (jobId && !summary) {
+    return (
+      <div className="space-y-4" data-testid="import-progress">
+        <p className="text-sm text-slate-600 dark:text-slate-300">{t("Importando el proyecto en el servidor. Puedes cerrar esta ventana: te avisaremos cuando termine.")}</p>
+        {gone ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{t("No se pudo importar el proyecto.")}</p> : job ? <TransferProgress job={job} /> : <p className="text-sm text-slate-500">{t("Procesando el archivo…")}</p>}
+        <div className="flex justify-end">
+          <button type="button" className="btn-secondary" onClick={onClose}>{t("Cerrar")}</button>
+        </div>
+      </div>
+    );
+  }
 
   if (summary) {
     const c = summary.counts;
@@ -136,6 +161,7 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
         <button type="button" className="btn-secondary" disabled={processing} onClick={() => (progress !== null ? xhr.current?.abort() : onBack())}>{progress !== null ? t("Cancelar") : t("Volver")}</button>
         <button type="submit" className="btn-primary" disabled={!file || busy}>{t("Importar")}</button>
       </div>
+      <TransferJobs kind="IMPORT" title={t("Importaciones recientes (24 h)")} />
     </form>
   );
 }
