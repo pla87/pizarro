@@ -59,6 +59,8 @@ test("get.sh: rechaza opciones desconocidas, dirs de sistema y --domain con --lo
   assert.match(run(["--dir", "relativa"]).stderr, /ruta absoluta/);
   assert.match(run(["--domain", "a.example.com", "--local"]).stderr, /no los dos/);
   assert.match(run(["--ref", "x;rm -rf"]).stderr, /no es válida/);
+  assert.match(run(["--ref", "a/../b"]).stderr, /no es válida/);
+  assert.match(run(["--dir", "/srv/pizarro/../x", "--tarball", "x"]).stderr, /\.\./);
 });
 
 test("get.sh: instala, pasa --domain a install.sh y en la 2ª ejecución conserva .env y kit", { skip: process.getuid?.() !== 0 && "requiere root (usa sudo en caso contrario)" }, () => {
@@ -78,6 +80,12 @@ test("get.sh: instala, pasa --domain a install.sh y en la 2ª ejecución conserv
   const r2 = run(["--local", "--dir", dir, "--tarball", tar2]);
   assert.equal(r2.status, 0, r2.stderr + r2.stdout);
   assert.equal(readFileSync(join(dir, "deploy", "args.txt"), "utf8").trim(), "--local");
+  // Pedir --local sobre una instalación con dominio avisa de que se mantiene el actual y explica cómo cambiarlo.
+  assert.match(r2.stdout, /AVISO: esta instalación ya usa https:\/\/tablero\.example\.com/);
+  assert.match(r2.stdout, /DOMAIN y APP_URL/);
+  // El cambio es atómico: no quedan carpetas temporales.
+  assert.equal(existsSync(`${dir}.new`), false);
+  assert.equal(existsSync(`${dir}.old`), false);
   assert.equal(readFileSync(join(dir, "deploy", ".env"), "utf8"), 'SESSION_SECRET="keep"\nAPP_URL="https://tablero.example.com"\n');
   assert.equal(readFileSync(join(dir, "deploy", "recovery-kit.txt"), "utf8"), "kit\n");
   assert.equal(existsSync(join(dir, "src", "new.txt")), true);
@@ -87,6 +95,57 @@ test("get.sh: instala, pasa --domain a install.sh y en la 2ª ejecución conserv
   const r3 = run(["--dir", dir, "--tarball", tar2, "--no-start"]);
   assert.equal(r3.status, 0, r3.stderr + r3.stdout);
   assert.equal(readFileSync(join(dir, "deploy", "args.txt"), "utf8").trim(), "--no-start");
+});
+
+test("get.sh: --domain distinto del que ya hay avisa; el mismo no", { skip: process.getuid?.() !== 0 && "requiere root" }, () => {
+  const tar = makeTarball("w", full());
+  const dir = join(root, "inst-warn");
+  assert.equal(run(["--local", "--dir", dir, "--tarball", tar]).status, 0);
+  writeFileSync(join(dir, "deploy", ".env"), 'APP_URL="https://tablero.example.com"\n');
+  const otro = run(["--domain", "nuevo.example.com", "--dir", dir, "--tarball", tar]);
+  assert.equal(otro.status, 0, otro.stderr);
+  assert.match(otro.stdout, /AVISO/);
+  const igual = run(["--domain", "Tablero.example.com", "--dir", dir, "--tarball", tar]);
+  assert.equal(igual.status, 0, igual.stderr);
+  assert.doesNotMatch(igual.stdout, /AVISO/);
+});
+
+test("get.sh: recupera una carpeta que solo tiene deploy/.env (ejecución anterior interrumpida) y un .old huérfano", { skip: process.getuid?.() !== 0 && "requiere root" }, () => {
+  const tar = makeTarball("r", full());
+  const dir = join(root, "inst-rec");
+  mkdirSync(join(dir, "deploy"), { recursive: true });
+  writeFileSync(join(dir, "deploy", ".env"), 'APP_URL="https://tablero.example.com"\n');
+  writeFileSync(join(dir, "deploy", "recovery-kit.txt"), "kit\n");
+  const r = run(["--dir", dir, "--tarball", tar, "--no-start"]);
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.equal(readFileSync(join(dir, "deploy", ".env"), "utf8"), 'APP_URL="https://tablero.example.com"\n');
+  assert.equal(readFileSync(join(dir, "deploy", "recovery-kit.txt"), "utf8"), "kit\n");
+  assert.equal(existsSync(join(dir, "Dockerfile")), true);
+
+  // Cortada entre los dos «mv»: la carpeta buena quedó en .old y la principal no existe.
+  const dir2 = join(root, "inst-orph");
+  mkdirSync(`${dir2}.old/deploy`, { recursive: true });
+  writeFileSync(join(`${dir2}.old`, "deploy", ".env"), 'APP_URL="https://tablero.example.com"\n');
+  writeFileSync(join(`${dir2}.old`, "Dockerfile"), "x\n");
+  writeFileSync(join(`${dir2}.old`, "deploy", "install.sh"), "x\n");
+  const r2 = run(["--dir", dir2, "--tarball", tar, "--no-start"]);
+  assert.equal(r2.status, 0, r2.stderr + r2.stdout);
+  assert.equal(readFileSync(join(dir2, "deploy", ".env"), "utf8"), 'APP_URL="https://tablero.example.com"\n');
+  assert.equal(existsSync(`${dir2}.old`), false);
+});
+
+test("get.sh: un script truncado no ejecuta nada (todo va dentro de main, que se llama al final)", () => {
+  const src = readFileSync(GET, "utf8");
+  assert.match(src, /^main "\$@"\n$/m);
+  assert.match(src, /trap 'exit 130' INT/);
+  assert.match(src, /trap 'exit 143' TERM/);
+  const marca = join(root, "marca-truncado");
+  const cortado = src.slice(0, src.indexOf("# --- Descarga del código")) + `\n  touch ${marca}\n`;
+  const f = join(root, "get-truncado.sh");
+  writeFileSync(f, cortado);
+  const r = spawnSync("setsid", ["-w", "sh", f, "--local"], { encoding: "utf8", env: mkEnv(`${bin}:${process.env.PATH}`), stdio: ["ignore", "pipe", "pipe"] });
+  assert.notEqual(r.status, 0);
+  assert.equal(existsSync(marca), false);
 });
 
 test("get.sh: sin dominio ni terminal falla con un mensaje claro; no pisa carpetas ajenas", { skip: process.getuid?.() !== 0 && "requiere root" }, () => {
