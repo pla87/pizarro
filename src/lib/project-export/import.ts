@@ -2,6 +2,7 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import type { Prisma } from "@/generated/prisma/client";
 import { getT } from "@/i18n/server";
+import type { T } from "@/i18n/core";
 import { visibleProjectsWhere } from "../access";
 import { FILE_MAX_MAX_MB, FILE_MAX_MIN_MB, effectiveFileMaxMb } from "../upload-size";
 import { MAX_TITLE, RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "../constants";
@@ -29,6 +30,18 @@ export interface ImportUser {
   name: string;
   email: string;
   role: "ADMIN" | "MEMBER";
+}
+
+/** Opciones de importación. `t` y `onProgress` los pasa el trabajo en segundo plano (no hay petición de la que sacar el idioma). */
+export interface ImportOptions {
+  isPrivate: boolean;
+  t?: T;
+  onProgress?: (p: ImportProgress) => void;
+}
+export interface ImportProgress {
+  phase: "validar" | "archivos" | "base de datos";
+  done?: number;
+  total?: number;
 }
 
 export interface ImportSummary {
@@ -94,9 +107,10 @@ async function freeProjectName(user: ImportUser, wanted: string, suffix: string)
  * Primero se valida todo el archivo (formato, versión, sumas, esquema) y se escriben los ficheros; después, todas las filas
  * en una sola transacción. Si algo falla se borran los ficheros escritos y no queda nada en la base de datos.
  */
-export async function importProjectFile(file: string, user: ImportUser, opts: { isPrivate: boolean }): Promise<ImportSummary> {
+export async function importProjectFile(file: string, user: ImportUser, opts: ImportOptions): Promise<ImportSummary> {
   if (user.role !== "ADMIN") throw forbidden();
-  const archive = await openProjectArchive(file);
+  opts.onProgress?.({ phase: "validar" });
+  const archive = await openProjectArchive(file, (done, total) => opts.onProgress?.({ phase: "validar", done, total }));
   try {
     return await runImport(archive, user, opts);
   } finally {
@@ -104,8 +118,8 @@ export async function importProjectFile(file: string, user: ImportUser, opts: { 
   }
 }
 
-async function runImport({ zip, data, files, manifest }: ProjectArchive, user: ImportUser, opts: { isPrivate: boolean }): Promise<ImportSummary> {
-  const t = await getT();
+async function runImport({ zip, data, files, manifest }: ProjectArchive, user: ImportUser, opts: ImportOptions): Promise<ImportSummary> {
+  const t = opts.t ?? (await getT());
   const warnings: string[] = [];
   const zipTimeZone = manifest.timeZone;
 
@@ -156,9 +170,15 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
   type AttRow = Prisma.TaskAttachmentCreateManyInput;
   const attachmentRows: AttRow[] = [];
   const taskIds = new Map(data.tasks.map((x) => [x.ref, newId()]));
+  // Progreso de la fase de ficheros: uno por cada referencia (adjuntos de tarjetas, de releases y documentos).
+  const totalFiles = refShas.length;
+  let doneFiles = 0;
+  const fileStart = () => opts.onProgress?.({ phase: "archivos", done: doneFiles++, total: totalFiles });
+  opts.onProgress?.({ phase: "archivos", done: 0, total: totalFiles });
   try {
     for (const task of data.tasks) {
       for (const a of task.attachments) {
+        fileStart();
         if (tooBig(a.originalName, a.file)) continue;
         assertRoom(realSize(a.file));
         const id = newId();
@@ -199,6 +219,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
     for (const r of data.releases) {
       const usedNames = new Set<string>();
       for (const a of r.attachments) {
+        fileStart();
         if (tooBig(a.fileName, a.file)) continue;
         assertRoom(realSize(a.file));
         const id = newId();
@@ -229,6 +250,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
 
     const documentRows: Prisma.ProjectDocumentCreateManyInput[] = [];
     for (const d of data.documents) {
+      fileStart();
       if (tooBig(d.name, d.file)) continue;
       assertRoom(realSize(d.file));
       const id = newId();
@@ -255,6 +277,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
     }
 
     // --- Base de datos: todo o nada.
+    opts.onProgress?.({ phase: "base de datos" });
     const projectName = await freeProjectName(user, data.project.name, t("(importado)"));
     const last = await db.project.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
     const general = await db.taskKind.findMany({ where: { projectId: null }, select: { id: true, name: true } });

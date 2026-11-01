@@ -45,7 +45,7 @@ function schemaError(what: string, issues: { path: PropertyKey[]; message: strin
  * formato y versión, sumas SHA-256 de todos los ficheros, forma de project.json y coherencia de sus referencias.
  * Quien llama debe cerrar `zip` (archive.zip.close()).
  */
-export async function openProjectArchive(file: string): Promise<ProjectArchive> {
+export async function openProjectArchive(file: string, onProgress?: (done: number, total: number) => void): Promise<ProjectArchive> {
   let zip: ZipFile;
   try {
     zip = await ZipFile.open(file);
@@ -54,7 +54,7 @@ export async function openProjectArchive(file: string): Promise<ProjectArchive> 
     throw new AppError("No se pudo leer el archivo.");
   }
   try {
-    return await validateArchive(zip);
+    return await validateArchive(zip, onProgress);
   } catch (err) {
     await zip.close();
     if (err instanceof ZipReadError) throw new ArchiveError("El archivo está dañado.", err.message);
@@ -62,15 +62,8 @@ export async function openProjectArchive(file: string): Promise<ProjectArchive> 
   }
 }
 
-async function validateArchive(zip: ZipFile): Promise<ProjectArchive> {
-  const files = new Map<string, ZipEntryInfo>();
-  for (const e of zip.entries) {
-    if (e.name === "manifest.json" || e.name === "project.json") continue;
-    const m = FILE_ENTRY.exec(e.name);
-    if (!m) throw new ArchiveError("El archivo contiene una entrada inesperada.", e.name.slice(0, 60));
-    files.set(m[1]!, e);
-  }
-  if (files.size > LIMITS.files) throw new AppError("El archivo tiene demasiados ficheros.");
+/** Formato, versión y forma del manifiesto: lo barato de comprobar (no lee los ficheros). Exige también que exista project.json. */
+async function readManifest(zip: ZipFile): Promise<ExportManifest> {
   const manifestEntry = zip.find("manifest.json");
   const projectEntry = zip.find("project.json");
   if (!manifestEntry || !projectEntry) throw new AppError("No es un archivo de proyecto de Pizarro (falta manifest.json o project.json).");
@@ -86,7 +79,45 @@ async function validateArchive(zip: ZipFile): Promise<ProjectArchive> {
   assertSupportedVersion({ formatVersion: Number((rawManifest as { formatVersion?: unknown }).formatVersion) });
   const parsedManifest = manifestSchema.safeParse(rawManifest);
   if (!parsedManifest.success) throw schemaError("manifest.json", parsedManifest.error.issues);
-  let manifest = parsedManifest.data;
+  return parsedManifest.data;
+}
+
+/**
+ * Comprobación barata de un archivo recién subido, antes de ponerlo en cola: directorio del ZIP, nombres de las entradas,
+ * formato y versión del manifiesto. No lee los ficheros ni comprueba sus sumas (eso lo hace el trabajo en segundo plano).
+ */
+export async function peekProjectArchive(file: string): Promise<ExportManifest> {
+  let zip: ZipFile;
+  try {
+    zip = await ZipFile.open(file);
+  } catch (err) {
+    if (err instanceof ZipReadError) throw new ArchiveError("El archivo no es un ZIP válido.", err.message);
+    throw new AppError("No se pudo leer el archivo.");
+  }
+  try {
+    for (const e of zip.entries) {
+      if (e.name !== "manifest.json" && e.name !== "project.json" && !FILE_ENTRY.test(e.name)) throw new ArchiveError("El archivo contiene una entrada inesperada.", e.name.slice(0, 60));
+    }
+    return await readManifest(zip);
+  } catch (err) {
+    if (err instanceof ZipReadError) throw new ArchiveError("El archivo está dañado.", err.message);
+    throw err;
+  } finally {
+    await zip.close();
+  }
+}
+
+async function validateArchive(zip: ZipFile, onProgress?: (done: number, total: number) => void): Promise<ProjectArchive> {
+  const files = new Map<string, ZipEntryInfo>();
+  for (const e of zip.entries) {
+    if (e.name === "manifest.json" || e.name === "project.json") continue;
+    const m = FILE_ENTRY.exec(e.name);
+    if (!m) throw new ArchiveError("El archivo contiene una entrada inesperada.", e.name.slice(0, 60));
+    files.set(m[1]!, e);
+  }
+  if (files.size > LIMITS.files) throw new AppError("El archivo tiene demasiados ficheros.");
+  let manifest = await readManifest(zip);
+  const projectEntry = zip.find("project.json")!;
 
   // Todas las sumas, en los dos sentidos: nada sin declarar y nada declarado que falte.
   const declared = Object.keys(manifest.checksums);
@@ -94,7 +125,8 @@ async function validateArchive(zip: ZipFile): Promise<ProjectArchive> {
   if (declared.length !== present.length || !present.every((n) => n in manifest.checksums)) {
     throw new AppError("Las sumas de control del archivo no coinciden con su contenido.");
   }
-  for (const name of present) {
+  for (const [i, name] of present.entries()) {
+    onProgress?.(i, present.length);
     const entry = zip.find(name)!;
     const expected = manifest.checksums[name]!;
     const m = FILE_ENTRY.exec(name);

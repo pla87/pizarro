@@ -260,6 +260,7 @@ export const admin: Record<string, string> = {
   "Aviso de copia atrasada": "Overdue backup alert",
   "Prueba de restauración mensual": "Monthly restore test",
   "Resúmenes e informes por email": "Email digests and reports",
+  "Archivos de exportación de proyectos caducados": "Expired project export files",
   "Reanudar copias de adjuntos de releases": "Resume release attachment copies",
   "1. Avisos por email": "1. Email notices",
   "Cómo envía Pizarro los avisos, los enlaces de acceso y los informes por email. No tiene que ver con «Acceso con Google», que va aparte más abajo.": "How Pizarro sends notices, sign-in links and reports by email. It is unrelated to “Sign in with Google”, which is separate below.",

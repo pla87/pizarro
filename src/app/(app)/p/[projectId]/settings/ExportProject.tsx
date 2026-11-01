@@ -5,6 +5,10 @@ import { useEffect, useState } from "react";
 import { useT } from "@/i18n/client";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
+import { announceQueued } from "@/components/transfer/client";
+import { TransferProgress } from "@/components/transfer/TransferProgress";
+import { DownloadButton, TransferJobs } from "@/components/transfer/TransferJobs";
+import { useTransferJob } from "@/components/transfer/useTransferJob";
 
 type Attachments = "with" | "without";
 type Scope = "board" | "all";
@@ -17,7 +21,34 @@ interface Estimate {
   bytes: number;
 }
 
-/** Botón «Exportar proyecto» de los ajustes: pregunta adjuntos y alcance y descarga el .pizarro.zip. */
+/** Progreso de una exportación en cola: se consulta cada 2 s y, al terminar, ofrece «Descargar». */
+function ExportProgress({ jobId, onClose }: { jobId: string; onClose: () => void }) {
+  const t = useT();
+  const { job, gone } = useTransferJob(jobId);
+  const result = job?.result;
+  return (
+    <div className="space-y-4" data-testid="export-progress">
+      {job?.status === "DONE" ? (
+        <p className="text-sm" role="status">{t("La exportación está lista. El archivo estará disponible 24 horas.")}</p>
+      ) : job?.status === "FAILED" ? (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">{job.error ?? t("No se pudo exportar el proyecto.")}</p>
+      ) : job?.status === "EXPIRED" || gone ? (
+        <p className="text-sm">{t("El archivo ha caducado (24 h). Vuelve a exportar el proyecto.")}</p>
+      ) : (
+        <>
+          <p className="text-sm text-slate-600 dark:text-slate-300">{t("Preparando el archivo en el servidor. Puedes cerrar esta ventana: te avisaremos cuando esté listo.")}</p>
+          {job ? <TransferProgress job={job} /> : <p className="text-sm text-slate-500">{t("Calculando…")}</p>}
+        </>
+      )}
+      <div className="flex justify-end gap-2">
+        <button type="button" className="btn-secondary" onClick={onClose}>{t("Cerrar")}</button>
+        {job?.status === "DONE" && result && "size" in result && <DownloadButton id={job.id} size={result.size} />}
+      </div>
+    </div>
+  );
+}
+
+/** Botón «Exportar proyecto» de los ajustes: pregunta adjuntos y alcance y prepara el .pizarro.zip en segundo plano. */
 export function ExportProject({ projectId }: { projectId: string }) {
   const t = useT();
   const toast = useToast();
@@ -41,68 +72,25 @@ export function ExportProject({ projectId }: { projectId: string }) {
   }, [open, projectId, query]);
 
   const [busy, setBusy] = useState(false);
+  const [jobId, setJobId] = useState<string | null>(null);
 
-  /** Nombre del fichero según la cabecera Content-Disposition (filename* si viene, si no filename). */
-  const nameFrom = (res: Response): string => {
-    const cd = res.headers.get("Content-Disposition") ?? "";
-    const star = /filename\*=UTF-8''([^;]+)/i.exec(cd)?.[1];
-    if (star) {
-      try {
-        return decodeURIComponent(star);
-      } catch {
-        // cae en filename
-      }
-    }
-    return /filename="([^"]+)"/i.exec(cd)?.[1] ?? "proyecto.pizarro.zip";
-  };
-
-  const download = async () => {
+  /** Pone la exportación en cola y enseña su progreso; el archivo se prepara en el servidor y se descarga al terminar. */
+  const start = async () => {
     if (busy) return;
     setBusy(true);
-    setOpen(false);
-    // Con la API de acceso a ficheros (Chromium) se guarda en flujo, sin tener el archivo entero en memoria. El selector
-    // exige un gesto reciente, así que se abre antes de pedir el archivo; en el resto de navegadores se junta un Blob.
-    type Picker = (o: { suggestedName: string; types?: { description: string; accept: Record<string, string[]> }[] }) => Promise<FileSystemFileHandle>;
-    const picker = (window as unknown as { showSaveFilePicker?: Picker }).showSaveFilePicker;
-    let handle: FileSystemFileHandle | null = null;
     try {
-      if (picker) {
-        try {
-          handle = await picker({ suggestedName: "proyecto.pizarro.zip", types: [{ description: "Pizarro", accept: { "application/zip": [".zip"] } }] });
-        } catch (err) {
-          if (err instanceof DOMException && err.name === "AbortError") return; // cancelado: no se pide nada
-          handle = null; // sin selector utilizable: se descarga con Blob
-        }
-      }
-      toast(t("Preparando la descarga del proyecto…"));
-      const res = await fetch(`/api/projects/${projectId}/export?${query}`);
-      if (!res.ok) {
-        let message = t("No se pudo exportar el proyecto.");
-        try {
-          const body = (await res.json()) as { error?: string };
-          if (body.error) message = body.error;
-        } catch {
-          // respuesta que no es JSON (p. ej. un proxy): mensaje genérico
-        }
-        (handle as (FileSystemFileHandle & { remove?: () => Promise<void> }) | null)?.remove?.().catch(() => {});
-        toast(message, "error");
+      const res = await fetch(`/api/projects/${projectId}/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attachments, scope }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { jobId?: string; error?: string };
+      if (!res.ok || !body.jobId) {
+        toast(body.error ?? t("No se pudo exportar el proyecto."), "error");
         return;
       }
-      if (handle && res.body) {
-        const writable = await handle.createWritable();
-        await res.body.pipeTo(writable);
-      } else {
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = nameFrom(res);
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      }
-      toast(t("Proyecto exportado."));
+      setJobId(body.jobId);
+      announceQueued();
     } catch {
       toast(t("No se pudo exportar el proyecto."), "error");
     } finally {
@@ -122,10 +110,14 @@ export function ExportProject({ projectId }: { projectId: string }) {
 
   return (
     <>
-      <button type="button" className="btn-secondary" disabled={busy} onClick={() => setOpen(true)}>
-        <Download size={15} /> {t("Exportar proyecto")}
-      </button>
+      <div className="space-y-3">
+        <button type="button" className="btn-secondary" disabled={busy} onClick={() => { setJobId(null); setOpen(true); }}>
+          <Download size={15} /> {t("Exportar proyecto")}
+        </button>
+        <TransferJobs kind="EXPORT" projectId={projectId} title={t("Exportaciones recientes (24 h)")} />
+      </div>
       <Modal open={open} onClose={() => setOpen(false)} title={t("Exportar proyecto")} size="md">
+        {jobId ? <ExportProgress jobId={jobId} onClose={() => setOpen(false)} /> : (
         <div className="space-y-4">
           <p className="text-sm text-slate-600 dark:text-slate-300">
             {t("Descarga el proyecto entero en un archivo .pizarro.zip. Sirve de copia de seguridad o para llevarlo a otra instalación de Pizarro (Nuevo proyecto → «Importar desde un archivo…»).")}
@@ -150,9 +142,10 @@ export function ExportProject({ projectId }: { projectId: string }) {
           </p>
           <div className="flex justify-end gap-2">
             <button type="button" className="btn-secondary" onClick={() => setOpen(false)}>{t("Cancelar")}</button>
-            <button type="button" className="btn-primary" disabled={busy} onClick={download}>{t("Exportar")}</button>
+            <button type="button" className="btn-primary" disabled={busy} onClick={start}>{t("Exportar")}</button>
           </div>
         </div>
+        )}
       </Modal>
     </>
   );
