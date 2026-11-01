@@ -18,6 +18,7 @@ import { boardClients, useBoard, useTasks } from "./context";
 import { fieldsError, fieldsForCreate, TaskFieldsGroup, type FieldsForm } from "./TaskFieldsGroup";
 import { fieldsForDraft, fieldsFromDraft } from "@/lib/fields-form";
 import { DescriptionField } from "../ui/DescriptionField";
+import { DictationButton, insertIntoField } from "../ui/DictationButton";
 import { applyKindTemplate, mergeSubtasks } from "@/lib/kinds-special";
 import { MAX_DESCRIPTION, MAX_TITLE } from "@/lib/constants";
 import { TypeSelector } from "./TaskDialog";
@@ -86,6 +87,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   // Mientras llegan las opciones de otro proyecto se muestran las del abierto, sin poder crear.
   const loading = !pf;
   const form = pf ?? boardForm;
+  const titleRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState(() => d?.title ?? (initialFiles?.length ? captureTitle(t, locale) : ""));
   const [kindId, setKindId] = useState(!foreignInit && d && board.kindById.has(d.kindId) ? d.kindId : foreignInit ? "" : (board.kinds[0]?.id ?? ""));
   const [columnId, setColumnId] = useState(!foreignInit && d && board.columns.some((c) => c.id === d.columnId) ? d.columnId : foreignInit ? "" : (initialColumnId ?? board.columns[0]?.id ?? ""));
@@ -329,7 +331,10 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       }}>
         <div>
           <label className="label" htmlFor={`${uid}-title`}>{t("Título")}</label>
-          <input id={`${uid}-title`} className="input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={MAX_TITLE} required data-autofocus />
+          <div className="flex items-center gap-1">
+            <input ref={titleRef} id={`${uid}-title`} className="input min-w-0 flex-1" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={MAX_TITLE} required data-autofocus />
+            <DictationButton onText={(s) => insertIntoField(titleRef.current, s, setTitle)} />
+          </div>
         </div>
         <div>
           <div className="label">{t("Tipo")}</div>

@@ -12,6 +12,7 @@ import { cn } from "@/components/ui/cn";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import { ReleaseTemplateList } from "@/components/ReleaseTemplateList";
+import { DictationSection } from "./DictationSection";
 import { DraftsSection } from "./DraftsSection";
 import { ProfileTabs } from "./ProfileTabs";
 import type { ProfileTab } from "./profile-tabs";
@@ -80,6 +81,7 @@ export function ProfileSettings(props: Props) {
         <LanguageSection initial={props.locale} />
         <AppearanceSection initial={props.cardStyle} initialTheme={props.theme} initialAccent={props.accent} />
         <EditorModeSection initial={props.editorMode} />
+        <DictationSection />
         <DraftsSection initial={props.clearDraftsOnLogout} />
         {props.preferencesExtra}
         </>

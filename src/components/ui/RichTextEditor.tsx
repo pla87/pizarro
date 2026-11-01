@@ -17,6 +17,7 @@ import { markdownFromPaste } from "@/lib/markdown-paste";
 import type { UserOption } from "@/lib/types";
 import { Avatar } from "./Avatar";
 import { cn } from "./cn";
+import { DictationButton, insertIntoEditor } from "./DictationButton";
 import { registerDragEditor } from "./dragMove";
 import { FormatToolbar, type FormatItems } from "./FormatToolbar";
 import type { MentionCommand } from "./MentionTextarea";
@@ -313,7 +314,12 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
         }
       }}
     >
-      <FormatToolbar items={items} onLeave={() => editorRef.current?.commands.focus()} className="border-b border-slate-200 p-1 dark:border-slate-800" />
+      <FormatToolbar
+        items={items}
+        onLeave={() => editorRef.current?.commands.focus()}
+        className="border-b border-slate-200 p-1 dark:border-slate-800"
+        trailing={<DictationButton variant="toolbar" tabIndex={-1} onText={(s) => insertIntoEditor(editorRef.current, s)} />}
+      />
       {linkUrl !== null && (
         <div className="flex items-center gap-1 border-b border-slate-200 p-1 dark:border-slate-800">
           <input

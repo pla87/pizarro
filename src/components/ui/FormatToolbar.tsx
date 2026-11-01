@@ -56,11 +56,12 @@ const SEP = 9;
  * botones quedan fuera del orden de Tab (Título → descripción directo): se alcanzan con Alt+F10 y las flechas, o con el
  * ratón. Tab o Escape devuelven el foco al texto (`onLeave`).
  */
-export function FormatToolbar({ items, onLeave, className }: { items: FormatItems; onLeave: () => void; className?: string }) {
+export function FormatToolbar({ items, onLeave, className, trailing }: { items: FormatItems; onLeave: () => void; className?: string; trailing?: ReactNode }) {
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const trailRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState<number | null>(null);
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ right: number; top?: number; bottom?: number; maxHeight: number } | null>(null);
@@ -70,11 +71,14 @@ export function FormatToolbar({ items, onLeave, className }: { items: FormatItem
     if (!el) return;
     const measure = () => {
       const cs = getComputedStyle(el);
-      setWidth(el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
+      // Lo de `trailing` (p. ej. el micrófono del dictado) nunca se desborda: su sitio se descuenta del ancho de los botones.
+      const trail = trailRef.current?.offsetWidth ?? 0;
+      setWidth(el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - (trail ? trail + SEP : 0));
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
+    if (trailRef.current) ro.observe(trailRef.current);
     return () => ro.disconnect();
   }, []);
 
@@ -245,6 +249,8 @@ export function FormatToolbar({ items, onLeave, className }: { items: FormatItem
           <MoreHorizontal size={15} />
         </button>
       )}
+      {/* Fuera de la lista de botones: ocupa el extremo derecho y no pasa a «Más formatos». */}
+      {trailing && <div ref={trailRef} className="ml-auto flex shrink-0 items-center">{trailing}</div>}
       {menuOpen && pos &&
         createPortal(
           <div
