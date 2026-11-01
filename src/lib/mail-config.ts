@@ -124,7 +124,7 @@ export async function saveMailSettings(
   // Cambiar de servidor, puerto o usuario con la contraseña guardada la enviaría al nuevo destino: hay que escribirla de nuevo.
   const target = before.host !== input.host.trim() || before.port !== input.port || before.user !== input.user.trim();
   if (!disabling && before.hasPassword && before.host !== "" && target && pass === "" && !opts.clearPassword) {
-    throw new AppError("Escribe la contraseña de nuevo al cambiar de servidor o usuario");
+    throw new AppError("Escribe la contraseña de nuevo al cambiar de servidor, puerto o usuario.");
   }
   const entries: [string, string][] = [
     [MAIL_HOST_KEY, input.host],
@@ -133,7 +133,7 @@ export async function saveMailSettings(
     [MAIL_USER_KEY, input.user],
     [MAIL_FROM_NAME_KEY, input.fromName],
     [MAIL_FROM_ADDRESS_KEY, input.fromAddress],
-    [MAIL_MODE_KEY, input.mode ?? parseMailMode("", input.host)],
+    [MAIL_MODE_KEY, input.mode ?? parseMailMode("", input.host, input)],
   ];
   await db.$transaction(async (tx) => {
     for (const [key, value] of entries) await tx.appState.upsert({ where: { key }, create: { key, value }, update: { value } });

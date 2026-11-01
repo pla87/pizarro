@@ -54,3 +54,22 @@ describe("configuración de Google (parte pura)", () => {
     assert.equal(appDomainInfo(undefined).kind, "none");
   });
 });
+
+describe("dominio autorizado: alojamientos compartidos y sufijos de dos etiquetas", () => {
+  test("alojamientos compartidos", () => {
+    for (const host of ["miapp-x1y2z.ondigitalocean.app", "1-2-3-4.sslip.io", "app.nip.io", "svc-abc.koyeb.app", "svc-hash-uc.a.run.app", "a.fly.dev", "a.onrender.com", "a.herokuapp.com", "a.pages.dev", "a.workers.dev", "a.netlify.app", "a.vercel.app"]) {
+      const info = appDomainInfo(`https://${host}`);
+      assert.equal(info.kind, "shared", host);
+      assert.equal(info.domain, host, host);
+    }
+  });
+  test("sufijos de país de dos etiquetas", () => {
+    assert.equal(appDomainInfo("https://pizarro.empresa.com.cn").domain, "empresa.com.cn");
+    assert.equal(appDomainInfo("https://pizarro.empresa.co.kr").domain, "empresa.co.kr");
+    assert.equal(appDomainInfo("https://pizarro.ayuntamiento.gov.uk").domain, "ayuntamiento.gov.uk");
+    assert.equal(appDomainInfo("https://x.empresa.com.au").domain, "empresa.com.au");
+    assert.equal(appDomainInfo("https://x.empresa.co.jp").domain, "empresa.co.jp");
+    assert.equal(appDomainInfo("https://x.empresa.com.mx").domain, "empresa.com.mx");
+    assert.equal(appDomainInfo("https://x.empresa.com").domain, "empresa.com");
+  });
+});

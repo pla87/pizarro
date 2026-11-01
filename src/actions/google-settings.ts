@@ -5,7 +5,7 @@ import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
 import { AppError } from "@/lib/errors";
 import { envGoogleCredentials, validateGoogleSettings, type GoogleSettingsInput } from "@/lib/google-config-core";
-import { saveGoogleSettings as persist } from "@/lib/google-config";
+import { saveGoogleExtras, saveGoogleSettings as persist } from "@/lib/google-config";
 import { requireAdmin } from "@/lib/session";
 
 // Administración → Ajustes → «Acceso con Google». Solo administradores. El secreto nunca se registra ni se devuelve.
@@ -19,7 +19,23 @@ export interface GoogleSettingsForm extends GoogleSettingsInput {
 export async function saveGoogleSettings(form: GoogleSettingsForm) {
   return runAction({ name: "settings.saveGoogle" }, async () => {
     await requireAdmin();
-    if (envGoogleCredentials()) throw new AppError("Google está configurado en el servidor (variables GOOGLE_*) y no se puede cambiar aquí.");
+    if (envGoogleCredentials()) {
+      // El ID y el secreto los fija el servidor (se ignoran); sí se guardan el dominio (si el servidor no lo fija) y el contacto público.
+      const checked = validateGoogleSettings({ clientId: "", workspaceDomain: form.workspaceDomain, publicContactEmail: form.publicContactEmail });
+      if (!checked.ok) throw new AppError(checked.error);
+      const envDomain = Boolean(process.env.GOOGLE_WORKSPACE_DOMAIN?.trim());
+      const { before, after } = await saveGoogleExtras({ workspaceDomain: envDomain ? undefined : checked.value.workspaceDomain, publicContactEmail: checked.value.publicContactEmail });
+      describeAction("Cambió la configuración del acceso con Google", {
+        enabled: true,
+        was: true,
+        clientIdChanged: false,
+        domain: after.workspaceDomain || null,
+        contactChanged: before.publicContactEmail !== after.publicContactEmail,
+        authChange: "unchanged",
+      });
+      revalidatePath("/admin/settings");
+      return { settings: after };
+    }
     const checked = validateGoogleSettings(form);
     if (!checked.ok) throw new AppError(checked.error);
     const secret = typeof form.secret === "string" ? form.secret.trim() : "";
