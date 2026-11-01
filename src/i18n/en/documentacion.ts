@@ -35,6 +35,8 @@ export const documentacion: Record<string, string> = {
   "Borró el documento «{name}»": "Deleted the document “{name}”",
   "Renombró un documento a «{name}»": "Renamed a document to “{name}”",
   "Documento enviado a la papelera": "Document moved to the trash",
+  "Enviar «{name}» a la papelera": "Move “{name}” to the trash",
+  "Enviar a la papelera": "Move to the trash",
   "Documento restaurado": "Document restored",
   "Papelera ({n})": "Trash ({n})",
   "Papelera": "Trash",

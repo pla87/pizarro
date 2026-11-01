@@ -133,7 +133,7 @@ export const common: Record<string, string> = {
   "Al elegirlo, el título pasa a ser «{title}» y la descripción empieza por «{desc}».": "When chosen, the title becomes “{title}” and the description starts with “{desc}”.",
   "Al elegirlo, el título pasa a ser «{title}».": "When chosen, the title becomes “{title}”.",
   "Al elegirlo, la descripción empieza por «{desc}».": "When chosen, the description starts with “{desc}”.",
-  "Proyecto privado (solo sus miembros; empiezas siendo el único)": "Private project (members only; you start as the only one)",
+  "Crear como proyecto privado inicialmente": "Create as a private project initially",
   "Será un proyecto privado: solo lo verás tú hasta que añadas más miembros.": "It will be a private project: only you will see it until you add more members.",
   "Aumentar sangría (Tab)": "Indent (Tab)",
   "Reducir sangría (Mayús+Tab)": "Outdent (Shift+Tab)",

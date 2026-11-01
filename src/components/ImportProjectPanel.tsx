@@ -114,7 +114,7 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
   return (
     <form onSubmit={submit} className="space-y-4">
       <p className="text-sm text-slate-600 dark:text-slate-300">
-        {t("Crea un proyecto nuevo a partir de un archivo .pizarro.zip exportado desde Pizarro. El nombre sale del archivo y las personas se emparejan por email con usuarios activos.")}
+        {t("Crea un proyecto a partir de un archivo .pizarro.zip exportado desde Pizarro. Las personas se emparejan por email. El nombre sale del archivo y puedes cambiarlo después en Ajustes del proyecto.")}
       </p>
       <div>
         <label className="label" htmlFor="import-file">{t("Archivo .pizarro.zip")}</label>
@@ -124,7 +124,6 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
         />
       </div>
       {privateToggle}
-      <p className="-mt-2 text-xs text-slate-500">{isPrivate ? t("Se creará como proyecto privado (solo tú lo verás).") : t("Se creará como proyecto de equipo.")}</p>
       {progress !== null && (
         <div role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label={t("Subiendo…")} className="h-2 overflow-hidden rounded bg-slate-200 dark:bg-slate-700">
           <div className="h-full bg-brand-600 transition-[width]" style={{ width: `${progress}%` }} />
@@ -132,9 +131,12 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
       )}
       {processing && <p className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300"><Loader2 size={15} className="animate-spin" /> {t("Procesando el archivo…")}</p>}
       {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-      <div className="flex justify-end gap-2">
-        <button type="button" className="btn-secondary" disabled={processing} onClick={() => (progress !== null ? xhr.current?.abort() : onBack())}>{progress !== null ? t("Cancelar") : t("Volver")}</button>
-        <button type="submit" className="btn-primary" disabled={!file || busy}>{t("Importar")}</button>
+      <div className="flex items-center justify-between gap-3">
+        <p className="min-w-0 text-xs text-slate-500">{isPrivate ? t("Se creará como proyecto privado (solo tú lo verás).") : t("Se creará como proyecto de equipo.")}</p>
+        <div className="flex shrink-0 gap-2">
+          <button type="button" className="btn-secondary" disabled={processing} onClick={() => (progress !== null ? xhr.current?.abort() : onBack())}>{progress !== null ? t("Cancelar") : t("Volver")}</button>
+          <button type="submit" className="btn-primary" disabled={!file || busy}>{t("Importar")}</button>
+        </div>
       </div>
     </form>
   );
