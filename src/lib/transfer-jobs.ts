@@ -63,7 +63,7 @@ interface ExportJobResult { file: string; size: number; name: string; missingFil
 /** Cuenta los trabajos vivos de la persona y crea el nuevo con la misma exclusión (bloqueo por persona), para que dos peticiones a la vez no superen el tope. */
 async function enqueue(userId: string, data: Omit<Prisma.ProjectTransferJobUncheckedCreateInput, "userId">): Promise<JobRow> {
   const job = await db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`transfer-user:${userId}`}))`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`transfer-user:${userId}`}))::text`;
     const live = await tx.projectTransferJob.count({ where: { userId, status: { in: ["QUEUED", "RUNNING"] } } });
     if (live >= MAX_JOBS_PER_USER) throw new AppError("Ya tienes dos exportaciones o importaciones en curso. Espera a que termine alguna.", 429, "transfer_limit");
     return tx.projectTransferJob.create({ data: { ...data, userId } });
@@ -175,7 +175,7 @@ const state = ((globalThis as unknown as { __pzTransfer?: { active: number; pump
 /** Reserva el trabajo más antiguo en cola si hay hueco en todo el servidor (cuenta los RUNNING de cualquier proceso). */
 export async function claimNextJob(now: Date = new Date()): Promise<JobRow | null> {
   return db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(${LOCK_TRANSFER_CLAIM})`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(${LOCK_TRANSFER_CLAIM})::text`;
     if ((await tx.projectTransferJob.count({ where: { status: "RUNNING" } })) >= transferConcurrency()) return null;
     const next = await tx.projectTransferJob.findFirst({ where: { status: "QUEUED" }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
     if (!next) return null;
@@ -325,8 +325,9 @@ export async function runNextTransferJob(): Promise<string | null> {
   return job.id;
 }
 
-/** Despierta al trabajador (no espera). Se llama al encolar y al terminar cada trabajo. */
+/** Despierta al trabajador (no espera). Se llama al encolar y al terminar cada trabajo; no hace nada hasta que arranca (startTransferWorker). */
 export function kickTransferWorker(): void {
+  if (!state.started) return;
   setImmediate(() => void pump());
 }
 

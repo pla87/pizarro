@@ -14,7 +14,8 @@ import { capTitle, importProjectFile, safeFileName, type ImportUser } from "../.
 import { projectDataSchema, type ExportManifest, type ExportOptions, type ProjectExportData } from "../../src/lib/project-export/types";
 import { attachmentPath, documentPath, safeDownloadMime, saveAttachmentFiles, saveDocumentFile, saveRawAttachmentFile, saveReleaseAttachmentFile } from "../../src/lib/uploads";
 import { streamZip, type StreamZipEntry } from "../../src/lib/zip-stream";
-import { GET as exportRoute } from "../../src/app/api/projects/[projectId]/export/route";
+import { GET as exportRoute, POST as exportPost } from "../../src/app/api/projects/[projectId]/export/route";
+import { runNextTransferJob } from "../../src/lib/transfer-jobs";
 import { POST as importRoute } from "../../src/app/api/projects/import/route";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-pexport-"));
@@ -464,9 +465,12 @@ describe("permisos", () => {
     await loginAs(admin);
     assert.equal((await importRoute(new Request("http://localhost/api/projects/import", { method: "POST", body, headers: { host: "localhost" } }))).status, 403);
     const ok = await importRoute(req());
-    assert.equal(ok.status, 201);
-    const { summary } = await ok.json();
-    assert.equal((await db.project.findUniqueOrThrow({ where: { id: summary.projectId } })).isPrivate, true);
+    assert.equal(ok.status, 202);
+    const { jobId } = await ok.json();
+    assert.equal(await runNextTransferJob(), jobId);
+    const done = await db.projectTransferJob.findUniqueOrThrow({ where: { id: jobId } });
+    assert.equal(done.status, "DONE");
+    assert.equal((await db.project.findUniqueOrThrow({ where: { id: done.projectId! } })).isPrivate, true);
     // Cuerpo vacío o archivo que no es un ZIP: error claro, nada creado.
     const junk = await importRoute(new Request("http://localhost/api/projects/import", { method: "POST", body: "basura", headers: { origin: "http://localhost", host: "localhost" } }));
     assert.equal(junk.status, 400);
@@ -490,56 +494,57 @@ describe("permisos", () => {
     const outsider = await makeUser();
     const team = await makeProject({ members: [member] });
     const priv = await makeProject({ visibility: "PRIVATE", owner: member });
-    const url = (id: string, q = "attachments=without&scope=board") => new Request(`http://localhost/api/projects/${id}/export?${q}`, { headers: { "sec-fetch-site": "same-origin" } });
-    const status = async (id: string, q?: string) => (await exportRoute(url(id, q), params(id))).status;
+    const post = (id: string, body: unknown = { attachments: "without", scope: "board" }, headers: Record<string, string> = { origin: "http://localhost", host: "localhost" }) =>
+      new Request(`http://localhost/api/projects/${id}/export`, { method: "POST", body: JSON.stringify(body), headers });
+    const status = async (id: string, body?: unknown) => {
+      const res = await exportPost(post(id, body), params(id));
+      if (res.status === 202) await db.projectTransferJob.deleteMany({ where: { projectId: id } }); // sin dejar trabajos vivos que llenen el tope por persona
+      return res.status;
+    };
 
     logout();
     assert.equal(await status(team.project.id), 401);
     await loginAs(admin);
-    const res = await exportRoute(url(team.project.id), params(team.project.id));
-    assert.equal(res.status, 200);
-    assert.equal(res.headers.get("content-type"), "application/zip");
-    assert.match(res.headers.get("content-disposition")!, /pizarro-proyecto-\d{8}\.pizarro\.zip|pizarro-.*\.pizarro\.zip/);
-    const bytes = Buffer.from(await res.arrayBuffer());
-    assert.equal(bytes.length, Number(res.headers.get("content-length")));
-    assert.equal(bytes.subarray(0, 2).toString(), "PK");
+    const res = await exportPost(post(team.project.id), params(team.project.id));
+    assert.equal(res.status, 202);
+    const { jobId } = await res.json();
+    assert.equal(await runNextTransferJob(), jobId);
+    const job = await db.projectTransferJob.findUniqueOrThrow({ where: { id: jobId } });
+    assert.equal(job.status, "DONE");
+    assert.match((job.result as { name: string }).name, /^pizarro-.*\.pizarro\.zip$/);
+    await db.projectTransferJob.deleteMany({ where: { id: jobId } });
     assert.equal(await status(priv.project.id), 404); // un administrador ajeno no ve el privado
     await loginAs(otherAdmin);
     assert.equal(await status(priv.project.id), 404);
     await loginAs(member);
     assert.equal(await status(team.project.id), 403); // miembro de un proyecto de equipo: no gestiona
-    assert.equal(await status(priv.project.id), 200); // miembro de uno privado: sí
+    assert.equal(await status(priv.project.id), 202); // miembro de uno privado: sí
     await loginAs(outsider);
     assert.equal(await status(team.project.id), 404);
     assert.equal(await status(priv.project.id), 404);
     // Opciones inválidas.
     await loginAs(admin);
-    assert.equal(await status(team.project.id, "attachments=quizas&scope=board"), 400);
-    assert.equal(await status(team.project.id, "attachments=with&scope=nada"), 400);
-    // Otro sitio (Sec-Fetch-Site).
-    assert.equal((await exportRoute(new Request(`http://localhost/api/projects/${team.project.id}/export?attachments=with&scope=all`, { headers: { "sec-fetch-site": "cross-site" } }), params(team.project.id))).status, 403);
-    // Recuentos previos.
+    assert.equal(await status(team.project.id, { attachments: "quizas", scope: "board" }), 400);
+    assert.equal(await status(team.project.id, { attachments: "with", scope: "nada" }), 400);
+    // Otro sitio (sin Origin válido).
+    assert.equal((await exportPost(post(team.project.id, undefined, { host: "localhost" }), params(team.project.id))).status, 403);
+    // La descarga directa por GET ya no existe: solo los recuentos previos.
+    const url = (id: string, q: string) => new Request(`http://localhost/api/projects/${id}/export?${q}`, { headers: { "sec-fetch-site": "same-origin" } });
+    assert.equal((await exportRoute(url(team.project.id, "attachments=with&scope=all"), params(team.project.id))).status, 400);
+    assert.equal((await exportRoute(new Request(`http://localhost/api/projects/${team.project.id}/export?attachments=with&scope=all&estimate=1`, { headers: { "sec-fetch-site": "cross-site" } }), params(team.project.id))).status, 403);
     const est = await exportRoute(url(team.project.id, "attachments=with&scope=all&estimate=1"), params(team.project.id));
     assert.equal(est.status, 200);
     assert.equal((await est.json()).tasks, 0);
   });
 
-  test("exportar queda en el registro de actividad y respeta el hueco de ZIP por persona", async () => {
+  test("exportar queda en el registro de actividad", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const f = await makeProject({ members: [] });
     await makeTask(f);
     await loginAs(admin);
-    const q = "attachments=without&scope=all";
-    const first = await exportRoute(new Request(`http://localhost/api/projects/${f.project.id}/export?${q}`), params(f.project.id));
-    assert.equal(first.status, 200);
-    // El primero aún no se ha leído: el hueco sigue ocupado.
-    const second = await exportRoute(new Request(`http://localhost/api/projects/${f.project.id}/export?${q}`), params(f.project.id));
-    assert.equal(second.status, 429);
-    await first.arrayBuffer();
-    await new Promise((r) => setTimeout(r, 50));
-    const third = await exportRoute(new Request(`http://localhost/api/projects/${f.project.id}/export?${q}`), params(f.project.id));
-    assert.equal(third.status, 200);
-    await third.arrayBuffer();
+    const res = await exportPost(new Request(`http://localhost/api/projects/${f.project.id}/export`, { method: "POST", body: JSON.stringify({ attachments: "without", scope: "all" }), headers: { origin: "http://localhost", host: "localhost" } }), params(f.project.id));
+    assert.equal(res.status, 202);
+    assert.equal(await runNextTransferJob(), (await res.json()).jobId);
     await new Promise((r) => setTimeout(r, 3500)); // el registro se escribe por lotes
     assert.ok(await db.appLog.count({ where: { action: "projects.export", projectId: f.project.id } }));
   });
