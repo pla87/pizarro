@@ -606,6 +606,9 @@ model TaskComment {
   id        String    @id @default(cuid())
   taskId    String
   authorId  String?
+  /// Nombre de quien lo escribió cuando la persona no existe en esta instalación (comentarios de un proyecto importado
+  /// desde un archivo); null en los demás. Solo se muestra si no hay `author`.
+  authorName String?
   /// Las menciones se guardan como @[Nombre](user:ID).
   body      String
   createdAt DateTime  @default(now())
