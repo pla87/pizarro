@@ -6,13 +6,14 @@ import { useState, useTransition } from "react";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { createKind, deleteKind, moveKind, updateKind } from "@/actions/kinds";
 import { cn } from "@/components/ui/cn";
+import { ColorPicker } from "@/components/ui/ColorPicker";
 import { DescriptionField } from "@/components/ui/DescriptionField";
 import { DescriptionTools, descriptionTooLong } from "@/components/ui/DescriptionTools";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
 import type { EditorModeValue } from "@/lib/types";
-import { MAX_DESCRIPTION, PALETTE, swatchBorder } from "@/lib/constants";
+import { MAX_DESCRIPTION, PALETTE } from "@/lib/constants";
 import { describeKindAutomation, MAX_KIND_SUBTASKS, parseSubtaskLines } from "@/lib/kinds-special";
 
 export interface KindRow {
@@ -46,23 +47,7 @@ const COLORS = [...PALETTE, "#84cc16", "#06b6d4", "#d946ef", "#78716c"];
 
 function ColorField({ value, onChange }: { value: string; onChange: (c: string) => void }) {
   const t = useT();
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {COLORS.map((c) => (
-        <button
-          key={c}
-          type="button"
-          onClick={() => onChange(c)}
-          className={cn("h-7 w-7 rounded-full", swatchBorder(c), value.toLowerCase() === c && "ring-2 ring-brand-500 ring-offset-1 dark:ring-offset-slate-900")}
-          style={{ backgroundColor: c }}
-          aria-label={t("Color {name}", { name: c })}
-        />
-      ))}
-      <label className="relative h-7 w-7 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus" title={t("Otro color")}>
-        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label={t("Elegir otro color")} />
-      </label>
-    </div>
-  );
+  return <ColorPicker value={value} onChange={(c) => c && onChange(c)} colors={COLORS} allowNone={false} allowCustom label={t("Color")} />;
 }
 
 interface Props {

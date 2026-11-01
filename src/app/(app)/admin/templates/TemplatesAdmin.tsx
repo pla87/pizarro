@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { deleteTemplate, resetTemplate, restoreDefaultTemplates, saveTemplate, templateFromProject } from "@/actions/templates";
 import { TaskFieldToggles } from "@/components/TaskFieldToggles";
 import { cn } from "@/components/ui/cn";
+import { ColorPicker } from "@/components/ui/ColorPicker";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { DescriptionField } from "@/components/ui/DescriptionField";
 import { Modal } from "@/components/ui/Modal";
@@ -13,7 +14,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { T } from "@/i18n/core";
 import type { EditorModeValue } from "@/lib/types";
-import { COLUMN_ROLES, isUniqueColumnRole, MAX_DESCRIPTION, MAX_RELEASE_TEMPLATES_PER_KIND, MAX_TEMPLATE, PALETTE, swatchBorder, type ColumnRoleValue } from "@/lib/constants";
+import { COLUMN_ROLES, isUniqueColumnRole, MAX_DESCRIPTION, MAX_RELEASE_TEMPLATES_PER_KIND, MAX_TEMPLATE, PALETTE, type ColumnRoleValue } from "@/lib/constants";
 import { parseSubtaskLines } from "@/lib/kinds-special";
 import { normalizeTaskFields, type TaskFieldKey } from "@/lib/task-fields";
 import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS, type TemplateDto, type TemplateInput } from "@/lib/project-templates";
@@ -60,25 +61,7 @@ const EMPTY: Draft = {
 
 function ColorField({ value, onChange, colors }: { value: string; onChange: (c: string) => void; colors: readonly string[] }) {
   const t = useT();
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {colors.map((c) => (
-        <button
-          key={c}
-          type="button"
-          onClick={() => onChange(c)}
-          className={cn("h-6 w-6 rounded-full", swatchBorder(c), value.toLowerCase() === c && "ring-2 ring-brand-500 ring-offset-1 dark:ring-offset-slate-900")}
-          style={{ backgroundColor: c }}
-          aria-label={t("Color {c}", { c })}
-        />
-      ))}
-      {colors.length > PALETTE.length && (
-        <label className="relative h-6 w-6 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus" title={t("Otro color")}>
-          <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label={t("Elegir otro color")} />
-        </label>
-      )}
-    </div>
-  );
+  return <ColorPicker value={value} onChange={(c) => c && onChange(c)} colors={colors} allowNone={false} allowCustom={colors.length > PALETTE.length} label={t("Color")} />;
 }
 
 function move<T>(list: T[], i: number, dir: -1 | 1): T[] {

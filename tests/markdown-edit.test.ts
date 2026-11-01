@@ -90,3 +90,27 @@ test("insertRule e insertLink", () => {
   const url = insertLink("https://example.com", 0, 19);
   assert.equal(url.value, "[texto](https://example.com)");
 });
+
+test("toggleWrap: cursiva sobre negrita no rompe los asteriscos de la negrita", () => {
+  // Selección solo del texto dentro de **x**
+  const a = toggleWrap("**x**", 2, 3, "*");
+  assert.equal(a.value, "***x***");
+  assert.equal(a.value.slice(a.start, a.end), "x");
+  // Selección con los marcadores incluidos
+  assert.equal(toggleWrap("**x**", 0, 5, "*").value, "***x***");
+  // Una cursiva real sigue quitándose, dentro o con los marcadores en la selección
+  assert.equal(toggleWrap("*x*", 1, 2, "*").value, "x");
+  assert.equal(toggleWrap("*x*", 0, 3, "*").value, "x");
+  // Negrita y cursiva a la vez: se quita solo la cursiva
+  assert.equal(toggleWrap("***x***", 3, 4, "*").value, "**x**");
+  assert.equal(toggleWrap("***x***", 0, 7, "*").value, "**x**");
+  // La negrita sobre **x** sigue quitándose
+  assert.equal(toggleWrap("**x**", 2, 3, "**").value, "x");
+});
+
+test("indentLines: líneas sangradas con tabulador se desangran, y sin cambios devuelve null", () => {
+  const r = indentLines("- a\n\t- b", 6, 6, -1)!;
+  assert.equal(r.value, "- a\n- b");
+  assert.equal(indentLines("- a\n- b", 6, 6, -1), null);
+  assert.deepEqual(listMarker("\t- a"), { indent: 1, width: 2 });
+});
