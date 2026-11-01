@@ -57,6 +57,31 @@ export function GoogleGuide({ view, open }: { view: GoogleSettingsView; open: bo
       <div className="mt-3 space-y-2">
         <p>{t("Google Cloud usa ahora la interfaz «Google Auth Platform», con las secciones Overview, Branding, Audience, Clients, Data Access, Verification Center y Settings (si tu consola está en español, los nombres aparecen traducidos). Cada paso de abajo corresponde a una de esas pantallas. Abre solo el que necesites.")}</p>
 
+        <Step n={0} title={t("¿Dominio propio o la dirección del servidor?")}>
+          <p>{t("Antes de tocar Google, decide con qué dirección van a entrar tus usuarios. Esa dirección es APP_URL, y de ella salen todos los valores de los pasos siguientes. Hay dos caminos:")}</p>
+          <p className="font-medium">{t("A) La dirección que te da el servidor (por ejemplo https://algo.up.railway.app)")}</p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>{t("Funciona sin comprar nada y sin configurar DNS.")}</li>
+            <li>{t("Google suele aceptar la dirección completa como «dominio autorizado» (el paso 2 te la muestra).")}</li>
+            <li>{t("Se ve menos profesional, y si más adelante cambias a un dominio propio hay que actualizar Google (ver más abajo).")}</li>
+          </ul>
+          <p className="font-medium">{t("B) Un dominio propio (por ejemplo https://pizarro.example.com), recomendado")}</p>
+          <ol className="list-decimal space-y-1 pl-5">
+            <li>{t("Añade el dominio donde esté alojado Pizarro. En Railway: tu servicio → Settings → Networking → Custom Domain. Con la instalación en tu servidor (Docker Compose): apunta un registro DNS A (o AAAA) del dominio a la IP del servidor y pon ese dominio en DOMAIN (el instalador lo pregunta; Caddy pide el certificado solo).")}</li>
+            <li>{t("Crea en tu proveedor de DNS el registro que te indique el alojamiento (en Railway, un CNAME) y espera a que el HTTPS esté activo: de unos minutos a unas horas.")}</li>
+            <li>{t("Cambia APP_URL a la dirección nueva (con https:// y sin barra final) y redespliega. En Railway: Variables → APP_URL → Redeploy. Con Docker Compose: edita APP_URL en deploy/.env y ejecuta docker compose up -d.")}</li>
+            <li>{t("Vuelve a esta pantalla: arriba verás la nueva dirección pública y, abajo, los valores para Google ya calculados. Sigue los pasos 1 a 6.")}</li>
+          </ol>
+          <p>{t("El «dominio autorizado» de Google es el dominio registrable (example.com), sin subdominios ni «https://».")}</p>
+          <p className="font-medium">{t("Cambiar de una opción a otra más adelante")}</p>
+          <ol className="list-decimal space-y-1 pl-5">
+            <li>{t("En Google Cloud añade las direcciones de redirección nuevas en «Clients» sin borrar las antiguas: Google admite varias a la vez, así nada se rompe durante el cambio. Esta pantalla muestra las dos cuando entras por una dirección distinta de APP_URL.")}</li>
+            <li>{t("En «Branding» cambia la página principal, los enlaces de privacidad y condiciones y los dominios autorizados.")}</li>
+            <li>{t("Comprueba que «Iniciar sesión con Google» funciona con la dirección nueva y entonces borra las direcciones antiguas.")}</li>
+            <li>{t("Avisa a tu gente: tendrá que iniciar sesión otra vez, y quien instaló Pizarro como aplicación debe desinstalarla e instalarla de nuevo desde la dirección nueva.")}</li>
+          </ol>
+        </Step>
+
         <Step n={1} title={t("Crear o elegir un proyecto")}>
           <p>{t("Entra en {site} con una cuenta de Google. Arriba, en el selector de proyectos, pulsa «Proyecto nuevo» (por ejemplo «Pizarro») o elige uno que ya tengas. Es gratis y no hace falta activar la facturación.", { site: "console.cloud.google.com" })}</p>
           <p><Ext href="https://console.cloud.google.com/projectcreate">console.cloud.google.com/projectcreate</Ext></p>
@@ -127,6 +152,13 @@ export function GoogleGuide({ view, open }: { view: GoogleSettingsView; open: bo
             <div className="space-y-1.5">
               <CopyRow label={t("Acceso con Google")} value={redirectUris.login} />
               <CopyRow label={t("Docs y Sheets")} value={redirectUris.docs} />
+              {view.mismatch && (
+                <>
+                  <p className="pt-1">{t("Si estás migrando de dirección, añade también estas (la que usas ahora, {current}); Google admite varias:", { current: view.mismatch.current })}</p>
+                  <CopyRow label={t("Acceso con Google")} value={view.mismatch.redirectUris.login} />
+                  <CopyRow label={t("Docs y Sheets")} value={view.mismatch.redirectUris.docs} />
+                </>
+              )}
             </div>
           ) : (
             <p className="text-amber-600">{t("Define APP_URL en el servidor (por ejemplo https://pizarro.tuempresa.com) para ver las direcciones.")}</p>

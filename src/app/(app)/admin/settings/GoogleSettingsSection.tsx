@@ -63,13 +63,37 @@ export function GoogleSettingsSection({ view }: { view: GoogleSettingsView }) {
       </div>
       {status}
 
+      <div className="space-y-2" data-testid="google-public-url">
+        <h3 className="text-sm font-semibold">{t("Dirección pública de Pizarro")}</h3>
+        {view.appUrl ? <code className="block break-all rounded-md bg-slate-100 px-2 py-1 text-sm dark:bg-slate-800" data-testid="google-app-url">{view.appUrl}</code> : <p className="text-xs text-amber-600">{t("Define APP_URL en el servidor (por ejemplo https://pizarro.tuempresa.com) para ver las direcciones.")}</p>}
+        <p className="text-xs text-slate-500">{t("Es el valor de APP_URL en la configuración del servidor. Todo lo que hay que dar de alta en Google (página principal, enlaces de privacidad y condiciones, dominio autorizado y direcciones de redirección) sale de esa dirección. Si usas un dominio propio, APP_URL debe ser ese dominio; si no, la dirección que te da el servidor (consulta el «Paso 0» de la guía).")}</p>
+        {view.mismatch && (
+          <div role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200" data-testid="google-url-mismatch">
+            {view.mismatch.kind === "own" ? (
+              <p>{t("Estás entrando por {current} pero APP_URL es {app}. Si ya usas tu dominio propio, cambia APP_URL en la configuración del servidor (Railway → Variables) a {current} y redespliega; después vuelve aquí: las direcciones de abajo se actualizarán.", { current: view.mismatch.current, app: view.mismatch.app })}</p>
+            ) : (
+              <p>{t("Estás entrando por {current} pero APP_URL es {app}. Las direcciones de Google salen de APP_URL, no de la que usas ahora. Es normal si todavía entras por la dirección antigua; si quieres que Pizarro use {current}, cambia APP_URL en la configuración del servidor (Railway → Variables) y redespliega.", { current: view.mismatch.current, app: view.mismatch.app })}</p>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="space-y-2">
         <h3 className="text-sm font-semibold">{t("Direcciones de redirección")}</h3>
         <p className="text-xs text-slate-500">{t("Pégalas en Google Cloud al crear el cliente OAuth (en «URI de redirección autorizados»).")}</p>
         {view.redirectUris ? (
           <div className="space-y-1.5">
+            {view.mismatch && <p className="text-xs font-medium">{t("Con APP_URL (la configurada ahora)")}</p>}
             <CopyRow label={t("Acceso con Google")} value={view.redirectUris.login} />
             <CopyRow label={t("Docs y Sheets")} value={view.redirectUris.docs} />
+            {view.mismatch && (
+              <>
+                <p className="pt-1 text-xs font-medium">{t("Con la dirección que usas ahora ({current})", { current: view.mismatch.current })}</p>
+                <CopyRow label={t("Acceso con Google")} value={view.mismatch.redirectUris.login} />
+                <CopyRow label={t("Docs y Sheets")} value={view.mismatch.redirectUris.docs} />
+                <p className="text-xs text-slate-500">{t("Google admite varias direcciones de redirección a la vez: añade las dos mientras migras y quita las antiguas cuando todo funcione.")}</p>
+              </>
+            )}
           </div>
         ) : (
           <p className="text-xs text-amber-600">{t("Define APP_URL en el servidor (por ejemplo https://pizarro.tuempresa.com) para ver las direcciones.")}</p>
