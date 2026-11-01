@@ -353,6 +353,8 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   const [isPrivate, setIsPrivate] = useState(!isAdmin);
   // «Importar desde un archivo…» (solo administradores) cambia el contenido del diálogo.
   const [importing, setImporting] = useState(false);
+  // Con una importación en curso el diálogo no se cierra (Esc, fondo, atrás): la subida sigue y se enseña su resultado.
+  const [importBusy, setImportBusy] = useState(false);
   // Las plantillas (solo administradores) se piden al abrir el modal.
   useEffect(() => {
     if (!isAdmin) return;
@@ -379,15 +381,16 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
     });
   };
   return (
-    <Modal open onClose={onClose} title={t("Nuevo proyecto")} size="sm">
+    <Modal open onClose={importBusy ? () => {} : onClose} title={t("Nuevo proyecto")} size="sm">
       {importing ? (
         <ImportProjectPanel
           isPrivate={isPrivate}
           onBack={() => setImporting(false)}
           onClose={onClose}
+          onBusyChange={setImportBusy}
           privateToggle={
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
+              <input type="checkbox" checked={isPrivate} disabled={importBusy} onChange={(e) => setIsPrivate(e.target.checked)} />
               {t("Proyecto privado (solo sus miembros; empiezas siendo el único)")}
             </label>
           }

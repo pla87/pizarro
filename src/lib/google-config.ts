@@ -3,8 +3,8 @@ import { db } from "./db";
 import { AppError } from "./errors";
 import { decryptSecret, encryptSecret } from "./keyring";
 import {
-  appDomainInfo, EMPTY_GOOGLE_SETTINGS, envGoogleCredentials, GOOGLE_CLIENT_ID_KEY, GOOGLE_CONTACT_KEY, GOOGLE_DOMAIN_KEY, GOOGLE_KEYS, GOOGLE_SECRET_KEY, googleRedirectUris, isGoogleActive,
-  parseGoogleSettings, resolveGoogleConfig, type AppDomainInfo, type GoogleConfig, type GoogleSettings, type GoogleSettingsInput,
+  appDomainInfo, detectUrlMismatch, EMPTY_GOOGLE_SETTINGS, envGoogleCredentials, GOOGLE_CLIENT_ID_KEY, GOOGLE_CONTACT_KEY, GOOGLE_DOMAIN_KEY, GOOGLE_KEYS, GOOGLE_SECRET_KEY, googleRedirectUris, isGoogleActive,
+  parseGoogleSettings, resolveGoogleConfig, type AppDomainInfo, type UrlMismatch, type GoogleConfig, type GoogleSettings, type GoogleSettingsInput,
 } from "./google-config-core";
 
 // Configuración de Google (acceso con Google y Docs/Sheets): variables GOOGLE_* del servidor (mandan) o lo que un
@@ -94,9 +94,13 @@ export interface GoogleSettingsView {
   /** Datos para la guía de Google Cloud (pantalla «Marca»). */
   appUrl: string;
   appDomain: AppDomainInfo;
+  /** Dirección con la que entra quien administra, si difiere de APP_URL (con sus URI de redirección y dominio, para migrar). */
+  mismatch: (UrlMismatch & { redirectUris: { login: string; docs: string }; domain: AppDomainInfo }) | null;
 }
 
-export async function getGoogleSettingsView(): Promise<GoogleSettingsView> {
+export async function getGoogleSettingsView(currentOrigin?: string): Promise<GoogleSettingsView> {
+  const m = detectUrlMismatch(process.env.APP_URL, currentOrigin);
+  const mismatchUris = m && googleRedirectUris(m.current);
   const { settings } = await readSaved();
   await refreshGoogleConfig();
   return {
@@ -108,6 +112,7 @@ export async function getGoogleSettingsView(): Promise<GoogleSettingsView> {
     redirectUris: googleRedirectUris(process.env.APP_URL),
     appUrl: (process.env.APP_URL ?? "").trim().replace(/\/$/, ""),
     appDomain: appDomainInfo(process.env.APP_URL),
+    mismatch: m && mismatchUris ? { ...m, redirectUris: mismatchUris, domain: appDomainInfo(m.current) } : null,
   };
 }
 

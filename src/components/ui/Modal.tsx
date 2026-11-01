@@ -123,6 +123,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
     return () => {
       v.removeEventListener("resize", sync);
       v.removeEventListener("scroll", sync);
+      setVv(null);
     };
   }, [open]);
 

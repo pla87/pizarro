@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { EMPTY_GOOGLE_SETTINGS, appDomainInfo, googleRedirectUris, isGoogleActive, resolveGoogleConfig, validateGoogleSettings } from "../src/lib/google-config-core";
+import { EMPTY_GOOGLE_SETTINGS, appDomainInfo, detectUrlMismatch, googleRedirectUris, originFromHeaders, isGoogleActive, resolveGoogleConfig, validateGoogleSettings } from "../src/lib/google-config-core";
 
 const saved = { clientId: "bd-id.apps.googleusercontent.com", workspaceDomain: "bd.example", hasSecret: true, publicContactEmail: "" };
 
@@ -71,5 +71,30 @@ describe("dominio autorizado: alojamientos compartidos y sufijos de dos etiqueta
     assert.equal(appDomainInfo("https://x.empresa.co.jp").domain, "empresa.co.jp");
     assert.equal(appDomainInfo("https://x.empresa.com.mx").domain, "empresa.com.mx");
     assert.equal(appDomainInfo("https://x.empresa.com").domain, "empresa.com");
+  });
+
+  test("origen de acceso a partir de las cabeceras", () => {
+    assert.equal(originFromHeaders({ host: "127.0.0.1:3341" }), "http://127.0.0.1:3341");
+    assert.equal(originFromHeaders({ host: "app:3000", forwardedHost: "Pizarro.Example.com", forwardedProto: "https" }), "https://pizarro.example.com");
+    assert.equal(originFromHeaders({ host: "pizarro.example.com" }), "https://pizarro.example.com");
+    assert.equal(originFromHeaders({ forwardedHost: "a.example.com, b.example.com", forwardedProto: "https, http" }), "https://a.example.com");
+    assert.equal(originFromHeaders({ host: null }), "");
+    assert.equal(originFromHeaders({ host: "x.example.com/evil" }), "");
+    assert.equal(originFromHeaders({ host: "x.example.com", forwardedProto: "javascript" }), "");
+  });
+
+  test("detectUrlMismatch: APP_URL frente a la dirección de acceso", () => {
+    assert.equal(detectUrlMismatch("https://pizarro.example.com/", "https://pizarro.example.com"), null);
+    assert.equal(detectUrlMismatch("https://pizarro.example.com", "https://PIZARRO.example.com:443"), null);
+    assert.equal(detectUrlMismatch(undefined, "https://pizarro.example.com"), null);
+    assert.equal(detectUrlMismatch("https://pizarro.example.com", ""), null);
+    // Se entra por el dominio propio pero APP_URL sigue en la dirección del servidor.
+    assert.deepEqual(detectUrlMismatch("https://pizarro-prod.up.railway.app", "https://pizarro.example.com"), { current: "https://pizarro.example.com", app: "https://pizarro-prod.up.railway.app", kind: "own" });
+    // Al revés: APP_URL es el dominio propio y se entra por la dirección del servidor.
+    assert.equal(detectUrlMismatch("https://pizarro.example.com", "https://pizarro-prod.up.railway.app")?.kind, "other");
+    // Local: localhost frente a 127.0.0.1.
+    assert.deepEqual(detectUrlMismatch("http://localhost:3341", "http://127.0.0.1:3341"), { current: "http://127.0.0.1:3341", app: "http://localhost:3341", kind: "other" });
+    // Otro protocolo con el mismo host también es distinto.
+    assert.equal(detectUrlMismatch("https://pizarro.example.com", "http://pizarro.example.com")?.kind, "other");
   });
 });

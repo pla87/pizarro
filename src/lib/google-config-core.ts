@@ -134,3 +134,45 @@ export function appDomainInfo(appUrl: string | undefined): AppDomainInfo {
   const take = TWO_PART_TLDS.has(labels.slice(-2).join(".")) ? 3 : 2;
   return { host, domain: labels.slice(-take).join("."), kind: "ok" };
 }
+
+/** Dirección (origen) con la que el navegador está usando Pizarro, a partir de las cabeceras de la petición. Vacío si no se sabe. */
+export function originFromHeaders(h: { host?: string | null; forwardedHost?: string | null; forwardedProto?: string | null }): string {
+  // Detrás de un proxy, el host y el protocolo que ve el navegador son los reenviados (el primer valor).
+  const host = (h.forwardedHost?.split(",")[0] || h.host || "").trim().toLowerCase();
+  if (!host || /[\s/@]/.test(host)) return "";
+  const hostname = host.replace(/:\d+$/, "");
+  const local = hostname === "localhost" || hostname === "[::1]" || /^[\d.]+$/.test(hostname);
+  const proto = h.forwardedProto?.split(",")[0]?.trim().toLowerCase() || (local ? "http" : "https");
+  if (proto !== "http" && proto !== "https") return "";
+  try {
+    return new URL(`${proto}://${host}`).origin;
+  } catch {
+    return "";
+  }
+}
+
+export interface UrlMismatch {
+  /** Dirección con la que se está entrando. */
+  current: string;
+  /** APP_URL (sin barra final). */
+  app: string;
+  /** «own»: se entra por un dominio propio y APP_URL apunta a otra cosa (el caso típico tras añadir el dominio);
+   *  «other»: APP_URL es un dominio propio pero se entra por otra dirección (la del servidor, una IP…). */
+  kind: "own" | "other";
+}
+
+/** Compara la dirección de acceso con APP_URL. null si coinciden o si falta alguna de las dos. */
+export function detectUrlMismatch(appUrl: string | undefined, currentOrigin: string | undefined): UrlMismatch | null {
+  let app: URL;
+  let cur: URL;
+  try {
+    app = new URL(clean(appUrl));
+    cur = new URL(clean(currentOrigin));
+  } catch {
+    return null;
+  }
+  if (app.origin === cur.origin) return null;
+  const curKind = appDomainInfo(cur.origin).kind;
+  const appKind = appDomainInfo(app.origin).kind;
+  return { current: cur.origin, app: app.origin, kind: curKind === "ok" && appKind !== "ok" ? "own" : "other" };
+}

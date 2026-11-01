@@ -38,6 +38,9 @@ export function isSafeEntryName(name: string): boolean {
   return name.split("/").every((part) => part !== "" && part !== "." && part !== "..");
 }
 
+/** Tope absoluto del directorio central (se reserva entero en memoria). */
+const MAX_CD_BYTES = 64 * 1024 * 1024;
+
 export class ZipFile {
   private constructor(private readonly fh: FileHandle, readonly entries: ZipEntryInfo[], private readonly fileSize: number) {}
 
@@ -66,7 +69,7 @@ export class ZipFile {
       if (disk !== 0 || cdDisk !== 0) throw new ZipReadError("ZIP de varios discos no admitido.");
       if (count === 0xffff || cdSize === 0xffffffff || cdOffset === 0xffffffff) throw new ZipReadError("ZIP64 no admitido.");
       if (count > limits.maxEntries) throw new ZipReadError("El ZIP tiene demasiadas entradas.");
-      if (cdOffset + cdSize > size || cdSize > count * (46 + 0xffff * 3) + 1) throw new ZipReadError("Directorio central no válido.");
+      if (cdOffset + cdSize > size || cdSize > Math.min(MAX_CD_BYTES, count * (46 + 3 * 1024) + 1)) throw new ZipReadError("Directorio central no válido.");
       const cd = Buffer.alloc(cdSize);
       if (cdSize) await fh.read(cd, 0, cdSize, cdOffset);
       const entries: ZipEntryInfo[] = [];

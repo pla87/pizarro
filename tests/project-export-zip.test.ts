@@ -127,3 +127,17 @@ test("menciones y tope de importación", () => {
   assert.equal(importMaxBytes("0"), 500 * 1024 * 1024);
   assert.equal(importMaxBytes("abc"), 500 * 1024 * 1024);
 });
+
+test("el lector rechaza un directorio central desproporcionado para su número de entradas", async () => {
+  // 5 MB de «directorio central» para una sola entrada: no se reserva memoria, se rechaza.
+  const body = Buffer.alloc(5 * 1024 * 1024);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(1, 8);
+  eocd.writeUInt16LE(1, 10);
+  eocd.writeUInt32LE(body.length, 12);
+  eocd.writeUInt32LE(0, 16);
+  const file = path.join(dir, "cd-enorme.zip");
+  writeFileSync(file, Buffer.concat([body, eocd]));
+  await assert.rejects(ZipFile.open(file), /Directorio central no válido/);
+});

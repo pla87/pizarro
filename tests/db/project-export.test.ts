@@ -10,7 +10,7 @@ import { crc32 } from "node:zlib";
 import sharp from "sharp";
 import { db, loginAs, logout, makeKind, makeProject, makeTask, makeUser } from "./helpers";
 import { buildProjectExport, estimateProjectExport, exportFileName, projectSlug, type ProjectExport } from "../../src/lib/project-export/export";
-import { importProjectFile, type ImportUser } from "../../src/lib/project-export/import";
+import { capTitle, importProjectFile, safeFileName, type ImportUser } from "../../src/lib/project-export/import";
 import { projectDataSchema, type ExportManifest, type ExportOptions, type ProjectExportData } from "../../src/lib/project-export/types";
 import { attachmentPath, documentPath, safeDownloadMime, saveAttachmentFiles, saveDocumentFile, saveRawAttachmentFile, saveReleaseAttachmentFile } from "../../src/lib/uploads";
 import { streamZip, type StreamZipEntry } from "../../src/lib/zip-stream";
@@ -576,5 +576,156 @@ describe("piezas del exportador", () => {
     const again = await buildProjectExport(f.project.id, { attachments: true, scope: "board" });
     assert.equal(again.missingFiles, 1);
     assert.equal(again.manifest.counts.taskAttachments, 2);
+  });
+});
+
+describe("importar: endurecimiento (ronda 15)", () => {
+  const AT = "2026-01-01T00:00:00.000Z";
+  const att = (file: Buffer, name: string, size = file.length) => ({ originalName: name, mimeType: "application/octet-stream", isImage: false, width: null, height: null, size, createdBy: null, createdAt: AT, file: sha(file) });
+  const relWith = (attachments: ProjectExportData["releases"][number]["attachments"]): ProjectExportData["releases"] => [{ ref: "r1", number: 1, title: "R", content: "", createdBy: null, deployedAt: AT, tasks: [], attachments }];
+  const rattach = (file: Buffer, fileName: string) => ({ fileName, size: file.length, isImage: false, position: 0, createdAt: AT, file: sha(file) });
+  const withQuota = async (mb: string, fn: () => Promise<void>) => {
+    const prev = process.env.UPLOAD_QUOTA_MB_PER_PROJECT;
+    process.env.UPLOAD_QUOTA_MB_PER_PROJECT = mb;
+    try {
+      await fn();
+    } finally {
+      if (prev === undefined) delete process.env.UPLOAD_QUOTA_MB_PER_PROJECT;
+      else process.env.UPLOAD_QUOTA_MB_PER_PROJECT = prev;
+    }
+  };
+
+  test("etiquetas y adjuntos de release que solo difieren en mayúsculas no son duplicados", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const a = Buffer.from("uno");
+    const b = Buffer.from("dos");
+    const data = minimal([], { labels: [{ ref: "l1", name: "Bug", color: "#ff0000" }, { ref: "l2", name: "bug", color: "#00ff00" }], releases: relWith([rattach(a, "Notas.txt"), rattach(b, "notas.txt")]) });
+    const s = await importProjectFile(await craft(data, [a, b]), asImporter(admin), { isPrivate: false });
+    assert.equal(s.counts.labels, 2);
+    assert.equal(s.counts.releaseAttachments, 2);
+    // Exactamente iguales sí se rechazan.
+    await assert.rejects(importProjectFile(await craft(minimal([], { labels: [{ ref: "l1", name: "Bug", color: "#ff0000" }, { ref: "l2", name: "Bug", color: "#00ff00" }] })), asImporter(admin), { isPrivate: false }), /repite/);
+  });
+
+  test("la cuota usa el tamaño real de la entrada (no el declarado) y cuenta cada copia de un fichero repetido", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const big = Buffer.alloc(2 * 1024 * 1024, 9);
+    const before = await db.project.count();
+    await withQuota("1", async () => {
+      // El JSON dice 1 byte, el fichero pesa 2 MB.
+      await assert.rejects(importProjectFile(await craft(minimal([{ attachments: [att(big, "mentira.bin", 1)] }]), [big]), asImporter(admin), { isPrivate: false }), /Cuota/);
+      // Dos adjuntos con el mismo fichero de 600 KB: ocupan 1,2 MB en disco.
+      const mid = Buffer.alloc(600 * 1024, 5);
+      await assert.rejects(importProjectFile(await craft(minimal([{ attachments: [att(mid, "a.bin"), att(mid, "b.bin")] }]), [mid]), asImporter(admin), { isPrivate: false }), /Cuota/);
+      // Uno solo cabe.
+      const ok = await importProjectFile(await craft(minimal([{ attachments: [att(mid, "a.bin")] }]), [mid]), asImporter(admin), { isPrivate: false });
+      assert.equal(ok.counts.taskAttachments, 1);
+    });
+    assert.equal(await db.project.count(), before + 1);
+    // El máximo por fichero también mira el tamaño real.
+    const data = minimal([{ attachments: [att(big, "mentira.bin", 1)] }]);
+    data.project.fileMaxMb = 1;
+    const s = await importProjectFile(await craft(data, [big]), asImporter(admin), { isPrivate: false });
+    assert.equal(s.counts.taskAttachments, 0);
+    assert.match(s.warnings[0]!, /mentira\.bin/);
+  });
+
+  test("nombres de adjuntos de release saneados, acotados y sin repetirse", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const f = [1, 2, 3, 4, 5].map((n) => Buffer.from(`contenido ${n}`));
+    const names = ["a/b", "a\\b", "..", "", "x".repeat(290) + "/y".repeat(5)];
+    const data = minimal([], { releases: relWith(f.map((b, i) => rattach(b, names[i]!))) });
+    const s = await importProjectFile(await craft(data, f), asImporter(admin), { isPrivate: false });
+    const rows = await db.releaseAttachment.findMany({ where: { release: { projectId: s.projectId } }, select: { fileName: true } });
+    const got = rows.map((r) => r.fileName).sort();
+    assert.equal(got.length, 5);
+    for (const n of got) assert.ok(!/[\\/\0]/.test(n) && n !== ".." && n !== "." && n.length > 0 && n.length <= 200, n);
+    assert.ok(got.includes("a_b") && got.includes("a_b (2)"));
+    assert.equal(safeFileName(".."), "archivo");
+    assert.equal(safeFileName("a\0b/c"), "a_b_c");
+  });
+
+  test("enlaces de Google que no son de Google, títulos largos y fechas con desfase", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const link = (url: string) => ({ kind: "GOOGLE_DOC" as const, title: "Doc", url, createdBy: null, createdAt: AT });
+    const long = "T".repeat(300);
+    const data = minimal([{ title: long, updatedAt: "2026-03-01T10:00:00+02:00", links: [link("https://docs.google.com/document/d/1"), link("https://evil.example.com/x"), link("http://docs.google.com/x")] }]);
+    const s = await importProjectFile(await craft(data), asImporter(admin), { isPrivate: false });
+    const task = await db.task.findFirstOrThrow({ where: { projectId: s.projectId }, include: { links: true } });
+    assert.equal(task.links.length, 1);
+    assert.equal(task.title.length, 210);
+    assert.equal(task.updatedAt.toISOString(), "2026-03-01T08:00:00.000Z");
+    assert.ok(s.warnings.some((w) => /2 enlaces/.test(w)));
+    assert.ok(s.warnings.some((w) => /1 títulos/.test(w)));
+    // Una mención cortada a medias no queda en el título.
+    assert.equal(capTitle(`${"x".repeat(205)}@[Nombre](user:abc)`), "x".repeat(205));
+    assert.equal(capTitle("corto"), "corto");
+  });
+
+  test("el esquema rechaza días inexistentes y enteros fuera de rango", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const bad = async (data: unknown) => assert.rejects(importProjectFile(await craft(data), asImporter(admin), { isPrivate: false }), /project.json no es válido/);
+    await bad(minimal([{ dueDate: "2026-02-31" }]));
+    await bad(minimal([{ startDate: "2026-13-01" }]));
+    await bad(minimal([], { releases: [{ ...relWith([])[0]!, number: 2147483648 }] }));
+    await bad(minimal([], { releases: relWith([{ fileName: "a", size: 1, isImage: false, position: 2147483648, createdAt: AT, file: "a".repeat(64) }]) }));
+    assert.equal(projectDataSchema.safeParse(minimal([{ dueDate: "2028-02-29" }])).success, true);
+  });
+
+  test("columna de rutinas, aviso de espera, seguidores, autor de contenido, orden de empates y repeticiones", async () => {
+    const admin = await makeUser({ role: "ADMIN", name: "Ada" });
+    const base = minimal([
+      { title: "A", position: 1000, routineColumnRef: "c2", waitingNotifiedAt: "2026-02-02T02:02:02.000Z", contentUpdatedByRef: "u1", followers: [{ user: "u1", muted: false, createdAt: "2026-02-03T00:00:00.000Z" }] },
+      { title: "B", position: 1000, columnRef: "c2" },
+      { title: "C", position: 1000, recurrenceFromRef: "t1" },
+      { title: "D", position: 1000, recurrenceFromRef: "t2", columnRef: "c2" },
+    ], {
+      users: [{ ref: "u1", name: "Ada", email: admin.email }],
+      kinds: [
+        { ref: "k1", name: "Zeta", color: "#3b82f6", position: 1, titleTemplate: "", descriptionTemplate: "", subtaskTemplate: [], scope: "project" },
+        { ref: "k2", name: "Alfa", color: "#3b82f6", position: 1, titleTemplate: "", descriptionTemplate: "", subtaskTemplate: [], scope: "project" },
+      ],
+      releaseTemplates: [{ kind: "HEADER", name: "Z", content: "z", position: 1 }, { kind: "HEADER", name: "A", content: "a", position: 1 }],
+      reportSchedule: { enabled: true, weekday: 2, hour: 7 },
+    });
+    base.columns.push({ ref: "c2", name: "Rutinas", position: 2000, role: "ROUTINES", isDone: false, waitingDays: null, routineTargetRef: null });
+    const s = await importProjectFile(await craft(base, [], { timeZone: "Asia/Tokyo" }), asImporter(admin), { isPrivate: false });
+    const tasks = await db.task.findMany({ where: { projectId: s.projectId }, include: { followers: true } });
+    const byTitle = new Map(tasks.map((x) => [x.title, x]));
+    const a = byTitle.get("A")!;
+    const routines = await db.column.findFirstOrThrow({ where: { projectId: s.projectId, role: "ROUTINES" } });
+    assert.equal(a.routineColumnId, routines.id);
+    assert.equal(a.waitingNotifiedAt?.toISOString(), "2026-02-02T02:02:02.000Z");
+    assert.equal(a.contentUpdatedById, admin.id);
+    assert.equal(a.followers[0]!.createdAt.toISOString(), "2026-02-03T00:00:00.000Z");
+    // La tarea que ya está en una columna de rutinas la recuerda por el disparador.
+    assert.equal(byTitle.get("B")!.routineColumnId, routines.id);
+    // Misma posición en la misma columna: se conserva el orden del archivo (A, C en la primera; B, D en la segunda).
+    const order = async (colId: string) => (await db.task.findMany({ where: { columnId: colId }, orderBy: [{ position: "asc" }, { id: "asc" }] })).map((x) => x.title);
+    assert.deepEqual(await order(a.columnId), ["A", "C"]);
+    assert.deepEqual(await order(routines.id), ["B", "D"]);
+    assert.equal(byTitle.get("C")!.recurrenceFromId, a.id);
+    assert.equal(byTitle.get("D")!.recurrenceFromId, byTitle.get("B")!.id);
+    // Tipos y plantillas con la misma posición: createdAt creciente en el orden del archivo.
+    const kinds = await db.taskKind.findMany({ where: { projectId: s.projectId }, orderBy: [{ position: "asc" }, { createdAt: "asc" }] });
+    assert.deepEqual(kinds.map((k) => k.name), ["Zeta", "Alfa"]);
+    const tpls = await db.projectReleaseTemplate.findMany({ where: { projectId: s.projectId }, orderBy: [{ position: "asc" }, { createdAt: "asc" }] });
+    assert.deepEqual(tpls.map((x) => x.name), ["Z", "A"]);
+    // Zona horaria distinta de la de esta instancia: aviso del informe.
+    assert.ok(s.warnings.some((w) => /Asia\/Tokyo/.test(w)));
+  });
+
+  test("exportar guarda zona horaria, columna de rutinas, aviso de espera y fechas de orden", async () => {
+    const { projectId } = await richProject();
+    const routines = await db.column.findFirstOrThrow({ where: { projectId, role: "ROUTINES" } });
+    await db.task.updateMany({ where: { projectId, columnId: routines.id }, data: { waitingNotifiedAt: new Date("2026-05-05T05:05:05.000Z") } });
+    const built = await buildProjectExport(projectId, { attachments: false, scope: "all" });
+    assert.ok(built.manifest.timeZone);
+    const data = projectDataSchema.parse(projectJsonOf(built));
+    const routineTask = data.tasks.find((x) => x.title === "Archivada")!;
+    assert.ok(routineTask.routineColumnRef);
+    assert.equal(routineTask.waitingNotifiedAt, "2026-05-05T05:05:05.000Z");
+    assert.ok(data.kinds.every((k) => k.createdAt));
+    assert.ok(data.tasks.some((x) => x.followers.some((fo) => fo.createdAt)));
   });
 });
