@@ -38,6 +38,9 @@ export function LegalAdmin({ settings, editorMode }: { settings: LegalSettings; 
 
   return (
     <div className="space-y-4">
+      <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-100" role="note" data-testid="legal-template-note">
+        {t("Los textos por defecto son plantillas orientadas al RGPD (España/UE). Complétalos con los datos de tu organización (proveedores, plazos) y haz que los revise un profesional jurídico antes de darlos por buenos.")}
+      </p>
       <p className="text-sm text-slate-500">
         {t("Los textos de las páginas públicas /privacy y /terms (las que pide Google y enlaza la pantalla de acceso). Si no escribes nada se usa el texto genérico.")}
       </p>
