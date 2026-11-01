@@ -11,7 +11,9 @@ set -eu
 
 REPO="pla87/pizarro"
 DIR="/opt/pizarro"
-REF="main"
+REF="" # vacío = la última versión publicada (o main si aún no hay)
+VERSION=""
+BUILD=0
 DOMAIN_ARG=""
 LOCAL=0
 NOSTART=0
@@ -33,16 +35,21 @@ Opciones:
   --domain <dominio>  Dominio público (HTTPS automático; el DNS ya debe apuntar a este servidor)
   --local             Solo red local, por HTTP y sin dominio
   --dir <ruta>        Carpeta de instalación, ruta absoluta (por defecto /opt/pizarro)
-  --ref <rama|tag>    Versión que se descarga (por defecto main)
+  --version <X.Y.Z>   Instala esa versión (código de la etiqueta vX.Y.Z e imagen ghcr.io/pla87/pizarro:X.Y.Z).
+                      Sin ella se instala la última versión publicada (si aún no hay ninguna, main)
+  --ref <rama|tag>    Descarga el código de esa rama o etiqueta (una rama se construye en el servidor)
+  --build             Construye la imagen en el servidor, desde el código, en vez de descargar la publicada
   --no-start          Prepara todo pero no arranca los contenedores
   -y, --yes           Instala Docker si falta, sin preguntar
   -h, --help          Muestra esta ayuda
 
 Qué hace: comprueba Linux (x86_64 o arm64) y root/sudo, comprueba Docker y el plugin «docker compose»
 (si faltan, ofrece instalarlos con https://get.docker.com y solo lo hace tras confirmarlo), descarga el
-código de GitHub sin necesitar git, lo coloca en la carpeta de instalación y ejecuta deploy/install.sh.
+código de la versión elegida (sin necesitar git), lo coloca en la carpeta de instalación y ejecuta
+deploy/install.sh, que descarga la imagen ya construida (no se construye nada en tu servidor).
 
-Se puede repetir sin riesgo: actualiza el código y conserva deploy/.env, el kit de recuperación y los
+Se puede repetir sin riesgo: actualiza a la última versión (o a la que pidas con --version; sirve también
+para volver a una anterior) y conserva deploy/.env, el kit de recuperación y los
 datos (viven en volúmenes de Docker). Si pides otro dominio del que ya hay en deploy/.env, se avisa y
 se mantiene el actual. Guía completa: docs/INSTALL.md.
 EOT
@@ -61,6 +68,9 @@ main() {
       --dir=*) DIR="${1#--dir=}" ;;
       --ref) [ $# -ge 2 ] || die "Falta el valor de --ref"; REF="$2"; shift ;;
       --ref=*) REF="${1#--ref=}" ;;
+      --version) [ $# -ge 2 ] || die "Falta el valor de --version"; VERSION="$2"; shift ;;
+      --version=*) VERSION="${1#--version=}" ;;
+      --build) BUILD=1 ;;
       --tarball) [ $# -ge 2 ] || die "Falta el valor de --tarball"; TARBALL="$2"; shift ;;
       --local) LOCAL=1 ;;
       --no-start) NOSTART=1 ;;
@@ -72,8 +82,18 @@ main() {
   done
 
   if [ "$LOCAL" = 1 ] && [ -n "$DOMAIN_ARG" ]; then die "Usa --domain o --local, no los dos."; fi
+  VERSION="${VERSION#v}"
+  if [ -n "$VERSION" ]; then
+    [ -z "$REF" ] || die "Usa --version o --ref, no los dos."
+    case "$VERSION" in
+      *[!0-9.]*|.*|*.|*..*) die "La versión «$VERSION» no es válida (se espera X.Y.Z, p. ej. 1.38.0)." ;;
+      *.*.*) ;;
+      *) die "La versión «$VERSION» no es válida (se espera X.Y.Z, p. ej. 1.38.0)." ;;
+    esac
+    REF="v$VERSION"
+  fi
   case "$REF" in
-    ""|*[!A-Za-z0-9._/-]*|-*|*..*) die "La referencia «$REF» no es válida (solo letras, números, . _ - /, y sin «..»)." ;;
+    *[!A-Za-z0-9._/-]*|-*|*..*) die "La referencia «$REF» no es válida (solo letras, números, . _ - /, y sin «..»)." ;;
   esac
   case "$DIR" in
     *..*) die "--dir no puede contener «..»." ;;
@@ -138,6 +158,35 @@ main() {
     fi
   fi
   say "Docker listo: $($SUDO docker --version 2>/dev/null </dev/null || echo docker)."
+
+  # --- Qué versión ---------------------------------------------------------------------
+  # Sin --version ni --ref: la última release publicada (consulta a GitHub); si no hay ninguna o no se puede
+  # consultar, se usa main y la imagen se construye aquí (aún no hay imagen publicada que corresponda).
+  # Una etiqueta vX.Y.Z (--version o --ref) fija esa imagen; sin ellas se sigue «latest».
+  PIN_ARG=""
+  if [ -z "$REF" ]; then
+    if [ -z "$TARBALL" ]; then
+      if fetch "https://api.github.com/repos/$REPO/releases/latest" "$TMP/latest.json" 2>/dev/null; then
+        latest=$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\(v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)".*/\1/p' "$TMP/latest.json" | head -n 1)
+      else
+        latest=""
+      fi
+      if [ -n "$latest" ]; then
+        REF="$latest"
+        PIN_ARG="latest" # se sigue «latest», quitando una versión fijada antes
+        say "Última versión publicada: $latest."
+      else
+        REF="main"
+        BUILD=1
+        say "No encuentro ninguna versión publicada: se usa main y la imagen se construirá en este servidor."
+      fi
+    fi
+  else
+    case "$REF" in
+      v[0-9]*.[0-9]*.[0-9]*) case "${REF#v}" in *[!0-9.]*) BUILD=1 ;; *) PIN_ARG="${REF#v}" ;; esac ;;
+      *) BUILD=1 ;; # una rama u otra etiqueta: no hay imagen publicada para ella
+    esac
+  fi
 
   # --- Descarga del código -----------------------------------------------------------
   SRC="$TMP/src"
@@ -253,6 +302,13 @@ main() {
     fi
   fi
   if [ "$NOSTART" = 1 ]; then set -- "$@" --no-start; fi
+  if [ "$BUILD" = 1 ]; then
+    set -- "$@" --build
+  elif [ "$PIN_ARG" = latest ]; then
+    set -- "$@" --unpin
+  elif [ -n "$PIN_ARG" ]; then
+    set -- "$@" --version "$PIN_ARG"
+  fi
 
   # --- Instalar ------------------------------------------------------------------------
   say ""
@@ -267,6 +323,7 @@ main() {
   say "  2. Guarda $DIR/deploy/recovery-kit.txt FUERA del servidor (sin él, las copias de seguridad no se pueden leer)."
   say "  3. Configura el email en Administración → Ajustes y revisa las copias (docs/INSTALL.md, sección 4)."
   say "Para actualizar más adelante, repite el mismo comando: conserva tu configuración y tus datos."
+  say "Para volver a una versión anterior: el mismo comando con --version X.Y.Z (docs/INSTALL.md, sección 5)."
 }
 
 main "$@"

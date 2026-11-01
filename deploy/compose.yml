@@ -1,6 +1,8 @@
 # Pizarro en un servidor propio: Caddy (HTTPS) + Pizarro + PostgreSQL 16.
 # Uso (desde esta carpeta, con el fichero .env rellenado a partir de .env.example):
-#   docker compose up -d --build
+#   docker compose up -d
+# Usa la imagen ya construida y probada (ghcr.io/pla87/pizarro); para construirla en este servidor, añade
+# compose.build.yml (ver docs/INSTALL.md, «Construir la imagen en tu servidor»).
 # Guía completa: docs/INSTALL.md. Este fichero no afecta al despliegue en Railway.
 
 name: pizarro
@@ -34,14 +36,12 @@ services:
     logging: *logging
 
   app:
-    # Se construye desde el código (la raíz del repositorio). Con una imagen publicada bastaría con «image:».
-    build:
-      context: ..
-      dockerfile: Dockerfile
-      args:
-        # Opcional: commit del código, para el identificador de versión.
-        GIT_SHA: ${GIT_SHA:-}
-    image: ${PIZARRO_IMAGE:-pizarro:local}
+    # Imagen publicada en GHCR para cada versión (linux/amd64 y linux/arm64): no se construye nada en el servidor.
+    # PIZARRO_IMAGE fija una versión concreta (p. ej. ghcr.io/pla87/pizarro:1.38.0) o apunta a tu propio registro.
+    # Para construirla desde el código en lugar de descargarla: compose.build.yml (docs/INSTALL.md).
+    image: ${PIZARRO_IMAGE:-ghcr.io/pla87/pizarro:latest}
+    # «missing»: solo descarga si la imagen no está. Se actualiza a propósito con «docker compose pull».
+    pull_policy: ${PIZARRO_PULL_POLICY:-missing}
     restart: unless-stopped
     depends_on:
       postgres:

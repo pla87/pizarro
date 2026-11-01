@@ -351,4 +351,11 @@ export const admin: Record<string, string> = {
   "En «Branding» cambia la página principal, los enlaces de privacidad y condiciones y los dominios autorizados.": "Under “Branding” change the home page, the privacy and terms links and the authorized domains.",
   "Comprueba que «Iniciar sesión con Google» funciona con la dirección nueva y entonces borra las direcciones antiguas.": "Check that “Sign in with Google” works with the new address and then delete the old addresses.",
   "Avisa a tu gente: tendrá que iniciar sesión otra vez, y quien instaló Pizarro como aplicación debe desinstalarla e instalarla de nuevo desde la dirección nueva.": "Let your people know: they will have to sign in again, and anyone who installed Pizarro as an app must uninstall it and install it again from the new address.",
+  "Hay una versión nueva de Pizarro: v{version}": "A new version of Pizarro is available: v{version}",
+  "Hay una versión nueva de Pizarro": "A new version of Pizarro is available",
+  "Ver novedades": "See what's new",
+  "Cómo actualizar": "How to update",
+  "En Railway: vuelve a desplegar desde GitHub (Deployments → Redeploy).": "On Railway: redeploy from GitHub (Deployments → Redeploy).",
+  "En tu servidor: vuelve a ejecutar el comando de instalación (get.sh) o «docker compose pull && docker compose up -d».": "On your server: run the install command (get.sh) again or \"docker compose pull && docker compose up -d\".",
+  "Ocultar este aviso": "Hide this notice",
 };

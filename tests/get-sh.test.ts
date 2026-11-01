@@ -188,3 +188,45 @@ test("get.sh: sin Docker y sin --yes ni terminal no instala nada", () => {
 test("cleanup", () => {
   rmSync(root, { recursive: true, force: true });
 });
+
+test("get.sh: --version valida el formato, no se mezcla con --ref y se pasa a install.sh con su etiqueta", { skip: process.getuid?.() !== 0 && "requiere root" }, () => {
+  assert.match(run(["--version", "1.2"]).stderr, /no es válida/);
+  assert.match(run(["--version", "x;rm"]).stderr, /no es válida/);
+  assert.match(run(["--version", "1.2.3", "--ref", "main"]).stderr, /no los dos/);
+  const tar = makeTarball("v", full());
+  const dir = join(root, "inst-v");
+  const r = run(["--domain", "pizarro.example.com", "--version", "v1.2.3", "--dir", dir, "--tarball", tar]);
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.equal(readFileSync(join(dir, "deploy", "args.txt"), "utf8").trim(), "--domain pizarro.example.com --version 1.2.3");
+  const b = run(["--domain", "pizarro.example.com", "--build", "--dir", dir, "--tarball", tar]);
+  assert.equal(b.status, 0, b.stderr + b.stdout);
+  assert.equal(readFileSync(join(dir, "deploy", "args.txt"), "utf8").trim(), "--domain pizarro.example.com --build");
+  // Una rama no tiene imagen publicada: se construye aquí.
+  const m = run(["--domain", "pizarro.example.com", "--ref", "main", "--dir", dir, "--tarball", tar]);
+  assert.equal(m.status, 0, m.stderr + m.stdout);
+  assert.match(readFileSync(join(dir, "deploy", "args.txt"), "utf8"), /--build/);
+});
+
+// install.sh de verdad (con --no-start: no llega a llamar a docker).
+test("install.sh: --version fija la imagen, --unpin la suelta, --build usa compose.build.yml y se respeta un registro propio", () => {
+  const dir = join(root, "inst-real", "deploy");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, ".env.example"), 'DOMAIN="pizarro.example.com"\nAPP_URL="https://pizarro.example.com"\nPOSTGRES_PASSWORD=""\nSESSION_SECRET=""\nBACKUP_KEY=""\n');
+  writeFileSync(join(dir, "compose.yml"), "name: pizarro\n");
+  writeFileSync(join(dir, "install.sh"), readFileSync(join(process.cwd(), "deploy", "install.sh"), "utf8"));
+  const env = mkEnv(`${bin}:${process.env.PATH}`);
+  const go = (...args: string[]) => {
+    const r = spawnSync("sh", [join(dir, "install.sh"), "--domain", "a.example.com", "--no-start", ...args], { encoding: "utf8", env, stdio: ["ignore", "pipe", "pipe"] });
+    assert.equal(r.status, 0, r.stderr + r.stdout);
+    return readFileSync(join(dir, ".env"), "utf8");
+  };
+  assert.doesNotMatch(go(), /PIZARRO_IMAGE|COMPOSE_FILE/);
+  assert.match(go("--version", "v1.38.0"), /^PIZARRO_IMAGE="ghcr\.io\/pla87\/pizarro:1\.38\.0"$/m);
+  assert.doesNotMatch(go("--unpin"), /PIZARRO_IMAGE/);
+  assert.match(go("--build"), /^COMPOSE_FILE="compose\.yml:compose\.build\.yml"$/m);
+  assert.doesNotMatch(go("--unpin"), /COMPOSE_FILE/);
+  writeFileSync(join(dir, ".env"), `${readFileSync(join(dir, ".env"), "utf8")}PIZARRO_IMAGE="registro.example.com/pizarro:7"\n`);
+  assert.match(go("--unpin"), /registro\.example\.com\/pizarro:7/);
+  const bad = spawnSync("sh", [join(dir, "install.sh"), "--version", "1.x"], { encoding: "utf8", env, stdio: ["ignore", "pipe", "pipe"] });
+  assert.equal(bad.status, 2);
+});

@@ -5,6 +5,9 @@
 #   ./install.sh --domain pizarro.example.com  sin preguntas
 #   ./install.sh --local                       solo red local, por HTTP (sin dominio)
 #   ./install.sh --no-start                    solo prepara deploy/.env y el kit de recuperación
+#   ./install.sh --version 1.38.0              fija esa versión de la imagen (ghcr.io/pla87/pizarro:1.38.0)
+#   ./install.sh --unpin                       vuelve a seguir «latest» (quita una versión fijada antes)
+#   ./install.sh --build                       construye la imagen aquí, desde el código, en vez de descargarla
 
 # Qué hace: comprueba Docker, crea deploy/.env con secretos aleatorios fuertes (nunca pisa los que ya
 # existen), arranca los contenedores, espera a que la app esté sana, muestra la URL y el código del
@@ -20,17 +23,33 @@ KIT="$DIR/recovery-kit.txt"
 DOMAIN_ARG="${DOMAIN:-}"
 LOCAL=0
 START=1
+VERSION_ARG=""
+UNPIN=0
+BUILD="${PIZARRO_BUILD:-0}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain) [ $# -ge 2 ] || { echo "Falta el valor de --domain" >&2; exit 2; }; DOMAIN_ARG="$2"; shift ;;
     --domain=*) DOMAIN_ARG="${1#--domain=}" ;;
     --local) LOCAL=1 ;;
     --no-start) START=0 ;;
-    -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --version) [ $# -ge 2 ] || { echo "Falta el valor de --version" >&2; exit 2; }; VERSION_ARG="$2"; shift ;;
+    --version=*) VERSION_ARG="${1#--version=}" ;;
+    --unpin) UNPIN=1 ;;
+    --build) BUILD=1 ;;
+    -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Opción desconocida: $1 (prueba --help)" >&2; exit 2 ;;
   esac
   shift
 done
+
+VERSION_ARG="${VERSION_ARG#v}"
+case "$VERSION_ARG" in
+  "") ;;
+  *[!0-9.]*|.*|*.|*..*) echo "La versión «$VERSION_ARG» no es válida (se espera X.Y.Z, p. ej. 1.38.0)." >&2; exit 2 ;;
+  *.*.*) ;;
+  *) echo "La versión «$VERSION_ARG» no es válida (se espera X.Y.Z, p. ej. 1.38.0)." >&2; exit 2 ;;
+esac
+[ "$BUILD" = 1 ] || BUILD=0
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -66,6 +85,14 @@ set_var() {
     $0 ~ ("^" k "=") && !done { print k "=\"" v "\""; done = 1; next }
     { print }
     END { if (!done) print k "=\"" v "\"" }' "$ENV_FILE" >"$tmp"
+  cat "$tmp" >"$ENV_FILE"
+  rm -f "$tmp"
+}
+
+# Quita la variable del .env.
+unset_var() {
+  tmp=$(mktemp)
+  grep -v "^$1=" "$ENV_FILE" >"$tmp" || true
   cat "$tmp" >"$ENV_FILE"
   rm -f "$tmp"
 }
@@ -138,6 +165,28 @@ if [ -z "$cur_domain" ] || [ -z "$cur_url" ]; then
   fi
 fi
 
+# Imagen: por defecto la publicada (ghcr.io/pla87/pizarro:latest). --version la fija; --unpin vuelve a «latest».
+# Solo se toca un valor que ponga este script (ghcr.io/pla87/pizarro:…): un registro propio se respeta.
+IMAGE_REPO="ghcr.io/pla87/pizarro"
+if [ -n "$VERSION_ARG" ]; then
+  set_var PIZARRO_IMAGE "$IMAGE_REPO:$VERSION_ARG"
+  say "Imagen fijada a $IMAGE_REPO:$VERSION_ARG."
+elif [ "$UNPIN" = 1 ]; then
+  case "$(get_var PIZARRO_IMAGE)" in "$IMAGE_REPO":*) unset_var PIZARRO_IMAGE ;; esac
+fi
+# Construir en este servidor = añadir compose.build.yml a la lista de ficheros de Compose (queda en .env, así
+# «docker compose up -d --build» funciona después sin más). Sin --build se quita esa marca si la puso este script.
+cur_cf=$(get_var COMPOSE_FILE)
+if [ "$BUILD" = 1 ]; then
+  cf="compose.yml:compose.build.yml"
+  [ ! -f "$DIR/compose.override.yml" ] || cf="$cf:compose.override.yml"
+  set_var COMPOSE_FILE "$cf"
+  # Con la imagen publicada fijada no tiene sentido construir: se construye con el nombre local.
+  case "$(get_var PIZARRO_IMAGE)" in "$IMAGE_REPO":*) unset_var PIZARRO_IMAGE ;; esac
+else
+  case "$cur_cf" in compose.yml:compose.build.yml|compose.yml:compose.build.yml:compose.override.yml) unset_var COMPOSE_FILE ;; esac
+fi
+
 # Secretos: solo los que faltan.
 created=""
 if set_if_empty POSTGRES_PASSWORD "$(rand_hex 24)"; then
@@ -200,15 +249,24 @@ write_kit
 say "Kit de recuperación escrito en $KIT (permisos 600)."
 
 if [ "$START" = 0 ]; then
-  say "Opción --no-start: no se arrancan los contenedores. Cuando quieras: cd $DIR && docker compose up -d --build"
+  say "Opción --no-start: no se arrancan los contenedores. Cuando quieras: cd $DIR && docker compose up -d$([ "$BUILD" = 1 ] && echo " --build")"
   exit 0
 fi
 
 # --- Arranque -----------------------------------------------------------------
 cd "$DIR"
 say ""
-say "Arrancando Pizarro (la primera vez construye la imagen: unos minutos)..."
-docker compose up -d --build
+if [ "$BUILD" = 1 ]; then
+  say "Arrancando Pizarro (construye la imagen aquí: unos minutos)..."
+  docker compose up -d --build
+else
+  say "Descargando la imagen de Pizarro..."
+  if ! docker compose pull app; then
+    die "No se pudo descargar la imagen $(get_var PIZARRO_IMAGE | grep . || echo "$IMAGE_REPO:latest"). Comprueba la conexión y la versión, o construye la imagen aquí con:  ./install.sh --build"
+  fi
+  say "Arrancando Pizarro..."
+  docker compose up -d
+fi
 
 say "Esperando a que la app esté lista..."
 i=0
