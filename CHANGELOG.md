@@ -2,6 +2,32 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.36.1 — 2026-11-01 20:40
+
+Guía de Google para dominio propio o dirección del servidor y correcciones de exportar e importar
+
+### Nuevas funcionalidades
+
+- Ajustes → Acceso con Google muestra la dirección pública de Pizarro (APP_URL), avisa si estás entrando por otra dirección y lista las direcciones de redirección de ambas para poder migrar sin cortes.
+- Paso 0 en la guía de Google: dominio propio o dirección del servidor, y cómo pasar de uno a otro (Railway y Docker Compose).
+
+### Mejoras
+
+- Exportar: muestra el error del servidor si falla y, en Chrome, deja elegir dónde guardar el archivo mientras se descarga.
+- El diálogo Nuevo proyecto no se puede cerrar mientras se importa.
+- Importar respeta el orden de las tarjetas empatadas, de los tipos y de las plantillas, y conserva rutinas, avisos de espera ya enviados, seguidores y autor del contenido.
+
+### Correcciones
+
+- Importar usa el tamaño real de los archivos para la cuota y se detiene en cuanto la supera, sin bloquear las subidas de otras personas mientras importa.
+- Nombres de adjuntos de releases y enlaces de Google importados saneados; títulos de más de 210 caracteres recortados con aviso.
+- Etiquetas que solo se diferencian en mayúsculas ya no impiden importar.
+- La cursiva sobre varias zonas en cursiva ya no rompe el texto; el menú «Más formatos» se coloca bien con el teclado del móvil.
+
+### Cambios técnicos / DB
+
+- Formato pizarro-project v1 con campos opcionales nuevos (compatible con los exports de la v1.36.0); lectura del export en una transacción RepeatableRead; límite del directorio central del ZIP.
+
 ## v1.36.0 — 2026-11-01 19:24
 
 Exportar e importar proyectos, textos legales RGPD, diálogos fijos con el teclado del móvil y correcciones de la revisión

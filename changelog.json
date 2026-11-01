@@ -1,6 +1,55 @@
 {
   "versions": [
     {
+      "version": "1.36.1",
+      "date": "2026-11-01",
+      "releasedAt": "2026-11-01T20:40:43+01:00",
+      "summary": "Guía de Google para dominio propio o dirección del servidor y correcciones de exportar e importar",
+      "changes": {
+        "nuevas": [
+          "Ajustes → Acceso con Google muestra la dirección pública de Pizarro (APP_URL), avisa si estás entrando por otra dirección y lista las direcciones de redirección de ambas para poder migrar sin cortes.",
+          "Paso 0 en la guía de Google: dominio propio o dirección del servidor, y cómo pasar de uno a otro (Railway y Docker Compose)."
+        ],
+        "mejoras": [
+          "Exportar: muestra el error del servidor si falla y, en Chrome, deja elegir dónde guardar el archivo mientras se descarga.",
+          "El diálogo Nuevo proyecto no se puede cerrar mientras se importa.",
+          "Importar respeta el orden de las tarjetas empatadas, de los tipos y de las plantillas, y conserva rutinas, avisos de espera ya enviados, seguidores y autor del contenido."
+        ],
+        "correcciones": [
+          "Importar usa el tamaño real de los archivos para la cuota y se detiene en cuanto la supera, sin bloquear las subidas de otras personas mientras importa.",
+          "Nombres de adjuntos de releases y enlaces de Google importados saneados; títulos de más de 210 caracteres recortados con aviso.",
+          "Etiquetas que solo se diferencian en mayúsculas ya no impiden importar.",
+          "La cursiva sobre varias zonas en cursiva ya no rompe el texto; el menú «Más formatos» se coloca bien con el teclado del móvil."
+        ],
+        "tecnicos": [
+          "Formato pizarro-project v1 con campos opcionales nuevos (compatible con los exports de la v1.36.0); lectura del export en una transacción RepeatableRead; límite del directorio central del ZIP."
+        ]
+      },
+      "en": {
+        "summary": "Google guide for own domain or server address and export/import fixes",
+        "changes": {
+          "nuevas": [
+            "Settings → Google sign-in shows Pizarro's public address (APP_URL), warns if you are browsing from another address and lists the redirect URIs for both so you can migrate without downtime.",
+            "Step 0 in the Google guide: own domain or server address, and how to switch (Railway and Docker Compose)."
+          ],
+          "mejoras": [
+            "Export: shows the server error if it fails and, in Chrome, lets you choose where to save the file while it downloads.",
+            "The New project dialog cannot be closed while importing.",
+            "Import keeps the order of tied cards, types and templates, and keeps routines, already-sent waiting reminders, followers and content author."
+          ],
+          "correcciones": [
+            "Import uses the real file sizes for the quota and stops as soon as it is exceeded, without blocking other people's uploads while importing.",
+            "Imported release attachment names and Google links are sanitized; titles over 210 characters are cut with a warning.",
+            "Labels that differ only in case no longer block an import.",
+            "Italic over several italic spans no longer breaks the text; the “More formats” menu is positioned correctly with the mobile keyboard."
+          ],
+          "tecnicos": [
+            "pizarro-project v1 format with new optional fields (compatible with v1.36.0 exports); export reads in a RepeatableRead transaction; ZIP central directory limit."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.36.0",
       "date": "2026-11-01",
       "releasedAt": "2026-11-01T19:24:01+01:00",
