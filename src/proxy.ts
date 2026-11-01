@@ -96,5 +96,7 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api/auth/google/|api/health|_next/static|_next/image|favicon.ico|icon.svg|icons/|apple-touch-icon.png|pizarro-logo-120.png|sw.js|manifest.webmanifest).*)"],
+  // api/projects/import queda fuera: el proxy almacena el cuerpo de las peticiones (hasta proxyClientMaxBodySize) y la importación
+  // de un proyecto llega a cientos de MB; la ruta comprueba la sesión y el rol por sí misma y recibe el cuerpo en flujo.
+  matcher: ["/((?!api/auth/google/|api/projects/import$|api/health|_next/static|_next/image|favicon.ico|icon.svg|icons/|apple-touch-icon.png|pizarro-logo-120.png|sw.js|manifest.webmanifest).*)"],
 };
