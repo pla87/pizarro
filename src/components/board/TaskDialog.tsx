@@ -40,7 +40,9 @@ import { TitleField } from "./TitleField";
 import { createAndOpenGoogleFile, shareWarning } from "./google";
 import { AttachLimitHint } from "./AttachLimitHint";
 import { attachmentTotalsOf } from "@/lib/attachment-totals";
-import { filesFrom, formatBytes, UploadError, uploadFile, useFileDrop } from "./upload";
+import { UploadProgress } from "./UploadProgress";
+import { batchErrorMessage, filesFrom, formatBytes, skippedMessage, uploadBatch, useFileDrop, type BatchProgress } from "./upload";
+import { planUploads } from "@/lib/upload-queue";
 import { formatDate } from "@/lib/format";
 import { fieldsError, fieldsFormOf, fieldsPatch, TaskFieldsGroup, type FieldsForm } from "./TaskFieldsGroup";
 import { draftKey, useDraftAutosave, type EditTaskDraft } from "./drafts";
@@ -106,6 +108,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     setFieldsForm(fieldsFormOf(task));
   }
   const [uploading, setUploading] = useState(0);
+  const [progress, setProgress] = useState<BatchProgress | null>(null);
   // Una subida se rechazó por el máximo de adjuntos de la tarea: se resalta el total hasta que se borre algo.
   const [totalRejected, setTotalRejected] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
@@ -315,20 +318,27 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     save({ recurrence, recurrenceDay }, { recurrence, recurrenceDay });
   };
 
-  const upload = async (files: File[]) => {
-    if (!files.length) return;
-    setUploading((n) => n + files.length);
-    for (const file of files) {
-      try {
-        const att = await board.trackRaw(uploadFile(task.id, file, false, t));
-        setDetail((d) => (d ? { ...d, attachments: [...d.attachments, att] } : d));
-      } catch (err) {
-        if (err instanceof UploadError && err.code === "task_total") setTotalRejected(true);
-        toast((err as Error).message, "error");
-      } finally {
-        setUploading((n) => n - 1);
-      }
-    }
+  const upload = async (list: File[]) => {
+    if (!list.length) return;
+    // Sin tope de cantidad: solo el tamaño de cada archivo y lo que aún cabe en la tarea. Lo omitido se avisa de una vez.
+    const used = (detail?.attachments ?? []).reduce((n, a) => n + a.size, 0);
+    const { fileMaxMb, attachMaxMb } = board.project;
+    const { accepted, skipped } = planUploads(list, { fileMaxBytes: fileMaxMb * 1024 * 1024, remainingBytes: attachMaxMb * 1024 * 1024 - used });
+    if (skipped.length) toast(skippedMessage(t, locale, skipped, fileMaxMb), "error");
+    if (skipped.some((s) => s.reason === "total")) setTotalRejected(true);
+    if (!accepted.length) return;
+    setUploading((n) => n + accepted.length);
+    const res = await uploadBatch(task.id, accepted, {
+      t,
+      track: board.trackRaw,
+      onUploaded: (att) => setDetail((d) => (d ? { ...d, attachments: [...d.attachments, att] } : d)),
+      onProgress: setProgress,
+    });
+    setUploading((n) => n - accepted.length);
+    setProgress(null);
+    if (res.totalRejected) setTotalRejected(true);
+    const msg = batchErrorMessage(t, res.errors, res.notSent);
+    if (msg) toast(msg, "error");
   };
 
   // Los contadores de la tarjeta (y el aviso «N / M MB en total») salen de la lista de adjuntos que se muestra, no de sumas
@@ -574,12 +584,13 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
                   </button>
                 </div>
               ))}
-              {uploading > 0 && (
+              {uploading > 0 && !progress && (
                 <div className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-slate-300 text-xs text-slate-500 dark:border-slate-700">
                   <Loader2 size={16} className="mr-1.5 animate-spin" /> {t("Subiendo…")}
                 </div>
               )}
             </div>
+            {progress && <UploadProgress progress={progress} className="mt-2" />}
             {files.length > 0 && (
               <ul className={cn("space-y-1.5", images.length > 0 && "mt-2")}>
                 {files.map((a) => {

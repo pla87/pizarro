@@ -34,7 +34,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     assertNotArchivedRow(task);
     const { projectId } = task;
     // Tope de subidas por persona: evita llenar el disco o la memoria (sharp) con un bucle.
-    if (!rateLimit(`upload:${user.id}`, 60, 60_000)) throw new AppError("Demasiadas peticiones", 429);
+    if (!rateLimit(`upload:${user.id}`, 300, 60_000)) throw new AppError("Demasiadas peticiones", 429);
     // Sin Content-Length (algún proxy la quita) el tamaño se comprueba al leer el archivo.
     const length = declaredLength(req.headers);
     // Como mucho unas pocas subidas a la vez en todo el servidor (cada una se lee entera en memoria).
