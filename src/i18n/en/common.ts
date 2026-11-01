@@ -146,4 +146,12 @@ export const common: Record<string, string> = {
   "Dirección del enlace": "Link address",
   "Aplicar enlace": "Apply link",
   "Quitar enlace": "Remove link",
+  "Dictar": "Dictate",
+  "Parar dictado (Esc)": "Stop dictation (Esc)",
+  "Escuchando…": "Listening…",
+  "Permite el micrófono en el navegador": "Allow the microphone in your browser",
+  "No se oyó nada. Pulsa Dictar para intentarlo de nuevo": "Nothing was heard. Press Dictate to try again",
+  "No se encontró ningún micrófono": "No microphone was found",
+  "No se pudo conectar con el servicio de dictado": "Could not reach the dictation service",
+  "No se pudo dictar ({error})": "Dictation failed ({error})",
 };

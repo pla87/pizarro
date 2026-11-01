@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useT } from "@/i18n/client";
+import { insertDictation } from "@/lib/dictation";
 import { splitMentions } from "@/lib/mentions";
 import type { UserOption } from "@/lib/types";
 import { MentionText } from "../ui/MentionText";
+import { DictationButton, insertIntoField } from "../ui/DictationButton";
 import { MentionTextarea } from "../ui/MentionTextarea";
 
 const CLASSES = "field-sizing-content w-full min-w-0 resize-none rounded-md bg-transparent px-1 py-0.5 text-lg font-semibold outline-none focus:bg-slate-50 dark:focus:bg-slate-800";
@@ -22,36 +24,51 @@ export function TitleField({ value, onChange, onCommit, users }: {
   const t = useT();
   const [editing, setEditing] = useState(false);
   const hasMentions = splitMentions(value).some((p) => typeof p !== "string");
-
-  if (hasMentions && !editing) {
-    return (
-      <button type="button" onClick={() => setEditing(true)} className={`${CLASSES} min-w-0 flex-1 cursor-text text-left break-words`} aria-label={t("Título")}>
-        <MentionText text={value} />
-      </button>
-    );
-  }
-  return (
-    <MentionTextarea
-      value={value}
-      onValueChange={(v) => onChange(v.replace(/\n/g, ""))}
-      users={users}
-      autoFocus={editing}
-      onFocus={() => setEditing(true)}
-      onBlur={() => {
-        setEditing(false);
-        onCommit();
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const setTitle = (v: string) => onChange(v.replace(/\n/g, ""));
+  // Dictado: en el cursor del título; si ahora se ve con las menciones pintadas (sin campo), al final.
+  const mic = (
+    <DictationButton
+      onText={(s) => {
+        if (ref.current) insertIntoField(ref.current, s, setTitle);
+        else setTitle(insertDictation(value, value.length, value.length, s)?.value ?? value);
       }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          e.currentTarget.blur();
-        }
-      }}
-      rows={1}
-      maxLength={400}
-      className={CLASSES}
-      wrapperClassName="min-w-0 flex-1"
-      aria-label={t("Título")}
     />
+  );
+
+  // Un único contenedor: al pasar de campo a menciones pintadas, el botón del micrófono no se vuelve a crear (cortaría el dictado).
+  return (
+    <div className="flex min-w-0 flex-1 items-start gap-1">
+      {hasMentions && !editing ? (
+        <button type="button" onClick={() => setEditing(true)} className={`${CLASSES} min-w-0 flex-1 cursor-text text-left break-words`} aria-label={t("Título")}>
+          <MentionText text={value} />
+        </button>
+      ) : (
+        <MentionTextarea
+          ref={ref}
+          value={value}
+          onValueChange={setTitle}
+          users={users}
+          autoFocus={editing}
+          onFocus={() => setEditing(true)}
+          onBlur={() => {
+            setEditing(false);
+            onCommit();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.currentTarget.blur();
+            }
+          }}
+          rows={1}
+          maxLength={400}
+          className={CLASSES}
+          wrapperClassName="min-w-0 flex-1"
+          aria-label={t("Título")}
+        />
+      )}
+      {mic}
+    </div>
   );
 }
