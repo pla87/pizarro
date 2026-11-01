@@ -1154,14 +1154,14 @@ export async function restoreTask(taskId: string) {
 
 // --- Comentarios y menciones ---------------------------------------------------
 
-const commentSelect = { id: true, body: true, createdAt: true, authorId: true, parentId: true, deletedAt: true, author: { select: { name: true } } } as const;
+const commentSelect = { id: true, body: true, createdAt: true, authorId: true, authorName: true, parentId: true, deletedAt: true, author: { select: { name: true } } } as const;
 /** Orden estable para paginar con cursor (createdAt puede repetirse: el id desempata). */
 const COMMENT_ORDER: Prisma.TaskCommentOrderByWithRelationInput[] = [{ createdAt: "desc" }, { id: "desc" }];
 
-function toCommentInfo(c: { id: string; body: string; createdAt: Date; authorId: string | null; parentId: string | null; deletedAt: Date | null; author: { name: string } | null }): CommentInfo {
+function toCommentInfo(c: { id: string; body: string; createdAt: Date; authorId: string | null; authorName: string | null; parentId: string | null; deletedAt: Date | null; author: { name: string } | null }): CommentInfo {
   // Un comentario borrado que conserva respuestas no enseña ni texto ni autor.
   if (c.deletedAt) return { id: c.id, body: "", createdAt: c.createdAt.toISOString(), authorId: null, authorName: null, parentId: c.parentId, deleted: true };
-  return { id: c.id, body: c.body, createdAt: c.createdAt.toISOString(), authorId: c.authorId, authorName: c.author?.name ?? null, parentId: c.parentId };
+  return { id: c.id, body: c.body, createdAt: c.createdAt.toISOString(), authorId: c.authorId, authorName: c.author?.name ?? c.authorName ?? null, parentId: c.parentId };
 }
 
 /** Comentarios de la tarea anteriores al cursor, en el orden de COMMENT_ORDER. */

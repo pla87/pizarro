@@ -67,6 +67,30 @@ export async function processImage(input: Buffer): Promise<ProcessedImage> {
   }
 }
 
+/**
+ * Imagen de un archivo de importación de proyecto. Lo que exporta la aplicación ya es WebP de 1280 px como mucho:
+ * se valida con sharp y se conserva tal cual (sin volver a comprimir), generando solo la miniatura. Cualquier otra
+ * cosa pasa por el mismo procesado que una subida normal.
+ */
+export async function processImportedImage(input: Buffer): Promise<ProcessedImage> {
+  if (imageQueueFull()) throw new AppError(IMAGE_QUEUE_FULL_MESSAGE, 503);
+  let kept: ProcessedImage | null = null;
+  await acquire();
+  try {
+    const meta = await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS }).metadata().catch(() => {
+      throw new AppError("El archivo no es una imagen válida.");
+    });
+    if (meta.format === "webp" && meta.width && meta.height && meta.width <= 1280 && (meta.pages ?? 1) <= 1) {
+      const thumb = await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS }).resize({ width: 480, height: 360, fit: "inside", withoutEnlargement: true }).webp({ quality: 70 }).toBuffer()
+        .catch(() => { throw new AppError("El archivo no es una imagen válida."); });
+      kept = { full: input, thumb, width: meta.width, height: meta.height };
+    }
+  } finally {
+    release();
+  }
+  return kept ?? processImage(input);
+}
+
 const MAX_CONCURRENT = 2;
 export const MAX_WAITING = 10;
 export const IMAGE_QUEUE_FULL_MESSAGE = "El servidor está procesando muchas imágenes. Inténtalo de nuevo en unos segundos.";

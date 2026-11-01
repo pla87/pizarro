@@ -25,6 +25,7 @@ import { PrivateIcon, ProjectMenu, ProjectsContext, useProjectSwitchHref } from 
 import { UndoButton } from "./UndoButton";
 import { Avatar } from "./ui/Avatar";
 import { ReportButton } from "./ReportButton";
+import { ImportProjectPanel } from "./ImportProjectPanel";
 import { cn } from "./ui/cn";
 import { Menu as DropdownMenu, MenuItem } from "./ui/Menu";
 import { Modal } from "./ui/Modal";
@@ -350,6 +351,8 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   const [templateId, setTemplateId] = useState("");
   // Quien no es administrador solo puede crear proyectos privados.
   const [isPrivate, setIsPrivate] = useState(!isAdmin);
+  // «Importar desde un archivo…» (solo administradores) cambia el contenido del diálogo.
+  const [importing, setImporting] = useState(false);
   // Las plantillas (solo administradores) se piden al abrir el modal.
   useEffect(() => {
     if (!isAdmin) return;
@@ -377,6 +380,19 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   };
   return (
     <Modal open onClose={onClose} title={t("Nuevo proyecto")} size="sm">
+      {importing ? (
+        <ImportProjectPanel
+          isPrivate={isPrivate}
+          onBack={() => setImporting(false)}
+          onClose={onClose}
+          privateToggle={
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
+              {t("Proyecto privado (solo sus miembros; empiezas siendo el único)")}
+            </label>
+          }
+        />
+      ) : (
       <form onSubmit={submit} className="space-y-4">
         <div>
           <label className="label" htmlFor="project-name">{t("Nombre")}</label>
@@ -409,7 +425,13 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
           <button type="submit" className="btn-primary" disabled={pending || !!target || !name.trim()}>{t("Crear")}</button>
         </div>
+        {isAdmin && (
+          <button type="button" className="text-xs text-slate-500 underline hover:text-brand-600" onClick={() => setImporting(true)}>
+            {t("Importar desde un archivo…")}
+          </button>
+        )}
       </form>
+      )}
     </Modal>
   );
 }
