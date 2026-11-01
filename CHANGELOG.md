@@ -2,6 +2,35 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.37.0 — 2026-11-02 00:16
+
+Exportar e importar en segundo plano, dictado por voz, instalación en un paso y ajustes de interfaz
+
+### Nuevas funcionalidades
+
+- Exportar e importar proyectos en segundo plano, con barra de progreso: la exportación se descarga cuando está lista (disponible 24 horas) y se puede cerrar el diálogo; un aviso indica cuándo termina. Tienen su propia cola y no frenan las descargas de releases.
+- Dictado por voz en títulos, descripciones y «Varias tareas» (botón de micrófono; gratis con el reconocimiento de voz del navegador). Se puede ocultar y cambiar de idioma en Mi perfil → Preferencias.
+- Instalación en un paso en un servidor propio con un solo comando (deploy/get.sh), que también actualiza conservando la configuración y los datos; guía para Railway.
+
+### Mejoras
+
+- Documentación: botón de papelera en cada documento de la lista, sin abrirlo.
+- Borrar proyecto: el nombre a escribir se ve fuera de la caja.
+- Nuevo proyecto e importar: textos más cortos, «Crear como proyecto privado inicialmente» y el enlace de importar junto a los botones.
+- La columna lateral del detalle de la tarea es más estrecha y deja más espacio a la descripción.
+- Al sostener un archivo un segundo sobre «Siempre en la release» plegado, se abre para soltarlo en una tarea.
+
+### Correcciones
+
+- Una exportación solo la descarga quien la pidió y mientras siga gestionando el proyecto.
+- El panel «Siempre en la release» vuelve a su estado tras soltar un archivo.
+- El dictado en un título con menciones se guarda y respeta el largo máximo de cada campo.
+- El aviso de exportación terminada sale una sola vez aunque haya varias pestañas abiertas.
+
+### Cambios técnicos / DB
+
+- Migración: ProjectTransferJob. PROJECT_TRANSFER_CONCURRENCY (1 por defecto). Máximo de 64 MB para los datos de un proyecto (project.json). Las copias de seguridad no incluyen exportaciones ni importaciones en curso. Permissions-Policy: microphone=(self).
+
 ## v1.36.1 — 2026-11-01 20:40
 
 Guía de Google para dominio propio o dirección del servidor y correcciones de exportar e importar

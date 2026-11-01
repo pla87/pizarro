@@ -1,6 +1,61 @@
 {
   "versions": [
     {
+      "version": "1.37.0",
+      "date": "2026-11-02",
+      "releasedAt": "2026-11-02T00:16:13+01:00",
+      "summary": "Exportar e importar en segundo plano, dictado por voz, instalación en un paso y ajustes de interfaz",
+      "changes": {
+        "nuevas": [
+          "Exportar e importar proyectos en segundo plano, con barra de progreso: la exportación se descarga cuando está lista (disponible 24 horas) y se puede cerrar el diálogo; un aviso indica cuándo termina. Tienen su propia cola y no frenan las descargas de releases.",
+          "Dictado por voz en títulos, descripciones y «Varias tareas» (botón de micrófono; gratis con el reconocimiento de voz del navegador). Se puede ocultar y cambiar de idioma en Mi perfil → Preferencias.",
+          "Instalación en un paso en un servidor propio con un solo comando (deploy/get.sh), que también actualiza conservando la configuración y los datos; guía para Railway."
+        ],
+        "mejoras": [
+          "Documentación: botón de papelera en cada documento de la lista, sin abrirlo.",
+          "Borrar proyecto: el nombre a escribir se ve fuera de la caja.",
+          "Nuevo proyecto e importar: textos más cortos, «Crear como proyecto privado inicialmente» y el enlace de importar junto a los botones.",
+          "La columna lateral del detalle de la tarea es más estrecha y deja más espacio a la descripción.",
+          "Al sostener un archivo un segundo sobre «Siempre en la release» plegado, se abre para soltarlo en una tarea."
+        ],
+        "correcciones": [
+          "Una exportación solo la descarga quien la pidió y mientras siga gestionando el proyecto.",
+          "El panel «Siempre en la release» vuelve a su estado tras soltar un archivo.",
+          "El dictado en un título con menciones se guarda y respeta el largo máximo de cada campo.",
+          "El aviso de exportación terminada sale una sola vez aunque haya varias pestañas abiertas."
+        ],
+        "tecnicos": [
+          "Migración: ProjectTransferJob. PROJECT_TRANSFER_CONCURRENCY (1 por defecto). Máximo de 64 MB para los datos de un proyecto (project.json). Las copias de seguridad no incluyen exportaciones ni importaciones en curso. Permissions-Policy: microphone=(self)."
+        ]
+      },
+      "en": {
+        "summary": "Background export and import, voice dictation, one-step install and interface tweaks",
+        "changes": {
+          "nuevas": [
+            "Export and import projects in the background with a progress bar: the export is downloaded when ready (available for 24 hours) and the dialog can be closed; a notice tells you when it finishes. They have their own queue and don't slow down release downloads.",
+            "Voice dictation in titles, descriptions and “Several tasks” (microphone button; free with the browser's speech recognition). It can be hidden and its language changed in My profile → Preferences.",
+            "One-step install on your own server with a single command (deploy/get.sh), which also updates keeping the settings and data; Railway guide."
+          ],
+          "mejoras": [
+            "Documentation: trash button on each document in the list, without opening it.",
+            "Delete project: the name to type is shown outside the box.",
+            "New project and import: shorter texts, “Create as a private project initially” and the import link next to the buttons.",
+            "The task detail side column is narrower, leaving more room for the description.",
+            "Holding a file for a second over a collapsed “Always in the release” opens it so you can drop it on a task."
+          ],
+          "correcciones": [
+            "An export can only be downloaded by whoever requested it and while they still manage the project.",
+            "The “Always in the release” panel returns to its previous state after dropping a file.",
+            "Dictation into a title with mentions is saved and respects each field's maximum length.",
+            "The export finished notice shows only once even with several tabs open."
+          ],
+          "tecnicos": [
+            "Migration: ProjectTransferJob. PROJECT_TRANSFER_CONCURRENCY (1 by default). 64 MB maximum for a project's data (project.json). Backups exclude exports and imports in progress. Permissions-Policy: microphone=(self)."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.36.1",
       "date": "2026-11-01",
       "releasedAt": "2026-11-01T20:40:43+01:00",
