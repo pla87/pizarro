@@ -46,6 +46,11 @@ export const PDF_MAX_WAITING = 5;
 export const PDF_BUSY_MESSAGE = "Hay muchos PDF generándose; inténtalo en un momento.";
 let waitingRenders = 0;
 
+/** Errores esperables de la cola (tiempo agotado 504, cola llena 503): las rutas los traducen y devuelven con su estado. */
+export function isPdfQueueError(err: unknown): err is AppError {
+  return err instanceof PdfTimeoutError || (err instanceof AppError && err.code === "pdf_busy");
+}
+
 /** Ejecuta un render en la cola (de uno en uno) con tiempo máximo; `timeoutMs` es inyectable para los tests. */
 export function queuedRender<T>(render: () => Promise<T>, timeoutMs: number = PDF_RENDER_TIMEOUT_MS): Promise<T> {
   if (waitingRenders >= PDF_MAX_WAITING) return Promise.reject(new AppError(PDF_BUSY_MESSAGE, 503, "pdf_busy"));

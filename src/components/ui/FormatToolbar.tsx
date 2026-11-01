@@ -63,7 +63,7 @@ export function FormatToolbar({ items, onLeave, className }: { items: FormatItem
   const menuRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState<number | null>(null);
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ right: number; top: number } | null>(null);
+  const [pos, setPos] = useState<{ right: number; top?: number; bottom?: number; maxHeight: number } | null>(null);
 
   useIsoLayoutEffect(() => {
     const el = ref.current;
@@ -104,6 +104,8 @@ export function FormatToolbar({ items, onLeave, className }: { items: FormatItem
     return { shown: set, hidden: buttons.filter((x) => !set.has(x.i)).map((x) => x.b) };
   }, [items, width]);
 
+  // Si la barra vuelve a mostrar todos los botones, el menú queda cerrado (no se reabre solo al volver a desbordarse).
+  if (open && hidden.length === 0) setOpen(false);
   const menuOpen = open && hidden.length > 0;
   const closeMenu =(focusMore = false) => {
     setOpen(false);
@@ -115,7 +117,17 @@ export function FormatToolbar({ items, onLeave, className }: { items: FormatItem
     if (!open) return;
     const place = () => {
       const r = moreRef.current?.getBoundingClientRect();
-      if (r) setPos({ right: Math.max(8, window.innerWidth - r.right), top: r.bottom + 4 });
+      if (!r) return;
+      // Dentro del área visible (sin la barra de desplazamiento): ni se sale por la izquierda ni por abajo.
+      const cw = document.documentElement.clientWidth;
+      const ch = document.documentElement.clientHeight;
+      const menuW = menuRef.current?.offsetWidth ?? 176;
+      const menuH = menuRef.current?.scrollHeight ?? hidden.length * 32 + 8;
+      const right = Math.max(8, Math.min(cw - r.right, cw - menuW - 8));
+      const below = ch - r.bottom - 4 - 8;
+      const above = r.top - 4 - 8;
+      if (menuH > below && above > below) setPos({ right, bottom: ch - r.top + 4, maxHeight: Math.max(80, above) });
+      else setPos({ right, top: r.bottom + 4, maxHeight: Math.max(80, below) });
     };
     place();
     const onDown = (e: MouseEvent) => {
@@ -131,7 +143,7 @@ export function FormatToolbar({ items, onLeave, className }: { items: FormatItem
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", place, true);
     };
-  }, [open]);
+  }, [open, hidden.length]);
   // Al abrirse el menú, el foco pasa a su primera opción.
   useEffect(() => {
     if (open && pos) menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
@@ -222,8 +234,8 @@ export function FormatToolbar({ items, onLeave, className }: { items: FormatItem
             ref={menuRef}
             role="menu"
             aria-label={t("Más formatos")}
-            style={{ right: pos.right, top: pos.top }}
-            className="fixed z-[80] max-h-[70vh] min-w-44 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-slate-800 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            style={{ right: pos.right, top: pos.top, bottom: pos.bottom, maxHeight: pos.maxHeight }}
+            className="fixed z-[80] min-w-44 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-slate-800 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             onMouseDown={(e) => e.preventDefault()}
             onKeyDown={(e) => {
               // Los eventos de un portal burbujean al React padre: se atienden aquí y no llegan a la barra ni al diálogo.

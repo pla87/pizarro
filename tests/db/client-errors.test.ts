@@ -20,6 +20,7 @@ const report = (message: string) => ({ source: "global-error", message, path: "/
 
 beforeEach(async () => {
   jar.clear();
+  resetRateLimit("client-errors:ip:10.9.8.7");
   resetRateLimit("client-errors:anon:10.9.8.7");
   resetRateLimit("client-errors:u:10.9.8.7");
   await db.appLog.deleteMany({ where: { category: "client" } });
@@ -45,6 +46,18 @@ describe("/api/client-errors", () => {
     assert.equal((row.details as { anonymous: boolean }).anonymous, true);
   });
 
+  test("la ruta se guarda sin tokens de un solo uso ni query", async () => {
+    const res = await post({ source: "window", message: "fallo ruta redactada", path: "/reset/AbCdEf123456?code=zzz&state=yyy" });
+    assert.equal(res.status, 204);
+    await post({ source: "window", message: "fallo ruta confirm", path: "/confirm/SECRETTOKEN" });
+    await flushLogs();
+    const a = await db.appLog.findFirstOrThrow({ where: { category: "client", message: { contains: "fallo ruta redactada" } } });
+    assert.equal(a.path, "/reset/…");
+    assert.ok(!a.message.includes("AbCdEf") && !a.message.includes("zzz"));
+    const b = await db.appLog.findFirstOrThrow({ where: { category: "client", message: { contains: "fallo ruta confirm" } } });
+    assert.equal(b.path, "/confirm/…");
+  });
+
   test("con sesión se atribuye a la persona", async () => {
     const u = await makeUser();
     await loginAs(u);
@@ -62,7 +75,8 @@ describe("/api/client-errors", () => {
     assert.equal((await post("no es json")).status, 400);
     assert.equal((await post({ source: "otro", message: "m" })).status, 400);
     assert.equal((await post(report("z"), { origin: "https://evil.example.com" })).status, 403);
-    resetRateLimit("client-errors:anon:10.9.8.7");
+    resetRateLimit("client-errors:ip:10.9.8.7");
+  resetRateLimit("client-errors:anon:10.9.8.7");
     const statuses: number[] = [];
     for (let i = 0; i < 12; i++) statuses.push((await post(report(`rate ${i}`))).status);
     assert.deepEqual(statuses.slice(0, 10), Array(10).fill(204));

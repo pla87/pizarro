@@ -1236,12 +1236,12 @@ function GoogleLinks({ detail, setDetail, onCreate, taskId }: {
   const links = detail?.links ?? [];
   return (
     <section>
-      <div className="mb-2 flex flex-wrap items-center gap-1">
-        <h3 className="mr-auto text-sm font-semibold">{t("Documentos de Google")}</h3>
-        <button className="btn-ghost py-1 text-xs" onClick={() => onCreate("GOOGLE_DOC")} disabled={!detail}>
+      <div className="mb-2 flex items-center gap-1">
+        <h3 className="mr-auto min-w-0 text-sm font-semibold">{t("Documentos de Google")}</h3>
+        <button className="btn-ghost shrink-0 whitespace-nowrap px-2 py-1 text-xs" onClick={() => onCreate("GOOGLE_DOC")} disabled={!detail}>
           <FileText size={15} className="text-sky-600" /> {t("Nuevo Doc")}
         </button>
-        <button className="btn-ghost py-1 text-xs" onClick={() => onCreate("GOOGLE_SHEET")} disabled={!detail}>
+        <button className="btn-ghost shrink-0 whitespace-nowrap px-2 py-1 text-xs" onClick={() => onCreate("GOOGLE_SHEET")} disabled={!detail}>
           <FileSpreadsheet size={15} className="text-emerald-600" /> {t("Nuevo Sheet")}
         </button>
       </div>

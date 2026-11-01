@@ -89,7 +89,7 @@ export function logEvent(e: LogEvent): void {
     const projectId = state.queue[state.queue.length - 1]!.projectId;
     // Solo acciones correctas: una fallida (p. ej. sin acceso) podría traer un projectId ajeno del cliente.
     if (projectId && e.userId && e.category !== "page" && (e.level ?? "info") === "info") notePresence(projectId, e.userId, e.userName ?? "?");
-    if (e.level === "error") console.error(`[${e.category}] ${e.action}: ${e.message ?? ""}`);
+    if (e.level === "error") console.error(`[${e.category}] ${e.action}: ${(e.message ?? "").replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ")}`);
     if (state.queue.length >= MAX_QUEUE) void flushLogs();
     else state.timer ??= setTimeout(() => void flushLogs(), FLUSH_MS);
   } catch (err) {

@@ -25,6 +25,7 @@ import { ReleaseTemplateList } from "@/components/ReleaseTemplateList";
 import {
   createProjectReleaseTemplate, deleteProjectReleaseTemplate, moveProjectReleaseTemplate, updateProjectReleaseTemplate,
 } from "@/actions/project-release-templates";
+import { ExportProject } from "./ExportProject";
 import { ProjectSettingsTabs } from "./ProjectSettingsTabs";
 import type { ProjectSettingsTab } from "./project-settings-tabs";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
@@ -210,6 +211,12 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
             <p className="text-xs text-slate-500">{t("Si el documento no se puede compartir, se crea igualmente y se avisa en la tarea de que solo lo ve quien lo crea.")}</p>
             <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
           </form>
+        </Section>
+      )}
+
+      {canManage && (
+        <Section title="Exportar proyecto" description="Un archivo .pizarro.zip con todo el proyecto, para guardarlo o importarlo en otra instalación.">
+          <ExportProject projectId={project.id} />
         </Section>
       )}
 

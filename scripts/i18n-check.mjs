@@ -36,7 +36,7 @@ for (const f of files) {
 // Mensajes de servidor: new AppError("…"), message: "…" (zod, addIssue) y .min/.max/.length(n, "…") en src/lib y src/actions.
 const lit = String.raw`("(?:[^"\\\n]|\\.)*")`;
 const serverCalls = [
-  new RegExp(String.raw`new AppError\(\s*` + lit, "g"),
+  new RegExp(String.raw`new (?:AppError|ArchiveError)\(\s*` + lit, "g"),
   new RegExp(String.raw`\bmessage:\s*` + lit, "g"),
   new RegExp(String.raw`\.(?:min|max|length|gt|gte|lt|lte|regex)\([^()"\n]*,\s*` + lit, "g"),
 ];

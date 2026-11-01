@@ -8,11 +8,21 @@ import { cn } from "./cn";
 
 /** Selector de color como grupo de radio: Tab entra en el color elegido (o el primero) y sale al siguiente Tab;
  *  las flechas, Inicio y Fin mueven el foco (con vuelta) y Espacio o Intro eligen el color enfocado. */
-export function ColorPicker({ value, onChange, allowNone = true, label }: { value: string | null; onChange: (c: string | null) => void; allowNone?: boolean; label?: string }) {
+export function ColorPicker({ value, onChange, allowNone = true, label, colors = PALETTE, allowCustom = false }: {
+  value: string | null;
+  onChange: (c: string | null) => void;
+  allowNone?: boolean;
+  label?: string;
+  /** Colores a elegir; por defecto la paleta de tarjetas y etiquetas. */
+  colors?: readonly string[];
+  /** Añade al final «Otro color» (selector nativo) para un color que no está en la lista. */
+  allowCustom?: boolean;
+}) {
   const t = useT();
   const groupRef = useRef<HTMLDivElement>(null);
-  const options: (string | null)[] = allowNone ? [null, ...PALETTE] : [...PALETTE];
-  const checked = options.findIndex((c) => c === value);
+  const options: (string | null)[] = allowNone ? [null, ...colors] : [...colors];
+  const current = value?.toLowerCase() ?? null;
+  const checked = options.findIndex((c) => c === current);
   // Rodante: solo un color está en el orden de Tab (el elegido, o el primero si no hay ninguno).
   const tabIndexOf = Math.max(0, checked);
 
@@ -34,7 +44,8 @@ export function ColorPicker({ value, onChange, allowNone = true, label }: { valu
   const selectedRing = "ring-2 ring-brand-500 ring-offset-1 dark:ring-offset-slate-900";
   return (
     // Relleno con margen negativo: deja sitio al anillo de selección y al de foco (que un contenedor con scroll recortaría).
-    <div ref={groupRef} role="radiogroup" aria-label={label ?? t("Color")} onKeyDown={onKeyDown} className="-m-[3px] flex flex-wrap gap-1.5 p-1.5">
+    <div className="-m-[3px] flex flex-wrap items-center gap-1.5 p-1.5">
+    <div ref={groupRef} role="radiogroup" aria-label={label ?? t("Color")} onKeyDown={onKeyDown} className="contents">
       {options.map((c, i) => {
         const name = c === null ? t("Sin color") : COLOR_NAME[c] ? t(COLOR_NAME[c]) : c;
         return c === null ? (
@@ -42,10 +53,10 @@ export function ColorPicker({ value, onChange, allowNone = true, label }: { valu
             key="none"
             type="button"
             role="radio"
-            aria-checked={value === null}
+            aria-checked={current === null}
             tabIndex={i === tabIndexOf ? 0 : -1}
             onClick={() => onChange(null)}
-            className={cn("h-7 w-7 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600", base, value === null && selectedRing)}
+            className={cn("h-7 w-7 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600", base, current === null && selectedRing)}
             aria-label={name}
             title={name}
           />
@@ -54,18 +65,24 @@ export function ColorPicker({ value, onChange, allowNone = true, label }: { valu
             key={c}
             type="button"
             role="radio"
-            aria-checked={value === c}
+            aria-checked={current === c}
             tabIndex={i === tabIndexOf ? 0 : -1}
             onClick={() => onChange(c)}
-            className={cn("flex h-7 w-7 items-center justify-center rounded-full", swatchBorder(c), base, value === c && selectedRing)}
+            className={cn("flex h-7 w-7 items-center justify-center rounded-full", swatchBorder(c), base, current === c && selectedRing)}
             style={{ backgroundColor: c }}
             aria-label={t("Color {name}", { name })}
             title={name}
           >
-            {value === c && <Check size={14} className={isWhite(c) ? "text-slate-700" : "text-white"} />}
+            {current === c && <Check size={14} className={isWhite(c) ? "text-slate-700" : "text-white"} />}
           </button>
         );
       })}
+    </div>
+      {allowCustom && (
+        <label className={cn("relative h-7 w-7 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus", value && checked < 0 && selectedRing)} title={t("Otro color")}>
+          <input type="color" value={value ?? "#6366f1"} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label={t("Elegir otro color")} />
+        </label>
+      )}
     </div>
   );
 }

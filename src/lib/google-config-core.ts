@@ -96,10 +96,15 @@ export const isPlainEmail = (s: string) => s.length <= 200 && /^[^\s@<>"]+@[^\s@
 // no es de nadie, así que Google no lo acepta como «dominio autorizado» de una aplicación.
 const SHARED_SUFFIXES = [
   "up.railway.app", "railway.app", "vercel.app", "netlify.app", "herokuapp.com", "onrender.com", "fly.dev", "github.io", "pages.dev", "workers.dev",
-  "ngrok.io", "ngrok-free.app", "trycloudflare.com", "azurewebsites.net", "run.app", "web.app", "firebaseapp.com", "duckdns.org", "glitch.me", "repl.co",
+  "ngrok.io", "ngrok-free.app", "trycloudflare.com", "azurewebsites.net", "a.run.app", "ondigitalocean.app", "sslip.io", "nip.io", "koyeb.app", "web.app", "firebaseapp.com", "duckdns.org", "glitch.me", "repl.co",
 ];
 // Sufijos de país con dos etiquetas (no exhaustivo): el dominio registrable lleva una etiqueta más.
-const TWO_PART_TLDS = new Set(["co.uk", "org.uk", "ac.uk", "com.es", "org.es", "com.mx", "com.ar", "com.br", "com.co", "com.pe", "com.au", "co.nz", "co.jp", "co.za", "com.tr", "co.in"]);
+const TWO_PART_TLDS = new Set([
+  "co.uk", "org.uk", "ac.uk", "gov.uk", "me.uk", "ltd.uk", "com.es", "org.es", "com.mx", "com.ar", "com.br", "net.br", "org.br", "com.co", "com.pe",
+  "com.au", "net.au", "org.au", "edu.au", "gov.au", "co.nz", "co.jp", "or.jp", "ne.jp", "co.za", "com.tr", "co.in", "com.cn", "net.cn", "org.cn",
+  "co.kr", "or.kr", "com.sg", "com.hk", "com.tw", "com.my", "com.ph", "com.vn", "co.id", "co.il", "com.ua", "com.pl", "com.ng", "co.ke", "com.eg",
+  "com.sa", "com.ve", "com.uy", "com.ec", "com.bo", "com.py", "com.gt", "com.pa", "com.do", "co.cr",
+]);
 
 export interface AppDomainInfo {
   host: string;

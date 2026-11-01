@@ -29,7 +29,7 @@ function buildCsp(nonce: string): string {
 export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   // Opcional (CANONICAL_REDIRECT=1): las direcciones distintas de APP_URL redirigen (308) a ella.
-  const canonical = canonicalRedirect({ enabled: process.env.CANONICAL_REDIRECT, appUrl: process.env.APP_URL, host: req.headers.get("host"), method: req.method, pathname, search });
+  const canonical = canonicalRedirect({ enabled: process.env.CANONICAL_REDIRECT, appUrl: process.env.APP_URL, host: req.headers.get("host"), forwardedHost: req.headers.get("x-forwarded-host"), method: req.method, pathname, search });
   if (canonical) return NextResponse.redirect(canonical, 308);
   const isApi = pathname.startsWith("/api/");
   // Páginas públicas (sin sesión): acceso, política de privacidad y condiciones, contraseña olvidada, enlaces de email y el asistente de primer
@@ -96,5 +96,7 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api/auth/google/|api/health|_next/static|_next/image|favicon.ico|icon.svg|icons/|apple-touch-icon.png|pizarro-logo-120.png|sw.js|manifest.webmanifest).*)"],
+  // api/projects/import queda fuera: el proxy almacena el cuerpo de las peticiones (hasta proxyClientMaxBodySize) y la importación
+  // de un proyecto llega a cientos de MB; la ruta comprueba la sesión y el rol por sí misma y recibe el cuerpo en flujo.
+  matcher: ["/((?!api/auth/google/|api/projects/import$|api/health|_next/static|_next/image|favicon.ico|icon.svg|icons/|apple-touch-icon.png|pizarro-logo-120.png|sw.js|manifest.webmanifest).*)"],
 };

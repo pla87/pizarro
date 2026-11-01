@@ -12,33 +12,38 @@ export async function createResetLink(email: string, opts: { appUrl: string; res
   const user = await db.user.findFirst({ where: { email: { equals: email.trim(), mode: "insensitive" } }, select: { id: true, name: true, active: true, twoFactorMethod: true } });
   if (!user) return { ok: false, error: "No existe ningún usuario con ese email." };
   if (!user.active) return { ok: false, error: "Ese usuario está desactivado: reactívalo antes (Administración → Usuarios)." };
-  let twoFactorCleared = false;
-  if (opts.reset2fa) {
-    // Igual que clearTwoFactor (two-factor.ts), que no se puede importar desde aquí por su «server-only».
-    await db.$transaction([
-      db.user.update({ where: { id: user.id }, data: { twoFactorMethod: null, totpSecretEnc: null, totpLastStep: null } }),
-      db.recoveryCode.deleteMany({ where: { userId: user.id } }),
-      db.loginChallenge.deleteMany({ where: { userId: user.id } }),
-      db.knownDevice.updateMany({ where: { userId: user.id, trustedUntil: { not: null } }, data: { trustedUntil: null } }),
-    ]);
-    twoFactorCleared = !!user.twoFactorMethod;
-  }
+  // Primero el token: si falla, no se ha tocado nada (ni la verificación en dos pasos ni el registro).
   const token = await issueAuthToken(user.id, "PASSWORD_RESET");
+  const twoFactorCleared = Boolean(opts.reset2fa) && !!user.twoFactorMethod;
   // Rastro en el registro de actividad (Administración → Logs). Se escribe la fila directamente: log.ts es «server-only»
   // y su cola en memoria no llegaría a vaciarse antes de que el script termine. Nunca lleva el enlace ni el token.
+  const audit = db.appLog.create({
+    data: {
+      level: "info",
+      category: "auth",
+      action: "auth.resetLinkCli",
+      message: `Enlace de restablecimiento generado desde la consola para «${user.name}»${opts.reset2fa ? " y verificación en dos pasos reiniciada" : ""}`,
+      userId: user.id,
+      userName: user.name,
+      details: { reset2fa: Boolean(opts.reset2fa), twoFactorCleared },
+    },
+  });
   try {
-    await db.appLog.create({
-      data: {
-        level: "info",
-        category: "auth",
-        action: "auth.resetLinkCli",
-        message: `Enlace de restablecimiento generado desde la consola para «${user.name}»${opts.reset2fa ? " y verificación en dos pasos reiniciada" : ""}`,
-        userId: user.id,
-        userName: user.name,
-        details: { reset2fa: Boolean(opts.reset2fa), twoFactorCleared },
-      },
-    });
+    if (opts.reset2fa) {
+      // Igual que clearTwoFactor (two-factor.ts), que no se puede importar desde aquí por su «server-only».
+      // El reinicio y su anotación van juntos: no queda uno sin el otro.
+      await db.$transaction([
+        db.user.update({ where: { id: user.id }, data: { twoFactorMethod: null, totpSecretEnc: null, totpLastStep: null } }),
+        db.recoveryCode.deleteMany({ where: { userId: user.id } }),
+        db.loginChallenge.deleteMany({ where: { userId: user.id } }),
+        db.knownDevice.updateMany({ where: { userId: user.id, trustedUntil: { not: null } }, data: { trustedUntil: null } }),
+        audit,
+      ]);
+    } else {
+      await audit;
+    }
   } catch (err) {
+    if (opts.reset2fa) throw err;
     console.error("[reset-link] No se pudo anotar en el registro de actividad:", err instanceof Error ? err.message : err);
   }
   return { ok: true, url: `${opts.appUrl.replace(/\/$/, "")}/reset/${token}`, name: user.name, twoFactorCleared };

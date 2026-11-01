@@ -23,12 +23,14 @@ export function GoogleSettingsSection({ view }: { view: GoogleSettingsView }) {
   const [secret, setSecret] = useState("");
   const [replacing, setReplacing] = useState(!view.settings.hasSecret);
 
-  const dirty = clientId.trim() !== saved.clientId || domain.trim().toLowerCase().replace(/^@/, "") !== saved.workspaceDomain || secret !== "" || contact.trim() !== saved.publicContactEmail;
+  const contactChanged = contact.trim() !== saved.publicContactEmail;
+  const domainChanged = !view.envDomain && domain.trim().toLowerCase().replace(/^@/, "") !== saved.workspaceDomain;
+  const dirty = (!view.envCredentials && (clientId.trim() !== saved.clientId || secret !== "")) || domainChanged || contactChanged;
   const idChanged = saved.hasSecret && clientId.trim() !== saved.clientId && clientId.trim() !== "";
 
   const save = (disable = false) =>
     start(async () => {
-      const res = await saveGoogleSettings({ clientId: disable ? "" : clientId, workspaceDomain: domain, publicContactEmail: contact, secret: disable ? "" : secret }).catch((e) => actionThrowResult(e, t));
+      const res = await saveGoogleSettings({ clientId: disable ? "" : clientId, workspaceDomain: domain, publicContactEmail: contactChanged ? contact : undefined, secret: disable ? "" : secret }).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
       const s = res.data.settings;
       setSaved(s);
@@ -37,7 +39,7 @@ export function GoogleSettingsSection({ view }: { view: GoogleSettingsView }) {
       setContact(s.publicContactEmail);
       setSecret("");
       setReplacing(!s.hasSecret);
-      toast(s.clientId ? t("Configuración de Google guardada.") : t("Acceso con Google desactivado."), "success");
+      toast(s.clientId || view.envCredentials ? t("Configuración de Google guardada.") : t("Acceso con Google desactivado."), "success");
       router.refresh();
     });
 
@@ -118,24 +120,20 @@ export function GoogleSettingsSection({ view }: { view: GoogleSettingsView }) {
         </label>
       </div>
 
-      {!view.envCredentials && (
       <label className="block text-sm sm:max-w-md">
         <span className="font-medium">{t("Email de contacto público (opcional)")}</span>
         <input className="input mt-1 w-full" type="email" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="privacidad@empresa.com" autoComplete="off" maxLength={200} />
         <span className="mt-1 block text-xs text-slate-500">{t("Aparece en las páginas públicas de privacidad y condiciones (/privacy y /terms) que Google pide. Vacío = «el administrador de esta instalación».")}</span>
       </label>
-      )}
 
-      {!view.envCredentials && (
-        <div className="flex flex-wrap items-center gap-2">
-          <button className="btn-primary py-1.5" onClick={() => save()} disabled={pending || !dirty}>
-            {pending && <Loader2 size={15} className="animate-spin" />} {t("Guardar")}
-          </button>
-          {saved.clientId !== "" && (
-            <button className="btn-secondary py-1.5" onClick={() => save(true)} disabled={pending}>{t("Desactivar el acceso con Google")}</button>
-          )}
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <button className="btn-primary py-1.5" onClick={() => save()} disabled={pending || !dirty}>
+          {pending && <Loader2 size={15} className="animate-spin" />} {t("Guardar")}
+        </button>
+        {!view.envCredentials && saved.clientId !== "" && (
+          <button className="btn-secondary py-1.5" onClick={() => save(true)} disabled={pending}>{t("Desactivar el acceso con Google")}</button>
+        )}
+      </div>
     </section>
   );
 }

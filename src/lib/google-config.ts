@@ -148,6 +148,25 @@ export async function saveGoogleSettings(
   return { secretChange, before, after };
 }
 
+/**
+ * Con ID y secreto fijados por el servidor (GOOGLE_*) solo se pueden guardar el dominio de Workspace (si el servidor no
+ * lo fija también) y el email de contacto público. `undefined` = no tocar ese valor; el ID y el secreto no se tocan nunca.
+ */
+export async function saveGoogleExtras(input: { workspaceDomain?: string; publicContactEmail?: string }): Promise<{ before: GoogleSettings; after: GoogleSettings }> {
+  const { settings: before } = await readSaved();
+  const entries: [string, string][] = [];
+  if (input.workspaceDomain !== undefined) entries.push([GOOGLE_DOMAIN_KEY, input.workspaceDomain]);
+  if (input.publicContactEmail !== undefined) entries.push([GOOGLE_CONTACT_KEY, input.publicContactEmail]);
+  await db.$transaction(async (tx) => {
+    for (const [key, value] of entries) await tx.appState.upsert({ where: { key }, create: { key, value }, update: { value } });
+  });
+  const s = store();
+  if (s.loading) await s.loading.catch(() => {});
+  await refreshGoogleConfig();
+  const { settings: after } = await readSaved();
+  return { before, after };
+}
+
 /** Email de contacto público para /privacy y /terms (vacío si no hay). Lectura directa: son páginas poco visitadas. */
 export async function getPublicContactEmail(): Promise<string> {
   const row = await db.appState.findUnique({ where: { key: GOOGLE_CONTACT_KEY }, select: { value: true } }).catch(() => null);

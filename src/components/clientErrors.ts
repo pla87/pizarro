@@ -15,6 +15,7 @@ export function reportClientError(source: Source, error: unknown, digest?: strin
     const now = Date.now();
     if ((sent.get(key) ?? 0) > now - 60_000) return;
     sent.set(key, now);
+    if (sent.size > 100) for (const [k, t] of sent) if (t < now - 60_000) sent.delete(k);
     const body = JSON.stringify({
       source,
       message: err.message.slice(0, 2000) || "(sin mensaje)",

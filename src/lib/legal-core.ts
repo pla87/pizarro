@@ -1,6 +1,7 @@
 // Parte pura (sin base de datos) de los textos legales editables (/privacy y /terms): claves, textos por defecto,
 // sustitución de {responsable} y {email} y la regla de qué texto se muestra según el idioma.
 import { translate, type Locale } from "@/i18n/core";
+import { LEGAL_DEFAULTS } from "./legal-defaults";
 
 export type LegalKind = "privacy" | "terms";
 export const LEGAL_KINDS: readonly LegalKind[] = ["privacy", "terms"];
@@ -17,25 +18,7 @@ export const isLegalKind = (v: unknown): v is LegalKind => v === "privacy" || v 
 
 /** Texto por defecto (Markdown, con {responsable} y {email} sin sustituir) en el idioma pedido. */
 export function defaultLegalMarkdown(kind: LegalKind, locale: Locale): string {
-  const t = (text: string, vars?: Record<string, string>) => translate(locale, text, vars);
-  const vars = { responsable: "{responsable}", contact: "{email}" };
-  const sections: [string, string][] =
-    kind === "privacy"
-      ? [
-          [t("Quién trata tus datos"), t("Esta instalación de Pizarro la gestiona {responsable}, no sus desarrolladores. Para cualquier duda sobre tus datos, contacta con {contact}.", vars)],
-          [t("Qué datos se guardan"), t("Tu cuenta (nombre, email y contraseña cifrada), las tareas, comentarios y archivos que tú o tu equipo añadís, y un registro de actividad para la seguridad y el soporte.")],
-          [t("Acceso con Google"), t("Si entras con Google, Pizarro solo lee tu nombre, tu email y tu perfil básico para reconocer tu cuenta. Si conectas Google Docs o Sheets, el permiso de Drive se limita a los archivos que crea la propia aplicación; Pizarro no ve el resto de tu Drive.")],
-          [t("Uso y venta de datos"), t("Tus datos no se venden ni se ceden a terceros ni se usan para publicidad. Solo se usan para que la aplicación funcione para ti y tu equipo.")],
-          [t("Tus derechos"), t("Contactando con {contact}, puedes pedir que te muestren, corrijan o eliminen tus datos.", vars)],
-        ]
-      : [
-          [t("Uso del servicio"), t("Pizarro es una herramienta de trabajo en equipo que opera su administrador. Solo pueden usarla las personas a las que el administrador ha dado de alta.")],
-          [t("Tu responsabilidad"), t("Guarda tus credenciales con cuidado y no subas contenido ilegal ni de terceros sin permiso. El administrador puede suspender cuentas que incumplan estas condiciones.")],
-          [t("Disponibilidad"), t("El servicio se ofrece tal cual, sin garantía de disponibilidad continua. El administrador hace copias de seguridad, pero conviene conservar una copia de lo importante.")],
-          [t("Datos personales"), t("El tratamiento de tus datos se describe en la política de privacidad de esta instalación.")],
-          [t("Contacto"), t("Para cualquier duda, contacta con {contact}.", vars)],
-        ];
-  return sections.map(([h, body]) => `## ${h}\n\n${body}`).join("\n\n");
+  return LEGAL_DEFAULTS[kind][locale];
 }
 
 /** Sustituye {responsable} y {email}; sin ellos usa «el administrador de esta instalación». Si falta el email se nombra al responsable. */

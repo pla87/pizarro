@@ -69,10 +69,16 @@ const HOST_RE = /^[A-Za-z0-9]([A-Za-z0-9.-]{0,253}[A-Za-z0-9])?$/;
 export const isEmailAddress = (s: string) => s.length <= 200 && EMAIL_RE.test(s);
 export const isMailHost = (s: string) => HOST_RE.test(s);
 
-/** Modo guardado; sin él (ajustes de versiones anteriores) se deduce del servidor. */
-export function parseMailMode(value: string, host: string): MailMode {
+/**
+ * Modo guardado; sin él (ajustes de versiones anteriores) se deduce del servidor. Con smtp.gmail.com, si el remitente
+ * es otra dirección que el usuario o hay nombre de remitente, era un Workspace con alias (antes de la v1.33): «company».
+ */
+export function parseMailMode(value: string, host: string, from?: { user: string; fromName: string; fromAddress: string }): MailMode {
   if (value === "gmail" || value === "company") return value;
-  return host === "" || host.toLowerCase() === GMAIL_PRESET.host ? "gmail" : "company";
+  if (host === "") return "gmail";
+  if (host.toLowerCase() !== GMAIL_PRESET.host) return "company";
+  if (from && ((from.fromAddress !== "" && from.fromAddress.toLowerCase() !== from.user.toLowerCase()) || from.fromName !== "")) return "company";
+  return "gmail";
 }
 
 /** Lee los ajustes guardados (AppState); la contraseña solo se indica como presente o no. */
@@ -80,15 +86,18 @@ export function parseMailSettings(rows: { key: string; value: string }[]): MailS
   const get = (k: string) => rows.find((r) => r.key === k)?.value ?? "";
   const port = Number(get(MAIL_PORT_KEY));
   const host = get(MAIL_HOST_KEY).trim();
+  const user = get(MAIL_USER_KEY).trim();
+  const fromName = get(MAIL_FROM_NAME_KEY).trim();
+  const fromAddress = get(MAIL_FROM_ADDRESS_KEY).trim();
   return {
     host,
     port: Number.isInteger(port) && port >= 1 && port <= 65535 ? port : 465,
     secure: get(MAIL_SECURE_KEY) === "" ? true : get(MAIL_SECURE_KEY) === "true",
-    user: get(MAIL_USER_KEY).trim(),
-    fromName: get(MAIL_FROM_NAME_KEY).trim(),
-    fromAddress: get(MAIL_FROM_ADDRESS_KEY).trim(),
+    user,
+    fromName,
+    fromAddress,
     hasPassword: get(MAIL_PASS_KEY) !== "",
-    mode: parseMailMode(get(MAIL_MODE_KEY), host),
+    mode: parseMailMode(get(MAIL_MODE_KEY), host, { user, fromName, fromAddress }),
   };
 }
 
@@ -156,7 +165,7 @@ export function validateMailSettings(input: MailSettingsInput): { ok: true; valu
   if (user.length > 200 || /[\r\n]/.test(user)) return { ok: false, error: "El usuario no es válido." };
   if (fromName.length > 100) return { ok: false, error: "El nombre del remitente es demasiado largo." };
   if (!isEmailAddress(fromAddress)) return { ok: false, error: "El email del remitente no es válido." };
-  const mode = parseMailMode(String(input.mode ?? ""), host);
+  const mode = parseMailMode(String(input.mode ?? ""), host, { user, fromName, fromAddress });
   return { ok: true, value: { host, port, secure: Boolean(input.secure), user, fromName, fromAddress, mode } };
 }
 

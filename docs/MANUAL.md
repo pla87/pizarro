@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.35.1"
+version: "v1.36.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.35.1
+**Versión de la aplicación:** v1.36.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -189,6 +189,8 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 ### 3.2 Proyectos
 
 **Ajustes del proyecto** se organizan en pestañas (la elegida queda en la dirección, `?tab=`): **General** (nombre, visibilidad y miembros, documentos de Google, borrar), **Tablero** (campos opcionales, entregables, tipos de tarea, etiquetas, columnas), **Adjuntos y límites** (tamaños máximos), **Releases** (plantillas de release del proyecto, ver 3.6) e **Informes** (informe semanal por email). Quien no gestiona el proyecto (un miembro sin rol de admin en un proyecto de equipo) ve *Tablero*, *Releases* (solo las plantillas) e *Informes*. Al cambiar de proyecto desde los ajustes se mantiene la pestaña.
+
+**Exportar e importar un proyecto.** En *Ajustes del proyecto → General*, **Exportar proyecto** (quien gestiona el proyecto) pregunta: **Con adjuntos / Sin adjuntos** (adjuntos de tareas y releases y archivos de Documentación; sin adjuntos no se incluyen esas listas) y **Solo el tablero / Todo el histórico** (añade tareas archivadas, releases con su contenido e historial). Descarga `pizarro-<proyecto>-<fecha>.pizarro.zip`: un ZIP con `manifest.json` (formato y versión, opciones, recuentos y huellas SHA-256), `project.json` (ajustes, campos opcionales, columnas y sus roles, tipos, etiquetas, entregables, plantillas de release, tareas con subtareas y comentarios…) y los archivos. No incluye los miembros, la papelera de Documentación ni las notificaciones (no sustituye a las copias de seguridad). Para **importar**, un admin usa el enlace discreto **Importar desde un archivo…** del diálogo *Nuevo proyecto* (elige privado o de equipo): se crea siempre un proyecto nuevo (con « (importado)» si el nombre ya existe) y al final se muestra un resumen. Las personas se asocian por email a usuarios activos (en un proyecto de equipo pasan a ser miembros); si no existen, la tarea queda sin responsable con una nota y los comentarios conservan el nombre original. Se comprueban el formato, la versión y las huellas, y se aplican los límites y cuotas del proyecto; el tamaño máximo es `PROJECT_IMPORT_MAX_MB` (500 MB por defecto). Un archivo de una versión más nueva de Pizarro se rechaza; los de versiones anteriores se adaptan solos.
 
 - Para cambiar de proyecto, pulsa el **nombre del proyecto** en la parte superior del tablero (o en la barra superior en móvil) y elige otro en el desplegable. También sirve el selector de la barra lateral. Te quedas en la misma página: desde los **ajustes** de un proyecto pasas a los ajustes del otro, desde las **releases** a sus releases (con el texto buscado) y desde el **tablero** a su tablero. La app recuerda el último que abriste: aunque vayas a *Calendario*, *Avisos*, *Mis tareas*, *Mi perfil* u otra página general, el proyecto sigue elegido en el menú, con sus entradas (*Tablero*, *Releases*, *Ajustes del proyecto*, *Archivadas*) para volver directamente.
 - Los administradores crean proyectos desde el selector (**Nuevo proyecto**) y pueden elegir una **plantilla** (ver 3.16) y marcarlo como **privado**; al crearlo se abren primero sus **ajustes** (columnas, tipos, miembros…), con el botón **Ir al tablero** arriba; los proyectos de equipo que crean se añaden solos a sus «Proyectos en los que trabajo». Los demás usuarios también pueden crear proyectos, pero **solo privados** (máximo 100 y 10 creaciones por hora).
@@ -414,6 +416,8 @@ El menú lateral muestra, debajo de las opciones del proyecto: **Calendario**, *
   - La app se abre a pantalla completa con su icono y mantiene la sesión.
 
 **Actualizaciones con la app instalada:** al publicarse una versión nueva, Pizarro lo detecta y recarga la página (también la de acceso y la de verificación en dos pasos, si se quedaron abiertas). Si aun así aparece «Algo ha fallado», la pantalla ofrece **Reintentar**, **Recargar** y **Volver a iniciar sesión** (borra la sesión y las cookies de verificación de ese dispositivo y lleva a la pantalla de acceso); cerrar la app y volver a abrirla también lo arregla. Estos errores quedan en *Administración → Logs*, aunque no haya sesión («(sin sesión)»).
+
+**Móvil con el teclado abierto:** los diálogos se quedan fijos en la zona visible, encima del teclado; el fondo no se mueve y solo se desplaza el contenido del diálogo.
 
 ### 3.13 Apariencia
 
@@ -688,7 +692,7 @@ La tarjeta trae una **guía desplegable de 7 pasos**, uno por pantalla de *Googl
 6. **De vuelta en Pizarro:** pega el **ID de cliente** y el **secreto** (se guarda cifrado; al cambiar el ID hay que escribirlo de nuevo) y guarda. **Dominio de Workspace permitido** es opcional: vacío = cualquier cuenta de Google. Prueba cerrando sesión y entrando con Google con una cuenta cuyo email exista en Pizarro.
 7. **Si falla:** `redirect_uri_mismatch` (la URI debe coincidir exactamente), acceso bloqueado o app no verificada (modo *Pruebas* sin ese usuario, o permisos sensibles), «No hay ninguna cuenta con ese email» (crea antes el usuario en Pizarro), restricción de dominio.
 
-Las páginas **/privacy** y **/terms** son públicas (enlazadas en la pantalla de acceso). Su texto se edita en **Administración → Textos legales**: para cada página, una versión en español y otra opcional en inglés (Markdown con la barra de formato, hasta 50 000 caracteres), **Vista previa**, **Ver página pública**, **Partir del texto por defecto** y **Restaurar texto por defecto**. Ahí también se ponen el **nombre del responsable** y el **email de contacto público** (el mismo que en esta tarjeta), que el texto usa con `{responsable}` y `{email}`. Si quien visita usa inglés y solo hay texto propio en español, se muestra el español. La página indica la fecha de la última actualización. Solo los admins pueden editarlos y queda en el registro.
+Las páginas **/privacy** y **/terms** son públicas (enlazadas en la pantalla de acceso). Por defecto traen **plantillas completas según el RGPD y la LOPDGDD** (responsable, finalidades, base jurídica, datos, destinatarios, conservación, derechos y reclamación ante la AEPD, seguridad y cookies técnicas; y unas condiciones de uso), que conviene completar con los proveedores reales y que revise un profesional (el editor lo recuerda). Su texto se edita en **Administración → Textos legales**: para cada página, una versión en español y otra opcional en inglés (Markdown con la barra de formato, hasta 50 000 caracteres), **Vista previa**, **Ver página pública**, **Partir del texto por defecto** y **Restaurar texto por defecto**. Ahí también se ponen el **nombre del responsable** y el **email de contacto público** (el mismo que en esta tarjeta), que el texto usa con `{responsable}` y `{email}`. Si quien visita usa inglés y solo hay texto propio en español, se muestra el español. La página indica la fecha de la última actualización. Solo los admins pueden editarlos y queda en el registro.
 
 La tarjeta indica si está **Activo**. Las variables `GOOGLE_*` del servidor, si existen, tienen prioridad. Los cambios se aplican en segundos, sin reiniciar.
 

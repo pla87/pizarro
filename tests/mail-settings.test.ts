@@ -57,3 +57,16 @@ describe("ajustes de email (parte pura)", () => {
     assert.ok(sanitizeSmtpError(new Error("x".repeat(1000))).length <= 301);
   });
 });
+
+test("parseMailMode: sin modo guardado, un smtp.gmail.com con remitente distinto del usuario o con nombre era un Workspace («company»)", async () => {
+  const { parseMailMode } = await import("../src/lib/mail-settings-core");
+  const from = (user: string, fromName: string, fromAddress: string) => ({ user, fromName, fromAddress });
+  assert.equal(parseMailMode("", "smtp.gmail.com", from("yo@example.com", "", "yo@example.com")), "gmail");
+  assert.equal(parseMailMode("", "smtp.gmail.com", from("yo@example.com", "", "")), "gmail");
+  assert.equal(parseMailMode("", "smtp.gmail.com", from("yo@example.com", "", "avisos@example.com")), "company");
+  assert.equal(parseMailMode("", "smtp.gmail.com", from("yo@example.com", "Equipo", "yo@example.com")), "company");
+  assert.equal(parseMailMode("", "smtp.gmail.com"), "gmail");
+  assert.equal(parseMailMode("", "", from("", "", "")), "gmail");
+  assert.equal(parseMailMode("", "smtp.example.com", from("", "", "")), "company");
+  assert.equal(parseMailMode("gmail", "smtp.gmail.com", from("a@example.com", "X", "b@example.com")), "gmail");
+});
