@@ -3,12 +3,15 @@
 #      como ghcr.io/pla87/pizarro:X.Y.Z y :latest;
 #   2. crea la GitHub Release con las notas de esa versión tomadas de changelog.json.
 # La release se crea al final: si la imagen falla, no se anuncia una versión que no se puede instalar.
+# También se puede lanzar a mano (Actions → Release → Run workflow, rama main): publica la versión de
+# package.json de ese commit y crea la etiqueta vX.Y.Z junto con la release.
 name: Release
 
 on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
 
 concurrency:
   group: release-${{ github.ref }}
@@ -26,8 +29,10 @@ jobs:
 
       - name: Comprobar que la etiqueta coincide con package.json
         run: |
-          tag="${GITHUB_REF_NAME#v}"
           pkg="$(node -p "require('./package.json').version")"
+          # A mano (workflow_dispatch) la versión es la de package.json; con etiqueta, deben coincidir.
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then tag="$pkg"; else tag="${GITHUB_REF_NAME#v}"; fi
+          case "$pkg" in *[!0-9A-Za-z.-]*|"") echo "Versión de package.json no válida: $pkg" >&2; exit 1 ;; esac
           if [ "$tag" != "$pkg" ]; then
             echo "La etiqueta $GITHUB_REF_NAME no coincide con la versión de package.json ($pkg)." >&2
             exit 1
@@ -76,14 +81,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Versión
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "TAG=v$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+          else
+            echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+          fi
+
       - name: Notas de la versión (changelog.json)
-        run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" > release-notes.md
+        run: node scripts/release-notes.mjs "$TAG" > release-notes.md
 
       - name: Crear la release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "Pizarro $GITHUB_REF_NAME" \
-            --notes-file release-notes.md \
-            --verify-tag
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            # Crea la etiqueta en este commit junto con la release.
+            gh release create "$TAG" --target "$GITHUB_SHA" \
+              --title "Pizarro $TAG" --notes-file release-notes.md
+          else
+            gh release create "$TAG" \
+              --title "Pizarro $TAG" --notes-file release-notes.md --verify-tag
+          fi
