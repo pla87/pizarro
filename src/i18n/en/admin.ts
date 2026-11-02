@@ -218,6 +218,8 @@ export const admin: Record<string, string> = {
   "está vacía una vez quitadas las comillas y los espacios": "is empty once quotes and spaces are removed",
   "tenía comillas alrededor (se ignoran, pero revisa que no falte nada)": "had quotes around it (they are ignored, but check nothing is missing)",
   "contiene espacios o saltos de línea en medio": "contains spaces or line breaks in the middle",
+  "No se pudo crear la copia:": "Could not create the backup:",
+  "error desconocido": "unknown error",
   "Las copias de seguridad están desactivadas: define la variable BACKUP_KEY (openssl rand -base64 32) y reinicia.": "Backups are disabled: set the BACKUP_KEY variable (openssl rand -base64 32) and restart.",
   "Última copia": "Latest backup",
   "Creando…": "Creating…",
