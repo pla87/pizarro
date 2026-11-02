@@ -102,6 +102,7 @@ export const board: Record<string, string> = {
   "vacío": "empty",
   "pesa {size}, máx. {mb} MB": "is {size}, max {mb} MB",
   "no cabe en el máximo de la tarea": "does not fit in the task's maximum",
+  "1 archivo no se ha adjuntado: {list}": "1 file was not attached: {list}",
   "{n} archivos no se han adjuntado: {list}": "{n} files were not attached: {list}",
   "No se pudo descargar el documento.": "The document could not be downloaded.",
   "«{name}» pesa {size} y el máximo por archivo es {mb} MB.": "“{name}” is {size} and the maximum per file is {mb} MB.",

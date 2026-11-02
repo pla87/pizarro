@@ -10,7 +10,7 @@ import { POST as ackPost } from "../../src/app/api/transfer-jobs/[id]/ack/route"
 import { GET as downloadRoute } from "../../src/app/api/transfer-jobs/[id]/download/route";
 import { GET as statusRoute } from "../../src/app/api/transfer-jobs/[id]/route";
 import { GET as listRoute } from "../../src/app/api/transfer-jobs/route";
-import { assertDiskRoom, diskMarginBytes, isNoSpaceError } from "../../src/lib/disk-space";
+import { assertDiskRoom, diskMarginBytes, isNoSpaceError, releaseDisk, reserveDisk } from "../../src/lib/disk-space";
 import { buildProjectExport } from "../../src/lib/project-export/export";
 import { strongEtag } from "../../src/lib/http-range";
 import { writeProjectExport } from "../../src/lib/project-export/write";
@@ -426,13 +426,24 @@ describe("espacio en disco", () => {
     assert.equal(margin, 1024 * 1024 * 1024); // 1 GB por defecto
     await assert.rejects(assertDiskRoom("/x", 1000, free(1000 + margin - 1)), (e: { status: number; message: string }) => e.status === 507 && /No hay espacio/.test(e.message));
     await assertDiskRoom("/x", 1000, free(1000 + margin));
-    // El 5 % del volumen manda cuando es mayor (100 GB: 5 GB) y DISK_MIN_FREE_MB cambia el mínimo.
-    const GB = 1024 ** 3;
-    assert.equal(diskMarginBytes(100 * GB, undefined), 5 * GB);
+    // Por defecto min(1 GB, 20 % del volumen) con suelo de 100 MB; DISK_MIN_FREE_MB lo fija tal cual.
+    const GB = 1024 ** 3, MB = 1024 ** 2;
+    assert.equal(diskMarginBytes(100 * GB, undefined), GB);
+    assert.equal(diskMarginBytes(2 * GB, undefined), Math.floor(0.2 * 2 * GB));
+    assert.equal(diskMarginBytes(200 * MB, undefined), 100 * MB);
     assert.equal(diskMarginBytes(10 * GB, "2048"), 2 * GB);
+    assert.equal(diskMarginBytes(10 * GB, "50"), 50 * MB);
     assert.equal(diskMarginBytes(10 * GB, "x"), GB);
-    await assert.rejects(assertDiskRoom("/x", 0, free(4 * GB), async () => 100 * GB), (e: { status: number }) => e.status === 507);
-    await assertDiskRoom("/x", 0, free(6 * GB), async () => 100 * GB);
+    await assert.rejects(assertDiskRoom("/x", 0, free(GB - 1), async () => 100 * GB), (e: { status: number }) => e.status === 507);
+    await assertDiskRoom("/x", 0, free(GB), async () => 100 * GB);
+    // Lo reservado por otros trabajos en marcha se descuenta; el propio no.
+    reserveDisk("job-a", "/y", 500);
+    await assert.rejects(assertDiskRoom("/y", 1000, free(1000 + margin + 499)), (e: { status: number }) => e.status === 507);
+    await assertDiskRoom("/y", 1000, free(1000 + margin + 500));
+    await assertDiskRoom("/y", 1000, free(1000 + margin), undefined, "job-a");
+    await assertDiskRoom("/z", 1000, free(1000 + margin)); // otro directorio: sin efecto
+    releaseDisk("job-a");
+    await assertDiskRoom("/y", 1000, free(1000 + margin));
     assert.equal(isNoSpaceError(Object.assign(new Error("x"), { code: "ENOSPC" })), true);
     assert.equal(isNoSpaceError(new Error("x")), false);
     await assertDiskRoom("/x", 10 ** 15, free(null));
@@ -531,5 +542,19 @@ describe("exportaciones anteriores", () => {
       assert.equal(await exists(fileOf(j)), true);
     }
     assert.equal(await dropPreviousExports({ id: second.id, userId: u.id, projectId: f.project.id }), 0);
+    // La más antigua no retira a la más reciente: al ejecutarse con el primero, `second` (posterior) sigue lista.
+    assert.equal(await dropPreviousExports({ id: first.id, userId: u.id, projectId: f.project.id }), 0);
+    assert.equal((await db.projectTransferJob.findUniqueOrThrow({ where: { id: second.id } })).status, "DONE");
+  });
+  test("dos exportaciones con el mismo instante de fin no se borran entre sí (desempata el id)", async () => {
+    const u = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [] });
+    const at = new Date();
+    const mk = (id: string) => db.projectTransferJob.create({ data: { id, kind: "EXPORT", status: "DONE", userId: u.id, projectId: f.project.id, options: {}, progress: {}, finishedAt: at, expiresAt: new Date(at.getTime() + 3600_000), result: { file: `${id}.pizarro.zip`, size: 1, name: "x.zip" } } });
+    const a = await mk("aaaa-job"), b = await mk("bbbb-job");
+    assert.equal(await dropPreviousExports({ id: a.id, userId: u.id, projectId: f.project.id }), 0);
+    assert.equal(await dropPreviousExports({ id: b.id, userId: u.id, projectId: f.project.id }), 1);
+    assert.equal((await db.projectTransferJob.findUniqueOrThrow({ where: { id: a.id } })).status, "EXPIRED");
+    assert.equal((await db.projectTransferJob.findUniqueOrThrow({ where: { id: b.id } })).status, "DONE");
   });
 });

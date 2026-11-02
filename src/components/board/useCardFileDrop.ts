@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
-import { batchErrorMessage, cardsAcceptFiles, filesFrom, hasFiles, skippedMessage, uploadBatch } from "./upload";
+import { batchErrorMessage, cardsAcceptFiles, filesFrom, hasFiles, monotonicTotals, skippedMessage, uploadBatch } from "./upload";
 import { planUploads } from "@/lib/upload-queue";
 
 /**
@@ -54,7 +54,7 @@ export function useCardFileDrop(taskId: string, enabled: boolean) {
     const res = await uploadBatch(taskId, accepted, {
       t,
       track: board.trackRaw,
-      onUploaded: (att) => board.patchTask(taskId, att.totals),
+      onUploaded: (att) => board.patchTask(taskId, monotonicTotals(board.getTask(taskId), att.totals)),
     });
     if (alive.current) setUploading((n) => n - accepted.length);
     const ok = res.uploaded.length;

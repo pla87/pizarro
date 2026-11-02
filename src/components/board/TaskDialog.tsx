@@ -41,7 +41,7 @@ import { createAndOpenGoogleFile, shareWarning } from "./google";
 import { AttachLimitHint } from "./AttachLimitHint";
 import { attachmentTotalsOf } from "@/lib/attachment-totals";
 import { UploadProgress } from "./UploadProgress";
-import { batchErrorMessage, filesFrom, formatBytes, skippedMessage, uploadBatch, useFileDrop, type BatchProgress } from "./upload";
+import { batchErrorMessage, createProgressAggregator, filesFrom, formatBytes, monotonicTotals, skippedMessage, uploadBatch, useFileDrop, type BatchProgress } from "./upload";
 import { planUploads } from "@/lib/upload-queue";
 import { formatDate } from "@/lib/format";
 import { fieldsError, fieldsFormOf, fieldsPatch, TaskFieldsGroup, type FieldsForm } from "./TaskFieldsGroup";
@@ -109,6 +109,13 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   }
   const [uploading, setUploading] = useState(0);
   const [progress, setProgress] = useState<BatchProgress | null>(null);
+  // Varias tandas a la vez suman en un solo progreso, que se limpia cuando acaban todas.
+  const [progressAgg] = useState(() => createProgressAggregator(setProgress));
+  // Cancelar o cerrar el diálogo aborta las subidas que aún no han empezado (las que van en curso terminan).
+  const uploadAbort = useRef(new AbortController());
+  useEffect(() => {
+    return () => uploadAbort.current.abort();
+  }, []);
   // Una subida se rechazó por el máximo de adjuntos de la tarea: se resalta el total hasta que se borre algo.
   const [totalRejected, setTotalRejected] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
@@ -247,6 +254,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const cancelEdits = async () => {
     if (cancelling) return;
     setCancelling(true);
+    uploadAbort.current.abort();
+    uploadAbort.current = new AbortController(); // si Cancelar falla y el diálogo sigue abierto, se puede volver a subir
     try {
       await board.settle();
       if (!editedSinceOpen()) return onClose();
@@ -327,15 +336,22 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     if (skipped.length) toast(skippedMessage(t, locale, skipped, fileMaxMb), "error");
     if (skipped.some((s) => s.reason === "total")) setTotalRejected(true);
     if (!accepted.length) return;
+    if (uploadAbort.current.signal.aborted) return;
     setUploading((n) => n + accepted.length);
+    const batch = progressAgg.start();
     const res = await uploadBatch(task.id, accepted, {
       t,
       track: board.trackRaw,
-      onUploaded: (att) => setDetail((d) => (d ? { ...d, attachments: [...d.attachments, att] } : d)),
-      onProgress: setProgress,
+      signal: uploadAbort.current.signal,
+      onUploaded: (att) => {
+        setDetail((d) => (d ? { ...d, attachments: [...d.attachments, att] } : d));
+        // Con el diálogo ya cerrado nadie recalcula desde la lista: los contadores de la tarjeta se ponen aquí.
+        board.patchTask(task.id, monotonicTotals(board.getTask(task.id), att.totals));
+      },
+      onProgress: batch.update,
     });
     setUploading((n) => n - accepted.length);
-    setProgress(null);
+    batch.finish();
     if (res.totalRejected) setTotalRejected(true);
     const msg = batchErrorMessage(t, res.errors, res.notSent);
     if (msg) toast(msg, "error");

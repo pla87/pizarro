@@ -11,8 +11,8 @@ Dos caminos. Elige uno; los dos acaban en el mismo asistente `/setup`.
 | | Railway (nube) | Servidor propio (un comando) |
 |---|---|---|
 | Para quién | Sin servidor ni Linux a mano | Tienes un VPS o un equipo Linux |
-| Tiempo | 5–10 minutos | 5–10 minutos (la primera vez construye la imagen) |
-| Necesitas | Cuenta de Railway | Linux x86_64 o arm64, 2 GB de RAM, puertos 80/443 y un dominio con DNS ya apuntando al servidor (o red local sin dominio) |
+| Tiempo | 5–10 minutos | Unos minutos (descarga la imagen ya construida; solo con `--build` se compila en el servidor) |
+| Necesitas | Cuenta de Railway | Linux x86_64 o arm64, 1 GB de RAM (2 GB solo si construyes con `--build`), puertos 80/443 y un dominio con DNS ya apuntando al servidor (o red local sin dominio) |
 | Obtienes | Pizarro + PostgreSQL + volumen de adjuntos, con HTTPS | Pizarro + PostgreSQL 16 + Caddy (HTTPS automático) en Docker Compose |
 
 ### Servidor propio con un comando
@@ -29,7 +29,7 @@ El script:
 
 1. Comprueba Linux (x86_64 o arm64) y que eres root o tienes `sudo`.
 2. Comprueba Docker y el plugin `docker compose`. Si faltan, **te pregunta** si los instala con el script oficial de `get.docker.com` (con `--yes` no pregunta). Si dices que no, se detiene.
-3. Averigua la última versión publicada (o usa la que pidas con `--version`), descarga el código de esa etiqueta de GitHub (sin necesitar `git`), comprueba que está completo y lo deja en la carpeta de instalación. Si todavía no hay ninguna versión publicada, usa `main` y construye la imagen en el servidor.
+3. Averigua la última versión publicada (o usa la que pidas con `--version`), descarga el código de esa etiqueta de GitHub (sin necesitar `git`), comprueba que está completo y lo deja en la carpeta de instalación. Muestra la versión que va a instalar. Si no puede saber cuál es la última (sin red, límite de GitHub o todavía no hay ninguna publicada), **no construye `main` a escondidas**: en una instalación nueva se detiene y sugiere `--build` o `--ref main`, y en una ya existente la deja intacta y sugiere `--version X.Y.Z` o reintentar más tarde.
 4. Ejecuta `deploy/install.sh`: descarga la **imagen ya construida** (ver «La imagen ya construida»), crea `deploy/.env` con secretos aleatorios, arranca los contenedores, espera a que la app esté sana y muestra la dirección, el código de `/setup` y el kit de recuperación.
 
 Repetir el mismo comando **actualiza** Pizarro a la última versión (sección 5): prepara el código nuevo aparte y lo cambia de golpe (si se interrumpe, la instalación anterior sigue intacta), y conserva `deploy/.env`, `deploy/recovery-kit.txt` y los datos (que viven en volúmenes de Docker, fuera de la carpeta). Si al actualizar pasas un `--domain` (o `--local`) distinto del que ya está en `deploy/.env`, el script avisa y mantiene el actual; para cambiarlo, edita `DOMAIN` y `APP_URL` en `deploy/.env` y ejecuta `docker compose up -d` en `deploy/`. Haz antes una copia (sección 4). Si prefieres revisar el script antes de ejecutarlo, descárgalo con `curl -fsSLO <url>`, léelo y lánzalo con `sh get.sh --domain …`.
@@ -41,9 +41,11 @@ Cada versión de Pizarro se publica como una **imagen Docker ya construida** en 
 - **Instalar y actualizar es más rápido:** son unos minutos de descarga en lugar de una compilación larga. No hay que construir nada en el servidor del cliente.
 - **Hace falta menos máquina:** compilar la aplicación consume bastante memoria y procesador. Ya no se necesita ese pico: basta con lo que gasta Pizarro funcionando.
 - **Es exactamente lo que se probó:** todos los servidores ejecutan el mismo paquete, construido una sola vez con las comprobaciones pasadas, y no una compilación distinta en cada máquina.
-- **Volver atrás es inmediato:** las versiones anteriores siguen publicadas; volver a una es cambiar el número de versión (sección 5), sin recompilar.
+- **Volver atrás es rápido:** las versiones anteriores siguen publicadas; volver a una es cambiar el número de versión (sección 5), sin recompilar. Ojo: las migraciones de la base de datos solo avanzan, así que si la versión nueva ya migró los datos, volver atrás puede exigir restaurar antes una copia de seguridad.
 
 La imagen funciona en servidores normales (amd64) y en arm64 (p. ej. Raspberry Pi 5). Pizarro en Railway no la usa (ver sección 5).
+
+> **Para quien publica el repositorio (mantenedor):** tras la primera release, el paquete `ghcr.io/pla87/pizarro` nace **privado** en GitHub. Hay que hacerlo público una vez (en GitHub: perfil u organización → *Packages* → `pizarro` → *Package settings* → *Change visibility* → *Public*); mientras no lo sea, ninguna instalación puede descargar la imagen (`docker compose pull` falla con «unauthorized» o «denied»).
 
 #### Construir la imagen en tu servidor
 
@@ -123,7 +125,7 @@ Una plantilla se crea desde la cuenta de Railway del propietario; no se puede ha
 | | Mínimo |
 |---|---|
 | CPU | 1 vCPU (amd64 o arm64) |
-| Memoria | **2 GB de RAM** (1 GB funciona con swap, más lento) |
+| Memoria | **1 GB de RAM** basta con la imagen publicada (la opción por defecto). Solo si construyes la imagen en el servidor (`--build`) hacen falta 2 GB (o 1 GB con swap, más lento) |
 | Disco | 10 GB + lo que ocupen los adjuntos |
 | Software | Linux con **Docker 24+** y el plugin `docker compose` |
 | Red | Puertos **80** y **443** abiertos hacia Internet y un **dominio** (o subdominio) con un registro DNS `A`/`AAAA` apuntando al servidor |
@@ -310,6 +312,8 @@ Qué cambia:
 
 **Redirección opcional.** Pizarro no obliga a usar el host de `APP_URL`: responde en cualquier dirección que llegue al servicio. Para que quien entre por la dirección antigua pase automáticamente a la nueva, define `CANONICAL_REDIRECT=1` (y redespliega). Las peticiones de páginas (GET/HEAD) a un host distinto del de `APP_URL` reciben una redirección 308 al mismo camino y consulta en `APP_URL`; no se tocan `/api/*` (comprobaciones de salud, callbacks de Google), las peticiones internas (`localhost`) ni las que no son GET. Si `APP_URL` está mal escrita se redirige a una dirección inexistente: compruébala antes de activarlo y quítalo (o corrige `APP_URL`) si te quedas sin acceso.
 
+**Presentación en la raíz (`LANDING_AT_ROOT=1`).** Opcional: quien abre `/` sin sesión ve la página de presentación del producto (la dirección no cambia) en vez de ir al acceso; con sesión, todo sigue igual. La presentación también está siempre en `/presentacion`. Mientras la instalación no tenga usuarios, `/` lleva igualmente al asistente `/setup`; si alguna vez no lo hiciera, abre `/setup` directamente. Se define en `deploy/.env` (o en las variables de Railway) y se aplica con `docker compose up -d`.
+
 ## 4. Copias de seguridad
 
 - **Automáticas:** con `BACKUP_KEY`, cada día se copian, cifrados, la base de datos y **todos los ficheros del volumen de subidas** (adjuntos, miniaturas, copias de releases, documentos) en su carpeta `backups/`. Los ficheros se guardan una sola vez y cada copia solo añade los nuevos. Se conservan 14 diarias y 6 mensuales, y cada mes se restaura la última en una base de datos temporal para comprobar que sirve. Estado en *Administración → Copias de seguridad*.
@@ -392,11 +396,11 @@ Esto solo funciona si no fijaste una versión (ver abajo): una instalación fija
 curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --version 1.37.0
 ```
 
-Instala el código de la etiqueta `v1.37.0` y fija la imagen `ghcr.io/pla87/pizarro:1.37.0` (`PIZARRO_IMAGE` en `deploy/.env`). Las versiones publicadas están en <https://github.com/pla87/pizarro/releases>. Para volver a seguir siempre la última: repite el comando sin `--version`. Si la versión nueva no arranca, vuelve a la anterior así y, si ya había migrado la base de datos, restaura la copia de antes (sección 6): una versión anterior puede no entender una base migrada por otra posterior.
+Instala el código de la etiqueta `v1.37.0` y fija la imagen `ghcr.io/pla87/pizarro:1.37.0` (`PIZARRO_IMAGE` en `deploy/.env`). Las versiones publicadas están en <https://github.com/pla87/pizarro/releases>. Para volver a seguir siempre la última: repite el comando sin `--version`. Sirve igual para actualizar a una versión concreta (no solo para volver atrás). Si la versión nueva no arranca, puedes volver a la anterior así, pero las migraciones de la base de datos solo avanzan: si la versión nueva ya migró los datos, volver puede exigir restaurar antes la copia de seguridad (sección 6), porque una versión anterior puede no entender una base migrada por otra posterior. Por eso la copia previa a actualizar es imprescindible.
 
 **Railway** sigue construyendo desde el repositorio de GitHub con su `Dockerfile` (no usa la imagen publicada): para actualizar, en Railway pulsa *Redeploy* sobre el último commit (o activa el despliegue automático de la rama que usas). Para quedarte en una versión, apunta el servicio a su etiqueta (`vX.Y.Z`) en vez de a `main`.
 
-**Aviso de versión nueva.** Pizarro consulta a GitHub, como mucho cada 12 horas, cuál es la última release publicada. Si es más nueva que la que corre, los administradores ven un aviso discreto en Administración (y un punto junto a «Administración» en el menú) con enlaces a las novedades y a esta sección; se puede ocultar y no vuelve a salir hasta la siguiente versión. Solo se pide un dato público (la última versión); no se envía nada de tu instalación. Sin conexión o con el límite de GitHub agotado no pasa nada: simplemente no hay aviso. Para desactivarlo, `UPDATE_CHECK=0` en `deploy/.env` (y `docker compose up -d`) o en las variables de Railway.
+**Aviso de versión nueva.** Pizarro consulta a GitHub, como mucho cada 12 horas, cuál es la última release publicada. Si es más nueva que la que corre, los administradores ven un aviso discreto en Administración (y un punto junto a «Administración» en el menú) con enlaces a las novedades y a esta sección; se puede ocultar y no vuelve a salir hasta la siguiente versión. Es una petición a `api.github.com` cada 12 horas desde tu servidor: solo pide un dato público (la última versión) y no se envía nada de tu instalación, pero GitHub ve la dirección IP del servidor. Si no quieres esa conexión saliente, desactívalo (abajo). Sin conexión o con el límite de GitHub agotado no pasa nada: simplemente no hay aviso. Para desactivarlo, `UPDATE_CHECK=0` en `deploy/.env` (y `docker compose up -d`) o en las variables de Railway.
 
 **Publicar una versión (mantenedores).** `npm run version:bump -- minor` registra la versión y, tras fusionar en `main`, `npm run release:tag` crea la etiqueta anotada `vX.Y.Z` en el commit actual (se niega si hay cambios sin confirmar o si la etiqueta ya existe) y `git push origin vX.Y.Z` la sube. Eso lanza `.github/workflows/release.yml`: construye la imagen para amd64 y arm64, la publica en GHCR como `X.Y.Z` y `latest`, y crea la GitHub Release con el resumen y los cambios de esa versión tomados de `changelog.json`.
 
@@ -445,7 +449,7 @@ Opciones: `--files` (también los ficheros), `--files-only` (solo los ficheros; 
 
 ```bash
 cd /opt/pizarro/deploy
-docker compose build app
+docker compose pull app
 docker compose up -d postgres
 # Ver las copias disponibles
 docker compose run --rm --no-deps app node dist/restore.mjs s3:latest --list

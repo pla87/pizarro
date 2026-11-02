@@ -74,7 +74,7 @@ test("caché: sin red (lanza) o sin respuesta válida conserva la última versi�
 });
 
 test("caché guardada: JSON válido se lee; basura o versión rara se descarta", () => {
-  assert.deepEqual(parseUpdateCache(JSON.stringify({ checkedAt: 5, latest: "1.2.3", url: "u" })), { checkedAt: 5, latest: "1.2.3", url: "u", failed: false });
+  assert.deepEqual(parseUpdateCache(JSON.stringify({ checkedAt: 5, latest: "1.2.3", url: "u" })), { checkedAt: 5, latest: "1.2.3", url: null, failed: false });
   assert.equal(parseUpdateCache("{no json"), null);
   assert.equal(parseUpdateCache(null), null);
   assert.equal(parseUpdateCache(JSON.stringify({ latest: "1.2.3" })), null);
@@ -91,4 +91,10 @@ test("aviso: solo si la conocida es más nueva que la actual y no está descarta
   assert.equal(pendingUpdate({ ...c, latest: "1.39.0" }, "1.37.0", "1.38.0")?.version, "1.39.0", "una más nueva vuelve a avisar");
   assert.equal(pendingUpdate(null, "1.37.0", null), null);
   assert.equal(pendingUpdate({ ...c, url: null }, "1.37.0", null)?.url, "https://github.com/pla87/pizarro/releases/tag/v1.38.0");
+});
+
+test("parseUpdateCache: una URL ajena al repositorio oficial se descarta", () => {
+  const ok = "https://github.com/pla87/pizarro/releases/tag/v1.2.3";
+  assert.equal(parseUpdateCache(JSON.stringify({ checkedAt: 5, latest: "1.2.3", url: ok }))?.url, ok);
+  assert.equal(parseUpdateCache(JSON.stringify({ checkedAt: 5, latest: "1.2.3", url: "https://evil.example.com/x" }))?.url, null);
 });

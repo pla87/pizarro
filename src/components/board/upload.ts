@@ -71,7 +71,7 @@ export class UploadError extends Error {
 }
 
 /** `onCreate`: adjunto de una tarea recién creada (deshacer la creación se lo lleva, no cuenta aparte). Reintenta con calma ante 429/503. */
-export async function uploadFile(taskId: string, file: File, onCreate = false, t: T = makeT("es")): Promise<UploadedAttachment> {
+export async function uploadFile(taskId: string, file: File, onCreate = false, t: T = makeT("es"), signal?: AbortSignal): Promise<UploadedAttachment> {
   const isImage = isImageFile(file);
   const fallback = isImage ? `${t("captura")}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png` : t("archivo");
   const name = file.name && !(isImage && file.name === "image.png") ? file.name : fallback;
@@ -86,7 +86,58 @@ export async function uploadFile(taskId: string, file: File, onCreate = false, t
       throw new UploadError(json.error ?? t("No se pudo subir el archivo."), json.code, res.status, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null);
     }
     return json as UploadedAttachment;
-  });
+  }, { signal });
+}
+
+type Totals = { imageCount: number; fileCount: number; attachBytes: number };
+
+/**
+ * Contadores de la tarjeta tras una subida: con varias en paralelo las respuestas pueden llegar desordenadas, así que
+ * cada contador solo sube (el máximo entre lo que hay y lo que trae la respuesta). Borrados y demás los corrige el detalle.
+ */
+export function monotonicTotals(current: Partial<Totals> | undefined, next: Totals): Totals {
+  return {
+    imageCount: Math.max(current?.imageCount ?? 0, next.imageCount),
+    fileCount: Math.max(current?.fileCount ?? 0, next.fileCount),
+    attachBytes: Math.max(current?.attachBytes ?? 0, next.attachBytes),
+  };
+}
+
+/**
+ * Une el progreso de varias tandas simultáneas en uno solo (totales y terminadas sumados). Mientras quede alguna en
+ * marcha las ya terminadas siguen contando; solo cuando acaban todas se limpia (set(null)).
+ */
+export function createProgressAggregator(set: (p: BatchProgress | null) => void) {
+  const batches = new Map<number, { p: BatchProgress; finished: boolean }>();
+  let seq = 0;
+  const publish = () => {
+    if (!batches.size) return set(null);
+    let total = 0, done = 0;
+    const active: string[] = [];
+    for (const { p } of batches.values()) {
+      total += p.total;
+      done += p.done;
+      active.push(...p.active);
+    }
+    set({ total, done, active });
+  };
+  return {
+    start() {
+      const id = ++seq;
+      return {
+        update(p: BatchProgress) {
+          batches.set(id, { p, finished: false });
+          publish();
+        },
+        finish() {
+          const b = batches.get(id);
+          if (b) b.finished = true;
+          if ([...batches.values()].every((x) => x.finished)) batches.clear();
+          publish();
+        },
+      };
+    },
+  };
 }
 
 /** Progreso de una tanda de subidas: total, terminadas (bien o mal) y nombres de las que van ahora. */
@@ -113,7 +164,7 @@ export interface BatchResult {
 export async function uploadBatch(
   taskId: string,
   files: File[],
-  opts: { onCreate?: boolean; t?: T; track?: <R>(p: Promise<R>) => Promise<R>; onUploaded?: (a: UploadedAttachment) => void; onProgress?: (p: BatchProgress) => void } = {},
+  opts: { onCreate?: boolean; t?: T; track?: <R>(p: Promise<R>) => Promise<R>; onUploaded?: (a: UploadedAttachment) => void; onProgress?: (p: BatchProgress) => void; signal?: AbortSignal } = {},
 ): Promise<BatchResult> {
   const t = opts.t ?? makeT("es");
   const active = new Map<number, string>();
@@ -123,7 +174,7 @@ export async function uploadBatch(
   const results = await runQueue(
     files,
     async (file) => {
-      const send = uploadFile(taskId, file, opts.onCreate ?? false, t);
+      const send = uploadFile(taskId, file, opts.onCreate ?? false, t, opts.signal);
       const att = await (opts.track ? opts.track(send) : send);
       opts.onUploaded?.(att);
       return att;
@@ -139,6 +190,7 @@ export async function uploadBatch(
         report();
       },
       stopWhen: (reason) => reason instanceof UploadError && reason.code === "task_total",
+      signal: opts.signal,
     },
   );
   const uploaded: UploadedAttachment[] = [];
@@ -160,7 +212,8 @@ export async function uploadBatch(
 export function skippedMessage(t: T, locale: string, skipped: SkippedFile[], fileMaxMb: number): string {
   const why = (s: SkippedFile) =>
     s.reason === "empty" ? t("vacío") : s.reason === "too_big" ? t("pesa {size}, máx. {mb} MB", { size: formatBytes(s.size, locale), mb: fileMaxMb }) : t("no cabe en el máximo de la tarea");
-  return t("{n} archivos no se han adjuntado: {list}", { n: skipped.length, list: summarizeSkipped(skipped, (s) => `«${s.name || t("archivo")}» (${why(s)})`) });
+  const list = summarizeSkipped(skipped, (s) => `«${s.name || t("archivo")}» (${why(s)})`);
+  return skipped.length === 1 ? t("1 archivo no se ha adjuntado: {list}", { list }) : t("{n} archivos no se han adjuntado: {list}", { n: skipped.length, list });
 }
 
 /** Una sola frase para los fallos de una tanda: el primer motivo y cuántos más. */

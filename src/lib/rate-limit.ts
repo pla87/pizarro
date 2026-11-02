@@ -31,3 +31,9 @@ export function loginRateKeys(ip: string, email: string): { pair: string; ip: st
   const e = email.trim().toLowerCase().slice(0, 200);
   return { pair: `login:pair:${ip}|${e}`, ip: `login:ip:${ip}` };
 }
+
+/** Segundos que faltan para que se reinicie el contador de `key` (para Retry-After); 1 como mínimo. */
+export function rateLimitRetryAfterSec(key: string): number {
+  const b = buckets.get(key);
+  return b ? Math.max(1, Math.ceil((b.resetAt - Date.now()) / 1000)) : 1;
+}

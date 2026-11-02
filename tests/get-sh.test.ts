@@ -185,6 +185,29 @@ test("get.sh: sin Docker y sin --yes ni terminal no instala nada", () => {
   assert.match(r.stderr + r.stdout, /Docker/);
 });
 
+// Sin red (curl falso que falla): una instalación existente no pasa a construir main; una nueva pide --build o --ref main.
+test("get.sh: si falla la consulta de la última versión no construye main a escondidas", { skip: process.getuid?.() !== 0 && "requiere root" }, () => {
+  const fake = join(root, "bin-offline");
+  mkdirSync(fake, { recursive: true });
+  writeFileSync(join(fake, "curl"), "#!/bin/sh\nexit 22\n");
+  chmodSync(join(fake, "curl"), 0o755);
+  const runOffline = (args: string[]) =>
+    spawnSync("setsid", ["-w", "sh", GET, ...args], { encoding: "utf8", env: mkEnv(`${fake}:${bin}:${process.env.PATH}`), stdio: ["ignore", "pipe", "pipe"] });
+  const fresh = join(root, "inst-offline-new");
+  const a = runOffline(["--domain", "pizarro.example.com", "--dir", fresh]);
+  assert.notEqual(a.status, 0);
+  assert.match(a.stderr, /--build/);
+  assert.equal(existsSync(fresh), false);
+  const old = join(root, "inst-offline-old");
+  mkdirSync(join(old, "deploy"), { recursive: true });
+  writeFileSync(join(old, "Dockerfile"), "FROM scratch\n");
+  writeFileSync(join(old, "deploy", ".env"), 'APP_URL="https://p.example.com"\n');
+  const b = runOffline(["--domain", "p.example.com", "--build", "--dir", old]);
+  assert.notEqual(b.status, 0);
+  assert.match(b.stderr, /--version X\.Y\.Z/);
+  assert.equal(readFileSync(join(old, "deploy", ".env"), "utf8"), 'APP_URL="https://p.example.com"\n');
+});
+
 test("cleanup", () => {
   rmSync(root, { recursive: true, force: true });
 });

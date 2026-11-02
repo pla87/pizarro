@@ -4,7 +4,7 @@ import path from "node:path";
 import type { Prisma } from "@/generated/prisma/client";
 import { makeT, toLocale, type T } from "@/i18n/core";
 import { db } from "./db";
-import { assertDiskRoom, isNoSpaceError, NO_SPACE_MESSAGE } from "./disk-space";
+import { assertDiskRoom, isNoSpaceError, NO_SPACE_MESSAGE, releaseDisk, reserveDisk } from "./disk-space";
 import { AppError } from "./errors";
 import { logEvent } from "./log";
 import { buildProjectExport, estimateProjectExport } from "./project-export/export";
@@ -267,6 +267,7 @@ export async function executeJob(job: JobRow): Promise<void> {
     });
   } finally {
     clearInterval(beat);
+    releaseDisk(job.id);
     await progress.settle();
     if (job.kind === "IMPORT") await rm(String((job.options as { tempFile?: string }).tempFile ?? ""), { force: true }).catch(() => {});
   }
@@ -291,7 +292,16 @@ export async function dropPreviousExports(job: { id: string; userId: string; pro
   if (!job.projectId) return 0;
   let dropped = 0;
   try {
-    const old = await db.projectTransferJob.findMany({ where: { kind: "EXPORT", status: "DONE", userId: job.userId, projectId: job.projectId, id: { not: job.id } } });
+    // Solo las que terminaron estrictamente antes (a igual instante, desempata el id): dos exportaciones casi
+    // simultáneas no se borran entre sí, y la más reciente siempre sobrevive.
+    const me = await db.projectTransferJob.findUnique({ where: { id: job.id }, select: { finishedAt: true } });
+    if (!me?.finishedAt) return 0;
+    const old = await db.projectTransferJob.findMany({
+      where: {
+        kind: "EXPORT", status: "DONE", userId: job.userId, projectId: job.projectId, id: { not: job.id },
+        OR: [{ finishedAt: { lt: me.finishedAt } }, { finishedAt: me.finishedAt, id: { lt: job.id } }],
+      },
+    });
     for (const o of old) {
       const res = await db.projectTransferJob.updateMany({ where: { id: o.id, status: "DONE" }, data: { status: "EXPIRED" } });
       if (res.count === 0) continue;
@@ -322,7 +332,8 @@ async function runExport(job: JobRow, progress: ReturnType<typeof progressWriter
   const dir = exportsDir();
   await mkdir(dir, { recursive: true });
   // Con el tamaño exacto ya conocido: la comprobación definitiva de espacio, antes de escribir nada.
-  await assertDiskRoom(dir, built.size);
+  await assertDiskRoom(dir, built.size, undefined, undefined, job.id);
+  reserveDisk(job.id, dir, built.size); // hasta que termine, otros trabajos descuentan lo que este aún va a escribir
   const rel = `${job.id}.pizarro.zip`;
   const dest = path.join(dir, rel);
   progress.set({ phase: "archivos", done: 0, total: 0 });
@@ -354,7 +365,9 @@ async function runImport(job: JobRow, user: { id: string; name: string; email: s
   } catch {
     throw new AppError("El archivo subido ya no está en el servidor. Vuelve a subirlo.", 410);
   }
-  await assertDiskRoom(uploadDir(), Math.ceil((opts.bytes ?? 0) * IMPORT_FACTOR));
+  const importBytes = Math.ceil((opts.bytes ?? 0) * IMPORT_FACTOR);
+  await assertDiskRoom(uploadDir(), importBytes, undefined, undefined, job.id);
+  reserveDisk(job.id, uploadDir(), importBytes);
   const summary = await importProjectFile(opts.tempFile, user, { isPrivate: !!opts.isPrivate, t, onProgress: (p) => progress.set(p) });
   logEvent({
     category: "api", action: "projects.import",

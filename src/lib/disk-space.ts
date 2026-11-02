@@ -6,16 +6,41 @@ import { AppError } from "./errors";
 export const NO_SPACE_MESSAGE = "No hay espacio suficiente en el disco del servidor para esta operación.";
 
 const MB = 1024 * 1024;
-/** Mínimo libre por defecto que debe quedar además de lo estimado (DISK_MIN_FREE_MB lo cambia). */
+/** Margen por defecto: 1 GB como mucho (DISK_MIN_FREE_MB lo fija a mano)... */
 export const DISK_MIN_FREE_DEFAULT_MB = 1024;
-/** Fracción del sistema de ficheros que también debe quedar libre. */
-const DISK_MIN_FREE_FRACTION = 0.05;
+/** ...pero nunca más del 20 % del volumen (en un disco pequeño un GB fijo bloquearía todo)... */
+const DISK_MIN_FREE_FRACTION = 0.2;
+/** ...ni menos de 100 MB. */
+export const DISK_MIN_FREE_FLOOR_MB = 100;
 
-/** Margen en bytes: el mayor entre el mínimo configurado (1 GB por defecto) y el 5 % del volumen (si se conoce su tamaño). Se lee cada vez. */
+/**
+ * Margen en bytes que debe quedar libre además de lo estimado. Con DISK_MIN_FREE_MB válido manda tal cual; si no,
+ * min(1 GB, 20 % del volumen) con un suelo de 100 MB (sin conocer el tamaño del volumen, 1 GB). Se lee cada vez.
+ */
 export function diskMarginBytes(totalBytes: number | null = null, raw: string | undefined = process.env.DISK_MIN_FREE_MB): number {
   const n = Number(raw);
-  const floor = (raw !== undefined && raw.trim() !== "" && Number.isFinite(n) && n >= 0 ? n : DISK_MIN_FREE_DEFAULT_MB) * MB;
-  return Math.max(floor, totalBytes ? Math.floor(totalBytes * DISK_MIN_FREE_FRACTION) : 0);
+  if (raw !== undefined && raw.trim() !== "" && Number.isFinite(n) && n >= 0) return n * MB;
+  const byVolume = totalBytes ? Math.floor(totalBytes * DISK_MIN_FREE_FRACTION) : Infinity;
+  return Math.max(DISK_MIN_FREE_FLOOR_MB * MB, Math.min(DISK_MIN_FREE_DEFAULT_MB * MB, byVolume));
+}
+
+// Reservas en este proceso: bytes que los trabajos en marcha aún van a escribir y que el disco no refleja todavía.
+const reservations: Map<string, { dir: string; bytes: number }> = ((globalThis as unknown as { __pzDiskReserved?: Map<string, { dir: string; bytes: number }> }).__pzDiskReserved ??= new Map());
+
+/** Reserva `bytes` en `dir` para el trabajo `id` (sustituye su reserva anterior). Se libera con `releaseDisk`. */
+export function reserveDisk(id: string, dir: string, bytes: number): void {
+  reservations.set(id, { dir, bytes: Math.max(0, bytes) });
+}
+
+export function releaseDisk(id: string): void {
+  reservations.delete(id);
+}
+
+/** Bytes reservados por los trabajos en marcha que escriben en `dir` (menos los del trabajo `exceptId`). */
+export function reservedDiskBytes(dir: string, exceptId?: string): number {
+  let sum = 0;
+  for (const [id, r] of reservations) if (r.dir === dir && id !== exceptId) sum += r.bytes;
+  return sum;
 }
 
 /** Bytes libres (para un proceso sin privilegios) y totales del volumen de `dir`; null si el sistema no lo informa. */
@@ -42,13 +67,15 @@ export const isNoSpaceError = (err: unknown): boolean => (err as { code?: string
 /**
  * Falla (507) si en el volumen de `dir` no caben `needed` bytes más el margen. Si el sistema de ficheros no informa
  * del espacio libre no se bloquea nada: es una salvaguarda, no una garantía. `free` y `total` permiten inyectar los datos en las pruebas
- * (sin `total` en una prueba solo cuenta el mínimo configurado).
+ * (sin `total` en una prueba solo cuenta el mínimo configurado). Lo reservado por los demás trabajos en marcha de
+ * este proceso en `dir` (salvo `selfId`) se descuenta del espacio libre.
  */
 export async function assertDiskRoom(
   dir: string,
   needed: number,
   free?: (dir: string) => Promise<number | null>,
   total?: (dir: string) => Promise<number | null>,
+  selfId?: string,
 ): Promise<void> {
   let available: number | null;
   let size: number | null = null;
@@ -61,5 +88,5 @@ export async function assertDiskRoom(
     size = s?.total ?? null;
   }
   if (available === null) return;
-  if (available < needed + diskMarginBytes(size)) throw new AppError(NO_SPACE_MESSAGE, 507, "disk_full");
+  if (available - reservedDiskBytes(dir, selfId) < needed + diskMarginBytes(size)) throw new AppError(NO_SPACE_MESSAGE, 507, "disk_full");
 }

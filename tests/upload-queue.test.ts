@@ -90,6 +90,28 @@ describe("withRetry", () => {
   });
   test("retryDelayMs tiene tope", () => {
     assert.equal(retryDelayMs(10), 30_000);
+    assert.equal(retryDelayMs(0, 60), 60_000);
+    assert.equal(retryDelayMs(0, 600), 65_000);
+  });
+  test("espera total acotada y sin reintentos si se aborta", async () => {
+    const slept: number[] = [];
+    const sleep = async (ms: number) => void slept.push(ms);
+    const err = Object.assign(new Error("x"), { status: 429, retryAfterSec: 60 });
+    let calls = 0;
+    await assert.rejects(withRetry(async () => { calls++; throw err; }, { sleep }));
+    assert.deepEqual(slept, [60_000]); // el segundo (120 s en total) ya excede los 70 s
+    assert.equal(calls, 2);
+    const ac = new AbortController();
+    ac.abort();
+    calls = 0;
+    await assert.rejects(withRetry(async () => { calls++; throw err; }, { sleep, signal: ac.signal }));
+    assert.equal(calls, 1);
+  });
+  test("runQueue con señal abortada deja el resto sin empezar", async () => {
+    const ac = new AbortController();
+    const out = await runQueue([1, 2, 3, 4], async (n) => { if (n === 1) ac.abort(); return n; }, { concurrency: 1, signal: ac.signal });
+    assert.equal(out[0]!.status, "fulfilled");
+    assert.ok(out.slice(1).every((r) => r.status === "rejected" && r.reason instanceof QueueStopped));
   });
 });
 

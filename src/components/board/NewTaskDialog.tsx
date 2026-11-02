@@ -90,14 +90,16 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const loading = !pf;
   const form = pf ?? boardForm;
   const titleRef = useRef<HTMLInputElement>(null);
-  const [title, setTitle] = useState(() => d?.title ?? (initialFiles?.length ? captureTitle(t, locale) : ""));
+  // Archivos de entrada (pegar / soltar sobre «Nueva tarea»): mismos límites que al añadirlos dentro del diálogo.
+  const [initialPlan] = useState(() => planUploads(initialFiles ?? [], { fileMaxBytes: board.project.fileMaxMb * 1024 * 1024, remainingBytes: board.project.attachMaxMb * 1024 * 1024 }));
+  const [title, setTitle] = useState(() => d?.title ?? (initialPlan.accepted.length ? captureTitle(t, locale) : ""));
   const [kindId, setKindId] = useState(!foreignInit && d && board.kindById.has(d.kindId) ? d.kindId : foreignInit ? "" : (board.kinds[0]?.id ?? ""));
   const [columnId, setColumnId] = useState(!foreignInit && d && board.columns.some((c) => c.id === d.columnId) ? d.columnId : foreignInit ? "" : (initialColumnId ?? board.columns[0]?.id ?? ""));
   const [assigneeId, setAssigneeId] = useState(foreignInit ? "" : (d?.assigneeId ?? ""));
   const [dueDate, setDueDate] = useState(d?.dueDate ?? "");
   const [deliverableId, setDeliverableId] = useState(foreignInit ? "" : (d?.deliverableId ?? ""));
   const [description, setDescription] = useState(d?.description ?? initialDescription ?? "");
-  const [files, setFiles] = useState<File[]>(initialFiles ?? []);
+  const [files, setFiles] = useState<File[]>(initialPlan.accepted);
   const [subtasks, setSubtasks] = useState<string[]>(d?.subtasks ?? []);
   const [subtaskDraft, setSubtaskDraft] = useState(d?.subtaskDraft ?? "");
   const [evergreen, setEvergreen] = useState(foreignInit ? false : (d?.evergreen ?? !!initialEvergreen));
@@ -163,13 +165,33 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         ? null
         : ({ title, kindId, description, columnId, assigneeId, dueDate, deliverableId, evergreen, subtasks, subtaskDraft, projectId, fields: loading ? fieldsForm : fieldsForDraft(fieldsForm, form.project.taskFields) } satisfies NewTaskDraft),
   );
+  // Si el diálogo ya no está montado (cierre del padre, navegación), una subida tardía no cierra ni descarta nada ajeno.
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   const onClose = () => {
+    if (!alive.current) return;
     if (autosave) discardDraft();
     close();
   };
+  // Aviso de los archivos de entrada omitidos (una sola vez al abrir).
+  const warnedInitial = useRef(false);
+  useEffect(() => {
+    if (warnedInitial.current || !initialPlan.skipped.length) return;
+    warnedInitial.current = true;
+    toast(skippedMessage(t, locale, initialPlan.skipped, board.project.fileMaxMb), "error");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Escape, clic fuera, X o «Cancelar» con contenido escrito piden confirmación; crear no.
   const confirming = useRef(false);
+  const busyRef = useRef(false);
   const requestClose = async () => {
+    // Mientras se crea la tarea y se suben sus archivos no se cierra (se ve el progreso): cerrar a medias dejaría la subida huérfana.
+    if (busyRef.current) return;
     const dirty = !!(title.trim() || (description.trim() && description !== initialDescription) || subtasks.length || subtaskDraft.trim());
     if (dirty) {
       // Una sola confirmación a la vez (Escape o clics repetidos no las apilan).
@@ -241,11 +263,12 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (busy || loading || !title.trim() || !columnId) return;
+    if (busy || busyRef.current || loading || !title.trim() || !columnId) return;
     if (description.length > MAX_DESCRIPTION) return toast(descriptionTooLong(t, locale, MAX_DESCRIPTION), "error");
     const fieldsErr = fieldsError(fieldsForm, form.project.taskFields, dueDate, t);
     if (fieldsErr) return toast(fieldsErr, "error");
     setBusy(true);
+    busyRef.current = true;
     // Una subtarea a medio escribir también se guarda al crear.
     const pending = subtaskDraft.trim().slice(0, 200);
     const subtaskTitles = pending && subtasks.length < 50 ? [...subtasks, pending] : subtasks;
@@ -260,6 +283,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     ).catch((e) => actionThrowResult(e, t));
     if (!res.ok) {
       setBusy(false);
+      busyRef.current = false;
       return toast(res.error, "error");
     }
     let task = res.data;
@@ -282,7 +306,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     if (elsewhere) toast(t("Tarea creada en «{project}»", { project: form.project.name }), "success", { label: t("Ir al proyecto"), onClick: () => router.push(`/p/${projectId}`) });
     else if (!failed) toast(t("Tarea creada"));
     onClose();
-    if (!elsewhere) board.revealTask(task.id);
+    if (!elsewhere && alive.current) board.revealTask(task.id);
   };
 
   // Alt+S crea la tarea (también escribiendo), como Ctrl+Enter. Con dos modales a la vez, el que tiene el foco.

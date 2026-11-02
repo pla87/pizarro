@@ -135,6 +135,8 @@ steps:
 | `COOKIE_SECURE` | No | `true` / `false` | Fuerza el atributo `Secure` de la cookie. |
 | `APP_TIMEZONE` | No | `Europe/Madrid` | Zona horaria para calcular «hoy» en plazos e informes y para las fechas del navegador. Se lee al arrancar: cambiarla solo exige reiniciar. Sin ella vale la zona elegida en el asistente `/setup` (y, si no hay, `Europe/Madrid`). |
 | `UPDATE_CHECK` | No | `0` | Con `0` desactiva el aviso de versión nueva en Administración (por defecto Pizarro consulta la última release pública de GitHub como mucho cada 12 h; no envía datos de tu instalación). |
+| `LANDING_AT_ROOT` | No | `1` | Con `1`, quien no tiene sesión ve la presentación del producto en `/` (sin cambiar la dirección) en vez de ir al acceso; sin usuarios, `/` lleva a `/setup`. La presentación siempre está en `/presentacion`. |
+| `DISK_MIN_FREE_MB` | No | `1024` | Espacio libre que debe quedar tras una exportación o importación de proyecto. Por defecto, el menor entre 1 GB y el 20 % del volumen (mínimo 100 MB). |
 | `HEALTH_MIN_FREE_MB` | No | `200` | `/api/health` responde 503 (`low_disk_space`) si al disco de subidas le queda menos espacio libre. `0` desactiva la comprobación. |
 | `EXIT_ON_UNCAUGHT_EXCEPTION` | No | (desactivado) | `1`: en producción, una excepción no capturada se anota en *Logs* y la app sale para que la plataforma la reinicie (lo fija `deploy/compose.yml`). Sin él, solo se anota. |
 | `GIT_SHA` | No (solo al compilar) | commit | Commit para el identificador de versión (en Railway se usa `RAILWAY_GIT_COMMIT_SHA`). Sin él, la hora de la compilación. |

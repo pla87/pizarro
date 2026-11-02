@@ -50,6 +50,8 @@ export interface QueueOptions {
   onSettle?: (index: number, result: PromiseSettledResult<unknown>) => void;
   /** Si devuelve true para un error, no se empiezan más elementos (los que faltan quedan como QueueStopped). */
   stopWhen?: (reason: unknown) => boolean;
+  /** Al abortar no se empieza ningún elemento más (los que faltan quedan como QueueStopped); los que ya van siguen hasta el final. */
+  signal?: AbortSignal;
 }
 
 /** Ejecuta `worker` sobre cada elemento con como mucho `concurrency` a la vez, respetando el orden de salida. */
@@ -62,7 +64,7 @@ export async function runQueue<T, R>(items: readonly T[], worker: (item: T, inde
     while (true) {
       const i = next++;
       if (i >= items.length) return;
-      if (stopped) {
+      if (stopped || opts.signal?.aborted) {
         results[i] = { status: "rejected", reason: new QueueStopped() };
         opts.onSettle?.(i, results[i]!);
         continue;
@@ -83,18 +85,32 @@ export async function runQueue<T, R>(items: readonly T[], worker: (item: T, inde
 
 export const RETRY_STATUSES = [429, 503];
 
-/** Espera antes del reintento nº `attempt` (0, 1…): la indicada por el servidor (Retry-After) o 2, 4, 8 s…, con tope de 30 s. */
+/** Espera total máxima de una subida entre reintentos (cubre una ventana de límite por persona de 60 s). */
+export const RETRY_MAX_WAIT_MS = 70_000;
+
+/** Espera antes del reintento nº `attempt` (0, 1…): la indicada por el servidor (Retry-After, hasta 65 s) o 2, 4, 8 s…, con tope de 30 s. */
 export function retryDelayMs(attempt: number, retryAfterSec?: number | null): number {
-  if (retryAfterSec && retryAfterSec > 0) return Math.min(30_000, retryAfterSec * 1000);
+  if (retryAfterSec && retryAfterSec > 0) return Math.min(65_000, retryAfterSec * 1000);
   return Math.min(30_000, 2000 * 2 ** attempt);
 }
 
-/** Repite `fn` mientras falle con un estado reintentable (429/503), hasta `retries` veces. */
+/**
+ * Repite `fn` mientras falle con un estado reintentable (429/503), hasta `retries` veces y sin esperar en total más de
+ * `maxWaitMs`. Con `signal` abortada no se vuelve a intentar.
+ */
 export async function withRetry<R>(
   fn: () => Promise<R>,
-  opts: { retries?: number; sleep?: (ms: number) => Promise<void>; info?: (err: unknown) => { status?: number; retryAfterSec?: number | null } } = {},
+  opts: {
+    retries?: number;
+    maxWaitMs?: number;
+    signal?: AbortSignal;
+    sleep?: (ms: number) => Promise<void>;
+    info?: (err: unknown) => { status?: number; retryAfterSec?: number | null };
+  } = {},
 ): Promise<R> {
   const retries = opts.retries ?? 4;
+  const maxWait = opts.maxWaitMs ?? RETRY_MAX_WAIT_MS;
+  let waited = 0;
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const info = opts.info ?? ((err: unknown) => err as { status?: number; retryAfterSec?: number | null });
   for (let attempt = 0; ; attempt++) {
@@ -103,7 +119,10 @@ export async function withRetry<R>(
     } catch (err) {
       const { status, retryAfterSec } = info(err) ?? {};
       if (attempt >= retries || status === undefined || !RETRY_STATUSES.includes(status)) throw err;
-      await sleep(retryDelayMs(attempt, retryAfterSec));
+      const delay = retryDelayMs(attempt, retryAfterSec);
+      if (opts.signal?.aborted || waited + delay > maxWait) throw err;
+      waited += delay;
+      await sleep(delay);
     }
   }
 }
