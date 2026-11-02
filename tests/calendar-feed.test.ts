@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { feedHttpsUrl, feedWebcalUrl, FEED_TOKEN_LENGTH, googleSubscribeUrl, hashFeedToken, isFeedTokenShape, newFeedToken, safeEqualHex, sequenceOf, tokenFromFilename } from "../src/lib/calendar-feed-core";
+import { feedHttpsUrl, feedWebcalUrl, FEED_TOKEN_LENGTH, googleSubscribeUrl, hashFeedToken, isFeedTokenShape, newFeedToken, safeEqualHex, sequenceOf, snippet, tokenFromFilename } from "../src/lib/calendar-feed-core";
 import { buildIcs, escapeIcsText, foldIcsLine } from "../src/lib/ics";
 
 process.env.SESSION_SECRET ??= "x".repeat(40);
@@ -94,4 +94,15 @@ test("sin los campos nuevos la salida del .ics de la Agenda no cambia", () => {
   assert.ok(!ics.includes("SEQUENCE"));
   assert.ok(!ics.includes("REFRESH-INTERVAL"));
   assert.ok(!ics.includes("LAST-MODIFIED"));
+});
+
+test("snippet no parte un par sustituto (emoji) al recortar", () => {
+  assert.equal(snippet("corto", 10), "corto");
+  // 299 emojis seguidos de más texto: el corte cae justo en medio de un emoji si se corta por unidades UTF-16.
+  const out = snippet("😀".repeat(400), 300);
+  assert.equal(Array.from(out).length, 300);
+  assert.ok(out.endsWith("😀…"));
+  assert.ok(!/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(out), "sin sustitutos sueltos");
+  assert.equal(snippet("ab cd ef", 5), "ab c…");
+  assert.equal(snippet("ab  cd", 4), "ab…");
 });

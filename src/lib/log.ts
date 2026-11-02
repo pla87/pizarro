@@ -3,6 +3,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { actionContext } from "./action-context";
 import { db } from "./db";
 import { notePresence } from "./presence";
+import { maskSecretPaths } from "./secret-path";
 
 // Registro de actividad (Administración → Logs). Los eventos se acumulan en memoria y se
 // escriben en lote cada pocos segundos: registrar nunca añade una consulta a la petición.
@@ -69,18 +70,20 @@ function sanitize(value: unknown, depth = 0): unknown {
 export function logEvent(e: LogEvent): void {
   try {
     const store = actionContext.getStore();
+    // Última red de seguridad: ninguna ruta con credencial en la URL (calendario, /reset/, /confirm/) llega al registro.
+    const message = maskSecretPaths(e.message ?? "");
     state.queue.push({
       createdAt: new Date(),
       level: e.level ?? "info",
       category: e.category,
       action: e.action.slice(0, 120),
-      message: (e.message ?? "").slice(0, 1000),
+      message: message.slice(0, 1000),
       userId: e.userId ?? null,
       userName: e.userName ?? null,
       // Sin proyecto explícito, el de la acción en curso (si lo hay): lo usan los logs para ocultar los privados ajenos.
       projectId: e.projectId ?? store?.projectId ?? null,
       privateProjectId: store?.projectIsPrivate && (e.projectId ?? store.projectId) === store.projectId ? store.projectId : null,
-      path: e.path?.slice(0, 500) ?? null,
+      path: e.path ? maskSecretPaths(e.path).slice(0, 500) : null,
       durationMs: e.durationMs == null ? null : Math.round(e.durationMs),
       ip: e.ip ?? null,
       details: e.details === undefined ? undefined : (sanitize(e.details) as Prisma.InputJsonValue),
@@ -89,7 +92,7 @@ export function logEvent(e: LogEvent): void {
     const projectId = state.queue[state.queue.length - 1]!.projectId;
     // Solo acciones correctas: una fallida (p. ej. sin acceso) podría traer un projectId ajeno del cliente.
     if (projectId && e.userId && e.category !== "page" && (e.level ?? "info") === "info") notePresence(projectId, e.userId, e.userName ?? "?");
-    if (e.level === "error") console.error(`[${e.category}] ${e.action}: ${(e.message ?? "").replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ")}`);
+    if (e.level === "error") console.error(`[${e.category}] ${e.action}: ${message.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ")}`);
     if (state.queue.length >= MAX_QUEUE) void flushLogs();
     else state.timer ??= setTimeout(() => void flushLogs(), FLUSH_MS);
   } catch (err) {

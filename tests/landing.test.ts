@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { makeT } from "../src/i18n/core";
-import { buyHref, LICENSE_PRICE_EUR } from "../src/lib/product";
+import { BUY_URL, buyHref, buyNote, LICENSE_PRICE_EUR } from "../src/lib/product";
 import { localeFromAcceptLanguage, pickLandingLocale } from "../src/lib/landing-locale";
 
 test("idioma de la presentación: ?lang manda, luego el navegador, luego la instalación", () => {
@@ -23,4 +23,30 @@ test("presentación: «100 € + IVA, pago único por servidor» en los dos idio
   // Mismo destino que en Administración → Licencia: sin enlace de compra ni email de contacto, /licencia.
   assert.equal(buyHref("", "es", ""), "/licencia?lang=es");
   assert.equal(buyHref("ventas@example.com", "en", ""), "mailto:ventas@example.com");
+});
+
+test("frase de compra: solo promete tarjeta y factura automática si hay enlace de pago (BUY_URL)", () => {
+  for (const locale of ["es", "en"] as const) {
+    const t = makeT(locale);
+    const withUrl = buyNote(t, "ventas@example.com", "https://buy.example.com/x");
+    const withEmail = buyNote(t, "ventas@example.com", "");
+    const noContact = buyNote(t, "  ", "   ");
+    assert.match(withUrl, locale === "es" ? /tarjeta/ : /card/);
+    for (const text of [withEmail, noContact]) {
+      assert.doesNotMatch(text, /tarjeta|automática|card|automatic/i);
+      assert.match(text, locale === "es" ? /factura/ : /invoice/);
+      assert.ok(!text.includes("Escríbenos") || locale === "es");
+    }
+    assert.match(withEmail, locale === "es" ? /^Escríbenos/ : /^Write to us/);
+    assert.match(noContact, locale === "es" ? /^Lee la licencia/ : /^Read the licence/);
+    assert.notEqual(withEmail, noContact);
+  }
+  // Con el BUY_URL real vacío (hasta que el autor lo publique) la frase por defecto no promete pasarela.
+  if (!BUY_URL.trim()) assert.doesNotMatch(buyNote(makeT("es"), "ventas@example.com"), /tarjeta/);
+});
+
+test("Administración → Licencia: los marcadores de los campos se traducen", () => {
+  const en = makeT("en");
+  assert.equal(en("Empresa Ejemplo, S.L."), "Example Company, Ltd.");
+  assert.equal(en("compras@example.com"), "purchases@example.com");
 });

@@ -4,6 +4,9 @@ import { describe, test } from "node:test";
 import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { createCalendarFeed, disableCalendarFeed, setCalendarFeedScope } from "../../src/actions/calendar-feed";
 import { GET } from "../../src/app/api/calendar/[file]/route";
+import { onRequestError } from "../../src/instrumentation";
+import { buildColumnIcs } from "../../src/lib/column-views";
+import { flushLogs } from "../../src/lib/log";
 
 let n = 0;
 /** Pide la suscripción como lo haría un cliente de calendario (sin sesión), desde una IP propia de cada llamada. */
@@ -136,10 +139,35 @@ describe("calendario suscrito", () => {
     const priv = await makeProject({ visibility: "PRIVATE", owner });
     const t1 = await makeTask(team, { dueDate: inDays(2) });
     const t2 = await makeTask(priv, { dueDate: inDays(2) });
+    // «Todas las de mis proyectos» sigue la página del calendario: un administrador ve los de equipo que ha elegido en su perfil.
+    await db.adminProjectPick.create({ data: { projectId: team.project.id, userId: admin.id } });
     const { token } = await feedFor(admin, "ALL");
     const { text } = await fetchFeed(token);
     assert.ok(text.includes(t1.id));
     assert.ok(!text.includes(t2.id));
+  });
+
+  test("«todas»: un administrador solo ve los de equipo elegidos en su perfil y los privados de los que es miembro (como el calendario)", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const owner = await makeUser();
+    const picked = await makeProject({ members: [owner] });
+    const unpicked = await makeProject({ members: [owner] });
+    const privateMine = await makeProject({ visibility: "PRIVATE", owner: admin });
+    const tPicked = await makeTask(picked, { dueDate: inDays(2) });
+    const tUnpicked = await makeTask(unpicked, { dueDate: inDays(2) });
+    const tPrivate = await makeTask(privateMine, { dueDate: inDays(2) });
+    await db.task.update({ where: { id: tUnpicked.id }, data: { assigneeId: admin.id } });
+    await db.deliverable.create({ data: { projectId: unpicked.project.id, name: "Entrega no elegida", position: 1, dueDate: inDays(3) } });
+    await db.adminProjectPick.create({ data: { projectId: picked.project.id, userId: admin.id } });
+    const { token } = await feedFor(admin, "ALL");
+    let { text } = await fetchFeed(token);
+    assert.ok(text.includes(tPicked.id) && text.includes(tPrivate.id));
+    assert.ok(!text.includes(tUnpicked.id) && !text.includes("Entrega no elegida"));
+    // «Solo las mías»: la tarea que le asignaron sigue saliendo aunque su proyecto no esté entre los elegidos.
+    expectOk(await setCalendarFeedScope("MINE"));
+    ({ text } = await fetchFeed(token));
+    assert.ok(text.includes(tUnpicked.id));
+    assert.ok(!text.includes(tPicked.id));
   });
 
   test("ámbito: solo las asignadas a mí o todas las de mis proyectos", async () => {
@@ -206,5 +234,128 @@ describe("calendario suscrito", () => {
     logout();
     const res = await createCalendarFeed("MINE");
     assert.equal(res.ok, false);
+  });
+
+  test("entregables: LAST-MODIFIED, DTSTAMP y SEQUENCE salen de su propio updatedAt (o del proyecto, si es más reciente)", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const old = new Date("2026-01-10T08:00:00Z");
+    const d = await db.deliverable.create({ data: { projectId: f.project.id, name: "Entrega con historia", position: 1, dueDate: inDays(6) } });
+    // Valores antiguos fijos (también el del proyecto) para ver el efecto de cada cambio.
+    await db.$executeRaw`UPDATE "Deliverable" SET "updatedAt" = ${old}, "createdAt" = ${old} WHERE id = ${d.id}`;
+    await db.$executeRaw`UPDATE "Project" SET "updatedAt" = ${new Date("2026-01-05T08:00:00Z")} WHERE id = ${f.project.id}`;
+    const { token } = await feedFor(user);
+    const block = async () => (await fetchFeed(token)).text.split("BEGIN:VEVENT").find((b) => b.includes(`deliverable-${d.id}@pizarro`))!;
+    let b = await block();
+    assert.match(b, /LAST-MODIFIED:20260110T080000Z/);
+    assert.match(b, /DTSTAMP:20260110T080000Z/);
+    const seq1 = Number(/SEQUENCE:(\d+)/.exec(b)![1]);
+    assert.equal(seq1, Math.floor(old.getTime() / 1000));
+    // Editarlo sube la fecha y la secuencia (la creación no cambia).
+    await db.deliverable.update({ where: { id: d.id }, data: { name: "Entrega renombrada" } });
+    const row = await db.deliverable.findUniqueOrThrow({ where: { id: d.id } });
+    assert.ok(row.updatedAt.getTime() > old.getTime() && row.createdAt.getTime() === old.getTime());
+    b = await block();
+    assert.ok(b.includes("Entrega renombrada"));
+    assert.ok(Number(/SEQUENCE:(\d+)/.exec(b)![1]) > seq1);
+    // Un cambio del proyecto más reciente que el del entregable manda.
+    const later = new Date(row.updatedAt.getTime() + 86_400_000);
+    await db.$executeRaw`UPDATE "Project" SET "updatedAt" = ${later} WHERE id = ${f.project.id}`;
+    b = await block();
+    assert.equal(Number(/SEQUENCE:(\d+)/.exec(b)![1]), Math.floor(later.getTime() / 1000));
+  });
+
+  test("ETag: un If-None-Match con el prefijo débil W/ también da 304", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await makeTask(f, { dueDate: inDays(4) });
+    const { token } = await feedFor(user);
+    const etag = (await fetchFeed(token)).res.headers.get("etag")!;
+    assert.equal((await fetchFeed(token, undefined, { "if-none-match": `W/${etag}` })).res.status, 304);
+    assert.equal((await fetchFeed(token, undefined, { "if-none-match": `"otro", W/${etag}` })).res.status, 304);
+    assert.equal((await fetchFeed(token, undefined, { "if-none-match": 'W/"otro"' })).res.status, 200);
+  });
+
+  test("descripciones enormes: el calendario y el .ics de la columna Agenda recortan antes de convertir", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const huge = "**a ".repeat(60_000);
+    const emojis = "😀".repeat(400);
+    const t1 = await makeTask(f, { title: "Enorme", dueDate: inDays(2) });
+    const t2 = await makeTask(f, { title: "Emojis", dueDate: inDays(3) });
+    await db.task.update({ where: { id: t1.id }, data: { description: huge } });
+    await db.task.update({ where: { id: t2.id }, data: { description: emojis } });
+    await db.deliverable.create({ data: { projectId: f.project.id, name: "Entrega enorme", description: huge, position: 1, dueDate: inDays(4) } });
+    const { token } = await feedFor(user);
+    const t0 = performance.now();
+    const { res, text } = await fetchFeed(token);
+    assert.ok(performance.now() - t0 < 2000);
+    assert.equal(res.status, 200);
+    const unfolded = text.replace(/\r\n /g, "");
+    const desc = (id: string) => /DESCRIPTION:(.*)\r\n/.exec(unfolded.split("BEGIN:VEVENT").find((b) => b.includes(id))!)![1]!;
+    assert.ok(desc(t1.id).length < 700, "descripción acotada");
+    // El recorte a 300 caracteres no parte ningún emoji.
+    const emojiDesc = desc(t2.id);
+    assert.ok(emojiDesc.endsWith("😀…"));
+    assert.ok(!emojiDesc.includes("�"));
+    assert.equal(Array.from(emojiDesc.split("\\n").at(-1)!).length, 300);
+
+    // Columna Agenda: la descripción del .ics se recorta a 1500 caracteres antes de convertirla.
+    await db.column.update({ where: { id: f.columns.todo }, data: { role: "AGENDA" } });
+    const t3 = performance.now();
+    const col = await buildColumnIcs(f.project.id, f.columns.todo);
+    assert.ok(performance.now() - t3 < 2000);
+    assert.ok(col);
+    const colDesc = /DESCRIPTION:(.*)\r\n/.exec(col.ics.replace(/\r\n /g, "").split("BEGIN:VEVENT").find((b) => b.includes(t1.id))!)![1]!;
+    assert.ok(colDesc.length <= 1600);
+  });
+
+  test("si la ruta falla: 500 genérico y el error se registra sin el token", async () => {
+    const user = await makeUser();
+    const { token } = await feedFor(user);
+    // La consulta del token falla (BD caída…): se sustituye el acceso a la tabla en el cliente, que solo existe durante la prueba.
+    const real = db.calendarFeed;
+    Object.defineProperty(db, "calendarFeed", {
+      configurable: true,
+      value: new Proxy(real, {
+        get: (target, prop, receiver) =>
+          prop === "findFirst" ? async () => { throw new Error(`conexión perdida resolviendo /api/calendar/${token}.ics (${token})`); } : Reflect.get(target, prop, receiver),
+      }),
+    });
+    try {
+      const { res, text } = await fetchFeed(token);
+      assert.equal(res.status, 500);
+      assert.equal(text, "Internal error");
+      assert.equal(res.headers.get("content-type"), "text/plain; charset=utf-8");
+    } finally {
+      Object.defineProperty(db, "calendarFeed", { configurable: true, value: real });
+    }
+    await flushLogs();
+    const rows = await db.appLog.findMany({ where: { action: "calendar.feedFailed" }, orderBy: { createdAt: "desc" }, take: 1 });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.level, "error");
+    assert.equal(rows[0]!.path, "/api/calendar/…");
+    assert.ok(!JSON.stringify(rows[0]).includes(token), "el token no está en el registro");
+    assert.match(rows[0]!.message, /conexión perdida/);
+    // Sin el fallo, el mismo enlace sigue sirviendo.
+    assert.equal((await fetchFeed(token)).res.status, 200);
+  });
+
+  test("onRequestError no deja tokens (calendario, /reset/, /confirm/) en Administración → Logs", async () => {
+    process.env.NEXT_RUNTIME = "nodejs";
+    const secret = "tok" + "A1b2C3d4E5f6".repeat(3);
+    const cases = [`/api/calendar/${secret}.ics`, `/api/calendar/${secret}`, `/reset/${secret}`, `/confirm/${secret}`, `/api/calendar/${secret}.ics?x=1`];
+    for (const path of cases) {
+      const err = Object.assign(new Error(`boom ${secret} en ${path}`), { stack: `Error: boom ${secret}\n    at ${path}` });
+      await onRequestError(err, { path, method: "GET" }, { routerKind: "App Router", routePath: "/x/[token]", routeType: "route" });
+    }
+    // Una ruta normal se registra tal cual.
+    await onRequestError(new Error("otro"), { path: "/p/abc?task=1", method: "GET" }, { routerKind: "App Router", routePath: "/p/[id]", routeType: "render" });
+    await flushLogs();
+    const rows = await db.appLog.findMany({ where: { action: "system.uncaughtError" }, orderBy: { createdAt: "desc" }, take: cases.length + 1 });
+    assert.equal(rows.length, cases.length + 1);
+    assert.deepEqual(rows.map((r) => r.path).sort(), ["/api/calendar/…", "/api/calendar/…", "/api/calendar/…", "/confirm/…", "/p/abc?task=1", "/reset/…"].sort());
+    for (const r of rows) assert.ok(!JSON.stringify(r).includes(secret), `filtrado en ${r.path}: ${r.message}`);
+    assert.ok(rows.some((r) => r.path === "/p/abc?task=1" && r.message.includes("otro")));
   });
 });

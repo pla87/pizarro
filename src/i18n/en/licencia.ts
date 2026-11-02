@@ -30,4 +30,8 @@ export const licencia: Record<string, string> = {
   "{price} € + IVA": "€{price} + VAT",
   "Pago con tarjeta en la web y factura automática con los datos de tu empresa o con los tuyos (el DNI o NIF es opcional). El IVA se suma después.": "Pay by card on the website, with an automatic invoice with your company's details or your own (ID or tax number optional). VAT is added afterwards.",
   "Comprar": "Buy",
+  "Escríbenos para comprarla; emitimos factura con los datos de tu empresa. El IVA se suma después.": "Write to us to buy it; we issue an invoice with your company's details. VAT is added afterwards.",
+  "Lee la licencia para saber cómo comprarla; emitimos factura con los datos de tu empresa. El IVA se suma después.": "Read the licence to see how to buy it; we issue an invoice with your company's details. VAT is added afterwards.",
+  "Empresa Ejemplo, S.L.": "Example Company, Ltd.",
+  "compras@example.com": "purchases@example.com",
 };

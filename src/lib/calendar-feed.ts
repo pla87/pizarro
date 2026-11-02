@@ -1,10 +1,10 @@
 import "server-only";
-import { visibleProjectsWhere } from "./access";
-import { FEED_FUTURE_DAYS, FEED_MAX_DELIVERABLES, FEED_MAX_TASKS, FEED_PAST_DAYS, FEED_REFRESH_MINUTES, feedTokenHashes, isFeedTokenShape, safeEqualHex, sequenceOf } from "./calendar-feed-core";
+import { visibleProjectsWhere, workingProjectsWhere } from "./access";
+import { FEED_FUTURE_DAYS, FEED_MAX_DELIVERABLES, FEED_MAX_TASKS, FEED_PAST_DAYS, FEED_REFRESH_MINUTES, feedTokenHashes, isFeedTokenShape, safeEqualHex, sequenceOf, snippet } from "./calendar-feed-core";
 import { appTimeZone } from "./board";
 import { addDaysIso, dateToIso, isoToDate, todayIso } from "./dates";
 import { db } from "./db";
-import { buildIcs, markdownToPlain, type IcsEvent } from "./ics";
+import { buildIcs, descriptionToPlain, type IcsEvent } from "./ics";
 import { appUrl } from "./mail";
 import { mentionsToPlain } from "./mentions";
 import { makeT, toLocale } from "../i18n/core";
@@ -35,16 +35,16 @@ export async function resolveFeedToken(token: string): Promise<{ feedId: string;
   return { feedId: feed.id, scope: feed.scope, user: feed.user };
 }
 
-const snippet = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s);
-
 /** .ics con las tareas no archivadas con fecha límite y los entregables con fecha. Los permisos se evalúan aquí, en cada petición. */
 export async function buildFeedIcs(user: FeedOwner, scope: CalendarFeedScope, now: Date = new Date()): Promise<{ ics: string; tasks: number; deliverables: number }> {
   const t = makeT(toLocale(user.locale));
   const base = appUrl();
   const today = todayIso(appTimeZone(), now);
   const window = { gte: isoToDate(addDaysIso(today, -FEED_PAST_DAYS)), lte: isoToDate(addDaysIso(today, FEED_FUTURE_DAYS)) };
-  const project: Prisma.ProjectWhereInput = visibleProjectsWhere(user as CurrentUser);
   const mine = scope === "MINE";
+  // «Todas las de mis proyectos»: los mismos proyectos que la página del calendario (un administrador, solo los de equipo que ha
+  // elegido en su perfil y sus privados). «Solo las mías»: cualquier proyecto que pueda ver, pues la tarea ya es suya.
+  const project: Prisma.ProjectWhereInput = mine ? visibleProjectsWhere(user as CurrentUser) : workingProjectsWhere(user as CurrentUser);
 
   const [tasks, deliverables] = await Promise.all([
     db.task.findMany({
@@ -58,7 +58,7 @@ export async function buildFeedIcs(user: FeedOwner, scope: CalendarFeedScope, no
       where: { project, dueDate: window, ...(mine ? { tasks: { some: { assigneeId: user.id, archivedAt: null } } } : {}) },
       orderBy: [{ dueDate: "asc" }, { id: "asc" }],
       take: FEED_MAX_DELIVERABLES,
-      select: { id: true, name: true, description: true, dueDate: true, createdAt: true, project: { select: { id: true, name: true, updatedAt: true } } },
+      select: { id: true, name: true, description: true, dueDate: true, updatedAt: true, project: { select: { id: true, name: true, updatedAt: true } } },
     }),
   ]);
 
@@ -70,7 +70,7 @@ export async function buildFeedIcs(user: FeedOwner, scope: CalendarFeedScope, no
     const start = x.project.taskFields.includes("startDate") ? dateToIso(x.startDate) : null;
     const isRange = !!start && start < due;
     const modifiedAt = x.updatedAt > x.project.updatedAt ? x.updatedAt : x.project.updatedAt;
-    const plain = x.description ? snippet(markdownToPlain(x.description), 300) : "";
+    const plain = x.description ? snippet(descriptionToPlain(x.description), 300) : "";
     events.push({
       // Mismo UID que el .ics de la columna Agenda: un solo evento por tarea aunque se importen los dos.
       uid: `${x.id}@pizarro`,
@@ -87,12 +87,12 @@ export async function buildFeedIcs(user: FeedOwner, scope: CalendarFeedScope, no
   for (const d of deliverables) {
     const due = dateToIso(d.dueDate);
     if (!due) continue;
-    const modifiedAt = d.createdAt > d.project.updatedAt ? d.createdAt : d.project.updatedAt;
+    const modifiedAt = d.updatedAt > d.project.updatedAt ? d.updatedAt : d.project.updatedAt;
     events.push({
       uid: `deliverable-${d.id}@pizarro`,
       date: due,
       summary: `[${d.project.name}] ${t("Entregable: {name}", { name: d.name })}`,
-      description: [t("Proyecto: {name}", { name: d.project.name }), d.description ? snippet(markdownToPlain(d.description), 300) : ""].filter(Boolean).join("\n"),
+      description: [t("Proyecto: {name}", { name: d.project.name }), d.description ? snippet(descriptionToPlain(d.description), 300) : ""].filter(Boolean).join("\n"),
       url: `${base}/p/${d.project.id}`,
       modifiedAt,
       sequence: sequenceOf(modifiedAt),
