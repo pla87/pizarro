@@ -42,7 +42,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       title={t("Iniciar sesión")}
       footer={
         <>
-          <a className="underline" href="/privacy">{t("Privacidad")}</a> · <a className="underline" href="/terms">{t("Condiciones")}</a>
+          <a className="underline" href="/privacy">{t("Privacidad")}</a> · <a className="underline" href="/terms">{t("Condiciones")}</a> · <a className="underline" href="/licencia">{t("Licencia")}</a>
         </>
       }
     >

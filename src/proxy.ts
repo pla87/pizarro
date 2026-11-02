@@ -32,11 +32,11 @@ export function proxy(req: NextRequest) {
   const canonical = canonicalRedirect({ enabled: process.env.CANONICAL_REDIRECT, appUrl: process.env.APP_URL, host: req.headers.get("host"), forwardedHost: req.headers.get("x-forwarded-host"), method: req.method, pathname, search });
   if (canonical) return NextResponse.redirect(canonical, 308);
   const isApi = pathname.startsWith("/api/");
-  // Páginas públicas (sin sesión): presentación del producto, acceso, política de privacidad y condiciones, contraseña olvidada, enlaces de email y el asistente de primer
+  // Páginas públicas (sin sesión): presentación del producto, acceso, política de privacidad, condiciones, licencia, contraseña olvidada, enlaces de email y el asistente de primer
   // arranque (/setup se protege con el código del log y da 404 cuando ya hay usuarios).
   // Sin usuarios, el proxy no consulta la base de datos: manda a /login y esa página redirige a /setup.
   const isLogin =
-    pathname === "/setup" || pathname.startsWith("/setup/") || pathname === "/login" || pathname.startsWith("/login/") || pathname === "/forgot-password" || pathname === "/presentacion" || pathname === "/privacy" || pathname === "/terms" || pathname.startsWith("/reset/") || pathname.startsWith("/confirm/") ||
+    pathname === "/setup" || pathname.startsWith("/setup/") || pathname === "/login" || pathname.startsWith("/login/") || pathname === "/forgot-password" || pathname === "/presentacion" || pathname === "/privacy" || pathname === "/terms" || pathname === "/licencia" || pathname.startsWith("/reset/") || pathname.startsWith("/confirm/") ||
     // Públicas también: informe de errores del navegador (la pantalla de acceso no tiene sesión), versión en curso y salida limpia.
     pathname === "/api/client-errors" || pathname === "/api/version" || pathname === "/api/auth/reset";
   const token = req.cookies.get(sessionCookieName())?.value;

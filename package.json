@@ -2,6 +2,7 @@
   "name": "pizarro",
   "version": "1.40.0",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE.md",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -27,7 +28,8 @@
     "backup:restore": "node --env-file-if-exists=.env --import tsx scripts/restore.ts",
     "keys:rotate": "node --env-file-if-exists=.env --import tsx scripts/rotate-keys.ts",
     "doctor": "node --env-file-if-exists=.env --import tsx scripts/doctor.ts",
-    "i18n:check": "node scripts/i18n-check.mjs"
+    "i18n:check": "node scripts/i18n-check.mjs",
+    "license:sync": "node scripts/license-sync.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",
