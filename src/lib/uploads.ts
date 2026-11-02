@@ -2,6 +2,7 @@ import "server-only";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
+import { forgetAttachments } from "./attachment-cache";
 import { AppError } from "./errors";
 import { uploadDir } from "./upload-dir";
 
@@ -157,6 +158,7 @@ export async function saveRawAttachmentFile(id: string, data: Buffer): Promise<v
 }
 
 export async function removeAttachmentFiles(ids: string[]): Promise<void> {
+  forgetAttachments(ids);
   await Promise.all(
     ids.flatMap((id) => [
       rm(attachmentPath(id, "full"), { force: true }),
