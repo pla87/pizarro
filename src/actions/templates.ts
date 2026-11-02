@@ -96,8 +96,10 @@ export async function templateFromProject(projectId: string) {
     });
     if (!project) throw notFound();
     const palette: readonly string[] = PALETTE;
+    // En el idioma de quien la crea (es el nombre propuesto en el formulario).
+    const t = await getT();
     return {
-      name: `Plantilla de ${project.name}`.slice(0, 80),
+      name: t("Plantilla de {name}", { name: project.name }).slice(0, 80),
       description: "",
       columns: project.columns.slice(0, 20),
       kinds: project.kinds.map((k) => ({ ...k, color: k.color.toLowerCase() })),
