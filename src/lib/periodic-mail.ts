@@ -25,12 +25,15 @@ type TaskRow = { id: string; title: string; project: { id: string; name: string 
 const item = (t: TaskRow, extra: Partial<DigestItem> = {}): DigestItem => ({ taskId: t.id, title: t.title, projectId: t.project.id, projectName: t.project.name, ...extra });
 
 /**
- * Lo ocurrido en las últimas 24 h en los proyectos en los que trabaja la persona (los de sus menús: un admin, los
+ * Lo ocurrido desde el resumen anterior (o en las últimas 24 h) en los proyectos en los que trabaja la persona (los de sus menús: un admin, los
  * de equipo que eligió en su perfil y sus privados; ver workingProjectsWhere), y lo que le toca a ella en
  * cualquier proyecto que pueda ver.
  */
-export async function gatherDigest(user: { id: string; role: "ADMIN" | "MEMBER" }, now: Date, today: string): Promise<DigestInput> {
-  const since = new Date(now.getTime() - DAY_MS);
+export async function gatherDigest(user: { id: string; role: "ADMIN" | "MEMBER" }, now: Date, today: string, lastSentAt: Date | null = null): Promise<DigestInput> {
+  // Desde el envío anterior (así no se pierde ni se repite nada aunque salga a otra hora), como mucho 48 h atrás;
+  // sin envío anterior, las últimas 24 h.
+  const floor = now.getTime() - 2 * DAY_MS;
+  const since = new Date(lastSentAt ? Math.min(now.getTime(), Math.max(lastSentAt.getTime(), floor)) : now.getTime() - DAY_MS);
   const working = workingProjectsWhere(user as CurrentUser);
   const live = { project: working, archivedAt: null };
   // Lo asignado a la persona sale aunque un admin no haya elegido ese proyecto (sigue pudiendo verlo).
@@ -78,7 +81,7 @@ export async function sendDueDigests(now: Date = new Date()): Promise<number> {
     if (claim.count !== 1) continue;
     const t0 = performance.now();
     try {
-      const digest = buildDigest(await gatherDigest(u, now, todayIso(tz, now)));
+      const digest = buildDigest(await gatherDigest(u, now, todayIso(tz, now), u.lastDigestAt));
       if (digest.empty) continue; // sin novedades no se manda nada (el día queda reservado)
       const t: T = makeT(toLocale(u.locale));
       await sendMail({ to: u.email, ...digestEmail(digest, { name: u.name, baseUrl: appUrl() }, t) });

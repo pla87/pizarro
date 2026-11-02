@@ -1,6 +1,6 @@
 import "server-only";
 import { stat } from "node:fs/promises";
-import { cachedFileStat, cachedMeta, dropMeta, storeFileStat, storeMeta, type AttachmentMeta, type Variant } from "./attachment-cache";
+import { cacheEpoch, cachedFileStat, cachedMeta, dropMeta, storeFileStat, storeMeta, type AttachmentMeta, type Variant } from "./attachment-cache";
 import { db } from "./db";
 import { attachmentPath } from "./uploads";
 
@@ -8,6 +8,7 @@ import { attachmentPath } from "./uploads";
 export async function getAttachmentMeta(id: string): Promise<AttachmentMeta | null> {
   const hit = cachedMeta(id);
   if (hit) return hit;
+  const readAt = cacheEpoch();
   const row = await db.taskAttachment.findUnique({
     where: { id },
     select: { id: true, taskId: true, originalName: true, mimeType: true, isImage: true, task: { select: { projectId: true } } },
@@ -17,7 +18,7 @@ export async function getAttachmentMeta(id: string): Promise<AttachmentMeta | nu
     return null;
   }
   const meta: AttachmentMeta = { id: row.id, taskId: row.taskId, projectId: row.task.projectId, isImage: row.isImage, originalName: row.originalName, mimeType: row.mimeType };
-  storeMeta(meta);
+  storeMeta(meta, readAt);
   return meta;
 }
 
