@@ -32,11 +32,17 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
   }, [q]);
 
   // La búsqueda se hace en el servidor (con una pequeña espera al teclear); el listado va por páginas.
+  const reqRef = useRef(0);
   useEffect(() => {
     let alive = true;
+    const req = ++reqRef.current;
+    // La paginación anterior ya no vale: sin cursor no se puede pedir «Cargar más» de la búsqueda vieja.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNext(null);
+    setLoadingMore(false);
     const timer = setTimeout(() => {
       getArchivedTasks(board.project.id, { query: q }).then((res) => {
-        if (!alive) return;
+        if (!alive || reqRef.current !== req) return;
         if (!res.ok) {
           toast(res.error, "error");
           setItems([]);
@@ -58,9 +64,10 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
     if (!next) return;
     setLoadingMore(true);
     const asked = q;
+    const req = ++reqRef.current;
     const res = await getArchivedTasks(board.project.id, { query: asked, cursor: next });
+    if (reqRef.current !== req || qRef.current !== asked) return;
     setLoadingMore(false);
-    if (qRef.current !== asked) return;
     if (!res.ok) return toast(res.error, "error");
     setItems((prev) => {
       const have = new Set((prev ?? []).map((it) => it.id));
@@ -75,7 +82,10 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
     setBusy(id);
     const res = await board.track(restoreTask(id));
     setBusy(null);
-    if (!res.ok) return toast(res.error, "error");
+    if (!res.ok) {
+      if (res.error === t("La tarea no está archivada.")) setItems((prev) => prev?.filter((it) => it.id !== id) ?? prev);
+      return toast(res.error, "error");
+    }
     board.upsertTask(res.data.task);
     setItems((prev) => prev?.filter((it) => it.id !== id) ?? prev);
     toast(t("Tarea recuperada en «{name}»", { name: res.data.columnName }));

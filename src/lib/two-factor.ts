@@ -48,11 +48,11 @@ export async function clearChallengeCookie(): Promise<void> {
 }
 
 /** Abre el estado pendiente de este navegador (sustituye a cualquier otro de la misma persona). */
-export async function startChallenge(userId: string, kind: "LOGIN" | "SETUP", opts: { next?: string; remember?: boolean } = {}): Promise<Challenge> {
+export async function startChallenge(userId: string, kind: "LOGIN" | "SETUP", opts: { next?: string; remember?: boolean; via?: "google" } = {}): Promise<Challenge> {
   const token = newToken();
   await db.loginChallenge.deleteMany({ where: { OR: [{ userId, kind: { in: ["LOGIN", "SETUP"] } }, { expiresAt: { lt: new Date() } }] } });
   const row = await db.loginChallenge.create({
-    data: { userId, kind, tokenHash: hashAuthToken(token), next: opts.next?.slice(0, 500) || null, expiresAt: new Date(Date.now() + CHALLENGE_TTL_MS) },
+    data: { userId, kind, tokenHash: hashAuthToken(token), next: opts.next?.slice(0, 500) || null, via: opts.via ?? null, expiresAt: new Date(Date.now() + CHALLENGE_TTL_MS) },
     include: challengeInclude,
   });
   await setChallengeCookie(token, CHALLENGE_TTL_MS);

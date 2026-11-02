@@ -65,7 +65,7 @@ export async function GET(req: Request) {
   if (user.role === "ADMIN") {
     const step = await secondStepFor(user);
     if (step) {
-      const challenge = await startChallenge(user.id, step === "VERIFY" ? "LOGIN" : "SETUP", { next });
+      const challenge = await startChallenge(user.id, step === "VERIFY" ? "LOGIN" : "SETUP", { next, via: "google" });
       if (step === "VERIFY" && user.twoFactorMethod === "EMAIL") await sendEmailCode(challenge, user).catch(() => {});
       logEvent({ category: "auth", action: "auth.secondStepRequested", message: `${user.name}: acceso con Google correcto, falta la verificación en dos pasos`, userId: user.id, userName: user.name, path: "/api/auth/google/callback", ip });
       redirect(`${appUrl()}/login/verify`);

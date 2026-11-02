@@ -27,7 +27,7 @@ export interface LoginUser {
  */
 export async function completeLogin(
   user: LoginUser,
-  how: { method: "password" | "google" | "password+2fa"; rememberDevice?: boolean; path: string },
+  how: { method: "password" | "google" | "password+2fa" | "google+2fa"; rememberDevice?: boolean; path: string },
 ): Promise<void> {
   // La marca se respeta con cualquier método (también Google): quien tiene el cambio pendiente aterriza en /change-password y no puede usar la app hasta elegir contraseña.
   await createSession(user.id, { mustChangePassword: passwordChangeRequired(how.method, user.mustChangePassword) });
@@ -40,13 +40,13 @@ export async function completeLogin(
     );
   }
   // Entrar con la contraseña (y 2FA si la hay) levanta el bloqueo de re-enlazado tras desvincular Google: el siguiente acceso con Google vuelve a enlazar.
-  if (how.method !== "google") {
+  if (how.method !== "google" && how.method !== "google+2fa") {
     const { count } = await db.user.updateMany({ where: { id: user.id, googleRelinkBlocked: true }, data: { googleRelinkBlocked: false } });
     if (count > 0) logEvent({ category: "auth", action: "auth.googleRelinkAllowed", message: `${user.name} ha entrado con su contraseña: Google podrá volver a vincularse`, userId: user.id, userName: user.name, path: how.path, ip, details: { by: "password" } });
   }
   logEvent({
     category: "auth", action: "auth.login",
-    message: `${user.name} ha iniciado sesión${how.method === "google" ? " con Google" : how.method === "password+2fa" ? " (con verificación en dos pasos)" : ""}`,
+    message: `${user.name} ha iniciado sesión${how.method === "google" ? " con Google" : how.method === "google+2fa" ? " con Google y verificación en dos pasos" : how.method === "password+2fa" ? " (con verificación en dos pasos)" : ""}`,
     userId: user.id, userName: user.name, path: how.path, ip, details: { email: user.email, method: how.method },
   });
 }

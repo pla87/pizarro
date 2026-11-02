@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectOk, loginAs, makeUser } from "./helpers";
 import { createProject, listProjectExamples } from "../../src/actions/projects";
-import { dateToIso } from "../../src/lib/dates";
+import { dateToIso, todayIso } from "../../src/lib/dates";
+import { appTimeZone } from "../../src/lib/format";
 import { EXAMPLE_KEYS, EXAMPLE_LABEL, resolveExample, type ExampleLocale } from "../../src/lib/project-examples";
 
 async function check(projectId: string, key: string, locale: ExampleLocale) {
@@ -51,7 +52,7 @@ describe("proyectos desde un ejemplo", () => {
     assert.ok(rec.every((t) => t.routineColumnId));
     const ev = expectOk(await createProject("Evento", { exampleKey: "eventos" }));
     const { tasks, deliverables } = await check(ev.id, "eventos", "es");
-    assert.ok(deliverables.every((d) => d.dueDate && dateToIso(d.dueDate)! > dateToIso(new Date())!));
+    assert.ok(deliverables.every((d) => d.dueDate && dateToIso(d.dueDate)! > todayIso(appTimeZone())));
     assert.ok(tasks.some((t) => t.deliverableId) && tasks.some((t) => t.cost !== null));
   });
 

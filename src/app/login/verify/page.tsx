@@ -12,7 +12,7 @@ export async function generateMetadata() {
   return { title: t("Verificación en dos pasos") };
 }
 
-// Segundo paso del acceso con contraseña. Solo se llega con el estado pendiente de la cookie pz_2fa: no hay sesión todavía.
+// Segundo paso del acceso con contraseña o con Google (administradores). Solo se llega con el estado pendiente de la cookie pz_2fa: no hay sesión todavía.
 export default async function VerifyPage() {
   if (await getCurrentUser()) redirect("/");
   const ch = await readChallenge();
