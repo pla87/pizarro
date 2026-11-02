@@ -16,9 +16,9 @@ export interface CleanupResult {
 }
 
 export const CLEANUP_DAYS: Record<CleanupKind, readonly number[]> = {
-  archivedTasks: [0, 30, 90, 365],
+  archivedTasks: [0, 7, 15, 30, 90, 365],
   documentsTrash: [0],
-  oldReleases: [30, 90, 180, 365],
+  oldReleases: [7, 15, 30, 90, 180, 365],
 };
 
 const cutoff = (days: number, now: Date) => new Date(now.getTime() - days * DAY_MS);
