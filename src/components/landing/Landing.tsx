@@ -3,6 +3,7 @@ import { ArrowRight, Check, Mail, Users, Wallet, Lock, Sparkles } from "lucide-r
 import type { LucideIcon } from "lucide-react";
 import type { Locale, T } from "@/i18n/core";
 import { BrandMark } from "@/components/ui/BrandMark";
+import { buyHref, LICENSE_PRICE_EUR } from "@/lib/product";
 
 export const REPO_URL = "https://github.com/pla87/pizarro";
 export const INSTALL_URL = `${REPO_URL}/blob/main/docs/INSTALL.md`;
@@ -17,6 +18,8 @@ function SectionTitle({ id, title }: { id: string; title: string }) {
 
 export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; contactEmail: string }) {
   const other = locale === "es" ? "en" : "es";
+  const buy = buyHref(contactEmail, locale);
+  const buyExternal = /^https?:\/\//.test(buy);
 
   const pillars: { icon: LucideIcon; title: string; text: string }[] = [
     { icon: Sparkles, title: t("Simple"), text: t("Lo justo para organizar el trabajo: un tablero, tarjetas y columnas. Sin curva de aprendizaje y sin cientos de opciones que configurar.") },
@@ -126,11 +129,9 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
             <article className="card p-6">
               <h3 className="text-lg font-bold">{t("Licencia para empresas")}</h3>
               <p className="mt-2 text-slate-600 dark:text-slate-400">{t("Pago único por servidor. Actualizaciones gratis para siempre. Sin soporte incluido.")}</p>
-              <p className="mt-3 text-2xl font-bold" data-testid="price">{t("100 €")} <span className="text-sm font-medium text-slate-500">{t("pago único por servidor")}</span></p>
-              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{t("Pago con tarjeta. Factura con los datos de tu empresa o con los tuyos (el DNI es opcional).")}</p>
-              {contactEmail && (
-                <a href={`mailto:${contactEmail}`} className="btn-primary mt-3 inline-flex max-w-full break-all" data-testid="pricing-contact"><Mail size={16} aria-hidden />{contactEmail}</a>
-              )}
+              <p className="mt-3 text-2xl font-bold" data-testid="price">{t("{price} € + IVA", { price: LICENSE_PRICE_EUR })}<span className="text-sm font-medium text-slate-500">, {t("pago único por servidor")}</span></p>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{t("Pago con tarjeta en la web y factura automática con los datos de tu empresa o con los tuyos (el DNI o NIF es opcional). El IVA se suma después.")}</p>
+              <a href={buy} {...(buyExternal ? { target: "_blank", rel: "noopener noreferrer" } : {})} className="btn-primary mt-3 inline-flex max-w-full" data-testid="pricing-buy"><Wallet size={16} aria-hidden />{t("Comprar")}</a>
             </article>
           </div>
           <p className="mt-4 text-sm">
