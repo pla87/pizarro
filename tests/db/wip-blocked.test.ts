@@ -7,6 +7,7 @@ import { describe, test } from "node:test";
 import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
 import { createTask, archiveTask, deleteTask, deleteTasks, duplicateTask, moveTask, restoreTaskSnapshot, updateTask } from "../../src/actions/tasks";
 import { setColumnWipLimit } from "../../src/actions/columns";
+import { blockProblem } from "../../src/lib/blocking";
 import { redoLast, undoLast } from "../../src/actions/undo";
 import { loadBoardTasks } from "../../src/lib/board";
 import { buildProjectExport } from "../../src/lib/project-export/export";
@@ -331,5 +332,69 @@ describe("exportar e importar con límite y bloqueos", () => {
     await assert.rejects(importProjectFile(self, asImporter(admin), { isPrivate: false }), /en círculo/);
     const missing = await tamper((d) => { d.tasks[0]!.blockedByRef = "t99"; });
     await assert.rejects(importProjectFile(missing, asImporter(admin), { isPrivate: false }), /no existe/);
+  });
+});
+
+describe("bloqueos: carrera de ciclos y detección con una sola consulta", () => {
+  test("dos bloqueos opuestos A→B y B→A a la vez: como mucho uno se guarda y nunca queda un ciclo", async () => {
+    const { f } = await setup();
+    let wins = 0;
+    for (let round = 0; round < 12; round++) {
+      const a = await makeTask(f, { title: `A${round}` });
+      const b = await makeTask(f, { title: `B${round}` });
+      const res = await Promise.all([updateTask(a.id, { blockedById: b.id }), updateTask(b.id, { blockedById: a.id })]);
+      const oks = res.filter((r) => r.ok).length;
+      assert.equal(oks, 1, `ronda ${round}: debía ganar exactamente una (ganaron ${oks})`);
+      wins += oks;
+      const [ba, bb] = [await blockerOf(a.id), await blockerOf(b.id)];
+      assert.ok(!(ba === b.id && bb === a.id), "no puede haber un ciclo");
+      const lost = res.find((r) => !r.ok) as { ok: false; error: string };
+      assert.match(lost.error, /círculo/);
+    }
+    assert.equal(wins, 12);
+  });
+
+  test("la restauración de una instantánea (cancelar cambios) también respeta el candado", async () => {
+    const { f } = await setup();
+    const a = await makeTask(f, { title: "A" });
+    const b = await makeTask(f, { title: "B" });
+    expectOk(await updateTask(a.id, { blockedById: b.id }));
+    // B pide quedar bloqueada por A mediante una instantánea: se ignora el campo (cerraría un ciclo) sin fallar.
+    const snap = {
+      title: "B", description: "", color: null, linkUrl: null, evergreen: false, evergreenEvery: 1, recurrence: "NONE" as const, recurrenceDay: null,
+      kindId: f.kindId, assigneeId: null, deliverableId: null, blockedById: a.id, dueDate: null, columnId: f.columns.todo, position: 1000, labelIds: [],
+    };
+    const res = await restoreTaskSnapshot(b.id, snap as never);
+    if (res.ok) assert.equal(await blockerOf(b.id), null);
+    assert.equal(await blockerOf(a.id), b.id);
+  });
+
+  test("blockProblem con cadena larga, ciclo previo, otro proyecto y casos básicos", async () => {
+    const { f } = await setup();
+    const N = 3000;
+    const ids = Array.from({ length: N }, (_, i) => `chain-${seq++}-${i}`);
+    // t[i] está bloqueada por t[i+1]; se insertan del final al principio para que la que bloquea ya exista.
+    await db.task.createMany({
+      data: ids.map((id, i) => ({ id, projectId: f.project.id, columnId: f.columns.todo, title: id, kindId: f.kindId, position: 1000 + i, blockedById: ids[i + 1] ?? null })).reverse(),
+    });
+    const extra = await makeTask(f, { title: "extra" });
+    const t0 = Date.now();
+    assert.equal(await blockProblem(extra.id, ids[0]!, f.project.id), null);
+    assert.equal(await blockProblem(ids[N - 1]!, ids[0]!, f.project.id), "cycle"); // t0 → … → t(N-1)
+    assert.equal(await blockProblem(ids[0]!, ids[N - 1]!, f.project.id), null); // el final de la cadena no vuelve a t0
+    assert.ok(Date.now() - t0 < 5000, "la detección debe ser una consulta, no miles");
+    // Ciclo previo (A ↔ B, escrito por SQL): termina y no se confunde.
+    const a = await makeTask(f, { title: "PA" });
+    const b = await makeTask(f, { title: "PB" });
+    await db.task.update({ where: { id: a.id }, data: { blockedById: b.id } });
+    await db.task.update({ where: { id: b.id }, data: { blockedById: a.id } });
+    assert.equal(await blockProblem(extra.id, a.id, f.project.id), null);
+    assert.equal(await blockProblem(a.id, b.id, f.project.id), "cycle");
+    // Básicos.
+    assert.equal(await blockProblem(extra.id, extra.id, f.project.id), "self");
+    assert.equal(await blockProblem(extra.id, "no-existe", f.project.id), "missing");
+    const other = await makeProject({ members: [] });
+    const foreign = await makeTask(other);
+    assert.equal(await blockProblem(extra.id, foreign.id, f.project.id), "missing");
   });
 });

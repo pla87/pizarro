@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowDown, ArrowUp, CalendarClock, CheckSquare, ChevronsUpDown } from "lucide-react";
-import { memo, useMemo, useState } from "react";
+import { memo, useMemo, useState, useSyncExternalStore } from "react";
 import { isWhite } from "@/lib/constants";
 import { dueStatus, formatDay } from "@/lib/dates";
 import { PRIORITY_COLOR, PRIORITY_LABEL } from "@/lib/task-fields";
@@ -16,6 +16,21 @@ import { ariaSortOf, DEFAULT_LIST_SORT, nextSort, sortTasks, type ListSort, type
 
 type Translate = ReturnType<typeof useT>;
 
+/** Mismo punto de corte que `sm:` de Tailwind: desde aquí, tabla; por debajo, lista compacta. */
+const DESKTOP_QUERY = "(min-width: 640px)";
+/** Solo se monta una de las dos versiones (así no hay filas ni data-task-card duplicados). En el servidor se supone escritorio. */
+function useDesktopLayout(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia(DESKTOP_QUERY);
+      mq.addEventListener("change", cb);
+      return () => mq.removeEventListener("change", cb);
+    },
+    () => window.matchMedia(DESKTOP_QUERY).matches,
+    () => true,
+  );
+}
+
 /** Vista de lista del tablero: las tareas no archivadas (con búsqueda y filtros del tablero) en una tabla ordenable. */
 export function ListView({ tasks, matchingIds, filtering }: { tasks: BoardTask[]; matchingIds: Set<string> | null; filtering: boolean }) {
   const { project, columns, users, labels, today, kindById } = useBoard();
@@ -23,6 +38,7 @@ export function ListView({ tasks, matchingIds, filtering }: { tasks: BoardTask[]
   const locale = useIntlLocale();
   const [sort, setSort] = useState<ListSort>(DEFAULT_LIST_SORT);
   const priorityEnabled = project.taskFields.includes("priority");
+  const desktop = useDesktopLayout();
 
   const lookups = useMemo(
     () => ({
@@ -62,6 +78,7 @@ export function ListView({ tasks, matchingIds, filtering }: { tasks: BoardTask[]
       <p className="sr-only" role="status" aria-live="polite">{announce}</p>
 
       {/* Móvil: el orden se elige en un desplegable. */}
+      {!desktop && (
       <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:hidden dark:border-slate-800 dark:bg-slate-900">
         <label htmlFor="list-sort-select" className="shrink-0 text-xs text-slate-500">{t("Ordenar por")}</label>
         <select
@@ -81,15 +98,17 @@ export function ListView({ tasks, matchingIds, filtering }: { tasks: BoardTask[]
           {sort.dir === "asc" ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
         </button>
       </div>
+      )}
 
       {rows.length === 0 ? (
         <p className="px-4 py-10 text-center text-sm text-slate-500">{filtering ? t("Ninguna tarjeta coincide con el filtro.") : t("Este tablero aún no tiene tareas.")}</p>
       ) : (
         <>
+          {!desktop ? (
           <ul className="min-h-0 flex-1 divide-y divide-slate-200 overflow-y-auto bg-white sm:hidden dark:divide-slate-800 dark:bg-slate-900" aria-label={t("Lista de tareas")}>
             {rows.map((task) => <CompactRow key={task.id} task={task} lookups={lookups} today={today} locale={locale} t={t} />)}
           </ul>
-
+          ) : (
           <div className="min-h-0 flex-1 overflow-auto px-4 pb-4 max-sm:hidden">
             <table className="w-full border-separate border-spacing-0 text-sm">
               <caption className="sr-only">{t("Lista de tareas")}</caption>
@@ -124,6 +143,7 @@ export function ListView({ tasks, matchingIds, filtering }: { tasks: BoardTask[]
               </tbody>
             </table>
           </div>
+          )}
         </>
       )}
     </div>

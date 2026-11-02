@@ -94,6 +94,7 @@ function useCoarsePointer(): boolean {
 }
 
 function MobileTab({ active, onClick, over = false, title, children }: { active: boolean; onClick: () => void; /** La columna pasa de su límite de tarjetas (solo aviso). */ over?: boolean; title?: string; children: React.ReactNode }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -110,6 +111,7 @@ function MobileTab({ active, onClick, over = false, title, children }: { active:
       )}
     >
       {children}
+      {over && <span className="sr-only">{t("Límite superado")}</span>}
     </button>
   );
 }

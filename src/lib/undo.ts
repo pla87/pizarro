@@ -6,7 +6,7 @@ import { forgetAttachments } from "./attachment-cache";
 import { isUniqueColumnRole } from "./constants";
 import { db } from "./db";
 import { assertTaskCapacity } from "./caps";
-import { blockProblem } from "./blocking";
+import { blockProblem, lockBlocking } from "./blocking";
 import { resolvePositionTies } from "./task-positions";
 import { removeAttachmentFiles, removeReleaseAttachmentFiles } from "./uploads";
 
@@ -434,20 +434,21 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           if (data.kindId && !(await db.taskKind.count({ where: { id: data.kindId } }))) delete data.kindId;
           if (data.deliverableId && !(await db.deliverable.count({ where: { id: data.deliverableId } }))) data.deliverableId = null;
           if (data.assigneeId) data.assigneeId = assignable(data.assigneeId);
-          // El bloqueo solo vuelve si la tarea que bloqueaba sigue en el proyecto y no cierra un ciclo.
-          if (data.blockedById && (await blockProblem(op.id, data.blockedById, projectId))) data.blockedById = null;
           if (data.position !== undefined || data.columnId !== undefined) placed.push(op.id);
-          await db.$transaction([
-            db.task.update({ where: { id: op.id }, data: taskUpdateData(data) }),
-            ...(op.labelIds
-              ? [
-                  db.taskLabel.deleteMany({ where: { taskId: op.id } }),
-                  db.taskLabel.createMany({
-                    data: (await db.label.findMany({ where: { id: { in: op.labelIds }, projectId }, select: { id: true } })).map((l) => ({ taskId: op.id, labelId: l.id })),
-                  }),
-                ]
-              : []),
-          ]);
+          const labelRows = op.labelIds ? await db.label.findMany({ where: { id: { in: op.labelIds }, projectId }, select: { id: true } }) : null;
+          await db.$transaction(async (tx) => {
+            // El bloqueo solo vuelve si la tarea que bloqueaba sigue en el proyecto y no cierra un ciclo;
+            // comprobación y escritura van juntas bajo el candado de bloqueos del proyecto.
+            if (data.blockedById) {
+              await lockBlocking(tx, projectId);
+              if (await blockProblem(op.id, data.blockedById, projectId, tx)) data.blockedById = null;
+            }
+            await tx.task.update({ where: { id: op.id }, data: taskUpdateData(data) });
+            if (labelRows) {
+              await tx.taskLabel.deleteMany({ where: { taskId: op.id } });
+              await tx.taskLabel.createMany({ data: labelRows.map((l) => ({ taskId: op.id, labelId: l.id })) });
+            }
+          });
           break;
         }
         case "task.remove": {
@@ -474,21 +475,22 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           const labels = await db.label.findMany({ where: { id: { in: s.labelIds }, projectId }, select: { id: true } });
           // Se crea sin bloqueo y se enlaza después (la que bloquea puede ser otra tarea que vuelve en esta misma entrada).
           const blockedById = t.blockedById ?? null;
-          await db.$transaction([
-            db.task.create({
+          await db.$transaction(async (tx) => {
+            if (blockedById) await lockBlocking(tx, projectId);
+            await tx.task.create({
               data: {
                 ...(taskUpdateData({ ...t, columnId, kindId, deliverableId, assigneeId: assignable(t.assigneeId), recurrenceFromId, blockedById: null }) as Prisma.TaskUncheckedCreateInput),
                 id: t.id, projectId, title: t.title, position: t.position, createdById: known(t.createdById), createdAt: new Date(t.createdAt),
               },
-            }),
-            db.taskLabel.createMany({ data: labels.map((l) => ({ taskId: t.id, labelId: l.id })) }),
-            db.subtask.createMany({ data: s.subtasks }),
-            db.taskComment.createMany({ data: s.comments.map((c) => ({ ...c, authorId: known(c.authorId), createdAt: new Date(c.createdAt), editedAt: date(c.editedAt), deletedAt: date(c.deletedAt) })) }),
-            db.taskAttachment.createMany({ data: s.attachments.map((a) => ({ ...a, createdById: known(a.createdById), createdAt: new Date(a.createdAt) })) }),
-            db.taskLink.createMany({ data: s.links.map((l) => ({ ...l, kind: l.kind as Prisma.TaskLinkCreateManyInput["kind"], createdById: known(l.createdById), createdAt: new Date(l.createdAt) })) }),
-            db.releaseTask.updateMany({ where: { id: { in: s.releaseTaskIds } }, data: { taskId: t.id } }),
-          ]);
-          if (blockedById && !(await blockProblem(t.id, blockedById, projectId))) await db.task.update({ where: { id: t.id }, data: { blockedById } });
+            });
+            await tx.taskLabel.createMany({ data: labels.map((l) => ({ taskId: t.id, labelId: l.id })) });
+            await tx.subtask.createMany({ data: s.subtasks });
+            await tx.taskComment.createMany({ data: s.comments.map((c) => ({ ...c, authorId: known(c.authorId), createdAt: new Date(c.createdAt), editedAt: date(c.editedAt), deletedAt: date(c.deletedAt) })) });
+            await tx.taskAttachment.createMany({ data: s.attachments.map((a) => ({ ...a, createdById: known(a.createdById), createdAt: new Date(a.createdAt) })) });
+            await tx.taskLink.createMany({ data: s.links.map((l) => ({ ...l, kind: l.kind as Prisma.TaskLinkCreateManyInput["kind"], createdById: known(l.createdById), createdAt: new Date(l.createdAt) })) });
+            await tx.releaseTask.updateMany({ where: { id: { in: s.releaseTaskIds } }, data: { taskId: t.id } });
+            if (blockedById && !(await blockProblem(t.id, blockedById, projectId, tx))) await tx.task.update({ where: { id: t.id }, data: { blockedById } });
+          });
           placed.push(t.id);
           break;
         }

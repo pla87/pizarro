@@ -32,12 +32,17 @@ export function BlockerPicker({ task, onChange }: { task: BoardTask; onChange: (
 
   const byId = new Map(tasks.map((x) => [x.id, x]));
   const words = norm(query).split(/\s+/).filter(Boolean);
-  const candidates = searching
-    ? tasks
-        .filter((x) => x.id !== task.id && x.id !== blocked?.id && !wouldCycle(task.id, x.id, (id) => byId.get(id)?.blockedBy?.id))
-        .filter((x) => words.every((w) => norm(mentionsToPlain(x.title)).includes(w)))
-        .slice(0, MAX_RESULTS)
-    : [];
+  // Primero el texto; wouldCycle (que sigue la cadena) solo se calcula sobre los que se van a enseñar, sin recorrer todo el tablero.
+  const candidates: BoardTask[] = [];
+  if (searching) {
+    for (const x of tasks) {
+      if (candidates.length >= MAX_RESULTS) break;
+      if (x.id === task.id || x.id === blocked?.id) continue;
+      if (!words.every((w) => norm(mentionsToPlain(x.title)).includes(w))) continue;
+      if (wouldCycle(task.id, x.id, (id) => byId.get(id)?.blockedBy?.id)) continue;
+      candidates.push(x);
+    }
+  }
 
   const pick = (x: BoardTask) => {
     setSearching(false);

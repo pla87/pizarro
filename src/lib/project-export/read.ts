@@ -190,14 +190,7 @@ export function validateRefs(data: ProjectExportData, fileShas: Set<string>): vo
     for (const a of t.attachments) need(fileShas, a.file, "un fichero");
   }
   // Bloqueos: ninguna tarea bloqueada por sí misma ni en círculo.
-  const blockedBy = new Map(data.tasks.filter((t) => t.blockedByRef).map((t) => [t.ref, t.blockedByRef!]));
-  for (const start of blockedBy.keys()) {
-    let cur: string | undefined = start;
-    for (let i = 0; cur !== undefined && i <= blockedBy.size; i++) {
-      cur = blockedBy.get(cur);
-      if (cur === start) throw new ArchiveError("El archivo tiene tareas bloqueadas en círculo.", `project.json: ${start}`);
-    }
-  }
+  assertNoBlockCycles(new Map(data.tasks.filter((t) => t.blockedByRef).map((t) => [t.ref, t.blockedByRef!])));
   const fromRefs = data.tasks.map((t) => t.recurrenceFromRef).filter((r): r is string => !!r);
   dup("la tarea de la que sale una repetición", fromRefs);
   for (const r of data.releases) {
@@ -207,4 +200,26 @@ export function validateRefs(data: ProjectExportData, fileShas: Set<string>): vo
   }
   for (const d of data.documents) need(fileShas, d.file, "un fichero");
   for (const e of data.events) need(tasks, e.taskRef, "una tarea");
+}
+
+/**
+ * Falla si los bloqueos (tarea → la que la bloquea) forman un círculo, también una tarea bloqueada por sí misma.
+ * Recorrido lineal con estados (visitando / hecho) y sin recursión: cada tarea se visita una sola vez.
+ */
+export function assertNoBlockCycles(blockedBy: Map<string, string>): void {
+  const state = new Map<string, 1 | 2>(); // 1 = en el camino actual, 2 = ya comprobada
+  for (const start of blockedBy.keys()) {
+    if (state.has(start)) continue;
+    const path: string[] = [];
+    let cur: string | undefined = start;
+    while (cur !== undefined) {
+      const st = state.get(cur);
+      if (st === 1) throw new ArchiveError("El archivo tiene tareas bloqueadas en círculo.", `project.json: ${cur}`);
+      if (st === 2) break;
+      state.set(cur, 1);
+      path.push(cur);
+      cur = blockedBy.get(cur);
+    }
+    for (const id of path) state.set(id, 2);
+  }
 }
