@@ -525,6 +525,8 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           break;
         }
         case "attachment.restore": {
+          // Deshacer un borrado recrea lo que existía hace nada: no se comprueba la cuota de almacenamiento (igual que
+          // task.restore y el «Cancelar» de tasks.ts). Puede dejar el proyecto algo por encima; se libera desde sus ajustes.
           const r = op.row;
           if (!(await db.task.count({ where: { id: r.taskId, projectId } })) || (await db.taskAttachment.count({ where: { id: r.id } }))) { skipped++; break; }
           const creator = r.createdById && (await db.user.count({ where: { id: r.createdById } })) ? r.createdById : null;

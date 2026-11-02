@@ -139,13 +139,12 @@ export async function restoreDocumentRow(user: CurrentUser, documentId: string) 
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:attachment-quota'))::text`;
     const count = await tx.projectDocument.count({ where: { projectId: doc.projectId, deletedAt: null } });
     if (count >= DOCUMENTS_MAX_PER_PROJECT) return "count" as const;
-    // Su tamaño ya está en el uso actual: se comprueba que el total siga dentro de la cuota (0 bytes más).
-    if (await quotaExceededFor(doc.projectId, 0, tx)) return "quota" as const;
+    // Sin comprobar la cuota: los bytes del documento ya cuentan en el uso (la papelera cuenta), así que restaurarlo no añade
+    // nada. Bloquearlo con el proyecto por encima de la cuota impediría recuperar un documento justo cuando más falta hace.
     const { count: n } = await tx.projectDocument.updateMany({ where: { id: doc.id, deletedAt: { not: null } }, data: { deletedAt: null, deletedById: null } });
     return n ? ("ok" as const) : ("gone" as const);
   });
   if (res === "count") throw new AppError("No se puede restaurar: la documentación del proyecto ya tiene el máximo de documentos.");
-  if (res === "quota") throw new AppError("No se puede restaurar: se supera la cuota de almacenamiento del proyecto.");
   if (res === "gone") throw notFound();
   return doc;
 }
