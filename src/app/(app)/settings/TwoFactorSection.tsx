@@ -40,7 +40,7 @@ export function TwoFactorSection({ method, admin, emailAvailable, codesLeft }: P
       <h2 className="flex items-center gap-2 font-semibold"><ShieldCheck size={18} /> {t("Verificación en dos pasos")}</h2>
       <p className="mt-0.5 text-sm text-slate-500">
         {admin
-          ? t("Obligatoria para administradores al entrar con contraseña. Al entrar con Google no se pide: Google ya tiene la suya.")
+          ? t("Obligatoria para administradores, también al entrar con Google.")
           : t("Añade un segundo código al entrar con contraseña. Al entrar con Google no se pide: Google ya tiene la suya.")}
       </p>
 

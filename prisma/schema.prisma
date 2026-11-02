@@ -213,6 +213,8 @@ model LoginChallenge {
   confirmed         Boolean            @default(false)
   /// Ruta a la que volver tras entrar.
   next              String?
+  /// Cómo se pasó el primer paso, si no fue con contraseña (p. ej. "google").
+  via               String?
   expiresAt         DateTime
   createdAt         DateTime           @default(now())
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)

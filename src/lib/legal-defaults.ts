@@ -189,15 +189,19 @@ En la medida permitida por la ley, {responsable} no responde de daños indirecto
 
 El tratamiento de tus datos personales se describe en la política de privacidad de esta instalación.
 
-## 9. Cambios
+## 9. Licencia del software
+
+Pizarro se usa bajo su propia licencia, que puedes consultar en [/licencia](/licencia). El uso con fines empresariales o profesionales requiere una licencia comercial, y {responsable} es quien debe disponer de ella para esta instalación.
+
+## 10. Cambios
 
 Podemos modificar estas condiciones; la versión vigente es la publicada aquí. Si el cambio es relevante, te lo comunicaremos, y el uso continuado del servicio implica su aceptación.
 
-## 10. Ley aplicable y jurisdicción
+## 11. Ley aplicable y jurisdicción
 
 Estas condiciones se rigen por la ley española. Para cualquier controversia, las partes se someten a los juzgados y tribunales que correspondan conforme a la ley, respetando el fuero que corresponda a los consumidores.
 
-## 11. Contacto
+## 12. Contacto
 
 Para cualquier duda sobre estas condiciones, escribe a {email}.`;
 
@@ -233,15 +237,19 @@ To the extent permitted by law, {responsable} is not liable for indirect damages
 
 How your personal data is processed is described in this installation's privacy policy.
 
-## 9. Changes
+## 9. Software licence
+
+Pizarro is used under its own licence, which you can read at [/licencia](/licencia?lang=en). Use for business or professional purposes requires a commercial licence, and {responsable} is responsible for holding it for this installation.
+
+## 10. Changes
 
 We may amend these terms; the current version is the one published here. If a change is significant, we will let you know, and continued use of the service means acceptance.
 
-## 10. Governing law and jurisdiction
+## 11. Governing law and jurisdiction
 
 These terms are governed by Spanish law. For any dispute, the parties submit to the courts that have jurisdiction under the law, respecting the forum that applies to consumers.
 
-## 11. Contact
+## 12. Contact
 
 For any question about these terms, write to {email}.`;
 

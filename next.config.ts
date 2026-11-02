@@ -42,6 +42,9 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "same-origin" },
+          // Aísla la pestaña de las ventanas que abra o que la abran desde otro sitio (no puede manipularla). El acceso
+          // con Google va por redirección (no por ventana emergente), así que no le afecta.
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
           { key: "Permissions-Policy", value: "camera=(self), microphone=(self), geolocation=()" },
           ...(isDev ? [] : [{ key: "Strict-Transport-Security", value: "max-age=31536000" }]),
         ],

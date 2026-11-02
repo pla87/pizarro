@@ -6,7 +6,7 @@ process.env.SESSION_SECRET = "x".repeat(48);
 const core = await import("../src/lib/auth-token-core");
 const { summarizeUserAgent, deviceLabel } = await import("../src/lib/user-agent");
 const { passwordSchema, passwordByteLength, MAX_PASSWORD_BYTES } = await import("../src/lib/password");
-const { LOGIN_ACCOUNT_LIMIT, loginRateKeys, rateLimit, resetRateLimit } = await import("../src/lib/rate-limit");
+const { LOGIN_ACCOUNT_LIMIT, loginRateKeys, rateLimit, rateLimitReached, resetRateLimit } = await import("../src/lib/rate-limit");
 const { makeT } = await import("../src/i18n/core");
 
 test("token: aleatorio, con hash estable y distinto del token", () => {
@@ -79,34 +79,25 @@ test("contraseña: mínimo 10 caracteres y máximo 72 bytes (UTF-8)", () => {
   assert.ok(!long.success && /72 bytes/.test(long.error.issues[0]!.message));
 });
 
-test("límite de acceso: clave por pareja IP+email normalizada y otra por IP", () => {
+test("límite de acceso: clave por IP y por cuenta, normalizadas", () => {
   const a = loginRateKeys("1.2.3.4", "Ana@Example.com ");
   const b = loginRateKeys("1.2.3.4", "ana@example.com");
   assert.deepEqual(a, b);
-  assert.notEqual(a.pair, loginRateKeys("5.6.7.8", "ana@example.com").pair);
-  assert.notEqual(a.pair, loginRateKeys("1.2.3.4", "otra@example.com").pair);
   assert.equal(a.ip, loginRateKeys("1.2.3.4", "otra@example.com").ip);
-  assert.ok(a.pair.length < 300);
+  assert.ok(a.account.length < 300);
   // La de cuenta es la misma desde cualquier IP.
   assert.equal(a.account, loginRateKeys("5.6.7.8", "ANA@example.com").account);
   assert.notEqual(a.account, loginRateKeys("1.2.3.4", "otra@example.com").account);
 });
 
-test("límite por cuenta: 6 intentos desde conexiones distintas bloquean el séptimo", () => {
-  for (let i = 0; i < LOGIN_ACCOUNT_LIMIT; i++) assert.equal(rateLimit(loginRateKeys(`10.0.0.${i}`, "cuenta@example.com").account, LOGIN_ACCOUNT_LIMIT, 60_000), true);
+test("límite por cuenta: tras 6 fallos desde conexiones distintas se bloquea; consultar no cuenta", () => {
   const key = loginRateKeys("10.0.0.99", "cuenta@example.com").account;
-  assert.equal(rateLimit(key, LOGIN_ACCOUNT_LIMIT, 60_000), false);
+  for (let i = 0; i < LOGIN_ACCOUNT_LIMIT; i++) {
+    assert.equal(rateLimitReached(key, LOGIN_ACCOUNT_LIMIT), false);
+    rateLimit(loginRateKeys(`10.0.0.${i}`, "cuenta@example.com").account, LOGIN_ACCOUNT_LIMIT, 60_000);
+  }
+  assert.equal(rateLimitReached(key, LOGIN_ACCOUNT_LIMIT), true);
+  assert.equal(rateLimitReached(key, LOGIN_ACCOUNT_LIMIT), true);
   resetRateLimit(key);
-  assert.equal(rateLimit(key, LOGIN_ACCOUNT_LIMIT, 60_000), true);
-  resetRateLimit(key);
-});
-
-test("límite por pareja: bloquear a un atacante no bloquea a otra IP", () => {
-  const attacker = loginRateKeys("9.9.9.9", "victima@example.com");
-  const owner = loginRateKeys("8.8.8.8", "victima@example.com");
-  for (let i = 0; i < 8; i++) assert.equal(rateLimit(attacker.pair, 8, 60_000), true);
-  assert.equal(rateLimit(attacker.pair, 8, 60_000), false);
-  assert.equal(rateLimit(owner.pair, 8, 60_000), true);
-  resetRateLimit(attacker.pair);
-  resetRateLimit(owner.pair);
+  assert.equal(rateLimitReached(key, LOGIN_ACCOUNT_LIMIT), false);
 });

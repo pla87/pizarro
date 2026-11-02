@@ -165,8 +165,8 @@ export const cuentas: Record<string, string> = {
     "Their method and recovery codes will be deleted. If they are an administrator, they will have to set up a new one before signing in; if they are a member, they can enable it again from “My profile”.",
   "Verificación en dos pasos":
     "Two-step verification",
-  "Obligatoria para administradores al entrar con contraseña. Al entrar con Google no se pide: Google ya tiene la suya.":
-    "Required for administrators when signing in with a password. Not asked when signing in with Google: Google has its own.",
+  "Obligatoria para administradores, también al entrar con Google.":
+    "Required for administrators, also when signing in with Google.",
   "Añade un segundo código al entrar con contraseña. Al entrar con Google no se pide: Google ya tiene la suya.":
     "Adds a second code when signing in with a password. Not asked when signing in with Google: Google has its own.",
   "He guardado los códigos":

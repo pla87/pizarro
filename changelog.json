@@ -1,6 +1,67 @@
 {
   "versions": [
     {
+      "version": "1.41.0",
+      "date": "2026-11-02",
+      "releasedAt": "2026-11-02T13:40:54+01:00",
+      "summary": "Licencia: gratis para uso personal y pago único para empresas; página de presentación simplificada; seguridad y correcciones",
+      "changes": {
+        "nuevas": [
+          "Licencia de Pizarro (LICENSE.md y página pública /licencia): gratis para uso personal; las empresas y profesionales necesitan una licencia de pago único por servidor, con actualizaciones gratis para siempre y sin soporte.",
+          "Las condiciones del servicio por defecto incluyen el apartado «Licencia del software», y el pie del acceso enlaza a la licencia."
+        ],
+        "mejoras": [
+          "Página de presentación más corta y clara, centrada en lo que distingue a Pizarro: simple, pago único, tus datos en tu servidor; con precios y licencia. Se quitan la demo y la comparativa.",
+          "La administración ya no enlaza a la página de presentación.",
+          "Los micrófonos del título y de la descripción quedan perfectamente alineados.",
+          "El límite por cuenta del acceso cuenta solo los intentos fallidos: quien acierta su contraseña ya no puede quedar bloqueado por sus propios intentos.",
+          "Abrir una tarea ya no se anota en el registro de actividad (más ligero).",
+          "Nueva cabecera de seguridad que aísla la pestaña de Pizarro de otras webs.",
+          "Mi perfil explica a los administradores que la verificación en dos pasos también se pide al entrar con Google, y el registro anota esos accesos como «con Google y verificación en dos pasos».",
+          "Nuevo proyecto: el nombre sugerido cambia al cambiar de ejemplo mientras no lo hayas escrito tú."
+        ],
+        "correcciones": [
+          "Liberar espacio nunca borra más elementos de los que se confirmaron, y la sección se actualiza si algo cambió.",
+          "Archivadas: la búsqueda y «Cargar más» ya no se mezclan; recuperar una tarea que ya recuperó otra persona la quita de la lista.",
+          "Un aviso repetido renueva su tiempo en pantalla en vez de desaparecer antes."
+        ],
+        "tecnicos": [
+          "Se quita el límite por pareja IP+email, que ya no actuaba.",
+          "Nuevo campo en el paso intermedio del acceso para recordar si vino de Google (migración).",
+          "Prueba de que LICENSE.md y el texto de /licencia coinciden (npm run license:sync)."
+        ]
+      },
+      "en": {
+        "summary": "Licence: free for personal use, one-off payment for businesses; simpler product page; security and fixes",
+        "changes": {
+          "nuevas": [
+            "Pizarro licence (LICENSE.md and public /licencia page): free for personal use; businesses and professionals need a one-off per-server licence, with free updates forever and no support.",
+            "The default terms of service include a “Software licence” section, and the sign-in footer links to the licence."
+          ],
+          "mejoras": [
+            "Shorter, clearer product page focused on what sets Pizarro apart: simple, one-off payment, your data on your server; with pricing and licence. The demo and comparison are removed.",
+            "Administration no longer links to the product page.",
+            "The title and description microphones are now perfectly aligned.",
+            "The per-account sign-in limit counts only failed attempts: someone who gets their password right can no longer be locked out by their own attempts.",
+            "Opening a task is no longer written to the activity log (lighter log).",
+            "New security header that isolates Pizarro's tab from other websites.",
+            "My profile tells administrators that two-step verification is also required when signing in with Google, and the log records those sign-ins as “with Google and two-step verification”.",
+            "New project: the suggested name follows the chosen example as long as you have not typed your own."
+          ],
+          "correcciones": [
+            "Freeing up space never deletes more items than were confirmed, and the section refreshes if something changed.",
+            "Archived: search and “Load more” no longer mix; restoring a task someone else already restored removes it from the list.",
+            "A repeated notice renews its time on screen instead of disappearing early."
+          ],
+          "tecnicos": [
+            "The per IP+email pair limit, which no longer had any effect, is removed.",
+            "New field on the intermediate sign-in step to remember whether it came from Google (migration).",
+            "Test that LICENSE.md and the /licencia text match (npm run license:sync)."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.40.0",
       "date": "2026-11-02",
       "releasedAt": "2026-11-02T12:42:15+01:00",

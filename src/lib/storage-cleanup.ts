@@ -96,12 +96,14 @@ export async function deleteTaskAttachments(projectId: string, ids: string[], op
   return out;
 }
 
-/** Borra para siempre los adjuntos de tareas archivadas (hace al menos `days` días; 0 = todas las archivadas). */
-export async function cleanupArchivedTaskAttachments(projectId: string, days: number, now: Date = new Date()): Promise<DeletedTaskAttachments> {
+/** Borra para siempre los adjuntos de tareas archivadas (hace al menos `days` días; 0 = todas las archivadas), como mucho `max`. */
+export async function cleanupArchivedTaskAttachments(projectId: string, days: number, now: Date = new Date(), max: number = Infinity): Promise<DeletedTaskAttachments> {
   const total: DeletedTaskAttachments = { count: 0, bytes: 0, ids: [], taskIds: [] };
   const tasks = new Set<string>();
   for (;;) {
-    const rows = await db.taskAttachment.findMany({ where: taskWhere(projectId, days, now), select: { id: true }, orderBy: { id: "asc" }, take: BATCH });
+    const room = Math.min(BATCH, max - total.count);
+    if (room <= 0) break;
+    const rows = await db.taskAttachment.findMany({ where: taskWhere(projectId, days, now), select: { id: true }, orderBy: { id: "asc" }, take: room });
     if (rows.length === 0) break;
     const r = await deleteTaskAttachments(projectId, rows.map((x) => x.id), { onlyArchived: true });
     if (r.count === 0) break;
@@ -134,10 +136,12 @@ export async function deleteReleaseAttachments(projectId: string, ids: string[])
 }
 
 /** Borra para siempre las copias de adjuntos de las releases con más de `days` días. */
-export async function cleanupOldReleaseAttachments(projectId: string, days: number, now: Date = new Date()): Promise<CleanupResult> {
+export async function cleanupOldReleaseAttachments(projectId: string, days: number, now: Date = new Date(), max: number = Infinity): Promise<CleanupResult> {
   const total = { count: 0, bytes: 0 };
   for (;;) {
-    const rows = await db.releaseAttachment.findMany({ where: releaseWhere(projectId, days, now), select: { id: true }, orderBy: { id: "asc" }, take: BATCH });
+    const room = Math.min(BATCH, max - total.count);
+    if (room <= 0) break;
+    const rows = await db.releaseAttachment.findMany({ where: releaseWhere(projectId, days, now), select: { id: true }, orderBy: { id: "asc" }, take: room });
     if (rows.length === 0) break;
     const r = await deleteReleaseAttachments(projectId, rows.map((x) => x.id));
     if (r.count === 0) break;
@@ -165,10 +169,12 @@ export async function deleteDocumentsForever(projectId: string, ids: string[], o
 }
 
 /** Vacía la papelera de documentación del proyecto (filas y ficheros). */
-export async function emptyDocumentsTrash(projectId: string): Promise<CleanupResult> {
+export async function emptyDocumentsTrash(projectId: string, max: number = Infinity): Promise<CleanupResult> {
   const total = { count: 0, bytes: 0 };
   for (;;) {
-    const rows = await db.projectDocument.findMany({ where: trashWhere(projectId), select: { id: true }, orderBy: { id: "asc" }, take: BATCH });
+    const room = Math.min(BATCH, max - total.count);
+    if (room <= 0) break;
+    const rows = await db.projectDocument.findMany({ where: trashWhere(projectId), select: { id: true }, orderBy: { id: "asc" }, take: room });
     if (rows.length === 0) break;
     const r = await deleteDocumentsForever(projectId, rows.map((x) => x.id), { onlyTrashed: true });
     if (r.count === 0) break;

@@ -338,4 +338,4 @@ Detalles de rendimiento, seguridad y modelo de datos en el [manual](docs/MANUAL.
 
 ## Licencia
 
-Uso interno. Añade la licencia que prefieras antes de reutilizar el código.
+Pizarro es software de código disponible, no de código abierto. Es gratis para uso personal (personas físicas, en sus propios servidores, sin fines comerciales ni profesionales). Las empresas, los profesionales y las organizaciones necesitan una licencia comercial de pago único por servidor, con todas las actualizaciones futuras incluidas y sin soporte. Este resumen no sustituye al texto completo: consulta [LICENSE.md](LICENSE.md) (también en `/licencia` en cada instalación).

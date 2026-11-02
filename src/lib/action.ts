@@ -27,6 +27,9 @@ interface ActionMeta {
   args?: ArrayLike<unknown>;
 }
 
+/** Consultas que no se anotan en el registro cuando salen bien (los errores sí). */
+export const UNLOGGED_READS: ReadonlySet<string> = new Set(["tasks.getTaskDetail", "tasks.getTaskHistory", "tasks.getOlderComments"]);
+
 /** Ejecuta una acción, la registra en los logs y convierte los errores en un resultado serializable. */
 export async function runAction<T>(fn: () => Promise<T>): Promise<ActionResult<T>>;
 export async function runAction<T>(meta: ActionMeta, fn: () => Promise<T>): Promise<ActionResult<T>>;
@@ -82,8 +85,9 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
       }
     }
   }
-  // Con éxito, el texto que haya dejado la acción («Movió «X» de A a B»); si falla, el error.
-  if (meta) await logAction(meta, ctx, start, level, result.ok ? (ctx.message ?? "OK") : result.error);
+  // Con éxito, el texto que haya dejado la acción («Movió «X» de A a B»); si falla, el error. Abrir una tarea (y lo que
+  // carga al abrirla) no deja rastro cuando sale bien: es lo más frecuente y solo llenaba el registro.
+  if (meta && !(result.ok && UNLOGGED_READS.has(meta.name))) await logAction(meta, ctx, start, level, result.ok ? (ctx.message ?? "OK") : result.error);
   // El registro queda en español; al usuario, el error en su idioma.
   if (!result.ok) result = { ok: false, error: await translateError(result.error) };
   return result;

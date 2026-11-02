@@ -358,6 +358,8 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   // Ejemplo de serie con el que empezar ("" = en blanco); lo pueden usar todas las personas.
   const [examples, setExamples] = useState<{ key: string; name: string; description: string }[]>([]);
   const [exampleKey, setExampleKey] = useState("");
+  // Último nombre puesto por el autocompletado de un ejemplo: solo se sustituye o se quita mientras siga sin tocarse.
+  const autoName = useRef("");
   // Quien no es administrador solo puede crear proyectos privados.
   const [isPrivate, setIsPrivate] = useState(!isAdmin);
   // «Importar desde un archivo…» (solo administradores) cambia el contenido del diálogo.
@@ -424,7 +426,16 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
             <div className="space-y-1" role="radiogroup">
               {[{ key: "", name: t("Proyecto en blanco"), description: t("Columnas por defecto, sin tarjetas.") }, ...examples].map((ex) => (
                 <label key={ex.key || "blank"} className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 text-sm ${exampleKey === ex.key ? "border-brand-500 bg-brand-50/50 dark:bg-brand-500/10" : "border-slate-200 dark:border-slate-700"}`}>
-                  <input type="radio" name="project-start" className="mt-1" checked={exampleKey === ex.key} onChange={() => { setExampleKey(ex.key); if (ex.key && !name.trim()) setName(ex.name); }} />
+                  <input type="radio" name="project-start" className="mt-1" checked={exampleKey === ex.key} onChange={() => {
+                    setExampleKey(ex.key);
+                    const untouched = !name.trim() || name === autoName.current;
+                    if (ex.key) {
+                      if (untouched) { setName(ex.name); autoName.current = ex.name; }
+                    } else {
+                      if (name === autoName.current) setName("");
+                      autoName.current = "";
+                    }
+                  }} />
                   <span>
                     <span className="font-medium">{ex.name}</span>
                     <span className="block text-xs text-slate-500">{ex.description}</span>
