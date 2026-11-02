@@ -1,6 +1,8 @@
 // Traducciones al inglés (common). Clave: texto exacto en español.
 export const common: Record<string, string> = {
   "Cerrar menú": "Close menu",
+  "Menú": "Menu",
+  "Detalle de la tarea": "Task details",
   "Abrir menú": "Open menu",
   "{n} avisos sin leer": "{n} unread notifications",
   "Tablero": "Board",

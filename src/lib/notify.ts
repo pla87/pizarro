@@ -258,12 +258,13 @@ export async function notifyTask(opts: {
 
 /** Ventana en la que no se repite email/WhatsApp a la misma persona por la misma tarea. */
 const DEDUPE_MINUTES = 10;
-/** Máximo de envíos externos que puede provocar una misma persona por hora. */
+/** Máximo de envíos externos por hora que puede provocar una misma persona (o el sistema a una misma persona). */
 const MAX_EXTERNAL_PER_HOUR = 40;
 
 /**
  * Los avisos en la app se crean siempre; el email y el WhatsApp (que pueden costar dinero)
- * se limitan: uno por persona y tarea cada 10 minutos y un tope por autor y hora.
+ * se limitan: uno por persona y tarea cada 10 minutos y un tope por hora: por autor o, en los avisos del sistema,
+ * por destinatario.
  */
 async function externalAllowed(actorId: string | null, type: NotificationKind, taskId: string, recipientIds: string[], newIds: string[]): Promise<Set<string>> {
   const since = new Date(Date.now() - DEDUPE_MINUTES * 60_000);
@@ -289,9 +290,12 @@ async function externalAllowed(actorId: string | null, type: NotificationKind, t
   const allowed = new Set<string>();
   for (const id of recipientIds) {
     if (skip.has(id) || !wanted.has(id)) continue;
-    if (!rateLimit(`notify:${actorId ?? "system"}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000)) {
-      console.error("[notify] Límite de envíos externos alcanzado para", actorId);
-      break;
+    // Los de una persona, con tope por autor (nadie inunda a los demás). Los del sistema (recordatorios de «Esperando»),
+    // por destinatario: con uno solo para todos, a partir del 40.º de la hora nadie más recibía el email.
+    if (!rateLimit(actorId ? `notify:${actorId}` : `notify:system:${id}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000)) {
+      console.error("[notify] Límite de envíos externos alcanzado para", actorId ?? `el sistema (destinatario ${id})`);
+      if (actorId) break;
+      continue;
     }
     allowed.add(id);
   }

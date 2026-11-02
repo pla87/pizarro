@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { useT } from "@/i18n/client";
 import { PlusStack } from "./PlusStack";
 import { cn } from "./cn";
+import { trapTab } from "./focusTrap";
 import { useBackToClose } from "./useBackToClose";
 
 interface ModalProps {
@@ -17,6 +18,8 @@ interface ModalProps {
   size?: "sm" | "md" | "lg" | "xl" | "2xl";
   /** Contenido que reemplaza la cabecera estándar. */
   header?: React.ReactNode;
+  /** Nombre accesible del diálogo cuando no hay `title` que lo dé (p. ej. con `header` propio). */
+  ariaLabel?: string;
   /** En móvil: "bottom" (por defecto) es una hoja inferior; "top" ancla el panel arriba para que el teclado no lo tape. */
   placement?: "bottom" | "top";
   /** Clases extra para el panel (p. ej. una altura fija en escritorio). */
@@ -66,8 +69,6 @@ function unlockBodyScroll() {
   savedBody = null;
 }
 
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
-
 const SIZES = { sm: "sm:max-w-md", md: "sm:max-w-xl", lg: "sm:max-w-3xl", xl: "sm:max-w-5xl", "2xl": "sm:max-w-[90rem]" };
 /** Ancho máximo de cada tamaño (para combinarlo con el límite de media pantalla en lg). */
 const SIZE_REM = { sm: "28rem", md: "36rem", lg: "48rem", xl: "64rem", "2xl": "90rem" };
@@ -85,7 +86,7 @@ const BULK_BTN = "h-11 w-11 items-center justify-center rounded-full border bord
 
 const noopSubscribe = () => () => {};
 
-export function Modal({ open, onClose, title, children, footer, size = "md", header, placement = "bottom", panelClassName, side = "center", pairLeftWidth: pairLeftProp, onAddSecond, onAddSecondBulk, mobileAdd = false }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, size = "md", header, ariaLabel, placement = "bottom", panelClassName, side = "center", pairLeftWidth: pairLeftProp, onAddSecond, onAddSecondBulk, mobileAdd = false }: ModalProps) {
   const t = useT();
   const pairLeftCtx = useContext(PairLeftWidthContext);
   const pairLeftWidth = pairLeftProp ?? pairLeftCtx ?? PAIR_RIGHT;
@@ -136,29 +137,8 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
     const onKey = (e: KeyboardEvent) => {
       if (modalStack[modalStack.length - 1] !== entry) return;
       if (e.key === "Escape" && !e.defaultPrevented) onCloseRef.current();
-      else if (e.key === "Tab" && !e.defaultPrevented) {
-        // Trampa de foco: Tab desde el último campo vuelve al primero (y Mayús+Tab al revés), sin salir al tablero de debajo.
-        const panel = panelRef.current;
-        if (!panel) return;
-        const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => (el.offsetParent !== null && el.tabIndex >= 0) || el === document.activeElement);
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        const current = document.activeElement;
-        // Foco en otro diálogo (el otro modal de la pareja, el visor de imágenes): se deja al navegador.
-        const otherDialog = current?.closest?.("[role=dialog]");
-        if (otherDialog && !panel.contains(otherDialog) && !otherDialog.contains(panel)) return;
-        if (!first || !last) return e.preventDefault();
-        if (!panel.contains(current) || current === panel) {
-          e.preventDefault();
-          (e.shiftKey ? last : first).focus();
-        } else if (e.shiftKey && current === first) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && current === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
+      // Trampa de foco: Tab desde el último campo vuelve al primero (y Mayús+Tab al revés), sin salir al tablero de debajo.
+      else if (e.key === "Tab" && !e.defaultPrevented) trapTab(e, panelRef.current);
     };
     document.addEventListener("keydown", onKey);
     if (scrollLocks++ === 0) lockBodyScroll();
@@ -211,8 +191,9 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        // Nombre accesible del diálogo: su título (con la cabecera estándar).
-        aria-labelledby={!header && title ? titleId : undefined}
+        // Nombre accesible del diálogo: su título (con la cabecera estándar) o, con una cabecera propia, `ariaLabel`.
+        aria-labelledby={!ariaLabel && !header && title ? titleId : undefined}
+        aria-label={ariaLabel}
         tabIndex={-1}
         style={{ "--mw": SIZE_REM[size], ...(vv ? { "--vvh": `${vv.h}px` } : {}) } as React.CSSProperties}
         className={cn(

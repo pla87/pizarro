@@ -14,6 +14,7 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from "@dnd-kit/utilities";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { dueStatus } from "@/lib/dates";
+import { mentionsToPlain } from "@/lib/mentions";
 import { defaultRecurrenceDay, type RecurrenceRule } from "@/lib/recurrence-date";
 import { isWhite, kindBadgeStyle, MAX_TITLE, onColor } from "@/lib/constants";
 import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
@@ -510,6 +511,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       onAddSecondBulk={onAddSecondBulk}
       size="xl"
       placement="top"
+      ariaLabel={mentionsToPlain(title).trim() || t("Detalle de la tarea")}
       // Móvil: pie siempre visible con Archivar, Borrar y Guardar.
       footer={
         mobile ? (

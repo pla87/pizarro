@@ -350,4 +350,5 @@ export const admin: Record<string, string> = {
   "Avisa a tu gente: deberá iniciar sesión de nuevo, y quien instaló Pizarro como aplicación debe reinstalarla desde la dirección nueva.": "Tell your people: they must sign in again, and anyone who installed Pizarro as an app must reinstall it from the new address.",
   "Tu dirección ({host}) es un subdominio de un alojamiento compartido: Google suele aceptar la dirección completa como dominio autorizado (abajo). Si la rechaza, o para mostrar tu marca, usa un dominio propio en APP_URL. Dominio a escribir:": "Your address ({host}) is a subdomain of a shared hosting service: Google usually accepts the full address as the authorized domain (below). If it rejects it, or to show your brand, use your own domain in APP_URL. Domain to enter:",
   "Usuario: tu dirección de Gmail. Contraseña: una contraseña de aplicación creada en myaccount.google.com/apppasswords (no vale la normal).": "User: your Gmail address. Password: an app password created at myaccount.google.com/apppasswords (your normal password won't work).",
+  "Plantilla de {name}": "{name} template",
 };
