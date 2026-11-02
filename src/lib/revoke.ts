@@ -1,5 +1,6 @@
 import "server-only";
 import { forgetProjectAccess, forgetUserAccess } from "./access-cache";
+import { forgetProjectAttachments } from "./attachment-cache";
 import { dropProjectPresence, dropUserPresence } from "./presence";
 import { revokeProjectStreams, revokeSessionStreams, revokeUserStreams } from "./realtime";
 
@@ -22,6 +23,7 @@ export function revokeSession(sessionId: string): void {
 /** Han cambiado quién ve el proyecto (visibilidad o miembros) o se ha borrado. */
 export function revokeProject(projectId: string): void {
   forgetProjectAccess(projectId);
+  forgetProjectAttachments(projectId);
   revokeProjectStreams(projectId);
   dropProjectPresence(projectId);
 }
