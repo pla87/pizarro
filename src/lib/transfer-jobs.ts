@@ -9,6 +9,8 @@ import { AppError } from "./errors";
 import { logEvent } from "./log";
 import { buildProjectExport, estimateProjectExport } from "./project-export/export";
 import { ArchiveError } from "./project-export/errors";
+import { importForeignFile } from "./foreign-import/create";
+import type { ImportFormat } from "./foreign-import/parse";
 import { importProjectFile, type ImportSummary } from "./project-export/import";
 import type { ExportOptions } from "./project-export/types";
 import { writeProjectExport } from "./project-export/write";
@@ -90,9 +92,9 @@ export async function createExportJob(userId: string, projectId: string, options
 }
 
 /** Pone en cola la importación de un archivo ya subido a `tempFile` (de `bytes` bytes). El trabajo se queda con el fichero y lo borra al terminar. */
-export async function createImportJob(userId: string, tempFile: string, bytes: number, isPrivate: boolean, name?: string): Promise<JobRow> {
+export async function createImportJob(userId: string, tempFile: string, bytes: number, isPrivate: boolean, name?: string, format: ImportFormat = "pizarro"): Promise<JobRow> {
   await assertDiskRoom(uploadDir(), Math.ceil(bytes * IMPORT_FACTOR));
-  return enqueue(userId, { kind: "IMPORT", options: { isPrivate, tempFile, bytes, ...(name ? { name } : {}) }, progress: { phase: "validar" } });
+  return enqueue(userId, { kind: "IMPORT", options: { isPrivate, tempFile, bytes, format, ...(name ? { name } : {}) }, progress: { phase: "validar" } });
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -357,7 +359,7 @@ async function runExport(job: JobRow, progress: ReturnType<typeof progressWriter
 }
 
 async function runImport(job: JobRow, user: { id: string; name: string; email: string; role: "ADMIN" | "MEMBER" }, t: T, progress: ReturnType<typeof progressWriter>): Promise<ImportSummary> {
-  const opts = job.options as { isPrivate?: boolean; tempFile?: string; bytes?: number };
+  const opts = job.options as { isPrivate?: boolean; tempFile?: string; bytes?: number; format?: ImportFormat; name?: string };
   if (!opts.tempFile) throw new AppError("No se ha recibido ningún archivo.");
   const started = performance.now();
   try {
@@ -368,10 +370,12 @@ async function runImport(job: JobRow, user: { id: string; name: string; email: s
   const importBytes = Math.ceil((opts.bytes ?? 0) * IMPORT_FACTOR);
   await assertDiskRoom(uploadDir(), importBytes, undefined, undefined, job.id);
   reserveDisk(job.id, uploadDir(), importBytes);
-  const summary = await importProjectFile(opts.tempFile, user, { isPrivate: !!opts.isPrivate, t, onProgress: (p) => progress.set(p) });
+  const summary = opts.format === "trello" || opts.format === "csv"
+    ? await importForeignFile(opts.tempFile, opts.format, user, { isPrivate: !!opts.isPrivate, t, fileName: opts.name, onProgress: (p) => progress.set(p) })
+    : await importProjectFile(opts.tempFile, user, { isPrivate: !!opts.isPrivate, t, onProgress: (p) => progress.set(p) });
   logEvent({
     category: "api", action: "projects.import",
-    message: `Proyecto «${summary.name}» importado desde un archivo (${summary.counts.tasks} tareas, ${Math.round((opts.bytes ?? 0) / 1024)} KB)`,
+    message: `Proyecto «${summary.name}» importado desde ${summary.source === "trello" ? "un JSON de Trello" : summary.source === "csv" ? "un CSV" : "un archivo"} (${summary.counts.tasks} tareas, ${Math.round((opts.bytes ?? 0) / 1024)} KB)`,
     userId: user.id, userName: user.name, projectId: summary.projectId, path: "background:transfer", durationMs: performance.now() - started,
     details: { jobId: job.id, bytes: opts.bytes, isPrivate: !!opts.isPrivate, counts: summary.counts, unmappedUsers: summary.unmappedUsers.length, addedMembers: summary.addedMembers, warnings: summary.warnings.length },
   });

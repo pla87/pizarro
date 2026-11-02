@@ -1,5 +1,5 @@
 import { createWriteStream } from "node:fs";
-import { mkdir, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, open, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -7,6 +7,9 @@ import { randomBytes } from "node:crypto";
 import { AppError } from "@/lib/errors";
 import { ArchiveError } from "@/lib/project-export/errors";
 import { logEvent } from "@/lib/log";
+import { assertCsvHeader } from "@/lib/foreign-import/csv";
+import { decodeText, sniffFormat } from "@/lib/foreign-import/parse";
+import { FOREIGN_LIMITS } from "@/lib/foreign-import/types";
 import { importMaxBytes } from "@/lib/project-export/config";
 import { peekProjectArchive } from "@/lib/project-export/read";
 import { rateLimit } from "@/lib/rate-limit";
@@ -35,8 +38,20 @@ async function sweepStale(dir: string): Promise<void> {
   }
 }
 
+/** Primeros bytes de un archivo (para reconocer su formato sin leerlo entero). */
+async function readHead(file: string, bytes = 8192): Promise<Buffer> {
+  const handle = await open(file, "r");
+  try {
+    const buf = Buffer.alloc(bytes);
+    const { bytesRead } = await handle.read(buf, 0, bytes, 0);
+    return buf.subarray(0, bytesRead);
+  } finally {
+    await handle.close();
+  }
+}
+
 /**
- * Importa un proyecto desde un .pizarro.zip. El cuerpo de la petición ES el archivo (sin multipart), que se guarda por
+ * Importa un proyecto desde un .pizarro.zip, un JSON exportado de Trello o un CSV de tareas (formato por contenido). El cuerpo de la petición ES el archivo (sin multipart), que se guarda por
  * trozos en un temporal para no cargarlo en memoria. `?private=1` crea el proyecto como privado. Solo administradores.
  * Aquí solo se sube y se comprueba lo barato (directorio del ZIP y manifiesto); la importación en sí es un trabajo en
  * segundo plano (lib/transfer-jobs.ts) y la respuesta (202) lleva su id. El hueco de subida se suelta al terminar de recibir.
@@ -53,8 +68,12 @@ export async function POST(req: Request) {
     if (!user) throw new AppError("No autorizado", 401);
     if (user.role !== "ADMIN") throw new AppError("No tienes permiso para esta acción.", 403);
     if (!rateLimit(`project-import:${user.id}`, 5, 10 * 60_000)) throw new AppError("Demasiadas peticiones", 429);
-    const isPrivate = new URL(req.url).searchParams.get("private") === "1";
-    const max = importMaxBytes();
+    const params = new URL(req.url).searchParams;
+    const isPrivate = params.get("private") === "1";
+    const fileName = (params.get("name") ?? "").slice(0, 200);
+    // JSON y CSV de otros Kanban tienen un tope menor que el ZIP (si el nombre ya lo anuncia, se corta antes de recibirlo entero).
+    const looksForeign = /\.(json|csv|tsv|txt)$/i.test(fileName);
+    const max = looksForeign ? Math.min(importMaxBytes(), FOREIGN_LIMITS.maxBytes) : importMaxBytes();
     const tooBig = () => new AppError(t("El archivo supera el tamaño máximo de importación ({mb} MB).", { mb: Math.round(max / 1024 / 1024) }), 413);
     const length = declaredLength(req.headers);
     if (length !== null && length > max) throw tooBig();
@@ -78,13 +97,21 @@ export async function POST(req: Request) {
     await pipeline(Readable.fromWeb(req.body as never), limiter, createWriteStream(temp));
     if (received === 0) throw new AppError("No se ha recibido ningún archivo.");
 
-    await peekProjectArchive(temp);
+    const head = await readHead(temp);
+    const format = sniffFormat(head, fileName);
+    if (!format) throw new AppError("Formato de archivo no reconocido. Sube un .pizarro.zip de Pizarro, un JSON exportado de Trello o un CSV.");
+    if (format === "pizarro") await peekProjectArchive(temp);
+    else {
+      if (received > FOREIGN_LIMITS.maxBytes) throw new AppError(t("El archivo supera el tamaño máximo de importación ({mb} MB).", { mb: Math.round(FOREIGN_LIMITS.maxBytes / 1024 / 1024) }), 413);
+      // Comprobación barata antes de encolar: un CSV sin cabecera con título no llega a ser un trabajo.
+      if (format === "csv") assertCsvHeader(decodeText(head));
+    }
     // Desde aquí el temporal es del trabajo (lo borra al terminar).
-    const job = await createImportJob(user.id, temp, received, isPrivate);
+    const job = await createImportJob(user.id, temp, received, isPrivate, fileName.replace(/\.(pizarro\.zip|zip|json|csv|tsv|txt)$/i, "").trim() || undefined, format);
     temp = null;
     logEvent({
       category: "api", action: "projects.importQueued", message: `Importación de un proyecto en cola (${Math.round(received / 1024)} KB)`,
-      userId: user.id, userName: user.name, path: "/api/projects/import", ip, durationMs: performance.now() - start, details: { jobId: job.id, bytes: received, isPrivate },
+      userId: user.id, userName: user.name, path: "/api/projects/import", ip, durationMs: performance.now() - start, details: { jobId: job.id, bytes: received, isPrivate, format },
     });
     return Response.json({ ok: true, jobId: job.id }, { status: 202, headers: { "Cache-Control": "private, no-store" } });
   } catch (err) {

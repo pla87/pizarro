@@ -60,9 +60,11 @@ export interface ImportSummary {
   addedMembers: number;
   /** Cosas que no se pudieron importar (ficheros demasiado grandes, imágenes dañadas…). */
   warnings: string[];
+  /** Origen del archivo: ausente o «pizarro» = exportación de Pizarro; «trello» y «csv» = importación desde otro Kanban. */
+  source?: "pizarro" | "trello" | "csv";
 }
 
-const newId = () => `c${randomBytes(12).toString("hex")}`;
+export const newId = () => `c${randomBytes(12).toString("hex")}`;
 const CHUNK = 1000;
 const MAX_FILE_BYTES = (FILE_MAX_MAX_MB + 4) * 1024 * 1024;
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
@@ -87,12 +89,12 @@ export function capTitle(title: string, max = MAX_TITLE): string {
   return title.slice(0, max).replace(/@\[[^\]\n]*(\]\([^)\s]*)?$/, "").trimEnd();
 }
 
-async function insertChunks<T>(rows: T[], insert: (chunk: T[]) => Promise<unknown>): Promise<void> {
+export async function insertChunks<T>(rows: T[], insert: (chunk: T[]) => Promise<unknown>): Promise<void> {
   for (let i = 0; i < rows.length; i += CHUNK) await insert(rows.slice(i, i + CHUNK));
 }
 
 /** Nombre libre entre los proyectos visibles para quien importa: el del archivo y, si ya existe, con «(importado)». */
-async function freeProjectName(user: ImportUser, wanted: string, suffix: string): Promise<string> {
+export async function freeProjectName(user: ImportUser, wanted: string, suffix: string): Promise<string> {
   const base = (wanted.trim() || "Proyecto").slice(0, 80);
   const taken = async (name: string) => (await db.project.count({ where: { name, ...visibleProjectsWhere(user as never) } })) > 0;
   if (!(await taken(base))) return base;

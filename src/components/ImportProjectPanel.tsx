@@ -12,7 +12,9 @@ import { useTransferJob } from "./transfer/useTransferJob";
 interface Summary {
   projectId: string;
   name: string;
-  counts: { columns: number; tasks: number; archivedTasks: number; comments: number; taskAttachments: number; releases: number; releaseAttachments: number; documents: number };
+  counts: { columns: number; tasks: number; archivedTasks: number; subtasks?: number; labels?: number; comments: number; taskAttachments: number; releases: number; releaseAttachments: number; documents: number };
+  /** «trello» o «csv» si viene de otro Kanban; ausente o «pizarro» si es una exportación de Pizarro. */
+  source?: "pizarro" | "trello" | "csv";
   unmappedUsers: { name: string; email: string }[];
   mappedUsers: number;
   addedMembers: number;
@@ -20,8 +22,8 @@ interface Summary {
 }
 
 /**
- * «Importar desde un archivo…» del diálogo de nuevo proyecto: sube un .pizarro.zip (el cuerpo de la petición es el
- * archivo, con barra de progreso) y enseña el resumen. `isPrivate` es lo que se ha elegido en el diálogo.
+ * «Importar desde un archivo…» del diálogo de nuevo proyecto: sube un .pizarro.zip, un JSON de Trello o un CSV (el cuerpo
+ * de la petición es el archivo, con barra de progreso; el servidor reconoce el formato por su contenido) y enseña el resumen. `isPrivate` es lo que se ha elegido en el diálogo.
  */
 export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, onBusyChange }: { isPrivate: boolean; privateToggle: React.ReactNode; onBack: () => void; onClose: () => void; onBusyChange?: (busy: boolean) => void }) {
   const t = useT();
@@ -56,7 +58,7 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
     setProgress(0);
     const req = new XMLHttpRequest();
     xhr.current = req;
-    req.open("POST", `/api/projects/import?private=${isPrivate ? 1 : 0}`);
+    req.open("POST", `/api/projects/import?private=${isPrivate ? 1 : 0}&name=${encodeURIComponent(file.name.slice(0, 200))}`);
     req.upload.onprogress = (ev) => ev.lengthComputable && setProgress(Math.round((ev.loaded / ev.total) * 100));
     req.upload.onload = () => {
       setProgress(null);
@@ -102,27 +104,36 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
 
   if (summary) {
     const c = summary.counts;
+    const foreign = summary.source === "trello" || summary.source === "csv";
     return (
-      <div className="space-y-4">
+      <div className="space-y-4" data-testid="import-summary">
         <h3 className="font-semibold">{t("Proyecto importado")}</h3>
         <p className="text-sm">
-          {t("«{name}» se ha creado con {tasks} tarjetas ({archived} archivadas), {columns} columnas, {comments} comentarios, {attachments} adjuntos, {releases} releases y {documents} documentos.", {
-            name: summary.name, tasks: c.tasks, archived: c.archivedTasks, columns: c.columns, comments: c.comments, attachments: c.taskAttachments + c.releaseAttachments, releases: c.releases, documents: c.documents,
-          })}
+          {foreign
+            ? t("«{name}» se ha creado con {columns} columnas y {tasks} tareas ({archived} archivadas), con {subtasks} subtareas, {labels} etiquetas y {comments} comentarios.", {
+                name: summary.name, columns: c.columns, tasks: c.tasks, archived: c.archivedTasks, subtasks: c.subtasks ?? 0, labels: c.labels ?? 0, comments: c.comments,
+              })
+            : t("«{name}» se ha creado con {tasks} tarjetas ({archived} archivadas), {columns} columnas, {comments} comentarios, {attachments} adjuntos, {releases} releases y {documents} documentos.", {
+                name: summary.name, tasks: c.tasks, archived: c.archivedTasks, columns: c.columns, comments: c.comments, attachments: c.taskAttachments + c.releaseAttachments, releases: c.releases, documents: c.documents,
+              })}
         </p>
-        {summary.addedMembers > 0 && <p className="text-sm text-slate-600 dark:text-slate-300">{t("{n} usuario(s) se han añadido como miembros del proyecto por figurar en el archivo.", { n: summary.addedMembers })}</p>}
+        {summary.addedMembers > 0 && <p className="text-sm text-slate-600 dark:text-slate-300">{foreign ? t("{n} usuario(s) se han añadido como miembros del proyecto por ser responsables de alguna tarea.", { n: summary.addedMembers }) : t("{n} usuario(s) se han añadido como miembros del proyecto por figurar en el archivo.", { n: summary.addedMembers })}</p>}
         {summary.unmappedUsers.length > 0 && (
           <div className="text-sm">
-            <p className="font-medium">{t("Personas sin emparejar ({n})", { n: summary.unmappedUsers.length })}</p>
-            <p className="mt-0.5 text-xs text-slate-500">{t("No hay un usuario activo con el mismo email (o el proyecto es privado), así que sus tarjetas quedan sin asignar y sus comentarios conservan el nombre original.")}</p>
+            <p className="font-medium">{foreign ? t("Responsables sin emparejar ({n})", { n: summary.unmappedUsers.length }) : t("Personas sin emparejar ({n})", { n: summary.unmappedUsers.length })}</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {foreign
+                ? t("No hay un usuario activo con ese email o nombre (o el proyecto es privado), así que sus tareas quedan sin asignar y el nombre figura en la descripción.")
+                : t("No hay un usuario activo con el mismo email (o el proyecto es privado), así que sus tarjetas quedan sin asignar y sus comentarios conservan el nombre original.")}
+            </p>
             <ul className="mt-1 max-h-32 list-disc overflow-y-auto pl-5 text-xs">
-              {summary.unmappedUsers.map((u) => <li key={u.email}>{u.name} · {u.email}</li>)}
+              {summary.unmappedUsers.map((u) => <li key={`${u.name}|${u.email}`}>{u.email ? `${u.name} · ${u.email}` : u.name}</li>)}
             </ul>
           </div>
         )}
         {summary.warnings.length > 0 && (
           <div className="text-sm">
-            <p className="font-medium">{t("Avisos")}</p>
+            <p className="font-medium">{foreign ? t("Cosas que no se pudieron importar") : t("Avisos")}</p>
             <ul className="mt-1 max-h-32 list-disc overflow-y-auto pl-5 text-xs">
               {summary.warnings.map((w, i) => <li key={i}>{w}</li>)}
             </ul>
@@ -139,12 +150,12 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
   return (
     <form onSubmit={submit} className="space-y-4">
       <p className="text-sm text-slate-600 dark:text-slate-300">
-        {t("Crea un proyecto a partir de un archivo .pizarro.zip exportado desde Pizarro. Las personas se emparejan por email. El nombre sale del archivo y puedes cambiarlo después en Ajustes del proyecto.")}
+        {t("Crea un proyecto a partir de un .pizarro.zip de Pizarro, un JSON exportado de Trello o un CSV de tareas (Asana, Jira, Notion, GitHub Projects, Wekan, Kanboard…). El formato se reconoce solo; las personas se emparejan por email o nombre y el nombre del proyecto sale del archivo.")}
       </p>
       <div>
-        <label className="label" htmlFor="import-file">{t("Archivo .pizarro.zip")}</label>
+        <label className="label" htmlFor="import-file">{t("Archivo (.zip, .json o .csv)")}</label>
         <input
-          id="import-file" ref={input} type="file" accept=".zip,application/zip" className="input" disabled={busy}
+          id="import-file" ref={input} type="file" accept=".zip,.json,.csv,.tsv,.txt,application/zip,application/json,text/csv,text/plain" className="input" disabled={busy}
           onChange={(e) => { setFile(e.target.files?.[0] ?? null); setError(null); }}
         />
       </div>
