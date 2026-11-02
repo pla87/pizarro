@@ -12,7 +12,7 @@ import { POSITION_STEP } from "../positions";
 import { freeProjectName, insertChunks, newId, type ImportProgress, type ImportSummary, type ImportUser } from "../project-export/import";
 import { normalizeTaskFields } from "../task-fields";
 import { assertBoardLimits, decodeText, parseForeign } from "./parse";
-import { clip } from "./text";
+import { cleanName, clip } from "./text";
 import { FOREIGN_LIMITS, type ForeignBoard, type ForeignFormat, type ForeignPerson } from "./types";
 
 export interface ForeignImportOptions {
@@ -29,6 +29,12 @@ const isDoneName = (name: string) => DONE_RE.test(name.normalize("NFD").replace(
 
 /** Colores para etiquetas que vienen sin color (CSV): se reparten por orden de aparición, sin el blanco ni el gris. */
 const AUTO_COLORS = PALETTE.filter((c) => c !== "#ffffff" && c !== "#64748b");
+
+/** Persona del archivo con el nombre limpio (80 como mucho) y un email sin espacios ni caracteres de control (si no, se descarta). */
+function cleanPerson(p: ForeignPerson): ForeignPerson {
+  const email = p.email?.trim().toLowerCase() ?? "";
+  return { email: email && email.length <= 254 && !/[\s\u0000-\u001f\u007f]/.test(email) ? email : null, name: p.name ? cleanName(p.name, 80) || null : null };
+}
 
 /** Lee y crea el proyecto de un archivo JSON (Trello) o CSV ya guardado en disco. Solo administradores, como la importación de Pizarro. */
 export async function importForeignFile(file: string, format: ForeignFormat, user: ImportUser, opts: ForeignImportOptions): Promise<ImportSummary> {
@@ -53,7 +59,9 @@ export async function createProjectFromBoard(board: ForeignBoard, source: Foreig
   const locale = toLocale((await db.user.findUnique({ where: { id: user.id }, select: { locale: true } }))?.locale);
 
   // --- Personas: por email y, si no hay, por nombre exacto (sin distinguir mayúsculas) cuando es único.
-  const people = board.tasks.flatMap((x) => x.assignees);
+  // Los nombres y emails vienen del archivo (el de Trello sin tocar): sin controles (un NUL rompe la consulta) y de longitud razonable.
+  const assigneesOf = board.tasks.map((x) => x.assignees.map(cleanPerson).filter((p) => p.email || p.name));
+  const people = assigneesOf.flat();
   const emails = [...new Set(people.map((p) => p.email).filter((e): e is string => !!e))].slice(0, 500);
   const names = [...new Set(people.map((p) => p.name?.trim()).filter((n): n is string => !!n))].slice(0, 200);
   const candidates = emails.length || names.length
@@ -64,7 +72,10 @@ export async function createProjectFromBoard(board: ForeignBoard, source: Foreig
     : [];
   const byEmail = new Map(candidates.map((u) => [u.email.toLowerCase(), u]));
   const byName = new Map<string, typeof candidates>();
-  for (const u of candidates) byName.set(u.name.toLowerCase(), [...(byName.get(u.name.toLowerCase()) ?? []), u]);
+  for (const u of candidates) {
+    const same = byName.get(u.name.toLowerCase());
+    if (same) same.push(u); else byName.set(u.name.toLowerCase(), [u]);
+  }
   const allowed = (u: { id: string }) => !opts.isPrivate || u.id === user.id;
   const resolve = (p: ForeignPerson) => {
     const byMail = p.email ? byEmail.get(p.email) : undefined;
@@ -108,7 +119,8 @@ export async function createProjectFromBoard(board: ForeignBoard, source: Foreig
   const taskLabelRows: Prisma.TaskLabelCreateManyInput[] = [];
   const subtaskRows: Prisma.SubtaskCreateManyInput[] = [];
   const commentRows: Prisma.TaskCommentCreateManyInput[] = [];
-  for (const task of board.tasks) {
+  let extraLabels = 0;
+  board.tasks.forEach((task, taskIndex) => {
     const col = Math.min(task.column ?? 0, columnIds.length - 1);
     const pos = (nextPos.get(col) ?? 0) + POSITION_STEP;
     nextPos.set(col, pos);
@@ -116,7 +128,7 @@ export async function createProjectFromBoard(board: ForeignBoard, source: Foreig
 
     let assigneeId: string | null = null;
     const lost: string[] = [];
-    for (const p of task.assignees) {
+    for (const p of assigneesOf[taskIndex]!) {
       const found = resolve(p);
       const label = p.name ?? p.email ?? "";
       if (found && !assigneeId) {
@@ -134,13 +146,19 @@ export async function createProjectFromBoard(board: ForeignBoard, source: Foreig
       id, projectId, columnId: columnIds[col]!, title: task.title, description, kindId, position: pos, assigneeId, createdById: user.id,
       dueDate: task.due ? isoToDate(task.due) : null, priority: task.priority, archivedAt: task.archived ? now : null, archivedFromColumnId: task.archived ? columnIds[col]! : null,
     });
+    // Una tarea con más etiquetas de las que admite el editor (updateTask: 20) no se podría volver a guardar.
+    const taskLabels = new Set<string>();
     for (const l of task.labels) {
       const labelId = labelIds.get(l.name.toLowerCase());
-      if (labelId) taskLabelRows.push({ taskId: id, labelId });
+      if (!labelId || taskLabels.has(labelId)) continue;
+      if (taskLabels.size >= FOREIGN_LIMITS.labelsPerTask) { extraLabels++; continue; }
+      taskLabels.add(labelId);
+      taskLabelRows.push({ taskId: id, labelId });
     }
     task.subtasks.forEach((s, i) => subtaskRows.push({ taskId: id, title: s.title, done: s.done, position: (i + 1) * POSITION_STEP }));
     for (const c of task.comments) commentRows.push({ id: newId(), taskId: id, authorId: user.id, body: c.body, createdAt: c.createdAt && c.createdAt.getTime() <= now.getTime() ? c.createdAt : now });
-  }
+  });
+  if (extraLabels) warnings.push(t("{n} etiquetas de tareas sobraban (máximo {max} por tarea) y no se han importado.", { n: extraLabels, max: FOREIGN_LIMITS.labelsPerTask }));
   const fields = normalizeTaskFields(board.tasks.some((x) => x.priority) ? ["priority"] : []);
   const projectName = await freeProjectName(user, board.name, t("(importado)"));
   const last = await db.project.findFirst({ orderBy: { position: "desc" }, select: { position: true } });

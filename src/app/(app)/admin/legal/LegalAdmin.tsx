@@ -50,7 +50,7 @@ export function LegalAdmin({ settings, editorMode }: { settings: LegalSettings; 
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm">
             <span className="font-medium">{t("Nombre del responsable")}</span>
-            <input className="input mt-1 w-full" value={responsible} onChange={(e) => setResponsible(e.target.value)} maxLength={LEGAL_RESPONSIBLE_MAX} placeholder="Empresa Ejemplo, S.L." autoComplete="off" />
+            <input className="input mt-1 w-full" value={responsible} onChange={(e) => setResponsible(e.target.value)} maxLength={LEGAL_RESPONSIBLE_MAX} placeholder={t("Empresa Ejemplo, S.L.")} autoComplete="off" />
             <span className="mt-1 block text-xs text-slate-500">{t("Empresa o persona que opera esta instalación. Sustituye a {responsable} en los textos.")}</span>
           </label>
           <label className="block text-sm">

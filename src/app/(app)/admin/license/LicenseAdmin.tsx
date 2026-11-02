@@ -82,7 +82,7 @@ export function LicenseAdmin({ license, buyHref }: { license: LicenseRecord | nu
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm">
             <span className="font-medium">{t("Titular")}</span>
-            <input className="input mt-1 w-full" value={holder} onChange={(e) => setHolder(e.target.value)} maxLength={LICENSE_HOLDER_MAX} placeholder="Empresa Ejemplo, S.L." autoComplete="off" data-testid="license-holder" />
+            <input className="input mt-1 w-full" value={holder} onChange={(e) => setHolder(e.target.value)} maxLength={LICENSE_HOLDER_MAX} placeholder={t("Empresa Ejemplo, S.L.")} autoComplete="off" data-testid="license-holder" />
           </label>
           <label className="block text-sm">
             <span className="font-medium">{t("Nº de factura o referencia de compra")}</span>
@@ -90,7 +90,7 @@ export function LicenseAdmin({ license, buyHref }: { license: LicenseRecord | nu
           </label>
           <label className="block text-sm sm:col-span-2">
             <span className="font-medium">{t("Email de compra (opcional)")}</span>
-            <input className="input mt-1 w-full" type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={LICENSE_EMAIL_MAX} placeholder="compras@example.com" autoComplete="off" data-testid="license-email" />
+            <input className="input mt-1 w-full" type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={LICENSE_EMAIL_MAX} placeholder={t("compras@example.com")} autoComplete="off" data-testid="license-email" />
           </label>
         </div>
         <div className="flex flex-wrap gap-2">

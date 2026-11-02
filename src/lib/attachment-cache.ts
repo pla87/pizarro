@@ -51,12 +51,13 @@ export function cachedMeta(id: string): AttachmentMeta | undefined {
  * Generación de la caché: cada «olvidar» la sube. Quien leyó la BD antes de un borrado no puede guardar después
  * metadatos ya obsoletos (storeMeta descarta lo leído con una generación anterior).
  */
-let epoch = 0;
-export const cacheEpoch = (): number => epoch;
+// En globalThis, como el almacén: acciones y rutas pueden empaquetarse por separado y deben ver el mismo contador.
+const gen = (globalThis as unknown as { __pzAttachmentCacheEpoch?: { n: number } }).__pzAttachmentCacheEpoch ??= { n: 0 };
+export const cacheEpoch = (): number => gen.n;
 
 /** Guarda los metadatos de un adjunto que existe (los inexistentes no se guardan), si nada se olvidó desde `readAt`. */
-export function storeMeta(meta: AttachmentMeta, readAt: number = epoch): void {
-  if (readAt !== epoch) return;
+export function storeMeta(meta: AttachmentMeta, readAt: number = gen.n): void {
+  if (readAt !== gen.n) return;
   const now = Date.now();
   store.delete(meta.id);
   store.set(meta.id, { meta, until: now + TTL_MS, files: {} });
@@ -80,19 +81,19 @@ export function storeFileStat(meta: AttachmentMeta, variant: Variant, value: { s
 
 /** Olvida estos adjuntos (borrados o con los ficheros quitados). */
 export function forgetAttachments(ids: Iterable<string>): void {
-  epoch++;
+  gen.n++;
   for (const id of ids) store.delete(id);
 }
 
 /** Olvida los adjuntos de estas tareas (tareas borradas: sus filas caen en cascada). */
 export function forgetTaskAttachments(taskIds: Iterable<string>): void {
-  epoch++;
+  gen.n++;
   const set = new Set(taskIds);
   for (const [k, e] of store) if (set.has(e.meta.taskId)) store.delete(k);
 }
 
 /** Olvida los adjuntos de un proyecto (borrado o con el acceso cambiado). */
 export function forgetProjectAttachments(projectId: string): void {
-  epoch++;
+  gen.n++;
   for (const [k, e] of store) if (e.meta.projectId === projectId) store.delete(k);
 }

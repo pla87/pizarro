@@ -48,18 +48,96 @@ export function foldIcsLine(line: string): string {
   return parts.join("\r\n ");
 }
 
+const EMPHASIS_EDGE = /[\p{L}\p{N}_*]/u;
+const BLANK = /\s/u;
+const LINE_BREAKS = /\r\n|[\n\r\u2028\u2029]/;
+
+const cpBefore = (s: string, i: number): string => {
+  if (i <= 0) return "";
+  const c = s.charCodeAt(i - 1);
+  if (c >= 0xdc00 && c <= 0xdfff && i >= 2) {
+    const h = s.charCodeAt(i - 2);
+    if (h >= 0xd800 && h <= 0xdbff) return s.slice(i - 2, i);
+  }
+  return s[i - 1]!;
+};
+const cpAt = (s: string, i: number): string => (i >= s.length ? "" : String.fromCodePoint(s.codePointAt(i)!));
+
+/**
+ * Quita el énfasis Markdown (`**a**`, `__a__`, `*a*`, `_a_`) solo en límite de palabra, igual que lo hacían dos expresiones
+ * regulares, pero en tiempo lineal: con `(.+?)` y muchos delimitadores sin cierre (`**a **a **a …`) aquellas eran cuadráticas.
+ * `inner` dice si el carácter pegado al delimitador por dentro vale (no vacío ni espacio; en el énfasis simple, tampoco * ni _).
+ */
+function stripEmphasis(text: string, delims: readonly string[], inner: (cp: string) => boolean): string {
+  let out = "";
+  let last = 0;
+  let lineStart = 0;
+  const lines = text.split(LINE_BREAKS);
+  // Los terminadores de línea miden 1 o 2 unidades (\r\n): se recorren con una expresión global para conocer cada inicio.
+  const breaks = [...text.matchAll(new RegExp(LINE_BREAKS.source, "g"))];
+  for (let n = 0; n < lines.length; n++) {
+    const ls = lineStart;
+    const le = ls + lines[n]!.length;
+    lineStart = le + (breaks[n]?.[0].length ?? 0);
+    if (le - ls < 3) continue;
+    // Cierres válidos por delimitador (solo dependen de la posición), en orden; el cursor avanza y nunca retrocede.
+    const closings = new Map<string, { list: number[]; at: number }>();
+    const closingsOf = (d: string) => {
+      let c = closings.get(d);
+      if (!c) {
+        const list: number[] = [];
+        for (let j = text.indexOf(d, ls); j !== -1 && j + d.length <= le; j = text.indexOf(d, j + 1)) {
+          if (inner(cpBefore(text, j)) && !EMPHASIS_EDGE.test(cpAt(text, j + d.length))) list.push(j);
+        }
+        c = { list, at: 0 };
+        closings.set(d, c);
+      }
+      return c;
+    };
+    for (let i = ls; i < le; i++) {
+      const d = delims.find((x) => text.startsWith(x, i));
+      if (!d) continue;
+      const after = cpAt(text, i + d.length);
+      if (i + d.length >= le || !inner(after) || EMPHASIS_EDGE.test(cpBefore(text, i))) continue;
+      const minClose = i + d.length + after.length;
+      const c = closingsOf(d);
+      while (c.at < c.list.length && c.list[c.at]! < minClose) c.at++;
+      const j = c.list[c.at];
+      if (j === undefined) continue;
+      out += text.slice(last, i) + text.slice(i + d.length, j);
+      last = j + d.length;
+      i = last - 1;
+    }
+  }
+  return last === 0 ? text : out + text.slice(last);
+}
+
+const isInner = (cp: string) => cp !== "" && !BLANK.test(cp);
+const isInnerSingle = (cp: string) => isInner(cp) && cp !== "*" && cp !== "_";
+
+/** Recorta a `max` caracteres (puntos de código, sin partir un par sustituto) antes de procesar un texto largo. */
+export function cutChars(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const c = text.charCodeAt(max - 1);
+  return text.slice(0, c >= 0xd800 && c <= 0xdbff ? max - 1 : max);
+}
+
+/** Descripción de una tarea a texto plano para el .ics: se recorta ANTES de convertir (las expresiones regulares de abajo no deben ver textos enormes). */
+export function descriptionToPlain(md: string, max = 1500): string {
+  return markdownToPlain(cutChars(md, max));
+}
+
 /** Markdown de la descripción de una tarea a texto plano legible. */
 export function markdownToPlain(md: string): string {
-  return mentionsToPlain(md)
+  const plain = mentionsToPlain(md)
     .replace(/```[^\n]*\n([\s\S]*?)```/g, "$1")
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/\[([^\]]+)\]\(([^)\s]+)[^)]*\)/g, (_m, text: string, href: string) => (text === href ? text : `${text} (${href})`))
     .replace(/<[^>\n]+>/g, "")
     .replace(/^#{1,6}\s+/gm, "")
-    .replace(/^\s*>\s?/gm, "")
-    // Énfasis solo en límite de palabra: no toca guiones bajos de URL ni de snake_case, ni 2*3*4.
-    .replace(/(?<![\p{L}\p{N}_*])(\*\*|__)(?=\S)(.+?)(?<=\S)\1(?![\p{L}\p{N}_*])/gu, "$2")
-    .replace(/(?<![\p{L}\p{N}_*])([*_])(?=[^\s*_])(.+?)(?<=[^\s*_])\1(?![\p{L}\p{N}_*])/gu, "$2")
+    .replace(/^\s*>\s?/gm, "");
+  // Énfasis solo en límite de palabra: no toca guiones bajos de URL ni de snake_case, ni 2*3*4.
+  return stripEmphasis(stripEmphasis(plain, ["**", "__"], isInner), ["*", "_"], isInnerSingle)
     .replace(/~~(.+?)~~/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/^\s*[-*+]\s+\[( |x)\]\s+/gim, (_m, c: string) => (c === " " ? "[ ] " : "[x] "))

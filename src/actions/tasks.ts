@@ -10,7 +10,7 @@ import { appTimeZone, attachmentTotals, boardTaskSelect, listKinds, loadBoardTas
 import { MAX_BULK_TASKS } from "@/lib/bulk";
 import { MAX_TITLE } from "@/lib/constants";
 import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
-import { assertCanBlock } from "@/lib/blocking";
+import { assertCanBlock, blockProblem, lockBlocking } from "@/lib/blocking";
 import { addUndo, captureTasks, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, type TaskField, type UndoOp } from "@/lib/undo";
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
@@ -501,6 +501,12 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
     addUndo(taskSetOp(task, changed, labels));
     const prev = task;
     const newMentions = await db.$transaction(async (tx) => {
+      // Bloqueo: la comprobación de antes vale para el mensaje rápido, pero la definitiva va aquí, con el candado del
+      // proyecto, junto a la escritura (dos bloqueos A → B y B → A a la vez no pueden cerrar un ciclo).
+      if (data.blockedById) {
+        await lockBlocking(tx, projectId);
+        await assertCanBlock(id, data.blockedById, projectId, tx);
+      }
       // Menciones nuevas en la descripción (las que ya estaban no vuelven a avisar).
       // Se lee la versión anterior con bloqueo de fila para que dos ediciones simultáneas no avisen dos veces.
       let added: string[] = [];
@@ -1172,6 +1178,12 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
     const touched = editsText ? [...fieldKeys, "contentUpdatedAt", "contentUpdatedById"] as TaskField[] : fieldKeys;
     addUndo(taskSetOp(task, touched, labelsChanged ? labels : undefined), ...undo);
     await db.$transaction(async (tx) => {
+      if (typeof fields.blockedById === "string") {
+        // Misma regla que updateTask: comprobación y escritura bajo el candado de bloqueos del proyecto.
+        // Si entretanto otra petición lo hizo imposible, ese campo se deja como está (como hace la comprobación previa).
+        await lockBlocking(tx, projectId);
+        if (await blockProblem(id, fields.blockedById, projectId, tx)) delete fields.blockedById;
+      }
       if (Object.keys(fields).length) await tx.task.update({ where: { id }, data: fields });
       if (labelsChanged) {
         await tx.taskLabel.deleteMany({ where: { taskId: id } });

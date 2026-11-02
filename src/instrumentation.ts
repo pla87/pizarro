@@ -6,14 +6,18 @@ export async function onRequestError(
 ) {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   const { logEvent } = await import("@/lib/log");
+  const { maskSecretsFor } = await import("@/lib/secret-path");
   const e = err as { message?: string; digest?: string; stack?: string };
+  // Rutas con credencial en la URL (token del calendario, enlaces de /reset/ y /confirm/): ni en la ruta ni en el mensaje.
+  const mask = (text: string) => maskSecretsFor(text, request.path);
+  const path = mask(request.path);
   logEvent({
     level: "error",
     category: "system",
     action: "system.uncaughtError",
-    message: `Error no controlado en ${request.method} ${request.path}: ${e?.message ?? String(err)}`,
-    path: request.path,
-    details: { digest: e?.digest, route: context.routePath, routeType: context.routeType, stack: e?.stack?.split("\n").slice(0, 6).join("\n") },
+    message: `Error no controlado en ${request.method} ${path}: ${mask(e?.message ?? String(err))}`,
+    path,
+    details: { digest: e?.digest, route: context.routePath, routeType: context.routeType, stack: mask(e?.stack?.split("\n").slice(0, 6).join("\n") ?? "") || undefined },
   });
 }
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { BoardTask } from "@/lib/types";
+import { sameTask } from "./sameTask";
 
 /**
  * Almacén externo mínimo (para useSyncExternalStore): guarda un valor inmutable y avisa a quien se suscribe.
@@ -53,19 +54,6 @@ export function tasksById(list: BoardTask[]): Map<string, BoardTask> {
   }
   return map;
 }
-
-const sameTask = (a: BoardTask, b: BoardTask) => {
-  const x = a as unknown as Record<string, unknown>;
-  const y = b as unknown as Record<string, unknown>;
-  const keys = Object.keys(x);
-  if (keys.length !== Object.keys(y).length) return false;
-  return keys.every((k) => {
-    const p = x[k];
-    const q = y[k];
-    if (p === q) return true;
-    return Array.isArray(p) && Array.isArray(q) && p.length === q.length && p.every((v, i) => v === q[i]);
-  });
-};
 
 /**
  * Datos nuevos del servidor sobre la lista actual: las tareas que no han cambiado conservan su objeto

@@ -51,6 +51,8 @@ export const FOREIGN_LIMITS = {
   activeTasks: 1000,
   archivedTasks: 5000,
   labels: 50,
+  /** Máximo de etiquetas por tarea: updateTask no deja guardar una tarea con más de 20 (src/actions/tasks.ts). */
+  labelsPerTask: 20,
   labelName: 40,
   columnName: 80,
   subtasksPerTask: 50,

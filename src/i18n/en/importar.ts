@@ -47,6 +47,8 @@ export const importar: Record<string, string> = {
   "{n} fechas límite no se pudieron interpretar y se han ignorado.": "{n} due dates could not be understood and were ignored.",
   "{n} prioridades no se reconocieron y se han ignorado.": "{n} priorities were not recognised and were ignored.",
   "{n} filas no tenían título y se han ignorado.": "{n} rows had no title and were ignored.",
+  "{n} tarjetas no tenían título y se han ignorado.": "{n} cards had no title and were ignored.",
+  "{n} etiquetas de tareas sobraban (máximo {max} por tarea) y no se han importado.": "{n} task labels were over the limit ({max} per task) and were not imported.",
   "{n} elementos de checklist sobraban (máximo {max} subtareas por tarea) y no se han importado.": "{n} checklist items were over the limit ({max} subtasks per task) and were not imported.",
   "{n} subtareas sobraban (máximo {max} por tarea) y no se han importado.": "{n} subtasks were over the limit ({max} per task) and were not imported.",
   "{n} comentarios sobraban (máximo {max} por tarea) y no se han importado.": "{n} comments were over the limit ({max} per task) and were not imported.",

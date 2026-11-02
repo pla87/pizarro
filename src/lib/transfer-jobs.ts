@@ -397,6 +397,7 @@ export function kickTransferWorker(): void {
 }
 
 async function pump(): Promise<void> {
+  if (!state.started) return;
   if (state.pumping) {
     state.again = true;
     return;
@@ -489,6 +490,11 @@ export async function purgeTransferJobs(now: Date = new Date()): Promise<number>
   await db.projectTransferJob.deleteMany({ where: { status: { in: ["DONE", "FAILED", "EXPIRED"] }, finishedAt: { lt: new Date(now.getTime() - ROW_KEEP_MS) } } });
   if (removed) logEvent({ category: "system", action: "projects.transferPurged", message: `Archivos de exportación caducados borrados: ${removed}`, details: { count: removed } });
   return removed;
+}
+
+/** Solo pruebas: deja de atender la cola en este proceso (lo que ya está en marcha termina). */
+export function stopTransferWorkerForTests(): void {
+  state.started = false;
 }
 
 /** Arranca el trabajador una vez por proceso: retoma lo pendiente, vigila los trabajos muertos y atiende la cola. */

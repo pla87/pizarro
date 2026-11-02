@@ -19,38 +19,155 @@ export function clip(s: string, max: number, counter?: { n: number }): string {
   return `${s.slice(0, end).trimEnd()}…`;
 }
 
-/**
- * HTML en bruto → nada. Los bloques <script> y <style> desaparecen con su contenido; <br> y el cierre de párrafo
- * son saltos de línea; el resto de etiquetas se quita dejando el texto. Se conservan las autoenlaces <https://…>.
- */
-export function stripHtml(s: string): string {
-  return s
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/<(script|style|iframe|object|embed)\b[\s\S]*?<\/\1\s*>/gi, "")
-    .replace(/<(script|style|iframe|object|embed)\b[^>]*>/gi, "")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|li|h[1-6]|tr)\s*>/gi, "\n")
-    .replace(/<\/?(?!https?:|mailto:)[a-z][a-z0-9-]*(\s[^<>]*)?\/?>/gi, "");
+/** Etiquetas HTML que se quitan dejando su texto (cualquier otra cosa entre «<» y «>», como `<T>` o `<tu-email>`, es texto del usuario). */
+const KNOWN_TAG = /<\/?(?:a|b|i|u|em|strong|p|div|span|br|hr|img|ul|ol|li|table|thead|tbody|tr|td|th|h[1-6]|pre|code|blockquote|font|center|small|sup|sub|s|strike|del|ins)(?:\s[^<>]*)?\/?>/gi;
+/** Bloques que se quitan con su contenido. */
+const BLOCK_OPEN = /<(script|style|iframe|object|embed)\b/gi;
+/** Pasadas máximas de stripHtml (cada una quita un nivel de etiquetas anidadas como `<img x <b>>`). */
+const MAX_HTML_PASSES = 50;
+
+/** Quita los comentarios HTML en una sola pasada (un `<!--` sin cierre se queda como texto). */
+function stripComments(s: string): string {
+  let at = s.indexOf("<!--");
+  if (at === -1) return s;
+  let out = "";
+  let from = 0;
+  while (at !== -1) {
+    const close = s.indexOf("-->", at + 4);
+    if (close === -1) break;
+    out += s.slice(from, at);
+    from = close + 3;
+    at = s.indexOf("<!--", from);
+  }
+  return out + s.slice(from);
 }
 
-/** Los enlaces Markdown con un esquema que no sea http(s) o mailto (javascript:, data:…) quedan solo como su texto. */
-function neutralizeLinks(s: string): string {
-  return s.replace(/(!?)\[([^\]\n]*)\]\(\s*<?([a-z][a-z0-9+.-]*):(?:[^()\n]|\([^()\n]*\))*\)/gi, (m, _bang: string, text: string, scheme: string) => (/^(https?|mailto)$/i.test(scheme) ? m : text));
+/**
+ * Quita los bloques <script>, <style>, <iframe>, <object> y <embed> con su contenido; si no tienen cierre, solo la etiqueta
+ * de apertura. Lineal: cada búsqueda de cierre o de «>» que falla se recuerda y no se repite.
+ */
+function stripBlocks(s: string): string {
+  if (!/<(?:script|style|iframe|object|embed)\b/i.test(s)) return s;
+  const closers = new Map<string, RegExp>();
+  const noClose = new Set<string>();
+  let noGt = false;
+  let out = "";
+  let from = 0;
+  BLOCK_OPEN.lastIndex = 0;
+  for (let m = BLOCK_OPEN.exec(s); m; m = BLOCK_OPEN.exec(s)) {
+    if (m.index < from) continue;
+    const name = m[1]!.toLowerCase();
+    let end = -1;
+    if (!noClose.has(name)) {
+      let re = closers.get(name);
+      if (!re) { re = new RegExp(`</${name}\\s*>`, "gi"); closers.set(name, re); }
+      re.lastIndex = m.index + m[0].length;
+      const c = re.exec(s);
+      if (c) end = c.index + c[0].length; else noClose.add(name);
+    }
+    if (end === -1 && !noGt) {
+      const gt = s.indexOf(">", m.index + m[0].length);
+      if (gt === -1) noGt = true; else end = gt + 1;
+    }
+    if (end === -1) continue;
+    out += s.slice(from, m.index);
+    from = end;
+    BLOCK_OPEN.lastIndex = end;
+  }
+  return out + s.slice(from);
+}
+
+/**
+ * HTML en bruto → nada. Los bloques <script>, <style>, <iframe>, <object> y <embed> desaparecen con su contenido, igual que
+ * los comentarios; <br> y el cierre de párrafo son saltos de línea; las etiquetas HTML conocidas se quitan dejando el texto.
+ * Lo que solo parece una etiqueta (`Promise<void>`, `<T>`, `<tu-email>`) y las autoenlaces <https://…> se conservan.
+ * Se repite hasta que no cambie nada (quitar `<b>` de `<img x onerror=1 <b>>` deja una etiqueta `<img>` completa).
+ */
+export function stripHtml(s: string): string {
+  if (!s.includes("<")) return s;
+  let cur = s;
+  for (let pass = 0; pass < MAX_HTML_PASSES; pass++) {
+    const next = stripBlocks(stripComments(cur))
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(p|div|li|h[1-6]|tr)\s*>/gi, "\n")
+      .replace(KNOWN_TAG, "");
+    if (next === cur) break;
+    cur = next;
+  }
+  return cur;
+}
+
+/** Destino de enlace que solo debe ser texto: un esquema que no sea http(s) o mailto (javascript:, data:…) y los destinos internos de las menciones (`#mention-…`) y del subrayado (`#u`). */
+const LINK_TAIL = /\(\s*<?(?:([a-z][a-z0-9+.-]*):|(#(?:mention-|u)))(?:[^()\n]|\([^()\n]*\))*\)/iy;
+/** Definición de referencia (`[x]: #mention-abc`) con un destino interno: la línea se descarta. */
+const INTERNAL_DEFINITION = /^[ \t]{0,3}\[[^\]\n]*\]:[ \t]*<?#(?:mention-|u)[^\n]*(?:\n|$)/gim;
+
+/**
+ * Los enlaces Markdown con un esquema que no sea http(s) o mailto, o con un destino interno (`#mention-…`, `#u`), quedan solo
+ * como su texto (si no, `[@Admin](#mention-x)` se pintaría como una mención de verdad). Recorrido lineal: una «[» sin cierre
+ * (80.000 seguidas) no obliga a releer el resto de la línea en cada una.
+ */
+function neutralizeLinks(input: string): string {
+  const s = input.includes("#") ? input.replace(INTERNAL_DEFINITION, "") : input;
+  if (!s.includes("](")) return s;
+  let out = "";
+  let from = 0; // lo ya copiado a `out`
+  let open = -1; // primera «[» desde el último «]» o salto de línea
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c === 10) open = -1;
+    else if (c === 91) { if (open < 0) open = i; }
+    else if (c === 93) {
+      if (open >= 0 && s.charCodeAt(i + 1) === 40) {
+        LINK_TAIL.lastIndex = i + 1;
+        const m = LINK_TAIL.exec(s);
+        if (m) {
+          const end = i + 1 + m[0].length;
+          if (!(m[1] && /^(https?|mailto)$/i.test(m[1]))) {
+            const bang = open > from && s.charCodeAt(open - 1) === 33 ? 1 : 0;
+            out += s.slice(from, open - bang) + s.slice(open + 1, i);
+            from = end;
+          }
+          i = end - 1;
+        }
+      }
+      open = -1;
+    }
+  }
+  return out + s.slice(from);
+}
+
+/** Recorta la entrada en bruto antes de sanearla (el saneado de textos enormes es caro y se recortaría igualmente). Sin partir un par sustituto. */
+function bound(raw: string, limit: number): string {
+  if (raw.length <= limit) return raw;
+  const end = raw.charCodeAt(limit - 1) >= 0xd800 && raw.charCodeAt(limit - 1) <= 0xdbff ? limit - 1 : limit;
+  return raw.slice(0, end);
+}
+
+/** Cuenta una sola vez el recorte (el de la entrada en bruto y el final son el mismo texto). */
+function countClip(raw: string, rawMax: number, final: string, max: number, counter?: { n: number }): string {
+  if (!counter) return clip(final, max);
+  const own = { n: 0 };
+  const out = clip(final, max, own);
+  if (own.n || raw.length > rawMax) counter.n++;
+  return out;
 }
 
 /** Título de una línea, recortado al máximo de la aplicación. */
 export function cleanTitle(raw: string, max = MAX_TITLE, counter?: { n: number }): string {
-  return clip(basic(stripHtml(raw)).replace(/\s+/g, " ").trim(), max, counter);
+  const rawMax = max * 4;
+  return countClip(raw, rawMax, basic(stripHtml(bound(raw, rawMax))).replace(/\s+/g, " ").trim(), max, counter);
 }
 
 /** Nombres cortos (columnas, etiquetas): una línea, sin HTML. */
 export function cleanName(raw: string, max: number): string {
-  return clip(basic(stripHtml(raw)).replace(/\s+/g, " ").trim(), max);
+  return clip(basic(stripHtml(bound(raw, max * 4))).replace(/\s+/g, " ").trim(), max);
 }
 
 /** Descripción Markdown: sin HTML en bruto, sin esquemas peligrosos, sin controles, y recortada al máximo. */
 export function cleanMarkdown(raw: string, max = MAX_DESCRIPTION, counter?: { n: number }): string {
-  return clip(neutralizeLinks(basic(stripHtml(raw))).replace(/\n{4,}/g, "\n\n\n").trim(), max, counter);
+  const rawMax = max * 2;
+  return countClip(raw, rawMax, neutralizeLinks(basic(stripHtml(bound(raw, rawMax)))).replace(/\n{4,}/g, "\n\n\n").trim(), max, counter);
 }
 
 /** URL http(s) sin espacios ni caracteres que rompan un enlace Markdown, o null. */
@@ -104,14 +221,33 @@ function validDay(y: number, m: number, d: number): string | null {
 
 const fullYear = (y: number) => (y < 100 ? 2000 + y : y);
 
+/** Un formateador por zona horaria (crearlos es lo caro: 150.000 comentarios tardaban 30 s). null = zona no válida. */
+const dayFormats = new Map<string, Intl.DateTimeFormat | null>();
+
+function dayFormat(timeZone: string): Intl.DateTimeFormat | null {
+  let f = dayFormats.get(timeZone);
+  if (f === undefined) {
+    try {
+      f = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+    } catch {
+      f = null;
+    }
+    if (dayFormats.size >= 100) dayFormats.clear();
+    dayFormats.set(timeZone, f);
+  }
+  return f;
+}
+
 /** Día natural de un instante en una zona horaria (null si el instante no es válido). */
 export function instantDay(d: Date, timeZone = "UTC"): string | null {
   if (Number.isNaN(d.getTime())) return null;
+  const f = dayFormat(timeZone);
   try {
-    return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+    if (f) return f.format(d);
   } catch {
-    return d.toISOString().slice(0, 10);
+    // cae al día UTC
   }
+  return d.toISOString().slice(0, 10);
 }
 
 /**
@@ -121,7 +257,7 @@ export function instantDay(d: Date, timeZone = "UTC"): string | null {
  */
 export function parseDay(raw: string, timeZone = "UTC"): string | null {
   const s = raw.trim();
-  if (!s) return null;
+  if (!s || s.length > 100) return null;
   let m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?\s*(Z|[+-]\d{2}:?\d{2})?)?$/.exec(s);
   if (m) {
     if (m[7]) return instantDay(new Date(s.replace(" ", "T")), timeZone) ?? validDay(+m[1]!, +m[2]!, +m[3]!);

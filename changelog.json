@@ -1,6 +1,65 @@
 {
   "versions": [
     {
+      "version": "1.43.1",
+      "date": "2026-11-02",
+      "releasedAt": "2026-11-02T20:24:23+01:00",
+      "summary": "Mantenimiento: seguridad y rendimiento de la importación, el calendario suscrito y las tareas bloqueadas, y correcciones",
+      "changes": {
+        "nuevas": [],
+        "mejoras": [
+          "Importar desde Trello o CSV es mucho más rápido con archivos grandes y conserva el texto técnico como `Promise<void>`.",
+          "Comprobar un bloqueo entre tareas pasa de hasta 1000 consultas a una sola.",
+          "El calendario suscrito con «todas las de mis proyectos» muestra los mismos proyectos que la página Calendario.",
+          "La página de presentación solo anuncia el pago con tarjeta y la factura automática cuando el enlace de pago existe."
+        ],
+        "correcciones": [
+          "El enlace secreto del calendario ya no puede quedar escrito en el registro de Administración si algo falla (tampoco los enlaces de restablecer contraseña o confirmar email).",
+          "Una descripción preparada a propósito ya no puede bloquear el servidor al generar el calendario.",
+          "Al mover o editar un entregable, Apple Calendar y Outlook ya actualizan la fecha.",
+          "Dos bloqueos simultáneos A→B y B→A ya no dejan dos tareas bloqueadas en círculo.",
+          "Importar un proyecto con muchísimas tareas encadenadas ya no deja el servidor colgado.",
+          "Importaciones: un CSV con millones de filas, textos enormes o muchos comentarios ya no agotan la memoria; las tareas con más de 20 etiquetas se recortan (antes no se podían editar después); se evitan menciones falsas.",
+          "La vista de lista ya no pinta cada tarea dos veces, e «ir a la tarea» desde un aviso funciona en esa vista.",
+          "Los lectores de pantalla anuncian el límite superado en las pestañas de columna del móvil.",
+          "Textos de ejemplo de Licencia y Textos legales traducidos."
+        ],
+        "tecnicos": [
+          "Migración: fecha de última modificación en los entregables.",
+          "Prueba intermitente de exportaciones estabilizada (el trabajador de fondo se detiene tras su prueba).",
+          "marked pasa a dependencias de la aplicación y qrcode queda fijado."
+        ]
+      },
+      "en": {
+        "summary": "Maintenance: security and performance of importing, the calendar subscription and blocked tasks, and fixes",
+        "changes": {
+          "nuevas": [],
+          "mejoras": [
+            "Importing from Trello or CSV is much faster with large files and keeps technical text such as `Promise<void>`.",
+            "Checking a blocking link between tasks now takes one query instead of up to 1000.",
+            "The calendar subscription with “all my projects” shows the same projects as the Calendar page.",
+            "The product page only mentions card payment and automatic invoices once the payment link exists."
+          ],
+          "correcciones": [
+            "The secret calendar link can no longer end up in the Administration log if something fails (nor password-reset or email-confirmation links).",
+            "A specially crafted description can no longer stall the server when generating the calendar.",
+            "Moving or editing a deliverable now updates the date in Apple Calendar and Outlook.",
+            "Two simultaneous blocks A→B and B→A no longer leave two tasks blocking each other.",
+            "Importing a project with a huge chain of tasks no longer stalls the server.",
+            "Imports: CSVs with millions of rows, huge texts or many comments no longer exhaust memory; tasks with more than 20 labels are trimmed (they could not be edited afterwards); fake mentions are prevented.",
+            "The list view no longer renders each task twice, and “go to task” from a notification works in that view.",
+            "Screen readers announce the exceeded limit on mobile column tabs.",
+            "Example placeholders in Licence and Legal texts are translated."
+          ],
+          "tecnicos": [
+            "Migration: last-modified date on deliverables.",
+            "Flaky export test stabilised (the background worker stops after its test).",
+            "marked moves to app dependencies and qrcode is pinned."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.43.0",
       "date": "2026-11-02",
       "releasedAt": "2026-11-02T19:26:15+01:00",

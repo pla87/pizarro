@@ -1,7 +1,10 @@
 // Límite de tarjetas por columna (WIP) y tareas bloqueadas: lógica pura, sin base de datos.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { sameTask } from "../src/components/board/sameTask";
 import { blockerIsDone, wouldCycle } from "../src/lib/blocked";
+import { assertNoBlockCycles } from "../src/lib/project-export/read";
+import type { BoardTask } from "../src/lib/types";
 import { buildTemplateApplication, templateInputSchema } from "../src/lib/project-templates";
 import { isValidWipLimit, parseWipInput, wipExceeded } from "../src/lib/wip";
 
@@ -71,5 +74,52 @@ describe("tareas bloqueadas: ciclos y fin del bloqueo", () => {
     assert.equal(blockerIsDone(undefined, columns), true);
     assert.equal(blockerIsDone({ columnId: "done" }, columns), true);
     assert.equal(blockerIsDone({ columnId: "todo" }, columns), false);
+  });
+});
+
+describe("importar: validación de bloqueos en círculo (lineal)", () => {
+  test("una cadena de 100.000 tareas se valida enseguida y sin desbordar la pila", () => {
+    const n = 100_000;
+    const m = new Map<string, string>();
+    for (let i = 0; i < n - 1; i++) m.set(`t${i}`, `t${i + 1}`);
+    const t0 = Date.now();
+    assert.doesNotThrow(() => assertNoBlockCycles(m));
+    assert.ok(Date.now() - t0 < 1000, `tardó ${Date.now() - t0} ms`);
+  });
+  test("detecta un círculo al final de una cadena larga, uno directo y uno de una sola tarea", () => {
+    const n = 100_000;
+    const m = new Map<string, string>();
+    for (let i = 0; i < n - 1; i++) m.set(`t${i}`, `t${i + 1}`);
+    m.set(`t${n - 1}`, "t50000");
+    const t0 = Date.now();
+    assert.throws(() => assertNoBlockCycles(m), /en círculo/);
+    assert.ok(Date.now() - t0 < 1000);
+    assert.throws(() => assertNoBlockCycles(new Map([["a", "b"], ["b", "a"]])), /en círculo/);
+    assert.throws(() => assertNoBlockCycles(new Map([["a", "a"]])), /en círculo/);
+  });
+  test("varias tareas bloqueadas por la misma, sin círculo, valen", () => {
+    assert.doesNotThrow(() => assertNoBlockCycles(new Map([["a", "x"], ["b", "x"], ["c", "a"], ["d", "c"]])));
+  });
+});
+
+describe("tablero: sameTask no invalida tarjetas por un blockedBy nuevo pero igual", () => {
+  const base = { id: "t1", title: "Hola", columnId: "c1", labelIds: ["l1"], blockedBy: { id: "b1", title: "Otra" } } as unknown as BoardTask;
+  const withBlocked = (blockedBy: unknown) => ({ ...base, blockedBy }) as unknown as BoardTask;
+  test("mismo id y título en objetos distintos: igual", () => {
+    assert.equal(sameTask(base, withBlocked({ id: "b1", title: "Otra" })), true);
+  });
+  test("cambia el id o el título: distinta", () => {
+    assert.equal(sameTask(base, withBlocked({ id: "b2", title: "Otra" })), false);
+    assert.equal(sameTask(base, withBlocked({ id: "b1", title: "Otra cosa" })), false);
+  });
+  test("null y undefined cuentan como sin bloqueo, y distinto de uno con bloqueo", () => {
+    assert.equal(sameTask(withBlocked(null), withBlocked(undefined)), true);
+    assert.equal(sameTask(withBlocked(null), withBlocked(null)), true);
+    assert.equal(sameTask(base, withBlocked(null)), false);
+    assert.equal(sameTask(withBlocked(undefined), base), false);
+  });
+  test("las listas de valores siguen comparándose por contenido", () => {
+    assert.equal(sameTask(base, { ...base, labelIds: ["l1"] } as BoardTask), true);
+    assert.equal(sameTask(base, { ...base, labelIds: ["l2"] } as BoardTask), false);
   });
 });

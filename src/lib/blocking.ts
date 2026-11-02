@@ -5,22 +5,33 @@ import { AppError } from "./errors";
 /** Por qué una tarea no puede quedar bloqueada por otra (null = sí puede). */
 export type BlockProblem = "missing" | "self" | "cycle" | null;
 
-type Client = Pick<typeof db, "task">;
+type Client = Pick<typeof db, "$queryRaw" | "$executeRaw">;
+
+/**
+ * Candado por proyecto (hasta el final de la transacción) para todo lo que escribe `blockedById`: la comprobación de ciclos
+ * y la escritura van juntas bajo él, así dos bloqueos A → B y B → A a la vez no pueden cerrar un ciclo.
+ */
+export async function lockBlocking(tx: Pick<typeof db, "$executeRaw">, projectId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`block:${projectId}`}))`;
+}
 
 /**
  * ¿Puede `taskId` quedar bloqueada por `blockerId`? La que bloquea debe existir en el MISMO proyecto, no ser la propia
- * tarea y no cerrar un ciclo (A → B → A, ni más largo): se sigue la cadena de bloqueos de la que bloquea.
+ * tarea y no cerrar un ciclo (A → B → A, ni más largo): se sigue la cadena de bloqueos de la que bloquea con una sola
+ * consulta recursiva (UNION: termina aunque ya hubiera un ciclo). Para que el resultado valga hay que escribir bajo `lockBlocking`.
  */
 export async function blockProblem(taskId: string, blockerId: string, projectId: string, client: Client = db): Promise<BlockProblem> {
   if (blockerId === taskId) return "self";
-  const blocker = await client.task.findFirst({ where: { id: blockerId, projectId }, select: { blockedById: true } });
-  if (!blocker) return "missing";
-  let cur = blocker.blockedById;
-  for (let i = 0; cur && i < 1000; i++) {
-    if (cur === taskId) return "cycle";
-    cur = (await client.task.findUnique({ where: { id: cur }, select: { blockedById: true } }))?.blockedById ?? null;
-  }
-  return null;
+  const rows = await client.$queryRaw<{ found: boolean; cycle: boolean }[]>`
+    WITH RECURSIVE chain(id, nxt) AS (
+      SELECT id, "blockedById" FROM "Task" WHERE id = ${blockerId} AND "projectId" = ${projectId}
+      UNION
+      SELECT t.id, t."blockedById" FROM "Task" t JOIN chain c ON t.id = c.nxt
+    )
+    SELECT EXISTS (SELECT 1 FROM chain WHERE id = ${blockerId}) AS found,
+           EXISTS (SELECT 1 FROM chain WHERE id = ${taskId}) AS cycle`;
+  if (!rows[0]?.found) return "missing";
+  return rows[0].cycle ? "cycle" : null;
 }
 
 /** Lanza el error legible si no se puede bloquear. */

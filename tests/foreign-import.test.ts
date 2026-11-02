@@ -6,7 +6,7 @@ import { test, describe } from "node:test";
 import { makeT } from "../src/i18n/core";
 import { detectDelimiter, mapHeaders, parseCsv, parseCsvBoard } from "../src/lib/foreign-import/csv";
 import { assertBoardLimits, decodeText, parseForeign, sniffFormat } from "../src/lib/foreign-import/parse";
-import { cleanMarkdown, parseDay } from "../src/lib/foreign-import/text";
+import { cleanMarkdown, cleanName, cleanTitle, instantDay, parseDay, stripHtml } from "../src/lib/foreign-import/text";
 import { parseTrello } from "../src/lib/foreign-import/trello";
 
 const t = makeT("es");
@@ -299,5 +299,159 @@ describe("fechas, saneado y detección de formato", () => {
 
   test("assertBoardLimits acepta un tablero normal", () => {
     assert.doesNotThrow(() => assertBoardLimits(parseForeign(trelloText, "trello", { t })));
+  });
+});
+
+describe("entradas hostiles y rendimiento", () => {
+  /** Ejecuta `fn` y comprueba que tarda menos de `ms` (cotas muy holgadas: lo cuadrático tardaría decenas de segundos). */
+  function fast<R>(ms: number, fn: () => R): R {
+    const t0 = performance.now();
+    const out = fn();
+    const took = performance.now() - t0;
+    assert.ok(took < ms, `tardó ${Math.round(took)} ms (máximo ${ms})`);
+    return out;
+  }
+
+  test("una línea de 80.000 «[» y 80.000 «<!--» se sanean rápido, también sin recortar de antemano", () => {
+    fast(1500, () => cleanMarkdown("[".repeat(80_000), 1_000_000));
+    fast(1500, () => cleanMarkdown("<!--".repeat(80_000), 1_000_000));
+    fast(1500, () => stripHtml("<script>".repeat(80_000)));
+    fast(1500, () => stripHtml("<script ".repeat(80_000)));
+    fast(1500, () => stripHtml("<img ".repeat(30_000)));
+    fast(1500, () => cleanMarkdown("[a](b:".repeat(80_000), 1_000_000));
+    fast(1500, () => cleanMarkdown("](a:(x)".repeat(80_000), 1_000_000));
+    fast(1500, () => cleanTitle("[".repeat(500_000)));
+    fast(1500, () => cleanName("<!--".repeat(500_000), 40));
+    // Con los máximos normales la entrada se recorta antes de sanear y el resultado respeta el tope.
+    const clipped = { n: 0 };
+    const md = fast(500, () => cleanMarkdown("[".repeat(500_000), undefined, clipped));
+    assert.equal(md.length, 20_000);
+    assert.equal(clipped.n, 1);
+  });
+
+  test("recortar la entrada en bruto cuenta un aviso aunque lo que quede sea corto", () => {
+    const clipped = { n: 0 };
+    const md = cleanMarkdown(`${"<br/><br/>".repeat(1000)}fin`, 1000, clipped);
+    assert.equal(md, "");
+    assert.equal(clipped.n, 1);
+    const ok = { n: 0 };
+    cleanMarkdown("corto", 1000, ok);
+    cleanTitle("corto", 200, ok);
+    assert.equal(ok.n, 0);
+  });
+
+  test("stripHtml conserva el texto técnico que solo parece una etiqueta", () => {
+    const tech = "Devuelve Promise<void> y <T> en Map<K, V>; escribe a <tu-email> o <https://example.com/x>";
+    assert.equal(stripHtml(tech), tech);
+    assert.equal(cleanMarkdown("Usa `Array<string>` con <T>"), "Usa `Array<string>` con <T>");
+    assert.equal(cleanTitle("Arreglar Promise<void> en <T>"), "Arreglar Promise<void> en <T>");
+  });
+
+  test("stripHtml quita las etiquetas conocidas, los bloques peligrosos con su contenido y los comentarios", () => {
+    assert.equal(stripHtml("a<b>b</b><P CLASS=x>c</P><br/>d<span style='x'>e</span><img src=x>f"), "abc\n\ndef");
+    assert.equal(stripHtml("x<script>alert(1)</script>y<STYLE>p{}</STYLE>z<iframe src=a></iframe><object data=b></object><embed src=c>w"), "xyzw");
+    assert.equal(stripHtml("x<!-- <b>oculto</b> -->y"), "xy");
+    assert.equal(stripHtml("x<script>sin cierre"), "xsin cierre");
+    assert.equal(stripHtml("un <!-- sin cierre"), "un <!-- sin cierre");
+    assert.equal(stripHtml("<scr<script></script>ipt>alert(1)</scr<script></script>ipt>"), "");
+  });
+
+  test("stripHtml repite hasta que no cambia: «<img … <b>>» no deja una etiqueta", () => {
+    assert.equal(stripHtml("a<img src=x onerror=1 <b>>b"), "ab");
+    assert.equal(cleanMarkdown("<img src=x onerror=alert(1) <b>>hola"), "hola");
+    assert.equal(stripHtml("<i <i <i <i x>>>>ok"), "ok");
+    // Anidados a miles de niveles: la repetición está acotada y no se cuelga.
+    fast(3000, () => stripHtml(`${"<i ".repeat(20_000)}x${">".repeat(20_000)}`));
+  });
+
+  test("los enlaces a #mention- y #u quedan solo como texto; los https se conservan", () => {
+    assert.equal(cleanMarkdown("[@Admin](#mention-abc) dice [hola](#u) y [x](#user)"), "@Admin dice hola y x");
+    assert.equal(cleanMarkdown("[@Admin]( <#mention-abc> )"), "@Admin");
+    assert.equal(cleanMarkdown("![@Admin](#mention-abc)"), "@Admin");
+    assert.equal(cleanMarkdown("[@Admin][m]\n\n[m]: #mention-abc\n[ok](https://example.com/a_(b)) [m](mailto:a@example.com)"), "[@Admin][m]\n\n[ok](https://example.com/a_(b)) [m](mailto:a@example.com)");
+    assert.equal(cleanMarkdown("[a](https://example.com) [b](javascript:alert(1)) ![c](data:x) [d](https://example.com/(x))"), "[a](https://example.com) b c [d](https://example.com/(x))");
+    assert.equal(cleanMarkdown("[[a]](javascript:x) [b [c](javascript:y)"), "[[a]](javascript:x) b [c"); // el texto del enlace llega hasta el primer «]»
+  });
+
+  test("instantDay: la zona horaria se cachea (150.000 fechas, rápido), una zona no válida cae a UTC", () => {
+    const d = new Date("2026-03-04T23:30:00Z");
+    fast(2000, () => { for (let i = 0; i < 150_000; i++) assert.equal(instantDay(d, "Europe/Madrid"), "2026-03-05"); });
+    assert.equal(instantDay(d, "No/Existe"), "2026-03-04");
+    assert.equal(instantDay(d, "No/Existe"), "2026-03-04");
+    assert.equal(instantDay(new Date("x")), null);
+  });
+
+  test("CSV con un millón de filas mínimas: se rechaza enseguida y sin gastar memoria", () => {
+    const big = `title\n${"a\n".repeat(1_000_000)}`;
+    const before = process.memoryUsage().heapUsed;
+    const t0 = performance.now();
+    assert.throws(() => parseCsvBoard(big, { t }), /demasiadas filas/);
+    assert.ok(performance.now() - t0 < 1000, "tardó demasiado");
+    assert.ok(process.memoryUsage().heapUsed - before < 100 * 1024 * 1024, "gastó demasiada memoria");
+    assert.throws(() => parseCsv(big, undefined, 10), /demasiadas filas/);
+    assert.equal(parseCsv("a\nb\nc\n", undefined, 3).length, 3);
+    // El tope exacto (6000 filas de tareas) sigue valiendo.
+    assert.equal(parseCsvBoard(`title\n${"a\n".repeat(6000)}`, { t }).tasks.length, 6000);
+    assert.throws(() => parseCsvBoard(`title\n${"a\n".repeat(6001)}`, { t }), /demasiadas filas/);
+  });
+
+  test("CSV: celdas enormes con miles de etiquetas o responsables no son cuadráticas", () => {
+    const labels = Array.from({ length: 200_000 }, (_, i) => `e${i}`).join(",");
+    const people = Array.from({ length: 200_000 }, (_, i) => `p${i}`).join(",");
+    const b = fast(3000, () => csv(`title,labels,assignee\nA,"${labels}","${people}"`));
+    assert.equal(b.tasks[0]!.labels.length, 20);
+    assert.ok(b.tasks[0]!.assignees.length <= 20);
+    assert.ok(b.warnings.some((w) => /199980 etiquetas de tareas sobraban \(máximo 20 por tarea\)/.test(w)));
+  });
+
+  test("CSV: más de 20 etiquetas en una tarea se recortan a 20 con aviso; sin repetidas", () => {
+    const names = Array.from({ length: 25 }, (_, i) => `et${i}`);
+    const b = csv(`title,labels\nA,"${names.join(",")},ET1"\nB,"x,y"`);
+    assert.deepEqual(b.tasks[0]!.labels.map((l) => l.name), names.slice(0, 20));
+    assert.equal(b.tasks[1]!.labels.length, 2);
+    assert.ok(b.warnings.some((w) => /^5 etiquetas de tareas sobraban \(máximo 20 por tarea\)/.test(w)));
+  });
+
+  test("CSV: un email con caracteres de control no es un email", () => {
+    const b = csv('title,assignee,assignee email\nA,"ana\u0000@example.com","luis\u0001@example.com"\nB,"Eva <eva\u0000@example.com>",');
+    for (const p of b.tasks.flatMap((x) => x.assignees)) assert.ok(!p.email || !/[\u0000-\u001f]/.test(p.email), JSON.stringify(p));
+    assert.deepEqual(b.tasks[1]!.assignees.map((p) => p.email), [null]);
+  });
+
+  test("Trello: 100.000 comentarios en una tarjeta se leen rápido y se recortan al tope", () => {
+    const actions = Array.from({ length: 100_000 }, (_, i) => ({
+      type: "commentCard", date: new Date(1.7e12 + i * 1000).toISOString(), data: { text: `hola ${i}`, card: { id: "c1" } }, memberCreator: { fullName: "Ana" },
+    }));
+    const text = JSON.stringify({ name: "x", lists: [{ id: "l1", name: "A", pos: 1 }], cards: [{ id: "c1", name: "t", idList: "l1" }], actions });
+    const board = fast(3000, () => parseTrello(text, { t, timeZone: "Europe/Madrid" }));
+    assert.equal(board.tasks[0]!.comments.length, 200);
+    assert.ok(board.warnings.some((w) => /99800 comentarios sobraban/.test(w)));
+  });
+
+  test("Trello: muchas tarjetas con comentarios y checklists en cada una se leen rápido", () => {
+    const cards = Array.from({ length: 1000 }, (_, i) => ({ id: `c${i}`, name: `t${i}`, idList: "l1", desc: "d".repeat(500) }));
+    const actions = Array.from({ length: 150_000 }, (_, i) => ({
+      type: "commentCard", date: new Date(1.7e12 + i * 1000).toISOString(), data: { text: `hola ${i}`, card: { id: `c${i % 1000}` } }, memberCreator: { fullName: "Ana" },
+    }));
+    const checklists = Array.from({ length: 50_000 }, (_, i) => ({ id: `k${i}`, idCard: "c0", name: "L", pos: i, checkItems: [{ name: "x", pos: 1, state: "incomplete" }] }));
+    const text = JSON.stringify({ name: "x", lists: [{ id: "l1", name: "A", pos: 1 }], cards, actions, checklists });
+    const board = fast(5000, () => parseTrello(text, { t, timeZone: "Europe/Madrid" }));
+    assert.equal(board.tasks.length, 1000);
+    assert.equal(board.tasks[0]!.subtasks.length, 50);
+  });
+
+  test("Trello: más de 20 etiquetas se recortan con aviso, las tarjetas sin título y el recorte de la descripción del tablero también", () => {
+    const labels = Array.from({ length: 23 }, (_, i) => ({ id: `b${i}`, name: `et${i}`, color: "blue" }));
+    const text = JSON.stringify({
+      name: "x", desc: "d".repeat(5000), lists: [{ id: "l1", name: "A", pos: 1 }],
+      cards: [{ id: "c1", name: "con", idList: "l1", labels }, { id: "c2", name: "  ", idList: "l1" }, { id: "c3", name: "<b></b>", idList: "l1" }],
+    });
+    const board = parseTrello(text, { t });
+    assert.equal(board.tasks.length, 1);
+    assert.equal(board.tasks[0]!.labels.length, 20);
+    assert.equal(board.description.length, 2000);
+    assert.ok(board.warnings.some((w) => /^2 tarjetas no tenían título/.test(w)));
+    assert.ok(board.warnings.some((w) => /^3 etiquetas de tareas sobraban \(máximo 20 por tarea\)/.test(w)));
+    assert.ok(board.warnings.some((w) => /^1 textos eran más largos/.test(w)), "el recorte de la descripción del tablero se cuenta antes del aviso");
   });
 });
