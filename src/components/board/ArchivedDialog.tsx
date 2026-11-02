@@ -1,7 +1,7 @@
 "use client";
 
 import { ArchiveRestore, Loader2, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { getArchivedTasks, restoreTask } from "@/actions/tasks";
 import { useIntlLocale, useT } from "@/i18n/client";
 import type { ArchivedTask } from "@/lib/types";
@@ -11,7 +11,6 @@ import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard } from "./context";
 import { formatDate } from "@/lib/format";
 import { MentionText } from "../ui/MentionText";
-import { mentionsToPlain } from "@/lib/mentions";
 
 /** Tareas archivadas del proyecto: consulta y recuperación. */
 export function ArchivedDialog({ onClose }: { onClose: () => void }) {
@@ -21,29 +20,49 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
   const locale = useIntlLocale();
   const dateFmt = (iso: string) => formatDate(iso, "dateShort", locale);
   const [items, setItems] = useState<ArchivedTask[] | null>(null);
+  const [next, setNext] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const q = query.trim();
 
+  // La búsqueda se hace en el servidor (con una pequeña espera al teclear); el listado va por páginas.
   useEffect(() => {
     let alive = true;
-    getArchivedTasks(board.project.id).then((res) => {
-      if (!alive) return;
-      if (!res.ok) {
-        toast(res.error, "error");
-        setItems([]);
-      } else setItems(res.data);
-    });
+    const timer = setTimeout(() => {
+      getArchivedTasks(board.project.id, { query: q }).then((res) => {
+        if (!alive) return;
+        if (!res.ok) {
+          toast(res.error, "error");
+          setItems([]);
+          setNext(null);
+        } else {
+          setItems(res.data.items);
+          setNext(res.data.nextCursor);
+        }
+      });
+    }, q ? 250 : 0);
     return () => {
       alive = false;
+      clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [board.project.id]);
+  }, [board.project.id, q]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q || !items) return items;
-    return items.filter((it) => mentionsToPlain(it.title).toLowerCase().includes(q) || it.releases.some((r) => r.title.toLowerCase().includes(q)));
-  }, [items, query]);
+  const loadMore = async () => {
+    if (!next) return;
+    setLoadingMore(true);
+    const res = await getArchivedTasks(board.project.id, { query: q, cursor: next });
+    setLoadingMore(false);
+    if (!res.ok) return toast(res.error, "error");
+    setItems((prev) => {
+      const have = new Set((prev ?? []).map((it) => it.id));
+      return [...(prev ?? []), ...res.data.items.filter((it) => !have.has(it.id))];
+    });
+    setNext(res.data.nextCursor);
+  };
+
+  const filtered = items;
 
   const restore = async (id: string) => {
     setBusy(id);
@@ -70,7 +89,7 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
       {filtered === null ? (
         <div className="flex justify-center py-10 text-slate-400"><Loader2 className="animate-spin" size={20} /></div>
       ) : filtered.length === 0 ? (
-        <p className="py-6 text-center text-sm text-slate-500">{items?.length ? t("Ninguna tarea coincide.") : t("No hay tareas archivadas.")}</p>
+        <p className="py-6 text-center text-sm text-slate-500">{q ? t("Ninguna tarea coincide.") : t("No hay tareas archivadas.")}</p>
       ) : (
         <ul className="divide-y divide-slate-200 dark:divide-slate-800">
           {filtered.map((task) => (
@@ -94,6 +113,13 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
             </li>
           ))}
         </ul>
+      )}
+      {next && (
+        <div className="flex justify-center pt-3">
+          <button className="btn-ghost text-sm" disabled={loadingMore} onClick={loadMore}>
+            {loadingMore && <Loader2 size={14} className="animate-spin" />} {t("Cargar más")}
+          </button>
+        </div>
       )}
     </Modal>
   );

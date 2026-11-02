@@ -91,7 +91,9 @@ async function applyEntry(kind: UndoKind, user: { id: string }, pid: string, ent
   const history = undo
     ? { events: await removeTaskEvents(entry.eventIds, pid) }
     : { eventIds: await restoreTaskEvents((entry.events ?? []) as unknown as SavedEvent[], pid) };
-  if (counter.length) await saveUndo(user.id, pid, entry.label, counter, entry.taskId, undo ? "REDO" : "UNDO", false, await fingerprintOps(pid, counter), history);
+  // Una release desplegada no se puede recrear: rehacer volvería a mover las tareas sin ella. No hay entrada de rehacer.
+  const recreatable = !(undo && ops.some((op) => op.t === "release.remove"));
+  if (recreatable && counter.length) await saveUndo(user.id, pid, entry.label, counter, entry.taskId, undo ? "REDO" : "UNDO", false, await fingerprintOps(pid, counter), history);
   await Promise.all(
     intact.map(async (s) => db.undoEntry.updateMany({ where: { id: s.id }, data: { fingerprint: await fingerprintOps(pid, s.ops as unknown as UndoOp[]) } })),
   );

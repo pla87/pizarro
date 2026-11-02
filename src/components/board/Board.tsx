@@ -383,6 +383,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     setColumns(data.columns);
     setTasks((prev) => mergeTasks(prev, data.tasks));
     setLabels(data.labels);
+    // Quita de la selección múltiple lo que ya no existe (borrado o archivado desde otra pestaña).
+    const present = new Set(data.tasks.map((t) => t.id));
+    const sel = stores.selection.get();
+    if (sel.size && [...sel].some((id) => !present.has(id))) stores.selection.set(new Set([...sel].filter((id) => present.has(id))));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 

@@ -103,10 +103,10 @@ export interface TransferViewer {
   role: "ADMIN" | "MEMBER";
 }
 
-/** Solo la persona que lo pidió o un administrador. Los demás no saben ni que existe. */
+/** Solo la persona que lo pidió (ni siquiera un administrador). Los demás no saben ni que existe. */
 export async function getJobFor(viewer: TransferViewer, id: string): Promise<JobRow> {
   const job = await db.projectTransferJob.findUnique({ where: { id } });
-  if (!job || (job.userId !== viewer.id && viewer.role !== "ADMIN")) throw new AppError("No encontrado o sin acceso.", 404);
+  if (!job || job.userId !== viewer.id) throw new AppError("No encontrado o sin acceso.", 404);
   return job;
 }
 

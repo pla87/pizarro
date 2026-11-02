@@ -59,8 +59,10 @@ export async function deliverDueNotices(now: Date = new Date()): Promise<number>
     for (const row of rows) {
       try {
         if (row.fromDue === row.toDue || !row.actorId) continue; // vuelta a la fecha original: nada que contar
-        const task = await db.task.findUnique({ where: { id: row.taskId }, select: { projectId: true, archivedAt: true, assigneeId: true } });
+        const task = await db.task.findUnique({ where: { id: row.taskId }, select: { projectId: true, archivedAt: true, assigneeId: true, dueDate: true } });
         if (!task || task.archivedAt || task.assigneeId !== row.recipientId) continue;
+        // La fecha actual ya no es la que se iba a comunicar (Cancelar/deshacer/rehacer): el aviso sería falso.
+        if ((task.dueDate ? task.dueDate.toISOString().slice(0, 10) : null) !== row.toDue) continue;
         const r = await notifyTask({ type: "DUE_CHANGED", actorId: row.actorId, taskId: row.taskId, projectId: task.projectId, recipientIds: [row.recipientId], excerpt: dueChangeExcerpt(row.fromDue, row.toDue), immediate: true });
         sent += r.recipients.length;
       } catch (err) {

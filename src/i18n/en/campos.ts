@@ -39,12 +39,7 @@ export const campos: Record<string, string> = {
   "El coste debe ser un importe entre 0 y 9.999.999.999,99.": "Cost must be an amount between 0 and 9,999,999,999.99.",
   "Las horas deben ser un número entre 0 y 99.999,99.": "Hours must be a number between 0 and 99,999.99.",
   "El cliente admite como máximo 120 caracteres.": "The client allows at most 120 characters.",
-  "El campo «coste» no está activado en este proyecto.": "The “cost” field is not turned on in this project.",
-  "El campo «horas» no está activado en este proyecto.": "The “hours” field is not turned on in this project.",
-  "El campo «prioridad» no está activado en este proyecto.": "The “priority” field is not turned on in this project.",
-  "El campo «cliente» no está activado en este proyecto.": "The “client” field is not turned on in this project.",
-  "El campo «fecha de inicio» no está activado en este proyecto.": "The “start date” field is not turned on in this project.",
-  "El campo «enlace de referencia» no está activado en este proyecto.": "The “reference link” field is not turned on in this project.",
+  "El campo «{field}» no está activado en este proyecto.": "The “{field}” field is not turned on in this project.",
   // Historial
   "coste": "cost",
   "pago": "payment",

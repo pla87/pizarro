@@ -205,7 +205,7 @@ describe("cola propia", () => {
 });
 
 describe("permisos de estado y descarga", () => {
-  test("solo su dueño (o un administrador) ve el estado y descarga; los demás, 404", async () => {
+  test("solo su dueño (tampoco un administrador) ve el estado y descarga; los demás, 404", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const otherAdmin = await makeUser({ role: "ADMIN" });
     const owner = await makeUser();
@@ -270,8 +270,9 @@ describe("permisos de estado y descarga", () => {
     await loginAs(stranger);
     assert.equal((await downloadRoute(get(), ctx(job.id))).status, 404);
     await loginAs(admin);
-    // Un administrador ve el estado, pero no descarga el archivo de otra persona.
-    assert.equal((await statusRoute(get(), ctx(job.id))).status, 200);
+    // Un administrador tampoco ve el estado ni descarga el archivo de otra persona.
+    assert.equal((await statusRoute(get(), ctx(job.id))).status, 404);
+    await assert.rejects(getJobFor({ id: admin.id, role: "ADMIN" }, job.id), /No encontrado/);
     assert.equal((await downloadRoute(get(), ctx(job.id))).status, 404);
     await loginAs(otherAdmin);
     assert.equal((await downloadRoute(get(), ctx(job.id))).status, 404);
