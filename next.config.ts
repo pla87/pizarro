@@ -27,8 +27,10 @@ const nextConfig: NextConfig = {
   experimental: {
     // Las imágenes van por /api/tasks/[id]/attachments; las acciones solo mueven JSON.
     serverActions: { bodySizeLimit: "1mb" },
-    // El proxy almacena el cuerpo de la petición: techo fijo del mayor adjunto posible (100 MB) más el envoltorio
-    // multipart. El límite real (por proyecto, y MAX_UPLOAD_MB si existe) se aplica al subir, sin recompilar.
+    // Next guarda en memoria el cuerpo de cada petición (no GET) que pasa por src/proxy.ts, hasta este tope, antes de que
+    // llegue a la ruta (lo que pase de ahí se descarta). Por el proxy solo pasan acciones (1 MB) y JSON pequeños: las
+    // subidas de archivos quedan fuera de su matcher y cada ruta lee el cuerpo con su propio tope. Así una petición enorme
+    // (p. ej. a /login, sin cuenta) ya no ocupa su tamaño en memoria mientras llega.
     proxyClientMaxBodySize: PROXY_BODY_LIMIT_BYTES,
   },
   async headers() {

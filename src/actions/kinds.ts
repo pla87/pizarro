@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { assertProjectAccess } from "@/lib/access";
+import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { AppError, notFound } from "@/lib/errors";
@@ -54,8 +55,8 @@ async function loadKind(kindId: string) {
  * un tipo general no puede repetir el nombre de ningún otro tipo (general o de proyecto),
  * y uno de proyecto no puede repetir el de un general ni el de otro tipo de ese proyecto.
  */
-async function assertUniqueName(name: string, projectId: string | null, exceptId?: string) {
-  const dup = await db.taskKind.findFirst({
+async function assertUniqueName(name: string, projectId: string | null, exceptId?: string, client: Prisma.TransactionClient | typeof db = db) {
+  const dup = await client.taskKind.findFirst({
     where: {
       name: { equals: name, mode: "insensitive" },
       ...(projectId === null ? {} : { OR: [{ projectId: null }, { projectId }] }),
@@ -69,6 +70,21 @@ async function assertUniqueName(name: string, projectId: string | null, exceptId
   throw new AppError("Ya existe un tipo con ese nombre.");
 }
 
+/**
+ * Candado de los tipos de un ámbito hasta el final de la transacción: recuento, nombre único y alta (o renombrado) van
+ * juntos, y dos peticiones a la vez no pueden pasarse del tope ni repetir nombre. Un tipo general no puede repetir el
+ * nombre de ningún tipo de ningún proyecto: toma el candado general en exclusiva. Uno de proyecto toma el de su proyecto
+ * en exclusiva y el general compartido (así los de proyectos distintos no se esperan entre sí). Siempre en el mismo orden.
+ */
+async function lockKindScope(tx: Prisma.TransactionClient, projectId: string | null): Promise<void> {
+  if (projectId === null) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:kinds:general'))::text`;
+    return;
+  }
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock_shared(hashtext('pz:kinds:general'))::text`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`pz:kinds:${projectId}`}))::text`;
+}
+
 function revalidate(projectId: string | null) {
   revalidatePath(projectId ? `/p/${projectId}` : "/", "layout");
 }
@@ -79,15 +95,18 @@ export async function createKind(input: KindInput, projectId?: string | null) {
     const scope = projectId ? v.id.parse(projectId) : null;
     await authorize(scope);
     const data = kindSchema.parse(input);
-    await assertUniqueName(data.name, scope);
-    if ((await db.taskKind.count({ where: { projectId: scope } })) >= MAX_KINDS) {
-      const t = await getT();
-      throw new AppError(t("Máximo {n} tipos de tarea.", { n: MAX_KINDS }));
-    }
-    const last = await db.taskKind.findFirst({ where: { projectId: scope }, orderBy: { position: "desc" }, select: { position: true } });
-    const kind = await db.taskKind.create({
-      data: { ...data, projectId: scope, position: (last?.position ?? 0) + POSITION_STEP },
-      select: { id: true, name: true, color: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true },
+    const kind = await db.$transaction(async (tx) => {
+      await lockKindScope(tx, scope);
+      await assertUniqueName(data.name, scope, undefined, tx);
+      if ((await tx.taskKind.count({ where: { projectId: scope } })) >= MAX_KINDS) {
+        const t = await getT();
+        throw new AppError(t("Máximo {n} tipos de tarea.", { n: MAX_KINDS }));
+      }
+      const last = await tx.taskKind.findFirst({ where: { projectId: scope }, orderBy: { position: "desc" }, select: { position: true } });
+      return tx.taskKind.create({
+        data: { ...data, projectId: scope, position: (last?.position ?? 0) + POSITION_STEP },
+        select: { id: true, name: true, color: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true },
+      });
     });
     revalidate(scope);
     return kind;
@@ -98,8 +117,11 @@ export async function updateKind(kindId: string, input: KindInput) {
   return runAction({ name: "kinds.updateKind", args: [kindId, input] }, async () => {
     const kind = await loadKind(kindId);
     const data = kindSchema.parse(input);
-    await assertUniqueName(data.name, kind.projectId, kind.id);
-    await db.taskKind.update({ where: { id: kind.id }, data });
+    await db.$transaction(async (tx) => {
+      await lockKindScope(tx, kind.projectId);
+      await assertUniqueName(data.name, kind.projectId, kind.id, tx);
+      await tx.taskKind.update({ where: { id: kind.id }, data });
+    });
     revalidate(kind.projectId);
   });
 }

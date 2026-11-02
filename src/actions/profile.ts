@@ -36,11 +36,15 @@ export async function createReleaseTemplate(kind: "HEADER" | "FOOTER", input: { 
     const user = await requireUser();
     const k = z.enum(["HEADER", "FOOTER"]).parse(kind);
     const data = templateSchema.parse(input);
-    if ((await db.releaseTemplate.count({ where: { userId: user.id } })) >= 40) throw new AppError("Máximo 40 plantillas.");
-    const last = await db.releaseTemplate.findFirst({ where: { userId: user.id, kind: k }, orderBy: { position: "desc" }, select: { position: true } });
-    return db.releaseTemplate.create({
-      data: { userId: user.id, kind: k, ...data, position: (last?.position ?? 0) + POSITION_STEP },
-      select: { id: true, name: true, content: true },
+    // Recuento y alta con un candado por persona: dos altas a la vez no pasan del máximo.
+    return db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`pz:release-templates:${user.id}`}))::text`;
+      if ((await tx.releaseTemplate.count({ where: { userId: user.id } })) >= 40) throw new AppError("Máximo 40 plantillas.");
+      const last = await tx.releaseTemplate.findFirst({ where: { userId: user.id, kind: k }, orderBy: { position: "desc" }, select: { position: true } });
+      return tx.releaseTemplate.create({
+        data: { userId: user.id, kind: k, ...data, position: (last?.position ?? 0) + POSITION_STEP },
+        select: { id: true, name: true, content: true },
+      });
     });
   });
 }

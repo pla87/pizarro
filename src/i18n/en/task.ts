@@ -87,4 +87,5 @@ export const task: Record<string, string> = {
   "Comentar": "Comment",
   "{name} también tiene abierta esta tarea": "{name} also has this task open",
   "{names} y {last} también tienen abierta esta tarea": "{names} and {last} also have this task open",
+  "Demasiadas subtareas seguidas. Espera un momento.": "Too many subtasks in a row. Please wait a moment.",
 };

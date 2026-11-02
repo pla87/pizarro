@@ -31,8 +31,10 @@ import { cn } from "./ui/cn";
 import { Menu as DropdownMenu, MenuItem } from "./ui/Menu";
 import { Modal } from "./ui/Modal";
 import { ConfirmProvider } from "./ui/ConfirmDialog";
+import { PromptProvider } from "./ui/PromptDialog";
 import { ToastProvider, useToast } from "./ui/Toast";
 import { useEscapeClose } from "./ui/useEscapeClose";
+import { useFocusTrap } from "./ui/focusTrap";
 
 interface Props {
   user: CurrentUser;
@@ -52,8 +54,10 @@ export function AppShell(props: Props) {
   return (
     <ToastProvider>
       <ConfirmProvider>
-        <TransferJobWatcher />
-        <Shell {...props} />
+        <PromptProvider>
+          <TransferJobWatcher />
+          <Shell {...props} />
+        </PromptProvider>
       </ConfirmProvider>
     </ToastProvider>
   );
@@ -68,6 +72,11 @@ function Shell({ user, projects, version, unread, lastProjectId = null, backupAl
   const drawerOpen = drawerPath === pathname;
   const setDrawerOpen = (open: boolean) => setDrawerPath(open ? pathname : null);
   useEscapeClose(drawerOpen, () => setDrawerPath(null));
+  // Menú móvil como diálogo: el foco entra en «Cerrar menú», Tab no sale de él y al cerrar vuelve a «Abrir menú».
+  const drawerRef = useRef<HTMLElement>(null);
+  const drawerCloseRef = useRef<HTMLButtonElement>(null);
+  const drawerOpenerRef = useRef<HTMLButtonElement>(null);
+  useFocusTrap(drawerOpen, drawerRef, { initialRef: drawerCloseRef, returnRef: drawerOpenerRef });
   const projectId = pathname.match(/^\/p\/([^/]+)/)?.[1] ?? null;
   // En páginas que no son de un proyecto (calendario, avisos, perfil…) sigue seleccionado el último visitado,
   // para volver a su tablero sin elegirlo de nuevo.
@@ -102,8 +111,8 @@ function Shell({ user, projects, version, unread, lastProjectId = null, backupAl
       {drawerOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-slate-900/50" onClick={() => setDrawerOpen(false)} aria-hidden />
-          <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white shadow-xl dark:bg-slate-900">
-            <button className="btn-icon absolute top-3 right-3" onClick={() => setDrawerOpen(false)} aria-label={t("Cerrar menú")}>
+          <aside ref={drawerRef} role="dialog" aria-modal="true" aria-label={t("Menú")} className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white shadow-xl dark:bg-slate-900">
+            <button ref={drawerCloseRef} className="btn-icon absolute top-3 right-3" onClick={() => setDrawerOpen(false)} aria-label={t("Cerrar menú")}>
               <X size={18} />
             </button>
             {sidebar}
@@ -113,7 +122,7 @@ function Shell({ user, projects, version, unread, lastProjectId = null, backupAl
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 pt-[env(safe-area-inset-top)] lg:hidden dark:border-slate-800 dark:bg-slate-900">
-          <button className="btn-icon" onClick={() => setDrawerOpen(true)} aria-label={t("Abrir menú")}>
+          <button ref={drawerOpenerRef} className="btn-icon" onClick={() => setDrawerOpen(true)} aria-label={t("Abrir menú")}>
             <Menu size={20} />
           </button>
           {/* Deshacer, justo a continuación del nombre del tablero. */}

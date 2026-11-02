@@ -1,7 +1,7 @@
 // Cuotas de almacenamiento configurables (entorno > ajuste de la aplicación > 10 GB; cuota propia del proyecto) y
 // limpieza de espacio por proyecto contra PostgreSQL real, con ficheros de verdad en una carpeta temporal.
 import assert from "node:assert/strict";
-import { mkdtemp, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, test } from "node:test";
@@ -13,7 +13,7 @@ import { createAttachmentWithinLimit } from "../../src/lib/attachment-limit";
 import { createDocumentWithinLimit } from "../../src/lib/documents";
 import { DEFAULT_PROJECT_QUOTA_MB } from "../../src/lib/quota";
 import { invalidateQuotaSettings, getQuotaLimits, saveQuotaSettings } from "../../src/lib/quota-settings";
-import { storageAdminView, projectStorage } from "../../src/lib/storage-stats";
+import { backupsDirBytes, storageAdminView, projectStorage } from "../../src/lib/storage-stats";
 import { storageUsage } from "../../src/lib/storage-usage";
 import { saveUndo } from "../../src/lib/undo";
 import { attachmentPath, documentPath, saveAttachmentFiles, saveDocumentFile, saveRawAttachmentFile, saveReleaseAttachmentFile } from "../../src/lib/uploads";
@@ -303,5 +303,16 @@ describe("liberar espacio del proyecto", () => {
     assert.equal(v.topProjects.find((p) => p.id === f.project.id)?.name, f.project.name);
     assert.ok(v.topProjects.length <= 10);
     assert.deepEqual([v.effective.projectMb, v.effective.projectSource], [10240, "default"]);
+  });
+
+  test("vista de administración: el tamaño de las copias se recalcula como mucho cada 10 min", async () => {
+    const dir = path.join(process.env.UPLOAD_DIR!, "backups", "files", "ab");
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "uno"), Buffer.alloc(1000));
+    const now = Date.now() + 60 * 60 * 1000; // por delante de cualquier recorrido anterior de este proceso
+    const first = await backupsDirBytes(now);
+    await writeFile(path.join(dir, "dos"), Buffer.alloc(500));
+    assert.equal(await backupsDirBytes(now + 9 * 60 * 1000), first, "dentro de los 10 min, el valor guardado");
+    assert.equal(await backupsDirBytes(now + 11 * 60 * 1000), first + 500, "pasados, se vuelve a recorrer");
   });
 });

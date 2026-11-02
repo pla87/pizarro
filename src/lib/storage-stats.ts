@@ -102,6 +102,24 @@ export async function dirBytes(dir: string, depth = 0): Promise<number> {
   return sum;
 }
 
+/** El almacén de copias puede tener decenas de miles de objetos: su tamaño se recalcula como mucho cada 10 min. */
+const BACKUPS_BYTES_TTL_MS = 10 * 60 * 1000;
+const backupsBytesCache = ((globalThis as unknown as { __pzBackupsBytes?: { dir: string; at: number; bytes: Promise<number> | null } }).__pzBackupsBytes ??= { dir: "", at: 0, bytes: null });
+
+/** Bytes de UPLOAD_DIR/backups, guardados 10 min en memoria (varias cargas a la vez comparten el mismo recorrido). */
+export function backupsDirBytes(now = Date.now()): Promise<number> {
+  const dir = backupsDir();
+  const c = backupsBytesCache;
+  if (c.bytes && c.dir === dir && now - c.at < BACKUPS_BYTES_TTL_MS) return c.bytes;
+  const bytes = dirBytes(dir);
+  Object.assign(c, { dir, at: now, bytes });
+  // Si fallara, que la próxima carga lo vuelva a intentar en lugar de servir el error 10 min.
+  bytes.catch(() => {
+    if (c.bytes === bytes) c.bytes = null;
+  });
+  return bytes;
+}
+
 export interface StorageAdminView {
   uploadDir: string;
   disk: { total: number; free: number } | null;
@@ -128,7 +146,7 @@ export async function storageAdminView(): Promise<StorageAdminView> {
     db.releaseAttachment.aggregate({ _sum: { size: true } }),
     db.projectDocument.aggregate({ _sum: { size: true }, where: { deletedAt: null } }),
     db.projectDocument.aggregate({ _sum: { size: true }, where: { deletedAt: { not: null } } }),
-    dirBytes(backupsDir()),
+    backupsDirBytes(),
     dirBytes(path.join(dir, "exports")),
     db.$queryRaw<{ projectId: string; bytes: bigint }[]>(Prisma.sql`
       SELECT "projectId", SUM("size")::bigint AS bytes FROM (

@@ -9,14 +9,16 @@ import pkg from "../../../package.json";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUserPage();
-  const [projects, unread] = await Promise.all([
+  const isAdmin = user.role === "ADMIN";
+  // En paralelo: estas consultas van en cada página.
+  const [projects, unread, backupAlert, updateAvailable] = await Promise.all([
     listVisibleProjects(user),
     db.notification.count({ where: { userId: user.id, readAt: null, task: { project: visibleProjectsWhere(user) } } }),
+    // Punto de aviso en «Administración» si la copia de seguridad está atrasada (solo se consulta a los admins).
+    isAdmin ? getBackupAlert().then((a) => a?.active === true, () => false) : false,
+    // Punto discreto si hay una versión nueva sin descartar (consulta cacheada 12 h; nunca falla).
+    isAdmin ? getUpdateNotice().then((n) => n !== null) : false,
   ]);
-  // Punto de aviso en «Administración» si la copia de seguridad está atrasada (solo se consulta a los admins).
-  const backupAlert = user.role === "ADMIN" ? (await getBackupAlert().catch(() => null))?.active === true : false;
-  // Punto discreto si hay una versión nueva sin descartar (consulta cacheada 12 h; nunca falla).
-  const updateAvailable = user.role === "ADMIN" ? (await getUpdateNotice()) !== null : false;
   const last = (await cookies()).get("tablon_last_project")?.value;
   const lastProjectId = projects.find((p) => p.id === last)?.id ?? null;
   return (

@@ -5,16 +5,19 @@ import { assign, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeU
 import { addSubtask, deleteAttachment, deleteSubtask, moveTask, restoreTaskSnapshot, updateSubtask, updateTask, type TaskEditSnapshot } from "../../src/actions/tasks";
 import { undoLast } from "../../src/actions/undo";
 
-const att = (taskId: string, name: string) =>
-  db.taskAttachment.create({ data: { taskId, originalName: name, mimeType: "text/plain", isImage: false, size: 10 } });
+/** Adjunto creado directamente (como la subida, que anota quién lo sube). */
+const att = (taskId: string, name: string, createdById: string | null = null) =>
+  db.taskAttachment.create({ data: { taskId, originalName: name, mimeType: "text/plain", isImage: false, size: 10, createdById } });
 
-/** Lo que el diálogo guarda al abrirse: la tarea tal como está en la base de datos. */
+/** Lo que el diálogo guarda al abrirse: la tarea tal como está en la base de datos (y la hora de apertura). */
 async function snapshotOf(taskId: string): Promise<TaskEditSnapshot> {
+  const openedAt = new Date().toISOString();
   const t = await db.task.findUniqueOrThrow({
     where: { id: taskId },
     include: { labels: true, subtasks: { orderBy: { position: "asc" } }, attachments: true, links: true },
   });
   return {
+    openedAt,
     title: t.title, description: t.description, kindId: t.kindId, color: t.color as never, linkUrl: t.linkUrl, assigneeId: t.assigneeId,
     labelIds: t.labels.map((l) => l.labelId), dueDate: t.dueDate ? t.dueDate.toISOString().slice(0, 10) : null, deliverableId: t.deliverableId,
     evergreen: t.evergreen, recurrence: t.recurrence, recurrenceDay: t.recurrenceDay, columnId: t.columnId, position: t.position,
@@ -61,7 +64,7 @@ describe("Cancelar la edición (restoreTaskSnapshot)", () => {
     expectOk(await deleteSubtask(s2!.id));
     const added = expectOk(await addSubtask(task.id, "nueva"));
     expectOk(await deleteAttachment(removed.id));
-    const uploaded = await att(task.id, "subido.txt");
+    const uploaded = await att(task.id, "subido.txt", user.id);
     expectOk(await moveTask(task.id, f.columns.doing, null, null));
 
     const before = await undoCount(user.id, f.project.id);

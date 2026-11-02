@@ -171,9 +171,10 @@ describe("historial y deshacer", () => {
     const { f } = await setup();
     const t = expectOk(await createTask({ ...base(f), cost: "10", priority: "BAJA" }));
     const open = await db.task.findUniqueOrThrow({ where: { id: t.id } });
+    const openedAt = new Date().toISOString();
     expectOk(await updateTask(t.id, { cost: "99", priority: "URGENTE", client: "Acme" }));
     const res = expectOk(await restoreTaskSnapshot(t.id, {
-      title: open.title, kindId: open.kindId, color: null, linkUrl: null, assigneeId: null, labelIds: [], dueDate: null, deliverableId: null, evergreen: false,
+      openedAt, title: open.title, kindId: open.kindId, color: null, linkUrl: null, assigneeId: null, labelIds: [], dueDate: null, deliverableId: null, evergreen: false,
       recurrence: "NONE", recurrenceDay: null, columnId: open.columnId, position: open.position,
       cost: "10.00", costPaid: false, estimatedHours: null, actualHours: null, priority: "BAJA", client: null, startDate: null,
     }));

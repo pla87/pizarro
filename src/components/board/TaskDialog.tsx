@@ -14,6 +14,7 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from "@dnd-kit/utilities";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { dueStatus } from "@/lib/dates";
+import { mentionsToPlain } from "@/lib/mentions";
 import { defaultRecurrenceDay, type RecurrenceRule } from "@/lib/recurrence-date";
 import { isWhite, kindBadgeStyle, MAX_TITLE, onColor } from "@/lib/constants";
 import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
@@ -124,6 +125,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // Cómo estaba la tarea al abrir el diálogo (para «Cancelar»): la tarjeta al montar y el detalle en su primera carga.
   const initialTask = useRef(task);
   const initialDetail = useRef<TaskDetail | null>(null);
+  // Desde cuándo cuenta lo que se hace en el diálogo: la hora del servidor al cargar el detalle (sin depender del reloj
+  // del navegador) o, si no llegó a cargarse, la del navegador al abrirlo.
+  const [openedAtLocal] = useState(() => new Date().toISOString());
   const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
@@ -250,8 +254,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   };
 
   /**
-   * Botón Cancelar: deja la tarea como estaba al abrir el diálogo (una sola acción, deshacible) y cierra.
-   * Lo que se esté escribiendo sin confirmar se descarta al cerrar.
+   * Botón Cancelar: deshace lo que has hecho en la tarea desde que abriste el diálogo (una sola acción, deshacible) y
+   * cierra; lo que hayan cambiado otras personas entretanto se queda. Lo que se esté escribiendo sin confirmar se
+   * descarta al cerrar.
    */
   const cancelEdits = async () => {
     if (cancelling) return;
@@ -266,7 +271,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       const res = await tracked(restoreTaskSnapshot(task.id, {
         title: t0.title, kindId: t0.kindId, color: t0.color as never, linkUrl: t0.linkUrl, assigneeId: t0.assigneeId, labelIds: t0.labelIds,
         dueDate: t0.dueDate, deliverableId: t0.deliverableId, evergreen: t0.evergreen, evergreenEvery: t0.evergreenEvery, recurrence: t0.recurrence, recurrenceDay: t0.recurrenceDay,
-        columnId: t0.columnId, position: t0.position, blockedById: t0.blockedBy?.id ?? null,
+        columnId: t0.columnId, position: t0.position, blockedById: t0.blockedBy?.id ?? null, openedAt: d0?.loadedAt ?? openedAtLocal,
         cost: t0.cost, costPaid: t0.costPaid, estimatedHours: t0.estimatedHours, actualHours: t0.actualHours, priority: t0.priority, client: t0.client, startDate: t0.startDate,
         ...(d0 ? {
           description: d0.description,
@@ -282,7 +287,10 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         return;
       }
       board.upsertTask(res.data.task);
+      res.data.removed.forEach(board.removeTask);
       onClose();
+      // Solo había cambios de otras personas (Cancelar no los toca): nada que descartar ni que deshacer.
+      if (!res.data.changed) return;
       board.refresh();
       toast(t("Cambios descartados"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange() });
     } finally {
@@ -510,6 +518,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       onAddSecondBulk={onAddSecondBulk}
       size="xl"
       placement="top"
+      ariaLabel={mentionsToPlain(title).trim() || t("Detalle de la tarea")}
       // Móvil: pie siempre visible con Archivar, Borrar y Guardar.
       footer={
         mobile ? (

@@ -125,7 +125,8 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
       // Con otro email, la cuenta de Google vinculada deja de valer (era la de la dirección anterior).
       await tx.user.update({ where: { id: user.id }, data: emailChanged ? { ...data, googleSub: null } : data });
       // Y los enlaces pendientes enviados a la dirección anterior (invitación, restablecer, confirmar) ya no sirven.
-      if (emailChanged) await tx.authToken.deleteMany({ where: { userId: user.id, purpose: { in: ["INVITE", "PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } });
+      // Al desactivar, ningún enlace pendiente debe «revivir» si se reactiva antes de que caduque.
+      if (emailChanged || !data.active) await tx.authToken.deleteMany({ where: { userId: user.id, purpose: { in: ["INVITE", "PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } });
       for (const op of roleSwitch) await op(tx);
       // Al desactivar o cambiar de rol se cierran sus sesiones.
       if (data.active !== user.active || data.role !== user.role) await tx.session.deleteMany({ where: { userId: user.id } });
@@ -156,6 +157,9 @@ export async function forcePasswordChange(userId: string, opts?: { copyLink?: bo
     await db.$transaction([
       db.user.update({ where: { id: user.id }, data: { mustChangePassword: true } }),
       db.session.deleteMany({ where: { userId: user.id } }),
+      // Los enlaces pendientes (un cambio de email pedido por quien conocía la contraseña, restablecimientos anteriores)
+      // dejan de valer: el único válido será el que se genera ahora.
+      db.authToken.deleteMany({ where: { userId: user.id, purpose: { in: ["PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } }),
     ]);
     revokeUser(user.id);
     // El token nunca se registra: describeAction solo dice qué se hizo.

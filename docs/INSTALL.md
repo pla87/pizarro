@@ -325,7 +325,7 @@ Los adjuntos, sus miniaturas, las copias de adjuntos de las releases, la documen
 
 ## 4. Copias de seguridad
 
-- **Automáticas:** con `BACKUP_KEY`, cada día se copian, cifrados, la base de datos y **todos los ficheros del volumen de subidas** (adjuntos, miniaturas, copias de releases, documentos) en su carpeta `backups/`. Los ficheros se guardan una sola vez y cada copia solo añade los nuevos. Se conservan 14 diarias y 6 mensuales, y cada mes se restaura la última en una base de datos temporal para comprobar que sirve. Estado en *Administración → Copias de seguridad*.
+- **Automáticas:** con `BACKUP_KEY`, cada día se copian, cifrados, la base de datos y **todos los ficheros del volumen de subidas** (adjuntos, miniaturas, copias de releases, documentos) en su carpeta `backups/`. Los ficheros se guardan una sola vez y cada copia solo añade los nuevos. Se conservan 14 diarias, 6 mensuales y siempre las 3 más recientes, y cada mes se restaura la última en una base de datos temporal para comprobar que sirve. Estado en *Administración → Copias de seguridad*.
 - **Fuera del servidor:** esas copias viven en el mismo disco que protegen. Configura además **un destino externo** (sección 4.1 o 4.2): tras cada copia diaria se sube allí lo que falte, con la misma retención, y la app avisa si la última subida correcta tiene más de 48 h.
 - Guarda `.env` (sobre todo `BACKUP_KEY`) **fuera del servidor**: sin la clave, ninguna copia se puede abrir.
 - Con destino externo, por defecto el volumen guarda solo la base de datos (los ficheros van al destino externo y no ocupan el doble). `BACKUP_LOCAL_FILES=1` guarda también una copia local de los ficheros; `0` la evita aunque no haya destino externo.
@@ -482,6 +482,7 @@ docker compose up -d
 
 Notas:
 
+- **Elige la copia por su nombre** (con `--list`) en vez de `latest` si la app llegó a arrancar tras perder los datos: su primera copia automática (al minuto de arrancar) es de una instalación vacía y es la más reciente del volumen. Al destino externo no llega si es mucho menor que la última que hay allí (queda como error en *Administración → Copias de seguridad*), salvo que se pulse *Copiar ahora a destino externo*. Para que no se haga ninguna copia mientras restauras, pon `BACKUP_PAUSE=1` en `.env` antes de arrancar y quítala al terminar.
 - Si la app llegó a arrancar contra la base nueva, ya tiene el administrador inicial y la restauración se niega: añade `--force` (borra todo lo que tenga esa base).
 - `--files` no borra ficheros que no estén en la copia; los sobrantes los quita la limpieza de huérfanos al día siguiente.
 - Para restaurar un `.pzbak` descargado: `docker compose run --rm --no-deps -v "$PWD":/restaurar app node dist/restore.mjs /restaurar/pizarro-backup-AAAAMMDDTHHMMSSZ.pzbak`.

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 import { backupStem, decryptChunks, encryptChunks, writeBackupFile, type TableBatch } from "../src/lib/backup-core";
-import { DirDestination, listObjectKeys, listStems, pruneDestination, readManifest, S3Destination, syncBackup, type BackupDestination } from "../src/lib/backup-dest";
+import { backupShrink, checkShrink, DirDestination, listObjectKeys, listStems, pruneDestination, readManifest, S3Destination, syncBackup, type BackupDestination } from "../src/lib/backup-dest";
 import {
   buildManifest,
   decodeManifest,
@@ -183,11 +183,13 @@ test("destinos: subida incremental, reanudación, retención y restauración de 
     assert.deepEqual((await listStems(s3dest)).map((s) => s.stem), [b2.manifest.stem, b1.manifest.stem]);
     assert.equal((await readManifest(s3dest, b2.manifest.stem, key)).fileCount, 6);
 
-    // Retención: con 1 diaria y 0 mensuales se borra la copia del día 1 y el objeto que solo ella nombraba.
+    // Retención: con 1 diaria, 0 mensuales y 0 recientes se borra la copia del día 1 y el objeto que solo ella nombraba.
     await rm(path.join(root, "a1.webp"));
     const b3 = await makeBackup(root, backups, new Date("2026-10-03T03:00:00Z"));
     await syncBackup(s3dest, b3.manifest, b3.bytes, dumpOf(b3.manifest, b3.dumpFile), { key, uploadRoot: root, store });
-    const pruned = await pruneDestination(s3dest, key, { daily: 1, monthly: 0 });
+    // (Con las 3 recientes de siempre no se borraría ninguna.)
+    assert.deepEqual([(await pruneDestination(s3dest, key, { daily: 1, monthly: 0 })).removedBackups], [0]);
+    const pruned = await pruneDestination(s3dest, key, { daily: 1, monthly: 0, recent: 0 });
     assert.deepEqual([pruned.removedBackups, pruned.removedObjects, pruned.gcSkipped], [2, 1, null]);
     assert.equal((await listObjectKeys(s3dest)).size, 4);
 
@@ -213,6 +215,50 @@ test("destinos: subida incremental, reanudación, retención y restauración de 
   } finally {
     await s3.close();
   }
+});
+
+test("copia mucho menor que la del destino: se detecta con mínimos (filas y ficheros)", async () => {
+  assert.equal(backupShrink({ rows: 10, fileCount: 0 }, { rows: 499, fileCount: 19 }), null, "destino pequeño: no se compara");
+  assert.deepEqual(backupShrink({ rows: 40, fileCount: 30 }, { rows: 5000, fileCount: 30 }), { what: "rows", local: 40, remote: 5000 });
+  assert.deepEqual(backupShrink({ rows: 5000, fileCount: 2 }, { rows: 5000, fileCount: 20 }), { what: "files", local: 2, remote: 20 });
+  assert.equal(backupShrink({ rows: 2500, fileCount: 10 }, { rows: 5000, fileCount: 20 }), null, "la mitad justa no bloquea");
+  assert.equal(backupShrink({ rows: 9000, fileCount: 90 }, { rows: 5000, fileCount: 20 }), null);
+
+  // Contra un destino de verdad: la última copia con manifiesto manda; la misma copia o un destino vacío, nada.
+  const root = await tmp();
+  for (let i = 0; i < 24; i++) await writeFile(path.join(root, `f${i}.bin`), randomBytes(100));
+  const backups = path.join(root, "backups");
+  const dest = new DirDestination("dir", await tmp(), true);
+  const good = await makeBackup(root, backups, new Date("2026-11-02T03:15:00Z"));
+  assert.deepEqual(await checkShrink(dest, good.manifest, key), { problem: null });
+  await syncBackup(dest, good.manifest, good.bytes, dumpOf(good.manifest, good.dumpFile), { key, uploadRoot: root });
+  assert.deepEqual(await checkShrink(dest, good.manifest, key), { problem: null });
+  const empty = await tmp();
+  const bad = await makeBackup(empty, path.join(empty, "backups"), new Date("2026-11-02T11:01:00Z"));
+  assert.equal(bad.manifest.fileCount, 0);
+  assert.deepEqual((await checkShrink(dest, bad.manifest, key)).problem, { what: "files", local: 0, remote: 24, stem: good.manifest.stem });
+  // Manifiesto del destino ilegible (otra clave): no bloquea, pero lo dice.
+  const other = await checkShrink(dest, bad.manifest, randomBytes(32));
+  assert.equal(other.problem, null);
+  assert.match(other.unreadable ?? "", new RegExp(good.manifest.stem));
+});
+
+test("retención en carpetas: borra los temporales abandonados de más de 24 h (raíz y files/), no los recientes", async () => {
+  const root = await tmp();
+  const dest = new DirDestination("dir", root, true);
+  await mkdir(path.join(root, "files", "ab"), { recursive: true });
+  const old = new Date(Date.now() - 25 * 3600 * 1000);
+  const stale = ["pizarro-backup-20261101T031500Z.pzbak.123.tmp", "files/ab/abcdef.456.tmp"];
+  const fresh = ["pizarro-backup-20261102T031500Z.pzbak.789.tmp", "files/ab/fedcba.1.tmp"];
+  for (const f of [...stale, ...fresh]) await writeFile(path.join(root, f), "x");
+  for (const f of stale) await utimes(path.join(root, f), old, old);
+  await writeFile(path.join(root, "notas.txt"), "no es nuestro");
+  await utimes(path.join(root, "notas.txt"), old, old);
+  const pruned = await pruneDestination(dest, key);
+  assert.equal(pruned.removedTemp, 2);
+  const exists = (p: string) => readFile(path.join(root, p)).then(() => true, () => false);
+  for (const f of stale) assert.equal(await exists(f), false, f);
+  for (const f of [...fresh, "notas.txt"]) assert.equal(await exists(f), true, f);
 });
 
 test("BACKUP_LOCAL_FILES: automático según haya destino externo; 1/0 lo fuerzan", async () => {

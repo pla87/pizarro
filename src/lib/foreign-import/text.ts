@@ -205,6 +205,10 @@ export function fold(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[_\-./]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
+/** Columnas cuyo nombre indica «terminado»: cuentan como hechas en informes y plazos (y en un CSV van al final). */
+const DONE_RE = /^(done|hecho|hecha|hechos|completad[oa]s?|completed?|terminad[oa]s?|finalizad[oa]s?|finished|cerrad[oa]s?|closed|resuelt[oa]s?|resolved|en produccion|production|released?|entregad[oa]s?|delivered|archiv\w*)\b/;
+export const isDoneName = (name: string): boolean => DONE_RE.test(name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim());
+
 const MONTHS: Record<string, number> = {
   jan: 1, january: 1, ene: 1, enero: 1, feb: 2, february: 2, febrero: 2, mar: 3, march: 3, marzo: 3, apr: 4, april: 4, abr: 4, abril: 4,
   may: 5, mayo: 5, jun: 6, june: 6, junio: 6, jul: 7, july: 7, julio: 7, aug: 8, august: 8, ago: 8, agosto: 8,

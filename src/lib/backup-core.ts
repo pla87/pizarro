@@ -372,10 +372,11 @@ export function backupStem(name: string): string | null {
 }
 
 /**
- * Qué copias se conservan: la más reciente de cada uno de los últimos `daily` días con copia y la más
- * reciente de cada uno de los últimos `monthly` meses con copia (UTC). El resto se puede borrar.
+ * Qué copias se conservan: la más reciente de cada uno de los últimos `daily` días con copia, la más
+ * reciente de cada uno de los últimos `monthly` meses con copia (UTC) y, siempre, las `recent` más recientes
+ * (así una copia hecha tras perder los datos no sustituye a la buena del mismo día). El resto se puede borrar.
  */
-export function selectBackupsToKeep(names: string[], daily = 14, monthly = 6): Set<string> {
+export function selectBackupsToKeep(names: string[], daily = 14, monthly = 6, recent = 3): Set<string> {
   const dated = names
     .map((name) => ({ name, at: parseBackupFileName(name) }))
     .filter((x): x is { name: string; at: Date } => x.at !== null)
@@ -396,5 +397,6 @@ export function selectBackupsToKeep(names: string[], daily = 14, monthly = 6): S
       keep.add(name);
     }
   }
+  for (const { name } of dated.slice(0, Math.max(0, recent))) keep.add(name);
   return keep;
 }

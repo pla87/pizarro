@@ -5,11 +5,11 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { randomBytes } from "node:crypto";
 import { AppError } from "@/lib/errors";
+import { assertDiskRoom } from "@/lib/disk-space";
 import { ArchiveError } from "@/lib/project-export/errors";
 import { logEvent } from "@/lib/log";
 import { assertCsvHeader } from "@/lib/foreign-import/csv";
-import { decodeText, sniffFormat } from "@/lib/foreign-import/parse";
-import { FOREIGN_LIMITS } from "@/lib/foreign-import/types";
+import { decodeText, foreignMaxBytes, sniffFormat } from "@/lib/foreign-import/parse";
 import { importMaxBytes } from "@/lib/project-export/config";
 import { peekProjectArchive } from "@/lib/project-export/read";
 import { rateLimit } from "@/lib/rate-limit";
@@ -71,14 +71,21 @@ export async function POST(req: Request) {
     const params = new URL(req.url).searchParams;
     const isPrivate = params.get("private") === "1";
     const fileName = (params.get("name") ?? "").slice(0, 200);
-    // JSON y CSV de otros Kanban tienen un tope menor que el ZIP (si el nombre ya lo anuncia, se corta antes de recibirlo entero).
+    // JSON y CSV de otros Kanban tienen un tope menor que el ZIP: 25 MB o PROJECT_IMPORT_MAX_MB si es menor (si el nombre ya
+    // lo anuncia, se corta antes de recibirlo entero; si no, se comprueba al reconocer el formato).
+    const foreignMax = foreignMaxBytes();
     const looksForeign = /\.(json|csv|tsv|txt)$/i.test(fileName);
-    const max = looksForeign ? Math.min(importMaxBytes(), FOREIGN_LIMITS.maxBytes) : importMaxBytes();
-    const tooBig = () => new AppError(t("El archivo supera el tamaño máximo de importación ({mb} MB).", { mb: Math.round(max / 1024 / 1024) }), 413);
+    const max = looksForeign ? foreignMax : importMaxBytes();
+    const mb = (bytes: number) => Math.round(bytes / 1024 / 1024);
+    const tooBigForeign = () => new AppError(t("El archivo supera el tamaño máximo para JSON y CSV ({mb} MB).", { mb: mb(foreignMax) }), 413);
+    const tooBig = () => (looksForeign ? tooBigForeign() : new AppError(t("El archivo supera el tamaño máximo de importación ({mb} MB).", { mb: mb(max) }), 413));
     const length = declaredLength(req.headers);
     if (length !== null && length > max) throw tooBig();
     if (length === 0 || !req.body) throw new AppError("No se ha recibido ningún archivo.");
     await assertUserCanQueue(user.id);
+    // Antes de recibir nada: el temporal y la importación (lib/transfer-jobs, IMPORT_FACTOR) deben caber en el disco.
+    // Sin Content-Length se cuenta con el máximo admitido.
+    await assertDiskRoom(uploadDir(), Math.ceil((length ?? max) * 1.5));
     release = await acquireUploadSlot();
     if (!release) throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
 
@@ -102,7 +109,7 @@ export async function POST(req: Request) {
     if (!format) throw new AppError("Formato de archivo no reconocido. Sube un .pizarro.zip de Pizarro, un JSON exportado de Trello o un CSV.");
     if (format === "pizarro") await peekProjectArchive(temp);
     else {
-      if (received > FOREIGN_LIMITS.maxBytes) throw new AppError(t("El archivo supera el tamaño máximo de importación ({mb} MB).", { mb: Math.round(FOREIGN_LIMITS.maxBytes / 1024 / 1024) }), 413);
+      if (received > foreignMax) throw tooBigForeign();
       // Comprobación barata antes de encolar: un CSV sin cabecera con título no llega a ser un trabajo.
       if (format === "csv") assertCsvHeader(decodeText(head));
     }

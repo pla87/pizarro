@@ -1,7 +1,7 @@
 "use client";
 
 import { Share, Smartphone } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useT } from "@/i18n/client";
 import { Modal } from "./ui/Modal";
 
@@ -10,38 +10,57 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
+interface InstallState {
+  /** Aviso nativo de instalación (Android/Chrome) guardado para usarlo al pulsar el botón; solo sirve una vez. */
+  prompt: BeforeInstallPromptEvent | null;
+  /** iPhone/iPad: Safari no tiene aviso nativo, el botón explica cómo añadirla a la pantalla de inicio. */
+  ios: boolean;
+  /** Ya abierta como app (o recién instalada): no se ofrece. */
+  installed: boolean;
+}
+
+// Estado compartido por todas las copias del botón: la barra lateral se monta dos veces (escritorio, oculta por CSS en
+// el móvil, y el menú móvil, que solo existe mientras está abierto). `beforeinstallprompt` llega una sola vez y antes
+// se lo quedaba la copia oculta; ahora se recoge aquí, al cargar el módulo, y lo ve cualquier copia montada después.
+const SERVER_STATE: InstallState = { prompt: null, ios: false, installed: true };
+let state: InstallState = SERVER_STATE;
+const listeners = new Set<() => void>();
+
+function setState(patch: Partial<InstallState>) {
+  state = { ...state, ...patch };
+  for (const l of listeners) l();
+}
+
+if (typeof window !== "undefined") {
+  const standalone =
+    window.matchMedia?.("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  state = { prompt: null, ios, installed: standalone };
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    setState({ prompt: e as BeforeInstallPromptEvent });
+  });
+  window.addEventListener("appinstalled", () => setState({ installed: true, prompt: null }));
+  // El service worker (necesario para instalar) se registra una sola vez, no por cada copia del botón.
+  navigator.serviceWorker?.register("/sw.js").catch(() => {});
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 /**
  * «Instalar app»: en Android/Chrome usa el aviso nativo de instalación; en iPhone/iPad
  * (Safari no lo tiene) muestra cómo añadirla a la pantalla de inicio.
  */
 export function InstallApp() {
   const t = useT();
-  const [prompt, setPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [ios, setIos] = useState(false);
-  const [installed, setInstalled] = useState(true);
+  // En el servidor y durante la hidratación no se pinta (lo que se sabe del navegador llega justo después).
+  const { prompt, ios, installed } = useSyncExternalStore(subscribe, () => state, () => SERVER_STATE);
   const [help, setHelp] = useState(false);
-
-  useEffect(() => {
-    navigator.serviceWorker?.register("/sw.js").catch(() => {});
-    const standalone =
-      window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
-    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    const onPrompt = (e: Event) => {
-      e.preventDefault();
-      setPrompt(e as BeforeInstallPromptEvent);
-    };
-    const onInstalled = () => setInstalled(true);
-    window.addEventListener("beforeinstallprompt", onPrompt);
-    window.addEventListener("appinstalled", onInstalled);
-    // Estado que solo se conoce en el navegador: se fija tras montar.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIos(isIos);
-    setInstalled(standalone);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", onPrompt);
-      window.removeEventListener("appinstalled", onInstalled);
-    };
-  }, []);
 
   if (installed || (!prompt && !ios)) return null;
 
@@ -52,10 +71,11 @@ export function InstallApp() {
         className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
         onClick={async () => {
           if (prompt) {
+            // El evento solo admite un prompt(): se retira ya para todas las copias (Chrome manda otro si hace falta).
+            setState({ prompt: null });
             await prompt.prompt();
             const choice = await prompt.userChoice;
-            if (choice.outcome === "accepted") setInstalled(true);
-            setPrompt(null);
+            if (choice.outcome === "accepted") setState({ installed: true });
           } else setHelp(true);
         }}
       >

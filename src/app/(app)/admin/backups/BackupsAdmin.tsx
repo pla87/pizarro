@@ -60,7 +60,7 @@ function keyProblemText(p: BackupKeyDiagnosis | null, t: (s: string, v?: Record<
 }
 
 /** Panel «Copias de seguridad»: estado de la última copia, de la copia externa y de la última prueba de restauración. */
-export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUseCode, jobs, destinations, externalRunning }: {
+export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUseCode, jobs, destinations, externalRunning, paused = false }: {
   keyState: "ok" | "missing" | "invalid";
   keyProblem: BackupKeyDiagnosis | null;
   status: BackupStatus;
@@ -70,6 +70,8 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
   jobs: JobRunInfo[];
   destinations: DestinationsInfo;
   externalRunning: boolean;
+  /** BACKUP_PAUSE=1: las tareas automáticas de copia están detenidas. */
+  paused?: boolean;
 }) {
   const t = useT();
   const locale = useIntlLocale();
@@ -184,7 +186,12 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
         </div>
       )}
 
-      {enabled ? (
+      {enabled && paused ? (
+        <p role="alert" className="card flex items-start gap-2 p-3 text-sm text-amber-700 dark:text-amber-300">
+          <ShieldAlert size={16} className="mt-0.5 shrink-0" />
+          <span>{t("Copias automáticas en pausa (BACKUP_PAUSE=1): no se hacen la copia diaria, la subida al destino externo ni la prueba de restauración. Quita la variable cuando termines de restaurar.")}</span>
+        </p>
+      ) : enabled ? (
         <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
           <ShieldCheck size={16} /> {t("Copias automáticas activadas.")}
         </p>

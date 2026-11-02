@@ -100,7 +100,11 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // api/projects/import queda fuera: el proxy almacena el cuerpo de las peticiones (hasta proxyClientMaxBodySize) y la importación
-  // de un proyecto llega a cientos de MB; la ruta comprueba la sesión y el rol por sí misma y recibe el cuerpo en flujo.
-  matcher: ["/((?!api/auth/google/|api/projects/import$|api/health|_next/static|_next/image|favicon.ico|icon.svg|icons/|apple-touch-icon.png|pizarro-logo-120.png|sw.js|manifest.webmanifest).*)"],
+  // Next guarda en memoria el cuerpo de toda petición (no GET) que pasa por aquí, hasta proxyClientMaxBodySize (2 MB, ver
+  // next.config.ts), antes de que llegue a su ruta. Por eso las rutas que reciben archivos quedan fuera: la importación de
+  // proyectos (cientos de MB, en flujo), los adjuntos de tareas y los documentos del proyecto (hasta 100 MB). Cada una
+  // comprueba por sí misma el origen, la sesión (también la contraseña pendiente de cambiar) y los permisos antes de leer
+  // el cuerpo, y lo lee con su propio tope; de este proxy no necesitan nada (son API: sin CSP ni renovación de cookie,
+  // y la redirección canónica no toca /api). Solo admiten POST; con otro método, Next responde 405.
+  matcher: ["/((?!api/auth/google/|api/projects/import$|api/tasks/[^/]+/attachments$|api/projects/[^/]+/documents$|api/health|_next/static|_next/image|favicon.ico|icon.svg|icons/|apple-touch-icon.png|pizarro-logo-120.png|sw.js|manifest.webmanifest).*)"],
 };

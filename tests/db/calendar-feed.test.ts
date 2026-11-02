@@ -213,6 +213,37 @@ describe("calendario suscrito", () => {
     assert.ok(block(inside.id).includes(`DTSTART;VALUE=DATE:${day(start)}`), "con el campo activo, de inicio a límite");
   });
 
+  test("las tareas terminadas (columna que cuenta como hecha) no salen", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const doneCol = await db.column.create({ data: { projectId: f.project.id, name: "Hecho", position: 99_000, isDone: true } });
+    const open = await makeTask(f, { dueDate: inDays(3) });
+    const done = await makeTask(f, { columnId: doneCol.id, dueDate: inDays(3) });
+    const { token } = await feedFor(user);
+    const { text } = await fetchFeed(token);
+    assert.ok(text.includes(`UID:${open.id}@pizarro`));
+    assert.ok(!text.includes(`UID:${done.id}@pizarro`));
+  });
+
+  test("rotación de TOKEN_SECRET: el enlace guardado con la clave anterior se rehace con la actual y sigue valiendo al retirarla", async () => {
+    const { createHmac } = await import("node:crypto");
+    const user = await makeUser();
+    const { token } = await feedFor(user);
+    const old = "clave-anterior-de-prueba-".padEnd(48, "x");
+    // Como si el enlace se hubiera creado antes de la rotación: su hash, con la clave anterior.
+    await db.calendarFeed.update({ where: { userId: user.id }, data: { tokenHash: createHmac("sha256", old).update(`calendar-feed:${token}`).digest("hex") } });
+    const prev = process.env.TOKEN_SECRET_PREVIOUS;
+    process.env.TOKEN_SECRET_PREVIOUS = old;
+    try {
+      assert.equal((await fetchFeed(token)).res.status, 200);
+    } finally {
+      if (prev === undefined) delete process.env.TOKEN_SECRET_PREVIOUS;
+      else process.env.TOKEN_SECRET_PREVIOUS = prev;
+    }
+    // Retirada la clave anterior, el enlace sigue funcionando.
+    assert.equal((await fetchFeed(token)).res.status, 200);
+  });
+
   test("límite de ritmo por token e IP", async () => {
     const user = await makeUser();
     const { token } = await feedFor(user);

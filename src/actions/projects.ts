@@ -58,9 +58,11 @@ export async function createProject(name: string, options?: { templateId?: strin
     // Quien no es administrador solo puede crear proyectos privados (y sin plantillas, que gestionan los admins).
     if (user.role !== "ADMIN" && (!options?.isPrivate || options.templateId)) throw forbidden();
     if (!rateLimit(`project-create:${user.id}`, 10, 60 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
-    if (user.role !== "ADMIN" && (await db.project.count({ where: { privateOwnerId: user.id } })) >= 100) {
-      throw new AppError("Has llegado al máximo de proyectos privados.");
-    }
+    const capped = user.role !== "ADMIN";
+    const assertPrivateSlot = async (client: Prisma.TransactionClient | typeof db) => {
+      if (capped && (await client.project.count({ where: { privateOwnerId: user.id } })) >= 100) throw new AppError("Has llegado al máximo de proyectos privados.");
+    };
+    await assertPrivateSlot(db);
     const projectName = v.name.parse(name);
     if (options?.exampleKey && options.templateId) throw new AppError("Elige una plantilla o un ejemplo, no los dos.");
     // Sin plantilla, las columnas por defecto salen en el idioma de quien crea el proyecto; con ejemplo, todo el ejemplo.
@@ -75,6 +77,11 @@ export async function createProject(name: string, options?: { templateId?: strin
     const template = example ? example.template : templateRow ? localizeTemplate(parseStoredTemplate(templateRow), templateRow.builtinKey, locale) : null;
     const last = await db.project.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
     const project = await db.$transaction(async (tx) => {
+      // El recuento se repite con un candado por persona: dos altas a la vez no pasan del máximo de privados.
+      if (capped) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`pz:private-projects:${user.id}`}))::text`;
+        await assertPrivateSlot(tx);
+      }
       const created = await tx.project.create({
         data: {
           name: projectName,
