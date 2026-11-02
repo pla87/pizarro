@@ -2,7 +2,7 @@ import { z } from "zod";
 import { logEvent } from "@/lib/log";
 import { redactPath } from "@/lib/redact-path";
 import { rateLimit } from "@/lib/rate-limit";
-import { declaredLength } from "@/lib/upload-slots";
+import { BodyTooLargeError, declaredLength, readBodyLimited } from "@/lib/upload-slots";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 
@@ -31,8 +31,13 @@ export async function POST(req: Request) {
   const max = user ? 16_384 : ANON_MAX_BODY;
   const declared = declaredLength(req.headers);
   if (declared !== null && declared > max) return new Response(null, { status: 413 });
-  const raw = await req.text().catch(() => "");
-  if (raw.length > max) return new Response(null, { status: 413 });
+  // Sin Content-Length (cuerpo por trozos) también hay tope: se deja de leer al pasar de `max` bytes.
+  let raw = "";
+  try {
+    raw = await readBodyLimited(req, max, "text");
+  } catch (err) {
+    if (err instanceof BodyTooLargeError) return new Response(null, { status: 413 });
+  }
   let body: unknown = null;
   try {
     body = JSON.parse(raw);

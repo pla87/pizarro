@@ -6,7 +6,7 @@ import { z } from "zod";
 import { applyNewPassword } from "@/lib/account";
 import { runAction } from "@/lib/action";
 import { sendEmailChangedMail, sendPasswordResetMail } from "@/lib/auth-mail";
-import { passwordLoginAllowed } from "@/lib/auth-policy";
+import { googleOnly, passwordLoginAllowed } from "@/lib/auth-policy";
 import { googlePolicyEnv } from "@/lib/google-config";
 import { consumeToken, findUsableToken, issueAuthToken } from "@/lib/auth-token";
 import { db } from "@/lib/db";
@@ -69,28 +69,39 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     return { error: t("Demasiados intentos. Espera unos minutos.") };
   }
 
+  // Con «solo Google» la contraseña no abre la puerta (salvo el acceso de emergencia de los administradores), y la
+  // respuesta no puede depender de si es correcta: se decide ANTES de comprobarla. El intento reservado queda gastado,
+  // como un fallo, sea cual sea la contraseña.
+  const policy = googlePolicyEnv();
+  if (!passwordLoginAllowed("ADMIN", policy)) {
+    // Nadie entra con contraseña: la misma respuesta para todos, sin buscar siquiera la cuenta (tampoco delata si existe).
+    logEvent({
+      level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión con contraseña rechazado (${shownEmail}): solo se admite Google`,
+      path: "/login", ip, details: { email: shownEmail, reason: "google_only" },
+    });
+    return { error: t("El acceso con contraseña está desactivado en este servidor. Entra con Google.") };
+  }
+
   const user = await db.user.findUnique({ where: { email }, select: { id: true, name: true, email: true, locale: true, role: true, passwordHash: true, active: true, mustChangePassword: true, twoFactorMethod: true } });
-  const valid = user ? await verifyPassword(password, user.passwordHash) : await dummyVerify(password);
-  if (!user || !valid || !user.active) {
-    const reason = !user ? "unknown_email" : !valid ? "wrong_password" : "inactive";
-    const why = reason === "inactive" ? "usuario desactivado" : reason === "unknown_email" ? "email desconocido" : "contraseña incorrecta";
+  // Con el acceso de emergencia, un rol sin contraseña no llega a comprobarla (bcrypt de relleno, para que tampoco lo
+  // delate el tiempo) y recibe la misma respuesta que un email desconocido o una contraseña incorrecta.
+  const googleOnlyRole = !!user && !passwordLoginAllowed(user.role, policy);
+  const valid = user && !googleOnlyRole ? await verifyPassword(password, user.passwordHash) : await dummyVerify(password);
+  if (!user || googleOnlyRole || !valid || !user.active) {
+    const reason = !user ? "unknown_email" : googleOnlyRole ? "google_only" : !valid ? "wrong_password" : "inactive";
+    const why = { unknown_email: "email desconocido", google_only: "solo se admite Google", wrong_password: "contraseña incorrecta", inactive: "usuario desactivado" }[reason];
     logEvent({
       level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión fallido (${shownEmail}): ${why}`,
       userId: user?.id ?? null, userName: user?.name ?? null, path: "/login", ip, details: { email: shownEmail, reason },
     });
-    return { error: t("Credenciales incorrectas.") };
+    return {
+      error: googleOnly(policy)
+        ? t("Credenciales incorrectas. En este servidor solo los administradores entran con contraseña (acceso de emergencia); los demás, con Google.")
+        : t("Credenciales incorrectas."),
+    };
   }
   // Contraseña correcta: el intento reservado no cuenta como fallo.
   resetRateLimit(keys.account);
-
-  // Con «solo Google» la contraseña correcta tampoco abre la puerta (salvo el acceso de emergencia de los administradores).
-  if (!passwordLoginAllowed(user.role, googlePolicyEnv())) {
-    logEvent({
-      level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión con contraseña rechazado (${shownEmail}): solo se admite Google`,
-      userId: user.id, userName: user.name, path: "/login", ip, details: { email: shownEmail, reason: "google_only" },
-    });
-    return { error: t("El acceso con contraseña está desactivado en este servidor. Entra con Google.") };
-  }
 
   const next = safeNextPath(String(formData.get("next") ?? ""));
   // Segundo paso: todavía NO hay sesión, solo un estado pendiente (cookie pz_2fa, 10 min) hasta que el código sea correcto.

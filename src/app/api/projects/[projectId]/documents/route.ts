@@ -5,7 +5,7 @@ import { AppError } from "@/lib/errors";
 import { actionContext } from "@/lib/action-context";
 import { logEvent } from "@/lib/log";
 import { publishChange } from "@/lib/realtime";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimit, rateLimitRetryAfterSec } from "@/lib/rate-limit";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser, requireUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
@@ -14,7 +14,7 @@ import { roundMb } from "@/lib/attachment-limit";
 import { confirmDocumentKind, detectDocumentKind, documentMime, sanitizeDocumentName, type DocumentKindName } from "@/lib/document-kind";
 import { createDocumentWithinLimit } from "@/lib/documents";
 import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, processImage, removeDocumentFiles, sanitizeMime, saveDocumentFile } from "@/lib/uploads";
-import { acquireUploadSlot, declaredLength } from "@/lib/upload-slots";
+import { acquireUploadSlot, BodyTooLargeError, declaredLength, readBodyLimited } from "@/lib/upload-slots";
 import { effectiveFileMaxMb, MULTIPART_OVERHEAD_BYTES } from "@/lib/upload-size";
 
 export const runtime = "nodejs";
@@ -25,14 +25,18 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
   const ip = clientIp(req.headers);
   const projectIdForLog = (await ctx.params).projectId;
   let release: (() => void) | null = null;
+  let rateLimited = 0;
   let fileInfo: { name: string; type: string; size: number } | null = null;
   try {
     if (!isSameOrigin(req)) throw new AppError("Origen no permitido.", 403);
     const user = await requireUser();
     const { projectId } = await ctx.params;
     await assertProjectAccess(user, projectId);
-    // Tope de subidas por persona (comparte cubo con los adjuntos de tareas): evita llenar disco o memoria con un bucle.
-    if (!rateLimit(`upload:${user.id}`, 60, 60_000)) throw new AppError("Demasiadas peticiones", 429);
+    // Tope de subidas por persona (el mismo cubo y el mismo tope que los adjuntos de tareas): evita llenar disco o memoria con un bucle.
+    if (!rateLimit(`upload:${user.id}`, 300, 60_000)) {
+      rateLimited = rateLimitRetryAfterSec(`upload:${user.id}`);
+      throw new AppError("Demasiadas peticiones", 429, "rate_limited");
+    }
     // Sin Content-Length (algún proxy la quita) el tamaño se comprueba al leer el archivo.
     const length = declaredLength(req.headers);
     const project = await db.project.findUniqueOrThrow({ where: { id: projectId }, select: { fileMaxMb: true } });
@@ -48,7 +52,10 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
     // Como mucho unas pocas subidas a la vez en todo el servidor (cada una se lee entera en memoria).
     release = await acquireUploadSlot();
     if (!release) throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
-    const form = await req.formData();
+    // Con tope real al leer: sin Content-Length (o si miente un proxy intermedio) se corta al superar el máximo.
+    const form = await readBodyLimited(req, maxBytes + MULTIPART_OVERHEAD_BYTES, "formData").catch(async (err) => {
+      throw err instanceof BodyTooLargeError ? await tooBig() : err;
+    });
     const file = form.get("file");
     if (!(file instanceof File)) throw new AppError("No se ha recibido ningún archivo.");
     fileInfo = { name: file.name, type: file.type, size: file.size };
@@ -102,7 +109,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
     });
     const t = await getT();
     if (err instanceof AppError) {
-      const headers = err.code === "upload_busy" ? { "Retry-After": "5" } : undefined;
+      const headers = err.code === "upload_busy" ? { "Retry-After": "5" } : err.code === "rate_limited" ? { "Retry-After": String(rateLimited || 60) } : undefined;
       return NextResponse.json({ error: t(err.message), ...(err.code ? { code: err.code } : {}) }, { status: err.status, headers });
     }
     console.error("[documents upload]", err);
