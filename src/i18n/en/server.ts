@@ -328,4 +328,6 @@ export const server: Record<string, string> = {
   "Escribe el secreto de nuevo al cambiar el ID de cliente": "Enter the secret again when you change the client ID",
   "Falta el secreto de cliente de Google.": "The Google client secret is missing.",
   "Versión no válida.": "Invalid version.",
+  "Elige una plantilla o un ejemplo, no los dos.": "Choose a template or an example, not both.",
+  "El ejemplo ya no existe.": "The example no longer exists.",
 };

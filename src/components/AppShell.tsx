@@ -11,7 +11,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { logout } from "@/actions/auth";
 import { useT } from "@/i18n/client";
-import { createProject } from "@/actions/projects";
+import { createProject, listProjectExamples } from "@/actions/projects";
 import { listTemplates } from "@/actions/templates";
 import type { CurrentUser } from "@/lib/session";
 import { AppBadge } from "./AppBadge";
@@ -355,12 +355,22 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   const [target, setTarget] = useState<string | null>(null);
   const [templates, setTemplates] = useState<{ id: string; name: string; description: string }[]>([]);
   const [templateId, setTemplateId] = useState("");
+  // Ejemplo de serie con el que empezar ("" = en blanco); lo pueden usar todas las personas.
+  const [examples, setExamples] = useState<{ key: string; name: string; description: string }[]>([]);
+  const [exampleKey, setExampleKey] = useState("");
   // Quien no es administrador solo puede crear proyectos privados.
   const [isPrivate, setIsPrivate] = useState(!isAdmin);
   // «Importar desde un archivo…» (solo administradores) cambia el contenido del diálogo.
   const [importing, setImporting] = useState(false);
   // Con una importación en curso el diálogo no se cierra (Esc, fondo, atrás): la subida sigue y se enseña su resultado.
   const [importBusy, setImportBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    listProjectExamples().then((res) => {
+      if (!cancelled && res.ok) setExamples(res.data);
+    });
+    return () => { cancelled = true; };
+  }, []);
   // Las plantillas (solo administradores) se piden al abrir el modal.
   useEffect(() => {
     if (!isAdmin) return;
@@ -378,7 +388,7 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     start(async () => {
-      const res = await createProject(name, { templateId: templateId || null, isPrivate });
+      const res = await createProject(name, { templateId: exampleKey ? null : templateId || null, exampleKey: exampleKey || null, isPrivate });
       if (!res.ok) return toast(res.error, "error");
       // Primero los ajustes del proyecto nuevo (columnas, tipos, miembros…); desde ahí se va al tablero.
       const dest = `/p/${res.data.id}/settings`;
@@ -408,7 +418,24 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
           <input id="project-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required data-autofocus />
           <p className="mt-1 text-xs text-slate-500">{t("Luego puedes cambiar las columnas, tipos y etiquetas.")}</p>
         </div>
-        {isAdmin && (
+        {examples.length > 0 && (
+          <fieldset>
+            <legend className="label">{t("Empezar desde")}</legend>
+            <div className="space-y-1" role="radiogroup">
+              {[{ key: "", name: t("Proyecto en blanco"), description: t("Columnas por defecto, sin tarjetas.") }, ...examples].map((ex) => (
+                <label key={ex.key || "blank"} className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 text-sm ${exampleKey === ex.key ? "border-brand-500 bg-brand-50/50 dark:bg-brand-500/10" : "border-slate-200 dark:border-slate-700"}`}>
+                  <input type="radio" name="project-start" className="mt-1" checked={exampleKey === ex.key} onChange={() => { setExampleKey(ex.key); if (ex.key && !name.trim()) setName(ex.name); }} />
+                  <span>
+                    <span className="font-medium">{ex.name}</span>
+                    <span className="block text-xs text-slate-500">{ex.description}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {exampleKey && <p className="mt-1 text-xs text-slate-500">{t("Incluye unas tarjetas de muestra con la etiqueta «Ejemplo» que puedes borrar cuando quieras.")}</p>}
+          </fieldset>
+        )}
+        {isAdmin && !exampleKey && (
         <div>
           <label className="label" htmlFor="project-template">{t("Plantilla")}</label>
           <select id="project-template" className="input" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
