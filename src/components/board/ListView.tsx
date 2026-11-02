@@ -1,8 +1,10 @@
 "use client";
 
-import { ArrowDown, ArrowUp, CalendarClock, CheckSquare, ChevronsUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarClock, CheckSquare, ChevronsUpDown, Lock } from "lucide-react";
 import { memo, useMemo, useState, useSyncExternalStore } from "react";
+import { blockerIsDone } from "@/lib/blocked";
 import { isWhite } from "@/lib/constants";
+import { mentionsToPlain } from "@/lib/mentions";
 import { dueStatus, formatDay } from "@/lib/dates";
 import { PRIORITY_COLOR, PRIORITY_LABEL } from "@/lib/task-fields";
 import type { BoardColumn, BoardTask, LabelOption, UserOption } from "@/lib/types";
@@ -11,7 +13,7 @@ import { Avatar } from "../ui/Avatar";
 import { MentionText } from "../ui/MentionText";
 import { TypeBadge } from "../ui/TypeBadge";
 import { cn } from "../ui/cn";
-import { useBoard } from "./context";
+import { useBoard, useTask } from "./context";
 import { ariaSortOf, DEFAULT_LIST_SORT, nextSort, sortTasks, type ListSort, type ListSortKey } from "./listSort";
 
 type Translate = ReturnType<typeof useT>;
@@ -182,6 +184,19 @@ function ColorBar({ color }: { color: string | null }) {
   return <span className={cn("w-1 shrink-0 self-stretch rounded-full ring-1 ring-black/10 ring-inset dark:ring-white/25")} style={{ backgroundColor: color }} aria-hidden />;
 }
 
+/** Candado de «bloqueada por», como en la tarjeta: desaparece cuando la tarea que bloquea está terminada o archivada. */
+function BlockedBadge({ task, t }: { task: BoardTask; t: Translate }) {
+  const { columns } = useBoard();
+  const blocker = useTask(task.blockedBy?.id ?? "");
+  if (!task.blockedBy || blockerIsDone(blocker, columns)) return null;
+  const label = t("Bloqueada por: {title}", { title: mentionsToPlain(blocker?.title ?? task.blockedBy.title) });
+  return (
+    <span className="inline-flex shrink-0 items-center rounded bg-amber-100 px-1 py-0.5 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300" title={label} data-blocked>
+      <Lock size={12} aria-hidden /><span className="sr-only">{label}</span>
+    </span>
+  );
+}
+
 const TableRow = memo(function TableRow({ task, lookups, today, locale, t, priorityEnabled, kind }: {
   task: BoardTask; lookups: Lookups; today: string; locale: string; t: Translate; priorityEnabled: boolean; kind: { name: string; color: string } | undefined;
 }) {
@@ -202,6 +217,7 @@ const TableRow = memo(function TableRow({ task, lookups, today, locale, t, prior
           >
             <MentionText text={task.title} />
           </button>
+          <BlockedBadge task={task} t={t} />
           <TypeBadge kind={kind} />
         </div>
       </td>
@@ -258,6 +274,7 @@ const CompactRow = memo(function CompactRow({ task, lookups, today, locale, t }:
           <span className="block text-sm leading-snug font-medium break-words"><MentionText text={task.title} /></span>
           <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
             <span>{column?.name}</span>
+            <BlockedBadge task={task} t={t} />
             {task.dueDate && <DueBadge task={task} done={column?.isDone ?? false} today={today} locale={locale} t={t} />}
           </span>
         </span>

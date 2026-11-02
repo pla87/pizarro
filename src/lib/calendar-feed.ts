@@ -32,10 +32,16 @@ export async function resolveFeedToken(token: string): Promise<{ feedId: string;
     select: { id: true, scope: true, tokenHash: true, user: { select: { id: true, name: true, role: true, locale: true, active: true } } },
   });
   if (!feed || !candidates.some((c) => safeEqualHex(c, feed.tokenHash)) || !feed.user.active) return null;
+  // Coincidió con la clave anterior (TOKEN_SECRET_PREVIOUS, durante una rotación): se guarda ya con la actual, así el enlace
+  // sigue funcionando cuando se retire la anterior. Es una escritura rara (una vez por enlace y rotación).
+  const current = candidates[0]!;
+  if (!safeEqualHex(current, feed.tokenHash)) {
+    await db.calendarFeed.updateMany({ where: { id: feed.id, tokenHash: feed.tokenHash }, data: { tokenHash: current } }).catch(() => {});
+  }
   return { feedId: feed.id, scope: feed.scope, user: feed.user };
 }
 
-/** .ics con las tareas no archivadas con fecha límite y los entregables con fecha. Los permisos se evalúan aquí, en cada petición. */
+/** .ics con las tareas no archivadas ni terminadas con fecha límite y los entregables con fecha. Los permisos se evalúan aquí, en cada petición. */
 export async function buildFeedIcs(user: FeedOwner, scope: CalendarFeedScope, now: Date = new Date()): Promise<{ ics: string; tasks: number; deliverables: number }> {
   const t = makeT(toLocale(user.locale));
   const base = appUrl();
@@ -48,7 +54,8 @@ export async function buildFeedIcs(user: FeedOwner, scope: CalendarFeedScope, no
 
   const [tasks, deliverables] = await Promise.all([
     db.task.findMany({
-      where: { project, archivedAt: null, dueDate: window, ...(mine ? { assigneeId: user.id } : {}) },
+      // Sin las terminadas (en columnas que cuentan como hechas), como «Ocultar terminadas» en el Calendario.
+      where: { project, archivedAt: null, column: { isDone: false }, dueDate: window, ...(mine ? { assigneeId: user.id } : {}) },
       orderBy: [{ dueDate: "asc" }, { id: "asc" }],
       take: FEED_MAX_TASKS,
       select: { id: true, title: true, description: true, dueDate: true, startDate: true, updatedAt: true, project: { select: { id: true, name: true, taskFields: true, updatedAt: true } }, column: { select: { name: true } } },
