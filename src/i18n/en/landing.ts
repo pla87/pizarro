@@ -42,7 +42,6 @@ export const landing: Record<string, string> = {
   "Pago único por servidor. Actualizaciones gratis para siempre. Sin soporte incluido.": "One-time payment per server. Free updates forever. Support not included.",
   "Precio: consúltanos": "Price: contact us",
   "Lee la licencia": "Read the license",
-  "Licencia": "License",
   "Release": "Release",
   "Contacto": "Contact",
   // Preguntas
