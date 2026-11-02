@@ -10,7 +10,9 @@ import { emailEnabled } from "@/lib/mail";
 import { googleEnabled } from "@/lib/google";
 import { googleWorkspaceDomain } from "@/lib/google-config";
 import { effectiveShareMode } from "@/lib/google-share";
+import { largestAttachments, projectStorage } from "@/lib/storage-stats";
 import { ProjectSettings } from "./ProjectSettings";
+import { StorageSection } from "./StorageSection";
 import { parseProjectSettingsTab } from "./project-settings-tabs";
 import { ReportScheduleSection } from "./ReportScheduleSection";
 
@@ -70,8 +72,13 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
   const schedule = await db.reportSchedule.findUnique({ where: { projectId: project.id }, select: { enabled: true, recipient: true, weekday: true, hour: true } });
   const editorMode = (await db.user.findUnique({ where: { id: user.id }, select: { editorMode: true } }))?.editorMode ?? "MARKDOWN";
 
+  const storageSection = tab === "adjuntos" && canManage
+    ? <StorageSection projectId={project.id} isAdmin={isAdmin} initial={await projectStorage(project.id)} initialLargest={await largestAttachments(project.id, 20)} />
+    : null;
+
   return (
     <ProjectSettings
+      storageSection={storageSection}
       isAdmin={isAdmin}
       tab={tab}
       releaseTemplates={releaseTemplates}

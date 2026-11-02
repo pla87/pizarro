@@ -1,14 +1,15 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "./db";
-import { checkQuota, totalQuotaBytes, type QuotaExceeded } from "./quota";
+import { checkQuota, type QuotaExceeded } from "./quota";
+import { getQuotaLimits } from "./quota-settings";
 
 type Client = Prisma.TransactionClient | typeof db;
 
 /** Bytes de adjuntos, copias de releases y documentación de un proyecto y del servidor entero. */
-export async function storageUsage(projectId: string, client: Client = db): Promise<{ project: number; total: number }> {
+export async function storageUsage(projectId: string, client: Client = db, opts: { total?: boolean } = {}): Promise<{ project: number; total: number }> {
   // Sin cuota global no hace falta sumar todo el servidor (se llama dentro del bloqueo de subidas).
-  const wantTotal = totalQuotaBytes() !== null;
+  const wantTotal = opts.total ?? (await getQuotaLimits(null, client)).total !== null;
   const zero = { _sum: { size: null as number | null } };
   const [pTasks, pReleases, tTasks, tReleases, pDocs, tDocs] = await Promise.all([
     client.taskAttachment.aggregate({ _sum: { size: true }, where: { task: { projectId } } }),
@@ -26,5 +27,6 @@ export async function storageUsage(projectId: string, client: Client = db): Prom
 
 /** Comprueba si una subida de `bytes` cabe en las cuotas; devuelve null si cabe. */
 export async function quotaExceededFor(projectId: string, bytes: number, client: Client = db): Promise<QuotaExceeded | null> {
-  return checkQuota(await storageUsage(projectId, client), bytes);
+  const limits = await getQuotaLimits(projectId, client);
+  return checkQuota(await storageUsage(projectId, client, { total: limits.total !== null }), bytes, limits);
 }

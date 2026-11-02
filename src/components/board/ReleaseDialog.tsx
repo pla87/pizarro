@@ -26,6 +26,8 @@ interface DeployResult {
   archived: string[];
   /** Siguientes apariciones de tareas recurrentes que se acaban de terminar. */
   spawned?: BoardTask[];
+  /** Con las copias de adjuntos de la release el proyecto supera su cuota de almacenamiento. */
+  storageWarning?: { usedMb: number; limitMb: number } | null;
 }
 
 interface Props {
@@ -243,6 +245,9 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
     toast(t("Release registrada como desplegada"));
+    if (res.data.storageWarning) {
+      toast(t("Con los adjuntos de esta release el proyecto supera su cuota de almacenamiento ({used} de {limit} MB). Libera espacio, por ejemplo borrando adjuntos de releases antiguas: {link}", { used: res.data.storageWarning.usedMb, limit: res.data.storageWarning.limitMb, link: `/p/${board.project.id}/settings?tab=adjuntos` }), "error");
+    }
     onDeployed(res.data);
   };
 

@@ -18,6 +18,9 @@ import { computeReleaseCodes, titleWithReleaseCode, zonedDayRange } from "@/lib/
 import { localizeGeneralKinds } from "@/lib/kinds-localize";
 import { runReleaseAttachmentsJob, type PendingJob } from "@/lib/release-attachments";
 import { requireUser } from "@/lib/session";
+import { checkQuota } from "@/lib/quota";
+import { getQuotaLimits } from "@/lib/quota-settings";
+import { storageUsage } from "@/lib/storage-usage";
 import { removeReleaseAttachmentFiles } from "@/lib/uploads";
 import { addUndo, captureTasks } from "@/lib/undo";
 import { tasksN } from "@/lib/undo-label";
@@ -160,7 +163,10 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     // Copias compactas de los adjuntos para el histórico: tras responder (comprimir imágenes tarda), así el
     // despliegue no espera. El histórico las muestra unos segundos después; si algo falla queda en el registro.
     if (job) after(() => runReleaseAttachmentsJob(result.releaseId, job));
-    return { ...result, spawned };
+    // Las copias del histórico se guardan sin comprobar la cuota (un despliegue no debe fallar por ella) pero sí cuentan:
+    // si con ellas el proyecto se pasa, se avisa para que libere espacio.
+    const storageWarning = await releaseStorageWarning(data.projectId, job);
+    return { ...result, spawned, ...(storageWarning ? { storageWarning } : {}) } as typeof result & { spawned: typeof spawned; storageWarning?: { usedMb: number; limitMb: number } };
   });
 }
 
@@ -243,4 +249,17 @@ export async function deleteReleaseAttachments(releaseId: string) {
     await removeReleaseAttachmentFiles(ids);
     return { id };
   });
+}
+
+/** Aviso si el uso del proyecto, sumando las copias que se van a guardar (como mucho, el tamaño de los originales), supera su cuota. */
+async function releaseStorageWarning(projectId: string, job: PendingJob | null): Promise<{ usedMb: number; limitMb: number } | null> {
+  try {
+    const limits = await getQuotaLimits(projectId);
+    if (limits.project === null) return null;
+    const copies = job ? (await db.taskAttachment.aggregate({ _sum: { size: true }, where: { taskId: { in: job.items.map((i) => i.taskId) } } }))._sum.size ?? 0 : 0;
+    const q = checkQuota(await storageUsage(projectId, db, { total: false }), copies, { project: limits.project, total: null });
+    return q ? { usedMb: q.usedMb, limitMb: q.limitMb } : null;
+  } catch {
+    return null;
+  }
 }

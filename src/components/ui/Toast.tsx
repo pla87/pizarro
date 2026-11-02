@@ -1,7 +1,9 @@
 "use client";
 
 import { CheckCircle2, AlertCircle, Undo2 } from "lucide-react";
+import Link from "next/link";
 import { createContext, useCallback, useContext, useState } from "react";
+import { useT } from "@/i18n/client";
 import { cn } from "./cn";
 
 type ToastKind = "success" | "error" | "undo";
@@ -25,6 +27,26 @@ export function useToast() {
 
 let nextId = 1;
 
+// Rutas internas que un aviso de error puede traer (cuota de almacenamiento superada, para administradores): se pintan como enlace.
+const SETTINGS_PATH = /(\/p\/[a-z0-9]+\/settings\?tab=adjuntos|\/admin\/settings)(?![\w/?=&-])/i;
+
+export function MessageWithLinks({ message }: { message: string }) {
+  const t = useT();
+  const parts = message.split(SETTINGS_PATH);
+  if (parts.length === 1) return <>{message}</>;
+  return (
+    <>
+      {parts.map((part, i) =>
+        i % 2 === 1 ? (
+          <Link key={i} href={part} className="font-semibold underline underline-offset-2">{t("Abrir ajustes")}</Link>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
   const show = useCallback((message: string, kind: ToastKind = "success", action?: ToastAction) => {
@@ -47,7 +69,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             )}
           >
             {t.kind === "error" ? <AlertCircle size={16} className="shrink-0" /> : t.kind === "undo" ? <Undo2 size={16} className="shrink-0" /> : <CheckCircle2 size={16} className="shrink-0" />}
-            {t.message}
+            <span><MessageWithLinks message={t.message} /></span>
             {t.action && (
               <button
                 type="button"

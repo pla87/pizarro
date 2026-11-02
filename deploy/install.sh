@@ -224,8 +224,8 @@ write_kit() {
     echo "Dominio:            $(get_var DOMAIN)"
     echo
     echo "SESSION_SECRET=\"$(get_var SESSION_SECRET)\""
-    echo "TOKEN_SECRET=\"$(get_var TOKEN_SECRET)\""
-    echo "ENCRYPTION_KEY=\"$(get_var ENCRYPTION_KEY)\""
+    if [ -n "$(get_var TOKEN_SECRET)" ]; then echo "TOKEN_SECRET=\"$(get_var TOKEN_SECRET)\""; else echo "TOKEN_SECRET: no definida (se deriva de SESSION_SECRET)"; fi
+    if [ -n "$(get_var ENCRYPTION_KEY)" ]; then echo "ENCRYPTION_KEY=\"$(get_var ENCRYPTION_KEY)\""; else echo "ENCRYPTION_KEY: no definida (se deriva de SESSION_SECRET)"; fi
     echo "BACKUP_KEY=\"$(get_var BACKUP_KEY)\""
     echo "POSTGRES_PASSWORD=\"$(get_var POSTGRES_PASSWORD)\""
     echo

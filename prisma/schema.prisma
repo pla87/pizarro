@@ -239,6 +239,8 @@ model Project {
   googleShareMode String?
   /// Tamaño máximo (MB) de UN adjunto. 1 ≤ fileMaxMb ≤ taskAttachMaxMb ≤ releaseZipMaxMb.
   fileMaxMb       Int    @default(20)
+  /// Cuota de almacenamiento propia (MB) de este proyecto; null = la general (Administración → Ajustes, o UPLOAD_QUOTA_MB_PER_PROJECT).
+  storageQuotaMb  Int?
   /// Campos opcionales de las tareas que el proyecto tiene activados (ver lib/task-fields.ts); los datos se conservan al desactivar.
   taskFields  String[] @default([])
   position    Float    @default(0)

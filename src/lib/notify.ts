@@ -241,7 +241,7 @@ export async function notifyTask(opts: {
   });
   const createdIds = created.map((c) => c.id);
   // Por email solo si la persona lo quiere para este tipo; WhatsApp, solo menciones (lo decide deliver).
-  const external = await externalAllowed(opts.actorId, opts.taskId, created.map((c) => c.userId), createdIds);
+  const external = await externalAllowed(opts.actorId, opts.type, opts.taskId, created.map((c) => c.userId), createdIds);
   logEvent({
     category: "notify", action: `notify.${opts.type.toLowerCase()}`, message: `${createdIds.length} aviso(s) ${opts.type} creados (${external.size} con envío externo)`,
     userId: opts.actorId ?? undefined, projectId: opts.projectId,
@@ -265,22 +265,30 @@ const MAX_EXTERNAL_PER_HOUR = 40;
  * Los avisos en la app se crean siempre; el email y el WhatsApp (que pueden costar dinero)
  * se limitan: uno por persona y tarea cada 10 minutos y un tope por autor y hora.
  */
-async function externalAllowed(actorId: string | null, taskId: string, recipientIds: string[], newIds: string[]): Promise<Set<string>> {
+async function externalAllowed(actorId: string | null, type: NotificationKind, taskId: string, recipientIds: string[], newIds: string[]): Promise<Set<string>> {
   const since = new Date(Date.now() - DEDUPE_MINUTES * 60_000);
   const recent = await db.notification.findMany({
     where: {
       taskId,
+      type,
       userId: { in: recipientIds },
       createdAt: { gte: since },
-      // Cualquier aviso previo reciente (enviado o en curso) basta: así dos comentarios seguidos no duplican.
+      // Cualquier aviso previo reciente del mismo tipo (enviado o en curso) basta: así dos comentarios seguidos no
+      // duplican, pero un comentario no silencia el email de una asignación.
       id: { notIn: newIds },
     },
     select: { userId: true },
   });
   const skip = new Set(recent.map((r) => r.userId));
+  // Quien no quiere ningún envío externo de este tipo no gasta el límite por hora.
+  const prefs = await db.user.findMany({
+    where: { id: { in: recipientIds } },
+    select: { id: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, notifyWhatsapp: true, whatsappPhone: true },
+  });
+  const wanted = new Set(prefs.filter((u) => emailWanted(type, u) || (type === "MENTION" && u.notifyWhatsapp && !!u.whatsappPhone)).map((u) => u.id));
   const allowed = new Set<string>();
   for (const id of recipientIds) {
-    if (skip.has(id)) continue;
+    if (skip.has(id) || !wanted.has(id)) continue;
     if (!rateLimit(`notify:${actorId ?? "system"}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000)) {
       console.error("[notify] Límite de envíos externos alcanzado para", actorId);
       break;

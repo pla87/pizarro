@@ -11,7 +11,7 @@ import { ZoomImage } from "@/components/docs/ZoomImage";
 import { Markdown } from "@/components/ui/Markdown";
 import { MODAL_SIZE_REM, Modal } from "@/components/ui/Modal";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { useToast } from "@/components/ui/Toast";
+import { MessageWithLinks, useToast } from "@/components/ui/Toast";
 import { cn } from "@/components/ui/cn";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { DOCUMENT_PREVIEW_MAX_BYTES, DOCUMENT_TRASH_DAYS, isPreviewable, type DocumentKindName } from "@/lib/document-kind";
@@ -228,7 +228,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
                 <span className="shrink-0 text-xs text-slate-500">{t("Subiendo…")}</span>
               ) : (
                 <>
-                  <span className="min-w-0 shrink text-xs text-red-600 dark:text-red-400" role="alert">{u.error}</span>
+                  <span className="min-w-0 shrink text-xs text-red-600 dark:text-red-400" role="alert"><MessageWithLinks message={u.error ?? ""} /></span>
                   <button type="button" className="btn-icon shrink-0" aria-label={t("Descartar")} onClick={() => setUploads((x) => x.filter((i) => i.key !== u.key))}>
                     <X size={14} />
                   </button>

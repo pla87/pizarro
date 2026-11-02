@@ -5,6 +5,7 @@ import { runAction } from "@/lib/action";
 import { backupDestinationsInfo, backupKey, createBackup, startExternalCopy } from "@/lib/backup";
 import { issueBackupDownloadToken } from "@/lib/backup-download";
 import { db } from "@/lib/db";
+import { getT } from "@/i18n/server";
 import { AppError } from "@/lib/errors";
 import { logEvent } from "@/lib/log";
 import { verifyPassword } from "@/lib/password";
@@ -18,7 +19,10 @@ export async function createBackupNow() {
     await requireAdmin();
     if (!backupKey()) throw new AppError("Las copias de seguridad están desactivadas: falta una BACKUP_KEY válida.");
     const run = await createBackup();
-    if (!run.ok) throw new AppError(`No se pudo crear la copia: ${run.error ?? "error desconocido"}`);
+    if (!run.ok) {
+      const t = await getT();
+      throw new AppError(`${t("No se pudo crear la copia:")} ${run.error ?? t("error desconocido")}`);
+    }
     revalidatePath("/admin/backups");
     return { file: run.file ?? "", bytes: run.bytes ?? 0 };
   });

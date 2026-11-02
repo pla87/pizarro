@@ -10,6 +10,7 @@ import { saveUndo } from "@/lib/undo";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser, requireUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
+import { quotaError } from "@/lib/quota-message";
 import { createAttachmentWithinLimit, roundMb } from "@/lib/attachment-limit";
 import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, processImage, removeAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveRawAttachmentFile } from "@/lib/uploads";
 import { attachmentTotals } from "@/lib/board";
@@ -83,14 +84,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
       { id: true, originalName: true, mimeType: true, isImage: true, width: true, height: true, size: true },
     );
     if (!created.ok && created.reason === "quota") {
-      const t = await getT();
-      const vars = { used: created.quota.usedMb, limit: created.quota.limitMb };
-      throw new AppError(
-        created.quota.scope === "project"
-          ? t("Cuota de adjuntos del proyecto superada: {used} MB usados de {limit} MB.", vars)
-          : t("Cuota total de adjuntos del servidor superada: {used} MB usados de {limit} MB.", vars),
-        413,
-      );
+      throw quotaError(await getT(), created.quota, { projectId, isAdmin: user.role === "ADMIN" });
     }
     if (!created.ok) {
       const t = await getT();

@@ -9,6 +9,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser, requireUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
+import { quotaError } from "@/lib/quota-message";
 import { roundMb } from "@/lib/attachment-limit";
 import { confirmDocumentKind, detectDocumentKind, documentMime, sanitizeDocumentName, type DocumentKindName } from "@/lib/document-kind";
 import { createDocumentWithinLimit } from "@/lib/documents";
@@ -75,13 +76,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
       if (created.reason === "count") {
         throw new AppError(t("La documentación del proyecto ya tiene el máximo de {n} archivos.", { n: created.limit }), 413);
       }
-      const vars = { used: created.quota.usedMb, limit: created.quota.limitMb };
-      throw new AppError(
-        created.quota.scope === "project"
-          ? t("Cuota de adjuntos del proyecto superada: {used} MB usados de {limit} MB.", vars)
-          : t("Cuota total de adjuntos del servidor superada: {used} MB usados de {limit} MB.", vars),
-        413,
-      );
+      throw quotaError(t, created.quota, { projectId, isAdmin: user.role === "ADMIN" });
     }
     const document = created.document;
     try {

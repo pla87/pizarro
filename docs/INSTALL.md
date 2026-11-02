@@ -314,6 +314,15 @@ Qué cambia:
 
 **Presentación en la raíz (`LANDING_AT_ROOT=1`).** Opcional: quien abre `/` sin sesión ve la página de presentación del producto (la dirección no cambia) en vez de ir al acceso; con sesión, todo sigue igual. La presentación también está siempre en `/presentacion`. Mientras la instalación no tenga usuarios, `/` lleva igualmente al asistente `/setup`; si alguna vez no lo hiciera, abre `/setup` directamente. Se define en `deploy/.env` (o en las variables de Railway) y se aplica con `docker compose up -d`.
 
+### 3.8 Dónde se guardan los ficheros y cuánto pueden ocupar
+
+Los adjuntos, sus miniaturas, las copias de adjuntos de las releases, la documentación, las exportaciones y las copias de seguridad locales viven en la carpeta `UPLOAD_DIR` (por defecto `/app/uploads` en la imagen; en Railway, el volumen montado en esa ruta; en Docker Compose, el volumen `pizarro_uploads`). La base de datos solo guarda sus nombres y tamaños.
+
+- **Tamaño del disco.** En Railway el volumen se puede ampliar desde el propio volumen (*Settings → Size*); no hace falta redesplegar. En un servidor propio, ampliando el disco o el volumen de Docker.
+- **Cuotas.** Cada proyecto tiene una cuota de almacenamiento (adjuntos, copias en releases y documentación, papelera incluida): **10 GB por defecto**. Se cambia en *Administración → Ajustes → Almacenamiento* (también la cuota total opcional del servidor y, para un proyecto concreto, en *Ajustes del proyecto → Adjuntos y límites*). Si defines `UPLOAD_QUOTA_MB_PER_PROJECT` o `UPLOAD_QUOTA_MB_TOTAL`, esas variables mandan sobre lo guardado en la aplicación. Orden: cuota propia del proyecto, variable de entorno, ajuste de Administración, 10 GB.
+- **Ver y liberar espacio.** *Administración → Ajustes → Almacenamiento* muestra la carpeta, el espacio del disco, lo que ocupa cada categoría y los 10 proyectos que más pesan. En *Ajustes del proyecto → Adjuntos y límites* se pueden borrar los adjuntos de tareas archivadas, vaciar la papelera de documentación y quitar las copias de adjuntos de releases antiguas (suelen ser lo que más pesa, porque duplican los adjuntos de las tareas).
+- Deja siempre margen en el volumen: las cuotas no incluyen miniaturas, copias de seguridad locales ni exportaciones.
+
 ## 4. Copias de seguridad
 
 - **Automáticas:** con `BACKUP_KEY`, cada día se copian, cifrados, la base de datos y **todos los ficheros del volumen de subidas** (adjuntos, miniaturas, copias de releases, documentos) en su carpeta `backups/`. Los ficheros se guardan una sola vez y cada copia solo añade los nuevos. Se conservan 14 diarias y 6 mensuales, y cada mes se restaura la última en una base de datos temporal para comprobar que sirve. Estado en *Administración → Copias de seguridad*.

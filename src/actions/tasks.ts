@@ -132,7 +132,7 @@ export async function createTask(input: z.input<typeof createSchema>) {
     const optional = pickTaskFields(data);
     if (patchedFieldKeys(optional).length) {
       const enabled = await enabledTaskFields(data.projectId);
-      assertFieldsEnabled(enabled, optional);
+      await assertFieldsEnabled(enabled, optional);
       assertStartBeforeDue(enabled, data.startDate, data.dueDate);
     }
     // Solo se admite evergreen en la columna de la release.
@@ -239,7 +239,7 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
     await assertDeliverableInProject(data.deliverableId, data.projectId);
     await assertKindsInProject(data.tasks.map((t) => t.kindId), data.projectId);
     const optional = pickTaskFields({ priority: data.priority, client: data.client });
-    if (patchedFieldKeys(optional).length) assertFieldsEnabled(await enabledTaskFields(data.projectId), optional);
+    if (patchedFieldKeys(optional).length) await assertFieldsEnabled(await enabledTaskFields(data.projectId), optional);
     const labelIds = [...new Set(data.labelIds)];
     const dueDate = data.dueDate ? isoToDate(data.dueDate) : null;
     const templates = new Map<string, string[]>();
@@ -286,6 +286,10 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
     });
     addUndo(...ids.map((id) => ({ t: "task.remove" as const, id })));
     describeAction("Creó {count} en «{col}»: {titles}", { count: tasksN(ids.length), col: await columnName(data.columnId), titles: data.tasks.map((t) => `«${t.title}»`).join(", ").slice(0, 600) }, { taskIds: ids });
+    // Un solo aviso para todo el lote (enlaza a la primera tarea), como createTask pero sin inundar al responsable.
+    if (data.assigneeId && ids[0]) {
+      await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId: ids[0], projectId: data.projectId, recipientIds: [data.assigneeId], excerpt: ids.length === 1 ? makeExcerpt(data.tasks[0]!.title) : `${ids.length} tareas` });
+    }
     const rows = await db.task.findMany({ where: { id: { in: ids } }, orderBy: TASK_ORDER, select: boardTaskSelect });
     return rows.map(toBoardTask);
   });
@@ -457,7 +461,7 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
     const optional = onlyChangedFields(task, optionalIn);
     if (patchedFieldKeys(optional).length || optionalIn.startDate !== undefined || data.dueDate !== undefined) {
       const enabled = await enabledTaskFields(projectId);
-      assertFieldsEnabled(enabled, optional);
+      await assertFieldsEnabled(enabled, optional);
       if (optionalIn.startDate !== undefined || data.dueDate !== undefined) {
         assertStartBeforeDue(enabled, optionalIn.startDate !== undefined ? optionalIn.startDate : dateToIso(task.startDate), data.dueDate !== undefined ? data.dueDate : dateToIso(task.dueDate));
       }
@@ -661,9 +665,11 @@ export async function archiveTask(taskId: string) {
 export async function archiveTasks(taskIds: string[]) {
   return runAction({ name: "tasks.archiveTasks", args: [taskIds] }, async () => {
     const user = await requireUser();
-    const ids = [...new Set(z.array(v.id).min(1).max(500).parse(taskIds))];
-    const tasks = await db.task.findMany({ where: { id: { in: ids }, project: visibleProjectsWhere(user) }, select: { id: true, projectId: true } });
-    if (tasks.length !== ids.length) throw notFound();
+    const requested = [...new Set(z.array(v.id).min(1).max(500).parse(taskIds))];
+    // Las que ya no existen o no se ven (borradas desde otra pestaña, p. ej.) se ignoran en vez de fallar toda la acción.
+    const tasks = await db.task.findMany({ where: { id: { in: requested }, project: visibleProjectsWhere(user) }, select: { id: true, projectId: true } });
+    if (!tasks.length) return { archived: 0, spawned: await spawnRecurrences([], user.id) };
+    const ids = tasks.map((t) => t.id);
     // Como en el borrado múltiple: el deshacer se guarda por proyecto, así que todas deben ser del mismo.
     if (new Set(tasks.map((t) => t.projectId)).size > 1) throw new AppError("Las tareas son de proyectos distintos.");
     noteProject(tasks[0]?.projectId);
@@ -677,16 +683,37 @@ export async function archiveTasks(taskIds: string[]) {
   });
 }
 
-/** Tareas archivadas del proyecto, las más recientes primero. */
-export async function getArchivedTasks(projectId: string) {
-  return runAction({ name: "tasks.getArchivedTasks", args: [projectId] }, async (): Promise<ArchivedTask[]> => {
+const ARCHIVED_PAGE = 100;
+
+/**
+ * Tareas archivadas del proyecto, las más recientes primero, en páginas (`cursor` = id de la última recibida).
+ * `query` busca en el servidor por título de la tarea o por título/número de release.
+ */
+export async function getArchivedTasks(projectId: string, opts: { query?: string; cursor?: string | null } = {}) {
+  return runAction({ name: "tasks.getArchivedTasks", args: [projectId, opts] }, async (): Promise<{ items: ArchivedTask[]; nextCursor: string | null }> => {
     const user = await requireUser();
     await assertProjectAccess(user, v.id.parse(projectId));
+    const q = (opts.query ?? "").trim().slice(0, 200);
+    const cursor = opts.cursor ? v.id.parse(opts.cursor) : null;
     describeAction("Consultó las tareas archivadas");
-    const rows = await db.task.findMany({
-      where: { projectId, archivedAt: { not: null } },
-      orderBy: { archivedAt: "desc" },
-      take: 500,
+    const num = /^R?(\d{1,9})$/i.exec(q);
+    const where: Prisma.TaskWhereInput = {
+      projectId,
+      archivedAt: { not: null },
+      ...(q
+        ? {
+            OR: [
+              { title: { contains: q, mode: "insensitive" } },
+              { releases: { some: { release: { OR: [{ title: { contains: q, mode: "insensitive" } }, ...(num ? [{ number: Number(num[1]) }] : [])] } } } },
+            ],
+          }
+        : {}),
+    };
+    const found = await db.task.findMany({
+      where,
+      orderBy: [{ archivedAt: "desc" }, { id: "desc" }],
+      take: ARCHIVED_PAGE + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       select: {
         id: true,
         title: true,
@@ -696,9 +723,11 @@ export async function getArchivedTasks(projectId: string) {
         releases: { select: { release: { select: { id: true, title: true, deployedAt: true } } } },
       },
     });
+    const rows = found.slice(0, ARCHIVED_PAGE);
+    const nextCursor = found.length > ARCHIVED_PAGE ? rows[rows.length - 1]!.id : null;
     const columns = await db.column.findMany({ where: { projectId }, select: { id: true, name: true } });
     const names = new Map(columns.map((c) => [c.id, c.name]));
-    return rows.map((t) => ({
+    const items = rows.map((t) => ({
       id: t.id,
       title: t.title,
       kindId: t.kindId,
@@ -708,6 +737,7 @@ export async function getArchivedTasks(projectId: string) {
         .map((r) => ({ id: r.release.id, title: r.release.title, deployedAt: r.release.deployedAt.toISOString() }))
         .sort((a, b) => b.deployedAt.localeCompare(a.deployedAt)),
     }));
+    return { items, nextCursor };
   });
 }
 export async function deleteTask(taskId: string) {
@@ -725,9 +755,11 @@ export async function deleteTask(taskId: string) {
 export async function deleteTasks(taskIds: string[]) {
   return runAction({ name: "tasks.deleteTasks", args: [taskIds] }, async () => {
     const user = await requireUser();
-    const ids = [...new Set(z.array(v.id).min(1).max(500).parse(taskIds))];
-    const tasks = await db.task.findMany({ where: { id: { in: ids }, project: visibleProjectsWhere(user) }, select: { id: true, projectId: true } });
-    if (tasks.length !== ids.length) throw notFound();
+    const requested = [...new Set(z.array(v.id).min(1).max(500).parse(taskIds))];
+    // Las que ya no existen o no se ven se ignoran en vez de fallar toda la acción.
+    const tasks = await db.task.findMany({ where: { id: { in: requested }, project: visibleProjectsWhere(user) }, select: { id: true, projectId: true } });
+    if (!tasks.length) return { deleted: 0 };
+    const ids = tasks.map((t) => t.id);
     // Todas deben ser del mismo proyecto: el deshacer se guarda por proyecto.
     if (new Set(tasks.map((t) => t.projectId)).size > 1) throw new AppError("Las tareas son de proyectos distintos.");
     noteProject(tasks[0]?.projectId);
@@ -1133,6 +1165,8 @@ export async function restoreTask(taskId: string) {
     const user = await requireUser();
     const { projectId } = await assertTaskAccess(user, v.id.parse(taskId));
     const task = await db.task.findUniqueOrThrow({ where: { id: taskId }, select: { archivedFromColumnId: true, archivedAt: true } });
+    // Una segunda pestaña (o un doble clic) puede llegar tarde: si ya está activa no se mueve.
+    if (!task.archivedAt) throw new AppError("La tarea no está archivada.");
     const origin = task.archivedFromColumnId
       ? await db.column.findFirst({ where: { id: task.archivedFromColumnId, projectId }, select: { id: true, name: true } })
       : null;
