@@ -60,7 +60,7 @@ Esta licencia se rige por la ley española. Para cualquier controversia, las par
 
 ## 10. Cómo obtener una licencia
 
-Para obtener una licencia comercial, escribe al Autor al email indicado en la página de presentación de Pizarro o en el repositorio del proyecto. El precio es el publicado en la página de presentación en el momento de la compra. El pago se hace con tarjeta y se emite factura con los datos de la empresa o de la persona que compra (el DNI o NIF es opcional para particulares).`;
+Para obtener una licencia comercial, escribe al Autor al email indicado en la página de presentación de Pizarro o en el repositorio del proyecto. El precio es el publicado en la página de presentación en el momento de la compra, más los impuestos aplicables (IVA). El pago se hace con tarjeta mediante una pasarela de pago, y la factura se emite de forma automática con los datos de la empresa o de la persona que compra (el DNI o NIF es opcional para particulares).`;
 
 export const LICENSE_EN = `# Pizarro License (English translation)
 
@@ -124,4 +124,4 @@ This licence is governed by Spanish law. For any dispute, the parties submit to 
 
 ## 10. How to obtain a licence
 
-To obtain a commercial licence, write to the Author at the email shown on Pizarro's presentation page or in the project repository. The price is the one published on the presentation page at the time of purchase. Payment is by card, and an invoice is issued with the details of the purchasing company or person (an ID or tax number is optional for individuals).`;
+To obtain a commercial licence, write to the Author at the email shown on Pizarro's presentation page or in the project repository. The price is the one published on the presentation page at the time of purchase, plus applicable taxes (VAT). Payment is by card through a payment gateway, and the invoice is issued automatically with the details of the purchasing company or person (an ID or tax number is optional for individuals).`;

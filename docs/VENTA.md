@@ -1,0 +1,106 @@
+# Guía de venta de la licencia (Stripe, sin programar)
+
+Esta guía explica cómo cobrar la licencia comercial de Pizarro (100 € **más IVA**, pago único por servidor) con tarjeta en la web y con factura automática, usando solo el panel de Stripe. No hace falta escribir código: al final se pega un enlace en un fichero del proyecto.
+
+> Los pasos y nombres de menú de Stripe cambian de vez en cuando. Si algo no coincide exactamente, busca la opción por su nombre en el panel (o en su ayuda). No guardes en el repositorio ninguna clave ni secreto de Stripe: para esto no hacen falta, solo se usa un enlace público.
+
+## Antes de empezar: lo que debe confirmar el propietario con su gestor
+
+Esta guía es técnica, no es asesoramiento fiscal. Antes de publicar el enlace conviene confirmar con el gestor o asesor:
+
+1. Que el autor está **dado de alta** para facturar (alta censal como autónomo o sociedad, epígrafe de actividad, obligaciones con Hacienda y con la Seguridad Social) antes del primer cobro.
+2. Que el **tipo de IVA aplicable es el 21 %** a la venta de esta licencia a clientes de España y cómo se declara (modelo 303).
+3. El **tratamiento de las ventas a empresas de otros países de la UE** (inversión del sujeto pasivo, ver más abajo) y la obligación de presentar el modelo 349 si se hacen.
+4. El **tratamiento de las ventas a clientes fuera de la UE** y a particulares de otros países de la UE (régimen de ventanilla única, OSS, en su caso).
+5. Que la **factura que genera Stripe** cumple los requisitos de factura que exige su caso (datos del emisor, numeración, mención de la inversión del sujeto pasivo cuando proceda), o si prefiere emitirla con su propio sistema.
+6. Cómo se declaran los ingresos que Stripe liquida en la cuenta bancaria, y la **comisión** de Stripe (que no es el precio de la factura).
+7. Qué cuenta de Stripe usar (a nombre del autor o de la sociedad) y el país de la cuenta.
+
+## 1. Crear la cuenta de Stripe
+
+1. Entra en la web de Stripe y crea una cuenta con un email de la actividad.
+2. Activa la cuenta (**Activar pagos** o similar): datos de la actividad, del titular, y la cuenta bancaria donde recibir los cobros. Hasta completarlo, Stripe funciona en modo de prueba.
+3. En **Configuración de la empresa** completa el nombre comercial, la dirección y el NIF del emisor: aparecerán en las facturas.
+4. Mientras pruebas, usa el **modo de prueba** (interruptor arriba del panel). Todo lo de esta guía se puede probar antes con las tarjetas de prueba de Stripe; cuando funcione, repite la creación del enlace en modo real.
+
+## 2. Crear el producto
+
+1. **Catálogo de productos → Añadir producto.**
+2. Nombre: **Licencia comercial Pizarro**.
+3. Descripción (opcional): «Licencia comercial de Pizarro, pago único por servidor. Actualizaciones incluidas.»
+4. Precio: **100 €**, tipo **Pago único** (no recurrente), moneda euro.
+5. **Comportamiento fiscal (tax behavior): «Exclusivo» (exclusive)**. Así el precio de 100 € es **sin IVA** y el IVA se suma después, que es lo que se anuncia en la web.
+6. Guarda el producto.
+
+## 3. Configurar el IVA
+
+### Opción recomendada: Stripe Tax
+
+1. **Impuestos (Tax) → Empezar** y activa Stripe Tax.
+2. Indica la dirección del emisor y añade tu **registro de IVA** (el país donde estás registrado; en España, el IVA general).
+3. Elige el **código fiscal del producto** (software o servicio electrónico, según te indique el gestor).
+4. Deja el comportamiento fiscal del precio en **exclusivo (exclusive)**.
+
+Stripe Tax calcula el IVA según el país del comprador y aplica la inversión del sujeto pasivo cuando el comprador es una empresa de la UE con un número de IVA válido (ver el apartado de IVA intracomunitario).
+
+### Alternativa: tasa de IVA manual del 21 %
+
+Si no se activa Stripe Tax:
+
+1. **Catálogo de productos → Tasas de impuestos → Crear** una tasa **IVA 21 %**, tipo **Exclusiva (no incluida en el precio)**, país España.
+2. Asígnala al producto o al Payment Link como tasa de impuesto por defecto.
+
+Con la tasa manual se cobra el 21 % a todos los compradores, incluidas las empresas de otros países de la UE. Si vas a vender fuera de España, pregunta al gestor si te conviene Stripe Tax o gestionar esos casos a mano.
+
+## 4. Crear el Payment Link
+
+1. **Payment Links → Nuevo** (o **Crear enlace de pago**).
+2. Elige el producto **Licencia comercial Pizarro** (cantidad 1; desactiva el selector de cantidad: la licencia es por servidor y se compra una por servidor; quien tenga varios servidores repite la compra).
+3. Activa la **recogida automática de impuestos** (con Stripe Tax) o aplica la tasa manual del paso 3.
+4. En **Opciones**:
+   - **Crear factura después del pago** (invoice creation): **activado**. Stripe genera y envía la factura por email al comprador automáticamente.
+   - **Recoger la dirección de facturación**: activado (obligatoria para calcular el IVA y para la factura).
+   - **Recoger el nombre de la empresa** (o «Permitir que los clientes compren como empresa»): activado.
+   - **Recoger el NIF/CIF/número de IVA (tax ID collection)**: activado. Es **opcional** para quien compra: los particulares pueden dejarlo en blanco.
+   - El **email** del comprador se pide siempre en el pago; Stripe lo usa para enviarle el recibo y la factura.
+5. **Página de confirmación**: elige **Mostrar mensaje de confirmación** y escribe algo como: «Gracias por tu compra. Te hemos enviado la factura por email. Ahora, en Pizarro, ve a Administración → Licencia y anota el titular y el número de factura. No hace falta activar nada: Pizarro funciona igual con o sin ese registro.» (Si prefieres, redirige a una página tuya.)
+6. Guarda (**Crear enlace**). Stripe te da una dirección pública del estilo `https://buy.stripe.com/...`.
+
+Antes de publicarlo, prueba el enlace en modo de prueba: paga con una tarjeta de prueba, comprueba que llega la factura con el IVA bien calculado (21 % para un comprador de España) y con el NIF y el nombre de empresa si se rellenan.
+
+## 5. Dónde pegar el enlace y cómo publicarlo
+
+1. Abre `src/lib/product.ts` y pega el enlace (el del modo real) en la constante `BUY_URL`:
+
+   ```ts
+   export const BUY_URL: string = "https://buy.stripe.com/...";
+   ```
+
+   Es una constante del producto, no de cada instalación: el producto se vende desde un único sitio. Es un enlace público; no contiene claves ni secretos.
+2. Guarda el cambio con un commit y publica una versión nueva como se hace habitualmente (ver `docs/HANDOFF.md`). La página de presentación (botón «Comprar») y Administración → Licencia (botón «Comprar licencia (100 € + IVA)») usan ese enlace.
+3. Mientras `BUY_URL` esté vacía, el botón lleva al email de contacto público (el configurado en Administración → Textos legales) o, si tampoco hay, a la página `/licencia`.
+
+## 6. Qué hace el comprador después
+
+1. Paga con tarjeta en el enlace y recibe la factura por email.
+2. En su instalación de Pizarro, entra como administrador en **Administración → Licencia**, y anota el **titular**, el **número de factura (o referencia de compra)** y, si quiere, el email de compra. Se guarda en su instalación y queda anotado en el registro de actividad.
+3. Ese registro es solo informativo: no activa nada ni bloquea nada, y Pizarro no hace llamadas a internet para comprobarlo.
+
+Cada servidor necesita su licencia. Las actualizaciones son gratuitas para siempre. El soporte no está incluido.
+
+## 7. IVA intracomunitario (empresas de otros países de la UE)
+
+- Si el comprador es una **empresa de otro país de la UE con un número de IVA (VAT) válido**, la operación normalmente se factura **sin IVA** por **inversión del sujeto pasivo** (el IVA lo declara el comprador en su país), y la factura debe indicarlo.
+- **Stripe Tax lo gestiona**: valida el número de IVA que se recoge en el pago y, si es válido y el comprador está en otro país de la UE, no cobra IVA y lo anota en la factura. Con la tasa manual del 21 % **no** se hace: cobraría el 21 % a todos.
+- Si el comprador es un particular, o la empresa no aporta un número de IVA válido, se cobra el IVA que corresponda.
+- Estas ventas hay que declararlas (por ejemplo, el modelo 349 de operaciones intracomunitarias en España). Consúltalo con el gestor.
+- Para ventas fuera de la UE, el IVA español normalmente no se aplica, pero conviene confirmar con el gestor cada caso.
+
+## Comprobación final
+
+- [ ] El gestor ha confirmado el alta, el tipo de IVA y el tratamiento de las ventas fuera de España.
+- [ ] El producto tiene el precio de 100 € con comportamiento fiscal exclusivo.
+- [ ] Stripe Tax está activado (o la tasa manual del 21 % exclusiva está asignada).
+- [ ] El Payment Link crea factura después del pago y pide dirección, empresa y NIF/CIF/VAT (opcional).
+- [ ] Una compra de prueba produce una factura correcta.
+- [ ] `BUY_URL` contiene el enlace del modo real y la nueva versión está publicada.
