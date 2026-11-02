@@ -37,6 +37,8 @@ export const READ_ACTIONS = [
   "templates.listTemplates",
   "report.pdf",
   "release.zipDownload",
+  "storage.previewCleanup",
+  "storage.largestAttachments",
 ];
 
 type Params = Record<string, string | string[] | undefined>;

@@ -1,5 +1,6 @@
 // Diccionario español → inglés, repartido por zonas de la app (cada fichero es un objeto plano).
 import { admin } from "./admin";
+import { almacenamiento } from "./almacenamiento";
 import { board } from "./board";
 import { colaboracion } from "./colaboracion";
 import { calendar } from "./calendar";
@@ -15,4 +16,4 @@ import { legal } from "./legal";
 import { setup } from "./setup";
 import { task } from "./task";
 
-export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing };
+export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing, ...almacenamiento };

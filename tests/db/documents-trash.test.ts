@@ -124,7 +124,7 @@ describe("papelera de documentos", () => {
     assert.ok((await db.projectDocument.findUniqueOrThrow({ where: { id: trashed.id } })).deletedAt);
   });
 
-  test("la papelera cuenta en la cuota hasta la purga, y restaurar falla si la cuota se redujo", async () => {
+  test("la papelera cuenta en la cuota hasta la purga, y restaurar siempre se permite", async () => {
     const m = await makeUser();
     const f = await makeProject({ members: [m] });
     const pid = f.project.id;
@@ -142,7 +142,9 @@ describe("papelera de documentos", () => {
     // Con la cuota reducida por debajo de lo usado, restaurar falla; borrar definitivamente libera sitio.
     await db.projectDocument.update({ where: { id: big.id }, data: { size: 3 * MB } });
     await withQuota(2, async () => {
-      await asUser(m, async () => { expectFail(await restoreDocument(big.id), /cuota/); });
+      // Restaurar no añade bytes (ya contaban): se permite aunque el proyecto esté por encima de la cuota.
+      await asUser(m, async () => { expectOk(await restoreDocument(big.id)); });
+      await asUser(m, async () => { expectOk(await deleteDocument(big.id)); });
       await asUser(m, async () => { expectOk(await deleteDocumentForever(big.id)); });
       assert.equal((await createDocumentWithinLimit(row(pid, m.id, 1))).ok, true);
     });

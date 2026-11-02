@@ -15,7 +15,9 @@ import { appTimeZone } from "../format";
 import { isDomainMode } from "../google-share";
 import { mentionToken } from "../mentions";
 import { POSITION_STEP } from "../positions";
-import { checkQuota } from "../quota";
+import { checkQuota, type QuotaExceeded } from "../quota";
+import { getQuotaLimits } from "../quota-settings";
+import { quotaError as quotaErrorFor } from "../quota-message";
 import { quotaExceededFor, storageUsage } from "../storage-usage";
 import { normalizeTaskFields } from "../task-fields";
 import {
@@ -152,13 +154,14 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
   // su copia aunque varias apunten al mismo fichero. Comprobación previa aquí; la definitiva se repite dentro de la transacción.
   const realSize = (sha: string) => files.get(sha)!.size;
   const usageBase = await storageUsage("none");
+  const quotaLimits = await getQuotaLimits(null);
   const refShas = [...data.tasks.flatMap((x) => x.attachments.map((a) => a.file)), ...data.releases.flatMap((r) => r.attachments.map((a) => a.file)), ...data.documents.map((d) => d.file)];
-  const preQuota = checkQuota(usageBase, refShas.map(realSize).filter((n) => n <= fileMaxBytes).reduce((n, s) => n + s, 0));
+  const preQuota = checkQuota(usageBase, refShas.map(realSize).filter((n) => n <= fileMaxBytes).reduce((n, s) => n + s, 0), quotaLimits);
   if (preQuota) throw quotaError(t, preQuota);
   /** Bytes ya escritos en disco: se aborta en cuanto se pasa la cuota, antes de seguir llenando el disco. */
   let writtenBytes = 0;
   const assertRoom = (more: number) => {
-    const q = checkQuota(usageBase, writtenBytes + more);
+    const q = checkQuota(usageBase, writtenBytes + more, quotaLimits);
     if (q) throw quotaError(t, q);
   };
 
@@ -545,12 +548,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
   }
 }
 
-function quotaError(t: Awaited<ReturnType<typeof getT>>, q: { scope: "project" | "total"; usedMb: number; limitMb: number }): AppError {
-  const vars = { used: q.usedMb, limit: q.limitMb };
-  return new AppError(
-    q.scope === "project"
-      ? t("Cuota de adjuntos del proyecto superada: {used} MB usados de {limit} MB.", vars)
-      : t("Cuota total de adjuntos del servidor superada: {used} MB usados de {limit} MB.", vars),
-    413,
-  );
+/** La importación solo la hace un administrador; el proyecto aún no existe, así que no hay enlace a sus ajustes. */
+function quotaError(t: Awaited<ReturnType<typeof getT>>, q: QuotaExceeded): AppError {
+  return quotaErrorFor(t, q, { projectId: null, isAdmin: true });
 }
