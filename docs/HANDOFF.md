@@ -101,13 +101,14 @@ llevan enlaces de sesión ni nombres de modelos.
 **Paquetización (paso a paso, a petición del propietario):**
 
 - Hecho: instalación en un paso (`deploy/get.sh`), actualizaciones con versiones e imagen publicada, aviso de
-  versión nueva, página de presentación `/presentacion` con demo.
+  versión nueva, página de presentación `/presentacion` con demo, instalación, precios («próximamente»), preguntas
+  frecuentes y acceso desde *Administración → Ajustes*; proyectos de ejemplo al crear un proyecto
+  (`src/lib/project-examples.ts`: software, familia, eventos, empresa).
 - Pendiente de confirmar por el propietario: primera publicación con *Run workflow* y paquete GHCR público; prueba
   real en un VPS siguiendo `docs/PRUEBA-VPS.md`; plantilla de Railway (pasos en `docs/INSTALL.md`; la sintaxis de
   variables generadas debe verificarse en Railway).
-- Siguientes pasos: licencia o edición (cómo se vende y se limita), plantillas de ejemplo listas para usar
-  (familia, empresa, eventos…) con las columnas especiales y plantillas de release, y pulir la página de
-  presentación (capturas reales sin datos personales, precios).
+- Siguientes pasos: licencia o edición (cómo se vende y se limita), precios reales en la presentación, capturas
+  reales sin datos personales, y dominio/web propia del producto.
 
 **Ideas pospuestas por decisión del propietario:**
 
@@ -120,4 +121,8 @@ llevan enlaces de sesión ni nombres de modelos.
 - WhatsApp: la integración con la API oficial de Meta ya existe (variables `WHATSAPP_*`); falta que el propietario
   decida si la activa (coste aproximado por aviso fuera de la ventana de 24 h; alternativa gratuita: un bot de
   Telegram, no implementado).
+- Entorno de la nube: `npm ci` instala solo el binario SWC musl; para `next build` hace falta
+  `@next/swc-linux-x64-gnu` (misma versión que `next`) extraído en `node_modules/@next/`. La suite QA necesita
+  `SEED_ADMIN_PASSWORD="cambia-esta-clave"` en el `.env` local.
+- Ideas pospuestas (R36): tablero que recarga solo lo cambiado (a partir de ~10 personas a la vez).
 - Las copias de seguridad cifradas suben a un almacenamiento S3 compatible configurado por el propietario.

@@ -1,6 +1,79 @@
 {
   "versions": [
     {
+      "version": "1.40.0",
+      "date": "2026-11-02",
+      "releasedAt": "2026-11-02T12:42:15+01:00",
+      "summary": "Ejemplos de proyecto listos para usar, página de presentación mejorada, más seguridad en el acceso y correcciones",
+      "changes": {
+        "nuevas": [
+          "Nuevo proyecto → «Empezar desde»: proyecto en blanco o un ejemplo listo para usar (Equipo de software, Familia y casa, Preparación de un evento, Empresa y clientes), con sus columnas, tipos, campos y unas tarjetas de muestra con la etiqueta «Ejemplo».",
+          "Administración → Ajustes: tarjeta «Página de presentación» con el enlace para verla.",
+          "Página de presentación: secciones «Cómo se instala», «Precios» (próximamente, con el email de contacto) y «Preguntas frecuentes»."
+        ],
+        "mejoras": [
+          "Inicio de sesión: además del límite por conexión, como mucho 6 intentos por cuenta cada 15 minutos.",
+          "Los administradores que entran con Google pasan también por la verificación en dos pasos de Pizarro.",
+          "Las imágenes de un proyecto dejan de verse en cuanto se quita el acceso (antes el navegador las guardaba hasta un día).",
+          "Móvil: el título de la tarea ocupa como mucho dos líneas; al tocarlo se edita y se ve entero.",
+          "El micrófono para dictar el título va dentro de la caja del campo.",
+          "Liberar espacio: opciones de más de 7 y de 15 días.",
+          "Ajustes del proyecto y de administración cargan más rápido (consultas en paralelo)."
+        ],
+        "correcciones": [
+          "Dictado en Chrome para Android: ya no repite el texto («esto, esto es, esto es una…»).",
+          "Liberar espacio ya no puede borrar adjuntos de una tarea recuperada ni un documento restaurado mientras tanto, y pide confirmar de nuevo si hay más contenido del mostrado.",
+          "La purga automática de la papelera ya no borra el archivo de un documento restaurado a la vez.",
+          "El aviso de cuota total superada mostraba «{used}» y «{limit}» sin rellenar a quien no es administrador.",
+          "Archivadas: «Cargar más» ya no se pierde si se recupera una tarea mientras se pagina, ni mezcla resultados de una búsqueda anterior.",
+          "Archivar varias tareas ya no cuenta ni anota las que ya estaban archivadas; recuperar dos veces seguidas no duplica el movimiento.",
+          "Dos columnas creadas a la vez ya no superan el máximo ni comparten posición; mover una columna en el extremo no deja un deshacer vacío.",
+          "Los avisos de error idénticos seguidos ya no se apilan duplicados.",
+          "Una subida múltiple se detiene al alcanzar la cuota en vez de intentar todos los archivos."
+        ],
+        "tecnicos": [
+          "Las subidas rechazan por tamaño declarado y por cola llena antes de ocupar un hueco de subida.",
+          "El registro de errores del navegador rechaza cuerpos grandes antes de leerlos.",
+          "Las cuotas generales se guardan en una sola transacción."
+        ]
+      },
+      "en": {
+        "summary": "Ready-to-use example projects, an improved product page, stronger sign-in security and fixes",
+        "changes": {
+          "nuevas": [
+            "New project → “Start from”: a blank project or a ready-to-use example (Software team, Family and home, Event planning, Business and clients), with its columns, types, fields and a few sample cards labelled “Example”.",
+            "Administration → Settings: “Product page” card with a link to view it.",
+            "Product page: “How to install”, “Pricing” (coming soon, with the contact email) and “FAQ” sections."
+          ],
+          "mejoras": [
+            "Sign-in: besides the per-connection limit, at most 6 attempts per account every 15 minutes.",
+            "Administrators who sign in with Google also go through Pizarro's two-step verification.",
+            "A project's images stop showing as soon as access is removed (the browser used to keep them for up to a day).",
+            "Mobile: the task title takes at most two lines; tap it to edit and see it in full.",
+            "The dictation microphone for the title sits inside the field box.",
+            "Free up space: older-than-7-days and older-than-15-days options.",
+            "Project and administration settings load faster (parallel queries)."
+          ],
+          "correcciones": [
+            "Dictation in Chrome for Android no longer repeats text.",
+            "Freeing up space can no longer delete attachments of a task restored meanwhile or a document restored meanwhile, and asks to confirm again if there is more content than shown.",
+            "The automatic trash purge no longer deletes the file of a document restored at the same time.",
+            "The total-quota-exceeded message showed unfilled “{used}” and “{limit}” to non-administrators.",
+            "Archived: “Load more” no longer gets lost if a task is restored while paging, nor mixes results from a previous search.",
+            "Archiving several tasks no longer counts or logs those already archived; restoring twice in a row no longer duplicates the move.",
+            "Two columns created at once no longer exceed the maximum or share a position; moving a column at the edge no longer leaves an empty undo.",
+            "Identical consecutive error notices no longer stack up.",
+            "A multi-file upload stops when the quota is reached instead of trying every file."
+          ],
+          "tecnicos": [
+            "Uploads are rejected by declared size and full queue before taking an upload slot.",
+            "The browser error log rejects large bodies before reading them.",
+            "General quotas are saved in a single transaction."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.39.0",
       "date": "2026-11-02",
       "releasedAt": "2026-11-02T02:29:44+01:00",
