@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import type { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { actionContext } from "./action-context";
 import { forgetAttachments } from "./attachment-cache";
 import { isUniqueColumnRole } from "./constants";
@@ -272,6 +272,33 @@ export function touchedTask(entries: { kind: UndoKind; ops: unknown }[], taskId:
   return out;
 }
 
+/**
+ * ¿Pudo recortarse lo que touchedTask ve? Cada pila guarda UNDO_LIMIT entradas por persona y proyecto: si las de un
+ * rato la llenan (de deshacer o de rehacer), las más antiguas de ese rato pueden haberse descartado.
+ */
+export function entriesMayBeTrimmed(entries: { kind: UndoKind }[]): boolean {
+  return (["UNDO", "REDO"] as const).some((k) => entries.filter((e) => e.kind === k).length >= UNDO_LIMIT);
+}
+
+/**
+ * Cuando las entradas pudieron recortarse (entriesMayBeTrimmed), lo que hizo la persona ya no se sabe entero: se da por
+ * tocado todo lo que la instantánea del detalle permite devolver (todos los campos, las etiquetas, las subtareas que
+ * había, que vuelven a su estado; las que no había se quitan). Adjuntos y enlaces siguen por su autor y fecha.
+ */
+export function touchEverything(out: TouchedTask, taskId: string, snapSubtasks: { id: string; title: string; done: boolean; position: number }[] | undefined, currentSubtaskIds: string[]): void {
+  for (const k of TASK_DATA_KEYS) out.fields.add(k);
+  out.labels = true;
+  if (!snapSubtasks) return;
+  const before = new Set(snapSubtasks.map((s) => s.id));
+  for (const id of currentSubtaskIds) if (!before.has(id)) out.subtasksCreated.add(id);
+  const now = new Set(currentSubtaskIds);
+  for (const s of snapSubtasks) {
+    out.subtaskFields.set(s.id, new Set<SubtaskKey>(["title", "done", "position"]));
+    out.subtasksCreated.delete(s.id);
+    if (!now.has(s.id) && !out.subtasksDeleted.has(s.id)) out.subtasksDeleted.set(s.id, { row: { ...s, taskId }, byUndo: true });
+  }
+}
+
 /** Entrada de historial (TaskEvent) tal como se guarda en la entrada de rehacer para poder recrearla. */
 export interface SavedEvent {
   taskId: string;
@@ -364,58 +391,73 @@ export async function discardUndo(where: Prisma.UndoEntryWhereInput): Promise<nu
  * pueden recrear, así que `release.remove` no tiene operación de rehacer.
  */
 export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoOp[]> {
-  const out: UndoOp[] = [];
+  // Cada operación deja su hueco en `out`, en orden. Las de tarea (las que llegan a cientos en una acción masiva) se
+  // leen después por lotes y rellenan su hueco: nada cambia en la BD mientras tanto, así que da lo mismo que leerlas
+  // una a una, con 2-3 consultas por juego de campos en vez de 2 por tarjeta.
+  const out: UndoOp[][] = [];
+  const push = (...o: UndoOp[]) => void out.push(o);
   const seen = new Set<string>();
   const once = (key: string) => (seen.has(key) ? false : (seen.add(key), true));
   const inProject = { task: { projectId } };
+  const sets = new Map<string, { fields: TaskField[]; withLabels: boolean; slots: { id: string; slot: UndoOp[] }[] }>();
+  const removes: { id: string; slot: UndoOp[] }[] = [];
   for (const op of ops) {
     switch (op.t) {
       case "task.set": {
-        if (!once(`task.set:${op.id}:${Object.keys(op.data).join(",")}:${!!op.labelIds}`)) break;
-        const taskOk = await db.task.count({ where: { id: op.id, projectId } });
-        if (taskOk) out.push(...(await captureTasks([op.id], Object.keys(op.data) as TaskField[], !!op.labelIds)));
+        const fields = Object.keys(op.data).join(",");
+        if (!once(`task.set:${op.id}:${fields}:${!!op.labelIds}`)) break;
+        const slot: UndoOp[] = [];
+        out.push(slot);
+        const key = `${fields}:${!!op.labelIds}`;
+        const g = sets.get(key) ?? { fields: Object.keys(op.data) as TaskField[], withLabels: !!op.labelIds, slots: [] };
+        g.slots.push({ id: op.id, slot });
+        sets.set(key, g);
         break;
       }
       case "task.remove":
-        if (once(`task:${op.id}`) && (await db.task.count({ where: { id: op.id, projectId } }))) out.push(...(await snapshotTasks([op.id])));
+        if (once(`task:${op.id}`)) {
+          const slot: UndoOp[] = [];
+          out.push(slot);
+          removes.push({ id: op.id, slot });
+        }
         break;
       case "task.restore":
-        if (once(`task:${op.snap.task.id}`)) out.push({ t: "task.remove", id: op.snap.task.id });
+        if (once(`task:${op.snap.task.id}`)) push({ t: "task.remove", id: op.snap.task.id });
         break;
       case "subtask.set": {
         if (!once(`subtask.set:${op.id}`)) break;
         const r = await db.subtask.findFirst({ where: { id: op.id, ...inProject } });
-        if (r) out.push({ t: "subtask.set", id: op.id, data: Object.fromEntries(Object.keys(op.data).map((k) => [k, r[k as keyof typeof r]])) });
+        if (r) push({ t: "subtask.set", id: op.id, data: Object.fromEntries(Object.keys(op.data).map((k) => [k, r[k as keyof typeof r]])) });
         break;
       }
       case "subtask.remove": {
         const r = once(`subtask:${op.id}`) && (await db.subtask.findFirst({ where: { id: op.id, ...inProject } }));
-        if (r) out.push({ t: "subtask.restore", row: { id: r.id, taskId: r.taskId, title: r.title, done: r.done, position: r.position } });
+        if (r) push({ t: "subtask.restore", row: { id: r.id, taskId: r.taskId, title: r.title, done: r.done, position: r.position } });
         break;
       }
       case "subtask.restore":
-        if (once(`subtask:${op.row.id}`)) out.push({ t: "subtask.remove", id: op.row.id });
+        if (once(`subtask:${op.row.id}`)) push({ t: "subtask.remove", id: op.row.id });
         break;
       case "comment.remove": {
         const c = once(`comment:${op.id}`) && (await db.taskComment.findFirst({ where: { id: op.id, ...inProject } }));
-        if (c) out.push({ t: "comment.restore", row: { id: c.id, taskId: c.taskId, authorId: c.authorId, authorName: c.authorName, body: c.body, createdAt: c.createdAt.toISOString(), editedAt: iso(c.editedAt), parentId: c.parentId, deletedAt: iso(c.deletedAt) } });
+        if (c) push({ t: "comment.restore", row: { id: c.id, taskId: c.taskId, authorId: c.authorId, authorName: c.authorName, body: c.body, createdAt: c.createdAt.toISOString(), editedAt: iso(c.editedAt), parentId: c.parentId, deletedAt: iso(c.deletedAt) } });
         break;
       }
       case "comment.restore":
-        if (once(`comment:${op.row.id}`)) out.push({ t: "comment.remove", id: op.row.id });
+        if (once(`comment:${op.row.id}`)) push({ t: "comment.remove", id: op.row.id });
         break;
       case "comment.undelete":
-        if (once(`comment:${op.id}`)) out.push({ t: "comment.softdelete", id: op.id });
+        if (once(`comment:${op.id}`)) push({ t: "comment.softdelete", id: op.id });
         break;
       case "comment.softdelete": {
         const c = once(`comment:${op.id}`) && (await db.taskComment.findFirst({ where: { id: op.id, deletedAt: null, ...inProject }, select: { id: true, body: true } }));
-        if (c) out.push({ t: "comment.undelete", id: c.id, body: c.body });
+        if (c) push({ t: "comment.undelete", id: c.id, body: c.body });
         break;
       }
       case "attachment.remove": {
         const a = once(`attachment:${op.id}`) && (await db.taskAttachment.findFirst({ where: { id: op.id, ...inProject } }));
         if (a) {
-          out.push({
+          push({
             t: "attachment.restore",
             row: { id: a.id, taskId: a.taskId, originalName: a.originalName, mimeType: a.mimeType, isImage: a.isImage, width: a.width, height: a.height, size: a.size, createdById: a.createdById, createdAt: a.createdAt.toISOString() },
           });
@@ -423,35 +465,52 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
         break;
       }
       case "attachment.restore":
-        if (once(`attachment:${op.row.id}`)) out.push({ t: "attachment.remove", id: op.row.id });
+        if (once(`attachment:${op.row.id}`)) push({ t: "attachment.remove", id: op.row.id });
         break;
       case "link.remove": {
         const l = once(`link:${op.id}`) && (await db.taskLink.findFirst({ where: { id: op.id, ...inProject } }));
-        if (l) out.push({ t: "link.restore", row: { id: l.id, taskId: l.taskId, kind: l.kind, title: l.title, url: l.url, externalId: l.externalId, createdById: l.createdById, createdAt: l.createdAt.toISOString() } });
+        if (l) push({ t: "link.restore", row: { id: l.id, taskId: l.taskId, kind: l.kind, title: l.title, url: l.url, externalId: l.externalId, createdById: l.createdById, createdAt: l.createdAt.toISOString() } });
         break;
       }
       case "link.restore":
-        if (once(`link:${op.row.id}`)) out.push({ t: "link.remove", id: op.row.id });
+        if (once(`link:${op.row.id}`)) push({ t: "link.remove", id: op.row.id });
         break;
       case "column.set": {
         if (!once(`column.set:${op.id}`)) break;
         const c = await db.column.findFirst({ where: { id: op.id, projectId } });
-        if (c) out.push({ t: "column.set", id: op.id, data: Object.fromEntries(Object.keys(op.data).map((k) => [k, c[k as keyof typeof c]])) });
+        if (c) push({ t: "column.set", id: op.id, data: Object.fromEntries(Object.keys(op.data).map((k) => [k, c[k as keyof typeof c]])) });
         break;
       }
       case "column.remove": {
         const c = once(`column:${op.id}`) && (await db.column.findFirst({ where: { id: op.id, projectId } }));
-        if (c) out.push({ t: "column.restore", row: { id: c.id, projectId: c.projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays, routineTargetColumnId: c.routineTargetColumnId, wipLimit: c.wipLimit } });
+        if (c) push({ t: "column.restore", row: { id: c.id, projectId: c.projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays, routineTargetColumnId: c.routineTargetColumnId, wipLimit: c.wipLimit } });
         break;
       }
       case "column.restore":
-        if (once(`column:${op.row.id}`)) out.push({ t: "column.remove", id: op.row.id });
+        if (once(`column:${op.row.id}`)) push({ t: "column.remove", id: op.row.id });
         break;
       case "release.remove":
         break;
     }
   }
-  return out;
+  const taskIds = [...new Set([...[...sets.values()].flatMap((g) => g.slots.map((x) => x.id)), ...removes.map((x) => x.id)])];
+  if (taskIds.length) {
+    const present = new Set((await db.task.findMany({ where: { id: { in: taskIds }, projectId }, select: { id: true } })).map((t) => t.id));
+    for (const g of sets.values()) {
+      const ids = [...new Set(g.slots.map((x) => x.id).filter((id) => present.has(id)))];
+      const byId = new Map((await captureTasks(ids, g.fields, g.withLabels)).map((op) => [(op as TaskSetOp).id, op]));
+      for (const x of g.slots) {
+        const op = byId.get(x.id);
+        if (op) x.slot.push(op);
+      }
+    }
+    const snaps = new Map((await snapshotTasks(removes.map((x) => x.id).filter((id) => present.has(id)))).map((op) => [(op as TaskRestoreOp).snap.task.id, op]));
+    for (const x of removes) {
+      const op = snaps.get(x.id);
+      if (op) x.slot.push(op);
+    }
+  }
+  return out.flat();
 }
 
 /** Una columna de presupuesto exige el campo Coste: si al deshacer vuelve una, se reactiva. */
@@ -506,12 +565,78 @@ async function countReturningTasks(projectId: string, ops: UndoOp[]): Promise<nu
   return restoreIds.size - existing + archived;
 }
 
+type TaskSetOp = Extract<UndoOp, { t: "task.set" }>;
+type TaskRemoveOp = Extract<UndoOp, { t: "task.remove" }>;
+type TaskRestoreOp = Extract<UndoOp, { t: "task.restore" }>;
+
+/** Operaciones de tarea que se aplican por lotes cuando van seguidas (deshacer un archivado o un movimiento de 500). */
+const BATCHED: ReadonlySet<UndoOp["t"]> = new Set(["task.set", "task.remove", "task.restore"]);
+/** Tamaño máximo de un lote (filas por sentencia). */
+const BATCH_CHUNK = 500;
+
+/** Tipo SQL de cada campo restaurable, para el UPDATE … FROM (VALUES …) de los lotes (los valores viajan como texto). */
+const TASK_SQL_TYPE: Record<TaskField, string> = {
+  title: "text", description: "text", kindId: "text", color: "text", linkUrl: "text", position: "float8", columnId: "text", assigneeId: "text",
+  dueDate: "date", deliverableId: "text", archivedAt: "timestamp", archivedFromColumnId: "text", evergreen: "boolean", evergreenEvery: "int4",
+  recurrence: '"Recurrence"', recurrenceDay: "int4", contentUpdatedAt: "timestamp", contentUpdatedById: "text", cost: "numeric", costPaid: "boolean",
+  estimatedHours: "numeric", actualHours: "numeric", priority: '"TaskPriority"', client: "text", startDate: "date", recurrenceFromId: "text",
+  routineColumnId: "text", blockedById: "text",
+};
+
+/**
+ * Un valor de TaskData como expresión SQL tipada. Las fechas guardadas en ISO se pasan a UTC igual que hace Prisma
+ * (timestamp sin zona en UTC; las de solo día, su fecha en UTC).
+ */
+function taskValueSql(field: TaskField, value: unknown): Prisma.Sql {
+  const text = value === null || value === undefined ? null : String(value);
+  const type = TASK_SQL_TYPE[field];
+  if (type === "timestamp") return Prisma.sql`((${text}::text)::timestamptz AT TIME ZONE 'UTC')`;
+  if (type === "date") return Prisma.sql`(((${text}::text)::timestamptz AT TIME ZONE 'UTC')::date)`;
+  return Prisma.sql`(${text}::text)::${Prisma.raw(type)}`;
+}
+
+/**
+ * Parte una racha de operaciones en lotes aplicables de una vez: sin repetir tarea dentro de un lote (la segunda
+ * operación sobre la misma tarea depende de la primera) y como mucho BATCH_CHUNK. Las que `alone` marca se aplican
+ * solas, en su sitio: el orden de la racha se respeta siempre.
+ */
+function batchesOf<T extends UndoOp>(run: T[], idOf: (op: T) => string, alone: (op: T) => boolean): T[][] {
+  const out: T[][] = [];
+  let cur: T[] = [];
+  let ids = new Set<string>();
+  const flush = () => {
+    if (cur.length) out.push(cur);
+    cur = [];
+    ids = new Set();
+  };
+  for (const op of run) {
+    if (alone(op)) {
+      flush();
+      out.push([op]);
+      continue;
+    }
+    if (ids.has(idOf(op)) || cur.length >= BATCH_CHUNK) flush();
+    cur.push(op);
+    ids.add(idOf(op));
+  }
+  flush();
+  return out;
+}
+
 /**
  * Aplica las operaciones inversas (de la última a la primera). Lo que ya no existe se salta;
  * devuelve cuántas operaciones no se pudieron aplicar. Con `keepFiles` no borra los ficheros de los
  * adjuntos que quita: la entrada contraria (rehacer/deshacer) los retiene y los libera al descartarse.
+ *
+ * Las rachas de operaciones de tarea del mismo tipo (task.set, task.remove, task.restore) se aplican por lotes, con
+ * unas pocas consultas en vez de ~5 por tarjeta, y el mismo resultado que una a una (lo comprueba tests/db/undo-batch):
+ * mismas comprobaciones (tarea en el proyecto, columna, tipo, entregable, responsable, etiquetas), `updatedAt`,
+ * ficheros y caché de adjuntos. Lo que depende del orden dentro de la racha (un bloqueo que vuelve, que se comprueba
+ * contra el estado de ese momento por los ciclos, y la tarea de origen de una recurrente, que es única) se aplica solo,
+ * en su sitio. Si un lote falla (p. ej. una clave foránea que desapareció entretanto) no deja nada a medias: se repite
+ * una a una. `batch: false` fuerza el camino de una en una (pruebas).
  */
-export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFiles?: boolean } = {}): Promise<number> {
+export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFiles?: boolean; batch?: boolean } = {}): Promise<number> {
   let skipped = 0;
   // Tope de tareas activas: si deshacer/rehacer va a crear (o desarchivar) tareas y no caben, falla entero
   // antes de tocar nada (la entrada se conserva, ver applyLast).
@@ -538,12 +663,14 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
   const known = (id: string | null | undefined) => (id && existingIds.has(id) ? id : null);
   const assignable = (id: string | null | undefined) => (id && assignableIds.has(id) ? id : null);
 
-  for (const op of [...ops].reverse()) {
+  /** Una operación suelta; devuelve 1 si no se pudo aplicar. */
+  const applyOne = async (op: UndoOp): Promise<number> => {
+    let miss = 0;
     try {
       switch (op.t) {
         case "task.set": {
           const exists = await db.task.count({ where: { id: op.id, projectId } });
-          if (!exists) { skipped++; break; }
+          if (!exists) { miss++; break; }
           const data = { ...op.data };
           if (data.columnId) data.columnId = await safeColumn(data.columnId);
           if (data.kindId && !(await db.taskKind.count({ where: { id: data.kindId } }))) delete data.kindId;
@@ -569,7 +696,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
         case "task.remove": {
           const atts = await db.taskAttachment.findMany({ where: { taskId: op.id }, select: { id: true } });
           const { count } = await db.task.deleteMany({ where: { id: op.id, projectId } });
-          if (!count) skipped++;
+          if (!count) miss++;
           else {
             filesToRemove.push(...atts.map((a) => a.id));
             forgetAttachments(atts.map((a) => a.id));
@@ -578,12 +705,12 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
         }
         case "task.restore": {
           const s = op.snap;
-          if (await db.task.count({ where: { id: s.task.id } })) { skipped++; break; }
+          if (await db.task.count({ where: { id: s.task.id } })) { miss++; break; }
           const t = s.task;
           const kindOk = await db.taskKind.count({ where: { id: t.kindId } });
           const kindId = kindOk ? t.kindId : (await db.taskKind.findFirst({ where: { OR: [{ projectId: null }, { projectId }] }, orderBy: { position: "asc" }, select: { id: true } }))?.id;
           const columnId = await safeColumn(t.columnId);
-          if (!kindId || !columnId) { skipped++; break; }
+          if (!kindId || !columnId) { miss++; break; }
           // La tarea de la que salió puede haberse borrado (clave foránea): entonces se queda sin origen. Tampoco lo
           // conserva si entretanto nació otra siguiente aparición de esa tarea (recurrenceFromId es único: el alta
           // fallaría y la tarea se perdería).
@@ -617,27 +744,27 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
         }
         case "subtask.set": {
           const { count } = await db.subtask.updateMany({ where: { id: op.id, task: { projectId } }, data: op.data });
-          if (!count) skipped++;
+          if (!count) miss++;
           break;
         }
         case "subtask.remove": {
           const { count } = await db.subtask.deleteMany({ where: { id: op.id, task: { projectId } } });
-          if (!count) skipped++;
+          if (!count) miss++;
           break;
         }
         case "subtask.restore": {
-          if (!(await db.task.count({ where: { id: op.row.taskId, projectId } })) || (await db.subtask.count({ where: { id: op.row.id } }))) { skipped++; break; }
+          if (!(await db.task.count({ where: { id: op.row.taskId, projectId } })) || (await db.subtask.count({ where: { id: op.row.id } }))) { miss++; break; }
           await db.subtask.create({ data: op.row });
           break;
         }
         case "comment.remove": {
           const { count } = await db.taskComment.deleteMany({ where: { id: op.id, task: { projectId } } });
-          if (!count) skipped++;
+          if (!count) miss++;
           break;
         }
         case "comment.restore": {
           const r = op.row;
-          if (!(await db.task.count({ where: { id: r.taskId, projectId } })) || (await db.taskComment.count({ where: { id: r.id } }))) { skipped++; break; }
+          if (!(await db.task.count({ where: { id: r.taskId, projectId } })) || (await db.taskComment.count({ where: { id: r.id } }))) { miss++; break; }
           const author = r.authorId && (await db.user.count({ where: { id: r.authorId } })) ? r.authorId : null;
           const parentId = r.parentId && (await db.taskComment.count({ where: { id: r.parentId } })) ? r.parentId : null;
           await db.taskComment.create({ data: { ...r, parentId, authorId: author, createdAt: new Date(r.createdAt), editedAt: date(r.editedAt), deletedAt: date(r.deletedAt) } });
@@ -645,17 +772,17 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
         }
         case "comment.undelete": {
           const { count } = await db.taskComment.updateMany({ where: { id: op.id, deletedAt: { not: null }, task: { projectId } }, data: { body: op.body, deletedAt: null } });
-          if (!count) skipped++;
+          if (!count) miss++;
           break;
         }
         case "comment.softdelete": {
           const { count } = await db.taskComment.updateMany({ where: { id: op.id, deletedAt: null, task: { projectId } }, data: { body: "", deletedAt: new Date() } });
-          if (!count) skipped++;
+          if (!count) miss++;
           break;
         }
         case "attachment.remove": {
           const { count } = await db.taskAttachment.deleteMany({ where: { id: op.id, task: { projectId } } });
-          if (!count) skipped++;
+          if (!count) miss++;
           else {
             filesToRemove.push(op.id);
             forgetAttachments([op.id]);
@@ -666,19 +793,19 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           // Deshacer un borrado recrea lo que existía hace nada: no se comprueba la cuota de almacenamiento (igual que
           // task.restore y el «Cancelar» de tasks.ts). Puede dejar el proyecto algo por encima; se libera desde sus ajustes.
           const r = op.row;
-          if (!(await db.task.count({ where: { id: r.taskId, projectId } })) || (await db.taskAttachment.count({ where: { id: r.id } }))) { skipped++; break; }
+          if (!(await db.task.count({ where: { id: r.taskId, projectId } })) || (await db.taskAttachment.count({ where: { id: r.id } }))) { miss++; break; }
           const creator = r.createdById && (await db.user.count({ where: { id: r.createdById } })) ? r.createdById : null;
           await db.taskAttachment.create({ data: { ...r, createdById: creator, createdAt: new Date(r.createdAt) } });
           break;
         }
         case "link.remove": {
           const { count } = await db.taskLink.deleteMany({ where: { id: op.id, task: { projectId } } });
-          if (!count) skipped++;
+          if (!count) miss++;
           break;
         }
         case "link.restore": {
           const r = op.row;
-          if (!(await db.task.count({ where: { id: r.taskId, projectId } })) || (await db.taskLink.count({ where: { id: r.id } }))) { skipped++; break; }
+          if (!(await db.task.count({ where: { id: r.taskId, projectId } })) || (await db.taskLink.count({ where: { id: r.id } }))) { miss++; break; }
           const creator = r.createdById && (await db.user.count({ where: { id: r.createdById } })) ? r.createdById : null;
           await db.taskLink.create({ data: { ...r, kind: r.kind as Prisma.TaskLinkCreateInput["kind"], createdById: creator, createdAt: new Date(r.createdAt) } });
           break;
@@ -691,14 +818,14 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
             db.column.updateMany({ where: uniqueRole ? { projectId, role: uniqueRole, id: { not: op.id } } : { id: "" }, data: { role: "NONE" } }),
             db.column.updateMany({ where: { id: op.id, projectId }, data: op.data as Prisma.ColumnUpdateManyMutationInput }),
           ]);
-          if (!count) skipped++;
+          if (!count) miss++;
           else if (op.data.role === "BUDGET") await ensureCostField(projectId);
           break;
         }
         case "column.remove": {
-          if (await db.task.count({ where: { columnId: op.id, archivedAt: null } })) { skipped++; break; }
+          if (await db.task.count({ where: { columnId: op.id, archivedAt: null } })) { miss++; break; }
           const other = await db.column.findFirst({ where: { projectId, id: { not: op.id } }, orderBy: { position: "asc" }, select: { id: true } });
-          if (!other) { skipped++; break; }
+          if (!other) { miss++; break; }
           placed.push(...(await db.task.findMany({ where: { columnId: op.id }, select: { id: true } })).map((r) => r.id));
           await db.$transaction([
             db.task.updateMany({ where: { columnId: op.id }, data: { columnId: other.id } }),
@@ -708,7 +835,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           break;
         }
         case "column.restore": {
-          if (await db.column.count({ where: { id: op.row.id } })) { skipped++; break; }
+          if (await db.column.count({ where: { id: op.row.id } })) { miss++; break; }
           // El destino de rutinas puede haberse borrado entre tanto: entonces la columna vuelve sin él.
           const routineTargetColumnId = op.row.routineTargetColumnId && (await db.column.count({ where: { id: op.row.routineTargetColumnId, projectId } })) ? op.row.routineTargetColumnId : null;
           await db.column.create({ data: { ...op.row, routineTargetColumnId, projectId, role: op.row.role as Prisma.ColumnCreateInput["role"] } });
@@ -719,14 +846,177 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
         case "release.remove": {
           const atts = await db.releaseAttachment.findMany({ where: { releaseId: op.id }, select: { id: true } });
           const { count } = await db.release.deleteMany({ where: { id: op.id, projectId } });
-          if (!count) skipped++;
+          if (!count) miss++;
           else releaseFiles.push(...atts.map((a) => a.id));
           break;
         }
       }
     } catch (err) {
       console.error("[undo]", op.t, err);
-      skipped++;
+      return 1;
+    }
+    return miss;
+  };
+  const oneByOne = async (run: UndoOp[]): Promise<number> => {
+    let s = 0;
+    for (const op of run) s += await applyOne(op);
+    return s;
+  };
+
+  /** Lote de task.set de tareas distintas: las comprobaciones de applyOne, leídas de una vez; un UPDATE por juego de campos. */
+  const setTasks = async (run: TaskSetOp[]): Promise<number> => {
+    let s = 0;
+    const kindIds = [...new Set(run.flatMap((op) => (op.data.kindId ? [op.data.kindId] : [])))];
+    const deliverableIds = [...new Set(run.flatMap((op) => (op.data.deliverableId ? [op.data.deliverableId] : [])))];
+    const labelIds = [...new Set(run.flatMap((op) => op.labelIds ?? []))];
+    const [present, kinds, deliverables, labels] = await Promise.all([
+      db.task.findMany({ where: { id: { in: run.map((op) => op.id) }, projectId }, select: { id: true } }),
+      kindIds.length ? db.taskKind.findMany({ where: { id: { in: kindIds } }, select: { id: true } }) : [],
+      deliverableIds.length ? db.deliverable.findMany({ where: { id: { in: deliverableIds } }, select: { id: true } }) : [],
+      labelIds.length ? db.label.findMany({ where: { id: { in: labelIds }, projectId }, select: { id: true } }) : [],
+    ]);
+    const presentIds = new Set(present.map((t) => t.id));
+    const kindOk = new Set(kinds.map((k) => k.id));
+    const deliverableOk = new Set(deliverables.map((d) => d.id));
+    const labelOk = new Set(labels.map((l) => l.id));
+    let first: Promise<string | undefined> | null = null;
+    // Por juego de campos (los que quedan tras las comprobaciones) y si lleva etiquetas: cada grupo, una sentencia.
+    const groups = new Map<string, { keys: TaskField[]; withLabels: boolean; rows: { op: TaskSetOp; data: TaskData; labelIds: string[] }[] }>();
+    for (const op of run) {
+      if (!presentIds.has(op.id)) { s++; continue; }
+      const data = { ...op.data };
+      if (data.columnId) data.columnId = columnIds.has(data.columnId) ? data.columnId : await (first ??= firstColumn());
+      if (data.kindId && !kindOk.has(data.kindId)) delete data.kindId;
+      if (data.deliverableId && !deliverableOk.has(data.deliverableId)) data.deliverableId = null;
+      if (data.assigneeId) data.assigneeId = assignable(data.assigneeId);
+      if (data.position !== undefined || data.columnId !== undefined) placed.push(op.id);
+      const keys = (Object.keys(data) as TaskField[]).filter((k) => TASK_DATA_KEYS.has(k) && data[k] !== undefined).sort();
+      const key = `${keys.join(",")}|${op.labelIds ? "L" : ""}`;
+      const g = groups.get(key) ?? { keys, withLabels: !!op.labelIds, rows: [] };
+      g.rows.push({ op, data, labelIds: (op.labelIds ?? []).filter((id) => labelOk.has(id)) });
+      groups.set(key, g);
+    }
+    const now = new Date();
+    for (const g of groups.values()) {
+      // Sin campos que escribir (todo filtrado), una a una: es lo que hace task.update con datos vacíos.
+      if (!g.keys.length) { s += await oneByOne(g.rows.map((r) => r.op)); continue; }
+      try {
+        const count = await db.$transaction(async (tx) => {
+          const cols = Prisma.raw(g.keys.map((k) => `"${k}"`).join(", "));
+          const sets = Prisma.raw(g.keys.map((k) => `"${k}" = v."${k}"`).join(", "));
+          const values = Prisma.join(g.rows.map((r) => Prisma.sql`(${r.op.id}::text, ${Prisma.join(g.keys.map((k) => taskValueSql(k, r.data[k])))})`));
+          const n = await tx.$executeRaw`UPDATE "Task" AS t SET ${sets}, "updatedAt" = ${now} FROM (VALUES ${values}) AS v("id", ${cols}) WHERE t."id" = v."id"`;
+          if (g.withLabels) {
+            await tx.taskLabel.deleteMany({ where: { taskId: { in: g.rows.map((r) => r.op.id) } } });
+            await tx.taskLabel.createMany({ data: g.rows.flatMap((r) => r.labelIds.map((labelId) => ({ taskId: r.op.id, labelId }))) });
+          }
+          return n;
+        });
+        // Una tarea borrada justo entre la comprobación y el UPDATE: como el P2025 de task.update, cuenta como no aplicada.
+        s += g.rows.length - count;
+      } catch (err) {
+        console.error("[undo] lote task.set: se repite una a una", err);
+        s += await oneByOne(g.rows.map((r) => r.op));
+      }
+    }
+    return s;
+  };
+
+  /** Lote de task.remove: un DELETE … RETURNING; ficheros y caché, solo de las que de verdad se borran. */
+  const removeTasks = async (run: TaskRemoveOp[]): Promise<number> => {
+    const ids = run.map((op) => op.id);
+    try {
+      const atts = await db.taskAttachment.findMany({ where: { taskId: { in: ids } }, select: { id: true, taskId: true } });
+      const deleted = new Set(
+        (await db.$queryRaw<{ id: string }[]>`DELETE FROM "Task" WHERE "id" = ANY(${ids}::text[]) AND "projectId" = ${projectId} RETURNING "id"`).map((r) => r.id),
+      );
+      const gone = atts.filter((a) => deleted.has(a.taskId)).map((a) => a.id);
+      filesToRemove.push(...gone);
+      forgetAttachments(gone);
+      return run.length - deleted.size;
+    } catch (err) {
+      console.error("[undo] lote task.remove: se repite una a una", err);
+      return oneByOne(run);
+    }
+  };
+
+  /** Lote de task.restore (sin bloqueo ni tarea de origen): las comprobaciones de applyOne, leídas de una vez, y un createMany por tabla. */
+  const restoreTasks = async (run: TaskRestoreOp[]): Promise<number> => {
+    let s = 0;
+    const snaps = run.map((op) => op.snap);
+    const deliverableIds = [...new Set(snaps.flatMap((x) => (x.task.deliverableId ? [x.task.deliverableId] : [])))];
+    const [existing, kinds, deliverables, labels] = await Promise.all([
+      db.task.findMany({ where: { id: { in: snaps.map((x) => x.task.id) } }, select: { id: true } }),
+      db.taskKind.findMany({ where: { id: { in: [...new Set(snaps.map((x) => x.task.kindId))] } }, select: { id: true } }),
+      deliverableIds.length ? db.deliverable.findMany({ where: { id: { in: deliverableIds } }, select: { id: true } }) : [],
+      db.label.findMany({ where: { id: { in: [...new Set(snaps.flatMap((x) => x.labelIds))] }, projectId }, select: { id: true } }),
+    ]);
+    const exists = new Set(existing.map((t) => t.id));
+    const kindOk = new Set(kinds.map((k) => k.id));
+    const deliverableOk = new Set(deliverables.map((d) => d.id));
+    const labelOk = new Set(labels.map((l) => l.id));
+    let fallbackKind: Promise<string | undefined> | null = null;
+    let first: Promise<string | undefined> | null = null;
+    const rows: { op: TaskRestoreOp; data: Prisma.TaskCreateManyInput }[] = [];
+    for (const op of run) {
+      const t = op.snap.task;
+      if (exists.has(t.id)) { s++; continue; }
+      const kindId = kindOk.has(t.kindId)
+        ? t.kindId
+        : await (fallbackKind ??= db.taskKind.findFirst({ where: { OR: [{ projectId: null }, { projectId }] }, orderBy: { position: "asc" }, select: { id: true } }).then((k) => k?.id));
+      const columnId = t.columnId && columnIds.has(t.columnId) ? t.columnId : await (first ??= firstColumn());
+      if (!kindId || !columnId) { s++; continue; }
+      const deliverableId = t.deliverableId && deliverableOk.has(t.deliverableId) ? t.deliverableId : null;
+      rows.push({
+        op,
+        data: {
+          ...(taskUpdateData({ ...t, columnId, kindId, deliverableId, assigneeId: assignable(t.assigneeId), recurrenceFromId: null, blockedById: null }) as Prisma.TaskCreateManyInput),
+          id: t.id, projectId, title: t.title, position: t.position, createdById: known(t.createdById), createdAt: new Date(t.createdAt),
+        },
+      });
+    }
+    if (!rows.length) return s;
+    const ok = rows.map((r) => r.op.snap);
+    try {
+      await db.$transaction(async (tx) => {
+        await tx.task.createMany({ data: rows.map((r) => r.data) });
+        await tx.taskLabel.createMany({ data: ok.flatMap((x) => x.labelIds.filter((id) => labelOk.has(id)).map((labelId) => ({ taskId: x.task.id, labelId }))) });
+        await tx.subtask.createMany({ data: ok.flatMap((x) => x.subtasks) });
+        await tx.taskComment.createMany({ data: ok.flatMap((x) => x.comments.map((c) => ({ ...c, authorId: known(c.authorId), createdAt: new Date(c.createdAt), editedAt: date(c.editedAt), deletedAt: date(c.deletedAt) }))) });
+        await tx.taskAttachment.createMany({ data: ok.flatMap((x) => x.attachments.map((a) => ({ ...a, createdById: known(a.createdById), createdAt: new Date(a.createdAt) }))) });
+        await tx.taskLink.createMany({ data: ok.flatMap((x) => x.links.map((l) => ({ ...l, kind: l.kind as Prisma.TaskLinkCreateManyInput["kind"], createdById: known(l.createdById), createdAt: new Date(l.createdAt) }))) });
+        for (const x of ok) if (x.releaseTaskIds.length) await tx.releaseTask.updateMany({ where: { id: { in: x.releaseTaskIds } }, data: { taskId: x.task.id } });
+      });
+      placed.push(...ok.map((x) => x.task.id));
+    } catch (err) {
+      console.error("[undo] lote task.restore: se repite una a una", err);
+      s += await oneByOne(rows.map((r) => r.op));
+    }
+    return s;
+  };
+
+  const seq = [...ops].reverse();
+  for (let i = 0; i < seq.length; ) {
+    const op = seq[i]!;
+    let j = i + 1;
+    if (opts.batch !== false && BATCHED.has(op.t)) while (j < seq.length && seq[j]!.t === op.t) j++;
+    const run = seq.slice(i, j);
+    i = j;
+    if (run.length < 2) {
+      skipped += await applyOne(op);
+      continue;
+    }
+    if (op.t === "task.set") {
+      // Un bloqueo que vuelve se comprueba contra el estado de ese momento (ciclos) y la tarea de origen es única: solas.
+      for (const b of batchesOf(run as TaskSetOp[], (o) => o.id, (o) => !!o.data.blockedById || "recurrenceFromId" in o.data)) {
+        skipped += b.length > 1 ? await setTasks(b) : await applyOne(b[0]!);
+      }
+    } else if (op.t === "task.remove") {
+      for (const b of batchesOf(run as TaskRemoveOp[], (o) => o.id, () => false)) skipped += b.length > 1 ? await removeTasks(b) : await applyOne(b[0]!);
+    } else {
+      for (const b of batchesOf(run as TaskRestoreOp[], (o) => o.snap.task.id, (o) => !!o.snap.task.blockedById || !!o.snap.task.recurrenceFromId)) {
+        skipped += b.length > 1 ? await restoreTasks(b) : await applyOne(b[0]!);
+      }
     }
   }
   await clearStrayEvergreen(projectId);

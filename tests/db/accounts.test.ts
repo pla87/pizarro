@@ -1,14 +1,16 @@
 // Miembros de proyectos privados, contraseñas y cambio forzado, contra PostgreSQL real.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser, NOT_FOUND, saveSession, restoreSession } from "./helpers";
+import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser, NOT_FOUND, saveSession, restoreSession, logout } from "./helpers";
 import { addProjectMember, deleteProject, removeProjectMember, updateProject } from "../../src/actions/projects";
 import { getTaskDetail, updateTask } from "../../src/actions/tasks";
-import { setNewPassword } from "../../src/actions/auth";
+import { login, resetPassword, setNewPassword } from "../../src/actions/auth";
 import * as usersActions from "../../src/actions/users";
 import { forcePasswordChange, updateUser } from "../../src/actions/users";
 import { getCurrentUser, getPendingUser } from "../../src/lib/session";
-import { hashPassword } from "../../src/lib/password";
+import { hashPassword, verifyPassword } from "../../src/lib/password";
+import { findUserForGoogle } from "../../src/lib/google-login";
+import { completeLogin } from "../../src/lib/login";
 import { createResetLink } from "../../src/lib/reset-link";
 import { findUsableToken, consumeToken } from "../../src/lib/auth-token";
 import { issueAuthToken } from "../../src/lib/auth-token-issue";
@@ -125,7 +127,7 @@ describe("contraseñas y cambio forzado", () => {
     assert.equal(row.name, "Otro nombre");
   });
 
-  test("forcePasswordChange: marca el cambio, cierra sus sesiones y no toca la contraseña; solo admins y nunca a uno mismo", async () => {
+  test("forcePasswordChange: marca el cambio, cierra sus sesiones y anula la contraseña actual; solo admins y nunca a uno mismo", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const target = await makeUser();
     const hash = await hashPassword("clave-original-123");
@@ -141,12 +143,52 @@ describe("contraseñas y cambio forzado", () => {
     expectOk(await forcePasswordChange(target.id));
     const row = await db.user.findUniqueOrThrow({ where: { id: target.id } });
     assert.equal(row.mustChangePassword, true);
-    assert.equal(row.passwordHash, hash);
+    // La contraseña anterior deja de valer: queda el hash bcrypt de un valor aleatorio que nadie conoce.
+    assert.notEqual(row.passwordHash, hash);
+    assert.match(row.passwordHash, /^\$2[aby]\$/);
+    assert.equal(await verifyPassword("clave-original-123", row.passwordHash), false);
     assert.equal(await db.session.count({ where: { userId: target.id } }), 0);
 
     // La sesión vieja ya no vale.
     restoreSession(targetCookie);
     assert.equal(await getCurrentUser(), null);
+  });
+
+  test("tras forzarlo: la contraseña anterior no entra; con Google se llega a «Elige una contraseña nueva» y, elegida, el enlace deja de valer", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const target = await makeUser();
+    const sub = `google-sub-${target.id}`;
+    await db.user.update({ where: { id: target.id }, data: { passwordHash: await hashPassword("clave-original-123"), googleSub: sub } });
+    await loginAs(admin);
+    const { link } = expectOk(await forcePasswordChange(target.id, { copyLink: true })) as { link: string | null };
+    const before = (await db.user.findUniqueOrThrow({ where: { id: target.id } })).passwordHash;
+
+    // 1) Con la contraseña que conocía (la persona o quien se la hubiera sacado) ya no se entra.
+    logout();
+    const form = new FormData();
+    form.set("email", target.email);
+    form.set("password", "clave-original-123");
+    const res = await login({}, form);
+    assert.equal(res.error, "Credenciales incorrectas.");
+    assert.equal(await db.session.count({ where: { userId: target.id } }), 0);
+
+    // 2) Con Google (cuenta enlazada) sí entra, pero la sesión queda pendiente de elegir contraseña: solo ve /change-password.
+    const viaGoogle = await findUserForGoogle({ sub, email: target.email, name: null });
+    assert.ok(viaGoogle && viaGoogle !== "relink_blocked");
+    assert.equal(viaGoogle.mustChangePassword, true);
+    await completeLogin(viaGoogle, { method: "google", path: "/api/auth/google/callback" });
+    assert.equal(await getCurrentUser(), null);
+    assert.equal((await getPendingUser())?.id, target.id);
+    // Cualquier contraseña válida es «distinta de la actual» (nadie conoce la aleatoria); al elegirla ya entra.
+    expectOk(await setNewPassword("clave-nueva-tras-google-1"));
+    assert.equal((await getCurrentUser())?.id, target.id);
+    const chosen = await db.user.findUniqueOrThrow({ where: { id: target.id } });
+    assert.equal(chosen.mustChangePassword, false);
+    assert.notEqual(chosen.passwordHash, before);
+
+    // 3) Elegida la contraseña, el enlace generado al forzar deja de valer (applyNewPassword anula los pendientes).
+    logout();
+    expectFail(await resetPassword(link!.split("/reset/")[1]!, "clave-del-enlace-segura-2"), /no es válido o ha caducado/);
   });
 
   test("con el cambio pendiente (sesión viva) las acciones quedan bloqueadas y solo se puede elegir la contraseña nueva", async () => {

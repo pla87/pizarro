@@ -12,6 +12,7 @@ import { ArchiveError } from "./project-export/errors";
 import { importForeignFile } from "./foreign-import/create";
 import type { ImportFormat } from "./foreign-import/parse";
 import { importProjectFile, type ImportSummary } from "./project-export/import";
+import { isShuttingDown } from "./shutdown";
 import type { ExportOptions } from "./project-export/types";
 import { writeProjectExport } from "./project-export/write";
 import { uploadDir } from "./upload-dir";
@@ -397,7 +398,7 @@ export function kickTransferWorker(): void {
 }
 
 async function pump(): Promise<void> {
-  if (!state.started) return;
+  if (!state.started || isShuttingDown()) return;
   if (state.pumping) {
     state.again = true;
     return;
@@ -501,7 +502,7 @@ export function stopTransferWorkerForTests(): void {
 export function startTransferWorker(): void {
   if (state.started) return;
   state.started = true;
-  const sweep = () => void recoverInterruptedJobs().then(() => pump()).catch((err) => console.error("[transfer] barrido", err));
+  const sweep = () => isShuttingDown() ? undefined : void recoverInterruptedJobs().then(() => pump()).catch((err) => console.error("[transfer] barrido", err));
   setTimeout(() => {
     sweep();
     setInterval(sweep, SWEEP_EVERY_MS).unref?.();

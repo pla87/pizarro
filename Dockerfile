@@ -41,7 +41,10 @@ COPY prisma ./prisma
 
 # --- 4. Runtime -----------------------------------------------------------------
 FROM base AS runner
+# NEXT_MANUAL_SIG_HANDLE=1: Next.js no gestiona SIGTERM/SIGINT; el apagado ordenado (guardar los registros pendientes y
+# esperar a los emails en curso) lo hace src/instrumentation.ts (src/lib/shutdown.ts).
 ENV NODE_ENV=production \
+    NEXT_MANUAL_SIG_HANDLE=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
     UPLOAD_DIR=/app/uploads

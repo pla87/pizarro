@@ -14,4 +14,6 @@ export const lista: Record<string, string> = {
   "Sin etiquetas": "No labels",
   "Sin prioridad": "No priority",
   "Sin subtareas": "No subtasks",
+  "Ver como lista": "View as list",
+  "Ver como tablero": "View as board",
 };

@@ -127,4 +127,28 @@ describe("Cancelar la edición (restoreTaskSnapshot)", () => {
     expectFail(await restoreTaskSnapshot(task.id, snap, since), /ha cambiado el texto/);
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).title, "Ajeno");
   });
+
+  test("con más acciones que entradas guarda la pila (12 subtareas marcadas), Cancelar lo devuelve todo, no solo las 10 últimas", async () => {
+    const user = await makeUser();
+    const f = await makeProject();
+    await loginAs(user);
+    const titles = Array.from({ length: 12 }, (_, i) => `sub ${i + 1}`);
+    const task = await makeTask(f, { title: "Muchas", subtasks: titles });
+    const snap = await snapshotOf(task.id);
+    // La primera acción del rato (el título) y luego 12 marcas: las entradas más antiguas se descartan de la pila.
+    expectOk(await updateTask(task.id, { title: "Muchas (editada)" }));
+    for (const s of await db.subtask.findMany({ where: { taskId: task.id }, orderBy: { position: "asc" } })) expectOk(await updateSubtask(s.id, { done: true }));
+    const extra = expectOk(await addSubtask(task.id, "añadida al final"));
+    assert.equal(await undoCount(user.id, f.project.id), 10);
+
+    const res = expectOk(await restoreTaskSnapshot(task.id, snap, null));
+    assert.equal(res.changed, true);
+    const back = await db.task.findUniqueOrThrow({ where: { id: task.id }, include: { subtasks: { orderBy: { position: "asc" } } } });
+    assert.equal(back.title, "Muchas");
+    assert.deepEqual(back.subtasks.map((s) => [s.title, s.done]), titles.map((t) => [t, false]));
+    assert.ok(!back.subtasks.some((s) => s.id === (extra as { id: string }).id));
+    // Sigue siendo una sola acción deshacible: deshacer el Cancelar devuelve las 12 marcas.
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await db.subtask.count({ where: { taskId: task.id, done: true } }), 12);
+  });
 });

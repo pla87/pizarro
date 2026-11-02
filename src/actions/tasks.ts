@@ -9,9 +9,10 @@ import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjec
 import { appTimeZone, attachmentTotals, boardTaskSelect, listKinds, loadBoardTask, projectClients, projectUsers, toBoardTask } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
 import { MAX_TITLE } from "@/lib/constants";
+import { clampTitle } from "@/lib/title-clamp";
 import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { assertCanBlock, blockProblem, lockBlocking } from "@/lib/blocking";
-import { addUndo, captureTasks, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchedTask, type TaskField, type UndoOp } from "@/lib/undo";
+import { addUndo, captureTasks, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchEverything, touchedTask, type TaskField, type UndoOp } from "@/lib/undo";
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
@@ -104,6 +105,16 @@ const COMMENTS_MORE_PAGE = 100;
 /** Campos que cambian al archivar o recuperar una tarea. */
 const ARCHIVE_FIELDS: TaskField[] = ["archivedAt", "archivedFromColumnId", "columnId", "position", "evergreen", "evergreenEvery"];
 
+/** Máximo al que se recortó el título que llegó demasiado largo (para el aviso del cliente); undefined si cupo. */
+function clipOf(raw: unknown): number | undefined {
+  return typeof raw === "string" && clampTitle(raw.trim()).clipped ? MAX_TITLE : undefined;
+}
+
+/** Tarea del tablero con el aviso de título recortado, solo si se recortó (el cliente lo muestra y no lo guarda). */
+function withClip<T extends object>(task: T, clip: number | undefined): T & { titleClipped?: number } {
+  return clip ? { ...task, titleClipped: clip } : task;
+}
+
 const createSchema = z.object({
   projectId: v.id,
   columnId: v.id,
@@ -179,7 +190,7 @@ export async function createTask(input: z.input<typeof createSchema>) {
     await notifyMentions({ actorId: user.id, taskId: task.id, projectId: data.projectId, recipientIds: descMentions, text: data.description });
     await notifyMentions({ actorId: user.id, taskId: task.id, projectId: data.projectId, recipientIds: extractMentionIds(data.title).filter((id) => !descMentions.includes(id)), text: data.title });
     if (data.assigneeId) await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId: task.id, projectId: data.projectId, recipientIds: [data.assigneeId], excerpt: makeExcerpt(data.title) });
-    return loadBoardTask(task.id);
+    return withClip(await loadBoardTask(task.id), clipOf(input.title));
   });
 }
 
@@ -217,7 +228,7 @@ export async function getProjectFormData(projectId: string) {
 const createManySchema = z.object({
   projectId: v.id,
   columnId: v.id,
-  tasks: z.array(z.object({ title: v.title, kindId: v.id })).min(1, "No hay tareas que crear.").max(MAX_BULK_TASKS, "Máximo 100 tareas de una vez."),
+  tasks: z.array(z.object({ title: v.taskTitle, kindId: v.id })).min(1, "No hay tareas que crear.").max(MAX_BULK_TASKS, "Máximo 100 tareas de una vez."),
   assigneeId: v.id.nullable().default(null),
   labelIds: z.array(v.id).max(20).default([]),
   dueDate: v.dayIso.default(null),
@@ -293,7 +304,9 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
       await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId: ids[0], projectId: data.projectId, recipientIds: [data.assigneeId], excerpt: ids.length === 1 ? makeExcerpt(data.tasks[0]!.title) : `${ids.length} tareas` });
     }
     const rows = await db.task.findMany({ where: { id: { in: ids } }, orderBy: TASK_ORDER, select: boardTaskSelect });
-    return rows.map(toBoardTask);
+    // `ids` conserva el orden de entrada (la tarea i es la línea i): ahí se sabe qué título llegó demasiado largo.
+    const clips = new Map(ids.map((id, i) => [id, clipOf(input.tasks[i]?.title)] as const));
+    return rows.map((row) => withClip(toBoardTask(row), clips.get(row.id)));
   });
 }
 
@@ -545,7 +558,7 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
     if (dueDate !== undefined && dueDate !== oldDue && assigneeNow && !assigneeChanged) {
       await queueDueChange({ taskId, recipientId: assigneeNow, actorId: user.id, from: oldDue, to: dueDate });
     }
-    return loadBoardTask(taskId);
+    return withClip(await loadBoardTask(taskId), clipOf(patch.title));
   });
 }
 
@@ -1076,6 +1089,9 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
     // Lo que hizo esta persona desde que abrió el detalle (como mucho sus 10 últimas entradas de cada pila).
     const entries = await db.undoEntry.findMany({ where: { userId: user.id, projectId, createdAt: { gte: openedAt } }, orderBy: { createdAt: "asc" }, select: { kind: true, ops: true } });
     const mine = touchedTask(entries, id);
+    // Si esas entradas llenan una pila, las primeras del rato pudieron descartarse (p. ej. marcar 12 subtareas): no se sabe
+    // todo lo que hizo, así que vuelve todo lo que guarda la instantánea. El texto sigue protegido por `since` (más abajo).
+    if (entriesMayBeTrimmed(entries)) touchEverything(mine, id, snap.subtasks, subs.map((s) => s.id));
     const touched = (k: TaskField) => mine.fields.has(k);
 
     // --- Campos de la tarjeta: solo los que tocó, solo si difieren y solo si el destino sigue existiendo.

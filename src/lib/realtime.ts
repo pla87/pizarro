@@ -98,6 +98,11 @@ export function revokeProjectStreams(projectId: string): number {
   return closeWhere((s) => s.projectId === projectId);
 }
 
+/** Cierra todos los canales (apagado del servidor): los navegadores reconectan solos a la instancia nueva. */
+export function closeAllStreams(): number {
+  return closeWhere(() => true);
+}
+
 /** Número de canales abiertos (para pruebas y diagnóstico). */
 export function openStreamCount(userId?: string): number {
   let n = 0;

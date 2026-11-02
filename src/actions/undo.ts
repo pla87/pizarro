@@ -10,17 +10,20 @@ import { requireUser } from "@/lib/session";
 import { removeTaskEvents, restoreTaskEvents } from "@/lib/task-events";
 import { renderStoredLabel } from "@/lib/undo-label";
 import { getT } from "@/i18n/server";
-import { makeT } from "@/i18n/core";
+import { makeT, type T } from "@/i18n/core";
+import { findUndoConflicts, type UndoConflicts } from "@/lib/undo-conflicts";
 import { applyUndo, discardEntries, fingerprintOps, mirrorOps, saveUndo, type SavedEvent, type UndoKind, type UndoOp } from "@/lib/undo";
 import * as v from "@/lib/validation";
 
 type Result = { label: string; remaining: number; skipped: number; redoable: number };
 
-/**
- * Aplica la última entrada de la pila `kind` del usuario y deja en la contraria (deshacer ↔ rehacer)
- * el estado previo, para poder alternar. Con una tarea abierta (`taskId`) el contexto es esa tarea.
- */
-async function applyLast(kind: UndoKind, projectId: string, taskId?: string | null): Promise<Result> {
+/** Lo que devuelve undoChecked/redoChecked: lo aplicado o, si otra persona cambió lo mismo después, qué preguntar. */
+export type CheckedResult =
+  | { applied: Result; conflict?: undefined }
+  | { applied?: undefined; conflict: { entryId: string; title: string; message: string; confirmLabel: string; danger: boolean } };
+
+/** La última entrada de la pila `kind` del usuario (con una tarea abierta, de esa tarea). */
+async function lastEntry(kind: UndoKind, projectId: string, taskId?: string | null) {
   const undo = kind === "UNDO";
   const user = await requireUser();
   const pid = v.id.parse(projectId);
@@ -32,13 +35,64 @@ async function applyLast(kind: UndoKind, projectId: string, taskId?: string | nu
       undo ? (tid ? "No hay nada que deshacer en esta tarea." : "No hay nada que deshacer.") : tid ? "No hay nada que rehacer en esta tarea." : "No hay nada que rehacer.",
     );
   }
+  return { user, pid, entry };
+}
+
+/**
+ * Aplica la última entrada de la pila `kind` del usuario y deja en la contraria (deshacer ↔ rehacer)
+ * el estado previo, para poder alternar. Con una tarea abierta (`taskId`) el contexto es esa tarea.
+ */
+async function applyLast(kind: UndoKind, projectId: string, taskId?: string | null): Promise<Result> {
+  const { user, pid, entry } = await lastEntry(kind, projectId, taskId);
   return applyEntry(kind, user, pid, entry);
+}
+
+/** Lista legible de lo que otros añadieron a una tarea que se va a quitar («2 comentarios, 1 adjunto»). */
+function addedItems(a: UndoConflicts["added"], t: T): string {
+  const parts: string[] = [];
+  if (a.comments) parts.push(a.comments === 1 ? t("1 comentario") : t("{n} comentarios", { n: a.comments }));
+  if (a.attachments) parts.push(a.attachments === 1 ? t("1 adjunto") : t("{n} adjuntos", { n: a.attachments }));
+  if (a.links) parts.push(a.links === 1 ? t("1 enlace") : t("{n} enlaces", { n: a.links }));
+  return parts.join(", ");
+}
+
+/** El texto del diálogo de confirmación, en el idioma de quien deshace. */
+function conflictDialog(c: UndoConflicts, redo: boolean, t: T): { title: string; message: string; confirmLabel: string; danger: boolean } {
+  const question = redo ? t("¿Rehacer igualmente?") : t("¿Deshacer igualmente?");
+  const several = c.affected > 1;
+  const names = c.names.length > 3 ? `${c.names.slice(0, 3).join(", ")}…` : c.names.join(", ");
+  const what = c.generic
+    ? t("Otra persona ha cambiado esto después.")
+    : c.names.length === 1
+      ? several ? t("{name} cambió {n} de estas tareas después.", { name: names, n: c.tasks }) : t("{name} cambió esta tarea después.", { name: names })
+      : several ? t("Otras personas ({names}) cambiaron {n} de estas tareas después.", { names, n: c.tasks }) : t("Otras personas ({names}) cambiaron esta tarea después.", { names });
+  const items = addedItems(c.added, t);
+  // Quitar la tarea entera (deshacer su creación, rehacer su borrado) se lleva también lo que otros le añadieron.
+  const loses = items ? ` ${t("También se borrará lo que añadieron: {items}.", { items })}` : "";
+  return { title: t("Cambios de otras personas"), message: `${what}${loses} ${question}`, confirmLabel: redo ? t("Rehacer igualmente") : t("Deshacer igualmente"), danger: !!items };
+}
+
+/**
+ * Como undoLast/redoLast, pero antes mira si otra persona cambió después lo que la entrada va a tocar (findUndoConflicts).
+ * Si no, la aplica igual que siempre. Si sí, no aplica nada y devuelve el texto de la confirmación con el id de la
+ * entrada; con `confirmEntryId` (la persona aceptó) la aplica sin preguntar, solo si sigue siendo la última de su pila
+ * (si entretanto cambió, se pide volver a intentarlo para no aplicar otra cosa de la que se confirmó).
+ */
+async function applyLastChecked(kind: UndoKind, projectId: string, taskId: string | null | undefined, confirmEntryId: string | null | undefined): Promise<CheckedResult> {
+  const { user, pid, entry } = await lastEntry(kind, projectId, taskId);
+  if (confirmEntryId) {
+    if (v.id.parse(confirmEntryId) !== entry.id) throw new AppError("Ha cambiado entretanto lo que se iba a deshacer o rehacer: vuelve a intentarlo.");
+    return { applied: await applyEntry(kind, user, pid, entry, { force: true }) };
+  }
+  const conflicts = await findUndoConflicts(entry, user.id, pid);
+  if (conflicts) return { conflict: { entryId: entry.id, ...conflictDialog(conflicts, kind === "REDO", await getT()) } };
+  return { applied: await applyEntry(kind, user, pid, entry) };
 }
 
 type Entry = NonNullable<Awaited<ReturnType<typeof db.undoEntry.findFirst>>>;
 
 /** Aplica una entrada concreta de la pila (la última o una elegida) y deja la contraria para alternar. */
-async function applyEntry(kind: UndoKind, user: { id: string }, pid: string, entry: Entry): Promise<Result> {
+async function applyEntry(kind: UndoKind, user: { id: string }, pid: string, entry: Entry, opts: { force?: boolean } = {}): Promise<Result> {
   const undo = kind === "UNDO";
   // Se retira primero: dos clics seguidos no aplican dos veces lo mismo.
   const { count } = await db.undoEntry.deleteMany({ where: { id: entry.id } });
@@ -64,7 +118,8 @@ async function applyEntry(kind: UndoKind, user: { id: string }, pid: string, ent
   }
   // Si otra persona ha cambiado lo afectado desde que se creó esta entrada, aplicarla pisaría su trabajo:
   // se descarta (para no bloquear la pila) y se avisa. Las acciones propias ya vacían la pila de rehacer.
-  if (entry.fingerprint && current !== entry.fingerprint) {
+  // Con `force` la persona ya lo ha confirmado (undoChecked/redoChecked): se aplica igualmente.
+  if (entry.fingerprint && current !== entry.fingerprint && !opts.force) {
     await discardEntries([{ id: entry.id, ops: entry.ops }]);
     throw new AppError(
       undo ? "Otra persona ha cambiado esto después de rehacerlo: no se puede deshacer." : "Otra persona ha cambiado esto después de deshacerlo: no se puede rehacer.",
@@ -117,6 +172,20 @@ export async function undoLast(projectId: string, taskId?: string | null) {
 /** Rehace lo último que se deshizo (mismo contexto que undoLast). Una acción nueva vacía esta pila. */
 export async function redoLast(projectId: string, taskId?: string | null) {
   return runAction({ name: "undo.redoLast", args: [projectId, taskId] }, () => applyLast("REDO", projectId, taskId));
+}
+
+/**
+ * Deshacer del botón y de Ctrl+Z: como undoLast, pero si otra persona cambió después lo que se va a deshacer, devuelve
+ * `conflict` sin aplicar nada; se vuelve a llamar con `confirmEntryId` cuando la persona acepta. En el registro
+ * cuenta como undo.undoLast (es la misma acción).
+ */
+export async function undoChecked(projectId: string, taskId?: string | null, confirmEntryId?: string | null) {
+  return runAction({ name: "undo.undoLast", args: [projectId, taskId, confirmEntryId] }, () => applyLastChecked("UNDO", projectId, taskId, confirmEntryId));
+}
+
+/** Lo mismo para rehacer (undo.redoLast). */
+export async function redoChecked(projectId: string, taskId?: string | null, confirmEntryId?: string | null) {
+  return runAction({ name: "undo.redoLast", args: [projectId, taskId, confirmEntryId] }, () => applyLastChecked("REDO", projectId, taskId, confirmEntryId));
 }
 
 

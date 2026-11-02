@@ -5,36 +5,28 @@ import { useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
 import type { BoardView } from "./listSort";
 
-/** Conmutador Tablero / Lista de la cabecera. `compact`: solo iconos (móvil). */
-export function ViewToggle({ view, onChange, compact = false, className }: { view: BoardView; onChange: (v: BoardView) => void; compact?: boolean; className?: string }) {
+/**
+ * Conmutador Tablero / Lista de la cabecera: UN solo botón de icono (como el de filtros), siempre en el mismo sitio.
+ * Muestra el icono de la vista a la que se cambia (en el tablero, la lista; en la lista, las columnas), que es también
+ * lo que dicen su título y su etiqueta («Ver como lista» / «Ver como tablero»). `aria-pressed` indica que la vista
+ * de lista está activa.
+ */
+export function ViewToggle({ view, onChange, className }: { view: BoardView; onChange: (v: BoardView) => void; className?: string }) {
   const t = useT();
-  const options: { value: BoardView; label: string; Icon: typeof List }[] = [
-    { value: "board", label: t("Tablero"), Icon: Columns3 },
-    { value: "list", label: t("Lista"), Icon: List },
-  ];
+  const toList = view === "board";
+  const label = toList ? t("Ver como lista") : t("Ver como tablero");
+  const Icon = toList ? List : Columns3;
   return (
-    <div role="group" aria-label={t("Vista")} data-view-toggle className={cn("inline-flex shrink-0 rounded-md border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900", className)}>
-      {options.map(({ value, label, Icon }) => {
-        const active = view === value;
-        return (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={active}
-            aria-label={compact ? label : undefined}
-            title={label}
-            onClick={() => !active && onChange(value)}
-            className={cn(
-              "inline-flex h-7 items-center gap-1.5 rounded text-xs font-medium transition-colors",
-              compact ? "w-8 justify-center" : "px-2",
-              active ? "bg-brand-600 text-on-brand" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
-            )}
-          >
-            <Icon size={14} aria-hidden />
-            {!compact && <span className="@max-[1099px]:sr-only">{label}</span>}
-          </button>
-        );
-      })}
-    </div>
+    <button
+      type="button"
+      data-view-toggle
+      aria-pressed={!toList}
+      aria-label={label}
+      title={label}
+      onClick={() => onChange(toList ? "list" : "board")}
+      className={cn("btn-icon h-8 w-8 shrink-0", className)}
+    >
+      <Icon size={16} aria-hidden />
+    </button>
   );
 }

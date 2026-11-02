@@ -10,7 +10,7 @@ import {
 } from "@/actions/profile";
 import { cn } from "@/components/ui/cn";
 import { useToast } from "@/components/ui/Toast";
-import { useT } from "@/i18n/client";
+import { preloadEnglish, useT } from "@/i18n/client";
 import { ReleaseTemplateList } from "@/components/ReleaseTemplateList";
 import { DictationSection } from "./DictationSection";
 import { DraftsSection } from "./DraftsSection";
@@ -191,6 +191,8 @@ function LanguageSection({ initial }: { initial: "ES" | "EN" }) {
     if (value === locale) return;
     const previous = locale;
     setLocale(value);
+    // El diccionario de inglés se descarga aparte: ya en marcha mientras se guarda, el cambio de idioma es inmediato.
+    if (value === "EN") void preloadEnglish();
     const res = await updateLocale(value);
     if (!res.ok) {
       setLocale(previous);

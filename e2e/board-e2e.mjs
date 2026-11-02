@@ -8,7 +8,7 @@ import * as U from "./qa/ui.mjs";
 const { COL, sleep } = L;
 const APP = process.env.APP_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "b1,f3,m1,f1,dlg").split(",");
+const only = (process.env.PART || "b1,f3,m1,f1,dlg,vt").split(",");
 
 await L.prepareUsers();
 
@@ -359,6 +359,40 @@ if (only.includes("dlg")) {
   L.eq("DLG: ningún window.prompt/confirm/alert nativo", natives, []);
   L.assertNoErrors("DLG móvil", [m]);
   await m.ctx.close();
+}
+
+if (only.includes("vt")) {
+  L.scenario("R41C3/R41C4 y R41M1: conmutador de vista en un solo icono y título recortado");
+  await L.cleanBoard();
+  for (const [label, viewport, mobile] of [["escritorio", { width: 1280, height: 800 }, false], ["móvil", { width: 390, height: 844 }, true]]) {
+    const s = await L.session({ viewport, mobile });
+    const tog = s.page.locator("[data-view-toggle]:visible");
+    L.eq(`VT ${label}: un único botón de icono`, await tog.count(), 1);
+    const flt = await s.page.locator('button[aria-label^="Filtros"]:visible').first().boundingBox();
+    const a = await tog.boundingBox();
+    L.check(`VT ${label}: justo a la derecha del filtro`, a.x > flt.x && a.x - (flt.x + flt.width) < 16 && Math.abs(a.y - flt.y) < 3, JSON.stringify({ flt, a }));
+    L.eq(`VT ${label}: tablero → «Ver como lista» (sin pulsar)`, [await tog.getAttribute("aria-label"), await tog.getAttribute("aria-pressed")], ["Ver como lista", "false"]);
+    await tog.click(); await sleep(600);
+    const b = await tog.boundingBox();
+    L.eq(`VT ${label}: lista → «Ver como tablero» (pulsado)`, [await tog.getAttribute("aria-label"), await tog.getAttribute("aria-pressed")], ["Ver como tablero", "true"]);
+    L.eq(`VT ${label}: no se mueve al pasar a lista`, b, a);
+    await tog.click(); await sleep(600);
+    L.eq(`VT ${label}: no se mueve al volver al tablero`, await tog.boundingBox(), a);
+    L.assertNoErrors(`VT ${label}`, [s]);
+    await s.ctx.close();
+  }
+  // Título largo al crear: campo en rojo, se guarda recortado y sale el aviso.
+  const d = await L.session({ viewport: { width: 1280, height: 800 } });
+  await d.page.keyboard.press("Alt+n");
+  const input = d.page.locator('input[id$="-title"]').first();
+  await input.waitFor();
+  await input.fill("T".repeat(300));
+  L.eq("VT: título de 300: aria-invalid y ayuda «n/máx»", [await input.getAttribute("aria-invalid"), (await d.page.locator('[id$="-title-hint"]').innerText()).trim()], ["true", "300/210"]);
+  await d.page.keyboard.press("Alt+s");
+  L.check("VT: aviso «Título recortado a 210 caracteres»", await d.page.getByText("Título recortado a 210 caracteres").first().waitFor({ timeout: 8000 }).then(() => true, () => false));
+  await L.eqEventually("VT: se guarda recortado a 210", async () => (await L.q(`SELECT length(title) n FROM "Task" WHERE title LIKE 'TTTT%'`)).map((r) => r.n), [210]);
+  L.assertNoErrors("VT título", [d]);
+  await d.ctx.close();
 }
 
 await L.closeBrowser(); await L.closeDb();

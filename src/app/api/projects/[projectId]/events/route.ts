@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { MAX_STREAMS_PER_USER, openStreamCount, registerStream, subscribeProject } from "@/lib/realtime";
 import { currentSessionId, getCurrentUser, type CurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
+import { isShuttingDown } from "@/lib/shutdown";
 import * as v from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -32,6 +33,8 @@ async function stillAllowed(sessionId: string, projectId: string): Promise<boole
 /** Canal de avisos (Server-Sent Events): «ha cambiado algo en el proyecto». No se registra en los logs. */
 export async function GET(req: Request, ctx: { params: Promise<{ projectId: string }> }) {
   const t = await getT();
+  // Apagado del servidor en marcha: el navegador reintenta enseguida y se encuentra con la instancia nueva.
+  if (isShuttingDown()) return new Response(null, { status: 503, headers: { "Retry-After": "3" } });
   const user = await getCurrentUser();
   if (!user) return new Response(t("No autorizado"), { status: 401 });
   const parsed = v.id.safeParse((await ctx.params).projectId);

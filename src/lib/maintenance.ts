@@ -2,10 +2,12 @@
 // varios procesos, solo uno las ejecuta cada vez (bloqueo de Postgres) y la última ejecución queda en JobRun.
 
 import type { JobDef } from "./jobs";
+import { isShuttingDown } from "./shutdown";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NON_IMAGE_COPY_DAYS = 7;
 const READ_NOTIFICATION_DAYS = 90;
+const UNREAD_NOTIFICATION_DAYS = 365;
 const FIRST_RUN_MS = 60 * 1000;
 const EVERY_MS = 60 * 60 * 1000;
 
@@ -45,11 +47,15 @@ async function purgeDocumentsTrash(now: Date = new Date()): Promise<number> {
   return purgeTrashedDocuments(now);
 }
 
-/** Borra los avisos ya leídos de más de 90 días (los no leídos se conservan). */
+/**
+ * Borra los avisos ya leídos de más de 90 días y los que nunca se leyeron de más de un año (sin tope, las bandejas de
+ * quien no abre la app crecían para siempre). Ambos casos usan el índice (readAt, createdAt).
+ */
 async function purgeOldNotifications(now: Date = new Date()): Promise<number> {
   const { db } = await import("@/lib/db");
-  const { count } = await db.notification.deleteMany({ where: { readAt: { not: null }, createdAt: { lt: new Date(now.getTime() - READ_NOTIFICATION_DAYS * DAY_MS) } } });
-  return count;
+  const read = await db.notification.deleteMany({ where: { readAt: { not: null }, createdAt: { lt: new Date(now.getTime() - READ_NOTIFICATION_DAYS * DAY_MS) } } });
+  const unread = await db.notification.deleteMany({ where: { readAt: null, createdAt: { lt: new Date(now.getTime() - UNREAD_NOTIFICATION_DAYS * DAY_MS) } } });
+  return read.count + unread.count;
 }
 
 /** Borra los enlaces de email caducados y los dispositivos conocidos sin actividad en más de un año. */
@@ -188,6 +194,8 @@ export const MAINTENANCE_JOBS = [
 
 /** Ejecuta las tareas bajo el bloqueo `key`: si otro proceso ya lo tiene (p. ej. durante un despliegue), no hace nada. Nunca lanza. */
 async function runLocked(key: "maintenance" | "releaseResume", jobs: readonly JobDef[]): Promise<void> {
+  // Apagado del servidor en marcha: no se empieza trabajo nuevo.
+  if (isShuttingDown()) return;
   try {
     const { withAdvisoryLock, runJob, LOCK_MAINTENANCE, LOCK_RELEASE_RESUME } = await import("@/lib/jobs");
     const res = await withAdvisoryLock(key === "maintenance" ? LOCK_MAINTENANCE : LOCK_RELEASE_RESUME, async () => {

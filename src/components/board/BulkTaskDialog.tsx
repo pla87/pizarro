@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import { createTasks, getProjectFormData } from "@/actions/tasks";
 import type { ProjectFormData } from "@/lib/types";
-import { MAX_BULK_TASKS, parseTaskLines } from "@/lib/bulk";
+import { MAX_BULK_TASKS, parseTaskLinesInfo } from "@/lib/bulk";
 import { useT } from "@/i18n/client";
 import { DictationButton, insertIntoField } from "../ui/DictationButton";
 import { Modal } from "../ui/Modal";
@@ -14,7 +14,7 @@ import { useToast } from "../ui/Toast";
 import { boardClients, useBoard, useTasks } from "./context";
 import { TypeSelector } from "./TaskDialog";
 import { ProjectPicker } from "./ProjectPicker";
-import { isWhite, onColor } from "@/lib/constants";
+import { isWhite, MAX_TITLE, onColor } from "@/lib/constants";
 import { MAX_CLIENT, PRIORITY_LABEL, TASK_PRIORITIES } from "@/lib/task-fields";
 import { actionThrowResult } from "@/lib/stale-action";
 
@@ -97,7 +97,7 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
     applyForm(res.data);
   };
 
-  const lines = useMemo(() => parseTaskLines(text), [text]);
+  const { lines, clipped } = useMemo(() => parseTaskLinesInfo(text), [text]);
   const tooMany = lines.length > MAX_BULK_TASKS;
   const kindOf = (title: string) => overrides[title] || kindId;
   const missingKind = lines.some((l) => !kindOf(l));
@@ -135,6 +135,9 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
     const done = res.data.length === 1 ? t("1 tarea creada") : t("{n} tareas creadas", { n: res.data.length });
     if (elsewhere) toast(`${done} · ${form.project.name}`, "success", { label: t("Ir al proyecto"), onClick: () => router.push(`/p/${projectId}`) });
     else toast(done);
+    // Los títulos más largos que el máximo se han creado recortados (ya cortados aquí; el servidor también corta lo que llegue largo).
+    const cut = Math.max(clipped, res.data.filter((x) => x.titleClipped).length);
+    if (cut) toast(cut === 1 ? t("Título recortado a {max} caracteres", { max: MAX_TITLE }) : t("{n} títulos recortados a {max} caracteres", { n: cut, max: MAX_TITLE }));
     onClose();
     if (!elsewhere && res.data[0]) board.revealTask(res.data[0].id);
   };

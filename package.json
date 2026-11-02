@@ -1,6 +1,6 @@
 {
   "name": "pizarro",
-  "version": "1.44.0",
+  "version": "1.45.0",
   "private": true,
   "license": "SEE LICENSE IN LICENSE.md",
   "type": "module",
@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build && node scripts/postbuild.mjs && npm run build:boot",
-    "start": "node --env-file-if-exists=.env .next/standalone/server.js",
+    "start": "node --env-file-if-exists=.env --env-file=scripts/server.env .next/standalone/server.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "node --conditions=react-server --import tsx --test tests/*.test.ts",

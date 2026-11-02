@@ -1,7 +1,7 @@
 "use client";
 
 import { createGoogleFile } from "@/actions/tasks";
-import { makeT, type T } from "@/i18n/core";
+import { esT, type T } from "@/i18n/shared";
 import type { TaskLinkInfo } from "@/lib/types";
 
 /**
@@ -13,7 +13,7 @@ export async function createAndOpenGoogleFile(
   taskId: string,
   kind: "GOOGLE_DOC" | "GOOGLE_SHEET",
   title: string,
-  t: T = makeT("es"),
+  t: T = esT,
 ): Promise<{ ok: true; link: TaskLinkInfo } | { ok: false; error: string }> {
   const win = window.open("about:blank", "_blank");
   if (win) {

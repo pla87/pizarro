@@ -49,6 +49,7 @@ import { ReportButton } from "../ReportButton";
 import { filesFrom, hasFiles, imageFilesFrom, useBlockStrayFileDrops } from "./upload";
 import { draftKey, readDraft, type EditTaskDraft, type NewTaskDraft } from "./drafts";
 import { mentionsToPlain } from "@/lib/mentions";
+import { shouldRefreshOnFocus } from "@/lib/focus-refresh";
 
 // Los diálogos (con el editor de texto y el Markdown) no van en el código inicial del tablero:
 // se cargan al abrirlos y se precargan cuando el navegador está libre.
@@ -329,8 +330,15 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // «se reordenan solas» un momento): se anota cuándo se pidió el último y cuándo empezó el último cambio.
   const refreshAt = useRef(0);
   const mutationAt = useRef(0);
+  // Para espaciar el refresco al enfocar la ventana (lib/focus-refresh.ts): cuándo se sincronizó el tablero por última vez y
+  // estado del canal en vivo (abierto ahora; cortado desde la última sincronización, con avisos que pudieron perderse).
+  const lastSyncAt = useRef(0); // se rellena al montar (efecto de datos)
+  const channel = useRef({ open: false, gap: false });
   const refresh = useCallback(() => {
     refreshAt.current = performance.now();
+    lastSyncAt.current = refreshAt.current;
+    // Un refresco pedido con el canal abierto ya recoge todo lo anterior: el corte queda cubierto.
+    if (channel.current.open) channel.current.gap = false;
     router.refresh();
   }, [router]);
   const flushStale = useCallback(() => {
@@ -412,6 +420,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
 
   // Sincroniza con el servidor cuando llegan datos nuevos (router.refresh).
   useEffect(() => {
+    lastSyncAt.current = performance.now();
     if (pending.current > 0 || activeId || mutationAt.current > refreshAt.current) {
       // Datos que pueden ser anteriores a un cambio propio: se piden otra vez cuando no quede ninguno en vuelo.
       staleRefresh.current = true;
@@ -434,6 +443,15 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (typeof EventSource === "undefined") return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const source = new EventSource(`/api/projects/${data.project.id}/events`);
+    const live = channel.current;
+    source.addEventListener("open", () => {
+      live.open = true;
+    });
+    // EventSource reconecta solo, pero lo ocurrido mientras estuvo cortado no llega por el canal.
+    source.addEventListener("error", () => {
+      live.open = false;
+      live.gap = true;
+    });
     source.addEventListener("change", (e) => {
       let cid: string | null = null;
       try {
@@ -453,19 +471,29 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     return () => {
       if (timer) clearTimeout(timer);
       source.close();
+      live.open = false;
     };
   }, [data.project.id, drainIncoming]);
 
-  // Refresco ligero de respaldo (por si el canal de avisos no llega).
+  // Refresco ligero de respaldo (por si el canal de avisos no llega) y al volver a la ventana. Al volver no se recarga cada
+  // vez: se espacia según el estado del canal en vivo (reglas en lib/focus-refresh.ts).
   useEffect(() => {
+    const idle = () => document.visibilityState === "visible" && pending.current === 0 && !document.querySelector("[role=dialog]");
     const tick = () => {
-      if (document.visibilityState === "visible" && pending.current === 0 && !document.querySelector("[role=dialog]")) refresh();
+      if (idle()) refresh();
+    };
+    const onFocus = () => {
+      if (!idle()) return;
+      const { open, gap } = channel.current;
+      if (shouldRefreshOnFocus({ sinceSyncMs: performance.now() - lastSyncAt.current, channelOpen: open, channelGap: gap })) refresh();
     };
     const timer = setInterval(tick, REFRESH_MS);
-    window.addEventListener("focus", tick);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
     return () => {
       clearInterval(timer);
-      window.removeEventListener("focus", tick);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
     };
   }, [refresh]);
 
@@ -1021,7 +1049,6 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             )}
           </span>
           <Presence projectId={data.project.id} />
-          <ViewToggle view={view} onChange={changeView} />
           <div className="relative ml-auto w-36 min-w-16 shrink transition-[width] @min-[1000px]:focus-within:w-56">
             <Search size={14} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" aria-hidden />
             <input
@@ -1048,6 +1075,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             )}
           </div>
           <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="-ml-1.5 shrink-0" />
+          {/* Justo a la derecha del filtro y antes de «Limpiar filtros» (que aparece y desaparece): no se mueve al cambiar de vista. */}
+          <ViewToggle view={view} onChange={changeView} className="-ml-1" />
           {filterCount > 0 && (
             <button type="button" className="-ml-1 text-xs text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline dark:hover:text-slate-300" onClick={() => changeFilters(EMPTY_FILTERS)}>
               {t("Limpiar filtros")}
@@ -1136,7 +1165,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               {query.trim() && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-brand-600" aria-hidden />}
             </button>
             <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="shrink-0" />
-            <ViewToggle view={view} onChange={changeView} compact className={view === "list" ? "ml-auto mr-3" : "ml-0.5"} />
+            <ViewToggle view={view} onChange={changeView} className="ml-0.5" />
             {view === "board" && (
             <div data-mobile-tabs className="no-scrollbar ml-0.5 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pr-3">
               {sortedColumns.map((c) => (
@@ -1178,7 +1207,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             </div>
             {/* En móvil los filtros ya están en la barra de pestañas. */}
             <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="max-md:hidden" />
-            <ViewToggle view={view} onChange={changeView} compact className="max-md:hidden" />
+            <ViewToggle view={view} onChange={changeView} className="max-md:hidden" />
             <span className="shrink-0 text-xs text-slate-500" aria-live="polite">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : t("{n} tarjetas", { n: tasks.length })}</span>
             {(mobileSearch || filtering) && (
               <button

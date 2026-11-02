@@ -11,20 +11,25 @@ export const cuentas: Record<string, string> = {
   "El envío de emails no está configurado: dale esta clave por otro medio. Al entrar tendrá que elegir una contraseña nueva, así que tú no llegarás a conocer la definitiva.":
     "Email sending isn't configured: give them this password another way. When they sign in they will have to choose a new password, so you will never know the final one.",
   "Se avisará por email a la dirección antigua del cambio.": "The old address will be notified of the change by email.",
-  "Cambio forzado: se han cerrado sus sesiones y le hemos enviado un enlace por email": "Change forced: their sessions were closed and we've emailed them a link",
-  "Cambio forzado: se han cerrado sus sesiones": "Change forced: their sessions were closed",
-  "Se cerrarán todas sus sesiones y tendrá que elegir una contraseña nueva la próxima vez que entre. Tú no escribes ninguna contraseña.":
-    "All their sessions will be closed and they will have to choose a new password next time they sign in. You don't type any password.",
-  "Le enviaremos un enlace por email (válido 30 minutos) para elegirla.": "We'll email them a link (valid for 30 minutes) to choose it.",
-  "El envío de emails no está configurado: se generará un enlace de un solo uso (válido 30 minutos) para que se lo pases tú por un canal de confianza. Así puede recuperar el acceso aunque no recuerde la contraseña actual.":
-    "Email sending isn't configured: a one-time link (valid for 30 minutes) will be generated for you to pass on through a trusted channel. This way they can regain access even if they don't remember their current password.",
+  "Cambio forzado: su contraseña ya no vale, se han cerrado sus sesiones y le hemos enviado un enlace por email":
+    "Change forced: their password no longer works, their sessions were closed and we've emailed them a link",
+  "Cambio forzado: su contraseña ya no vale y se han cerrado sus sesiones": "Change forced: their password no longer works and their sessions were closed",
+  "Su contraseña actual dejará de valer en el acto (tampoco para quien la conociera), se cerrarán todas sus sesiones y se anularán los enlaces que tuviera pendientes. Tú no escribes ninguna contraseña.":
+    "Their current password will stop working immediately (for anyone who knew it, too), all their sessions will be closed and any pending links will be cancelled. You don't type any password.",
+  "Le enviaremos un enlace por email (válido 30 minutos) para elegir una nueva; hasta entonces no podrá entrar con contraseña.":
+    "We'll email them a link (valid for 30 minutes) to choose a new one; until then they can't sign in with a password.",
+  "El envío de emails no está configurado: se generará un enlace de un solo uso (válido 30 minutos) para que se lo pases tú por un canal de confianza; hasta usarlo no podrá entrar con contraseña.":
+    "Email sending isn't configured: a one-time link (valid for 30 minutes) will be generated for you to pass on through a trusted channel; until they use it they can't sign in with a password.",
+  "Tiene Google enlazado: podrá seguir entrando con Google, pero antes de continuar tendrá que elegir una contraseña nueva.":
+    "They have Google linked: they can keep signing in with Google, but they will have to choose a new password before continuing.",
   "Generar enlace": "Generate link",
   "Copiar enlace": "Copy link",
   "Copiar enlace en lugar de enviarlo": "Copy the link instead of sending it",
   "Enlace copiado": "Link copied",
   "Enlace de restablecimiento": "Reset link",
   "Enlace para {name}": "Link for {name}",
-  "Sus sesiones están cerradas. Con este enlace elegirá una contraseña nueva.": "Their sessions are closed. With this link they will choose a new password.",
+  "Su contraseña anterior ya no vale y sus sesiones están cerradas. Con este enlace elegirá una contraseña nueva.":
+    "Their previous password no longer works and their sessions are closed. With this link they will choose a new password.",
   "Envíaselo por un canal de confianza; caduca en 30 minutos y sirve una sola vez. No volverá a mostrarse.": "Send it through a trusted channel; it expires in 30 minutes and works only once. It won't be shown again.",
   "Forzar cambio": "Force change",
   // Perfil

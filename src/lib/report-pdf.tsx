@@ -1,6 +1,7 @@
-import "server-only";
+// Documentos PDF (@react-pdf/renderer). Este módulo solo se carga en el worker de PDF (report-pdf-worker.ts): el
+// proceso web importa de aquí únicamente tipos, así @react-pdf/renderer no entra en el servidor de Next.
 import { Document, Font, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
-import { makeT, type T } from "@/i18n/core";
+import { intlLocale, makeT, type Locale, type T } from "@/i18n/core";
 import { formatDay } from "./dates";
 import type { ChecklistGroup, ChecklistGroupBy } from "./checklist";
 import type { WeekPlanGroupBy, WeekPlanSection, WeekPlanTask } from "./week-plan";
@@ -33,7 +34,9 @@ const STATUS_COLOR: Record<DeliverableStatus, string> = {
 };
 
 const s = StyleSheet.create({
-  page: { paddingTop: 36, paddingBottom: 48, paddingHorizontal: 36, fontFamily: "Helvetica", fontSize: 9, color: C.text, lineHeight: 1.35 },
+  // Sin interlineado en la página: el pie fijo lo hereda y @react-pdf calcula mal la paginación de los documentos largos
+  // («unsupported number» a partir de ~150 filas, y el pie no se pintaba). Las filas ya llevan su relleno.
+  page: { paddingTop: 36, paddingBottom: 48, paddingHorizontal: 36, fontFamily: "Helvetica", fontSize: 9, color: C.text },
   header: { borderBottomWidth: 2, borderBottomColor: C.brand, paddingBottom: 10, marginBottom: 14 },
   eyebrow: { fontSize: 8, color: C.brand, fontFamily: "Helvetica-Bold", letterSpacing: 1, textTransform: "uppercase" },
   title: { fontSize: 20, lineHeight: 1.2, fontFamily: "Helvetica-Bold", marginTop: 4 },
@@ -466,4 +469,24 @@ function DeliveryDocument({ r, t, locale }: { r: DeliveryPdfInput; t: T; locale:
 
 export function renderDeliveryPdf(input: DeliveryPdfInput, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
   return renderToBuffer(<DeliveryDocument r={input} t={t} locale={locale} />);
+}
+
+/** Trabajo para el worker de PDF: datos ya preparados (serializables) y el idioma de quien lo pide. */
+export type PdfJob =
+  | { kind: "report"; locale: Locale; input: Report }
+  | { kind: "weekPlan"; locale: Locale; input: WeekPlanPdfInput }
+  | { kind: "checklist"; locale: Locale; input: ChecklistPdfInput }
+  | { kind: "delivery"; locale: Locale; input: DeliveryPdfInput };
+
+/** Pinta el PDF de un trabajo (en el worker). */
+export function renderPdfJob(job: PdfJob): Promise<Buffer> {
+  const t = makeT(job.locale);
+  const locale = intlLocale(job.locale);
+  switch (job.kind) {
+    case "report": return renderReportPdf(job.input, t, locale);
+    case "weekPlan": return renderWeekPlanPdf(job.input, t, locale);
+    case "checklist": return renderChecklistPdf(job.input, t, locale);
+    case "delivery": return renderDeliveryPdf(job.input, t, locale);
+    default: throw new Error(`Tipo de PDF desconocido: ${(job as { kind: unknown }).kind}`);
+  }
 }
