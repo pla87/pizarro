@@ -16,10 +16,11 @@ import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { completeLogin } from "@/lib/login";
 import { requestContext } from "@/lib/request-context";
 import { dummyVerify, hashPassword, passwordSchema, verifyPassword } from "@/lib/password";
-import { LOGIN_ACCOUNT_LIMIT, loginRateKeys, rateLimit, rateLimitReached, resetRateLimit } from "@/lib/rate-limit";
+import { LOGIN_ACCOUNT_LIMIT, LOGIN_ACCOUNT_LIMIT_TRUSTED, loginRateKeys, rateLimit, rateLimitReached, resetRateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { safeNextPath } from "@/lib/redirect";
 import { createSession, destroySession, getCurrentUser, requirePendingUser } from "@/lib/session";
+import { isTrustedDevice } from "@/lib/devices";
 import { secondStepFor, sendEmailCode, startChallenge } from "@/lib/two-factor";
 import * as v from "@/lib/validation";
 import { getT } from "@/i18n/server";
@@ -33,6 +34,17 @@ const loginSchema = z.object({
   password: z.string().min(1).max(200),
 });
 
+/**
+ * ¿Está bloqueado el acceso con contraseña a esta cuenta? Tras LOGIN_ACCOUNT_LIMIT fallos (desde cualquier conexión),
+ * solo se sigue probando desde un dispositivo recordado de la cuenta, hasta LOGIN_ACCOUNT_LIMIT_TRUSTED.
+ */
+async function accountLocked(key: string, email: string): Promise<boolean> {
+  if (rateLimitReached(key, LOGIN_ACCOUNT_LIMIT_TRUSTED)) return true;
+  if (!rateLimitReached(key, LOGIN_ACCOUNT_LIMIT)) return false;
+  const user = await db.user.findUnique({ where: { email }, select: { id: true } });
+  return !user || !(await isTrustedDevice(user.id));
+}
+
 export async function login(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const t = await getT();
   const parsed = loginSchema.safeParse({ email: formData.get("email"), password: formData.get("password") });
@@ -44,7 +56,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   const keys = loginRateKeys(ip, email);
   // En los logs solo se anota si parece un email (si alguien pega ahí su contraseña, no queda guardada).
   const shownEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "[no es un email]";
-  if (!rateLimit(keys.ip, 60, 15 * 60_000) || rateLimitReached(keys.account, LOGIN_ACCOUNT_LIMIT)) {
+  if (!rateLimit(keys.ip, 60, 15 * 60_000) || (await accountLocked(keys.account, email))) {
     logEvent({
       level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión bloqueado por demasiados intentos (${shownEmail})`,
       path: "/login", ip, details: { email: shownEmail, reason: "rate_limited" },
@@ -61,7 +73,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
       level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión fallido (${shownEmail}): ${why}`,
       userId: user?.id ?? null, userName: user?.name ?? null, path: "/login", ip, details: { email: shownEmail, reason },
     });
-    rateLimit(keys.account, LOGIN_ACCOUNT_LIMIT, 15 * 60_000);
+    rateLimit(keys.account, LOGIN_ACCOUNT_LIMIT_TRUSTED, 15 * 60_000);
     return { error: t("Credenciales incorrectas.") };
   }
 

@@ -37,6 +37,11 @@ export function loginRateKeys(ip: string, email: string): { ip: string; account:
 
 /** Fallos permitidos por cuenta en la ventana del login (cualquier conexión). */
 export const LOGIN_ACCOUNT_LIMIT = 6;
+/**
+ * Desde un dispositivo recordado de esa cuenta se admiten fallos hasta este tope. Un tercero (sin el dispositivo) se
+ * queda en LOGIN_ACCOUNT_LIMIT, así que no puede gastar estos intentos: quien entra desde su equipo no queda bloqueado.
+ */
+export const LOGIN_ACCOUNT_LIMIT_TRUSTED = 10;
 
 /** ¿Ya se han gastado los `limit` usos de `key` en su ventana? Solo consulta: no cuenta este uso. */
 export function rateLimitReached(key: string, limit: number): boolean {
