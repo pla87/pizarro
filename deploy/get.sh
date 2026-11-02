@@ -11,7 +11,7 @@ set -eu
 
 REPO="pla87/pizarro"
 DIR="/opt/pizarro"
-REF="" # vacío = la última versión publicada (o main si aún no hay)
+REF="" # vacío = la última versión publicada
 VERSION=""
 BUILD=0
 DOMAIN_ARG=""
@@ -36,7 +36,7 @@ Opciones:
   --local             Solo red local, por HTTP y sin dominio
   --dir <ruta>        Carpeta de instalación, ruta absoluta (por defecto /opt/pizarro)
   --version <X.Y.Z>   Instala esa versión (código de la etiqueta vX.Y.Z e imagen ghcr.io/pla87/pizarro:X.Y.Z).
-                      Sin ella se instala la última versión publicada (si aún no hay ninguna, main)
+                      Sin ella se instala la última versión publicada (si no se puede saber cuál es, se aborta; con --build se usa main)
   --ref <rama|tag>    Descarga el código de esa rama o etiqueta (una rama se construye en el servidor)
   --build             Construye la imagen en el servidor, desde el código, en vez de descargar la publicada
   --no-start          Prepara todo pero no arranca los contenedores
@@ -161,24 +161,30 @@ main() {
 
   # --- Qué versión ---------------------------------------------------------------------
   # Sin --version ni --ref: la última release publicada (consulta a GitHub); si no hay ninguna o no se puede
-  # consultar, se usa main y la imagen se construye aquí (aún no hay imagen publicada que corresponda).
+  # consultar: con una instalación existente se aborta sin tocarla; en una nueva hay que pedir --build / --ref main (no se construye en silencio).
   # Una etiqueta vX.Y.Z (--version o --ref) fija esa imagen; sin ellas se sigue «latest».
   PIN_ARG=""
   if [ -z "$REF" ]; then
     if [ -z "$TARBALL" ]; then
+      LOOKUP_OK=0
+      latest=""
       if fetch "https://api.github.com/repos/$REPO/releases/latest" "$TMP/latest.json" 2>/dev/null; then
+        LOOKUP_OK=1
         latest=$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\(v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)".*/\1/p' "$TMP/latest.json" | head -n 1)
-      else
-        latest=""
       fi
+      if [ "$LOOKUP_OK" = 1 ]; then why="Aún no hay ninguna versión publicada"; else why="No se pudo consultar a GitHub cuál es la última versión (sin red o límite de peticiones)"; fi
       if [ -n "$latest" ]; then
         REF="$latest"
         PIN_ARG="latest" # se sigue «latest», quitando una versión fijada antes
         say "Última versión publicada: $latest."
-      else
+      elif $SUDO test -f "$DIR/deploy/.env" </dev/null 2>/dev/null; then
+        # Ya hay una instalación: por un fallo de la consulta nunca se salta a construir main; se deja como está.
+        die "$why. Se mantiene la instalación actual en $DIR sin tocar nada. Inténtalo más tarde o indica la versión: --version X.Y.Z (las publicadas están en https://github.com/$REPO/releases)."
+      elif [ "$BUILD" = 1 ]; then
         REF="main"
-        BUILD=1
-        say "No encuentro ninguna versión publicada: se usa main y la imagen se construirá en este servidor."
+        say "$why: se usa main y la imagen se construirá en este servidor (--build)."
+      else
+        die "$why. Reintenta más tarde, indica una con --version X.Y.Z o, si quieres construir el código en este servidor, usa --build (o --ref main)."
       fi
     fi
   else

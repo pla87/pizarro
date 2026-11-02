@@ -23,7 +23,7 @@ try {
 } catch {
   fail("Esto no es un repositorio git.");
 }
-if (git("status", "--porcelain")) fail("Hay cambios sin confirmar: haz commit (o descártalos) antes de etiquetar.");
+if (git("status", "--porcelain", "--untracked-files=no")) fail("Hay cambios sin confirmar: haz commit (o descártalos) antes de etiquetar.");
 if (git("tag", "--list", tag)) fail(`La etiqueta ${tag} ya existe.`);
 
 git("tag", "-a", tag, "-m", `Pizarro ${tag}`);

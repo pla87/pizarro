@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { Landing } from "@/components/landing/Landing";
 import { I18nProvider } from "@/i18n/client";
 import { makeT } from "@/i18n/core";
 import { getLocale } from "@/i18n/server";
 import { getPublicContactEmail } from "@/lib/google-config";
 import { pickLandingLocale } from "@/lib/landing-locale";
+import { db } from "@/lib/db";
+import { isSetupPending } from "@/lib/setup";
 import { getCurrentUser } from "@/lib/session";
 
 // Página pública de presentación (sin sesión): se sirve en /presentacion y, con LANDING_AT_ROOT=1, en «/» a quien no ha iniciado sesión.
@@ -33,6 +36,8 @@ export async function generateMetadata({ searchParams }: { searchParams: Search 
 }
 
 export default async function Page({ searchParams }: { searchParams: Search }) {
+  // Con LANDING_AT_ROOT=1 «/» muestra esta página incluso en una instalación recién hecha: sin usuarios se manda al asistente.
+  if (process.env.LANDING_AT_ROOT === "1" && (await isSetupPending(db).catch(() => false))) redirect("/setup");
   const locale = await resolveLocale(searchParams);
   const contactEmail = await getPublicContactEmail().catch(() => "");
   return (

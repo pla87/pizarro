@@ -72,7 +72,9 @@ export function parseUpdateCache(raw: string | null | undefined): UpdateCache | 
     const o = JSON.parse(raw) as Partial<UpdateCache>;
     if (typeof o.checkedAt !== "number") return null;
     const latest = typeof o.latest === "string" && parseSemver(o.latest) ? o.latest : null;
-    return { checkedAt: o.checkedAt, latest, url: typeof o.url === "string" ? o.url : null, failed: o.failed === true };
+    // La URL acaba en un enlace del aviso: solo se acepta una de las versiones del repositorio oficial.
+    const url = typeof o.url === "string" && /^https:\/\/github\.com\/pla87\/pizarro\//.test(o.url) ? o.url : null;
+    return { checkedAt: o.checkedAt, latest, url, failed: o.failed === true };
   } catch {
     return null;
   }
