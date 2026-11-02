@@ -179,7 +179,9 @@ export function DictationButton({ onText, variant = "field", placement = "beside
   const inside = variant === "field" && placement === "inside";
   const title = listening ? t("Parar dictado (Esc)") : t("Dictar");
   return (
-    <span className={cn(inside ? "absolute right-0 z-10" : "inline-flex shrink-0 items-center gap-1.5", inside && !className && "top-0", className)}>
+    // Dentro del campo: mismo tamaño y misma distancia al borde derecho (borde + relleno de la barra de formato) que el
+    // micrófono de la barra de la descripción, para que los dos queden en la misma vertical.
+    <span className={cn(inside ? "absolute right-[5px] z-10" : "inline-flex shrink-0 items-center gap-1.5", inside && !className && "top-0.5", className)}>
       <button
         type="button"
         data-dictation
@@ -192,7 +194,7 @@ export function DictationButton({ onText, variant = "field", placement = "beside
         onClick={toggle}
         className={cn(
           "btn-icon relative shrink-0",
-          variant === "toolbar" ? "h-7 w-7" : "h-8 w-8",
+          variant === "toolbar" || inside ? "h-7 w-7" : "h-8 w-8",
           listening && "bg-red-50 text-red-600 dark:bg-red-500/20 dark:text-red-300",
         )}
       >
