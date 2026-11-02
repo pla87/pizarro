@@ -2,6 +2,35 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.43.1 — 2026-11-02 20:24
+
+Mantenimiento: seguridad y rendimiento de la importación, el calendario suscrito y las tareas bloqueadas, y correcciones
+
+### Mejoras
+
+- Importar desde Trello o CSV es mucho más rápido con archivos grandes y conserva el texto técnico como `Promise<void>`.
+- Comprobar un bloqueo entre tareas pasa de hasta 1000 consultas a una sola.
+- El calendario suscrito con «todas las de mis proyectos» muestra los mismos proyectos que la página Calendario.
+- La página de presentación solo anuncia el pago con tarjeta y la factura automática cuando el enlace de pago existe.
+
+### Correcciones
+
+- El enlace secreto del calendario ya no puede quedar escrito en el registro de Administración si algo falla (tampoco los enlaces de restablecer contraseña o confirmar email).
+- Una descripción preparada a propósito ya no puede bloquear el servidor al generar el calendario.
+- Al mover o editar un entregable, Apple Calendar y Outlook ya actualizan la fecha.
+- Dos bloqueos simultáneos A→B y B→A ya no dejan dos tareas bloqueadas en círculo.
+- Importar un proyecto con muchísimas tareas encadenadas ya no deja el servidor colgado.
+- Importaciones: un CSV con millones de filas, textos enormes o muchos comentarios ya no agotan la memoria; las tareas con más de 20 etiquetas se recortan (antes no se podían editar después); se evitan menciones falsas.
+- La vista de lista ya no pinta cada tarea dos veces, e «ir a la tarea» desde un aviso funciona en esa vista.
+- Los lectores de pantalla anuncian el límite superado en las pestañas de columna del móvil.
+- Textos de ejemplo de Licencia y Textos legales traducidos.
+
+### Cambios técnicos / DB
+
+- Migración: fecha de última modificación en los entregables.
+- Prueba intermitente de exportaciones estabilizada (el trabajador de fondo se detiene tras su prueba).
+- marked pasa a dependencias de la aplicación y qrcode queda fijado.
+
 ## v1.43.0 — 2026-11-02 19:26
 
 Importar desde Trello y CSV, calendario suscribible, límite por columna, tareas bloqueadas, vista de lista y licencia en Administración
