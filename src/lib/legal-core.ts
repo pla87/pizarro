@@ -1,6 +1,6 @@
 // Parte pura (sin base de datos) de los textos legales editables (/privacy y /terms): claves, textos por defecto,
 // sustitución de {responsable} y {email} y la regla de qué texto se muestra según el idioma.
-import { translate, type Locale } from "@/i18n/core";
+import type { Locale } from "@/i18n/shared";
 import { LEGAL_DEFAULTS } from "./legal-defaults";
 
 export type LegalKind = "privacy" | "terms";
@@ -21,9 +21,16 @@ export function defaultLegalMarkdown(kind: LegalKind, locale: Locale): string {
   return LEGAL_DEFAULTS[kind][locale];
 }
 
+/**
+ * Fórmula por defecto cuando no hay responsable. Va aquí y no en el diccionario porque este módulo también lo usa el
+ * navegador (vista previa en Administración) y importar la traducción arrastraría todo el diccionario de inglés.
+ * tests/i18n-split.test.ts comprueba que coincide con la entrada del diccionario.
+ */
+export const ADMIN_PHRASE: Record<Locale, string> = { es: "el administrador de esta instalación", en: "this installation's administrator" };
+
 /** Sustituye {responsable} y {email}; sin ellos usa «el administrador de esta instalación». Si falta el email se nombra al responsable. */
 export function fillLegalPlaceholders(text: string, locale: Locale, responsible: string, email: string): string {
-  const admin = translate(locale, "el administrador de esta instalación");
+  const admin = ADMIN_PHRASE[locale];
   const resp = responsible.trim() || admin;
   const mail = email.trim() || responsible.trim() || admin;
   return text.replace(/\{(responsable|email)\}/g, (_m, k: string) => (k === "responsable" ? resp : mail));

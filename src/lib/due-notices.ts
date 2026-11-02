@@ -3,6 +3,7 @@ import { db } from "./db";
 import { logEvent } from "./log";
 import { dueChangeExcerpt } from "./notification-text";
 import { notifyTask } from "./notify";
+import { isShuttingDown } from "./shutdown";
 
 // Avisos de cambio de fecha límite agrupados: mover una tarjeta varias veces seguidas (arrastrando en el
 // calendario, Alt+flechas…) no genera un aviso por movimiento. Cada cambio actualiza una fila pendiente por
@@ -82,7 +83,7 @@ export function startDueNoticeScheduler(): void {
   g.__pzDueNotices = true;
   let running = false;
   setInterval(() => {
-    if (running) return;
+    if (running || isShuttingDown()) return;
     running = true;
     deliverDueNotices().catch((err) => console.error("[due-notices]", err)).finally(() => { running = false; });
   }, DUE_NOTIFY_POLL_MS).unref?.();
