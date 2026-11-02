@@ -1,6 +1,61 @@
 {
   "versions": [
     {
+      "version": "1.38.0",
+      "date": "2026-11-02",
+      "releasedAt": "2026-11-02T01:44:06+01:00",
+      "summary": "Actualizaciones con versiones e imagen publicada, página de presentación con demo, subir archivos sin límite y descargas reanudables",
+      "changes": {
+        "nuevas": [
+          "Actualizaciones con versiones: cada release lleva su etiqueta en GitHub y una imagen Docker ya construida (ghcr.io/pla87/pizarro) para instalar y actualizar en segundos; se puede fijar o volver a una versión con --version.",
+          "Aviso en Administración cuando hay una versión nueva de Pizarro, con enlace a las novedades y a cómo actualizar (se puede ocultar por versión o desactivar con UPDATE_CHECK=0).",
+          "Página de presentación pública (/presentacion) con las funciones principales, comparativa con Trello, Asana, Notion y Jira, y una demo interactiva con un proyecto de ejemplo que funciona en el navegador."
+        ],
+        "mejoras": [
+          "Se pueden soltar o adjuntar todos los archivos que quieras de una vez: suben en cola de 3 en 3, con progreso y reintentos; un aviso indica los que no caben y por qué.",
+          "La columna lateral del detalle de la tarea ya no tiene scroll horizontal y los colores se reparten en dos filas.",
+          "Ajustes de correo y de Google más breves; cada proveedor indica de dónde salen el usuario y la contraseña.",
+          "Exportaciones: la nueva sustituye a la anterior del mismo proyecto, las descargas se pueden reanudar si se cortan, se hacen dos a la vez y se deja más margen de disco libre.",
+          "La guía de prueba en un VPS describe la instalación en un paso."
+        ],
+        "correcciones": [
+          "Cancelar o cerrar la tarea detiene las subidas pendientes; los contadores de la tarjeta no retroceden.",
+          "El diálogo de nueva tarea no se cierra mientras crea y sube.",
+          "Dos exportaciones casi simultáneas ya no se borran entre sí.",
+          "El instalador ya no construye una versión sin publicar si GitHub no responde."
+        ],
+        "tecnicos": [
+          "Workflow .github/workflows/release.yml (imagen multiarquitectura y GitHub Release con las notas del changelog); npm run release:tag. compose usa la imagen publicada (compose.build.yml para construir). Range/ETag en descargas de exportación. DISK_MIN_FREE_MB, PROJECT_TRANSFER_CONCURRENCY=2, LANDING_AT_ROOT, UPDATE_CHECK."
+        ]
+      },
+      "en": {
+        "summary": "Versioned updates with a published image, presentation page with demo, unlimited file uploads and resumable downloads",
+        "changes": {
+          "nuevas": [
+            "Versioned updates: each release has its GitHub tag and a prebuilt Docker image (ghcr.io/pla87/pizarro) to install and update in seconds; a version can be pinned or rolled back with --version.",
+            "Notice in Administration when a new Pizarro version is out, linking to what's new and how to update (can be hidden per version or turned off with UPDATE_CHECK=0).",
+            "Public presentation page (/presentacion) with the main features, a comparison with Trello, Asana, Notion and Jira, and an interactive demo with a sample project running in the browser."
+          ],
+          "mejoras": [
+            "Drop or attach as many files as you want at once: they upload in a queue of 3 at a time with progress and retries; a notice lists the ones that don't fit and why.",
+            "The task detail side column no longer scrolls sideways and colours are split into two rows.",
+            "Shorter mail and Google settings; each provider states where the user and password come from.",
+            "Exports: a new one replaces the previous one of the same project, downloads can resume if interrupted, two run at once and more free disk margin is kept.",
+            "The VPS test guide describes the one-step install."
+          ],
+          "correcciones": [
+            "Cancelling or closing the task stops pending uploads; card counters no longer go backwards.",
+            "The new task dialog doesn't close while creating and uploading.",
+            "Two near-simultaneous exports no longer delete each other.",
+            "The installer no longer builds an unreleased version if GitHub doesn't answer."
+          ],
+          "tecnicos": [
+            "Workflow .github/workflows/release.yml (multi-arch image and GitHub Release from changelog notes); npm run release:tag. compose uses the published image (compose.build.yml to build). Range/ETag on export downloads. DISK_MIN_FREE_MB, PROJECT_TRANSFER_CONCURRENCY=2, LANDING_AT_ROOT, UPDATE_CHECK."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.37.0",
       "date": "2026-11-02",
       "releasedAt": "2026-11-02T00:16:13+01:00",
