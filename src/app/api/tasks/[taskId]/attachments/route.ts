@@ -42,10 +42,6 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     }
     // Sin Content-Length (algún proxy la quita) el tamaño se comprueba al leer el archivo.
     const length = declaredLength(req.headers);
-    // Como mucho unas pocas subidas a la vez en todo el servidor (cada una se lee entera en memoria).
-    release = await acquireUploadSlot();
-    if (!release) throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
-
     // Límite de un archivo: el del proyecto (y, si existe, el tope MAX_UPLOAD_MB del servidor), leído en cada subida.
     const fileMaxMb = effectiveFileMaxMb(task.project.fileMaxMb);
     const maxBytes = fileMaxMb * 1024 * 1024;
@@ -57,6 +53,9 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     if (length !== null && length > maxBytes + MULTIPART_OVERHEAD_BYTES) throw await tooBig();
     // Cola de imágenes llena: se rechaza antes de leer el cuerpo (no se sabe si es imagen, pero el servidor está saturado).
     if (imageQueueFull()) throw new AppError(IMAGE_QUEUE_FULL_MESSAGE, 503);
+    // Como mucho unas pocas subidas a la vez en todo el servidor (cada una se lee entera en memoria).
+    release = await acquireUploadSlot();
+    if (!release) throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
     const form = await req.formData();
     const file = form.get("file");
     if (!(file instanceof File)) throw new AppError("No se ha recibido ningún archivo.");

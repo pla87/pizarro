@@ -93,11 +93,15 @@ export async function refreshProjectStorage(projectId: string) {
  * Borra para siempre (filas, ficheros y miniaturas) un grupo de ficheros del proyecto: adjuntos de tareas archivadas,
  * papelera de documentación o adjuntos de releases antiguas. El cliente pide confirmación mostrando `previewStorageCleanup`.
  */
-export async function runStorageCleanup(projectId: string, kind: string, days: number) {
-  return runAction({ name: "storage.cleanup", args: [projectId, kind, days] }, async () => {
+export async function runStorageCleanup(projectId: string, kind: string, days: number, expectedCount: number) {
+  return runAction({ name: "storage.cleanup", args: [projectId, kind, days, expectedCount] }, async () => {
     const user = await requireUser();
     const project = await findManageableProject(user, projectId);
     const c = parseCleanup(kind, days);
+    const expected = z.number().int().min(0).parse(expectedCount);
+    // Se recalcula: si ahora hay más de lo que la persona vio y confirmó, no se borra nada hasta que lo vuelva a confirmar.
+    const now = await previewCleanup(project.id, c.kind, c.days);
+    if (now.count > expected) throw new AppError("El contenido ha cambiado; revisa y confirma de nuevo.");
     let res: { count: number; bytes: number };
     if (c.kind === "archivedTasks") res = await cleanupArchivedTaskAttachments(project.id, c.days);
     else if (c.kind === "oldReleases") res = await cleanupOldReleaseAttachments(project.id, c.days);

@@ -56,24 +56,26 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
   // Gestionan el proyecto los administradores y, si es privado, sus miembros (como en las acciones).
   const canManage = isAdmin || project.isPrivate;
   const tab = parseProjectSettingsTab(tabParam, canManage);
-  // Las cabeceras y pies solo se leen cuando se abre la pestaña Releases, que es donde se editan.
-  const [releaseTemplates, generalKinds, generalUsage] = await Promise.all([
+  // Las cabeceras y pies solo se leen cuando se abre la pestaña Releases, que es donde se editan; el almacenamiento,
+  // en la pestaña Adjuntos. Los administradores asignan usuarios a los proyectos de equipo; los miembros de un privado
+  // añaden a otros usuarios.
+  const showStorage = tab === "adjuntos" && canManage;
+  const [releaseTemplates, generalKinds, generalUsage, users, schedule, editorRow, storageInitial, storageLargest] = await Promise.all([
     tab === "releases" ? projectReleaseTemplates(project.id) : Promise.resolve({ headers: [], footers: [] }),
     listKinds(),
     db.task.groupBy({ by: ["kindId"], where: { projectId: project.id }, _count: { _all: true } }),
+    canManage ? db.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, role: true } }) : Promise.resolve([]),
+    db.reportSchedule.findUnique({ where: { projectId: project.id }, select: { enabled: true, recipient: true, weekday: true, hour: true } }),
+    db.user.findUnique({ where: { id: user.id }, select: { editorMode: true } }),
+    showStorage ? projectStorage(project.id) : Promise.resolve(null),
+    showStorage ? largestAttachments(project.id, 20) : Promise.resolve(null),
   ]);
   const hidden = new Set(project.hiddenKinds.map((h) => h.kindId));
   const usage = new Map(generalUsage.map((g) => [g.kindId, g._count._all]));
-  // Los administradores asignan usuarios a los proyectos de equipo; los miembros de un privado añaden a otros usuarios.
-  const users = isAdmin || project.isPrivate
-    ? await db.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, role: true } })
-    : [];
+  const editorMode = editorRow?.editorMode ?? "MARKDOWN";
 
-  const schedule = await db.reportSchedule.findUnique({ where: { projectId: project.id }, select: { enabled: true, recipient: true, weekday: true, hour: true } });
-  const editorMode = (await db.user.findUnique({ where: { id: user.id }, select: { editorMode: true } }))?.editorMode ?? "MARKDOWN";
-
-  const storageSection = tab === "adjuntos" && canManage
-    ? <StorageSection projectId={project.id} isAdmin={isAdmin} initial={await projectStorage(project.id)} initialLargest={await largestAttachments(project.id, 20)} />
+  const storageSection = storageInitial && storageLargest
+    ? <StorageSection projectId={project.id} isAdmin={isAdmin} initial={storageInitial} initialLargest={storageLargest} />
     : null;
 
   return (

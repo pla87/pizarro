@@ -30,11 +30,14 @@ export async function getQuotaSettings(now: number = Date.now()): Promise<{ proj
 }
 
 export async function saveQuotaSettings(next: { project: QuotaSetting; total: QuotaSetting }): Promise<void> {
-  for (const [key, setting] of [[QUOTA_PROJECT_KEY, next.project], [QUOTA_TOTAL_KEY, next.total]] as const) {
+  // Las dos escrituras juntas: o se guardan ambas o ninguna.
+  const ops = ([[QUOTA_PROJECT_KEY, next.project], [QUOTA_TOTAL_KEY, next.total]] as const).map(([key, setting]) => {
     const value = serializeQuotaSetting(setting);
-    if (value === null) await db.appState.deleteMany({ where: { key } });
-    else await db.appState.upsert({ where: { key }, create: { key, value }, update: { value } });
-  }
+    return value === null
+      ? db.appState.deleteMany({ where: { key } })
+      : db.appState.upsert({ where: { key }, create: { key, value }, update: { value } });
+  });
+  await db.$transaction(ops);
   invalidateQuotaSettings();
 }
 

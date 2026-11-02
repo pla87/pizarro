@@ -2,6 +2,7 @@ import { z } from "zod";
 import { logEvent } from "@/lib/log";
 import { redactPath } from "@/lib/redact-path";
 import { rateLimit } from "@/lib/rate-limit";
+import { declaredLength } from "@/lib/upload-slots";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 
@@ -27,8 +28,11 @@ export async function POST(req: Request) {
   // y su error es justo el que hay que ver), con un límite más estricto por IP y un cuerpo más pequeño.
   const user = await getCurrentUser().catch(() => null);
   if (!rateLimit(`client-errors:${user ? "u" : "anon"}:${ip}`, user ? 20 : 10, 60_000)) return new Response(null, { status: 429 });
+  const max = user ? 16_384 : ANON_MAX_BODY;
+  const declared = declaredLength(req.headers);
+  if (declared !== null && declared > max) return new Response(null, { status: 413 });
   const raw = await req.text().catch(() => "");
-  if (raw.length > (user ? 16_384 : ANON_MAX_BODY)) return new Response(null, { status: 413 });
+  if (raw.length > max) return new Response(null, { status: 413 });
   let body: unknown = null;
   try {
     body = JSON.parse(raw);
