@@ -2,6 +2,35 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.39.0 — 2026-11-02 02:29
+
+Gestión del almacenamiento: cuotas configurables, desglose y liberar espacio por proyecto, y correcciones
+
+### Nuevas funcionalidades
+
+- Administración → Ajustes → Almacenamiento: dónde se guardan los ficheros, espacio del disco, cuánto ocupa cada cosa, los proyectos que más ocupan y las cuotas (por proyecto, 10 GB por defecto, y total opcional) sin tocar variables del servidor.
+- Ajustes del proyecto → Adjuntos y límites → Almacenamiento: barra de uso, desglose (adjuntos de tareas activas y archivadas, copias en releases, documentación y su papelera), cuota propia del proyecto y acciones para liberar espacio: borrar copias de releases antiguas, adjuntos de tareas archivadas, vaciar la papelera y los 20 archivos más grandes.
+
+### Mejoras
+
+- Al superar la cuota, el aviso explica cómo liberar espacio o pedir que se amplíe (con enlace para admins); al desplegar una release que deja el proyecto por encima, se avisa.
+- Tareas archivadas: búsqueda en el servidor por título o release y «Cargar más» (antes solo las 500 últimas).
+- Crear varias tareas con responsable le avisa una vez («N tareas»).
+
+### Correcciones
+
+- Ya no llegan avisos de cambio de fecha si el cambio se deshizo o canceló.
+- Archivar o borrar varias tarjetas funciona aunque otra persona haya quitado alguna.
+- Recuperar una tarea que ya no está archivada da un aviso en lugar de moverla.
+- Rehacer después de deshacer el despliegue de una release ya no mueve tareas sin release.
+- Restaurar un documento de la papelera funciona aunque el proyecto esté al límite.
+- Los emails de avisos distintos sobre la misma tarea ya no se bloquean entre sí.
+- Solo quien lanzó una exportación o importación ve su estado; el kit de recuperación ya no muestra claves vacías.
+
+### Cambios técnicos / DB
+
+- Migración: Project.storageQuotaMb. Cuotas en AppState (uploadQuotaMbPerProject, uploadQuotaMbTotal); precedencia proyecto > variables > ajuste > 10 GB. src/lib/storage-cleanup.ts (borrado por lotes de filas y ficheros, invalida deshacer).
+
 ## v1.38.0 — 2026-11-02 01:44
 
 Actualizaciones con versiones e imagen publicada, página de presentación con demo, subir archivos sin límite y descargas reanudables

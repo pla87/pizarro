@@ -1,6 +1,61 @@
 {
   "versions": [
     {
+      "version": "1.39.0",
+      "date": "2026-11-02",
+      "releasedAt": "2026-11-02T02:29:44+01:00",
+      "summary": "Gestión del almacenamiento: cuotas configurables, desglose y liberar espacio por proyecto, y correcciones",
+      "changes": {
+        "nuevas": [
+          "Administración → Ajustes → Almacenamiento: dónde se guardan los ficheros, espacio del disco, cuánto ocupa cada cosa, los proyectos que más ocupan y las cuotas (por proyecto, 10 GB por defecto, y total opcional) sin tocar variables del servidor.",
+          "Ajustes del proyecto → Adjuntos y límites → Almacenamiento: barra de uso, desglose (adjuntos de tareas activas y archivadas, copias en releases, documentación y su papelera), cuota propia del proyecto y acciones para liberar espacio: borrar copias de releases antiguas, adjuntos de tareas archivadas, vaciar la papelera y los 20 archivos más grandes."
+        ],
+        "mejoras": [
+          "Al superar la cuota, el aviso explica cómo liberar espacio o pedir que se amplíe (con enlace para admins); al desplegar una release que deja el proyecto por encima, se avisa.",
+          "Tareas archivadas: búsqueda en el servidor por título o release y «Cargar más» (antes solo las 500 últimas).",
+          "Crear varias tareas con responsable le avisa una vez («N tareas»)."
+        ],
+        "correcciones": [
+          "Ya no llegan avisos de cambio de fecha si el cambio se deshizo o canceló.",
+          "Archivar o borrar varias tarjetas funciona aunque otra persona haya quitado alguna.",
+          "Recuperar una tarea que ya no está archivada da un aviso en lugar de moverla.",
+          "Rehacer después de deshacer el despliegue de una release ya no mueve tareas sin release.",
+          "Restaurar un documento de la papelera funciona aunque el proyecto esté al límite.",
+          "Los emails de avisos distintos sobre la misma tarea ya no se bloquean entre sí.",
+          "Solo quien lanzó una exportación o importación ve su estado; el kit de recuperación ya no muestra claves vacías."
+        ],
+        "tecnicos": [
+          "Migración: Project.storageQuotaMb. Cuotas en AppState (uploadQuotaMbPerProject, uploadQuotaMbTotal); precedencia proyecto > variables > ajuste > 10 GB. src/lib/storage-cleanup.ts (borrado por lotes de filas y ficheros, invalida deshacer)."
+        ]
+      },
+      "en": {
+        "summary": "Storage management: configurable quotas, per-project breakdown and freeing space, and fixes",
+        "changes": {
+          "nuevas": [
+            "Administration → Settings → Storage: where files are stored, disk space, how much each thing takes, the projects using the most and the quotas (per project, 10 GB by default, and optional total) without touching server variables.",
+            "Project settings → Attachments and limits → Storage: usage bar, breakdown (active and archived task attachments, release copies, documentation and its trash), the project's own quota and actions to free space: delete old release copies, archived task attachments, empty the trash and the 20 largest files."
+          ],
+          "mejoras": [
+            "When the quota is exceeded, the message explains how to free space or ask for more (with a link for admins); deploying a release that leaves the project over the quota shows a warning.",
+            "Archived tasks: server-side search by title or release and “Load more” (previously only the last 500).",
+            "Creating several tasks with an assignee notifies them once (“N tasks”)."
+          ],
+          "correcciones": [
+            "Due date change notices no longer arrive if the change was undone or cancelled.",
+            "Archiving or deleting several cards works even if someone else removed one.",
+            "Recovering a task that is no longer archived shows a notice instead of moving it.",
+            "Redo after undoing a release deploy no longer moves tasks without a release.",
+            "Restoring a document from the trash works even when the project is at its limit.",
+            "Emails for different notices about the same task no longer block each other.",
+            "Only whoever started an export or import sees its status; the recovery kit no longer shows empty keys."
+          ],
+          "tecnicos": [
+            "Migration: Project.storageQuotaMb. Quotas in AppState (uploadQuotaMbPerProject, uploadQuotaMbTotal); precedence project > variables > setting > 10 GB. src/lib/storage-cleanup.ts (batched row and file deletion, invalidates undo)."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.38.0",
       "date": "2026-11-02",
       "releasedAt": "2026-11-02T01:44:06+01:00",
