@@ -49,15 +49,19 @@ async function warm(id: string) {
 }
 
 describe("/api/attachments: caché y acceso", () => {
-  test("con acceso: 200 con ETag, no-cache y 304 al revalidar", async () => {
+  test("con acceso: 200 con ETag, max-age=10 en línea y 304 al revalidar", async () => {
     const member = await makeUser();
     const f = await makeProject({ members: [member] });
     const { att } = await makeAttachment(f);
     await loginAs(member);
     const res = await get(att.id, { thumb: true });
     assert.equal(res.status, 200);
-    assert.equal(res.headers.get("cache-control"), "private, no-cache");
+    assert.equal(res.headers.get("cache-control"), "private, max-age=10");
     assert.equal(await res.text(), "thumb-im");
+    // La descarga explícita se revalida siempre (queda registrada).
+    const dl = await get(att.id, { download: true });
+    assert.equal(dl.headers.get("cache-control"), "private, no-cache");
+    await dl.arrayBuffer();
     await warm(att.id);
   });
 

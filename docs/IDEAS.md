@@ -119,3 +119,54 @@ Orden: mejor relación beneficio/complejidad primero. ★ = top 5 recomendado.
 Si hay que sacrificar uno, el 4 es el que más puede complicar la interfaz; el sustituto natural es la **plantilla de tarea** (nº 9) o la **búsqueda global** (nº 7).
 
 Nota: del 17 al 20 está justificado dejarlos fuera por complejidad; sirven para decirle «no» a quien los pida.
+
+---
+
+# Reglas sencillas «si pasa esto, haz esto» (diseño propuesto, sin implementar)
+
+Objetivo: ahorrar clics repetidos sin convertir Pizarro en una herramienta de automatización. Por eso, un catálogo
+**cerrado** de disparadores y acciones, frases legibles y nada de reglas encadenadas.
+
+## Cómo lo vería la persona
+
+*Ajustes del proyecto → Tablero → Reglas* (solo quien gestiona el proyecto), con una lista de frases editables:
+
+- «Cuando una tarjeta **llega a** [En curso] → **asignarla a** [quien la mueve]»
+- «Cuando una tarjeta **llega a** [Hecho] → **marcar todas sus subtareas** como hechas»
+- «Cuando se **completan todas las subtareas** → **mover a** [Revisión]»
+- «Cuando se **crea** una tarjeta de tipo [Corrección] → **poner la etiqueta** [Urgente]»
+- «Cuando una tarjeta **vence** → **avisar a** [su responsable]»
+- «Cuando una tarjeta **lleva N días** en [Esperando] → **mover a** [Por hacer]»
+
+Cada regla se puede pausar; tope de 10 por proyecto.
+
+## Catálogo inicial
+
+- **Disparadores** (eventos que la app ya registra en el historial de la tarea, `src/lib/task-events.ts`): llega a
+  columna X, sale de columna X, se crea (opcionalmente de tipo X o con etiqueta Y), se completan todas sus subtareas, se
+  asigna, vence o le quedan N días, lleva N días en una columna.
+- **Acciones**: mover a columna, asignar a una persona o a quien hizo el cambio, poner o quitar etiqueta, poner fecha
+  límite (+N días), marcar subtareas hechas, archivar, avisar a una persona.
+
+## Cómo funcionaría por dentro
+
+1. **Modelo**: tabla `ProjectRule` (proyecto, disparador y sus parámetros, acción y sus parámetros, activa, orden), con
+   validación estricta de que columnas, tipos, etiquetas y personas pertenecen al proyecto.
+2. **Ejecución de los disparadores de cambio**: en `runAction`, justo donde hoy se guardan los eventos del historial
+   (`saveTaskEvents`), se buscan las reglas activas del proyecto que encajan y se aplican en la misma operación. Así:
+   - se guardan en el historial como «Regla: …» y entran en el **mismo paso de deshacer** que el cambio que las disparó;
+   - **las reglas no disparan otras reglas** (un solo nivel), así no hay bucles;
+   - si una regla falla (p. ej. la columna ya no existe), el cambio original sigue valiendo y se anota el aviso.
+3. **Disparadores de tiempo** («vence», «lleva N días»): en el proceso periódico que ya existe
+   (`src/lib/maintenance.ts` / `due-notices.ts`), con una marca para no repetir la misma regla sobre la misma tarjeta.
+4. **Avisos en vivo**: los cambios hechos por reglas se publican como los demás, así las otras pestañas se actualizan.
+
+## Coste y riesgos
+
+- Esfuerzo medio: un modelo y su migración, el motor (unas 300–400 líneas), la pantalla de reglas y sus pruebas.
+- Riesgo principal: que alguien no entienda por qué se movió una tarjeta. Por eso se anota siempre «Regla: …» en el
+  historial y en el aviso, y se puede deshacer.
+- Encaja con «simple» solo si el catálogo sigue cerrado: nada de condiciones combinadas («y/o») ni reglas encadenadas.
+
+**Recomendación:** empezar con 3 reglas fijas que se activan con una casilla («al llegar a Hecho, completar subtareas»,
+«al completar subtareas, mover a…», «al vencer, avisar al responsable») y solo después abrir el editor de frases.

@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ArrowLeft, ArrowRight, CalendarDays, Check, CheckCircle2, FileDown, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Tag, Trash2, Wallet } from "lucide-react";
-import { deleteColumn, moveColumn, renameColumn, setColumnDone, setColumnRole, setColumnRoutineTarget, setColumnWaitingDays } from "@/actions/columns";
+import { AlertTriangle, ArrowLeft, ArrowRight, CalendarDays, Check, CheckCircle2, FileDown, Gauge, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Tag, Trash2, Wallet } from "lucide-react";
+import { deleteColumn, moveColumn, renameColumn, setColumnDone, setColumnRole, setColumnRoutineTarget, setColumnWaitingDays, setColumnWipLimit } from "@/actions/columns";
 import { COLUMN_ROLE_LABEL, COLUMN_ROLES, DEFAULT_WAITING_DAYS, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
 import type { BoardColumn } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
+import { parseWipInput, WIP_MAX, WIP_MIN, wipExceeded } from "@/lib/wip";
 import { budgetSummary, formatEuro } from "@/lib/task-fields";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
@@ -44,6 +45,8 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
   const allSelected = taskIds.length > 0 && selectedHere === taskIds.length;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
   const isNextRelease = column.role === "NEXT_RELEASE";
+  // Límite orientativo: solo avisa al pasarlo (con las tarjetas justas no), nunca impide mover ni crear.
+  const wipOver = wipExceeded(cardCount, column.wipLimit);
   // Archivos soltados en el hueco bajo las tarjetas: nueva tarea en esta columna.
   const fileZone = useFileZone((files) => openNewTask(column.id, false, files));
 
@@ -51,14 +54,16 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
     <section
       ref={setNodeRef}
       className={cn(
-        "flex w-full shrink-0 flex-col rounded-xl bg-slate-100/80 dark:bg-slate-900/60",
+        "flex w-full shrink-0 flex-col rounded-xl",
+        wipOver ? "bg-red-50/90 ring-1 ring-red-300 dark:bg-red-950/30 dark:ring-red-500/40" : "bg-slate-100/80 dark:bg-slate-900/60",
         // Con cuatro columnas o más, en escritorio se reparten el ancho del tablero (mínimo 18 rem; si no caben, scroll).
         // Con 1-3 miden lo mismo que con 4: (ancho útil - barra «+» de 2.5 rem - 4 huecos de 0.75 rem) / 4. Es CSS puro, sin estado.
         total >= 4 ? "md:min-w-72 md:flex-1" : "md:w-[calc((100%-5.5rem)/4)] md:min-w-72",
         mobileHidden && "max-md:hidden",
-        isNextRelease && "ring-1 ring-brand-500/30",
+        isNextRelease && !wipOver && "ring-1 ring-brand-500/30",
       )}
       aria-label={column.name}
+      data-wip-over={wipOver || undefined}
     >
       <header className="flex items-center gap-1.5 px-3 pt-2.5 pb-1.5">
         {taskIds.length > 0 && (
@@ -77,9 +82,25 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
           </button>
         )}
         <h2 className="min-w-0 truncate text-sm font-semibold" title={column.name}>{column.name}</h2>
-        <span className="rounded-full bg-slate-200 px-1.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-          {taskIds.length}
-        </span>
+        {column.wipLimit == null ? (
+          <span className="rounded-full bg-slate-200 px-1.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+            {taskIds.length}
+          </span>
+        ) : (
+          // Con límite se muestra siempre el total real («n / límite»): el aviso no depende solo del color (texto, icono y título).
+          <span
+            data-wip-badge
+            className={cn(
+              "inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 text-xs font-medium",
+              wipOver ? "bg-red-100 font-semibold text-red-700 dark:bg-red-500/20 dark:text-red-300" : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+            )}
+            title={wipOver ? t("Límite superado: {n} tarjetas de {limit}", { n: cardCount, limit: column.wipLimit }) : t("Límite de tarjetas: {limit}", { limit: column.wipLimit })}
+          >
+            {wipOver && <AlertTriangle size={11} aria-hidden />}
+            {cardCount} / {column.wipLimit}
+            {wipOver && <span className="sr-only">{t("Límite superado")}</span>}
+          </span>
+        )}
         {column.role === "BUDGET" && <BudgetTotal columnId={column.id} />}
         <div className="ml-auto flex items-center">
           <button className="btn-icon h-7 w-7" onClick={() => openNewTask(column.id)} aria-label={t("Añadir tarea en {name}", { name: column.name })}>
@@ -210,6 +231,16 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
     run(() => setColumnWaitingDays(column.id, days), () => setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, waitingDays: days } : c))));
   };
 
+  // Límite de tarjetas (WIP): vacío = sin límite.
+  const editWipLimit = () => {
+    const raw = window.prompt(t("Máximo de tarjetas en esta columna ({min}-{max}). Déjalo vacío para quitar el límite. Solo avisa: nunca impide mover ni crear tarjetas.", { min: WIP_MIN, max: WIP_MAX }), column.wipLimit != null ? String(column.wipLimit) : "");
+    if (raw === null) return;
+    const limit = parseWipInput(raw);
+    if (limit === undefined) return toast(t("Indica un número entero entre {min} y {max}, o déjalo vacío.", { min: WIP_MIN, max: WIP_MAX }), "error");
+    if (limit === column.wipLimit) return;
+    run(() => setColumnWipLimit(column.id, limit), () => setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, wipLimit: limit } : c))));
+  };
+
   // Rol «Planificación semanal»: PDF de la semana, por día o por persona.
   const weekPdf = (by: "day" | "person") => window.open(`/api/projects/${project.id}/columns/${column.id}/week?by=${by}`, "_blank", "noopener");
 
@@ -277,6 +308,9 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
       {column.role === "DELIVERY" && <MenuItem icon={FileDown} onClick={() => window.open(columnUrl("delivery"), "_blank", "noopener")}>{t("Resumen para el cliente (PDF)")}</MenuItem>}
       {column.role === "BUDGET" && <MenuItem icon={Wallet} onClick={() => setSummaryOpen(true)}>{t("Resumen de presupuesto")}</MenuItem>}
       <MenuSeparator />
+      <MenuItem icon={Gauge} onClick={editWipLimit}>
+        {column.wipLimit != null ? t("Límite de tarjetas: {limit}…", { limit: column.wipLimit }) : t("Límite de tarjetas…")}
+      </MenuItem>
       <MenuItem icon={CheckCircle2} onClick={toggleDone}>
         {column.isDone ? t("✓ Cuenta como terminada") : t("Contar como terminada")}
       </MenuItem>

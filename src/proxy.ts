@@ -38,7 +38,9 @@ export function proxy(req: NextRequest) {
   const isLogin =
     pathname === "/setup" || pathname.startsWith("/setup/") || pathname === "/login" || pathname.startsWith("/login/") || pathname === "/forgot-password" || pathname === "/presentacion" || pathname === "/privacy" || pathname === "/terms" || pathname === "/licencia" || pathname.startsWith("/reset/") || pathname.startsWith("/confirm/") ||
     // Públicas también: informe de errores del navegador (la pantalla de acceso no tiene sesión), versión en curso y salida limpia.
-    pathname === "/api/client-errors" || pathname === "/api/version" || pathname === "/api/auth/reset";
+    pathname === "/api/client-errors" || pathname === "/api/version" || pathname === "/api/auth/reset" ||
+    // Suscripción al calendario (.ics vivo): la dirección con su token larga es la credencial (la ruta limita el ritmo y lo comprueba).
+    (req.method === "GET" && /^\/api\/calendar\/[A-Za-z0-9_-]+\.ics$/.test(pathname));
   const token = req.cookies.get(sessionCookieName())?.value;
   // Opcional (LANDING_AT_ROOT=1): quien no tiene sesión ve la presentación en «/» en vez de ir al acceso (sin redirigir; la dirección no cambia).
   const landingAtRoot = process.env.LANDING_AT_ROOT === "1" && pathname === "/" && !token && req.method === "GET";

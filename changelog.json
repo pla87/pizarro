@@ -1,6 +1,67 @@
 {
   "versions": [
     {
+      "version": "1.43.0",
+      "date": "2026-11-02",
+      "releasedAt": "2026-11-02T19:26:15+01:00",
+      "summary": "Importar desde Trello y CSV, calendario suscribible, límite por columna, tareas bloqueadas, vista de lista y licencia en Administración",
+      "changes": {
+        "nuevas": [
+          "Importar desde Trello (JSON) y desde CSV (Asana, Jira, Notion, GitHub Projects, Wekan, Kanboard…), además del ZIP de Pizarro.",
+          "Suscribirse al calendario: enlace privado para Google Calendar, Apple Calendar u Outlook que se actualiza solo.",
+          "Límite de tarjetas por columna: solo avisa, con la columna en rojo al pasarlo.",
+          "Tareas bloqueadas: «Bloqueada por» otra tarea del proyecto, con candado en la tarjeta y enlace en el detalle.",
+          "Vista de lista ordenable, junto al tablero.",
+          "Administración → Licencia: muestra si la instalación tiene licencia comercial registrada (solo informativo) y lleva a la compra.",
+          "Botón «Comprar» y precio «100 € + IVA» en la página de presentación; guía para configurar el pago con Stripe y la factura automática."
+        ],
+        "mejoras": [
+          "La barra de formato fija conserva el borde resaltado y las esquinas redondeadas del recuadro, y nunca sale de él.",
+          "Las imágenes se reutilizan 10 segundos sin volver a preguntar, y las del detalle se cargan solo al aparecer en pantalla.",
+          "Administración sigue con ocho pestañas: «Tipos de tarea» y «Plantillas de proyecto» se unen en «Tipos y plantillas».",
+          "Tocar la etiqueta de un campo ya no corta el dictado."
+        ],
+        "correcciones": [
+          "El resumen diario parte del envío anterior y no pierde novedades aunque salga a otra hora.",
+          "Una imagen borrada no puede volver a verse unos segundos por una lectura que coincidía con el borrado.",
+          "En modo Markdown, la barra de formato fija ya no tapa los botones Guardar y Cancelar."
+        ],
+        "tecnicos": [
+          "Migraciones: límite por columna, tarea que bloquea y suscripción al calendario.",
+          "Diseño propuesto de reglas sencillas en docs/IDEAS.md (sin implementar)."
+        ]
+      },
+      "en": {
+        "summary": "Import from Trello and CSV, calendar subscription, column limits, blocked tasks, list view and licence in Administration",
+        "changes": {
+          "nuevas": [
+            "Import from Trello (JSON) and CSV (Asana, Jira, Notion, GitHub Projects, Wekan, Kanboard…), besides the Pizarro ZIP.",
+            "Calendar subscription: a private link for Google Calendar, Apple Calendar or Outlook that updates by itself.",
+            "Cards-per-column limit: a warning only, with the column turning red when exceeded.",
+            "Blocked tasks: “Blocked by” another task of the project, with a padlock on the card and a link in the detail.",
+            "Sortable list view, next to the board.",
+            "Administration → Licence: shows whether the installation has a registered commercial licence (informational only) and links to purchase.",
+            "“Buy” button and “€100 + VAT” price on the product page; guide to set up Stripe payment and automatic invoices."
+          ],
+          "mejoras": [
+            "The sticky formatting toolbar keeps the highlighted border and rounded corners of the box, and never leaves it.",
+            "Images are reused for 10 seconds without asking again, and those in the task detail only load when they come into view.",
+            "Administration keeps eight tabs: “Task types” and “Project templates” are merged into “Types and templates”.",
+            "Tapping a field's label no longer stops dictation."
+          ],
+          "correcciones": [
+            "The daily digest starts from the previous one and no longer misses updates when sent at a different time.",
+            "A deleted image can no longer show for a few seconds because of a read that overlapped the deletion.",
+            "In Markdown mode, the sticky toolbar no longer covers the Save and Cancel buttons."
+          ],
+          "tecnicos": [
+            "Migrations: column limit, blocking task and calendar subscription.",
+            "Proposed design for simple rules in docs/IDEAS.md (not implemented)."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.42.0",
       "date": "2026-11-02",
       "releasedAt": "2026-11-02T15:12:44+01:00",

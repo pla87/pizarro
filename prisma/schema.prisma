@@ -102,6 +102,7 @@ model User {
   releases          Release[]
   googleAccount     GoogleAccount?
   releaseTemplates  ReleaseTemplate[]
+  calendarFeed      CalendarFeed?
   taskLinks         TaskLink[]
   comments          TaskComment[]
   notifications     Notification[]    @relation("NotificationRecipient")
@@ -304,6 +305,8 @@ model Column {
   routineTargetColumnId String?
   routineTarget Column? @relation("RoutineTarget", fields: [routineTargetColumnId], references: [id], onDelete: SetNull)
   routineSources Column[] @relation("RoutineTarget")
+  /// Límite orientativo de tarjetas no archivadas (1-999, null = sin límite). Solo avisa: nunca bloquea mover ni crear.
+  wipLimit  Int?
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tasks     Task[]
 
@@ -368,6 +371,10 @@ model Task {
 
   recurrenceFrom Task?           @relation("TaskRecurrence", fields: [recurrenceFromId], references: [id], onDelete: SetNull)
   recurrenceNext Task?           @relation("TaskRecurrence")
+  /// Tarea del mismo proyecto que bloquea a esta (una sola, opcional). Se quita sola si esa tarea se borra.
+  blockedById   String?
+  blockedBy     Task?            @relation("TaskBlock", fields: [blockedById], references: [id], onDelete: SetNull)
+  blocking      Task[]           @relation("TaskBlock")
   project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   column        Column           @relation(fields: [columnId], references: [id], onDelete: Restrict)
   kind          TaskKind         @relation(fields: [kindId], references: [id], onDelete: Restrict)
@@ -386,6 +393,7 @@ model Task {
   events        TaskEvent[]
 
   @@index([columnId, position])
+  @@index([blockedById])
   @@index([projectId, archivedAt])
   @@index([assigneeId, archivedAt])
   @@index([deliverableId])
@@ -991,4 +999,23 @@ model ProjectTransferJob {
   @@index([status, createdAt])
   @@index([userId, createdAt])
   @@index([projectId])
+}
+
+enum CalendarFeedScope {
+  MINE
+  ALL
+}
+
+/// Enlace privado de suscripción al calendario (.ics vivo) de una persona. Solo se guarda el HMAC del token; borrar la fila lo desactiva.
+model CalendarFeed {
+  id         String            @id @default(cuid())
+  userId     String            @unique
+  tokenHash  String            @unique
+  /// MINE: solo las tareas asignadas a la persona; ALL: todas las de los proyectos que puede ver.
+  scope      CalendarFeedScope @default(MINE)
+  createdAt  DateTime          @default(now())
+  /// Cuándo se generó el token actual (regenerar lo cambia).
+  rotatedAt  DateTime          @default(now())
+  lastUsedAt DateTime?
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

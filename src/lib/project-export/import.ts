@@ -60,9 +60,11 @@ export interface ImportSummary {
   addedMembers: number;
   /** Cosas que no se pudieron importar (ficheros demasiado grandes, imágenes dañadas…). */
   warnings: string[];
+  /** Origen del archivo: ausente o «pizarro» = exportación de Pizarro; «trello» y «csv» = importación desde otro Kanban. */
+  source?: "pizarro" | "trello" | "csv";
 }
 
-const newId = () => `c${randomBytes(12).toString("hex")}`;
+export const newId = () => `c${randomBytes(12).toString("hex")}`;
 const CHUNK = 1000;
 const MAX_FILE_BYTES = (FILE_MAX_MAX_MB + 4) * 1024 * 1024;
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
@@ -87,12 +89,12 @@ export function capTitle(title: string, max = MAX_TITLE): string {
   return title.slice(0, max).replace(/@\[[^\]\n]*(\]\([^)\s]*)?$/, "").trimEnd();
 }
 
-async function insertChunks<T>(rows: T[], insert: (chunk: T[]) => Promise<unknown>): Promise<void> {
+export async function insertChunks<T>(rows: T[], insert: (chunk: T[]) => Promise<unknown>): Promise<void> {
   for (let i = 0; i < rows.length; i += CHUNK) await insert(rows.slice(i, i + CHUNK));
 }
 
 /** Nombre libre entre los proyectos visibles para quien importa: el del archivo y, si ya existe, con «(importado)». */
-async function freeProjectName(user: ImportUser, wanted: string, suffix: string): Promise<string> {
+export async function freeProjectName(user: ImportUser, wanted: string, suffix: string): Promise<string> {
   const base = (wanted.trim() || "Proyecto").slice(0, 80);
   const taken = async (name: string) => (await db.project.count({ where: { name, ...visibleProjectsWhere(user as never) } })) > 0;
   if (!(await taken(base))) return base;
@@ -438,7 +440,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
         if (data.releaseTemplates.length) await tx.projectReleaseTemplate.createMany({ data: data.releaseTemplates.map((r, i) => ({ kind: r.kind, name: r.name, content: r.content, position: r.position, projectId, createdAt: r.createdAt ? date(r.createdAt) : new Date(importedAt + i) })) });
 
         await tx.column.createMany({
-          data: data.columns.map((c) => ({ id: columnIds.get(c.ref)!, projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays })),
+          data: data.columns.map((c) => ({ id: columnIds.get(c.ref)!, projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays, wipLimit: c.wipLimit ?? null })),
         });
         for (const c of data.columns) {
           if (c.routineTargetRef) await tx.column.update({ where: { id: columnIds.get(c.ref)! }, data: { routineTargetColumnId: columnIds.get(c.routineTargetRef)! } });
@@ -458,6 +460,10 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
         const chained = data.tasks.filter((x) => x.recurrenceFromRef);
         if (chained.length) {
           await tx.$executeRaw`UPDATE "Task" AS t SET "recurrenceFromId" = d.f FROM unnest(${chained.map((x) => taskIds.get(x.ref)!)}::text[], ${chained.map((x) => taskIds.get(x.recurrenceFromRef!)!)}::text[]) AS d(id, f) WHERE t."id" = d.id`;
+        }
+        const blocked = data.tasks.filter((x) => x.blockedByRef);
+        if (blocked.length) {
+          await tx.$executeRaw`UPDATE "Task" AS t SET "blockedById" = d.b FROM unnest(${blocked.map((x) => taskIds.get(x.ref)!)}::text[], ${blocked.map((x) => taskIds.get(x.blockedByRef!)!)}::text[]) AS d(id, b) WHERE t."id" = d.id`;
         }
         // Prisma pone la fecha de modificación al insertar aunque se indique: se restituye la del archivo.
         if (data.tasks.length) {

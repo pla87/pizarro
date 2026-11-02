@@ -1,0 +1,79 @@
+{
+  "id": "64f0c0ffee0000000000b0a1",
+  "name": "Lanzamiento web",
+  "desc": "Tablero del **lanzamiento** de la web.\n\n<script>alert(1)</script>Más información en la wiki.",
+  "closed": false,
+  "labelNames": { "green": "Listo", "red": "" },
+  "lists": [
+    { "id": "l-done", "name": "Hecho", "closed": false, "pos": 49152 },
+    { "id": "l-todo", "name": "Por hacer", "closed": false, "pos": 16384 },
+    { "id": "l-doing", "name": "En curso", "closed": false, "pos": 32768 },
+    { "id": "l-old", "name": "Ideas descartadas", "closed": true, "pos": 65536 }
+  ],
+  "labels": [
+    { "id": "lb-1", "name": "Diseño", "color": "purple" },
+    { "id": "lb-2", "name": "", "color": "red" },
+    { "id": "lb-3", "name": "Frontend", "color": "sky_dark" },
+    { "id": "lb-4", "name": "Listo", "color": "green" }
+  ],
+  "members": [
+    { "id": "m-1", "fullName": "Ana Ejemplo", "username": "anaejemplo" },
+    { "id": "m-2", "fullName": "Luis Muestra", "username": "luismuestra" }
+  ],
+  "cards": [
+    {
+      "id": "c-2", "idList": "l-todo", "name": "Redactar los textos", "desc": "Textos de la **portada** y del pie.\n\n- Portada\n- Pie\n\n<img src=x onerror=alert(1)> [pulsa](javascript:alert(1)) y @[Falso](user:abc123)",
+      "closed": false, "pos": 32768, "due": "2026-12-15T23:30:00.000Z", "dueComplete": false,
+      "idLabels": ["lb-1", "lb-2"], "labels": [{ "id": "lb-1", "name": "Diseño", "color": "purple" }, { "id": "lb-2", "name": "", "color": "red" }],
+      "idChecklists": ["ck-1"], "idMembers": ["m-1", "m-2"], "shortUrl": "https://trello.example.com/c/abc123",
+      "attachments": [
+        { "id": "a-1", "name": "Guía de estilo", "url": "https://example.com/guia-(v2).pdf", "isUpload": false },
+        { "id": "a-2", "name": "logo.png", "url": "https://trello.example.com/1/cards/c-2/attachments/a-2/download/logo.png", "isUpload": true }
+      ]
+    },
+    {
+      "id": "c-1", "idList": "l-todo", "name": "Elegir el dominio", "desc": "", "closed": false, "pos": 16384, "due": null,
+      "idLabels": [], "labels": [], "idChecklists": [], "idMembers": [], "attachments": []
+    },
+    {
+      "id": "c-3", "idList": "l-doing", "name": "Maquetar la portada", "desc": "Primera versión.", "closed": false, "pos": 16384, "due": "2026-11-30T10:00:00.000Z",
+      "idLabels": ["lb-3", "lb-4"], "labels": [{ "id": "lb-3", "name": "Frontend", "color": "sky_dark" }, { "id": "lb-4", "name": "Listo", "color": "green" }],
+      "idChecklists": ["ck-2", "ck-3"], "idMembers": ["m-1"], "attachments": []
+    },
+    {
+      "id": "c-4", "idList": "l-done", "name": "Contratar el hosting", "desc": "Hecho en octubre.", "closed": true, "pos": 16384, "due": null,
+      "idLabels": [], "labels": [], "idChecklists": [], "idMembers": [], "attachments": []
+    },
+    {
+      "id": "c-5", "idList": "l-old", "name": "Chat en vivo", "desc": "Se descartó.", "closed": false, "pos": 16384, "due": null,
+      "idLabels": [], "labels": [], "idChecklists": [], "idMembers": [], "attachments": []
+    },
+    {
+      "id": "c-6", "idList": "l-done", "name": "   ", "desc": "Sin título: se ignora.", "closed": false, "pos": 32768, "idLabels": [], "labels": [], "idChecklists": [], "idMembers": [], "attachments": []
+    }
+  ],
+  "checklists": [
+    {
+      "id": "ck-1", "idCard": "c-2", "name": "Revisión", "pos": 1,
+      "checkItems": [
+        { "id": "i-2", "name": "Revisar con Ana", "state": "incomplete", "pos": 32768 },
+        { "id": "i-1", "name": "Primer borrador", "state": "complete", "pos": 16384 }
+      ]
+    },
+    { "id": "ck-2", "idCard": "c-3", "name": "Diseño", "pos": 1, "checkItems": [{ "id": "i-3", "name": "Cabecera", "state": "complete", "pos": 1 }] },
+    { "id": "ck-3", "idCard": "c-3", "name": "Código", "pos": 2, "checkItems": [{ "id": "i-4", "name": "Responsive", "state": "incomplete", "pos": 1 }] }
+  ],
+  "actions": [
+    {
+      "id": "ac-2", "type": "commentCard", "date": "2026-11-02T09:15:00.000Z",
+      "data": { "text": "Mejor lo vemos el lunes.", "card": { "id": "c-2", "name": "Redactar los textos" } },
+      "memberCreator": { "id": "m-2", "fullName": "Luis Muestra", "username": "luismuestra" }
+    },
+    {
+      "id": "ac-1", "type": "commentCard", "date": "2026-10-30T18:00:00.000Z",
+      "data": { "text": "Empiezo hoy.", "card": { "id": "c-2", "name": "Redactar los textos" } },
+      "memberCreator": { "id": "m-1", "fullName": "Ana Ejemplo", "username": "anaejemplo" }
+    },
+    { "id": "ac-3", "type": "updateCard", "date": "2026-10-30T18:00:00.000Z", "data": { "card": { "id": "c-2" } }, "memberCreator": { "id": "m-1", "fullName": "Ana Ejemplo" } }
+  ]
+}

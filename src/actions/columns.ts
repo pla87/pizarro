@@ -10,12 +10,13 @@ import { DEFAULT_WAITING_DAYS, isUniqueColumnRole, MAX_WAITING_DAYS } from "@/li
 import { POSITION_STEP } from "@/lib/positions";
 import { lastPositionIn, lockColumns, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { requireUser } from "@/lib/session";
+import { WIP_MAX, WIP_MIN } from "@/lib/wip";
 import { normalizeTaskFields } from "@/lib/task-fields";
 import { addUndo, captureTasks } from "@/lib/undo";
 import * as v from "@/lib/validation";
 import type { BoardColumn } from "@/lib/types";
 
-const columnSelect = { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true } as const;
+const columnSelect = { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true } as const;
 
 async function findColumn(columnId: string) {
   const user = await requireUser();
@@ -65,7 +66,7 @@ export async function setColumnRole(columnId: string, role: string) {
     const column = await findColumn(columnId);
     const value = v.columnRole.parse(role);
     // Deshacer: roles de todas las columnas y las tareas fijas que dejarían de serlo.
-    const before = await db.column.findMany({ where: { projectId: column.projectId }, select: { id: true, role: true, waitingDays: true, routineTargetColumnId: true } });
+    const before = await db.column.findMany({ where: { projectId: column.projectId }, select: { id: true, role: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true } });
     // Si la columna deja de ser «Esperando» o «Rutinas», se borra su plazo de espera o su destino (y el deshacer los devuelve).
     const clearWaiting = column.role === "WAITING" && value !== "WAITING";
     const clearRoutine = column.role === "ROUTINES" && value !== "ROUTINES";
@@ -106,6 +107,22 @@ export async function setColumnWaitingDays(columnId: string, days: number | null
     addUndo({ t: "column.set", id: column.id, data: { waitingDays: current.waitingDays } });
     describeAction("Cambió el plazo de espera de la columna «{name}» a {days} d", { name: column.name, days: value ?? DEFAULT_WAITING_DAYS });
     await db.column.update({ where: { id: columnId }, data: { waitingDays: value } });
+  });
+}
+
+/**
+ * Límite orientativo de tarjetas (1-999, null = sin límite). Solo avisa en el tablero al pasarlo; nunca impide mover
+ * ni crear tarjetas. Se puede deshacer.
+ */
+export async function setColumnWipLimit(columnId: string, limit: number | null) {
+  return runAction({ name: "columns.setColumnWipLimit", args: [columnId, limit] }, async () => {
+    const column = await findColumn(columnId);
+    const value = limit === null ? null : z.number().int("Indica un número entero de tarjetas.").min(WIP_MIN, `Mínimo ${WIP_MIN}.`).max(WIP_MAX, `Máximo ${WIP_MAX}.`).parse(limit);
+    if (value === column.wipLimit) return;
+    addUndo({ t: "column.set", id: column.id, data: { wipLimit: column.wipLimit } });
+    if (value === null) describeAction("Quitó el límite de tarjetas de la columna «{name}»", { name: column.name });
+    else describeAction("Puso un límite de {n} tarjetas a la columna «{name}»", { name: column.name, n: value });
+    await db.column.update({ where: { id: columnId }, data: { wipLimit: value } });
   });
 }
 
@@ -177,7 +194,7 @@ export async function deleteColumn(columnId: string) {
     addUndo(
       ...pointing.map((c) => ({ t: "column.set" as const, id: c.id, data: { routineTargetColumnId: column.id } })),
       ...archived.map((t) => ({ t: "task.set" as const, id: t.id, data: { columnId: column.id } })),
-      { t: "column.restore", row: { id: column.id, projectId: column.projectId, name: column.name, position: column.position, role: column.role, isDone: column.isDone, waitingDays: column.waitingDays, routineTargetColumnId: column.routineTargetColumnId } },
+      { t: "column.restore", row: { id: column.id, projectId: column.projectId, name: column.name, position: column.position, role: column.role, isDone: column.isDone, waitingDays: column.waitingDays, routineTargetColumnId: column.routineTargetColumnId, wipLimit: column.wipLimit } },
     );
     await db.$transaction(async (tx) => {
       const active = await tx.task.count({ where: { columnId, archivedAt: null } });
