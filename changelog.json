@@ -1,6 +1,57 @@
 {
   "versions": [
     {
+      "version": "1.42.0",
+      "date": "2026-11-02",
+      "releasedAt": "2026-11-02T15:12:44+01:00",
+      "summary": "Precio de la licencia, dictado que se para al salir del campo, edición más cómoda en el móvil, imágenes más rápidas y seguridad del acceso",
+      "changes": {
+        "nuevas": [
+          "Precio de la licencia en la página de presentación: 100 €, pago único por servidor, con pago con tarjeta y factura (DNI opcional)."
+        ],
+        "mejoras": [
+          "El dictado se para solo al pasar a otro campo o al pulsar fuera, en vez de seguir grabando.",
+          "Móvil: el micrófono del título solo aparece mientras editas el título.",
+          "Al editar la descripción, la barra de formato se queda fija arriba al hacer scroll.",
+          "Las imágenes del tablero se sirven casi el doble de rápido, y siguen dejando de verse al momento al quitar el acceso.",
+          "Desde un dispositivo recordado se admiten 10 intentos de contraseña en vez de 6: nadie puede bloquearte desde fuera tu propio equipo.",
+          "La licencia deja claro que todo uso que no sea personal o familiar necesita licencia, sin excepciones."
+        ],
+        "correcciones": [
+          "El límite de intentos por cuenta ya no se puede saltar lanzando muchas peticiones a la vez.",
+          "El enlace a la licencia mantiene el idioma elegido, y /licencia respeta el idioma de quien ha iniciado sesión."
+        ],
+        "tecnicos": [
+          "Caché en memoria de los datos de cada adjunto y uso de la caché de permisos al servir imágenes; pruebas de revocación.",
+          "Las imágenes WebP muy altas también se recomprimen."
+        ]
+      },
+      "en": {
+        "summary": "Licence price, dictation that stops when you leave the field, easier mobile editing, faster images and sign-in security",
+        "changes": {
+          "nuevas": [
+            "Licence price on the product page: €100, one-off payment per server, paid by card with an invoice (ID number optional)."
+          ],
+          "mejoras": [
+            "Dictation stops by itself when you move to another field or click outside, instead of keeping on recording.",
+            "Mobile: the title microphone only appears while you are editing the title.",
+            "While editing the description, the formatting toolbar stays fixed at the top when scrolling.",
+            "Board images are served almost twice as fast, and still stop showing as soon as access is removed.",
+            "From a remembered device, 10 password attempts are allowed instead of 6: nobody outside can lock you out of your own device.",
+            "The licence makes clear that any use that is not personal or family use needs a licence, without exceptions."
+          ],
+          "correcciones": [
+            "The per-account attempt limit can no longer be bypassed by sending many requests at once.",
+            "The licence link keeps the chosen language, and /licencia respects the language of the signed-in person."
+          ],
+          "tecnicos": [
+            "In-memory cache of each attachment's data and use of the permission cache when serving images; revocation tests.",
+            "Very tall WebP images are also recompressed."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.41.0",
       "date": "2026-11-02",
       "releasedAt": "2026-11-02T13:40:54+01:00",

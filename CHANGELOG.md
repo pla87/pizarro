@@ -2,6 +2,33 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.42.0 — 2026-11-02 15:12
+
+Precio de la licencia, dictado que se para al salir del campo, edición más cómoda en el móvil, imágenes más rápidas y seguridad del acceso
+
+### Nuevas funcionalidades
+
+- Precio de la licencia en la página de presentación: 100 €, pago único por servidor, con pago con tarjeta y factura (DNI opcional).
+
+### Mejoras
+
+- El dictado se para solo al pasar a otro campo o al pulsar fuera, en vez de seguir grabando.
+- Móvil: el micrófono del título solo aparece mientras editas el título.
+- Al editar la descripción, la barra de formato se queda fija arriba al hacer scroll.
+- Las imágenes del tablero se sirven casi el doble de rápido, y siguen dejando de verse al momento al quitar el acceso.
+- Desde un dispositivo recordado se admiten 10 intentos de contraseña en vez de 6: nadie puede bloquearte desde fuera tu propio equipo.
+- La licencia deja claro que todo uso que no sea personal o familiar necesita licencia, sin excepciones.
+
+### Correcciones
+
+- El límite de intentos por cuenta ya no se puede saltar lanzando muchas peticiones a la vez.
+- El enlace a la licencia mantiene el idioma elegido, y /licencia respeta el idioma de quien ha iniciado sesión.
+
+### Cambios técnicos / DB
+
+- Caché en memoria de los datos de cada adjunto y uso de la caché de permisos al servir imágenes; pruebas de revocación.
+- Las imágenes WebP muy altas también se recomprimen.
+
 ## v1.41.0 — 2026-11-02 13:40
 
 Licencia: gratis para uso personal y pago único para empresas; página de presentación simplificada; seguridad y correcciones

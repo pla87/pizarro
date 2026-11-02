@@ -46,7 +46,7 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
     { q: t("¿Hay que pagar por cada usuario?"), a: t("No. Invitas a quien quieras; el límite lo pone tu servidor.") },
     { q: t("¿Qué servidor necesito?"), a: t("Un Linux con Docker y 1 GB de RAM. También puedes desplegarla en Railway.") },
     { q: t("¿Cómo se actualiza?"), a: t("Repitiendo el comando de instalación, que conserva tus datos. La app avisa a los administradores cuando hay una versión nueva.") },
-    { q: t("¿Puedo usarla gratis?"), a: t("Sí, para uso personal y familiar no comercial. Para una empresa hace falta la licencia.") },
+    { q: t("¿Puedo usarla gratis?"), a: t("Sí, para uso personal y familiar no comercial. Cualquier otro uso (empresa, autónomo, asociación, centro educativo…) necesita la licencia.") },
   ];
 
   return (
@@ -126,14 +126,15 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
             <article className="card p-6">
               <h3 className="text-lg font-bold">{t("Licencia para empresas")}</h3>
               <p className="mt-2 text-slate-600 dark:text-slate-400">{t("Pago único por servidor. Actualizaciones gratis para siempre. Sin soporte incluido.")}</p>
-              <p className="mt-3 font-semibold">{t("Precio: consúltanos")}</p>
+              <p className="mt-3 text-2xl font-bold" data-testid="price">{t("100 €")} <span className="text-sm font-medium text-slate-500">{t("pago único por servidor")}</span></p>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{t("Pago con tarjeta. Factura con los datos de tu empresa o con los tuyos (el DNI es opcional).")}</p>
               {contactEmail && (
                 <a href={`mailto:${contactEmail}`} className="btn-primary mt-3 inline-flex max-w-full break-all" data-testid="pricing-contact"><Mail size={16} aria-hidden />{contactEmail}</a>
               )}
             </article>
           </div>
           <p className="mt-4 text-sm">
-            <Link href="/licencia" className="font-medium text-brand-700 underline dark:text-brand-300" data-testid="license-link">{t("Lee la licencia")}</Link>
+            <Link href={`/licencia?lang=${locale}`} className="font-medium text-brand-700 underline dark:text-brand-300" data-testid="license-link">{t("Lee la licencia")}</Link>
           </p>
         </section>
 
@@ -155,7 +156,7 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
       <footer className="border-t border-slate-200 py-8 text-sm text-slate-600 dark:border-slate-800 dark:text-slate-400">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-4">
           <span className="mr-auto inline-flex items-center gap-2 font-semibold text-slate-900 dark:text-slate-100"><BrandMark size={22} /> Pizarro</span>
-          <Link href="/licencia" className="hover:underline">{t("Licencia")}</Link>
+          <Link href={`/licencia?lang=${locale}`} className="hover:underline">{t("Licencia")}</Link>
           <Link href="/privacy" className="hover:underline">{t("Privacidad")}</Link>
           <Link href="/terms" className="hover:underline">{t("Condiciones")}</Link>
           <a href={REPO_URL} rel="noopener noreferrer" className="hover:underline">GitHub</a>

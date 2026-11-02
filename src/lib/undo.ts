@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type { Prisma } from "@/generated/prisma/client";
 import { actionContext } from "./action-context";
+import { forgetAttachments } from "./attachment-cache";
 import { isUniqueColumnRole } from "./constants";
 import { db } from "./db";
 import { assertTaskCapacity } from "./caps";
@@ -448,7 +449,10 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           const atts = await db.taskAttachment.findMany({ where: { taskId: op.id }, select: { id: true } });
           const { count } = await db.task.deleteMany({ where: { id: op.id, projectId } });
           if (!count) skipped++;
-          else filesToRemove.push(...atts.map((a) => a.id));
+          else {
+            filesToRemove.push(...atts.map((a) => a.id));
+            forgetAttachments(atts.map((a) => a.id));
+          }
           break;
         }
         case "task.restore": {
@@ -521,7 +525,10 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
         case "attachment.remove": {
           const { count } = await db.taskAttachment.deleteMany({ where: { id: op.id, task: { projectId } } });
           if (!count) skipped++;
-          else filesToRemove.push(op.id);
+          else {
+            filesToRemove.push(op.id);
+            forgetAttachments([op.id]);
+          }
           break;
         }
         case "attachment.restore": {

@@ -2,7 +2,7 @@
 // Texto de la licencia (Markdown) en español, que prevalece, y su traducción al inglés, para la página pública /licencia.
 export const LICENSE_ES = `# Licencia de Pizarro
 
-**En resumen:** Pizarro es software de código disponible, no de código abierto. Puedes leer el código, pero para usarlo necesitas licencia. Si eres una persona y lo usas en tu propio servidor para fines personales, domésticos o familiares, sin ánimo comercial ni profesional, es gratis. Si lo usas en una empresa, como profesional o autónomo, o en cualquier organización (también asociaciones, ONG y centros educativos, salvo acuerdo escrito), necesitas una licencia comercial: se paga una sola vez por servidor, incluye todas las actualizaciones futuras y no incluye soporte. Este resumen es solo orientativo y no sustituye al texto de la licencia, que es el que vale.
+**En resumen:** Pizarro es software de código disponible, no de código abierto. Puedes leer el código, pero para usarlo necesitas licencia. Si eres una persona y lo usas en tu propio servidor para fines personales, domésticos o familiares, sin ánimo comercial ni profesional, es gratis. Si lo usas en una empresa, como profesional o autónomo, o en cualquier organización (también asociaciones, ONG, administraciones y centros educativos), necesitas una licencia comercial: se paga una sola vez por servidor, incluye todas las actualizaciones futuras y no incluye soporte. Este resumen es solo orientativo y no sustituye al texto de la licencia, que es el que vale.
 
 ## 1. Titularidad
 
@@ -12,7 +12,7 @@ Pizarro (el «Software»), su código fuente, su documentación y sus elementos 
 
 - **Instalación**: una instancia en producción del Software, con su base de datos, desplegada en un servidor (físico o virtual) o en un entorno de alojamiento. Las copias destinadas solo a pruebas, desarrollo, copias de seguridad o recuperación ante desastres de una instalación con licencia no cuentan como instalaciones adicionales mientras no se usen en producción.
 - **Uso personal**: el uso por una persona física con fines personales, domésticos o familiares, sin fines comerciales ni profesionales, en servidores que controla ella misma.
-- **Uso empresarial o profesional**: cualquier uso con fines comerciales o profesionales, o dentro de una organización, tenga o no ánimo de lucro, incluidos los autónomos y profesionales independientes. Por defecto, las asociaciones, las ONG, las fundaciones, las administraciones y los centros educativos se consideran organizaciones a estos efectos y necesitan licencia comercial, salvo que el Autor acuerde por escrito unas condiciones distintas.
+- **Uso empresarial o profesional**: cualquier uso con fines comerciales o profesionales, o dentro de una organización, tenga o no ánimo de lucro, incluidos los autónomos y profesionales independientes. Las asociaciones, las ONG, las fundaciones, las administraciones y los centros educativos se consideran organizaciones a estos efectos y necesitan licencia comercial, sin excepción: todo uso que no sea personal necesita licencia.
 
 ## 3. Uso personal gratuito
 
@@ -60,11 +60,11 @@ Esta licencia se rige por la ley española. Para cualquier controversia, las par
 
 ## 10. Cómo obtener una licencia
 
-Para obtener una licencia comercial, o para pedir un acuerdo especial (por ejemplo, para una asociación, una ONG o un centro educativo), escribe al Autor al email indicado en la página de presentación de Pizarro o en el repositorio del proyecto.`;
+Para obtener una licencia comercial, escribe al Autor al email indicado en la página de presentación de Pizarro o en el repositorio del proyecto. El precio es el publicado en la página de presentación en el momento de la compra. El pago se hace con tarjeta y se emite factura con los datos de la empresa o de la persona que compra (el DNI o NIF es opcional para particulares).`;
 
 export const LICENSE_EN = `# Pizarro License (English translation)
 
-**In short:** Pizarro is source-available software, not open source. You can read the code, but you need a licence to use it. If you are an individual running it on your own server for personal, household or family purposes, with no commercial or professional aim, it is free. If you use it in a company, as a professional or freelancer, or in any organisation (including associations, NGOs and schools, unless otherwise agreed in writing), you need a commercial licence: it is a one-time payment per server, includes all future updates and does not include support. This summary is for guidance only and does not replace the licence text, which is the one that applies.
+**In short:** Pizarro is source-available software, not open source. You can read the code, but you need a licence to use it. If you are an individual running it on your own server for personal, household or family purposes, with no commercial or professional aim, it is free. If you use it in a company, as a professional or freelancer, or in any organisation (including associations, NGOs, public bodies and schools), you need a commercial licence: it is a one-time payment per server, includes all future updates and does not include support. This summary is for guidance only and does not replace the licence text, which is the one that applies.
 
 *This is a translation of the Spanish licence above. In case of any discrepancy between the two versions, the Spanish version prevails.*
 
@@ -76,7 +76,7 @@ Pizarro (the "Software"), its source code, its documentation and its graphic ele
 
 - **Installation**: a production instance of the Software, with its database, deployed on a server (physical or virtual) or in a hosting environment. Copies intended only for testing, development, backup or disaster recovery of a licensed installation do not count as additional installations as long as they are not used in production.
 - **Personal use**: use by an individual for personal, household or family purposes, with no commercial or professional aim, on servers that individual controls.
-- **Business or professional use**: any use for commercial or professional purposes, or within an organisation, whether or not for profit, including freelancers and independent professionals. By default, associations, NGOs, foundations, public bodies and educational institutions are treated as organisations for this purpose and need a commercial licence, unless the Author agrees different terms in writing.
+- **Business or professional use**: any use for commercial or professional purposes, or within an organisation, whether or not for profit, including freelancers and independent professionals. Associations, NGOs, foundations, public bodies and educational institutions are treated as organisations for this purpose and need a commercial licence, without exception: any use that is not personal needs a licence.
 
 ## 3. Free personal use
 
@@ -124,4 +124,4 @@ This licence is governed by Spanish law. For any dispute, the parties submit to 
 
 ## 10. How to obtain a licence
 
-To obtain a commercial licence, or to ask for a special agreement (for example, for an association, an NGO or a school), write to the Author at the email shown on Pizarro's presentation page or in the project repository.`;
+To obtain a commercial licence, write to the Author at the email shown on Pizarro's presentation page or in the project repository. The price is the one published on the presentation page at the time of purchase. Payment is by card, and an invoice is issued with the details of the purchasing company or person (an ID or tax number is optional for individuals).`;

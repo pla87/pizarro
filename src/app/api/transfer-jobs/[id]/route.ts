@@ -7,7 +7,7 @@ import { getT } from "@/i18n/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Estado de una exportación o importación: solo quien la pidió o un administrador (los demás reciben 404). */
+/** Estado de una exportación o importación: solo quien la pidió (los demás, administradores incluidos, reciben 404). */
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   return actionContext.run({}, async () => {
     const t = await getT();

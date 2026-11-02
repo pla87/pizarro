@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
+import { forgetAttachments, forgetTaskAttachments } from "@/lib/attachment-cache";
 import { runAction } from "@/lib/action";
 import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjectAccess, assertTaskAccess, loadTaskWithAccess, visibleProjectsWhere } from "@/lib/access";
 import { appTimeZone, attachmentTotals, boardTaskSelect, listKinds, loadBoardTask, projectClients, projectUsers, toBoardTask } from "@/lib/board";
@@ -757,6 +758,7 @@ export async function deleteTask(taskId: string) {
     // Los ficheros de sus adjuntos se conservan mientras se pueda deshacer (ver undo.ts).
     addUndo(...(await snapshotTasks([taskId])));
     await db.task.delete({ where: { id: taskId } });
+    forgetTaskAttachments([taskId]);
   });
 }
 
@@ -776,6 +778,7 @@ export async function deleteTasks(taskIds: string[]) {
     const titles = await db.task.findMany({ where: { id: { in: ids } }, select: { title: true } });
     describeAction("Borró {count}: {titles}", { count: tasksN(ids.length), titles: titles.map((t) => `«${t.title}»`).join(", ").slice(0, 600) }, { taskIds: ids });
     await db.task.deleteMany({ where: { id: { in: ids } } });
+    forgetTaskAttachments(ids);
     return { deleted: ids.length };
   });
 }
@@ -951,6 +954,7 @@ export async function deleteAttachment(attachmentId: string) {
     // El fichero se conserva mientras se pueda deshacer (ver undo.ts).
     addUndo({ t: "attachment.restore", row: { ...att, createdAt: att.createdAt.toISOString() } });
     await db.taskAttachment.delete({ where: { id: att.id } });
+    forgetAttachments([att.id]);
     // Id de la entrada de deshacer, para que el aviso «Deshacer» deshaga justo este borrado; y los contadores reales de la tarea.
     return { undo: trackUndoEntry(), totals: await attachmentTotals(att.taskId) };
   });
@@ -1162,6 +1166,7 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
         await tx.taskAttachment.create({ data: { ...r, taskId: id, createdById: creator, createdAt: new Date(r.createdAt) } });
       }
     });
+    forgetAttachments(attDelete);
     if (fields.columnId !== undefined) await resolvePositionTies([id]);
     describeAction("Canceló los cambios en «{title}»", { title: mentionsToPlain(task.title) }, { taskId: id });
     return { task: await loadBoardTask(id), changed: true };

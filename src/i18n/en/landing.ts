@@ -40,7 +40,6 @@ export const landing: Record<string, string> = {
   "Para ti y tu familia, sin fines comerciales.": "For you and your family, non-commercial.",
   "Licencia para empresas": "Business license",
   "Pago único por servidor. Actualizaciones gratis para siempre. Sin soporte incluido.": "One-time payment per server. Free updates forever. Support not included.",
-  "Precio: consúltanos": "Price: contact us",
   "Lee la licencia": "Read the license",
   "Release": "Release",
   "Contacto": "Contact",
@@ -53,5 +52,8 @@ export const landing: Record<string, string> = {
   "¿Cómo se actualiza?": "How do I update it?",
   "Repitiendo el comando de instalación, que conserva tus datos. La app avisa a los administradores cuando hay una versión nueva.": "By running the install command again, which keeps your data. The app tells administrators when a new version is out.",
   "¿Puedo usarla gratis?": "Can I use it for free?",
-  "Sí, para uso personal y familiar no comercial. Para una empresa hace falta la licencia.": "Yes, for personal and non-commercial family use. A business needs the license.",
+  "Sí, para uso personal y familiar no comercial. Cualquier otro uso (empresa, autónomo, asociación, centro educativo…) necesita la licencia.": "Yes, for personal and non-commercial family use. Any other use (business, freelancer, association, school…) needs the licence.",
+  "100 €": "€100",
+  "pago único por servidor": "one-off payment per server",
+  "Pago con tarjeta. Factura con los datos de tu empresa o con los tuyos (el DNI es opcional).": "Pay by card. Invoice with your company's details or your own (ID number optional).",
 };
