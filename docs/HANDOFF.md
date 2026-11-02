@@ -101,14 +101,16 @@ llevan enlaces de sesión ni nombres de modelos.
 **Paquetización (paso a paso, a petición del propietario):**
 
 - Hecho: instalación en un paso (`deploy/get.sh`), actualizaciones con versiones e imagen publicada, aviso de
-  versión nueva, página de presentación `/presentacion` con demo, instalación, precios («próximamente»), preguntas
-  frecuentes y acceso desde *Administración → Ajustes*; proyectos de ejemplo al crear un proyecto
-  (`src/lib/project-examples.ts`: software, familia, eventos, empresa).
-- Pendiente de confirmar por el propietario: primera publicación con *Run workflow* y paquete GHCR público; prueba
+  versión nueva, proyectos de ejemplo al crear un proyecto (`src/lib/project-examples.ts`), página de presentación
+  `/presentacion` simplificada (sin demo; la administración no enlaza a ella por decisión del propietario) y licencia
+  (`LICENSE.md` + `/licencia`; `npm run license:sync` tras cambiarla).
+- Modelo de venta decidido: gratis para uso personal; empresas y profesionales, pago único por servidor con
+  actualizaciones gratis para siempre y sin soporte. Precio aún sin fijar («consúltanos»).
+- Pendiente de confirmar por el propietario: primera publicación con *Run workflow* y paquete GHCR público (el propietario prefiere seguir puliendo antes); prueba
   real en un VPS siguiendo `docs/PRUEBA-VPS.md`; plantilla de Railway (pasos en `docs/INSTALL.md`; la sintaxis de
   variables generadas debe verificarse en Railway).
-- Siguientes pasos: licencia o edición (cómo se vende y se limita), precios reales en la presentación, capturas
-  reales sin datos personales, y dominio/web propia del producto.
+- Siguientes pasos: fijar el precio, revisión de la licencia por un abogado, vídeo para la presentación (sustituye a
+  la demo), capturas reales sin datos personales, y dominio/web propia del producto.
 
 **Ideas pospuestas por decisión del propietario:**
 

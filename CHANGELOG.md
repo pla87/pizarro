@@ -2,6 +2,38 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.41.0 — 2026-11-02 13:40
+
+Licencia: gratis para uso personal y pago único para empresas; página de presentación simplificada; seguridad y correcciones
+
+### Nuevas funcionalidades
+
+- Licencia de Pizarro (LICENSE.md y página pública /licencia): gratis para uso personal; las empresas y profesionales necesitan una licencia de pago único por servidor, con actualizaciones gratis para siempre y sin soporte.
+- Las condiciones del servicio por defecto incluyen el apartado «Licencia del software», y el pie del acceso enlaza a la licencia.
+
+### Mejoras
+
+- Página de presentación más corta y clara, centrada en lo que distingue a Pizarro: simple, pago único, tus datos en tu servidor; con precios y licencia. Se quitan la demo y la comparativa.
+- La administración ya no enlaza a la página de presentación.
+- Los micrófonos del título y de la descripción quedan perfectamente alineados.
+- El límite por cuenta del acceso cuenta solo los intentos fallidos: quien acierta su contraseña ya no puede quedar bloqueado por sus propios intentos.
+- Abrir una tarea ya no se anota en el registro de actividad (más ligero).
+- Nueva cabecera de seguridad que aísla la pestaña de Pizarro de otras webs.
+- Mi perfil explica a los administradores que la verificación en dos pasos también se pide al entrar con Google, y el registro anota esos accesos como «con Google y verificación en dos pasos».
+- Nuevo proyecto: el nombre sugerido cambia al cambiar de ejemplo mientras no lo hayas escrito tú.
+
+### Correcciones
+
+- Liberar espacio nunca borra más elementos de los que se confirmaron, y la sección se actualiza si algo cambió.
+- Archivadas: la búsqueda y «Cargar más» ya no se mezclan; recuperar una tarea que ya recuperó otra persona la quita de la lista.
+- Un aviso repetido renueva su tiempo en pantalla en vez de desaparecer antes.
+
+### Cambios técnicos / DB
+
+- Se quita el límite por pareja IP+email, que ya no actuaba.
+- Nuevo campo en el paso intermedio del acceso para recordar si vino de Google (migración).
+- Prueba de que LICENSE.md y el texto de /licencia coinciden (npm run license:sync).
+
 ## v1.40.0 — 2026-11-02 12:42
 
 Ejemplos de proyecto listos para usar, página de presentación mejorada, más seguridad en el acceso y correcciones

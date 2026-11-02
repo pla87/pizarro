@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.40.0"
+version: "v1.41.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.40.0
+**Versión de la aplicación:** v1.41.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -124,14 +124,14 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 | Contraseñas | bcrypt (coste 11), entre 10 caracteres y 72 bytes. Tiempo de respuesta constante si el usuario no existe. Los admins no fijan contraseñas ajenas: invitan o fuerzan un cambio por enlace. Los enlaces (invitación 72 h; restablecer y confirmar cambios 30 min) son de un solo uso y se guardan solo como hash. |
 | Sesiones | Token aleatorio de 256 bits en cookie `HttpOnly`, `SameSite=Lax` y `Secure` (con HTTPS, con prefijo `__Host-`). En base de datos solo se guarda su HMAC-SHA256 con `SESSION_SECRET`. Caducidad deslizante de 14 días. Cada persona ve y cierra sus sesiones en **Sesiones abiertas**. |
 | Revocación | Cerrar sesión, cambiar la contraseña, restablecerla, forzar el cambio, desactivar al usuario o cambiarle el rol eliminan sus sesiones. Iniciar sesión cierra la sesión anterior de ese navegador. Las conexiones en vivo (SSE y presencia) se cortan al instante al desactivar al usuario, cambiarle el rol, cerrar sesiones o quitarle el acceso a un proyecto (incluida la desasignación de un proyecto de equipo); máximo 10 conexiones en vivo por persona. |
-| Verificación en dos pasos | App TOTP o código por email, con 10 códigos de recuperación (se muestran una vez). Obligatoria para admins con contraseña, opcional para el resto. Los secretos se cifran con `ENCRYPTION_KEY` (o, si no está definida, con una clave derivada de `SESSION_SECRET`). «Recordar este dispositivo 14 días» la omite en ese navegador. Un admin puede reiniciar el segundo paso de otra persona. |
+| Verificación en dos pasos | App TOTP o código por email, con 10 códigos de recuperación (se muestran una vez). Obligatoria para admins (con contraseña y también al entrar con Google), opcional para el resto. Los secretos se cifran con `ENCRYPTION_KEY` (o, si no está definida, con una clave derivada de `SESSION_SECRET`). «Recordar este dispositivo 14 días» la omite en ese navegador. Un admin puede reiniciar el segundo paso de otra persona. |
 | Inicio con Google | OpenID Connect con PKCE. Solo entran usuarios existentes y activos (por email verificado y, después, por id de Google); opcionalmente limitado a `GOOGLE_WORKSPACE_DOMAIN`. A los miembros no se les pide segundo paso propio (vale el de Google); a los **administradores** sí: tras Google pasan por la verificación en dos pasos de Pizarro (o la configuran si aún no la tienen) antes de tener sesión. |
 | Avisos de cuenta | Email de aviso al iniciar sesión desde un dispositivo desconocido (no en el primer acceso de una cuenta) y tras cualquier cambio de contraseña o de email. Al cambiar el email de una cuenta (desde el perfil o por un admin) se desvincula su cuenta de Google y dejan de valer los enlaces pendientes enviados a la dirección anterior (invitación, restablecer, confirmar); si era una invitación con el email mal escrito, hay que volver a enviarla. Cerrar sesión borra la cookie del navegador. |
-| Fuerza bruta y abuso | Límite de intentos de login por pareja IP+email, por IP y **por cuenta** (6 intentos desde cualquier conexión; ventana de 15 minutos), de «¿Olvidaste tu contraseña?» y de cambios de contraseña. También hay topes de subidas (60 por minuto y persona), comentarios (30 por minuto; por tarea, 500 por defecto, configurable entre 1 y 1000 en *Administración → Ajustes*), subtareas (100 por tarea), documentos de Google (20 por minuto), creación de tareas (300 por minuto y persona), etiquetas y entregables (30 por minuto), suma de adjuntos por tarea y tamaño de cada paquete ZIP de una release (80 MB por defecto cada uno, configurables en cada proyecto entre 10 y 500 MB, y el de un archivo entre 1 y 100 MB; cada persona arma un ZIP a la vez y el servidor como mucho dos), cola de imágenes en proceso (más de 10 esperando: «inténtalo de nuevo en unos segundos») e informes PDF (5 por minuto y persona; se generan de uno en uno para que la app no se frene). |
+| Fuerza bruta y abuso | Límite de intentos de login por IP y **por cuenta** (6 intentos fallidos desde cualquier conexión; ventana de 15 minutos; acertar la contraseña no cuenta), de «¿Olvidaste tu contraseña?» y de cambios de contraseña. También hay topes de subidas (60 por minuto y persona), comentarios (30 por minuto; por tarea, 500 por defecto, configurable entre 1 y 1000 en *Administración → Ajustes*), subtareas (100 por tarea), documentos de Google (20 por minuto), creación de tareas (300 por minuto y persona), etiquetas y entregables (30 por minuto), suma de adjuntos por tarea y tamaño de cada paquete ZIP de una release (80 MB por defecto cada uno, configurables en cada proyecto entre 10 y 500 MB, y el de un archivo entre 1 y 100 MB; cada persona arma un ZIP a la vez y el servidor como mucho dos), cola de imágenes en proceso (más de 10 esperando: «inténtalo de nuevo en unos segundos») e informes PDF (5 por minuto y persona; se generan de uno en uno para que la app no se frene). |
 | CSRF | `SameSite=Lax`, verificación de `Origin` integrada en las Server Actions y comprobación explícita de `Origin` en la ruta de subida. |
 | Autorización | Sin registro público. Solo los admins gestionan usuarios. Cualquier usuario puede crear proyectos privados (máximo 100 por usuario no admin y 10 creaciones por hora). Cada operación comprueba la visibilidad del proyecto: un usuario no admin solo accede a los proyectos de equipo a los que está **asignado** y a sus privados; los admins acceden a todos los de equipo; los privados solo los ven sus miembros. Deshacer y rehacer nunca reasignan una tarjeta a alguien que ha perdido el acceso. |
 | XSS | React escapa todo el contenido. El Markdown se renderiza sin HTML. Los enlaces solo admiten `http(s)` y se abren con `rel="noopener noreferrer"`. CSP estricta con *nonce* distinto en cada petición. |
-| Cabeceras | `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `HSTS`. |
+| Cabeceras | `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Cross-Origin-Opener-Policy: same-origin` (otra web que abra Pizarro, o que Pizarro abra, no puede manipular su pestaña), `HSTS`. |
 | Imágenes | Tamaño máximo configurable, límite de píxeles en sharp (protección frente a *decompression bombs*), reconversión siempre a WebP (se descarta cualquier contenido incrustado) y servido solo a usuarios con acceso. |
 | Adjuntos | Cuota por proyecto (10 GB por defecto; se ajusta en *Administración → Ajustes → Almacenamiento*, por proyecto en sus ajustes, o con `UPLOAD_QUOTA_MB_PER_PROJECT`) y cuota total opcional (`UPLOAD_QUOTA_MB_TOTAL` o el mismo ajuste). Limpieza diaria de ficheros huérfanos (de más de 24 h; nunca toca `backups/` y se aborta si más del 50 % parecen huérfanos). |
 | Documentación | Se sirve solo a quien ve el proyecto, con `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox` y `X-Frame-Options: SAMEORIGIN` (solo la propia app puede incrustarla). Nada se sirve como HTML: texto y Markdown van como `text/plain` y los pinta el navegador (el Markdown, con el mismo componente seguro que las descripciones); las imágenes se reconvierten a WebP; el SVG, el HTML y cualquier PDF o texto cuyo contenido no lo sea de verdad son «otros» y solo se descargan (como `application/octet-stream`). El tipo se decide al subir y no cambia al renombrar. |
@@ -177,13 +177,13 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 - **Borrar los borradores al cerrar sesión:** opción del perfil que elimina de ese navegador los borradores de tareas (ver 3.4) al cerrar sesión; útil en equipos compartidos.
 - **Aviso de inicio de sesión nuevo:** si entras desde un dispositivo desconocido, recibes un email (no en el primer acceso de una cuenta).
 - **Verificación en dos pasos:** con una **app de autenticación** (TOTP) o con un **código por email**.
-  - Es **obligatoria para los administradores** que entran con contraseña: se configura en su primer acceso (si hay email, elegir la app también exige un código enviado por email). Los demás usuarios pueden activarla en el perfil.
+  - Es **obligatoria para los administradores**, tanto con contraseña como al entrar con Google (*Mi perfil* lo indica así a los administradores; el registro anota «con Google y verificación en dos pasos»). Se configura en su primer acceso (si hay email, elegir la app también exige un código enviado por email). Los demás usuarios pueden activarla en el perfil.
   - Con la app de autenticación, al configurarla se muestran un **código QR** y la **clave** para introducirla a mano.
   - Al activarla se muestran **10 códigos de recuperación** (centrados en pantalla), una sola vez: guárdalos.
   - Casilla **Recordar este dispositivo 14 días** para no repetirla.
   - Un admin puede **reiniciar** el segundo paso de otra persona si lo pierde.
   - Con Google no se pide a los miembros (vale la verificación de Google); a los **administradores** sí se les pide también al entrar con Google.
-- El login tiene límite de intentos por pareja IP+email, por IP y por cuenta: tras **6 intentos** con la misma cuenta en 15 minutos (desde cualquier conexión) hay que esperar. Frena a quien prueba contraseñas desde muchas conexiones; a cambio, alguien podría bloquear una cuenta unos minutos a propósito.
+- El login tiene límite de intentos por IP y por cuenta: tras **6 intentos fallidos** con la misma cuenta en 15 minutos (desde cualquier conexión) hay que esperar; quien acierta la contraseña no suma intentos. Frena a quien prueba contraseñas desde muchas conexiones; a cambio, alguien podría bloquear una cuenta unos minutos a propósito.
 - El icono del ojo junto a un campo de contraseña muestra u oculta lo que escribes.
 
 ### 3.2 Proyectos
@@ -521,7 +521,7 @@ Cada acción se describe en lenguaje claro: «Creó la tarea «X» en «Backlog�
 
 **Proyectos privados en los logs:** la actividad de un proyecto privado solo la ven en detalle sus miembros. El resto de administradores ve esas filas con la hora y el usuario y el texto «Actividad en un proyecto privado» (también en el CSV); los filtros de texto, nivel y categoría no las tienen en cuenta.
 
-**Solo cambios por defecto:** las consultas (páginas vistas, abrir una tarea, ver archivadas, generar el texto de una release, informes PDF y ZIP) se ocultan salvo que marques **Incluir consultas**. Los avisos y errores se ven siempre.
+**Solo cambios por defecto:** abrir una tarea (y cargar su historial o sus comentarios antiguos) ya no se anota en el registro, salvo si falla. Las demás consultas (páginas vistas, ver archivadas, generar el texto de una release, informes PDF y ZIP) se ocultan salvo que marques **Incluir consultas**. Los avisos y errores se ven siempre.
 
 Se filtra por periodo (1 h, 24 h, 7 días), nivel (Info, Aviso, Error), categoría, usuario y texto. Cada fila se despliega para ver los detalles y la IP. **Descargar CSV** exporta el filtro actual entre las fechas **Desde** y **Hasta** (por defecto, el último día; como máximo, los días que se conservan los logs), y se genera por partes para no cargar la memoria del servidor. Los registros antiguos se borran solos.
 
@@ -777,9 +777,18 @@ Cada release de Pizarro lleva una **etiqueta de versión** en GitHub (`vX.Y.Z`) 
 
 ### 4.10b3 Página de presentación
 
-`/presentacion` es una página pública (sin iniciar sesión, en español o inglés) con las funciones principales, una comparativa con Trello, Asana, Notion y Jira, y una **demo interactiva** con un proyecto de ejemplo que funciona solo en el navegador (arrastrar tarjetas, abrir y crear tareas, marcar subtareas, generar notas de release; se guarda en el navegador y se puede restablecer). Incluye también «Cómo se instala» (3 pasos), **Precios** (de momento «próximamente», con el email público de contacto si está configurado en *Administración → Textos legales*) y **Preguntas frecuentes**. Con `LANDING_AT_ROOT=1`, quien entra en `/` sin sesión ve esta página.
+`/presentacion` es una página pública, corta, en español o inglés (`?lang=en`), centrada en lo que distingue a Pizarro: **simple**, **pagas una vez y es tuyo para siempre** (sin suscripción ni cuota por usuario, actualizaciones gratis), **tus datos son tuyos** (en tu servidor, sin rastreadores, copias cifradas) y **hecho para equipos pequeños y familias**. Incluye lo que trae, «Cómo se instala» en 3 pasos, **Precios** (gratis para uso personal; licencia para empresas de pago único por servidor, con actualizaciones gratis para siempre y sin soporte; «Precio: consúltanos» con el email público de contacto de *Administración → Textos legales* si está configurado) y unas preguntas frecuentes. No tiene demo ni comparativas ni recursos externos. Se abre escribiendo `/presentacion` tras la dirección de la instalación (la administración no enlaza a ella). Con `LANDING_AT_ROOT=1`, quien entra en `/` sin sesión ve esta página.
 
-**Dónde verla:** en *Administración → Ajustes*, tarjeta **Página de presentación**, botón **Ver la página de presentación** (abre `/presentacion` en una pestaña nueva; la tarjeta indica si ya se muestra en la dirección principal). También vale escribir `/presentacion` tras la dirección de tu instalación.
+### 4.10b4 Licencia
+
+Pizarro es software de **código disponible, no de código abierto**: el texto completo está en `LICENSE.md` y en la página pública `/licencia` (español o inglés, enlazada desde la presentación, el pie del acceso y las condiciones del servicio por defecto).
+
+- **Uso personal gratuito:** personas físicas, en sus propios servidores, con fines personales, domésticos o familiares, sin fines comerciales ni profesionales.
+- **Licencia comercial** para empresas, profesionales y autónomos, y por defecto también para asociaciones, ONG y centros educativos salvo acuerdo escrito: **pago único por instalación** (servidor en producción; las copias de prueba o de seguridad no cuentan), uso indefinido, **todas las actualizaciones futuras gratis**, **sin soporte** incluido; no transferible sin autorización.
+- **Prohibido sin autorización:** revender, sublicenciar, redistribuir, ofrecerlo como servicio a terceros, quitar avisos de autoría o eludir límites técnicos.
+- **Uso sin licencia:** el uso empresarial o profesional sin licencia comercial no está autorizado, infringe los derechos de propiedad intelectual del autor y le permite ejercer las acciones legales que correspondan (incluida la reclamación de daños y del precio de las licencias).
+- Las **condiciones del servicio** por defecto de cada instalación incluyen el apartado «Licencia del software», que recuerda que el responsable de una instalación de empresa debe tener la licencia.
+- Mantenimiento: si cambias `LICENSE.md`, ejecuta `npm run license:sync` (regenera `src/lib/license-text.ts`; una prueba falla si no coinciden).
 
 ### 4.10c Instalación en un paso
 
