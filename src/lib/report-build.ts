@@ -8,7 +8,8 @@ import { db } from "./db";
 import { AppError } from "./errors";
 import { mentionsToPlain } from "./mentions";
 import { buildReport, RECENT_DONE_DAYS } from "./report";
-import { renderChecklistPdf, renderDeliveryPdf, renderReportPdf, renderWeekPlanPdf } from "./report-pdf";
+import type { PdfJob } from "./report-pdf";
+import { renderInWorker } from "./report-render";
 import { groupChecklist, type ChecklistGroupBy } from "./checklist";
 import { loadChecklistItems } from "./column-views";
 import { buildWeekPlan, type WeekPlanGroupBy } from "./week-plan";
@@ -25,10 +26,12 @@ export interface ProjectReportPdf {
   taskCount: number;
 }
 
-// El render del PDF ocupa la CPU del único proceso: se generan de uno en uno (en cola) para que el resto de la app
-// (tablero, canal en vivo, subidas) siga respondiendo aunque se pidan varios a la vez. Solo el render ocupa turno:
-// los datos se cargan antes, fuera de la cola. Un render atascado no bloquea la cola para siempre: a los 90 s se
-// abandona (queda libre el turno) y quien lo pidió recibe un error claro.
+// El render del PDF (@react-pdf/renderer) se hace en un worker_thread aparte (report-render.ts): aquí se cargan los
+// datos y se comprueba el acceso, y al worker solo le llega un objeto serializable. Así un informe de miles de tareas
+// no frena el tablero, el canal en vivo ni las subidas. Se generan de uno en uno (en cola) para no ocupar más de un
+// núcleo ni más memoria de la cuenta aunque se pidan varios a la vez; solo el render ocupa turno. Un render atascado
+// no bloquea la cola para siempre: a los 90 s se termina el worker (deja de gastar CPU), queda libre el turno y quien
+// lo pidió recibe un error claro.
 let reportQueue: Promise<unknown> = Promise.resolve();
 
 export const PDF_RENDER_TIMEOUT_MS = 90_000;
@@ -51,16 +54,24 @@ export function isPdfQueueError(err: unknown): err is AppError {
   return err instanceof PdfTimeoutError || (err instanceof AppError && err.code === "pdf_busy");
 }
 
-/** Ejecuta un render en la cola (de uno en uno) con tiempo máximo; `timeoutMs` es inyectable para los tests. */
-export function queuedRender<T>(render: () => Promise<T>, timeoutMs: number = PDF_RENDER_TIMEOUT_MS): Promise<T> {
+/**
+ * Ejecuta un render en la cola (de uno en uno) con tiempo máximo; `timeoutMs` es inyectable para los tests. Al
+ * agotarse se aborta `signal` (el worker se termina) y se rechaza con PdfTimeoutError.
+ */
+export function queuedRender<T>(render: (signal: AbortSignal) => Promise<T>, timeoutMs: number = PDF_RENDER_TIMEOUT_MS): Promise<T> {
   if (waitingRenders >= PDF_MAX_WAITING) return Promise.reject(new AppError(PDF_BUSY_MESSAGE, 503, "pdf_busy"));
   waitingRenders++;
   const run = reportQueue.then(
     () =>
       new Promise<T>((resolve, reject) => {
         waitingRenders--;
-        const timer = setTimeout(() => reject(new PdfTimeoutError()), timeoutMs);
-        render().then(
+        const abort = new AbortController();
+        const timer = setTimeout(() => {
+          const err = new PdfTimeoutError();
+          reject(err);
+          abort.abort(err);
+        }, timeoutMs);
+        render(abort.signal).then(
           (v) => { clearTimeout(timer); resolve(v); },
           (e) => { clearTimeout(timer); reject(e); },
         );
@@ -69,6 +80,9 @@ export function queuedRender<T>(render: () => Promise<T>, timeoutMs: number = PD
   reportQueue = run.catch(() => {});
   return run;
 }
+
+/** Genera un PDF en el worker, en la cola y con tiempo máximo. */
+export const renderPdf = (job: PdfJob): Promise<Uint8Array> => queuedRender((signal) => renderInWorker(job, signal));
 
 export function generateProjectReportPdf(projectId: string, opts: { generatedBy: string; locale: Locale }): Promise<ProjectReportPdf | null> {
   return buildProjectReportPdf(projectId, opts);
@@ -154,7 +168,7 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
     taskFields: normalizeTaskFields(project.taskFields),
   }, t);
 
-  const pdf = await queuedRender(() => renderReportPdf(report, t, locale));
+  const pdf = await renderPdf({ kind: "report", locale: opts.locale, input: report });
   const slug = project.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || t("proyecto");
   return { project: { id: project.id, name: project.name }, pdf, today, filename: `${t("informe")}-${slug}-${today}.pdf`, taskCount: tasks.length };
 }
@@ -172,7 +186,7 @@ export function generateChecklistPdf(
     const locale = intlLocale(opts.locale);
     const today = todayIso(appTimeZone());
     const groups = groupChecklist(data.items, opts.by, locale);
-    const pdf = await queuedRender(() => renderChecklistPdf({ project: data.column.projectName, column: data.column.name, today, by: opts.by, groups }, t, locale));
+    const pdf = await renderPdf({ kind: "checklist", locale: opts.locale, input: { project: data.column.projectName, column: data.column.name, today, by: opts.by, groups } });
     return { pdf, filename: `${t("lista")}-${slugOf(data.column.name, t("columna"))}-${today}.pdf`, itemCount: data.items.length };
   })();
 }
@@ -194,15 +208,14 @@ export function generateDeliveryPdf(
         subtasks: { orderBy: [{ position: "asc" }, { id: "asc" }], select: { title: true, done: true } },
       },
     });
-    const locale = intlLocale(opts.locale);
     const today = todayIso(appTimeZone());
-    const pdf = await queuedRender(() => renderDeliveryPdf({
+    const pdf = await renderPdf({ kind: "delivery", locale: opts.locale, input: {
       project: column.project.name, column: column.name, today,
       tasks: tasks.map((x) => ({
         title: mentionsToPlain(x.title, false), kind: localizeGeneralKind(x.kind, opts.locale).name, dueDate: dateToIso(x.dueDate),
         subtaskTotal: x.subtasks.length, doneSubtasks: x.subtasks.filter((s) => s.done).map((s) => mentionsToPlain(s.title, false)),
       })),
-    }, t, locale));
+    } });
     return { pdf, filename: `${t("entrega")}-${slugOf(column.project.name, t("proyecto"))}-${today}.pdf`, taskCount: tasks.length };
   })();
 }
@@ -227,7 +240,7 @@ export function generateWeekPlanPdf(
       tasks.map((x) => ({ title: mentionsToPlain(x.title), kind: localizeGeneralKind(x.kind, opts.locale).name, assigneeName: x.assignee?.name ?? null, dueDate: dateToIso(x.dueDate) })),
       today, opts.groupBy, t, locale,
     );
-    const pdf = await queuedRender(() => renderWeekPlanPdf({ project: column.project.name, column: column.name, today, generatedBy: opts.generatedBy, groupBy: opts.groupBy, sections }, t, locale));
+    const pdf = await renderPdf({ kind: "weekPlan", locale: opts.locale, input: { project: column.project.name, column: column.name, today, generatedBy: opts.generatedBy, groupBy: opts.groupBy, sections } });
     return { pdf, filename: `${t("semana")}-${slugOf(column.name, t("columna"))}-${today}.pdf`, taskCount: tasks.length };
   })();
 }
