@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
 import { attachmentFileNames, isoDate } from "@/lib/release";
-import { acquireZipSlot, buildZipPart, planZipEntries, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict, type ZipEntry } from "@/lib/release-zip";
+import { acquireZipSlot, buildZipPart, planZipEntries, zipBodyStream, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict, type ZipEntry } from "@/lib/release-zip";
 import { partSuffix } from "@/lib/zip-plan";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
@@ -83,22 +83,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   // Uno a la vez por persona y pocos en todo el servidor (cada paquete se arma en memoria).
   const releaseSlot = acquireZipSlot(user.id);
   if (!releaseSlot) return new Response(t("Ya se está preparando otro ZIP. Inténtalo de nuevo en unos segundos."), { status: 429, headers: { "Retry-After": "5" } });
+  // El hueco se suelta cuando se ha enviado el ZIP entero (o se cancela la descarga), no al terminar de armarlo.
   let built: Awaited<ReturnType<typeof buildZipPart>>;
   try {
     built = await buildZipPart(entries, pkg);
-  } finally {
+  } catch (err) {
     releaseSlot();
+    throw err;
   }
   const { zip, files: fileCount } = built;
-  if (fileCount === 0) return new Response(t("No hay adjuntos disponibles"), { status: 404 });
+  if (fileCount === 0) {
+    releaseSlot();
+    return new Response(t("No hay adjuntos disponibles"), { status: 404 });
+  }
   logEvent({
     category: "api", action: "release.zipDownload", message: `ZIP de adjuntos de release (paquete ${mode.part}/${packages.length}, ${fileCount} ficheros, ${Math.round(zip.length / 1024)} KB)`,
     userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/release-attachments`, ip: clientIp(req.headers),
     durationMs: performance.now() - start, details: { tasks: items.length, part: mode.part, parts: packages.length, files: fileCount, bytes: zip.length },
   });
-  return new Response(new Uint8Array(zip.buffer as ArrayBuffer, zip.byteOffset, zip.length), {
+  return new Response(zipBodyStream(zip, releaseSlot, { signal: req.signal }), {
     headers: {
       "Content-Type": "application/zip",
+      "Content-Length": String(zip.length),
       "Content-Disposition": `attachment; filename="release-${isoDate(new Date(), appTimeZone())}-adjuntos${partSuffix(mode.part, packages.length)}.zip"`,
       "Cache-Control": "private, no-store",
       "X-Zip-Parts": String(packages.length),

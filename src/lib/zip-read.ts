@@ -152,17 +152,31 @@ export class ZipFile {
       }
     } else {
       const inflater = createInflateRaw();
+      // Espera a que el descompresor pida más o a que se cierre: si falla (datos dañados) o el lector lo destruye
+      // (entrada mayor de lo declarado, lectura abandonada), 'drain' ya no llega nunca y la lectura se quedaría colgada.
+      const drained = () =>
+        new Promise<void>((res) => {
+          const done = () => {
+            inflater.off("drain", done);
+            inflater.off("close", done);
+            res();
+          };
+          inflater.on("drain", done);
+          inflater.on("close", done);
+        });
       const feed = (async () => {
         try {
           const chunk = 64 * 1024;
           for (let pos = 0; pos < e.compressedSize; pos += chunk) {
+            if (inflater.destroyed) return;
             const len = Math.min(chunk, e.compressedSize - pos);
             const buf = Buffer.alloc(len);
             const { bytesRead } = await this.fh.read(buf, 0, len, start + pos);
             if (bytesRead !== len) throw new ZipReadError("Archivo truncado.");
-            if (!inflater.write(buf)) await new Promise<void>((res) => inflater.once("drain", () => res()));
+            if (inflater.destroyed) return;
+            if (!inflater.write(buf) && !inflater.destroyed) await drained();
           }
-          inflater.end();
+          if (!inflater.destroyed) inflater.end();
         } catch (err) {
           inflater.destroy(err as Error);
         }

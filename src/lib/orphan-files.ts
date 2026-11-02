@@ -16,6 +16,8 @@ export interface OrphanReport {
   deleted: number;
   bytes: number;
   aborted: boolean;
+  /** Por qué se canceló: demasiados huérfanos, o ninguna fila de adjuntos, adjuntos de release ni documentos. */
+  abortReason?: "fraction" | "noRows";
 }
 
 /** Id de adjunto que corresponde a un nombre de fichero, o null si no es un fichero nuestro. */
@@ -34,12 +36,15 @@ export function isInside(root: string, target: string): boolean {
 }
 
 /**
- * Borra los ficheros de `dir` (raíz), `dir/releases` y `dir/documents` que no estén en los conjuntos de ids conocidos.
- * `dryRun` solo cuenta. Nunca lanza por un fichero concreto.
+ * Borra los ficheros de `dir` (raíz), `dir/releases` y `dir/documents` que no estén en los conjuntos de ids conocidos
+ * (las filas de la base de datos; `retained`, ids que retienen otras cosas, como las entradas de deshacer, y que
+ * protegen los adjuntos y las copias de releases). `dryRun` solo cuenta. Nunca lanza por un fichero concreto.
+ * No borra nada si parecen huérfanos más de la mitad (con 50 ficheros o más) o si la base de datos no tiene ninguna
+ * fila de adjuntos, adjuntos de release ni documentos y hay ficheros que borrar (¿base de datos nueva o equivocada?).
  */
 export async function cleanOrphanFiles(
   dir: string,
-  known: { attachments: Set<string>; releaseAttachments: Set<string>; documents?: Set<string> },
+  known: { attachments: Set<string>; releaseAttachments: Set<string>; documents?: Set<string>; retained?: Set<string> },
   opts: { now?: number; dryRun?: boolean; minAgeMs?: number } = {},
 ): Promise<OrphanReport> {
   const now = opts.now ?? Date.now();
@@ -52,8 +57,9 @@ export async function cleanOrphanFiles(
     return report; // La carpeta aún no existe: nada que limpiar.
   }
 
-  const candidates: { file: string; size: number }[] = [];
-  const scan = async (folder: string, where: "root" | "releases" | "documents", ids: Set<string>) => {
+  const candidates: { file: string; size: number; tmp: boolean }[] = [];
+  const retained = known.retained ?? new Set<string>();
+  const scan = async (folder: string, where: "root" | "releases" | "documents", ids: Set<string>, alsoRetained: boolean) => {
     let entries;
     try {
       entries = await readdir(folder, { withFileTypes: true });
@@ -76,18 +82,28 @@ export async function cleanOrphanFiles(
       if (!st.isFile() || st.isSymbolicLink()) continue;
       report.scanned++;
       if (now - st.mtimeMs < minAge) continue;
-      if ("id" in parsed && ids.has(parsed.id)) continue;
-      candidates.push({ file, size: st.size });
+      if ("id" in parsed && (ids.has(parsed.id) || (alsoRetained && retained.has(parsed.id)))) continue;
+      candidates.push({ file, size: st.size, tmp: !("id" in parsed) });
     }
   };
-  await scan(root, "root", known.attachments);
-  await scan(path.join(root, "releases"), "releases", known.releaseAttachments);
-  await scan(path.join(root, "documents"), "documents", known.documents ?? new Set());
+  const documents = known.documents ?? new Set<string>();
+  await scan(root, "root", known.attachments, true);
+  await scan(path.join(root, "releases"), "releases", known.releaseAttachments, true);
+  await scan(path.join(root, "documents"), "documents", documents, false);
 
   report.orphans = candidates.length;
   report.bytes = candidates.reduce((n, c) => n + c.size, 0);
+  // Sin ninguna fila (base de datos nueva tras perder la buena, o equivocada), todo parece huérfano: con pocos
+  // ficheros la proporción de abajo no salta, así que se comprueba aparte (los temporales de subidas a medias no cuentan).
+  const noRows = known.attachments.size === 0 && known.releaseAttachments.size === 0 && documents.size === 0;
+  if (noRows && candidates.some((c) => !c.tmp)) {
+    report.aborted = true;
+    report.abortReason = "noRows";
+    return report;
+  }
   if (report.scanned >= MIN_FILES_FOR_GUARD && candidates.length > report.scanned * MAX_ORPHAN_FRACTION) {
     report.aborted = true;
+    report.abortReason = "fraction";
     return report;
   }
   if (opts.dryRun) return report;

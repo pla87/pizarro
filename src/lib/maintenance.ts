@@ -90,12 +90,16 @@ async function purgeOrphanFiles(): Promise<number> {
     cursor = page[page.length - 1]!.id;
   }
   const report = await cleanOrphanFiles(uploadDir(), {
-    attachments: new Set([...attachments.map((a) => a.id), ...retained]),
-    releaseAttachments: new Set([...releaseAttachments.map((a) => a.id), ...retained]),
+    attachments: new Set(attachments.map((a) => a.id)),
+    releaseAttachments: new Set(releaseAttachments.map((a) => a.id)),
     documents: new Set(documents.map((d) => d.id)),
+    retained,
   });
   if (report.aborted) {
-    logEvent({ level: "warn", category: "system", action: "uploads.orphansAborted", message: `Limpieza de huérfanos cancelada: ${report.orphans} de ${report.scanned} ficheros parecen huérfanos (demasiados; ¿base de datos equivocada?)`, details: { ...report } });
+    const why = report.abortReason === "noRows"
+      ? "la base de datos no tiene ningún adjunto ni documento (¿base de datos nueva, equivocada o a medio restaurar?)"
+      : "demasiados; ¿base de datos equivocada?";
+    logEvent({ level: "warn", category: "system", action: "uploads.orphansAborted", message: `Limpieza de huérfanos cancelada: ${report.orphans} de ${report.scanned} ficheros parecen huérfanos (${why})`, details: { ...report } });
   } else if (report.deleted > 0) {
     logEvent({ category: "system", action: "uploads.orphansPurged", message: `Ficheros huérfanos borrados: ${report.deleted} (${Math.round(report.bytes / 1024)} KB)`, details: { ...report } });
   }

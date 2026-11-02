@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { partSuffix, planPackages, type PlanItem } from "../src/lib/zip-plan";
 import { zipPlanToken } from "../src/lib/zip-token";
-import { zipRequestMode, zipVersionConflict } from "../src/lib/release-zip";
+import { acquireZipSlot, zipBodyStream, zipRequestMode, zipVersionConflict } from "../src/lib/release-zip";
 
 const items = (...sizes: number[]): PlanItem[] => sizes.map((size, index) => ({ index, size }));
 
@@ -104,5 +104,53 @@ describe("zipRequestMode y conflicto de versión", () => {
     const res = zipVersionConflict(part(`part=1&v=${v}`), changed, 25, "Cambiaron");
     assert.equal(res?.status, 409);
     assert.equal(await res?.text(), "Cambiaron");
+  });
+});
+
+describe("zipBodyStream: el hueco del ZIP se suelta al terminar de enviarlo", () => {
+  const zip = Buffer.alloc(2.5 * 1024 * 1024, 7);
+  const held = (user: string) => {
+    const again = acquireZipSlot(user);
+    again?.();
+    return again === null;
+  };
+
+  test("a trozos de 1 MB; el hueco sigue ocupado hasta el último", async () => {
+    const release = acquireZipSlot("zs-1")!;
+    const reader = zipBodyStream(zip, release).getReader();
+    assert.equal(held("zs-1"), true, "recién creada, aún sin enviar");
+    const sizes: number[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      sizes.push(value.length);
+      if (sizes.length < 3) assert.equal(held("zs-1"), true, `tras el trozo ${sizes.length}`);
+    }
+    assert.deepEqual(sizes, [1024 * 1024, 1024 * 1024, 0.5 * 1024 * 1024]);
+    assert.equal(held("zs-1"), false, "enviado entero: hueco libre");
+  });
+
+  test("también se suelta si se cancela la descarga o se aborta la petición", async () => {
+    const release = acquireZipSlot("zs-2")!;
+    const reader = zipBodyStream(zip, release).getReader();
+    await reader.read();
+    assert.equal(held("zs-2"), true);
+    await reader.cancel();
+    assert.equal(held("zs-2"), false);
+
+    const ac = new AbortController();
+    const release2 = acquireZipSlot("zs-3")!;
+    const body = new Response(zipBodyStream(zip, release2, { signal: ac.signal }));
+    assert.equal(held("zs-3"), true);
+    ac.abort();
+    assert.equal(held("zs-3"), false);
+    await body.body?.cancel();
+  });
+
+  test("como cuerpo de Response, llega entero", async () => {
+    const release = acquireZipSlot("zs-4")!;
+    const got = Buffer.from(await new Response(zipBodyStream(zip, release)).arrayBuffer());
+    assert.ok(got.equals(zip));
+    assert.equal(held("zs-4"), false);
   });
 });
