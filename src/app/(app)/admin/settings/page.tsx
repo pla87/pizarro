@@ -25,5 +25,5 @@ export default async function SettingsPage() {
     getGoogleSettingsView(origin),
     storageAdminView(),
   ]);
-  return <SettingsAdmin maxComments={maxComments} mail={mail} google={google} storage={storage} landingAtRoot={process.env.LANDING_AT_ROOT === "1"} />;
+  return <SettingsAdmin maxComments={maxComments} mail={mail} google={google} storage={storage} />;
 }
