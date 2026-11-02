@@ -105,7 +105,7 @@ llevan enlaces de sesión ni nombres de modelos.
   `/presentacion` simplificada (sin demo; la administración no enlaza a ella por decisión del propietario) y licencia
   (`LICENSE.md` + `/licencia`; `npm run license:sync` tras cambiarla).
 - Modelo de venta decidido: gratis para uso personal; empresas y profesionales, pago único por servidor con
-  actualizaciones gratis para siempre y sin soporte. Precio aún sin fijar («consúltanos»).
+  actualizaciones gratis para siempre y sin soporte. Precio: 100 € (pago con tarjeta y factura, DNI opcional); el cobro aún es manual por email. Sin excepciones: todo uso no personal paga. Listas de funciones candidatas a licencia profesional y de ideas de otros Kanban: `docs/IDEAS.md`.
 - Pendiente de confirmar por el propietario: primera publicación con *Run workflow* y paquete GHCR público (el propietario prefiere seguir puliendo antes); prueba
   real en un VPS siguiendo `docs/PRUEBA-VPS.md`; plantilla de Railway (pasos en `docs/INSTALL.md`; la sintaxis de
   variables generadas debe verificarse en Railway).
