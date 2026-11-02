@@ -19,5 +19,5 @@ export default async function SettingsPage() {
   // Dirección con la que entra el administrador ahora (para avisar si no coincide con APP_URL).
   const h = await headers();
   const origin = originFromHeaders({ host: h.get("host"), forwardedHost: h.get("x-forwarded-host"), forwardedProto: h.get("x-forwarded-proto") });
-  return <SettingsAdmin maxComments={await getMaxCommentsPerTask()} mail={await getMailSettingsView(Boolean(outboxDir()))} google={await getGoogleSettingsView(origin)} storage={await storageAdminView()} />;
+  return <SettingsAdmin maxComments={await getMaxCommentsPerTask()} mail={await getMailSettingsView(Boolean(outboxDir()))} google={await getGoogleSettingsView(origin)} storage={await storageAdminView()} landingAtRoot={process.env.LANDING_AT_ROOT === "1"} />;
 }
