@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { makeT, type T } from "@/i18n/core";
+import { esT, type T } from "@/i18n/shared";
 import type { UploadedAttachment } from "@/lib/types";
 import { QueueStopped, runQueue, summarizeSkipped, withRetry, type SkippedFile } from "@/lib/upload-queue";
 
@@ -71,7 +71,7 @@ export class UploadError extends Error {
 }
 
 /** `onCreate`: adjunto de una tarea recién creada (deshacer la creación se lo lleva, no cuenta aparte). Reintenta con calma ante 429/503. */
-export async function uploadFile(taskId: string, file: File, onCreate = false, t: T = makeT("es"), signal?: AbortSignal): Promise<UploadedAttachment> {
+export async function uploadFile(taskId: string, file: File, onCreate = false, t: T = esT, signal?: AbortSignal): Promise<UploadedAttachment> {
   const isImage = isImageFile(file);
   const fallback = isImage ? `${t("captura")}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png` : t("archivo");
   const name = file.name && !(isImage && file.name === "image.png") ? file.name : fallback;
@@ -166,7 +166,7 @@ export async function uploadBatch(
   files: File[],
   opts: { onCreate?: boolean; t?: T; track?: <R>(p: Promise<R>) => Promise<R>; onUploaded?: (a: UploadedAttachment) => void; onProgress?: (p: BatchProgress) => void; signal?: AbortSignal } = {},
 ): Promise<BatchResult> {
-  const t = opts.t ?? makeT("es");
+  const t = opts.t ?? esT;
   const active = new Map<number, string>();
   let done = 0;
   const report = () => opts.onProgress?.({ total: files.length, done, active: [...active.values()] });

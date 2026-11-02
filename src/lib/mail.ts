@@ -8,6 +8,7 @@ import { logEvent } from "./log";
 import { loadMailConfig, peekMailConfig, savedMailEnabled } from "./mail-config";
 import type { MailConfig } from "./mail-settings-core";
 import { maskEmailsIn } from "./mask-email";
+import { trackInFlight } from "./shutdown";
 
 // Envío de emails: SMTP con nodemailer. La configuración sale de las variables SMTP_* del servidor o, si no hay, de lo
 // que un administrador guarda en Administración → Ajustes (lib/mail-config.ts). Con MAIL_OUTBOX_DIR (solo desarrollo y
@@ -80,8 +81,12 @@ export interface MailMessage {
   attachments?: MailAttachment[];
 }
 
-/** Envía un email; lanza si falla. */
-export async function sendMail(m: MailMessage): Promise<void> {
+/** Envía un email; lanza si falla. El apagado ordenado del servidor espera a los envíos en curso (lib/shutdown.ts). */
+export function sendMail(m: MailMessage): Promise<void> {
+  return trackInFlight(() => deliverMail(m));
+}
+
+async function deliverMail(m: MailMessage): Promise<void> {
   const dir = outboxDir();
   // Con el buzón de pruebas no se toca la BD: solo se anota el remitente conocido.
   const config = dir ? peekMailConfig() : await loadMailConfig();
@@ -109,7 +114,8 @@ export async function sendMail(m: MailMessage): Promise<void> {
  * si existe una cuenta). Los fallos solo se registran.
  */
 export function sendMailInBackground(label: string, send: () => Promise<void>): void {
-  const run = async () => {
+  const run = () => trackInFlight(runSend);
+  const runSend = async () => {
     try {
       await send();
       logEvent({ category: "auth", action: "auth.emailSent", message: `Email enviado: ${label}` });
