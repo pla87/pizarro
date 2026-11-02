@@ -160,7 +160,9 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 - **Tablero ligero:** al cargar el tablero no se envían las descripciones de las tarjetas (solo si tienen); se piden al abrir cada tarea.
 - **Errores de red:** si una acción del tablero falla por red o tras un despliegue, se avisa, se deshace el cambio optimista solo en las tarjetas afectadas y se recarga el tablero.
 - **Calendario ligero:** solo carga las tareas y entregables del rango de fechas visible, con índices por fecha límite.
-- **Índices y limpieza:** índices para avisos y deshacer; el mantenimiento horario borra avisos leídos de más de 90 días, y cada día se buscan adjuntos huérfanos y se hace la copia de seguridad.
+- **Volver a la ventana:** el tablero no se recarga cada vez. Si el canal en vivo está conectado, la comprobación al volver se hace como mucho cada 5 minutos, porque los cambios ya llegan al momento; sin canal en vivo, como mucho una vez por minuto; si el canal se cortó, se actualiza al volver.
+- **Idioma:** el diccionario de inglés se descarga solo si usas la app en inglés; en español la pantalla de acceso y el tablero cargan unos 60 KB menos.
+- **Índices y limpieza:** índices para avisos y deshacer; el mantenimiento horario borra los avisos leídos de más de 90 días y los que nunca se leyeron de más de un año, y cada día se buscan adjuntos huérfanos y se hace la copia de seguridad.
 - **Logs sin duplicados:** las visitas a una misma página de una misma persona se registran como mucho una vez por minuto (los refrescos automáticos no llenan los logs).
 
 ---
@@ -393,7 +395,7 @@ Se genera en el idioma de quien lo pide.
   - por **email**, si el servidor tiene SMTP y la persona no lo ha desactivado (hay preferencias **por tipo de aviso**);
   - por **WhatsApp**, si el servidor lo tiene configurado y la persona lo ha activado con su número (menciones).
 - Cada persona elige sus canales en **Mi perfil → Avisos**. Allí también puede activar un **resumen diario por email** y elegir la hora. El resumen recoge la actividad de los proyectos en los que trabajas (para un admin, los de equipo que eligió en *Proyectos en los que trabajo* y sus privados) y, de cualquier proyecto que puedas ver, lo que tienes asignado y lo vencido. Cubre desde el resumen anterior (como mucho 48 h), así no se pierde ni se repite nada aunque un día salga a otra hora.
-- La página **Avisos** muestra los 100 últimos y el botón **Cargar más** trae los anteriores. Los avisos ya leídos se borran a los 90 días. Al hacer clic en uno se abre directamente la tarjeta.
+- La página **Avisos** muestra los 100 últimos y el botón **Cargar más** trae los anteriores. Los avisos ya leídos se borran a los 90 días y los no leídos, al año. Al hacer clic en uno se abre directamente la tarjeta.
 - **Historial de la tarea:** sección plegada **Historial** en el detalle, con los cambios de la tarea (se conserva 365 días).
 - **Informe semanal por email:** en **Ajustes del proyecto** se elige destinatario, día de la semana y hora, y se envía el informe PDF (ver 3.8). Solo puede ir a personas con acceso al proyecto; una dirección externa solo la puede fijar un admin y nunca en proyectos privados. Se vuelve a comprobar en el momento del envío.
 - **App instalada:** accesos directos **Mis tareas** y **Avisos**, y contador de avisos sin leer en el icono.
@@ -575,6 +577,8 @@ Entrada **Documentación** del menú lateral (debajo de *Releases*): los archivo
 ### 4.1 Despliegue
 
 Cada *push* a la rama configurada en Railway genera una nueva imagen (Dockerfile multi-stage) y la despliega. Al arrancar, el contenedor ejecuta `scripts/start.sh`:
+
+**Apagado ordenado.** Al reiniciar o desplegar, la app se apaga de forma ordenada: deja de aceptar conexiones nuevas, cierra los canales en vivo (los navegadores se reconectan solos), guarda los registros pendientes y espera hasta 5 segundos a los emails que se están enviando; si un envío no termina en ese tiempo, queda anotado en los logs (`system.shutdown`, nivel aviso). La imagen fija `NEXT_MANUAL_SIG_HANDLE=1`; si arrancas `node server.js` a mano, defínela o la app lo corrige sola. Con `npm start`, Ctrl+C hace lo mismo.
 
 1. ajusta el propietario del volumen y baja al usuario `node`;
 2. `prisma migrate deploy` (migraciones pendientes);
