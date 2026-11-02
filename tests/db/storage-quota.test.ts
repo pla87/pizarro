@@ -161,7 +161,7 @@ describe("liberar espacio del proyecto", () => {
     await asUser(admin, async () => {
       const prev = expectOk(await previewStorageCleanup(f.project.id, "archivedTasks", 90));
       assert.deepEqual(prev, { count: 2, bytes: 5 * MB });
-      const res = expectOk(await runStorageCleanup(f.project.id, "archivedTasks", 90));
+      const res = expectOk(await runStorageCleanup(f.project.id, "archivedTasks", 90, 2));
       assert.deepEqual(res, { count: 2, bytes: 5 * MB });
     });
     assert.equal(await exists(attachmentPath(oldImg, "full")), false);
@@ -178,7 +178,7 @@ describe("liberar espacio del proyecto", () => {
 
     // Con 0 días caen todas las archivadas.
     await asUser(admin, async () => {
-      assert.deepEqual(expectOk(await runStorageCleanup(f.project.id, "archivedTasks", 0)), { count: 1, bytes: 4 * MB });
+      assert.deepEqual(expectOk(await runStorageCleanup(f.project.id, "archivedTasks", 0, 1)), { count: 1, bytes: 4 * MB });
     });
     assert.equal(await exists(attachmentPath(fresh, "file")), false);
     assert.equal((await storageUsage(f.project.id)).project, MB);
@@ -199,7 +199,7 @@ describe("liberar espacio del proyecto", () => {
     const t2 = await mk(3 * MB, true);
     await asUser(admin, async () => {
       assert.deepEqual(expectOk(await previewStorageCleanup(f.project.id, "documentsTrash", 0)), { count: 2, bytes: 5 * MB });
-      assert.deepEqual(expectOk(await runStorageCleanup(f.project.id, "documentsTrash", 0)), { count: 2, bytes: 5 * MB });
+      assert.deepEqual(expectOk(await runStorageCleanup(f.project.id, "documentsTrash", 0, 2)), { count: 2, bytes: 5 * MB });
     });
     assert.equal(await exists(documentPath(t1)) || await exists(documentPath(t2)), false);
     assert.equal(await exists(documentPath(live)), true);
@@ -217,7 +217,7 @@ describe("liberar espacio del proyecto", () => {
     const a3 = await releaseAttach(recent.id, "F1_c.webp", 4 * MB);
     await asUser(admin, async () => {
       assert.deepEqual(expectOk(await previewStorageCleanup(f.project.id, "oldReleases", 90)), { count: 2, bytes: 3 * MB });
-      assert.deepEqual(expectOk(await runStorageCleanup(f.project.id, "oldReleases", 90)), { count: 2, bytes: 3 * MB });
+      assert.deepEqual(expectOk(await runStorageCleanup(f.project.id, "oldReleases", 90, 2)), { count: 2, bytes: 3 * MB });
     });
     assert.equal(await exists(relPath(a1)) || await exists(relPath(a2)), false);
     assert.equal(await exists(relPath(a3)), true);
@@ -270,17 +270,17 @@ describe("liberar espacio del proyecto", () => {
     const a = await attach(teamTask.id, MB);
     const b = await attach(privTask.id, MB);
     await asUser(member, async () => {
-      expectFail(await runStorageCleanup(team.project.id, "archivedTasks", 0), FORBIDDEN);
+      expectFail(await runStorageCleanup(team.project.id, "archivedTasks", 0, 1), FORBIDDEN);
       expectFail(await previewStorageCleanup(team.project.id, "archivedTasks", 0), FORBIDDEN);
       expectFail(await deleteStorageItem(team.project.id, "task", a), FORBIDDEN);
-      expectFail(await runStorageCleanup(priv.project.id, "archivedTasks", 0), NOT_FOUND);
+      expectFail(await runStorageCleanup(priv.project.id, "archivedTasks", 0, 1), NOT_FOUND);
     });
     await asUser(admin, async () => {
-      expectFail(await runStorageCleanup(priv.project.id, "archivedTasks", 0), NOT_FOUND);
-      expectFail(await runStorageCleanup(team.project.id, "archivedTasks", 7)); // antigüedad no permitida
+      expectFail(await runStorageCleanup(priv.project.id, "archivedTasks", 0, 1), NOT_FOUND);
+      expectFail(await runStorageCleanup(team.project.id, "archivedTasks", 8, 1)); // antigüedad no permitida
     });
     await asUser(owner, async () => {
-      assert.equal(expectOk(await runStorageCleanup(priv.project.id, "archivedTasks", 0)).count, 1);
+      assert.equal(expectOk(await runStorageCleanup(priv.project.id, "archivedTasks", 0, 1)).count, 1);
     });
     assert.equal(await db.taskAttachment.count({ where: { id: a } }), 1);
     assert.equal(await db.taskAttachment.count({ where: { id: b } }), 0);

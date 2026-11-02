@@ -2,6 +2,44 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.40.0 — 2026-11-02 12:42
+
+Ejemplos de proyecto listos para usar, página de presentación mejorada, más seguridad en el acceso y correcciones
+
+### Nuevas funcionalidades
+
+- Nuevo proyecto → «Empezar desde»: proyecto en blanco o un ejemplo listo para usar (Equipo de software, Familia y casa, Preparación de un evento, Empresa y clientes), con sus columnas, tipos, campos y unas tarjetas de muestra con la etiqueta «Ejemplo».
+- Administración → Ajustes: tarjeta «Página de presentación» con el enlace para verla.
+- Página de presentación: secciones «Cómo se instala», «Precios» (próximamente, con el email de contacto) y «Preguntas frecuentes».
+
+### Mejoras
+
+- Inicio de sesión: además del límite por conexión, como mucho 6 intentos por cuenta cada 15 minutos.
+- Los administradores que entran con Google pasan también por la verificación en dos pasos de Pizarro.
+- Las imágenes de un proyecto dejan de verse en cuanto se quita el acceso (antes el navegador las guardaba hasta un día).
+- Móvil: el título de la tarea ocupa como mucho dos líneas; al tocarlo se edita y se ve entero.
+- El micrófono para dictar el título va dentro de la caja del campo.
+- Liberar espacio: opciones de más de 7 y de 15 días.
+- Ajustes del proyecto y de administración cargan más rápido (consultas en paralelo).
+
+### Correcciones
+
+- Dictado en Chrome para Android: ya no repite el texto («esto, esto es, esto es una…»).
+- Liberar espacio ya no puede borrar adjuntos de una tarea recuperada ni un documento restaurado mientras tanto, y pide confirmar de nuevo si hay más contenido del mostrado.
+- La purga automática de la papelera ya no borra el archivo de un documento restaurado a la vez.
+- El aviso de cuota total superada mostraba «{used}» y «{limit}» sin rellenar a quien no es administrador.
+- Archivadas: «Cargar más» ya no se pierde si se recupera una tarea mientras se pagina, ni mezcla resultados de una búsqueda anterior.
+- Archivar varias tareas ya no cuenta ni anota las que ya estaban archivadas; recuperar dos veces seguidas no duplica el movimiento.
+- Dos columnas creadas a la vez ya no superan el máximo ni comparten posición; mover una columna en el extremo no deja un deshacer vacío.
+- Los avisos de error idénticos seguidos ya no se apilan duplicados.
+- Una subida múltiple se detiene al alcanzar la cuota en vez de intentar todos los archivos.
+
+### Cambios técnicos / DB
+
+- Las subidas rechazan por tamaño declarado y por cola llena antes de ocupar un hueco de subida.
+- El registro de errores del navegador rechaza cuerpos grandes antes de leerlos.
+- Las cuotas generales se guardan en una sola transacción.
+
 ## v1.39.0 — 2026-11-02 02:29
 
 Gestión del almacenamiento: cuotas configurables, desglose y liberar espacio por proyecto, y correcciones

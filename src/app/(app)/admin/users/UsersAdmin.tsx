@@ -269,7 +269,7 @@ function ResetTwoFactor({ user, onClose }: { user: UserRow; onClose: () => void 
           });
         }}
       >
-        <p>{t("Se borrarán su método y sus códigos de recuperación. Si es administrador, tendrá que configurar uno nuevo antes de entrar con contraseña; si es miembro, puede volver a activarlo desde «Mi perfil».")}</p>
+        <p>{t("Se borrarán su método y sus códigos de recuperación. Si es administrador, tendrá que configurar uno nuevo antes de entrar; si es miembro, puede volver a activarlo desde «Mi perfil».")}</p>
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
           <button className="btn-primary" disabled={pending}>{t("Restablecer")}</button>

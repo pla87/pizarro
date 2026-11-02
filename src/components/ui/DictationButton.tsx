@@ -34,6 +34,11 @@ function recognitionCtor(): RecognitionCtor | null {
 }
 const noopSubscribe = () => () => {};
 
+/** Chrome de Android (y navegadores basados en él): su modo continuo duplica el texto reconocido. */
+function isAndroid(): boolean {
+  return typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+}
+
 /** ¿El navegador sabe reconocer voz? En el servidor y en la primera pintura es «no» (así no hay desajuste de hidratación). */
 export function useDictationSupported(): boolean {
   return useSyncExternalStore(noopSubscribe, () => recognitionCtor() !== null, () => false);
@@ -59,45 +64,69 @@ export function useDictation(onText: (text: string) => void) {
     latest.current = { onText, toast, t };
   });
 
-  const stop = useCallback(() => rec.current?.stop(), []);
+  // Chrome de Android, en modo continuo, repite cada frase acumulada («esto», «esto es», «esto es una»…) como resultados
+  // finales distintos. Allí se reconoce frase a frase (no continuo) y se vuelve a escuchar al terminar cada una, hasta
+  // que la persona lo para.
+  const wanted = useRef(false);
+
+  const stop = useCallback(() => {
+    wanted.current = false;
+    rec.current?.stop();
+  }, []);
 
   const start = useCallback(() => {
     const Ctor = recognitionCtor();
     if (!Ctor || rec.current) return;
-    const r = new Ctor();
-    r.lang = lang;
-    r.continuous = true;
-    r.interimResults = true;
-    r.onresult = (e) => {
-      let provisional = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const res = e.results[i]!;
-        const text = res[0]?.transcript ?? "";
-        if (res.isFinal) latest.current.onText(text);
-        else provisional += text;
+    const phraseMode = isAndroid();
+    const begin = (first: boolean) => {
+      const r = new Ctor();
+      r.lang = lang;
+      r.continuous = !phraseMode;
+      r.interimResults = true;
+      let silent = false;
+      r.onresult = (e) => {
+        let provisional = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const res = e.results[i]!;
+          const text = res[0]?.transcript ?? "";
+          if (res.isFinal) latest.current.onText(text);
+          else provisional += text;
+        }
+        setInterim(provisional);
+      };
+      r.onerror = (e) => {
+        const { toast: show, t: tr } = latest.current;
+        // Silencio tras una frase al volver a escuchar: se para sin avisar (ya se dictó algo).
+        if (e.error === "no-speech" && !first) {
+          silent = true;
+          return;
+        }
+        if (e.error !== "aborted") wanted.current = false;
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") show(tr("Permite el micrófono en el navegador"), "error");
+        else if (e.error === "no-speech") show(tr("No se oyó nada. Pulsa Dictar para intentarlo de nuevo"), "error");
+        else if (e.error === "audio-capture") show(tr("No se encontró ningún micrófono"), "error");
+        else if (e.error === "network") show(tr("No se pudo conectar con el servicio de dictado"), "error");
+        else if (e.error !== "aborted") show(tr("No se pudo dictar ({error})", { error: e.error }), "error");
+      };
+      r.onend = () => {
+        rec.current = null;
+        setInterim("");
+        if (phraseMode && wanted.current && !silent && begin(false)) return;
+        wanted.current = false;
+        setListening(false);
+      };
+      rec.current = r;
+      try {
+        r.start();
+        return true;
+      } catch {
+        rec.current = null;
+        return false;
       }
-      setInterim(provisional);
     };
-    r.onerror = (e) => {
-      const { toast: show, t: tr } = latest.current;
-      if (e.error === "not-allowed" || e.error === "service-not-allowed") show(tr("Permite el micrófono en el navegador"), "error");
-      else if (e.error === "no-speech") show(tr("No se oyó nada. Pulsa Dictar para intentarlo de nuevo"), "error");
-      else if (e.error === "audio-capture") show(tr("No se encontró ningún micrófono"), "error");
-      else if (e.error === "network") show(tr("No se pudo conectar con el servicio de dictado"), "error");
-      else if (e.error !== "aborted") show(tr("No se pudo dictar ({error})", { error: e.error }), "error");
-    };
-    r.onend = () => {
-      rec.current = null;
-      setListening(false);
-      setInterim("");
-    };
-    rec.current = r;
-    try {
-      r.start();
-      setListening(true);
-    } catch {
-      rec.current = null;
-    }
+    wanted.current = true;
+    if (begin(true)) setListening(true);
+    else wanted.current = false;
   }, [lang]);
 
   // Esc para el dictado (y no llega al diálogo, que no debe cerrarse por ello).
@@ -107,17 +136,18 @@ export function useDictation(onText: (text: string) => void) {
       if (e.key !== "Escape") return;
       e.preventDefault();
       e.stopImmediatePropagation();
-      rec.current?.stop();
+      stop();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [listening]);
+  }, [listening, stop]);
 
   // Al desmontarse (se cierra el diálogo) se corta el micrófono sin esperar.
   useEffect(
     () => () => {
       const r = rec.current;
       if (!r) return;
+      wanted.current = false;
       r.onresult = r.onerror = r.onend = null;
       r.abort();
       rec.current = null;
@@ -125,7 +155,7 @@ export function useDictation(onText: (text: string) => void) {
     [],
   );
 
-  return { supported, listening, interim, toggle: () => (rec.current ? stop() : start()) };
+  return { supported, listening, interim, toggle: () => (rec.current || wanted.current ? stop() : start()) };
 }
 
 /**
@@ -133,10 +163,12 @@ export function useDictation(onText: (text: string) => void) {
  * (Firefox) o si la persona lo desactivó en Mi perfil → Preferencias. `onText` inserta cada frase donde corresponda
  * (`insertIntoField` / `insertIntoEditor`).
  */
-export function DictationButton({ onText, variant = "field", tabIndex, className }: {
+export function DictationButton({ onText, variant = "field", placement = "beside", tabIndex, className }: {
   onText: (text: string) => void;
   /** «toolbar»: icono de la barra de formato; «field»: botón junto a un campo, con el texto «Escuchando…» mientras graba. */
   variant?: "toolbar" | "field";
+  /** «inside» (solo «field»): el botón va dentro de la caja del campo, a la derecha (el contenedor debe ser `relative` y el campo llevar `pr-9`); «Escuchando…» sale debajo. */
+  placement?: "beside" | "inside";
   tabIndex?: number;
   className?: string;
 }) {
@@ -144,9 +176,10 @@ export function DictationButton({ onText, variant = "field", tabIndex, className
   const enabled = useDictationEnabled();
   const { supported, listening, interim, toggle } = useDictation(onText);
   if (!supported || !enabled) return null;
+  const inside = variant === "field" && placement === "inside";
   const title = listening ? t("Parar dictado (Esc)") : t("Dictar");
   return (
-    <span className={cn("inline-flex shrink-0 items-center gap-1.5", className)}>
+    <span className={cn(inside ? "absolute right-0 z-10" : "inline-flex shrink-0 items-center gap-1.5", inside && !className && "top-0", className)}>
       <button
         type="button"
         data-dictation
@@ -167,7 +200,13 @@ export function DictationButton({ onText, variant = "field", tabIndex, className
         <Mic size={15} className="relative" />
       </button>
       {listening && variant === "field" && (
-        <span className="max-w-40 truncate text-xs font-medium text-red-600 dark:text-red-300" role="status">
+        <span
+          className={cn(
+            "max-w-40 truncate text-xs font-medium text-red-600 dark:text-red-300",
+            inside && "absolute top-full right-0 mt-0.5 max-w-[min(18rem,80vw)] rounded-md border border-slate-200 bg-white px-2 py-0.5 whitespace-nowrap shadow-sm dark:border-slate-700 dark:bg-slate-900",
+          )}
+          role="status"
+        >
           <span className="animate-pulse motion-reduce:animate-none">{t("Escuchando…")}</span>
           {interim && <span className="ml-1 font-normal text-slate-500 max-sm:hidden">{interim}</span>}
         </span>

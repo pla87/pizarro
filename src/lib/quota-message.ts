@@ -17,7 +17,7 @@ export function quotaError(t: T, q: QuotaExceeded, opts: { projectId: string | n
     return new AppError(
       opts.isAdmin
         ? t("Cuota total de almacenamiento del servidor superada ({used} de {limit} MB). Libera espacio o amplíala en Administración → Ajustes: {link}", { ...vars, link: ADMIN_STORAGE_PATH })
-        : t("Cuota total de almacenamiento del servidor superada ({used} de {limit} MB). Pide a un administrador que la amplíe o que libere espacio."),
+        : t("Cuota total de almacenamiento del servidor superada ({used} de {limit} MB). Pide a un administrador que la amplíe o que libere espacio.", vars),
       413,
       "quota_total",
     );

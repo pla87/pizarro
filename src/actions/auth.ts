@@ -16,7 +16,7 @@ import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { completeLogin } from "@/lib/login";
 import { requestContext } from "@/lib/request-context";
 import { dummyVerify, hashPassword, passwordSchema, verifyPassword } from "@/lib/password";
-import { loginRateKeys, rateLimit, resetRateLimit } from "@/lib/rate-limit";
+import { LOGIN_ACCOUNT_LIMIT, loginRateKeys, rateLimit, resetRateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { safeNextPath } from "@/lib/redirect";
 import { createSession, destroySession, getCurrentUser, requirePendingUser } from "@/lib/session";
@@ -40,11 +40,11 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   const { email, password } = parsed.data;
 
   const ip = clientIp(await headers());
-  // Límite estricto por pareja IP+email (un tercero no puede bloquear a otra persona desde su IP) y otro más holgado por IP.
+  // Límite estricto por pareja IP+email, otro más holgado por IP y otro por cuenta desde cualquier conexión.
   const keys = loginRateKeys(ip, email);
   // En los logs solo se anota si parece un email (si alguien pega ahí su contraseña, no queda guardada).
   const shownEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "[no es un email]";
-  if (!rateLimit(keys.ip, 60, 15 * 60_000) || !rateLimit(keys.pair, 8, 15 * 60_000)) {
+  if (!rateLimit(keys.ip, 60, 15 * 60_000) || !rateLimit(keys.pair, 8, 15 * 60_000) || !rateLimit(keys.account, LOGIN_ACCOUNT_LIMIT, 15 * 60_000)) {
     logEvent({
       level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión bloqueado por demasiados intentos (${shownEmail})`,
       path: "/login", ip, details: { email: shownEmail, reason: "rate_limited" },
@@ -74,6 +74,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   }
 
   resetRateLimit(keys.pair);
+  resetRateLimit(keys.account);
   const next = safeNextPath(String(formData.get("next") ?? ""));
   // Segundo paso: todavía NO hay sesión, solo un estado pendiente (cookie pz_2fa, 10 min) hasta que el código sea correcto.
   const step = await secondStepFor(user);

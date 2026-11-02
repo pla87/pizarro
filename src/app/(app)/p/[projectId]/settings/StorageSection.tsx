@@ -77,7 +77,7 @@ export function StorageSection({ projectId, isAdmin, initial, initialLargest }: 
         ),
       });
       if (!ok) return;
-      const res = await runStorageCleanup(projectId, kind, days).catch((e) => actionThrowResult(e, t));
+      const res = await runStorageCleanup(projectId, kind, days, prev.data.count).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
       toast(t("Borrados {files}: se han liberado {size}.", { files: files(res.data.count), size: fmt(res.data.bytes) }));
       await reload();
@@ -190,7 +190,7 @@ export function StorageSection({ projectId, isAdmin, initial, initialLargest }: 
           <label className="text-xs text-slate-500">
             {t("Releases")}
             <select className="input ml-1 w-auto py-1" value={releaseDays} onChange={(e) => setReleaseDays(Number(e.target.value))} aria-label={t("Antigüedad de las releases")}>
-              {[30, 90, 180, 365].map((n) => <option key={n} value={n}>{days(n)}</option>)}
+              {[7, 15, 30, 90, 180, 365].map((n) => <option key={n} value={n}>{days(n)}</option>)}
             </select>
           </label>
           <button
@@ -212,7 +212,7 @@ export function StorageSection({ projectId, isAdmin, initial, initialLargest }: 
           <label className="text-xs text-slate-500">
             {t("Archivadas")}
             <select className="input ml-1 w-auto py-1" value={archivedDays} onChange={(e) => setArchivedDays(Number(e.target.value))} aria-label={t("Antigüedad de las tareas archivadas")}>
-              {[0, 30, 90, 365].map((n) => <option key={n} value={n}>{days(n)}</option>)}
+              {[0, 7, 15, 30, 90, 365].map((n) => <option key={n} value={n}>{days(n)}</option>)}
             </select>
           </label>
           <button

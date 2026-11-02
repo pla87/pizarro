@@ -88,6 +88,7 @@ export const almacenamiento: Record<string, string> = {
   "Cuota de almacenamiento del proyecto superada ({used} de {limit} MB). Libera espacio en Ajustes del proyecto → Adjuntos y límites, o pide a un administrador que la amplíe.": "Project storage quota exceeded ({used} of {limit} MB). Free up space in Project settings → Attachments and limits, or ask an administrator to raise it.",
   "Antigüedad no válida.": "Invalid age.",
   "Ese fichero ya no existe.": "That file no longer exists.",
+  "El contenido ha cambiado; revisa y confirma de nuevo.": "The content has changed; review and confirm again.",
   "La cuota debe ser de al menos 1 MB.": "The quota must be at least 1 MB.",
   "La cuota es demasiado grande.": "The quota is too large.",
   // Entradas del registro de actividad (se traducen al leerlas)

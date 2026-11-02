@@ -1,7 +1,7 @@
 "use client";
 
 import { ArchiveRestore, Loader2, Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getArchivedTasks, restoreTask } from "@/actions/tasks";
 import { useIntlLocale, useT } from "@/i18n/client";
 import type { ArchivedTask } from "@/lib/types";
@@ -25,6 +25,11 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const q = query.trim();
+  // Búsqueda vigente: una respuesta de «Ver más» que llega tras cambiar la búsqueda se descarta.
+  const qRef = useRef(q);
+  useEffect(() => {
+    qRef.current = q;
+  }, [q]);
 
   // La búsqueda se hace en el servidor (con una pequeña espera al teclear); el listado va por páginas.
   useEffect(() => {
@@ -52,8 +57,10 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
   const loadMore = async () => {
     if (!next) return;
     setLoadingMore(true);
-    const res = await getArchivedTasks(board.project.id, { query: q, cursor: next });
+    const asked = q;
+    const res = await getArchivedTasks(board.project.id, { query: asked, cursor: next });
     setLoadingMore(false);
+    if (qRef.current !== asked) return;
     if (!res.ok) return toast(res.error, "error");
     setItems((prev) => {
       const have = new Set((prev ?? []).map((it) => it.id));

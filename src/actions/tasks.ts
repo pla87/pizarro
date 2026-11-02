@@ -674,19 +674,27 @@ export async function archiveTasks(taskIds: string[]) {
     if (new Set(tasks.map((t) => t.projectId)).size > 1) throw new AppError("Las tareas son de proyectos distintos.");
     noteProject(tasks[0]?.projectId);
     const active = (await db.task.findMany({ where: { id: { in: ids }, archivedAt: null }, select: { id: true } })).map((t) => t.id);
+    // Las que ya estaban archivadas (otra pestaña) no cuentan ni se registran: sin ninguna activa no se toca nada.
+    if (!active.length) return { archived: 0, spawned: [] as Awaited<ReturnType<typeof spawnRecurrences>> };
     addUndo(...(await captureTasks(active, ARCHIVE_FIELDS)));
-    await db.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId", "evergreen" = false, "evergreenEvery" = 1 WHERE "id" IN (${Prisma.join(ids)}) AND "archivedAt" IS NULL`;
+    await db.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId", "evergreen" = false, "evergreenEvery" = 1 WHERE "id" IN (${Prisma.join(active)}) AND "archivedAt" IS NULL`;
     const spawned = await spawnRecurrences(active, user.id);
-    describeAction("Archivó {count}", { count: tasksN(ids.length) }, { taskIds: ids });
-    for (const id of ids) recordTaskEvent(id, "archive", { k: "Archivó la tarea" });
-    return { archived: ids.length, spawned };
+    describeAction("Archivó {count}", { count: tasksN(active.length) }, { taskIds: active });
+    for (const id of active) recordTaskEvent(id, "archive", { k: "Archivó la tarea" });
+    return { archived: active.length, spawned };
   });
 }
 
 const ARCHIVED_PAGE = 100;
 
+function parseArchivedCursor(raw: string): { archivedAt: Date; id: string } {
+  const [at, id] = z.string().max(100).parse(raw).split("|");
+  return { archivedAt: new Date(z.iso.datetime().parse(at)), id: v.id.parse(id) };
+}
+
 /**
- * Tareas archivadas del proyecto, las más recientes primero, en páginas (`cursor` = id de la última recibida).
+ * Tareas archivadas del proyecto, las más recientes primero, en páginas (`cursor` = «archivedAt|id» de la última recibida:
+ * paginación por claves, que no se rompe si esa fila se desarchiva o se borra entre dos páginas).
  * `query` busca en el servidor por título de la tarea o por título/número de release.
  */
 export async function getArchivedTasks(projectId: string, opts: { query?: string; cursor?: string | null } = {}) {
@@ -694,12 +702,13 @@ export async function getArchivedTasks(projectId: string, opts: { query?: string
     const user = await requireUser();
     await assertProjectAccess(user, v.id.parse(projectId));
     const q = (opts.query ?? "").trim().slice(0, 200);
-    const cursor = opts.cursor ? v.id.parse(opts.cursor) : null;
+    const cursor = opts.cursor ? parseArchivedCursor(opts.cursor) : null;
     describeAction("Consultó las tareas archivadas");
     const num = /^R?(\d{1,9})$/i.exec(q);
     const where: Prisma.TaskWhereInput = {
       projectId,
       archivedAt: { not: null },
+      ...(cursor ? { AND: [{ OR: [{ archivedAt: { lt: cursor.archivedAt } }, { archivedAt: cursor.archivedAt, id: { lt: cursor.id } }] }] } : {}),
       ...(q
         ? {
             OR: [
@@ -713,7 +722,6 @@ export async function getArchivedTasks(projectId: string, opts: { query?: string
       where,
       orderBy: [{ archivedAt: "desc" }, { id: "desc" }],
       take: ARCHIVED_PAGE + 1,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       select: {
         id: true,
         title: true,
@@ -724,7 +732,8 @@ export async function getArchivedTasks(projectId: string, opts: { query?: string
       },
     });
     const rows = found.slice(0, ARCHIVED_PAGE);
-    const nextCursor = found.length > ARCHIVED_PAGE ? rows[rows.length - 1]!.id : null;
+    const last = rows[rows.length - 1];
+    const nextCursor = found.length > ARCHIVED_PAGE && last ? `${last.archivedAt!.toISOString()}|${last.id}` : null;
     const columns = await db.column.findMany({ where: { projectId }, select: { id: true, name: true } });
     const names = new Map(columns.map((c) => [c.id, c.name]));
     const items = rows.map((t) => ({
@@ -1174,8 +1183,11 @@ export async function restoreTask(taskId: string) {
     if (!column) throw new AppError("El proyecto no tiene columnas.");
     addUndo(...(await captureTasks([taskId], ARCHIVE_FIELDS)));
     await db.$transaction(async (tx) => {
+      // Se vuelve a comprobar dentro de la transacción: otra pestaña pudo recuperarla entre medias.
+      const fresh = await tx.task.findUnique({ where: { id: taskId }, select: { archivedAt: true } });
+      if (!fresh?.archivedAt) throw new AppError("La tarea no está archivada.");
       // Al recuperarla vuelve a contar como activa: si el proyecto está en el tope, no cabe.
-      if (task.archivedAt) await assertTaskCapacity(tx, projectId);
+      await assertTaskCapacity(tx, projectId);
       await lockColumns(tx, [column.id]);
       const position = positionBetween(await lastPositionIn(tx, column.id, taskId), null);
       // columnEnteredAt/waitingNotifiedAt a mano: si la columna no cambia, el disparador no actúa.

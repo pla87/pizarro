@@ -13,6 +13,8 @@ import { getLocale } from "@/i18n/server";
 import { AppError, forbidden, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
 import { localizeTemplate } from "@/lib/builtin-templates-en";
+import { createExampleContent } from "@/lib/project-example-apply";
+import { listExamples, resolveExample } from "@/lib/project-examples";
 import { buildTemplateApplication, parseStoredTemplate, type TemplateData } from "@/lib/project-templates";
 import { requireUser } from "@/lib/session";
 import { normalizeTaskFields, TASK_FIELDS } from "@/lib/task-fields";
@@ -37,7 +39,20 @@ async function applyTemplate(tx: Prisma.TransactionClient, projectId: string, te
   if (app.taskFields.length) await tx.project.update({ where: { id: projectId }, data: { taskFields: app.taskFields } });
 }
 
-export async function createProject(name: string, options?: { templateId?: string | null; isPrivate?: boolean }) {
+/** Proyectos de ejemplo que se pueden elegir al crear un proyecto (cualquier persona con sesión), en su idioma. */
+export async function listProjectExamples() {
+  return runAction({ name: "projects.listProjectExamples" }, async () => {
+    await requireUser();
+    return listExamples(await getLocale());
+  });
+}
+
+/**
+ * Crea un proyecto. Con `templateId` (solo administradores) parte de una plantilla; con `exampleKey` (cualquiera),
+ * de un ejemplo de serie: la misma plantilla (columnas, tipos, etiquetas, campos y plantillas de release) más
+ * unas pocas tarjetas de muestra con la etiqueta «Ejemplo». Sin ninguna de las dos, las columnas por defecto.
+ */
+export async function createProject(name: string, options?: { templateId?: string | null; isPrivate?: boolean; exampleKey?: string | null }) {
   return runAction({ name: "projects.createProject", args: [name, options] }, async () => {
     const user = await requireUser();
     // Quien no es administrador solo puede crear proyectos privados (y sin plantillas, que gestionan los admins).
@@ -47,19 +62,23 @@ export async function createProject(name: string, options?: { templateId?: strin
       throw new AppError("Has llegado al máximo de proyectos privados.");
     }
     const projectName = v.name.parse(name);
+    if (options?.exampleKey && options.templateId) throw new AppError("Elige una plantilla o un ejemplo, no los dos.");
+    // Sin plantilla, las columnas por defecto salen en el idioma de quien crea el proyecto; con ejemplo, todo el ejemplo.
+    const locale = await getLocale();
+    const example = options?.exampleKey ? resolveExample(options.exampleKey, locale) : null;
+    if (options?.exampleKey && !example) throw new AppError("El ejemplo ya no existe.");
     const templateRow = options?.templateId
       ? await db.projectTemplate.findUnique({ where: { id: v.id.parse(options.templateId) } })
       : null;
     if (options?.templateId && !templateRow) throw new AppError("La plantilla ya no existe.");
-    // Sin plantilla, las columnas por defecto salen en el idioma de quien crea el proyecto.
-    const locale = await getLocale();
     // Una plantilla de serie sin modificar se aplica en inglés a quien usa la interfaz en inglés.
-    const template = templateRow ? localizeTemplate(parseStoredTemplate(templateRow), templateRow.builtinKey, locale) : null;
+    const template = example ? example.template : templateRow ? localizeTemplate(parseStoredTemplate(templateRow), templateRow.builtinKey, locale) : null;
     const last = await db.project.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
     const project = await db.$transaction(async (tx) => {
       const created = await tx.project.create({
         data: {
           name: projectName,
+          ...(example ? { description: example.content.description } : {}),
           position: (last?.position ?? 0) + POSITION_STEP,
           isPrivate: !!options?.isPrivate,
           privateOwnerId: options?.isPrivate ? user.id : null,
@@ -71,9 +90,10 @@ export async function createProject(name: string, options?: { templateId?: strin
         select: { id: true },
       });
       if (template) await applyTemplate(tx, created.id, template, locale);
+      if (example) await createExampleContent(tx, created.id, example, user.id);
       return created;
     });
-    describeAction(`Creó el proyecto «${projectName}»${options?.isPrivate ? " (privado)" : ""}${template ? ` con la plantilla «${templateRow!.name}»` : ""}`);
+    describeAction(`Creó el proyecto «${projectName}»${options?.isPrivate ? " (privado)" : ""}${example ? ` con el ejemplo «${example.content.name}»` : template ? ` con la plantilla «${templateRow!.name}»` : ""}`);
     noteProject(project.id);
     revalidatePath("/", "layout");
     return project;
