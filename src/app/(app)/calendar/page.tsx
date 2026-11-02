@@ -113,6 +113,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     },
   });
 
+  const feedRow = await db.calendarFeed.findUnique({ where: { userId: user.id }, select: { scope: true } });
   const locale = await getLocale();
   const tasks: CalendarTask[] = rows.map((r) => ({
     id: r.id,
@@ -147,6 +148,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       people={people}
       meId={user.id}
       filters={{ project: projectIds, person: personIds, hideDone }}
+      feed={{ active: !!feedRow, scope: feedRow?.scope ?? "MINE" }}
       truncated={rows.length >= MAX_TASKS || deliverableRows.length >= MAX_DELIVERABLES}
     />
   );

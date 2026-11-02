@@ -13,11 +13,17 @@ export interface IcsEvent {
   /** Texto plano. */
   description?: string;
   url?: string;
+  /** Último cambio del evento: DTSTAMP y LAST-MODIFIED (sin él, DTSTAMP es el instante de generación). */
+  modifiedAt?: Date;
+  /** SEQUENCE: entero que sube con cada cambio, para que los clientes sustituyan la copia que ya tienen. */
+  sequence?: number;
+  /** Etiqueta del evento (CATEGORIES). */
+  category?: string;
 }
 
 /** Escapa un valor TEXT: barra, punto y coma, coma y saltos de línea. */
 export function escapeIcsText(text: string): string {
-  return text.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r\n|\r|\n/g, "\\n");
+  return text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r\n|\r|\n/g, "\\n");
 }
 
 /** Pliega una línea a 75 octetos como máximo (CRLF + espacio), sin partir caracteres UTF-8. */
@@ -66,20 +72,24 @@ const compact = (iso: string) => iso.replace(/-/g, "");
 const stampOf = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 
 /** Calendario con un evento de día completo por tarea. Líneas separadas por CRLF y plegadas a 75 octetos. */
-export function buildIcs(opts: { name: string; events: IcsEvent[]; now?: Date; prodId?: string }): string {
+export function buildIcs(opts: { name: string; events: IcsEvent[]; now?: Date; prodId?: string; /** Suscripción viva: cada cuántos minutos se sugiere a los clientes volver a consultarla. */ refreshMinutes?: number }): string {
   const stamp = stampOf(opts.now ?? new Date());
   const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", `PRODID:${opts.prodId ?? "-//Pizarro//Agenda//ES"}`, "CALSCALE:GREGORIAN", "METHOD:PUBLISH", `X-WR-CALNAME:${escapeIcsText(opts.name)}`];
+  if (opts.refreshMinutes) lines.push(`REFRESH-INTERVAL;VALUE=DURATION:PT${opts.refreshMinutes}M`, `X-PUBLISHED-TTL:PT${opts.refreshMinutes}M`);
   for (const e of opts.events) {
     lines.push(
       "BEGIN:VEVENT",
       `UID:${escapeIcsText(e.uid)}`,
-      `DTSTAMP:${stamp}`,
+      `DTSTAMP:${e.modifiedAt ? stampOf(e.modifiedAt) : stamp}`,
       `DTSTART;VALUE=DATE:${compact(e.date)}`,
       // En eventos de día completo DTEND es exclusivo: el día siguiente al último.
       `DTEND;VALUE=DATE:${compact(addDaysIso(e.endDate && e.endDate > e.date ? e.endDate : e.date, 1))}`,
       `SUMMARY:${escapeIcsText(e.summary)}`,
     );
     if (e.description) lines.push(`DESCRIPTION:${escapeIcsText(e.description)}`);
+    if (e.category) lines.push(`CATEGORIES:${escapeIcsText(e.category)}`);
+    if (e.modifiedAt) lines.push(`LAST-MODIFIED:${stampOf(e.modifiedAt)}`);
+    if (e.sequence !== undefined) lines.push(`SEQUENCE:${Math.max(0, Math.trunc(e.sequence))}`);
     if (e.url) lines.push(`URL:${e.url.replace(/[\r\n]/g, "")}`);
     lines.push("TRANSP:TRANSPARENT", "END:VEVENT");
   }

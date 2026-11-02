@@ -102,6 +102,7 @@ model User {
   releases          Release[]
   googleAccount     GoogleAccount?
   releaseTemplates  ReleaseTemplate[]
+  calendarFeed      CalendarFeed?
   taskLinks         TaskLink[]
   comments          TaskComment[]
   notifications     Notification[]    @relation("NotificationRecipient")
@@ -998,4 +999,23 @@ model ProjectTransferJob {
   @@index([status, createdAt])
   @@index([userId, createdAt])
   @@index([projectId])
+}
+
+enum CalendarFeedScope {
+  MINE
+  ALL
+}
+
+/// Enlace privado de suscripción al calendario (.ics vivo) de una persona. Solo se guarda el HMAC del token; borrar la fila lo desactiva.
+model CalendarFeed {
+  id         String            @id @default(cuid())
+  userId     String            @unique
+  tokenHash  String            @unique
+  /// MINE: solo las tareas asignadas a la persona; ALL: todas las de los proyectos que puede ver.
+  scope      CalendarFeedScope @default(MINE)
+  createdAt  DateTime          @default(now())
+  /// Cuándo se generó el token actual (regenerar lo cambia).
+  rotatedAt  DateTime          @default(now())
+  lastUsedAt DateTime?
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
