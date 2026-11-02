@@ -3,7 +3,7 @@ import type { Locale } from "../i18n/core";
 import type { ChecklistItem } from "./checklist";
 import { dateToIso } from "./dates";
 import { db } from "./db";
-import { buildIcs, markdownToPlain } from "./ics";
+import { buildIcs, descriptionToPlain } from "./ics";
 import { localizeGeneralKind } from "./kinds-localize";
 import { mentionsToPlain } from "./mentions";
 import { appUrl } from "./mail";
@@ -61,7 +61,7 @@ export async function buildColumnIcs(projectId: string, columnId: string): Promi
       const start = column.project.taskFields.includes("startDate") ? dateToIso(x.startDate) : null;
       const range = due && start && start < due;
       const date = range ? start : due;
-      return date ? [{ uid: `${x.id}@pizarro`, date, endDate: range ? due! : undefined, summary: mentionsToPlain(x.title), description: x.description ? markdownToPlain(x.description) : undefined, url: `${base}/p/${projectId}?task=${x.id}` }] : [];
+      return date ? [{ uid: `${x.id}@pizarro`, date, endDate: range ? due! : undefined, summary: mentionsToPlain(x.title), description: x.description ? descriptionToPlain(x.description) : undefined, url: `${base}/p/${projectId}?task=${x.id}` }] : [];
     }),
   });
   const slug = column.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "agenda";

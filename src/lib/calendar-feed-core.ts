@@ -47,3 +47,9 @@ export const googleSubscribeUrl = (webcal: string): string => `https://calendar.
 
 /** SEQUENCE de un evento: segundos desde 1970 del último cambio (sube con cada cambio y cabe en 32 bits hasta 2038). */
 export const sequenceOf = (d: Date): number => Math.floor(d.getTime() / 1000);
+
+/** Recorta a `max` caracteres (puntos de código: no parte un par sustituto, p. ej. un emoji) y añade «…». */
+export const snippet = (s: string, max: number) => {
+  const chars = Array.from(s);
+  return chars.length > max ? `${chars.slice(0, max - 1).join("").trimEnd()}…` : s;
+};
