@@ -475,11 +475,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // tanto en la columna lateral (~300 px) como en el pie móvil (360 px).
   const actionButtons = (
     <>
-      <button className="btn-secondary px-2.5 py-1.5" onClick={archive} aria-label={t("Archivar")} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /></button>
-      <button className="btn-secondary px-2.5 py-1.5" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
-      <button className="btn-ghost px-2.5 py-1.5 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
-      <button className="btn-secondary ml-auto px-2.5 py-1.5" onClick={cancelEdits} disabled={cancelling} title={t("Descarta los cambios hechos desde que abriste la tarea y la cierra")}>{t("Cancelar")}</button>
-      <button className="btn-primary py-1.5" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} /> {t("Guardar")}</button>
+      <button className="btn-secondary px-2 py-1.5" onClick={archive} aria-label={t("Archivar")} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /></button>
+      <button className="btn-secondary px-2 py-1.5" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
+      <button className="btn-ghost px-2 py-1.5 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
+      <button className="btn-secondary ml-auto px-2 py-1.5" onClick={cancelEdits} disabled={cancelling} title={t("Descarta los cambios hechos desde que abriste la tarea y la cierra")}>{t("Cancelar")}</button>
+      <button className="btn-primary px-3 py-1.5" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} /> {t("Guardar")}</button>
     </>
   );
 
@@ -523,7 +523,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         </div>
       }
     >
-      <div ref={rootRef} onPaste={onPaste} className="grid gap-6 md:grid-cols-[minmax(0,1fr)_16.5rem]">
+      <div ref={rootRef} onPaste={onPaste} className="grid gap-6 md:grid-cols-[minmax(0,1fr)_18rem]">
         {/* Margen negativo con relleno igual: deja sitio al anillo de foco (3 px + 2 de separación) que el scroll recortaría. */}
         <div className="min-w-0 space-y-6 md:-m-2 md:max-h-[calc(100dvh-8rem)] md:overflow-y-auto md:p-2">
           <TaskViewers taskId={task.id} />
@@ -728,9 +728,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             </select>
           </Field>
           <Field label={t("Color")}>
-            {/* Escritorio: swatches más pequeños y juntos para ocupar menos alto; según el ancho de la columna pueden seguir pasando a una segunda fila. */}
-            <div className="md:[&>div]:gap-1 md:[&_button]:h-[22px] md:[&_button]:w-[22px]">
-              <ColorPicker value={task.color} onChange={(color) => save({ color: color as never }, { color })} />
+            {/* Escritorio: dos filas equilibradas (8 + 7) de swatches algo más pequeños para ocupar menos alto. */}
+            <div className="md:[&_button]:h-6 md:[&_button]:w-6">
+              <ColorPicker value={task.color} onChange={(color) => save({ color: color as never }, { color })} balancedRowsMd />
             </div>
           </Field>
           <Field label={t("Etiquetas")}>
