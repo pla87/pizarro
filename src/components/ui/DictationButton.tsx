@@ -44,11 +44,18 @@ export function useDictationSupported(): boolean {
   return useSyncExternalStore(noopSubscribe, () => recognitionCtor() !== null, () => false);
 }
 
+/** Elementos que cuentan como «dentro» del dictado: el campo (o el editor con su barra) y el propio botón. */
+type Scope = Element | null | undefined | (Element | null | undefined)[];
+
+/** Lo que queda dentro aunque esté en un portal (menús de la barra de formato, lista de menciones). */
+const KEEP = "[data-dictation-keep]";
+
 /**
  * Dictado por voz con la API del navegador (gratis): reconocimiento continuo con resultados provisionales. `onText` recibe
- * cada frase ya reconocida. Esc (o llamar a `stop`) lo para; se para también al desmontarse el componente.
+ * cada frase ya reconocida. Esc (o llamar a `stop`) lo para; se para también al desmontarse el componente y, mientras
+ * escucha, cuando el foco pasa a otro elemento o se pulsa/toca fuera de lo que devuelve `within` (el campo asociado).
  */
-export function useDictation(onText: (text: string) => void) {
+export function useDictation(onText: (text: string) => void, within?: () => Scope) {
   const t = useT();
   const toast = useToast();
   const intl = useIntlLocale();
@@ -142,6 +149,34 @@ export function useDictation(onText: (text: string) => void) {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [listening, stop]);
 
+  // Mientras escucha, el dictado termina al salir del campo: el foco se va a otro elemento, o se pulsa/toca fuera.
+  const withinRef = useRef(within);
+  useEffect(() => {
+    withinRef.current = within;
+  });
+  useEffect(() => {
+    if (!listening) return;
+    const isInside = (n: EventTarget | null) => {
+      if (!(n instanceof Element)) return false;
+      if (n.closest(KEEP)) return true;
+      const s = withinRef.current?.();
+      return (Array.isArray(s) ? s : [s]).some((el) => el?.contains(n));
+    };
+    const onFocusOut = (e: FocusEvent) => {
+      // Sin destino (clic en vacío, cambio de ventana) no se para: ya lo trata pointerdown.
+      if (e.relatedTarget && isInside(e.target) && !isInside(e.relatedTarget)) stop();
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      if (!isInside(e.target)) stop();
+    };
+    document.addEventListener("focusout", onFocusOut, true);
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      document.removeEventListener("focusout", onFocusOut, true);
+      document.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  }, [listening, stop]);
+
   // Al desmontarse (se cierra el diálogo) se corta el micrófono sin esperar.
   useEffect(
     () => () => {
@@ -163,8 +198,10 @@ export function useDictation(onText: (text: string) => void) {
  * (Firefox) o si la persona lo desactivó en Mi perfil → Preferencias. `onText` inserta cada frase donde corresponda
  * (`insertIntoField` / `insertIntoEditor`).
  */
-export function DictationButton({ onText, variant = "field", placement = "beside", tabIndex, className }: {
+export function DictationButton({ onText, within, variant = "field", placement = "beside", tabIndex, className }: {
   onText: (text: string) => void;
+  /** Campo (o editor con su barra) al que dicta: el dictado se para al pasar el foco a otro sitio o al pulsar fuera de él y del botón. */
+  within: () => Scope;
   /** «toolbar»: icono de la barra de formato; «field»: botón junto a un campo, con el texto «Escuchando…» mientras graba. */
   variant?: "toolbar" | "field";
   /** «inside» (solo «field»): el botón va dentro de la caja del campo, a la derecha (el contenedor debe ser `relative` y el campo llevar `pr-9`); «Escuchando…» sale debajo. */
@@ -174,7 +211,11 @@ export function DictationButton({ onText, variant = "field", placement = "beside
 }) {
   const t = useT();
   const enabled = useDictationEnabled();
-  const { supported, listening, interim, toggle } = useDictation(onText);
+  const btn = useRef<HTMLButtonElement>(null);
+  const { supported, listening, interim, toggle } = useDictation(onText, () => {
+    const s = within();
+    return [btn.current, ...(Array.isArray(s) ? s : [s])];
+  });
   if (!supported || !enabled) return null;
   const inside = variant === "field" && placement === "inside";
   const title = listening ? t("Parar dictado (Esc)") : t("Dictar");
@@ -183,6 +224,7 @@ export function DictationButton({ onText, variant = "field", placement = "beside
     // micrófono de la barra de la descripción, para que los dos queden en la misma vertical.
     <span className={cn(inside ? "absolute right-[5px] z-10" : "inline-flex shrink-0 items-center gap-1.5", inside && !className && "top-0.5", className)}>
       <button
+        ref={btn}
         type="button"
         data-dictation
         aria-label={t("Dictar")}

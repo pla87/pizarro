@@ -258,7 +258,7 @@ export function FormatToolbar({ items, onLeave, className, trailing }: { items: 
             role="menu"
             aria-label={t("Más formatos")}
             style={{ right: pos.right, top: pos.top, bottom: pos.bottom, maxHeight: pos.maxHeight }}
-            className="fixed z-[80] min-w-44 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-slate-800 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            data-dictation-keep className="fixed z-[80] min-w-44 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-slate-800 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             onMouseDown={(e) => e.preventDefault()}
             onKeyDown={(e) => {
               // Los eventos de un portal burbujean al React padre: se atienden aquí y no llegan a la barra ni al diálogo.

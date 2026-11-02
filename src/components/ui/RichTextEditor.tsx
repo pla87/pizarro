@@ -73,6 +73,7 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
   // Último Markdown emitido: si `value` cambia desde fuera (p. ej. una plantilla), se recarga.
   const lastEmitted = useRef(value);
   const editorRef = useRef<Editor | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   // Sugerencias de «@»: datos actuales sin recrear el editor.
   const mentionData = useRef({ users, onCommand });
   useEffect(() => {
@@ -280,6 +281,7 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
 
   return (
     <div
+      ref={rootRef}
       className={cn(
         "rounded-lg border border-slate-300 bg-white text-slate-900 focus-within:border-focus focus-within:ring-3 focus-within:ring-focus/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100",
         className,
@@ -317,8 +319,8 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
       <FormatToolbar
         items={items}
         onLeave={() => editorRef.current?.commands.focus()}
-        className="border-b border-slate-200 p-1 dark:border-slate-800"
-        trailing={<DictationButton variant="toolbar" tabIndex={-1} onText={(s) => insertIntoEditor(editorRef.current, s)} />}
+        className="sticky top-[var(--sticky-top,0px)] z-10 rounded-t-lg border-b border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-900"
+        trailing={<DictationButton variant="toolbar" tabIndex={-1} within={() => rootRef.current} onText={(s) => insertIntoEditor(editorRef.current, s)} />}
       />
       {linkUrl !== null && (
         <div className="flex items-center gap-1 border-b border-slate-200 p-1 dark:border-slate-800">
@@ -355,7 +357,7 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
               top: (popup.rect?.bottom ?? 0) + 4,
               left: Math.max(8, Math.min(popup.rect?.left ?? 0, window.innerWidth - 296)),
             }}
-            className="z-[100] max-h-64 w-72 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-sm text-slate-900 shadow-xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            data-dictation-keep className="z-[100] max-h-64 w-72 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-sm text-slate-900 shadow-xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
           >
             {popup.items.map((o, i) => (
               <li key={`${o.kind}-${o.id}`} role="option" aria-selected={i === popup.active}>
