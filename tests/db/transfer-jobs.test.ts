@@ -16,7 +16,7 @@ import { strongEtag } from "../../src/lib/http-range";
 import { writeProjectExport } from "../../src/lib/project-export/write";
 import {
   MAX_JOBS_PER_USER, claimNextJob, listRecentJobs, createExportJob, createImportJob, executeJob, exportsDir, getJobFor, purgeTransferJobs, recoverInterruptedJobs,
-  runNextTransferJob, startTransferWorker, transferConcurrency, dropPreviousExports,
+  runNextTransferJob, startTransferWorker, stopTransferWorkerForTests, transferConcurrency, dropPreviousExports,
 } from "../../src/lib/transfer-jobs";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-transfer-"));
@@ -474,6 +474,8 @@ describe("trabajador en segundo plano", () => {
     const end = Date.now() + 15_000;
     while (Date.now() < end && (await db.projectTransferJob.findUniqueOrThrow({ where: { id: second.id } })).status !== "DONE") await new Promise((r) => setTimeout(r, 100));
     assert.equal((await db.projectTransferJob.findUniqueOrThrow({ where: { id: second.id } })).status, "DONE");
+    // Las pruebas siguientes reservan los trabajos a mano: el trabajador de fondo no debe adelantarse (pruebas intermitentes).
+    stopTransferWorkerForTests();
   });
 });
 
