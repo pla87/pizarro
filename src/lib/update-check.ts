@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { db } from "./db";
 import {
-  parseLatestRelease, parseUpdateCache, pendingUpdate, refreshUpdateCache, UPDATE_CHECK_URL, UPDATE_FETCH_TIMEOUT_MS,
+  parseLatestRelease, parseUpdateCache, pendingUpdate, refreshUpdateCache, updateCheckDue, UPDATE_CHECK_URL, UPDATE_FETCH_TIMEOUT_MS,
   type UpdateInfo,
 } from "./update-check-core";
 import pkg from "../../package.json";
@@ -30,20 +30,47 @@ async function fetchLatestRelease() {
   return parseLatestRelease(await res.json());
 }
 
-/** Versión nueva disponible para anunciar a los administradores, o null. Nunca lanza. */
-export async function computeUpdateNotice(now: number = Date.now()): Promise<UpdateInfo | null> {
+let inFlight: Promise<void> | null = null;
+
+/** Consulta GitHub y guarda la caché; una sola consulta a la vez en el proceso. */
+function refreshInBackground(row: string | undefined, now: number): Promise<void> {
+  inFlight ??= (async () => {
+    try {
+      const { cache: next, changed } = await refreshUpdateCache(parseUpdateCache(row), now, fetchLatestRelease);
+      if (changed) {
+        const value = JSON.stringify(next);
+        await db.appState.upsert({ where: { key: CACHE_KEY }, create: { key: CACHE_KEY, value }, update: { value } });
+      }
+    } catch {
+      // En silencio: el aviso es opcional.
+    } finally {
+      inFlight = null;
+    }
+  })();
+  return inFlight;
+}
+
+/**
+ * Versión nueva disponible para anunciar a los administradores, o null. Nunca lanza ni hace esperar a la página:
+ * si toca consultar GitHub, la consulta va en segundo plano y esta respuesta usa lo que ya había en caché.
+ * Con `wait` (tests) espera a la consulta.
+ */
+export async function computeUpdateNotice(now: number = Date.now(), wait = false): Promise<UpdateInfo | null> {
   if (!updateCheckEnabled()) return null;
   try {
     const [row, dismissed] = await Promise.all([
       db.appState.findUnique({ where: { key: CACHE_KEY } }),
       db.appState.findUnique({ where: { key: DISMISS_KEY } }),
     ]);
-    const { cache: next, changed } = await refreshUpdateCache(parseUpdateCache(row?.value), now, fetchLatestRelease);
-    if (changed) {
-      const value = JSON.stringify(next);
-      await db.appState.upsert({ where: { key: CACHE_KEY }, create: { key: CACHE_KEY, value }, update: { value } });
+    let cache = parseUpdateCache(row?.value);
+    if (updateCheckDue(cache, now)) {
+      const p = refreshInBackground(row?.value, now);
+      if (wait) {
+        await p;
+        cache = parseUpdateCache((await db.appState.findUnique({ where: { key: CACHE_KEY } }))?.value);
+      }
     }
-    return pendingUpdate(next, pkg.version, dismissed?.value ?? null);
+    return pendingUpdate(cache, pkg.version, dismissed?.value ?? null);
   } catch {
     return null;
   }
