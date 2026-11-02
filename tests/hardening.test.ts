@@ -1,20 +1,66 @@
-// Endurecimientos sueltos: tope del cuerpo de subida, buzón de pruebas, origen de las peticiones y enlaces Markdown.
+// Endurecimientos sueltos: tope del cuerpo (proxy y subidas), buzón de pruebas, origen de las peticiones y enlaces Markdown.
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import { test } from "node:test";
 
 process.env.SESSION_SECRET ??= "x".repeat(48);
 process.env.DATABASE_URL ??= "postgresql://test:test@localhost:5432/test";
 
-const { effectiveFileMaxMb, serverUploadCapMb, FILE_MAX_MAX_MB, MULTIPART_OVERHEAD_BYTES, PROXY_BODY_LIMIT_BYTES } = await import("../src/lib/upload-size");
+const { effectiveFileMaxMb, serverUploadCapMb, PROXY_BODY_LIMIT_BYTES } = await import("../src/lib/upload-size");
 const { outboxDir } = await import("../src/lib/mail");
 const { isSameOrigin } = await import("../src/lib/request");
 const { safeMarkdownUrl } = await import("../src/lib/safe-url");
+const { config: proxyConfig } = await import("../src/proxy");
+const { BodyTooLargeError, readBodyLimited } = await import("../src/lib/upload-slots");
 
 const MB = 1024 * 1024;
+const nextRequire = createRequire(import.meta.url);
 
-test("tope del proxy: fijo, por encima del mayor adjunto posible (100 MB) más el envoltorio multipart", () => {
-  assert.ok(PROXY_BODY_LIMIT_BYTES >= FILE_MAX_MAX_MB * MB + MULTIPART_OVERHEAD_BYTES);
-  assert.ok(PROXY_BODY_LIMIT_BYTES <= FILE_MAX_MAX_MB * MB + 2 * MB);
+test("tope del proxy: pequeño (lo que pasa por él son acciones de 1 MB y JSON), no el de los adjuntos", () => {
+  assert.ok(PROXY_BODY_LIMIT_BYTES >= 1 * MB + 64 * 1024, "cabe una acción de 1 MB con su envoltorio");
+  assert.ok(PROXY_BODY_LIMIT_BYTES <= 4 * MB, "una petición enorme sin cuenta no ocupa su tamaño en memoria");
+});
+
+test("matcher del proxy (compilado como lo compila Next): las rutas que reciben archivos quedan fuera, el resto no", () => {
+  const { getMiddlewareMatchers } = nextRequire("next/dist/build/analysis/get-page-static-info.js");
+  const { getMiddlewareRouteMatcher } = nextRequire("next/dist/shared/lib/router/utils/middleware-route-matcher.js");
+  const match = getMiddlewareRouteMatcher(getMiddlewareMatchers(proxyConfig.matcher, {})) as (path: string, req: unknown, query: unknown) => boolean;
+  const passes = (path: string) => match(path, { headers: {} }, {});
+  for (const path of ["/api/tasks/abc123/attachments", "/api/projects/abc123/documents", "/api/projects/import", "/api/health", "/api/auth/google/callback"]) {
+    assert.equal(passes(path), false, `${path} no pasa por el proxy`);
+  }
+  for (const path of [
+    "/", "/login", "/p/abc123", "/api/tasks/abc123/viewers", "/api/tasks/abc123/attachments/x", "/api/tasks/a/b/attachments", "/api/projects/abc123/documents/x",
+    "/api/documents/abc123", "/api/attachments/abc123", "/api/projects/abc123/release-attachments", "/api/projects/abc123/export", "/api/client-errors", "/api/projects/importar",
+  ]) {
+    assert.equal(passes(path), true, `${path} pasa por el proxy`);
+  }
+});
+
+test("lectura del cuerpo con tope: corta al superarlo aunque no haya Content-Length", async () => {
+  const chunked = (parts: number, size: number) =>
+    new ReadableStream<Uint8Array>({
+      start(c) {
+        for (let i = 0; i < parts; i++) c.enqueue(new Uint8Array(size).fill(97));
+        c.close();
+      },
+    });
+  const post = (body: ReadableStream<Uint8Array> | string, type = "text/plain") =>
+    new Request("http://localhost/x", { method: "POST", body, headers: { "content-type": type }, duplex: "half" } as RequestInit);
+  assert.equal((await readBodyLimited(post(chunked(4, 1000)), 4000, "text")).length, 4000);
+  await assert.rejects(readBodyLimited(post(chunked(5, 1000)), 4000, "text"), BodyTooLargeError);
+  // Formulario multipart: dentro del tope se lee igual que req.formData(); por encima, BodyTooLargeError.
+  const form = new FormData();
+  form.append("file", new File([new Uint8Array(3000).fill(98)], "a.bin"));
+  const multipart = new Request("http://localhost/x", { method: "POST", body: form });
+  const type = multipart.headers.get("content-type")!;
+  const raw = new Uint8Array(await multipart.arrayBuffer());
+  const asStream = () => new ReadableStream<Uint8Array>({ start(c) { for (let i = 0; i < raw.length; i += 512) c.enqueue(raw.slice(i, i + 512)); c.close(); } });
+  const file = (await readBodyLimited(post(asStream(), type), raw.length, "formData")).get("file");
+  assert.ok(file instanceof File && file.size === 3000);
+  await assert.rejects(readBodyLimited(post(asStream(), type), raw.length - 1, "formData"), BodyTooLargeError);
+  // Lo que no es un formulario sigue fallando como antes (no como «demasiado grande»).
+  await assert.rejects(readBodyLimited(post("hola"), 100, "formData"), (err) => !(err instanceof BodyTooLargeError));
 });
 
 test("límite de un archivo: el del proyecto, y MAX_UPLOAD_MB (opcional) solo lo recorta", () => {

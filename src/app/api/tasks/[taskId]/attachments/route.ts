@@ -7,6 +7,7 @@ import { logEvent } from "@/lib/log";
 import { publishChange } from "@/lib/realtime";
 import { rateLimit, rateLimitRetryAfterSec } from "@/lib/rate-limit";
 import { saveUndo } from "@/lib/undo";
+import { encodeLabel } from "@/lib/undo-label";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser, requireUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
@@ -14,7 +15,7 @@ import { quotaError } from "@/lib/quota-message";
 import { createAttachmentWithinLimit, roundMb } from "@/lib/attachment-limit";
 import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, processImage, removeAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveRawAttachmentFile } from "@/lib/uploads";
 import { attachmentTotals } from "@/lib/board";
-import { acquireUploadSlot, declaredLength } from "@/lib/upload-slots";
+import { acquireUploadSlot, BodyTooLargeError, declaredLength, readBodyLimited } from "@/lib/upload-slots";
 import { effectiveFileMaxMb, MULTIPART_OVERHEAD_BYTES } from "@/lib/upload-size";
 import type { UploadedAttachment } from "@/lib/types";
 
@@ -56,7 +57,10 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     // Como mucho unas pocas subidas a la vez en todo el servidor (cada una se lee entera en memoria).
     release = await acquireUploadSlot();
     if (!release) throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
-    const form = await req.formData();
+    // Con tope real al leer: sin Content-Length (o si miente un proxy intermedio) se corta al superar el máximo.
+    const form = await readBodyLimited(req, maxBytes + MULTIPART_OVERHEAD_BYTES, "formData").catch(async (err) => {
+      throw err instanceof BodyTooLargeError ? await tooBig() : err;
+    });
     const file = form.get("file");
     if (!(file instanceof File)) throw new AppError("No se ha recibido ningún archivo.");
     fileInfo = { name: file.name, type: file.type, size: file.size };
@@ -121,7 +125,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
       ));
     publishChange({ projectId, userId: user.id, action: "attachments.upload" });
     if (!withCreation) {
-      await saveUndo(user.id, projectId, `Subió «${attachment.originalName}»`, [{ t: "attachment.remove", id: attachment.id }], taskId).catch((err) =>
+      await saveUndo(user.id, projectId, encodeLabel({ k: "Subió «{name}»", p: { name: attachment.originalName } }), [{ t: "attachment.remove", id: attachment.id }], taskId).catch((err) =>
         console.error("[undo] no se pudo guardar", err),
       );
     }

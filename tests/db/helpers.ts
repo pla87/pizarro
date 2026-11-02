@@ -19,7 +19,16 @@ const { createSession } = await import("../../src/lib/session");
 
 export { db };
 
-const jar = (globalThis as unknown as { __pzTestRequest: { jar: Map<string, string> } }).__pzTestRequest.jar;
+const testRequest = (globalThis as unknown as { __pzTestRequest: { jar: Map<string, string>; inRequest: <T>(fn: () => Promise<T>) => Promise<T> } }).__pzTestRequest;
+const jar = testRequest.jar;
+
+/**
+ * Ejecuta `fn` como una sola petición HTTP: dentro, cookies() devuelve siempre el mismo objeto (como en Next), así
+ * que lo que se memoriza por petición (la sesión) se reutiliza. Fuera de inRequest cada llamada es una petición aparte.
+ */
+export function inRequest<T>(fn: () => Promise<T>): Promise<T> {
+  return testRequest.inRequest(fn);
+}
 
 after(async () => {
   await db.$disconnect();

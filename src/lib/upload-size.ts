@@ -23,8 +23,9 @@ export function effectiveFileMaxMb(projectMb: number, raw: string | undefined = 
 }
 
 /**
- * Tope fijo del cuerpo de la petición en el proxy de Next (`proxyClientMaxBodySize`): el mayor archivo posible
- * (FILE_MAX_MAX_MB) más el envoltorio multipart, con margen. No depende de ninguna variable de entorno, así que
- * no hace falta recompilar al cambiar los límites: el límite real se comprueba en la ruta de subida.
+ * Tope del cuerpo que el proxy de Next guarda en memoria (`proxyClientMaxBodySize`, ver next.config.ts): 2 MB, el doble
+ * de lo que admiten las acciones (1 MB). Las subidas de archivos no pasan por el proxy (src/proxy.ts las saca del
+ * matcher), así que este tope no limita los adjuntos: su máximo (por proyecto, y MAX_UPLOAD_MB si existe) lo aplica la
+ * ruta de subida al leer el cuerpo, sin recompilar.
  */
-export const PROXY_BODY_LIMIT_BYTES = FILE_MAX_MAX_MB * 1024 * 1024 + 1024 * 1024;
+export const PROXY_BODY_LIMIT_BYTES = 2 * 1024 * 1024;

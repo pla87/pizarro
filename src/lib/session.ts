@@ -83,10 +83,8 @@ interface SessionUser extends CurrentUser {
   mustChangePassword: boolean;
 }
 
-/** Usuario de la sesión de la petición (una sola consulta gracias a cache()), pendiente o no de cambiar la contraseña. */
-const loadSessionUser = cache(async (): Promise<SessionUser | null> => {
-  const token = (await cookies()).get(sessionCookieName())?.value;
-  if (!token || token.length > 100) return null;
+/** Consulta la sesión del token (y anota su actividad). Sin memoria: la pone loadSessionUser. */
+async function querySessionUser(token: string): Promise<SessionUser | null> {
   const id = sessionIdFromToken(token);
   const session = await db.session.findUnique({
     where: { id },
@@ -99,37 +97,65 @@ const loadSessionUser = cache(async (): Promise<SessionUser | null> => {
   if (!session || !session.user.active) return null;
   const now = Date.now();
   if (session.expiresAt.getTime() < now) return null;
-  // Expiración deslizante: se renueva cuando ha consumido la mitad de su vida. Y la última actividad, cada 5 minutos.
-  const renew = session.expiresAt.getTime() - now < (SESSION_MAX_AGE_SECONDS * 1000) / 2;
+  // Expiración deslizante de SESSION_MAX_AGE (14 días) desde el último uso: al anotar la última actividad (como mucho
+  // cada 5 minutos) también se aplaza la caducidad, igual que la cookie, que se renueva al navegar. La segunda condición
+  // solo es una red: una sesión a la que le quede menos de media vida se renueva aunque se haya anotado hace poco.
   const touch = now - session.lastSeenAt.getTime() > LAST_SEEN_EVERY_MS;
-  if (renew || touch) {
+  const renew = session.expiresAt.getTime() - now < (SESSION_MAX_AGE_SECONDS * 1000) / 2;
+  if (touch || renew) {
     await db.session.update({
       where: { id },
-      data: { ...(renew ? { expiresAt: new Date(now + SESSION_MAX_AGE_SECONDS * 1000) } : {}), ...(touch ? { lastSeenAt: new Date(now) } : {}) },
+      data: { lastSeenAt: new Date(now), expiresAt: new Date(now + SESSION_MAX_AGE_SECONDS * 1000) },
     }).catch(() => {});
   }
   const { active: _active, ...user } = session.user;
   return user;
-});
+}
+
+/**
+ * Sesión ya consultada en cada petición. La clave es el objeto que devuelve `await cookies()`, que Next crea para cada
+ * petición y mantiene durante toda ella (en acciones y rutas API, el de cookies modificables; al renderizar, el de
+ * solo lectura): así nada se comparte entre peticiones ni entre personas, y el WeakMap lo suelta al acabar.
+ * React.cache no sirve aquí: fuera del render (acciones, rutas API) no memoriza nada.
+ */
+const sessionByRequest = new WeakMap<object, { token: string; user: Promise<SessionUser | null> }>();
+
+/**
+ * Usuario de la sesión de la petición, pendiente o no de cambiar la contraseña: una sola consulta por petición. Si el
+ * token cambia a mitad (createSession, destroySession) se vuelve a consultar; si la consulta falla, no se recuerda.
+ */
+async function loadSessionUser(): Promise<SessionUser | null> {
+  const store = await cookies();
+  const token = store.get(sessionCookieName())?.value;
+  if (!token || token.length > 100) return null;
+  const known = sessionByRequest.get(store);
+  if (known?.token === token) return known.user;
+  const user = querySessionUser(token);
+  sessionByRequest.set(store, { token, user });
+  user.catch(() => {
+    if (sessionByRequest.get(store)?.user === user) sessionByRequest.delete(store);
+  });
+  return user;
+}
 
 /**
  * Usuario de la petición actual. Con la contraseña pendiente de cambiar devuelve null: así páginas,
  * acciones y rutas API quedan bloqueadas por defecto hasta que la elija (ver getPendingUser).
  */
-export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
+export async function getCurrentUser(): Promise<CurrentUser | null> {
   const user = await loadSessionUser();
   if (!user || user.mustChangePassword) return null;
   const { mustChangePassword: _m, ...rest } = user;
   return rest;
-});
+}
 
 /** Usuario con sesión abierta que debe elegir una contraseña nueva antes de seguir; null en cualquier otro caso. */
-export const getPendingUser = cache(async (): Promise<CurrentUser | null> => {
+export async function getPendingUser(): Promise<CurrentUser | null> {
   const user = await loadSessionUser();
   if (!user?.mustChangePassword) return null;
   const { mustChangePassword: _m, ...rest } = user;
   return rest;
-});
+}
 
 /** Para Server Components: redirige a /login si no hay sesión. */
 export async function requireUserPage(): Promise<CurrentUser> {

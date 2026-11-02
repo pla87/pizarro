@@ -1,4 +1,5 @@
 // Diccionario español → inglés, repartido por zonas de la app (cada fichero es un objeto plano).
+import { acceso } from "./acceso";
 import { admin } from "./admin";
 import { almacenamiento } from "./almacenamiento";
 import { board } from "./board";
@@ -21,4 +22,4 @@ import { setup } from "./setup";
 import { task } from "./task";
 import { wip } from "./wip";
 
-export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing, ...almacenamiento, ...licencia, ...wip, ...importar, ...ics, ...lista };
+export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing, ...almacenamiento, ...licencia, ...wip, ...importar, ...ics, ...lista, ...acceso };

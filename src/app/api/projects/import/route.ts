@@ -5,6 +5,7 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { randomBytes } from "node:crypto";
 import { AppError } from "@/lib/errors";
+import { assertDiskRoom } from "@/lib/disk-space";
 import { ArchiveError } from "@/lib/project-export/errors";
 import { logEvent } from "@/lib/log";
 import { assertCsvHeader } from "@/lib/foreign-import/csv";
@@ -82,6 +83,9 @@ export async function POST(req: Request) {
     if (length !== null && length > max) throw tooBig();
     if (length === 0 || !req.body) throw new AppError("No se ha recibido ningún archivo.");
     await assertUserCanQueue(user.id);
+    // Antes de recibir nada: el temporal y la importación (lib/transfer-jobs, IMPORT_FACTOR) deben caber en el disco.
+    // Sin Content-Length se cuenta con el máximo admitido.
+    await assertDiskRoom(uploadDir(), Math.ceil((length ?? max) * 1.5));
     release = await acquireUploadSlot();
     if (!release) throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
 
