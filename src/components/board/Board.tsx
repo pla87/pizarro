@@ -36,6 +36,9 @@ import { useCardActions } from "./cardActions";
 import { useReviewGuard } from "./reviewGuard";
 import { activeFilterCount, EMPTY_FILTERS, filtersKey, parseStoredFilters, sanitizeFilters, taskMatchesFilters, type BoardFilters } from "./filters";
 import { Presence } from "./Presence";
+import { ListView } from "./ListView";
+import { parseStoredView, parseViewParam, viewStorageKey, type BoardView } from "./listSort";
+import { ViewToggle } from "./ViewToggle";
 import { SelectionBar } from "./SelectionBar";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 import { useShortcut } from "./shortcuts";
@@ -212,6 +215,34 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     } catch {
       // Sin almacenamiento: el filtro vale igualmente en esta sesión.
     }
+  };
+  // Vista Tablero / Lista: la URL (?vista=lista) manda; si no hay, la última elegida en este proyecto (localStorage).
+  const [view, setViewState] = useState<BoardView>(() => parseViewParam(searchParams.get("vista")) ?? "board");
+  useEffect(() => {
+    if (parseViewParam(searchParams.get("vista"))) return;
+    const frame = requestAnimationFrame(() => {
+      try {
+        setViewState(parseStoredView(window.localStorage.getItem(viewStorageKey(data.project.id))));
+      } catch {
+        // Sin almacenamiento: tablero.
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+    // Solo al abrir el proyecto.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.project.id]);
+  const changeView = (next: BoardView) => {
+    setViewState(next);
+    try {
+      window.localStorage.setItem(viewStorageKey(data.project.id), next);
+    } catch {
+      // Sin almacenamiento: vale en esta sesión.
+    }
+    // La dirección refleja la vista (se puede compartir); sin recargar la página.
+    const url = new URL(window.location.href);
+    if (next === "list") url.searchParams.set("vista", "lista");
+    else url.searchParams.delete("vista");
+    window.history.replaceState(window.history.state, "", url);
   };
   const sc = useShortcut();
   const dragHandle = useCoarsePointer();
@@ -981,6 +1012,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             )}
           </span>
           <Presence projectId={data.project.id} />
+          <ViewToggle view={view} onChange={changeView} />
           <div className="relative ml-auto w-36 min-w-16 shrink transition-[width] @min-[1000px]:focus-within:w-56">
             <Search size={14} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" aria-hidden />
             <input
@@ -1095,6 +1127,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               {query.trim() && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-brand-600" aria-hidden />}
             </button>
             <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="shrink-0" />
+            <ViewToggle view={view} onChange={changeView} compact className={view === "list" ? "ml-auto mr-3" : "ml-0.5"} />
+            {view === "board" && (
             <div data-mobile-tabs className="no-scrollbar ml-0.5 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pr-3">
               {sortedColumns.map((c) => (
                 <MobileTab key={c.id} active={c.id === activeMobileColumn} onClick={() => showMobileColumn(c.id)}>
@@ -1103,6 +1137,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               ))}
               <NewColumnButton variant="mobile" onCreated={showMobileColumn} />
             </div>
+            )}
           </div>
           {/* Móvil y tableta: buscador y filtros (en móvil, solo al pulsar el icono de la lupa o con un filtro activo). */}
           <div className={cn("flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-1.5 lg:hidden dark:border-slate-800 dark:bg-slate-900", !(mobileSearch || filtering) && "max-md:hidden")}>
@@ -1128,6 +1163,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             </div>
             {/* En móvil los filtros ya están en la barra de pestañas. */}
             <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="max-md:hidden" />
+            <ViewToggle view={view} onChange={changeView} compact className="max-md:hidden" />
             <span className="shrink-0 text-xs text-slate-500" aria-live="polite">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : t("{n} tarjetas", { n: tasks.length })}</span>
             {(mobileSearch || filtering) && (
               <button
@@ -1144,6 +1180,9 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               </button>
             )}
           </div>
+          {view === "list" ? (
+            <ListView tasks={tasks} matchingIds={matchingIds} filtering={filtering} />
+          ) : (
           <div
             className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-3 max-md:no-scrollbar pt-2 pb-2 md:px-4 md:pb-4"
             onTouchStart={onSwipeStart}
@@ -1164,6 +1203,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             ))}
             <NewColumnButton variant="desktop" />
           </div>
+          )}
           {/* Sin animación de soltado con Ctrl/Alt (la copia aparece donde se suelta) ni al cambiar de columna (la tarjeta ya está en destino). */}
           <DragOverlay dropAnimation={duplicating || skipDropAnimation ? null : DROP_ANIMATION}>
             {activeTask ? (
