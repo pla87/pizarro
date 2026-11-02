@@ -54,7 +54,6 @@ export const documentacion: Record<string, string> = {
   "¿Borrar «{name}» definitivamente? No se puede deshacer.": "Permanently delete “{name}”? This cannot be undone.",
   "Documento borrado definitivamente": "Document permanently deleted",
   "No se puede restaurar: la documentación del proyecto ya tiene el máximo de documentos.": "Cannot restore: the project documentation already has the maximum number of documents.",
-  "No se puede restaurar: se supera la cuota de almacenamiento del proyecto.": "Cannot restore: the project's storage quota would be exceeded.",
   "Papelera de documentos (una vez al día)": "Documents trash (once a day)",
   "Envió el documento «{name}» a la papelera": "Moved the document “{name}” to the trash",
   "Restauró el documento «{name}» de la papelera": "Restored the document “{name}” from the trash",

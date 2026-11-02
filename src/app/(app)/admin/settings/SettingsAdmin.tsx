@@ -8,6 +8,8 @@ import { useT } from "@/i18n/client";
 import type { MailSettingsView } from "@/lib/mail-config";
 import { actionThrowResult } from "@/lib/stale-action";
 import { MailSettingsSection } from "./MailSettingsSection";
+import { StorageSettingsSection } from "./StorageSettingsSection";
+import type { StorageAdminView } from "@/lib/storage-stats";
 import { GoogleSettingsSection } from "./GoogleSettingsSection";
 import type { GoogleSettingsView } from "@/lib/google-config";
 
@@ -16,7 +18,7 @@ const MIN = 1;
 const MAX = 1000;
 
 /** «Ajustes»: parámetros generales de la aplicación. */
-export function SettingsAdmin({ maxComments, mail, google }: { maxComments: number; mail: MailSettingsView; google: GoogleSettingsView }) {
+export function SettingsAdmin({ maxComments, mail, google, storage }: { maxComments: number; mail: MailSettingsView; google: GoogleSettingsView; storage: StorageAdminView }) {
   const t = useT();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -87,6 +89,7 @@ export function SettingsAdmin({ maxComments, mail, google }: { maxComments: numb
           {!valid && <span className="text-xs text-red-600">{t("Debe ser un número entero entre {min} y {max}.", { min: MIN, max: MAX })}</span>}
         </div>
       </section>
+      <StorageSettingsSection view={storage} />
       <MailSettingsSection initial={mail.settings} env={mail.env} outbox={mail.outbox} />
       <GoogleSettingsSection view={google} />
       <section className="card space-y-3 p-5">

@@ -44,6 +44,8 @@ interface Props {
   editorMode: EditorModeValue;
   /** Integración con Google: si está activa y el dominio de Workspace configurado (para ofrecer compartir con él). */
   google: { enabled: boolean; domain: string | null };
+  /** Sección «Almacenamiento» de la pestaña Adjuntos y límites (la monta la página). */
+  storageSection?: React.ReactNode;
   /** Sección «Informe semanal por email» (la monta la página). */
   reportSchedule?: React.ReactNode;
   /** Cabeceras y pies de release del proyecto. */
@@ -76,7 +78,7 @@ function Section({ title, description, children, id }: { title: string; descript
   );
 }
 
-export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode, google, reportSchedule, releaseTemplates, tab }: Props) {
+export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode, google, reportSchedule, storageSection, releaseTemplates, tab }: Props) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
@@ -315,6 +317,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
 
       {tab === "adjuntos" && (
         <>
+      {canManage && storageSection}
       {canManage && (
         <Section title="Tamaños máximos" description="Límites de los adjuntos de las tareas y de los paquetes ZIP al generar o descargar una release.">
           <form
