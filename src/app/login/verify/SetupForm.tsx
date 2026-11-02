@@ -28,7 +28,7 @@ export function SetupForm({ emailAvailable, confirmed }: { emailAvailable: boole
   return (
     <div className="space-y-4">
       <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
-        {t("Los administradores deben activar la verificación en dos pasos antes de entrar con contraseña.")}
+        {t("Los administradores deben activar la verificación en dos pasos antes de entrar.")}
       </p>
       <TwoFactorEnroll emailAvailable={emailAvailable} begin={(m) => chooseSetupMethod(m)} confirm={(c, e) => confirmSetup(c, e)} onCodes={setCodes} />
       <form action={cancelSecondStep}>

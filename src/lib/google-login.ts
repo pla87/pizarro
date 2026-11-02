@@ -54,7 +54,7 @@ export async function exchangeAndVerify(code: string, verifier: string, nonce: s
   return checked.ok ? { ok: true, identity: checked } : { ok: false, reason: checked.reason };
 }
 
-const userSelect = { id: true, name: true, email: true, locale: true, active: true, mustChangePassword: true, googleSub: true } as const;
+const userSelect = { id: true, name: true, email: true, locale: true, role: true, active: true, mustChangePassword: true, twoFactorMethod: true, googleSub: true } as const;
 
 /**
  * Cuenta existente a la que corresponde esa identidad de Google: primero por `sub` (estable aunque cambie el email),

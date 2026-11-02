@@ -9,6 +9,7 @@ import { logEvent } from "@/lib/log";
 import { appUrl } from "@/lib/mail";
 import { rateLimit } from "@/lib/rate-limit";
 import { safeNextPath } from "@/lib/redirect";
+import { secondStepFor, sendEmailCode, startChallenge } from "@/lib/two-factor";
 import { clientIp } from "@/lib/request";
 import { cookieSecure } from "@/lib/session-config";
 
@@ -58,8 +59,19 @@ export async function GET(req: Request) {
   // Mensaje neutro: no se distingue «no existe», «desactivada» o «enlazada a otra cuenta de Google».
   if (!user) return fail("google_noaccount", "sin cuenta asociada", { email: result.identity.email });
 
+  const next = safeNextPath(Buffer.from(nextB64 ?? "", "base64url").toString("utf8"));
+  // Los administradores pasan también por la verificación en dos pasos de Pizarro (la de Google no basta para administrar):
+  // misma pantalla y mismo estado pendiente que tras la contraseña; hasta superarla no hay sesión.
+  if (user.role === "ADMIN") {
+    const step = await secondStepFor(user);
+    if (step) {
+      const challenge = await startChallenge(user.id, step === "VERIFY" ? "LOGIN" : "SETUP", { next });
+      if (step === "VERIFY" && user.twoFactorMethod === "EMAIL") await sendEmailCode(challenge, user).catch(() => {});
+      logEvent({ category: "auth", action: "auth.secondStepRequested", message: `${user.name}: acceso con Google correcto, falta la verificación en dos pasos`, userId: user.id, userName: user.name, path: "/api/auth/google/callback", ip });
+      redirect(`${appUrl()}/login/verify`);
+    }
+  }
   await completeLogin(user, { method: "google", path: "/api/auth/google/callback" });
   if (user.mustChangePassword) redirect(`${appUrl()}/change-password`);
-  const next = safeNextPath(Buffer.from(nextB64 ?? "", "base64url").toString("utf8"));
   redirect(`${appUrl()}${next}`);
 }

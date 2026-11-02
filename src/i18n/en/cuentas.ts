@@ -161,8 +161,8 @@ export const cuentas: Record<string, string> = {
     "Reset two-step verification",
   "Verificación en dos pasos restablecida":
     "Two-step verification reset",
-  "Se borrarán su método y sus códigos de recuperación. Si es administrador, tendrá que configurar uno nuevo antes de entrar con contraseña; si es miembro, puede volver a activarlo desde «Mi perfil».":
-    "Their method and recovery codes will be deleted. If they are an administrator, they will have to set up a new one before signing in with a password; if they are a member, they can enable it again from “My profile”.",
+  "Se borrarán su método y sus códigos de recuperación. Si es administrador, tendrá que configurar uno nuevo antes de entrar; si es miembro, puede volver a activarlo desde «Mi perfil».":
+    "Their method and recovery codes will be deleted. If they are an administrator, they will have to set up a new one before signing in; if they are a member, they can enable it again from “My profile”.",
   "Verificación en dos pasos":
     "Two-step verification",
   "Obligatoria para administradores al entrar con contraseña. Al entrar con Google no se pide: Google ya tiene la suya.":
@@ -201,8 +201,8 @@ export const cuentas: Record<string, string> = {
     "Emergency access (administrators)",
   "La verificación ya está activada. Puedes generar códigos de recuperación nuevos en «Mi perfil».":
     "Verification is already enabled. You can generate new recovery codes in “My profile”.",
-  "Los administradores deben activar la verificación en dos pasos antes de entrar con contraseña.":
-    "Administrators must enable two-step verification before signing in with a password.",
+  "Los administradores deben activar la verificación en dos pasos antes de entrar.":
+    "Administrators must enable two-step verification before signing in.",
   "Volver":
     "Back",
   "Te hemos enviado un código a tu email.":
