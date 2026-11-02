@@ -92,6 +92,46 @@ test("huérfanos: si casi todo parece huérfano (BD equivocada) no borra nada", 
   }
 });
 
+test("huérfanos: sin ninguna fila de adjuntos, releases ni documentos (BD nueva) no borra nada aunque haya pocos ficheros", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "pz-up-"));
+  try {
+    const old = new Date(Date.now() - 3 * 24 * 3600 * 1000);
+    await mkdir(path.join(dir, "releases"), { recursive: true });
+    await mkdir(path.join(dir, "documents"), { recursive: true });
+    const files = ["a1.webp", "a1.thumb.webp", "a2.bin", "releases/r1.webp", "documents/d1.bin"];
+    for (const f of files) {
+      await writeFile(path.join(dir, f), "x");
+      await utimes(path.join(dir, f), old, old);
+    }
+    const exists = (p: string) => stat(path.join(dir, p)).then(() => true, () => false);
+    // Las entradas de deshacer (retained) no cuentan como filas: una BD vacía sigue siéndolo.
+    const empty = { attachments: new Set<string>(), releaseAttachments: new Set<string>(), documents: new Set<string>(), retained: new Set(["zzz"]) };
+    const report = await cleanOrphanFiles(dir, empty);
+    assert.deepEqual([report.aborted, report.abortReason, report.deleted, report.orphans], [true, "noRows", 0, 5]);
+    for (const f of files) assert.equal(await exists(f), true, f);
+    // Solo temporales de subidas a medias: esos sí se borran.
+    for (const f of files) await rm(path.join(dir, f));
+    await writeFile(path.join(dir, "a3.webp.123.tmp"), "x");
+    await utimes(path.join(dir, "a3.webp.123.tmp"), old, old);
+    const onlyTmp = await cleanOrphanFiles(dir, empty);
+    assert.deepEqual([onlyTmp.aborted, onlyTmp.deleted], [false, 1]);
+    // Con una sola fila conocida, la limpieza normal sigue (pocos ficheros: sin la protección de la proporción).
+    for (const f of ["k1.webp", "x1.webp", "x2.webp"]) {
+      await writeFile(path.join(dir, f), "x");
+      await utimes(path.join(dir, f), old, old);
+    }
+    const normal = await cleanOrphanFiles(dir, { ...empty, attachments: new Set(["k1"]) });
+    assert.deepEqual([normal.aborted, normal.deleted], [false, 2]);
+    assert.equal(await exists("k1.webp"), true);
+    // Un id retenido por deshacer protege su fichero.
+    await writeFile(path.join(dir, "zzz.webp"), "x");
+    await utimes(path.join(dir, "zzz.webp"), old, old);
+    assert.equal((await cleanOrphanFiles(dir, { ...empty, attachments: new Set(["k1"]) })).deleted, 0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("canales SSE: revocar por usuario, sesión y proyecto, y límite por usuario", () => {
   let closed = 0;
   const open = (userId: string, projectId: string, sessionId: string) => registerStream({ userId, projectId, sessionId, close: () => void closed++ });

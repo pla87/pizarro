@@ -4,7 +4,7 @@ import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { releaseZipName } from "@/lib/release";
-import { acquireZipSlot, buildZipPart, planZipEntries, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict, type ZipEntry } from "@/lib/release-zip";
+import { acquireZipSlot, buildZipPart, planZipEntries, zipBodyStream, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict, type ZipEntry } from "@/lib/release-zip";
 import { getCurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { readReleaseAttachmentFile, releaseAttachmentFileSize } from "@/lib/uploads";
@@ -50,14 +50,19 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
   // Uno a la vez por persona y pocos en todo el servidor (cada paquete se arma en memoria).
   const releaseSlot = acquireZipSlot(user.id);
   if (!releaseSlot) return new Response(t("Ya se está preparando otro ZIP. Inténtalo de nuevo en unos segundos."), { status: 429, headers: { "Retry-After": "5" } });
+  // El hueco se suelta cuando se ha enviado el ZIP entero (o se cancela la descarga), no al terminar de armarlo.
   let built: Awaited<ReturnType<typeof buildZipPart>>;
   try {
     built = await buildZipPart(entries, pkg);
-  } finally {
+  } catch (err) {
     releaseSlot();
+    throw err;
   }
   const { zip, files: fileCount } = built;
-  if (fileCount === 0) return new Response(t("No hay adjuntos disponibles"), { status: 404 });
+  if (fileCount === 0) {
+    releaseSlot();
+    return new Response(t("No hay adjuntos disponibles"), { status: 404 });
+  }
 
   const name = releaseZipName(release.title, mode.part, packages.length);
   logEvent({
@@ -65,9 +70,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
     userId: user.id, userName: user.name, projectId: release.projectId, path: `/api/releases/${releaseId}/attachments`, ip: clientIp(req.headers),
     durationMs: performance.now() - start, details: { releaseId, part: mode.part, parts: packages.length, files: fileCount, bytes: zip.length },
   });
-  return new Response(new Uint8Array(zip.buffer as ArrayBuffer, zip.byteOffset, zip.length), {
+  return new Response(zipBodyStream(zip, releaseSlot, { signal: req.signal }), {
     headers: {
       "Content-Type": "application/zip",
+      "Content-Length": String(zip.length),
       "Content-Disposition": `attachment; filename="${name.replace(/[^\x20-\x7e]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(name)}`,
       "Cache-Control": "private, no-store",
       "X-Zip-Parts": String(packages.length),

@@ -106,6 +106,55 @@ test("el lector descomprime deflate y no se fía del tamaño declarado", async (
   await z2.close();
 });
 
+/** ZIP de una sola entrada deflate con los datos comprimidos `comp` (de `data`), declarando `declared` bytes. */
+function deflateZip(data: Buffer, comp: Buffer, declared: number): Buffer {
+  const name = Buffer.from("grande.txt");
+  const local = Buffer.alloc(30);
+  local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(8, 8); local.writeUInt32LE(crc32(data), 14); local.writeUInt32LE(comp.length, 18); local.writeUInt32LE(declared, 22); local.writeUInt16LE(name.length, 26);
+  const cen = Buffer.alloc(46);
+  cen.writeUInt32LE(0x02014b50, 0); cen.writeUInt16LE(8, 10); cen.writeUInt32LE(crc32(data), 16); cen.writeUInt32LE(comp.length, 20); cen.writeUInt32LE(declared, 24); cen.writeUInt16LE(name.length, 28);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(1, 8); end.writeUInt16LE(1, 10); end.writeUInt32LE(46 + name.length, 12); end.writeUInt32LE(30 + name.length + comp.length, 16);
+  return Buffer.concat([local, name, comp, cen, name, end]);
+}
+
+/** Falla (en lugar de colgarse) si `p` no termina en `ms`. */
+async function within<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([p, new Promise<never>((_, rej) => (timer = setTimeout(() => rej(new Error(`colgado: más de ${ms} ms`)), ms)))]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+test("el lector no se cuelga con datos deflate dañados ni con una entrada que se infla más de lo declarado", { timeout: 20_000 }, async () => {
+  // Varios MB comprimidos: el descompresor se llena y el lector tiene que esperar a que pida más ('drain').
+  const data = Buffer.from(Array.from({ length: 600_000 }, (_, i) => `l${(i * 2654435761) % 1000003}\n`).join(""));
+  const comp = deflateRawSync(data);
+  assert.ok(comp.length > 1024 * 1024);
+  const read = async (zip: Buffer) => {
+    const f = path.join(dir, "colgado.zip");
+    writeFileSync(f, zip);
+    const z = await ZipFile.open(f);
+    try {
+      return await within(z.readAll(z.entries[0]!, 100 * 1024 * 1024), 5000);
+    } finally {
+      await z.close();
+    }
+  };
+  assert.ok((await read(deflateZip(data, comp, data.length))).equals(data), "sin daños, se lee entero");
+  // Bytes basura a mitad: error del descompresor mientras el lector espera.
+  const bad = Buffer.from(comp);
+  const mid = Math.floor(comp.length / 2);
+  for (let i = mid; i < mid + 2000; i++) bad[i] = (i * 31) & 0xff;
+  const started = Date.now();
+  await assert.rejects(read(deflateZip(data, bad, data.length)), ZipReadError);
+  // Declara mucho menos de lo que se descomprime: el lector corta en cuanto lo supera.
+  await assert.rejects(read(deflateZip(data, comp, 100_000)), /mayor de lo declarado/);
+  assert.ok(Date.now() - started < 5000, "fallan rápido");
+});
+
 test("upgrade: identidad en la versión 1 y rechazo de versiones futuras o inválidas", () => {
   const manifest = { format: EXPORT_FORMAT, formatVersion: 1, appVersion: "1", exportedAt: new Date().toISOString(), options: { attachments: false, scope: "board" }, counts: {}, checksums: {} } as ExportManifest;
   const data = { a: 1 };

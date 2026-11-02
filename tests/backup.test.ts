@@ -157,13 +157,27 @@ test("nombres de fichero y retención 14 diarias + 6 mensuales", () => {
   const names: string[] = [];
   for (let i = 0; i < 400; i++) names.push(backupFileName(new Date(Date.UTC(2026, 9, 22, 3, 0, 0) - i * 86_400_000)));
   names.push(backupFileName(new Date("2026-10-22T20:00:00Z")));
-  const keep = selectBackupsToKeep(names);
+  const keep = selectBackupsToKeep(names, 14, 6, 0);
   // 14 días + (meses distintos de los últimos 6 que no coincidan con esos días).
   const kept = [...keep].sort().reverse();
   assert.ok(keep.has(backupFileName(new Date("2026-10-22T20:00:00Z"))), "la más reciente del día se queda");
-  assert.ok(!keep.has(backupFileName(new Date("2026-10-22T03:00:00Z"))), "la otra del mismo día se descarta");
+  assert.ok(!keep.has(backupFileName(new Date("2026-10-22T03:00:00Z"))), "sin «recientes», la otra del mismo día se descarta");
   const months = new Set(kept.map((n) => parseBackupFileName(n)!.toISOString().slice(0, 7)));
   assert.ok(months.size >= 6);
   assert.ok(kept.length >= 14 && kept.length <= 14 + 6);
   assert.ok(!keep.has(backupFileName(new Date(Date.UTC(2026, 9, 22, 3) - 100 * 86_400_000))), "una copia diaria antigua no se conserva");
+  // Por defecto, además, las 3 más recientes siempre: la otra del mismo día también se queda.
+  const byDefault = selectBackupsToKeep(names);
+  assert.ok(byDefault.has(backupFileName(new Date("2026-10-22T03:00:00Z"))));
+  assert.deepEqual([...byDefault].filter((n) => !keep.has(n)), [backupFileName(new Date("2026-10-22T03:00:00Z"))]);
+});
+
+test("retención: una copia hecha tras perder los datos no borra la buena del mismo día", () => {
+  // La buena de las 03:15 y, el mismo día, la de una base de datos vacía (primera copia tras el arranque).
+  const names = ["pizarro-backup-20261101T031500Z.pzbak", "pizarro-backup-20261102T031500Z.pzbak", "pizarro-backup-20261102T110100Z.pzbak"];
+  assert.deepEqual([...selectBackupsToKeep(names)].sort(), [...names].sort());
+  // Varias copias seguidas el mismo día: se quedan las 3 últimas (y la última de cada día anterior).
+  const many = Array.from({ length: 6 }, (_, i) => backupFileName(new Date(Date.UTC(2026, 10, 2, 10 + i))));
+  const keep = selectBackupsToKeep(["pizarro-backup-20261101T031500Z.pzbak", ...many]);
+  assert.deepEqual([...keep].sort(), ["pizarro-backup-20261101T031500Z.pzbak", ...many.slice(3)].sort());
 });

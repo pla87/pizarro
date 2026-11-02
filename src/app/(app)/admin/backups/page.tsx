@@ -1,4 +1,4 @@
-import { backupDestinationsInfo, backupKeyProblem, backupKeyState, externalCopyRunning, listBackups, readStatus } from "@/lib/backup";
+import { backupDestinationsInfo, backupKeyProblem, backupKeyState, backupPaused, externalCopyRunning, listBackups, readStatus } from "@/lib/backup";
 import { getBackupAlert } from "@/lib/backup-alert";
 import { db } from "@/lib/db";
 import { listJobRuns } from "@/lib/jobs";
@@ -33,6 +33,7 @@ export default async function BackupsPage() {
       jobs={jobs}
       destinations={backupDestinationsInfo()}
       externalRunning={externalCopyRunning()}
+      paused={backupPaused()}
     />
   );
 }

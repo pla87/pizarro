@@ -35,6 +35,9 @@ function safeKey(key: string): string {
   return key;
 }
 
+/** Antigüedad a partir de la cual un temporal de una carpeta de copias se da por abandonado. */
+export const TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 export class DirDestination implements BackupDestination {
   constructor(readonly id: DestinationId, readonly root: string, readonly files: boolean, readonly label = root) {}
 
@@ -76,6 +79,39 @@ export class DirDestination implements BackupDestination {
 
   async delete(key: string): Promise<void> {
     await rm(this.file(key), { force: true });
+  }
+
+  /**
+   * Borra los temporales (*.tmp) de más de `maxAgeMs` que dejó una escritura interrumpida (un reinicio a mitad
+   * de un volcado o de una subida), en la raíz y en files/. Una escritura en curso no se toca: su fecha avanza.
+   */
+  async cleanTemp(maxAgeMs = TEMP_MAX_AGE_MS, now = Date.now()): Promise<number> {
+    let removed = 0;
+    const walk = async (dir: string, deep: boolean): Promise<void> => {
+      let entries;
+      try {
+        entries = await readdir(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const e of entries) {
+        const abs = path.join(dir, e.name);
+        if (e.isDirectory()) {
+          if (deep) await walk(abs, true);
+        } else if (e.isFile() && e.name.endsWith(".tmp")) {
+          try {
+            if (now - (await stat(abs)).mtimeMs < maxAgeMs) continue;
+            await rm(abs, { force: true });
+            removed++;
+          } catch {
+            // Desapareció entre medias.
+          }
+        }
+      }
+    };
+    await walk(this.root, false);
+    await walk(path.join(this.root, FILES_PREFIX.replace(/\/$/, "")), true);
+    return removed;
   }
 
   async *list(prefix: string): AsyncGenerator<{ key: string; size: number }> {
@@ -239,6 +275,46 @@ async function* streamFrom(open: () => Promise<AsyncIterable<Buffer>>): AsyncGen
   for await (const c of await open()) yield c;
 }
 
+// --- Copia mucho menor que la del destino ------------------------------------------------------
+
+/** Por debajo de estos tamaños, la copia del destino es tan pequeña que no se compara (instalación recién empezada). */
+export const SHRINK_MIN_ROWS = 500;
+export const SHRINK_MIN_FILES = 20;
+
+export interface ShrinkProblem {
+  what: "rows" | "files";
+  local: number;
+  remote: number;
+}
+
+/**
+ * ¿Es la copia nueva sospechosamente menor que la última del destino? Menos de la mitad de filas (con al menos
+ * SHRINK_MIN_ROWS en el destino) o de ficheros (con al menos SHRINK_MIN_FILES). Pasa al arrancar sobre una base de
+ * datos o un volumen nuevos tras perder los datos: subirla y aplicar la retención borraría la copia buena.
+ */
+export function backupShrink(local: { rows: number; fileCount: number }, remote: { rows: number; fileCount: number }): ShrinkProblem | null {
+  if (remote.rows >= SHRINK_MIN_ROWS && local.rows < remote.rows / 2) return { what: "rows", local: local.rows, remote: remote.rows };
+  if (remote.fileCount >= SHRINK_MIN_FILES && local.fileCount < remote.fileCount / 2) return { what: "files", local: local.fileCount, remote: remote.fileCount };
+  return null;
+}
+
+/**
+ * Compara `manifest` con la copia más reciente del destino (si es otra): el problema si es mucho menor, o null. Si el
+ * manifiesto del destino no se puede leer, `unreadable` lo explica y no se bloquea (la retención ya protege sus objetos).
+ */
+export async function checkShrink(dest: BackupDestination, manifest: FullManifest, key: Buffer): Promise<{ problem: (ShrinkProblem & { stem: string }) | null; unreadable?: string }> {
+  const latest = (await listStems(dest)).find((s) => s.hasManifest);
+  if (!latest || latest.stem === manifest.stem) return { problem: null };
+  let remote: FullManifest;
+  try {
+    remote = await readManifest(dest, latest.stem, key);
+  } catch (err) {
+    return { problem: null, unreadable: `${latest.stem}: ${err instanceof Error ? err.message : err}` };
+  }
+  const problem = backupShrink({ rows: manifest.db.rows, fileCount: manifest.fileCount }, { rows: remote.db.rows, fileCount: remote.fileCount });
+  return { problem: problem && { ...problem, stem: latest.stem } };
+}
+
 export interface SyncResult {
   /** Ficheros del manifiesto que ya no existían al subirlos (borrados después de la copia). */
   missing?: number;
@@ -295,16 +371,25 @@ export interface PruneResult {
   removedObjects: number;
   /** El almacén no se limpió porque algún manifiesto conservado no se pudo leer (por prudencia). */
   gcSkipped: string | null;
+  /** Temporales abandonados borrados (solo en carpetas). */
+  removedTemp?: number;
 }
 
 /**
- * Retención de un destino: conserva las copias de selectBackupsToKeep (14 diarias y 6 mensuales) y borra las
- * demás; después borra los objetos que no nombra ningún manifiesto conservado. Si algún manifiesto conservado no se
- * puede leer, no se borra ningún objeto (mejor ocupar sitio que perder ficheros).
+ * Retención de un destino: conserva las copias de selectBackupsToKeep (14 diarias, 6 mensuales y las 3 más
+ * recientes) y borra las demás; después borra los objetos que no nombra ningún manifiesto conservado. Si algún
+ * manifiesto conservado no se puede leer, no se borra ningún objeto (mejor ocupar sitio que perder ficheros). En una
+ * carpeta, además, borra los temporales de escrituras interrumpidas de más de 24 h.
  */
-export async function pruneDestination(dest: BackupDestination, key: Buffer, opts: { daily?: number; monthly?: number; extraKeys?: (stem: string) => string[] } = {}): Promise<PruneResult> {
+export async function pruneDestination(dest: BackupDestination, key: Buffer, opts: { daily?: number; monthly?: number; recent?: number; extraKeys?: (stem: string) => string[]; now?: number } = {}): Promise<PruneResult> {
+  const removedTemp = dest instanceof DirDestination ? await dest.cleanTemp(TEMP_MAX_AGE_MS, opts.now) : undefined;
+  const result = await pruneBackups(dest, key, opts);
+  return removedTemp === undefined ? result : { ...result, removedTemp };
+}
+
+async function pruneBackups(dest: BackupDestination, key: Buffer, opts: { daily?: number; monthly?: number; recent?: number; extraKeys?: (stem: string) => string[] }): Promise<PruneResult> {
   const stems = await listStems(dest);
-  const keep = selectBackupsToKeep(stems.map((s) => dumpKey(s.stem)), opts.daily, opts.monthly);
+  const keep = selectBackupsToKeep(stems.map((s) => dumpKey(s.stem)), opts.daily, opts.monthly, opts.recent);
   let removedBackups = 0;
   for (const s of stems) {
     if (keep.has(dumpKey(s.stem))) continue;

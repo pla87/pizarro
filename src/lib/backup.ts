@@ -5,7 +5,7 @@ import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/p
 import path from "node:path";
 import { backupFileName, fileSha256, parseBackupFileName, diagnoseBackupKey, parseBackupKey, verifyBackupFile, type BackupManifest } from "./backup-core";
 import { dumpDatabase } from "./backup-db";
-import { DirDestination, externalDestinations, localFilesEnabled, listObjectKeys, listStems, manifestKey, pruneDestination, readManifest, syncBackup, type BackupDestination, type DestinationId } from "./backup-dest";
+import { checkShrink, DirDestination, externalDestinations, localFilesEnabled, listObjectKeys, listStems, manifestKey, pruneDestination, readManifest, syncBackup, type BackupDestination, type DestinationId } from "./backup-dest";
 import { buildManifest, decodeManifest, encodeManifest, fileNameKey, hashFiles, loadHashIndex, saveHashIndex, scanFiles, type FullManifest } from "./backup-files";
 import { withDatabase } from "./backup-pg";
 import { checkObjects, findMigrationsDir, restoreDatabaseFromDump } from "./backup-restore";
@@ -102,6 +102,15 @@ export function backupKeyState(): "ok" | "missing" | "invalid" {
 }
 
 export { localFilesEnabled } from "./backup-dest";
+
+/**
+ * BACKUP_PAUSE=1: detiene las tareas automáticas de copia (la diaria, la subida al destino externo y la prueba de
+ * restauración), p. ej. mientras se restaura tras perder la base de datos o el volumen, para que la primera copia de
+ * una base vacía no llegue al destino externo. Los botones de Administración siguen funcionando.
+ */
+export function backupPaused(env: Record<string, string | undefined> = process.env): boolean {
+  return /^(1|true|yes|on)$/i.test(env.BACKUP_PAUSE?.trim() ?? "");
+}
 
 export function localDestination(): DirDestination {
   return new DirDestination("local", backupsDir(), localFilesEnabled(), "UPLOAD_DIR/backups");
@@ -227,7 +236,7 @@ export async function createBackup(): Promise<BackupRun> {
       action: "backup.created",
       message: `Copia de seguridad creada: ${name} (${Math.round(bytes / 1024)} KB, ${dbManifest.totalRows} filas, ${manifest.fileCount} ficheros)`,
       durationMs: run.durationMs,
-      details: { file: name, bytes, rows: dbManifest.totalRows, tables: dbManifest.tables.length, files: manifest.fileCount, filesBytes: manifest.fileBytes, filesNew: run.filesNew, pruned: pruned.removedBackups, objectsRemoved: pruned.removedObjects },
+      details: { file: name, bytes, rows: dbManifest.totalRows, tables: dbManifest.tables.length, files: manifest.fileCount, filesBytes: manifest.fileBytes, filesNew: run.filesNew, pruned: pruned.removedBackups, objectsRemoved: pruned.removedObjects, tempRemoved: pruned.removedTemp ?? 0 },
     });
   } catch (err) {
     run = { at: new Date().toISOString(), ok: false, error: message(err), durationMs: Date.now() - started };
@@ -250,9 +259,16 @@ async function latestLocalManifest(key: Buffer): Promise<{ manifest: FullManifes
   return { manifest: await decodeManifest(bytes, key), bytes };
 }
 
+/** Mensaje del bloqueo por copia mucho menor que la del destino (ver checkShrink). */
+function shrinkMessage(p: { what: "rows" | "files"; local: number; remote: number; stem: string }, stem: string): string {
+  const what = p.what === "rows" ? "filas en la base de datos" : "ficheros";
+  return `No se sube la copia ${stem}: tiene ${p.local} ${what} y la última del destino (${p.stem}) tiene ${p.remote}. ¿Se ha perdido la base de datos o el volumen? Para no sustituir una copia buena por una casi vacía, no se sube ni se aplica la retención. Restaura la copia buena (node dist/restore.mjs con su nombre; --list las muestra) o, si la reducción es intencionada, pulsa «Copiar ahora a destino externo».`;
+}
+
 /**
  * Sube la última copia local a cada destino externo que aún no la tenga (o a todos con `force`), reanudando lo
- * que quedara a medias, y aplica allí la misma retención. Devuelve un resultado por destino; nunca lanza.
+ * que quedara a medias, y aplica allí la misma retención. Sin `force`, no sube a un destino cuya última copia es
+ * mucho mayor (ver checkShrink): es un fallo. Devuelve un resultado por destino; nunca lanza.
  */
 export async function syncExternal(opts: { force?: boolean } = {}): Promise<ExternalRun[]> {
   const key = backupKey();
@@ -278,12 +294,18 @@ export async function syncExternal(opts: { force?: boolean } = {}): Promise<Exte
       const started = Date.now();
       let run: ExternalRun;
       try {
+        let warning: string | undefined;
+        // Antes de subir y podar: una copia casi vacía (base de datos o volumen perdidos) no sustituye a la buena.
+        if (!opts.force) {
+          const shrink = await checkShrink(dest, manifest, key);
+          if (shrink.problem) throw new Error(shrinkMessage(shrink.problem, manifest.stem));
+          if (shrink.unreadable) warning = `No se pudo comparar con la última copia del destino: ${shrink.unreadable}`;
+        }
         const sync = await syncBackup(dest, manifest, bytes, { size: manifest.db.bytes, open: () => createReadStream(dumpFile) }, { key, uploadRoot: uploadDir(), store });
         let pruned = null;
-        let warning: string | undefined;
         try {
           pruned = await pruneDestination(dest, key);
-          if (pruned.gcSkipped) warning = `No se limpió el almacén: ${pruned.gcSkipped}`;
+          if (pruned.gcSkipped) warning = [warning, `No se limpió el almacén: ${pruned.gcSkipped}`].filter(Boolean).join(" · ");
           if (sync.missing) warning = [warning, `${sync.missing} ficheros ya borrados no se subieron (se borraron después de la copia)`].filter(Boolean).join(" · ");
         } catch (err) {
           warning = `Retención: ${message(err)}`;
@@ -292,7 +314,7 @@ export async function syncExternal(opts: { force?: boolean } = {}): Promise<Exte
         logEvent({
           level: warning ? "warn" : "info", category: "system", action: "backup.external",
           message: `Copia subida a ${dest.label}: ${manifest.stem} (${sync.uploaded} ficheros nuevos, ${sync.skipped} ya estaban, ${Math.round(sync.bytes / 1024)} KB)${warning ? `. ${warning}` : ""}`,
-          durationMs: run.durationMs, details: { dest: dest.id, file: manifest.stem, uploaded: sync.uploaded, skipped: sync.skipped, bytes: sync.bytes, removedBackups: pruned?.removedBackups ?? null, removedObjects: pruned?.removedObjects ?? null },
+          durationMs: run.durationMs, details: { dest: dest.id, file: manifest.stem, uploaded: sync.uploaded, skipped: sync.skipped, bytes: sync.bytes, removedBackups: pruned?.removedBackups ?? null, removedObjects: pruned?.removedObjects ?? null, removedTemp: pruned?.removedTemp ?? null },
         });
       } catch (err) {
         run = { at: at(), ok: false, label: dest.label, file: manifest.stem, durationMs: Date.now() - started, error: message(err) };
@@ -434,7 +456,7 @@ export async function runRestoreTest(): Promise<RestoreTestRun> {
 
 /** Tarea diaria (se llama cada hora): crea la copia si la última correcta tiene más de 23 h o si la última falló. */
 export async function dailyBackupJob(now: number = Date.now()): Promise<void> {
-  if (!backupKey()) return;
+  if (!backupKey() || backupPaused()) return;
   const status = await readStatus();
   const last = status.lastBackup?.ok ? Date.parse(status.lastBackup.at) : 0;
   const [latestFile] = await listBackups();
@@ -446,6 +468,7 @@ export async function dailyBackupJob(now: number = Date.now()): Promise<void> {
 
 /** Tarea horaria: sube a los destinos externos la última copia si aún no la tienen (o reintenta si falló). Lanza si falla alguno. */
 export async function externalBackupJob(): Promise<void> {
+  if (backupPaused()) return;
   const runs = await syncExternal();
   const failed = runs.filter((r) => !r.ok);
   if (failed.length) throw new Error(failed.map((r) => `${r.label}: ${r.error}`).join(" · "));
@@ -453,7 +476,7 @@ export async function externalBackupJob(): Promise<void> {
 
 /** Tarea mensual (se llama cada hora): prueba de restauración si hace más de 30 días de la última (o nunca). */
 export async function monthlyRestoreTestJob(now: number = Date.now()): Promise<void> {
-  if (!backupKey() || (await listBackups()).length === 0) return;
+  if (!backupKey() || backupPaused() || (await listBackups()).length === 0) return;
   const status = await readStatus();
   const last = status.lastRestoreTest ? Date.parse(status.lastRestoreTest.at) : 0;
   // Si la última prueba falló se repite al día siguiente en vez de esperar un mes.

@@ -58,6 +58,48 @@ export function acquireZipSlot(userId: string): (() => void) | null {
   };
 }
 
+/** Tamaño de cada trozo con que se envía un ZIP ya armado. */
+const ZIP_SEND_CHUNK = 1024 * 1024;
+/** Por si la descarga ni termina ni se cancela (conexión abandonada sin aviso): el hueco se suelta igualmente. */
+const ZIP_SEND_MAX_MS = 15 * 60 * 1000;
+
+/**
+ * Cuerpo de respuesta que entrega el ZIP armado a trozos de 1 MB, según los pide el cliente, y suelta el hueco de
+ * acquireZipSlot al dar el último trozo, si se cancela la descarga o se aborta la petición (o, como muy tarde, a los
+ * 15 min): mientras se envía, el ZIP sigue ocupando memoria y debe seguir contando como uno en curso.
+ */
+export function zipBodyStream(zip: Uint8Array, release: () => void, opts: { signal?: AbortSignal; chunk?: number } = {}): ReadableStream<Uint8Array> {
+  const chunk = opts.chunk ?? ZIP_SEND_CHUNK;
+  let pos = 0;
+  const timer = setTimeout(() => done(), ZIP_SEND_MAX_MS);
+  timer.unref?.();
+  const done = () => {
+    clearTimeout(timer);
+    opts.signal?.removeEventListener("abort", done);
+    release();
+  };
+  if (opts.signal?.aborted) done();
+  else opts.signal?.addEventListener("abort", done, { once: true });
+  return new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        const end = Math.min(pos + chunk, zip.length);
+        if (end > pos) controller.enqueue(zip.subarray(pos, end));
+        pos = end;
+        if (pos >= zip.length) {
+          done();
+          controller.close();
+        }
+      },
+      cancel() {
+        done();
+      },
+    },
+    // Sin cola: cada trozo se lee del buffer solo cuando el cliente pide el siguiente.
+    { highWaterMark: 0 },
+  );
+}
+
 /** Tope por petición: el plan tiene el suyo (se consulta al abrir cada release del histórico), los paquetes pedidos por número otro. */
 export function zipRateKey(mode: ZipRequestMode, userId: string): { key: string; limit: number } {
   if (mode.kind === "plan") return { key: `release-zip-plan:${userId}`, limit: 60 };
