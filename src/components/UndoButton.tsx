@@ -4,9 +4,10 @@ import { Loader2, Redo2, Undo2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { redoLast, undoLast } from "@/actions/undo";
+import { redoChecked, undoChecked } from "@/actions/undo";
 import { useT } from "@/i18n/client";
 import { cn } from "./ui/cn";
+import { useConfirm } from "./ui/ConfirmDialog";
 import { useToast } from "./ui/Toast";
 import { isTypingTarget, useShortcut } from "./board/shortcuts";
 import { UNDONE_EVENT, useBoardModalOpen, useUndoTask } from "./undo-context";
@@ -23,6 +24,7 @@ export function UndoButton({ projectId, shortcut = false, inDialog = false, clas
   const t = useT();
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
   const taskId = useUndoTask();
   const sc = useShortcut();
   const [busy, setBusy] = useState<"undo" | "redo" | null>(null);
@@ -36,9 +38,18 @@ export function UndoButton({ projectId, shortcut = false, inDialog = false, clas
     busyRef.current = true;
     setBusy(redo ? "redo" : "undo");
     try {
-      const res = await (redo ? redoLast : undoLast)(projectId, scope);
+      const call = redo ? redoChecked : undoChecked;
+      let res = await call(projectId, scope);
       if (!res.ok) return toast(res.error, "error");
-      const { label, skipped } = res.data;
+      // Otra persona cambió después lo que se va a deshacer: se pregunta y, si acepta, se aplica esa misma entrada.
+      const conflict = res.data.conflict;
+      if (conflict) {
+        if (!(await confirm({ title: conflict.title, message: conflict.message, confirmLabel: conflict.confirmLabel, danger: conflict.danger }))) return;
+        res = await call(projectId, scope, conflict.entryId);
+        if (!res.ok) return toast(res.error, "error");
+      }
+      if (!res.data.applied) return;
+      const { label, skipped } = res.data.applied;
       toast(
         redo
           ? skipped ? t("Rehecho: {label} (parte ya no existía)", { label }) : t("Rehecho: {label}", { label })
@@ -52,7 +63,7 @@ export function UndoButton({ projectId, shortcut = false, inDialog = false, clas
       busyRef.current = false;
       setBusy(null);
     }
-  }, [projectId, taskId, router, toast, t]);
+  }, [projectId, taskId, router, toast, t, confirm]);
 
   useEffect(() => {
     if (!shortcut) return;
