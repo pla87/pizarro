@@ -29,7 +29,7 @@ export function Markdown({ children }: { children: string }) {
           img: ({ node: _node, alt, src }) =>
             typeof src === "string" && src.startsWith("/api/attachments/") ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img alt={alt ?? ""} src={src} className="max-w-full rounded" />
+              <img alt={alt ?? ""} src={src} loading="lazy" decoding="async" className="max-w-full rounded" />
             ) : (
               <span className="text-slate-400">{t("[imagen: {alt}]", { alt: alt ?? "" })}</span>
             ),

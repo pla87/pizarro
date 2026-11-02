@@ -6,7 +6,7 @@ import { useCallback, useImperativeHandle, useMemo, useRef } from "react";
 import { useT } from "@/i18n/client";
 import { indentLines, insertLink, insertRule, toggleCodeBlock, toggleLinePrefix, toggleWrap, type EditResult } from "@/lib/markdown-edit";
 import { DictationButton, insertIntoField } from "./DictationButton";
-import { FormatToolbar, type FormatItems } from "./FormatToolbar";
+import { FormatToolbar, FORMAT_BAR_CLASS, type FormatItems } from "./FormatToolbar";
 import { MentionTextarea, type MentionCommand } from "./MentionTextarea";
 import { applyTextareaEdit } from "./textarea-edit";
 
@@ -85,11 +85,15 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
     return <RichTextEditor id={id} value={value} onChange={onValueChange} onSubmit={onSubmit} onCancel={onCancel} placeholder={placeholder} autoFocus={autoFocus} users={users} onCommand={onCommand} />;
   }
   return (
-    <div ref={root} className="contents">
+    <>
+    <div
+      ref={root}
+      className="group rounded-lg border border-slate-300 bg-white focus-within:border-focus focus-within:ring-3 focus-within:ring-focus/30 dark:border-slate-700 dark:bg-slate-900 [&_textarea:focus]:border-transparent [&_textarea:focus]:ring-0 [&_textarea]:rounded-t-none [&_textarea]:border-0 [&_textarea]:bg-transparent"
+    >
       <FormatToolbar
         items={items}
         onLeave={() => inner.current?.focus()}
-        className="sticky top-[var(--sticky-top,0px)] z-10 mb-1 bg-white py-1 dark:bg-slate-900"
+        className={FORMAT_BAR_CLASS}
         trailing={<DictationButton variant="toolbar" tabIndex={-1} within={() => root.current} onText={(s) => insertIntoField(inner.current, s, onValueChange)} />}
       />
       <MentionTextarea
@@ -138,7 +142,8 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
           }
         }}
       />
-      <p className="mt-1 text-xs text-slate-400">{t(MARKDOWN_HINT)}</p>
     </div>
+    <p className="mt-1 text-xs text-slate-400">{t(MARKDOWN_HINT)}</p>
+    </>
   );
 }

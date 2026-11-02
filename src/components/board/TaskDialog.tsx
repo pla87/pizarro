@@ -588,7 +588,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
                 <div key={a.id} className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
                   <button type="button" onClick={() => setLightbox(i)} className="block w-full" aria-label={t("Ver {name}", { name: a.originalName })}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={`/api/attachments/${a.id}?thumb=1`} alt={a.originalName} loading="lazy" className="aspect-video w-full object-cover" />
+                    <img src={`/api/attachments/${a.id}?thumb=1`} alt={a.originalName} loading="lazy" decoding="async" className="aspect-video w-full object-cover" />
                   </button>
                   <button
                     type="button"

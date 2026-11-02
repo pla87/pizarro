@@ -8,6 +8,14 @@ import type { LucideIcon } from "lucide-react";
 import { useT } from "@/i18n/client";
 import { cn } from "./cn";
 
+/**
+ * Aspecto de la barra pegada arriba dentro de una caja con borde (clase `group` en el contenedor): lleva su propio borde
+ * superior y laterales (con -1px de margen, encima del de la caja) y el color/anillo de foco, para que al quedar pegada se
+ * siga viendo el borde superior redondeado resaltado. Como es `sticky` dentro de la caja, nunca sobresale por debajo.
+ */
+export const FORMAT_BAR_CLASS =
+  "sticky top-[var(--sticky-top,0px)] z-10 -mx-px -mt-px rounded-t-lg border-x border-t border-b border-slate-300 border-b-slate-200 bg-white p-1 dark:border-slate-700 dark:border-b-slate-800 dark:bg-slate-900 group-focus-within:border-x-focus group-focus-within:border-t-focus data-[stuck]:group-focus-within:shadow-[0_-3px_0_0_color-mix(in_srgb,var(--color-focus)_30%,transparent)]";
+
 /** Botón de la barra de formato: `title` en español (con el atajo entre paréntesis). */
 export interface FormatItem {
   title: string;
@@ -80,6 +88,25 @@ export function FormatToolbar({ items, onLeave, className, trailing }: { items: 
     ro.observe(el);
     if (trailRef.current) ro.observe(trailRef.current);
     return () => ro.disconnect();
+  }, []);
+
+  // Marca `data-stuck` mientras la barra está pegada arriba (su caja empieza más arriba que ella).
+  useEffect(() => {
+    const el = ref.current;
+    const box = el?.parentElement;
+    if (!el || !box) return;
+    const update = () => {
+      const stuck = box.getBoundingClientRect().top < el.getBoundingClientRect().top - 0.5;
+      if (stuck) el.setAttribute("data-stuck", "");
+      else el.removeAttribute("data-stuck");
+    };
+    update();
+    document.addEventListener("scroll", update, { capture: true, passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      document.removeEventListener("scroll", update, { capture: true });
+      window.removeEventListener("resize", update);
+    };
   }, []);
 
   // Botones visibles: se admiten por prioridad mientras la fila (con el botón de desbordamiento si sobra alguno) quepa.
