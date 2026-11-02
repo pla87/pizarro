@@ -27,7 +27,7 @@ Sirve cualquier proveedor: **Hetzner Cloud**, **DigitalOcean** u **OVH**. Pide:
 | Dato | Valor |
 |---|---|
 | Sistema | **Ubuntu 24.04** |
-| Memoria | **2 GB de RAM como mínimo** (con menos, la construcción de la imagen se queda sin memoria) |
+| Memoria | **1 GB de RAM** basta (la imagen ya viene construida). Solo si instalas con `--build` (se compila en el servidor) hacen falta 2 GB |
 | CPU | 1-2 vCPU |
 | Disco | 20 GB o más |
 | Precio | ~5 €/mes (se cobra por horas) |
@@ -130,9 +130,9 @@ curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pi
 Qué verás, en orden:
 
 1. Si falta Docker (en un Ubuntu recién creado, lo normal), pregunta: `¿Instalo Docker con el script oficial (https://get.docker.com)? [s/N]`. Escribe **`s`** y Enter. (Para que no pregunte, añade `--yes` al final del comando.)
-2. `Descargando Pizarro (main) desde GitHub...` y `Instalando en /opt/pizarro...`
+2. `Última versión publicada: vX.Y.Z.`, `Descargando Pizarro (vX.Y.Z) desde GitHub...` y `Instalando en /opt/pizarro...`. (Si dice que no puede saber la última versión o que aún no hay ninguna publicada, se detiene: repite más tarde o añade `--build` para construir el código en el servidor, lo que necesita 2 GB de RAM y tarda 5-10 minutos.)
 3. `Secretos generados: ...` y `Kit de recuperación escrito en /opt/pizarro/deploy/recovery-kit.txt`.
-4. `Arrancando Pizarro (la primera vez construye la imagen: unos minutos)...` Tarda **5-10 minutos**; salen muchas líneas, es normal.
+4. `Descargando la imagen de Pizarro...` y `Arrancando Pizarro...` La imagen ya está construida: se descarga en **segundos o pocos minutos** según la conexión; salen varias líneas de progreso, es normal.
 5. `Esperando a que la app esté lista...` y por fin:
 
 ```
@@ -287,10 +287,10 @@ Esta es la prueba que de verdad importa. Lo único que sobrevivirá es lo que ha
    ```
 
    Y añade al final las cinco líneas `BACKUP_S3_*` de la sección 8. Guarda y sal.
-7. Construye, restaura y arranca (detalle en la sección 6.3 de `docs/INSTALL.md`):
+7. Descarga la imagen, restaura y arranca (detalle en la sección 6.3 de `docs/INSTALL.md`):
 
    ```bash
-   docker compose build app
+   docker compose pull app
    docker compose up -d postgres
    docker compose run --rm --no-deps app node dist/restore.mjs s3:latest --list
    time docker compose run --rm --no-deps app node dist/restore.mjs s3:latest --files
@@ -325,7 +325,10 @@ Actualizar es repetir el mismo comando. Conserva `.env`, el kit y los datos.
    ```
 
    Esperado: `Actualizando el código en /opt/pizarro (se conservan deploy/.env y el kit de recuperación)...`, `Los secretos ya existían: no se ha cambiado ninguno.` y al final `La instalación ya estaba configurada: entra con tu usuario.` (sin código de `/setup`).
+   Esperado también: `Última versión publicada: vX.Y.Z.` y, en lugar de una compilación, `Descargando la imagen de Pizarro...` (segundos).
 3. Comprueba que tus datos siguen ahí y que la versión es la esperada (la misma si no hay novedades, o la nueva).
+4. **Fijar o volver a una versión** (opcional): añade `--version X.Y.Z` al mismo comando (por ejemplo `... | sh -s -- --domain pizarro.example.com --version 1.37.0`). Instala el código y la imagen de esa versión. Ojo: las migraciones de la base de datos solo avanzan; si la versión nueva ya migró los datos, volver atrás puede exigir restaurar antes una copia de seguridad (sección 7 y siguientes), así que no cuentes con un «rollback inmediato».
+5. **Privacidad:** Pizarro consulta `api.github.com` cada 12 horas para avisar de versiones nuevas (solo pide la última versión, no envía datos de tu instalación). Para desactivarlo, pon `UPDATE_CHECK=0` en `/opt/pizarro/deploy/.env` y ejecuta `docker compose up -d`.
 
 ## 11. Desinstalar y limpiar
 
@@ -353,7 +356,8 @@ Cuando termines (y hayas apuntado lo que quieras contar):
 | El instalador se detiene en «No encuentro Docker» y pregunta `[s/N]` | Ubuntu nuevo sin Docker | Responde `s`. Si no te deja (sin terminal), repite el comando añadiendo `--yes`. |
 | El instalador dice «Sin Docker no puedo seguir» | Respondiste `n` o dejaste vacío | Repite el comando y responde `s`, o usa `--yes`. |
 | «Sin terminal no puedo preguntar el dominio» | Falta `--domain` o `--local` | Añade `--domain pizarro.example.com` o `--local` al comando. |
-| La construcción se corta con «Killed» o `exit code 137`, o el servidor se congela | Memoria insuficiente (menos de 2 GB) | Usa un servidor de 2 GB o más. En un apuro, añade swap: `fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile` y repite el comando. |
+| Solo con `--build`: la construcción se corta con «Killed» o `exit code 137`, o el servidor se congela | Memoria insuficiente (menos de 2 GB) para compilar | Usa un servidor de 2 GB o más, o instala sin `--build` (con la imagen publicada basta 1 GB). En un apuro, añade swap: `fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile` y repite el comando. |
+| `docker compose pull` dice «unauthorized» o «denied» | El paquete `ghcr.io/pla87/pizarro` aún es privado | Quien publica el repositorio debe hacerlo público una vez, tras la primera release: GitHub → *Packages* → `pizarro` → *Package settings* → *Change visibility* → *Public*. Mientras tanto, instala con `--build`. |
 | «La app no ha llegado a healthy en 6 minutos» | Servidor lento o error al arrancar | `cd /opt/pizarro/deploy && docker compose logs --tail 80 app`. Si solo va lento, espera y mira `docker compose ps`. |
 | No tengo el código de `/setup` | Caduca a las 24 h o se perdió la pantalla | `docker compose logs app \| grep "introduce el código"`, o `docker compose restart app` y repite. |
 | `/setup` da 404 | Ya hay un administrador creado | Entra por `/login`. Para empezar de cero: sección 11 y volver a instalar. |
