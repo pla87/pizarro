@@ -165,7 +165,8 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     if (job) after(() => runReleaseAttachmentsJob(result.releaseId, job));
     // Las copias del histórico se guardan sin comprobar la cuota (un despliegue no debe fallar por ella) pero sí cuentan:
     // si con ellas el proyecto se pasa, se avisa para que libere espacio.
-    return { ...result, spawned, storageWarning: await releaseStorageWarning(data.projectId, job) };
+    const storageWarning = await releaseStorageWarning(data.projectId, job);
+    return { ...result, spawned, ...(storageWarning ? { storageWarning } : {}) } as typeof result & { spawned: typeof spawned; storageWarning?: { usedMb: number; limitMb: number } };
   });
 }
 
