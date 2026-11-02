@@ -15,7 +15,9 @@ interface ModalProps {
   title?: React.ReactNode;
   children: React.ReactNode;
   footer?: React.ReactNode;
-  size?: "sm" | "md" | "lg" | "xl" | "2xl";
+  size?: "sm" | "md" | "lg" | "xl" | "wide" | "2xl";
+  /** Clases extra para el área central (p. ej. sin scroll propio cuando el contenido reparte su altura y hace scroll por zonas). */
+  bodyClassName?: string;
   /** Contenido que reemplaza la cabecera estándar. */
   header?: React.ReactNode;
   /** Nombre accesible del diálogo cuando no hay `title` que lo dé (p. ej. con `header` propio). */
@@ -69,9 +71,9 @@ function unlockBodyScroll() {
   savedBody = null;
 }
 
-const SIZES = { sm: "sm:max-w-md", md: "sm:max-w-xl", lg: "sm:max-w-3xl", xl: "sm:max-w-5xl", "2xl": "sm:max-w-[90rem]" };
+const SIZES = { sm: "sm:max-w-md", md: "sm:max-w-xl", lg: "sm:max-w-3xl", xl: "sm:max-w-5xl", wide: "sm:max-w-6xl", "2xl": "sm:max-w-[90rem]" };
 /** Ancho máximo de cada tamaño (para combinarlo con el límite de media pantalla en lg). */
-const SIZE_REM = { sm: "28rem", md: "36rem", lg: "48rem", xl: "64rem", "2xl": "90rem" };
+const SIZE_REM = { sm: "28rem", md: "36rem", lg: "48rem", xl: "64rem", wide: "72rem", "2xl": "90rem" };
 
 /** Ancho de cada tamaño, para `pairLeftWidth`. */
 export const MODAL_SIZE_REM = SIZE_REM;
@@ -86,7 +88,7 @@ const BULK_BTN = "h-11 w-11 items-center justify-center rounded-full border bord
 
 const noopSubscribe = () => () => {};
 
-export function Modal({ open, onClose, title, children, footer, size = "md", header, ariaLabel, placement = "bottom", panelClassName, side = "center", pairLeftWidth: pairLeftProp, onAddSecond, onAddSecondBulk, mobileAdd = false }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, size = "md", header, ariaLabel, placement = "bottom", panelClassName, bodyClassName, side = "center", pairLeftWidth: pairLeftProp, onAddSecond, onAddSecondBulk, mobileAdd = false }: ModalProps) {
   const t = useT();
   const pairLeftCtx = useContext(PairLeftWidthContext);
   const pairLeftWidth = pairLeftProp ?? pairLeftCtx ?? PAIR_RIGHT;
@@ -216,7 +218,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
             </button>
           </div>
         )}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 [--sticky-top:-1rem]">{children}</div>
+        <div className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 [--sticky-top:-1rem]", bodyClassName)}>{children}</div>
         {footer && (
           <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-slate-800">
             {footer}

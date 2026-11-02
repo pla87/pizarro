@@ -9,12 +9,14 @@ import { useT } from "@/i18n/client";
 import { cn } from "./cn";
 
 /**
- * Aspecto de la barra pegada arriba dentro de una caja con borde (clase `group` en el contenedor): lleva su propio borde
- * superior y laterales (con -1px de margen, encima del de la caja) y el color/anillo de foco, para que al quedar pegada se
- * siga viendo el borde superior redondeado resaltado. Como es `sticky` dentro de la caja, nunca sobresale por debajo.
+ * Aspecto de la barra dentro de una caja con borde (clase `group` en el contenedor): lleva su propio borde superior y
+ * laterales (con -1px de margen, justo encima de los de la caja) y el color de foco, así que en reposo su esquina
+ * redondeada es la de la caja. Pegada arriba (`data-stuck`) la caja ya ha salido por arriba: la barra pierde el redondeo y
+ * queda a ras del borde del área con scroll (sube 1px para que su borde superior quede fuera, recortado), de modo que los
+ * bordes y el anillo de la caja siguen derechos a sus lados hasta el borde y no asoma nada de la caja por encima de los botones.
  */
 export const FORMAT_BAR_CLASS =
-  "sticky top-[var(--sticky-top,0px)] z-10 -mx-px -mt-px rounded-t-lg border-x border-t border-b border-slate-300 border-b-slate-200 bg-white p-1 dark:border-slate-700 dark:border-b-slate-800 dark:bg-slate-900 group-focus-within:border-x-focus group-focus-within:border-t-focus data-[stuck]:group-focus-within:shadow-[0_-3px_0_0_color-mix(in_srgb,var(--color-focus)_30%,transparent)]";
+  "sticky top-[var(--sticky-top,0px)] z-10 -mx-px -mt-px rounded-t-lg border-x border-t border-b border-slate-300 border-b-slate-200 bg-white p-1 data-[stuck]:top-[calc(var(--sticky-top,0px)-1px)] data-[stuck]:rounded-t-none dark:border-slate-700 dark:border-b-slate-800 dark:bg-slate-900 group-focus-within:border-x-focus group-focus-within:border-t-focus";
 
 /** Botón de la barra de formato: `title` en español (con el atajo entre paréntesis). */
 export interface FormatItem {
@@ -96,7 +98,8 @@ export function FormatToolbar({ items, onLeave, className, trailing }: { items: 
     const box = el?.parentElement;
     if (!el || !box) return;
     const update = () => {
-      const stuck = box.getBoundingClientRect().top < el.getBoundingClientRect().top - 0.5;
+      // Pegada, la barra sube 1px (ver FORMAT_BAR_CLASS): se compensa para que el estado no oscile.
+      const stuck = box.getBoundingClientRect().top < el.getBoundingClientRect().top + (el.hasAttribute("data-stuck") ? 1 : 0) - 0.5;
       if (stuck) el.setAttribute("data-stuck", "");
       else el.removeAttribute("data-stuck");
     };
