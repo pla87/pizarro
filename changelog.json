@@ -1,6 +1,71 @@
 {
   "versions": [
     {
+      "version": "1.45.0",
+      "date": "2026-11-03",
+      "releasedAt": "2026-11-03T00:51:57+01:00",
+      "summary": "Deshacer con aviso y por lotes, PDF en segundo plano, modal de tarea más cómodo, títulos largos recortados y menos carga",
+      "changes": {
+        "nuevas": [
+          "Deshacer y rehacer avisan con su nombre si otra persona cambió lo mismo después, y piden confirmación.",
+          "El conmutador Tablero/Lista es un solo icono junto al filtro, que no cambia de sitio."
+        ],
+        "mejoras": [
+          "Detalle de la tarea más ancho en escritorio, con los botones de guardar y cancelar siempre visibles y el color en un selector compacto cuando no cabe.",
+          "La barra de formato fija ya no deja asomar nada por encima ni descuadra la esquina.",
+          "Títulos largos: el campo se pone en rojo al pasarse y, al guardar, se recortan a 210 caracteres con aviso en lugar de perderse.",
+          "Forzar el cambio de contraseña anula también la contraseña actual.",
+          "Deshacer o rehacer acciones sobre cientos de tarjetas tarda una fracción de segundo (antes, varios segundos).",
+          "Los PDF se generan en un proceso aparte: un informe grande ya no frena la app.",
+          "El tablero no se recarga cada vez que vuelves a la pestaña si el canal en vivo funciona.",
+          "En español, la pantalla de acceso y el tablero cargan unos 60 KB menos (el diccionario de inglés solo se descarga en inglés).",
+          "Apagado ordenado al desplegar: se guardan los registros pendientes y se esperan los emails en curso.",
+          "Los avisos sin leer se borran al año."
+        ],
+        "correcciones": [
+          "Los informes PDF con muchas tareas pendientes (más de unas 150 en una columna) fallaban siempre; ahora se generan y vuelven a mostrar el pie de página.",
+          "Cancelar en el detalle con más de 10 cambios hechos ya no deja cambios antiguos sin revertir.",
+          "El manual explica el límite de la privacidad de los proyectos privados frente a un administrador."
+        ],
+        "tecnicos": [
+          "Generador de PDF en dist/pdf-worker.mjs (worker_thread).",
+          "i18n separada en parte común y diccionario inglés cargado bajo demanda en el cliente.",
+          "NEXT_MANUAL_SIG_HANDLE=1 y apagado propio."
+        ]
+      },
+      "en": {
+        "summary": "Undo with warnings and in batches, PDFs in the background, a roomier task dialog, long titles trimmed and lighter loading",
+        "changes": {
+          "nuevas": [
+            "Undo and redo warn, naming the person, if someone else changed the same thing afterwards, and ask for confirmation.",
+            "The Board/List switch is a single icon next to the filter that doesn't move."
+          ],
+          "mejoras": [
+            "Wider task detail on desktop, with save and cancel always visible and the colour in a compact picker when it doesn't fit.",
+            "The sticky formatting toolbar no longer lets anything peek above it nor misaligns the corner.",
+            "Long titles: the field turns red when over the limit and, on save, titles are trimmed to 210 characters with a notice instead of being lost.",
+            "Forcing a password change also invalidates the current password.",
+            "Undoing or redoing actions on hundreds of cards takes a fraction of a second (it used to take seconds).",
+            "PDFs are generated in a separate process: a large report no longer slows the app.",
+            "The board no longer reloads every time you return to the tab if the live channel works.",
+            "In Spanish, the sign-in page and the board load about 60 KB less (the English dictionary only downloads in English).",
+            "Graceful shutdown on deploy: pending logs are saved and emails in flight are awaited.",
+            "Unread notifications are deleted after a year."
+          ],
+          "correcciones": [
+            "PDF reports with many pending tasks (over ~150 in one column) always failed; they now generate and show the page footer again.",
+            "Cancel in the task detail after more than 10 changes no longer leaves older changes in place.",
+            "The manual explains the limit of private-project privacy towards an administrator."
+          ],
+          "tecnicos": [
+            "PDF generator in dist/pdf-worker.mjs (worker_thread).",
+            "i18n split into a shared part and an English dictionary loaded on demand on the client.",
+            "NEXT_MANUAL_SIG_HANDLE=1 and custom shutdown."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.44.0",
       "date": "2026-11-02",
       "releasedAt": "2026-11-02T23:07:44+01:00",

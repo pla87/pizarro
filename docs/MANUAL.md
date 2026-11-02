@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.44.0"
+version: "v1.45.0"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.44.0
+**Versión de la aplicación:** v1.45.0
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 
@@ -127,7 +127,7 @@ Además, `Session` guarda el dispositivo y la última actividad (para **Sesiones
 | Verificación en dos pasos | App TOTP o código por email, con 10 códigos de recuperación (se muestran una vez). Obligatoria para admins (con contraseña y también al entrar con Google), opcional para el resto. Los secretos se cifran con `ENCRYPTION_KEY` (o, si no está definida, con una clave derivada de `SESSION_SECRET`). «Recordar este dispositivo 14 días» la omite en ese navegador. Un admin puede reiniciar el segundo paso de otra persona. |
 | Inicio con Google | OpenID Connect con PKCE. Solo entran usuarios existentes y activos (por email verificado y, después, por id de Google); opcionalmente limitado a `GOOGLE_WORKSPACE_DOMAIN`. A los miembros no se les pide segundo paso propio (vale el de Google); a los **administradores** sí: tras Google pasan por la verificación en dos pasos de Pizarro (o la configuran si aún no la tienen) antes de tener sesión. |
 | Avisos de cuenta | Email de aviso al iniciar sesión desde un dispositivo desconocido (no en el primer acceso de una cuenta) y tras cualquier cambio de contraseña o de email. Al cambiar el email de una cuenta (desde el perfil o por un admin) se desvincula su cuenta de Google y dejan de valer los enlaces pendientes enviados a la dirección anterior (invitación, restablecer, confirmar); si era una invitación con el email mal escrito, hay que volver a enviarla. Cerrar sesión borra la cookie del navegador. |
-| Fuerza bruta y abuso | Límite de intentos de login por IP y **por cuenta** (6 intentos sin acierto desde cualquier conexión, 10 desde un dispositivo recordado de esa cuenta; ventana de 15 minutos; el intento se reserva antes de comprobar la contraseña, así que no se salta con peticiones en paralelo, y acertarla lo devuelve), de «¿Olvidaste tu contraseña?» y de cambios de contraseña. También hay topes de subidas (300 por minuto y persona, adjuntos y documentos juntos; al pasarse, la app espera lo que indica el servidor y lo reintenta sola), comentarios (30 por minuto; por tarea, 500 por defecto, configurable entre 1 y 1000 en *Administración → Ajustes*), subtareas (100 por tarea y 60 nuevas por minuto y persona; los topes de subtareas, comentarios, tipos de tarea, proyectos privados y plantillas se respetan aunque se creen varias cosas a la vez), documentos de Google (20 por minuto), creación de tareas (300 por minuto y persona), etiquetas y entregables (30 por minuto), suma de adjuntos por tarea y tamaño de cada paquete ZIP de una release (80 MB por defecto cada uno, configurables en cada proyecto entre 10 y 500 MB, y el de un archivo entre 1 y 100 MB; cada persona arma un ZIP a la vez y el servidor como mucho dos), cola de imágenes en proceso (más de 10 esperando: «inténtalo de nuevo en unos segundos») e informes PDF (5 por minuto y persona; se generan de uno en uno para que la app no se frene). |
+| Fuerza bruta y abuso | Límite de intentos de login por IP y **por cuenta** (6 intentos sin acierto desde cualquier conexión, 10 desde un dispositivo recordado de esa cuenta; ventana de 15 minutos; el intento se reserva antes de comprobar la contraseña, así que no se salta con peticiones en paralelo, y acertarla lo devuelve), de «¿Olvidaste tu contraseña?» y de cambios de contraseña. También hay topes de subidas (300 por minuto y persona, adjuntos y documentos juntos; al pasarse, la app espera lo que indica el servidor y lo reintenta sola), comentarios (30 por minuto; por tarea, 500 por defecto, configurable entre 1 y 1000 en *Administración → Ajustes*), subtareas (100 por tarea y 60 nuevas por minuto y persona; los topes de subtareas, comentarios, tipos de tarea, proyectos privados y plantillas se respetan aunque se creen varias cosas a la vez), documentos de Google (20 por minuto), creación de tareas (300 por minuto y persona), etiquetas y entregables (30 por minuto), suma de adjuntos por tarea y tamaño de cada paquete ZIP de una release (80 MB por defecto cada uno, configurables en cada proyecto entre 10 y 500 MB, y el de un archivo entre 1 y 100 MB; cada persona arma un ZIP a la vez y el servidor como mucho dos), cola de imágenes en proceso (más de 10 esperando: «inténtalo de nuevo en unos segundos») e informes PDF (5 por minuto y persona; se generan de uno en uno y en un proceso aparte para que la app no se frene). |
 | CSRF | `SameSite=Lax`, verificación de `Origin` integrada en las Server Actions y comprobación explícita de `Origin` en las rutas de subida. |
 | Tamaño de las peticiones | El proxy de Next guarda como mucho 2 MB del cuerpo de cada petición, así que una petición enorme sin cuenta (por ejemplo, a /login) no ocupa memoria: cinco conexiones lentas de 100 MB pasaron de ocupar unos 450 MB a unos 40 MB. Las subidas de archivos no pasan por el proxy y se cortan (413) en cuanto superan el máximo del proyecto, aunque no lleven Content-Length; el informe de errores del navegador admite 16 KB (8 KB sin sesión). |
 | Solo Google | Con `AUTH_GOOGLE_ONLY` la respuesta del formulario de contraseña no depende de si la contraseña es correcta: sin acceso de emergencia, siempre «El acceso con contraseña está desactivado…»; con él, cualquier fallo (un miembro, un email desconocido o la contraseña equivocada de un admin) recibe el mismo mensaje. Cada intento cuenta para el límite por cuenta. |
@@ -379,6 +379,8 @@ Está pensado para leerse de un vistazo; cada sección sale solo si tiene conten
 Se genera en el idioma de quien lo pide.
 
 «Hoy» se calcula en la zona horaria `APP_TIMEZONE` (por defecto `Europe/Madrid`).
+
+Los PDF (informe, plan semanal, lista y entrega) se generan en un proceso aparte del servidor: mientras se prepara un informe grande, el tablero, el canal en vivo y las subidas siguen respondiendo con normalidad. El primer PDF tras un rato sin usarse tarda alrededor de medio segundo más, mientras arranca el generador. Los informes largos (cientos de tareas pendientes) se generan sin problema: antes, a partir de unas 150 filas en una columna, el informe fallaba.
 
 ### 3.9 Colaboración: comentarios, avisos, seguimiento e informes
 
@@ -753,7 +755,7 @@ Con variables del servidor (tienen prioridad sobre la tarjeta):
    - `SMTP_FROM=Pizarro <avisos@tu-dominio.com>`
 5. Redespliega y prueba con una invitación o con «¿Olvidaste tu contraseña?».
 
-Los PDF (informe, plan semanal, lista, entrega) tienen un tiempo máximo de 90 s cada uno: si se supera, se muestra «El PDF tardó demasiado; inténtalo de nuevo» y la cola sigue con los siguientes. Si ya hay 5 esperando, los nuevos se rechazan con «Hay muchos PDF generándose; inténtalo en un momento». Un informe semanal que falla se reintenta como mucho una vez por hora.
+Los PDF (informe, plan semanal, lista, entrega) se generan de uno en uno en un proceso aparte, para que la app no se frene, con un tiempo máximo de 90 s cada uno: si se supera, se detiene ese PDF (deja de consumir CPU), se muestra «El PDF tardó demasiado; inténtalo de nuevo» y la cola sigue con los siguientes. Si ya hay 5 esperando, los nuevos se rechazan con «Hay muchos PDF generándose; inténtalo en un momento». Un informe semanal que falla se reintenta como mucho una vez por hora.
 
 **Alternativa:** el servicio *SMTP relay* de Workspace (`smtp-relay.gmail.com`). Las IP de salida de Railway no son fijas, así que no sirve la autorización por IP: usa autenticación SMTP.
 
@@ -842,7 +844,7 @@ Además de Railway, Pizarro se puede instalar en cualquier servidor con Docker 2
 | Roles de columna | Permiten renombrar y reordenar columnas sin romper el generador de releases. |
 | Generación de la release en el cliente | Respuesta instantánea y edición libre antes de guardar. |
 | `changelog.json` como fuente | Versionado con el código y legible en revisiones; la tabla `AppVersionLog` se reconstruye en cada arranque. |
-| Informe con `@react-pdf/renderer` | Genera el PDF en el servidor sin un navegador: la imagen no crece y el informe tarda milisegundos. |
+| Informe con `@react-pdf/renderer` | Genera el PDF en el servidor sin un navegador, en un hilo aparte (`dist/pdf-worker.mjs`, empaquetado al compilar por `scripts/postbuild.mjs`; sin ese paso los PDF fallan con «No se encuentra el generador de PDF»): la imagen no crece y un informe grande no frena la app. |
 | OAuth por usuario con `drive.file` | Cada archivo pertenece a quien lo crea, sin cuentas de servicio ni permisos sobre el resto del Drive. |
 | Copias cifradas dentro de la app | Restaurables sin `pg_dump` y con la clave fuera del servidor; protegen frente a fallos y filtraciones del volumen. |
 | Tipos de tarea en tabla | Cada equipo define sus categorías y su orden en la release sin tocar código. Las releases guardan el nombre del tipo como instantánea. |

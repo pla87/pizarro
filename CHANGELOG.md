@@ -2,6 +2,40 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.45.0 — 2026-11-03 00:51
+
+Deshacer con aviso y por lotes, PDF en segundo plano, modal de tarea más cómodo, títulos largos recortados y menos carga
+
+### Nuevas funcionalidades
+
+- Deshacer y rehacer avisan con su nombre si otra persona cambió lo mismo después, y piden confirmación.
+- El conmutador Tablero/Lista es un solo icono junto al filtro, que no cambia de sitio.
+
+### Mejoras
+
+- Detalle de la tarea más ancho en escritorio, con los botones de guardar y cancelar siempre visibles y el color en un selector compacto cuando no cabe.
+- La barra de formato fija ya no deja asomar nada por encima ni descuadra la esquina.
+- Títulos largos: el campo se pone en rojo al pasarse y, al guardar, se recortan a 210 caracteres con aviso en lugar de perderse.
+- Forzar el cambio de contraseña anula también la contraseña actual.
+- Deshacer o rehacer acciones sobre cientos de tarjetas tarda una fracción de segundo (antes, varios segundos).
+- Los PDF se generan en un proceso aparte: un informe grande ya no frena la app.
+- El tablero no se recarga cada vez que vuelves a la pestaña si el canal en vivo funciona.
+- En español, la pantalla de acceso y el tablero cargan unos 60 KB menos (el diccionario de inglés solo se descarga en inglés).
+- Apagado ordenado al desplegar: se guardan los registros pendientes y se esperan los emails en curso.
+- Los avisos sin leer se borran al año.
+
+### Correcciones
+
+- Los informes PDF con muchas tareas pendientes (más de unas 150 en una columna) fallaban siempre; ahora se generan y vuelven a mostrar el pie de página.
+- Cancelar en el detalle con más de 10 cambios hechos ya no deja cambios antiguos sin revertir.
+- El manual explica el límite de la privacidad de los proyectos privados frente a un administrador.
+
+### Cambios técnicos / DB
+
+- Generador de PDF en dist/pdf-worker.mjs (worker_thread).
+- i18n separada en parte común y diccionario inglés cargado bajo demanda en el cliente.
+- NEXT_MANUAL_SIG_HANDLE=1 y apagado propio.
+
 ## v1.44.0 — 2026-11-02 23:07
 
 Revisión de toda la app: seguridad, rendimiento y fallos del tablero, las copias y el registro; cuadro propio en las columnas
