@@ -47,13 +47,15 @@ describe("contadores de adjuntos de la tarea", () => {
     const keep = await db.taskAttachment.create({ data: row(task.id, 2 * MB) });
     const gone = await db.taskAttachment.create({ data: row(task.id, 4 * MB, true) });
     const t0 = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+    const openedAt = new Date().toISOString();
     const snap = {
+      openedAt,
       title: t0.title, kindId: t0.kindId, color: t0.color as never, linkUrl: t0.linkUrl, assigneeId: t0.assigneeId, labelIds: [], dueDate: null,
       deliverableId: t0.deliverableId, evergreen: t0.evergreen, evergreenEvery: t0.evergreenEvery, recurrence: t0.recurrence, recurrenceDay: t0.recurrenceDay,
       columnId: t0.columnId, position: t0.position, attachmentIds: [keep.id, gone.id],
     };
     expectOk(await deleteAttachment(gone.id));
-    await db.taskAttachment.create({ data: row(task.id, 1 * MB, true) }); // subido después de abrir
+    await db.taskAttachment.create({ data: { ...row(task.id, 1 * MB, true), createdById: user.id } }); // subido después de abrir
     const res = expectOk(await restoreTaskSnapshot(task.id, snap));
     assert.deepEqual([res.task.imageCount, res.task.fileCount, res.task.attachBytes], [1, 1, 6 * MB]);
     assert.deepEqual(await attachmentTotals(task.id), { imageCount: 1, fileCount: 1, attachBytes: 6 * MB });

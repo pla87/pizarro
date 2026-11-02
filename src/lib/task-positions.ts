@@ -105,8 +105,14 @@ export async function resolvePositionTies(taskIds: string[]): Promise<void> {
   await db.$transaction(async (tx) => {
     const columns = await tx.task.findMany({ where: { id: { in: ids } }, select: { columnId: true } });
     await lockColumns(tx, columns.map((c) => c.columnId));
-    const ordered = await tx.task.findMany({ where: { id: { in: ids } }, orderBy: TASK_ORDER, select: { id: true } });
-    for (const { id } of ordered) {
+    // Una sola consulta para las que de verdad empatan con otra tarea de su columna (lo normal es ninguna):
+    // solo esas se recorren, en el orden del tablero.
+    const tied = await tx.$queryRaw<{ id: string }[]>`
+      SELECT t."id" FROM "Task" AS t
+      WHERE t."id" = ANY(${ids}::text[])
+        AND EXISTS (SELECT 1 FROM "Task" AS o WHERE o."columnId" = t."columnId" AND o."position" = t."position" AND o."id" <> t."id")
+      ORDER BY t."position", t."id"`;
+    for (const { id } of tied) {
       // Se relee cada una: una renumeración anterior puede haberla movido.
       const r = await tx.task.findUniqueOrThrow({ where: { id }, select: { id: true, columnId: true, position: true } });
       const clash = await tx.task.count({ where: { columnId: r.columnId, position: r.position, id: { not: r.id } } });

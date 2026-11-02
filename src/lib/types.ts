@@ -195,6 +195,8 @@ export interface TaskDetail {
   textVersion: string | null;
   /** El usuario actual sigue la tarea (recibe avisos de comentarios y cambios). */
   following: boolean;
+  /** Hora del servidor al leer el detalle: «Cancelar» solo deshace lo que se haga desde entonces (ver restoreTaskSnapshot). */
+  loadedAt: string;
 }
 
 /** Tarea archivada, con su columna de origen y las releases en las que entró. */

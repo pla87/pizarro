@@ -38,12 +38,16 @@ export async function saveTemplate(input: TemplateInput, templateId?: string | n
       revalidatePath("/admin/templates");
       return { id };
     }
-    if ((await db.projectTemplate.count()) >= MAX_TEMPLATES) {
-      const t = await getT();
-      throw new AppError(t("Máximo {n} plantillas.", { n: MAX_TEMPLATES }));
-    }
-    const last = await db.projectTemplate.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
-    const created = await db.projectTemplate.create({ data: { ...row, position: (last?.position ?? 0) + POSITION_STEP }, select: { id: true } });
+    // Recuento y alta con un candado común: dos altas a la vez no pasan del máximo.
+    const created = await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:project-templates'))::text`;
+      if ((await tx.projectTemplate.count()) >= MAX_TEMPLATES) {
+        const t = await getT();
+        throw new AppError(t("Máximo {n} plantillas.", { n: MAX_TEMPLATES }));
+      }
+      const last = await tx.projectTemplate.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
+      return tx.projectTemplate.create({ data: { ...row, position: (last?.position ?? 0) + POSITION_STEP }, select: { id: true } });
+    });
     revalidatePath("/admin/templates");
     return created;
   });
