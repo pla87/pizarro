@@ -163,10 +163,12 @@ export function useDictation(onText: (text: string) => void) {
  * (Firefox) o si la persona lo desactivó en Mi perfil → Preferencias. `onText` inserta cada frase donde corresponda
  * (`insertIntoField` / `insertIntoEditor`).
  */
-export function DictationButton({ onText, variant = "field", tabIndex, className }: {
+export function DictationButton({ onText, variant = "field", placement = "beside", tabIndex, className }: {
   onText: (text: string) => void;
   /** «toolbar»: icono de la barra de formato; «field»: botón junto a un campo, con el texto «Escuchando…» mientras graba. */
   variant?: "toolbar" | "field";
+  /** «inside» (solo «field»): el botón va dentro de la caja del campo, a la derecha (el contenedor debe ser `relative` y el campo llevar `pr-9`); «Escuchando…» sale debajo. */
+  placement?: "beside" | "inside";
   tabIndex?: number;
   className?: string;
 }) {
@@ -174,9 +176,10 @@ export function DictationButton({ onText, variant = "field", tabIndex, className
   const enabled = useDictationEnabled();
   const { supported, listening, interim, toggle } = useDictation(onText);
   if (!supported || !enabled) return null;
+  const inside = variant === "field" && placement === "inside";
   const title = listening ? t("Parar dictado (Esc)") : t("Dictar");
   return (
-    <span className={cn("inline-flex shrink-0 items-center gap-1.5", className)}>
+    <span className={cn(inside ? "absolute right-0 z-10" : "inline-flex shrink-0 items-center gap-1.5", inside && !className && "top-0", className)}>
       <button
         type="button"
         data-dictation
@@ -197,7 +200,13 @@ export function DictationButton({ onText, variant = "field", tabIndex, className
         <Mic size={15} className="relative" />
       </button>
       {listening && variant === "field" && (
-        <span className="max-w-40 truncate text-xs font-medium text-red-600 dark:text-red-300" role="status">
+        <span
+          className={cn(
+            "max-w-40 truncate text-xs font-medium text-red-600 dark:text-red-300",
+            inside && "absolute top-full right-0 mt-0.5 max-w-[min(18rem,80vw)] rounded-md border border-slate-200 bg-white px-2 py-0.5 whitespace-nowrap shadow-sm dark:border-slate-700 dark:bg-slate-900",
+          )}
+          role="status"
+        >
           <span className="animate-pulse motion-reduce:animate-none">{t("Escuchando…")}</span>
           {interim && <span className="ml-1 font-normal text-slate-500 max-sm:hidden">{interim}</span>}
         </span>

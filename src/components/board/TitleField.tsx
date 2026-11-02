@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import { useT } from "@/i18n/client";
 import { insertDictation } from "@/lib/dictation";
 import { splitMentions } from "@/lib/mentions";
@@ -10,7 +10,22 @@ import { DictationButton, insertIntoField } from "../ui/DictationButton";
 import { MentionTextarea } from "../ui/MentionTextarea";
 
 const TITLE_MAX = 400;
-const CLASSES = "field-sizing-content w-full min-w-0 resize-none rounded-md bg-transparent px-1 py-0.5 text-lg font-semibold outline-none focus:bg-slate-50 dark:focus:bg-slate-800";
+// pr-9: deja sitio al micrófono, que va dentro del campo, a la derecha.
+const CLASSES = "field-sizing-content w-full min-w-0 resize-none rounded-md bg-transparent py-0.5 pr-9 pl-1 text-lg font-semibold outline-none focus:bg-slate-50 dark:focus:bg-slate-800";
+
+const NARROW = "(max-width: 639px)";
+/** true por debajo de sm (móvil). En el servidor, false. */
+function useNarrow(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia(NARROW);
+      mq.addEventListener("change", cb);
+      return () => mq.removeEventListener("change", cb);
+    },
+    () => window.matchMedia(NARROW).matches,
+    () => false,
+  );
+}
 
 /**
  * Título de la tarea en una línea, con @menciones. Al editar se ve el texto con las menciones tal como
@@ -24,6 +39,7 @@ export function TitleField({ value, onChange, onCommit, users }: {
 }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
+  const narrow = useNarrow();
   const hasMentions = splitMentions(value).some((p) => typeof p !== "string");
   const ref = useRef<HTMLTextAreaElement>(null);
   const setTitle = (v: string) => onChange(v.replace(/\n/g, ""));
@@ -39,14 +55,16 @@ export function TitleField({ value, onChange, onCommit, users }: {
           if (next !== value) onCommit(next);
         }
       }}
+      placement="inside"
     />
   );
 
   // Un único contenedor: al pasar de campo a menciones pintadas, el botón del micrófono no se vuelve a crear (cortaría el dictado).
   return (
-    <div className="flex min-w-0 flex-1 items-start gap-1">
-      {hasMentions && !editing ? (
-        <button type="button" onClick={() => setEditing(true)} className={`${CLASSES} min-w-0 flex-1 cursor-text text-left break-words`} aria-label={t("Título")}>
+    <div className="relative min-w-0 flex-1">
+      {!editing && (hasMentions || narrow) ? (
+        // En móvil, sin editar, el título ocupa como mucho 2 líneas; al tocarlo se edita y se ve entero.
+        <button type="button" onClick={() => setEditing(true)} className={`${CLASSES} block min-w-0 cursor-text text-left break-words max-sm:line-clamp-2`} aria-label={t("Título")}>
           <MentionText text={value} />
         </button>
       ) : (
@@ -70,7 +88,7 @@ export function TitleField({ value, onChange, onCommit, users }: {
           rows={1}
           maxLength={TITLE_MAX}
           className={CLASSES}
-          wrapperClassName="min-w-0 flex-1"
+          wrapperClassName="min-w-0"
           aria-label={t("Título")}
         />
       )}
