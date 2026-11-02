@@ -8,6 +8,7 @@ import { campos } from "./campos";
 import { common } from "./common";
 import { cuentas } from "./cuentas";
 import { documentacion } from "./documentacion";
+import { importar } from "./importar";
 import { proyectos } from "./proyectos";
 import { server } from "./server";
 import { settings } from "./settings";
@@ -18,4 +19,4 @@ import { setup } from "./setup";
 import { task } from "./task";
 import { wip } from "./wip";
 
-export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing, ...almacenamiento, ...licencia, ...wip };
+export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing, ...almacenamiento, ...licencia, ...wip, ...importar };

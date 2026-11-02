@@ -474,9 +474,13 @@ describe("permisos", () => {
     assert.equal(done.status, "DONE");
     assert.equal((await db.project.findUniqueOrThrow({ where: { id: done.projectId! } })).isPrivate, true);
     // Cuerpo vacío o archivo que no es un ZIP: error claro, nada creado.
-    const junk = await importRoute(new Request("http://localhost/api/projects/import", { method: "POST", body: "basura", headers: { origin: "http://localhost", host: "localhost" } }));
+    const junk = await importRoute(new Request("http://localhost/api/projects/import?name=basura.zip", { method: "POST", body: "basura", headers: { origin: "http://localhost", host: "localhost" } }));
     assert.equal(junk.status, 400);
     assert.match((await junk.json()).error, /ZIP/);
+    // Sin nombre, un texto cualquiera se toma por CSV: se rechaza porque no tiene una columna de título.
+    const text = await importRoute(new Request("http://localhost/api/projects/import", { method: "POST", body: "basura", headers: { origin: "http://localhost", host: "localhost" } }));
+    assert.equal(text.status, 400);
+    assert.match((await text.json()).error, /columna de título/);
     // Tamaño máximo configurable.
     process.env.PROJECT_IMPORT_MAX_MB = "0.0001";
     try {
