@@ -11,7 +11,7 @@ import { MAX_BULK_TASKS } from "@/lib/bulk";
 import { MAX_TITLE } from "@/lib/constants";
 import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { assertCanBlock, blockProblem, lockBlocking } from "@/lib/blocking";
-import { addUndo, captureTasks, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchedTask, type TaskField, type UndoOp } from "@/lib/undo";
+import { addUndo, captureTasks, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchEverything, touchedTask, type TaskField, type UndoOp } from "@/lib/undo";
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
@@ -1076,6 +1076,9 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
     // Lo que hizo esta persona desde que abrió el detalle (como mucho sus 10 últimas entradas de cada pila).
     const entries = await db.undoEntry.findMany({ where: { userId: user.id, projectId, createdAt: { gte: openedAt } }, orderBy: { createdAt: "asc" }, select: { kind: true, ops: true } });
     const mine = touchedTask(entries, id);
+    // Si esas entradas llenan una pila, las primeras del rato pudieron descartarse (p. ej. marcar 12 subtareas): no se sabe
+    // todo lo que hizo, así que vuelve todo lo que guarda la instantánea. El texto sigue protegido por `since` (más abajo).
+    if (entriesMayBeTrimmed(entries)) touchEverything(mine, id, snap.subtasks, subs.map((s) => s.id));
     const touched = (k: TaskField) => mine.fields.has(k);
 
     // --- Campos de la tarjeta: solo los que tocó, solo si difieren y solo si el destino sigue existiendo.
