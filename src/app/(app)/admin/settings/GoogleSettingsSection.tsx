@@ -58,7 +58,7 @@ export function GoogleSettingsSection({ view }: { view: GoogleSettingsView }) {
       <div>
         <h2 className="flex items-center gap-1.5 text-base font-semibold"><KeyRound size={16} /> {t("2. Acceso con Google")}</h2>
         <p className="mt-0.5 text-xs text-slate-500">
-          {t("Permite entrar con «Iniciar sesión con Google» a las personas que ya tienen cuenta en Pizarro con ese mismo email. También se usa para crear Docs y Sheets desde las tarjetas. No envía ningún email: eso es la sección 1.")}
+          {t("Permite «Iniciar sesión con Google» a quien ya tiene cuenta en Pizarro con ese email, y crear Docs y Sheets desde las tarjetas. No envía emails (sección 1).")}
         </p>
       </div>
       {status}
@@ -66,13 +66,13 @@ export function GoogleSettingsSection({ view }: { view: GoogleSettingsView }) {
       <div className="space-y-2" data-testid="google-public-url">
         <h3 className="text-sm font-semibold">{t("Dirección pública de Pizarro")}</h3>
         {view.appUrl ? <code className="block break-all rounded-md bg-slate-100 px-2 py-1 text-sm dark:bg-slate-800" data-testid="google-app-url">{view.appUrl}</code> : <p className="text-xs text-amber-600">{t("Define APP_URL en el servidor (por ejemplo https://pizarro.tuempresa.com) para ver las direcciones.")}</p>}
-        <p className="text-xs text-slate-500">{t("Es el valor de APP_URL en la configuración del servidor. Todo lo que hay que dar de alta en Google (página principal, enlaces de privacidad y condiciones, dominio autorizado y direcciones de redirección) sale de esa dirección. Si usas un dominio propio, APP_URL debe ser ese dominio; si no, la dirección que te da el servidor (consulta el «Paso 0» de la guía).")}</p>
+        <p className="text-xs text-slate-500">{t("Es el APP_URL del servidor; de él salen todas las direcciones que pide Google (ver el «Paso 0» de la guía).")}</p>
         {view.mismatch && (
           <div role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200" data-testid="google-url-mismatch">
             {view.mismatch.kind === "own" ? (
-              <p>{t("Estás entrando por {current} pero APP_URL es {app}. Si ya usas tu dominio propio, cambia APP_URL en la configuración del servidor (Railway → Variables) a {current} y redespliega; después vuelve aquí: las direcciones de abajo se actualizarán.", { current: view.mismatch.current, app: view.mismatch.app })}</p>
+              <p>{t("Entras por {current} pero APP_URL es {app}. Si ya usas tu dominio propio, cambia APP_URL en el servidor (Railway → Variables) a {current} y redespliega.", { current: view.mismatch.current, app: view.mismatch.app })}</p>
             ) : (
-              <p>{t("Estás entrando por {current} pero APP_URL es {app}. Las direcciones de Google salen de APP_URL, no de la que usas ahora. Es normal si todavía entras por la dirección antigua; si quieres que Pizarro use {current}, cambia APP_URL en la configuración del servidor (Railway → Variables) y redespliega.", { current: view.mismatch.current, app: view.mismatch.app })}</p>
+              <p>{t("Entras por {current} pero APP_URL es {app}, y las direcciones de Google salen de APP_URL. Es normal si aún usas la dirección antigua; para usar {current}, cambia APP_URL (Railway → Variables) y redespliega.", { current: view.mismatch.current, app: view.mismatch.app })}</p>
             )}
           </div>
         )}
@@ -91,7 +91,7 @@ export function GoogleSettingsSection({ view }: { view: GoogleSettingsView }) {
                 <p className="pt-1 text-xs font-medium">{t("Con la dirección que usas ahora ({current})", { current: view.mismatch.current })}</p>
                 <CopyRow label={t("Acceso con Google")} value={view.mismatch.redirectUris.login} />
                 <CopyRow label={t("Docs y Sheets")} value={view.mismatch.redirectUris.docs} />
-                <p className="text-xs text-slate-500">{t("Google admite varias direcciones de redirección a la vez: añade las dos mientras migras y quita las antiguas cuando todo funcione.")}</p>
+                <p className="text-xs text-slate-500">{t("Google admite varias a la vez: añade ambas mientras migras y quita las antiguas al terminar.")}</p>
               </>
             )}
           </div>
@@ -100,11 +100,11 @@ export function GoogleSettingsSection({ view }: { view: GoogleSettingsView }) {
         )}
       </div>
 
-      <GoogleGuide view={view} open={!saved.clientId && !view.envCredentials} />
+      <GoogleGuide view={view} />
 
       {view.envCredentials ? (
         <div className="space-y-2">
-          <p className="text-xs text-slate-500">{t("El ID y el secreto de cliente están configurados en el servidor (variables GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET). Para cambiarlos hay que editar las variables del servicio; aquí solo se muestra.")}</p>
+          <p className="text-xs text-slate-500">{t("ID y secreto de cliente configurados en el servidor (GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET); aquí solo se muestran.")}</p>
           <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[10rem_1fr]">
             <dt className="text-slate-500">{t("ID de cliente")}</dt><dd>{t("configurado en el servidor")}</dd>
             <dt className="text-slate-500">{t("Secreto de cliente")}</dt><dd>{t("configurado en el servidor")}</dd>
@@ -140,14 +140,14 @@ export function GoogleSettingsSection({ view }: { view: GoogleSettingsView }) {
           ) : (
             <input className="input mt-1 w-full" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="empresa.com" autoComplete="off" maxLength={253} />
           )}
-          <span className="mt-1 block text-xs text-slate-500">{t("Vacío = vale cualquier cuenta de Google, también Gmail. Con un dominio, solo entran cuentas de ese dominio, y se puede compartir Docs y Sheets con todo el dominio.")}</span>
+          <span className="mt-1 block text-xs text-slate-500">{t("Vacío = cualquier cuenta de Google. Con dominio, solo entran cuentas de ese dominio y se pueden compartir Docs y Sheets con todo él.")}</span>
         </label>
       </div>
 
       <label className="block text-sm sm:max-w-md">
         <span className="font-medium">{t("Email de contacto público (opcional)")}</span>
         <input className="input mt-1 w-full" type="email" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="privacidad@empresa.com" autoComplete="off" maxLength={200} />
-        <span className="mt-1 block text-xs text-slate-500">{t("Aparece en las páginas públicas de privacidad y condiciones (/privacy y /terms) que Google pide. Vacío = «el administrador de esta instalación».")}</span>
+        <span className="mt-1 block text-xs text-slate-500">{t("Se muestra en /privacy y /terms (las pide Google). Vacío = «el administrador de esta instalación».")}</span>
       </label>
 
       <div className="flex flex-wrap items-center gap-2">

@@ -101,7 +101,7 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
   const header = (
     <div>
       <h2 className="flex items-center gap-1.5 text-base font-semibold"><Mail size={16} /> {t("1. Avisos por email")}</h2>
-      <p className="mt-0.5 text-xs text-slate-500">{t("Cómo envía Pizarro los avisos, los enlaces de acceso y los informes por email. No tiene que ver con «Acceso con Google», que va aparte más abajo.")}</p>
+      <p className="mt-0.5 text-xs text-slate-500">{t("Avisos, enlaces de acceso e informes por email. Es independiente de «Acceso con Google» (sección 2).")}</p>
     </div>
   );
 
@@ -109,7 +109,7 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
     return (
       <section id="avisos-email" className="card space-y-3 p-5">
         {header}
-        <p className="text-xs text-slate-500">{t("Configurado en el servidor (variables SMTP_*). Para cambiarlo hay que editar las variables del servicio; aquí solo se muestra.")}</p>
+        <p className="text-xs text-slate-500">{t("Configurado en el servidor (variables SMTP_*); aquí solo se muestra.")}</p>
         <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[10rem_1fr]">
           <dt className="text-slate-500">{t("Servidor SMTP")}</dt><dd>{env.host}</dd>
           <dt className="text-slate-500">{t("Puerto")}</dt><dd>{env.port} · {connection(env.secure)}</dd>
@@ -153,26 +153,28 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
     <section id="avisos-email" className="card space-y-4 p-5">
       {header}
       {outbox && <p className="text-xs text-amber-600">{t("El buzón de pruebas (MAIL_OUTBOX_DIR) está activo: los emails se guardan en disco en vez de enviarse.")}</p>}
-      <p className="text-xs text-slate-500">{t("Elige una opción. La contraseña se guarda cifrada y no se vuelve a mostrar.")}</p>
+      <p className="text-xs text-slate-500">{t("La contraseña se guarda cifrada y no se vuelve a mostrar.")}</p>
 
       <div role="radiogroup" aria-label={t("Cómo se envían los emails")} className="grid gap-3 sm:grid-cols-2">
         <ModeCard checked={gmail} onSelect={() => chooseMode("gmail")} title={t("Gmail de un administrador (uso familiar)")}
-          text={t("Sencillo y gratuito: los emails salen de una cuenta de Gmail o de Google. Vale para equipos pequeños; Google limita los envíos diarios.")} />
+          text={t("Gratis y sencillo, para equipos pequeños. Google limita los envíos diarios.")} />
         <ModeCard checked={!gmail} onSelect={() => chooseMode("company")} title={t("Servicio de correo de la empresa")}
-          text={t("Un servidor SMTP profesional: Google Workspace, Brevo, SendGrid, Amazon SES, Mailgun, Microsoft 365… Para más envíos y mejor entrega.")} />
+          text={t("Servidor SMTP profesional (Workspace, Brevo, SendGrid, SES…): más envíos y mejor entrega.")} />
       </div>
 
       {gmail ? (
         <div className="space-y-3">
-          <details className="rounded-md bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/50 dark:text-slate-300" open={!saved.hasPassword}>
-            <summary className="cursor-pointer font-medium">{t("Cómo conseguir la contraseña de aplicación de Gmail")}</summary>
+          <p className="rounded-md bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/50 dark:text-slate-300">
+            {t("Usuario: tu dirección de Gmail. Contraseña: una contraseña de aplicación creada en myaccount.google.com/apppasswords (no vale la normal).")}
+          </p>
+          <details className="text-xs text-slate-600 dark:text-slate-300">
+            <summary className="cursor-pointer font-medium">{t("Cómo crear la contraseña de aplicación")}</summary>
             <ol className="mt-2 list-decimal space-y-1 pl-5">
-              <li>{t("Entra en tu cuenta de Google → Seguridad y activa la «Verificación en dos pasos» (si no la tienes).")}</li>
-              <li>{t("Abre myaccount.google.com/apppasswords, escribe un nombre (por ejemplo «Pizarro») y pulsa Crear.")}</li>
-              <li>{t("Google te muestra una contraseña de 16 letras. Cópiala y pégala aquí abajo (con o sin espacios).")}</li>
-              <li>{t("Gmail no acepta tu contraseña normal, solo esta. Si no ves la opción, tu cuenta (por ejemplo la de un colegio o una empresa) puede tenerla bloqueada.")}</li>
+              <li>{t("Activa la «Verificación en dos pasos» en tu cuenta de Google.")}</li>
+              <li>{t("Abre myaccount.google.com/apppasswords, ponle un nombre (p. ej. «Pizarro») y pulsa Crear.")}</li>
+              <li>{t("Copia la contraseña de 16 letras y pégala aquí (con o sin espacios).")}</li>
             </ol>
-            <p className="mt-2"><a className="underline" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer">myaccount.google.com/apppasswords</a> · {t("Se usará smtp.gmail.com, puerto 465 con SSL/TLS.")}</p>
+            <p className="mt-2"><a className="underline" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer">myaccount.google.com/apppasswords</a></p>
           </details>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
