@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Loader2 } from "lucide-react";
+import { Download, ExternalLink, Loader2, Presentation } from "lucide-react";
 import { useState, useTransition } from "react";
 import { saveMaxCommentsPerTask } from "@/actions/settings";
 import { useToast } from "@/components/ui/Toast";
@@ -18,7 +18,7 @@ const MIN = 1;
 const MAX = 1000;
 
 /** «Ajustes»: parámetros generales de la aplicación. */
-export function SettingsAdmin({ maxComments, mail, google, storage }: { maxComments: number; mail: MailSettingsView; google: GoogleSettingsView; storage: StorageAdminView }) {
+export function SettingsAdmin({ maxComments, mail, google, storage, landingAtRoot }: { maxComments: number; mail: MailSettingsView; google: GoogleSettingsView; storage: StorageAdminView; landingAtRoot: boolean }) {
   const t = useT();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -88,6 +88,18 @@ export function SettingsAdmin({ maxComments, mail, google, storage }: { maxComme
           </button>
           {!valid && <span className="text-xs text-red-600">{t("Debe ser un número entero entre {min} y {max}.", { min: MIN, max: MAX })}</span>}
         </div>
+      </section>
+      <section className="card space-y-3 p-5" data-testid="landing-access">
+        <div>
+          <h2 className="flex items-center gap-2 text-sm font-semibold"><Presentation size={16} aria-hidden />{t("Página de presentación")}</h2>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {t("La página pública para presentar Pizarro a quien quieras venderla o enseñarla: funciones, demo, instalación y contacto. Con la variable LANDING_AT_ROOT=1 se muestra también en la dirección principal a quien no ha iniciado sesión.")}
+            {landingAtRoot && <> {t("Ahora mismo se muestra en la dirección principal a quien no ha iniciado sesión.")}</>}
+          </p>
+        </div>
+        <a href="/presentacion" target="_blank" rel="noopener noreferrer" className="btn-secondary inline-flex py-1.5">
+          <ExternalLink size={15} aria-hidden /> {t("Ver la página de presentación")}
+        </a>
       </section>
       <StorageSettingsSection view={storage} />
       <MailSettingsSection initial={mail.settings} env={mail.env} outbox={mail.outbox} />

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {
   ArrowRight, Bell, BookOpen, Briefcase, CalendarDays, CalendarPlus, CalendarRange, ClipboardCheck, Code, Columns3, DatabaseBackup, FileDown, House, Hourglass, Languages, ListChecks,
-  Mic, Minus, Package, Repeat, Rocket, Send, ShieldCheck, SlidersHorizontal, Smartphone, Mail, Wallet, Check,
+  Mic, Minus, Package, Terminal, BellRing, FileText, Repeat, Rocket, Send, ShieldCheck, SlidersHorizontal, Smartphone, Mail, Wallet, Check,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Locale, T } from "@/i18n/core";
@@ -49,6 +49,9 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
     { icon: Package, title: t("Exportar e importar proyectos"), text: t("Descarga un proyecto con sus adjuntos y su histórico, o importa uno desde un archivo.") },
     { icon: DatabaseBackup, title: t("Copias de seguridad cifradas"), text: t("Copias diarias cifradas y una prueba mensual que restaura de verdad la última copia para comprobar que sirve.") },
     { icon: Smartphone, title: t("App instalable en el móvil"), text: t("Instálala desde el navegador, sin tienda de aplicaciones, con una vista pensada para el móvil.") },
+    { icon: Terminal, title: t("Instalación en un paso"), text: t("Un solo comando en tu servidor con Docker, o la plantilla de Railway. Repetirlo actualiza a la última versión.") },
+    { icon: BellRing, title: t("Actualizaciones con aviso"), text: t("La app avisa a los administradores cuando hay una versión nueva, con lo que cambia en ella.") },
+    { icon: FileText, title: t("Plantillas de release"), text: t("Cabeceras y pies reutilizables para las notas de release, en español o en inglés.") },
     { icon: Languages, title: t("Español e inglés"), text: t("Cada persona elige su idioma; también las notas de release y los tipos de tarea de serie.") },
   ];
 
@@ -96,6 +99,21 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
     },
   ];
 
+  const steps: { title: string; text: string }[] = [
+    { title: t("Prepara un servidor"), text: t("Un Linux con Docker, 1 GB de RAM y un dominio apuntando a él (o tu red local, sin dominio).") },
+    { title: t("Ejecuta un comando"), text: t("El script instala Pizarro, la base de datos y el certificado HTTPS, y deja una copia de recuperación.") },
+    { title: t("Crea tu cuenta"), text: t("Abre la dirección, crea el administrador en el asistente y empieza con una plantilla de proyecto.") },
+  ];
+
+  const faq: { q: string; a: string }[] = [
+    { q: t("¿Dónde están mis datos y quién los ve?"), a: t("En la base de datos y los ficheros de tu servidor. Pizarro no tiene rastreadores ni analítica y no envía tus datos a terceros; solo usa los servicios que actives tú, como el correo o Google para iniciar sesión.") },
+    { q: t("¿Hay cuota por usuario?"), a: t("No. Puedes invitar a quien quieras; el límite lo pone tu servidor. Está pensada para equipos pequeños, de hasta unas diez personas.") },
+    { q: t("¿Qué servidor necesito?"), a: t("Linux x86_64 o arm64 con Docker, 1 GB de RAM y los puertos 80 y 443. También puedes desplegarla en Railway.") },
+    { q: t("¿Y las copias de seguridad?"), a: t("Se hacen cada día, cifradas, hacia un destino que eliges (un almacenamiento S3 compatible o una carpeta). Una vez al mes se restaura la última de verdad para comprobar que sirve.") },
+    { q: t("¿En qué idiomas está?"), a: t("Español e inglés. Cada persona elige el suyo, y también las notas de release y los tipos de tarea de serie.") },
+    { q: t("¿Cómo se actualiza?"), a: t("Repitiendo el comando de instalación, que conserva tus datos. La app avisa a los administradores cuando hay una versión nueva.") },
+  ];
+
   return (
     <div data-testid="landing">
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-slate-50/90 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
@@ -108,9 +126,12 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
             <a href="#comparativa" className="hover:text-brand-600 dark:hover:text-brand-300">{t("Comparativa")}</a>
             <a href="#para-quien" className="hover:text-brand-600 dark:hover:text-brand-300">{t("Para quién")}</a>
             <a href="#demo" className="hover:text-brand-600 dark:hover:text-brand-300">{t("Demo")}</a>
+            <a href="#instalacion" className="hover:text-brand-600 dark:hover:text-brand-300">{t("Instalación")}</a>
+            <a href="#precios" className="hover:text-brand-600 dark:hover:text-brand-300">{t("Precios")}</a>
+            <a href="#preguntas" className="hover:text-brand-600 dark:hover:text-brand-300">{t("Preguntas")}</a>
           </nav>
           <a href={`?lang=${other}`} hrefLang={other} lang={other} className="btn-ghost px-2" data-testid="landing-lang" aria-label={other === "en" ? "English" : "Español"}>{other.toUpperCase()}</a>
-          <Link href="/login" className="btn-secondary">{t("Iniciar sesión")}</Link>
+          <Link href="/login" className="btn-secondary whitespace-nowrap">{t("Iniciar sesión")}</Link>
         </div>
       </header>
 
@@ -125,8 +146,9 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <a href="#demo" className="btn-primary px-5 py-2.5 text-base" data-testid="cta-demo">{t("Probar la demo")} <ArrowRight size={16} aria-hidden /></a>
-            <a href={INSTALL_URL} className="btn-secondary px-5 py-2.5 text-base" data-testid="cta-install" rel="noopener noreferrer">{t("Instalar")}</a>
+            <a href="#instalacion" className="btn-secondary px-5 py-2.5 text-base" data-testid="cta-install">{t("Cómo se instala")}</a>
           </div>
+          <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">{t("Sin registro ni tarjeta para probarla: la demo funciona en tu navegador.")}</p>
           <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-600 dark:text-slate-400">
             {[t("Kanban con arrastrar y soltar"), t("Release notes en un clic"), t("Documentación del proyecto"), t("Sin servicios externos obligatorios")].map((x) => (
               <li key={x} className="inline-flex items-center gap-1.5"><Check size={15} className="text-brand-600 dark:text-brand-300" aria-hidden />{x}</li>
@@ -218,6 +240,52 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
         <section className="mx-auto max-w-6xl px-4 py-14" aria-labelledby="demo">
           <SectionTitle id="demo" title={t("Pruébalo")} lead={t("Un proyecto de ejemplo que funciona aquí mismo, sin registrarte. Lo que hagas se queda en tu navegador.")} />
           <LandingDemoLoader />
+        </section>
+
+        <section className="border-t border-slate-200 bg-white py-14 dark:border-slate-800 dark:bg-slate-900/40" aria-labelledby="instalacion">
+          <div className="mx-auto max-w-6xl px-4">
+            <SectionTitle id="instalacion" title={t("Cómo se instala")} lead={t("Tres pasos, sin ser administrador de sistemas.")} />
+            <ol className="grid gap-4 md:grid-cols-3" data-testid="install-steps">
+              {steps.map((st, i) => (
+                <li key={st.title} className="card flex gap-3 p-5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-600 text-sm font-bold text-on-brand" aria-hidden>{i + 1}</span>
+                  <div>
+                    <h3 className="font-semibold">{st.title}</h3>
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{st.text}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <p className="mt-5 text-sm text-slate-600 dark:text-slate-400">
+              {t("¿Prefieres Railway? Hay una plantilla con la base de datos incluida. Los detalles están en la guía de instalación.")}{" "}
+              <a href={INSTALL_URL} rel="noopener noreferrer" className="font-medium text-brand-700 underline dark:text-brand-300">{t("Guía de instalación")}</a>
+            </p>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-4 py-14" aria-labelledby="precios">
+          <SectionTitle id="precios" title={t("Precios")} lead={t("Pizarro no cobra por usuario: el coste es el de tu servidor.")} />
+          <div className="card max-w-2xl p-5" data-testid="pricing">
+            <p className="font-semibold">{t("Precios: próximamente")}</p>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{t("Todavía no hay tarifas publicadas. Si quieres saber cuándo las habrá, o instalarla ya, contacta.")}</p>
+            {contactEmail && (
+              <a href={`mailto:${contactEmail}`} className="btn-primary mt-4 inline-flex" data-testid="pricing-contact"><Mail size={16} aria-hidden />{t("Contacto")}: {contactEmail}</a>
+            )}
+          </div>
+        </section>
+
+        <section className="border-t border-slate-200 bg-white py-14 dark:border-slate-800 dark:bg-slate-900/40" aria-labelledby="preguntas">
+          <div className="mx-auto max-w-3xl px-4">
+            <SectionTitle id="preguntas" title={t("Preguntas frecuentes")} />
+            <div className="space-y-2" data-testid="faq">
+              {faq.map((f) => (
+                <details key={f.q} className="card group p-4">
+                  <summary className="cursor-pointer font-semibold marker:text-brand-600">{f.q}</summary>
+                  <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{f.a}</p>
+                </details>
+              ))}
+            </div>
+          </div>
         </section>
 
         <section className="border-t border-slate-200 bg-brand-600 py-12 text-on-brand dark:border-slate-800">
