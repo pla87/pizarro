@@ -59,7 +59,7 @@ export async function verifyLoginCode(_prev: VerifyState, formData: FormData): P
     return { error: t("Código incorrecto o caducado.") };
   }
   await dropChallenge(ch.id);
-  await completeLogin(ch.user, { method: "password+2fa", rememberDevice: formData.get("remember") === "on", path: "/login/verify" });
+  await completeLogin(ch.user, { method: ch.via === "google" ? "google+2fa" : "password+2fa", rememberDevice: formData.get("remember") === "on", path: "/login/verify" });
   redirect(ch.user.mustChangePassword ? "/change-password" : safeNextPath(ch.next ?? ""));
 }
 
@@ -123,7 +123,7 @@ export async function finishSetup(): Promise<void> {
   const ch = await readChallenge();
   if (!ch || ch.kind !== "SETUP" || !ch.confirmed) redirect("/login");
   await dropChallenge(ch.id);
-  await completeLogin(ch.user, { method: "password+2fa", path: "/login/verify" });
+  await completeLogin(ch.user, { method: ch.via === "google" ? "google+2fa" : "password+2fa", path: "/login/verify" });
   redirect(ch.user.mustChangePassword ? "/change-password" : safeNextPath(ch.next ?? ""));
 }
 

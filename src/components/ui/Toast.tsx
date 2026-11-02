@@ -49,16 +49,23 @@ export function MessageWithLinks({ message }: { message: string }) {
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
-  const last = useRef<{ message: string; kind: ToastKind; at: number } | null>(null);
+  const last = useRef<{ message: string; kind: ToastKind; at: number; id: number; timer: ReturnType<typeof setTimeout>; ms: number } | null>(null);
   const show = useCallback((message: string, kind: ToastKind = "success", action?: ToastAction) => {
     // Un aviso idéntico al anterior (mismo texto y tipo) y reciente no se repite: varias acciones seguidas con el mismo
     // resultado (o un doble clic) no apilan avisos iguales. Los que traen botón sí se muestran.
     const now = Date.now();
-    if (!action && last.current && last.current.message === message && last.current.kind === kind && now - last.current.at < 2000) return;
-    last.current = { message, kind, at: now };
+    if (!action && last.current && last.current.message === message && last.current.kind === kind && now - last.current.at < 2000) {
+      // Se descarta el duplicado, pero el aviso visible vuelve a contar su tiempo.
+      const cur = last.current;
+      clearTimeout(cur.timer);
+      cur.timer = setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== cur.id)), cur.ms);
+      return;
+    }
     const id = nextId++;
+    const ms = kind === "error" || action ? 6000 : 2500;
+    const timer = setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== id)), ms);
+    last.current = { message, kind, at: now, id, timer, ms };
     setItems((prev) => [...prev.slice(-3), { id, kind, message, action }]);
-    setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== id)), kind === "error" || action ? 6000 : 2500);
   }, []);
   return (
     <ToastContext.Provider value={show}>

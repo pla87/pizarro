@@ -8,7 +8,7 @@ import { asUser, db, expectFail, makeProject, makeTask, makeUser } from "./helpe
 import { runStorageCleanup } from "../../src/actions/storage";
 import { createAttachmentWithinLimit } from "../../src/lib/attachment-limit";
 import { createDocumentWithinLimit, purgeTrashedDocuments } from "../../src/lib/documents";
-import { deleteDocumentsForever, deleteTaskAttachments } from "../../src/lib/storage-cleanup";
+import { cleanupArchivedTaskAttachments, deleteDocumentsForever, deleteTaskAttachments } from "../../src/lib/storage-cleanup";
 import { attachmentPath, documentPath, saveDocumentFile, saveRawAttachmentFile } from "../../src/lib/uploads";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-recheck-"));
@@ -41,6 +41,16 @@ describe("limpieza: estado vuelto a comprobar al borrar", () => {
     });
     assert.equal(await exists(attachmentPath(id, "file")), true);
     assert.equal(await db.taskAttachment.count({ where: { id } }), 1);
+  });
+
+  test("max: nunca se borra más de lo confirmado", async () => {
+    const f = await makeProject({ members: [] });
+    const task = await makeTask(f);
+    await db.task.update({ where: { id: task.id }, data: { archivedAt: new Date() } });
+    for (let i = 0; i < 3; i++) await attach(task.id, MB);
+    const r = await cleanupArchivedTaskAttachments(f.project.id, 0, new Date(), 2);
+    assert.equal(r.count, 2);
+    assert.equal(await db.taskAttachment.count({ where: { taskId: task.id } }), 1);
   });
 
   test("onlyArchived / onlyTrashed: lo desarchivado o restaurado no se borra", async () => {

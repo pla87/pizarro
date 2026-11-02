@@ -103,9 +103,9 @@ export async function runStorageCleanup(projectId: string, kind: string, days: n
     const now = await previewCleanup(project.id, c.kind, c.days);
     if (now.count > expected) throw new AppError("El contenido ha cambiado; revisa y confirma de nuevo.");
     let res: { count: number; bytes: number };
-    if (c.kind === "archivedTasks") res = await cleanupArchivedTaskAttachments(project.id, c.days);
-    else if (c.kind === "oldReleases") res = await cleanupOldReleaseAttachments(project.id, c.days);
-    else res = await emptyDocumentsTrash(project.id);
+    if (c.kind === "archivedTasks") res = await cleanupArchivedTaskAttachments(project.id, c.days, new Date(), expected);
+    else if (c.kind === "oldReleases") res = await cleanupOldReleaseAttachments(project.id, c.days, new Date(), expected);
+    else res = await emptyDocumentsTrash(project.id, expected);
     const what = c.kind === "archivedTasks" ? "adjuntos de tareas archivadas" : c.kind === "oldReleases" ? "adjuntos de releases antiguas" : "documentos de la papelera";
     describeAction("Borró definitivamente {n} {what} ({mb} MB liberados)", { n: res.count, what, mb: Math.round((res.bytes / 1024 / 1024) * 10) / 10 }, { kind: c.kind, days: c.days, count: res.count, bytes: res.bytes });
     revalidatePath(`/p/${project.id}/settings`);
