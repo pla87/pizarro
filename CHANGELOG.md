@@ -2,6 +2,35 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.38.0 — 2026-11-02 01:44
+
+Actualizaciones con versiones e imagen publicada, página de presentación con demo, subir archivos sin límite y descargas reanudables
+
+### Nuevas funcionalidades
+
+- Actualizaciones con versiones: cada release lleva su etiqueta en GitHub y una imagen Docker ya construida (ghcr.io/pla87/pizarro) para instalar y actualizar en segundos; se puede fijar o volver a una versión con --version.
+- Aviso en Administración cuando hay una versión nueva de Pizarro, con enlace a las novedades y a cómo actualizar (se puede ocultar por versión o desactivar con UPDATE_CHECK=0).
+- Página de presentación pública (/presentacion) con las funciones principales, comparativa con Trello, Asana, Notion y Jira, y una demo interactiva con un proyecto de ejemplo que funciona en el navegador.
+
+### Mejoras
+
+- Se pueden soltar o adjuntar todos los archivos que quieras de una vez: suben en cola de 3 en 3, con progreso y reintentos; un aviso indica los que no caben y por qué.
+- La columna lateral del detalle de la tarea ya no tiene scroll horizontal y los colores se reparten en dos filas.
+- Ajustes de correo y de Google más breves; cada proveedor indica de dónde salen el usuario y la contraseña.
+- Exportaciones: la nueva sustituye a la anterior del mismo proyecto, las descargas se pueden reanudar si se cortan, se hacen dos a la vez y se deja más margen de disco libre.
+- La guía de prueba en un VPS describe la instalación en un paso.
+
+### Correcciones
+
+- Cancelar o cerrar la tarea detiene las subidas pendientes; los contadores de la tarjeta no retroceden.
+- El diálogo de nueva tarea no se cierra mientras crea y sube.
+- Dos exportaciones casi simultáneas ya no se borran entre sí.
+- El instalador ya no construye una versión sin publicar si GitHub no responde.
+
+### Cambios técnicos / DB
+
+- Workflow .github/workflows/release.yml (imagen multiarquitectura y GitHub Release con las notas del changelog); npm run release:tag. compose usa la imagen publicada (compose.build.yml para construir). Range/ETag en descargas de exportación. DISK_MIN_FREE_MB, PROJECT_TRANSFER_CONCURRENCY=2, LANDING_AT_ROOT, UPDATE_CHECK.
+
 ## v1.37.0 — 2026-11-02 00:16
 
 Exportar e importar en segundo plano, dictado por voz, instalación en un paso y ajustes de interfaz

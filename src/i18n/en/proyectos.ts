@@ -145,7 +145,7 @@ export const proyectos: Record<string, string> = {
   "Guardando en la base de datos…": "Saving to the database…",
   "Preparando…": "Preparing…",
   "Progreso": "Progress",
-  "No hay espacio libre suficiente en el disco del servidor para esta operación.": "There is not enough free disk space on the server for this operation.",
+  "No hay espacio suficiente en el disco del servidor para esta operación.": "There is not enough free disk space on the server for this operation.",
   "Ya tienes dos exportaciones o importaciones en curso. Espera a que termine alguna.": "You already have two exports or imports in progress. Wait for one to finish.",
   "El proyecto ya no existe.": "The project no longer exists.",
   "El archivo subido ya no está en el servidor. Vuelve a subirlo.": "The uploaded file is no longer on the server. Upload it again.",

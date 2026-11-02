@@ -3,6 +3,7 @@
 //
 //   npm run version:bump -- patch|minor|major|X.Y.Z [--date YYYY-MM-DD] [--summary "texto"]
 //   npm run version:bump -- --render      (solo regenera CHANGELOG.md)
+//   npm run release:tag                   (crea la etiqueta vX.Y.Z de package.json en el commit actual)
 //
 // Actualiza package.json (y package-lock.json), añade la entrada en changelog.json
 // y regenera CHANGELOG.md. La tabla AppVersionLog se sincroniza al arrancar la app
@@ -88,6 +89,10 @@ if (!args.includes("--render")) {
   }
   writeJson("changelog.json", changelog);
   console.log(`Versión ${next} registrada. Rellena sus cambios en changelog.json y ejecuta "npm run version:bump -- --render".`);
+  // Tras fusionar en main, la etiqueta dispara .github/workflows/release.yml (release + imagen Docker).
+  console.log(`\nCuando esté fusionado en main, publica la versión con la etiqueta (o con "npm run release:tag"):`);
+  console.log(`  git tag -a v${next} -m "Pizarro v${next}"`);
+  console.log(`  git push origin v${next}`);
 }
 
 writeFileSync("CHANGELOG.md", renderMarkdown(changelog));

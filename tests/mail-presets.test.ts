@@ -11,6 +11,14 @@ describe("preajustes de proveedores de correo", () => {
     assert.ok(MAIL_PRESETS.every((p) => p.hint && p.host && p.port));
   });
 
+  test("cada preajuste dice de dónde salen el usuario y la contraseña, en una línea corta", () => {
+    for (const p of MAIL_PRESETS) {
+      assert.match(p.hint, /Usuario/, p.id);
+      assert.match(p.hint, /[Cc]ontraseña|credenciales/, p.id);
+      assert.ok(p.hint.length < 200, `${p.id}: ${p.hint.length}`);
+    }
+  });
+
   test("el modo se deduce del servidor si no se guardó", () => {
     assert.equal(parseMailSettings([{ key: "mail.host", value: "smtp.gmail.com" }]).mode, "gmail");
     assert.equal(parseMailSettings([{ key: "mail.host", value: "smtp.brevo.example" }]).mode, "company");

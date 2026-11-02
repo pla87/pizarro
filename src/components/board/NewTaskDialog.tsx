@@ -24,7 +24,9 @@ import { MAX_DESCRIPTION, MAX_TITLE } from "@/lib/constants";
 import { TypeSelector } from "./TaskDialog";
 import type { T } from "@/i18n/core";
 import { AttachLimitHint } from "./AttachLimitHint";
-import { filesFrom, formatBytes, isImageFile, uploadFile, useFileDrop } from "./upload";
+import { UploadProgress } from "./UploadProgress";
+import { batchErrorMessage, filesFrom, formatBytes, isImageFile, skippedMessage, uploadBatch, useFileDrop, type BatchProgress } from "./upload";
+import { planUploads } from "@/lib/upload-queue";
 import { documentDownloadName, type DocumentKindName } from "@/lib/document-kind";
 import { draftKey, useDraftAutosave, type NewTaskDraft } from "./drafts";
 import { actionThrowResult } from "@/lib/stale-action";
@@ -88,14 +90,16 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const loading = !pf;
   const form = pf ?? boardForm;
   const titleRef = useRef<HTMLInputElement>(null);
-  const [title, setTitle] = useState(() => d?.title ?? (initialFiles?.length ? captureTitle(t, locale) : ""));
+  // Archivos de entrada (pegar / soltar sobre «Nueva tarea»): mismos límites que al añadirlos dentro del diálogo.
+  const [initialPlan] = useState(() => planUploads(initialFiles ?? [], { fileMaxBytes: board.project.fileMaxMb * 1024 * 1024, remainingBytes: board.project.attachMaxMb * 1024 * 1024 }));
+  const [title, setTitle] = useState(() => d?.title ?? (initialPlan.accepted.length ? captureTitle(t, locale) : ""));
   const [kindId, setKindId] = useState(!foreignInit && d && board.kindById.has(d.kindId) ? d.kindId : foreignInit ? "" : (board.kinds[0]?.id ?? ""));
   const [columnId, setColumnId] = useState(!foreignInit && d && board.columns.some((c) => c.id === d.columnId) ? d.columnId : foreignInit ? "" : (initialColumnId ?? board.columns[0]?.id ?? ""));
   const [assigneeId, setAssigneeId] = useState(foreignInit ? "" : (d?.assigneeId ?? ""));
   const [dueDate, setDueDate] = useState(d?.dueDate ?? "");
   const [deliverableId, setDeliverableId] = useState(foreignInit ? "" : (d?.deliverableId ?? ""));
   const [description, setDescription] = useState(d?.description ?? initialDescription ?? "");
-  const [files, setFiles] = useState<File[]>(initialFiles ?? []);
+  const [files, setFiles] = useState<File[]>(initialPlan.accepted);
   const [subtasks, setSubtasks] = useState<string[]>(d?.subtasks ?? []);
   const [subtaskDraft, setSubtaskDraft] = useState(d?.subtaskDraft ?? "");
   const [evergreen, setEvergreen] = useState(foreignInit ? false : (d?.evergreen ?? !!initialEvergreen));
@@ -161,13 +165,33 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         ? null
         : ({ title, kindId, description, columnId, assigneeId, dueDate, deliverableId, evergreen, subtasks, subtaskDraft, projectId, fields: loading ? fieldsForm : fieldsForDraft(fieldsForm, form.project.taskFields) } satisfies NewTaskDraft),
   );
+  // Si el diálogo ya no está montado (cierre del padre, navegación), una subida tardía no cierra ni descarta nada ajeno.
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   const onClose = () => {
+    if (!alive.current) return;
     if (autosave) discardDraft();
     close();
   };
+  // Aviso de los archivos de entrada omitidos (una sola vez al abrir).
+  const warnedInitial = useRef(false);
+  useEffect(() => {
+    if (warnedInitial.current || !initialPlan.skipped.length) return;
+    warnedInitial.current = true;
+    toast(skippedMessage(t, locale, initialPlan.skipped, board.project.fileMaxMb), "error");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Escape, clic fuera, X o «Cancelar» con contenido escrito piden confirmación; crear no.
   const confirming = useRef(false);
+  const busyRef = useRef(false);
   const requestClose = async () => {
+    // Mientras se crea la tarea y se suben sus archivos no se cierra (se ve el progreso): cerrar a medias dejaría la subida huérfana.
+    if (busyRef.current) return;
     const dirty = !!(title.trim() || (description.trim() && description !== initialDescription) || subtasks.length || subtaskDraft.trim());
     if (dirty) {
       // Una sola confirmación a la vez (Escape o clics repetidos no las apilan).
@@ -181,6 +205,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   };
   const isReleaseColumn = form.columns.find((c) => c.id === columnId)?.role === "NEXT_RELEASE";
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<BatchProgress | null>(null);
   const [lightbox, setLightbox] = useState<number | null>(null);
 
   const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
@@ -190,7 +215,12 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
 
   const addFiles = (list: File[]) => {
     if (!list.length) return;
-    setFiles((prev) => [...prev, ...list].slice(0, 10));
+    // Sin tope de cantidad: solo el tamaño de cada archivo y la suma de la tarea. Lo omitido se avisa de una vez.
+    const { fileMaxMb, attachMaxMb } = form.project;
+    const { accepted, skipped } = planUploads(list, { fileMaxBytes: fileMaxMb * 1024 * 1024, remainingBytes: attachMaxMb * 1024 * 1024 - files.reduce((n, f) => n + f.size, 0) });
+    if (skipped.length) toast(skippedMessage(t, locale, skipped, fileMaxMb), "error");
+    if (!accepted.length) return;
+    setFiles((prev) => [...prev, ...accepted]);
     // Con una captura y sin título, se propone uno para ir más rápido.
     setTitle((cur) => cur || captureTitle(t, locale));
   };
@@ -205,7 +235,6 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     if (!attachDocument || docLoading || docAttached) return;
     const name = attachDocument.name;
     const fileMax = form.project.fileMaxMb * 1024 * 1024;
-    if (files.length >= 10) return toast(t("Ya hay 10 archivos adjuntos, el máximo por tarea."), "error");
     setDocLoading(true);
     try {
       const res = await fetch(`/api/documents/${attachDocument.id}`, { credentials: "same-origin" });
@@ -217,7 +246,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       }
       const file = new File([blob], documentDownloadName(name, attachDocument.kind ?? "OTHER"), { type: blob.type || "application/octet-stream" });
       setDocFile(file);
-      setFiles((prev) => [...prev, file].slice(0, 10));
+      setFiles((prev) => [...prev, file]);
     } catch (e) {
       toast(e instanceof Error && e.message ? e.message : t("No se pudo descargar el documento."), "error");
     } finally {
@@ -234,11 +263,12 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (busy || loading || !title.trim() || !columnId) return;
+    if (busy || busyRef.current || loading || !title.trim() || !columnId) return;
     if (description.length > MAX_DESCRIPTION) return toast(descriptionTooLong(t, locale, MAX_DESCRIPTION), "error");
     const fieldsErr = fieldsError(fieldsForm, form.project.taskFields, dueDate, t);
     if (fieldsErr) return toast(fieldsErr, "error");
     setBusy(true);
+    busyRef.current = true;
     // Una subtarea a medio escribir también se guarda al crear.
     const pending = subtaskDraft.trim().slice(0, 200);
     const subtaskTitles = pending && subtasks.length < 50 ? [...subtasks, pending] : subtasks;
@@ -253,28 +283,30 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     ).catch((e) => actionThrowResult(e, t));
     if (!res.ok) {
       setBusy(false);
+      busyRef.current = false;
       return toast(res.error, "error");
     }
     let task = res.data;
     // En otro proyecto la tarjeta no es de este tablero: no se añade (se avisa con un enlace al proyecto).
     const elsewhere = projectId !== board.project.id;
     if (!elsewhere) board.upsertTask(task);
-    // Los archivos se suben en paralelo tras crear la tarea.
-    const results = await Promise.allSettled(files.map((f) => board.trackRaw(uploadFile(task.id, f, true, t))));
-    const uploaded = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+    // Los archivos se suben tras crear la tarea, por una cola de 3 a la vez.
+    const batch = await uploadBatch(task.id, files, { onCreate: true, t, track: board.trackRaw, onProgress: setProgress });
+    setProgress(null);
+    const { uploaded } = batch;
     const ok = uploaded.length;
-    const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+    const failed = batchErrorMessage(t, batch.errors, batch.notSent);
     if (ok && !elsewhere) {
       // Las subidas van en paralelo: sus respuestas pueden llegar desordenadas; vale la que ya cuenta todas las que se guardaron.
       const latest = uploaded.reduce((best, a) => (a.totals.imageCount + a.totals.fileCount > best.imageCount + best.fileCount ? a.totals : best), uploaded[0]!.totals);
       task = { ...task, ...latest };
       board.upsertTask(task);
     }
-    if (failed) toast((failed.reason as Error).message, "error");
+    if (failed) toast(failed, "error");
     if (elsewhere) toast(t("Tarea creada en «{project}»", { project: form.project.name }), "success", { label: t("Ir al proyecto"), onClick: () => router.push(`/p/${projectId}`) });
     else if (!failed) toast(t("Tarea creada"));
     onClose();
-    if (!elsewhere) board.revealTask(task.id);
+    if (!elsewhere && alive.current) board.revealTask(task.id);
   };
 
   // Alt+S crea la tarea (también escribiendo), como Ctrl+Enter. Con dos modales a la vez, el que tiene el foco.
@@ -482,6 +514,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
           </div>
         </div>
       </form>
+      {progress && <UploadProgress progress={progress} className="mt-3" />}
 
       {dropping && (
         <div className="pointer-events-none fixed inset-0 z-[70] flex items-center justify-center bg-brand-500/15 p-4 backdrop-blur-[1px]">

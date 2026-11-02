@@ -4,7 +4,7 @@ import path from "node:path";
 import type { Prisma } from "@/generated/prisma/client";
 import { makeT, toLocale, type T } from "@/i18n/core";
 import { db } from "./db";
-import { assertDiskRoom } from "./disk-space";
+import { assertDiskRoom, isNoSpaceError, NO_SPACE_MESSAGE, releaseDisk, reserveDisk } from "./disk-space";
 import { AppError } from "./errors";
 import { logEvent } from "./log";
 import { buildProjectExport, estimateProjectExport } from "./project-export/export";
@@ -45,10 +45,13 @@ const INTERRUPTED = "Interrumpido por un reinicio";
 /** Hueco de más que se pide al disco sobre el tamaño del archivo al importar (imágenes recodificadas, temporales…). */
 const IMPORT_FACTOR = 1.5;
 
-/** Trabajos simultáneos en todo el servidor (PROJECT_TRANSFER_CONCURRENCY, 1 por defecto). Se lee cada vez. */
+/** Trabajos simultáneos por defecto. Cada uno tiene en memoria como mucho el project.json (64 MB) o un adjunto de importación (~100 MB), así que dos caben de sobra. */
+export const DEFAULT_CONCURRENCY = 2;
+
+/** Trabajos simultáneos en todo el servidor (PROJECT_TRANSFER_CONCURRENCY, 2 por defecto). Se lee cada vez. */
 export function transferConcurrency(raw: string | undefined = process.env.PROJECT_TRANSFER_CONCURRENCY): number {
   const n = Math.floor(Number(raw));
-  return raw !== undefined && raw.trim() !== "" && Number.isFinite(n) && n >= 1 ? Math.min(n, 8) : 1;
+  return raw !== undefined && raw.trim() !== "" && Number.isFinite(n) && n >= 1 ? Math.min(n, 8) : DEFAULT_CONCURRENCY;
 }
 
 export const exportsDir = () => path.join(/*turbopackIgnore: true*/ uploadDir(), "exports");
@@ -264,11 +267,12 @@ export async function executeJob(job: JobRow): Promise<void> {
     });
   } finally {
     clearInterval(beat);
+    releaseDisk(job.id);
     await progress.settle();
     if (job.kind === "IMPORT") await rm(String((job.options as { tempFile?: string }).tempFile ?? ""), { force: true }).catch(() => {});
   }
   const now = new Date();
-  await db.projectTransferJob
+  const finished = await db.projectTransferJob
     .updateMany({
       // Con el mismo startedAt que reservó este trabajador: un duplicado rezagado (el trabajo ya se retomó) no pisa al vigente.
       where: { id: job.id, status: "RUNNING", startedAt: job.startedAt },
@@ -276,7 +280,39 @@ export async function executeJob(job: JobRow): Promise<void> {
         ? { status: "DONE", finishedAt: now, expiresAt: new Date(now.getTime() + TRANSFER_TTL_MS), result: result as Prisma.InputJsonValue, projectId, error: null, progress: { phase: job.kind === "EXPORT" ? "comprimir" : "base de datos", done: 1, total: 1 } }
         : { status: "FAILED", finishedAt: now, expiresAt: new Date(now.getTime() + TRANSFER_TTL_MS), error },
     })
-    .catch((err) => console.error("[transfer] no se pudo anotar el final", err));
+    .catch((err) => { console.error("[transfer] no se pudo anotar el final", err); return null; });
+  if (finished?.count && error === null && job.kind === "EXPORT") await dropPreviousExports(job);
+}
+
+/**
+ * Al terminar una exportación, retira las exportaciones listas anteriores de la misma persona y el mismo proyecto
+ * (la fila pasa a EXPIRED y se borra el archivo): la última sustituye a las demás y no se acumulan GB en el disco.
+ */
+export async function dropPreviousExports(job: { id: string; userId: string; projectId: string | null }): Promise<number> {
+  if (!job.projectId) return 0;
+  let dropped = 0;
+  try {
+    // Solo las que terminaron estrictamente antes (a igual instante, desempata el id): dos exportaciones casi
+    // simultáneas no se borran entre sí, y la más reciente siempre sobrevive.
+    const me = await db.projectTransferJob.findUnique({ where: { id: job.id }, select: { finishedAt: true } });
+    if (!me?.finishedAt) return 0;
+    const old = await db.projectTransferJob.findMany({
+      where: {
+        kind: "EXPORT", status: "DONE", userId: job.userId, projectId: job.projectId, id: { not: job.id },
+        OR: [{ finishedAt: { lt: me.finishedAt } }, { finishedAt: me.finishedAt, id: { lt: job.id } }],
+      },
+    });
+    for (const o of old) {
+      const res = await db.projectTransferJob.updateMany({ where: { id: o.id, status: "DONE" }, data: { status: "EXPIRED" } });
+      if (res.count === 0) continue;
+      const f = exportFileOf(o);
+      if (f) await rm(f.file, { force: true }).catch(() => {});
+      dropped++;
+    }
+  } catch (err) {
+    console.error("[transfer] no se pudieron retirar las exportaciones anteriores", err);
+  }
+  return dropped;
 }
 
 /** Temporal del intento actual de una exportación (junto al archivo final, para renombrarlo sin salir del sistema de ficheros). */
@@ -296,7 +332,8 @@ async function runExport(job: JobRow, progress: ReturnType<typeof progressWriter
   const dir = exportsDir();
   await mkdir(dir, { recursive: true });
   // Con el tamaño exacto ya conocido: la comprobación definitiva de espacio, antes de escribir nada.
-  await assertDiskRoom(dir, built.size);
+  await assertDiskRoom(dir, built.size, undefined, undefined, job.id);
+  reserveDisk(job.id, dir, built.size); // hasta que termine, otros trabajos descuentan lo que este aún va a escribir
   const rel = `${job.id}.pizarro.zip`;
   const dest = path.join(dir, rel);
   progress.set({ phase: "archivos", done: 0, total: 0 });
@@ -306,6 +343,7 @@ async function runExport(job: JobRow, progress: ReturnType<typeof progressWriter
     size = await writeProjectExport(built, dest, (done, total) => progress.set(total > 0 && done >= total ? { phase: "comprimir" } : { phase: "archivos", done, total }), exportTmpFile(job));
   } catch (err) {
     await rm(exportTmpFile(job), { force: true }).catch(() => {});
+    if (isNoSpaceError(err)) throw new AppError(NO_SPACE_MESSAGE, 507, "disk_full");
     throw err;
   }
   const u = await db.user.findUnique({ where: { id: job.userId }, select: { name: true } });
@@ -327,7 +365,9 @@ async function runImport(job: JobRow, user: { id: string; name: string; email: s
   } catch {
     throw new AppError("El archivo subido ya no está en el servidor. Vuelve a subirlo.", 410);
   }
-  await assertDiskRoom(uploadDir(), Math.ceil((opts.bytes ?? 0) * IMPORT_FACTOR));
+  const importBytes = Math.ceil((opts.bytes ?? 0) * IMPORT_FACTOR);
+  await assertDiskRoom(uploadDir(), importBytes, undefined, undefined, job.id);
+  reserveDisk(job.id, uploadDir(), importBytes);
   const summary = await importProjectFile(opts.tempFile, user, { isPrivate: !!opts.isPrivate, t, onProgress: (p) => progress.set(p) });
   logEvent({
     category: "api", action: "projects.import",

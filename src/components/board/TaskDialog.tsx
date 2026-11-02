@@ -40,7 +40,9 @@ import { TitleField } from "./TitleField";
 import { createAndOpenGoogleFile, shareWarning } from "./google";
 import { AttachLimitHint } from "./AttachLimitHint";
 import { attachmentTotalsOf } from "@/lib/attachment-totals";
-import { filesFrom, formatBytes, UploadError, uploadFile, useFileDrop } from "./upload";
+import { UploadProgress } from "./UploadProgress";
+import { batchErrorMessage, createProgressAggregator, filesFrom, formatBytes, monotonicTotals, skippedMessage, uploadBatch, useFileDrop, type BatchProgress } from "./upload";
+import { planUploads } from "@/lib/upload-queue";
 import { formatDate } from "@/lib/format";
 import { fieldsError, fieldsFormOf, fieldsPatch, TaskFieldsGroup, type FieldsForm } from "./TaskFieldsGroup";
 import { draftKey, useDraftAutosave, type EditTaskDraft } from "./drafts";
@@ -106,6 +108,14 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     setFieldsForm(fieldsFormOf(task));
   }
   const [uploading, setUploading] = useState(0);
+  const [progress, setProgress] = useState<BatchProgress | null>(null);
+  // Varias tandas a la vez suman en un solo progreso, que se limpia cuando acaban todas.
+  const [progressAgg] = useState(() => createProgressAggregator(setProgress));
+  // Cancelar o cerrar el diálogo aborta las subidas que aún no han empezado (las que van en curso terminan).
+  const uploadAbort = useRef(new AbortController());
+  useEffect(() => {
+    return () => uploadAbort.current.abort();
+  }, []);
   // Una subida se rechazó por el máximo de adjuntos de la tarea: se resalta el total hasta que se borre algo.
   const [totalRejected, setTotalRejected] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
@@ -244,6 +254,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const cancelEdits = async () => {
     if (cancelling) return;
     setCancelling(true);
+    uploadAbort.current.abort();
+    uploadAbort.current = new AbortController(); // si Cancelar falla y el diálogo sigue abierto, se puede volver a subir
     try {
       await board.settle();
       if (!editedSinceOpen()) return onClose();
@@ -315,20 +327,34 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     save({ recurrence, recurrenceDay }, { recurrence, recurrenceDay });
   };
 
-  const upload = async (files: File[]) => {
-    if (!files.length) return;
-    setUploading((n) => n + files.length);
-    for (const file of files) {
-      try {
-        const att = await board.trackRaw(uploadFile(task.id, file, false, t));
+  const upload = async (list: File[]) => {
+    if (!list.length) return;
+    // Sin tope de cantidad: solo el tamaño de cada archivo y lo que aún cabe en la tarea. Lo omitido se avisa de una vez.
+    const used = (detail?.attachments ?? []).reduce((n, a) => n + a.size, 0);
+    const { fileMaxMb, attachMaxMb } = board.project;
+    const { accepted, skipped } = planUploads(list, { fileMaxBytes: fileMaxMb * 1024 * 1024, remainingBytes: attachMaxMb * 1024 * 1024 - used });
+    if (skipped.length) toast(skippedMessage(t, locale, skipped, fileMaxMb), "error");
+    if (skipped.some((s) => s.reason === "total")) setTotalRejected(true);
+    if (!accepted.length) return;
+    if (uploadAbort.current.signal.aborted) return;
+    setUploading((n) => n + accepted.length);
+    const batch = progressAgg.start();
+    const res = await uploadBatch(task.id, accepted, {
+      t,
+      track: board.trackRaw,
+      signal: uploadAbort.current.signal,
+      onUploaded: (att) => {
         setDetail((d) => (d ? { ...d, attachments: [...d.attachments, att] } : d));
-      } catch (err) {
-        if (err instanceof UploadError && err.code === "task_total") setTotalRejected(true);
-        toast((err as Error).message, "error");
-      } finally {
-        setUploading((n) => n - 1);
-      }
-    }
+        // Con el diálogo ya cerrado nadie recalcula desde la lista: los contadores de la tarjeta se ponen aquí.
+        board.patchTask(task.id, monotonicTotals(board.getTask(task.id), att.totals));
+      },
+      onProgress: batch.update,
+    });
+    setUploading((n) => n - accepted.length);
+    batch.finish();
+    if (res.totalRejected) setTotalRejected(true);
+    const msg = batchErrorMessage(t, res.errors, res.notSent);
+    if (msg) toast(msg, "error");
   };
 
   // Los contadores de la tarjeta (y el aviso «N / M MB en total») salen de la lista de adjuntos que se muestra, no de sumas
@@ -465,11 +491,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // tanto en la columna lateral (~300 px) como en el pie móvil (360 px).
   const actionButtons = (
     <>
-      <button className="btn-secondary px-2.5 py-1.5" onClick={archive} aria-label={t("Archivar")} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /></button>
-      <button className="btn-secondary px-2.5 py-1.5" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
-      <button className="btn-ghost px-2.5 py-1.5 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
-      <button className="btn-secondary ml-auto px-2.5 py-1.5" onClick={cancelEdits} disabled={cancelling} title={t("Descarta los cambios hechos desde que abriste la tarea y la cierra")}>{t("Cancelar")}</button>
-      <button className="btn-primary py-1.5" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} /> {t("Guardar")}</button>
+      <button className="btn-secondary px-2 py-1.5" onClick={archive} aria-label={t("Archivar")} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /></button>
+      <button className="btn-secondary px-2 py-1.5" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
+      <button className="btn-ghost px-2 py-1.5 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
+      <button className="btn-secondary ml-auto px-2 py-1.5" onClick={cancelEdits} disabled={cancelling} title={t("Descarta los cambios hechos desde que abriste la tarea y la cierra")}>{t("Cancelar")}</button>
+      <button className="btn-primary px-3 py-1.5" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} /> {t("Guardar")}</button>
     </>
   );
 
@@ -513,7 +539,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         </div>
       }
     >
-      <div ref={rootRef} onPaste={onPaste} className="grid gap-6 md:grid-cols-[minmax(0,1fr)_16.5rem]">
+      <div ref={rootRef} onPaste={onPaste} className="grid gap-6 md:grid-cols-[minmax(0,1fr)_18rem]">
         {/* Margen negativo con relleno igual: deja sitio al anillo de foco (3 px + 2 de separación) que el scroll recortaría. */}
         <div className="min-w-0 space-y-6 md:-m-2 md:max-h-[calc(100dvh-8rem)] md:overflow-y-auto md:p-2">
           <TaskViewers taskId={task.id} />
@@ -574,12 +600,13 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
                   </button>
                 </div>
               ))}
-              {uploading > 0 && (
+              {uploading > 0 && !progress && (
                 <div className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-slate-300 text-xs text-slate-500 dark:border-slate-700">
                   <Loader2 size={16} className="mr-1.5 animate-spin" /> {t("Subiendo…")}
                 </div>
               )}
             </div>
+            {progress && <UploadProgress progress={progress} className="mt-2" />}
             {files.length > 0 && (
               <ul className={cn("space-y-1.5", images.length > 0 && "mt-2")}>
                 {files.map((a) => {
@@ -717,9 +744,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             </select>
           </Field>
           <Field label={t("Color")}>
-            {/* Escritorio: swatches más pequeños y juntos para ocupar menos alto; según el ancho de la columna pueden seguir pasando a una segunda fila. */}
-            <div className="md:[&>div]:gap-1 md:[&_button]:h-[22px] md:[&_button]:w-[22px]">
-              <ColorPicker value={task.color} onChange={(color) => save({ color: color as never }, { color })} />
+            {/* Escritorio: dos filas equilibradas (8 + 7) de swatches algo más pequeños para ocupar menos alto. */}
+            <div className="md:[&_button]:h-6 md:[&_button]:w-6">
+              <ColorPicker value={task.color} onChange={(color) => save({ color: color as never }, { color })} balancedRowsMd />
             </div>
           </Field>
           <Field label={t("Etiquetas")}>

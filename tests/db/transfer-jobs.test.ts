@@ -10,12 +10,13 @@ import { POST as ackPost } from "../../src/app/api/transfer-jobs/[id]/ack/route"
 import { GET as downloadRoute } from "../../src/app/api/transfer-jobs/[id]/download/route";
 import { GET as statusRoute } from "../../src/app/api/transfer-jobs/[id]/route";
 import { GET as listRoute } from "../../src/app/api/transfer-jobs/route";
-import { DISK_MARGIN_BYTES, assertDiskRoom } from "../../src/lib/disk-space";
+import { assertDiskRoom, diskMarginBytes, isNoSpaceError, releaseDisk, reserveDisk } from "../../src/lib/disk-space";
 import { buildProjectExport } from "../../src/lib/project-export/export";
+import { strongEtag } from "../../src/lib/http-range";
 import { writeProjectExport } from "../../src/lib/project-export/write";
 import {
   MAX_JOBS_PER_USER, claimNextJob, listRecentJobs, createExportJob, createImportJob, executeJob, exportsDir, getJobFor, purgeTransferJobs, recoverInterruptedJobs,
-  runNextTransferJob, startTransferWorker, transferConcurrency,
+  runNextTransferJob, startTransferWorker, transferConcurrency, dropPreviousExports,
 } from "../../src/lib/transfer-jobs";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-transfer-"));
@@ -137,30 +138,43 @@ describe("ciclo de vida", () => {
 });
 
 describe("cola propia", () => {
-  test("FIFO y un solo trabajo en marcha en todo el servidor; PROJECT_TRANSFER_CONCURRENCY lo amplía", async () => {
-    assert.equal(transferConcurrency(undefined), 1);
-    assert.equal(transferConcurrency(""), 1);
-    assert.equal(transferConcurrency("abc"), 1);
+  test("FIFO y dos trabajos en marcha como mucho en todo el servidor por defecto; PROJECT_TRANSFER_CONCURRENCY lo cambia", async () => {
+    assert.equal(transferConcurrency(undefined), 2);
+    assert.equal(transferConcurrency(""), 2);
+    assert.equal(transferConcurrency("abc"), 2);
+    assert.equal(transferConcurrency("0"), 2);
+    assert.equal(transferConcurrency("1"), 1);
     assert.equal(transferConcurrency("3"), 3);
+    assert.equal(transferConcurrency("99"), 8);
     const [a, b, c] = [await makeUser({ role: "ADMIN" }), await makeUser({ role: "ADMIN" }), await makeUser({ role: "ADMIN" })];
     const first = (await exportJob(a.id)).job;
     const second = (await exportJob(b.id)).job;
     const third = (await exportJob(c.id)).job;
     const run1 = (await claimNextJob())!;
     assert.equal(run1.id, first.id);
-    assert.equal(await claimNextJob(), null); // ya hay uno en marcha
-    await executeJob(run1);
-    const run2 = (await claimNextJob())!;
+    const run2 = (await claimNextJob())!; // con 2 a la vez, el segundo entra mientras el primero sigue
     assert.equal(run2.id, second.id);
-    process.env.PROJECT_TRANSFER_CONCURRENCY = "2";
+    assert.equal(await claimNextJob(), null); // ya hay dos en marcha: el tercero espera
+    await Promise.all([executeJob(run1), executeJob(run2)]);
+    const run3 = (await claimNextJob())!;
+    assert.equal(run3.id, third.id);
+    await executeJob(run3);
+    for (const j of [first, second, third]) assert.equal((await db.projectTransferJob.findUniqueOrThrow({ where: { id: j.id } })).status, "DONE");
+    // Con 1, solo uno a la vez.
+    process.env.PROJECT_TRANSFER_CONCURRENCY = "1";
     try {
-      const run3 = (await claimNextJob())!; // con 2 a la vez, el tercero entra mientras el segundo sigue
-      assert.equal(run3.id, third.id);
-      await executeJob(run3);
+      const d = (await exportJob(a.id)).job;
+      const e = (await exportJob(b.id)).job;
+      const r1 = (await claimNextJob())!;
+      assert.equal(r1.id, d.id);
+      assert.equal(await claimNextJob(), null);
+      await executeJob(r1);
+      const r2 = (await claimNextJob())!;
+      assert.equal(r2.id, e.id);
+      await executeJob(r2);
     } finally {
       delete process.env.PROJECT_TRANSFER_CONCURRENCY;
     }
-    await executeJob(run2);
   });
 
   test("tope de dos trabajos en cola o en marcha por persona", async () => {
@@ -225,6 +239,31 @@ describe("permisos de estado y descarga", () => {
     const bytes = Buffer.from(await res.arrayBuffer());
     assert.equal(bytes.length, Number(res.headers.get("content-length")));
     assert.equal(bytes.subarray(0, 2).toString(), "PK");
+    assert.equal(res.headers.get("accept-ranges"), "bytes");
+    const etag = res.headers.get("etag")!;
+    assert.equal(etag, strongEtag(job.id, bytes.length, ready.finishedAt ? new Date(ready.finishedAt) : null));
+    const rget = (range: string, extra: Record<string, string> = {}) => downloadRoute(new Request("http://localhost/x", { headers: { "sec-fetch-site": "same-origin", range, ...extra } }), ctx(job.id));
+    // Rango parcial: 206 con Content-Range y solo esos bytes.
+    const part = await rget("bytes=2-9");
+    assert.equal(part.status, 206);
+    assert.equal(part.headers.get("content-range"), `bytes 2-9/${bytes.length}`);
+    assert.equal(part.headers.get("content-length"), "8");
+    assert.deepEqual(Buffer.from(await part.arrayBuffer()), bytes.subarray(2, 10));
+    const tail = await rget("bytes=-5");
+    assert.equal(tail.status, 206);
+    assert.deepEqual(Buffer.from(await tail.arrayBuffer()), bytes.subarray(bytes.length - 5));
+    const open = await rget(`bytes=${bytes.length - 3}-`);
+    assert.deepEqual(Buffer.from(await open.arrayBuffer()), bytes.subarray(bytes.length - 3));
+    // Fuera del archivo: 416 con el tamaño.
+    const bad = await rget(`bytes=${bytes.length}-`);
+    assert.equal(bad.status, 416);
+    assert.equal(bad.headers.get("content-range"), `bytes */${bytes.length}`);
+    assert.equal((await rget("bytes=abc")).status, 416);
+    // If-Range: con el ETag vigente se atiende el rango; con otro valor se envía el archivo entero.
+    assert.equal((await rget("bytes=0-3", { "if-range": etag })).status, 206);
+    const whole = await rget("bytes=0-3", { "if-range": '"otro"' });
+    assert.equal(whole.status, 200);
+    assert.equal(Buffer.from(await whole.arrayBuffer()).length, bytes.length);
     // Otro sitio (Sec-Fetch-Site).
     assert.equal((await downloadRoute(new Request("http://localhost/x", { headers: { "sec-fetch-site": "cross-site" } }), ctx(job.id))).status, 403);
 
@@ -383,8 +422,30 @@ describe("espacio en disco", () => {
   test("se rechaza lo que no cabe (507) y no se bloquea si el sistema no informa del espacio", async () => {
     const free = (n: number | null) => async () => n;
     await assert.rejects(assertDiskRoom("/x", 1000, free(500)), (e: { status: number }) => e.status === 507);
-    await assert.rejects(assertDiskRoom("/x", 1000, free(1000 + DISK_MARGIN_BYTES - 1)), (e: { status: number }) => e.status === 507);
-    await assertDiskRoom("/x", 1000, free(1000 + DISK_MARGIN_BYTES));
+    const margin = diskMarginBytes(null, undefined);
+    assert.equal(margin, 1024 * 1024 * 1024); // 1 GB por defecto
+    await assert.rejects(assertDiskRoom("/x", 1000, free(1000 + margin - 1)), (e: { status: number; message: string }) => e.status === 507 && /No hay espacio/.test(e.message));
+    await assertDiskRoom("/x", 1000, free(1000 + margin));
+    // Por defecto min(1 GB, 20 % del volumen) con suelo de 100 MB; DISK_MIN_FREE_MB lo fija tal cual.
+    const GB = 1024 ** 3, MB = 1024 ** 2;
+    assert.equal(diskMarginBytes(100 * GB, undefined), GB);
+    assert.equal(diskMarginBytes(2 * GB, undefined), Math.floor(0.2 * 2 * GB));
+    assert.equal(diskMarginBytes(200 * MB, undefined), 100 * MB);
+    assert.equal(diskMarginBytes(10 * GB, "2048"), 2 * GB);
+    assert.equal(diskMarginBytes(10 * GB, "50"), 50 * MB);
+    assert.equal(diskMarginBytes(10 * GB, "x"), GB);
+    await assert.rejects(assertDiskRoom("/x", 0, free(GB - 1), async () => 100 * GB), (e: { status: number }) => e.status === 507);
+    await assertDiskRoom("/x", 0, free(GB), async () => 100 * GB);
+    // Lo reservado por otros trabajos en marcha se descuenta; el propio no.
+    reserveDisk("job-a", "/y", 500);
+    await assert.rejects(assertDiskRoom("/y", 1000, free(1000 + margin + 499)), (e: { status: number }) => e.status === 507);
+    await assertDiskRoom("/y", 1000, free(1000 + margin + 500));
+    await assertDiskRoom("/y", 1000, free(1000 + margin), undefined, "job-a");
+    await assertDiskRoom("/z", 1000, free(1000 + margin)); // otro directorio: sin efecto
+    releaseDisk("job-a");
+    await assertDiskRoom("/y", 1000, free(1000 + margin));
+    assert.equal(isNoSpaceError(Object.assign(new Error("x"), { code: "ENOSPC" })), true);
+    assert.equal(isNoSpaceError(new Error("x")), false);
     await assertDiskRoom("/x", 10 ** 15, free(null));
     // Con el disco real hay de sobra para una exportación pequeña.
     const u = await makeUser({ role: "ADMIN" });
@@ -446,5 +507,54 @@ describe("lista reciente y trabajadores duplicados", () => {
     assert.equal(row.status, "RUNNING");
     assert.equal(row.result, null);
     assert.deepEqual((await readdir(exportsDir())).filter((n) => n.startsWith(job.id) && n.endsWith(".tmp")), []);
+  });
+});
+
+describe("exportaciones anteriores", () => {
+  test("al terminar una exportación se retiran las listas anteriores de la misma persona y proyecto", async () => {
+    const u = await makeUser({ role: "ADMIN" });
+    const other = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [] });
+    await makeTask(f);
+    const opts = { attachments: false, scope: "all" } as const;
+    const run = async (userId: string, projectId: string) => {
+      const j = await createExportJob(userId, projectId, opts);
+      await runNextTransferJob(); // si el trabajador de fondo (ya arrancado por otra prueba) lo reservó antes, se espera a que lo termine
+      for (let i = 0; i < 200; i++) {
+        const row = await db.projectTransferJob.findUniqueOrThrow({ where: { id: j.id } });
+        if (row.status === "DONE" || row.status === "FAILED") return row;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      throw new Error("la exportación no terminó");
+    };
+    const first = await run(u.id, f.project.id);
+    const theirs = await run(other.id, f.project.id);
+    const f2 = await makeProject({ members: [] });
+    await makeTask(f2);
+    const elsewhere = await run(u.id, f2.project.id);
+    const fileOf = (j: { result: unknown }) => path.join(exportsDir(), (j.result as { file: string }).file);
+    const second = await run(u.id, f.project.id);
+    assert.equal((await db.projectTransferJob.findUniqueOrThrow({ where: { id: first.id } })).status, "EXPIRED");
+    assert.equal(await exists(fileOf(first)), false);
+    assert.equal(await exists(fileOf(second)), true);
+    for (const j of [theirs, elsewhere]) {
+      assert.equal((await db.projectTransferJob.findUniqueOrThrow({ where: { id: j.id } })).status, "DONE");
+      assert.equal(await exists(fileOf(j)), true);
+    }
+    assert.equal(await dropPreviousExports({ id: second.id, userId: u.id, projectId: f.project.id }), 0);
+    // La más antigua no retira a la más reciente: al ejecutarse con el primero, `second` (posterior) sigue lista.
+    assert.equal(await dropPreviousExports({ id: first.id, userId: u.id, projectId: f.project.id }), 0);
+    assert.equal((await db.projectTransferJob.findUniqueOrThrow({ where: { id: second.id } })).status, "DONE");
+  });
+  test("dos exportaciones con el mismo instante de fin no se borran entre sí (desempata el id)", async () => {
+    const u = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [] });
+    const at = new Date();
+    const mk = (id: string) => db.projectTransferJob.create({ data: { id, kind: "EXPORT", status: "DONE", userId: u.id, projectId: f.project.id, options: {}, progress: {}, finishedAt: at, expiresAt: new Date(at.getTime() + 3600_000), result: { file: `${id}.pizarro.zip`, size: 1, name: "x.zip" } } });
+    const a = await mk("aaaa-job"), b = await mk("bbbb-job");
+    assert.equal(await dropPreviousExports({ id: a.id, userId: u.id, projectId: f.project.id }), 0);
+    assert.equal(await dropPreviousExports({ id: b.id, userId: u.id, projectId: f.project.id }), 1);
+    assert.equal((await db.projectTransferJob.findUniqueOrThrow({ where: { id: a.id } })).status, "EXPIRED");
+    assert.equal((await db.projectTransferJob.findUniqueOrThrow({ where: { id: b.id } })).status, "DONE");
   });
 });

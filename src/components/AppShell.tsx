@@ -43,6 +43,8 @@ interface Props {
   lastProjectId?: string | null;
   /** Copia de seguridad atrasada: punto de aviso junto a «Administración» (solo admins). */
   backupAlert?: boolean;
+  /** Versión nueva de Pizarro sin descartar: punto de aviso junto a «Administración» (solo admins). */
+  updateAvailable?: boolean;
   children: React.ReactNode;
 }
 
@@ -57,7 +59,7 @@ export function AppShell(props: Props) {
   );
 }
 
-function Shell({ user, projects, version, unread, lastProjectId = null, backupAlert = false, children }: Props) {
+function Shell({ user, projects, version, unread, lastProjectId = null, backupAlert = false, updateAvailable = false, children }: Props) {
   useFocusRingScroll();
   const t = useT();
   const pathname = usePathname();
@@ -84,7 +86,7 @@ function Shell({ user, projects, version, unread, lastProjectId = null, backupAl
   }, [projectId]);
 
   const sidebar = (
-    <Sidebar user={user} projects={projects} current={current} version={version} pathname={pathname} unread={unread} backupAlert={backupAlert} />
+    <Sidebar user={user} projects={projects} current={current} version={version} pathname={pathname} unread={unread} backupAlert={backupAlert} updateAvailable={updateAvailable} />
   );
 
   return (
@@ -209,9 +211,10 @@ function DocsNavLink({ projectId, active }: { projectId: string; active: boolean
   return <NavLink href={`/p/${projectId}/docs`} icon={FileText} active={active} extra={extra} highlight={over}>{t("Documentación")}</NavLink>;
 }
 
-function Sidebar({ user, projects, current, version, pathname, unread, backupAlert }: {
+function Sidebar({ user, projects, current, version, pathname, unread, backupAlert, updateAvailable }: {
   unread: number;
   backupAlert: boolean;
+  updateAvailable: boolean;
   user: CurrentUser;
   projects: { id: string; name: string; isPrivate?: boolean }[];
   current: { id: string; name: string; isPrivate?: boolean } | null;
@@ -255,6 +258,7 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
         {isAdmin && <NavLink href="/admin" icon={Shield} active={pathname.startsWith("/admin")}>
           <span className="flex-1">{t("Administración")}</span>
           {backupAlert && <span className="h-2 w-2 rounded-full bg-amber-500" role="img" aria-label={t("Copia de seguridad atrasada")} title={t("Copia de seguridad atrasada")} />}
+          {updateAvailable && <span className="h-2 w-2 rounded-full bg-sky-500" role="img" aria-label={t("Hay una versión nueva de Pizarro")} title={t("Hay una versión nueva de Pizarro")} />}
         </NavLink>}
         <NavLink href="/changelog" icon={History} active={pathname === "/changelog"}>{t("Historial de versiones")}</NavLink>
         <InstallApp />

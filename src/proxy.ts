@@ -32,28 +32,30 @@ export function proxy(req: NextRequest) {
   const canonical = canonicalRedirect({ enabled: process.env.CANONICAL_REDIRECT, appUrl: process.env.APP_URL, host: req.headers.get("host"), forwardedHost: req.headers.get("x-forwarded-host"), method: req.method, pathname, search });
   if (canonical) return NextResponse.redirect(canonical, 308);
   const isApi = pathname.startsWith("/api/");
-  // Páginas públicas (sin sesión): acceso, política de privacidad y condiciones, contraseña olvidada, enlaces de email y el asistente de primer
+  // Páginas públicas (sin sesión): presentación del producto, acceso, política de privacidad y condiciones, contraseña olvidada, enlaces de email y el asistente de primer
   // arranque (/setup se protege con el código del log y da 404 cuando ya hay usuarios).
   // Sin usuarios, el proxy no consulta la base de datos: manda a /login y esa página redirige a /setup.
   const isLogin =
-    pathname === "/setup" || pathname.startsWith("/setup/") || pathname === "/login" || pathname.startsWith("/login/") || pathname === "/forgot-password" || pathname === "/privacy" || pathname === "/terms" || pathname.startsWith("/reset/") || pathname.startsWith("/confirm/") ||
+    pathname === "/setup" || pathname.startsWith("/setup/") || pathname === "/login" || pathname.startsWith("/login/") || pathname === "/forgot-password" || pathname === "/presentacion" || pathname === "/privacy" || pathname === "/terms" || pathname.startsWith("/reset/") || pathname.startsWith("/confirm/") ||
     // Públicas también: informe de errores del navegador (la pantalla de acceso no tiene sesión), versión en curso y salida limpia.
     pathname === "/api/client-errors" || pathname === "/api/version" || pathname === "/api/auth/reset";
   const token = req.cookies.get(sessionCookieName())?.value;
+  // Opcional (LANDING_AT_ROOT=1): quien no tiene sesión ve la presentación en «/» en vez de ir al acceso (sin redirigir; la dirección no cambia).
+  const landingAtRoot = process.env.LANDING_AT_ROOT === "1" && pathname === "/" && !token && req.method === "GET";
 
   // Nonce nuevo en cada petición de página (las API devuelven JSON/ficheros: sin CSP de documento).
   const nonce = isApi ? null : Buffer.from(crypto.randomUUID()).toString("base64");
   const csp = nonce ? buildCsp(nonce) : null;
 
   // Las páginas públicas solo necesitan la CSP (la ruta de /api/health queda fuera del matcher).
-  if (isLogin) {
+  if (isLogin || landingAtRoot) {
     const headers = new Headers(req.headers);
     headers.delete("x-pz-path");
     if (nonce && csp) {
       headers.set("x-nonce", nonce);
       headers.set("Content-Security-Policy", csp);
     }
-    const res = NextResponse.next({ request: { headers } });
+    const res = landingAtRoot ? NextResponse.rewrite(new URL(`/presentacion${search}`, req.url), { request: { headers } }) : NextResponse.next({ request: { headers } });
     if (csp) res.headers.set("Content-Security-Policy", csp);
     return res;
   }
