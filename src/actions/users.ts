@@ -142,8 +142,11 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
 }
 
 /**
- * «Forzar cambio de contraseña»: el admin no escribe ninguna clave. La persona queda obligada a elegir una
- * nueva, se cierran sus sesiones y, con email configurado, recibe un enlace de restablecimiento (30 min).
+ * «Forzar cambio de contraseña»: el admin no escribe ninguna clave. La contraseña actual deja de valer (se sustituye
+ * por el hash de un valor aleatorio que no se guarda ni se muestra: quien la conociera ya no puede entrar con ella),
+ * la persona queda obligada a elegir una nueva, se cierran sus sesiones, se anulan sus enlaces pendientes y recibe un
+ * enlace de restablecimiento (30 min) por email o el admin lo copia. Con Google (si lo tiene enlazado) sigue
+ * pudiendo entrar, pero aterriza en «Elige una contraseña nueva» hasta elegirla.
  */
 export async function forcePasswordChange(userId: string, opts?: { copyLink?: boolean }) {
   return runAction({ name: "users.forcePasswordChange", args: [userId, !!opts?.copyLink] }, async () => {
@@ -154,8 +157,10 @@ export async function forcePasswordChange(userId: string, opts?: { copyLink?: bo
     if (user.id === admin.id) throw new AppError("Para cambiar tu propia contraseña usa «Mi perfil».");
     // Sin email (o si el admin lo pide) el enlace no se envía: se le devuelve para que lo pase por otro canal.
     const showLink = !emailEnabled() || !!opts?.copyLink;
+    // Fuera de la transacción: bcrypt tarda (~0,1 s). El valor aleatorio se descarta enseguida.
+    const passwordHash = await hashPassword(randomBytes(32).toString("base64url"));
     await db.$transaction([
-      db.user.update({ where: { id: user.id }, data: { mustChangePassword: true } }),
+      db.user.update({ where: { id: user.id }, data: { mustChangePassword: true, passwordHash } }),
       db.session.deleteMany({ where: { userId: user.id } }),
       // Los enlaces pendientes (un cambio de email pedido por quien conocía la contraseña, restablecimientos anteriores)
       // dejan de valer: el único válido será el que se genera ahora.

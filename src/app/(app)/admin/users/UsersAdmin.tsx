@@ -206,14 +206,14 @@ function ForcePasswordChange({ user, emailAvailable, onClose }: { user: UserRow;
       if (!res.ok) return toast(res.error, "error");
       router.refresh();
       if (res.data.link) return setLink(res.data.link);
-      toast(res.data.emailed ? t("Cambio forzado: se han cerrado sus sesiones y le hemos enviado un enlace por email") : t("Cambio forzado: se han cerrado sus sesiones"));
+      toast(res.data.emailed ? t("Cambio forzado: su contraseña ya no vale, se han cerrado sus sesiones y le hemos enviado un enlace por email") : t("Cambio forzado: su contraseña ya no vale y se han cerrado sus sesiones"));
       onClose();
     });
   if (link) {
     return (
       <Modal open onClose={onClose} title={t("Enlace para {name}", { name: user.name })} size="sm">
         <div className="space-y-3 text-sm">
-          <p>{t("Sus sesiones están cerradas. Con este enlace elegirá una contraseña nueva.")}</p>
+          <p>{t("Su contraseña anterior ya no vale y sus sesiones están cerradas. Con este enlace elegirá una contraseña nueva.")}</p>
           <input className="input font-mono text-xs" value={link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={t("Enlace de restablecimiento")} data-testid="reset-link" />
           <p className="text-amber-700 dark:text-amber-300">{t("Envíaselo por un canal de confianza; caduca en 30 minutos y sirve una sola vez. No volverá a mostrarse.")}</p>
           <div className="flex justify-end gap-2">
@@ -233,12 +233,13 @@ function ForcePasswordChange({ user, emailAvailable, onClose }: { user: UserRow;
           run(false);
         }}
       >
-        <p>{t("Se cerrarán todas sus sesiones y tendrá que elegir una contraseña nueva la próxima vez que entre. Tú no escribes ninguna contraseña.")}</p>
+        <p>{t("Su contraseña actual dejará de valer en el acto (tampoco para quien la conociera), se cerrarán todas sus sesiones y se anularán los enlaces que tuviera pendientes. Tú no escribes ninguna contraseña.")}</p>
         <p className="text-slate-500">
           {emailAvailable
-            ? t("Le enviaremos un enlace por email (válido 30 minutos) para elegirla.")
-            : t("El envío de emails no está configurado: se generará un enlace de un solo uso (válido 30 minutos) para que se lo pases tú por un canal de confianza. Así puede recuperar el acceso aunque no recuerde la contraseña actual.")}
+            ? t("Le enviaremos un enlace por email (válido 30 minutos) para elegir una nueva; hasta entonces no podrá entrar con contraseña.")
+            : t("El envío de emails no está configurado: se generará un enlace de un solo uso (válido 30 minutos) para que se lo pases tú por un canal de confianza; hasta usarlo no podrá entrar con contraseña.")}
         </p>
+        {user.googleLinked && <p className="text-slate-500">{t("Tiene Google enlazado: podrá seguir entrando con Google, pero antes de continuar tendrá que elegir una contraseña nueva.")}</p>}
         <div className="flex flex-wrap justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
           {emailAvailable && <button type="button" className="btn-secondary" disabled={pending} onClick={() => run(true)}>{t("Copiar enlace en lugar de enviarlo")}</button>}
