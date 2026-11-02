@@ -38,7 +38,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
 
   // Todas las consultas en paralelo: una sola ida y vuelta efectiva.
   const [columns, tasks, users, labels, me, deliverables, kinds, templates, projectTemplates] = await Promise.all([
-    db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true } }),
+    db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true } }),
     loadBoardTasks(projectId),
     projectUsers(projectId, project),
     db.label.findMany({ where: { projectId }, orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),

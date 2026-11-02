@@ -183,10 +183,20 @@ export function validateRefs(data: ProjectExportData, fileShas: Set<string>): vo
     need(deliverables, t.deliverableRef, "un entregable");
     need(columns, t.archivedFromColumnRef, "una columna");
     need(tasks, t.recurrenceFromRef, "una tarea");
+    need(tasks, t.blockedByRef ?? null, "una tarea");
     for (const l of t.labelRefs) need(labels, l, "una etiqueta");
     const comments = dup("un comentario", t.comments.map((c) => c.ref));
     for (const c of t.comments) need(comments, c.parentRef, "un comentario");
     for (const a of t.attachments) need(fileShas, a.file, "un fichero");
+  }
+  // Bloqueos: ninguna tarea bloqueada por sí misma ni en círculo.
+  const blockedBy = new Map(data.tasks.filter((t) => t.blockedByRef).map((t) => [t.ref, t.blockedByRef!]));
+  for (const start of blockedBy.keys()) {
+    let cur: string | undefined = start;
+    for (let i = 0; cur !== undefined && i <= blockedBy.size; i++) {
+      cur = blockedBy.get(cur);
+      if (cur === start) throw new ArchiveError("El archivo tiene tareas bloqueadas en círculo.", `project.json: ${start}`);
+    }
   }
   const fromRefs = data.tasks.map((t) => t.recurrenceFromRef).filter((r): r is string => !!r);
   dup("la tarea de la que sale una repetición", fromRefs);

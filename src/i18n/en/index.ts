@@ -15,5 +15,6 @@ import { landing } from "./landing";
 import { legal } from "./legal";
 import { setup } from "./setup";
 import { task } from "./task";
+import { wip } from "./wip";
 
-export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing, ...almacenamiento };
+export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing, ...almacenamiento, ...wip };

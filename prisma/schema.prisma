@@ -304,6 +304,8 @@ model Column {
   routineTargetColumnId String?
   routineTarget Column? @relation("RoutineTarget", fields: [routineTargetColumnId], references: [id], onDelete: SetNull)
   routineSources Column[] @relation("RoutineTarget")
+  /// Límite orientativo de tarjetas no archivadas (1-999, null = sin límite). Solo avisa: nunca bloquea mover ni crear.
+  wipLimit  Int?
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tasks     Task[]
 
@@ -368,6 +370,10 @@ model Task {
 
   recurrenceFrom Task?           @relation("TaskRecurrence", fields: [recurrenceFromId], references: [id], onDelete: SetNull)
   recurrenceNext Task?           @relation("TaskRecurrence")
+  /// Tarea del mismo proyecto que bloquea a esta (una sola, opcional). Se quita sola si esa tarea se borra.
+  blockedById   String?
+  blockedBy     Task?            @relation("TaskBlock", fields: [blockedById], references: [id], onDelete: SetNull)
+  blocking      Task[]           @relation("TaskBlock")
   project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   column        Column           @relation(fields: [columnId], references: [id], onDelete: Restrict)
   kind          TaskKind         @relation(fields: [kindId], references: [id], onDelete: Restrict)
@@ -386,6 +392,7 @@ model Task {
   events        TaskEvent[]
 
   @@index([columnId, position])
+  @@index([blockedById])
   @@index([projectId, archivedAt])
   @@index([assigneeId, archivedAt])
   @@index([deliverableId])

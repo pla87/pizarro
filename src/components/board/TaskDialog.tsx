@@ -37,6 +37,7 @@ import { Comments } from "./TaskComments";
 import { FollowToggle } from "./FollowToggle";
 import { TaskHistory } from "./TaskHistory";
 import { TitleField } from "./TitleField";
+import { BlockerPicker } from "./BlockerPicker";
 import { createAndOpenGoogleFile, shareWarning } from "./google";
 import { AttachLimitHint } from "./AttachLimitHint";
 import { attachmentTotalsOf } from "@/lib/attachment-totals";
@@ -235,6 +236,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     const now = board.getTask(task.id) ?? task;
     const keys = ["title", "kindId", "color", "linkUrl", "assigneeId", "dueDate", "deliverableId", "evergreen", "evergreenEvery", "recurrence", "recurrenceDay", "columnId", "cost", "costPaid", "estimatedHours", "actualHours", "priority", "client", "startDate"] as const;
     if (keys.some((k) => t0[k] !== now[k])) return true;
+    if ((t0.blockedBy?.id ?? null) !== (now.blockedBy?.id ?? null)) return true;
     if ([...t0.labelIds].sort().join() !== [...now.labelIds].sort().join()) return true;
     const d0 = initialDetail.current;
     if (!d0 || !detail) return false;
@@ -264,7 +266,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       const res = await tracked(restoreTaskSnapshot(task.id, {
         title: t0.title, kindId: t0.kindId, color: t0.color as never, linkUrl: t0.linkUrl, assigneeId: t0.assigneeId, labelIds: t0.labelIds,
         dueDate: t0.dueDate, deliverableId: t0.deliverableId, evergreen: t0.evergreen, evergreenEvery: t0.evergreenEvery, recurrence: t0.recurrence, recurrenceDay: t0.recurrenceDay,
-        columnId: t0.columnId, position: t0.position,
+        columnId: t0.columnId, position: t0.position, blockedById: t0.blockedBy?.id ?? null,
         cost: t0.cost, costPaid: t0.costPaid, estimatedHours: t0.estimatedHours, actualHours: t0.actualHours, priority: t0.priority, client: t0.client, startDate: t0.startDate,
         ...(d0 ? {
           description: d0.description,
@@ -742,6 +744,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               <option value="">{t("Sin entregable")}</option>
               {board.deliverables.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
+          </Field>
+          <Field label={t("Bloqueada por (opcional)")}>
+            <BlockerPicker task={task} onChange={(blocker) => save({ blockedById: blocker?.id ?? null }, { blockedBy: blocker })} />
           </Field>
           <Field label={t("Color")}>
             {/* Escritorio: dos filas equilibradas (8 + 7) de swatches algo más pequeños para ocupar menos alto. */}

@@ -38,7 +38,7 @@ function summarizeTemplate(tpl: Pick<TemplateDto, "columns" | "kinds" | "labels"
 type Draft = {
   name: string;
   description: string;
-  columns: { name: string; role: ColumnRoleValue; isDone: boolean }[];
+  columns: { name: string; role: ColumnRoleValue; isDone: boolean; wipLimit?: number | null }[];
   kinds: { name: string; color: string; titleTemplate: string; descriptionTemplate: string; subtaskTemplate: string[] }[];
   hiddenGeneralKinds: string[];
   hideAllGeneralKinds: boolean;
