@@ -24,6 +24,8 @@ const templateColumnSchema = z.object({
   name: v.name,
   role: z.enum(COLUMN_ROLES),
   isDone: z.boolean(),
+  /** Límite orientativo de tarjetas de la columna (1-999); opcional. */
+  wipLimit: z.number().int().min(1).max(999).nullable().optional(),
 });
 
 const templateKindSchema = z.object({
@@ -124,7 +126,7 @@ interface GeneralKind {
 }
 
 interface TemplateApplication {
-  columns: { name: string; role: ColumnRoleValue; isDone: boolean; position: number }[];
+  columns: { name: string; role: ColumnRoleValue; isDone: boolean; position: number; wipLimit: number | null }[];
   kinds: { name: string; color: string; titleTemplate: string; descriptionTemplate: string; subtaskTemplate: string[]; position: number }[];
   labels: { name: string; color: string }[];
   /** Ids de tipos generales que el proyecto no usará. */
@@ -152,7 +154,7 @@ export function buildTemplateApplication(template: TemplateData, generalKinds: G
   // Un tipo propio no puede llamarse como uno general (secciones repetidas en la release): se omite.
   const generalNames = new Set(generalKinds.map((k) => nameKey(k.name)));
   return {
-    columns: columns.map((c, i) => ({ name: c.name, role: c.role, isDone: c.isDone, position: (i + 1) * POSITION_STEP })),
+    columns: columns.map((c, i) => ({ name: c.name, role: c.role, isDone: c.isDone, position: (i + 1) * POSITION_STEP, wipLimit: (c as { wipLimit?: number | null }).wipLimit ?? null })),
     kinds: template.kinds.filter((k) => !generalNames.has(nameKey(k.name))).map((k, i) => ({
       name: k.name,
       color: k.color,

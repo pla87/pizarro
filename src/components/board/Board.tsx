@@ -30,6 +30,7 @@ import { cn } from "../ui/cn";
 import { BoardContext, useSelectionSize, type BoardApi } from "./context";
 import { createBoardStores, mergeTasks, tasksById, useStableValue } from "./stores";
 import { ColumnView } from "./ColumnView";
+import { wipExceeded } from "@/lib/wip";
 import { EVERGREEN_DROPPABLE_PREFIX } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
 import { useCardActions } from "./cardActions";
@@ -89,16 +90,20 @@ function useCoarsePointer(): boolean {
   );
 }
 
-function MobileTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function MobileTab({ active, onClick, over = false, title, children }: { active: boolean; onClick: () => void; /** La columna pasa de su límite de tarjetas (solo aviso). */ over?: boolean; title?: string; children: React.ReactNode }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
       data-active={active || undefined}
+      data-wip-over={over || undefined}
+      title={title}
       className={cn(
         "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-offset-[-3px]",
-        active ? "bg-brand-600 text-on-brand" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+        active ? "bg-brand-600 text-on-brand" : over ? "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-200" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+        // Con la pestaña activa (fondo de marca) el aviso va en el anillo y en el texto «n / límite».
+        over && "ring-2 ring-red-500 ring-inset",
       )}
     >
       {children}
@@ -492,6 +497,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   );
   const taskById = tasksById(tasks);
   const sortedColumns = useMemo(() => [...columns].sort((a, b) => a.position - b.position), [columns]);
+  /** Tarjetas no archivadas de la columna (sin filtrar, con las fijas): la cifra que se compara con su límite. */
+  const columnCardCount = (columnId: string) => (baseItems[columnId]?.length ?? 0) + (evergreenByColumn[columnId]?.length ?? 0);
   const nextReleaseColumn = sortedColumns.find((c) => c.role === "NEXT_RELEASE");
   const activeMobileColumn = sortedColumns.find((c) => c.id === mobileColumn)?.id ?? sortedColumns[0]?.id;
 
@@ -1097,8 +1104,14 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="shrink-0" />
             <div data-mobile-tabs className="no-scrollbar ml-0.5 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pr-3">
               {sortedColumns.map((c) => (
-                <MobileTab key={c.id} active={c.id === activeMobileColumn} onClick={() => showMobileColumn(c.id)}>
-                  {c.name} <span className="opacity-70">{items[c.id]?.length ?? 0}</span>
+                <MobileTab
+                  key={c.id}
+                  active={c.id === activeMobileColumn}
+                  onClick={() => showMobileColumn(c.id)}
+                  over={wipExceeded(columnCardCount(c.id), c.wipLimit)}
+                  title={c.wipLimit != null ? (wipExceeded(columnCardCount(c.id), c.wipLimit) ? t("Límite superado: {n} tarjetas de {limit}", { n: columnCardCount(c.id), limit: c.wipLimit }) : t("Límite de tarjetas: {limit}", { limit: c.wipLimit })) : undefined}
+                >
+                  {c.name} <span className={c.wipLimit == null ? "opacity-70" : "font-semibold"}>{c.wipLimit != null ? `${columnCardCount(c.id)} / ${c.wipLimit}` : (items[c.id]?.length ?? 0)}</span>
                 </MobileTab>
               ))}
               <NewColumnButton variant="mobile" onCreated={showMobileColumn} />
@@ -1155,7 +1168,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
                 column={column}
                 taskIds={items[column.id] ?? []}
                 evergreenIds={shownEvergreen[column.id] ?? []}
-                cardCount={(baseItems[column.id]?.length ?? 0) + (evergreenByColumn[column.id]?.length ?? 0)}
+                cardCount={columnCardCount(column.id)}
                 index={i}
                 total={sortedColumns.length}
                 droppableId={COLUMN_PREFIX + column.id}

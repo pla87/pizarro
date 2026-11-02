@@ -25,6 +25,8 @@ export const boardTaskSelect = {
   contentUpdatedAt: true,
   columnEnteredAt: true,
   cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
+  // Solo id y título de la tarea que bloquea (una consulta por lote, sin N+1).
+  blockedBy: { select: { id: true, title: true } },
   labels: { select: { labelId: true } },
   subtasks: { select: { done: true } },
   // Solo el flag de cada adjunto: la tarjeta distingue imágenes de otros ficheros.
@@ -68,6 +70,7 @@ function toBoardTaskWith(t: BoardTaskRow, hasDescription: boolean): BoardTask {
     recurrenceDay: t.recurrenceDay,
     textVersion: t.contentUpdatedAt?.toISOString() ?? null,
     columnEnteredAt: t.columnEnteredAt.toISOString(),
+    blockedBy: t.blockedBy,
     cost: t.cost?.toFixed(2) ?? null,
     costPaid: t.costPaid,
     estimatedHours: t.estimatedHours?.toFixed(2) ?? null,

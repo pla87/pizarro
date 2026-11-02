@@ -10,6 +10,7 @@ import { appTimeZone, attachmentTotals, boardTaskSelect, listKinds, loadBoardTas
 import { MAX_BULK_TASKS } from "@/lib/bulk";
 import { MAX_TITLE } from "@/lib/constants";
 import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
+import { assertCanBlock } from "@/lib/blocking";
 import { addUndo, captureTasks, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, type TaskField, type UndoOp } from "@/lib/undo";
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
@@ -84,7 +85,7 @@ const CHANGE_LABELS: Record<string, string> = {
   assigneeId: "responsable", labelIds: "etiquetas", dueDate: "fecha límite", deliverableId: "entregable", evergreen: "fija en la release", evergreenEvery: "cadencia en la release",
   recurrence: "repetición", recurrenceDay: "repetición",
   cost: "coste", costPaid: "pago", estimatedHours: "horas estimadas", actualHours: "horas reales", priority: "prioridad",
-  client: "cliente", startDate: "fecha de inicio",
+  client: "cliente", startDate: "fecha de inicio", blockedById: "bloqueo",
 };
 
 /** «tipo, responsable y fecha límite» a partir de los campos cambiados. */
@@ -193,7 +194,7 @@ export async function getProjectFormData(projectId: string) {
     await assertProjectAccess(user, id);
     const project = await db.project.findUniqueOrThrow({ where: { id }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true, fileMaxMb: true, taskFields: true } });
     const [columns, users, deliverables, kinds, locale, labels, clients] = await Promise.all([
-      db.column.findMany({ where: { projectId: id }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true } }),
+      db.column.findMany({ where: { projectId: id }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true } }),
       projectUsers(id, project),
       db.deliverable.findMany({ where: { projectId: id }, orderBy: [{ position: "asc" }], select: { id: true, name: true, dueDate: true } }),
       listKinds(id),
@@ -319,7 +320,7 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
       select: {
         title: true, description: true, kindId: true, color: true, linkUrl: true, assigneeId: true, dueDate: true, deliverableId: true,
         cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
-        columnId: true,
+        columnId: true, blockedById: true,
         labels: { select: { labelId: true } },
         subtasks: { orderBy: { position: "asc" }, select: { title: true, position: true } },
       },
@@ -350,6 +351,8 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
           deliverableId: src.deliverableId,
           cost: src.cost, costPaid: src.costPaid, estimatedHours: src.estimatedHours, actualHours: src.actualHours,
           priority: src.priority, client: src.client, startDate: src.startDate,
+          // La copia queda bloqueada por la misma tarea que la original.
+          blockedById: src.blockedById,
           position,
           createdById: user.id,
           labels: { create: src.labels.map((l) => ({ labelId: l.labelId })) },
@@ -380,12 +383,14 @@ const updateSchema = z.object({
   evergreenEvery: z.number().int().min(1).max(3).optional(),
   recurrence: z.enum(RECURRENCES).optional(),
   recurrenceDay: z.number().int().min(1).max(31).nullable().optional(),
+  /** Tarea del mismo proyecto que bloquea a esta (null = sin bloqueo). */
+  blockedById: v.id.nullable().optional(),
 });
 
 /** Anota en el historial qué ha cambiado realmente al editar la tarea (una línea por cambio). */
 async function recordUpdateEvents(
   taskId: string,
-  prev: { title: string; description: string; kindId: string; assigneeId: string | null; dueDate: Date | null; color: string | null; linkUrl: string | null; deliverableId: string | null; evergreen: boolean; evergreenEvery: number },
+  prev: { title: string; description: string; kindId: string; assigneeId: string | null; dueDate: Date | null; color: string | null; linkUrl: string | null; deliverableId: string | null; evergreen: boolean; evergreenEvery: number; blockedById: string | null },
   data: z.infer<typeof updateSchema>,
   dueDate: string | null | undefined,
   optional: Record<string, unknown> = {},
@@ -410,6 +415,12 @@ async function recordUpdateEvents(
   if (data.evergreen !== undefined && data.evergreen !== prev.evergreen) others.evergreen = true;
   if (data.evergreenEvery !== undefined && data.evergreenEvery !== prev.evergreenEvery && (data.evergreen ?? prev.evergreen)) {
     add({ k: "Cambió la cadencia en la release a «{to}»", p: { to: evergreenEveryLabel(data.evergreenEvery) } });
+  }
+  if (data.blockedById !== undefined && data.blockedById !== prev.blockedById) {
+    if (data.blockedById) {
+      const by = await db.task.findUnique({ where: { id: data.blockedById }, select: { title: true } });
+      add({ k: "Marcó la tarea como bloqueada por «{title}»", p: { title: by ? mentionsToPlain(by.title) : "?" } });
+    } else add({ k: "Quitó el bloqueo de la tarea" });
   }
   if (data.labelIds !== undefined) others.labelIds = true;
   for (const k of Object.keys(optional)) others[k] = true;
@@ -452,6 +463,7 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
       data.labelIds ? assertLabelsInProject(data.labelIds, projectId) : null,
       assertDeliverableInProject(data.deliverableId, projectId),
       assertKindsInProject([data.kindId], projectId),
+      data.blockedById ? assertCanBlock(id, data.blockedById, projectId) : null,
       // Evergreen solo tiene sentido en la columna de la release.
       data.evergreen ? db.column.count({ where: { id: task.columnId, role: "NEXT_RELEASE" } }).then((ok) => {
         if (!ok) throw new AppError("Solo las tareas de la columna de la release pueden ser fijas.");
@@ -750,13 +762,23 @@ export async function getArchivedTasks(projectId: string, opts: { query?: string
     return { items, nextCursor };
   });
 }
+/**
+ * Al borrar tareas, el servidor quita solo el bloqueo de las que dependían de ellas (SetNull). Para poder devolverlo al
+ * deshacer se guarda el bloqueo actual de esas tareas y de las borradas que se bloqueaban entre sí (se aplica después de
+ * recrearlas, porque las operaciones de deshacer van en orden inverso).
+ */
+async function blockLinkOps(ids: string[]): Promise<UndoOp[]> {
+  const dependents = await db.task.findMany({ where: { blockedById: { in: ids } }, select: { id: true } });
+  return captureTasks(dependents.map((t) => t.id), ["blockedById"]);
+}
+
 export async function deleteTask(taskId: string) {
   return runAction({ name: "tasks.deleteTask", args: [taskId] }, async () => {
     const user = await requireUser();
     await assertTaskAccess(user, v.id.parse(taskId));
     describeAction("Borró la tarea «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
     // Los ficheros de sus adjuntos se conservan mientras se pueda deshacer (ver undo.ts).
-    addUndo(...(await snapshotTasks([taskId])));
+    addUndo(...(await blockLinkOps([taskId])), ...(await snapshotTasks([taskId])));
     await db.task.delete({ where: { id: taskId } });
     forgetTaskAttachments([taskId]);
   });
@@ -774,7 +796,7 @@ export async function deleteTasks(taskIds: string[]) {
     // Todas deben ser del mismo proyecto: el deshacer se guarda por proyecto.
     if (new Set(tasks.map((t) => t.projectId)).size > 1) throw new AppError("Las tareas son de proyectos distintos.");
     noteProject(tasks[0]?.projectId);
-    addUndo(...(await snapshotTasks(ids)));
+    addUndo(...(await blockLinkOps(ids)), ...(await snapshotTasks(ids)));
     const titles = await db.task.findMany({ where: { id: { in: ids } }, select: { title: true } });
     describeAction("Borró {count}: {titles}", { count: tasksN(ids.length), titles: titles.map((t) => `«${t.title}»`).join(", ").slice(0, 600) }, { taskIds: ids });
     await db.task.deleteMany({ where: { id: { in: ids } } });
@@ -978,6 +1000,8 @@ const snapshotSchema = z.object({
   recurrenceDay: z.number().int().min(1).max(31).nullable(),
   columnId: v.id,
   position: z.number().finite(),
+  /** Bloqueo: si falta, no se toca. */
+  blockedById: v.id.nullable().optional(),
   // Campos opcionales del proyecto: si faltan (o el proyecto ya no los tiene activados), no se tocan.
   ...taskFieldShape,
   // Solo si el detalle estaba cargado al abrir el diálogo; si faltan, no se tocan.
@@ -1032,6 +1056,7 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
     if (snap.kindId !== task.kindId && (await passes(() => assertKindsInProject([snap.kindId], projectId)))) fields.kindId = snap.kindId;
     if (snap.assigneeId !== task.assigneeId && (!snap.assigneeId || (await passes(() => assertAssignable(projectId, snap.assigneeId!))))) fields.assigneeId = snap.assigneeId;
     if (snap.deliverableId !== task.deliverableId && (await passes(() => assertDeliverableInProject(snap.deliverableId, projectId)))) fields.deliverableId = snap.deliverableId;
+    if (snap.blockedById !== undefined && snap.blockedById !== task.blockedById && (!snap.blockedById || (await passes(() => assertCanBlock(id, snap.blockedById!, projectId))))) fields.blockedById = snap.blockedById;
     if (snap.dueDate !== dateToIso(task.dueDate)) fields.dueDate = snap.dueDate ? isoToDate(snap.dueDate) : null;
     const optionalSnap = onlyChangedFields(task, pickTaskFields(snap));
     if (patchedFieldKeys(optionalSnap).length) {

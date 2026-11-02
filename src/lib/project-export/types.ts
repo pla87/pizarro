@@ -66,6 +66,8 @@ const columnSchema = z.object({
   waitingDays: z.number().int().min(1).max(365).nullable(),
   /** Columna a la que va la siguiente aparición de una tarea recurrente (solo rol ROUTINES). */
   routineTargetRef: ref.nullable(),
+  /** Límite orientativo de tarjetas (1-999). Opcional: los archivos anteriores no lo traen. */
+  wipLimit: z.number().int().min(1).max(999).nullable().optional(),
 });
 
 const kindSchema = z.object({
@@ -141,6 +143,8 @@ const taskSchema = z.object({
   recurrenceDay: z.number().int().min(1).max(31).nullable(),
   /** Tarea de la que salió esta aparición (solo si también está en el archivo). */
   recurrenceFromRef: ref.nullable(),
+  /** Tarea del proyecto que bloquea a esta (solo si también está en el archivo). Opcional: los archivos anteriores no lo traen. */
+  blockedByRef: ref.nullable().optional(),
   /** Última columna ROUTINES en la que estuvo (de ahí sale su siguiente aparición). */
   routineColumnRef: ref.nullable().optional(),
   /** Cuándo se avisó de la espera en una columna WAITING (evita avisos repetidos tras importar). */

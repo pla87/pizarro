@@ -12,6 +12,8 @@ export interface BoardColumn {
   waitingDays: number | null;
   /** Solo rol ROUTINES: columna destino de la siguiente aparición (null = la misma). */
   routineTargetColumnId: string | null;
+  /** Límite orientativo de tarjetas no archivadas (1-999, null = sin límite): solo avisa al pasarlo. */
+  wipLimit: number | null;
 }
 
 export interface BoardTask extends TaskFieldValues {
@@ -49,6 +51,8 @@ export interface BoardTask extends TaskFieldValues {
   textVersion: string | null;
   /** Cuándo entró en su columna actual (ISO): la tarjeta de una columna «Esperando» muestra los días. */
   columnEnteredAt: string;
+  /** Tarea del mismo proyecto que bloquea a esta (id y título), o null. Si ya está terminada o archivada, la tarjeta no avisa. */
+  blockedBy?: { id: string; title: string } | null;
 }
 
 export interface KindOption {

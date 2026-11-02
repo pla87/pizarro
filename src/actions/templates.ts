@@ -86,7 +86,7 @@ export async function templateFromProject(projectId: string) {
       select: {
         name: true,
         description: true,
-        columns: { orderBy: { position: "asc" }, select: { name: true, role: true, isDone: true } },
+        columns: { orderBy: { position: "asc" }, select: { name: true, role: true, isDone: true, wipLimit: true } },
         kinds: { orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: { name: true, color: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true } },
         hiddenKinds: { select: { kind: { select: { name: true } } } },
         labels: { orderBy: { name: "asc" }, select: { name: true, color: true } },

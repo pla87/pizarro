@@ -6,6 +6,7 @@ import { forgetAttachments } from "./attachment-cache";
 import { isUniqueColumnRole } from "./constants";
 import { db } from "./db";
 import { assertTaskCapacity } from "./caps";
+import { blockProblem } from "./blocking";
 import { resolvePositionTies } from "./task-positions";
 import { removeAttachmentFiles, removeReleaseAttachmentFiles } from "./uploads";
 
@@ -53,6 +54,8 @@ export interface TaskData {
   /** Recurrencia: de qué tarea salió y la columna de rutinas de la que cuelga. */
   recurrenceFromId?: string | null;
   routineColumnId?: string | null;
+  /** Tarea (del mismo proyecto) que bloquea a esta. */
+  blockedById?: string | null;
 }
 export type TaskField = keyof TaskData;
 
@@ -63,7 +66,7 @@ type AttachmentRow = {
   width: number | null; height: number | null; size: number; createdById: string | null; createdAt: string;
 };
 type LinkRow = { id: string; taskId: string; kind: string; title: string; url: string; externalId: string | null; createdById: string | null; shareStatus?: string | null; shareFailed?: number; createdAt: string };
-type ColumnRow = { id: string; projectId: string; name: string; position: number; role: string; isDone: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null };
+type ColumnRow = { id: string; projectId: string; name: string; position: number; role: string; isDone: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null; wipLimit?: number | null };
 
 /** Todo lo necesario para recrear una tarea borrada con sus hijos. */
 export interface TaskSnapshot {
@@ -92,7 +95,7 @@ export type UndoOp =
   | { t: "attachment.restore"; row: AttachmentRow }
   | { t: "link.remove"; id: string }
   | { t: "link.restore"; row: LinkRow }
-  | { t: "column.set"; id: string; data: { name?: string; position?: number; role?: string; isDone?: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null } }
+  | { t: "column.set"; id: string; data: { name?: string; position?: number; role?: string; isDone?: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null; wipLimit?: number | null } }
   | { t: "column.remove"; id: string }
   | { t: "column.restore"; row: ColumnRow }
   | { t: "release.remove"; id: string };
@@ -109,7 +112,7 @@ const date = (s: string | null | undefined) => (s ? new Date(s) : null);
 const TASK_SELECT = {
   title: true, description: true, kindId: true, color: true, linkUrl: true, position: true, columnId: true, assigneeId: true,
   dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, evergreenEvery: true, recurrence: true, recurrenceDay: true, contentUpdatedAt: true, contentUpdatedById: true,
-  cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true, recurrenceFromId: true, routineColumnId: true,
+  cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true, recurrenceFromId: true, routineColumnId: true, blockedById: true,
 } as const;
 type TaskRowFull = Prisma.TaskGetPayload<{ select: typeof TASK_SELECT }>;
 
@@ -335,7 +338,7 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
       }
       case "column.remove": {
         const c = once(`column:${op.id}`) && (await db.column.findFirst({ where: { id: op.id, projectId } }));
-        if (c) out.push({ t: "column.restore", row: { id: c.id, projectId: c.projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays, routineTargetColumnId: c.routineTargetColumnId } });
+        if (c) out.push({ t: "column.restore", row: { id: c.id, projectId: c.projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays, routineTargetColumnId: c.routineTargetColumnId, wipLimit: c.wipLimit } });
         break;
       }
       case "column.restore":
@@ -359,7 +362,7 @@ const TASK_DATA_KEYS: ReadonlySet<string> = new Set<keyof TaskData>([
   "title", "description", "kindId", "color", "linkUrl", "position", "columnId", "assigneeId", "dueDate", "deliverableId",
   "archivedAt", "archivedFromColumnId", "evergreen", "evergreenEvery", "recurrence", "recurrenceDay", "contentUpdatedAt",
   "contentUpdatedById", "cost", "costPaid", "estimatedHours", "actualHours", "priority", "client", "startDate",
-  "recurrenceFromId", "routineColumnId",
+  "recurrenceFromId", "routineColumnId", "blockedById",
 ]);
 
 export function taskUpdateData(d: TaskData): Prisma.TaskUncheckedUpdateInput {
@@ -431,6 +434,8 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           if (data.kindId && !(await db.taskKind.count({ where: { id: data.kindId } }))) delete data.kindId;
           if (data.deliverableId && !(await db.deliverable.count({ where: { id: data.deliverableId } }))) data.deliverableId = null;
           if (data.assigneeId) data.assigneeId = assignable(data.assigneeId);
+          // El bloqueo solo vuelve si la tarea que bloqueaba sigue en el proyecto y no cierra un ciclo.
+          if (data.blockedById && (await blockProblem(op.id, data.blockedById, projectId))) data.blockedById = null;
           if (data.position !== undefined || data.columnId !== undefined) placed.push(op.id);
           await db.$transaction([
             db.task.update({ where: { id: op.id }, data: taskUpdateData(data) }),
@@ -467,10 +472,12 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           const recurrenceFromId = t.recurrenceFromId && (await db.task.count({ where: { id: t.recurrenceFromId } })) ? t.recurrenceFromId : null;
           const deliverableId = t.deliverableId && (await db.deliverable.count({ where: { id: t.deliverableId } })) ? t.deliverableId : null;
           const labels = await db.label.findMany({ where: { id: { in: s.labelIds }, projectId }, select: { id: true } });
+          // Se crea sin bloqueo y se enlaza después (la que bloquea puede ser otra tarea que vuelve en esta misma entrada).
+          const blockedById = t.blockedById ?? null;
           await db.$transaction([
             db.task.create({
               data: {
-                ...(taskUpdateData({ ...t, columnId, kindId, deliverableId, assigneeId: assignable(t.assigneeId), recurrenceFromId }) as Prisma.TaskUncheckedCreateInput),
+                ...(taskUpdateData({ ...t, columnId, kindId, deliverableId, assigneeId: assignable(t.assigneeId), recurrenceFromId, blockedById: null }) as Prisma.TaskUncheckedCreateInput),
                 id: t.id, projectId, title: t.title, position: t.position, createdById: known(t.createdById), createdAt: new Date(t.createdAt),
               },
             }),
@@ -481,6 +488,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
             db.taskLink.createMany({ data: s.links.map((l) => ({ ...l, kind: l.kind as Prisma.TaskLinkCreateManyInput["kind"], createdById: known(l.createdById), createdAt: new Date(l.createdAt) })) }),
             db.releaseTask.updateMany({ where: { id: { in: s.releaseTaskIds } }, data: { taskId: t.id } }),
           ]);
+          if (blockedById && !(await blockProblem(t.id, blockedById, projectId))) await db.task.update({ where: { id: t.id }, data: { blockedById } });
           placed.push(t.id);
           break;
         }

@@ -16,5 +16,6 @@ import { legal } from "./legal";
 import { licencia } from "./licencia";
 import { setup } from "./setup";
 import { task } from "./task";
+import { wip } from "./wip";
 
-export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing, ...almacenamiento, ...licencia };
+export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing, ...almacenamiento, ...licencia, ...wip };

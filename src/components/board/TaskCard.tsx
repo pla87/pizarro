@@ -2,7 +2,9 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlignLeft, Loader2, CalendarClock, Check, CheckSquare, ExternalLink, FileText, GripVertical, Hourglass, Image as ImageIcon, MessageSquare, Paperclip, Repeat } from "lucide-react";
+import { AlignLeft, Loader2, CalendarClock, Check, CheckSquare, ExternalLink, FileText, GripVertical, Hourglass, Image as ImageIcon, Lock, MessageSquare, Paperclip, Repeat } from "lucide-react";
+import { blockerIsDone } from "@/lib/blocked";
+import { mentionsToPlain } from "@/lib/mentions";
 import { nextOccurrenceDue } from "@/lib/recurrence-date";
 import { DEFAULT_WAITING_DAYS, isWhite, MAX_TITLE } from "@/lib/constants";
 import { formatEuro, PRIORITY_COLOR, PRIORITY_LABEL } from "@/lib/task-fields";
@@ -65,6 +67,9 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
   const t = useT();
   const column = columns.find((c) => c.id === task.columnId);
   const done = column?.isDone ?? false;
+  // «Bloqueada por»: el aviso se apaga cuando la tarea que bloquea termina (columna terminada) o se archiva (ya no está en el tablero).
+  const blocker = useTask(task.blockedBy?.id ?? "");
+  const blockedBy = task.blockedBy && !blockerIsDone(blocker, columns) ? mentionsToPlain(blocker?.title ?? task.blockedBy.title) : null;
   // Columna «Esperando»: días naturales desde que la tarjeta entró (se resalta al llegar al plazo del recordatorio).
   const waitingDays = column?.role === "WAITING" ? Math.max(0, daysBetween(isoInZone(new Date(task.columnEnteredAt), appTimeZone()), today)) : null;
   const waitingLate = waitingDays !== null && waitingDays >= (column?.waitingDays ?? DEFAULT_WAITING_DAYS);
@@ -229,6 +234,15 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
             title={due === "overdue" ? t("Plazo vencido") : t("Fecha límite")}
           >
             <CalendarClock size={12} /> {due === "today" ? t("Hoy") : formatDay(task.dueDate, today, locale)}
+          </span>
+        )}
+        {blockedBy !== null && (
+          <span
+            className="inline-flex items-center gap-0.5 rounded bg-amber-100 px-1 font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-300"
+            title={t("Bloqueada por: {title}", { title: blockedBy })}
+            data-blocked
+          >
+            <Lock size={12} aria-hidden /><span className="sr-only">{t("Bloqueada por: {title}", { title: blockedBy })}</span>
           </span>
         )}
         {waitingDays !== null && (

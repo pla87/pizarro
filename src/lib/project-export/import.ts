@@ -438,7 +438,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
         if (data.releaseTemplates.length) await tx.projectReleaseTemplate.createMany({ data: data.releaseTemplates.map((r, i) => ({ kind: r.kind, name: r.name, content: r.content, position: r.position, projectId, createdAt: r.createdAt ? date(r.createdAt) : new Date(importedAt + i) })) });
 
         await tx.column.createMany({
-          data: data.columns.map((c) => ({ id: columnIds.get(c.ref)!, projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays })),
+          data: data.columns.map((c) => ({ id: columnIds.get(c.ref)!, projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays, wipLimit: c.wipLimit ?? null })),
         });
         for (const c of data.columns) {
           if (c.routineTargetRef) await tx.column.update({ where: { id: columnIds.get(c.ref)! }, data: { routineTargetColumnId: columnIds.get(c.routineTargetRef)! } });
@@ -458,6 +458,10 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
         const chained = data.tasks.filter((x) => x.recurrenceFromRef);
         if (chained.length) {
           await tx.$executeRaw`UPDATE "Task" AS t SET "recurrenceFromId" = d.f FROM unnest(${chained.map((x) => taskIds.get(x.ref)!)}::text[], ${chained.map((x) => taskIds.get(x.recurrenceFromRef!)!)}::text[]) AS d(id, f) WHERE t."id" = d.id`;
+        }
+        const blocked = data.tasks.filter((x) => x.blockedByRef);
+        if (blocked.length) {
+          await tx.$executeRaw`UPDATE "Task" AS t SET "blockedById" = d.b FROM unnest(${blocked.map((x) => taskIds.get(x.ref)!)}::text[], ${blocked.map((x) => taskIds.get(x.blockedByRef!)!)}::text[]) AS d(id, b) WHERE t."id" = d.id`;
         }
         // Prisma pone la fecha de modificación al insertar aunque se indique: se restituye la del archivo.
         if (data.tasks.length) {
