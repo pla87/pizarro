@@ -7,7 +7,10 @@ import { createTask, getProjectFormData } from "@/actions/tasks";
 import { ProjectsContext } from "../ProjectMenu";
 import { ProjectPicker } from "./ProjectPicker";
 import { DescriptionTools, descriptionTooLong } from "../ui/DescriptionTools";
-import type { ProjectFormData } from "@/lib/types";
+import type { BoardTask, ProjectFormData } from "@/lib/types";
+import { clampTitle } from "@/lib/title-clamp";
+import { cn } from "../ui/cn";
+import { overTitleLimit, TITLE_INPUT_LIMIT, TITLE_INVALID_CLASSES, TitleLimitHint } from "./TitleLimit";
 import { useT, useIntlLocale } from "@/i18n/client";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { Lightbox } from "../ui/Lightbox";
@@ -270,11 +273,13 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     setBusy(true);
     busyRef.current = true;
     // Una subtarea a medio escribir también se guarda al crear.
+    // Un título más largo que el máximo no se rechaza: se crea recortado y se avisa.
+    const sent = clampTitle(title.trim());
     const pending = subtaskDraft.trim().slice(0, 200);
     const subtaskTitles = pending && subtasks.length < 50 ? [...subtasks, pending] : subtasks;
     const res = await board.track(
       createTask({
-        projectId, columnId, title, kindId, description,
+        projectId, columnId, title: sent.value, kindId, description,
         assigneeId: assigneeId || null, dueDate: dueDate || null, deliverableId: deliverableId || null,
         evergreen: isReleaseColumn && evergreen,
         subtasks: subtaskTitles,
@@ -286,7 +291,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       busyRef.current = false;
       return toast(res.error, "error");
     }
-    let task = res.data;
+    const { titleClipped, ...created } = res.data;
+    let task: BoardTask = created;
     // En otro proyecto la tarjeta no es de este tablero: no se añade (se avisa con un enlace al proyecto).
     const elsewhere = projectId !== board.project.id;
     if (!elsewhere) board.upsertTask(task);
@@ -303,6 +309,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       board.upsertTask(task);
     }
     if (failed) toast(failed, "error");
+    if (sent.clipped || titleClipped) toast(t("Título recortado a {max} caracteres", { max: titleClipped ?? MAX_TITLE }));
     if (elsewhere) toast(t("Tarea creada en «{project}»", { project: form.project.name }), "success", { label: t("Ir al proyecto"), onClick: () => router.push(`/p/${projectId}`) });
     else if (!failed) toast(t("Tarea creada"));
     onClose();
@@ -364,9 +371,10 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         <div>
           <label className="label" htmlFor={`${uid}-title`}>{t("Título")}</label>
           <div className="relative">
-            <input ref={titleRef} id={`${uid}-title`} className="input min-w-0 w-full pr-10" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={MAX_TITLE} required data-autofocus />
+            <input ref={titleRef} id={`${uid}-title`} className={cn("input min-w-0 w-full pr-10", overTitleLimit(title) && TITLE_INVALID_CLASSES)} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={TITLE_INPUT_LIMIT} aria-invalid={overTitleLimit(title) || undefined} aria-describedby={overTitleLimit(title) ? `${uid}-title-hint` : undefined} required data-autofocus />
             <DictationButton onText={(s) => insertIntoField(titleRef.current, s, setTitle)} within={() => titleRef.current?.parentElement?.parentElement ?? null} placement="inside" className="top-1/2 -translate-y-1/2" />
           </div>
+          <TitleLimitHint id={`${uid}-title-hint`} value={title} className="mt-1" />
         </div>
         <div>
           <div className="label">{t("Tipo")}</div>

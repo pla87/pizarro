@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { duplicateTask, moveTask, updateTask } from "@/actions/tasks";
+import { MAX_TITLE } from "@/lib/constants";
 import { positionBetween } from "@/lib/positions";
+import { clampTitle } from "@/lib/title-clamp";
 import type { BoardColumn, BoardTask } from "@/lib/types";
 import type { T } from "@/i18n/core";
 import type { useToast } from "../ui/Toast";
@@ -48,7 +50,10 @@ export function useCardActions(deps: Deps) {
         toast(res.error, "error");
         return false;
       }
-      upsertTask(res.data);
+      // El servidor recorta un título demasiado largo: se avisa, y el aviso no se guarda en la tarea.
+      const { titleClipped, ...saved } = res.data;
+      upsertTask(saved);
+      if (titleClipped) ref.current.toast(ref.current.t("Título recortado a {max} caracteres", { max: titleClipped }));
       return true;
     };
 
@@ -121,10 +126,13 @@ export function useCardActions(deps: Deps) {
 
       renameTask: async (id: string, title: string) => {
         const task = ref.current.getTask(id);
-        const value = title.trim();
+        // Más largo que el máximo: se guarda recortado (sin partir emojis ni menciones) y se avisa.
+        const { value, clipped } = clampTitle(title.trim());
         if (!task || !value || value === task.title) return true;
         // `since`: si otra persona cambió el texto mientras tanto, el servidor avisa en vez de pisarlo.
-        return saveFields(id, { title: value }, { title: value }, task.textVersion);
+        const ok = await saveFields(id, { title: value }, { title: value }, task.textVersion);
+        if (ok && clipped) ref.current.toast(ref.current.t("Título recortado a {max} caracteres", { max: MAX_TITLE }));
+        return ok;
       },
 
       duplicateTask: async (id: string) => {

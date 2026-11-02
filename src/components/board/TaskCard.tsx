@@ -21,6 +21,8 @@ import { useBoard, useIsSelected, useTask } from "./context";
 import { useCardFileDrop } from "./useCardFileDrop";
 import { DueDatePopover } from "./DueDatePopover";
 import { recurrenceLabel } from "./recurrence-ui";
+import { overTitleLimit, TITLE_INPUT_LIMIT } from "./TitleLimit";
+import { titleLength } from "@/lib/title-clamp";
 import { focusCard, isTypingTarget } from "./shortcuts";
 import { TaskViewerBubbles } from "./TaskViewerBubbles";
 
@@ -325,6 +327,7 @@ function RenameInput({ title, onDone }: { title: string; onDone: (value: string,
   const t = useT();
   const ref = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState(title);
+  const over = overTitleLimit(value);
   const finished = useRef(false);
   useEffect(() => {
     ref.current?.focus();
@@ -339,8 +342,10 @@ function RenameInput({ title, onDone }: { title: string; onDone: (value: string,
     <input
       ref={ref}
       value={value}
-      maxLength={MAX_TITLE}
+      maxLength={TITLE_INPUT_LIMIT}
       aria-label={t("Título")}
+      aria-invalid={over || undefined}
+      title={over ? `${titleLength(value)}/${MAX_TITLE}` : undefined}
       onChange={(e) => setValue(e.target.value)}
       onBlur={() => finish(true, false)}
       onClick={(e) => e.stopPropagation()}
@@ -358,7 +363,7 @@ function RenameInput({ title, onDone }: { title: string; onDone: (value: string,
           finish(false, true);
         }
       }}
-      className="min-w-0 flex-1 rounded border border-brand-500 bg-white px-1 text-sm leading-snug font-medium outline-none dark:bg-slate-900"
+      className={cn("min-w-0 flex-1 rounded border bg-white px-1 text-sm leading-snug font-medium outline-none dark:bg-slate-900", over ? "border-red-500 text-red-700 dark:text-red-300" : "border-brand-500")}
     />
   );
 }

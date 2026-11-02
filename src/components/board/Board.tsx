@@ -1021,7 +1021,6 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             )}
           </span>
           <Presence projectId={data.project.id} />
-          <ViewToggle view={view} onChange={changeView} />
           <div className="relative ml-auto w-36 min-w-16 shrink transition-[width] @min-[1000px]:focus-within:w-56">
             <Search size={14} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" aria-hidden />
             <input
@@ -1048,6 +1047,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             )}
           </div>
           <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="-ml-1.5 shrink-0" />
+          {/* Justo a la derecha del filtro y antes de «Limpiar filtros» (que aparece y desaparece): no se mueve al cambiar de vista. */}
+          <ViewToggle view={view} onChange={changeView} className="-ml-1" />
           {filterCount > 0 && (
             <button type="button" className="-ml-1 text-xs text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline dark:hover:text-slate-300" onClick={() => changeFilters(EMPTY_FILTERS)}>
               {t("Limpiar filtros")}
@@ -1136,7 +1137,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               {query.trim() && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-brand-600" aria-hidden />}
             </button>
             <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="shrink-0" />
-            <ViewToggle view={view} onChange={changeView} compact className={view === "list" ? "ml-auto mr-3" : "ml-0.5"} />
+            <ViewToggle view={view} onChange={changeView} className="ml-0.5" />
             {view === "board" && (
             <div data-mobile-tabs className="no-scrollbar ml-0.5 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pr-3">
               {sortedColumns.map((c) => (
@@ -1178,7 +1179,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             </div>
             {/* En móvil los filtros ya están en la barra de pestañas. */}
             <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="max-md:hidden" />
-            <ViewToggle view={view} onChange={changeView} compact className="max-md:hidden" />
+            <ViewToggle view={view} onChange={changeView} className="max-md:hidden" />
             <span className="shrink-0 text-xs text-slate-500" aria-live="polite">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : t("{n} tarjetas", { n: tasks.length })}</span>
             {(mobileSearch || filtering) && (
               <button

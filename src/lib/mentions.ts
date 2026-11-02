@@ -2,6 +2,11 @@
 
 const MENTION_RE = /@\[([^\]\n]{1,80})\]\(user:([a-z0-9]{1,40})\)/gi;
 
+/** Expresión nueva (con el estado a cero) que reconoce una mención; grupo 1 = nombre, grupo 2 = id. */
+export function mentionRegex(): RegExp {
+  return new RegExp(MENTION_RE.source, MENTION_RE.flags);
+}
+
 export function mentionToken(name: string, userId: string): string {
   return `@[${name.replace(/[\[\]\n]/g, "")}](user:${userId})`;
 }
