@@ -1,9 +1,9 @@
 "use client";
 
 import { takePrefetchedTaskDetail } from "./taskDetailPrefetch";
-import { Archive, Camera, Check, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
+import { Archive, Camera, Check, ChevronDown, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   addSubtask, archiveTask, deleteAttachment, deleteSubtask, deleteTask, deleteTaskLink, getTaskDetail,
   moveTask, reorderSubtask, restoreTaskSnapshot, updateSubtask, updateTask,
@@ -16,7 +16,7 @@ import { useIntlLocale, useT } from "@/i18n/client";
 import { dueStatus } from "@/lib/dates";
 import { mentionsToPlain } from "@/lib/mentions";
 import { defaultRecurrenceDay, type RecurrenceRule } from "@/lib/recurrence-date";
-import { isWhite, kindBadgeStyle, MAX_TITLE, onColor } from "@/lib/constants";
+import { COLOR_NAME, isWhite, kindBadgeStyle, MAX_TITLE, onColor, swatchBorder } from "@/lib/constants";
 import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
 import { ColorPicker } from "../ui/ColorPicker";
 import { cn } from "../ui/cn";
@@ -27,6 +27,7 @@ import { Markdown } from "../ui/Markdown";
 import type { MentionCommand } from "../ui/MentionTextarea";
 import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
+import { Popover } from "../ui/Popover";
 import { applyKindTemplate } from "@/lib/kinds-special";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { useToast } from "../ui/Toast";
@@ -430,6 +431,42 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     shortcutRef.current = { saveAndClose, archive };
   });
   const rootRef = useRef<HTMLDivElement>(null);
+  // Columna derecha (escritorio): si sus campos no caben y necesitaría scroll, la paleta de color pasa a un botón con selector.
+  // (El diálogo se pinta tras la hidratación: el elemento se guarda en estado para empezar a medir cuando existe.)
+  const [asideScroll, setAsideScroll] = useState<HTMLDivElement | null>(null);
+  const colorBox = useRef<HTMLDivElement>(null);
+  const [compactColor, setCompactColor] = useState(false);
+  const compactRef = useRef(false);
+  const paletteH = useRef(0);
+  useLayoutEffect(() => {
+    const scroller = asideScroll;
+    const content = scroller?.firstElementChild;
+    if (!scroller || !content) return;
+    const check = () => {
+      const box = colorBox.current;
+      if (!box) return;
+      // Sobra (>0) lo que habría que desplazar (altura del contenido menos el hueco útil de la columna); con la paleta compacta se suma lo que ocuparía abierta (la última medida),
+      // así no oscila: solo se reabre si cabe entera.
+      const cs = getComputedStyle(scroller);
+      const over = content.getBoundingClientRect().height - (scroller.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom));
+      let next: boolean;
+      if (!compactRef.current) {
+        paletteH.current = box.offsetHeight;
+        next = over > 1;
+      } else {
+        next = over + (paletteH.current - box.offsetHeight) > 0;
+      }
+      if (next !== compactRef.current) {
+        compactRef.current = next;
+        setCompactColor(next);
+      }
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(scroller);
+    ro.observe(content);
+    return () => ro.disconnect();
+  }, [asideScroll]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.repeat || e.defaultPrevented) return;
@@ -516,8 +553,10 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       side={side}
       onAddSecond={onAddSecond}
       onAddSecondBulk={onAddSecondBulk}
-      size="xl"
+      size="wide"
       placement="top"
+      // Escritorio: el área central no hace scroll; cada columna lo hace por separado y los botones del pie nunca se mueven.
+      bodyClassName="md:flex md:flex-col md:overflow-hidden"
       ariaLabel={mentionsToPlain(title).trim() || t("Detalle de la tarea")}
       // Móvil: pie siempre visible con Archivar, Borrar y Guardar.
       footer={
@@ -550,9 +589,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         </div>
       }
     >
-      <div ref={rootRef} onPaste={onPaste} className="grid gap-6 md:grid-cols-[minmax(0,1fr)_18rem]">
+      <div ref={rootRef} onPaste={onPaste} className="grid gap-6 md:min-h-0 md:flex-[1_1_auto] md:grid-cols-[minmax(0,1fr)_18rem] md:grid-rows-[minmax(0,1fr)]">
         {/* Margen negativo con relleno igual: deja sitio al anillo de foco (3 px + 2 de separación) que el scroll recortaría. */}
-        <div className="min-w-0 space-y-6 md:-m-2 md:max-h-[calc(100dvh-8rem)] md:overflow-y-auto md:p-2 md:[--sticky-top:-0.5rem]">
+        <div className="min-w-0 space-y-6 md:-m-2 md:overflow-y-auto md:p-2 md:[--sticky-top:-0.5rem]">
           <TaskViewers taskId={task.id} />
           <DescriptionEditor
             key={detail ? `loaded-${descVersion}` : "loading"}
@@ -648,7 +687,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         </div>
 
         {/* El margen negativo con relleno igual deja sitio al anillo de foco (3 px + 2 de separación) que el scroll recortaría. */}
-        <aside className="flex flex-col gap-4 text-sm md:-m-2 md:max-h-[calc(100dvh-8rem)] md:gap-2.5 md:overflow-y-auto md:p-2">
+        <aside className="flex flex-col text-sm md:-m-2 md:min-h-0 md:p-2">
+          <div ref={setAsideScroll} className="md:-mx-2 md:-mt-2 md:min-h-0 md:flex-1 md:overflow-y-auto md:px-2 md:pt-2 md:pb-1">
+          <div className="flex flex-col gap-4 md:gap-2.5">
           <Field label={t("Columna")}>
             <select className="input min-w-0 truncate md:py-1.5" title={board.columns.find((c) => c.id === task.columnId)?.name} value={task.columnId} onChange={(e) => changeColumn(e.target.value)}>
               {board.columns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -758,9 +799,15 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             <BlockerPicker task={task} onChange={(blocker) => save({ blockedById: blocker?.id ?? null }, { blockedBy: blocker })} />
           </Field>
           <Field label={t("Color")}>
-            {/* Escritorio: dos filas equilibradas (8 + 7) de swatches algo más pequeños para ocupar menos alto. */}
-            <div className="md:[&_button]:h-6 md:[&_button]:w-6">
-              <ColorPicker value={task.color} onChange={(color) => save({ color: color as never }, { color })} balancedRowsMd />
+            <div ref={colorBox}>
+              {compactColor ? (
+                <ColorPopover value={task.color} onChange={(color) => save({ color: color as never }, { color })} />
+              ) : (
+                // Escritorio: dos filas equilibradas (8 + 7) de swatches algo más pequeños para ocupar menos alto.
+                <div className="md:[&_button]:h-6 md:[&_button]:w-6">
+                  <ColorPicker value={task.color} onChange={(color) => save({ color: color as never }, { color })} balancedRowsMd />
+                </div>
+              )}
             </div>
           </Field>
           <Field label={t("Etiquetas")}>
@@ -815,8 +862,10 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             </p>
           )}
           <FollowToggle taskId={task.id} following={detail?.following} />
-          {/* En móvil estos botones van en el pie fijo, junto a Guardar. */}
-          <div className="mt-auto flex flex-nowrap items-center gap-2 border-t border-slate-200 pt-4 max-md:hidden md:gap-1 md:pt-2.5 dark:border-slate-800">
+          </div>
+          </div>
+          {/* En móvil estos botones van en el pie fijo, junto a Guardar; en escritorio, fijos bajo la columna (no se desplazan). */}
+          <div className="mt-auto flex flex-nowrap items-center gap-2 border-t border-slate-200 pt-4 max-md:hidden md:mt-0 md:shrink-0 md:gap-1 md:pt-2.5 dark:border-slate-800">
             {actionButtons}
           </div>
         </aside>
@@ -842,6 +891,40 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         />
       )}
     </Modal>
+  );
+}
+
+/** Selector de color compacto: un botón con el color actual que abre la paleta en un panel flotante (elegir uno lo cierra). */
+function ColorPopover({ value, onChange }: { value: string | null; onChange: (c: string | null) => void }) {
+  const t = useT();
+  const name = value === null ? t("Sin color") : COLOR_NAME[value.toLowerCase()] ? t(COLOR_NAME[value.toLowerCase()]!) : value;
+  return (
+    <Popover
+      label={t("Color")}
+      panelClassName="w-[19rem] max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-2 text-sm shadow-xl dark:border-slate-700 dark:bg-slate-900"
+      trigger={({ open, props }) => (
+        <button type="button" {...props} aria-label={`${t("Color")}: ${name}`} className={cn("input flex items-center gap-2 text-left md:py-1.5", open && "border-focus")}>
+          <span
+            className={cn("h-4 w-4 shrink-0 rounded-full", value === null ? "border-2 border-dashed border-slate-300 dark:border-slate-600" : swatchBorder(value))}
+            style={value ? { backgroundColor: value } : undefined}
+            aria-hidden
+          />
+          <span className="min-w-0 flex-1 truncate">{name}</span>
+          <ChevronDown size={14} className="shrink-0 text-slate-400" aria-hidden />
+        </button>
+      )}
+    >
+      {({ close }) => (
+        <ColorPicker
+          value={value}
+          onChange={(c) => {
+            onChange(c);
+            close();
+          }}
+          balancedRowsMd
+        />
+      )}
+    </Popover>
   );
 }
 
