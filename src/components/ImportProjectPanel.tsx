@@ -150,7 +150,7 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
   return (
     <form onSubmit={submit} className="space-y-4">
       <p className="text-sm text-slate-600 dark:text-slate-300">
-        {t("Crea un proyecto a partir de un .pizarro.zip de Pizarro, un JSON exportado de Trello o un CSV de tareas (Asana, Jira, Notion, GitHub Projects, Wekan, Kanboard…). El formato se reconoce solo; las personas se emparejan por email o nombre y el nombre del proyecto sale del archivo.")}
+        {t("Crea un proyecto a partir de un .pizarro.zip de Pizarro, un JSON exportado de Trello o un CSV de tareas (Asana, Notion, GitHub Projects, Wekan, Kanboard…). El formato se reconoce solo; las personas se emparejan por email o nombre y el nombre del proyecto sale del archivo.")}
       </p>
       <div>
         <label className="label" htmlFor="import-file">{t("Archivo (.zip, .json o .csv)")}</label>

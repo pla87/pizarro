@@ -11,8 +11,8 @@ import { isoToDate } from "../dates";
 import { POSITION_STEP } from "../positions";
 import { freeProjectName, insertChunks, newId, type ImportProgress, type ImportSummary, type ImportUser } from "../project-export/import";
 import { normalizeTaskFields } from "../task-fields";
-import { assertBoardLimits, decodeText, parseForeign } from "./parse";
-import { cleanName, clip } from "./text";
+import { assertBoardLimits, decodeText, foreignMaxBytes, parseForeign } from "./parse";
+import { cleanName, clip, isDoneName } from "./text";
 import { FOREIGN_LIMITS, type ForeignBoard, type ForeignFormat, type ForeignPerson } from "./types";
 
 export interface ForeignImportOptions {
@@ -22,10 +22,6 @@ export interface ForeignImportOptions {
   fileName?: string;
   onProgress?: (p: ImportProgress) => void;
 }
-
-/** Columnas cuyo nombre indica «terminado»: cuentan como hechas en informes y plazos. */
-const DONE_RE = /^(done|hecho|hecha|hechos|completad[oa]s?|completed?|terminad[oa]s?|finalizad[oa]s?|finished|cerrad[oa]s?|closed|resuelt[oa]s?|resolved|en produccion|production|released?|entregad[oa]s?|delivered|archiv\w*)\b/;
-const isDoneName = (name: string) => DONE_RE.test(name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim());
 
 /** Colores para etiquetas que vienen sin color (CSV): se reparten por orden de aparición, sin el blanco ni el gris. */
 const AUTO_COLORS = PALETTE.filter((c) => c !== "#ffffff" && c !== "#64748b");
@@ -40,7 +36,8 @@ function cleanPerson(p: ForeignPerson): ForeignPerson {
 export async function importForeignFile(file: string, format: ForeignFormat, user: ImportUser, opts: ForeignImportOptions): Promise<ImportSummary> {
   if (user.role !== "ADMIN") throw forbidden();
   opts.onProgress?.({ phase: "validar" });
-  if ((await stat(file)).size > FOREIGN_LIMITS.maxBytes) throw new AppError("El archivo supera el tamaño máximo para JSON y CSV (50 MB).", 413);
+  const max = foreignMaxBytes();
+  if ((await stat(file)).size > max) throw new AppError(opts.t("El archivo supera el tamaño máximo para JSON y CSV ({mb} MB).", { mb: Math.round(max / 1024 / 1024) }), 413);
   const text = decodeText(await readFile(file));
   const board = parseForeign(text, format, { t: opts.t, timeZone: appTimeZone(), fileName: opts.fileName });
   return createProjectFromBoard(board, format, user, opts);
