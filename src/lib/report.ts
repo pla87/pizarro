@@ -1,5 +1,5 @@
 // Cálculo del informe de estado de un proyecto. Funciones puras (sin BD) para poder testearlas.
-import { makeT, type T } from "../i18n/core";
+import { esT, type T } from "../i18n/shared";
 import { daysBetween, isoInZone } from "./dates";
 import { centsToAmount, sumCents, type TaskFieldKey, type TaskFieldValues } from "./task-fields";
 
@@ -121,7 +121,7 @@ export function deliverableStatus(total: number, done: number, daysLeft: number 
   return "En plazo";
 }
 
-export function buildReport(input: ReportInput, tr: T = makeT("es")): Report {
+export function buildReport(input: ReportInput, tr: T = esT): Report {
   const { today } = input;
   const columnById = new Map(input.columns.map((c) => [c.id, c]));
   const isDone = (t: ReportInput["tasks"][number]) => columnById.get(t.columnId)?.isDone ?? false;
