@@ -1,4 +1,4 @@
-// Verificación de R16B1, R16F3, R16M1 y R16F1 (agente «board»).
+// Verificación de R16B1, R16F3, R16M1 y R16F1 (agente «board») y de los diálogos propios del menú de la columna (dlg).
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,7 +8,7 @@ import * as U from "./qa/ui.mjs";
 const { COL, sleep } = L;
 const APP = process.env.APP_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "b1,f3,m1,f1").split(",");
+const only = (process.env.PART || "b1,f3,m1,f1,dlg").split(",");
 
 await L.prepareUsers();
 
@@ -225,6 +225,140 @@ if (only.includes("f1")) {
   await L.eqEventually("F1: deshacer desde el detalle", () => L.dbOrder(COL.backlog), ["Mía"]);
   L.assertNoErrors("F1", [s]);
   await s.ctx.close();
+}
+
+// ---------------------------------------------------------------- Diálogos propios del menú de la columna
+// Renombrar, «Límite de tarjetas…» y el plazo de «Esperando» usan un cuadro de la app, no window.prompt (que algunos
+// navegadores integrados no muestran): foco en el campo con el texto seleccionado, Intro acepta, Escape cancela,
+// error en línea sin cerrar y las mismas acciones de servidor.
+if (only.includes("dlg")) {
+  L.scenario("Diálogos propios del menú de la columna (sin window.prompt)");
+  await L.cleanBoard();
+  await L.seedTasks(COL.doing, ["W1", "W2", "W3"]);
+  const proj = await L.project();
+  const colRow = async (name) => (await L.q(`SELECT name, role, "wipLimit", "waitingDays" FROM "Column" WHERE "projectId"=$1 AND name=$2`, [proj.id, name]))[0] ?? null;
+  const natives = [];
+  const watchNative = (p) => p.on("dialog", (d) => { natives.push(d.type()); d.dismiss().catch(() => {}); });
+  const openColMenu = async (p, col, item, tap = false) => {
+    const act = (loc) => (tap ? loc.tap() : loc.click());
+    await act(L.colLoc(p, col).getByRole("button", { name: "Opciones de columna" }));
+    await act(p.getByRole("menuitem", { name: item }));
+  };
+  const promptDialog = async (p, title) => { const d = p.getByRole("dialog", { name: title }); await d.waitFor(); await sleep(300); return d; };
+  const active = (p) => p.evaluate(() => { const el = document.activeElement; return { tag: el?.tagName, value: el?.value ?? null, sel: [el?.selectionStart ?? null, el?.selectionEnd ?? null], label: el?.getAttribute("aria-label") ?? null }; });
+
+  // Escritorio (1280 px)
+  const s = await L.session({ viewport: { width: 1280, height: 800 } });
+  const p = s.page;
+  watchNative(p);
+  // Renombrar: foco en el campo con el nombre seleccionado; se escribe encima e Intro guarda.
+  await openColMenu(p, COL.backlog, "Renombrar");
+  let d = await promptDialog(p, "Renombrar columna");
+  L.eq("DLG: renombrar abre el cuadro con el nombre seleccionado y el foco en el campo", await active(p), { tag: "INPUT", value: COL.backlog, sel: [0, COL.backlog.length], label: null });
+  await p.keyboard.type("Pendiente");
+  await p.keyboard.press("Enter");
+  await L.eqEventually("DLG: Intro guarda el nombre nuevo (renameColumn)", async () => (await colRow("Pendiente"))?.name ?? null, "Pendiente");
+  await d.waitFor({ state: "detached" });
+  L.eq("DLG: al cerrar, el foco vuelve al botón «⋯» de la columna", (await active(p)).label, "Opciones de columna");
+  // Vacío = no cambiar; Escape cancela.
+  await openColMenu(p, "Pendiente", "Renombrar");
+  d = await promptDialog(p, "Renombrar columna");
+  await d.getByRole("textbox", { name: "Nombre de la columna" }).fill("");
+  await p.keyboard.press("Enter");
+  await d.waitFor({ state: "detached" });
+  await openColMenu(p, "Pendiente", "Renombrar");
+  d = await promptDialog(p, "Renombrar columna");
+  await p.keyboard.type("Otro nombre");
+  await p.keyboard.press("Escape");
+  await d.waitFor({ state: "detached" });
+  await sleep(600);
+  L.check("DLG: vacío no renombra y Escape cancela", (await colRow("Pendiente")) && !(await colRow("")) && !(await colRow("Otro nombre")));
+  await openColMenu(p, "Pendiente", "Renombrar");
+  d = await promptDialog(p, "Renombrar columna");
+  await d.getByRole("textbox", { name: "Nombre de la columna" }).fill(COL.backlog);
+  await d.getByRole("button", { name: "Guardar" }).click();
+  await L.eqEventually("DLG: «Guardar» también guarda", async () => (await colRow(COL.backlog))?.name ?? null, COL.backlog);
+
+  // Límite de tarjetas: error en línea sin cerrar; ↑ suma uno; vacío = quitar el límite.
+  await openColMenu(p, COL.doing, /^Límite de tarjetas/);
+  d = await promptDialog(p, "Límite de tarjetas");
+  const wipInput = d.getByRole("textbox", { name: /Máximo de tarjetas/ });
+  L.eq("DLG: límite sin valor (placeholder «Sin límite»)", [await wipInput.inputValue(), await wipInput.getAttribute("placeholder")], ["", "Sin límite"]);
+  await p.keyboard.type("abc");
+  await p.keyboard.press("Enter");
+  await sleep(300);
+  L.eq("DLG: un límite no válido muestra el error en línea y no cierra", [await d.getByRole("alert").textContent(), await wipInput.getAttribute("aria-invalid"), await d.isVisible()], ["Indica un número entero entre 1 y 999, o déjalo vacío.", "true", true]);
+  await p.screenshot({ path: `${SHOTS}/board-dlg-wip-error.png` });
+  L.eq("DLG: sin cambios en la BD tras el error", (await colRow(COL.doing)).wipLimit, null);
+  await wipInput.fill("2");
+  L.eq("DLG: al escribir se quita el error", await d.getByRole("alert").count(), 0);
+  await d.getByRole("button", { name: "Guardar" }).click();
+  await L.eqEventually("DLG: guarda el límite (setColumnWipLimit)", async () => (await colRow(COL.doing)).wipLimit, 2);
+  await L.eqEventually("DLG: la columna avisa al pasarse (3 de 2)", () => L.colLoc(p, COL.doing).getAttribute("data-wip-over"), "true");
+  await openColMenu(p, COL.doing, /^Límite de tarjetas/);
+  d = await promptDialog(p, "Límite de tarjetas");
+  L.eq("DLG: el límite actual aparece seleccionado", await active(p), { tag: "INPUT", value: "2", sel: [0, 1], label: null });
+  await p.keyboard.press("ArrowUp");
+  L.eq("DLG: ↑ suma uno", await wipInput.inputValue(), "3");
+  await p.keyboard.press("Enter");
+  await L.eqEventually("DLG: Intro guarda 3", async () => (await colRow(COL.doing)).wipLimit, 3);
+  await openColMenu(p, COL.doing, /^Límite de tarjetas/);
+  d = await promptDialog(p, "Límite de tarjetas");
+  await wipInput.fill("");
+  await p.keyboard.press("Enter");
+  await L.eqEventually("DLG: vacío quita el límite", async () => (await colRow(COL.doing)).wipLimit, null);
+
+  // Plazo de «Esperando»: misma regla (entero de 1 a 365), error en línea.
+  const closedRole = (await colRow(COL.closed)).role;
+  await L.q(`UPDATE "Column" SET role='WAITING' WHERE "projectId"=$1 AND name=$2`, [proj.id, COL.closed]);
+  await L.reload(p);
+  await openColMenu(p, COL.closed, /^Recordar tras 3 d/);
+  d = await promptDialog(p, "Plazo de espera");
+  L.eq("DLG: plazo con el valor actual (3) seleccionado", await active(p), { tag: "INPUT", value: "3", sel: [0, 1], label: null });
+  await p.keyboard.type("0");
+  await p.keyboard.press("Enter");
+  await sleep(300);
+  L.eq("DLG: plazo no válido: error en línea", await d.getByRole("alert").textContent(), "Indica un número entero de días.");
+  await d.getByRole("textbox").fill("7");
+  await p.keyboard.press("Enter");
+  await L.eqEventually("DLG: guarda el plazo (setColumnWaitingDays)", async () => (await colRow(COL.closed)).waitingDays, 7);
+  await L.q(`UPDATE "Column" SET role=$3, "waitingDays"=NULL WHERE "projectId"=$1 AND name=$2`, [proj.id, COL.closed, closedRole]);
+  L.assertNoErrors("DLG escritorio", [s]);
+  await s.ctx.close();
+
+  // Móvil (390 px): arriba del todo, sin salirse por los lados, 16 px (iOS no amplía) y con el teclado abierto.
+  const m = await L.session({ viewport: { width: 390, height: 844 }, mobile: true });
+  const mp = m.page;
+  watchNative(mp);
+  await openColMenu(mp, COL.backlog, /^Límite de tarjetas/, true);
+  d = await promptDialog(mp, "Límite de tarjetas");
+  const box = await d.boundingBox();
+  L.check("DLG móvil: el cuadro va arriba y cabe a lo ancho", box.y <= 1 && box.x >= 0 && box.x + box.width <= 390, JSON.stringify(box));
+  L.eq("DLG móvil: campo a 16 px", await d.getByRole("textbox").evaluate((el) => getComputedStyle(el).fontSize), "16px");
+  await mp.keyboard.type("5");
+  await d.getByRole("button", { name: "Guardar" }).tap();
+  await L.eqEventually("DLG móvil: guarda el límite", async () => (await colRow(COL.backlog)).wipLimit, 5);
+  // Teclado abierto: la zona visible se reduce a ~420 px; el campo y los botones siguen a la vista.
+  await mp.setViewportSize({ width: 390, height: 420 });
+  await openColMenu(mp, COL.backlog, /^Límite de tarjetas/, true);
+  d = await promptDialog(mp, "Límite de tarjetas");
+  const save = await d.getByRole("button", { name: "Guardar" }).boundingBox();
+  L.check("DLG móvil: con el teclado abierto se ven el campo y «Guardar»", save && save.y + save.height <= 420 && (await d.getByRole("textbox").isVisible()), JSON.stringify(save));
+  await d.getByRole("textbox").fill("");
+  await d.getByRole("button", { name: "Guardar" }).tap();
+  await L.eqEventually("DLG móvil: vacío quita el límite", async () => (await colRow(COL.backlog)).wipLimit, null);
+  // Modo oscuro.
+  await mp.setViewportSize({ width: 390, height: 844 });
+  await mp.emulateMedia({ colorScheme: "dark" });
+  await openColMenu(mp, COL.backlog, "Renombrar", true);
+  d = await promptDialog(mp, "Renombrar columna");
+  await mp.screenshot({ path: `${SHOTS}/board-dlg-mobile-dark.png` });
+  L.check("DLG móvil: en modo oscuro el cuadro no es blanco", (await d.evaluate((el) => getComputedStyle(el).backgroundColor)) !== "rgb(255, 255, 255)");
+  await d.getByRole("button", { name: "Cancelar" }).tap();
+  await d.waitFor({ state: "detached" });
+  L.eq("DLG: ningún window.prompt/confirm/alert nativo", natives, []);
+  L.assertNoErrors("DLG móvil", [m]);
+  await m.ctx.close();
 }
 
 await L.closeBrowser(); await L.closeDb();

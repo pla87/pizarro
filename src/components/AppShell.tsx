@@ -31,6 +31,7 @@ import { cn } from "./ui/cn";
 import { Menu as DropdownMenu, MenuItem } from "./ui/Menu";
 import { Modal } from "./ui/Modal";
 import { ConfirmProvider } from "./ui/ConfirmDialog";
+import { PromptProvider } from "./ui/PromptDialog";
 import { ToastProvider, useToast } from "./ui/Toast";
 import { useEscapeClose } from "./ui/useEscapeClose";
 
@@ -52,8 +53,10 @@ export function AppShell(props: Props) {
   return (
     <ToastProvider>
       <ConfirmProvider>
-        <TransferJobWatcher />
-        <Shell {...props} />
+        <PromptProvider>
+          <TransferJobWatcher />
+          <Shell {...props} />
+        </PromptProvider>
       </ConfirmProvider>
     </ToastProvider>
   );

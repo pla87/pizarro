@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, X } from "lucide-react";
-import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/i18n/client";
 import { PlusStack } from "./PlusStack";
@@ -93,6 +93,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
   // justo después aparece. Sin esto, un modal abierto desde el primer render (?task=) daba el error #418.
   const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
   const onCloseRef = useRef(onClose);
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -210,6 +211,8 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
         ref={panelRef}
         role="dialog"
         aria-modal="true"
+        // Nombre accesible del diálogo: su título (con la cabecera estándar).
+        aria-labelledby={!header && title ? titleId : undefined}
         tabIndex={-1}
         style={{ "--mw": SIZE_REM[size], ...(vv ? { "--vvh": `${vv.h}px` } : {}) } as React.CSSProperties}
         className={cn(
@@ -226,7 +229,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
       >
         {header ?? (
           <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-slate-800">
-            <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{title}</h2>
+            <h2 id={titleId} className="min-w-0 flex-1 truncate text-base font-semibold">{title}</h2>
             <button type="button" className="btn-icon" onClick={onClose} aria-label={t("Cerrar")}>
               <X size={18} />
             </button>

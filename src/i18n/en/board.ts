@@ -29,7 +29,8 @@ export const board: Record<string, string> = {
   "Generar Release": "Generate release",
   "Arrastra tarjetas aquí": "Drag cards here",
   "Error": "Error",
-  "Nuevo nombre de la columna": "New column name",
+  "Renombrar columna": "Rename column",
+  "Plazo de espera": "Waiting period",
   "Solo se pueden borrar columnas vacías.": "Only empty columns can be deleted.",
   "¿Borrar la columna «{name}»?": "Delete the column “{name}”?",
   "Opciones de columna": "Column options",
@@ -72,6 +73,8 @@ export const board: Record<string, string> = {
   "Nueva columna": "New column",
   "Nombre de la columna": "Column name",
   "Cancelar": "Cancel",
+  // PromptDialog
+  "Aceptar": "OK",
   // Presence
   "Activos en los últimos 5 minutos: {names}": "Active in the last 5 minutes: {names}",
   // NewTaskDialog

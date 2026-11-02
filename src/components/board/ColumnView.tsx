@@ -13,6 +13,7 @@ import { budgetSummary, formatEuro } from "@/lib/task-fields";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
 import { useConfirm } from "../ui/ConfirmDialog";
+import { usePrompt } from "../ui/PromptDialog";
 import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
 import { Modal } from "../ui/Modal";
 import { BudgetSummaryDialog } from "./BudgetSummaryDialog";
@@ -169,6 +170,7 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
   const [dialog, setDialog] = useState<"checklist" | "routine" | null>(null);
   const toast = useToast();
   const confirm = useConfirm();
+  const prompt = usePrompt();
   const t = useT();
   const [summaryOpen, setSummaryOpen] = useState(false);
 
@@ -182,8 +184,9 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
     }
   };
 
-  const rename = () => {
-    const name = window.prompt(t("Nuevo nombre de la columna"), column.name)?.trim();
+  // Vacío o el mismo nombre: no cambia nada.
+  const rename = async () => {
+    const name = (await prompt({ title: t("Renombrar columna"), label: t("Nombre de la columna"), defaultValue: column.name, maxLength: 80, confirmLabel: t("Guardar") }))?.trim();
     if (!name || name === column.name) return;
     run(() => renameColumn(column.id, name), () => setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, name } : c))));
   };
@@ -220,24 +223,48 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
         ),
     );
 
-  // Rol «Esperando»: días hasta el recordatorio.
-  const editWaitingDays = () => {
+  // Rol «Esperando»: días hasta el recordatorio (entero de 1 a MAX_WAITING_DAYS; vacío = no cambiar).
+  const editWaitingDays = async () => {
     const current = column.waitingDays ?? DEFAULT_WAITING_DAYS;
-    const raw = window.prompt(t("Avisar a la persona asignada tras cuántos días en esta columna (1-{max})", { max: MAX_WAITING_DAYS }), String(current))?.trim();
+    const parseDays = (raw: string) => {
+      const days = Number(raw.trim());
+      return Number.isInteger(days) && days >= 1 && days <= MAX_WAITING_DAYS ? days : undefined;
+    };
+    const raw = (
+      await prompt({
+        title: t("Plazo de espera"),
+        label: t("Avisar a la persona asignada tras cuántos días en esta columna (1-{max})", { max: MAX_WAITING_DAYS }),
+        defaultValue: String(current),
+        type: "number",
+        min: 1,
+        max: MAX_WAITING_DAYS,
+        confirmLabel: t("Guardar"),
+        validate: (v) => (v.trim() && parseDays(v) === undefined ? t("Indica un número entero de días.") : null),
+      })
+    )?.trim();
     if (!raw) return;
-    const days = Number(raw);
-    if (!Number.isInteger(days) || days < 1 || days > MAX_WAITING_DAYS) return toast(t("Indica un número entero de días."), "error");
-    if (days === current) return;
+    const days = parseDays(raw);
+    if (days === undefined || days === current) return;
     run(() => setColumnWaitingDays(column.id, days), () => setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, waitingDays: days } : c))));
   };
 
   // Límite de tarjetas (WIP): vacío = sin límite.
-  const editWipLimit = () => {
-    const raw = window.prompt(t("Máximo de tarjetas en esta columna ({min}-{max}). Déjalo vacío para quitar el límite. Solo avisa: nunca impide mover ni crear tarjetas.", { min: WIP_MIN, max: WIP_MAX }), column.wipLimit != null ? String(column.wipLimit) : "");
+  const editWipLimit = async () => {
+    const raw = await prompt({
+      title: t("Límite de tarjetas"),
+      label: t("Máximo de tarjetas en esta columna ({min}-{max})", { min: WIP_MIN, max: WIP_MAX }),
+      description: t("Déjalo vacío para quitar el límite. Solo avisa: nunca impide mover ni crear tarjetas."),
+      defaultValue: column.wipLimit != null ? String(column.wipLimit) : "",
+      placeholder: t("Sin límite"),
+      type: "number",
+      min: WIP_MIN,
+      max: WIP_MAX,
+      confirmLabel: t("Guardar"),
+      validate: (v) => (parseWipInput(v) === undefined ? t("Indica un número entero entre {min} y {max}, o déjalo vacío.", { min: WIP_MIN, max: WIP_MAX }) : null),
+    });
     if (raw === null) return;
     const limit = parseWipInput(raw);
-    if (limit === undefined) return toast(t("Indica un número entero entre {min} y {max}, o déjalo vacío.", { min: WIP_MIN, max: WIP_MAX }), "error");
-    if (limit === column.wipLimit) return;
+    if (limit === undefined || limit === column.wipLimit) return;
     run(() => setColumnWipLimit(column.id, limit), () => setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, wipLimit: limit } : c))));
   };
 
