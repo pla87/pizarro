@@ -229,7 +229,7 @@ describe("tareas bloqueadas", () => {
     const { f } = await setup();
     const a = await makeTask(f, { title: "A" });
     const b = await makeTask(f);
-    const snapshot = { title: "A", kindId: f.kindId, color: null, linkUrl: null, assigneeId: null, labelIds: [], dueDate: null, deliverableId: null, evergreen: false, evergreenEvery: 1, recurrence: "NONE" as const, recurrenceDay: null, columnId: f.columns.todo, position: 1000, blockedById: null };
+    const snapshot = { openedAt: new Date().toISOString(), title: "A", kindId: f.kindId, color: null, linkUrl: null, assigneeId: null, labelIds: [], dueDate: null, deliverableId: null, evergreen: false, evergreenEvery: 1, recurrence: "NONE" as const, recurrenceDay: null, columnId: f.columns.todo, position: 1000, blockedById: null };
     expectOk(await updateTask(a.id, { blockedById: b.id }));
     const res = expectOk(await restoreTaskSnapshot(a.id, snapshot));
     assert.equal(res.changed, true);

@@ -65,17 +65,23 @@ export async function setColumnRole(columnId: string, role: string) {
   return runAction({ name: "columns.setColumnRole", args: [columnId, role] }, async () => {
     const column = await findColumn(columnId);
     const value = v.columnRole.parse(role);
-    // Deshacer: roles de todas las columnas y las tareas fijas que dejarían de serlo.
-    const before = await db.column.findMany({ where: { projectId: column.projectId }, select: { id: true, role: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true } });
     // Si la columna deja de ser «Esperando» o «Rutinas», se borra su plazo de espera o su destino (y el deshacer los devuelve).
     const clearWaiting = column.role === "WAITING" && value !== "WAITING";
     const clearRoutine = column.role === "ROUTINES" && value !== "ROUTINES";
-    const fixed = await db.task.findMany({ where: { projectId: column.projectId, evergreen: true }, select: { id: true } });
-    addUndo(...before.map((c) => ({
-      t: "column.set" as const,
-      id: c.id,
-      data: { role: c.role, ...(c.id === columnId && clearWaiting ? { waitingDays: c.waitingDays } : {}), ...(c.id === columnId && clearRoutine ? { routineTargetColumnId: c.routineTargetColumnId } : {}) },
-    })), ...(await captureTasks(fixed.map((t) => t.id), ["evergreen", "evergreenEvery"])));
+    // Deshacer: solo lo que cambia (esta columna, la que tenía el rol si es único y las tareas fijas que dejan de serlo),
+    // para no pisar al deshacer los roles que otras personas hayan cambiado en otras columnas.
+    const [holders, fixed] = await Promise.all([
+      isUniqueColumnRole(value) ? db.column.findMany({ where: { projectId: column.projectId, role: value, id: { not: columnId } }, select: { id: true } }) : [],
+      db.task.findMany({
+        where: { projectId: column.projectId, evergreen: true, ...(value === "NEXT_RELEASE" ? { columnId: { not: columnId } } : { columnId }) },
+        select: { id: true },
+      }),
+    ]);
+    addUndo(
+      { t: "column.set", id: column.id, data: { role: column.role, ...(clearWaiting ? { waitingDays: column.waitingDays } : {}), ...(clearRoutine ? { routineTargetColumnId: column.routineTargetColumnId } : {}) } },
+      ...holders.map((c) => ({ t: "column.set" as const, id: c.id, data: { role: value } })),
+      ...(await captureTasks(fixed.map((t) => t.id), ["evergreen", "evergreenEvery"])),
+    );
     describeAction("Cambió el rol de la columna «{name}»", { name: column.name });
     // Una columna de presupuesto suma el coste de sus tareas: el campo Coste se activa si no lo estaba.
     const project = value === "BUDGET" ? await db.project.findUniqueOrThrow({ where: { id: column.projectId }, select: { taskFields: true } }) : null;

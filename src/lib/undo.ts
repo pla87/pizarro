@@ -60,7 +60,8 @@ export interface TaskData {
 export type TaskField = keyof TaskData;
 
 type SubtaskRow = { id: string; taskId: string; title: string; done: boolean; position: number };
-type CommentRow = { id: string; taskId: string; authorId: string | null; body: string; createdAt: string; editedAt: string | null; parentId?: string | null; deletedAt?: string | null };
+/** `authorName`: autor de un comentario importado de otra herramienta (sin usuario en Pizarro). */
+type CommentRow = { id: string; taskId: string; authorId: string | null; authorName?: string | null; body: string; createdAt: string; editedAt: string | null; parentId?: string | null; deletedAt?: string | null };
 type AttachmentRow = {
   id: string; taskId: string; originalName: string; mimeType: string; isImage: boolean;
   width: number | null; height: number | null; size: number; createdById: string | null; createdAt: string;
@@ -174,7 +175,7 @@ export async function snapshotTasks(ids: string[]): Promise<UndoOp[]> {
       },
       labelIds: r.labels.map((l) => l.labelId),
       subtasks: r.subtasks.map((s) => ({ id: s.id, taskId: s.taskId, title: s.title, done: s.done, position: s.position })),
-      comments: r.comments.map((c) => ({ id: c.id, taskId: c.taskId, authorId: c.authorId, body: c.body, createdAt: c.createdAt.toISOString(), editedAt: iso(c.editedAt), parentId: c.parentId, deletedAt: iso(c.deletedAt) })),
+      comments: r.comments.map((c) => ({ id: c.id, taskId: c.taskId, authorId: c.authorId, authorName: c.authorName, body: c.body, createdAt: c.createdAt.toISOString(), editedAt: iso(c.editedAt), parentId: c.parentId, deletedAt: iso(c.deletedAt) })),
       attachments: r.attachments.map((a) => ({
         id: a.id, taskId: a.taskId, originalName: a.originalName, mimeType: a.mimeType, isImage: a.isImage,
         width: a.width, height: a.height, size: a.size, createdById: a.createdById, createdAt: a.createdAt.toISOString(),
@@ -186,6 +187,90 @@ export async function snapshotTasks(ids: string[]): Promise<UndoOp[]> {
 }
 
 export type UndoKind = "UNDO" | "REDO";
+
+type SubtaskKey = "title" | "done" | "position";
+/**
+ * Fila borrada en el rato. `byUndo`: alguna entrada de deshacer la anota (la borró una acción suya); si solo la anotan
+ * las de rehacer, la quitó su «Deshacer» (deshizo algo suyo, p. ej. haberla creado).
+ */
+type Deleted<R> = { row: R; byUndo: boolean };
+
+/** Lo que una persona tocó de una tarea según sus entradas de deshacer y rehacer de un rato (ver touchedTask). */
+export interface TouchedTask {
+  /** Campos de la tarjeta (claves de TaskData) y si cambió sus etiquetas. */
+  fields: Set<string>;
+  labels: boolean;
+  /**
+   * Subtareas: campos que cambió, su valor antes del primer cambio del rato (solo de las entradas de deshacer: las de
+   * rehacer guardan el valor previo a su «Deshacer», que ya era suyo), creadas (ids) y borradas (fila al borrarla).
+   */
+  subtaskFields: Map<string, Set<SubtaskKey>>;
+  subtaskBefore: Map<string, Partial<Record<SubtaskKey, unknown>>>;
+  subtasksCreated: Set<string>;
+  subtasksDeleted: Map<string, Deleted<SubtaskRow>>;
+  attachmentsCreated: Set<string>;
+  attachmentsDeleted: Map<string, Deleted<AttachmentRow>>;
+  linksCreated: Set<string>;
+  linksDeleted: Map<string, Deleted<LinkRow>>;
+  /** Tareas que nacieron en la misma acción que movió esta (la siguiente aparición de una recurrente). */
+  spawned: Set<string>;
+}
+
+function noteDeleted<R extends { id: string }>(map: Map<string, Deleted<R>>, row: R, kind: UndoKind): void {
+  map.set(row.id, { row, byUndo: (map.get(row.id)?.byUndo ?? false) || kind === "UNDO" });
+}
+
+/**
+ * Qué hizo una persona en la tarea `taskId` según sus entradas (las más antiguas primero). Cada operación es la
+ * inversa de lo que hizo: `task.set` lleva los campos que cambió; `subtask.remove`/`attachment.remove`/`link.remove`,
+ * lo que creó; `*.restore`, lo que borró. Las de rehacer valen igual: son la inversa de lo que hizo su «Deshacer».
+ * Las subtareas y adjuntos sin tarea en la operación se filtran después por pertenencia a la tarea.
+ */
+export function touchedTask(entries: { kind: UndoKind; ops: unknown }[], taskId: string): TouchedTask {
+  const out: TouchedTask = {
+    fields: new Set(), labels: false, subtaskFields: new Map(), subtaskBefore: new Map(), subtasksCreated: new Set(), subtasksDeleted: new Map(),
+    attachmentsCreated: new Set(), attachmentsDeleted: new Map(), linksCreated: new Set(), linksDeleted: new Map(), spawned: new Set(),
+  };
+  for (const e of entries) {
+    const ops = e.ops as UndoOp[];
+    let moved = false;
+    const removed: string[] = [];
+    for (const op of ops) {
+      switch (op.t) {
+        case "task.set":
+          if (op.id !== taskId) break;
+          for (const k of Object.keys(op.data)) out.fields.add(k);
+          if (op.labelIds) out.labels = true;
+          if (op.data.columnId !== undefined) moved = true;
+          break;
+        case "task.remove":
+          if (op.id !== taskId) removed.push(op.id);
+          break;
+        case "subtask.set": {
+          const keys = out.subtaskFields.get(op.id) ?? new Set<SubtaskKey>();
+          const before = out.subtaskBefore.get(op.id) ?? {};
+          for (const [k, val] of Object.entries(op.data) as [SubtaskKey, unknown][]) {
+            keys.add(k);
+            if (e.kind === "UNDO" && !(k in before)) before[k] = val;
+          }
+          out.subtaskFields.set(op.id, keys);
+          out.subtaskBefore.set(op.id, before);
+          break;
+        }
+        case "subtask.remove": out.subtasksCreated.add(op.id); break;
+        case "subtask.restore": if (op.row.taskId === taskId) noteDeleted(out.subtasksDeleted, op.row, e.kind); break;
+        case "attachment.remove": out.attachmentsCreated.add(op.id); break;
+        case "attachment.restore": if (op.row.taskId === taskId) noteDeleted(out.attachmentsDeleted, op.row, e.kind); break;
+        case "link.remove": out.linksCreated.add(op.id); break;
+        case "link.restore": if (op.row.taskId === taskId) noteDeleted(out.linksDeleted, op.row, e.kind); break;
+        default: break;
+      }
+    }
+    // Solo en las de deshacer: una de rehacer con task.remove es una tarea que su «Deshacer» devolvió, no una que naciera.
+    if (moved && e.kind === "UNDO") for (const id of removed) out.spawned.add(id);
+  }
+  return out;
+}
 
 /** Entrada de historial (TaskEvent) tal como se guarda en la entrada de rehacer para poder recrearla. */
 export interface SavedEvent {
@@ -237,14 +322,32 @@ function retainedAttachmentIds(ops: UndoOp[]): string[] {
   return ids;
 }
 
-/** Borra entradas y los ficheros que solo ellas retenían. */
+/**
+ * De esos adjuntos, los que otra entrada (deshacer o rehacer, de cualquier persona) aún puede devolver: su fichero
+ * debe seguir en el disco. Una sola consulta con contención jsonb sobre las operaciones de cada entrada.
+ */
+async function stillRetained(ids: string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set();
+  const rows = await db.$queryRaw<{ id: string }[]>`
+    SELECT a."id" FROM unnest(${ids}::text[]) AS a("id")
+    WHERE EXISTS (
+      SELECT 1 FROM "UndoEntry" u
+      WHERE u."ops" @> jsonb_build_array(jsonb_build_object('t', 'attachment.restore', 'row', jsonb_build_object('id', a."id")))
+         OR u."ops" @> jsonb_build_array(jsonb_build_object('t', 'task.restore', 'snap', jsonb_build_object('attachments', jsonb_build_array(jsonb_build_object('id', a."id")))))
+    )`;
+  return new Set(rows.map((r) => r.id));
+}
+
+/** Borra entradas y los ficheros que solo ellas retenían (ni un adjunto vivo ni otra entrada los necesitan). */
 export async function discardEntries(entries: { id: string; ops: unknown }[]): Promise<void> {
   if (!entries.length) return;
-  const candidates = entries.flatMap((e) => retainedAttachmentIds(e.ops as UndoOp[]));
+  const candidates = [...new Set(entries.flatMap((e) => retainedAttachmentIds(e.ops as UndoOp[])))];
   await db.undoEntry.deleteMany({ where: { id: { in: entries.map((e) => e.id) } } });
   if (!candidates.length) return;
   const alive = new Set((await db.taskAttachment.findMany({ where: { id: { in: candidates } }, select: { id: true } })).map((a) => a.id));
-  await removeAttachmentFiles(candidates.filter((id) => !alive.has(id)));
+  const orphans = candidates.filter((id) => !alive.has(id));
+  const retained = await stillRetained(orphans);
+  await removeAttachmentFiles(orphans.filter((id) => !retained.has(id)));
 }
 
 /** Descarta las entradas que cumplan la condición (al borrar un proyecto o un usuario, o por antigüedad). */
@@ -295,7 +398,7 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
         break;
       case "comment.remove": {
         const c = once(`comment:${op.id}`) && (await db.taskComment.findFirst({ where: { id: op.id, ...inProject } }));
-        if (c) out.push({ t: "comment.restore", row: { id: c.id, taskId: c.taskId, authorId: c.authorId, body: c.body, createdAt: c.createdAt.toISOString(), editedAt: iso(c.editedAt), parentId: c.parentId, deletedAt: iso(c.deletedAt) } });
+        if (c) out.push({ t: "comment.restore", row: { id: c.id, taskId: c.taskId, authorId: c.authorId, authorName: c.authorName, body: c.body, createdAt: c.createdAt.toISOString(), editedAt: iso(c.editedAt), parentId: c.parentId, deletedAt: iso(c.deletedAt) } });
         break;
       }
       case "comment.restore":
@@ -355,6 +458,18 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
 async function ensureCostField(projectId: string): Promise<void> {
   const p = await db.project.findUnique({ where: { id: projectId }, select: { taskFields: true } });
   if (p && !p.taskFields.includes("cost")) await db.project.update({ where: { id: projectId }, data: { taskFields: [...p.taskFields, "cost"] } });
+}
+
+/**
+ * Una tarea fija solo existe en la columna de la release del proyecto. Lo que devuelve una entrada (la marca de una
+ * tarea, el rol de una columna, una tarea borrada) puede dejar alguna fuera de ella si entretanto cambió otra cosa:
+ * esas pasan a normales, en una sola sentencia.
+ */
+async function clearStrayEvergreen(projectId: string): Promise<void> {
+  await db.$executeRaw`
+    UPDATE "Task" AS t SET "evergreen" = false, "evergreenEvery" = 1, "updatedAt" = ${new Date()}
+    WHERE t."projectId" = ${projectId} AND t."evergreen"
+      AND NOT EXISTS (SELECT 1 FROM "Column" AS c WHERE c."id" = t."columnId" AND c."role" = 'NEXT_RELEASE')`;
 }
 
 /** Campos que taskUpdateData acepta: las entradas antiguas pueden traer otros (p. ej. externalUrl) y se ignoran. */
@@ -469,8 +584,14 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           const kindId = kindOk ? t.kindId : (await db.taskKind.findFirst({ where: { OR: [{ projectId: null }, { projectId }] }, orderBy: { position: "asc" }, select: { id: true } }))?.id;
           const columnId = await safeColumn(t.columnId);
           if (!kindId || !columnId) { skipped++; break; }
-          // La tarea de la que salió puede haberse borrado (clave foránea): entonces se queda sin origen.
-          const recurrenceFromId = t.recurrenceFromId && (await db.task.count({ where: { id: t.recurrenceFromId } })) ? t.recurrenceFromId : null;
+          // La tarea de la que salió puede haberse borrado (clave foránea): entonces se queda sin origen. Tampoco lo
+          // conserva si entretanto nació otra siguiente aparición de esa tarea (recurrenceFromId es único: el alta
+          // fallaría y la tarea se perdería).
+          const recurrenceFromId = t.recurrenceFromId
+            && (await db.task.count({ where: { id: t.recurrenceFromId } }))
+            && !(await db.task.count({ where: { recurrenceFromId: t.recurrenceFromId } }))
+            ? t.recurrenceFromId
+            : null;
           const deliverableId = t.deliverableId && (await db.deliverable.count({ where: { id: t.deliverableId } })) ? t.deliverableId : null;
           const labels = await db.label.findMany({ where: { id: { in: s.labelIds }, projectId }, select: { id: true } });
           // Se crea sin bloqueo y se enlaza después (la que bloquea puede ser otra tarea que vuelve en esta misma entrada).
@@ -608,6 +729,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
       skipped++;
     }
   }
+  await clearStrayEvergreen(projectId);
   await resolvePositionTies(placed);
   if (filesToRemove.length && !opts.keepFiles) await removeAttachmentFiles(filesToRemove);
   if (releaseFiles.length) await removeReleaseAttachmentFiles(releaseFiles);

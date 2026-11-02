@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import { useT } from "@/i18n/client";
 import { Avatar } from "../ui/Avatar";
 import { cn } from "../ui/cn";
@@ -10,35 +10,66 @@ const POLL_MS = 20_000;
 const MAX_SHOWN = 5;
 const MAX_COMPACT = 3; // cabecera móvil: círculos pequeños y solo 3
 
+type ActiveUser = { id: string; name: string };
+const NONE: ActiveUser[] = [];
+
+/**
+ * Un solo sondeo por proyecto, compartido por todos los círculos montados (la cabecera de escritorio y la móvil
+ * están siempre montadas, una oculta por CSS): empieza con el primero que se suscribe y para con el último.
+ */
+interface Feed {
+  users: ActiveUser[];
+  listeners: Set<() => void>;
+  stop: () => void;
+}
+const feeds = new Map<string, Feed>();
+
+function startFeed(projectId: string): Feed {
+  let cancelled = false;
+  const feed: Feed = { users: NONE, listeners: new Set(), stop: () => {} };
+  const load = async () => {
+    if (document.visibilityState !== "visible") return;
+    try {
+      const res = await fetch(`/api/projects/${projectId}/presence`, { cache: "no-store" });
+      if (res.ok && !cancelled) {
+        const json = (await res.json()) as { users: ActiveUser[]; viewers?: Record<string, TaskViewer[]> };
+        feed.users = json.users;
+        setTaskViewers(json.viewers ?? {});
+        for (const l of feed.listeners) l();
+      }
+    } catch {
+      // Sin conexión: se mantiene lo último conocido.
+    }
+  };
+  const timer = setInterval(load, POLL_MS);
+  window.addEventListener("focus", load);
+  feed.stop = () => {
+    cancelled = true;
+    clearInterval(timer);
+    window.removeEventListener("focus", load);
+  };
+  void load();
+  return feed;
+}
+
+function subscribeFeed(projectId: string, listener: () => void): () => void {
+  const feed = feeds.get(projectId) ?? startFeed(projectId);
+  feeds.set(projectId, feed);
+  feed.listeners.add(listener);
+  return () => {
+    feed.listeners.delete(listener);
+    if (feed.listeners.size === 0 && feeds.get(projectId) === feed) {
+      feed.stop();
+      feeds.delete(projectId);
+    }
+  };
+}
+
 /** Círculos con las iniciales de quien ha hecho algo en este tablero en los últimos 5 minutos. */
 export function Presence({ projectId, compact }: { projectId: string; compact?: boolean }) {
   const t = useT();
-  const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      if (document.visibilityState !== "visible") return;
-      try {
-        const res = await fetch(`/api/projects/${projectId}/presence`, { cache: "no-store" });
-        if (res.ok && !cancelled) {
-          const json = (await res.json()) as { users: { id: string; name: string }[]; viewers?: Record<string, TaskViewer[]> };
-          setUsers(json.users);
-          setTaskViewers(json.viewers ?? {});
-        }
-      } catch {
-        // Sin conexión: se mantiene lo último conocido.
-      }
-    };
-    void load();
-    const timer = setInterval(load, POLL_MS);
-    window.addEventListener("focus", load);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-      window.removeEventListener("focus", load);
-    };
-  }, [projectId]);
+  const subscribe = useCallback((listener: () => void) => subscribeFeed(projectId, listener), [projectId]);
+  const users = useSyncExternalStore(subscribe, () => feeds.get(projectId)?.users ?? NONE, () => NONE);
 
   if (users.length === 0) return null;
   const max = compact ? MAX_COMPACT : MAX_SHOWN;
