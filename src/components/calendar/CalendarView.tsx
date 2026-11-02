@@ -15,6 +15,7 @@ import { useIntlLocale, useT } from "@/i18n/client";
 import { isTypingTarget } from "@/components/board/shortcuts";
 import { cn } from "@/components/ui/cn";
 import { Popover } from "@/components/ui/Popover";
+import { CalendarSubscribe } from "./CalendarSubscribe";
 import { useToast } from "@/components/ui/Toast";
 
 export interface CalendarTask {
@@ -104,6 +105,8 @@ interface Props {
   filters: Filters;
   /** Se alcanzó el tope de tareas cargadas. */
   truncated: boolean;
+  /** Suscripción viva (.ics) de la persona: si la tiene activa y qué incluye. */
+  feed: { active: boolean; scope: "MINE" | "ALL" };
 }
 
 /** Chips visibles por día antes de «+N más». */
@@ -154,7 +157,7 @@ function LinkSpinner() {
   return pending ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null;
 }
 
-export function CalendarView({ month, today, weeks, tasks, deliverables, projects, people, meId, filters, truncated }: Props) {
+export function CalendarView({ month, today, weeks, tasks, deliverables, projects, people, meId, filters, truncated, feed }: Props) {
   const t = useT();
   const locale = useIntlLocale();
   const router = useRouter();
@@ -563,6 +566,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
           </Link>
         </nav>
         <h2 className="order-last min-w-0 basis-full text-lg font-semibold first-letter:uppercase md:order-none md:flex-1 md:basis-auto" aria-live="polite">{monthTitle}</h2>
+        <CalendarSubscribe initialActive={feed.active} initialScope={feed.scope} className="ml-auto md:ml-0" />
         {last && (
           <button type="button" onClick={undo} disabled={undoing} className={cn(navBtn, "disabled:opacity-60")} title="Ctrl+Z">
             <Undo2 size={15} aria-hidden />
