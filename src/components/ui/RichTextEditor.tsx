@@ -19,7 +19,7 @@ import { Avatar } from "./Avatar";
 import { cn } from "./cn";
 import { DictationButton, insertIntoEditor } from "./DictationButton";
 import { registerDragEditor } from "./dragMove";
-import { FormatToolbar, type FormatItems } from "./FormatToolbar";
+import { FormatToolbar, FORMAT_BAR_CLASS, type FormatItems } from "./FormatToolbar";
 import type { MentionCommand } from "./MentionTextarea";
 
 type Option =
@@ -283,7 +283,7 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
     <div
       ref={rootRef}
       className={cn(
-        "rounded-lg border border-slate-300 bg-white text-slate-900 focus-within:border-focus focus-within:ring-3 focus-within:ring-focus/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100",
+        "group rounded-lg border border-slate-300 bg-white text-slate-900 focus-within:border-focus focus-within:ring-3 focus-within:ring-focus/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100",
         className,
       )}
       onKeyDown={(e) => {
@@ -319,7 +319,7 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
       <FormatToolbar
         items={items}
         onLeave={() => editorRef.current?.commands.focus()}
-        className="sticky top-[var(--sticky-top,0px)] z-10 rounded-t-lg border-b border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-900"
+        className={FORMAT_BAR_CLASS}
         trailing={<DictationButton variant="toolbar" tabIndex={-1} within={() => rootRef.current} onText={(s) => insertIntoEditor(editorRef.current, s)} />}
       />
       {linkUrl !== null && (

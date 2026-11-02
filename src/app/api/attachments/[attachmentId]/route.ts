@@ -57,9 +57,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ attachmentId: s
   };
   const headers: Record<string, string> = {
     ETag: etag,
-    // Caché solo del navegador (nunca compartida) y revalidada en cada uso: si se quita el acceso, la imagen deja de verse
-    // al momento (la revalidación cuesta poco: 304 sin cuerpo). Las descargas, además, quedan registradas.
-    "Cache-Control": "private, no-cache",
+    // Caché solo del navegador (nunca compartida). Las imágenes en línea se reutilizan 10 s sin preguntar al servidor
+    // (después se revalidan con ETag: 304 sin cuerpo; si se quita el acceso, deja de verse en unos segundos). Las
+    // descargas explícitas y los ficheros no imagen se revalidan siempre, para que queden registradas.
+    "Cache-Control": download ? "private, no-cache" : "private, max-age=10",
     Vary: "Cookie",
     "X-Content-Type-Options": "nosniff",
   };
