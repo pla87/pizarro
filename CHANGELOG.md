@@ -2,6 +2,46 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.44.0 — 2026-11-02 23:07
+
+Revisión de toda la app: seguridad, rendimiento y fallos del tablero, las copias y el registro; cuadro propio en las columnas
+
+### Nuevas funcionalidades
+
+- Renombrar columna, el plazo de «Esperando» y el límite de tarjetas usan un cuadro propio de la app (el aviso del navegador no sale en algunas apps de móvil).
+
+### Mejoras
+
+- «Cancelar» en el detalle de una tarea deshace solo lo que hiciste tú desde que la abriste; lo que cambiaron otras personas se queda.
+- La vista de lista muestra el candado de las tareas bloqueadas.
+- El calendario suscrito deja fuera las tareas terminadas y sigue funcionando al cambiar la clave secreta del servidor.
+- Importar CSV: las columnas terminadas van al final. Trello: se guardan los 200 comentarios más recientes de cada tarjeta. Tope de 25 MB para JSON y CSV. Jira deja de aparecer como origen admitido.
+- Cada acción lee la sesión una sola vez (antes tres o cuatro); la presencia hace la mitad de peticiones y seguir una tarea ya no recarga el tablero de los demás.
+- Las sesiones duran de verdad 14 días desde el último uso.
+- «Instalar app» vuelve a aparecer en Android; el menú del móvil y los diálogos son accesibles con teclado y lector de pantalla.
+- Copias: se guardan siempre las 3 más recientes y la variable BACKUP_PAUSE=1 detiene las automáticas mientras se restaura.
+
+### Correcciones
+
+- Seguridad: cambiar, restablecer o forzar la contraseña anula los cambios de email pendientes (alguien que conociera la contraseña podía quedarse con la cuenta).
+- Seguridad: una petición enorme sin cuenta ya no puede llenar la memoria del servidor; las subidas se cortan al pasar del máximo aunque no indiquen su tamaño.
+- Seguridad: con «solo Google», el formulario de contraseña ya no revela si la contraseña era correcta.
+- Un mensaje con caracteres raros ya no bloquea para siempre el registro de Administración.
+- Tras perder el disco o la base de datos, la primera copia automática ya no puede sustituir a la buena en el destino externo; la limpieza de ficheros no borra nada si la base está vacía.
+- Un ZIP dañado ya no deja una importación colgada para siempre; los ZIP de releases ya no ocupan memoria más de la cuenta.
+- Deshacer ya no deja tareas fijas fuera de la columna de release ni pisa roles de columna de otras personas.
+- Deshacer el borrado de una tarea repetitiva ya no puede perderla; descartar deshaceres antiguos ya no borra ficheros que otro deshacer necesita; los comentarios importados conservan su autor.
+- Los topes de subtareas, comentarios, tipos, proyectos privados y plantillas ya no se saltan con peticiones a la vez.
+- Los recordatorios de «Esperando» ya no dejan sin email a otras personas cuando hay muchos.
+- Textos sin traducir en el deshacer de una subida y en el nombre de una plantilla creada desde un proyecto.
+
+### Cambios técnicos / DB
+
+- next y eslint-config-next 16.4.3.
+- Las rutas de subida salen del proxy (2 MB de cuerpo como mucho) y leen con tope propio; documentos y adjuntos comparten el tope de 300 subidas por minuto.
+- Desempate de posiciones con una sola consulta; un sondeo de presencia por tablero.
+- La importación comprueba el espacio en disco antes de recibir el archivo.
+
 ## v1.43.1 — 2026-11-02 20:24
 
 Mantenimiento: seguridad y rendimiento de la importación, el calendario suscrito y las tareas bloqueadas, y correcciones

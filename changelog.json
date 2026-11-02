@@ -1,6 +1,83 @@
 {
   "versions": [
     {
+      "version": "1.44.0",
+      "date": "2026-11-02",
+      "releasedAt": "2026-11-02T23:07:44+01:00",
+      "summary": "Revisión de toda la app: seguridad, rendimiento y fallos del tablero, las copias y el registro; cuadro propio en las columnas",
+      "changes": {
+        "nuevas": [
+          "Renombrar columna, el plazo de «Esperando» y el límite de tarjetas usan un cuadro propio de la app (el aviso del navegador no sale en algunas apps de móvil)."
+        ],
+        "mejoras": [
+          "«Cancelar» en el detalle de una tarea deshace solo lo que hiciste tú desde que la abriste; lo que cambiaron otras personas se queda.",
+          "La vista de lista muestra el candado de las tareas bloqueadas.",
+          "El calendario suscrito deja fuera las tareas terminadas y sigue funcionando al cambiar la clave secreta del servidor.",
+          "Importar CSV: las columnas terminadas van al final. Trello: se guardan los 200 comentarios más recientes de cada tarjeta. Tope de 25 MB para JSON y CSV. Jira deja de aparecer como origen admitido.",
+          "Cada acción lee la sesión una sola vez (antes tres o cuatro); la presencia hace la mitad de peticiones y seguir una tarea ya no recarga el tablero de los demás.",
+          "Las sesiones duran de verdad 14 días desde el último uso.",
+          "«Instalar app» vuelve a aparecer en Android; el menú del móvil y los diálogos son accesibles con teclado y lector de pantalla.",
+          "Copias: se guardan siempre las 3 más recientes y la variable BACKUP_PAUSE=1 detiene las automáticas mientras se restaura."
+        ],
+        "correcciones": [
+          "Seguridad: cambiar, restablecer o forzar la contraseña anula los cambios de email pendientes (alguien que conociera la contraseña podía quedarse con la cuenta).",
+          "Seguridad: una petición enorme sin cuenta ya no puede llenar la memoria del servidor; las subidas se cortan al pasar del máximo aunque no indiquen su tamaño.",
+          "Seguridad: con «solo Google», el formulario de contraseña ya no revela si la contraseña era correcta.",
+          "Un mensaje con caracteres raros ya no bloquea para siempre el registro de Administración.",
+          "Tras perder el disco o la base de datos, la primera copia automática ya no puede sustituir a la buena en el destino externo; la limpieza de ficheros no borra nada si la base está vacía.",
+          "Un ZIP dañado ya no deja una importación colgada para siempre; los ZIP de releases ya no ocupan memoria más de la cuenta.",
+          "Deshacer ya no deja tareas fijas fuera de la columna de release ni pisa roles de columna de otras personas.",
+          "Deshacer el borrado de una tarea repetitiva ya no puede perderla; descartar deshaceres antiguos ya no borra ficheros que otro deshacer necesita; los comentarios importados conservan su autor.",
+          "Los topes de subtareas, comentarios, tipos, proyectos privados y plantillas ya no se saltan con peticiones a la vez.",
+          "Los recordatorios de «Esperando» ya no dejan sin email a otras personas cuando hay muchos.",
+          "Textos sin traducir en el deshacer de una subida y en el nombre de una plantilla creada desde un proyecto."
+        ],
+        "tecnicos": [
+          "next y eslint-config-next 16.4.3.",
+          "Las rutas de subida salen del proxy (2 MB de cuerpo como mucho) y leen con tope propio; documentos y adjuntos comparten el tope de 300 subidas por minuto.",
+          "Desempate de posiciones con una sola consulta; un sondeo de presencia por tablero.",
+          "La importación comprueba el espacio en disco antes de recibir el archivo."
+        ]
+      },
+      "en": {
+        "summary": "Whole-app review: security, performance and fixes for the board, backups and the log; in-app dialog for columns",
+        "changes": {
+          "nuevas": [
+            "Renaming a column, the “Waiting” period and the card limit use an in-app dialog (the browser prompt does not show in some mobile apps)."
+          ],
+          "mejoras": [
+            "“Cancel” in a task's detail only undoes what you did since opening it; what other people changed stays.",
+            "The list view shows the padlock of blocked tasks.",
+            "The calendar subscription leaves out done tasks and keeps working when the server's secret key is rotated.",
+            "CSV import: done columns go last. Trello: the 200 most recent comments per card are kept. 25 MB limit for JSON and CSV. Jira is no longer listed as a supported source.",
+            "Each action reads the session once (it used to be three or four times); presence makes half the requests and following a task no longer reloads other people's boards.",
+            "Sessions really last 14 days since last use.",
+            "“Install app” shows again on Android; the mobile menu and dialogs work with keyboard and screen readers.",
+            "Backups: the 3 most recent are always kept and BACKUP_PAUSE=1 stops the automatic ones while restoring."
+          ],
+          "correcciones": [
+            "Security: changing, resetting or forcing a password cancels pending email changes (someone who knew the password could take over the account).",
+            "Security: a huge request without an account can no longer fill the server's memory; uploads are cut once over the maximum even without a declared size.",
+            "Security: with “Google only”, the password form no longer reveals whether the password was right.",
+            "A message with odd characters can no longer block the Administration log forever.",
+            "After losing the disk or database, the first automatic backup can no longer replace the good one at the external destination; file cleanup deletes nothing if the database is empty.",
+            "A damaged ZIP no longer leaves an import hanging forever; release ZIPs no longer hold memory longer than needed.",
+            "Undo no longer leaves pinned tasks outside the release column nor overwrites other people's column roles.",
+            "Undoing the deletion of a recurring task can no longer lose it; discarding old undo steps no longer deletes files another undo still needs; imported comments keep their author.",
+            "Limits on subtasks, comments, types, private projects and templates can no longer be bypassed with simultaneous requests.",
+            "“Waiting” reminders no longer leave other people without email when there are many.",
+            "Untranslated texts in an upload's undo label and in the name of a template created from a project."
+          ],
+          "tecnicos": [
+            "next and eslint-config-next 16.4.3.",
+            "Upload routes leave the proxy (2 MB body at most) and read with their own limit; documents and attachments share the 300 uploads per minute limit.",
+            "Position tie-breaking with a single query; one presence poll per board.",
+            "Import checks free disk space before receiving the file."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.43.1",
       "date": "2026-11-02",
       "releasedAt": "2026-11-02T20:24:23+01:00",
