@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { useT } from "@/i18n/client";
+import { useIntlLocale, useT } from "@/i18n/client";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
-import { cardsAcceptFiles, filesFrom, hasFiles, uploadFile } from "./upload";
+import { batchErrorMessage, cardsAcceptFiles, filesFrom, hasFiles, skippedMessage, uploadBatch } from "./upload";
+import { planUploads } from "@/lib/upload-queue";
 
 /**
  * Soltar archivos sobre una tarjeta del tablero (escritorio): se adjuntan a esa tarea con la misma ruta
@@ -13,6 +14,7 @@ export function useCardFileDrop(taskId: string, enabled: boolean) {
   const board = useBoard();
   const toast = useToast();
   const t = useT();
+  const locale = useIntlLocale();
   const [over, setOver] = useState(false);
   const [uploading, setUploading] = useState(0);
   const depth = useRef(0);
@@ -41,24 +43,24 @@ export function useCardFileDrop(taskId: string, enabled: boolean) {
 
   const accepts = (e: React.DragEvent) => enabled && hasFiles(e) && cardsAcceptFiles();
 
-  const upload = async (files: File[]) => {
-    setUploading((n) => n + files.length);
-    let ok = 0;
-    const errors: string[] = [];
-    for (const file of files) {
-      try {
-        const att = await board.trackRaw(uploadFile(taskId, file, false, t));
-        board.patchTask(taskId, att.totals);
-        ok++;
-      } catch (err) {
-        errors.push((err as Error).message);
-      } finally {
-        if (alive.current) setUploading((n) => n - 1);
-      }
-    }
+  const upload = async (list: File[]) => {
+    // Sin tope de cantidad: solo el tamaño de cada archivo y lo que aún cabe en la tarea. Lo omitido se avisa de una vez.
+    const { fileMaxMb, attachMaxMb } = board.project;
+    const used = board.getTask(taskId)?.attachBytes ?? 0;
+    const { accepted, skipped } = planUploads(list, { fileMaxBytes: fileMaxMb * 1024 * 1024, remainingBytes: attachMaxMb * 1024 * 1024 - used });
+    if (skipped.length) toast(skippedMessage(t, locale, skipped, fileMaxMb), "error");
+    if (!accepted.length) return;
+    setUploading((n) => n + accepted.length);
+    const res = await uploadBatch(taskId, accepted, {
+      t,
+      track: board.trackRaw,
+      onUploaded: (att) => board.patchTask(taskId, att.totals),
+    });
+    if (alive.current) setUploading((n) => n - accepted.length);
+    const ok = res.uploaded.length;
     if (ok) toast(ok === 1 ? t("1 archivo adjuntado a la tarea") : t("{n} archivos adjuntados a la tarea", { n: ok }));
-    // Un solo aviso con el primer motivo (si fallan varios, normalmente es el mismo: el máximo de la tarea).
-    if (errors.length) toast(errors.length > 1 ? `${errors[0]} (${t("{n} archivos no se han adjuntado", { n: errors.length })})` : errors[0]!, "error");
+    const msg = batchErrorMessage(t, res.errors, res.notSent);
+    if (msg) toast(msg, "error");
   };
 
   const handlers = {

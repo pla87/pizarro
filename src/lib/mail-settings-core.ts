@@ -46,14 +46,14 @@ export interface MailPreset {
 }
 
 export const MAIL_PRESETS: readonly MailPreset[] = [
-  { id: "workspace", label: "Google Workspace (buzón con contraseña de aplicación)", host: "smtp.gmail.com", port: 465, secure: true, hint: "Usuario: el buzón completo (nombre@tuempresa.com). Contraseña: una contraseña de aplicación de ese buzón (necesita la verificación en dos pasos)." },
-  { id: "workspace-relay", label: "Google Workspace (relay SMTP)", host: "smtp-relay.gmail.com", port: 587, secure: false, hint: "Usuario y contraseña de aplicación de un buzón de tu dominio. Un administrador debe activar el servicio de relay SMTP en la consola de administración de Google (Gmail → Enrutamiento) y exigir autenticación SMTP." },
-  { id: "brevo", label: "Brevo", host: "smtp-relay.brevo.com", port: 587, secure: false, hint: "Usuario: el login SMTP que aparece en Brevo (SMTP y API). Contraseña: la clave SMTP que genera Brevo, no la de tu cuenta." },
-  { id: "mandrill", label: "Mailchimp Transactional (Mandrill)", host: "smtp.mandrillapp.com", port: 587, secure: false, hint: "Usuario: cualquier nombre (el de tu cuenta de Mailchimp Transactional). Contraseña: una clave de API de Mandrill." },
-  { id: "sendgrid", label: "SendGrid", host: "smtp.sendgrid.net", port: 587, secure: false, user: "apikey", hint: "Usuario: la palabra apikey, tal cual. Contraseña: una clave de API de SendGrid con permiso de envío de correo." },
-  { id: "ses", label: "Amazon SES", host: "email-smtp.eu-west-1.amazonaws.com", port: 587, secure: false, hint: "Usuario y contraseña: las credenciales SMTP que crea SES (no las de acceso a AWS). Cambia eu-west-1 por tu región." },
-  { id: "mailgun", label: "Mailgun", host: "smtp.mailgun.org", port: 587, secure: false, hint: "Usuario: postmaster@ seguido de tu dominio de envío de Mailgun. Contraseña: la del usuario SMTP que muestra Mailgun." },
-  { id: "microsoft365", label: "Outlook / Microsoft 365", host: "smtp.office365.com", port: 587, secure: false, hint: "Usuario: el buzón completo. Contraseña: la del buzón; un administrador de Microsoft 365 debe permitir el envío SMTP autenticado (SMTP AUTH) para ese buzón." },
+  { id: "workspace", label: "Google Workspace (buzón con contraseña de aplicación)", host: "smtp.gmail.com", port: 465, secure: true, hint: "Usuario: la dirección del buzón. Contraseña: su contraseña de aplicación (myaccount.google.com/apppasswords, con verificación en dos pasos)." },
+  { id: "workspace-relay", label: "Google Workspace (relay SMTP)", host: "smtp-relay.gmail.com", port: 587, secure: false, hint: "Usuario: un buzón de tu dominio. Contraseña: su contraseña de aplicación. Un administrador debe activar el relay SMTP en la consola de Google (Gmail → Enrutamiento)." },
+  { id: "brevo", label: "Brevo", host: "smtp-relay.brevo.com", port: 587, secure: false, hint: "Usuario: el login SMTP de Brevo → SMTP y API → SMTP (parece un email). Contraseña: la clave SMTP que generas ahí, no la de tu cuenta." },
+  { id: "mandrill", label: "Mailchimp Transactional (Mandrill)", host: "smtp.mandrillapp.com", port: 587, secure: false, hint: "Usuario: cualquier nombre o el email de tu cuenta de Mandrill. Contraseña: una clave de API de los ajustes de Mandrill." },
+  { id: "sendgrid", label: "SendGrid", host: "smtp.sendgrid.net", port: 587, secure: false, user: "apikey", hint: "Usuario: la palabra apikey, tal cual. Contraseña: una clave de API de SendGrid con permiso de envío." },
+  { id: "ses", label: "Amazon SES", host: "email-smtp.eu-west-1.amazonaws.com", port: 587, secure: false, hint: "Usuario y contraseña: las credenciales SMTP creadas en SES → SMTP settings (no tus claves de AWS). Cambia eu-west-1 por tu región." },
+  { id: "mailgun", label: "Mailgun", host: "smtp.mailgun.org", port: 587, secure: false, hint: "Usuario: el login SMTP de las credenciales SMTP del dominio en Mailgun. Contraseña: la de esas credenciales." },
+  { id: "microsoft365", label: "Outlook / Microsoft 365", host: "smtp.office365.com", port: 587, secure: false, hint: "Usuario: la dirección del buzón. Contraseña: la del buzón o una contraseña de aplicación (SMTP AUTH debe estar activado)." },
 ];
 
 /** Preajuste que corresponde a un servidor y puerto (SES vale con cualquier región), o null si es otro. */

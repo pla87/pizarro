@@ -8,7 +8,7 @@ import { cn } from "./cn";
 
 /** Selector de color como grupo de radio: Tab entra en el color elegido (o el primero) y sale al siguiente Tab;
  *  las flechas, Inicio y Fin mueven el foco (con vuelta) y Espacio o Intro eligen el color enfocado. */
-export function ColorPicker({ value, onChange, allowNone = true, label, colors = PALETTE, allowCustom = false }: {
+export function ColorPicker({ value, onChange, allowNone = true, label, colors = PALETTE, allowCustom = false, balancedRowsMd = false }: {
   value: string | null;
   onChange: (c: string | null) => void;
   allowNone?: boolean;
@@ -17,6 +17,8 @@ export function ColorPicker({ value, onChange, allowNone = true, label, colors =
   colors?: readonly string[];
   /** Añade al final «Otro color» (selector nativo) para un color que no está en la lista. */
   allowCustom?: boolean;
+  /** Desde `md`: dos filas equilibradas (cuadrícula de ceil(n/2) columnas; la de arriba lleva una más si n es impar). Móvil no cambia. */
+  balancedRowsMd?: boolean;
 }) {
   const t = useT();
   const groupRef = useRef<HTMLDivElement>(null);
@@ -40,11 +42,15 @@ export function ColorPicker({ value, onChange, allowNone = true, label, colors =
     radios[next]!.focus();
   }
 
+  const count = options.length + (allowCustom ? 1 : 0);
   const base = "focus-visible:outline-offset-[3px]";
   const selectedRing = "ring-2 ring-brand-500 ring-offset-1 dark:ring-offset-slate-900";
   return (
     // Relleno con margen negativo: deja sitio al anillo de selección y al de foco (que un contenedor con scroll recortaría).
-    <div className="-m-[3px] flex flex-wrap items-center gap-1.5 p-1.5">
+    <div
+      className={cn("-m-[3px] flex flex-wrap items-center gap-1.5 p-1.5", balancedRowsMd && "md:grid md:grid-cols-[repeat(var(--color-cols),minmax(0,1fr))] md:justify-items-center md:gap-y-1.5")}
+      style={balancedRowsMd ? ({ "--color-cols": Math.ceil(count / 2) } as React.CSSProperties) : undefined}
+    >
     <div ref={groupRef} role="radiogroup" aria-label={label ?? t("Color")} onKeyDown={onKeyDown} className="contents">
       {options.map((c, i) => {
         const name = c === null ? t("Sin color") : COLOR_NAME[c] ? t(COLOR_NAME[c]) : c;
