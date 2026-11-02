@@ -8,7 +8,8 @@ import { describe, test } from "node:test";
 import { db, loginAs, logout, makeKind, makeUser } from "./helpers";
 import { makeT } from "../../src/i18n/core";
 import { POST as importRoute } from "../../src/app/api/projects/import/route";
-import { importForeignFile } from "../../src/lib/foreign-import/create";
+import { createProjectFromBoard, importForeignFile } from "../../src/lib/foreign-import/create";
+import type { ForeignBoard } from "../../src/lib/foreign-import/types";
 import { runNextTransferJob } from "../../src/lib/transfer-jobs";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-foreign-"));
@@ -145,10 +146,40 @@ describe("CSV", () => {
 
   test("el CSV con etiquetas por encima del tope de 50 las recorta con aviso y el resto se importa", async () => {
     const admin = await makeUser({ role: "ADMIN" });
-    const csv = `title,labels\nA,"${Array.from({ length: 55 }, (_, i) => `L${i}`).join(",")}"\n`;
+    const rows = Array.from({ length: 6 }, (_, r) => `T${r},"${Array.from({ length: 10 }, (_, i) => `L${r * 10 + i}`).join(",")}"`);
+    const csv = `title,labels\n${rows.join("\n")}\n`;
     const s = await importForeignFile(await file("t.csv", csv), "csv", asImporter(admin), { isPrivate: false, t });
     assert.equal(s.counts.labels, 50);
-    assert.ok(s.warnings.some((w) => /5 etiquetas sobraban/.test(w)));
+    assert.ok(s.warnings.some((w) => /10 etiquetas sobraban/.test(w)));
+  });
+
+  test("más de 20 etiquetas en una tarea: se recortan a 20 con aviso y la tarea se puede editar (updateTask admite 20)", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const csv = `title,labels\nA,"${Array.from({ length: 30 }, (_, i) => `L${i}`).join(",")}"\nB,"L1,L2"\n`;
+    const s = await importForeignFile(await file("t.csv", csv), "csv", asImporter(admin), { isPrivate: false, t });
+    const p = await load(s.projectId);
+    assert.deepEqual(p.tasks.map((x) => [x.title, x.labels.length]), [["A", 20], ["B", 2]]);
+    assert.equal(p.labels.length, 20); // las 10 de más no llegan a crearse en el proyecto
+    assert.ok(s.warnings.some((w) => /^10 etiquetas de tareas sobraban \(máximo 20 por tarea\)/.test(w)));
+  });
+
+  test("create.ts también recorta a 20 y limpia los nombres de responsables (un NUL no rompe la consulta)", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const board: ForeignBoard = {
+      name: "Tablero a mano", description: "", columns: [], warnings: [],
+      tasks: [{
+        title: "A", description: "", column: null, archived: false, due: null, comments: [], subtasks: [], priority: null,
+        labels: Array.from({ length: 25 }, (_, i) => ({ name: `E${i}`, color: null })),
+        assignees: [{ email: null, name: `Nombre\u0000Raro ${"x".repeat(200)}` }, { email: "ana\u0000@example.com", name: null }],
+      }],
+    };
+    const s = await createProjectFromBoard(board, "csv", asImporter(admin), { isPrivate: false, t });
+    const p = await load(s.projectId);
+    assert.equal(p.tasks[0]!.labels.length, 20);
+    assert.ok(s.warnings.some((w) => /^5 etiquetas de tareas sobraban/.test(w)));
+    assert.doesNotMatch(p.tasks[0]!.description, /\u0000/);
+    assert.match(p.tasks[0]!.description, /Responsable en el archivo original: NombreRaro x+…\./);
+    assert.ok(s.unmappedUsers.every((u) => u.name.length <= 80 && !/\u0000/.test(u.name + u.email)));
   });
 });
 

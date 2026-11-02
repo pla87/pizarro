@@ -39,8 +39,9 @@ export function detectDelimiter(text: string): "," | ";" | "\t" {
 /**
  * CSV según RFC 4180: campos entre comillas con «""» para una comilla, saltos de línea dentro de comillas, CRLF o LF,
  * BOM UTF-8 al principio. Las líneas totalmente vacías se ignoran. Una comilla en mitad de un campo sin comillas es literal.
+ * Con `maxRows` se lanza un AppError en cuanto se supera (sin llegar a crear el resto de las filas).
  */
-export function parseCsv(input: string, delimiter?: string): string[][] {
+export function parseCsv(input: string, delimiter?: string, maxRows = Infinity): string[][] {
   const text = input.replace(/^\uFEFF/, "");
   const sep = delimiter ?? detectDelimiter(text);
   const rows: string[][] = [];
@@ -53,7 +54,10 @@ export function parseCsv(input: string, delimiter?: string): string[][] {
     const q = wasQuoted;
     endField();
     wasQuoted = false;
-    if (row.length > 1 || row[0] !== "" || q) rows.push(row);
+    if (row.length > 1 || row[0] !== "" || q) {
+      rows.push(row);
+      if (rows.length > maxRows) throw new AppError("El CSV tiene demasiadas filas.");
+    }
     row = [];
   };
   for (let i = 0; i < text.length; i++) {
@@ -95,6 +99,9 @@ const HEADERS: Record<Field, string[]> = {
 };
 const MULTI: Field[] = ["labels", "assignee", "assigneeEmail", "description"];
 
+/** Columnas de la cabecera que se miran (el resto se ignoran): una cabecera de un millón de columnas no debe costar nada. */
+const MAX_HEADER_COLUMNS = 1000;
+
 export interface CsvMapping {
   /** Índices de las columnas del archivo que alimentan cada campo. */
   columns: Partial<Record<Field, number[]>>;
@@ -102,13 +109,13 @@ export interface CsvMapping {
 
 /** Qué columna del archivo es cada campo (por la cabecera). */
 export function mapHeaders(header: string[]): CsvMapping {
-  const folded = header.map(fold);
+  const folded = header.slice(0, MAX_HEADER_COLUMNS).map(fold);
   const columns: Partial<Record<Field, number[]>> = {};
   const used = new Set<number>();
   for (const field of Object.keys(HEADERS) as Field[]) {
     const found: number[] = [];
     for (const name of HEADERS[field]) {
-      for (let i = 0; i < folded.length; i++) if (folded[i] === name && !used.has(i) && !found.includes(i)) found.push(i);
+      for (let i = 0; i < folded.length; i++) if (folded[i] === name && !used.has(i)) found.push(i); // cada índice sale una vez por nombre y no está en `used`
       if (found.length && !MULTI.includes(field)) break;
     }
     // La descripción prevalece por orden de preferencia: solo se juntan varias columnas «Description» repetidas.
@@ -128,6 +135,13 @@ const PRIORITIES: Record<string, TaskPriorityValue> = {
 const TRUE_RE = /^(true|yes|si|sí|y|s|1|x|verdadero)$/i;
 const isTruthy = (v: string) => { const s = v.trim(); return s !== "" && !/^(false|no|n|0|falso)$/i.test(s); };
 
+/** Carácter que nunca va en un email: espacios, «@» y de control (un NUL rompe la consulta a la base de datos). */
+const NOT_MAIL = "\\s@\\u0000-\\u001f\\u007f";
+const EMAIL_RE = new RegExp(`^[^${NOT_MAIL}]+@[^${NOT_MAIL}]+\\.[^${NOT_MAIL}]+$`);
+const ANGLE_RE = new RegExp(`^(.*?)\\s*<([^<>${NOT_MAIL}]+@[^<>\\s\\u0000-\\u001f\\u007f]+)>$`);
+/** Personas que se leen de una celda como máximo (solo se usa una; el resto va a la descripción). */
+const MAX_PEOPLE = 20;
+
 /** Personas de una celda: «Ana, Luis», «ana@example.com», «Ana <ana@example.com>». */
 function people(cell: string, emailCell: string): ForeignPerson[] {
   const out: ForeignPerson[] = [];
@@ -137,14 +151,15 @@ function people(cell: string, emailCell: string): ForeignPerson[] {
     out.push({ email, name });
   };
   for (const raw of cell.split(/[;,\n]/)) {
+    if (out.length >= MAX_PEOPLE) break;
     const part = raw.trim();
     if (!part) continue;
-    const angle = /^(.*?)\s*<([^<>@\s]+@[^<>\s]+)>$/.exec(part);
+    const angle = part.length < 400 ? ANGLE_RE.exec(part) : null;
     if (angle) push(angle[2]!.toLowerCase(), cleanName(angle[1]!, 80) || null);
-    else if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(part)) push(part.toLowerCase(), null);
+    else if (part.length < 400 && EMAIL_RE.test(part)) push(part.toLowerCase(), null);
     else push(null, cleanName(part, 80) || null);
   }
-  const emails = emailCell.split(/[;,\n\s]+/).map((e) => e.trim().toLowerCase()).filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+  const emails = emailCell.split(/[;,\n\s]+/).slice(0, MAX_PEOPLE).map((e) => e.trim().toLowerCase()).filter((e) => e.length < 400 && EMAIL_RE.test(e));
   // Un email suelto junto a un nombre suelto son la misma persona.
   if (emails.length && out.length === 1 && !out[0]!.email && emails.length === 1) out[0] = { email: emails[0]!, name: out[0]!.name };
   else for (const e of emails) push(e, null);
@@ -168,9 +183,8 @@ export function assertCsvHeader(head: string): void {
 
 export function parseCsvBoard(text: string, opts: CsvOptions): ForeignBoard {
   const { t } = opts;
-  const rows = parseCsv(text);
+  const rows = parseCsv(text, undefined, FOREIGN_LIMITS.csvRows + 1); // + la cabecera
   if (rows.length < 2) throw new AppError("El CSV no tiene filas de tareas (solo cabecera o está vacío).");
-  if (rows.length - 1 > FOREIGN_LIMITS.csvRows) throw new AppError("El CSV tiene demasiadas filas.");
   const { columns } = mapHeaders(rows[0]!);
   if (!columns.title) throw new AppError(NO_TITLE_COLUMN);
 
@@ -180,6 +194,7 @@ export function parseCsvBoard(text: string, opts: CsvOptions): ForeignBoard {
   let badDates = 0;
   let badPriorities = 0;
   let noTitle = 0;
+  let extraLabels = 0;
 
   type Row = { title: string; row: string[]; parent: string; index: number };
   const data: Row[] = [];
@@ -232,9 +247,12 @@ export function parseCsvBoard(text: string, opts: CsvOptions): ForeignBoard {
     const description = cleanMarkdown([cell(row, "description"), ...extra].filter((s) => s.trim()).join("\n\n"), undefined, clipped);
 
     const labels: ForeignTask["labels"] = [];
+    const seen = new Set<string>();
     for (const raw of cell(row, "labels").split(/[,;\n]/)) {
       const name = cleanName(raw, FOREIGN_LIMITS.labelName);
-      if (name && !labels.some((l) => l.name.toLowerCase() === name.toLowerCase())) labels.push({ name, color: null });
+      if (!name || seen.has(name.toLowerCase())) continue;
+      seen.add(name.toLowerCase());
+      if (labels.length >= FOREIGN_LIMITS.labelsPerTask) extraLabels++; else labels.push({ name, color: null });
     }
 
     let due: string | null = null;
@@ -263,6 +281,7 @@ export function parseCsvBoard(text: string, opts: CsvOptions): ForeignBoard {
   if (clipped.n) warnings.push(t("{n} textos eran más largos de lo permitido y se han recortado.", { n: clipped.n }));
   if (badDates) warnings.push(t("{n} fechas límite no se pudieron interpretar y se han ignorado.", { n: badDates }));
   if (badPriorities) warnings.push(t("{n} prioridades no se reconocieron y se han ignorado.", { n: badPriorities }));
+  if (extraLabels) warnings.push(t("{n} etiquetas de tareas sobraban (máximo {max} por tarea) y no se han importado.", { n: extraLabels, max: FOREIGN_LIMITS.labelsPerTask }));
   if (extraSubtasks) warnings.push(t("{n} subtareas sobraban (máximo {max} por tarea) y no se han importado.", { n: extraSubtasks, max: FOREIGN_LIMITS.subtasksPerTask }));
   if (!tasks.length) throw new AppError("El CSV no tiene ninguna fila con título.");
 

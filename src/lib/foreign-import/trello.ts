@@ -64,7 +64,10 @@ export function parseTrello(text: string, opts: TrelloOptions): ForeignBoard {
   const boardLabels = new Map(arr(data.labels).map((l) => [str(l.id), l]));
   const members = new Map(arr(data.members).map((m) => [str(m.id), m]));
   const checklistsOf = new Map<string, Obj[]>();
-  for (const c of arr(data.checklists)) checklistsOf.set(str(c.idCard), [...(checklistsOf.get(str(c.idCard)) ?? []), c]);
+  for (const c of arr(data.checklists)) {
+    const list = checklistsOf.get(str(c.idCard));
+    if (list) list.push(c); else checklistsOf.set(str(c.idCard), [c]);
+  }
   const commentsOf = new Map<string, { at: Date | null; author: string; text: string }[]>();
   for (const a of arr(data.actions)) {
     if (a.type !== "commentCard" || !isObj(a.data)) continue;
@@ -72,7 +75,9 @@ export function parseTrello(text: string, opts: TrelloOptions): ForeignBoard {
     const body = str(a.data.text);
     if (!cardId || !body.trim()) continue;
     const who = isObj(a.memberCreator) ? str(a.memberCreator.fullName) || str(a.memberCreator.username) : "";
-    commentsOf.set(cardId, [...(commentsOf.get(cardId) ?? []), { at: parseInstant(a.date), author: who, text: body }]);
+    const comment = { at: parseInstant(a.date), author: who, text: body };
+    const list = commentsOf.get(cardId);
+    if (list) list.push(comment); else commentsOf.set(cardId, [comment]);
   }
 
   // --- Tarjetas.
@@ -84,10 +89,12 @@ export function parseTrello(text: string, opts: TrelloOptions): ForeignBoard {
   let badDates = 0;
   let extraComments = 0;
   let extraSubtasks = 0;
+  let extraLabels = 0;
+  let noTitle = 0;
   const tasks: ForeignTask[] = [];
   for (const { c } of cards) {
     const title = cleanTitle(str(c.name), undefined, clipped);
-    if (!title) continue;
+    if (!title) { noTitle++; continue; }
     const id = str(c.id);
     const inClosedList = closedList.has(str(c.idList));
 
@@ -113,10 +120,13 @@ export function parseTrello(text: string, opts: TrelloOptions): ForeignBoard {
     // Etiquetas: las de la tarjeta; sin nombre, el del color.
     const labelSrc = arr(c.labels).length ? arr(c.labels) : (Array.isArray(c.idLabels) ? c.idLabels : []).map((l) => boardLabels.get(str(l))).filter((l): l is Obj => !!l);
     const labels: ForeignLabel[] = [];
+    const seenLabels = new Set<string>();
     for (const l of labelSrc) {
       const color = trelloColor(str(l.color));
       const name = cleanName(str(l.name), FOREIGN_LIMITS.labelName) || t(COLOR_NAME[color] ?? "Gris");
-      labels.push({ name, color });
+      if (seenLabels.has(name.toLowerCase())) continue;
+      seenLabels.add(name.toLowerCase());
+      if (labels.length >= FOREIGN_LIMITS.labelsPerTask) extraLabels++; else labels.push({ name, color });
     }
 
     // Checklists → subtareas (con el nombre de la lista si hay más de una).
@@ -155,15 +165,20 @@ export function parseTrello(text: string, opts: TrelloOptions): ForeignBoard {
     });
   }
 
+  // La descripción del tablero también cuenta como recorte: se limpia antes de emitir el aviso.
+  const boardDescription = cleanMarkdown(str(data.desc), 2000, clipped);
+
+  if (noTitle) warnings.push(t("{n} tarjetas no tenían título y se han ignorado.", { n: noTitle }));
   if (clipped.n) warnings.push(t("{n} textos eran más largos de lo permitido y se han recortado.", { n: clipped.n }));
   if (uploads) warnings.push(t("{n} archivos adjuntos subidos a Trello no se han importado (solo se importan los enlaces).", { n: uploads }));
   if (badDates) warnings.push(t("{n} fechas límite no se pudieron interpretar y se han ignorado.", { n: badDates }));
+  if (extraLabels) warnings.push(t("{n} etiquetas de tareas sobraban (máximo {max} por tarea) y no se han importado.", { n: extraLabels, max: FOREIGN_LIMITS.labelsPerTask }));
   if (extraSubtasks) warnings.push(t("{n} elementos de checklist sobraban (máximo {max} subtareas por tarea) y no se han importado.", { n: extraSubtasks, max: FOREIGN_LIMITS.subtasksPerTask }));
   if (extraComments) warnings.push(t("{n} comentarios sobraban (máximo {max} por tarea) y no se han importado.", { n: extraComments, max: FOREIGN_LIMITS.commentsPerTask }));
 
   return {
     name: cleanName(str(data.name), 80) || cleanName(opts.fileName ?? "", 80) || "Trello",
-    description: cleanMarkdown(str(data.desc), 2000, clipped),
+    description: boardDescription,
     columns,
     tasks,
     warnings,
