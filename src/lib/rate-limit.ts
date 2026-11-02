@@ -27,16 +27,22 @@ export function resetRateLimit(key: string): void {
 }
 
 /**
- * Claves del límite de inicio de sesión: por pareja IP+email (estricto), por IP (más holgado) y por cuenta (frena a quien
- * prueba contraseñas desde muchas conexiones; a cambio, un tercero puede bloquear la cuenta unos minutos).
+ * Claves del límite de inicio de sesión: por IP (todas las peticiones) y por cuenta (solo los fallos, desde cualquier
+ * conexión: frena a quien prueba contraseñas desde muchas; a cambio, un tercero puede bloquear la cuenta unos minutos).
  */
-export function loginRateKeys(ip: string, email: string): { pair: string; ip: string; account: string } {
+export function loginRateKeys(ip: string, email: string): { ip: string; account: string } {
   const e = email.trim().toLowerCase().slice(0, 200);
-  return { pair: `login:pair:${ip}|${e}`, ip: `login:ip:${ip}`, account: `login:acct:${e}` };
+  return { ip: `login:ip:${ip}`, account: `login:acct:${e}` };
 }
 
-/** Intentos por cuenta en la ventana del login (cualquier conexión). */
+/** Fallos permitidos por cuenta en la ventana del login (cualquier conexión). */
 export const LOGIN_ACCOUNT_LIMIT = 6;
+
+/** ¿Ya se han gastado los `limit` usos de `key` en su ventana? Solo consulta: no cuenta este uso. */
+export function rateLimitReached(key: string, limit: number): boolean {
+  const b = buckets.get(key);
+  return !!b && b.resetAt >= Date.now() && b.count >= limit;
+}
 
 /** Segundos que faltan para que se reinicie el contador de `key` (para Retry-After); 1 como mínimo. */
 export function rateLimitRetryAfterSec(key: string): number {
