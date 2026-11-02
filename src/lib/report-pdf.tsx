@@ -34,7 +34,9 @@ const STATUS_COLOR: Record<DeliverableStatus, string> = {
 };
 
 const s = StyleSheet.create({
-  page: { paddingTop: 36, paddingBottom: 48, paddingHorizontal: 36, fontFamily: "Helvetica", fontSize: 9, color: C.text, lineHeight: 1.35 },
+  // Sin interlineado en la página: el pie fijo lo hereda y @react-pdf calcula mal la paginación de los documentos largos
+  // («unsupported number» a partir de ~150 filas, y el pie no se pintaba). Las filas ya llevan su relleno.
+  page: { paddingTop: 36, paddingBottom: 48, paddingHorizontal: 36, fontFamily: "Helvetica", fontSize: 9, color: C.text },
   header: { borderBottomWidth: 2, borderBottomColor: C.brand, paddingBottom: 10, marginBottom: 14 },
   eyebrow: { fontSize: 8, color: C.brand, fontFamily: "Helvetica-Bold", letterSpacing: 1, textTransform: "uppercase" },
   title: { fontSize: 20, lineHeight: 1.2, fontFamily: "Helvetica-Bold", marginTop: 4 },
