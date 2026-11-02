@@ -2,6 +2,38 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.43.0 — 2026-11-02 19:26
+
+Importar desde Trello y CSV, calendario suscribible, límite por columna, tareas bloqueadas, vista de lista y licencia en Administración
+
+### Nuevas funcionalidades
+
+- Importar desde Trello (JSON) y desde CSV (Asana, Jira, Notion, GitHub Projects, Wekan, Kanboard…), además del ZIP de Pizarro.
+- Suscribirse al calendario: enlace privado para Google Calendar, Apple Calendar u Outlook que se actualiza solo.
+- Límite de tarjetas por columna: solo avisa, con la columna en rojo al pasarlo.
+- Tareas bloqueadas: «Bloqueada por» otra tarea del proyecto, con candado en la tarjeta y enlace en el detalle.
+- Vista de lista ordenable, junto al tablero.
+- Administración → Licencia: muestra si la instalación tiene licencia comercial registrada (solo informativo) y lleva a la compra.
+- Botón «Comprar» y precio «100 € + IVA» en la página de presentación; guía para configurar el pago con Stripe y la factura automática.
+
+### Mejoras
+
+- La barra de formato fija conserva el borde resaltado y las esquinas redondeadas del recuadro, y nunca sale de él.
+- Las imágenes se reutilizan 10 segundos sin volver a preguntar, y las del detalle se cargan solo al aparecer en pantalla.
+- Administración sigue con ocho pestañas: «Tipos de tarea» y «Plantillas de proyecto» se unen en «Tipos y plantillas».
+- Tocar la etiqueta de un campo ya no corta el dictado.
+
+### Correcciones
+
+- El resumen diario parte del envío anterior y no pierde novedades aunque salga a otra hora.
+- Una imagen borrada no puede volver a verse unos segundos por una lectura que coincidía con el borrado.
+- En modo Markdown, la barra de formato fija ya no tapa los botones Guardar y Cancelar.
+
+### Cambios técnicos / DB
+
+- Migraciones: límite por columna, tarea que bloquea y suscripción al calendario.
+- Diseño propuesto de reglas sencillas en docs/IDEAS.md (sin implementar).
+
 ## v1.42.0 — 2026-11-02 15:12
 
 Precio de la licencia, dictado que se para al salir del campo, edición más cómoda en el móvil, imágenes más rápidas y seguridad del acceso
