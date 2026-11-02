@@ -72,15 +72,17 @@ export interface DeletedTaskAttachments extends CleanupResult {
 }
 
 /** Borra para siempre estos adjuntos de tarea del proyecto (filas y ficheros con su miniatura), por tandas. */
-export async function deleteTaskAttachments(projectId: string, ids: string[]): Promise<DeletedTaskAttachments> {
+export async function deleteTaskAttachments(projectId: string, ids: string[], opts: { onlyArchived?: boolean } = {}): Promise<DeletedTaskAttachments> {
   const out: DeletedTaskAttachments = { count: 0, bytes: 0, ids: [], taskIds: [] };
   const tasks = new Set<string>();
   for (let i = 0; i < ids.length; i += BATCH) {
     const chunk = ids.slice(i, i + BATCH);
     // Solo los del proyecto; RETURNING da lo realmente borrado (otra persona pudo borrar alguno a la vez).
+    // `onlyArchived`: se vuelve a comprobar dentro del DELETE (la tarea pudo desarchivarse tras leer los ids).
+    const archived = opts.onlyArchived ? Prisma.sql`AND t."archivedAt" IS NOT NULL` : Prisma.empty;
     const rows = await db.$queryRaw<{ id: string; size: number; taskId: string }[]>(Prisma.sql`
       DELETE FROM "TaskAttachment" a USING "Task" t
-      WHERE a."taskId" = t."id" AND t."projectId" = ${projectId} AND a."id" IN (${Prisma.join(chunk)})
+      WHERE a."taskId" = t."id" AND t."projectId" = ${projectId} AND a."id" IN (${Prisma.join(chunk)}) ${archived}
       RETURNING a."id", a."size", a."taskId"`);
     await removeAttachmentFiles(rows.map((r) => r.id));
     for (const r of rows) {
@@ -101,7 +103,7 @@ export async function cleanupArchivedTaskAttachments(projectId: string, days: nu
   for (;;) {
     const rows = await db.taskAttachment.findMany({ where: taskWhere(projectId, days, now), select: { id: true }, orderBy: { id: "asc" }, take: BATCH });
     if (rows.length === 0) break;
-    const r = await deleteTaskAttachments(projectId, rows.map((x) => x.id));
+    const r = await deleteTaskAttachments(projectId, rows.map((x) => x.id), { onlyArchived: true });
     if (r.count === 0) break;
     total.count += r.count;
     total.bytes += r.bytes;
@@ -146,11 +148,13 @@ export async function cleanupOldReleaseAttachments(projectId: string, days: numb
 }
 
 /** Borra para siempre estos documentos del proyecto (vivos o en la papelera). */
-export async function deleteDocumentsForever(projectId: string, ids: string[]): Promise<CleanupResult> {
+export async function deleteDocumentsForever(projectId: string, ids: string[], opts: { onlyTrashed?: boolean } = {}): Promise<CleanupResult> {
   const out = { count: 0, bytes: 0 };
   for (let i = 0; i < ids.length; i += BATCH) {
+    // `onlyTrashed`: se vuelve a comprobar dentro del DELETE (el documento pudo restaurarse tras leer los ids).
+    const trashed = opts.onlyTrashed ? Prisma.sql`AND "deletedAt" IS NOT NULL` : Prisma.empty;
     const rows = await db.$queryRaw<{ id: string; size: number }[]>(Prisma.sql`
-      DELETE FROM "ProjectDocument" WHERE "projectId" = ${projectId} AND "id" IN (${Prisma.join(ids.slice(i, i + BATCH))}) RETURNING "id", "size"`);
+      DELETE FROM "ProjectDocument" WHERE "projectId" = ${projectId} AND "id" IN (${Prisma.join(ids.slice(i, i + BATCH))}) ${trashed} RETURNING "id", "size"`);
     await removeDocumentFiles(rows.map((r) => r.id));
     for (const r of rows) {
       out.count++;
@@ -166,7 +170,7 @@ export async function emptyDocumentsTrash(projectId: string): Promise<CleanupRes
   for (;;) {
     const rows = await db.projectDocument.findMany({ where: trashWhere(projectId), select: { id: true }, orderBy: { id: "asc" }, take: BATCH });
     if (rows.length === 0) break;
-    const r = await deleteDocumentsForever(projectId, rows.map((x) => x.id));
+    const r = await deleteDocumentsForever(projectId, rows.map((x) => x.id), { onlyTrashed: true });
     if (r.count === 0) break;
     total.count += r.count;
     total.bytes += r.bytes;

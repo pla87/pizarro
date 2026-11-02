@@ -77,7 +77,7 @@ export function StorageSection({ projectId, isAdmin, initial, initialLargest }: 
         ),
       });
       if (!ok) return;
-      const res = await runStorageCleanup(projectId, kind, days).catch((e) => actionThrowResult(e, t));
+      const res = await runStorageCleanup(projectId, kind, days, prev.data.count).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
       toast(t("Borrados {files}: se han liberado {size}.", { files: files(res.data.count), size: fmt(res.data.bytes) }));
       await reload();

@@ -2,7 +2,7 @@
 
 import { CheckCircle2, AlertCircle, Undo2 } from "lucide-react";
 import Link from "next/link";
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useRef, useState } from "react";
 import { useT } from "@/i18n/client";
 import { cn } from "./cn";
 
@@ -49,7 +49,13 @@ export function MessageWithLinks({ message }: { message: string }) {
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
+  const last = useRef<{ message: string; kind: ToastKind; at: number } | null>(null);
   const show = useCallback((message: string, kind: ToastKind = "success", action?: ToastAction) => {
+    // Un aviso idéntico al anterior (mismo texto y tipo) y reciente no se repite: varias acciones seguidas con el mismo
+    // resultado (o un doble clic) no apilan avisos iguales. Los que traen botón sí se muestran.
+    const now = Date.now();
+    if (!action && last.current && last.current.message === message && last.current.kind === kind && now - last.current.at < 2000) return;
+    last.current = { message, kind, at: now };
     const id = nextId++;
     setItems((prev) => [...prev.slice(-3), { id, kind, message, action }]);
     setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== id)), kind === "error" || action ? 6000 : 2500);

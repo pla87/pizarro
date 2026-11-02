@@ -1,4 +1,5 @@
 import "server-only";
+import { Prisma } from "@/generated/prisma/client";
 import { visibleProjectsWhere } from "./access";
 import { db } from "./db";
 import { DOCUMENT_TRASH_DAYS, DOCUMENTS_MAX_PER_PROJECT, type DocumentKindName } from "./document-kind";
@@ -162,20 +163,19 @@ export async function deleteTrashedDocumentRow(user: CurrentUser, documentId: st
 
 /** Purga lo que lleva en la papelera más de DOCUMENT_TRASH_DAYS días: filas y ficheros. Devuelve cuántos. */
 export async function purgeTrashedDocuments(now: Date = new Date()): Promise<number> {
-  const old = await db.projectDocument.findMany({
-    where: { deletedAt: { lt: new Date(now.getTime() - DOCUMENT_TRASH_DAYS * DAY_MS) } },
-    select: { id: true, size: true },
-  });
-  if (old.length === 0) return 0;
-  const ids = old.map((d) => d.id);
-  await db.projectDocument.deleteMany({ where: { id: { in: ids }, deletedAt: { not: null } } });
-  await removeDocumentFiles(ids);
+  const limit = new Date(now.getTime() - DOCUMENT_TRASH_DAYS * DAY_MS);
+  // El estado se vuelve a comprobar en el DELETE: un documento restaurado entre medias no se toca, y solo se borran
+  // del disco las filas realmente eliminadas (RETURNING).
+  const rows = await db.$queryRaw<{ id: string; size: number }[]>(Prisma.sql`
+    DELETE FROM "ProjectDocument" WHERE "deletedAt" IS NOT NULL AND "deletedAt" < ${limit} RETURNING "id", "size"`);
+  if (rows.length === 0) return 0;
+  await removeDocumentFiles(rows.map((d) => d.id));
   logEvent({
     category: "system", action: "documents.trashPurged",
-    message: `Documentos de la papelera borrados (más de ${DOCUMENT_TRASH_DAYS} días): ${ids.length}`,
-    details: { count: ids.length, bytes: old.reduce((n, d) => n + d.size, 0) },
+    message: `Documentos de la papelera borrados (más de ${DOCUMENT_TRASH_DAYS} días): ${rows.length}`,
+    details: { count: rows.length, bytes: rows.reduce((n, d) => n + Number(d.size), 0) },
   });
-  return ids.length;
+  return rows.length;
 }
 
 export async function renameDocumentRow(user: CurrentUser, documentId: string, name: string) {

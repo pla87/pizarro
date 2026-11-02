@@ -32,14 +32,19 @@ export async function createColumn(projectId: string, name: string) {
   return runAction({ name: "columns.createColumn", args: [projectId, name] }, async (): Promise<BoardColumn> => {
     const user = await requireUser();
     await assertProjectAccess(user, v.id.parse(projectId));
-    const count = await db.column.count({ where: { projectId } });
-    if (count >= 30) throw new AppError("Máximo 30 columnas por proyecto.");
-    const last = await db.column.findFirst({ where: { projectId }, orderBy: { position: "desc" }, select: { position: true } });
-    describeAction("Creó la columna «{name}»", { name: v.name.parse(name) });
-    const column = await db.column.create({
-      data: { projectId, name: v.name.parse(name), position: (last?.position ?? 0) + POSITION_STEP },
-      select: columnSelect,
+    const colName = v.name.parse(name);
+    // Bloqueo por proyecto: dos altas a la vez no pueden pasar del tope ni calcular la misma posición.
+    const column = await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`columns:${projectId}`}))`;
+      const count = await tx.column.count({ where: { projectId } });
+      if (count >= 30) throw new AppError("Máximo 30 columnas por proyecto.");
+      const last = await tx.column.findFirst({ where: { projectId }, orderBy: { position: "desc" }, select: { position: true } });
+      return tx.column.create({
+        data: { projectId, name: colName, position: (last?.position ?? 0) + POSITION_STEP },
+        select: columnSelect,
+      });
     });
+    describeAction("Creó la columna «{name}»", { name: colName });
     addUndo({ t: "column.remove", id: column.id });
     return column;
   });
@@ -141,11 +146,12 @@ export async function moveColumn(columnId: string, direction: number) {
       orderBy: { position: "asc" },
       select: { id: true, position: true },
     });
-    addUndo(...columns.map((c) => ({ t: "column.set" as const, id: c.id, data: { position: c.position } })));
-    describeAction(dir < 0 ? "Movió la columna «{name}» a la izquierda" : "Movió la columna «{name}» a la derecha", { name: column.name });
     const idx = columns.findIndex((c) => c.id === columnId);
     const target = idx + dir;
-    if (target < 0 || target >= columns.length) return;
+    // Ya en el extremo: no hay nada que mover, ni que deshacer, ni que anotar.
+    if (idx < 0 || target < 0 || target >= columns.length) return;
+    addUndo(...columns.map((c) => ({ t: "column.set" as const, id: c.id, data: { position: c.position } })));
+    describeAction(dir < 0 ? "Movió la columna «{name}» a la izquierda" : "Movió la columna «{name}» a la derecha", { name: column.name });
     [columns[idx], columns[target]] = [columns[target]!, columns[idx]!];
     await db.$transaction(
       columns.map((c, i) => db.column.update({ where: { id: c.id }, data: { position: (i + 1) * POSITION_STEP } })),

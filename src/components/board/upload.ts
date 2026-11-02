@@ -189,7 +189,7 @@ export async function uploadBatch(
         done++;
         report();
       },
-      stopWhen: (reason) => reason instanceof UploadError && reason.code === "task_total",
+      stopWhen: (reason) => reason instanceof UploadError && (reason.code === "task_total" || reason.code === "quota_total" || reason.code === "quota_project"),
       signal: opts.signal,
     },
   );
