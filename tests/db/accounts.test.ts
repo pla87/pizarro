@@ -11,6 +11,8 @@ import { getCurrentUser, getPendingUser } from "../../src/lib/session";
 import { hashPassword } from "../../src/lib/password";
 import { createResetLink } from "../../src/lib/reset-link";
 import { findUsableToken, consumeToken } from "../../src/lib/auth-token";
+import { issueAuthToken } from "../../src/lib/auth-token-issue";
+import { applyNewPassword } from "../../src/lib/account";
 
 describe("miembros de proyectos privados", () => {
   test("un miembro añade y quita miembros; quien no lo es recibe «no encontrado»", async () => {
@@ -177,6 +179,38 @@ describe("contraseñas y cambio forzado", () => {
     expectFail(await forcePasswordChange(other.id), FORBIDDEN);
     expectFail(await updateUser(other.id, { name: "x", email: other.email, role: "ADMIN", active: true }), FORBIDDEN);
     assert.equal((await db.user.findUniqueOrThrow({ where: { id: other.id } })).role, "MEMBER");
+  });
+});
+
+describe("enlaces pendientes al cambiar la contraseña", () => {
+  const pending = (userId: string) => db.authToken.count({ where: { userId, purpose: { in: ["EMAIL_CHANGE", "PASSWORD_CHANGE", "INVITE"] } } });
+
+  test("cambiar o restablecer la contraseña anula un cambio de email pendiente (pedido por quien conocía la anterior)", async () => {
+    const victim = await makeUser();
+    await issueAuthToken(victim.id, "EMAIL_CHANGE", { email: "atacante@example.com" });
+    assert.equal(await pending(victim.id), 1);
+    await applyNewPassword(victim.id, await hashPassword("una-clave-nueva-larga-1"), { notice: false });
+    assert.equal(await pending(victim.id), 0);
+  });
+
+  test("forzar el cambio de contraseña también anula los cambios de email pendientes", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const victim = await makeUser();
+    await issueAuthToken(victim.id, "EMAIL_CHANGE", { email: "atacante@example.com" });
+    await loginAs(admin);
+    expectOk(await forcePasswordChange(victim.id, { copyLink: true }));
+    assert.equal(await db.authToken.count({ where: { userId: victim.id, purpose: "EMAIL_CHANGE" } }), 0);
+    // Queda solo el enlace nuevo de restablecimiento.
+    assert.equal(await db.authToken.count({ where: { userId: victim.id, purpose: "PASSWORD_RESET" } }), 1);
+  });
+
+  test("desactivar a alguien borra sus enlaces pendientes (no «reviven» al reactivar)", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const u = await makeUser();
+    await issueAuthToken(u.id, "EMAIL_CHANGE", { email: "otra@example.com" });
+    await loginAs(admin);
+    expectOk(await updateUser(u.id, { name: u.name, email: u.email, role: "MEMBER", active: false }));
+    assert.equal(await db.authToken.count({ where: { userId: u.id } }), 0);
   });
 });
 
