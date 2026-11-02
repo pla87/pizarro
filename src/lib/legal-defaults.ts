@@ -191,7 +191,7 @@ El tratamiento de tus datos personales se describe en la política de privacidad
 
 ## 9. Licencia del software
 
-Pizarro se usa bajo su propia licencia, que puedes consultar en [/licencia](/licencia). El uso con fines empresariales o profesionales requiere una licencia comercial, y {responsable} es quien debe disponer de ella para esta instalación.
+Pizarro se usa bajo su propia licencia, que puedes consultar en [/licencia](/licencia?lang=es). El uso con fines empresariales o profesionales requiere una licencia comercial, y {responsable} es quien debe disponer de ella para esta instalación.
 
 ## 10. Cambios
 

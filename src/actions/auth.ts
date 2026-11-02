@@ -35,14 +35,19 @@ const loginSchema = z.object({
 });
 
 /**
- * ¿Está bloqueado el acceso con contraseña a esta cuenta? Tras LOGIN_ACCOUNT_LIMIT fallos (desde cualquier conexión),
- * solo se sigue probando desde un dispositivo recordado de la cuenta, hasta LOGIN_ACCOUNT_LIMIT_TRUSTED.
+ * Reserva un intento de acceso con contraseña para esta cuenta, ANTES de comprobar la contraseña (así no se salta con
+ * peticiones en paralelo); un acceso correcto lo devuelve (resetRateLimit). Tras LOGIN_ACCOUNT_LIMIT intentos sin acierto
+ * (desde cualquier conexión), solo se sigue desde un dispositivo recordado de la cuenta, hasta LOGIN_ACCOUNT_LIMIT_TRUSTED.
+ * `false`: bloqueado.
  */
-async function accountLocked(key: string, email: string): Promise<boolean> {
-  if (rateLimitReached(key, LOGIN_ACCOUNT_LIMIT_TRUSTED)) return true;
-  if (!rateLimitReached(key, LOGIN_ACCOUNT_LIMIT)) return false;
+async function reserveAccountAttempt(key: string, email: string): Promise<boolean> {
+  const window = 15 * 60_000;
+  if (rateLimitReached(key, LOGIN_ACCOUNT_LIMIT_TRUSTED)) return false;
+  // Comprobar y reservar sin ningún await entre medias: dos peticiones a la vez no pueden ver el mismo contador.
+  if (!rateLimitReached(key, LOGIN_ACCOUNT_LIMIT)) return rateLimit(key, LOGIN_ACCOUNT_LIMIT_TRUSTED, window);
   const user = await db.user.findUnique({ where: { email }, select: { id: true } });
-  return !user || !(await isTrustedDevice(user.id));
+  if (!user || !(await isTrustedDevice(user.id))) return false;
+  return rateLimit(key, LOGIN_ACCOUNT_LIMIT_TRUSTED, window);
 }
 
 export async function login(_prev: LoginState, formData: FormData): Promise<LoginState> {
@@ -52,11 +57,11 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   const { email, password } = parsed.data;
 
   const ip = clientIp(await headers());
-  // Límite por IP (todas las peticiones) y por cuenta (solo los fallos, desde cualquier conexión).
+  // Límite por IP (todas las peticiones) y por cuenta (los intentos sin acierto, desde cualquier conexión).
   const keys = loginRateKeys(ip, email);
   // En los logs solo se anota si parece un email (si alguien pega ahí su contraseña, no queda guardada).
   const shownEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "[no es un email]";
-  if (!rateLimit(keys.ip, 60, 15 * 60_000) || (await accountLocked(keys.account, email))) {
+  if (!rateLimit(keys.ip, 60, 15 * 60_000) || !(await reserveAccountAttempt(keys.account, email))) {
     logEvent({
       level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión bloqueado por demasiados intentos (${shownEmail})`,
       path: "/login", ip, details: { email: shownEmail, reason: "rate_limited" },
@@ -73,9 +78,10 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
       level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión fallido (${shownEmail}): ${why}`,
       userId: user?.id ?? null, userName: user?.name ?? null, path: "/login", ip, details: { email: shownEmail, reason },
     });
-    rateLimit(keys.account, LOGIN_ACCOUNT_LIMIT_TRUSTED, 15 * 60_000);
     return { error: t("Credenciales incorrectas.") };
   }
+  // Contraseña correcta: el intento reservado no cuenta como fallo.
+  resetRateLimit(keys.account);
 
   // Con «solo Google» la contraseña correcta tampoco abre la puerta (salvo el acceso de emergencia de los administradores).
   if (!passwordLoginAllowed(user.role, googlePolicyEnv())) {
@@ -86,7 +92,6 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     return { error: t("El acceso con contraseña está desactivado en este servidor. Entra con Google.") };
   }
 
-  resetRateLimit(keys.account);
   const next = safeNextPath(String(formData.get("next") ?? ""));
   // Segundo paso: todavía NO hay sesión, solo un estado pendiente (cookie pz_2fa, 10 min) hasta que el código sea correcto.
   const step = await secondStepFor(user);

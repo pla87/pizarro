@@ -7,6 +7,7 @@ import { makeT } from "@/i18n/core";
 import { getLocale } from "@/i18n/server";
 import { pickLandingLocale } from "@/lib/landing-locale";
 import { LICENSE_EN, LICENSE_ES } from "@/lib/license-text";
+import { getCurrentUser } from "@/lib/session";
 
 // Página pública (sin sesión) con la licencia del software, igual que LICENSE.md. Idioma como la página de presentación:
 // ?lang=, si no el del navegador y, si tampoco sirve, el de la instalación. El texto en español es el que prevalece.
@@ -17,7 +18,10 @@ type Search = Promise<{ lang?: string | string[] }>;
 async function resolveLocale(searchParams: Search) {
   const sp = await searchParams;
   const lang = Array.isArray(sp.lang) ? sp.lang[0] : sp.lang;
-  return pickLandingLocale({ lang, acceptLanguage: (await headers()).get("accept-language"), fallback: await getLocale() });
+  // Con sesión manda el idioma de la persona (como en la presentación); sin ella, el del navegador.
+  const user = await getCurrentUser().catch(() => null);
+  const acceptLanguage = user ? null : (await headers()).get("accept-language");
+  return pickLandingLocale({ lang, acceptLanguage, fallback: await getLocale() });
 }
 
 export async function generateMetadata({ searchParams }: { searchParams: Search }): Promise<Metadata> {

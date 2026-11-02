@@ -80,7 +80,7 @@ export async function processImportedImage(input: Buffer): Promise<ProcessedImag
     const meta = await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS }).metadata().catch(() => {
       throw new AppError("El archivo no es una imagen válida.");
     });
-    if (meta.format === "webp" && meta.width && meta.height && meta.width <= 1280 && (meta.pages ?? 1) <= 1) {
+    if (meta.format === "webp" && meta.width && meta.height && meta.width <= 1280 && meta.height <= 16384 && (meta.pages ?? 1) <= 1) {
       const thumb = await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS }).resize({ width: 480, height: 360, fit: "inside", withoutEnlargement: true }).webp({ quality: 70 }).toBuffer()
         .catch(() => { throw new AppError("El archivo no es una imagen válida."); });
       kept = { full: input, thumb, width: meta.width, height: meta.height };

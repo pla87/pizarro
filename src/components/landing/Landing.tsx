@@ -134,7 +134,7 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
             </article>
           </div>
           <p className="mt-4 text-sm">
-            <Link href="/licencia" className="font-medium text-brand-700 underline dark:text-brand-300" data-testid="license-link">{t("Lee la licencia")}</Link>
+            <Link href={`/licencia?lang=${locale}`} className="font-medium text-brand-700 underline dark:text-brand-300" data-testid="license-link">{t("Lee la licencia")}</Link>
           </p>
         </section>
 
@@ -156,7 +156,7 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
       <footer className="border-t border-slate-200 py-8 text-sm text-slate-600 dark:border-slate-800 dark:text-slate-400">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-4">
           <span className="mr-auto inline-flex items-center gap-2 font-semibold text-slate-900 dark:text-slate-100"><BrandMark size={22} /> Pizarro</span>
-          <Link href="/licencia" className="hover:underline">{t("Licencia")}</Link>
+          <Link href={`/licencia?lang=${locale}`} className="hover:underline">{t("Licencia")}</Link>
           <Link href="/privacy" className="hover:underline">{t("Privacidad")}</Link>
           <Link href="/terms" className="hover:underline">{t("Condiciones")}</Link>
           <a href={REPO_URL} rel="noopener noreferrer" className="hover:underline">GitHub</a>
