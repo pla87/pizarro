@@ -89,8 +89,8 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
       <FormatToolbar
         items={items}
         onLeave={() => inner.current?.focus()}
-        className="mb-1"
-        trailing={<DictationButton variant="toolbar" tabIndex={-1} onText={(s) => insertIntoField(inner.current, s, onValueChange)} />}
+        className="sticky top-[var(--sticky-top,0px)] z-10 mb-1 bg-white py-1 dark:bg-slate-900"
+        trailing={<DictationButton variant="toolbar" tabIndex={-1} within={() => root.current} onText={(s) => insertIntoField(inner.current, s, onValueChange)} />}
       />
       <MentionTextarea
         ref={inner}

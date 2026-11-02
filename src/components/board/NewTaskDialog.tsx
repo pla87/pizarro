@@ -365,7 +365,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
           <label className="label" htmlFor={`${uid}-title`}>{t("Título")}</label>
           <div className="relative">
             <input ref={titleRef} id={`${uid}-title`} className="input min-w-0 w-full pr-10" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={MAX_TITLE} required data-autofocus />
-            <DictationButton onText={(s) => insertIntoField(titleRef.current, s, setTitle)} placement="inside" className="top-1/2 -translate-y-1/2" />
+            <DictationButton onText={(s) => insertIntoField(titleRef.current, s, setTitle)} within={() => titleRef.current} placement="inside" className="top-1/2 -translate-y-1/2" />
           </div>
         </div>
         <div>

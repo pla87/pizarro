@@ -42,6 +42,7 @@ export function TitleField({ value, onChange, onCommit, users }: {
   const narrow = useNarrow();
   const hasMentions = splitMentions(value).some((p) => typeof p !== "string");
   const ref = useRef<HTMLTextAreaElement>(null);
+  const box = useRef<HTMLDivElement>(null);
   const setTitle = (v: string) => onChange(v.replace(/\n/g, ""));
   // Dictado: en el cursor del título; si ahora se ve con las menciones pintadas (sin campo), al final.
   const mic = (
@@ -55,13 +56,14 @@ export function TitleField({ value, onChange, onCommit, users }: {
           if (next !== value) onCommit(next);
         }
       }}
+      within={() => box.current}
       placement="inside"
     />
   );
 
   // Un único contenedor: al pasar de campo a menciones pintadas, el botón del micrófono no se vuelve a crear (cortaría el dictado).
   return (
-    <div className="relative min-w-0 flex-1">
+    <div ref={box} className="relative min-w-0 flex-1">
       {!editing && (hasMentions || narrow) ? (
         // En móvil, sin editar, el título ocupa como mucho 2 líneas; al tocarlo se edita y se ve entero.
         <button type="button" onClick={() => setEditing(true)} className={`${CLASSES} block min-w-0 cursor-text text-left break-words max-sm:line-clamp-2`} aria-label={t("Título")}>
@@ -92,7 +94,8 @@ export function TitleField({ value, onChange, onCommit, users }: {
           aria-label={t("Título")}
         />
       )}
-      {mic}
+      {/* En móvil, el micrófono solo sale al editar el título (absoluto: no mueve nada ni quita el foco). */}
+      {(!narrow || editing) && mic}
     </div>
   );
 }

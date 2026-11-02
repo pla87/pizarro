@@ -182,7 +182,7 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
           <div className="flex items-center justify-between gap-2">
             <label className="label" htmlFor="bt-text">{t("Tareas (una por línea)")}</label>
             {/* Cada frase dictada (hasta una pausa) es una tarea nueva. */}
-            <DictationButton onText={(s) => insertIntoField(textRef.current, s, setText, true)} className="-mt-1" />
+            <DictationButton onText={(s) => insertIntoField(textRef.current, s, setText, true)} within={() => textRef.current} className="-mt-1" />
           </div>
           <textarea
             ref={textRef}
