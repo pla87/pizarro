@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { db } from "./db";
+import { getT } from "@/i18n/server";
 import { AppError } from "./errors";
 import { isoToDate } from "./dates";
 import { FIELD_COLUMNS, normalizeTaskFields, startAfterDue, TASK_FIELDS, type TaskFieldKey, type TaskFieldValues } from "./task-fields";
@@ -38,11 +39,14 @@ export async function enabledTaskFields(projectId: string): Promise<TaskFieldKey
 }
 
 /** Los campos con valor en `patch` deben estar activados en el proyecto. */
-export function assertFieldsEnabled(enabled: readonly TaskFieldKey[], patch: Partial<Record<keyof TaskFieldValues, unknown>>): void {
+export async function assertFieldsEnabled(enabled: readonly TaskFieldKey[], patch: Partial<Record<keyof TaskFieldValues, unknown>>): Promise<void> {
   for (const col of Object.keys(patch) as (keyof TaskFieldValues)[]) {
     if (patch[col] === undefined) continue;
     const key = fieldKeyOf(col);
-    if (!enabled.includes(key)) throw new AppError(`El campo «${FIELD_NAME[key]}» no está activado en este proyecto.`);
+    if (!enabled.includes(key)) {
+      const t = await getT();
+      throw new AppError(t("El campo «{field}» no está activado en este proyecto.", { field: t(FIELD_NAME[key]) }));
+    }
   }
 }
 

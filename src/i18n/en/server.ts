@@ -92,6 +92,7 @@ export const server: Record<string, string> = {
   "Las tareas son de proyectos distintos.": "The tasks belong to different projects.",
   "La subtarea no existe.": "The subtask doesn't exist.",
   "El proyecto no tiene columnas.": "The project has no columns.",
+  "La tarea no está archivada.": "The task is not archived.",
   "Solo puedes borrar tus comentarios.": "You can only delete your own comments.",
   "Google devolvió un enlace inesperado.": "Google returned an unexpected link.",
   "La plantilla ya no existe.": "The template no longer exists.",

@@ -137,6 +137,7 @@ export const board: Record<string, string> = {
   "Tareas archivadas": "Archived tasks",
   "Filtrar por título o release…": "Filter by title or release…",
   "Ninguna tarea coincide.": "No tasks match.",
+  "Cargar más": "Load more",
   "No hay tareas archivadas.": "There are no archived tasks.",
   "Archivada el {date}": "Archived on {date}",
   "de «{name}»": "from “{name}”",
