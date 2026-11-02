@@ -1,8 +1,8 @@
 // Traducciones al inglés (importar desde Trello JSON y CSV). Clave: texto exacto en español.
 export const importar: Record<string, string> = {
   // Panel
-  "Crea un proyecto a partir de un .pizarro.zip de Pizarro, un JSON exportado de Trello o un CSV de tareas (Asana, Jira, Notion, GitHub Projects, Wekan, Kanboard…). El formato se reconoce solo; las personas se emparejan por email o nombre y el nombre del proyecto sale del archivo.":
-    "Creates a project from a Pizarro .pizarro.zip, a JSON exported from Trello or a CSV of tasks (Asana, Jira, Notion, GitHub Projects, Wekan, Kanboard…). The format is detected automatically; people are matched by email or name and the project name comes from the file.",
+  "Crea un proyecto a partir de un .pizarro.zip de Pizarro, un JSON exportado de Trello o un CSV de tareas (Asana, Notion, GitHub Projects, Wekan, Kanboard…). El formato se reconoce solo; las personas se emparejan por email o nombre y el nombre del proyecto sale del archivo.":
+    "Creates a project from a Pizarro .pizarro.zip, a JSON exported from Trello or a CSV of tasks (Asana, Notion, GitHub Projects, Wekan, Kanboard…). The format is detected automatically; people are matched by email or name and the project name comes from the file.",
   "Archivo (.zip, .json o .csv)": "File (.zip, .json or .csv)",
   "«{name}» se ha creado con {columns} columnas y {tasks} tareas ({archived} archivadas), con {subtasks} subtareas, {labels} etiquetas y {comments} comentarios.":
     "“{name}” was created with {columns} columns and {tasks} tasks ({archived} archived), with {subtasks} subtasks, {labels} labels and {comments} comments.",
@@ -14,7 +14,7 @@ export const importar: Record<string, string> = {
 
   // Errores del archivo
   "Formato de archivo no reconocido. Sube un .pizarro.zip de Pizarro, un JSON exportado de Trello o un CSV.": "File format not recognised. Upload a Pizarro .pizarro.zip, a JSON exported from Trello or a CSV.",
-  "El archivo supera el tamaño máximo para JSON y CSV (50 MB).": "The file exceeds the maximum size for JSON and CSV (50 MB).",
+  "El archivo supera el tamaño máximo para JSON y CSV ({mb} MB).": "The file exceeds the maximum size for JSON and CSV ({mb} MB).",
   "El archivo no es un JSON válido.": "The file is not valid JSON.",
   "El JSON no parece una exportación de un tablero de Trello (faltan «lists» y «cards»).": "The JSON does not look like a Trello board export (“lists” and “cards” are missing).",
   "El CSV no tiene filas de tareas (solo cabecera o está vacío).": "The CSV has no task rows (header only, or empty).",
@@ -51,7 +51,8 @@ export const importar: Record<string, string> = {
   "{n} etiquetas de tareas sobraban (máximo {max} por tarea) y no se han importado.": "{n} task labels were over the limit ({max} per task) and were not imported.",
   "{n} elementos de checklist sobraban (máximo {max} subtareas por tarea) y no se han importado.": "{n} checklist items were over the limit ({max} subtasks per task) and were not imported.",
   "{n} subtareas sobraban (máximo {max} por tarea) y no se han importado.": "{n} subtasks were over the limit ({max} per task) and were not imported.",
-  "{n} comentarios sobraban (máximo {max} por tarea) y no se han importado.": "{n} comments were over the limit ({max} per task) and were not imported.",
+  "{n} comentarios antiguos no se han importado: de cada tarjeta con más de {max} se guardan los {max} más recientes.":
+    "{n} older comments were not imported: for each card with more than {max}, the {max} most recent are kept.",
   "{n} etiquetas sobraban (máximo {max} por proyecto) y no se han importado.": "{n} labels were over the limit ({max} per project) and were not imported.",
   "{n} tareas archivadas sobraban (máximo {max}) y no se han importado.": "{n} archived tasks were over the limit ({max}) and were not imported.",
 };

@@ -1,6 +1,7 @@
 // Detección del formato de un archivo de importación y lectura de los formatos de otros Kanban. Sin dependencias de Node.
 import type { T } from "@/i18n/core";
 import { AppError } from "../errors";
+import { importMaxBytes } from "../project-export/config";
 import { parseCsvBoard } from "./csv";
 import { parseTrello } from "./trello";
 import { FOREIGN_LIMITS, type ForeignBoard, type ForeignFormat } from "./types";
@@ -23,6 +24,11 @@ export function sniffFormat(head: Uint8Array, fileName = ""): ImportFormat | nul
   if (first === "{" || first === "[") return "trello";
   if (ext === "json") return null;
   return text.trim() ? "csv" : null;
+}
+
+/** Tamaño máximo (bytes) de un JSON o CSV: 25 MB, o PROJECT_IMPORT_MAX_MB si es menor (el ZIP de Pizarro solo tiene este último). */
+export function foreignMaxBytes(raw: string | undefined = process.env.PROJECT_IMPORT_MAX_MB): number {
+  return Math.min(importMaxBytes(raw), FOREIGN_LIMITS.maxBytes);
 }
 
 /** Bytes → texto: UTF-8 (con o sin BOM), UTF-16 con BOM (Excel) y, si no es UTF-8 válido, Windows-1252. */

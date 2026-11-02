@@ -143,10 +143,13 @@ export function parseTrello(text: string, opts: TrelloOptions): ForeignBoard {
       }
     }
 
-    // Comentarios: del más antiguo al más nuevo, con el autor original en el texto.
+    // Comentarios: del más antiguo al más nuevo, con el autor original en el texto. Por encima del tope se guardan los
+    // más recientes (los que no traen fecha cuentan como los más antiguos).
     const comments: ForeignTask["comments"] = [];
-    for (const k of (commentsOf.get(id) ?? []).sort((a, b) => (a.at?.getTime() ?? 0) - (b.at?.getTime() ?? 0))) {
-      if (comments.length >= FOREIGN_LIMITS.commentsPerTask) { extraComments++; continue; }
+    const sorted = (commentsOf.get(id) ?? []).sort((a, b) => (a.at?.getTime() ?? 0) - (b.at?.getTime() ?? 0));
+    const kept = sorted.length > FOREIGN_LIMITS.commentsPerTask ? sorted.slice(-FOREIGN_LIMITS.commentsPerTask) : sorted;
+    extraComments += sorted.length - kept.length;
+    for (const k of kept) {
       const day = k.at ? instantDay(k.at, tz) : null;
       const author = cleanName(k.author, 80) || t("Alguien");
       const head = day ? t("{author} comentó en Trello el {date}:", { author, date: day }) : t("{author} comentó en Trello:", { author });
@@ -174,7 +177,7 @@ export function parseTrello(text: string, opts: TrelloOptions): ForeignBoard {
   if (badDates) warnings.push(t("{n} fechas límite no se pudieron interpretar y se han ignorado.", { n: badDates }));
   if (extraLabels) warnings.push(t("{n} etiquetas de tareas sobraban (máximo {max} por tarea) y no se han importado.", { n: extraLabels, max: FOREIGN_LIMITS.labelsPerTask }));
   if (extraSubtasks) warnings.push(t("{n} elementos de checklist sobraban (máximo {max} subtareas por tarea) y no se han importado.", { n: extraSubtasks, max: FOREIGN_LIMITS.subtasksPerTask }));
-  if (extraComments) warnings.push(t("{n} comentarios sobraban (máximo {max} por tarea) y no se han importado.", { n: extraComments, max: FOREIGN_LIMITS.commentsPerTask }));
+  if (extraComments) warnings.push(t("{n} comentarios antiguos no se han importado: de cada tarjeta con más de {max} se guardan los {max} más recientes.", { n: extraComments, max: FOREIGN_LIMITS.commentsPerTask }));
 
   return {
     name: cleanName(str(data.name), 80) || cleanName(opts.fileName ?? "", 80) || "Trello",

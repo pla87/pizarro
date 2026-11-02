@@ -60,6 +60,6 @@ export const FOREIGN_LIMITS = {
   commentBody: 10_000,
   /** Filas de un CSV (activas + archivadas), para no procesar un archivo absurdo. */
   csvRows: 6000,
-  /** Tamaño máximo de un JSON o CSV de otro Kanban (bytes). */
-  maxBytes: 50 * 1024 * 1024,
+  /** Tamaño máximo de un JSON o CSV de otro Kanban (bytes); si PROJECT_IMPORT_MAX_MB es menor, vale ese (foreignMaxBytes). */
+  maxBytes: 25 * 1024 * 1024,
 } as const;

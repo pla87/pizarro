@@ -1,25 +1,27 @@
 // Lector de CSV genérico de tareas. Las columnas se reconocen por su cabecera (español e inglés, sin distinguir
 // mayúsculas, acentos ni separadores como _ - /), de modo que sirve para las exportaciones de otros Kanban.
 //
-// Cabeceras reconocidas (CABECERAS más abajo; la primera de cada lista que aparezca gana, salvo etiquetas y
-// responsables, que juntan todas las columnas que coincidan, p. ej. las «Labels» repetidas de Jira):
-//   título      title, name, summary, task name, card name, nombre, resumen, tarea…        (Asana «Name», Jira «Summary», Notion «Name», GitHub/Kanboard/Wekan «Title»)
-//   descripción description, notes, details, body, descripción, notas, detalle…         (Asana «Notes», Jira/Kanboard/Wekan «Description»)
-//   columna     status, section/column, column, list, stage, state, estado, columna…     (Asana «Section/Column», Jira/Notion/GitHub «Status», Wekan «Stage», Kanboard «Column»)
-//   etiquetas   labels, tags, category, categories, etiquetas…                           (Asana/Notion «Tags», Jira/GitHub/Wekan «Labels», Kanboard «Category»)
-//   fecha límite due date, due, deadline, date due, fecha límite, vencimiento…           (Asana/Jira «Due Date», Kanboard «Date Due», Wekan «Due Date»)
+// Cabeceras reconocidas (HEADERS más abajo). Cada campo sale de la columna del primer nombre de su lista que aparezca; si
+// una cabecera se repite, solo cuenta la primera. Etiquetas y responsables juntan además las columnas de nombres distintos
+// que coincidan (p. ej. «Tags» y «Category», u «Owner» y «Members»):
+//   título      title, name, summary, task name, card name, nombre, resumen, tarea…        (Asana/Notion «Name», GitHub/Kanboard/Wekan «Title»)
+//   descripción description, notes, details, body, descripción, notas, detalle…         (Asana «Notes», Kanboard/Wekan «Description»)
+//   columna     status, section/column, column, list, stage, state, estado, columna…     (Asana «Section/Column», Notion/GitHub «Status», Wekan «Stage», Kanboard «Column»)
+//   etiquetas   labels, tags, category, categories, etiquetas…                           (Asana/Notion «Tags», GitHub/Wekan «Labels», Kanboard «Category»)
+//   fecha límite due date, due, deadline, date due, fecha límite, vencimiento…           (Asana/Wekan «Due Date», Kanboard «Date Due»)
 //   responsable assignee, assignees, assigned to, owner, members, responsable…, y su email («Assignee Email» de Asana)
-//   prioridad   priority, prioridad                                                      (Jira Highest…Lowest, Asana High/Medium/Low, Kanboard 0-3)
+//   prioridad   priority, prioridad                                                      (Urgent/High/Medium/Low, P0-P4, Kanboard 0-3)
 //   archivada   archived, archivada, archivado
-//   referencia  issue key, key, task id, card id, id, reference                          (Jira «Issue key», Asana «Task ID»): va a la descripción
-//   tarea madre parent task, parent summary, parent, tarea padre…                        (Asana «Parent task»): si coincide por título con otra fila, la fila pasa a ser su subtarea
-// Las cabeceras de cada herramienta están escritas de memoria (sin poder exportar de cada una): si alguna difiere
-// en una versión, basta con renombrar la columna a una de las de arriba.
+//   referencia  task id, card id, id, reference, referencia…                             (Asana «Task ID», Kanboard «Task Id»): va a la descripción
+//   tarea madre parent task, tarea padre, tarea principal, subtarea de                   (Asana «Parent task»): si coincide por título con otra fila, la fila pasa a ser su subtarea
+// Las columnas del tablero son los estados distintos por orden de aparición, salvo las que cuentan como terminadas
+// («Hecho», «Done», «Cerrado»…), que van al final. Las cabeceras de cada herramienta están escritas de memoria (sin poder
+// exportar de cada una): si alguna difiere en una versión, basta con renombrar la columna a una de las de arriba.
 import type { T } from "@/i18n/core";
 import { AppError } from "../errors";
 import type { TaskPriorityValue } from "../task-fields";
 import { FOREIGN_LIMITS, type ForeignBoard, type ForeignPerson, type ForeignTask } from "./types";
-import { cleanMarkdown, cleanName, cleanTitle, fold, parseDay } from "./text";
+import { cleanMarkdown, cleanName, cleanTitle, fold, isDoneName, parseDay } from "./text";
 
 /** Separador de campos: el que más aparece en la primera línea (fuera de comillas) entre «,», «;» y tabulador. */
 export function detectDelimiter(text: string): "," | ";" | "\t" {
@@ -93,11 +95,12 @@ const HEADERS: Record<Field, string[]> = {
   ],
   priority: ["prioridad", "priority"],
   archived: ["archivada", "archivado", "archivadas", "archived"],
-  key: ["issue key", "key", "task id", "card id", "id", "clave", "referencia", "reference", "task number", "card number"],
-  parent: ["parent task", "parent summary", "tarea principal", "tarea padre", "subtarea de", "parent"],
+  key: ["task id", "card id", "id", "clave", "referencia", "reference", "task number", "card number"],
+  parent: ["parent task", "tarea principal", "tarea padre", "subtarea de"],
   completed: ["completed at", "completed", "completada", "completado", "fecha de finalizacion", "resolved", "resolucion", "resolution date"],
 };
-const MULTI: Field[] = ["labels", "assignee", "assigneeEmail", "description"];
+/** Campos que juntan las columnas de todos los nombres de su lista que aparezcan (el resto se queda con la primera). */
+const MULTI: Field[] = ["labels", "assignee", "assigneeEmail"];
 
 /** Columnas de la cabecera que se miran (el resto se ignoran): una cabecera de un millón de columnas no debe costar nada. */
 const MAX_HEADER_COLUMNS = 1000;
@@ -107,20 +110,21 @@ export interface CsvMapping {
   columns: Partial<Record<Field, number[]>>;
 }
 
-/** Qué columna del archivo es cada campo (por la cabecera). */
+/** Qué columna del archivo es cada campo (por la cabecera). Una cabecera repetida solo cuenta la primera vez. */
 export function mapHeaders(header: string[]): CsvMapping {
-  const folded = header.slice(0, MAX_HEADER_COLUMNS).map(fold);
+  const first = new Map<string, number>();
+  header.slice(0, MAX_HEADER_COLUMNS).forEach((h, i) => { const name = fold(h); if (!first.has(name)) first.set(name, i); });
   const columns: Partial<Record<Field, number[]>> = {};
   const used = new Set<number>();
   for (const field of Object.keys(HEADERS) as Field[]) {
     const found: number[] = [];
     for (const name of HEADERS[field]) {
-      for (let i = 0; i < folded.length; i++) if (folded[i] === name && !used.has(i)) found.push(i); // cada índice sale una vez por nombre y no está en `used`
-      if (found.length && !MULTI.includes(field)) break;
+      const i = first.get(name);
+      if (i === undefined || used.has(i)) continue;
+      found.push(i);
+      if (!MULTI.includes(field)) break;
     }
-    // La descripción prevalece por orden de preferencia: solo se juntan varias columnas «Description» repetidas.
-    const picked = field === "description" ? found.filter((i) => folded[i] === folded[found[0]!]) : found;
-    if (picked.length) { columns[field] = picked; picked.forEach((i) => used.add(i)); }
+    if (found.length) { columns[field] = found; found.forEach((i) => used.add(i)); }
   }
   return { columns };
 }
@@ -188,7 +192,7 @@ export function parseCsvBoard(text: string, opts: CsvOptions): ForeignBoard {
   const { columns } = mapHeaders(rows[0]!);
   if (!columns.title) throw new AppError(NO_TITLE_COLUMN);
 
-  const cell = (row: string[], f: Field): string => (columns[f] ?? []).map((i) => row[i] ?? "").filter((s) => s.trim() !== "").join(f === "description" ? "\n\n" : f === "labels" || f === "assignee" ? ", " : " ");
+  const cell = (row: string[], f: Field): string => (columns[f] ?? []).map((i) => row[i] ?? "").filter((s) => s.trim() !== "").join(f === "labels" || f === "assignee" ? ", " : " ");
   const warnings: string[] = [];
   const clipped = { n: 0 };
   let badDates = 0;
@@ -214,7 +218,7 @@ export function parseCsvBoard(text: string, opts: CsvOptions): ForeignBoard {
     if (p !== undefined && p !== i) subOf.set(i, p);
   });
 
-  // Columnas: estados distintos en el orden en que aparecen (sin contar las subtareas).
+  // Columnas: estados distintos en el orden en que aparecen (sin contar las subtareas); las terminadas se pasan al final después.
   const columnNames: string[] = [];
   const columnIndex = new Map<string, number>();
   const hasColumn = !!columns.column;
@@ -285,5 +289,11 @@ export function parseCsvBoard(text: string, opts: CsvOptions): ForeignBoard {
   if (extraSubtasks) warnings.push(t("{n} subtareas sobraban (máximo {max} por tarea) y no se han importado.", { n: extraSubtasks, max: FOREIGN_LIMITS.subtasksPerTask }));
   if (!tasks.length) throw new AppError("El CSV no tiene ninguna fila con título.");
 
-  return { name: cleanName(opts.fileName ?? "", 80) || "CSV", description: "", columns: columnNames, tasks, warnings };
+  // Las columnas que cuentan como terminadas («Hecho», «Done», «Cerrado»…) van al final; cada grupo conserva su orden.
+  const done = columnNames.map(isDoneName);
+  const order = [...columnNames.keys()].sort((a, b) => Number(done[a]) - Number(done[b]));
+  const moved = new Map(order.map((old, i) => [old, i]));
+  for (const task of tasks) if (task.column !== null) task.column = moved.get(task.column)!;
+
+  return { name: cleanName(opts.fileName ?? "", 80) || "CSV", description: "", columns: order.map((i) => columnNames[i]!), tasks, warnings };
 }

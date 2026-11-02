@@ -96,15 +96,33 @@ describe("Trello JSON", () => {
   });
 });
 
+describe("Trello: comentarios por encima del tope", () => {
+  test("una tarjeta con 230 comentarios guarda los 200 más recientes con su fecha original, y el aviso lo dice", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const at = (i: number) => new Date(Date.UTC(2026, 0, 1) + i * 3_600_000).toISOString();
+    const actions = Array.from({ length: 230 }, (_, i) => ({ type: "commentCard", date: at(i), data: { text: `nota ${i}`, card: { id: "c1" } }, memberCreator: { fullName: "Ana" } })).reverse();
+    const board = JSON.stringify({ name: `Muchos comentarios ${uniq()}`, lists: [{ id: "l1", name: "A", pos: 1 }], cards: [{ id: "c1", name: "Con charla", idList: "l1" }], actions });
+    const s = await importForeignFile(await file("t.json", board), "trello", asImporter(admin), { isPrivate: true, t });
+    assert.equal(s.counts.comments, 200);
+    assert.ok(s.warnings.includes("30 comentarios antiguos no se han importado: de cada tarjeta con más de 200 se guardan los 200 más recientes."), s.warnings.join(" | "));
+    const comments = (await load(s.projectId)).tasks[0]!.comments;
+    assert.equal(comments.length, 200);
+    assert.match(comments[0]!.body, /\n\nnota 30$/);
+    assert.match(comments[199]!.body, /\n\nnota 229$/);
+    assert.equal(comments[0]!.createdAt.toISOString(), at(30));
+    assert.equal(comments[199]!.createdAt.toISOString(), at(229));
+  });
+});
+
 describe("CSV", () => {
   test("columnas por estado en orden de aparición, etiquetas con color, responsable por email, prioridad activa el campo", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const dev = await makeUser({ name: "Dev Uno" });
     const text =
-      "﻿Summary;Issue key;Status;Priority;Assignee;Due Date;Labels;Description\n" +
-      `Arreglar login;PRJ-1;En curso;Highest;${dev.email.toUpperCase()};2026-12-01;auth, urgente;"Falla con ""SSO""\ny reinicios"\n` +
-      "Escribir docs;PRJ-2;Por hacer;Low;nadie@example.com;;docs;\n" +
-      "Otra más;PRJ-3;En curso;;;;auth;\n";
+      "﻿Title;Task ID;Status;Priority;Assignee;Due Date;Tags;Notes\n" +
+      `Arreglar login;T-1;En curso;Urgent;${dev.email.toUpperCase()};2026-12-01;auth, urgente;"Falla con ""SSO""\ny reinicios"\n` +
+      "Escribir docs;T-2;Por hacer;Low;nadie@example.com;;docs;\n" +
+      "Otra más;T-3;En curso;;;;auth;\n";
     const s = await importForeignFile(await file("plan q4.csv", text), "csv", asImporter(admin), { isPrivate: false, t, fileName: "plan q4" });
     assert.equal(s.source, "csv");
     const p = await load(s.projectId);
@@ -117,13 +135,27 @@ describe("CSV", () => {
     assert.equal(login.priority, "URGENTE");
     assert.equal(login.assigneeId, dev.id);
     assert.equal(login.dueDate?.toISOString().slice(0, 10), "2026-12-01");
-    assert.equal(login.description, 'Falla con "SSO"\ny reinicios\n\n_Referencia original: PRJ-1_');
+    assert.equal(login.description, 'Falla con "SSO"\ny reinicios\n\n_Referencia original: T-1_');
     assert.deepEqual(login.labels.map((l) => l.label.name).sort(), ["auth", "urgente"]);
     const docs = p.tasks.find((x) => x.title === "Escribir docs")!;
     assert.equal(docs.assigneeId, null);
     assert.match(docs.description, /Responsable en el archivo original: nadie@example\.com\./);
     assert.deepEqual(s.unmappedUsers, [{ name: "nadie@example.com", email: "nadie@example.com" }]);
     assert.deepEqual(p.members.map((m) => m.userId), [dev.id]);
+  });
+
+  test("una columna terminada que aparece primero («Hecho») queda al final, marcada como terminada, con sus tareas", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const text = "título,estado\nPublicar,Hecho\nRedactar,Por hacer\nRevisar,En curso\nMaquetar,Por hacer\nCerrar contrato,Cerrado\n";
+    const s = await importForeignFile(await file("t.csv", text), "csv", asImporter(admin), { isPrivate: false, t, fileName: "hecho primero" });
+    const p = await load(s.projectId);
+    assert.deepEqual(p.columns.map((c) => [c.name, c.isDone]), [["Por hacer", false], ["En curso", false], ["Hecho", true], ["Cerrado", true]]);
+    const colName = new Map(p.columns.map((c) => [c.id, c.name]));
+    assert.deepEqual(Object.fromEntries(p.tasks.map((x) => [x.title, colName.get(x.columnId)])), {
+      Publicar: "Hecho", Redactar: "Por hacer", Revisar: "En curso", Maquetar: "Por hacer", "Cerrar contrato": "Cerrado",
+    });
+    const todo = p.tasks.filter((x) => colName.get(x.columnId) === "Por hacer").sort((a, b) => a.position - b.position);
+    assert.deepEqual(todo.map((x) => x.title), ["Redactar", "Maquetar"]);
   });
 
   test("sin columna de estado: todo a la primera de las columnas por defecto", async () => {
@@ -240,6 +272,38 @@ describe("ruta de subida y trabajo en segundo plano", () => {
       delete process.env.PROJECT_IMPORT_MAX_MB;
     }
     assert.equal(await queued(), 0);
+    assert.deepEqual(await readdir(path.join(process.env.UPLOAD_DIR!, "imports")), []);
+  });
+
+  test("JSON y CSV: tope de 25 MB (o PROJECT_IMPORT_MAX_MB si es menor) en la subida y en el trabajo; el ZIP de Pizarro no lo tiene", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    const reject = async (body: BodyInit, name: string, status: number, message: RegExp) => {
+      const res = await importRoute(upload(body, name));
+      assert.equal(res.status, status);
+      assert.match((await res.json()).error, message);
+    };
+    // Por la extensión (se corta al recibirlo) o, sin ella, al reconocer el contenido.
+    const big = `title\n${"x".repeat(25 * 1024 * 1024)}\n`;
+    await reject(big, "grande.csv", 413, /tamaño máximo para JSON y CSV \(25 MB\)/);
+    await reject(big, "grande", 413, /tamaño máximo para JSON y CSV \(25 MB\)/);
+    process.env.PROJECT_IMPORT_MAX_MB = "1";
+    try {
+      await reject(`title\n${"x".repeat(1024 * 1024)}\n`, "mediano.csv", 413, /tamaño máximo para JSON y CSV \(1 MB\)/);
+    } finally {
+      delete process.env.PROJECT_IMPORT_MAX_MB;
+    }
+    // 26 MB que no son un ZIP: pasa del tope de JSON y CSV pero no del de importación, así que se rechaza por no ser un ZIP, no por tamaño.
+    await reject(new Uint8Array(26 * 1024 * 1024).fill(0x41), "grande.zip", 400, /no es un ZIP válido/);
+    assert.equal(await db.projectTransferJob.count({ where: { userId: admin.id } }), 0);
+    // El trabajo lo vuelve a comprobar (el archivo ya está en disco).
+    await assert.rejects(importForeignFile(await file("grande.csv", big), "csv", asImporter(admin), { isPrivate: true, t }), /tamaño máximo para JSON y CSV \(25 MB\)/);
+    process.env.PROJECT_IMPORT_MAX_MB = "1";
+    try {
+      await assert.rejects(importForeignFile(await file("m.csv", `title\n${"x".repeat(1024 * 1024)}\n`), "csv", asImporter(admin), { isPrivate: true, t }), /\(1 MB\)/);
+    } finally {
+      delete process.env.PROJECT_IMPORT_MAX_MB;
+    }
     assert.deepEqual(await readdir(path.join(process.env.UPLOAD_DIR!, "imports")), []);
   });
 

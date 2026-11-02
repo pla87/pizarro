@@ -1,12 +1,12 @@
 // Importar desde otros Kanban: lector del JSON de Trello, lector del CSV genérico (separadores, comillas, BOM, cabeceras de
-// Asana y Jira…), detección de formato y saneado de textos. Las pruebas con base de datos están en tests/db/foreign-import.test.ts.
+// Asana, GitHub Projects, Wekan…), detección de formato y saneado de textos. Las pruebas con base de datos están en tests/db/foreign-import.test.ts.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test, describe } from "node:test";
 import { makeT } from "../src/i18n/core";
 import { detectDelimiter, mapHeaders, parseCsv, parseCsvBoard } from "../src/lib/foreign-import/csv";
-import { assertBoardLimits, decodeText, parseForeign, sniffFormat } from "../src/lib/foreign-import/parse";
-import { cleanMarkdown, cleanName, cleanTitle, instantDay, parseDay, stripHtml } from "../src/lib/foreign-import/text";
+import { assertBoardLimits, decodeText, foreignMaxBytes, parseForeign, sniffFormat } from "../src/lib/foreign-import/parse";
+import { cleanMarkdown, cleanName, cleanTitle, instantDay, isDoneName, parseDay, stripHtml } from "../src/lib/foreign-import/text";
 import { parseTrello } from "../src/lib/foreign-import/trello";
 
 const t = makeT("es");
@@ -185,21 +185,46 @@ describe("CSV: tablero", () => {
     assert.equal(b.tasks[1]!.column, 1);
   });
 
-  test("exportación de Jira: Summary, Issue key, Status, Priority, Due Date, Description y varias columnas «Labels»", () => {
+  test("cabecera repetida: solo cuenta la primera; etiquetas y responsables juntan columnas de nombres distintos", () => {
     const b = csv(
-      "Summary,Issue key,Issue id,Issue Type,Status,Priority,Assignee,Due Date,Labels,Labels,Description\n" +
-        'Arreglar el login,PRJ-12,10012,Bug,In Progress,Highest,jperez@example.com,15/Jan/26 10:20 AM,auth,urgente,"Falla con ""SSO"""\n' +
-        "Documentar la API,PRJ-13,10013,Task,To Do,Low,,,docs,,\n",
+      "Summary,Status,Status,Priority,Due Date,Labels,Labels,Tags,Owner,Members,Description,Description\n" +
+        'Arreglar el login,In Progress,Bloqueada,Highest,15/Jan/26 10:20 AM,auth,urgente,web,ana@example.com,Luis,"Falla con ""SSO""",otra\n' +
+        "Documentar la API,To Do,,Low,,docs,,,,,,\n",
     );
     assert.deepEqual(b.columns, ["In Progress", "To Do"]);
     const [a, d] = b.tasks;
     assert.equal(a!.title, "Arreglar el login");
     assert.equal(a!.priority, "URGENTE");
     assert.equal(a!.due, "2026-01-15");
-    assert.deepEqual(a!.labels.map((l) => l.name), ["auth", "urgente"]);
-    assert.deepEqual(a!.assignees, [{ email: "jperez@example.com", name: null }]);
-    assert.equal(a!.description, 'Falla con "SSO"\n\n_Referencia original: PRJ-12_');
+    assert.deepEqual(a!.labels.map((l) => l.name), ["auth", "web"]);
+    assert.deepEqual(a!.assignees, [{ email: "ana@example.com", name: null }, { email: null, name: "Luis" }]);
+    assert.equal(a!.description, 'Falla con "SSO"');
     assert.equal(d!.priority, "BAJA");
+    assert.deepEqual(d!.labels.map((l) => l.name), ["docs"]);
+  });
+
+  test("«Issue key», «Key», «Issue Type», «Parent» y «Parent summary» no son cabeceras reconocidas", () => {
+    assert.deepEqual(Object.keys(mapHeaders(["Summary", "Issue key", "Key", "Issue Type", "Parent", "Parent summary"]).columns), ["title"]);
+    const b = csv("Summary,Issue key,Parent,Parent summary\nMadre,PRJ-1,,\nHija,PRJ-2,PRJ-1,Madre\n");
+    assert.deepEqual(b.tasks.map((x) => [x.title, x.description, x.subtasks.length]), [["Madre", "", 0], ["Hija", "", 0]]);
+    // La referencia y la tarea madre genéricas siguen valiendo.
+    const g = csv("Title,ID,Parent task\nMadre,7,\nHija,8,Madre\n");
+    assert.deepEqual(g.tasks.map((x) => [x.title, x.description, x.subtasks]), [["Madre", "_Referencia original: 7_", [{ title: "Hija", done: false }]]]);
+  });
+
+  test("las columnas que cuentan como terminadas van al final; el resto conserva su orden de aparición", () => {
+    const b = csv("title,status\nA,Hecho\nB,Por hacer\nC,Cerrado\nD,En curso\nE,Por hacer\nF,\nG,hecho\n");
+    assert.deepEqual(b.columns, ["Por hacer", "En curso", "Hecho", "Cerrado"]);
+    assert.deepEqual(b.tasks.map((x) => [x.title, x.column]), [["A", 2], ["B", 0], ["C", 3], ["D", 1], ["E", 0], ["F", null], ["G", 2]]);
+    assert.deepEqual(csv("name,status\nA,Todo\nB,Done\nC,Doing").columns, ["Todo", "Doing", "Done"]);
+    // Todas terminadas o ninguna: el orden no cambia.
+    assert.deepEqual(csv("name,status\nA,Done\nB,Completed").columns, ["Done", "Completed"]);
+    assert.deepEqual(csv("name,status\nA,Uno\nB,Dos").columns, ["Uno", "Dos"]);
+  });
+
+  test("isDoneName: los nombres de columna terminada en español e inglés", () => {
+    for (const name of ["Hecho", "Done", "Completed", "Completadas", "Cerrado", "Closed", "Resuelto", "En producción", "Terminado ✔", "  DONE  "]) assert.ok(isDoneName(name), name);
+    for (const name of ["Por hacer", "En curso", "To Do", "Doing", "Not done", "Revisión"]) assert.ok(!isDoneName(name), name);
   });
 
   test("GitHub Projects / Wekan / Kanboard / Notion: cabeceras típicas reconocidas", () => {
@@ -295,6 +320,16 @@ describe("fechas, saneado y detección de formato", () => {
     assert.equal(sniffFormat(new Uint8Array([0, 1, 2, 3, 4]), "x.csv"), null);
     assert.equal(sniffFormat(bytes("   "), "x.csv"), null);
     assert.equal(sniffFormat(bytes("texto"), "roto.zip"), "pizarro");
+  });
+
+  test("foreignMaxBytes: 25 MB para JSON y CSV, o PROJECT_IMPORT_MAX_MB si es menor", () => {
+    const MB = 1024 * 1024;
+    assert.equal(foreignMaxBytes(""), 25 * MB);
+    assert.equal(foreignMaxBytes("500"), 25 * MB);
+    assert.equal(foreignMaxBytes("25"), 25 * MB);
+    assert.equal(foreignMaxBytes("10"), 10 * MB);
+    assert.equal(foreignMaxBytes("0.5"), 0.5 * MB);
+    assert.equal(foreignMaxBytes("no"), 25 * MB);
   });
 
   test("assertBoardLimits acepta un tablero normal", () => {
@@ -424,8 +459,27 @@ describe("entradas hostiles y rendimiento", () => {
     }));
     const text = JSON.stringify({ name: "x", lists: [{ id: "l1", name: "A", pos: 1 }], cards: [{ id: "c1", name: "t", idList: "l1" }], actions });
     const board = fast(3000, () => parseTrello(text, { t, timeZone: "Europe/Madrid" }));
-    assert.equal(board.tasks[0]!.comments.length, 200);
-    assert.ok(board.warnings.some((w) => /99800 comentarios sobraban/.test(w)));
+    const comments = board.tasks[0]!.comments;
+    assert.equal(comments.length, 200);
+    assert.match(comments[0]!.body, /\n\nhola 99800$/);
+    assert.match(comments[199]!.body, /\n\nhola 99999$/);
+    assert.ok(board.warnings.some((w) => /^99800 comentarios antiguos no se han importado: de cada tarjeta con más de 200 se guardan los 200 más recientes\.$/.test(w)));
+  });
+
+  test("Trello: con más de 200 comentarios en una tarjeta se guardan los 200 más recientes, del más antiguo al más nuevo", () => {
+    // Trello los exporta del más nuevo al más antiguo; uno sin fecha cuenta como el más antiguo.
+    const dated = Array.from({ length: 250 }, (_, i) => ({
+      type: "commentCard", date: new Date(Date.UTC(2026, 0, 1) + i * 60_000).toISOString(), data: { text: `c${i}`, card: { id: "c1" } }, memberCreator: { fullName: "Ana" },
+    })).reverse();
+    const actions = [...dated, { type: "commentCard", data: { text: "sin fecha", card: { id: "c1" } } }, { type: "commentCard", date: dated[0]!.date, data: { text: "otra", card: { id: "c2" } } }];
+    const text = JSON.stringify({ name: "x", lists: [{ id: "l1", name: "A", pos: 1 }], cards: [{ id: "c1", name: "t", idList: "l1" }, { id: "c2", name: "u", idList: "l1" }], actions });
+    const board = parseTrello(text, { t });
+    const comments = board.tasks[0]!.comments;
+    assert.equal(comments.length, 200);
+    assert.deepEqual(comments.map((c) => c.body.split("\n\n")[1]), Array.from({ length: 200 }, (_, i) => `c${i + 50}`));
+    assert.ok(comments.every((c, i) => i === 0 || c.createdAt!.getTime() > comments[i - 1]!.createdAt!.getTime()));
+    assert.equal(board.tasks[1]!.comments.length, 1);
+    assert.deepEqual(board.warnings, ["51 comentarios antiguos no se han importado: de cada tarjeta con más de 200 se guardan los 200 más recientes."]);
   });
 
   test("Trello: muchas tarjetas con comentarios y checklists en cada una se leen rápido", () => {
