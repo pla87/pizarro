@@ -1,5 +1,6 @@
 // Traducciones al inglés (common). Clave: texto exacto en español.
 export const common: Record<string, string> = {
+  "La subida iba demasiado lenta y se ha cortado. Inténtalo de nuevo con mejor conexión.": "The upload was too slow and was cut off. Please try again with a better connection.",
   "Cerrar menú": "Close menu",
   "Menú": "Menu",
   "Detalle de la tarea": "Task details",
