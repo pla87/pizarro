@@ -371,10 +371,10 @@ if (only.includes("vt")) {
     const flt = await s.page.locator('button[aria-label^="Filtros"]:visible').first().boundingBox();
     const a = await tog.boundingBox();
     L.check(`VT ${label}: justo a la derecha del filtro`, a.x > flt.x && a.x - (flt.x + flt.width) < 16 && Math.abs(a.y - flt.y) < 3, JSON.stringify({ flt, a }));
-    L.eq(`VT ${label}: tablero → «Ver como lista» (sin pulsar)`, [await tog.getAttribute("aria-label"), await tog.getAttribute("aria-pressed")], ["Ver como lista", "false"]);
+    L.eq(`VT ${label}: tablero → «Ver como lista» (botón de acción, sin aria-pressed)`, [await tog.getAttribute("aria-label"), await tog.getAttribute("aria-pressed")], ["Ver como lista", null]);
     await tog.click(); await sleep(600);
     const b = await tog.boundingBox();
-    L.eq(`VT ${label}: lista → «Ver como tablero» (pulsado)`, [await tog.getAttribute("aria-label"), await tog.getAttribute("aria-pressed")], ["Ver como tablero", "true"]);
+    L.eq(`VT ${label}: lista → «Ver como tablero» (sin aria-pressed)`, [await tog.getAttribute("aria-label"), await tog.getAttribute("aria-pressed")], ["Ver como tablero", null]);
     L.eq(`VT ${label}: no se mueve al pasar a lista`, b, a);
     await tog.click(); await sleep(600);
     L.eq(`VT ${label}: no se mueve al volver al tablero`, await tog.boundingBox(), a);

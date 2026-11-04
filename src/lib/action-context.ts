@@ -30,6 +30,8 @@ export interface ActionContext {
   refreshOwnTab?: boolean;
   /** Se rellena con el id de la entrada de deshacer que cree runAction (ver trackUndoEntry). */
   undoRef?: { id?: string };
+  /** La acción no cambió nada (p. ej. un deshacer que espera confirmación): no se avisa a las demás pestañas. */
+  noPublish?: boolean;
 }
 
 export const actionContext = new AsyncLocalStorage<ActionContext>();

@@ -53,7 +53,7 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
     const user = tracked || willUndo ? await getCurrentUser().catch(() => null) : null;
     // Aviso a las demás pestañas del proyecto (las consultas no cambian nada): ya está confirmada la transacción
     // principal y publishChange no depende del historial ni del deshacer, así que sale antes de guardarlos.
-    const cid = tracked && !UNPUBLISHED_ACTIONS.has(meta!.name) ? publishChange({ projectId: ctx.projectId!, userId: user?.id ?? null, action: meta!.name }) : undefined;
+    const cid = tracked && !ctx.noPublish && !UNPUBLISHED_ACTIONS.has(meta!.name) ? publishChange({ projectId: ctx.projectId!, userId: user?.id ?? null, action: meta!.name }) : undefined;
     // Solo las acciones cuyo resultado ya trae todo lo que cambian devuelven el id; en las demás (o si la acción tocó
     // más de lo que devuelve) la pestaña que la lanzó también se refresca con su propio aviso.
     if (cid && !ctx.refreshOwnTab && ECHO_SAFE_ACTIONS.has(meta!.name)) result.cid = cid;

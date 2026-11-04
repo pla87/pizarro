@@ -8,8 +8,8 @@ import type { BoardView } from "./listSort";
 /**
  * Conmutador Tablero / Lista de la cabecera: UN solo botón de icono (como el de filtros), siempre en el mismo sitio.
  * Muestra el icono de la vista a la que se cambia (en el tablero, la lista; en la lista, las columnas), que es también
- * lo que dicen su título y su etiqueta («Ver como lista» / «Ver como tablero»). `aria-pressed` indica que la vista
- * de lista está activa.
+ * lo que dicen su título y su etiqueta («Ver como lista» / «Ver como tablero»). Es un botón de acción: sin aria-pressed,
+ * que con la etiqueta cambiante se leería de forma confusa («Ver como lista, pulsado»).
  */
 export function ViewToggle({ view, onChange, className }: { view: BoardView; onChange: (v: BoardView) => void; className?: string }) {
   const t = useT();
@@ -20,7 +20,6 @@ export function ViewToggle({ view, onChange, className }: { view: BoardView; onC
     <button
       type="button"
       data-view-toggle
-      aria-pressed={!toList}
       aria-label={label}
       title={label}
       onClick={() => onChange(toList ? "list" : "board")}

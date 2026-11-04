@@ -437,6 +437,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
+  // Vuelve a abrir el canal en vivo cuando el navegador lo da por cerrado (ver el manejador de «error»).
+  const [sseEpoch, setSseEpoch] = useState(0);
   // Cambios de otras pestañas y personas casi al momento: el servidor avisa (Server-Sent Events) y
   // se refresca. Se agrupan los avisos seguidos; si la conexión cae, EventSource reconecta solo.
   useEffect(() => {
@@ -447,10 +449,14 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     source.addEventListener("open", () => {
       live.open = true;
     });
-    // EventSource reconecta solo, pero lo ocurrido mientras estuvo cortado no llega por el canal.
+    // EventSource reconecta solo, pero lo ocurrido mientras estuvo cortado no llega por el canal. Si el servidor respondió
+    // con un error (p. ej. 503 mientras se apaga en un despliegue), el navegador da el canal por cerrado y no reintenta:
+    // se vuelve a abrir al cabo de unos segundos.
+    let retry: ReturnType<typeof setTimeout> | null = null;
     source.addEventListener("error", () => {
       live.open = false;
       live.gap = true;
+      if (source.readyState === EventSource.CLOSED && !retry) retry = setTimeout(() => setSseEpoch((n) => n + 1), 5000);
     });
     source.addEventListener("change", (e) => {
       let cid: string | null = null;
@@ -470,10 +476,11 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     });
     return () => {
       if (timer) clearTimeout(timer);
+      if (retry) clearTimeout(retry);
       source.close();
       live.open = false;
     };
-  }, [data.project.id, drainIncoming]);
+  }, [data.project.id, drainIncoming, sseEpoch]);
 
   // Refresco ligero de respaldo (por si el canal de avisos no llega) y al volver a la ventana. Al volver no se recarga cada
   // vez: se espacia según el estado del canal en vivo (reglas en lib/focus-refresh.ts).
