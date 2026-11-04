@@ -71,5 +71,24 @@ export async function run() {
 
   L.assertNoErrors("escenario 9", [s]);
   await s.ctx.close();
+
+  // Escape con el menú móvil y un diálogo encima («Instalar app», solo visible en iOS): el primer Escape cierra el diálogo,
+  // el segundo el menú.
+  const s2 = await L.session({ viewport: { width: 390, height: 844 }, mobile: true, init: () => {
+    Object.defineProperty(navigator, "userAgent", { get: () => "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148" });
+  } });
+  const q = s2.page;
+  await q.getByRole("button", { name: "Abrir menú" }).tap();
+  const drawer = q.getByRole("button", { name: "Cerrar menú" });
+  await drawer.waitFor();
+  await q.getByRole("button", { name: "Instalar app" }).tap();
+  const dlg = q.getByRole("dialog", { name: "Añadir Pizarro a la pantalla de inicio" });
+  await dlg.waitFor();
+  await q.keyboard.press("Escape"); await L.sleep(400);
+  L.check("Escape con menú y diálogo: el primer Escape cierra solo el diálogo", (await dlg.count()) === 0 && (await drawer.isVisible()));
+  await q.keyboard.press("Escape"); await L.sleep(400);
+  L.check("Escape con menú y diálogo: el segundo Escape cierra el menú", !(await drawer.isVisible()));
+  L.assertNoErrors("escenario 9 (Escape)", [s2]);
+  await s2.ctx.close();
 }
 await U.runStandalone(import.meta.url, run);

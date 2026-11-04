@@ -71,7 +71,7 @@ function Shell({ user, projects, version, unread, lastProjectId = null, backupAl
   const [drawerPath, setDrawerPath] = useState<string | null>(null);
   const drawerOpen = drawerPath === pathname;
   const setDrawerOpen = (open: boolean) => setDrawerPath(open ? pathname : null);
-  useEscapeClose(drawerOpen, () => setDrawerPath(null));
+  useEscapeClose(drawerOpen, () => setDrawerPath(null), { yieldToModal: true });
   // Menú móvil como diálogo: el foco entra en «Cerrar menú», Tab no sale de él y al cerrar vuelve a «Abrir menú».
   const drawerRef = useRef<HTMLElement>(null);
   const drawerCloseRef = useRef<HTMLButtonElement>(null);

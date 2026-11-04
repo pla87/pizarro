@@ -44,6 +44,10 @@ interface ModalProps {
 
 /** Pila de modales abiertos (el último es el de más arriba): solo él responde a Escape y al clic en el fondo. */
 const modalStack: { close: () => void }[] = [];
+/** Hay algún Modal abierto (para que un menú que no está dentro de él no se lleve el Escape). */
+export function hasOpenModal(): boolean {
+  return modalStack.length > 0;
+}
 let scrollLocks = 0;
 let savedBody: { overflow: string; position: string; top: string; width: string; htmlOverflow: string; scrollY: number } | null = null;
 

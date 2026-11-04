@@ -154,9 +154,10 @@ export async function getBrowser() { return (browser ??= await chromium.launch({
 export async function closeBrowser() { if (browser) { await browser.close(); browser = null; } }
 const IGNORED_CONSOLE = [/Download the React DevTools/i];
 /** Contexto + página con captura de errores de consola y de página. */
-export async function session({ email = ADMIN, viewport = { width: 1500, height: 900 }, mobile = false } = {}) {
+export async function session({ email = ADMIN, viewport = { width: 1500, height: 900 }, mobile = false, init = null } = {}) {
   const b = await getBrowser();
   const ctx = await b.newContext({ viewport, locale: "es-ES", acceptDownloads: true, ...(mobile ? { hasTouch: true, isMobile: true } : {}) });
+  if (init) await ctx.addInitScript(init);
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push("pageerror: " + e.message.slice(0, 300)));

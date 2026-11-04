@@ -55,18 +55,86 @@ export class BodyTooLargeError extends Error {
   }
 }
 
+/** La subida iba demasiado lenta (o tardó demasiado en total) y se cortó para no retener el hueco. */
+export class UploadTooSlowError extends Error {
+  constructor() {
+    super("upload too slow");
+    this.name = "UploadTooSlowError";
+  }
+}
+
+/** Mensaje (clave i18n) para la respuesta 408 cuando se corta una subida lenta. */
+export const UPLOAD_TOO_SLOW_MESSAGE = "La subida iba demasiado lenta y se ha cortado. Inténtalo de nuevo con mejor conexión.";
+
+/**
+ * Umbrales contra subidas que retienen un hueco. Velocidad mínima sostenida: 20 KB/s (~160 kbit/s, por debajo de una
+ * 2G/EDGE mala pero muy por encima de un goteo malicioso) medida en ventanas de 30 s, es decir, 600 KB por ventana;
+ * así una subida móvil con cobertura floja pasa y un cliente que manda unos pocos bytes por segundo no. Tiempo total:
+ * 3 min de margen más lo que costaría el cuerpo esperado a la velocidad mínima (tope 30 min).
+ */
+export const UPLOAD_MIN_BYTES_PER_SEC = 20 * 1024;
+export const UPLOAD_WINDOW_MS = 30_000;
+export const UPLOAD_BASE_TOTAL_MS = 3 * 60_000;
+export const UPLOAD_MAX_TOTAL_MS = 30 * 60_000;
+
+export type SlowGuardOptions = { minBytesPerSec?: number; windowMs?: number; totalMs?: number };
+
+/** Tiempo máximo total para recibir un cuerpo de `expectedBytes`. */
+export function uploadTotalMs(expectedBytes: number): number {
+  return Math.min(UPLOAD_MAX_TOTAL_MS, UPLOAD_BASE_TOTAL_MS + (expectedBytes / UPLOAD_MIN_BYTES_PER_SEC) * 1000);
+}
+
+/**
+ * Vigila una lectura: llama a `onSlow` si pasa el tiempo máximo total o si en una ventana completa llegan menos bytes
+ * que la velocidad mínima. Las subidas que acaban antes de cerrarse la primera ventana nunca se cortan. `add(n)` cuenta
+ * bytes; `stop()` desarma los temporizadores (siempre hay que llamarlo al terminar).
+ */
+export function createSlowGuard(onSlow: () => void, opts: SlowGuardOptions & { expectedBytes: number }) {
+  const minRate = opts.minBytesPerSec ?? UPLOAD_MIN_BYTES_PER_SEC;
+  const windowMs = opts.windowMs ?? UPLOAD_WINDOW_MS;
+  const totalMs = opts.totalMs ?? uploadTotalMs(opts.expectedBytes);
+  let received = 0;
+  let mark = 0;
+  let done = false;
+  const fire = () => {
+    if (done) return;
+    done = true;
+    clearTimeout(total);
+    clearInterval(tick);
+    onSlow();
+  };
+  const total = setTimeout(fire, totalMs);
+  const tick = setInterval(() => {
+    if (received - mark < (minRate * windowMs) / 1000) fire();
+    mark = received;
+  }, windowMs);
+  total.unref?.();
+  tick.unref?.();
+  return {
+    add(n: number) { received += n; },
+    stop() { done = true; clearTimeout(total); clearInterval(tick); },
+  };
+}
+
 /**
  * Lee el cuerpo como formulario (multipart) o como texto cortando en cuanto pasa de `maxBytes`, lleve o no
  * Content-Length (algún proxy la quita y entonces llega por trozos): nunca se acumula más que eso en memoria.
  * Lanza BodyTooLargeError si no cabe; con un cuerpo que no es un formulario válido, el error de siempre de formData().
  */
-export async function readBodyLimited(req: Request, maxBytes: number, as: "formData"): Promise<FormData>;
-export async function readBodyLimited(req: Request, maxBytes: number, as: "text"): Promise<string>;
-export async function readBodyLimited(req: Request, maxBytes: number, as: "formData" | "text"): Promise<FormData | string> {
+export async function readBodyLimited(req: Request, maxBytes: number, as: "formData", slow?: SlowGuardOptions): Promise<FormData>;
+export async function readBodyLimited(req: Request, maxBytes: number, as: "text", slow?: SlowGuardOptions): Promise<string>;
+export async function readBodyLimited(req: Request, maxBytes: number, as: "formData" | "text", slow: SlowGuardOptions = {}): Promise<FormData | string> {
   let received = 0;
   let exceeded = false;
+  let tooSlow = false;
+  let guard: ReturnType<typeof createSlowGuard> | null = null;
   const limiter = new TransformStream<Uint8Array, Uint8Array>({
+    start(controller) {
+      guard = createSlowGuard(() => { tooSlow = true; controller.error(new UploadTooSlowError()); }, { ...slow, expectedBytes: Math.min(maxBytes, declaredLength(req.headers) ?? maxBytes) });
+    },
+    flush() { guard?.stop(); },
     transform(chunk, controller) {
+      guard?.add(chunk.byteLength);
       received += chunk.byteLength;
       if (received > maxBytes) {
         exceeded = true;
@@ -78,8 +146,12 @@ export async function readBodyLimited(req: Request, maxBytes: number, as: "formD
   try {
     return as === "formData" ? await limited.formData() : await limited.text();
   } catch (err) {
+    if (tooSlow) throw new UploadTooSlowError();
     // formData() puede envolver el error del flujo en el suyo propio: lo que manda es si se superó el tope.
     if (exceeded) throw new BodyTooLargeError(maxBytes);
     throw err;
+  }
+  finally {
+    (guard as ReturnType<typeof createSlowGuard> | null)?.stop();
   }
 }
