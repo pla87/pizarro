@@ -5,8 +5,9 @@ import { Bold, Code, Code2, Heading2, Heading3, IndentDecrease, IndentIncrease, 
 import { useCallback, useImperativeHandle, useMemo, useRef } from "react";
 import { useT } from "@/i18n/client";
 import { indentLines, insertLink, insertRule, toggleCodeBlock, toggleLinePrefix, toggleWrap, type EditResult } from "@/lib/markdown-edit";
+import { cn } from "./cn";
 import { DictationButton, insertIntoField } from "./DictationButton";
-import { FormatToolbar, FORMAT_BAR_CLASS, type FormatItems } from "./FormatToolbar";
+import { FormatToolbar, FORMAT_BAR_CLASS, FORMAT_BOX_CLASS, type FormatItems } from "./FormatToolbar";
 import { MentionTextarea, type MentionCommand } from "./MentionTextarea";
 import { applyTextareaEdit } from "./textarea-edit";
 
@@ -88,7 +89,7 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
     <>
     <div
       ref={root}
-      className="group rounded-lg border border-slate-300 bg-white focus-within:border-focus focus-within:ring-3 focus-within:ring-focus/30 dark:border-slate-700 dark:bg-slate-900 [&_textarea:focus]:border-transparent [&_textarea:focus]:ring-0 [&_textarea]:rounded-t-none [&_textarea]:border-0 [&_textarea]:bg-transparent"
+      className={cn(FORMAT_BOX_CLASS, "[&_textarea:focus]:border-transparent [&_textarea:focus]:ring-0 [&_textarea]:rounded-t-none [&_textarea]:border-0 [&_textarea]:bg-transparent")}
     >
       <FormatToolbar
         items={items}
