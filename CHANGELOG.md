@@ -2,6 +2,39 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.46.0 — 2026-11-04 14:21
+
+Pegar Markdown en la descripción, tablas e imágenes conservadas, campos de tarea más fiables, barra de formato como una sola caja y subidas lentas cortadas
+
+### Nuevas funcionalidades
+
+- Al chocar con el cambio de otra persona en el título o la descripción, el aviso ofrece «Copiar tu texto».
+
+### Mejoras
+
+- La barra de formato y el texto forman una sola caja: mismo borde, esquinas y contorno de foco, también pegada arriba y tras cambiar el tamaño de la ventana.
+- El editor con barra muestra y conserva las tablas y las imágenes de Markdown.
+- Coste y horas admiten coma decimal.
+- Las subidas que van demasiado lentas se cortan y dejan libre el hueco para los demás.
+- Con teclado en la tableta, Escape cierra primero el diálogo abierto y luego el menú.
+
+### Correcciones
+
+- Ya se puede pegar en la descripción texto Markdown con código dentro de una negrita o un enlace (antes no se pegaba nada).
+- Abrir y guardar una descripción con una tabla en el editor con barra ya no la borra.
+- «Sr. García…» o «a) …» ya no se convierten en listas numeradas perdiendo el texto; los escapes y el contenido de los fragmentos de código se conservan.
+- «12,5» en coste u horas ya no se guarda como 125 ni se borra.
+- Guardar un campo ya no borra lo que se estaba escribiendo en otro; el enlace externo sigue a deshacer y a los cambios de otros.
+- Un borrador recuperado ya no pisa el cambio de otra persona.
+- Cancelar con muchos cambios ya no borra ni pisa lo que hicieron otras personas.
+- Un título enorme ya no frena el servidor.
+- La pantalla de error en inglés ya no puede quedarse en blanco tras un despliegue; el canal en vivo se reabre si el servidor lo cierra; deshacer pendiente de confirmar ya no se anota como hecho; el color vuelve a la paleta abierta al pasar a móvil.
+
+### Cambios técnicos / DB
+
+- Prueba de exportar proyectos que ya no deja carpetas temporales.
+- @tiptap/extension-code y @tiptap/extension-paragraph declaradas explícitamente.
+
 ## v1.45.0 — 2026-11-03 00:51
 
 Deshacer con aviso y por lotes, PDF en segundo plano, modal de tarea más cómodo, títulos largos recortados y menos carga

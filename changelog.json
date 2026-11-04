@@ -1,6 +1,69 @@
 {
   "versions": [
     {
+      "version": "1.46.0",
+      "date": "2026-11-04",
+      "releasedAt": "2026-11-04T14:21:26+01:00",
+      "summary": "Pegar Markdown en la descripción, tablas e imágenes conservadas, campos de tarea más fiables, barra de formato como una sola caja y subidas lentas cortadas",
+      "changes": {
+        "nuevas": [
+          "Al chocar con el cambio de otra persona en el título o la descripción, el aviso ofrece «Copiar tu texto»."
+        ],
+        "mejoras": [
+          "La barra de formato y el texto forman una sola caja: mismo borde, esquinas y contorno de foco, también pegada arriba y tras cambiar el tamaño de la ventana.",
+          "El editor con barra muestra y conserva las tablas y las imágenes de Markdown.",
+          "Coste y horas admiten coma decimal.",
+          "Las subidas que van demasiado lentas se cortan y dejan libre el hueco para los demás.",
+          "Con teclado en la tableta, Escape cierra primero el diálogo abierto y luego el menú."
+        ],
+        "correcciones": [
+          "Ya se puede pegar en la descripción texto Markdown con código dentro de una negrita o un enlace (antes no se pegaba nada).",
+          "Abrir y guardar una descripción con una tabla en el editor con barra ya no la borra.",
+          "«Sr. García…» o «a) …» ya no se convierten en listas numeradas perdiendo el texto; los escapes y el contenido de los fragmentos de código se conservan.",
+          "«12,5» en coste u horas ya no se guarda como 125 ni se borra.",
+          "Guardar un campo ya no borra lo que se estaba escribiendo en otro; el enlace externo sigue a deshacer y a los cambios de otros.",
+          "Un borrador recuperado ya no pisa el cambio de otra persona.",
+          "Cancelar con muchos cambios ya no borra ni pisa lo que hicieron otras personas.",
+          "Un título enorme ya no frena el servidor.",
+          "La pantalla de error en inglés ya no puede quedarse en blanco tras un despliegue; el canal en vivo se reabre si el servidor lo cierra; deshacer pendiente de confirmar ya no se anota como hecho; el color vuelve a la paleta abierta al pasar a móvil."
+        ],
+        "tecnicos": [
+          "Prueba de exportar proyectos que ya no deja carpetas temporales.",
+          "@tiptap/extension-code y @tiptap/extension-paragraph declaradas explícitamente."
+        ]
+      },
+      "en": {
+        "summary": "Paste Markdown into the description, tables and images kept, more reliable task fields, the formatting toolbar as a single box and slow uploads cut off",
+        "changes": {
+          "nuevas": [
+            "When saving the title or description clashes with someone else's change, the notice offers “Copy your text”."
+          ],
+          "mejoras": [
+            "The formatting toolbar and the text form a single box: same border, corners and focus ring, also when stuck at the top and after resizing the window.",
+            "The toolbar editor shows and keeps Markdown tables and images.",
+            "Cost and hours accept a decimal comma.",
+            "Uploads that are too slow are cut off, freeing the slot for others.",
+            "With a keyboard on a tablet, Escape closes the open dialog first and then the menu."
+          ],
+          "correcciones": [
+            "Markdown with code inside bold or a link can now be pasted into the description (previously nothing was pasted).",
+            "Opening and saving a description with a table in the toolbar editor no longer deletes it.",
+            "“Sr. García…” or “a) …” no longer turn into numbered lists losing text; escapes and code contents are preserved.",
+            "“12,5” in cost or hours is no longer saved as 125 nor erased.",
+            "Saving one field no longer wipes what was being typed in another; the external link follows undo and other people's changes.",
+            "A recovered draft no longer overwrites someone else's change.",
+            "Cancel with many changes no longer deletes or overwrites what other people did.",
+            "A huge title no longer slows the server.",
+            "The English error screen can no longer stay blank after a deploy; the live channel reopens if the server closes it; a pending undo is no longer logged as done; the colour returns to the open palette when switching to mobile."
+          ],
+          "tecnicos": [
+            "The project export test no longer leaves temporary folders behind.",
+            "@tiptap/extension-code and @tiptap/extension-paragraph declared explicitly."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.45.0",
       "date": "2026-11-03",
       "releasedAt": "2026-11-03T00:51:57+01:00",
