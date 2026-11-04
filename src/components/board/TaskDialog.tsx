@@ -445,6 +445,14 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     const check = () => {
       const box = colorBox.current;
       if (!box) return;
+      // Por debajo de md la columna no tiene scroll propio (hace scroll el diálogo entero): siempre paleta abierta.
+      if (!window.matchMedia("(min-width: 768px)").matches) {
+        if (compactRef.current) {
+          compactRef.current = false;
+          setCompactColor(false);
+        }
+        return;
+      }
       // Sobra (>0) lo que habría que desplazar (altura del contenido menos el hueco útil de la columna); con la paleta compacta se suma lo que ocuparía abierta (la última medida),
       // así no oscila: solo se reabre si cabe entera.
       const cs = getComputedStyle(scroller);
@@ -465,7 +473,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     const ro = new ResizeObserver(check);
     ro.observe(scroller);
     ro.observe(content);
-    return () => ro.disconnect();
+    window.addEventListener("resize", check);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", check);
+    };
   }, [asideScroll]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
