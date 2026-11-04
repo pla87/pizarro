@@ -63,3 +63,18 @@ test("alta en bloque: cuenta las líneas recortadas", () => {
   assert.deepEqual(r.lines.map((l) => l.length), [5, MAX_TITLE, 4]);
   assert.equal(r.clipped, 1);
 });
+
+test("un título enorme (1 MB) se recorta rápido: no se segmenta entero ni se calcula dos veces", () => {
+  // Sin menciones: antes se segmentaba el MB entero (dos veces, ~1,4 s); ahora se para al llegar al máximo.
+  const huge = "Texto largo sin menciones 😀 ".repeat(40_000).slice(0, 1_000_000);
+  const t0 = performance.now();
+  const r = clampTitle(huge.trim());
+  const parsed = taskTitle.parse(huge);
+  const again = clampTitle(huge.trim());
+  const ms = performance.now() - t0;
+  assert.equal(r.clipped, true);
+  assert.ok(titleLength(r.value) <= MAX_TITLE);
+  assert.equal(parsed, r.value);
+  assert.equal(again, r, "la segunda consulta (¿se recortó?) reutiliza el resultado");
+  assert.ok(ms < 150, `tardó ${ms.toFixed(0)} ms`);
+});

@@ -77,7 +77,7 @@ npx next build --webpack && node scripts/postbuild.mjs && npm run build:boot
 ```
 
 Pruebas en navegador (ver `e2e/README.md`): la suite QA (`e2e/qa/run-all.mjs`, ~350 comprobaciones) y la del
-tablero (`e2e/board-e2e.mjs`, 89). Si cambias el rol o la etiqueta de un elemento que la suite usa, actualiza el
+tablero (`e2e/board-e2e.mjs`, 115). Si cambias el rol o la etiqueta de un elemento que la suite usa, actualiza el
 script correspondiente.
 
 Antes de cada fusión en `main`, comprueba que no se cuela ningún dato personal del propietario en el diff ni en el

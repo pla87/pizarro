@@ -1,4 +1,5 @@
-// Verificación de R16B1, R16F3, R16M1 y R16F1 (agente «board») y de los diálogos propios del menú de la columna (dlg).
+// Verificación de R16B1, R16F3, R16M1 y R16F1 (agente «board»), de los diálogos propios del menú de la columna (dlg)
+// y de la descripción de la tarea (desc: pegar Markdown con código dentro de una negrita, tablas, conflicto).
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,7 +9,7 @@ import * as U from "./qa/ui.mjs";
 const { COL, sleep } = L;
 const APP = process.env.APP_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "b1,f3,m1,f1,dlg,vt").split(",");
+const only = (process.env.PART || "b1,f3,m1,f1,dlg,vt,desc").split(",");
 
 await L.prepareUsers();
 
@@ -371,10 +372,10 @@ if (only.includes("vt")) {
     const flt = await s.page.locator('button[aria-label^="Filtros"]:visible').first().boundingBox();
     const a = await tog.boundingBox();
     L.check(`VT ${label}: justo a la derecha del filtro`, a.x > flt.x && a.x - (flt.x + flt.width) < 16 && Math.abs(a.y - flt.y) < 3, JSON.stringify({ flt, a }));
-    L.eq(`VT ${label}: tablero → «Ver como lista» (sin pulsar)`, [await tog.getAttribute("aria-label"), await tog.getAttribute("aria-pressed")], ["Ver como lista", "false"]);
+    L.eq(`VT ${label}: tablero → «Ver como lista» (botón de acción, sin aria-pressed)`, [await tog.getAttribute("aria-label"), await tog.getAttribute("aria-pressed")], ["Ver como lista", null]);
     await tog.click(); await sleep(600);
     const b = await tog.boundingBox();
-    L.eq(`VT ${label}: lista → «Ver como tablero» (pulsado)`, [await tog.getAttribute("aria-label"), await tog.getAttribute("aria-pressed")], ["Ver como tablero", "true"]);
+    L.eq(`VT ${label}: lista → «Ver como tablero» (sin aria-pressed)`, [await tog.getAttribute("aria-label"), await tog.getAttribute("aria-pressed")], ["Ver como tablero", null]);
     L.eq(`VT ${label}: no se mueve al pasar a lista`, b, a);
     await tog.click(); await sleep(600);
     L.eq(`VT ${label}: no se mueve al volver al tablero`, await tog.boundingBox(), a);
@@ -393,6 +394,163 @@ if (only.includes("vt")) {
   await L.eqEventually("VT: se guarda recortado a 210", async () => (await L.q(`SELECT length(title) n FROM "Task" WHERE title LIKE 'TTTT%'`)).map((r) => r.n), [210]);
   L.assertNoErrors("VT título", [d]);
   await d.ctx.close();
+}
+
+if (only.includes("desc")) {
+  L.scenario("R42C1 y campos de la tarea: pegar Markdown con negrita y código, tablas, «Sr.» y conflicto sin perder el texto");
+  await L.cleanBoard();
+  const LINE = "* **Guardado Local en Borrador (`localStorage`):**";
+  const SAVED = "- **Guardado Local en Borrador (`localStorage`):**";
+  const desc = async (title) => (await L.q(`SELECT description FROM "Task" WHERE title=$1`, [title]))[0]?.description;
+  const editorOf = (d, mode) => (mode === "WYSIWYG" ? d.locator("[contenteditable=true]").first() : d.locator("textarea[placeholder^='Markdown']").first());
+  /** Pega con el portapapeles real (Ctrl+V), como desde un .txt. */
+  const paste = async (s, target, text) => {
+    await target.focus();
+    await s.page.evaluate((v) => navigator.clipboard.writeText(v), text);
+    await s.page.keyboard.press("Control+v");
+    await sleep(400);
+  };
+  try {
+    for (const mode of ["WYSIWYG", "MARKDOWN"]) {
+      await L.q(`UPDATE "User" SET "editorMode"=$1`, [mode]);
+      await L.seedTasks(COL.backlog, [`Pegar ${mode}`]);
+      const s = await L.session({ viewport: { width: 1400, height: 900 } });
+      await s.ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: L.BASE });
+      const p = s.page;
+      await U.openTask(p, `Pegar ${mode}`);
+      const d = U.dialog(p);
+      await d.getByRole("button", { name: "Añade una descripción…" }).click();
+      await sleep(800);
+      const ed = editorOf(d, mode);
+      await paste(s, ed, LINE);
+      if (mode === "WYSIWYG") L.eq("DESC: con barra, se pega como lista con negrita y código", await ed.locator("ul > li strong > code").textContent().catch(() => null), "localStorage");
+      await p.keyboard.press("Control+Enter");
+      const want = mode === "WYSIWYG" ? SAVED : LINE;
+      await L.eqEventually(`DESC ${mode}: se guarda en el detalle`, () => desc(`Pegar ${mode}`), want);
+      L.eq(`DESC ${mode}: se ve con negrita y código`, await d.locator(".prose-md li strong code").first().textContent(), "localStorage");
+      await U.closeDialog(p);
+      // Nueva tarea.
+      await p.keyboard.press("Alt+n");
+      const title = p.locator('input[id$="-title"]').first();
+      await title.waitFor();
+      await title.fill(`Nueva ${mode}`);
+      await sleep(800);
+      await paste(s, editorOf(U.dialog(p), mode), LINE);
+      await p.keyboard.press("Alt+s");
+      await L.eqEventually(`DESC ${mode}: se guarda en Nueva tarea`, () => desc(`Nueva ${mode}`), want);
+      L.assertNoErrors(`DESC ${mode}`, [s]);
+      await s.ctx.close();
+    }
+
+    // Con barra: abrir y guardar no estropea tablas, «Sr. García» (no es una lista), código en una lista numerada ni
+    // entidades dentro de código.
+    await L.q(`UPDATE "User" SET "editorMode"='WYSIWYG'`);
+    const rich = "Sr. García vino hoy\n\n| a | b |\n|---|---|\n| `1` | **2** |\n\n1. uno\n   ```js\n   x()\n   ```\n2. dos\n\nusa `&nbsp;` aquí";
+    const [rid] = await L.seedTasks(COL.backlog, ["Rica"]);
+    await L.q(`UPDATE "Task" SET description=$1 WHERE id=$2`, [rich, rid]);
+    const s = await L.session({ viewport: { width: 1400, height: 900 } });
+    await s.ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: L.BASE });
+    const p = s.page;
+    await U.openTask(p, "Rica");
+    let d = U.dialog(p);
+    await d.getByRole("button", { name: "Editar" }).first().click();
+    await sleep(800);
+    let ed = d.locator("[contenteditable=true]").first();
+    L.eq("DESC: la tabla se ve en el editor con barra", await ed.locator("table[data-md-table] td").allTextContents(), ["`1`", "**2**"]);
+    await ed.click();
+    await p.keyboard.press("Control+End");
+    await p.keyboard.type(" fin");
+    await p.keyboard.press("Control+Enter");
+    await L.eqEventually("DESC: tabla, «Sr.», código numerado y entidades en código intactos tras guardar", () => desc("Rica"), `${rich} fin`);
+    await U.closeDialog(p);
+
+    // Conflicto: otra persona cambia el texto mientras se edita; el aviso permite copiar lo escrito.
+    await U.openTask(p, "Rica");
+    d = U.dialog(p);
+    await d.getByRole("button", { name: "Editar" }).first().click();
+    await sleep(800);
+    ed = d.locator("[contenteditable=true]").first();
+    await ed.click();
+    await p.keyboard.press("Control+a");
+    await p.keyboard.type("Mi texto largo que no quiero perder");
+    await L.q(`UPDATE "Task" SET description='Texto de la otra persona', "contentUpdatedAt"=NOW() + interval '1 second', "contentUpdatedById"='qa_user_2' WHERE id=$1`, [rid]);
+    await p.keyboard.press("Control+Enter");
+    const copy = p.getByRole("button", { name: "Copiar tu texto" });
+    L.check("DESC: el aviso de conflicto ofrece «Copiar tu texto»", await copy.waitFor({ timeout: 6000 }).then(() => true, () => false));
+    await copy.click();
+    await sleep(300);
+    L.eq("DESC: «Copiar tu texto» copia lo que no se guardó", await p.evaluate(() => navigator.clipboard.readText()), "Mi texto largo que no quiero perder");
+    L.eq("DESC: no pisa el texto de la otra persona", await desc("Rica"), "Texto de la otra persona");
+    L.assertNoErrors("DESC con barra", [s]);
+    await s.ctx.close();
+
+    // Borrador recuperado (la página se cerró editando) mientras otra persona cambió el texto: no se pisa su cambio.
+    {
+      const s2 = await L.session({ viewport: { width: 1400, height: 900 } });
+      await s2.ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: L.BASE });
+      const p2 = s2.page;
+      const proj = await L.project();
+      const [me] = await L.q(`SELECT id FROM "User" WHERE email=$1`, [L.ADMIN]);
+      const [old] = await L.q(`SELECT (NOW() - interval '1 hour') AS t`);
+      await L.q(`UPDATE "Task" SET description='Cambio de Beto', "contentUpdatedAt"=NOW(), "contentUpdatedById"='qa_user_2' WHERE id=$1`, [rid]);
+      await p2.evaluate(([key, value]) => localStorage.setItem(key, JSON.stringify({ at: Date.now(), value })), [`pz-draft-edit:${me.id}:${proj.id}`, { taskId: rid, description: "Mi borrador de ayer", base: new Date(old.t).toISOString() }]);
+      await L.reload(p2);
+      const dd = U.dialog(p2);
+      await dd.waitFor();
+      const ed2 = dd.locator("[contenteditable=true]").first();
+      await ed2.waitFor();
+      L.eq("DESC: el borrador recuperado se abre con lo escrito", (await ed2.innerText()).trim(), "Mi borrador de ayer");
+      await ed2.click();
+      await p2.keyboard.press("Control+Enter");
+      L.check("DESC: guardar el borrador avisa del conflicto (con «Copiar tu texto»)", await p2.getByRole("button", { name: "Copiar tu texto" }).waitFor({ timeout: 6000 }).then(() => true, () => false));
+      L.eq("DESC: el borrador no pisa el cambio de la otra persona", await desc("Rica"), "Cambio de Beto");
+      await U.closeDialog(p2);
+
+      // Título pegado con saltos de línea (un espacio, no palabras pegadas) y coste con coma decimal.
+      await L.q(`UPDATE "Project" SET "taskFields"='{cost,hours}' WHERE id=$1`, [proj.id]);
+      await L.reload(p2);
+      await U.openTask(p2, "Rica");
+      const td = U.dialog(p2);
+      const ttl = td.locator("textarea[aria-label='Título']").first();
+      await ttl.click();
+      await p2.keyboard.press("Control+a");
+      await p2.evaluate(() => navigator.clipboard.writeText("Primera línea\nsegunda línea\n"));
+      await p2.keyboard.press("Control+v");
+      await p2.keyboard.press("Enter");
+      await L.eqEventually("DESC: título pegado en dos líneas → una línea con espacio", async () => (await L.q(`SELECT title FROM "Task" WHERE id=$1`, [rid]))[0].title, "Primera línea segunda línea");
+      const cost = td.locator('input[id$="-cost"]');
+      await cost.click();
+      await p2.keyboard.type("12,5");
+      await td.locator('input[id$="-est"]').click();
+      await p2.keyboard.type("1,5");
+      await p2.keyboard.press("ArrowUp");
+      L.eq("DESC: ↑ suma un cuarto de hora conservando la coma", await td.locator('input[id$="-est"]').inputValue(), "1,75");
+      await cost.click();
+      await L.eqEventually("DESC: coste «12,5» → 12,50 € (no 125) y horas «1,75»", async () => {
+        const [r] = await L.q(`SELECT cost::text c, "estimatedHours"::text h FROM "Task" WHERE id=$1`, [rid]);
+        return [r.c, r.h];
+      }, ["12.50", "1.75"]);
+      // Enlace externo: deshacer su cambio con el detalle abierto lo muestra en el campo, y «Guardar» no lo vuelve a escribir.
+      const linkRow = async () => (await L.q(`SELECT "linkUrl" FROM "Task" WHERE id=$1`, [rid]))[0].linkUrl;
+      const linkInput = td.locator('input[type="url"]').first();
+      await linkInput.fill("https://example.com/nuevo");
+      await linkInput.press("Enter");
+      await L.eqEventually("DESC: el enlace se guarda al salir del campo", linkRow, "https://example.com/nuevo");
+      await U.undoKey(p2, "Control+z");
+      await L.eqEventually("DESC: deshacer quita el enlace", linkRow, null);
+      await L.eqEventually("DESC: el campo del enlace refleja el deshacer", () => linkInput.inputValue(), "");
+      await p2.keyboard.press("Alt+s");
+      await td.waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+      await sleep(500);
+      L.eq("DESC: «Guardar» no repone el enlace deshecho", await linkRow(), null);
+      await L.q(`UPDATE "Project" SET "taskFields"='{}' WHERE id=$1`, [proj.id]);
+      L.assertNoErrors("DESC borrador y campos", [s2]);
+      await s2.ctx.close();
+    }
+  } finally {
+    await L.q(`UPDATE "User" SET "editorMode"='WYSIWYG'`);
+    await L.q(`UPDATE "Project" SET "taskFields"='{}'`);
+  }
 }
 
 await L.closeBrowser(); await L.closeDb();

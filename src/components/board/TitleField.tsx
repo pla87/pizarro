@@ -10,6 +10,7 @@ import type { UserOption } from "@/lib/types";
 import { MentionText } from "../ui/MentionText";
 import { DictationButton, insertIntoField } from "../ui/DictationButton";
 import { MentionTextarea } from "../ui/MentionTextarea";
+import { pasteAsOneLine } from "../ui/textarea-edit";
 import { useToast } from "../ui/Toast";
 import { cn } from "../ui/cn";
 import { overTitleLimit, TITLE_INPUT_LIMIT, TITLE_INVALID_CLASSES, TitleLimitHint } from "./TitleLimit";
@@ -50,7 +51,8 @@ export function TitleField({ value, onChange, onCommit, users }: {
   const hasMentions = splitMentions(value).some((p) => typeof p !== "string");
   const ref = useRef<HTMLTextAreaElement>(null);
   const box = useRef<HTMLDivElement>(null);
-  const setTitle = (v: string) => onChange(v.replace(/\n/g, ""));
+  // Un salto de línea (dictado, arrastre) es un espacio: así no se pegan dos palabras.
+  const setTitle = (v: string) => onChange(v.replace(/[ \t]*\n\s*/g, " "));
   /** Título listo para guardar: si pasa del máximo se recorta (sin partir emojis ni menciones) y se avisa. */
   const commitClamped = (raw: string): string => {
     const c = clampTitle(raw.trim());
@@ -88,6 +90,7 @@ export function TitleField({ value, onChange, onCommit, users }: {
           ref={ref}
           value={value}
           onValueChange={setTitle}
+          onPaste={(e) => pasteAsOneLine(e, setTitle)}
           users={users}
           autoFocus={editing}
           onFocus={() => setEditing(true)}

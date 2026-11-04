@@ -14,7 +14,7 @@ import { roundMb } from "@/lib/attachment-limit";
 import { confirmDocumentKind, detectDocumentKind, documentMime, sanitizeDocumentName, type DocumentKindName } from "@/lib/document-kind";
 import { createDocumentWithinLimit } from "@/lib/documents";
 import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, processImage, removeDocumentFiles, sanitizeMime, saveDocumentFile } from "@/lib/uploads";
-import { acquireUploadSlot, BodyTooLargeError, declaredLength, readBodyLimited } from "@/lib/upload-slots";
+import { acquireUploadSlot, BodyTooLargeError, declaredLength, readBodyLimited, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError } from "@/lib/upload-slots";
 import { effectiveFileMaxMb, MULTIPART_OVERHEAD_BYTES } from "@/lib/upload-size";
 
 export const runtime = "nodejs";
@@ -54,6 +54,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
     if (!release) throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
     // Con tope real al leer: sin Content-Length (o si miente un proxy intermedio) se corta al superar el máximo.
     const form = await readBodyLimited(req, maxBytes + MULTIPART_OVERHEAD_BYTES, "formData").catch(async (err) => {
+      if (err instanceof UploadTooSlowError) throw new AppError(UPLOAD_TOO_SLOW_MESSAGE, 408);
       throw err instanceof BodyTooLargeError ? await tooBig() : err;
     });
     const file = form.get("file");

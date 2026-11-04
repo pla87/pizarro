@@ -19,7 +19,7 @@ import { Avatar } from "./Avatar";
 import { cn } from "./cn";
 import { DictationButton, insertIntoEditor } from "./DictationButton";
 import { registerDragEditor } from "./dragMove";
-import { FormatToolbar, FORMAT_BAR_CLASS, type FormatItems } from "./FormatToolbar";
+import { FormatToolbar, FORMAT_BAR_CLASS, FORMAT_BOX_CLASS, type FormatItems } from "./FormatToolbar";
 import type { MentionCommand } from "./MentionTextarea";
 
 type Option =
@@ -194,9 +194,15 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
         }
         const text = markdownFromPaste(data.getData("text/plain"), data.getData("text/html"));
         if (!text) return false;
-        event.preventDefault();
-        editorRef.current?.chain().focus().insertContent(text, { contentType: "markdown" }).run();
-        return true;
+        try {
+          if (editorRef.current?.chain().focus().insertContent(text, { contentType: "markdown" }).run()) {
+            event.preventDefault();
+            return true;
+          }
+        } catch {
+          // Markdown que el editor no admite: antes se perdía el pegado entero; ahora entra con el pegado normal (texto).
+        }
+        return false;
       },
     },
     onUpdate: ({ editor: ed }) => {
@@ -283,7 +289,8 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
     <div
       ref={rootRef}
       className={cn(
-        "group rounded-lg border border-slate-300 bg-white text-slate-900 focus-within:border-focus focus-within:ring-3 focus-within:ring-focus/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100",
+        FORMAT_BOX_CLASS,
+        "text-slate-900 dark:text-slate-100",
         className,
       )}
       onKeyDown={(e) => {

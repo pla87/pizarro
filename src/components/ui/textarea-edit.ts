@@ -29,3 +29,21 @@ export function applyTextareaEdit(el: HTMLTextAreaElement | HTMLInputElement, ed
   }
   el.setSelectionRange(edit.start, edit.end);
 }
+
+/**
+ * Pegado en un campo de una sola línea (título, subtarea): los saltos de línea pasan a ser un espacio. El navegador los
+ * quitaba sin más en un <input> («Primera línea\nsegunda» quedaba «Primera líneasegunda»).
+ */
+export function pasteAsOneLine(e: React.ClipboardEvent<HTMLInputElement | HTMLTextAreaElement>, onValueChange: (v: string) => void): void {
+  const text = e.clipboardData.getData("text/plain");
+  if (!/[\r\n]/.test(text) || e.clipboardData.files.length) return;
+  e.preventDefault();
+  const el = e.currentTarget;
+  const flat = text.replace(/\s*[\r\n]+\s*/g, " ").trim();
+  const start = el.selectionStart ?? el.value.length;
+  const end = el.selectionEnd ?? el.value.length;
+  const max = el.maxLength >= 0 ? el.maxLength : Infinity;
+  const insert = flat.slice(0, Math.max(0, max - (el.value.length - (end - start))));
+  const value = el.value.slice(0, start) + insert + el.value.slice(end);
+  applyTextareaEdit(el, { value, start: start + insert.length, end: start + insert.length }, onValueChange);
+}

@@ -11,6 +11,7 @@ import { removeTaskEvents, restoreTaskEvents } from "@/lib/task-events";
 import { renderStoredLabel } from "@/lib/undo-label";
 import { getT } from "@/i18n/server";
 import { makeT, type T } from "@/i18n/core";
+import { actionContext } from "@/lib/action-context";
 import { findUndoConflicts, type UndoConflicts } from "@/lib/undo-conflicts";
 import { applyUndo, discardEntries, fingerprintOps, mirrorOps, saveUndo, type SavedEvent, type UndoKind, type UndoOp } from "@/lib/undo";
 import * as v from "@/lib/validation";
@@ -85,7 +86,16 @@ async function applyLastChecked(kind: UndoKind, projectId: string, taskId: strin
     return { applied: await applyEntry(kind, user, pid, entry, { force: true }) };
   }
   const conflicts = await findUndoConflicts(entry, user.id, pid);
-  if (conflicts) return { conflict: { entryId: entry.id, ...conflictDialog(conflicts, kind === "REDO", await getT()) } };
+  if (conflicts) {
+    // No se ha aplicado nada: el registro lo dice así, sin historial de tareas ni aviso a las demás pestañas.
+    const store = actionContext.getStore();
+    if (store) {
+      store.message = `${kind === "REDO" ? "Rehacer" : "Deshacer"} pendiente de confirmar: otra persona cambió lo mismo después`;
+      store.events = [];
+      store.noPublish = true;
+    }
+    return { conflict: { entryId: entry.id, ...conflictDialog(conflicts, kind === "REDO", await getT()) } };
+  }
   return { applied: await applyEntry(kind, user, pid, entry) };
 }
 

@@ -18,7 +18,7 @@ import { getCurrentUser } from "@/lib/session";
 import { assertUserCanQueue, createImportJob } from "@/lib/transfer-jobs";
 import { ZipReadError } from "@/lib/zip-read";
 import { uploadDir } from "@/lib/upload-dir";
-import { acquireUploadSlot, declaredLength } from "@/lib/upload-slots";
+import { acquireUploadSlot, createSlowGuard, declaredLength, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError } from "@/lib/upload-slots";
 import { getT } from "@/i18n/server";
 
 export const runtime = "nodejs";
@@ -94,14 +94,21 @@ export async function POST(req: Request) {
     await sweepStale(dir);
     temp = path.join(dir, `${randomBytes(8).toString("hex")}.tmp`);
     let received = 0;
-    const limiter = new Transform({
+    const limiter: Transform = new Transform({
       transform(chunk: Buffer, _enc, cb) {
+        guard.add(chunk.length);
         received += chunk.length;
         if (received > max) cb(tooBig());
         else cb(null, chunk);
       },
     });
-    await pipeline(Readable.fromWeb(req.body as never), limiter, createWriteStream(temp));
+    // Subida demasiado lenta o eterna: se destruye el flujo (el pipeline falla y el finally suelta el hueco).
+    const guard = createSlowGuard(() => limiter.destroy(new UploadTooSlowError()), { expectedBytes: length ?? max });
+    try {
+      await pipeline(Readable.fromWeb(req.body as never), limiter, createWriteStream(temp));
+    } finally {
+      guard.stop();
+    }
     if (received === 0) throw new AppError("No se ha recibido ningún archivo.");
 
     const head = await readHead(temp);
@@ -121,7 +128,8 @@ export async function POST(req: Request) {
       userId: user.id, userName: user.name, path: "/api/projects/import", ip, durationMs: performance.now() - start, details: { jobId: job.id, bytes: received, isPrivate, format },
     });
     return Response.json({ ok: true, jobId: job.id }, { status: 202, headers: { "Cache-Control": "private, no-store" } });
-  } catch (err) {
+  } catch (rawErr) {
+    const err = rawErr instanceof UploadTooSlowError ? new AppError(UPLOAD_TOO_SLOW_MESSAGE, 408) : rawErr;
     const status = err instanceof AppError ? err.status : 500;
     const known = err instanceof AppError ? err : err instanceof ZipReadError ? new ArchiveError("El archivo está dañado.", err.message) : null;
     logEvent({

@@ -30,6 +30,8 @@ import { Modal } from "../ui/Modal";
 import { Popover } from "../ui/Popover";
 import { applyKindTemplate } from "@/lib/kinds-special";
 import { useConfirm } from "../ui/ConfirmDialog";
+import { copyText } from "../ui/clipboard";
+import { pasteAsOneLine } from "../ui/textarea-edit";
 import { useToast } from "../ui/Toast";
 import { boardClients, useBoard } from "./context";
 import { isTypingTarget, useShortcut } from "./shortcuts";
@@ -84,7 +86,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     const desc = descDraft.current;
     const descChanged = desc !== null && desc !== (detail?.description ?? "");
     if (title === task.title && !descChanged) return null;
-    return { taskId: task.id, ...(title !== task.title ? { title } : {}), ...(descChanged ? { description: desc } : {}) };
+    return { taskId: task.id, ...(detail ? { base: detail.textVersion } : {}), ...(title !== task.title ? { title } : {}), ...(descChanged ? { description: desc } : {}) };
   });
   const onClose = () => {
     discardDraft();
@@ -100,15 +102,31 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // Se incrementa al cambiar la descripción desde fuera del editor para que se remonte con el texto nuevo.
   const [descVersion, setDescVersion] = useState(0);
   const [link, setLink] = useState(task.linkUrl ?? "");
+  // Como el título: si el enlace cambia desde fuera (deshacer, otra persona), se muestra el nuevo. Sin esto el campo
+  // seguía con el anterior y «Guardar» lo volvía a escribir, deshaciendo el cambio ajeno.
+  const [shownLink, setShownLink] = useState(task.linkUrl ?? "");
+  if (shownLink !== (task.linkUrl ?? "")) {
+    setShownLink(task.linkUrl ?? "");
+    // Lo que se esté escribiendo (distinto de lo que se mostraba) no se pisa.
+    if (link === shownLink) setLink(task.linkUrl ?? "");
+  }
   // Campos opcionales del proyecto: formulario local que se guarda al salir de cada campo.
   const enabledFields = board.project.taskFields;
   const [fieldsForm, setFieldsForm] = useState<FieldsForm>(() => fieldsFormOf(task));
   const savedFieldsSig = JSON.stringify(fieldsFormOf(task));
   const [shownFields, setShownFields] = useState(savedFieldsSig);
   if (shownFields !== savedFieldsSig) {
-    // Cambió desde fuera (deshacer, otra persona): se muestra lo guardado.
+    // Cambió lo guardado (al guardar un campo, deshacer, otra persona): se muestra lo nuevo, pero solo en los campos que
+    // cambiaron. Antes se reponía el formulario entero y, al guardarse el coste, se borraban las horas que se estaban
+    // escribiendo en ese momento.
+    const before = JSON.parse(shownFields) as FieldsForm;
+    const saved = fieldsFormOf(task);
     setShownFields(savedFieldsSig);
-    setFieldsForm(fieldsFormOf(task));
+    setFieldsForm((cur) => {
+      const next = { ...cur };
+      for (const k of Object.keys(saved) as (keyof FieldsForm)[]) if (saved[k] !== before[k]) (next as Record<string, unknown>)[k] = saved[k];
+      return next;
+    });
   }
   const [uploading, setUploading] = useState(0);
   const [progress, setProgress] = useState<BatchProgress | null>(null);
@@ -131,13 +149,19 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const [openedAtLocal] = useState(() => new Date().toISOString());
   const [cancelling, setCancelling] = useState(false);
 
+  // Borrador recuperado: su texto se escribió sobre una versión anterior (la de `base`), y se guarda contra ella.
+  const draftBase = useRef(
+    draft && draft.taskId === task.id && (draft.title !== undefined || draft.description !== undefined) && (typeof draft.base === "string" || draft.base === null) ? draft.base : undefined,
+  );
   useEffect(() => {
     let alive = true;
     (takePrefetchedTaskDetail(task.id) ?? getTaskDetail(task.id)).then((res) => {
       if (!alive) return;
       if (res.ok) {
         initialDetail.current ??= res.data;
-        setDetail(res.data);
+        const base = draftBase.current;
+        draftBase.current = undefined;
+        setDetail(base !== undefined ? { ...res.data, textVersion: base } : res.data);
       }
       else toast(res.error, "error");
     });
@@ -169,8 +193,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
 
   /** Vuelve a leer la tarea (p. ej. si otra persona cambió su texto mientras se editaba, o tras deshacer). */
   const reload = async () => {
-    const res = await getTaskDetail(task.id);
-    if (!res.ok) return;
+    // Sin red la acción lanza: no se recarga (y no queda una promesa rechazada sin atender).
+    const res = await getTaskDetail(task.id).catch(() => null);
+    if (!res?.ok) return;
     setDetail(res.data);
     setDescVersion((n) => n + 1);
     board.refresh();
@@ -308,7 +333,10 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     const res = await tracked(updateTask(task.id, patch, editsText ? (detail?.textVersion ?? null) : undefined));
     if (!res.ok) {
       if (before) board.upsertTask(before);
-      toast(res.error, "error");
+      // El texto que no se pudo guardar (p. ej. otra persona cambió la tarea a la vez y se recarga con lo suyo) no se
+      // pierde: el aviso permite copiarlo para volver a aplicarlo.
+      const rejected = [patch.title, patch.description].filter((x): x is string => !!x?.trim()).join("\n\n");
+      toast(res.error, "error", rejected ? { label: t("Copiar tu texto"), onClick: () => void copyText(rejected).then((ok) => ok && toast(t("Copiado al portapapeles"))) } : undefined);
       if (editsText) await reload();
       return false;
     }
@@ -445,6 +473,14 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     const check = () => {
       const box = colorBox.current;
       if (!box) return;
+      // Por debajo de md la columna no tiene scroll propio (hace scroll el diálogo entero): siempre paleta abierta.
+      if (!window.matchMedia("(min-width: 768px)").matches) {
+        if (compactRef.current) {
+          compactRef.current = false;
+          setCompactColor(false);
+        }
+        return;
+      }
       // Sobra (>0) lo que habría que desplazar (altura del contenido menos el hueco útil de la columna); con la paleta compacta se suma lo que ocuparía abierta (la última medida),
       // así no oscila: solo se reabre si cabe entera.
       const cs = getComputedStyle(scroller);
@@ -465,7 +501,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     const ro = new ResizeObserver(check);
     ro.observe(scroller);
     ro.observe(content);
-    return () => ro.disconnect();
+    window.addEventListener("resize", check);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", check);
+    };
   }, [asideScroll]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -530,7 +570,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const commitLink = () => {
     const value = link.trim();
     if (value === (task.linkUrl ?? "")) return;
-    save({ linkUrl: value }, { linkUrl: value || null });
+    // Sin cambio optimista: si el servidor lo rechaza (p. ej. sin «https://»), el campo conserva lo escrito para corregirlo.
+    save({ linkUrl: value }, {});
   };
 
 
@@ -605,9 +646,13 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               descDraft.current = md;
               if (md !== null && !draftUsed) setDraftUsed(true);
             }}
-            onSave={(description) => {
+            onSave={async (description) => {
+              const previous = detail?.description ?? "";
               setDetail((d) => (d ? { ...d, description } : d));
-              save({ description }, { hasDescription: description.trim().length > 0 });
+              const ok = await save({ description }, { hasDescription: description.trim().length > 0 });
+              // Si no se guardó y nadie lo recargó (sin red), el detalle vuelve a lo guardado: no se da por guardado.
+              if (!ok) setDetail((d) => (d && d.description === description ? { ...d, description: previous } : d));
+              return ok;
             }}
             onClear={async () => {
               setDetail((d) => (d ? { ...d, description: "" } : d));
@@ -983,7 +1028,8 @@ function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, o
   initial: string | null;
   /** Texto recuperado de un borrador: el editor empieza editándolo. */
   draft?: string;
-  onSave: (v: string) => void;
+  /** Guarda; con `false` (no se guardó) el editor vuelve a abrirse con el texto escrito. */
+  onSave: (v: string) => Promise<boolean>;
   /** Borra la descripción guardada (se guarda como cualquier cambio, así que se puede deshacer). */
   onClear: () => void;
   users: UserOption[];
@@ -1028,7 +1074,8 @@ function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, o
     // Pasarse del límite no se guarda: se queda editando con el aviso del recuento.
     if (value.length > MAX_DESCRIPTION) return toast(descriptionTooLong(t, locale, MAX_DESCRIPTION), "error");
     setEditing(false);
-    if (value !== initial) onSave(value);
+    // Si falla y el editor sigue montado (no se recargó la tarea), se reabre con lo escrito para no perderlo.
+    if (value !== initial) void onSave(value).then((ok) => !ok && setEditing(true));
   };
   const cancel = () => {
     setValue(initial);
@@ -1251,7 +1298,7 @@ function Subtasks({ taskId, detail, setDetail, flushRef }: { taskId: string; det
         </SortableContext>
       </DndContext>
       <form onSubmit={add} className="mt-1 flex gap-2">
-        <input className="input py-1.5" placeholder={t("Añadir subtarea…")} value={newTitle} onChange={(e) => setNewTitle(e.target.value)} maxLength={MAX_TITLE} disabled={!detail} />
+        <input className="input py-1.5" placeholder={t("Añadir subtarea…")} value={newTitle} onChange={(e) => setNewTitle(e.target.value)} onPaste={(e) => pasteAsOneLine(e, setNewTitle)} maxLength={MAX_TITLE} disabled={!detail} />
         <button className="btn-secondary py-1.5" disabled={!newTitle.trim()} aria-label={t("Añadir subtarea")}><Plus size={15} /></button>
       </form>
     </section>
@@ -1308,6 +1355,10 @@ function SubtaskRow({ s, editing, onEdit, onRename, onDraft, onToggle, onRemove 
             setDraft(e.target.value);
             onDraft(e.target.value);
           }}
+          onPaste={(e) => pasteAsOneLine(e, (v) => {
+            setDraft(v);
+            onDraft(v);
+          })}
           onBlur={() => finish(true)}
           onKeyDown={(e) => {
             if (e.nativeEvent.isComposing) return;

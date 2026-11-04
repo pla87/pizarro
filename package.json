@@ -1,6 +1,6 @@
 {
   "name": "pizarro",
-  "version": "1.45.0",
+  "version": "1.46.0",
   "private": true,
   "license": "SEE LICENSE IN LICENSE.md",
   "type": "module",
@@ -38,6 +38,8 @@
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
     "@react-pdf/renderer": "4.9.0",
+    "@tiptap/extension-code": "3.32.0",
+    "@tiptap/extension-paragraph": "3.32.0",
     "@tiptap/extension-list": "3.32.0",
     "@tiptap/extension-mention": "3.32.0",
     "@tiptap/markdown": "3.32.0",

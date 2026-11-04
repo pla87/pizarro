@@ -2,8 +2,17 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import { handleBoundaryError } from "@/components/clientErrors";
-import { I18nProvider, useT } from "@/i18n/client";
 import type { Locale } from "@/i18n/shared";
+
+// Textos propios y sin proveedor de idioma: si el error viene de un fragmento que no carga (tras un despliegue), esta
+// pantalla no puede depender de otro fragmento (el del diccionario de inglés). Solo estas cinco frases.
+const EN: Record<string, string> = {
+  "Algo ha fallado": "Something went wrong",
+  "El error ha quedado registrado. Prueba a recargar.": "The error has been recorded. Try reloading.",
+  Reintentar: "Retry",
+  Recargar: "Reload",
+  "Volver a iniciar sesión": "Back to sign in",
+};
 
 /** Error en el propio layout raíz: se registra y se ofrece recargar. */
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
@@ -19,16 +28,14 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
   return (
     <html lang={locale}>
       <body style={{ fontFamily: "system-ui, sans-serif", display: "grid", placeItems: "center", minHeight: "100vh", margin: 0 }}>
-        <I18nProvider locale={locale}>
-          <Content reset={reset} />
-        </I18nProvider>
+        <Content reset={reset} locale={locale} />
       </body>
     </html>
   );
 }
 
-function Content({ reset }: { reset: () => void }) {
-  const t = useT();
+function Content({ reset, locale }: { reset: () => void; locale: Locale }) {
+  const t = (s: string) => (locale === "en" ? (EN[s] ?? s) : s);
   return (
     <div style={{ textAlign: "center" }}>
       <p style={{ fontSize: 18, fontWeight: 600 }}>{t("Algo ha fallado")}</p>

@@ -2,10 +2,10 @@
 // versión y sumas de control, permisos, emparejado de personas, imágenes y límites.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, test } from "node:test";
+import { after, describe, test } from "node:test";
 import { crc32 } from "node:zlib";
 import sharp from "sharp";
 import { db, loginAs, logout, makeKind, makeProject, makeTask, makeUser } from "./helpers";
@@ -20,6 +20,11 @@ import { POST as importRoute } from "../../src/app/api/projects/import/route";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-pexport-"));
 const work = await mkdtemp(path.join(tmpdir(), "pz-pexport-zip-"));
+// Las carpetas temporales se borran al terminar (cada pasada dejaba ~75 MB en /tmp).
+after(async () => {
+  await rm(process.env.UPLOAD_DIR!, { recursive: true, force: true });
+  await rm(work, { recursive: true, force: true });
+});
 let seq = 0;
 
 const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
