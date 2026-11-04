@@ -9,14 +9,23 @@ import { useT } from "@/i18n/client";
 import { cn } from "./cn";
 
 /**
- * Aspecto de la barra dentro de una caja con borde (clase `group` en el contenedor): lleva su propio borde superior y
- * laterales (con -1px de margen, justo encima de los de la caja) y el color de foco, así que en reposo su esquina
- * redondeada es la de la caja. Pegada arriba (`data-stuck`) la caja ya ha salido por arriba: la barra pierde el redondeo y
- * queda a ras del borde del área con scroll (sube 1px para que su borde superior quede fuera, recortado), de modo que los
- * bordes y el anillo de la caja siguen derechos a sus lados hasta el borde y no asoma nada de la caja por encima de los botones.
+ * Caja con barra de formato (editor con barra y modo Markdown). El borde y el anillo de foco no son los de la caja: los pinta
+ * un pseudo-elemento que va POR ENCIMA de la barra pegajosa, sin capturar el ratón. Así la barra puede ir de borde a borde
+ * por debajo de ellos y la unión barra/texto, las esquinas y los laterales son siempre los de un único trazo, sin escalones
+ * aunque el redondeo a píxeles del dispositivo (DPR 2,625…) no case entre la barra y la caja. El borde real de la caja es
+ * transparente: solo reserva el píxel de siempre.
+ */
+export const FORMAT_BOX_CLASS =
+  "relative rounded-lg border border-transparent bg-white after:pointer-events-none after:absolute after:-inset-px after:z-[11] after:rounded-[inherit] after:border after:border-slate-300 focus-within:after:border-focus focus-within:after:ring-3 focus-within:after:ring-focus/30 dark:bg-slate-900 dark:after:border-slate-700";
+
+/**
+ * Barra dentro de FORMAT_BOX_CLASS: sin borde propio salvo la línea que la separa del texto, con el fondo de la caja y
+ * extendida bajo su borde (-1px) con el mismo redondeo, así que en reposo no se distingue de la caja. Pegada arriba
+ * (`data-stuck`, cuando la curva superior de la caja ya ha salido por arriba) pierde el redondeo para tapar entero el texto
+ * que pasa por debajo; a sus lados siguen los laterales rectos de la caja, pintados encima.
  */
 export const FORMAT_BAR_CLASS =
-  "sticky top-[var(--sticky-top,0px)] z-10 -mx-px -mt-px rounded-t-lg border-x border-t border-b border-slate-300 border-b-slate-200 bg-white p-1 data-[stuck]:top-[calc(var(--sticky-top,0px)-1px)] data-[stuck]:rounded-t-none dark:border-slate-700 dark:border-b-slate-800 dark:bg-slate-900 group-focus-within:border-x-focus group-focus-within:border-t-focus";
+  "sticky top-[var(--sticky-top,0px)] z-10 -mx-px -mt-px rounded-t-lg border-b border-slate-200 bg-white p-1 data-[stuck]:rounded-t-none dark:border-slate-800 dark:bg-slate-900";
 
 /** Botón de la barra de formato: `title` en español (con el atajo entre paréntesis). */
 export interface FormatItem {
@@ -92,23 +101,31 @@ export function FormatToolbar({ items, onLeave, className, trailing }: { items: 
     return () => ro.disconnect();
   }, []);
 
-  // Marca `data-stuck` mientras la barra está pegada arriba (su caja empieza más arriba que ella).
+  // Marca `data-stuck` mientras la barra está pegada arriba, es decir, mientras su caja empieza más arriba que ella al menos
+  // lo que mide el redondeo de la caja (antes de eso la curva del borde aún se ve y la barra conserva su esquina redondeada).
+  // Se recalcula con cualquier scroll, al cambiar el tamaño de la ventana o del viewport visual (teclado, rotación, vista
+  // móvil/escritorio) y al cambiar el tamaño de la caja (contenido que crece o mengua o deja de tener scroll).
   useEffect(() => {
     const el = ref.current;
     const box = el?.parentElement;
     if (!el || !box) return;
     const update = () => {
-      // Pegada, la barra sube 1px (ver FORMAT_BAR_CLASS): se compensa para que el estado no oscile.
-      const stuck = box.getBoundingClientRect().top < el.getBoundingClientRect().top + (el.hasAttribute("data-stuck") ? 1 : 0) - 0.5;
-      if (stuck) el.setAttribute("data-stuck", "");
-      else el.removeAttribute("data-stuck");
+      const radius = parseFloat(getComputedStyle(box).borderTopLeftRadius) || 0;
+      const stuck = el.getBoundingClientRect().top - box.getBoundingClientRect().top > Math.max(radius, 1);
+      if (stuck !== el.hasAttribute("data-stuck")) el.toggleAttribute("data-stuck", stuck);
     };
     update();
+    const vv = window.visualViewport;
+    const ro = new ResizeObserver(update);
+    ro.observe(box);
     document.addEventListener("scroll", update, { capture: true, passive: true });
     window.addEventListener("resize", update);
+    vv?.addEventListener("resize", update);
     return () => {
+      ro.disconnect();
       document.removeEventListener("scroll", update, { capture: true });
       window.removeEventListener("resize", update);
+      vv?.removeEventListener("resize", update);
     };
   }, []);
 
