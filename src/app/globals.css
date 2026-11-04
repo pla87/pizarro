@@ -353,6 +353,9 @@ body {
 .prose-md > :first-child { @apply mt-0; }
 .prose-md .mention-chip { @apply rounded bg-brand-50 px-1 py-0.5 font-medium text-brand-700 dark:bg-brand-500/20 dark:text-brand-100; }
 .prose-md .mention-chip.ProseMirror-selectednode { @apply ring-2 ring-brand-500/50; }
+/* Tablas e imágenes de Markdown en el editor con barra: se conservan tal cual (no se editan dentro). */
+.prose-md table.md-table { @apply cursor-default; }
+.prose-md .ProseMirror-selectednode[data-md-table], .prose-md .ProseMirror-selectednode[data-md-image] { @apply ring-2 ring-brand-500/50; }
 .prose-md u { @apply underline decoration-1 underline-offset-2; }
 /* Editor con barra de formato (TipTap): hereda .prose-md; el contenido ocupa el alto mínimo. */
 .ProseMirror.prose-md > :last-child { @apply mb-0; }

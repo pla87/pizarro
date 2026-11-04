@@ -50,3 +50,9 @@ test("sin HTML o sin aspecto de Markdown", () => {
   assert.equal(markdownFromPaste("texto normal", "<div>texto normal</div>"), null);
   assert.equal(markdownFromPaste("", "<div>- uno</div>"), null);
 });
+
+test("R42C1: la línea de un .txt con viñeta, negrita y código se trata como Markdown", () => {
+  const line = "* **Guardado Local en Borrador (`localStorage`):**";
+  assert.equal(markdownFromPaste(line, ""), line);
+  assert.equal(markdownFromPaste(line, `<meta charset="utf-8"><div><span>${line}</span></div>`), line);
+});

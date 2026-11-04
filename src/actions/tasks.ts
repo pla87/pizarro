@@ -12,7 +12,7 @@ import { MAX_TITLE } from "@/lib/constants";
 import { clampTitle } from "@/lib/title-clamp";
 import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { assertCanBlock, blockProblem, lockBlocking } from "@/lib/blocking";
-import { addUndo, captureTasks, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchEverything, touchedTask, type TaskField, type UndoOp } from "@/lib/undo";
+import { addUndo, captureTasks, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchEverything, touchedTask, type OthersActivity, type TaskField, type UndoOp } from "@/lib/undo";
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
@@ -1050,6 +1050,26 @@ const snapshotSchema = z.object({
 });
 export type TaskEditSnapshot = z.input<typeof snapshotSchema>;
 
+/**
+ * Lo que otras personas (o procesos sin autor) hicieron en la tarea desde `since`: sus entradas de deshacer/rehacer y su
+ * historial. `complete` es false si alguna de sus pilas se llenó en el rato o hay cambios sin autor en el historial.
+ */
+async function othersActivity(userId: string, projectId: string, taskId: string, since: Date): Promise<OthersActivity> {
+  const [entries, events] = await Promise.all([
+    db.undoEntry.findMany({ where: { projectId, userId: { not: userId }, createdAt: { gte: since } }, orderBy: { createdAt: "asc" }, select: { userId: true, kind: true, ops: true } }),
+    db.taskEvent.findMany({ where: { taskId, createdAt: { gte: since }, OR: [{ userId: null }, { userId: { not: userId } }] }, select: { userId: true, code: true } }),
+  ]);
+  const byUser = new Map<string, typeof entries>();
+  for (const e of entries) byUser.set(e.userId, [...(byUser.get(e.userId) ?? []), e]);
+  const relevant = events.filter((e) => e.code !== "comment");
+  return {
+    touched: touchedTask(entries, taskId),
+    complete: ![...byUser.values()].some(entriesMayBeTrimmed) && !relevant.some((e) => e.userId === null),
+    fields: relevant.some((e) => e.code !== "subtask"),
+    subtasks: relevant.some((e) => e.code === "subtask"),
+  };
+}
+
 /** Ejecuta la comprobación y dice si pasó (para saltarse un campo cuyo destino ya no existe, sin fallar). */
 async function passes(check: () => Promise<unknown>): Promise<boolean> {
   try {
@@ -1091,7 +1111,8 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
     const mine = touchedTask(entries, id);
     // Si esas entradas llenan una pila, las primeras del rato pudieron descartarse (p. ej. marcar 12 subtareas): no se sabe
     // todo lo que hizo, así que vuelve todo lo que guarda la instantánea. El texto sigue protegido por `since` (más abajo).
-    if (entriesMayBeTrimmed(entries)) touchEverything(mine, id, snap.subtasks, subs.map((s) => s.id));
+    // Lo que otras personas hicieron en el rato no se pisa: se lee de sus entradas y de su historial.
+    if (entriesMayBeTrimmed(entries)) touchEverything(mine, id, snap.subtasks, subs.map((s) => s.id), await othersActivity(user.id, projectId, id, openedAt));
     const touched = (k: TaskField) => mine.fields.has(k);
 
     // --- Campos de la tarjeta: solo los que tocó, solo si difieren y solo si el destino sigue existiendo.
