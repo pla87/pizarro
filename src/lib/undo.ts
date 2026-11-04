@@ -281,21 +281,53 @@ export function entriesMayBeTrimmed(entries: { kind: UndoKind }[]): boolean {
 }
 
 /**
- * Cuando las entradas pudieron recortarse (entriesMayBeTrimmed), lo que hizo la persona ya no se sabe entero: se da por
- * tocado todo lo que la instantánea del detalle permite devolver (todos los campos, las etiquetas, las subtareas que
- * había, que vuelven a su estado; las que no había se quitan). Adjuntos y enlaces siguen por su autor y fecha.
+ * Lo que otras personas hicieron en la tarea en el mismo rato (para no pisarlo en touchEverything): lo que dicen sus
+ * entradas de deshacer y rehacer (`touched`), si esas entradas lo cuentan todo (`complete`: ninguna pila llena y ningún
+ * cambio sin autor) y si su historial (TaskEvent) registra cambios en la tarjeta (`fields`) o en las subtareas (`subtasks`).
  */
-export function touchEverything(out: TouchedTask, taskId: string, snapSubtasks: { id: string; title: string; done: boolean; position: number }[] | undefined, currentSubtaskIds: string[]): void {
-  for (const k of TASK_DATA_KEYS) out.fields.add(k);
-  out.labels = true;
+export interface OthersActivity {
+  touched: TouchedTask;
+  complete: boolean;
+  fields: boolean;
+  subtasks: boolean;
+}
+
+/** Sin actividad de otras personas. */
+export const NO_OTHERS: OthersActivity = { touched: touchedTask([], ""), complete: true, fields: false, subtasks: false };
+
+/**
+ * Cuando las entradas pudieron recortarse (entriesMayBeTrimmed), lo que hizo la persona ya no se sabe entero: se da por
+ * tocado lo que la instantánea del detalle permite devolver (campos, etiquetas, las subtareas que había, que vuelven a su
+ * estado; las que no había se quitan), MENOS lo que hicieron otras personas en ese rato (`others`): sus campos, sus
+ * subtareas nuevas y las que borraron no se tocan. Si no se puede saber qué hicieron (sus pilas también se llenaron o
+ * hay cambios sin autor), en esa parte (tarjeta o subtareas) solo vuelve lo que las entradas conservadas atribuyen a esta
+ * persona: antes que deshacer de más, se deshace de menos. Adjuntos y enlaces siguen por su autor y fecha.
+ */
+export function touchEverything(
+  out: TouchedTask,
+  taskId: string,
+  snapSubtasks: { id: string; title: string; done: boolean; position: number }[] | undefined,
+  currentSubtaskIds: string[],
+  others: OthersActivity = NO_OTHERS,
+): void {
+  if (!others.fields || others.complete) {
+    for (const k of TASK_DATA_KEYS) if (!others.touched.fields.has(k)) out.fields.add(k);
+    if (!others.touched.labels) out.labels = true;
+  }
   if (!snapSubtasks) return;
+  // ¿Se sabe qué subtareas tocaron otras personas? (o no tocaron ninguna)
+  if (others.subtasks && !others.complete) return;
+  const theirs = others.touched;
   const before = new Set(snapSubtasks.map((s) => s.id));
-  for (const id of currentSubtaskIds) if (!before.has(id)) out.subtasksCreated.add(id);
+  for (const id of currentSubtaskIds) if (!before.has(id) && !theirs.subtasksCreated.has(id)) out.subtasksCreated.add(id);
   const now = new Set(currentSubtaskIds);
   for (const s of snapSubtasks) {
-    out.subtaskFields.set(s.id, new Set<SubtaskKey>(["title", "done", "position"]));
+    const keys = out.subtaskFields.get(s.id) ?? new Set<SubtaskKey>();
+    const changedByOthers = theirs.subtaskFields.get(s.id);
+    for (const k of ["title", "done", "position"] as const) if (!changedByOthers?.has(k)) keys.add(k);
+    if (keys.size) out.subtaskFields.set(s.id, keys);
     out.subtasksCreated.delete(s.id);
-    if (!now.has(s.id) && !out.subtasksDeleted.has(s.id)) out.subtasksDeleted.set(s.id, { row: { ...s, taskId }, byUndo: true });
+    if (!now.has(s.id) && !out.subtasksDeleted.has(s.id) && !theirs.subtasksDeleted.has(s.id)) out.subtasksDeleted.set(s.id, { row: { ...s, taskId }, byUndo: true });
   }
 }
 

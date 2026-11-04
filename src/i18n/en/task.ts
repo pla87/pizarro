@@ -90,4 +90,5 @@ export const task: Record<string, string> = {
   "Demasiadas subtareas seguidas. Espera un momento.": "Too many subtasks in a row. Please wait a moment.",
   "Título recortado a {max} caracteres": "Title shortened to {max} characters",
   "{n} títulos recortados a {max} caracteres": "{n} titles shortened to {max} characters",
+  "Copiar tu texto": "Copy your text",
 };

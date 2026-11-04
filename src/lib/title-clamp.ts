@@ -15,19 +15,35 @@ export function titleLength(text: string): number {
   return mentionsToPlain(text).length;
 }
 
-/** Trozos de texto sin partir emojis ni secuencias unidas (bandera, familia, tono de piel). */
-function graphemes(text: string): string[] {
-  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
-    return Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text), (s) => s.segment);
-  }
-  return Array.from(text);
+let segmenter: Intl.Segmenter | null | undefined;
+
+/**
+ * Trozos de texto sin partir emojis ni secuencias unidas (bandera, familia, tono de piel). Es perezoso: quien lo recorre
+ * se para al llenar el máximo, así que un texto enorme (p. ej. 1 MB pegado en el título) no se segmenta entero.
+ */
+function* graphemes(text: string): Generator<string> {
+  segmenter ??= typeof Intl !== "undefined" && "Segmenter" in Intl ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
+  if (segmenter) for (const s of segmenter.segment(text)) yield s.segment;
+  else yield* text;
 }
+
+// Último resultado: el servidor recorta el título al validarlo y vuelve a preguntar si se recortó (aviso al cliente).
+let last: { raw: string; max: number; result: ClampedTitle } | null = null;
 
 /**
  * Corta el título a `max` caracteres visibles. No parte un emoji ni una mención @[Nombre](user:ID): si la mención
  * no cabe entera, se queda fuera. El corte no deja espacios al final.
  */
 export function clampTitle(raw: string, max = MAX_TITLE): ClampedTitle {
+  // El texto visible nunca es más largo que el original: lo corto no necesita más cálculo.
+  if (raw.length <= max) return { value: raw, clipped: false };
+  if (last && last.raw === raw && last.max === max) return last.result;
+  const result = clampLong(raw, max);
+  last = { raw, max, result };
+  return result;
+}
+
+function clampLong(raw: string, max: number): ClampedTitle {
   if (titleLength(raw) <= max) return { value: raw, clipped: false };
   let used = 0;
   let out = "";

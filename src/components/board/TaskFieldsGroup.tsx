@@ -7,6 +7,38 @@ import { HOURS_STEP, MAX_CLIENT, PRIORITY_LABEL, TASK_PRIORITIES, type TaskField
 
 export { EMPTY_FIELDS_FORM, fieldsError, fieldsForCreate, fieldsFormOf, fieldsPatch, type FieldsForm } from "@/lib/fields-form";
 
+/**
+ * Importe u horas: campo de texto con teclado decimal que admite coma o punto (el servidor entiende los dos). Con
+ * type="number", Chrome en un sistema en inglés descartaba la coma al teclear («12,5» se guardaba como 125) y Firefox
+ * dejaba el valor vacío (se borraba lo guardado). ↑ ↓ suman o restan `step`, como antes.
+ */
+function DecimalInput({ value, onChange, step, ...rest }: Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "step" | "type"> & {
+  value: string;
+  onChange: (value: string) => void;
+  step: number;
+}) {
+  return (
+    <input
+      {...rest}
+      type="text"
+      inputMode="decimal"
+      autoComplete="off"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if ((e.key !== "ArrowUp" && e.key !== "ArrowDown") || e.altKey || e.ctrlKey || e.metaKey) return;
+        const raw = value.trim();
+        const comma = raw.includes(",");
+        if (raw !== "" && !/^\d+([.,]\d*)?$/.test(raw)) return;
+        e.preventDefault();
+        const n = Math.max(0, Math.round(((raw === "" ? 0 : Number(raw.replace(",", "."))) + (e.key === "ArrowUp" ? step : -step)) * 100) / 100);
+        const text = String(n);
+        onChange(comma ? text.replace(".", ",") : text);
+      }}
+    />
+  );
+}
+
 /** Grupo compacto «Campos» con los campos opcionales que el proyecto tiene activados. */
 export function TaskFieldsGroup({
   enabled, value, onChange, onCommit, dueDate, clients = [], disabled = false,
@@ -56,7 +88,7 @@ export function TaskFieldsGroup({
             <label className="label" htmlFor={`${uid}-cost`}>{t("Coste")}</label>
             <div className="flex items-center gap-2">
               <div className="relative min-w-0 flex-1">
-                <input id={`${uid}-cost`} type="number" inputMode="decimal" min={0} step={0.01} className="input py-1 pr-7" value={value.cost} onChange={(e) => onChange({ cost: e.target.value })} />
+                <DecimalInput id={`${uid}-cost`} step={0.01} className="input py-1 pr-7" value={value.cost} onChange={(cost) => onChange({ cost })} />
                 <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-sm text-slate-500" aria-hidden>€</span>
               </div>
               <label className="flex shrink-0 items-center gap-1 text-xs">
@@ -70,11 +102,11 @@ export function TaskFieldsGroup({
           <>
             <div className="min-w-0">
               <label className="label" htmlFor={`${uid}-est`}>{t("Horas estimadas")}</label>
-              <input id={`${uid}-est`} type="number" inputMode="decimal" min={0} step={HOURS_STEP} className="input py-1" value={value.estimatedHours} onChange={(e) => onChange({ estimatedHours: e.target.value })} />
+              <DecimalInput id={`${uid}-est`} step={HOURS_STEP} className="input py-1" value={value.estimatedHours} onChange={(estimatedHours) => onChange({ estimatedHours })} />
             </div>
             <div className="min-w-0">
               <label className="label" htmlFor={`${uid}-act`}>{t("Horas reales")}</label>
-              <input id={`${uid}-act`} type="number" inputMode="decimal" min={0} step={HOURS_STEP} className="input py-1" value={value.actualHours} onChange={(e) => onChange({ actualHours: e.target.value })} />
+              <DecimalInput id={`${uid}-act`} step={HOURS_STEP} className="input py-1" value={value.actualHours} onChange={(actualHours) => onChange({ actualHours })} />
             </div>
           </>
         )}

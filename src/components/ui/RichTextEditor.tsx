@@ -194,9 +194,15 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
         }
         const text = markdownFromPaste(data.getData("text/plain"), data.getData("text/html"));
         if (!text) return false;
-        event.preventDefault();
-        editorRef.current?.chain().focus().insertContent(text, { contentType: "markdown" }).run();
-        return true;
+        try {
+          if (editorRef.current?.chain().focus().insertContent(text, { contentType: "markdown" }).run()) {
+            event.preventDefault();
+            return true;
+          }
+        } catch {
+          // Markdown que el editor no admite: antes se perdía el pegado entero; ahora entra con el pegado normal (texto).
+        }
+        return false;
       },
     },
     onUpdate: ({ editor: ed }) => {

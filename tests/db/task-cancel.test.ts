@@ -152,3 +152,70 @@ describe("Cancelar la edición (restoreTaskSnapshot)", () => {
     assert.equal(await db.subtask.count({ where: { taskId: task.id, done: true } }), 12);
   });
 });
+
+describe("Cancelar con la pila llena no pisa el trabajo de otras personas", () => {
+  test("Ana abre, Beto cambia el responsable, añade y borra subtareas; Ana hace 12 acciones y Cancela: lo de Beto se queda", async () => {
+    const ana = await makeUser({ name: "Ana" });
+    const beto = await makeUser({ name: "Beto" });
+    const f = await makeProject();
+    await assign(f, beto);
+    await loginAs(ana);
+    const titles = Array.from({ length: 12 }, (_, i) => `sub ${i + 1}`);
+    const task = await makeTask(f, { title: "Compartida", subtasks: [...titles, "la borra Beto"] });
+    const snap = await snapshotOf(task.id);
+    const subs = await db.subtask.findMany({ where: { taskId: task.id }, orderBy: { position: "asc" } });
+
+    // Beto, con el detalle de Ana abierto: responsable, una subtarea nueva, borra otra y renombra la primera.
+    await loginAs(beto);
+    expectOk(await updateTask(task.id, { assigneeId: beto.id }));
+    const deBeto = expectOk(await addSubtask(task.id, "de Beto"));
+    expectOk(await deleteSubtask(subs[12]!.id));
+    expectOk(await updateSubtask(subs[0]!.id, { title: "sub 1 (Beto)" }));
+
+    // Ana: el título y 12 marcas (la pila se llena y las primeras entradas se descartan).
+    await loginAs(ana);
+    expectOk(await updateTask(task.id, { title: "Compartida (Ana)" }));
+    for (const s of subs.slice(0, 12)) expectOk(await updateSubtask(s.id, { done: true }));
+    const deAna = expectOk(await addSubtask(task.id, "de Ana"));
+    assert.equal(await undoCount(ana.id, f.project.id), 10);
+
+    expectOk(await restoreTaskSnapshot(task.id, snap, null));
+    const back = await db.task.findUniqueOrThrow({ where: { id: task.id }, include: { subtasks: { orderBy: { position: "asc" } } } });
+    // Lo de Ana vuelve…
+    assert.equal(back.title, "Compartida");
+    assert.ok(back.subtasks.every((s) => !s.done));
+    assert.ok(!back.subtasks.some((s) => s.id === (deAna as { id: string }).id));
+    // …y lo de Beto se queda.
+    assert.equal(back.assigneeId, beto.id);
+    assert.ok(back.subtasks.some((s) => s.id === (deBeto as { id: string }).id), "la subtarea de Beto sigue");
+    assert.ok(!back.subtasks.some((s) => s.id === subs[12]!.id), "la que borró Beto no resucita");
+    assert.equal(back.subtasks.find((s) => s.id === subs[0]!.id)?.title, "sub 1 (Beto)");
+  });
+
+  test("si no se sabe qué hizo la otra persona (su pila también se llenó), solo vuelve lo atribuible a quien cancela", async () => {
+    const ana = await makeUser({ name: "Ana" });
+    const beto = await makeUser({ name: "Beto" });
+    const f = await makeProject();
+    await assign(f, beto);
+    await loginAs(ana);
+    const task = await makeTask(f, { title: "Otra", subtasks: Array.from({ length: 12 }, (_, i) => `s${i}`) });
+    const other = await makeTask(f, { title: "Ajena" });
+    const snap = await snapshotOf(task.id);
+    const subs = await db.subtask.findMany({ where: { taskId: task.id }, orderBy: { position: "asc" } });
+
+    await loginAs(beto);
+    expectOk(await updateTask(task.id, { assigneeId: beto.id }));
+    const deBeto = expectOk(await addSubtask(task.id, "de Beto"));
+    // Beto sigue trabajando en otra tarea hasta llenar su pila: sus primeras entradas (las de esta tarea) se pierden.
+    for (let i = 0; i < 11; i++) expectOk(await updateTask(other.id, { title: `Ajena ${i}` }));
+
+    await loginAs(ana);
+    for (const s of subs) expectOk(await updateSubtask(s.id, { done: true }));
+    expectOk(await restoreTaskSnapshot(task.id, snap, null));
+    const back = await db.task.findUniqueOrThrow({ where: { id: task.id }, include: { subtasks: true } });
+    assert.equal(back.assigneeId, beto.id, "el responsable que puso Beto se queda");
+    assert.ok(back.subtasks.some((s) => s.id === (deBeto as { id: string }).id), "la subtarea de Beto se queda");
+    // Las marcas de Ana que siguen en su pila (las 10 últimas) sí se deshacen.
+    assert.ok(back.subtasks.filter((s) => s.done).length <= 2);
+  });
+});

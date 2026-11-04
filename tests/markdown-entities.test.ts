@@ -14,7 +14,17 @@ test("solo se conserva lo que cambiaría el Markdown", () => {
   assert.equal(normalizeEditorMarkdown("- &gt; tampoco"), "- \\> tampoco");
   assert.equal(normalizeEditorMarkdown("etiqueta &lt;div&gt;"), "etiqueta &lt;div>");
   assert.equal(normalizeEditorMarkdown("literal &amp;gt;"), "literal &amp;gt;");
-  assert.equal(normalizeEditorMarkdown("`a &lt;b&gt;`"), "`a <b>`");
+  // El código lo deja TipTap tal cual: una entidad escrita en él es parte del código.
+  assert.equal(normalizeEditorMarkdown("`a &lt;b&gt;` y &lt;- b"), "`a &lt;b&gt;` y <- b");
+  assert.equal(normalizeEditorMarkdown("```html\n<p>&amp;&nbsp;</p>\n```"), "```html\n<p>&amp;&nbsp;</p>\n```");
+});
+
+test("sin párrafos vacíos ni saltos al final (lo que deja el editor tras pegar)", () => {
+  assert.equal(normalizeEditorMarkdown("- **a**  \n\n\n"), "- **a**");
+  assert.equal(normalizeEditorMarkdown("texto\n\n&nbsp;\n\n&nbsp;"), "texto");
+  assert.equal(normalizeEditorMarkdown("&nbsp;"), "");
+  assert.equal(normalizeEditorMarkdown("uno\n\n&nbsp;\n\ndos"), "uno\n\n&nbsp;\n\ndos");
+  assert.equal(normalizeEditorMarkdown("escrito &amp;nbsp;"), "escrito &amp;nbsp;");
 });
 
 test("decodeEntities", () => {

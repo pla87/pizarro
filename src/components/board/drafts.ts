@@ -33,6 +33,11 @@ export interface EditTaskDraft {
   title?: string;
   /** Descripción en edición (si se estaba editando). */
   description?: string;
+  /**
+   * Versión del texto sobre la que se escribió (TaskDetail.textVersion). Al recuperar el borrador se guarda contra ella:
+   * si otra persona cambió el texto entretanto, se avisa del conflicto en vez de pisar su cambio.
+   */
+  base?: string | null;
 }
 
 export const draftKey = (kind: "new" | "edit", userId: string, projectId: string) => `pz-draft-${kind}:${userId}:${projectId}`;

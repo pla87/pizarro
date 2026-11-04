@@ -20,11 +20,15 @@ function decodeProse(text: string): string {
 }
 
 /** Markdown que sale del editor con barra → Markdown con los caracteres reales. */
-export function normalizeEditorMarkdown(md: string): string {
+export function normalizeEditorMarkdown(raw: string): string {
+  // Lo que sobra al final: TipTap guarda cada párrafo vacío como «&nbsp;» y un salto de línea como dos espacios; tras pegar
+  // queda un párrafo vacío detrás y la descripción se guardaba con «  \n\n\n» o «&nbsp;» al final.
+  const md = raw.replace(/(?:\s|&nbsp;)+$/, "");
   if (!md.includes("&")) return md;
-  // Bloques ``` y código en línea: ahí las entidades no se interpretan, se decodifican siempre.
+  // Bloques ``` y código en línea: el editor no los codifica (TipTap deja el código tal cual), así que se guardan como
+  // están. Decodificarlos convertía un `&amp;` o un `&nbsp;` escrito en un fragmento de código en `&` o en un espacio.
   return md
     .split(/(```[\s\S]*?```|`[^`\n]+`)/g)
-    .map((part, i) => (i % 2 === 1 ? decodeEntities(part) : decodeProse(part)))
+    .map((part, i) => (i % 2 === 1 ? part : decodeProse(part)))
     .join("");
 }
