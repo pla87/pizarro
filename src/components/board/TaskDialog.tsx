@@ -32,6 +32,7 @@ import { applyKindTemplate } from "@/lib/kinds-special";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { copyText } from "../ui/clipboard";
 import { pasteAsOneLine } from "../ui/textarea-edit";
+import { usePasteFiles } from "../ui/pasteFiles";
 import { useToast } from "../ui/Toast";
 import { boardClients, useBoard } from "./context";
 import { isTypingTarget, useShortcut } from "./shortcuts";
@@ -426,13 +427,6 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     await reloadRef.current();
   };
 
-  const onPaste = (e: React.ClipboardEvent) => {
-    const files = filesFrom(e.clipboardData.items);
-    if (files.length) {
-      e.preventDefault();
-      upload(files);
-    }
-  };
   const dropping = useFileDrop(upload);
 
   const remove = async () => {
@@ -459,6 +453,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     shortcutRef.current = { saveAndClose, archive };
   });
   const rootRef = useRef<HTMLDivElement>(null);
+  // Pegar archivos (Ctrl/⌘+V) en cualquier parte del detalle, también fuera de las cajas: una vez por pegado.
+  usePasteFiles((files) => void upload(files), () => rootRef.current?.closest("[role=dialog]") ?? null);
   // Columna derecha (escritorio): si sus campos no caben y necesitaría scroll, la paleta de color pasa a un botón con selector.
   // (El diálogo se pinta tras la hidratación: el elemento se guarda en estado para empezar a medir cuando existe.)
   const [asideScroll, setAsideScroll] = useState<HTMLDivElement | null>(null);
@@ -630,7 +626,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         </div>
       }
     >
-      <div ref={rootRef} onPaste={onPaste} className="grid gap-6 md:min-h-0 md:flex-[1_1_auto] md:grid-cols-[minmax(0,1fr)_18rem] md:grid-rows-[minmax(0,1fr)]">
+      <div ref={rootRef} className="grid gap-6 md:min-h-0 md:flex-[1_1_auto] md:grid-cols-[minmax(0,1fr)_18rem] md:grid-rows-[minmax(0,1fr)]">
         {/* Margen negativo con relleno igual: deja sitio al anillo de foco (3 px + 2 de separación) que el scroll recortaría. */}
         <div className="min-w-0 space-y-6 md:-m-2 md:overflow-y-auto md:p-2 md:[--sticky-top:-0.5rem]">
           <TaskViewers taskId={task.id} />

@@ -23,6 +23,7 @@ import { fieldsForDraft, fieldsFromDraft } from "@/lib/fields-form";
 import { DescriptionField } from "../ui/DescriptionField";
 import { DictationButton, insertIntoField } from "../ui/DictationButton";
 import { pasteAsOneLine } from "../ui/textarea-edit";
+import { usePasteFiles } from "../ui/pasteFiles";
 import { applyKindTemplate, mergeSubtasks } from "@/lib/kinds-special";
 import { MAX_DESCRIPTION, MAX_TITLE } from "@/lib/constants";
 import { TypeSelector } from "./TaskDialog";
@@ -319,6 +320,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
 
   // Alt+S crea la tarea (también escribiendo), como Ctrl+Enter. Con dos modales a la vez, el que tiene el foco.
   const formRef = useRef<HTMLFormElement>(null);
+  // Pegar archivos (Ctrl/⌘+V) con el foco en cualquier parte del diálogo, también fuera de las cajas: una vez por pegado.
+  usePasteFiles(addFiles, () => formRef.current?.closest("[role=dialog]") ?? null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.altKey || e.code !== "KeyS" || e.ctrlKey || e.metaKey || e.shiftKey || e.repeat || e.defaultPrevented) return;
@@ -361,12 +364,6 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) {
           e.preventDefault();
           e.currentTarget.requestSubmit();
-        }
-      }} onPaste={(e) => {
-        const pasted = filesFrom(e.clipboardData.items);
-        if (pasted.length) {
-          e.preventDefault();
-          addFiles(pasted);
         }
       }}>
         <div>
