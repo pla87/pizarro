@@ -5,7 +5,7 @@ import { Archive, Camera, Check, ChevronDown, Copy, Download, ExternalLink, File
 import Link from "next/link";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  addSubtask, archiveTask, deleteAttachment, deleteSubtask, deleteTask, deleteTaskLink, getTaskDetail,
+  addSubtask, addSubtasks, archiveTask, deleteAttachment, deleteSubtask, deleteTask, deleteTaskLink, getTaskDetail,
   moveTask, reorderSubtask, restoreTaskSnapshot, updateSubtask, updateTask,
 } from "@/actions/tasks";
 import { undoEntry, undoLast } from "@/actions/undo";
@@ -16,7 +16,7 @@ import { useIntlLocale, useT } from "@/i18n/client";
 import { dueStatus } from "@/lib/dates";
 import { mentionsToPlain } from "@/lib/mentions";
 import { defaultRecurrenceDay, type RecurrenceRule } from "@/lib/recurrence-date";
-import { COLOR_NAME, isWhite, kindBadgeStyle, MAX_TITLE, onColor, swatchBorder } from "@/lib/constants";
+import { COLOR_NAME, isWhite, kindBadgeStyle, MAX_SUBTASKS, MAX_TITLE, onColor, swatchBorder } from "@/lib/constants";
 import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
 import { ColorPicker } from "../ui/ColorPicker";
 import { cn } from "../ui/cn";
@@ -49,6 +49,9 @@ import { UploadProgress } from "./UploadProgress";
 import { batchErrorMessage, createProgressAggregator, filesFrom, formatBytes, monotonicTotals, skippedMessage, uploadBatch, useFileDrop, type BatchProgress } from "./upload";
 import { planUploads } from "@/lib/upload-queue";
 import { formatDate } from "@/lib/format";
+import { normalizeLinkUrl } from "@/lib/link-url";
+import { sortByFileName } from "@/lib/attachment-sort";
+import { subtaskLines } from "@/lib/subtask-lines";
 import { fieldsError, fieldsFormOf, fieldsPatch, TaskFieldsGroup, type FieldsForm } from "./TaskFieldsGroup";
 import { draftKey, useDraftAutosave, type EditTaskDraft } from "./drafts";
 import { setUndoTask, UNDONE_EVENT } from "../undo-context";
@@ -91,6 +94,44 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const onClose = () => {
     discardDraft();
     close();
+  };
+  // Subtarea nueva a medio escribir (la comunica la lista de subtareas): cerrar con ella pide confirmación.
+  const subtaskDraftPending = useRef<(() => boolean) | null>(null);
+  // ¿La descripción abierta tiene cambios de la persona? (la comunica el editor; ver DescriptionEditor).
+  const descDirtyCheck = useRef<(() => boolean) | null>(null);
+  const confirmingClose = useRef(false);
+  /**
+   * Cerrar con la X, clic fuera, Escape o el botón atrás: si la descripción tiene cambios sin guardar (o hay una subtarea
+   * a medio escribir), se pregunta antes de descartarlos; sin cambios se cierra directamente. Lo que se guarda al salir de
+   * su campo (título, enlace, campos opcionales, renombrar una subtarea) se guarda también al cerrar. `false` si no se cerró.
+   */
+  const requestClose = async (): Promise<boolean> => {
+    if (confirmingClose.current) return false;
+    const desc = descLive.current;
+    const descDirty = desc !== null && desc !== (detail?.description ?? "") && (descDirtyCheck.current?.() ?? true);
+    const subDirty = subtaskDraftPending.current?.() ?? false;
+    if (descDirty || subDirty) {
+      confirmingClose.current = true;
+      const ok = await confirm({
+        title: t("Cambios sin guardar"),
+        message: descDirty && subDirty
+          ? t("La descripción tiene cambios sin guardar y hay una subtarea a medio escribir. ¿Cerrar la tarea y descartarlos?")
+          : descDirty
+            ? t("La descripción tiene cambios sin guardar. ¿Cerrar la tarea y descartarlos?")
+            : t("Hay una subtarea a medio escribir. ¿Cerrar la tarea y descartarla?"),
+        confirmLabel: t("Descartar cambios"),
+        cancelLabel: t("Seguir editando"),
+        danger: true,
+      }).finally(() => {
+        confirmingClose.current = false;
+      });
+      if (!ok) return false;
+    }
+    // Salir del campo con el foco guarda lo que se guarda al salir (blur): sin esto, Escape o el clic fuera lo perdían.
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && rootRef.current?.closest("[role=dialog]")?.contains(active)) active.blur();
+    onClose();
+    return true;
   };
 
   // Si el título cambia desde fuera (recarga tras un conflicto, deshacer), se muestra el nuevo.
@@ -229,7 +270,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     const desc = descLive.current;
     if (desc !== null && desc.length > MAX_DESCRIPTION) return toast(descriptionTooLong(t, locale, MAX_DESCRIPTION), "error");
     if (desc !== null && desc !== (detail?.description ?? "")) patch.description = desc;
-    const linkValue = link.trim();
+    const linkValue = normalizeLinkUrl(link);
+    if (linkValue !== link) setLink(linkValue);
     if (linkValue !== (task.linkUrl ?? "")) patch.linkUrl = linkValue;
     if (!(await commitFields(fieldsForm))) return;
     if (patch.title !== undefined || patch.description !== undefined || patch.linkUrl !== undefined) {
@@ -405,8 +447,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listedAttachments, task.id]);
 
-  const images = detail?.attachments.filter((a) => a.isImage) ?? [];
-  const files = detail?.attachments.filter((a) => !a.isImage) ?? [];
+  // Por nombre (orden natural, sin mayúsculas ni acentos), venga la lista de donde venga: carga, subida, deshacer o
+  // recarga por cambios de otras personas. Las imágenes del visor siguen el mismo orden que las miniaturas.
+  const sortedAttachments = sortByFileName(detail?.attachments ?? [], (a) => a.originalName, locale);
+  const images = sortedAttachments.filter((a) => a.isImage);
+  const files = sortedAttachments.filter((a) => !a.isImage);
 
   // Borrar un adjunto se puede deshacer (el fichero se conserva mientras exista la entrada), así que no se pregunta.
   const removeAttachment = async (id: string) => {
@@ -459,54 +504,82 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     shortcutRef.current = { saveAndClose, archive };
   });
   const rootRef = useRef<HTMLDivElement>(null);
-  // Columna derecha (escritorio): si sus campos no caben y necesitaría scroll, la paleta de color pasa a un botón con selector.
-  // (El diálogo se pinta tras la hidratación: el elemento se guarda en estado para empezar a medir cuando existe.)
-  const [asideScroll, setAsideScroll] = useState<HTMLDivElement | null>(null);
+  // Columna derecha (escritorio): si sus campos no caben, primero la paleta de color pasa a un botón con selector; si aun así
+  // no caben, el diálogo entero pasa a tener un solo scroll (`flow`): las dos columnas crecen con su contenido y desplaza el
+  // cuerpo del diálogo, con los botones de abajo fijos. Así la columna nunca tiene un scroll propio (antes salía una barra
+  // inútil cuando sobraban 2-3 px). La medida no depende del modo (cuánto necesita la columna frente al alto útil del
+  // cuerpo), así que no oscila. (El diálogo se pinta tras la hidratación: el elemento se guarda en estado para medir cuando existe.)
+  const [asideEl, setAsideEl] = useState<HTMLElement | null>(null);
   const colorBox = useRef<HTMLDivElement>(null);
   const [compactColor, setCompactColor] = useState(false);
   const compactRef = useRef(false);
   const paletteH = useRef(0);
+  const [flow, setFlow] = useState(false);
+  const flowRef = useRef(false);
   useLayoutEffect(() => {
-    const scroller = asideScroll;
+    const aside = asideEl;
+    const scroller = aside?.querySelector<HTMLElement>("[data-aside-scroll]");
     const content = scroller?.firstElementChild;
-    if (!scroller || !content) return;
+    // Cuerpo del Modal (el que hace scroll en modo `flow`).
+    const body = rootRef.current?.parentElement;
+    if (!aside || !scroller || !content || !body) return;
+    const setCompact = (v: boolean) => {
+      if (v === compactRef.current) return;
+      compactRef.current = v;
+      setCompactColor(v);
+    };
+    const setFlowMode = (v: boolean) => {
+      if (v === flowRef.current) return;
+      flowRef.current = v;
+      setFlow(v);
+    };
     const check = () => {
       const box = colorBox.current;
       if (!box) return;
       // Por debajo de md la columna no tiene scroll propio (hace scroll el diálogo entero): siempre paleta abierta.
       if (!window.matchMedia("(min-width: 768px)").matches) {
-        if (compactRef.current) {
-          compactRef.current = false;
-          setCompactColor(false);
-        }
+        setCompact(false);
+        setFlowMode(false);
         return;
       }
-      // Sobra (>0) lo que habría que desplazar (altura del contenido menos el hueco útil de la columna); con la paleta compacta se suma lo que ocuparía abierta (la última medida),
-      // así no oscila: solo se reabre si cabe entera.
-      const cs = getComputedStyle(scroller);
-      const over = content.getBoundingClientRect().height - (scroller.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom));
-      let next: boolean;
+      const px = (v: string) => parseFloat(v) || 0;
+      const bs = getComputedStyle(body);
+      const as = getComputedStyle(aside);
+      const ss = getComputedStyle(scroller);
+      // Alto útil de la fila de columnas cuando el diálogo está a su alto máximo.
+      const available = body.clientHeight - px(bs.paddingTop) - px(bs.paddingBottom);
+      // Alto que necesita la columna para no desplazarse: su contenido, el relleno del contenedor con scroll y lo que lo
+      // rodea en la columna (relleno, márgenes negativos, botones de abajo). Igual en los dos modos (el contenedor llena la columna).
+      const around = aside.getBoundingClientRect().height - scroller.getBoundingClientRect().height + px(as.marginTop) + px(as.marginBottom);
+      const needed = content.getBoundingClientRect().height + px(ss.paddingTop) + px(ss.paddingBottom) + around;
+      const over = needed - available;
+      // Con la paleta compacta se suma lo que ocuparía abierta (la última medida): solo se reabre si cabe entera.
+      let compact: boolean;
       if (!compactRef.current) {
         paletteH.current = box.offsetHeight;
-        next = over > 1;
+        compact = over > 0.01;
       } else {
-        next = over + (paletteH.current - box.offsetHeight) > 0;
+        compact = over + (paletteH.current - box.offsetHeight) > 0.01;
       }
-      if (next !== compactRef.current) {
-        compactRef.current = next;
-        setCompactColor(next);
+      if (compact !== compactRef.current) {
+        // El cambio de la paleta cambia el alto del contenido: se vuelve a medir tras pintarla (ResizeObserver).
+        setCompact(compact);
+        if (!compact) setFlowMode(false);
+        return;
       }
+      setFlowMode(over > 0.01);
     };
     check();
     const ro = new ResizeObserver(check);
-    ro.observe(scroller);
+    ro.observe(body);
+    ro.observe(aside);
     ro.observe(content);
     window.addEventListener("resize", check);
     return () => {
       ro.disconnect();
       window.removeEventListener("resize", check);
     };
-  }, [asideScroll]);
+  }, [asideEl]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.repeat || e.defaultPrevented) return;
@@ -568,9 +641,12 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   };
 
   const commitLink = () => {
-    const value = link.trim();
+    // «example.com/x» o «www.example.com» se completan con https:// (como hará el servidor) y el campo lo muestra.
+    const value = normalizeLinkUrl(link);
+    if (value !== link) setLink(value);
     if (value === (task.linkUrl ?? "")) return;
-    // Sin cambio optimista: si el servidor lo rechaza (p. ej. sin «https://»), el campo conserva lo escrito para corregirlo.
+    // Sin cambio optimista: si el servidor lo rechaza (p. ej. «javascript:» o algo que no es una dirección), el campo
+    // conserva lo escrito para corregirlo.
     save({ linkUrl: value }, {});
   };
 
@@ -590,14 +666,15 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={requestClose}
       side={side}
       onAddSecond={onAddSecond}
       onAddSecondBulk={onAddSecondBulk}
       size="wide"
       placement="top"
       // Escritorio: el área central no hace scroll; cada columna lo hace por separado y los botones del pie nunca se mueven.
-      bodyClassName="md:flex md:flex-col md:overflow-hidden"
+      // Con `flow` (la columna de campos no cabe) hace scroll el cuerpo entero, uno solo.
+      bodyClassName={cn("md:flex md:flex-col", !flow && "md:overflow-hidden")}
       ariaLabel={mentionsToPlain(title).trim() || t("Detalle de la tarea")}
       // Móvil: pie siempre visible con Archivar, Borrar y Guardar.
       footer={
@@ -607,32 +684,41 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           </>
         ) : undefined
       }
-      // Escritorio: la altura se adapta al contenido (tope = viewport); solo hacen scroll las columnas si hay mucho contenido.
+      // Escritorio: la altura se adapta al contenido (tope = viewport); con mucho contenido hace scroll la columna principal
+      // (o, si la de campos no cabe, el cuerpo entero: ver `flow`).
       header={
-        <div className="flex items-start gap-2 border-b border-slate-200 px-5 py-3 dark:border-slate-800">
+        <div className="relative flex items-start gap-2 border-b border-slate-200 px-5 py-3 dark:border-slate-800">
           <TitleField value={title} onChange={setTitle} onCommit={commitTitle} users={board.users} />
-          {/* En móvil, sin nada que mostrar no ocupa sitio (el título necesita el ancho junto a deshacer/rehacer). */}
-          <span className={cn("mt-1.5 flex h-5 shrink-0 items-center text-xs", saving === 0 && !justSaved && "max-md:hidden")} role="status" aria-live="polite">
+          {/* «Guardando… / Guardado»: aviso flotante sobre la línea inferior de la cabecera, a la derecha. Absoluto: no quita
+              ancho al título ni tapa el micrófono, y su mitad inferior cae en el margen superior del cuerpo (sin texto). */}
+          <span
+            className={cn(
+              "pointer-events-none absolute right-5 bottom-0 z-10 flex translate-y-1/2 items-center gap-1 rounded-full border bg-white px-2 py-0.5 text-[11px] leading-4 shadow-sm transition-opacity duration-500 dark:bg-slate-900",
+              saving > 0 ? "border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400" : "border-emerald-200 text-emerald-700 dark:border-emerald-800 dark:text-emerald-400",
+              saving > 0 || justSaved ? "opacity-100" : "opacity-0",
+            )}
+            role="status"
+            aria-live="polite"
+            data-save-status
+          >
             {saving > 0 ? (
-              <span className="flex items-center gap-1 text-slate-500"><Loader2 size={13} className="animate-spin" /> {t("Guardando…")}</span>
+              <><Loader2 size={12} className="animate-spin" /> {t("Guardando…")}</>
             ) : (
-              <span className={cn("flex items-center gap-1 text-emerald-600 transition-opacity duration-500 dark:text-emerald-400", justSaved ? "opacity-100" : "opacity-0")}>
-                <Check size={13} /> {t("Guardado")}
-              </span>
+              <><Check size={12} /> {t("Guardado")}</>
             )}
           </span>
           {/* Móvil: el detalle ocupa la pantalla y tapa la cabecera; deshacer y rehacer (de esta tarea) van aquí. */}
           {mobile && <UndoButton projectId={board.project.id} inDialog className="shrink-0" />}
           {/* Fuera del orden de Tab (Título → descripción directo); Escape también cierra. */}
-          <button type="button" className="btn-icon" tabIndex={-1} onClick={onClose} aria-label={t("Cerrar")}>
+          <button type="button" className="btn-icon" tabIndex={-1} onClick={() => void requestClose()} aria-label={t("Cerrar")}>
             <X size={18} />
           </button>
         </div>
       }
     >
-      <div ref={rootRef} onPaste={onPaste} className="grid gap-6 md:min-h-0 md:flex-[1_1_auto] md:grid-cols-[minmax(0,1fr)_18rem] md:grid-rows-[minmax(0,1fr)]">
+      <div ref={rootRef} onPaste={onPaste} className={cn("grid gap-6 md:grid-cols-[minmax(0,1fr)_18rem]", flow ? "md:flex-none" : "md:min-h-0 md:flex-[1_1_auto] md:grid-rows-[minmax(0,1fr)]")}>
         {/* Margen negativo con relleno igual: deja sitio al anillo de foco (3 px + 2 de separación) que el scroll recortaría. */}
-        <div className="min-w-0 space-y-6 md:-m-2 md:overflow-y-auto md:p-2 md:[--sticky-top:-0.5rem]">
+        <div className={cn("min-w-0 space-y-6 md:-m-2 md:p-2", !flow && "md:overflow-y-auto md:[--sticky-top:-0.5rem]")}>
           <TaskViewers taskId={task.id} />
           <DescriptionEditor
             key={detail ? `loaded-${descVersion}` : "loading"}
@@ -642,6 +728,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             // El borrador recuperado solo se aplica la primera vez que se carga la tarea.
             draft={detail && !draftUsed && descVersion === 0 ? draft?.description : undefined}
             liveRef={descLive}
+            dirtyRef={descDirtyCheck}
             onDraftChange={(md) => {
               descDraft.current = md;
               if (md !== null && !draftUsed) setDraftUsed(true);
@@ -660,10 +747,12 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               if (await save({ description: "" }, { hasDescription: false })) toast(t("Descripción borrada"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange() });
             }}
           />
-          <Subtasks taskId={task.id} detail={detail} setDetail={setDetail} flushRef={flushSubtasks} />
+          <Subtasks taskId={task.id} detail={detail} setDetail={setDetail} flushRef={flushSubtasks} draftRef={subtaskDraftPending} onUndo={(id) => void undoLastChange(id)} />
           <section>
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-semibold">{t("Capturas y adjuntos")}</h3>
+              <h3 className="text-sm font-semibold">
+                {detail?.attachments.length ? t("Capturas y adjuntos ({n})", { n: detail.attachments.length }) : t("Capturas y adjuntos")}
+              </h3>
               <div className="flex items-center gap-1">
                 <label className="btn-secondary cursor-pointer py-1 text-xs has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus sm:hidden">
                   <Camera size={15} /> {t("Cámara")}
@@ -732,11 +821,12 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         </div>
 
         {/* El margen negativo con relleno igual deja sitio al anillo de foco (3 px + 2 de separación) que el scroll recortaría. */}
-        <aside className="flex flex-col text-sm md:-m-2 md:min-h-0 md:p-2">
-          <div ref={setAsideScroll} className="md:-mx-2 md:-mt-2 md:min-h-0 md:flex-1 md:overflow-y-auto md:px-2 md:pt-2 md:pb-1">
-          <div className="flex flex-col gap-4 md:gap-2.5">
+        <aside ref={setAsideEl} className="flex flex-col text-sm md:-m-2 md:min-h-0 md:p-2">
+          {/* Relleno de 6 px abajo: el anillo de foco del último botón (3 px + 2 de separación) no se recorta ni crea scroll. */}
+          <div data-aside-scroll className={cn("md:-mx-2 md:-mt-2 md:min-h-0 md:flex-1 md:px-2 md:pt-2 md:pb-1.5", !flow && "md:overflow-y-auto")}>
+          <div className="flex flex-col gap-4 md:gap-2">
           <Field label={t("Columna")}>
-            <select className="input min-w-0 truncate md:py-1.5" title={board.columns.find((c) => c.id === task.columnId)?.name} value={task.columnId} onChange={(e) => changeColumn(e.target.value)}>
+            <select className="input min-w-0 truncate md:py-1" title={board.columns.find((c) => c.id === task.columnId)?.name} value={task.columnId} onChange={(e) => changeColumn(e.target.value)}>
               {board.columns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
@@ -756,7 +846,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           </Field>
           <Field label={t("Asignada a (opcional)")}>
             <select
-              className="input min-w-0 truncate md:py-1.5"
+              className="input min-w-0 truncate md:py-1"
               title={board.users.find((u) => u.id === task.assigneeId)?.name}
               value={task.assigneeId ?? ""}
               onChange={(e) => save({ assigneeId: e.target.value || null }, { assigneeId: e.target.value || null })}
@@ -770,7 +860,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               <input
                 type="date"
                 className={cn(
-                  "input md:py-1.5",
+                  "input md:py-1",
                   dueStatus(task.dueDate, board.columns.find((c) => c.id === task.columnId)?.isDone ?? false, board.today) === "overdue" &&
                     "border-red-400 text-red-700 dark:text-red-300",
                 )}
@@ -782,7 +872,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
                 }}
               />
               {task.dueDate && (
-                <button className="btn-icon h-9 w-9 shrink-0 md:h-8 md:w-8" onClick={() => save({ dueDate: null }, { dueDate: null })} aria-label={t("Quitar fecha límite")}>
+                <button className="btn-icon h-9 w-9 shrink-0 md:h-7.5 md:w-7.5" onClick={() => save({ dueDate: null }, { dueDate: null })} aria-label={t("Quitar fecha límite")}>
                   <X size={15} />
                 </button>
               )}
@@ -798,7 +888,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           />
           <Field label={t("Repetir")}>
             <div className="flex gap-1">
-              <select className="input min-w-0 md:py-1.5" value={task.recurrence} onChange={(e) => changeRecurrence(e.target.value as RecurrenceRule)}>
+              <select className="input min-w-0 md:py-1" value={task.recurrence} onChange={(e) => changeRecurrence(e.target.value as RecurrenceRule)}>
                 <option value="NONE">{t("No se repite")}</option>
                 <option value="DAILY">{t("Cada día")}</option>
                 <option value="WEEKLY">{t("Cada semana")}</option>
@@ -806,7 +896,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               </select>
               {task.recurrence === "WEEKLY" && (
                 <select
-                  className="input md:py-1.5"
+                  className="input md:py-1"
                   value={task.recurrenceDay ?? 1}
                   onChange={(e) => save({ recurrenceDay: Number(e.target.value) }, { recurrenceDay: Number(e.target.value) })}
                   aria-label={t("Día de la semana")}
@@ -816,7 +906,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               )}
               {task.recurrence === "MONTHLY" && (
                 <select
-                  className="input md:py-1.5"
+                  className="input md:py-1"
                   value={task.recurrenceDay ?? 1}
                   onChange={(e) => save({ recurrenceDay: Number(e.target.value) }, { recurrenceDay: Number(e.target.value) })}
                   aria-label={t("Día del mes")}
@@ -831,7 +921,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           </Field>
           <Field label={t("Entregable")}>
             <select
-              className="input min-w-0 truncate md:py-1.5"
+              className="input min-w-0 truncate md:py-1"
               title={board.deliverables.find((d) => d.id === task.deliverableId)?.name}
               value={task.deliverableId ?? ""}
               onChange={(e) => save({ deliverableId: e.target.value || null }, { deliverableId: e.target.value || null })}
@@ -883,7 +973,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           <Field label={t("Enlace externo")}>
             <div className="flex gap-1">
               <input
-                className="input md:py-1.5"
+                className="input md:py-1"
                 type="url"
                 inputMode="url"
                 placeholder="https://…"
@@ -893,7 +983,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
                 onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
               />
               {task.linkUrl && (
-                <a href={task.linkUrl} target="_blank" rel="noopener noreferrer nofollow" className="btn-icon h-9 w-9 shrink-0 md:h-8 md:w-8" aria-label={t("Abrir enlace")}>
+                <a href={task.linkUrl} target="_blank" rel="noopener noreferrer nofollow" className="btn-icon h-9 w-9 shrink-0 md:h-7.5 md:w-7.5" aria-label={t("Abrir enlace")}>
                   <ExternalLink size={16} />
                 </a>
               )}
@@ -910,7 +1000,14 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           </div>
           </div>
           {/* En móvil estos botones van en el pie fijo, junto a Guardar; en escritorio, fijos bajo la columna (no se desplazan). */}
-          <div className="mt-auto flex flex-nowrap items-center gap-2 border-t border-slate-200 pt-4 max-md:hidden md:mt-0 md:shrink-0 md:gap-1 md:pt-2.5 dark:border-slate-800">
+          <div
+            className={cn(
+              "mt-auto flex flex-nowrap items-center gap-2 border-t border-slate-200 pt-4 max-md:hidden md:mt-0 md:shrink-0 md:gap-1 md:pt-2.5 dark:border-slate-800",
+              // Un solo scroll: los botones se quedan a la vista, pegados abajo. `-bottom-4` compensa el relleno inferior del
+              // cuerpo (el pegado cuenta desde su borde interior) y la sombra sólida tapa esa franja sin cambiar el alto del bloque.
+              flow && "md:sticky md:-bottom-4 md:z-10 md:bg-white md:shadow-[0_1rem_0_0_var(--color-white)] dark:md:bg-slate-900 dark:md:shadow-[0_1rem_0_0_var(--color-slate-900)]",
+            )}
+          >
             {actionButtons}
           </div>
         </aside>
@@ -948,7 +1045,7 @@ function ColorPopover({ value, onChange }: { value: string | null; onChange: (c:
       label={t("Color")}
       panelClassName="w-[19rem] max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-2 text-sm shadow-xl dark:border-slate-700 dark:bg-slate-900"
       trigger={({ open, props }) => (
-        <button type="button" {...props} aria-label={`${t("Color")}: ${name}`} className={cn("input flex items-center gap-2 text-left md:py-1.5", open && "border-focus")}>
+        <button type="button" {...props} aria-label={`${t("Color")}: ${name}`} className={cn("input flex items-center gap-2 text-left md:py-1", open && "border-focus")}>
           <span
             className={cn("h-4 w-4 shrink-0 rounded-full", value === null ? "border-2 border-dashed border-slate-300 dark:border-slate-600" : swatchBorder(value))}
             style={value ? { backgroundColor: value } : undefined}
@@ -1024,7 +1121,7 @@ export function TypeSelector({ kinds, value, onChange }: { kinds: KindOption[]; 
   );
 }
 
-function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, onDraftChange, liveRef }: {
+function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, onDraftChange, liveRef, dirtyRef }: {
   initial: string | null;
   /** Texto recuperado de un borrador: el editor empieza editándolo. */
   draft?: string;
@@ -1038,13 +1135,46 @@ function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, o
   onDraftChange?: (markdown: string | null) => void;
   /** Texto en edición al instante (null si no se edita): lo lee el botón Guardar. */
   liveRef?: React.MutableRefObject<string | null>;
+  /** ¿Hay cambios de la persona sin guardar? (para preguntar antes de cerrar el detalle). */
+  dirtyRef?: React.MutableRefObject<(() => boolean) | null>;
 }) {
   const t = useT();
   const locale = useIntlLocale();
   const toast = useToast();
+  const confirm = useConfirm();
   const { editorMode } = useBoard();
   const [value, setValue] = useState(draft ?? initial ?? "");
-  const [editing, setEditing] = useState(draft !== undefined);
+  const [editing, setEditingState] = useState(draft !== undefined);
+  // Cambios sin guardar = lo escrito difiere de `baseline`. Al abrir, el editor con barra puede reescribir el Markdown
+  // (p. ej. «* a» → «- a») sin que nadie toque nada: lo que emite antes de la primera tecla, pegado, arrastre o clic en
+  // él pasa a ser la referencia, para no preguntar al cerrar si no se ha cambiado nada. Un borrador recuperado ya cuenta como cambio.
+  const touched = useRef(draft !== undefined && draft !== initial);
+  const baseline = useRef(initial ?? "");
+  const setEditing = (on: boolean) => {
+    if (on && !editing) {
+      touched.current = false;
+      baseline.current = initial ?? "";
+    }
+    setEditingState(on);
+  };
+  const onEditorChange = (v: string) => {
+    if (!touched.current) baseline.current = v;
+    setValue(v);
+  };
+  const dirtyLatest = useRef<() => boolean>(() => false);
+  useEffect(() => {
+    dirtyLatest.current = () => editing && value !== baseline.current;
+  });
+  useEffect(() => {
+    if (!dirtyRef) return;
+    dirtyRef.current = () => dirtyLatest.current();
+    return () => {
+      dirtyRef.current = null;
+    };
+  }, [dirtyRef]);
+  const touch = () => {
+    touched.current = true;
+  };
   useEffect(() => {
     if (liveRef) liveRef.current = editing ? value : null;
   }, [liveRef, editing, value]);
@@ -1081,6 +1211,18 @@ function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, o
     setValue(initial);
     setEditing(false);
   };
+  // Escape en el editor descarta la edición: con cambios, se pregunta antes (el botón «Cancelar» no pregunta).
+  const escapeCancel = async () => {
+    if (value === initial || value === baseline.current) return cancel();
+    const ok = await confirm({
+      title: t("Cambios sin guardar"),
+      message: t("¿Descartar los cambios de la descripción?"),
+      confirmLabel: t("Descartar cambios"),
+      cancelLabel: t("Seguir editando"),
+      danger: true,
+    });
+    if (ok) cancel();
+  };
 
   const clear = () => {
     setEditing(false);
@@ -1102,21 +1244,25 @@ function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, o
       </div>
       {editing ? (
         <div className="space-y-2">
+          {/* Lo que hace la persona en el editor (teclas, pegar, soltar, clics en la barra) marca el texto como tocado. */}
+          <div onKeyDownCapture={touch} onPasteCapture={touch} onDropCapture={touch} onMouseDownCapture={touch} onTouchStartCapture={touch} onBeforeInputCapture={touch}>
           <DescriptionField
             mode={editorMode}
             textareaRef={ref}
             value={value}
-            onValueChange={setValue}
+            onValueChange={onEditorChange}
             users={users}
             autoFocus
             onCommand={async (kind) => {
+              touch();
               const link = await onGoogle(kind);
               if (link) setValue((v) => `${v.trimEnd()}\n\n${kind === "GOOGLE_SHEET" ? t("Hoja") : t("Documento")}: [${link.title.replace(/[\[\]]/g, "")}](${link.url})\n`);
             }}
             placeholder={t("Markdown · @persona · @docs / @sheets")}
-            onCancel={cancel}
+            onCancel={() => void escapeCancel()}
             onSubmit={finish}
           />
+          </div>
           <div className="flex gap-2">
             <button className="btn-primary py-1.5" onClick={finish}>{t("Guardar")}</button>
             <button className="btn-ghost py-1.5" onClick={cancel}>{t("Cancelar")}</button>
@@ -1155,7 +1301,16 @@ function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, o
   );
 }
 
-function Subtasks({ taskId, detail, setDetail, flushRef }: { taskId: string; detail: TaskDetail | null; setDetail: React.Dispatch<React.SetStateAction<TaskDetail | null>>; flushRef?: React.MutableRefObject<(() => Promise<boolean>) | null> }) {
+function Subtasks({ taskId, detail, setDetail, flushRef, draftRef, onUndo }: {
+  taskId: string;
+  detail: TaskDetail | null;
+  setDetail: React.Dispatch<React.SetStateAction<TaskDetail | null>>;
+  flushRef?: React.MutableRefObject<(() => Promise<boolean>) | null>;
+  /** ¿Hay una subtarea a medio escribir o un renombrado sin confirmar? (para avisar antes de cerrar). */
+  draftRef?: React.MutableRefObject<(() => boolean) | null>;
+  /** Deshace la entrada indicada (el «Deshacer» del aviso tras pegar varias subtareas) y recarga. */
+  onUndo?: (entryId?: string) => void;
+}) {
   const t = useT();
   const board = useBoard();
   const toast = useToast();
@@ -1191,6 +1346,26 @@ function Subtasks({ taskId, detail, setDetail, flushRef }: { taskId: string; det
   const add = (e: React.FormEvent) => {
     e.preventDefault();
     void addNow();
+  };
+
+  // Pegar varias líneas crea una subtarea por línea no vacía (sin viñetas ni casillas), todas en una acción que se
+  // deshace de una vez. Una sola línea se pega normal en el campo.
+  const pasteMany = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData("text/plain");
+    const lines = /[\r\n]/.test(text) && !e.clipboardData.files.length ? subtaskLines(text, MAX_TITLE) : [];
+    if (lines.length < 2) return pasteAsOneLine(e, setNewTitle);
+    e.preventDefault();
+    void addMany(lines);
+  };
+  const addMany = async (titles: string[]) => {
+    const room = MAX_SUBTASKS - list.length;
+    if (room <= 0) return toast(t("Una tarea no puede tener más de 100 subtareas."), "error");
+    const res = await board.track(addSubtasks(taskId, titles.slice(0, MAX_SUBTASKS)));
+    if (!res.ok) return toast(res.error, "error");
+    const { created, skipped, undo } = res.data;
+    update((l) => [...l, ...created.filter((c) => !l.some((x) => x.id === c.id))]);
+    if (skipped) toast(t("Se añadieron {n} subtareas; {m} no caben (máximo {max} por tarea).", { n: created.length, m: skipped, max: MAX_SUBTASKS }), "error");
+    else toast(t("{n} subtareas añadidas", { n: created.length }), "undo", onUndo ? { label: t("Deshacer"), onClick: () => onUndo(undo.id) } : undefined);
   };
 
   const setDone = (id: string, value: boolean) => update((l) => l.map((x) => (x.id === id ? { ...x, done: value } : x)));
@@ -1235,6 +1410,21 @@ function Subtasks({ taskId, detail, setDetail, flushRef }: { taskId: string; det
       flushRef.current = null;
     };
   }, [flushRef]);
+  const pendingLatest = useRef<() => boolean>(() => false);
+  useEffect(() => {
+    pendingLatest.current = () => {
+      const pending = renameDraft.current;
+      const target = pending ? list.find((x) => x.id === pending.id) : undefined;
+      return !!newTitle.trim() || (!!pending && !!target && !!pending.title.trim() && pending.title.trim() !== target.title);
+    };
+  });
+  useEffect(() => {
+    if (!draftRef) return;
+    draftRef.current = () => pendingLatest.current();
+    return () => {
+      draftRef.current = null;
+    };
+  }, [draftRef]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -1298,7 +1488,7 @@ function Subtasks({ taskId, detail, setDetail, flushRef }: { taskId: string; det
         </SortableContext>
       </DndContext>
       <form onSubmit={add} className="mt-1 flex gap-2">
-        <input className="input py-1.5" placeholder={t("Añadir subtarea…")} value={newTitle} onChange={(e) => setNewTitle(e.target.value)} onPaste={(e) => pasteAsOneLine(e, setNewTitle)} maxLength={MAX_TITLE} disabled={!detail} />
+        <input className="input py-1.5" placeholder={t("Añadir subtarea…")} value={newTitle} onChange={(e) => setNewTitle(e.target.value)} onPaste={pasteMany} maxLength={MAX_TITLE} disabled={!detail} />
         <button className="btn-secondary py-1.5" disabled={!newTitle.trim()} aria-label={t("Añadir subtarea")}><Plus size={15} /></button>
       </form>
     </section>

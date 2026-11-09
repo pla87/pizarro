@@ -11,7 +11,8 @@ import { useBackToClose } from "./useBackToClose";
 
 interface ModalProps {
   open: boolean;
-  onClose: () => void;
+  /** Cerrar (X, Escape, clic fuera, atrás). Puede devolver (o resolver) `false` si al final no se cierra (ver useBackToClose). */
+  onClose: () => void | boolean | Promise<void | boolean>;
   title?: React.ReactNode;
   children: React.ReactNode;
   footer?: React.ReactNode;

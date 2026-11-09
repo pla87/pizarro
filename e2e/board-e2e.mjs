@@ -1,5 +1,6 @@
-// Verificación de R16B1, R16F3, R16M1 y R16F1 (agente «board»), de los diálogos propios del menú de la columna (dlg)
-// y de la descripción de la tarea (desc: pegar Markdown con código dentro de una negrita, tablas, conflicto).
+// Verificación de R16B1, R16F3, R16M1 y R16F1 (agente «board»), de los diálogos propios del menú de la columna (dlg),
+// de la descripción de la tarea (desc: pegar Markdown con código dentro de una negrita, tablas, conflicto) y del detalle
+// (det: adjuntos por nombre y contador, subtareas pegadas, https automático, confirmar al cerrar con cambios).
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,7 +10,7 @@ import * as U from "./qa/ui.mjs";
 const { COL, sleep } = L;
 const APP = process.env.APP_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "b1,f3,m1,f1,dlg,vt,desc").split(",");
+const only = (process.env.PART || "b1,f3,m1,f1,dlg,vt,desc,det").split(",");
 
 await L.prepareUsers();
 
@@ -551,6 +552,164 @@ if (only.includes("desc")) {
     await L.q(`UPDATE "User" SET "editorMode"='WYSIWYG'`);
     await L.q(`UPDATE "Project" SET "taskFields"='{}'`);
   }
+}
+
+if (only.includes("det")) {
+  L.scenario("R43: detalle de la tarea (adjuntos por nombre y contador, subtareas pegadas, https automático, cerrar con cambios)");
+  await L.cleanBoard();
+  const [tid] = await L.seedTasks(COL.backlog, ["Detalle R43"]);
+  const row = async () => (await L.q(`SELECT title, description, "linkUrl" FROM "Task" WHERE id=$1`, [tid]))[0];
+  const subs = async () => (await L.q(`SELECT title FROM "Subtask" WHERE "taskId"=$1 ORDER BY position`, [tid])).map((r) => r.title);
+  const s = await L.session({ viewport: { width: 1366, height: 768 } });
+  await s.ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: L.BASE });
+  const p = s.page;
+  const pasteInto = async (target, text) => {
+    await target.focus();
+    await p.evaluate((v) => navigator.clipboard.writeText(v), text);
+    await p.keyboard.press("Control+v");
+    await sleep(500);
+  };
+  await U.openTask(p, "Detalle R43");
+  let d = U.dialog(p);
+
+  // Título hasta el micrófono: el aviso «Guardado» flota sin reservar ancho.
+  const title = d.locator("textarea[aria-label='Título']").first();
+  const close = d.getByRole("button", { name: "Cerrar" }).first();
+  const [tb, xb] = [await title.boundingBox(), await close.boundingBox()];
+  L.check("R43C4: la caja del título llega hasta la X (sin hueco para «Guardado»)", xb.x - (tb.x + tb.width) <= 12, `hueco ${Math.round(xb.x - (tb.x + tb.width))} px`);
+  await title.click();
+  await p.keyboard.press("End");
+  await p.keyboard.type(" editado");
+  await p.keyboard.press("Enter");
+  const status = d.locator("[data-save-status]");
+  L.check("R43C4: «Guardado» se ve tras guardar el título", await L.waitFor(async () => (await status.innerText()).includes("Guardado") && (await status.evaluate((e) => getComputedStyle(e).opacity)) === "1", { timeout: 5000 }));
+  await p.screenshot({ path: `${SHOTS}/r43-guardado-1366.png` });
+  const [tb2, sb] = [await title.boundingBox(), await status.boundingBox()];
+  L.check("R43C4: «Guardado» no tapa el título (queda sobre la línea inferior de la cabecera)", sb.y >= tb2.y + tb2.height - 2, JSON.stringify({ tb2, sb }));
+
+  // Adjuntos: por nombre (natural, sin mayúsculas ni acentos) y contador en el encabezado; el orden se mantiene al subir más.
+  const fileInput = d.locator("input[type=file][multiple]").first();
+  const txt = (name) => ({ name, mimeType: "text/plain", buffer: Buffer.from(`contenido de ${name}`) });
+  await fileInput.setInputFiles(["informe 10.txt", "Zeta.txt", "informe 2.txt", "árbol.txt"].map(txt));
+  const names = () => d.locator("li span[title]").allTextContents();
+  await L.eqEventually("R43M2: adjuntos ordenados por nombre", names, ["árbol.txt", "informe 2.txt", "informe 10.txt", "Zeta.txt"], { timeout: 15000 });
+  L.eq("R43M1: «Capturas y adjuntos (4)»", (await d.getByRole("heading", { name: /^Capturas y adjuntos/ }).innerText()).trim(), "Capturas y adjuntos (4)");
+  await fileInput.setInputFiles([txt("Beta.txt")]);
+  await L.eqEventually("R43M2: el nuevo adjunto entra en su sitio", names, ["árbol.txt", "Beta.txt", "informe 2.txt", "informe 10.txt", "Zeta.txt"], { timeout: 15000 });
+  L.eq("R43M1: el contador sube a 5", (await d.getByRole("heading", { name: /^Capturas y adjuntos/ }).innerText()).trim(), "Capturas y adjuntos (5)");
+
+  // Subtareas pegadas con varias líneas: una por línea (sin viñetas) y un solo «Deshacer».
+  const newSub = d.getByPlaceholder("Añadir subtarea…");
+  await pasteInto(newSub, "- Comprar pan\n* Llamar\n\n1. Revisar\n[ ] Enviar\n");
+  await L.eqEventually("R43: pegar 4 líneas crea 4 subtareas sin viñetas", subs, ["Comprar pan", "Llamar", "Revisar", "Enviar"]);
+  L.eq("R43: el campo queda vacío tras pegar varias líneas", await newSub.inputValue(), "");
+  await U.undoKey(p, "Control+z");
+  await L.eqEventually("R43: un solo deshacer quita las 4", subs, []);
+  await pasteInto(newSub, "Una sola línea\n");
+  L.eq("R43: una sola línea se pega en el campo", await newSub.inputValue(), "Una sola línea");
+  await newSub.fill("");
+
+  // Enlace sin esquema: se completa con https://; javascript: se sigue rechazando.
+  const link = d.locator('input[type="url"]').first();
+  await link.fill("example.com/r43");
+  await link.press("Enter");
+  await L.eqEventually("R43: «example.com/r43» se guarda como https://example.com/r43", async () => (await row()).linkUrl, "https://example.com/r43");
+  L.eq("R43: el campo muestra el enlace completo", await link.inputValue(), "https://example.com/r43");
+  await link.fill("javascript:alert(1)");
+  await link.press("Enter");
+  await sleep(800);
+  L.eq("R43: javascript: no se guarda", (await row()).linkUrl, "https://example.com/r43");
+  await link.fill("https://example.com/r43");
+  await link.press("Enter");
+  await sleep(300);
+
+  // Cerrar con la descripción a medio escribir pide confirmación; «Seguir editando» la conserva.
+  await d.getByRole("button", { name: "Añade una descripción…" }).click();
+  await sleep(600);
+  await p.keyboard.type("Texto sin guardar");
+  await close.click();
+  const confirmDlg = p.locator("[role=dialog]").filter({ hasText: "La descripción tiene cambios sin guardar" });
+  L.check("R43: cerrar con la X pide confirmación", await confirmDlg.waitFor({ timeout: 4000 }).then(() => true, () => false));
+  await p.screenshot({ path: `${SHOTS}/r43-confirmar-cierre.png` });
+  await confirmDlg.getByRole("button", { name: "Seguir editando" }).click();
+  await sleep(400);
+  L.check("R43: «Seguir editando» deja el detalle abierto con el texto", (await d.isVisible()) && (await d.locator("[contenteditable=true]").first().innerText()).includes("Texto sin guardar"), await d.locator("[contenteditable=true]").first().innerText().catch((e) => e.message));
+  await d.locator("[contenteditable=true]").first().click();
+  await p.keyboard.press("Escape");
+  const escConfirm = p.locator("[role=dialog]").filter({ hasText: "¿Descartar los cambios de la descripción?" });
+  L.check("R43: Escape en el editor con cambios pregunta", await escConfirm.waitFor({ timeout: 4000 }).then(() => true, () => false));
+  await escConfirm.getByRole("button", { name: "Seguir editando" }).click();
+  await sleep(300);
+  await p.mouse.click(5, 5); // fuera del diálogo
+  L.check("R43: clic fuera también pregunta", await confirmDlg.waitFor({ timeout: 4000 }).then(() => true, () => false));
+  await confirmDlg.getByRole("button", { name: "Descartar cambios" }).click();
+  await d.waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+  L.check("R43: «Descartar cambios» cierra sin guardar", (await p.locator("[role=dialog]").count()) === 0 && !(await row()).description);
+  // Sin cambios no pregunta.
+  await U.openTask(p, "Detalle R43 editado");
+  d = U.dialog(p);
+  await d.getByRole("button", { name: "Añade una descripción…" }).click();
+  await sleep(500);
+  await p.mouse.click(5, 5);
+  L.check("R43: sin cambios en la descripción cierra sin preguntar", await d.waitFor({ state: "detached", timeout: 4000 }).then(() => true, () => false));
+  // El editor con barra reescribe «* a» como «- a» al abrir: eso no cuenta como cambio (ni tras hacer clic dentro).
+  await L.q(`UPDATE "Task" SET description=$1 WHERE id=$2`, ["* uno\n* dos\n\nTexto con **negrita**", tid]);
+  await L.reload(p);
+  await U.openTask(p, "Detalle R43 editado");
+  d = U.dialog(p);
+  await d.getByRole("button", { name: "Editar" }).first().click();
+  await sleep(600);
+  await d.locator("[contenteditable=true]").first().click();
+  await p.keyboard.press("End");
+  await p.mouse.click(5, 5);
+  L.check("R43: abrir el editor y hacer clic sin escribir no pregunta al cerrar", await d.waitFor({ state: "detached", timeout: 4000 }).then(() => true, () => false));
+  await L.q(`UPDATE "Task" SET description='' WHERE id=$1`, [tid]);
+  L.assertNoErrors("R43 escritorio", [s]);
+  await s.ctx.close();
+
+  // Móvil: el botón atrás también pregunta y, si se sigue editando, volver atrás vuelve a preguntar (no sale del tablero).
+  const m = await L.session({ viewport: { width: 390, height: 844 }, mobile: true });
+  await U.openTask(m.page, "Detalle R43 editado");
+  const md = U.dialog(m.page);
+  await md.getByRole("button", { name: "Añade una descripción…" }).click();
+  await sleep(600);
+  await m.page.keyboard.type("Móvil sin guardar");
+  await m.page.screenshot({ path: `${SHOTS}/r43-movil-390.png` });
+  const boardUrl = m.page.url();
+  const mConfirm = m.page.locator("[role=dialog]").filter({ hasText: "La descripción tiene cambios sin guardar" });
+  await m.page.goBack();
+  L.check("R43 móvil: atrás pide confirmación", await mConfirm.waitFor({ timeout: 4000 }).then(() => true, () => false));
+  await mConfirm.getByRole("button", { name: "Seguir editando" }).click();
+  await sleep(800);
+  await m.page.goBack();
+  L.check("R43 móvil: atrás otra vez vuelve a preguntar", await mConfirm.waitFor({ timeout: 4000 }).then(() => true, () => false));
+  await mConfirm.getByRole("button", { name: "Descartar cambios" }).click();
+  await md.waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+  await sleep(500);
+  L.check("R43 móvil: tras descartar sigue en el tablero", (await m.page.locator("[role=dialog]").count()) === 0 && m.page.url().split("?")[0] === boardUrl.split("?")[0], m.page.url());
+  L.assertNoErrors("R43 móvil", [m]);
+  await m.ctx.close();
+
+  // Nueva tarea: subtareas pegadas y contador/orden de los archivos.
+  const n = await L.session({ viewport: { width: 1440, height: 900 } });
+  await n.ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: L.BASE });
+  await n.page.keyboard.press("Alt+n");
+  const nt = n.page.locator('input[id$="-title"]').first();
+  await nt.waitFor();
+  await nt.fill("Nueva R43");
+  const ns = n.page.locator('input[id$="-subtask"]').first();
+  await ns.focus();
+  await n.page.evaluate(() => navigator.clipboard.writeText("- uno\n- dos\n- tres"));
+  await n.page.keyboard.press("Control+v");
+  await sleep(300);
+  await U.dialog(n.page).locator("input[type=file][multiple]").first().setInputFiles(["b.txt", "A.txt"].map(txt));
+  await sleep(300);
+  L.eq("R43M1: «Capturas y adjuntos (2)» en Nueva tarea", (await U.dialog(n.page).getByText(/^Capturas y adjuntos/).innerText()).trim(), "Capturas y adjuntos (2)");
+  L.eq("R43M2: archivos por nombre en Nueva tarea", await U.dialog(n.page).locator("[title$='.txt']").evaluateAll((els) => els.map((e) => e.getAttribute("title"))), ["A.txt", "b.txt"]);
+  await n.page.keyboard.press("Alt+s");
+  await L.eqEventually("R43: Nueva tarea crea una subtarea por línea pegada", async () => (await L.q(`SELECT s.title FROM "Subtask" s JOIN "Task" t ON t.id=s."taskId" WHERE t.title='Nueva R43' ORDER BY s.position`)).map((r) => r.title), ["uno", "dos", "tres"]);
+  L.assertNoErrors("R43 nueva tarea", [n]);
+  await n.ctx.close();
 }
 
 await L.closeBrowser(); await L.closeDb();

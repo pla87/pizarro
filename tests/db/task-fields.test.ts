@@ -67,16 +67,18 @@ describe("validación de los campos", () => {
     assert.equal(expectOk(await updateTask(t.id, { actualHours: null })).actualHours, null);
   });
 
-  test("prioridad solo BAJA/MEDIA/ALTA/URGENTE; cliente hasta 120 caracteres; enlace solo http(s)", async () => {
+  test("prioridad solo BAJA/MEDIA/ALTA/URGENTE; cliente hasta 120 caracteres; enlace solo http(s) (o dominio sin esquema)", async () => {
     const { f } = await setup();
     const t = expectOk(await createTask({ ...base(f), priority: "URGENTE", client: "  Acme  ", linkUrl: "https://example.com/x" }));
     assert.deepEqual([t.priority, t.client, t.linkUrl], ["URGENTE", "Acme", "https://example.com/x"]);
     expectFail(await createTask({ ...base(f), priority: "NOPE" as never }));
     expectFail(await createTask({ ...base(f), client: "x".repeat(121) }), /120/);
     assert.equal(expectOk(await createTask({ ...base(f), client: "x".repeat(120) })).client?.length, 120);
-    for (const url of ["javascript:alert(1)", "ftp://example.com", "example.com", "data:text/html,hi"]) {
+    for (const url of ["javascript:alert(1)", "ftp://example.com", "example", "data:text/html,hi"]) {
       expectFail(await updateTask(t.id, { linkUrl: url }), /http/);
     }
+    // Sin esquema y con forma de dominio: se guarda con https:// delante.
+    assert.equal(expectOk(await updateTask(t.id, { linkUrl: "www.example.com/y" })).linkUrl, "https://www.example.com/y");
     assert.equal(expectOk(await updateTask(t.id, { client: "", linkUrl: "" })).client, null);
   });
 
