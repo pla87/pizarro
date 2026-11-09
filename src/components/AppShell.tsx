@@ -354,6 +354,22 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: strin
   );
 }
 
+/** Una opción de «Empezar desde» del proyecto nuevo (radio con título, explicación y, si hace falta, un control debajo). */
+function StartOption({ checked, onSelect, title, description, children }: { checked: boolean; onSelect: () => void; title: string; description: string; children?: React.ReactNode }) {
+  return (
+    <div className={`rounded-lg border p-2 text-sm ${checked ? "border-brand-500 bg-brand-50/50 dark:bg-brand-500/10" : "border-slate-200 dark:border-slate-700"}`}>
+      <label className="flex cursor-pointer items-start gap-2">
+        <input type="radio" name="project-start" className="mt-1" checked={checked} onChange={onSelect} />
+        <span>
+          <span className="font-medium">{title}</span>
+          {description && <span className="block text-xs text-slate-500">{description}</span>}
+        </span>
+      </label>
+      {children && <div className="pl-6">{children}</div>}
+    </div>
+  );
+}
+
 function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () => void }) {
   const t = useT();
   const router = useRouter();
@@ -362,11 +378,14 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   const [pending, start] = useTransition();
   const pathname = usePathname();
   const [target, setTarget] = useState<string | null>(null);
+  // Plantillas de proyecto de la instancia (solo administradores): solo la estructura, sin tarjetas.
   const [templates, setTemplates] = useState<{ id: string; name: string; description: string }[]>([]);
-  const [templateId, setTemplateId] = useState("");
-  // Ejemplo de serie con el que empezar ("" = en blanco); lo pueden usar todas las personas.
+  // Ejemplos de serie (con tarjetas de muestra): los puede usar todo el mundo.
   const [examples, setExamples] = useState<{ key: string; name: string; description: string }[]>([]);
-  const [exampleKey, setExampleKey] = useState("");
+  // Con qué empieza el proyecto: una sola opción a la vez (en blanco, un ejemplo o una plantilla), nunca dos mezcladas.
+  const [origin, setOrigin] = useState<{ kind: "blank" } | { kind: "example"; key: string } | { kind: "template"; id: string }>({ kind: "blank" });
+  const exampleKey = origin.kind === "example" ? origin.key : "";
+  const [templateId, setTemplateId] = useState("");
   // Último nombre puesto por el autocompletado de un ejemplo: solo se sustituye o se quita mientras siga sin tocarse.
   const autoName = useRef("");
   // Quien no es administrador solo puede crear proyectos privados.
@@ -387,7 +406,10 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
     if (!isAdmin) return;
     let cancelled = false;
     listTemplates().then((res) => {
-      if (!cancelled && res.ok) setTemplates(res.data);
+      if (!cancelled && res.ok) {
+        setTemplates(res.data);
+        setTemplateId((id) => id || (res.data[0]?.id ?? ""));
+      }
     });
     return () => { cancelled = true; };
   }, [isAdmin]);
@@ -396,10 +418,22 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   useEffect(() => {
     if (target && pathname === target) onClose();
   }, [target, pathname, onClose]);
+  const showTemplates = isAdmin && templates.length > 0;
+  // Elegir un ejemplo propone su nombre (si el campo está vacío o aún tiene el que puso otro ejemplo); lo demás lo quita.
+  const pickOrigin = (next: typeof origin, exampleName?: string) => {
+    setOrigin(next);
+    const untouched = !name.trim() || name === autoName.current;
+    if (next.kind === "example" && exampleName) {
+      if (untouched) { setName(exampleName); autoName.current = exampleName; }
+    } else {
+      if (autoName.current && name === autoName.current) setName("");
+      autoName.current = "";
+    }
+  };
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     start(async () => {
-      const res = await createProject(name, { templateId: exampleKey ? null : templateId || null, exampleKey: exampleKey || null, isPrivate });
+      const res = await createProject(name, { templateId: origin.kind === "template" ? origin.id : null, exampleKey: exampleKey || null, isPrivate });
       if (!res.ok) return toast(res.error, "error");
       // Primero los ajustes del proyecto nuevo (columnas, tipos, miembros…); desde ahí se va al tablero.
       const dest = `/p/${res.data.id}/settings`;
@@ -429,43 +463,48 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
           <input id="project-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required data-autofocus />
           <p className="mt-1 text-xs text-slate-500">{t("Luego puedes cambiar las columnas, tipos y etiquetas.")}</p>
         </div>
-        {examples.length > 0 && (
+        {(examples.length > 0 || showTemplates) && (
           <fieldset>
             <legend className="label">{t("Empezar desde")}</legend>
-            <div className="space-y-1" role="radiogroup">
-              {[{ key: "", name: t("Proyecto en blanco"), description: t("Columnas por defecto, sin tarjetas.") }, ...examples].map((ex) => (
-                <label key={ex.key || "blank"} className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 text-sm ${exampleKey === ex.key ? "border-brand-500 bg-brand-50/50 dark:bg-brand-500/10" : "border-slate-200 dark:border-slate-700"}`}>
-                  <input type="radio" name="project-start" className="mt-1" checked={exampleKey === ex.key} onChange={() => {
-                    setExampleKey(ex.key);
-                    const untouched = !name.trim() || name === autoName.current;
-                    if (ex.key) {
-                      if (untouched) { setName(ex.name); autoName.current = ex.name; }
-                    } else {
-                      if (name === autoName.current) setName("");
-                      autoName.current = "";
-                    }
-                  }} />
-                  <span>
-                    <span className="font-medium">{ex.name}</span>
-                    <span className="block text-xs text-slate-500">{ex.description}</span>
-                  </span>
-                </label>
-              ))}
+            <div className="space-y-1">
+              <StartOption checked={origin.kind === "blank"} onSelect={() => pickOrigin({ kind: "blank" })} title={t("Proyecto en blanco")} description={t("Columnas por defecto, sin tarjetas.")} />
             </div>
-            {exampleKey && <p className="mt-1 text-xs text-slate-500">{t("Incluye unas tarjetas de muestra con la etiqueta «Ejemplo» que puedes borrar cuando quieras.")}</p>}
+            {examples.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">{t("Ejemplos con tarjetas de muestra")}</p>
+                <p className="mb-1 text-xs text-slate-500">{t("Un proyecto ya preparado con unas tarjetas para ver cómo se trabaja. Para cualquier persona.")}</p>
+                <div className="space-y-1">
+                  {examples.map((ex) => <StartOption key={ex.key} checked={exampleKey === ex.key} onSelect={() => pickOrigin({ kind: "example", key: ex.key }, ex.name)} title={ex.name} description={ex.description} />)}
+                </div>
+                {exampleKey && <p className="mt-1 text-xs text-slate-500">{t("Incluye unas tarjetas de muestra con la etiqueta «Ejemplo» que puedes borrar cuando quieras.")}</p>}
+              </div>
+            )}
+            {showTemplates && (
+              <div className="mt-3">
+                <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">{t("Plantillas de proyecto")}</p>
+                <p className="mb-1 text-xs text-slate-500">{t("Solo la estructura (columnas, tipos, etiquetas, campos y plantillas de release), sin tarjetas. Se editan en Administración › Tipos y plantillas.")}</p>
+                <StartOption
+                  checked={origin.kind === "template"}
+                  onSelect={() => pickOrigin({ kind: "template", id: templateId })}
+                  title={t("Usar una plantilla")}
+                  description={templates.find((tpl) => tpl.id === templateId)?.description ?? ""}
+                >
+                  <select
+                    className="input mt-1.5 py-1.5"
+                    aria-label={t("Plantilla")}
+                    value={templateId}
+                    onChange={(e) => {
+                      setTemplateId(e.target.value);
+                      pickOrigin({ kind: "template", id: e.target.value });
+                    }}
+                    onFocus={() => origin.kind !== "template" && pickOrigin({ kind: "template", id: templateId })}
+                  >
+                    {templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.name}</option>)}
+                  </select>
+                </StartOption>
+              </div>
+            )}
           </fieldset>
-        )}
-        {isAdmin && !exampleKey && (
-        <div>
-          <label className="label" htmlFor="project-template">{t("Plantilla")}</label>
-          <select id="project-template" className="input" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-            <option value="">{t("Columnas por defecto")}</option>
-            {templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.name}</option>)}
-          </select>
-          {templates.find((t) => t.id === templateId)?.description && (
-            <p className="mt-1 text-xs text-slate-500">{templates.find((t) => t.id === templateId)?.description}</p>
-          )}
-        </div>
         )}
         {isAdmin ? (
           <label className="flex items-center gap-2 text-sm">

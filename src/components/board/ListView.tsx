@@ -106,12 +106,13 @@ export function ListView({ tasks, matchingIds, filtering }: { tasks: BoardTask[]
         <p className="px-4 py-10 text-center text-sm text-slate-500">{filtering ? t("Ninguna tarjeta coincide con el filtro.") : t("Este tablero aún no tiene tareas.")}</p>
       ) : (
         <>
+          {/* Hueco al final (pb-36) en móvil y tableta: si no, los botones flotantes de crear tapan las últimas filas. */}
           {!desktop ? (
-          <ul className="min-h-0 flex-1 divide-y divide-slate-200 overflow-y-auto bg-white sm:hidden dark:divide-slate-800 dark:bg-slate-900" aria-label={t("Lista de tareas")}>
+          <ul className="min-h-0 flex-1 divide-y divide-slate-200 overflow-y-auto bg-white pb-36 sm:hidden dark:divide-slate-800 dark:bg-slate-900" aria-label={t("Lista de tareas")}>
             {rows.map((task) => <CompactRow key={task.id} task={task} lookups={lookups} today={today} locale={locale} t={t} />)}
           </ul>
           ) : (
-          <div className="min-h-0 flex-1 overflow-auto px-4 pb-4 max-sm:hidden">
+          <div className="min-h-0 flex-1 overflow-auto px-4 pb-36 max-sm:hidden lg:pb-4">
             <table className="w-full border-separate border-spacing-0 text-sm">
               <caption className="sr-only">{t("Lista de tareas")}</caption>
               <thead>

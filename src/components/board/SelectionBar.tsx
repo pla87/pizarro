@@ -16,6 +16,8 @@ interface Props {
 }
 
 // En móvil: filas de dos botones del mismo ancho; en escritorio, todo en una línea.
+// Flota sobre el tablero (fixed): no cambia el alto ni el contenido de las columnas, que dejan siempre un hueco fijo
+// al final para que la última tarjeta pueda quedar por encima de la barra (ColumnView).
 export function SelectionBar({ count, columns, nextReleaseColumn, onMove, onRelease, onArchive, onDelete, onClear }: Props) {
   const t = useT();
   return (
@@ -27,7 +29,7 @@ export function SelectionBar({ count, columns, nextReleaseColumn, onMove, onRele
             <ArrowRightLeft size={15} className="shrink-0" /> <span className="truncate">{t("Mover a {name}", { name: nextReleaseColumn.name })}</span>
           </button>
         )}
-        <label className={nextReleaseColumn ? "min-w-0" : "col-span-2 min-w-0"}>
+        <label className={nextReleaseColumn ? "min-w-0 md:shrink-0" : "col-span-2 min-w-0 md:shrink-0"}>
           <span className="sr-only">{t("Mover a otra columna")}</span>
           <select className="input w-full py-1.5 text-xs md:w-40 md:text-sm" value="" onChange={(e) => e.target.value && onMove(e.target.value)}>
             <option value="">{t("Mover a…")}</option>
@@ -39,10 +41,10 @@ export function SelectionBar({ count, columns, nextReleaseColumn, onMove, onRele
         <button className="btn-secondary min-w-0 px-2 py-1.5 text-xs md:px-3 md:text-sm" onClick={onRelease}>
           <Rocket size={15} className="shrink-0" /> <span className="truncate">{t("Release con selección")}</span>
         </button>
-        <button className="btn-secondary min-w-0 px-2 py-1.5 text-xs md:px-3 md:text-sm" onClick={onArchive}>
+        <button className="btn-secondary min-w-0 px-2 py-1.5 text-xs md:shrink-0 md:px-3 md:text-sm" onClick={onArchive}>
           <Archive size={15} className="shrink-0" /> <span className="truncate">{t("Archivar")}</span>
         </button>
-        <button className="btn-secondary min-w-0 px-2 py-1.5 text-xs text-red-600 md:px-3 md:text-sm dark:text-red-400" onClick={onDelete}>
+        <button className="btn-secondary min-w-0 px-2 py-1.5 text-xs text-red-600 md:shrink-0 md:px-3 md:text-sm dark:text-red-400" onClick={onDelete}>
           <Trash2 size={15} className="shrink-0" /> <span className="truncate">{t("Borrar")}</span>
         </button>
       </div>
