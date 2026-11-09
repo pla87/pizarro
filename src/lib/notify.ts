@@ -8,7 +8,7 @@ import { appUrl, emailEnabled, escapeHtml, sendMail } from "./mail";
 import { logEvent } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
 import { excerpt as makeExcerpt, mentionsToPlain } from "./mentions";
-import { dueChangeText, notificationHeadline, waitingText, type NotificationKind } from "./notification-text";
+import { notificationBody, notificationHeadline, type NotificationKind } from "./notification-text";
 import { followerIds } from "./followers";
 import { rateLimit } from "./rate-limit";
 
@@ -37,7 +37,7 @@ interface MentionMessage {
 /** Email de un aviso: asunto, texto plano y HTML (todo el contenido del usuario va escapado). */
 export function mentionEmail(m: MentionMessage, t: T = makeT("es")) {
   const type = m.type ?? "MENTION";
-  const body = type === "DUE_CHANGED" ? dueChangeText(m.excerpt, t, m.locale ?? "es-ES") : type === "WAITING" ? waitingText(m.excerpt, t) : m.excerpt;
+  const body = notificationBody(type, m.excerpt, t, m.locale ?? "es-ES");
   const subject = notificationHeadline(type, t, { actor: m.actorName, task: `«${m.taskTitle}»` });
   const text = `${notificationHeadline(type, t, { actor: m.actorName, task: `«${m.taskTitle}»` })} (${m.projectName})${body ? `:\n\n${body}` : ""}\n\n${t("Abrir la tarea")}: ${m.url}\n`;
   const headline = notificationHeadline(type, t, { actor: `<strong>${escapeHtml(m.actorName)}</strong>`, task: `<strong>«${escapeHtml(m.taskTitle)}»</strong>` });

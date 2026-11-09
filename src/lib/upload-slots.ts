@@ -70,18 +70,21 @@ export const UPLOAD_TOO_SLOW_MESSAGE = "La subida iba demasiado lenta y se ha co
  * Umbrales contra subidas que retienen un hueco. Velocidad mínima sostenida: 20 KB/s (~160 kbit/s, por debajo de una
  * 2G/EDGE mala pero muy por encima de un goteo malicioso) medida en ventanas de 30 s, es decir, 600 KB por ventana;
  * así una subida móvil con cobertura floja pasa y un cliente que manda unos pocos bytes por segundo no. Tiempo total:
- * 3 min de margen más lo que costaría el cuerpo esperado a la velocidad mínima (tope 30 min).
+ * 3 min de margen más lo que costaría el cuerpo esperado a la velocidad mínima, con tope de 30 min para los adjuntos
+ * (como mucho unas decenas de MB) y de 3 h para la importación de un proyecto (hasta 500 MB o más: a ~190 KB/s, que
+ * supera con creces el mínimo, ya tarda unos 45 min). Lo que frena el goteo malicioso es la ventana, no el total.
  */
 export const UPLOAD_MIN_BYTES_PER_SEC = 20 * 1024;
 export const UPLOAD_WINDOW_MS = 30_000;
 export const UPLOAD_BASE_TOTAL_MS = 3 * 60_000;
 export const UPLOAD_MAX_TOTAL_MS = 30 * 60_000;
+export const IMPORT_MAX_TOTAL_MS = 3 * 60 * 60_000;
 
 export type SlowGuardOptions = { minBytesPerSec?: number; windowMs?: number; totalMs?: number };
 
-/** Tiempo máximo total para recibir un cuerpo de `expectedBytes`. */
-export function uploadTotalMs(expectedBytes: number): number {
-  return Math.min(UPLOAD_MAX_TOTAL_MS, UPLOAD_BASE_TOTAL_MS + (expectedBytes / UPLOAD_MIN_BYTES_PER_SEC) * 1000);
+/** Tiempo máximo total para recibir un cuerpo de `expectedBytes` (`maxMs`: tope; por defecto, el de los adjuntos). */
+export function uploadTotalMs(expectedBytes: number, maxMs = UPLOAD_MAX_TOTAL_MS): number {
+  return Math.min(maxMs, UPLOAD_BASE_TOTAL_MS + (expectedBytes / UPLOAD_MIN_BYTES_PER_SEC) * 1000);
 }
 
 /**
