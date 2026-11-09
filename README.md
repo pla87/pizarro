@@ -4,6 +4,7 @@ Kanban ligero y generador de *release notes* para equipos pequeños (hasta 10 pe
 
 - **Stack:** Next.js 16 (App Router, TypeScript, Tailwind CSS 4) · PostgreSQL · Prisma 7 · `@dnd-kit` · `sharp` · `lucide-react`.
 - **Despliegue:** un único contenedor Docker (monolito) en Railway, con un volumen persistente para las capturas. También se instala en un servidor propio con Docker Compose (Caddy + Pizarro + PostgreSQL): ver [docs/INSTALL.md](docs/INSTALL.md). Instalación en un paso en un servidor Linux: `curl -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com`. Cada versión se publica como imagen Docker ya construida (`ghcr.io/pla87/pizarro`, amd64 y arm64); actualizar o volver a una versión anterior: [docs/INSTALL.md](docs/INSTALL.md), sección 5. Railway sigue construyendo desde el repositorio.
+- **Web:** [getpizarro.com](https://getpizarro.com) (qué es, cómo se instala y precios; se genera desde `site/`, ver [docs/VENTA.md](docs/VENTA.md), sección 8).
 - **Documentación:** [Manual de operaciones (PDF)](MANUAL.pdf) · [fuente Markdown](docs/MANUAL.md) · [Changelog](CHANGELOG.md).
 
 ---
@@ -339,4 +340,4 @@ Detalles de rendimiento, seguridad y modelo de datos en el [manual](docs/MANUAL.
 
 ## Licencia
 
-Pizarro es software de código disponible, no de código abierto. Es gratis para uso personal (personas físicas, en sus propios servidores, sin fines comerciales ni profesionales). Las empresas, los profesionales y las organizaciones necesitan una licencia comercial de pago único por servidor, con todas las actualizaciones futuras incluidas y sin soporte. Este resumen no sustituye al texto completo: consulta [LICENSE.md](LICENSE.md) (también en `/licencia` en cada instalación).
+Pizarro es software de código disponible, no de código abierto. Es gratis para uso personal (personas físicas, en sus propios servidores, sin fines comerciales ni profesionales). Las empresas, los profesionales y las organizaciones necesitan una licencia comercial de pago único por servidor, con todas las actualizaciones futuras incluidas y sin soporte. Este resumen no sustituye al texto completo: consulta [LICENSE.md](LICENSE.md) (también en `/licencia` en cada instalación y en [getpizarro.com/licencia](https://getpizarro.com/licencia/)). Precio y compra: [getpizarro.com](https://getpizarro.com/#precios).

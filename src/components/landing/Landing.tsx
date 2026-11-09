@@ -3,10 +3,10 @@ import { ArrowRight, Check, Mail, Users, Wallet, Lock, Sparkles } from "lucide-r
 import type { LucideIcon } from "lucide-react";
 import type { Locale, T } from "@/i18n/core";
 import { BrandMark } from "@/components/ui/BrandMark";
-import { buyHref, buyNote, LICENSE_PRICE_EUR } from "@/lib/product";
+import { landingFaq, landingHero, landingIncludes, landingPillars, landingSteps, type PillarKey } from "@/lib/landing-content";
+import { buyHref, buyNote, INSTALL_URL, LICENSE_PRICE_EUR, REPO_URL, SITE_URL } from "@/lib/product";
 
-export const REPO_URL = "https://github.com/pla87/pizarro";
-export const INSTALL_URL = `${REPO_URL}/blob/main/docs/INSTALL.md`;
+const PILLAR_ICONS: Record<PillarKey, LucideIcon> = { simple: Sparkles, once: Wallet, data: Lock, small: Users };
 
 function SectionTitle({ id, title }: { id: string; title: string }) {
   return (
@@ -21,36 +21,11 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
   const buy = buyHref(contactEmail, locale);
   const buyExternal = /^https?:\/\//.test(buy);
 
-  const pillars: { icon: LucideIcon; title: string; text: string }[] = [
-    { icon: Sparkles, title: t("Simple"), text: t("Lo justo para organizar el trabajo: un tablero, tarjetas y columnas. Sin curva de aprendizaje y sin cientos de opciones que configurar.") },
-    { icon: Wallet, title: t("Pagas una vez y es tuyo para siempre"), text: t("Sin suscripción y sin cuota por usuario. Las actualizaciones son gratis para siempre.") },
-    { icon: Lock, title: t("Tus datos son tuyos"), text: t("Viven en tu propio servidor, sin rastreadores, y no salen de ahí. Con copias de seguridad cifradas.") },
-    { icon: Users, title: t("Hecho para equipos pequeños y familias"), text: t("Para unas pocas personas que quieren ponerse de acuerdo sin montar una herramienta enorme.") },
-  ];
-
-  const includes = [
-    t("Tablero Kanban"),
-    t("Notas de release generadas"),
-    t("Documentación del proyecto"),
-    t("Calendario"),
-    t("Dictado por voz"),
-    t("App en el móvil"),
-    t("Verificación en dos pasos"),
-    t("Español e inglés"),
-  ];
-
-  const steps = [
-    { title: t("Prepara un servidor"), text: t("Un Linux con Docker.") },
-    { title: t("Ejecuta un comando"), text: t("Instala todo lo necesario.") },
-    { title: t("Crea tu cuenta"), text: t("Y empieza a trabajar.") },
-  ];
-
-  const faq: { q: string; a: string }[] = [
-    { q: t("¿Hay que pagar por cada usuario?"), a: t("No. Invitas a quien quieras; el límite lo pone tu servidor.") },
-    { q: t("¿Qué servidor necesito?"), a: t("Un Linux con Docker y 1 GB de RAM. También puedes desplegarla en Railway.") },
-    { q: t("¿Cómo se actualiza?"), a: t("Repitiendo el comando de instalación, que conserva tus datos. La app avisa a los administradores cuando hay una versión nueva.") },
-    { q: t("¿Puedo usarla gratis?"), a: t("Sí, para uso personal y familiar no comercial. Cualquier otro uso (empresa, autónomo, asociación, centro educativo…) necesita la licencia.") },
-  ];
+  const hero = landingHero(t);
+  const pillars = landingPillars(t);
+  const includes = landingIncludes(t);
+  const steps = landingSteps(t);
+  const faq = landingFaq(t);
 
   return (
     <div data-testid="landing">
@@ -66,9 +41,9 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
 
       <main>
         <section className="mx-auto max-w-5xl px-4 pt-14 pb-14 sm:pt-24 sm:pb-20">
-          <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl">{t("Organiza tu trabajo sin complicarte")}</h1>
+          <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl">{hero.title}</h1>
           <p className="mt-4 max-w-2xl text-lg text-slate-600 dark:text-slate-400">
-            {t("Un tablero Kanban sencillo, que pagas una vez y funciona en tu propio servidor. Tus datos no salen de ahí.")}
+            {hero.lead}
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <a href="#instalacion" className="btn-primary px-5 py-2.5 text-base" data-testid="cta-install">{t("Cómo se instala")} <ArrowRight size={16} aria-hidden /></a>
@@ -78,15 +53,18 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
 
         <section className="border-t border-slate-200 bg-white py-14 dark:border-slate-800 dark:bg-slate-900/40" aria-label={t("Por qué Pizarro")}>
           <div className="mx-auto grid max-w-5xl gap-4 px-4 sm:grid-cols-2" data-testid="pillars">
-            {pillars.map((p) => (
-              <article key={p.title} className="card p-6">
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-300">
-                  <p.icon size={20} aria-hidden />
-                </span>
-                <h2 className="mt-4 text-xl font-bold tracking-tight">{p.title}</h2>
-                <p className="mt-2 text-slate-600 dark:text-slate-400">{p.text}</p>
-              </article>
-            ))}
+            {pillars.map((p) => {
+              const Icon = PILLAR_ICONS[p.key];
+              return (
+                <article key={p.title} className="card p-6">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-300">
+                    <Icon size={20} aria-hidden />
+                  </span>
+                  <h2 className="mt-4 text-xl font-bold tracking-tight">{p.title}</h2>
+                  <p className="mt-2 text-slate-600 dark:text-slate-400">{p.text}</p>
+                </article>
+              );
+            })}
           </div>
         </section>
 
@@ -134,8 +112,9 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
               <a href={buy} {...(buyExternal ? { target: "_blank", rel: "noopener noreferrer" } : {})} className="btn-primary mt-3 inline-flex max-w-full" data-testid="pricing-buy"><Wallet size={16} aria-hidden />{t("Comprar")}</a>
             </article>
           </div>
-          <p className="mt-4 text-sm">
+          <p className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm">
             <Link href={`/licencia?lang=${locale}`} className="font-medium text-brand-700 underline dark:text-brand-300" data-testid="license-link">{t("Lee la licencia")}</Link>
+            <a href={locale === "en" ? `${SITE_URL}/en/#pricing` : `${SITE_URL}/#precios`} rel="noopener noreferrer" className="font-medium text-brand-700 underline dark:text-brand-300" data-testid="site-link">{t("Más sobre la licencia en getpizarro.com")}</a>
           </p>
         </section>
 
@@ -160,6 +139,7 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
           <Link href={`/licencia?lang=${locale}`} className="hover:underline">{t("Licencia")}</Link>
           <Link href="/privacy" className="hover:underline">{t("Privacidad")}</Link>
           <Link href="/terms" className="hover:underline">{t("Condiciones")}</Link>
+          <a href={locale === "en" ? `${SITE_URL}/en/` : SITE_URL} rel="noopener noreferrer" className="hover:underline">getpizarro.com</a>
           <a href={REPO_URL} rel="noopener noreferrer" className="hover:underline">GitHub</a>
           {contactEmail && <a href={`mailto:${contactEmail}`} className="inline-flex items-center gap-1 hover:underline" data-testid="landing-contact"><Mail size={14} aria-hidden />{t("Contacto")}: {contactEmail}</a>}
         </div>

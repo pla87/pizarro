@@ -96,6 +96,8 @@ export async function prepareUsers() {
     await q(`INSERT INTO "User" (id,email,name,${cols.map((c) => `"${c}"`).join(",")}) VALUES ('qa_user_2',$1,'Segunda Persona',${cols.map((_, i) => `$${i + 2}`).join(",")})`, [USER2, ...vals]);
   }
   await q(`INSERT INTO "ProjectMember"("projectId","userId") SELECT p.id,u.id FROM "Project" p CROSS JOIN "User" u ON CONFLICT DO NOTHING`);
+  // Instalación de pruebas declarada «uso personal»: el recordatorio de licencia (solo admins, tras 7 días) nunca sale.
+  await q(`INSERT INTO "AppState"(key,value,"updatedAt") VALUES ('licensePersonalUse','{"personal":true,"date":"2026-01-01"}',NOW()) ON CONFLICT (key) DO NOTHING`);
 }
 /** Deja el proyecto de ejemplo sin tareas ni releases (cada escenario parte de cero). */
 export async function cleanBoard() {
