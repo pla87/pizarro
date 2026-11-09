@@ -1346,14 +1346,17 @@ export async function restoreTask(taskId: string) {
 
 // --- Comentarios y menciones ---------------------------------------------------
 
-const commentSelect = { id: true, body: true, createdAt: true, authorId: true, authorName: true, parentId: true, deletedAt: true, author: { select: { name: true } } } as const;
+const commentSelect = { id: true, body: true, createdAt: true, editedAt: true, authorId: true, authorName: true, parentId: true, deletedAt: true, author: { select: { name: true } } } as const;
 /** Orden estable para paginar con cursor (createdAt puede repetirse: el id desempata). */
 const COMMENT_ORDER: Prisma.TaskCommentOrderByWithRelationInput[] = [{ createdAt: "desc" }, { id: "desc" }];
 
-function toCommentInfo(c: { id: string; body: string; createdAt: Date; authorId: string | null; authorName: string | null; parentId: string | null; deletedAt: Date | null; author: { name: string } | null }): CommentInfo {
+function toCommentInfo(c: { id: string; body: string; createdAt: Date; editedAt: Date | null; authorId: string | null; authorName: string | null; parentId: string | null; deletedAt: Date | null; author: { name: string } | null }): CommentInfo {
   // Un comentario borrado que conserva respuestas no enseña ni texto ni autor.
   if (c.deletedAt) return { id: c.id, body: "", createdAt: c.createdAt.toISOString(), authorId: null, authorName: null, parentId: c.parentId, deleted: true };
-  return { id: c.id, body: c.body, createdAt: c.createdAt.toISOString(), authorId: c.authorId, authorName: c.author?.name ?? c.authorName ?? null, parentId: c.parentId };
+  return {
+    id: c.id, body: c.body, createdAt: c.createdAt.toISOString(), authorId: c.authorId, authorName: c.author?.name ?? c.authorName ?? null, parentId: c.parentId,
+    ...(c.editedAt ? { editedAt: c.editedAt.toISOString() } : {}),
+  };
 }
 
 /** Comentarios de la tarea anteriores al cursor, en el orden de COMMENT_ORDER. */
@@ -1375,6 +1378,32 @@ export async function getOlderComments(taskId: string, cursor: { createdAt: stri
     const oldest = rows.at(-1);
     const olderComments = oldest && rows.length === COMMENTS_MORE_PAGE ? await db.taskComment.count({ where: olderThan(taskId, oldest) }) : 0;
     return { comments: rows.reverse().map(toCommentInfo), olderComments };
+  });
+}
+
+/** Tope de comentarios que devuelve un refresco (el máximo configurable por tarea es 1000). */
+const COMMENTS_REFRESH_MAX = 1000;
+
+/**
+ * Refresco en vivo de los comentarios que ya se ven (otra persona comentó, editó o borró): todos desde `cursor` (el más
+ * antiguo cargado, incluido) hasta el más reciente; sin cursor, la primera página. Solo lectura.
+ */
+export async function getRecentComments(taskId: string, cursor?: { createdAt: string; id: string } | null) {
+  return runAction({ name: "tasks.getRecentComments", args: [taskId, cursor] }, async (): Promise<{ comments: CommentInfo[]; olderComments: number; commentCount: number }> => {
+    const user = await requireUser();
+    await assertTaskAccess(user, v.id.parse(taskId));
+    const c = cursor ? commentCursor.parse(cursor) : null;
+    const from = c ? { createdAt: new Date(c.createdAt), id: c.id } : null;
+    const where: Prisma.TaskCommentWhereInput = from
+      ? { taskId, OR: [{ createdAt: { gt: from.createdAt } }, { createdAt: from.createdAt, id: { gte: from.id } }] }
+      : { taskId };
+    const [rows, commentCount] = await Promise.all([
+      db.taskComment.findMany({ where, orderBy: COMMENT_ORDER, take: from ? COMMENTS_REFRESH_MAX : COMMENTS_FIRST_PAGE, select: commentSelect }),
+      db.taskComment.count({ where: { taskId, deletedAt: null } }),
+    ]);
+    const oldest = rows.at(-1) ?? from;
+    const olderComments = oldest ? await db.taskComment.count({ where: olderThan(taskId, oldest) }) : 0;
+    return { comments: rows.reverse().map(toCommentInfo), olderComments, commentCount };
   });
 }
 
@@ -1415,6 +1444,55 @@ export async function addComment(taskId: string, body: string, parentId?: string
     if (followers.length) await notifyTask({ type: "COMMENT", actorId: user.id, taskId, projectId, recipientIds: followers, excerpt: makeExcerpt(text) });
     describeAction(parent ? "Respondió a un comentario en «{title}»" : "Comentó en «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
     return toCommentInfo(comment);
+  });
+}
+
+/**
+ * Edita un comentario propio. Solo su autor: un admin puede borrar comentarios ajenos, pero no cambiar lo que otra
+ * persona escribió. Mismas reglas de texto que al crear; avisa solo a quien se menciona por primera vez en este
+ * comentario, actualiza el extracto de los avisos que creó y se puede deshacer.
+ */
+export async function editComment(commentId: string, body: string) {
+  return runAction({ name: "tasks.editComment", args: [commentId, body] }, async (): Promise<CommentInfo> => {
+    const user = await requireUser();
+    const found = await db.taskComment.findFirst({
+      where: { id: v.id.parse(commentId), deletedAt: null, task: { project: visibleProjectsWhere(user) } },
+      select: { id: true, taskId: true, authorId: true, createdAt: true, task: { select: { projectId: true, title: true } } },
+    });
+    if (!found) throw notFound();
+    if (found.authorId !== user.id) throw new AppError("Solo puedes editar tus comentarios.", 403);
+    const { taskId } = found;
+    const { projectId } = found.task;
+    noteProject(projectId);
+    noteTask(taskId);
+    await assertNotArchived(taskId);
+    const text = commentBody.parse(body);
+    if (!rateLimit(`comment:${user.id}`, 30, 60_000)) throw new AppError("Demasiados comentarios seguidos. Espera un momento.");
+    // Con la fila bloqueada: dos ediciones a la vez (dos pestañas) no calculan las menciones nuevas sobre el mismo texto.
+    const { before, updated } = await db.$transaction(async (tx) => {
+      const [row] = await tx.$queryRaw<{ body: string; editedAt: Date | null; deletedAt: Date | null }[]>`SELECT "body", "editedAt", "deletedAt" FROM "TaskComment" WHERE "id" = ${found.id} FOR UPDATE`;
+      if (!row || row.deletedAt) throw notFound();
+      if (row.body === text) return { before: row, updated: null };
+      return { before: row, updated: await tx.taskComment.update({ where: { id: found.id }, data: { body: text, editedAt: new Date() }, select: commentSelect }) };
+    });
+    // Sin cambios: no hay nada que anotar ni deshacer.
+    if (!updated) return toCommentInfo((await db.taskComment.findUniqueOrThrow({ where: { id: found.id }, select: commentSelect })));
+    addUndo({ t: "comment.set", id: found.id, body: before.body, editedAt: before.editedAt?.toISOString() ?? null });
+    describeAction("Editó un comentario en «{title}»", { title: found.task.title }, { taskId });
+    // Los avisos que creó el comentario llevan un extracto de su texto: pasan a mostrar el nuevo.
+    if (found.authorId) {
+      await db.notification.updateMany({
+        where: {
+          taskId, actorId: found.authorId, type: { in: ["COMMENT", "REPLY", "MENTION"] }, excerpt: makeExcerpt(before.body),
+          createdAt: { gte: found.createdAt, lte: new Date(found.createdAt.getTime() + 60_000) },
+        },
+        data: { excerpt: makeExcerpt(text) },
+      });
+    }
+    const old = new Set(extractMentionIds(before.body));
+    const added = extractMentionIds(text).filter((id) => !old.has(id));
+    if (added.length) await notifyMentions({ actorId: user.id, taskId, projectId, recipientIds: added, text });
+    return toCommentInfo(updated);
   });
 }
 

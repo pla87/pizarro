@@ -2,13 +2,17 @@
 
 import { useEffect, useRef } from "react";
 import type { FieldsForm } from "@/lib/fields-form";
+import { clearDraft, writeDraft } from "./draft-storage";
+
+// Almacenamiento (sin React, compartido con los borradores de comentarios): ver draft-storage.ts.
+export { clearAllDrafts, readDraft } from "./draft-storage";
+export { purgeExpiredCommentDrafts, readCommentDraft, saveCommentDraft, type CommentDraft } from "./draft-storage";
 
 // Borradores locales de las tareas que se están creando o editando: se guardan cada 5 s en el
 // navegador (por usuario y proyecto). Si la página se cierra sin cancelar ni guardar, al volver
 // al tablero se reabre el modal con lo escrito. Cerrar el modal (cancelar o guardar) los borra.
 
 const SAVE_MS = 5000;
-const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface NewTaskDraft {
   title: string;
@@ -41,43 +45,6 @@ export interface EditTaskDraft {
 }
 
 export const draftKey = (kind: "new" | "edit", userId: string, projectId: string) => `pz-draft-${kind}:${userId}:${projectId}`;
-
-/** Borra todos los borradores locales (`pz-draft-*`); las preferencias de filtros del tablero se conservan. */
-export function clearAllDrafts(): void {
-  try {
-    for (const key of Object.keys(localStorage)) if (key.startsWith("pz-draft-")) localStorage.removeItem(key);
-  } catch {
-    // Sin acceso a localStorage no hay borradores que borrar.
-  }
-}
-
-export function readDraft<T>(key: string): T | null {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    const { at, value } = JSON.parse(raw) as { at: number; value: T };
-    if (Date.now() - at > MAX_AGE_MS) {
-      localStorage.removeItem(key);
-      return null;
-    }
-    return value;
-  } catch {
-    return null;
-  }
-}
-
-function writeDraft(key: string, value: unknown): void {
-  try {
-    if (value == null) localStorage.removeItem(key);
-    else localStorage.setItem(key, JSON.stringify({ at: Date.now(), value }));
-  } catch {
-    // Sin almacenamiento (modo privado, cuota): no hay borrador.
-  }
-}
-
-function clearDraft(key: string): void {
-  writeDraft(key, null);
-}
 
 /**
  * Guarda `get()` cada 5 s y al ocultar o cerrar la página (null = nada que guardar, se borra;

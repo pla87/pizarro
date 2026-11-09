@@ -34,7 +34,7 @@ interface ActionMeta {
 }
 
 /** Consultas que no se anotan en el registro cuando salen bien (los errores sí). */
-export const UNLOGGED_READS: ReadonlySet<string> = new Set(["tasks.getTaskDetail", "tasks.getTaskHistory", "tasks.getOlderComments"]);
+export const UNLOGGED_READS: ReadonlySet<string> = new Set(["tasks.getTaskDetail", "tasks.getTaskHistory", "tasks.getOlderComments", "tasks.getRecentComments"]);
 
 /** Ejecuta una acción, la registra en los logs y convierte los errores en un resultado serializable. */
 export async function runAction<T>(fn: () => Promise<T>): Promise<ActionResult<T>>;
@@ -53,7 +53,7 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
     const user = tracked || willUndo ? await getCurrentUser().catch(() => null) : null;
     // Aviso a las demás pestañas del proyecto (las consultas no cambian nada): ya está confirmada la transacción
     // principal y publishChange no depende del historial ni del deshacer, así que sale antes de guardarlos.
-    const cid = tracked && !ctx.noPublish && !UNPUBLISHED_ACTIONS.has(meta!.name) ? publishChange({ projectId: ctx.projectId!, userId: user?.id ?? null, action: meta!.name }) : undefined;
+    const cid = tracked && !ctx.noPublish && !UNPUBLISHED_ACTIONS.has(meta!.name) ? publishChange({ projectId: ctx.projectId!, userId: user?.id ?? null, action: meta!.name, taskId: ctx.taskId ?? null }) : undefined;
     // Solo las acciones cuyo resultado ya trae todo lo que cambian devuelven el id; en las demás (o si la acción tocó
     // más de lo que devuelve) la pestaña que la lanzó también se refresca con su propio aviso.
     if (cid && !ctx.refreshOwnTab && ECHO_SAFE_ACTIONS.has(meta!.name)) result.cid = cid;

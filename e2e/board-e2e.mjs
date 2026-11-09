@@ -1,5 +1,6 @@
 // Verificación de R16B1, R16F3, R16M1 y R16F1 (agente «board»), de los diálogos propios del menú de la columna (dlg)
-// y de la descripción de la tarea (desc: pegar Markdown con código dentro de una negrita, tablas, conflicto).
+// y de la descripción de la tarea (desc: pegar Markdown con código dentro de una negrita, tablas, conflicto) y de los
+// comentarios (com: borrador local, editar los propios con aviso en vivo, menciones legibles mientras se escribe).
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,7 +10,7 @@ import * as U from "./qa/ui.mjs";
 const { COL, sleep } = L;
 const APP = process.env.APP_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "b1,f3,m1,f1,dlg,vt,desc").split(",");
+const only = (process.env.PART || "b1,f3,m1,f1,dlg,vt,desc,com").split(",");
 
 await L.prepareUsers();
 
@@ -551,6 +552,134 @@ if (only.includes("desc")) {
     await L.q(`UPDATE "User" SET "editorMode"='WYSIWYG'`);
     await L.q(`UPDATE "Project" SET "taskFields"='{}'`);
   }
+}
+
+// ---------------------------------------------------------------- Comentarios: borrador, edición y menciones legibles
+if (only.includes("com")) {
+  L.scenario("COM: borrador de comentario, editar comentarios propios (en vivo) y menciones legibles al escribir");
+  await L.cleanBoard();
+  await L.q(`DELETE FROM "Notification"`);
+  // Dos personas más para mencionar (id solo con letras y números, como un cuid: «qa_user_2» no sería una mención válida).
+  const [adm] = await L.q(`SELECT * FROM "User" WHERE email=$1`, [L.ADMIN]);
+  for (const [id, email, name] of [["qacom3", "qacom3@example.com", "Tercera Persona"], ["qacom4", "qacom4@example.com", "Cuarta Persona"]]) {
+    if ((await L.q(`SELECT 1 FROM "User" WHERE id=$1`, [id])).length) continue;
+    const cols = Object.keys(adm).filter((c) => !["id", "email", "name"].includes(c));
+    await L.q(`INSERT INTO "User" (id,email,name,${cols.map((c) => `"${c}"`).join(",")}) VALUES ($1,$2,$3,${cols.map((_, i) => `$${i + 4}`).join(",")})`, [id, email, name, ...cols.map((c) => adm[c])]);
+  }
+  await L.q(`INSERT INTO "ProjectMember"("projectId","userId") SELECT p.id,u.id FROM "Project" p CROSS JOIN "User" u ON CONFLICT DO NOTHING`);
+  const [tid] = await L.seedTasks(COL.backlog, ["Comentarios"]);
+  const bodyOf = async () => (await L.q(`SELECT body FROM "TaskComment" WHERE "taskId"=$1 ORDER BY "createdAt" LIMIT 1`, [tid]))[0]?.body;
+  const mentionsOf = async (id) => (await L.q(`SELECT count(*)::int n FROM "Notification" WHERE "userId"=$1 AND type='MENTION'`, [id]))[0].n;
+  const s = await L.session({ viewport: { width: 1400, height: 900 } });
+  const p = s.page;
+  const key = `pz-draft-comment:${adm.id}:${tid}`;
+  const draft = () => p.evaluate((k) => localStorage.getItem(k), key);
+  await U.openTask(p, "Comentarios");
+  const box = () => U.dialog(p).locator('textarea[aria-label="Nuevo comentario"]');
+  const marks = () => U.dialog(p).locator("[data-mention-backdrop] mark");
+  await box().click();
+  await p.keyboard.type("Hola @Cua");
+  await p.keyboard.press("Enter");
+  await p.keyboard.type("revisa esto");
+  L.eq("COM: al elegir a alguien se ve «@Nombre», sin el id", await box().inputValue(), "Hola @Cuarta Persona revisa esto");
+  L.eq("COM: la mención sale resaltada", await marks().count(), 1);
+  await U.dialog(p).locator("section").filter({ has: p.locator('textarea[aria-label="Nuevo comentario"]') }).last().screenshot({ path: path.join(SHOTS, "com-mencion.png") });
+  L.check("COM: el borrador se guarda al momento, con la mención completa", ((await draft()) ?? "").includes("@[Cuarta Persona](user:qacom4)"));
+  await U.closeDialog(p);
+  await L.reload(p);
+  await U.openTask(p, "Comentarios");
+  L.eq("COM: tras cerrar y recargar, el borrador vuelve (con la mención)", [await box().inputValue(), await marks().count()], ["Hola @Cuarta Persona revisa esto", 1]);
+  // El servidor rechaza el envío (tarea archivada entretanto): el texto y el borrador siguen.
+  await L.q(`UPDATE "Task" SET "archivedAt"=NOW() WHERE id=$1`, [tid]);
+  await box().click();
+  await p.keyboard.press("Control+Enter");
+  await sleep(1200);
+  L.eq("COM: un error al enviar no pierde el texto ni el borrador", [await box().inputValue(), !!(await draft())], ["Hola @Cuarta Persona revisa esto", true]);
+  await L.q(`UPDATE "Task" SET "archivedAt"=NULL WHERE id=$1`, [tid]);
+  await box().click();
+  await p.keyboard.press("Control+Enter");
+  await L.eqEventually("COM: se guarda en el formato de siempre", bodyOf, "Hola @[Cuarta Persona](user:qacom4) revisa esto");
+  L.eq("COM: enviar vacía la caja y borra el borrador", [await box().inputValue(), await draft()], ["", null]);
+  await L.eqEventually("COM: la mención avisa", () => mentionsOf("qacom4"), 1);
+  // Retroceso al final de una mención la borra entera; borrar dentro la deja como texto, sin id.
+  await box().click();
+  await p.keyboard.type("@Ter");
+  await p.keyboard.press("Enter");
+  await p.keyboard.press("Backspace");
+  await p.keyboard.press("Backspace");
+  L.eq("COM: Retroceso al final de la mención la borra entera (y vaciar borra el borrador)", [await box().inputValue(), await draft()], ["", null]);
+  await p.keyboard.type("@Ter");
+  await p.keyboard.press("Enter");
+  for (let i = 0; i < 3; i++) await p.keyboard.press("ArrowLeft");
+  await p.keyboard.press("Backspace");
+  L.eq("COM: borrar dentro de la mención no deja un id huérfano", JSON.parse((await draft()) ?? "{}").value?.text, "@Tercera Persna ");
+  await p.keyboard.press("Control+a");
+  await p.keyboard.press("Backspace");
+
+  // Otra persona con la tarea abierta: no puede editar lo ajeno y ve la edición en vivo.
+  const s2 = await L.session({ email: L.USER2, viewport: { width: 1400, height: 900 } });
+  const p2 = s2.page;
+  await U.openTask(p2, "Comentarios");
+  const theirs = U.dialog(p2).locator("[data-comment-id]").first();
+  L.eq("COM: sin lápiz en el comentario de otra persona", await theirs.getByRole("button", { name: "Editar comentario" }).count(), 0);
+  const mine = U.dialog(p).locator("[data-comment-id]").first();
+  const pencil = mine.getByRole("button", { name: "Editar comentario" });
+  L.eq("COM: el lápiz no se ve sin pasar el ratón", await pencil.evaluate((el) => getComputedStyle(el).opacity), "0");
+  await mine.hover();
+  await sleep(200);
+  L.eq("COM: al pasar el ratón sí", await pencil.evaluate((el) => getComputedStyle(el).opacity), "1");
+  await pencil.click();
+  const edit = U.dialog(p).locator('textarea[aria-label="Editar comentario"]');
+  L.eq("COM: la edición también muestra «@Nombre»", await edit.inputValue(), "Hola @Cuarta Persona revisa esto");
+  await p.keyboard.press("Escape");
+  L.eq("COM: Escape cancela la edición sin cerrar el detalle", [await edit.count(), await U.dialog(p).count()], [0, 1]);
+  await mine.hover();
+  await pencil.click();
+  await p.keyboard.type(" y @Ter");
+  await p.keyboard.press("Enter");
+  await p.keyboard.type("también");
+  await mine.screenshot({ path: path.join(SHOTS, "com-editando.png") });
+  await p.keyboard.press("Control+Enter");
+  await L.eqEventually("COM: Ctrl+Enter guarda la edición", bodyOf, "Hola @[Cuarta Persona](user:qacom4) revisa esto y @[Tercera Persona](user:qacom3) también");
+  await L.eqEventually("COM: la mención nueva avisa", () => mentionsOf("qacom3"), 1);
+  L.eq("COM: quien ya estaba mencionado no recibe otro aviso", await mentionsOf("qacom4"), 1);
+  L.check("COM: «(editado)» con la fecha en el título", /^Editado el /.test((await mine.getByText("(editado)").getAttribute("title")) ?? ""));
+  await L.eqEventually("COM: la otra persona ve la edición en vivo", async () => (await theirs.innerText()).includes("@Tercera Persona también") && (await theirs.innerText()).includes("(editado)"), true, { timeout: 8000 });
+  await U.closeDialog(p);
+  await U.undoKey(p, "Control+z");
+  await L.eqEventually("COM: deshacer devuelve el texto anterior", bodyOf, "Hola @[Cuarta Persona](user:qacom4) revisa esto");
+  await L.eqEventually("COM: y la otra persona lo ve en vivo, sin «(editado)»", async () => (await theirs.innerText()).includes("también") || (await theirs.innerText()).includes("(editado)"), false, { timeout: 8000 });
+
+  // Un borrador de más de 24 h se descarta, y los caducados de otras tareas se limpian al cargar.
+  await p.evaluate(([k1, k2]) => {
+    for (const k of [k1, k2]) localStorage.setItem(k, JSON.stringify({ at: Date.now() - 25 * 3600_000, value: { text: "de ayer" } }));
+  }, [key, `pz-draft-comment:${adm.id}:otra`]);
+  await L.reload(p);
+  await U.openTask(p, "Comentarios");
+  L.eq("COM: los borradores caducados no vuelven y se limpian", [await box().inputValue(), await p.evaluate((k) => localStorage.getItem(k), `pz-draft-comment:${adm.id}:otra`)], ["", null]);
+  L.assertNoErrors("COM escritorio", [s, s2]);
+  await s2.ctx.close();
+  await s.ctx.close();
+
+  // Móvil: el lápiz siempre visible (no hay ratón) y la mención resaltada al escribir.
+  const m = await L.session({ viewport: { width: 390, height: 844 }, mobile: true });
+  const mp = m.page;
+  await U.openTask(mp, "Comentarios");
+  const mc = U.dialog(mp).locator("[data-comment-id]").first();
+  await mc.scrollIntoViewIfNeeded();
+  L.eq("COM móvil: el lápiz se ve sin pasar el ratón", await mc.getByRole("button", { name: "Editar comentario" }).evaluate((el) => getComputedStyle(el).opacity), "1");
+  await mc.getByRole("button", { name: "Editar comentario" }).tap();
+  await U.dialog(mp).locator('textarea[aria-label="Editar comentario"]').waitFor();
+  await mp.screenshot({ path: path.join(SHOTS, "com-movil-editando.png") });
+  await mc.getByRole("button", { name: "Cancelar", exact: true }).tap();
+  const mbox = U.dialog(mp).locator('textarea[aria-label="Nuevo comentario"]');
+  await mbox.tap();
+  await mp.keyboard.type("Ojo @Cua");
+  await mp.keyboard.press("Enter");
+  L.eq("COM móvil: «@Nombre» resaltado", [await mbox.inputValue(), await U.dialog(mp).locator("[data-mention-backdrop] mark").count()], ["Ojo @Cuarta Persona ", 1]);
+  L.check("COM móvil: sin scroll horizontal", await mp.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  L.assertNoErrors("COM móvil", [m]);
+  await m.ctx.close();
 }
 
 await L.closeBrowser(); await L.closeDb();
