@@ -38,3 +38,30 @@ export function waitingText(excerpt: string, t: T): string {
   const n = Number.parseInt(excerpt, 10);
   return Number.isFinite(n) ? t("Lleva {n} d en espera", { n }) : "";
 }
+
+/**
+ * Aviso de asignación de un lote de tareas (alta masiva): se guarda solo el número, con un tabulador delante que el
+ * extracto de un título nunca lleva (excerpt() convierte todo espacio en blanco en un espacio), y el texto «N tareas»
+ * se pone al mostrarlo, en el idioma de quien lo lee.
+ */
+export function assignedBatchExcerpt(count: number): string {
+  return `\t${count}`;
+}
+
+function parseAssignedBatch(excerpt: string): number | null {
+  const m = /^\t(\d+)$/.exec(excerpt);
+  return m ? Number(m[1]) : null;
+}
+
+/** Texto bajo la cabecera del aviso, en el idioma de `t` (fechas con `locale`). */
+export function notificationBody(kind: NotificationKind, excerpt: string, t: T, locale: string): string {
+  switch (kind) {
+    case "DUE_CHANGED": return dueChangeText(excerpt, t, locale);
+    case "WAITING": return waitingText(excerpt, t);
+    case "ASSIGNED": {
+      const n = parseAssignedBatch(excerpt);
+      return n === null ? excerpt : n === 1 ? t("1 tarea") : t("{n} tareas", { n });
+    }
+    default: return excerpt;
+  }
+}

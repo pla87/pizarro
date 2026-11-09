@@ -40,6 +40,18 @@ const deploySchema = z.object({
   number: z.number().int().positive().optional(),
 });
 
+/** 409 si `missing` tareas de la release ya no están en el tablero: el texto generado no coincidiría con el histórico. */
+async function assertNoneMissing(missing: number) {
+  if (missing <= 0) return;
+  const t = await getT();
+  throw new AppError(
+    missing === 1
+      ? t("Una de las tareas ya no está en el tablero (archivada, borrada o movida a otro proyecto): vuelve a generar la release.")
+      : t("{n} de las tareas ya no están en el tablero (archivadas, borradas o movidas a otro proyecto): vuelve a generar la release.", { n: missing }),
+    409,
+  );
+}
+
 /**
  * Registra la release con el texto final editado y mueve las tarjetas incluidas
  * a la columna "En producción" (o las archiva).
@@ -59,16 +71,7 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     });
     // El texto llega ya generado del cliente: si alguna tarea se ha archivado, borrado o movido de proyecto
     // mientras tanto, el histórico no coincidiría con lo que dice el texto. Se pide volver a generarlo.
-    const missing = new Set(data.taskIds).size - tasks.length;
-    if (missing > 0) {
-      const t = await getT();
-      throw new AppError(
-        missing === 1
-          ? t("Una de las tareas ya no está en el tablero (archivada, borrada o movida a otro proyecto): vuelve a generar la release.")
-          : t("{n} de las tareas ya no están en el tablero (archivadas, borradas o movidas a otro proyecto): vuelve a generar la release.", { n: missing }),
-        409,
-      );
-    }
+    await assertNoneMissing(new Set(data.taskIds).size - tasks.length);
 
     // Deshacer: dónde estaba cada tarea (solo las de este proyecto); la release del histórico se quita (ver más abajo).
     // La columna de destino se busca a la vez.
@@ -96,6 +99,16 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
       // Dos despliegues a la vez del mismo proyecto: el segundo espera aquí y ve el número del primero
       // (y recibe el aviso de abajo) en lugar de chocar con el índice único con un error genérico.
       await lockProject(tx, data.projectId);
+      // La columna de destino se bloquea antes que las tareas, en el mismo orden que moveTask (columna → tarea).
+      if (target) await lockColumns(tx, [target.id]);
+      // Las tareas se leyeron fuera de la transacción: si alguien ha archivado (o borrado o movido) alguna entre
+      // medias, la release la incluiría y la sacaría a producción sin quitarle archivedAt. Se bloquean aquí las que
+      // siguen activas en el proyecto (un archivado en curso termina antes y deja de contar) y se repite el aviso.
+      const ids = tasks.map((t) => t.id);
+      const still = ids.length
+        ? await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "Task" WHERE "id" IN (${Prisma.join(ids)}) AND "projectId" = ${data.projectId} AND "archivedAt" IS NULL FOR UPDATE`
+        : [];
+      await assertNoneMissing(ids.length - still.length);
       const last = await tx.release.findFirst({ where: { projectId: data.projectId }, orderBy: { number: "desc" }, select: { number: true } });
       const number = (last?.number ?? 0) + 1;
       if (data.number && data.number !== number) {
@@ -131,7 +144,6 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
       }
       const moved: { id: string; columnId: string; position: number }[] = [];
       if (target) {
-        await lockColumns(tx, [target.id]);
         let pos = (await lastPositionIn(tx, target.id)) ?? 0;
         for (const t of tasks) {
           if (t.evergreen) continue; // las fijas se quedan en su columna

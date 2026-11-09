@@ -7,6 +7,8 @@ import { archiveTasks, createTasks, deleteTasks, getArchivedTasks, restoreTask, 
 import { deployRelease } from "../../src/actions/releases";
 import { redoLast, undoLast } from "../../src/actions/undo";
 import { DUE_NOTIFY_DELAY_MS, deliverDueNotices } from "../../src/lib/due-notices";
+import { notificationBody } from "../../src/lib/notification-text";
+import { makeT } from "../../src/i18n/core";
 
 describe("avisos de fecha", () => {
   test("si la fecha actual ya no es la del aviso pendiente, no se envía", async () => {
@@ -90,6 +92,7 @@ describe("rehacer un despliegue y asignación en lote", () => {
     const notes = await db.notification.findMany({ where: { userId: assignee.id, type: "ASSIGNED" } });
     assert.equal(notes.length, 1);
     assert.equal(notes[0]!.taskId, made[0]!.id);
-    assert.equal(notes[0]!.excerpt, "2 tareas");
+    // Se guarda solo el número; «2 tareas» se pone al mostrarlo, en el idioma de quien lo lee.
+    assert.equal(notificationBody("ASSIGNED", notes[0]!.excerpt, makeT("es"), "es-ES"), "2 tareas");
   });
 });

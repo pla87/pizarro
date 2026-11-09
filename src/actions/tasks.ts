@@ -29,6 +29,7 @@ import { createDriveFile, type GoogleFileKind } from "@/lib/google";
 import { shareRule } from "@/lib/google-share";
 import { excerpt as makeExcerpt, extractMentionIds, mentionsToPlain } from "@/lib/mentions";
 import { dropPendingDueChanges, queueDueChange } from "@/lib/due-notices";
+import { assignedBatchExcerpt } from "@/lib/notification-text";
 import { followTask, notifyMentions, notifyTask, taskFollowerIds } from "@/lib/notify";
 import { isFollowing } from "@/lib/followers";
 import { loadTaskHistory } from "@/lib/task-events";
@@ -301,7 +302,7 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
     describeAction("Creó {count} en «{col}»: {titles}", { count: tasksN(ids.length), col: await columnName(data.columnId), titles: data.tasks.map((t) => `«${t.title}»`).join(", ").slice(0, 600) }, { taskIds: ids });
     // Un solo aviso para todo el lote (enlaza a la primera tarea), como createTask pero sin inundar al responsable.
     if (data.assigneeId && ids[0]) {
-      await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId: ids[0], projectId: data.projectId, recipientIds: [data.assigneeId], excerpt: ids.length === 1 ? makeExcerpt(data.tasks[0]!.title) : `${ids.length} tareas` });
+      await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId: ids[0], projectId: data.projectId, recipientIds: [data.assigneeId], excerpt: ids.length === 1 ? makeExcerpt(data.tasks[0]!.title) : assignedBatchExcerpt(ids.length) });
     }
     const rows = await db.task.findMany({ where: { id: { in: ids } }, orderBy: TASK_ORDER, select: boardTaskSelect });
     // `ids` conserva el orden de entrada (la tarea i es la línea i): ahí se sabe qué título llegó demasiado largo.
@@ -442,6 +443,15 @@ async function recordUpdateEvents(
   skipTaskEvents();
 }
 
+/** 409 si otra persona ha cambiado el título o la descripción después de `since` (cuándo se cargó lo que se edita). */
+async function assertNoTextConflict(row: { contentUpdatedAt: Date | null; contentUpdatedById: string | null }, userId: string, since: string | null | undefined, client: Prisma.TransactionClient = db) {
+  const base = since ? new Date(since).getTime() : 0;
+  if (!row.contentUpdatedAt || row.contentUpdatedById === userId || row.contentUpdatedAt.getTime() <= base) return;
+  const who = row.contentUpdatedById ? (await client.user.findUnique({ where: { id: row.contentUpdatedById }, select: { name: true } }))?.name : null;
+  const t = await getT();
+  throw new AppError(who ? t("{who} ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos.", { who }) : t("Otra persona ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos."), 409);
+}
+
 /**
  * `since`: cuándo se cargó el título/descripción que se está editando. Si otra persona los ha
  * cambiado después, no se pisa su texto: se avisa para recargar.
@@ -462,14 +472,9 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
     const { projectId } = task;
     assertNotArchivedRow(task);
     const editsText = data.title !== undefined || data.description !== undefined;
-    if (editsText && since !== undefined) {
-      const base = since ? new Date(since).getTime() : 0;
-      if (task.contentUpdatedAt && task.contentUpdatedById !== user.id && task.contentUpdatedAt.getTime() > base) {
-        const who = task.contentUpdatedById ? (await db.user.findUnique({ where: { id: task.contentUpdatedById }, select: { name: true } }))?.name : null;
-        const t = await getT();
-        throw new AppError(who ? t("{who} ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos.", { who }) : t("Otra persona ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos."), 409);
-      }
-    }
+    const checkConflict = editsText && since !== undefined;
+    // Comprobación rápida (sin candado); la definitiva se repite dentro de la transacción con la fila bloqueada.
+    if (checkConflict) await assertNoTextConflict(task, user.id, since);
     // Las comprobaciones van a la vez; si fallan varias, gana la primera en el orden de siempre.
     const checks = await Promise.allSettled([
       data.assigneeId ? assertAssignable(projectId, data.assigneeId) : null,
@@ -522,11 +527,16 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
       }
       // Menciones nuevas en la descripción (las que ya estaban no vuelven a avisar).
       // Se lee la versión anterior con bloqueo de fila para que dos ediciones simultáneas no avisen dos veces.
+      // Con la misma fila bloqueada se repite la comprobación de conflicto: dos guardados casi a la vez pasan los dos
+      // la de fuera, pero aquí el segundo ya ve el texto del primero y recibe el 409.
       let added: string[] = [];
-      if (data.description !== undefined) {
-        const [before] = await tx.$queryRaw<{ description: string }[]>`SELECT "description" FROM "Task" WHERE "id" = ${taskId} FOR UPDATE`;
-        const old = new Set(extractMentionIds(before?.description ?? ""));
-        added = extractMentionIds(data.description).filter((id) => !old.has(id));
+      if (data.description !== undefined || checkConflict) {
+        const [before] = await tx.$queryRaw<{ description: string; contentUpdatedAt: Date | null; contentUpdatedById: string | null }[]>`SELECT "description", "contentUpdatedAt", "contentUpdatedById" FROM "Task" WHERE "id" = ${taskId} FOR UPDATE`;
+        if (checkConflict && before) await assertNoTextConflict(before, user.id, since, tx);
+        if (data.description !== undefined) {
+          const old = new Set(extractMentionIds(before?.description ?? ""));
+          added = extractMentionIds(data.description).filter((id) => !old.has(id));
+        }
       }
       await tx.task.update({ where: { id: taskId }, data: fields });
       if (labelIds) {
