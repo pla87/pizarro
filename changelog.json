@@ -1,6 +1,85 @@
 {
   "versions": [
     {
+      "version": "1.47.0",
+      "date": "2026-11-09",
+      "releasedAt": "2026-11-09T21:25:47+01:00",
+      "summary": "Web getpizarro.com y recordatorio de licencia, comentarios editables con borrador y menciones legibles, pegado de imágenes y tablas fiable, detalle de tarea más cómodo",
+      "changes": {
+        "nuevas": [
+          "Web del producto en getpizarro.com: qué es, cómo se instala, precios y licencia, en español e inglés.",
+          "Recordatorio discreto para administradores (como mucho una vez al mes) mientras la instalación no tenga licencia registrada ni esté declarada de uso personal; nada se bloquea.",
+          "Administración → Licencia: registrar la licencia (titular y factura) o declarar uso personal.",
+          "Editar tus comentarios con un lápiz discreto; se marcan «(editado)» y los demás lo ven al momento.",
+          "El comentario sin enviar se guarda como borrador durante un día.",
+          "Pegar una lista en «Añadir subtarea» crea una subtarea por línea.",
+          "Las tablas copiadas de Word, Google Docs, Excel o una web se pegan como tabla."
+        ],
+        "mejoras": [
+          "Las menciones se ven como @Nombre resaltado mientras escribes, sin códigos.",
+          "El título del detalle ocupa todo el ancho; «Guardado» aparece sin quitarle sitio.",
+          "La columna de campos del detalle ya no tiene un scroll propio inútil.",
+          "«Capturas y adjuntos (n)» muestra cuántos hay y los adjuntos se ordenan por nombre.",
+          "Cerrar la tarea con la descripción o una subtarea a medio escribir pide confirmación.",
+          "El enlace externo sin «https://» se completa solo.",
+          "La barra de selección flota sobre el tablero sin cambiar el scroll de las columnas.",
+          "Las plantillas de release se editan en su sitio, una a la vez.",
+          "«Nuevo proyecto» reúne en una sola lista proyecto en blanco, ejemplos y plantillas."
+        ],
+        "correcciones": [
+          "Pegar una imagen en «Nueva tarea» ya no da avisos dobles de archivo vacío y funciona con el foco en cualquier parte.",
+          "Copiar texto de Word, Excel u Outlook ya no adjunta una imagen de la selección.",
+          "La importación de un proyecto grande con una conexión normal ya no se corta a los 30 minutos.",
+          "Los avisos de asignación de varias tareas llegan en el idioma de quien los recibe.",
+          "Dos guardados simultáneos de la descripción ya no se pisan.",
+          "Una release ya no incluye una tarea archivada mientras se generaba.",
+          "Ocultar a la vez los últimos tipos ya no deja el proyecto sin tipos."
+        ],
+        "tecnicos": [
+          "Web estática en site/ generada con scripts/build-site.mjs y publicada con GitHub Pages.",
+          "Nueva suite e2e de pegado y más comprobaciones en la del tablero."
+        ]
+      },
+      "en": {
+        "summary": "getpizarro.com website and licence reminder, editable comments with drafts and readable mentions, reliable image and table pasting, a more comfortable task detail",
+        "changes": {
+          "nuevas": [
+            "Product website at getpizarro.com: what it is, how to install it, pricing and licence, in Spanish and English.",
+            "Discreet reminder for administrators (at most once a month) while the installation has no registered licence and is not declared personal use; nothing is blocked.",
+            "Administration → Licence: register the licence (holder and invoice) or declare personal use.",
+            "Edit your comments with a discreet pencil; they are marked «(edited)» and others see it right away.",
+            "An unsent comment is kept as a draft for a day.",
+            "Pasting a list into «Add subtask» creates one subtask per line.",
+            "Tables copied from Word, Google Docs, Excel or a web page are pasted as tables."
+          ],
+          "mejoras": [
+            "Mentions show as a highlighted @Name while you type, without codes.",
+            "The detail title uses the full width; «Saved» appears without taking space from it.",
+            "The detail fields column no longer has a useless scrollbar of its own.",
+            "«Screenshots and attachments (n)» shows how many there are, and attachments are sorted by name.",
+            "Closing a task with an unsaved description or a half-written subtask asks for confirmation.",
+            "An external link without «https://» is completed automatically.",
+            "The selection bar floats over the board without changing the columns' scroll.",
+            "Release templates are edited in place, one at a time.",
+            "«New project» brings blank project, examples and templates together in a single list."
+          ],
+          "correcciones": [
+            "Pasting an image in «New task» no longer shows duplicate empty-file warnings and works wherever the focus is.",
+            "Copying text from Word, Excel or Outlook no longer attaches an image of the selection.",
+            "Importing a large project over a normal connection no longer stops at 30 minutes.",
+            "Notifications for assigning several tasks arrive in the recipient's language.",
+            "Two simultaneous description saves no longer overwrite each other.",
+            "A release no longer includes a task archived while it was being generated.",
+            "Hiding the last task types at the same time no longer leaves the project without types."
+          ],
+          "tecnicos": [
+            "Static website in site/ built with scripts/build-site.mjs and published with GitHub Pages.",
+            "New paste e2e suite and more checks in the board suite."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.46.0",
       "date": "2026-11-04",
       "releasedAt": "2026-11-04T14:21:26+01:00",

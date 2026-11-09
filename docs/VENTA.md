@@ -77,13 +77,13 @@ Antes de publicarlo, prueba el enlace en modo de prueba: paga con una tarjeta de
    ```
 
    Es una constante del producto, no de cada instalación: el producto se vende desde un único sitio. Es un enlace público; no contiene claves ni secretos.
-2. Guarda el cambio con un commit y publica una versión nueva como se hace habitualmente (ver `docs/HANDOFF.md`). La página de presentación (botón «Comprar») y Administración → Licencia (botón «Comprar licencia (100 € + IVA)») usan ese enlace.
-3. Mientras `BUY_URL` esté vacía, el botón lleva al email de contacto público (el configurado en Administración → Textos legales) o, si tampoco hay, a la página `/licencia`.
+2. Guarda el cambio con un commit y publica una versión nueva como se hace habitualmente (ver `docs/HANDOFF.md`). La página de presentación (botón «Comprar»), Administración → Licencia (botón «Comprar licencia (100 € + IVA)») y el recordatorio de licencia para administradores usan ese enlace. La web getpizarro.com se regenera sola al subir el cambio a `main` (ver «Web getpizarro.com»): su botón «Próximamente» pasa a ser «Comprar licencia».
+3. Mientras `BUY_URL` esté vacía, el botón de la app lleva al email de contacto público (el configurado en Administración → Textos legales) o, si tampoco hay, a la página `/licencia`; en getpizarro.com sale «Próximamente», deshabilitado, con la nota «Mientras tanto puedes usar Pizarro con normalidad: la licencia se basa en la buena voluntad».
 
 ## 6. Qué hace el comprador después
 
 1. Paga con tarjeta en el enlace y recibe la factura por email.
-2. En su instalación de Pizarro, entra como administrador en **Administración → Licencia**, y anota el **titular**, el **número de factura (o referencia de compra)** y, si quiere, el email de compra. Se guarda en su instalación y queda anotado en el registro de actividad.
+2. En su instalación de Pizarro, entra como administrador en **Administración → Licencia → Registrar licencia** y anota el **titular** (empresa o nombre) y, si quiere, el **número de factura o recibo** y el email de compra; la fecha se pone sola. Se guarda en su instalación, queda anotado en el registro de actividad y deja de salir el recordatorio de licencia a los administradores.
 3. Ese registro es solo informativo: no activa nada ni bloquea nada, y Pizarro no hace llamadas a internet para comprobarlo.
 
 Cada servidor necesita su licencia. Las actualizaciones son gratuitas para siempre. El soporte no está incluido.
@@ -96,6 +96,27 @@ Cada servidor necesita su licencia. Las actualizaciones son gratuitas para siemp
 - Estas ventas hay que declararlas (por ejemplo, el modelo 349 de operaciones intracomunitarias en España). Consúltalo con el gestor.
 - Para ventas fuera de la UE, el IVA español normalmente no se aplica, pero conviene confirmar con el gestor cada caso.
 
+## 8. Web getpizarro.com
+
+La web del producto es un sitio estático (sin JavaScript, sin cookies ni analítica, sin recursos externos) que se genera desde el repositorio y se publica gratis con **GitHub Pages**:
+
+- **Fuentes:** `site/templates/layout.html` (plantilla), `site/static/` (hoja de estilos, `CNAME`, `robots.txt`, imagen para redes `og.png`) y `scripts/build-site.mjs`, que genera `site/dist`. Los textos salen de `src/lib/landing-content.ts` (los mismos de `/presentacion`) y `src/lib/site-content.ts`, con su inglés en `src/i18n/en/`; el precio y el enlace de compra, de `src/lib/product.ts`; la licencia (`/licencia/` y `/en/license/`), de `LICENSE.md`. Español en `/` e inglés en `/en/`.
+- **Probarla en local:** `node scripts/build-site.mjs` (Node 22.18 o superior) y abre `site/dist` con cualquier servidor estático.
+- **Publicación:** el workflow `.github/workflows/site.yml` la regenera y la publica en cada push a `main` que cambie `site/`, el script, `LICENSE*.md`, `src/lib/product.ts` o sus textos, y también a mano (**Actions → Web → Run workflow**).
+
+### Pasos del propietario (una sola vez)
+
+1. **Activar Pages:** en el repositorio, **Settings → Pages → Build and deployment → Source: GitHub Actions**. Después lanza el workflow (**Actions → Web → Run workflow**) o sube un cambio a `site/`.
+2. **DNS en el registrador del dominio** `getpizarro.com` (en su panel de DNS):
+   - Cuatro registros **A** del dominio raíz (`@`) a `185.199.108.153`, `185.199.109.153`, `185.199.110.153` y `185.199.111.153`.
+   - Opcional (IPv6): cuatro registros **AAAA** de `@` a `2606:50c0:8000::153`, `2606:50c0:8001::153`, `2606:50c0:8002::153` y `2606:50c0:8003::153`.
+   - Un registro **CNAME** de `www` a `pla87.github.io` (así `www.getpizarro.com` redirige a `getpizarro.com`).
+   - Borra otros registros A/AAAA/CNAME del raíz o de `www` que ponga el registrador por defecto (páginas de aparcamiento).
+3. **Dominio personalizado:** en **Settings → Pages → Custom domain** escribe `getpizarro.com` y pulsa **Save** (con la publicación por GitHub Actions este paso es obligatorio: el fichero `CNAME` del sitio no basta). Cuando GitHub compruebe el DNS (de minutos a unas horas), marca **Enforce HTTPS**.
+4. **Verificar el dominio** para que nadie pueda usarlo en otro repositorio de GitHub (secuestro de dominio): en la configuración de **tu cuenta** (no del repositorio), **Settings → Pages → Verified domains → Add a domain**, escribe `getpizarro.com` y crea en el DNS el registro **TXT** que indica GitHub (del estilo `_github-pages-challenge-pla87.getpizarro.com`); después pulsa **Verify**. Deja ese registro TXT puesto.
+
+La web no muestra ningún email de contacto. Cuando haya un enlace de pago (`BUY_URL`, sección 5), el botón «Comprar licencia» aparece solo tras el siguiente despliegue.
+
 ## Comprobación final
 
 - [ ] El gestor ha confirmado el alta, el tipo de IVA y el tratamiento de las ventas fuera de España.
@@ -104,3 +125,4 @@ Cada servidor necesita su licencia. Las actualizaciones son gratuitas para siemp
 - [ ] El Payment Link crea factura después del pago y pide dirección, empresa y NIF/CIF/VAT (opcional).
 - [ ] Una compra de prueba produce una factura correcta.
 - [ ] `BUY_URL` contiene el enlace del modo real y la nueva versión está publicada.
+- [ ] getpizarro.com muestra el botón «Comprar licencia» (workflow «Web» ejecutado tras el cambio) y tiene HTTPS forzado y el dominio verificado.

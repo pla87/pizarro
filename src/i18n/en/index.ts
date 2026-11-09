@@ -16,10 +16,15 @@ import { server } from "./server";
 import { settings } from "./settings";
 import { landing } from "./landing";
 import { lista } from "./lista";
+import { pegado } from "./pegado";
 import { legal } from "./legal";
 import { licencia } from "./licencia";
+import { licencia2 } from "./licencia2";
 import { setup } from "./setup";
 import { task } from "./task";
 import { wip } from "./wip";
+import { comentarios } from "./comentarios";
+import { plantillas2 } from "./plantillas2";
+import { detalle } from "./detalle";
 
-export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing, ...almacenamiento, ...licencia, ...wip, ...importar, ...ics, ...lista, ...acceso };
+export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing, ...almacenamiento, ...licencia, ...wip, ...importar, ...ics, ...lista, ...acceso, ...plantillas2, ...pegado, ...licencia2, ...comentarios, ...detalle };

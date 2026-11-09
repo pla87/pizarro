@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { esT, type T } from "@/i18n/shared";
 import type { UploadedAttachment } from "@/lib/types";
+import { CLIPBOARD_IMAGE_NAME } from "@/lib/clipboard-files";
 import { QueueStopped, runQueue, summarizeSkipped, withRetry, type SkippedFile } from "@/lib/upload-queue";
 
 const CLIENT_MAX_WIDTH = 1920;
@@ -30,7 +31,7 @@ async function shrink(file: File): Promise<Blob> {
   }
 }
 
-/** Archivos (de cualquier tipo) de un FileList o de los items de un portapapeles / arrastre. */
+/** Archivos (de cualquier tipo) de un FileList o de los items de un arrastre. Para pegar, ver ui/pasteFiles. */
 export function filesFrom(list: FileList | DataTransferItemList | null | undefined): File[] {
   if (!list) return [];
   const files: File[] = [];
@@ -39,11 +40,6 @@ export function filesFrom(list: FileList | DataTransferItemList | null | undefin
     if (file) files.push(file);
   }
   return files;
-}
-
-/** Solo imágenes (atajo de pegado del tablero que crea una tarea). */
-export function imageFilesFrom(list: FileList | DataTransferItemList | null | undefined): File[] {
-  return filesFrom(list).filter((f) => f.type.startsWith("image/"));
 }
 
 export function isImageFile(file: File): boolean {
@@ -212,6 +208,10 @@ export async function uploadBatch(
 export function skippedMessage(t: T, locale: string, skipped: SkippedFile[], fileMaxMb: number): string {
   const why = (s: SkippedFile) =>
     s.reason === "empty" ? t("vacío") : s.reason === "too_big" ? t("pesa {size}, máx. {mb} MB", { size: formatBytes(s.size, locale), mb: fileMaxMb }) : t("no cabe en el máximo de la tarea");
+  // Captura o imagen pegada que el navegador entregó vacía (y que tampoco se pudo volver a leer): qué hacer.
+  if (skipped.length === 1 && skipped[0]!.reason === "empty" && skipped[0]!.name === CLIPBOARD_IMAGE_NAME) {
+    return t("La imagen pegada ha llegado vacía desde el portapapeles. Vuelve a copiarla y pégala otra vez, o guárdala como archivo y adjúntala.");
+  }
   const list = summarizeSkipped(skipped, (s) => `«${s.name || t("archivo")}» (${why(s)})`);
   return skipped.length === 1 ? t("1 archivo no se ha adjuntado: {list}", { list }) : t("{n} archivos no se han adjuntado: {list}", { n: skipped.length, list });
 }

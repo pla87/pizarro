@@ -18,7 +18,7 @@ import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
 import { Modal } from "../ui/Modal";
 import { BudgetSummaryDialog } from "./BudgetSummaryDialog";
 import { ChecklistDialog } from "./ChecklistDialog";
-import { useBoard, useSelectedCount, useSelectionSize, useTasks } from "./context";
+import { useBoard, useSelectedCount, useTasks } from "./context";
 import { useShortcut } from "./shortcuts";
 import { EvergreenPanel } from "./EvergreenPanel";
 import { SortableTaskCard } from "./TaskCard";
@@ -42,7 +42,6 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
   const t = useT();
   const sc = useShortcut();
   const selectedHere = useSelectedCount(taskIds);
-  const hasSelection = useSelectionSize() > 0;
   const allSelected = taskIds.length > 0 && selectedHere === taskIds.length;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
   const isNextRelease = column.role === "NEXT_RELEASE";
@@ -127,8 +126,10 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
           className={cn(
             // pt y -mt: margen interior para que el anillo de foco de la primera tarjeta no lo recorte el scroll.
             "-mt-1.5 flex min-h-20 flex-1 flex-col gap-2 overflow-y-auto rounded-b-xl px-2 pt-1.5 transition-colors",
-            // Abajo se deja hueco: con selección lo tapa la barra inferior y en móvil los botones flotantes.
-            hasSelection ? "pb-44 md:pb-20" : "pb-32 lg:pb-2",
+            // Hueco fijo al final (con el de la zona de archivos) para que la última tarjeta pueda quedar por encima
+            // de la barra de selección y, sin ella, de los botones flotantes. Es el mismo haya o no selección: la barra
+            // flota encima sin cambiar el alto ni el contenido de la columna, y el scroll no salta al aparecer.
+            "pb-40 md:pb-32 lg:pb-6",
             isOver && "bg-brand-50/60 dark:bg-brand-500/5",
           )}
           {...fileZone.handlers}

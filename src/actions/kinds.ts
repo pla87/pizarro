@@ -13,6 +13,7 @@ import { requireAdmin, requireUser } from "@/lib/session";
 import * as v from "@/lib/validation";
 import { MAX_KIND_SUBTASKS, parseSubtaskLines } from "@/lib/kinds-special";
 import { getT } from "@/i18n/server";
+import { lockKindScope } from "@/lib/kind-lock";
 
 const kindSchema = z.object({
   name: v.name.max(40, "Máximo 40 caracteres."),
@@ -68,21 +69,6 @@ async function assertUniqueName(name: string, projectId: string | null, exceptId
   if (projectId === null && dup.projectId !== null) throw new AppError("Ya hay un tipo con ese nombre en algún proyecto.");
   if (projectId !== null && dup.projectId === null) throw new AppError("Ya existe un tipo general con ese nombre.");
   throw new AppError("Ya existe un tipo con ese nombre.");
-}
-
-/**
- * Candado de los tipos de un ámbito hasta el final de la transacción: recuento, nombre único y alta (o renombrado) van
- * juntos, y dos peticiones a la vez no pueden pasarse del tope ni repetir nombre. Un tipo general no puede repetir el
- * nombre de ningún tipo de ningún proyecto: toma el candado general en exclusiva. Uno de proyecto toma el de su proyecto
- * en exclusiva y el general compartido (así los de proyectos distintos no se esperan entre sí). Siempre en el mismo orden.
- */
-async function lockKindScope(tx: Prisma.TransactionClient, projectId: string | null): Promise<void> {
-  if (projectId === null) {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:kinds:general'))::text`;
-    return;
-  }
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock_shared(hashtext('pz:kinds:general'))::text`;
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`pz:kinds:${projectId}`}))::text`;
 }
 
 function revalidate(projectId: string | null) {

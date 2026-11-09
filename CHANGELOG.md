@@ -2,6 +2,47 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.47.0 — 2026-11-09 21:25
+
+Web getpizarro.com y recordatorio de licencia, comentarios editables con borrador y menciones legibles, pegado de imágenes y tablas fiable, detalle de tarea más cómodo
+
+### Nuevas funcionalidades
+
+- Web del producto en getpizarro.com: qué es, cómo se instala, precios y licencia, en español e inglés.
+- Recordatorio discreto para administradores (como mucho una vez al mes) mientras la instalación no tenga licencia registrada ni esté declarada de uso personal; nada se bloquea.
+- Administración → Licencia: registrar la licencia (titular y factura) o declarar uso personal.
+- Editar tus comentarios con un lápiz discreto; se marcan «(editado)» y los demás lo ven al momento.
+- El comentario sin enviar se guarda como borrador durante un día.
+- Pegar una lista en «Añadir subtarea» crea una subtarea por línea.
+- Las tablas copiadas de Word, Google Docs, Excel o una web se pegan como tabla.
+
+### Mejoras
+
+- Las menciones se ven como @Nombre resaltado mientras escribes, sin códigos.
+- El título del detalle ocupa todo el ancho; «Guardado» aparece sin quitarle sitio.
+- La columna de campos del detalle ya no tiene un scroll propio inútil.
+- «Capturas y adjuntos (n)» muestra cuántos hay y los adjuntos se ordenan por nombre.
+- Cerrar la tarea con la descripción o una subtarea a medio escribir pide confirmación.
+- El enlace externo sin «https://» se completa solo.
+- La barra de selección flota sobre el tablero sin cambiar el scroll de las columnas.
+- Las plantillas de release se editan en su sitio, una a la vez.
+- «Nuevo proyecto» reúne en una sola lista proyecto en blanco, ejemplos y plantillas.
+
+### Correcciones
+
+- Pegar una imagen en «Nueva tarea» ya no da avisos dobles de archivo vacío y funciona con el foco en cualquier parte.
+- Copiar texto de Word, Excel u Outlook ya no adjunta una imagen de la selección.
+- La importación de un proyecto grande con una conexión normal ya no se corta a los 30 minutos.
+- Los avisos de asignación de varias tareas llegan en el idioma de quien los recibe.
+- Dos guardados simultáneos de la descripción ya no se pisan.
+- Una release ya no incluye una tarea archivada mientras se generaba.
+- Ocultar a la vez los últimos tipos ya no deja el proyecto sin tipos.
+
+### Cambios técnicos / DB
+
+- Web estática en site/ generada con scripts/build-site.mjs y publicada con GitHub Pages.
+- Nueva suite e2e de pegado y más comprobaciones en la del tablero.
+
 ## v1.46.0 — 2026-11-04 14:21
 
 Pegar Markdown en la descripción, tablas e imágenes conservadas, campos de tarea más fiables, barra de formato como una sola caja y subidas lentas cortadas

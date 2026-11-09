@@ -10,11 +10,12 @@ import { DEFAULT_WAITING_DAYS, isUniqueColumnRole, MAX_WAITING_DAYS } from "@/li
 import { POSITION_STEP } from "@/lib/positions";
 import { lastPositionIn, lockColumns, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { requireUser } from "@/lib/session";
-import { WIP_MAX, WIP_MIN } from "@/lib/wip";
+import { isValidWipLimit, WIP_MAX, WIP_MIN } from "@/lib/wip";
 import { normalizeTaskFields } from "@/lib/task-fields";
 import { addUndo, captureTasks } from "@/lib/undo";
 import * as v from "@/lib/validation";
 import type { BoardColumn } from "@/lib/types";
+import { getT } from "@/i18n/server";
 
 const columnSelect = { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true } as const;
 
@@ -123,7 +124,12 @@ export async function setColumnWaitingDays(columnId: string, days: number | null
 export async function setColumnWipLimit(columnId: string, limit: number | null) {
   return runAction({ name: "columns.setColumnWipLimit", args: [columnId, limit] }, async () => {
     const column = await findColumn(columnId);
-    const value = limit === null ? null : z.number().int("Indica un número entero de tarjetas.").min(WIP_MIN, `Mínimo ${WIP_MIN}.`).max(WIP_MAX, `Máximo ${WIP_MAX}.`).parse(limit);
+    const value = limit === null ? null : z.number().int("Indica un número entero de tarjetas.").parse(limit);
+    // El rango se comprueba aparte para dar el texto ya traducido (con {min} y {max} no hay clave fija que traducir después).
+    if (value !== null && !isValidWipLimit(value)) {
+      const t = await getT();
+      throw new AppError(t("Indica un número entero entre {min} y {max}, o déjalo vacío.", { min: WIP_MIN, max: WIP_MAX }));
+    }
     if (value === column.wipLimit) return;
     addUndo({ t: "column.set", id: column.id, data: { wipLimit: column.wipLimit } });
     if (value === null) describeAction("Quitó el límite de tarjetas de la columna «{name}»", { name: column.name });

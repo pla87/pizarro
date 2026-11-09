@@ -1,4 +1,5 @@
 import type { EditResult } from "@/lib/markdown-edit";
+import { attachablePasteFiles } from "./pasteFiles";
 
 /**
  * Aplica una edición al textarea conservando el historial de deshacer del navegador (Ctrl+Z): se reemplaza solo el tramo
@@ -36,7 +37,8 @@ export function applyTextareaEdit(el: HTMLTextAreaElement | HTMLInputElement, ed
  */
 export function pasteAsOneLine(e: React.ClipboardEvent<HTMLInputElement | HTMLTextAreaElement>, onValueChange: (v: string) => void): void {
   const text = e.clipboardData.getData("text/plain");
-  if (!/[\r\n]/.test(text) || e.clipboardData.files.length) return;
+  // Con archivos que adjuntar, el pegado es del diálogo (ui/pasteFiles), no del campo.
+  if (!/[\r\n]/.test(text) || attachablePasteFiles(e.nativeEvent).length) return;
   e.preventDefault();
   const el = e.currentTarget;
   const flat = text.replace(/\s*[\r\n]+\s*/g, " ").trim();

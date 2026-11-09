@@ -5,6 +5,7 @@ import { z } from "zod";
 import { assertProjectAccess } from "@/lib/access";
 import { runAction } from "@/lib/action";
 import { db } from "@/lib/db";
+import { lockKindScope } from "@/lib/kind-lock";
 import { AppError, notFound } from "@/lib/errors";
 import { requireUser } from "@/lib/session";
 import * as v from "@/lib/validation";
@@ -27,29 +28,32 @@ export async function setGeneralKindEnabled(projectId: string, kindId: string, e
     if (on) {
       await db.projectHiddenKind.deleteMany({ where: { projectId: pid, kindId: kid } });
     } else {
-      // Tipos que seguirían disponibles en el proyecto.
-      const remaining = await db.taskKind.findMany({
-        where: { id: { not: kid }, OR: [{ projectId: null, hiddenIn: { none: { projectId: pid } } }, { projectId: pid }] },
-        select: { id: true },
-      });
-      if (remaining.length === 0) throw new AppError("El proyecto debe tener al menos un tipo de tarea.");
-      const inUse = await db.task.count({ where: { projectId: pid, kindId: kid } });
-      let target: string | null = null;
-      if (inUse > 0) {
-        target = replacementId ? v.id.parse(replacementId) : null;
-        if (!target || !remaining.some((k) => k.id === target)) {
-          const t = await getT();
-          throw new AppError(t("Hay {n} tarea(s) de tipo «{kind}»: elige a qué tipo pasan.", { n: inUse, kind: kind.name }));
+      // Recuento, cambio de tipo y ocultación van juntos con el candado de los tipos del proyecto: si dos personas
+      // ocultan a la vez los dos últimos tipos visibles, la segunda espera, ve que ya solo queda el suyo y se rechaza.
+      await db.$transaction(async (tx) => {
+        await lockKindScope(tx, pid);
+        // Tipos que seguirían disponibles en el proyecto.
+        const remaining = await tx.taskKind.findMany({
+          where: { id: { not: kid }, OR: [{ projectId: null, hiddenIn: { none: { projectId: pid } } }, { projectId: pid }] },
+          select: { id: true },
+        });
+        if (remaining.length === 0) throw new AppError("El proyecto debe tener al menos un tipo de tarea.");
+        const inUse = await tx.task.count({ where: { projectId: pid, kindId: kid } });
+        let target: string | null = null;
+        if (inUse > 0) {
+          target = replacementId ? v.id.parse(replacementId) : null;
+          if (!target || !remaining.some((k) => k.id === target)) {
+            const t = await getT();
+            throw new AppError(t("Hay {n} tarea(s) de tipo «{kind}»: elige a qué tipo pasan.", { n: inUse, kind: kind.name }));
+          }
+          await tx.task.updateMany({ where: { projectId: pid, kindId: kid }, data: { kindId: target } });
         }
-      }
-      await db.$transaction([
-        ...(target ? [db.task.updateMany({ where: { projectId: pid, kindId: kid }, data: { kindId: target } })] : []),
-        db.projectHiddenKind.upsert({
+        await tx.projectHiddenKind.upsert({
           where: { projectId_kindId: { projectId: pid, kindId: kid } },
           create: { projectId: pid, kindId: kid },
           update: {},
-        }),
-      ]);
+        });
+      });
     }
     revalidatePath(`/p/${pid}`, "layout");
   });

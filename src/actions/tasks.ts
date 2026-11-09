@@ -8,7 +8,7 @@ import { runAction } from "@/lib/action";
 import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjectAccess, assertTaskAccess, loadTaskWithAccess, visibleProjectsWhere } from "@/lib/access";
 import { appTimeZone, attachmentTotals, boardTaskSelect, listKinds, loadBoardTask, projectClients, projectUsers, toBoardTask } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
-import { MAX_TITLE } from "@/lib/constants";
+import { MAX_SUBTASKS, MAX_TITLE } from "@/lib/constants";
 import { clampTitle } from "@/lib/title-clamp";
 import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { assertCanBlock, blockProblem, lockBlocking } from "@/lib/blocking";
@@ -29,6 +29,7 @@ import { createDriveFile, type GoogleFileKind } from "@/lib/google";
 import { shareRule } from "@/lib/google-share";
 import { excerpt as makeExcerpt, extractMentionIds, mentionsToPlain } from "@/lib/mentions";
 import { dropPendingDueChanges, queueDueChange } from "@/lib/due-notices";
+import { assignedBatchExcerpt } from "@/lib/notification-text";
 import { followTask, notifyMentions, notifyTask, taskFollowerIds } from "@/lib/notify";
 import { isFollowing } from "@/lib/followers";
 import { loadTaskHistory } from "@/lib/task-events";
@@ -96,8 +97,7 @@ function describeChanges(data: Record<string, unknown>): Label {
   return { k: "{list} y {last}", p: { list: names.slice(0, -1), last: names.at(-1)! } };
 }
 
-/** Límites por tarea / usuario, para que nadie sature la base de datos ni la API de Google. */
-const MAX_SUBTASKS = 100;
+/** Límites por tarea / usuario, para que nadie sature la base de datos ni la API de Google (y MAX_SUBTASKS, en constants). */
 /** Comentarios que trae la tarea al abrirla, y los que añade cada «Ver anteriores». */
 const COMMENTS_FIRST_PAGE = 20;
 const COMMENTS_MORE_PAGE = 100;
@@ -301,7 +301,7 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
     describeAction("Creó {count} en «{col}»: {titles}", { count: tasksN(ids.length), col: await columnName(data.columnId), titles: data.tasks.map((t) => `«${t.title}»`).join(", ").slice(0, 600) }, { taskIds: ids });
     // Un solo aviso para todo el lote (enlaza a la primera tarea), como createTask pero sin inundar al responsable.
     if (data.assigneeId && ids[0]) {
-      await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId: ids[0], projectId: data.projectId, recipientIds: [data.assigneeId], excerpt: ids.length === 1 ? makeExcerpt(data.tasks[0]!.title) : `${ids.length} tareas` });
+      await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId: ids[0], projectId: data.projectId, recipientIds: [data.assigneeId], excerpt: ids.length === 1 ? makeExcerpt(data.tasks[0]!.title) : assignedBatchExcerpt(ids.length) });
     }
     const rows = await db.task.findMany({ where: { id: { in: ids } }, orderBy: TASK_ORDER, select: boardTaskSelect });
     // `ids` conserva el orden de entrada (la tarea i es la línea i): ahí se sabe qué título llegó demasiado largo.
@@ -442,6 +442,15 @@ async function recordUpdateEvents(
   skipTaskEvents();
 }
 
+/** 409 si otra persona ha cambiado el título o la descripción después de `since` (cuándo se cargó lo que se edita). */
+async function assertNoTextConflict(row: { contentUpdatedAt: Date | null; contentUpdatedById: string | null }, userId: string, since: string | null | undefined, client: Prisma.TransactionClient = db) {
+  const base = since ? new Date(since).getTime() : 0;
+  if (!row.contentUpdatedAt || row.contentUpdatedById === userId || row.contentUpdatedAt.getTime() <= base) return;
+  const who = row.contentUpdatedById ? (await client.user.findUnique({ where: { id: row.contentUpdatedById }, select: { name: true } }))?.name : null;
+  const t = await getT();
+  throw new AppError(who ? t("{who} ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos.", { who }) : t("Otra persona ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos."), 409);
+}
+
 /**
  * `since`: cuándo se cargó el título/descripción que se está editando. Si otra persona los ha
  * cambiado después, no se pisa su texto: se avisa para recargar.
@@ -462,14 +471,9 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
     const { projectId } = task;
     assertNotArchivedRow(task);
     const editsText = data.title !== undefined || data.description !== undefined;
-    if (editsText && since !== undefined) {
-      const base = since ? new Date(since).getTime() : 0;
-      if (task.contentUpdatedAt && task.contentUpdatedById !== user.id && task.contentUpdatedAt.getTime() > base) {
-        const who = task.contentUpdatedById ? (await db.user.findUnique({ where: { id: task.contentUpdatedById }, select: { name: true } }))?.name : null;
-        const t = await getT();
-        throw new AppError(who ? t("{who} ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos.", { who }) : t("Otra persona ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos."), 409);
-      }
-    }
+    const checkConflict = editsText && since !== undefined;
+    // Comprobación rápida (sin candado); la definitiva se repite dentro de la transacción con la fila bloqueada.
+    if (checkConflict) await assertNoTextConflict(task, user.id, since);
     // Las comprobaciones van a la vez; si fallan varias, gana la primera en el orden de siempre.
     const checks = await Promise.allSettled([
       data.assigneeId ? assertAssignable(projectId, data.assigneeId) : null,
@@ -522,11 +526,16 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
       }
       // Menciones nuevas en la descripción (las que ya estaban no vuelven a avisar).
       // Se lee la versión anterior con bloqueo de fila para que dos ediciones simultáneas no avisen dos veces.
+      // Con la misma fila bloqueada se repite la comprobación de conflicto: dos guardados casi a la vez pasan los dos
+      // la de fuera, pero aquí el segundo ya ve el texto del primero y recibe el 409.
       let added: string[] = [];
-      if (data.description !== undefined) {
-        const [before] = await tx.$queryRaw<{ description: string }[]>`SELECT "description" FROM "Task" WHERE "id" = ${taskId} FOR UPDATE`;
-        const old = new Set(extractMentionIds(before?.description ?? ""));
-        added = extractMentionIds(data.description).filter((id) => !old.has(id));
+      if (data.description !== undefined || checkConflict) {
+        const [before] = await tx.$queryRaw<{ description: string; contentUpdatedAt: Date | null; contentUpdatedById: string | null }[]>`SELECT "description", "contentUpdatedAt", "contentUpdatedById" FROM "Task" WHERE "id" = ${taskId} FOR UPDATE`;
+        if (checkConflict && before) await assertNoTextConflict(before, user.id, since, tx);
+        if (data.description !== undefined) {
+          const old = new Set(extractMentionIds(before?.description ?? ""));
+          added = extractMentionIds(data.description).filter((id) => !old.has(id));
+        }
       }
       await tx.task.update({ where: { id: taskId }, data: fields });
       if (labelIds) {
@@ -947,6 +956,39 @@ export async function addSubtask(taskId: string, title: string) {
   });
 }
 
+/**
+ * Varias subtareas de una vez (texto pegado con una por línea), al final de la lista y en una sola acción: un único
+ * «Deshacer» las quita todas. Si no caben todas (máximo por tarea), se añaden las primeras y `skipped` dice cuántas no.
+ * Cada título debe venir ya limpio (sin viñetas) y dentro del máximo de longitud (ver lib/subtask-lines.ts).
+ */
+export async function addSubtasks(taskId: string, titles: string[]) {
+  return runAction({ name: "tasks.addSubtasks", args: [taskId, titles] }, async (): Promise<{ created: SubtaskInfo[]; skipped: number; undo: { id?: string } }> => {
+    const user = await requireUser();
+    assertNotArchivedRow(await loadTaskWithAccess(user, v.id.parse(taskId), { archivedAt: true }));
+    const names = z.array(v.title).min(1).max(MAX_SUBTASKS).parse(titles);
+    if (!rateLimit(`subtask:${user.id}`, 60, 60_000)) throw new AppError("Demasiadas subtareas seguidas. Espera un momento.");
+    const { created, skipped } = await db.$transaction(async (tx) => {
+      await lockTaskRow(tx, taskId);
+      const room = MAX_SUBTASKS - (await tx.subtask.count({ where: { taskId } }));
+      if (room <= 0) throw new AppError("Una tarea no puede tener más de 100 subtareas.");
+      const last = await tx.subtask.findFirst({ where: { taskId }, orderBy: { position: "desc" }, select: { position: true } });
+      let position = last?.position;
+      const created: SubtaskInfo[] = [];
+      for (const title of names.slice(0, room)) {
+        position = positionBetween(position, null);
+        created.push(await tx.subtask.create({ data: { taskId, title, position }, select: { id: true, title: true, done: true, position: true } }));
+      }
+      return { created, skipped: Math.max(0, names.length - room) };
+    });
+    addUndo(...created.map((s) => ({ t: "subtask.remove" as const, id: s.id })));
+    const task = (await taskLabel(taskId)).title;
+    if (created.length === 1) describeAction("Añadió la subtarea «{subtask}» en «{task}»", { subtask: created[0]!.title, task }, { taskId });
+    else describeAction("Añadió {subs} en «{task}»", { subs: subtasksN(created.length), task }, { taskId });
+    // Id de la entrada de deshacer: el aviso «Deshacer» quita justo estas subtareas.
+    return { created, skipped, undo: trackUndoEntry() };
+  });
+}
+
 export async function updateSubtask(subtaskId: string, patch: { title?: string; done?: boolean }) {
   return runAction({ name: "tasks.updateSubtask", args: [subtaskId, patch] }, async () => {
     const sub = await assertSubtaskAccess(subtaskId);
@@ -1336,14 +1378,17 @@ export async function restoreTask(taskId: string) {
 
 // --- Comentarios y menciones ---------------------------------------------------
 
-const commentSelect = { id: true, body: true, createdAt: true, authorId: true, authorName: true, parentId: true, deletedAt: true, author: { select: { name: true } } } as const;
+const commentSelect = { id: true, body: true, createdAt: true, editedAt: true, authorId: true, authorName: true, parentId: true, deletedAt: true, author: { select: { name: true } } } as const;
 /** Orden estable para paginar con cursor (createdAt puede repetirse: el id desempata). */
 const COMMENT_ORDER: Prisma.TaskCommentOrderByWithRelationInput[] = [{ createdAt: "desc" }, { id: "desc" }];
 
-function toCommentInfo(c: { id: string; body: string; createdAt: Date; authorId: string | null; authorName: string | null; parentId: string | null; deletedAt: Date | null; author: { name: string } | null }): CommentInfo {
+function toCommentInfo(c: { id: string; body: string; createdAt: Date; editedAt: Date | null; authorId: string | null; authorName: string | null; parentId: string | null; deletedAt: Date | null; author: { name: string } | null }): CommentInfo {
   // Un comentario borrado que conserva respuestas no enseña ni texto ni autor.
   if (c.deletedAt) return { id: c.id, body: "", createdAt: c.createdAt.toISOString(), authorId: null, authorName: null, parentId: c.parentId, deleted: true };
-  return { id: c.id, body: c.body, createdAt: c.createdAt.toISOString(), authorId: c.authorId, authorName: c.author?.name ?? c.authorName ?? null, parentId: c.parentId };
+  return {
+    id: c.id, body: c.body, createdAt: c.createdAt.toISOString(), authorId: c.authorId, authorName: c.author?.name ?? c.authorName ?? null, parentId: c.parentId,
+    ...(c.editedAt ? { editedAt: c.editedAt.toISOString() } : {}),
+  };
 }
 
 /** Comentarios de la tarea anteriores al cursor, en el orden de COMMENT_ORDER. */
@@ -1365,6 +1410,32 @@ export async function getOlderComments(taskId: string, cursor: { createdAt: stri
     const oldest = rows.at(-1);
     const olderComments = oldest && rows.length === COMMENTS_MORE_PAGE ? await db.taskComment.count({ where: olderThan(taskId, oldest) }) : 0;
     return { comments: rows.reverse().map(toCommentInfo), olderComments };
+  });
+}
+
+/** Tope de comentarios que devuelve un refresco (el máximo configurable por tarea es 1000). */
+const COMMENTS_REFRESH_MAX = 1000;
+
+/**
+ * Refresco en vivo de los comentarios que ya se ven (otra persona comentó, editó o borró): todos desde `cursor` (el más
+ * antiguo cargado, incluido) hasta el más reciente; sin cursor, la primera página. Solo lectura.
+ */
+export async function getRecentComments(taskId: string, cursor?: { createdAt: string; id: string } | null) {
+  return runAction({ name: "tasks.getRecentComments", args: [taskId, cursor] }, async (): Promise<{ comments: CommentInfo[]; olderComments: number; commentCount: number }> => {
+    const user = await requireUser();
+    await assertTaskAccess(user, v.id.parse(taskId));
+    const c = cursor ? commentCursor.parse(cursor) : null;
+    const from = c ? { createdAt: new Date(c.createdAt), id: c.id } : null;
+    const where: Prisma.TaskCommentWhereInput = from
+      ? { taskId, OR: [{ createdAt: { gt: from.createdAt } }, { createdAt: from.createdAt, id: { gte: from.id } }] }
+      : { taskId };
+    const [rows, commentCount] = await Promise.all([
+      db.taskComment.findMany({ where, orderBy: COMMENT_ORDER, take: from ? COMMENTS_REFRESH_MAX : COMMENTS_FIRST_PAGE, select: commentSelect }),
+      db.taskComment.count({ where: { taskId, deletedAt: null } }),
+    ]);
+    const oldest = rows.at(-1) ?? from;
+    const olderComments = oldest ? await db.taskComment.count({ where: olderThan(taskId, oldest) }) : 0;
+    return { comments: rows.reverse().map(toCommentInfo), olderComments, commentCount };
   });
 }
 
@@ -1405,6 +1476,55 @@ export async function addComment(taskId: string, body: string, parentId?: string
     if (followers.length) await notifyTask({ type: "COMMENT", actorId: user.id, taskId, projectId, recipientIds: followers, excerpt: makeExcerpt(text) });
     describeAction(parent ? "Respondió a un comentario en «{title}»" : "Comentó en «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
     return toCommentInfo(comment);
+  });
+}
+
+/**
+ * Edita un comentario propio. Solo su autor: un admin puede borrar comentarios ajenos, pero no cambiar lo que otra
+ * persona escribió. Mismas reglas de texto que al crear; avisa solo a quien se menciona por primera vez en este
+ * comentario, actualiza el extracto de los avisos que creó y se puede deshacer.
+ */
+export async function editComment(commentId: string, body: string) {
+  return runAction({ name: "tasks.editComment", args: [commentId, body] }, async (): Promise<CommentInfo> => {
+    const user = await requireUser();
+    const found = await db.taskComment.findFirst({
+      where: { id: v.id.parse(commentId), deletedAt: null, task: { project: visibleProjectsWhere(user) } },
+      select: { id: true, taskId: true, authorId: true, createdAt: true, task: { select: { projectId: true, title: true } } },
+    });
+    if (!found) throw notFound();
+    if (found.authorId !== user.id) throw new AppError("Solo puedes editar tus comentarios.", 403);
+    const { taskId } = found;
+    const { projectId } = found.task;
+    noteProject(projectId);
+    noteTask(taskId);
+    await assertNotArchived(taskId);
+    const text = commentBody.parse(body);
+    if (!rateLimit(`comment:${user.id}`, 30, 60_000)) throw new AppError("Demasiados comentarios seguidos. Espera un momento.");
+    // Con la fila bloqueada: dos ediciones a la vez (dos pestañas) no calculan las menciones nuevas sobre el mismo texto.
+    const { before, updated } = await db.$transaction(async (tx) => {
+      const [row] = await tx.$queryRaw<{ body: string; editedAt: Date | null; deletedAt: Date | null }[]>`SELECT "body", "editedAt", "deletedAt" FROM "TaskComment" WHERE "id" = ${found.id} FOR UPDATE`;
+      if (!row || row.deletedAt) throw notFound();
+      if (row.body === text) return { before: row, updated: null };
+      return { before: row, updated: await tx.taskComment.update({ where: { id: found.id }, data: { body: text, editedAt: new Date() }, select: commentSelect }) };
+    });
+    // Sin cambios: no hay nada que anotar ni deshacer.
+    if (!updated) return toCommentInfo((await db.taskComment.findUniqueOrThrow({ where: { id: found.id }, select: commentSelect })));
+    addUndo({ t: "comment.set", id: found.id, body: before.body, editedAt: before.editedAt?.toISOString() ?? null });
+    describeAction("Editó un comentario en «{title}»", { title: found.task.title }, { taskId });
+    // Los avisos que creó el comentario llevan un extracto de su texto: pasan a mostrar el nuevo.
+    if (found.authorId) {
+      await db.notification.updateMany({
+        where: {
+          taskId, actorId: found.authorId, type: { in: ["COMMENT", "REPLY", "MENTION"] }, excerpt: makeExcerpt(before.body),
+          createdAt: { gte: found.createdAt, lte: new Date(found.createdAt.getTime() + 60_000) },
+        },
+        data: { excerpt: makeExcerpt(text) },
+      });
+    }
+    const old = new Set(extractMentionIds(before.body));
+    const added = extractMentionIds(text).filter((id) => !old.has(id));
+    if (added.length) await notifyMentions({ actorId: user.id, taskId, projectId, recipientIds: added, text });
+    return toCommentInfo(updated);
   });
 }
 

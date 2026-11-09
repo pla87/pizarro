@@ -1,55 +1,122 @@
 "use client";
 
 import { ExternalLink, Loader2, ShoppingCart } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { removeLicense, saveLicense } from "@/actions/license";
+import { removeLicense, saveLicense, setPersonalUseDeclared } from "@/actions/license";
+import { personalUseConfirm } from "@/components/LicenseNudge";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
-import { useT } from "@/i18n/client";
-import { LICENSE_EMAIL_MAX, LICENSE_HOLDER_MAX, LICENSE_REF_MAX, type LicenseRecord } from "@/lib/license-core";
-import { LICENSE_PRICE_EUR } from "@/lib/product";
+import { useIntlLocale, useT } from "@/i18n/client";
+import { LICENSE_EMAIL_MAX, LICENSE_HOLDER_MAX, LICENSE_REF_MAX, type LicenseStatus } from "@/lib/license-core";
+import { LICENSE_PRICE_EUR, SITE_URL } from "@/lib/product";
 import { actionThrowResult } from "@/lib/stale-action";
 
-/** «Licencia»: estado informativo de la licencia comercial de esta instalación. No bloquea ninguna función. */
-export function LicenseAdmin({ license, buyHref }: { license: LicenseRecord | null; buyHref: string }) {
+/**
+ * «Licencia»: estado de la licencia de esta instalación (registrada, declarada de uso personal o sin registrar) y
+ * formulario para registrarla. Todo es informativo (buena voluntad): no bloquea ninguna función ni comprueba nada.
+ */
+export function LicenseAdmin({ status: initial, buyHref }: { status: LicenseStatus; buyHref: string }) {
   const t = useT();
+  const intl = useIntlLocale();
   const toast = useToast();
+  const confirm = useConfirm();
+  const router = useRouter();
   const [pending, start] = useTransition();
-  const [saved, setSaved] = useState(license);
-  const [holder, setHolder] = useState(license?.holder ?? "");
-  const [reference, setReference] = useState(license?.reference ?? "");
-  const [email, setEmail] = useState(license?.email ?? "");
+  const [status, setStatus] = useState(initial);
+  const saved = status.kind === "licensed" ? status.license : null;
+  const [holder, setHolder] = useState(saved?.holder ?? "");
+  const [reference, setReference] = useState(saved?.reference ?? "");
+  const [email, setEmail] = useState(saved?.email ?? "");
   const external = /^https?:\/\//.test(buyHref);
   const dirty = holder.trim() !== (saved?.holder ?? "") || reference.trim() !== (saved?.reference ?? "") || email.trim() !== (saved?.email ?? "");
+  const day = (d: string) => {
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(`${d}T12:00:00`) : null;
+    return date ? date.toLocaleDateString(intl, { day: "numeric", month: "long", year: "numeric" }) : d;
+  };
+  const done = (message: string) => {
+    toast(message, "success");
+    router.refresh();
+  };
 
   const save = () =>
     start(async () => {
       const res = await saveLicense({ holder, reference, email }).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
-      setSaved(res.data);
-      toast(t("Licencia registrada."), "success");
+      setStatus({ kind: "licensed", license: res.data });
+      done(t("Licencia registrada."));
     });
   const remove = () =>
     start(async () => {
       const res = await removeLicense().catch((e) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
-      setSaved(null);
+      setStatus({ kind: "none" });
       setHolder("");
       setReference("");
       setEmail("");
-      toast(t("Registro de licencia quitado."), "success");
+      done(t("Registro de licencia quitado."));
+    });
+  const declarePersonal = async () => {
+    if (status.kind === "licensed" && !(await confirm({ ...personalUseConfirm(t), message: t("Se quitará la licencia registrada a nombre de {holder}. Uso personal es el de una persona en su propio servidor, sin fines comerciales ni profesionales.", { holder: status.license.holder }) }))) return;
+    if (status.kind !== "licensed" && !(await confirm(personalUseConfirm(t)))) return;
+    start(async () => {
+      const res = await setPersonalUseDeclared(true).catch((e) => actionThrowResult(e, t));
+      if (!res.ok) return toast(res.error, "error");
+      if (res.data) setStatus({ kind: "personal", personal: res.data });
+      setHolder("");
+      setReference("");
+      setEmail("");
+      done(t("Anotado: uso personal. No volverá a salir el recordatorio."));
+    });
+  };
+  const undeclarePersonal = () =>
+    start(async () => {
+      const res = await setPersonalUseDeclared(false).catch((e) => actionThrowResult(e, t));
+      if (!res.ok) return toast(res.error, "error");
+      setStatus({ kind: "none" });
+      done(t("Declaración de uso personal retirada."));
     });
 
   return (
     <div className="space-y-4">
-      <section className="card space-y-2 p-5" aria-live="polite" data-testid="license-status">
+      <section className="card space-y-2 p-5" aria-live="polite" data-testid="license-status" data-status={status.kind}>
         <h2 className="text-sm font-semibold">{t("Estado")}</h2>
-        {saved ? (
-          <p className="text-sm" data-testid="license-registered">
-            {t("Licencia comercial registrada: {holder}, {reference}, {date}", { holder: saved.holder, reference: saved.reference, date: saved.date })}
-          </p>
-        ) : (
-          <p className="text-sm" data-testid="license-personal">{t("Uso personal (sin licencia comercial registrada)")}</p>
+        {status.kind === "licensed" && (
+          <>
+            <p className="text-sm font-medium" data-testid="license-registered">{t("Licencia registrada a nombre de {holder}", { holder: status.license.holder })}</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              {status.license.reference
+                ? t("Factura o recibo: {reference} · registrada el {date}", { reference: status.license.reference, date: day(status.license.date) })
+                : t("Registrada el {date}", { date: day(status.license.date) })}
+            </p>
+          </>
         )}
+        {status.kind === "personal" && (
+          <>
+            <p className="text-sm font-medium" data-testid="license-personal">{t("Declarada uso personal")}</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              {status.personal.date ? `${t("Desde el {date}.", { date: day(status.personal.date) })} ` : ""}
+              {t("Si empiezas a usar Pizarro en una empresa o para trabajar, registra la licencia más abajo.")}
+            </p>
+          </>
+        )}
+        {status.kind === "none" && (
+          <>
+            <p className="text-sm font-medium" data-testid="license-none">{t("Sin licencia registrada")}</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400">{t("Si es uso personal, decláralo y los administradores dejarán de ver el recordatorio. Si es para una empresa o para trabajar, registra la licencia más abajo.")}</p>
+          </>
+        )}
+        <div className="flex flex-wrap gap-2 pt-1">
+          {status.kind !== "personal" && (
+            <button type="button" className="btn-secondary" onClick={declarePersonal} disabled={pending} data-testid="license-declare-personal">{t("Es uso personal")}</button>
+          )}
+          {status.kind === "personal" && (
+            <button type="button" className="btn-secondary" onClick={undeclarePersonal} disabled={pending} data-testid="license-undeclare-personal">{t("Quitar la declaración")}</button>
+          )}
+          {status.kind === "licensed" && (
+            <button type="button" className="btn-secondary" onClick={remove} disabled={pending} data-testid="license-remove">{t("Quitar registro")}</button>
+          )}
+        </div>
         <p className="text-xs text-slate-500">{t("Este registro es solo informativo: Pizarro funciona igual con o sin él, sin comprobaciones ni llamadas a internet.")}</p>
       </section>
 
@@ -65,6 +132,9 @@ export function LicenseAdmin({ license, buyHref }: { license: LicenseRecord | nu
           <a href="/licencia" className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 underline dark:text-brand-300" data-testid="license-page-link">
             {t("Leer la licencia")}<ExternalLink size={14} aria-hidden />
           </a>
+          <a href={SITE_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 underline dark:text-brand-300" data-testid="license-site-link">
+            getpizarro.com<ExternalLink size={14} aria-hidden />
+          </a>
           <a
             href={buyHref}
             {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
@@ -77,15 +147,15 @@ export function LicenseAdmin({ license, buyHref }: { license: LicenseRecord | nu
       </section>
 
       <section className="card space-y-3 p-5">
-        <h2 className="text-sm font-semibold">{t("Registrar la licencia")}</h2>
-        <p className="text-sm text-slate-500">{t("Tras comprarla, anota aquí los datos de tu factura. Se guardan en esta instalación y quedan anotados en el registro de actividad.")}</p>
+        <h2 className="text-sm font-semibold">{t("Registrar licencia")}</h2>
+        <p className="text-sm text-slate-500">{t("Tras comprarla, anota aquí el titular y, si quieres, el número de la factura o del recibo. La fecha se pone sola. Se guarda en esta instalación y queda anotado en el registro de actividad.")}</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm">
-            <span className="font-medium">{t("Titular")}</span>
+            <span className="font-medium">{t("Titular (empresa o nombre)")}</span>
             <input className="input mt-1 w-full" value={holder} onChange={(e) => setHolder(e.target.value)} maxLength={LICENSE_HOLDER_MAX} placeholder={t("Empresa Ejemplo, S.L.")} autoComplete="off" data-testid="license-holder" />
           </label>
           <label className="block text-sm">
-            <span className="font-medium">{t("Nº de factura o referencia de compra")}</span>
+            <span className="font-medium">{t("Nº de factura o recibo (opcional)")}</span>
             <input className="input mt-1 w-full" value={reference} onChange={(e) => setReference(e.target.value)} maxLength={LICENSE_REF_MAX} autoComplete="off" data-testid="license-reference" />
           </label>
           <label className="block text-sm sm:col-span-2">
@@ -94,12 +164,9 @@ export function LicenseAdmin({ license, buyHref }: { license: LicenseRecord | nu
           </label>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn-primary" onClick={save} disabled={pending || !dirty || !holder.trim() || !reference.trim()} data-testid="license-save">
-            {pending && <Loader2 size={16} className="animate-spin" aria-hidden />}{t("Guardar")}
+          <button type="button" className="btn-primary" onClick={save} disabled={pending || !dirty || !holder.trim()} data-testid="license-save">
+            {pending && <Loader2 size={16} className="animate-spin" aria-hidden />}{saved ? t("Guardar cambios") : t("Registrar licencia")}
           </button>
-          {saved && (
-            <button type="button" className="btn-secondary" onClick={remove} disabled={pending} data-testid="license-remove">{t("Quitar registro")}</button>
-          )}
         </div>
       </section>
     </div>

@@ -1,6 +1,7 @@
 import "./zod-config";
 import { z } from "zod";
 import { clampTitle } from "./title-clamp";
+import { isHttpUrl, normalizeLinkUrl } from "./link-url";
 import { MAX_CLIENT, MAX_COST, MAX_HOURS, TASK_PRIORITIES } from "./task-fields";
 import { FILE_MAX_MAX_MB, FILE_MAX_MIN_MB } from "./upload-size";
 import { COLUMN_ROLES, HEX_COLOR_RE, MAX_DESCRIPTION, MAX_TITLE, PALETTE, RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "./constants";
@@ -34,13 +35,13 @@ export const color = z.enum(PALETTE).nullable();
 export const hexColor = z.string().regex(HEX_COLOR_RE, "Color no válido.").transform((c) => c.toLowerCase());
 export const email = z.string().trim().toLowerCase().email("Email no válido.").max(200);
 
-/** Solo enlaces http(s): evita javascript: y similares. */
+/** Solo enlaces http(s): evita javascript: y similares. Sin esquema y con forma de dominio («example.com/x»), se completa con https://. */
 export const linkUrl = z
   .string()
   .trim()
   .max(2000)
-  .transform((v) => (v === "" ? null : v))
-  .refine((v) => v === null || /^https?:\/\/[^\s]+$/i.test(v), "El enlace debe empezar por http:// o https://")
+  .transform((v) => (v === "" ? null : normalizeLinkUrl(v)))
+  .refine((v) => v === null || (v.length <= 2000 && isHttpUrl(v)), "El enlace debe empezar por http:// o https://")
   .nullable();
 
 /** Fecha de día YYYY-MM-DD (o null para quitarla). */

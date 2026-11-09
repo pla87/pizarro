@@ -20,12 +20,21 @@ cd e2e/qa && BASE=http://localhost:3231 DATABASE_URL=$DBURL APP_DIR=$PWD/../.. n
 `run-all.mjs` crea (o vacía) la base `pz_qa`, aplica migraciones y arranca su propio servidor en el puerto de `BASE`:
 no debe haber otro servidor escuchando ahí.
 
-## Tablero (~115 comprobaciones)
+## Tablero (~170 comprobaciones)
 
 Con la base `pz_qa` preparada por la suite y un servidor arrancado (`DATABASE_URL=$DBURL PORT=3231 npm start`):
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node board-e2e.mjs
+```
+
+## Pegar (~70 comprobaciones)
+
+Imágenes pegadas en *Nueva tarea*, en el detalle y en el tablero (una sola vez, sin avisos, con el foco en cualquier
+sitio), y tablas pegadas desde Word, Google Docs, una web o una hoja de cálculo. Misma base y servidor que el tablero:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node paste-e2e.mjs
 ```
 
 Capturas en `SHOTS_DIR` (por defecto la carpeta temporal del sistema). Al terminar, borra la base `pz_qa`.

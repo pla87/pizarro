@@ -18,7 +18,7 @@ import { getCurrentUser } from "@/lib/session";
 import { assertUserCanQueue, createImportJob } from "@/lib/transfer-jobs";
 import { ZipReadError } from "@/lib/zip-read";
 import { uploadDir } from "@/lib/upload-dir";
-import { acquireUploadSlot, createSlowGuard, declaredLength, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError } from "@/lib/upload-slots";
+import { acquireUploadSlot, createSlowGuard, declaredLength, IMPORT_MAX_TOTAL_MS, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError, uploadTotalMs } from "@/lib/upload-slots";
 import { getT } from "@/i18n/server";
 
 export const runtime = "nodejs";
@@ -102,8 +102,11 @@ export async function POST(req: Request) {
         else cb(null, chunk);
       },
     });
-    // Subida demasiado lenta o eterna: se destruye el flujo (el pipeline falla y el finally suelta el hueco).
-    const guard = createSlowGuard(() => limiter.destroy(new UploadTooSlowError()), { expectedBytes: length ?? max });
+    // Subida demasiado lenta o eterna: se destruye el flujo (el pipeline falla y el finally suelta el hueco). Un proyecto
+    // grande con una conexión normal tarda bastante más que un adjunto: tope total de 3 h en vez de 30 min (la ventana de
+    // velocidad mínima sigue cortando el goteo).
+    const expected = length ?? max;
+    const guard = createSlowGuard(() => limiter.destroy(new UploadTooSlowError()), { expectedBytes: expected, totalMs: uploadTotalMs(expected, IMPORT_MAX_TOTAL_MS) });
     try {
       await pipeline(Readable.fromWeb(req.body as never), limiter, createWriteStream(temp));
     } finally {

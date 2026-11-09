@@ -150,6 +150,8 @@ export interface CommentInfo {
   parentId: string | null;
   /** Borrado pero conservado (tenía respuestas): sin texto, se muestra como «Comentario borrado». */
   deleted?: boolean;
+  /** Última edición de su autor (ISO), si se ha editado: se marca «(editado)». */
+  editedAt?: string;
 }
 
 /** Contadores de adjuntos de una tarea (los de la tarjeta): se calculan siempre sobre las filas que existen. */

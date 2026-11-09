@@ -23,6 +23,7 @@ import { fieldsForDraft, fieldsFromDraft } from "@/lib/fields-form";
 import { DescriptionField } from "../ui/DescriptionField";
 import { DictationButton, insertIntoField } from "../ui/DictationButton";
 import { pasteAsOneLine } from "../ui/textarea-edit";
+import { usePasteFiles } from "../ui/pasteFiles";
 import { applyKindTemplate, mergeSubtasks } from "@/lib/kinds-special";
 import { MAX_DESCRIPTION, MAX_TITLE } from "@/lib/constants";
 import { TypeSelector } from "./TaskDialog";
@@ -31,6 +32,8 @@ import { AttachLimitHint } from "./AttachLimitHint";
 import { UploadProgress } from "./UploadProgress";
 import { batchErrorMessage, filesFrom, formatBytes, isImageFile, skippedMessage, uploadBatch, useFileDrop, type BatchProgress } from "./upload";
 import { planUploads } from "@/lib/upload-queue";
+import { sortByFileName } from "@/lib/attachment-sort";
+import { subtaskLines } from "@/lib/subtask-lines";
 import { documentDownloadName, type DocumentKindName } from "@/lib/document-kind";
 import { draftKey, useDraftAutosave, type NewTaskDraft } from "./drafts";
 import { actionThrowResult } from "@/lib/stale-action";
@@ -58,6 +61,9 @@ interface Props {
   /** Guarda un borrador local cada 5 s (solo el modal principal). */
   autosave?: boolean;
 }
+
+/** Subtareas que admite «Nueva tarea» al crear (el servidor rechaza más). */
+const MAX_NEW_SUBTASKS = 50;
 
 function captureTitle(t: T, locale: string): string {
   return t("Captura") + " " + new Date().toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
@@ -103,7 +109,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const [dueDate, setDueDate] = useState(d?.dueDate ?? "");
   const [deliverableId, setDeliverableId] = useState(foreignInit ? "" : (d?.deliverableId ?? ""));
   const [description, setDescription] = useState(d?.description ?? initialDescription ?? "");
-  const [files, setFiles] = useState<File[]>(initialPlan.accepted);
+  const [files, setFiles] = useState<File[]>(() => sortByFileName(initialPlan.accepted, (f) => f.name, locale));
   const [subtasks, setSubtasks] = useState<string[]>(d?.subtasks ?? []);
   const [subtaskDraft, setSubtaskDraft] = useState(d?.subtaskDraft ?? "");
   const [evergreen, setEvergreen] = useState(foreignInit ? false : (d?.evergreen ?? !!initialEvergreen));
@@ -193,19 +199,21 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   // Escape, clic fuera, X o «Cancelar» con contenido escrito piden confirmación; crear no.
   const confirming = useRef(false);
   const busyRef = useRef(false);
-  const requestClose = async () => {
+  // `false` si no se cerró (el botón atrás del móvil vuelve entonces a poder cerrarlo).
+  const requestClose = async (): Promise<boolean> => {
     // Mientras se crea la tarea y se suben sus archivos no se cierra (se ve el progreso): cerrar a medias dejaría la subida huérfana.
-    if (busyRef.current) return;
+    if (busyRef.current) return false;
     const dirty = !!(title.trim() || (description.trim() && description !== initialDescription) || subtasks.length || subtaskDraft.trim());
     if (dirty) {
       // Una sola confirmación a la vez (Escape o clics repetidos no las apilan).
-      if (confirming.current) return;
+      if (confirming.current) return false;
       confirming.current = true;
       const ok = await confirm({ title: t("Descartar la nueva tarea"), message: t("Hay cambios sin guardar. ¿Descartar la nueva tarea?"), confirmLabel: t("Descartar"), danger: true });
       confirming.current = false;
-      if (!ok) return;
+      if (!ok) return false;
     }
     onClose();
+    return true;
   };
   const isReleaseColumn = form.columns.find((c) => c.id === columnId)?.role === "NEXT_RELEASE";
   const [busy, setBusy] = useState(false);
@@ -217,6 +225,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
 
   const imageIndexes = files.flatMap((f, i) => (isImageFile(f) ? [i] : []));
 
+  // Los archivos se muestran (y se suben) por nombre, como en el detalle de la tarea.
+  const byName = (list: File[]) => sortByFileName(list, (f) => f.name, locale);
   const addFiles = (list: File[]) => {
     if (!list.length) return;
     // Sin tope de cantidad: solo el tamaño de cada archivo y la suma de la tarea. Lo omitido se avisa de una vez.
@@ -224,7 +234,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     const { accepted, skipped } = planUploads(list, { fileMaxBytes: fileMaxMb * 1024 * 1024, remainingBytes: attachMaxMb * 1024 * 1024 - files.reduce((n, f) => n + f.size, 0) });
     if (skipped.length) toast(skippedMessage(t, locale, skipped, fileMaxMb), "error");
     if (!accepted.length) return;
-    setFiles((prev) => [...prev, ...accepted]);
+    setFiles((prev) => byName([...prev, ...accepted]));
     // Con una captura y sin título, se propone uno para ir más rápido.
     setTitle((cur) => cur || captureTitle(t, locale));
   };
@@ -250,7 +260,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       }
       const file = new File([blob], documentDownloadName(name, attachDocument.kind ?? "OTHER"), { type: blob.type || "application/octet-stream" });
       setDocFile(file);
-      setFiles((prev) => [...prev, file]);
+      setFiles((prev) => byName([...prev, file]));
     } catch (e) {
       toast(e instanceof Error && e.message ? e.message : t("No se pudo descargar el documento."), "error");
     } finally {
@@ -258,10 +268,22 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     }
   };
 
+  // Pegar varias líneas en «Añadir subtarea» crea una subtarea por línea (sin viñetas); una sola línea se pega normal.
+  const pasteSubtasks = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData("text/plain");
+    const lines = /[\r\n]/.test(text) && !e.clipboardData.files.length ? subtaskLines(text, MAX_TITLE) : [];
+    if (lines.length < 2) return pasteAsOneLine(e, setSubtaskDraft);
+    e.preventDefault();
+    const room = Math.max(0, MAX_NEW_SUBTASKS - subtasks.length);
+    const added = lines.slice(0, room);
+    if (added.length) setSubtasks((l) => [...l, ...added].slice(0, MAX_NEW_SUBTASKS));
+    if (added.length < lines.length) toast(t("Se añadieron {n} subtareas; {m} no caben (máximo {max} por tarea).", { n: added.length, m: lines.length - added.length, max: MAX_NEW_SUBTASKS }), "error");
+  };
+
   const addSubtaskDraft = () => {
     const text = subtaskDraft.trim();
     if (!text) return;
-    setSubtasks((l) => (l.length >= 50 ? l : [...l, text.slice(0, 200)]));
+    setSubtasks((l) => (l.length >= MAX_NEW_SUBTASKS ? l : [...l, text.slice(0, 200)]));
     setSubtaskDraft("");
   };
 
@@ -277,7 +299,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     // Un título más largo que el máximo no se rechaza: se crea recortado y se avisa.
     const sent = clampTitle(title.trim());
     const pending = subtaskDraft.trim().slice(0, 200);
-    const subtaskTitles = pending && subtasks.length < 50 ? [...subtasks, pending] : subtasks;
+    const subtaskTitles = pending && subtasks.length < MAX_NEW_SUBTASKS ? [...subtasks, pending] : subtasks;
     const res = await board.track(
       createTask({
         projectId, columnId, title: sent.value, kindId, description,
@@ -319,6 +341,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
 
   // Alt+S crea la tarea (también escribiendo), como Ctrl+Enter. Con dos modales a la vez, el que tiene el foco.
   const formRef = useRef<HTMLFormElement>(null);
+  // Pegar archivos (Ctrl/⌘+V) con el foco en cualquier parte del diálogo, también fuera de las cajas: una vez por pegado.
+  usePasteFiles(addFiles, () => formRef.current?.closest("[role=dialog]") ?? null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.altKey || e.code !== "KeyS" || e.ctrlKey || e.metaKey || e.shiftKey || e.repeat || e.defaultPrevented) return;
@@ -349,7 +373,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       placement="top"
       footer={
         <>
-          <button type="button" className="btn-secondary" onClick={requestClose}>{t("Cancelar")}</button>
+          <button type="button" className="btn-secondary" onClick={() => void requestClose()}>{t("Cancelar")}</button>
           <button type="submit" form={formId} className="btn-primary" disabled={busy || loading || !title.trim()} title={`${t("Crear tarea")} (${sc("Alt+S")})`}>
             {busy && <Loader2 size={16} className="animate-spin" />} {t("Crear tarea")}
           </button>
@@ -361,12 +385,6 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) {
           e.preventDefault();
           e.currentTarget.requestSubmit();
-        }
-      }} onPaste={(e) => {
-        const pasted = filesFrom(e.clipboardData.items);
-        if (pasted.length) {
-          e.preventDefault();
-          addFiles(pasted);
         }
       }}>
         <div>
@@ -422,7 +440,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
               value={subtaskDraft}
               maxLength={MAX_TITLE}
               onChange={(e) => setSubtaskDraft(e.target.value)}
-              onPaste={(e) => pasteAsOneLine(e, setSubtaskDraft)}
+              onPaste={pasteSubtasks}
               onKeyDown={(e) => {
                 // Enter añade la subtarea sin enviar el formulario; Ctrl/Cmd+Enter sigue creando la tarea.
                 if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.nativeEvent.isComposing) {
@@ -431,7 +449,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
                 }
               }}
             />
-            <button type="button" className="btn-secondary py-1.5" disabled={!subtaskDraft.trim() || subtasks.length >= 50} onClick={addSubtaskDraft} aria-label={t("Añadir subtarea")}>
+            <button type="button" className="btn-secondary py-1.5" disabled={!subtaskDraft.trim() || subtasks.length >= MAX_NEW_SUBTASKS} onClick={addSubtaskDraft} aria-label={t("Añadir subtarea")}>
               <Plus size={15} />
             </button>
           </div>
@@ -477,7 +495,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
           </label>
         )}
         <div>
-          <div className="label">{t("Capturas y adjuntos")}</div>
+          <div className="label">{files.length ? t("Capturas y adjuntos ({n})", { n: files.length }) : t("Capturas y adjuntos")}</div>
           <div className="flex flex-wrap gap-2">
             {files.map((f, i) => (
               <div key={`${previews[i]}`} className="relative">

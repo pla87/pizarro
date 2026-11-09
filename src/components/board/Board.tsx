@@ -1,6 +1,7 @@
 "use client";
 
 import { prefetchTaskDetail } from "./taskDetailPrefetch";
+import { announceRemoteChange } from "./remoteChange";
 import { actionThrowMessage } from "@/lib/stale-action";
 import {
   closestCorners, DndContext, type CollisionDetection, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
@@ -46,7 +47,8 @@ import { useShortcut } from "./shortcuts";
 import { useBoardShortcuts } from "./useBoardShortcuts";
 import { TaskCard } from "./TaskCard";
 import { ReportButton } from "../ReportButton";
-import { filesFrom, hasFiles, imageFilesFrom, useBlockStrayFileDrops } from "./upload";
+import { filesFrom, hasFiles, isImageFile, useBlockStrayFileDrops } from "./upload";
+import { claimPaste, isTextTarget, pastedFiles, pasteClaimed, recoverEmptyImages } from "../ui/pasteFiles";
 import { draftKey, readDraft, type EditTaskDraft, type NewTaskDraft } from "./drafts";
 import { mentionsToPlain } from "@/lib/mentions";
 import { shouldRefreshOnFocus } from "@/lib/focus-refresh";
@@ -241,6 +243,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   }, [data.project.id]);
   const changeView = (next: BoardView) => {
     setViewState(next);
+    // La lista no enseña qué tarjetas están seleccionadas: se limpia la selección (y con ella la barra).
+    if (next === "list" && stores.selection.get().size) stores.selection.set(new Set());
     try {
       window.localStorage.setItem(viewStorageKey(data.project.id), next);
     } catch {
@@ -463,6 +467,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       try {
         const parsed = JSON.parse((e as MessageEvent<string>).data) as { cid?: unknown };
         if (typeof parsed.cid === "string") cid = parsed.cid;
+        announceRemoteChange(parsed);
       } catch {
         // Aviso ilegible: se trata como ajeno y se refresca.
       }
@@ -573,13 +578,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // Pegar una imagen en el tablero (sin diálogo abierto) crea una tarea con ella.
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
-      if (document.querySelector("[role=dialog]")) return;
-      const target = e.target as HTMLElement | null;
-      if (target?.closest("input, textarea, [contenteditable=true]")) return;
-      const files = imageFilesFrom(e.clipboardData?.items);
+      if (pasteClaimed(e) || document.querySelector("[role=dialog]") || isTextTarget(e.target)) return;
+      // Una sola lectura (síncrona) de los archivos del pegado; una imagen que llega vacía se pide otra vez al portapapeles.
+      const files = pastedFiles(e).filter(isImageFile);
       if (files.length) {
-        e.preventDefault();
-        setNewTask({ files });
+        claimPaste(e);
+        void recoverEmptyImages(files).then((list) => setNewTask({ files: list }));
       }
     };
     document.addEventListener("paste", onPaste);
@@ -1270,20 +1274,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           </DragOverlay>
         </DndContext>
 
-        <button
-          onClick={() => setBulk({ columnId: activeMobileColumn })}
-          className="fixed right-[1.625rem] bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-30 flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-brand-600 shadow-lg hover:bg-slate-50 active:scale-95 lg:hidden dark:border-slate-700 dark:bg-slate-800 dark:text-brand-300"
-          aria-label={t("Crear varias tareas")}
-        >
-          <PlusStack size={22} />
-        </button>
-        <button
-          onClick={() => setNewTask({ columnId: activeMobileColumn })}
-          className="fixed right-5 bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] z-30 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-on-brand shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95 lg:hidden"
-          aria-label={t("Nueva tarea o captura")}
-        >
-          <Plus size={26} />
-        </button>
+        <FloatingCreateButtons onBulk={() => setBulk({ columnId: activeMobileColumn })} onNew={() => setNewTask({ columnId: activeMobileColumn })} />
 
         <SelectionBarHost
           columns={sortedColumns}
@@ -1363,6 +1354,34 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         )}
       </div>
     </BoardContext.Provider>
+  );
+}
+
+/**
+ * Botones flotantes de crear (móvil y tableta). Mientras hay selección se retiran: la barra de selección ocupa el pie
+ * de la pantalla con sus acciones y así ni la tapan ni quedan tapados (vuelven al limpiar la selección).
+ */
+function FloatingCreateButtons({ onBulk, onNew }: { onBulk: () => void; onNew: () => void }) {
+  const t = useT();
+  const selecting = useSelectionSize() > 0;
+  if (selecting) return null;
+  return (
+    <>
+      <button
+        onClick={onBulk}
+        className="fixed right-[1.625rem] bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-30 flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-brand-600 shadow-lg hover:bg-slate-50 active:scale-95 lg:hidden dark:border-slate-700 dark:bg-slate-800 dark:text-brand-300"
+        aria-label={t("Crear varias tareas")}
+      >
+        <PlusStack size={22} />
+      </button>
+      <button
+        onClick={onNew}
+        className="fixed right-5 bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] z-30 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-on-brand shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95 lg:hidden"
+        aria-label={t("Nueva tarea o captura")}
+      >
+        <Plus size={26} />
+      </button>
+    </>
   );
 }
 

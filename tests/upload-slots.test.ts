@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { acquireUploadSlot, declaredLength, MAX_UPLOADS_AT_ONCE, readBodyLimited, UploadTooSlowError } from "../src/lib/upload-slots";
+import { acquireUploadSlot, declaredLength, IMPORT_MAX_TOTAL_MS, MAX_UPLOADS_AT_ONCE, readBodyLimited, UPLOAD_MAX_TOTAL_MS, UploadTooSlowError, uploadTotalMs } from "../src/lib/upload-slots";
 
 describe("acquireUploadSlot", () => {
   test("concede como mucho MAX_UPLOADS_AT_ONCE a la vez; las demás esperan su turno o se rinden", async () => {
@@ -74,5 +74,23 @@ describe("readBodyLimited: subidas lentas", () => {
     const req = new Request("http://localhost/x", { method: "POST", body: fd });
     const out = await readBodyLimited(req, 10_000_000, "formData", { windowMs: 100, minBytesPerSec: 1000 });
     assert.equal((out.get("file") as File).size, 500_000);
+  });
+});
+
+describe("uploadTotalMs", () => {
+  const MB = 1024 * 1024;
+  test("los adjuntos siguen con 3 min de margen y tope de 30 min", () => {
+    assert.equal(uploadTotalMs(0), 3 * 60_000);
+    assert.equal(uploadTotalMs(10 * MB), 3 * 60_000 + ((10 * MB) / (20 * 1024)) * 1000);
+    assert.equal(uploadTotalMs(500 * MB), UPLOAD_MAX_TOTAL_MS);
+  });
+  test("la importación de un proyecto de 500 MB a ~190 KB/s cabe en su tope (3 h), no en los 30 min de los adjuntos", () => {
+    const needed = ((500 * MB) / (190 * 1024)) * 1000; // ~45 min
+    assert.ok(needed > UPLOAD_MAX_TOTAL_MS);
+    const total = uploadTotalMs(500 * MB, IMPORT_MAX_TOTAL_MS);
+    assert.equal(total, IMPORT_MAX_TOTAL_MS);
+    assert.ok(total > needed * 3);
+    // Un archivo pequeño no gana tiempo extra por ser una importación.
+    assert.equal(uploadTotalMs(MB, IMPORT_MAX_TOTAL_MS), uploadTotalMs(MB));
   });
 });

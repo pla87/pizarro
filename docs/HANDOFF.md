@@ -76,9 +76,11 @@ npm run test:db          # con base de datos (crea y borra pizarro_test_*)
 npx next build --webpack && node scripts/postbuild.mjs && npm run build:boot
 ```
 
-Pruebas en navegador (ver `e2e/README.md`): la suite QA (`e2e/qa/run-all.mjs`, ~350 comprobaciones) y la del
-tablero (`e2e/board-e2e.mjs`, 115). Si cambias el rol o la etiqueta de un elemento que la suite usa, actualiza el
-script correspondiente.
+Pruebas en navegador (ver `e2e/README.md`): la suite QA (`e2e/qa/run-all.mjs`, ~350 comprobaciones), la del
+tablero (`e2e/board-e2e.mjs`, unas 170) y la de pegado (`e2e/paste-e2e.mjs`, ~72: imágenes y tablas pegadas; misma
+base `pz_qa` y servidor que la del tablero). Si cambias el rol o la etiqueta de un elemento que la suite usa,
+actualiza el script correspondiente. Las suites declaran la instalación de uso personal en `prepareUsers`
+(`e2e/qa/lib.mjs`) para que no salga el recordatorio de licencia.
 
 Antes de cada fusión en `main`, comprueba que no se cuela ningún dato personal del propietario en el diff ni en el
 PDF del manual (busca su nombre, email y dominios; pídeselos si no los sabes) y que los mensajes de commit no
@@ -104,13 +106,19 @@ llevan enlaces de sesión ni nombres de modelos.
   versión nueva, proyectos de ejemplo al crear un proyecto (`src/lib/project-examples.ts`), página de presentación
   `/presentacion` simplificada (sin demo; la administración no enlaza a ella por decisión del propietario) y licencia
   (`LICENSE.md` + `/licencia`; `npm run license:sync` tras cambiarla).
+- Hecho: web estática del producto en `site/` (plantillas y estáticos), generada con `scripts/build-site.mjs` y
+  publicada con GitHub Pages por `.github/workflows/site.yml` en getpizarro.com. Puesta en marcha (Pages, DNS,
+  HTTPS, verificación del dominio): `docs/VENTA.md` §8.
+- Hecho: recordatorio de licencia para administradores (franja bajo la cabecera, como mucho cada 30 días, nunca en
+  los 7 primeros días): lógica en `shouldShowLicenseNudge` (`src/lib/license-core.ts`), interfaz en
+  `src/components/LicenseNudge.tsx`. Se oculta con licencia registrada o declarando uso personal.
 - Modelo de venta decidido: gratis para uso personal; empresas y profesionales, pago único por servidor con
-  actualizaciones gratis para siempre y sin soporte. Precio: 100 € (pago con tarjeta y factura, DNI opcional); «100 € + IVA»; botón Comprar con `BUY_URL` en `src/lib/product.ts` (vacía hasta que el propietario cree el Payment Link de Stripe, ver `docs/VENTA.md`); *Administración → Licencia* solo informa. Sin excepciones: todo uso no personal paga. Listas de funciones candidatas a licencia profesional y de ideas de otros Kanban: `docs/IDEAS.md`.
+  actualizaciones gratis para siempre y sin soporte. Precio: 100 € + IVA (pago con tarjeta y factura, NIF opcional); botón Comprar con `BUY_URL` en `src/lib/product.ts` (vacía hasta que el propietario cree el Payment Link de Stripe, ver `docs/VENTA.md`); *Administración → Licencia* solo informa. Sin excepciones: todo uso no personal paga. Listas de funciones candidatas a licencia profesional y de ideas de otros Kanban: `docs/IDEAS.md`.
 - Pendiente de confirmar por el propietario: primera publicación con *Run workflow* y paquete GHCR público (el propietario prefiere seguir puliendo antes); prueba
   real en un VPS siguiendo `docs/PRUEBA-VPS.md`; plantilla de Railway (pasos en `docs/INSTALL.md`; la sintaxis de
   variables generadas debe verificarse en Railway).
-- Siguientes pasos: fijar el precio, revisión de la licencia por un abogado, vídeo para la presentación (sustituye a
-  la demo), capturas reales sin datos personales, y dominio/web propia del producto.
+- Siguientes pasos: revisión de la licencia por un abogado, vídeo para la presentación (sustituye a la demo),
+  capturas reales sin datos personales, poner en marcha getpizarro.com (`docs/VENTA.md` §8) y el Payment Link.
 
 **Ideas pospuestas por decisión del propietario:**
 

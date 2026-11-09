@@ -82,6 +82,8 @@ model User {
   totpSecretEnc  String?
   /// Último paso de 30 s aceptado: impide reutilizar un código TOTP.
   totpLastStep   Int?
+  /// Recordatorio de licencia (solo admins): no se vuelve a mostrar hasta esta fecha (se fija al verlo o posponerlo).
+  licenseNudgeUntil DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
