@@ -8,6 +8,8 @@ interface ProjectChange {
   projectId: string;
   userId: string | null;
   action: string;
+  /** Tarea afectada si la acción tocó solo una (el detalle abierto refresca sus comentarios); null si varias o ninguna. */
+  taskId?: string | null;
   at: number;
   /** Id único del cambio: quien lo hizo lo recibe en el resultado de su acción y no se refresca por su propio aviso. */
   cid: string;

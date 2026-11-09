@@ -1,6 +1,7 @@
 "use client";
 
 import { prefetchTaskDetail } from "./taskDetailPrefetch";
+import { announceRemoteChange } from "./remoteChange";
 import { actionThrowMessage } from "@/lib/stale-action";
 import {
   closestCorners, DndContext, type CollisionDetection, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
@@ -463,6 +464,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       try {
         const parsed = JSON.parse((e as MessageEvent<string>).data) as { cid?: unknown };
         if (typeof parsed.cid === "string") cid = parsed.cid;
+        announceRemoteChange(parsed);
       } catch {
         // Aviso ilegible: se trata como ajeno y se refresca.
       }

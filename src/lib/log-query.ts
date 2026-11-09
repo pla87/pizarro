@@ -27,6 +27,7 @@ interface LogFilters {
 export const READ_ACTIONS = [
   "tasks.getTaskDetail",
   "tasks.getOlderComments",
+  "tasks.getRecentComments",
   "tasks.getArchivedTasks",
   "tasks.getTaskHistory",
   "tasks.getProjectFormData",

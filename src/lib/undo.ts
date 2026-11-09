@@ -92,6 +92,8 @@ export type UndoOp =
   /** Borrado «blando» (el comentario tenía respuestas): vuelve el texto y desaparece la marca de borrado. */
   | { t: "comment.undelete"; id: string; body: string }
   | { t: "comment.softdelete"; id: string }
+  /** Edición de un comentario: vuelve el texto y la marca de editado que tenía. */
+  | { t: "comment.set"; id: string; body: string; editedAt: string | null }
   | { t: "attachment.remove"; id: string }
   | { t: "attachment.restore"; row: AttachmentRow }
   | { t: "link.remove"; id: string }
@@ -486,6 +488,11 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
         if (c) push({ t: "comment.undelete", id: c.id, body: c.body });
         break;
       }
+      case "comment.set": {
+        const c = once(`comment:${op.id}`) && (await db.taskComment.findFirst({ where: { id: op.id, deletedAt: null, ...inProject }, select: { id: true, body: true, editedAt: true } }));
+        if (c) push({ t: "comment.set", id: c.id, body: c.body, editedAt: iso(c.editedAt) });
+        break;
+      }
       case "attachment.remove": {
         const a = once(`attachment:${op.id}`) && (await db.taskAttachment.findFirst({ where: { id: op.id, ...inProject } }));
         if (a) {
@@ -812,6 +819,11 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           if (!count) miss++;
           break;
         }
+        case "comment.set": {
+          const { count } = await db.taskComment.updateMany({ where: { id: op.id, deletedAt: null, task: { projectId } }, data: { body: op.body, editedAt: date(op.editedAt) } });
+          if (!count) miss++;
+          break;
+        }
         case "attachment.remove": {
           const { count } = await db.taskAttachment.deleteMany({ where: { id: op.id, task: { projectId } } });
           if (!count) miss++;
@@ -1077,7 +1089,7 @@ export async function fingerprintOps(projectId: string, ops: UndoOp[]): Promise<
       case "subtask.restore": taskIds.add(op.row.taskId); break;
       case "comment.restore": case "attachment.restore": case "link.restore": taskIds.add(op.row.taskId); break;
       case "subtask.set": case "subtask.remove": lookups.push({ model: "subtask", id: op.id }); break;
-      case "comment.remove": case "comment.undelete": case "comment.softdelete": lookups.push({ model: "taskComment", id: op.id }); break;
+      case "comment.remove": case "comment.undelete": case "comment.softdelete": case "comment.set": lookups.push({ model: "taskComment", id: op.id }); break;
       case "attachment.remove": lookups.push({ model: "taskAttachment", id: op.id }); break;
       case "link.remove": lookups.push({ model: "taskLink", id: op.id }); break;
       case "column.set": case "column.remove": columnIds.add(op.id); break;
