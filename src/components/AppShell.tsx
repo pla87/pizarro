@@ -16,6 +16,7 @@ import { listTemplates } from "@/actions/templates";
 import type { CurrentUser } from "@/lib/session";
 import { AppBadge } from "./AppBadge";
 import { InstallApp } from "./InstallApp";
+import { LicenseNudge } from "./LicenseNudge";
 import { clearAllDrafts } from "./board/drafts";
 import { filesFrom, hasFiles } from "./board/upload";
 import { uploadDocument } from "./docs/uploadDocuments";
@@ -47,6 +48,8 @@ interface Props {
   backupAlert?: boolean;
   /** Versión nueva de Pizarro sin descartar: punto de aviso junto a «Administración» (solo admins). */
   updateAvailable?: boolean;
+  /** Recordatorio de licencia para este administrador: destino de «Comprar» (null: no se muestra). */
+  licenseNudge?: string | null;
   children: React.ReactNode;
 }
 
@@ -63,7 +66,7 @@ export function AppShell(props: Props) {
   );
 }
 
-function Shell({ user, projects, version, unread, lastProjectId = null, backupAlert = false, updateAvailable = false, children }: Props) {
+function Shell({ user, projects, version, unread, lastProjectId = null, backupAlert = false, updateAvailable = false, licenseNudge = null, children }: Props) {
   useFocusRingScroll();
   const t = useT();
   const pathname = usePathname();
@@ -93,6 +96,11 @@ function Shell({ user, projects, version, unread, lastProjectId = null, backupAl
     // Recuerda el último proyecto para abrirlo directamente en la próxima visita.
     if (projectId) document.cookie = `tablon_last_project=${projectId}; path=/; max-age=31536000; samesite=lax`;
   }, [projectId]);
+
+  // El recordatorio de licencia se queda una vez mostrado: al verlo se pospone 30 días y el layout deja de pedirlo,
+  // pero no debe desaparecer al navegar o refrescar (solo lo cierra quien lo ve).
+  const [nudgeHref, setNudgeHref] = useState(licenseNudge);
+  if (licenseNudge && licenseNudge !== nudgeHref) setNudgeHref(licenseNudge);
 
   const sidebar = (
     <Sidebar user={user} projects={projects} current={current} version={version} pathname={pathname} unread={unread} backupAlert={backupAlert} updateAvailable={updateAvailable} />
@@ -137,6 +145,7 @@ function Shell({ user, projects, version, unread, lastProjectId = null, backupAl
             </Link>
           )}
         </header>
+        {nudgeHref && <LicenseNudge buyHref={nudgeHref} />}
         <main className="min-h-0 flex-1 overflow-auto max-lg:pb-[env(safe-area-inset-bottom)]">{children}</main>
       </div>
     </div>

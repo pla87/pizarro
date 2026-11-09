@@ -7,6 +7,7 @@ import { makeT } from "@/i18n/core";
 import { getLocale } from "@/i18n/server";
 import { pickLandingLocale } from "@/lib/landing-locale";
 import { LICENSE_EN, LICENSE_ES } from "@/lib/license-text";
+import { SITE_URL } from "@/lib/product";
 import { getCurrentUser } from "@/lib/session";
 
 // Página pública (sin sesión) con la licencia del software, igual que LICENSE.md. Idioma como la página de presentación:
@@ -45,6 +46,8 @@ export default async function Page({ searchParams }: { searchParams: Search }) {
           <Markdown>{body}</Markdown>
           <p className="text-xs text-slate-500">
             <a className="underline" href={locale === "en" ? "/licencia?lang=es" : "/licencia?lang=en"}>{t("Ver la licencia en el otro idioma")}</a>
+            {" · "}
+            <a className="underline" href={locale === "en" ? `${SITE_URL}/en/#pricing` : `${SITE_URL}/#precios`} rel="noopener noreferrer" data-testid="license-site">{t("Precio y compra en getpizarro.com")}</a>
             {" · "}
             <a className="underline" href="/login">{t("Volver al acceso")}</a>
           </p>

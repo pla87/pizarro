@@ -1,0 +1,66 @@
+# Web del producto (getpizarro.com): genera el sitio estático con scripts/build-site.mjs (site/ → site/dist) y lo
+# publica en GitHub Pages.
+#
+# IMPORTANTE (una sola vez, el propietario del repositorio): activar Pages en GitHub con
+#   Settings → Pages → Build and deployment → Source: «GitHub Actions».
+# Sin eso, el paso de despliegue falla. El dominio (CNAME getpizarro.com), el DNS y «Enforce HTTPS» se explican en
+# docs/VENTA.md, sección «Web getpizarro.com».
+name: Web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "scripts/build-site.mjs"
+      - "LICENSE*.md"
+      - "src/lib/product.ts"
+      - "src/lib/landing-content.ts"
+      - "src/lib/site-content.ts"
+      - "src/i18n/en/**"
+      - "src/app/icon.svg"
+      - "src/app/favicon.ico"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Una sola publicación a la vez; no se cancela una que ya está en marcha.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Generar la web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 22 (la última 22.x) importa los .ts de src/ sin compilar: no hace falta npm ci.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Generar site/dist
+        run: node scripts/build-site.mjs
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+  deploy:
+    name: Publicar en GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

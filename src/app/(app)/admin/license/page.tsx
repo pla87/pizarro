@@ -1,5 +1,5 @@
 import { getPublicContactEmail } from "@/lib/google-config";
-import { getLicense } from "@/lib/license-registry";
+import { getLicenseStatus } from "@/lib/license-registry";
 import { buyHref } from "@/lib/product";
 import { requireAdminPage } from "@/lib/session";
 import { getLocale, getT } from "@/i18n/server";
@@ -12,6 +12,6 @@ export async function generateMetadata() {
 
 export default async function LicensePage() {
   await requireAdminPage();
-  const [license, contact, locale] = await Promise.all([getLicense(), getPublicContactEmail().catch(() => ""), getLocale()]);
-  return <LicenseAdmin license={license} buyHref={buyHref(contact, locale)} />;
+  const [status, contact, locale] = await Promise.all([getLicenseStatus(), getPublicContactEmail().catch(() => ""), getLocale()]);
+  return <LicenseAdmin status={status} buyHref={buyHref(contact, locale)} />;
 }
