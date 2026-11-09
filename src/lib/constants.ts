@@ -77,6 +77,8 @@ export const COLOR_NAME: Record<string, string> = {
 };
 
 export const MAX_TITLE = 210;
+/** Subtareas por tarea como máximo. */
+export const MAX_SUBTASKS = 100;
 export const MAX_DESCRIPTION = 20_000;
 export const MAX_TEMPLATE = 20_000;
 export const MAX_RELEASE_CONTENT = 200_000;

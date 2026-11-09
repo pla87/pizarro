@@ -8,7 +8,7 @@ import { runAction } from "@/lib/action";
 import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjectAccess, assertTaskAccess, loadTaskWithAccess, visibleProjectsWhere } from "@/lib/access";
 import { appTimeZone, attachmentTotals, boardTaskSelect, listKinds, loadBoardTask, projectClients, projectUsers, toBoardTask } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
-import { MAX_TITLE } from "@/lib/constants";
+import { MAX_SUBTASKS, MAX_TITLE } from "@/lib/constants";
 import { clampTitle } from "@/lib/title-clamp";
 import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { assertCanBlock, blockProblem, lockBlocking } from "@/lib/blocking";
@@ -97,8 +97,7 @@ function describeChanges(data: Record<string, unknown>): Label {
   return { k: "{list} y {last}", p: { list: names.slice(0, -1), last: names.at(-1)! } };
 }
 
-/** Límites por tarea / usuario, para que nadie sature la base de datos ni la API de Google. */
-const MAX_SUBTASKS = 100;
+/** Límites por tarea / usuario, para que nadie sature la base de datos ni la API de Google (y MAX_SUBTASKS, en constants). */
 /** Comentarios que trae la tarea al abrirla, y los que añade cada «Ver anteriores». */
 const COMMENTS_FIRST_PAGE = 20;
 const COMMENTS_MORE_PAGE = 100;
@@ -954,6 +953,39 @@ export async function addSubtask(taskId: string, title: string) {
     addUndo({ t: "subtask.remove", id: sub.id });
     describeAction("Añadió la subtarea «{subtask}» en «{task}»", { subtask: sub.title, task: (await taskLabel(taskId)).title }, { taskId });
     return sub;
+  });
+}
+
+/**
+ * Varias subtareas de una vez (texto pegado con una por línea), al final de la lista y en una sola acción: un único
+ * «Deshacer» las quita todas. Si no caben todas (máximo por tarea), se añaden las primeras y `skipped` dice cuántas no.
+ * Cada título debe venir ya limpio (sin viñetas) y dentro del máximo de longitud (ver lib/subtask-lines.ts).
+ */
+export async function addSubtasks(taskId: string, titles: string[]) {
+  return runAction({ name: "tasks.addSubtasks", args: [taskId, titles] }, async (): Promise<{ created: SubtaskInfo[]; skipped: number; undo: { id?: string } }> => {
+    const user = await requireUser();
+    assertNotArchivedRow(await loadTaskWithAccess(user, v.id.parse(taskId), { archivedAt: true }));
+    const names = z.array(v.title).min(1).max(MAX_SUBTASKS).parse(titles);
+    if (!rateLimit(`subtask:${user.id}`, 60, 60_000)) throw new AppError("Demasiadas subtareas seguidas. Espera un momento.");
+    const { created, skipped } = await db.$transaction(async (tx) => {
+      await lockTaskRow(tx, taskId);
+      const room = MAX_SUBTASKS - (await tx.subtask.count({ where: { taskId } }));
+      if (room <= 0) throw new AppError("Una tarea no puede tener más de 100 subtareas.");
+      const last = await tx.subtask.findFirst({ where: { taskId }, orderBy: { position: "desc" }, select: { position: true } });
+      let position = last?.position;
+      const created: SubtaskInfo[] = [];
+      for (const title of names.slice(0, room)) {
+        position = positionBetween(position, null);
+        created.push(await tx.subtask.create({ data: { taskId, title, position }, select: { id: true, title: true, done: true, position: true } }));
+      }
+      return { created, skipped: Math.max(0, names.length - room) };
+    });
+    addUndo(...created.map((s) => ({ t: "subtask.remove" as const, id: s.id })));
+    const task = (await taskLabel(taskId)).title;
+    if (created.length === 1) describeAction("Añadió la subtarea «{subtask}» en «{task}»", { subtask: created[0]!.title, task }, { taskId });
+    else describeAction("Añadió {subs} en «{task}»", { subs: subtasksN(created.length), task }, { taskId });
+    // Id de la entrada de deshacer: el aviso «Deshacer» quita justo estas subtareas.
+    return { created, skipped, undo: trackUndoEntry() };
   });
 }
 

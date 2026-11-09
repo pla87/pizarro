@@ -28,7 +28,9 @@ test("prioridad, cliente y enlace", () => {
   assert.equal(taskClient.safeParse("x".repeat(121)).success, false);
   assert.equal(linkUrl.parse("https://example.com/a?b=1"), "https://example.com/a?b=1");
   assert.equal(linkUrl.parse(""), null);
-  for (const bad of ["javascript:alert(1)", "ftp://example.com", "example.com", "https://a b"]) assert.equal(linkUrl.safeParse(bad).success, false, bad);
+  // Sin esquema y con forma de dominio se completa con https:// (ver tests/link-url.test.ts).
+  assert.equal(linkUrl.parse("example.com"), "https://example.com");
+  for (const bad of ["javascript:alert(1)", "ftp://example.com", "example", "https://a b"]) assert.equal(linkUrl.safeParse(bad).success, false, bad);
 });
 
 test("borrador: solo guarda los campos activados y sanea lo que lee", () => {

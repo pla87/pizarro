@@ -80,7 +80,7 @@ export function BlockerPicker({ task, onChange }: { task: BoardTask; onChange: (
         <div className="mt-1">
           <input
             autoFocus
-            className="input md:py-1.5"
+            className="input md:py-1"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {

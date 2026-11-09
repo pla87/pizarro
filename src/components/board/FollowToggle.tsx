@@ -35,7 +35,7 @@ export function FollowToggle({ taskId, following }: { taskId: string; following:
     <div>
       <button
         type="button"
-        className="btn-secondary w-full justify-center py-1.5"
+        className="btn-secondary w-full justify-center py-1.5 md:py-1"
         onClick={toggle}
         aria-pressed={value}
         title={value ? t("Recibes avisos de los comentarios y cambios de esta tarea") : t("No recibes avisos de esta tarea (salvo si te mencionan)")}

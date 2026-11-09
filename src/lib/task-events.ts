@@ -24,6 +24,7 @@ const CODES: Record<string, string> = {
   "tasks.deleteComment": "comment",
   "tasks.editComment": "comment",
   "tasks.addSubtask": "subtask",
+  "tasks.addSubtasks": "subtask",
   "tasks.updateSubtask": "subtask",
   "tasks.deleteSubtask": "subtask",
   "tasks.makeEvergreen": "move",

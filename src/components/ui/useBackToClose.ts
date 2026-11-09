@@ -10,6 +10,12 @@ type ModalState = { pzModals?: string[] } | null;
 // y, si a la vez se navega a otra página, el router los interpretaría como «atrás» y la anularía.
 let silentPops = 0;
 let silencerInstalled = false;
+/** Lo que espera a que terminen los retrocesos silenciosos en curso (no se puede añadir una entrada mientras tanto). */
+let afterSilent: (() => void)[] = [];
+function whenNoSilentPops(fn: () => void) {
+  if (silentPops === 0) fn();
+  else afterSilent.push(fn);
+}
 // Eventos popstate provocados por nosotros: los modales los ignoran aunque otro escuchador se ejecute antes
 // que el silenciador (no depende del orden de registro ni de la fase).
 const silentEvents = new WeakSet<Event>();
@@ -23,6 +29,11 @@ function installSilencer() {
         silentPops--;
         silentEvents.add(e);
         e.stopImmediatePropagation();
+        if (silentPops === 0) {
+          const queued = afterSilent;
+          afterSilent = [];
+          queued.forEach((fn) => fn());
+        }
       }
     },
     true,
@@ -38,8 +49,10 @@ function silentBack() {
  * Mientras `active`, añade una entrada al historial: el botón atrás del navegador (o del
  * móvil) cierra el modal en vez de salir de la página. Si se cierra de otro modo (X, Escape,
  * guardar), se retira esa entrada para que el historial quede como estaba.
+ * Si `onClose` devuelve (o resuelve) `false`, el modal no se cerró (p. ej. se pidió confirmación y se dijo que no): la
+ * entrada se vuelve a añadir, así el siguiente «atrás» vuelve a cerrar el modal en vez de salir de la página.
  */
-export function useBackToClose(active: boolean, onClose: () => void) {
+export function useBackToClose(active: boolean, onClose: () => void | boolean | Promise<void | boolean>) {
   const onCloseRef = useRef(onClose);
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -53,21 +66,32 @@ export function useBackToClose(active: boolean, onClose: () => void) {
     const inState = () => ((window.history.state as ModalState)?.pzModals ?? []).includes(token);
     let pushed = false;
     let closedByBack = false;
-    // Diferido: el doble montaje de React en desarrollo no deja entradas huérfanas.
-    const timer = setTimeout(() => {
+    let alive = true;
+    const push = () => {
       const state = (window.history.state ?? {}) as NonNullable<ModalState>;
       window.history.pushState({ ...state, pzModals: [...(state.pzModals ?? []), token] }, "");
       pushed = true;
-    }, 0);
+    };
+    // Diferido: el doble montaje de React en desarrollo no deja entradas huérfanas.
+    const timer = setTimeout(push, 0);
     const onPop = (e: PopStateEvent) => {
       if (silentEvents.has(e)) return;
       if (pushed && !inState()) {
         closedByBack = true;
-        onCloseRef.current();
+        void Promise.resolve(onCloseRef.current()).then((closed) => {
+          if (closed !== false || !alive) return;
+          // No se cerró: vuelve la entrada (tras los retrocesos propios pendientes, p. ej. el del diálogo de confirmación).
+          closedByBack = false;
+          // Diferido: antes se cierra el diálogo de confirmación y retira su propia entrada.
+          setTimeout(() => whenNoSilentPops(() => {
+            if (alive && !inState()) push();
+          }), 0);
+        });
       }
     };
     window.addEventListener("popstate", onPop);
     return () => {
+      alive = false;
       clearTimeout(timer);
       window.removeEventListener("popstate", onPop);
       // Cerrado sin el botón atrás: quitar nuestra entrada (si no se ha navegado a otra página).
