@@ -16,6 +16,7 @@ import { server } from "./server";
 import { settings } from "./settings";
 import { landing } from "./landing";
 import { lista } from "./lista";
+import { pegado } from "./pegado";
 import { legal } from "./legal";
 import { licencia } from "./licencia";
 import { setup } from "./setup";
@@ -23,4 +24,4 @@ import { task } from "./task";
 import { wip } from "./wip";
 import { plantillas2 } from "./plantillas2";
 
-export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing, ...almacenamiento, ...licencia, ...wip, ...importar, ...ics, ...lista, ...acceso, ...plantillas2 };
+export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing, ...almacenamiento, ...licencia, ...wip, ...importar, ...ics, ...lista, ...acceso, ...plantillas2, ...pegado };

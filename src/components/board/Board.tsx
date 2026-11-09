@@ -46,7 +46,8 @@ import { useShortcut } from "./shortcuts";
 import { useBoardShortcuts } from "./useBoardShortcuts";
 import { TaskCard } from "./TaskCard";
 import { ReportButton } from "../ReportButton";
-import { filesFrom, hasFiles, imageFilesFrom, useBlockStrayFileDrops } from "./upload";
+import { filesFrom, hasFiles, isImageFile, useBlockStrayFileDrops } from "./upload";
+import { claimPaste, isTextTarget, pastedFiles, pasteClaimed, recoverEmptyImages } from "../ui/pasteFiles";
 import { draftKey, readDraft, type EditTaskDraft, type NewTaskDraft } from "./drafts";
 import { mentionsToPlain } from "@/lib/mentions";
 import { shouldRefreshOnFocus } from "@/lib/focus-refresh";
@@ -575,13 +576,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // Pegar una imagen en el tablero (sin diálogo abierto) crea una tarea con ella.
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
-      if (document.querySelector("[role=dialog]")) return;
-      const target = e.target as HTMLElement | null;
-      if (target?.closest("input, textarea, [contenteditable=true]")) return;
-      const files = imageFilesFrom(e.clipboardData?.items);
+      if (pasteClaimed(e) || document.querySelector("[role=dialog]") || isTextTarget(e.target)) return;
+      // Una sola lectura (síncrona) de los archivos del pegado; una imagen que llega vacía se pide otra vez al portapapeles.
+      const files = pastedFiles(e).filter(isImageFile);
       if (files.length) {
-        e.preventDefault();
-        setNewTask({ files });
+        claimPaste(e);
+        void recoverEmptyImages(files).then((list) => setNewTask({ files: list }));
       }
     };
     document.addEventListener("paste", onPaste);

@@ -14,11 +14,14 @@ import { MentionChip } from "@/lib/editor-mention";
 import { normalizeEditorMarkdown } from "@/lib/markdown-entities";
 import { COPY_MARKER } from "@/lib/markdown-copy";
 import { markdownFromPaste } from "@/lib/markdown-paste";
+import { htmlHasText } from "@/lib/clipboard-files";
+import { replaceHtmlTables } from "@/lib/paste-table";
 import type { UserOption } from "@/lib/types";
 import { Avatar } from "./Avatar";
 import { cn } from "./cn";
 import { DictationButton, insertIntoEditor } from "./DictationButton";
 import { registerDragEditor } from "./dragMove";
+import { pastedFiles } from "./pasteFiles";
 import { FormatToolbar, FORMAT_BAR_CLASS, FORMAT_BOX_CLASS, type FormatItems } from "./FormatToolbar";
 import type { MentionCommand } from "./MentionTextarea";
 
@@ -174,6 +177,18 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
         role: "textbox",
         "aria-multiline": "true",
         ...(placeholder ? { "aria-label": placeholder } : {}),
+      },
+      // Tablas pegadas (Word, Google Docs, Excel, una web): cada una entra como tabla Markdown; el resto del HTML, igual que siempre.
+      transformPastedHTML: (html) => replaceHtmlTables(html),
+      handleDOMEvents: {
+        // Solo archivos (una captura, «Copiar imagen»): no hay texto que pegar aquí; los adjunta el diálogo (ui/pasteFiles).
+        // Sin esto ProseMirror movía el foco a una caja oculta y volvía a procesar el mismo pegado 50 ms después.
+        paste: (_view, event) => {
+          const data = event.clipboardData;
+          if (!data || !pastedFiles(event).length || /\S/.test(data.getData("text/plain")) || htmlHasText(data.getData("text/html"))) return false;
+          event.preventDefault();
+          return true;
+        },
       },
       // Texto plano con aspecto de Markdown: se interpreta como Markdown. El HTML que solo envuelve el texto
       // (div/span/br que añaden los teclados y navegadores móviles) cuenta como texto plano.

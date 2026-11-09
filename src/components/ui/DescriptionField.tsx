@@ -10,6 +10,7 @@ import { DictationButton, insertIntoField } from "./DictationButton";
 import { FormatToolbar, FORMAT_BAR_CLASS, FORMAT_BOX_CLASS, type FormatItems } from "./FormatToolbar";
 import { MentionTextarea, type MentionCommand } from "./MentionTextarea";
 import { applyTextareaEdit } from "./textarea-edit";
+import { tablesOnlyMarkdown } from "@/lib/paste-table";
 
 // El editor con barra (TipTap) pesa: solo se descarga para quien lo usa (el tablero lo precarga en reposo).
 const RichTextEditor = dynamic(() => import("./RichTextEditor").then((m) => m.RichTextEditor), {
@@ -107,6 +108,21 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
         onCommand={onCommand}
         placeholder={placeholder}
         autoFocus={autoFocus}
+        onPaste={(e) => {
+          // Una tabla copiada de Excel, Google Sheets, Word o una web entra como tabla Markdown (no como texto con tabuladores).
+          const md = tablesOnlyMarkdown(e.clipboardData.getData("text/html"));
+          if (!md) return;
+          e.preventDefault();
+          const el = e.currentTarget;
+          const start = el.selectionStart, end = el.selectionEnd;
+          // La tabla necesita una línea en blanco antes y después para leerse como tabla.
+          const before = el.value.slice(0, start), after = el.value.slice(end);
+          const lead = !before || before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
+          const trail = !after || after.startsWith("\n\n") ? "" : after.startsWith("\n") ? "\n" : "\n\n";
+          const insert = lead + md + trail;
+          const caret = start + lead.length + md.length;
+          applyTextareaEdit(el, { value: before + insert + after, start: caret, end: caret }, onValueChange);
+        }}
         onKeyDown={(e) => {
           if (e.nativeEvent.isComposing) return;
           // Alt+F10: lleva el foco a la barra de formato (sus botones se saltan con Tab).
