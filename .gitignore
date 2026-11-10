@@ -14,6 +14,4 @@ next-env.d.ts
 npm-debug.log*
 dist/
 
-# Capturas de pruebas locales mal dirigidas
-/undefined/
 deploy/recovery-kit.txt

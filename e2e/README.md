@@ -6,7 +6,9 @@ datos propia. No forma parte de `npm test`: se lanza a mano antes de publicar un
 ## Requisitos
 
 - PostgreSQL accesible con el `DATABASE_URL` del `.env` (el usuario debe poder crear bases).
-- Chromium: por defecto `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`; otra ruta con `CHROME=/ruta/chrome`.
+- Chromium: el de `CHROME=/ruta/chrome` si se indica. Si no, se busca el más reciente instalado por Playwright en
+  `PLAYWRIGHT_BROWSERS_PATH` (por defecto `/opt/pw-browsers`): `chromium-<revisión>/chrome-linux*/chrome`. Si no hay
+  ninguno, se usa el de `playwright-core` (instálalo con `npx playwright-core install chromium`).
 - Una build: `npx next build --webpack && node scripts/postbuild.mjs && npm run build:boot`.
 
 ## Suite completa (9 escenarios, ~350 comprobaciones, ~5 min)

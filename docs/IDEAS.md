@@ -2,6 +2,11 @@
 
 Base: `docs/MANUAL.md` v1.41.0 y `docs/HANDOFF.md`. Para la lista de otras plataformas no se usó búsqueda web: se basa en el conocimiento de cada herramienta (puede haber cambiado algo reciente).
 
+> **Estado (v1.48.0):** este documento es la propuesta de entonces. Desde v1.43.0 ya existen la pestaña
+> *Administración → Licencia* (registro de la licencia o declaración de uso personal, sin funciones bloqueadas) y las
+> ideas 1 a 4 y 8 de la segunda lista (importar desde Trello y CSV, suscripción al calendario, límite por columna,
+> tareas bloqueadas y vista de lista). El resto sigue pendiente.
+
 ---
 
 ## R38F1 · Qué se podría reservar a la licencia profesional

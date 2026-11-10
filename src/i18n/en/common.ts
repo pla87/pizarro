@@ -23,7 +23,6 @@ export const common: Record<string, string> = {
   "Nombre": "Name",
   "Luego puedes cambiar las columnas, tipos y etiquetas.": "You can change the columns, types and labels later.",
   "Plantilla": "Template",
-  "Columnas por defecto": "Default columns",
   "Cancelar": "Cancel",
   "Crear": "Create",
   "Instalar app": "Install app",

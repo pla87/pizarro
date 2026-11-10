@@ -107,7 +107,7 @@ La web del producto es un sitio estático (sin cookies ni analítica, sin recurs
 
 ### Pasos del propietario (una sola vez)
 
-1. **Activar Pages con origen «GitHub Actions» (imprescindible):** en el repositorio, **Settings → Pages → Build and deployment → Source** y elige **GitHub Actions** en el desplegable. **No** elijas «Deploy from a branch»: con esa opción GitHub no usa la web generada, sino que publica el `README.md` del repositorio con Jekyll (se ve el README con un tema genérico en lugar de la presentación de Pizarro). Si ya estaba en «Deploy from a branch», cámbialo a **GitHub Actions**; no hace falta borrar nada.
+1. **Activar Pages con origen «GitHub Actions» (imprescindible):** en el repositorio, **Settings → Pages → Build and deployment → Source** y elige **GitHub Actions** en el desplegable. **No** elijas «Deploy from a branch»: con esa opción GitHub no usa la web generada, sino que publica el `README.md` del repositorio con Jekyll (se ve el README con un tema genérico en lugar de la presentación de Pizarro). Si ya estaba en «Deploy from a branch», cámbialo a **GitHub Actions**. Si GitHub llegó a crear un fichero `CNAME` en la raíz del repositorio (un commit «Create CNAME» al poner el dominio), sobra y se puede borrar: la web lleva el suyo en `site/static/CNAME`.
    Después lanza el workflow: **Actions → Web → Run workflow** (rama `main`) y pulsa el botón verde **Run workflow**. También se lanza solo al subir a `main` un cambio en `site/` o en sus textos.
 2. **DNS en el registrador del dominio** `getpizarro.com` (en su panel de DNS):
    - Cuatro registros **A** del dominio raíz (`@`) a `185.199.108.153`, `185.199.109.153`, `185.199.110.153` y `185.199.111.153`.

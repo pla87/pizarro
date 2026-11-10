@@ -30,8 +30,6 @@ export const importar: Record<string, string> = {
 
   // Textos que se escriben en las tareas
   "Sin nombre": "Unnamed",
-  "Alguien": "Someone",
-  "Tarea": "Task",
   "Adjuntos de Trello": "Trello attachments",
   "Lista de Trello archivada: {name}.": "Archived Trello list: {name}.",
   "Tarjeta original en Trello:": "Original Trello card:",

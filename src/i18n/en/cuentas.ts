@@ -67,7 +67,6 @@ export const cuentas: Record<string, string> = {
   "El enlace no es válido o ha caducado. Repite el cambio desde tu perfil.": "The link is invalid or has expired. Repeat the change from your profile.",
   "El enlace no es válido o ha caducado. Pide uno nuevo.": "The link is invalid or has expired. Request a new one.",
   "Pedir un enlace nuevo": "Request a new link",
-  "Volver a iniciar sesión": "Back to sign in",
   "Confirmar el nuevo email": "Confirm the new email",
   "Confirmar el cambio de contraseña": "Confirm the password change",
   "Si existe una cuenta con ese email, te hemos enviado un enlace para elegir una contraseña nueva. Caduca en 30 minutos.":

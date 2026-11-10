@@ -20,7 +20,6 @@ export const legal: Record<string, string> = {
   "Opcional. Vacío = si hay texto propio en español se muestra ese; si no, el texto genérico en inglés. Puedes usar {responsable} y {email}.": "Optional. Empty = if there is custom Spanish text it is shown; otherwise the generic English text. You can use {responsable} and {email}.",
   "Texto en Markdown (opcional)": "Text in Markdown (optional)",
   "Volver a editar": "Back to editing",
-  "Vista previa": "Preview",
   "Partir del texto por defecto": "Start from the default text",
   "Restaurar texto por defecto": "Restore default text",
   "Sin texto en inglés, los lectores en inglés verán el texto en español.": "With no English text, English readers will see the Spanish text.",
@@ -56,8 +55,6 @@ export const legal: Record<string, string> = {
   "Pégalas en «Application home page», «Application privacy policy link» y «Application terms of service link». Las dos últimas son páginas públicas de Pizarro.": "Paste them into “Application home page”, “Application privacy policy link” and “Application terms of service link”. The last two are public Pizarro pages.",
   "«Authorized domains»: el dominio principal de tu dirección, sin «https://» ni subdominios.": "“Authorized domains”: the main domain of your address, without “https://” or subdomains.",
   "Dominio autorizado": "Authorized domain",
-  "Tu dirección ({host}) es un subdominio de un servicio de alojamiento compartido. Como ese servicio está en la lista de sufijos públicos, Google suele aceptar como dominio autorizado la dirección completa (abajo). Si la rechaza, o para que la pantalla de Google muestre tu marca, usa un dominio propio y pon su dirección en APP_URL. Dominio a escribir:":
-    "Your address ({host}) is a subdomain of a shared hosting service. Because that service is on the Public Suffix List, Google usually accepts the full address (below) as an authorized domain. If it is rejected, or to show your own brand on Google's screen, use your own domain and set it in APP_URL. Domain to enter:",
   "Tu dirección ({host}) es local o una IP: Google no la acepta. Necesitas un dominio propio con HTTPS en APP_URL.": "Your address ({host}) is local or an IP: Google does not accept it. You need your own domain with HTTPS in APP_URL.",
   "Email de contacto del desarrollador: el tuyo. Guarda con «Siguiente» / «Guardar».": "Developer contact email: yours. Save with “Next” / “Save”.",
   "Audience (público)": "Audience",

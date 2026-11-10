@@ -12,7 +12,6 @@ export const board: Record<string, string> = {
   "{n} tareas borradas": "{n} tasks deleted",
   "Arrastrar para reordenar": "Drag to reorder",
   "{n} tarjetas": "{n} cards",
-  "Archivadas": "Archived",
   "Crear varias tareas pegando una lista": "Create several tasks by pasting a list",
   "Varias tareas": "Several tasks",
   "Nueva tarea": "New task",
@@ -28,7 +27,6 @@ export const board: Record<string, string> = {
   "No hay tarjetas en esta columna": "There are no cards in this column",
   "Generar Release": "Generate release",
   "Arrastra tarjetas aquí": "Drag cards here",
-  "Error": "Error",
   "Renombrar columna": "Rename column",
   "Plazo de espera": "Waiting period",
   "Solo se pueden borrar columnas vacías.": "Only empty columns can be deleted.",
@@ -72,7 +70,6 @@ export const board: Record<string, string> = {
   "Añadir columna": "Add column",
   "Nueva columna": "New column",
   "Nombre de la columna": "Column name",
-  "Cancelar": "Cancel",
   // PromptDialog
   "Aceptar": "OK",
   // Presence
@@ -156,7 +153,6 @@ export const board: Record<string, string> = {
   "Mover a…": "Move to…",
   "Release con selección": "Release with selection",
   "Archivar": "Archive",
-  "Borrar": "Delete",
   "Limpiar selección": "Clear selection",
   // ReleaseDialog
   "Cabecera": "Header",
@@ -268,7 +264,6 @@ export const board: Record<string, string> = {
   "día {n}": "day {n}",
   "Al terminarla o archivarla se crea la siguiente, sin las subtareas marcadas.": "When it is completed or archived the next one is created, with the subtasks unchecked.",
   "Duplicar": "Duplicate",
-  "Crea una copia justo detrás de esta tarea": "Creates a copy right after this task",
   "Añadir las subtareas predefinidas de cada tipo": "Add each type's predefined subtasks",
   // Confirmaciones (ui/ConfirmDialog)
   "Borrar tarea": "Delete task",
