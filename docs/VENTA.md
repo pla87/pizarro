@@ -98,10 +98,11 @@ Cada servidor necesita su licencia. Las actualizaciones son gratuitas para siemp
 
 ## 8. Web getpizarro.com
 
-La web del producto es un sitio estático (sin JavaScript, sin cookies ni analítica, sin recursos externos) que se genera desde el repositorio y se publica gratis con **GitHub Pages**:
+La web del producto es un sitio estático (sin cookies ni analítica, sin recursos externos; solo unas líneas de JavaScript para el botón «Copiar» del comando de instalación) que se genera desde el repositorio y se publica gratis con **GitHub Pages**. Es una página de presentación del producto (qué es, capturas reales, precio, preguntas e instalación en un bloque corto), no una guía de instalación: la guía completa está en `docs/INSTALL.md`.
 
-- **Fuentes:** `site/templates/layout.html` (plantilla), `site/static/` (hoja de estilos, `CNAME`, `robots.txt`, imagen para redes `og.png`) y `scripts/build-site.mjs`, que genera `site/dist`. Los textos salen de `src/lib/landing-content.ts` (los mismos de `/presentacion`) y `src/lib/site-content.ts`, con su inglés en `src/i18n/en/`; el precio y el enlace de compra, de `src/lib/product.ts`; la licencia (`/licencia/` y `/en/license/`), de `LICENSE.md`. Español en `/` e inglés en `/en/`.
+- **Fuentes:** `site/templates/layout.html` (plantilla), `site/static/` (hoja de estilos, `CNAME`, `robots.txt`, imágenes para redes `og.png` y `og-en.png`, capturas en `img/`) y `scripts/build-site.mjs`, que genera `site/dist` (falla si falta una traducción o una captura). Los textos salen de `src/lib/site-content.ts` (y las preguntas frecuentes, de `src/lib/landing-content.ts`, las mismas de `/presentacion`), con su inglés en `src/i18n/en/` (`web2.ts` y `licencia2.ts`); el precio y el enlace de compra, de `src/lib/product.ts`; la licencia (`/licencia/` y `/en/license/`), de `LICENSE.md`. Español en `/` e inglés en `/en/`.
 - **Probarla en local:** `node scripts/build-site.mjs` (Node 22.18 o superior) y abre `site/dist` con cualquier servidor estático.
+- **Capturas:** son de la app real, con datos de demostración (personas ficticias, emails `@example.com`), en español e inglés y en tema claro y oscuro (WebP a dos tamaños). Se regeneran con `scripts/site-screenshots.mjs`, que rellena una base de datos de pruebas, abre la app con Playwright y crea también las imágenes para redes; los pasos están al principio del script. Hazlo cuando cambie el aspecto de la app.
 - **Publicación:** el workflow `.github/workflows/site.yml` la regenera y la publica en cada push a `main` que cambie `site/`, el script, `LICENSE*.md`, `src/lib/product.ts` o sus textos, y también a mano (**Actions → Web → Run workflow**).
 
 ### Pasos del propietario (una sola vez)

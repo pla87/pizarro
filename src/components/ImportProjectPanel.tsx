@@ -133,7 +133,7 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
         )}
         {summary.warnings.length > 0 && (
           <div className="text-sm">
-            <p className="font-medium">{foreign ? t("Cosas que no se pudieron importar") : t("Avisos")}</p>
+            <p className="font-medium">{foreign ? t("Cosas que no se pudieron importar") : t("Advertencias")}</p>
             <ul className="mt-1 max-h-32 list-disc overflow-y-auto pl-5 text-xs">
               {summary.warnings.map((w, i) => <li key={i}>{w}</li>)}
             </ul>

@@ -6,7 +6,7 @@ import {
   LICENSE_NUDGE_GRACE_DAYS, LICENSE_NUDGE_SNOOZE_DAYS, licenseStatus, nudgeSnoozeUntil, parseLicense, parsePersonalUse, shouldShowLicenseNudge,
   type NudgeInput,
 } from "../src/lib/license-core";
-import { landingIncludes, licenseFaq } from "../src/lib/landing-content";
+import { licenseFaq } from "../src/lib/landing-content";
 import { siteText } from "../src/lib/site-content";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -53,15 +53,21 @@ describe("recordatorio de licencia", () => {
 });
 
 describe("web del producto (getpizarro.com)", () => {
-  test("una descripción por cada función y textos en inglés", () => {
+  test("bloques completos y textos en inglés", () => {
     for (const locale of ["es", "en"] as const) {
-      const t = makeT(locale);
-      const s = siteText(t, 100);
-      assert.equal(s.featureTexts.length, landingIncludes(t).length);
-      assert.equal(s.boardCards.length, s.boardCols.length);
+      const s = siteText(makeT(locale), 100);
+      assert.deepEqual(s.blocks.map((b) => b.key), ["task", "release", "comments"]);
+      for (const b of s.blocks) assert.ok(b.title && b.text && b.alt && b.points.length > 0);
+      assert.equal(s.features.length % 4, 0, "la lista de funciones llena filas de 4");
+      assert.equal(s.privacyItems.length, 4);
+      assert.equal(s.who.length, 3);
+      assert.deepEqual(s.installLinks.map((x) => x.key), ["guide", "image", "railway"]);
     }
+    const es = siteText(makeT("es"), 100);
     const en = makeT("en");
     assert.equal(siteText(en, 100).soon, "Coming soon");
+    assert.notEqual(siteText(en, 100).heroTitle, es.heroTitle);
+    assert.match(siteText(en, 100).heroLead, /€100 once/);
     assert.match(licenseFaq(en, 100)[1]?.a ?? "", /€100 \+ VAT/);
   });
 });
