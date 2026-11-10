@@ -20,7 +20,7 @@ cd e2e/qa && BASE=http://localhost:3231 DATABASE_URL=$DBURL APP_DIR=$PWD/../.. n
 `run-all.mjs` crea (o vacía) la base `pz_qa`, aplica migraciones y arranca su propio servidor en el puerto de `BASE`:
 no debe haber otro servidor escuchando ahí.
 
-## Tablero (~170 comprobaciones)
+## Tablero (~270 comprobaciones)
 
 Con la base `pz_qa` preparada por la suite y un servidor arrancado (`DATABASE_URL=$DBURL PORT=3231 npm start`):
 

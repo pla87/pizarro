@@ -77,7 +77,7 @@ Antes de publicarlo, prueba el enlace en modo de prueba: paga con una tarjeta de
    ```
 
    Es una constante del producto, no de cada instalación: el producto se vende desde un único sitio. Es un enlace público; no contiene claves ni secretos.
-2. Guarda el cambio con un commit y publica una versión nueva como se hace habitualmente (ver `docs/HANDOFF.md`). La página de presentación (botón «Comprar»), Administración → Licencia (botón «Comprar licencia (100 € + IVA)») y el recordatorio de licencia para administradores usan ese enlace. La web getpizarro.com se regenera sola al subir el cambio a `main` (ver «Web getpizarro.com»): su botón «Próximamente» pasa a ser «Comprar licencia».
+2. Guarda el cambio con un commit y publica una versión nueva como se hace habitualmente (ver `docs/HANDOFF.md`; si la publicas a mano con **Actions → Release → Run workflow**, elige la rama `main`: la publicación manual solo funciona desde `main`). La página de presentación (botón «Comprar»), Administración → Licencia (botón «Comprar licencia (100 € + IVA)») y el recordatorio de licencia para administradores usan ese enlace. La web getpizarro.com se regenera sola al subir el cambio a `main` (ver «Web getpizarro.com»): su botón «Próximamente» pasa a ser «Comprar licencia».
 3. Mientras `BUY_URL` esté vacía, el botón de la app lleva al email de contacto público (el configurado en Administración → Textos legales) o, si tampoco hay, a la página `/licencia`; en getpizarro.com sale «Próximamente», deshabilitado, con la nota «Mientras tanto puedes usar Pizarro con normalidad: la licencia se basa en la buena voluntad».
 
 ## 6. Qué hace el comprador después
@@ -107,7 +107,8 @@ La web del producto es un sitio estático (sin cookies ni analítica, sin recurs
 
 ### Pasos del propietario (una sola vez)
 
-1. **Activar Pages:** en el repositorio, **Settings → Pages → Build and deployment → Source: GitHub Actions**. Después lanza el workflow (**Actions → Web → Run workflow**) o sube un cambio a `site/`.
+1. **Activar Pages con origen «GitHub Actions» (imprescindible):** en el repositorio, **Settings → Pages → Build and deployment → Source** y elige **GitHub Actions** en el desplegable. **No** elijas «Deploy from a branch»: con esa opción GitHub no usa la web generada, sino que publica el `README.md` del repositorio con Jekyll (se ve el README con un tema genérico en lugar de la presentación de Pizarro). Si ya estaba en «Deploy from a branch», cámbialo a **GitHub Actions**; no hace falta borrar nada.
+   Después lanza el workflow: **Actions → Web → Run workflow** (rama `main`) y pulsa el botón verde **Run workflow**. También se lanza solo al subir a `main` un cambio en `site/` o en sus textos.
 2. **DNS en el registrador del dominio** `getpizarro.com` (en su panel de DNS):
    - Cuatro registros **A** del dominio raíz (`@`) a `185.199.108.153`, `185.199.109.153`, `185.199.110.153` y `185.199.111.153`.
    - Opcional (IPv6): cuatro registros **AAAA** de `@` a `2606:50c0:8000::153`, `2606:50c0:8001::153`, `2606:50c0:8002::153` y `2606:50c0:8003::153`.
@@ -115,6 +116,14 @@ La web del producto es un sitio estático (sin cookies ni analítica, sin recurs
    - Borra otros registros A/AAAA/CNAME del raíz o de `www` que ponga el registrador por defecto (páginas de aparcamiento).
 3. **Dominio personalizado:** en **Settings → Pages → Custom domain** escribe `getpizarro.com` y pulsa **Save** (con la publicación por GitHub Actions este paso es obligatorio: el fichero `CNAME` del sitio no basta). Cuando GitHub compruebe el DNS (de minutos a unas horas), marca **Enforce HTTPS**.
 4. **Verificar el dominio** para que nadie pueda usarlo en otro repositorio de GitHub (secuestro de dominio): en la configuración de **tu cuenta** (no del repositorio), **Settings → Pages → Verified domains → Add a domain**, escribe `getpizarro.com` y crea en el DNS el registro **TXT** que indica GitHub (del estilo `_github-pages-challenge-pla87.getpizarro.com`); después pulsa **Verify**. Deja ese registro TXT puesto.
+
+### Comprobar que funciona
+
+- **El workflow:** en **Actions → Web**, la última ejecución está en verde con sus dos pasos, «Generar la web» y «Publicar en GitHub Pages». Si falla en «Publicar en GitHub Pages» (error del estilo «Get Pages site failed» o «Not Found»), Pages no está activado con **Source: GitHub Actions** (paso 1).
+- **Una señal de que el origen es el equivocado:** en **Actions** aparece un workflow que no es del repositorio, «pages build and deployment». Sale solo con «Deploy from a branch»; con «GitHub Actions» no debe aparecer.
+- **Settings → Pages:** arriba indica «Your site is live at https://getpizarro.com» (o la dirección `github.io` mientras no haya dominio) con el botón **Visit site**, y en *Build and deployment* sigue **Source: GitHub Actions**.
+- **La web:** abre https://getpizarro.com (mejor en una ventana privada, para no ver una copia antigua). Debe verse la presentación de Pizarro con el logo, las capturas de la app y el precio, no el texto del README. Comprueba también https://getpizarro.com/en/ (inglés), https://getpizarro.com/licencia/ (texto de la licencia) y que `http://` y `www.` llevan a `https://getpizarro.com`.
+- **Desde la terminal (opcional):** `curl -sI https://getpizarro.com` responde `HTTP/2 200` y `curl -s https://getpizarro.com | grep -c 'og.png'` da 1 o más; si la página contiene el texto del README, el origen sigue en «Deploy from a branch».
 
 La web no muestra ningún email de contacto. Cuando haya un enlace de pago (`BUY_URL`, sección 5), el botón «Comprar licencia» aparece solo tras el siguiente despliegue.
 

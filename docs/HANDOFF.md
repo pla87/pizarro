@@ -77,10 +77,20 @@ npx next build --webpack && node scripts/postbuild.mjs && npm run build:boot
 ```
 
 Pruebas en navegador (ver `e2e/README.md`): la suite QA (`e2e/qa/run-all.mjs`, ~350 comprobaciones), la del
-tablero (`e2e/board-e2e.mjs`, unas 170) y la de pegado (`e2e/paste-e2e.mjs`, ~72: imágenes y tablas pegadas; misma
+tablero (`e2e/board-e2e.mjs`, unas 270) y la de pegado (`e2e/paste-e2e.mjs`, ~72: imágenes y tablas pegadas; misma
 base `pz_qa` y servidor que la del tablero). Si cambias el rol o la etiqueta de un elemento que la suite usa,
 actualiza el script correspondiente. Las suites declaran la instalación de uso personal en `prepareUsers`
 (`e2e/qa/lib.mjs`) para que no salga el recordatorio de licencia.
+
+Guardas que conviene conocer:
+
+- `tests/db/undo-perf.test.ts` (dentro de `npm run test:db`): guarda de rendimiento del deshacer. Mide las
+  consultas y los bytes leídos al deshacer y rehacer «Mover a…» de cientos de tarjetas; si falla, algo ha vuelto a
+  leer las descripciones completas o a hacer consultas entrada a entrada.
+- Apagado ordenado (`src/lib/shutdown.ts`): al recibir la señal, `/api/health` responde `503` (`shutting_down`),
+  se cierran los canales en vivo y se espera hasta 5 s a las peticiones en curso (subidas incluidas) y a los
+  emails. Una ruta nueva de larga duración debe contar como petición en curso; lo que no termine queda en
+  `system.shutdown`.
 
 Antes de cada fusión en `main`, comprueba que no se cuela ningún dato personal del propietario en el diff ni en el
 PDF del manual (busca su nombre, email y dominios; pídeselos si no los sabes) y que los mensajes de commit no
@@ -95,7 +105,7 @@ llevan enlaces de sesión ni nombres de modelos.
    secciones afectadas. Generar el PDF: `node scripts/build-manual-pdf.mjs` (con `CHROME_PATH` si hace falta).
 4. Commit «vX.Y.Z: …», PR a `main` y fusionar.
 5. Publicar la versión (etiqueta, imagen Docker y GitHub Release): en GitHub, **Actions → Release → Run workflow**
-   sobre `main`, o `npm run release:tag` y `git push origin vX.Y.Z` desde un equipo con permiso para subir
+   sobre `main` (la publicación manual solo funciona desde `main`: lanzada desde otra rama no hace nada), o `npm run release:tag` y `git push origin vX.Y.Z` desde un equipo con permiso para subir
    etiquetas. Tras la primera publicación, el paquete `ghcr.io/pla87/pizarro` debe hacerse público.
 
 ## 6. Estado y pendientes
@@ -107,8 +117,12 @@ llevan enlaces de sesión ni nombres de modelos.
   `/presentacion` simplificada (sin demo; la administración no enlaza a ella por decisión del propietario) y licencia
   (`LICENSE.md` + `/licencia`; `npm run license:sync` tras cambiarla).
 - Hecho: web estática del producto en `site/` (plantillas y estáticos), generada con `scripts/build-site.mjs` y
-  publicada con GitHub Pages por `.github/workflows/site.yml` en getpizarro.com. Puesta en marcha (Pages, DNS,
-  HTTPS, verificación del dominio): `docs/VENTA.md` §8.
+  publicada con GitHub Pages por `.github/workflows/site.yml` (workflow «Web») en getpizarro.com. En
+  *Settings → Pages → Build and deployment*, **Source debe ser «GitHub Actions»**: con «Deploy from a branch»
+  GitHub publica el README del repositorio con Jekyll en lugar de la web. Las capturas de `site/static/img/` y las
+  imágenes `og.png`/`og-en.png` se regeneran con `scripts/site-screenshots.mjs` (instrucciones en su cabecera;
+  siempre contra una base de pruebas con datos de demostración) cuando cambie el aspecto de la app. Puesta en
+  marcha (Pages, DNS, HTTPS, verificación del dominio): `docs/VENTA.md` §8.
 - Hecho: recordatorio de licencia para administradores (franja bajo la cabecera, como mucho cada 30 días, nunca en
   los 7 primeros días): lógica en `shouldShowLicenseNudge` (`src/lib/license-core.ts`), interfaz en
   `src/components/LicenseNudge.tsx`. Se oculta con licencia registrada o declarando uso personal.
