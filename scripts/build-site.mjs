@@ -11,8 +11,10 @@
 // scripts/site-screenshots.mjs; si falta alguna, falla. Sin recursos externos: HTML + una hoja de estilos y un
 // script mínimo en línea (el botón «Copiar» del comando de instalación). Modo claro/oscuro con prefers-color-scheme.
 // Plantilla: site/templates/layout.html. Ficheros tal cual: site/static/ (CNAME, robots.txt, style.css, og*.png, img/).
+// Guías de conexión (/guias/, /en/guides/): una página por cada docs/guias/*.md y su docs/guias/en/*.md, con el
+// Markdown convertido por src/lib/site-markdown.ts (sin dependencias; el HTML que traiga el texto se escapa).
 import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join, posix } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -22,6 +24,7 @@ const imp = (p) => import(pathToFileURL(join(root, p)).href);
 const product = await imp("src/lib/product.ts");
 const { landingFaq, licenseFaq } = await imp("src/lib/landing-content.ts");
 const { siteText } = await imp("src/lib/site-content.ts");
+const { markdownToHtml, parseGuide, safeHref } = await imp("src/lib/site-markdown.ts");
 
 // Diccionario de inglés: todos los ficheros de src/i18n/en (index.ts los reúne con imports que Node no resuelve).
 const EN = {};
@@ -42,26 +45,6 @@ const fill = (tpl, vars) => tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => {
   return vars[k];
 });
 
-/** Markdown mínimo de LICENSE.md: encabezados, párrafos, listas con «-», **negrita** y *cursiva*. */
-function markdown(md) {
-  const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/\*(.+?)\*/g, "<em>$1</em>");
-  const html = [];
-  for (const block of md.trim().split(/\n{2,}/)) {
-    const lines = block.split("\n");
-    const h = /^(#{1,3}) (.*)$/.exec(block);
-    if (h && lines.length === 1) {
-      const level = h[1].length;
-      const id = h[2].toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-      html.push(`<h${level} id="${id}">${inline(h[2])}</h${level}>`);
-    } else if (lines.every((l) => l.startsWith("- "))) {
-      html.push(`<ul>${lines.map((l) => `<li>${inline(l.slice(2))}</li>`).join("")}</ul>`);
-    } else {
-      html.push(`<p>${inline(lines.join(" "))}</p>`);
-    }
-  }
-  return html.join("\n");
-}
-
 const license = readFileSync(join(root, "LICENSE.md"), "utf8").replace(/\r\n/g, "\n").trimEnd().split("\n\n---\n\n");
 if (license.length !== 2) throw new Error("LICENSE.md debe tener exactamente un separador «---» entre el español y el inglés");
 
@@ -77,16 +60,67 @@ const LINKS = {
   manualPdf: `${BLOB}/MANUAL.pdf`,
   changelog: `${BLOB}/CHANGELOG.md`,
 };
+// Autoría: una línea discreta en el pie de la web (solo aquí; ni en la app ni en el manual).
+const AUTHOR_SITE = "pacolucena.com";
+const AUTHOR_URL = `https://${AUTHOR_SITE}`;
 const layout = readFileSync(join(root, "site/templates/layout.html"), "utf8");
+
+// ---------------------------------------------------------------------------------------------------------------
+// Guías de conexión: cada docs/guias/<nombre>.md (español) con su docs/guias/en/<nombre>.md (inglés) es una página,
+// /guias/<nombre>/ y /en/guides/<nombre>/. Cabecera y orden: parseGuide (src/lib/site-markdown.ts). Si una guía no
+// tiene su versión en el otro idioma, título o descripción, falla.
+// ---------------------------------------------------------------------------------------------------------------
+const GUIDE_DIR = { es: join(root, "docs/guias"), en: join(root, "docs/guias/en") };
+const guideFiles = (dir) => (existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".md")).map((f) => basename(f, ".md")).sort() : []);
+const guideSlugs = guideFiles(GUIDE_DIR.es);
+{
+  const en = guideFiles(GUIDE_DIR.en);
+  const lack = [...guideSlugs.filter((g) => !en.includes(g)).map((g) => `docs/guias/en/${g}.md`), ...en.filter((g) => !guideSlugs.includes(g)).map((g) => `docs/guias/${g}.md`)];
+  if (lack.length) throw new Error(`Cada guía necesita su versión en español y en inglés. Falta:\n  ${lack.join("\n  ")}`);
+}
+const GUIDES = { es: [], en: [] };
+for (const locale of ["es", "en"]) {
+  for (const slug of guideSlugs) {
+    const file = `${locale === "es" ? "docs/guias" : "docs/guias/en"}/${slug}.md`;
+    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) throw new Error(`${file}: el nombre solo puede tener minúsculas, números y guiones`);
+    const g = parseGuide(readFileSync(join(root, file), "utf8"));
+    if (!g.title || !g.description) throw new Error(`${file}: falta el título («# Título» o «titulo:») o la descripción («descripcion:»)`);
+    GUIDES[locale].push({ ...g, slug, file });
+  }
+}
+// El orden lo marca la versión en español, para que los dos índices coincidan.
+const guideOrder = Object.fromEntries(GUIDES.es.map((g) => [g.slug, g.order]));
+for (const locale of ["es", "en"]) GUIDES[locale].sort((a, b) => guideOrder[a.slug] - guideOrder[b.slug] || a.slug.localeCompare(b.slug));
+
+/**
+ * Enlaces de una guía: http(s) y anclas tal cual; «otra-guia.md#seccion» a su página; otro fichero del repositorio
+ * («../INSTALL.md») a GitHub. Nada más.
+ */
+const guideLink = (locale, file) => (href) => {
+  const ok = safeHref(href);
+  if (ok) return ok;
+  const m = /^(?:\.\/)?([a-z0-9-]+)\.md(#[\w-]+)?$/.exec(href);
+  if (m && guideSlugs.includes(m[1])) return `${L[locale].guides}${m[1]}/${m[2] ?? ""}`;
+  const [path, hash = ""] = href.split("#");
+  if (!/^[\w./-]+$/.test(path) || /^[a-z]+:/i.test(path) || (hash && !/^[\w-]+$/.test(hash))) return null;
+  const target = posix.normalize(posix.join(posix.dirname(file), path));
+  if (target.startsWith("..") || target.startsWith("/") || !existsSync(join(root, target))) return null;
+  return `${BLOB}/${target}${hash ? `#${hash}` : ""}`;
+};
+const guide = (locale, slug) => {
+  const g = GUIDES[locale].find((x) => x.slug === slug);
+  if (!g) throw new Error(`Falta la guía docs/guias/${slug}.md (la enlaza la portada)`);
+  return g;
+};
 
 const L = {
   es: {
-    home: "/", license: "/licencia/", og: "es_ES", ogImage: "og.png", other: "en", otherLabel: "English", otherShort: "EN",
-    ids: { why: "por-que", how: "como-funciona", privacy: "privacidad", features: "funciones", who: "para-quien", pricing: "precio", faq: "preguntas", install: "instalacion" },
+    home: "/", license: "/licencia/", guides: "/guias/", og: "es_ES", ogImage: "og.png", other: "en", otherLabel: "English", otherShort: "EN",
+    ids: { why: "por-que", how: "como-funciona", privacy: "privacidad", features: "funciones", connect: "integraciones", who: "para-quien", pricing: "precio", faq: "preguntas", install: "instalacion" },
   },
   en: {
-    home: "/en/", license: "/en/license/", og: "en_GB", ogImage: "og-en.png", other: "es", otherLabel: "Español", otherShort: "ES",
-    ids: { why: "why", how: "how-it-works", privacy: "privacy", features: "features", who: "who", pricing: "pricing", faq: "faq", install: "install" },
+    home: "/en/", license: "/en/license/", guides: "/en/guides/", og: "en_GB", ogImage: "og-en.png", other: "es", otherLabel: "Español", otherShort: "ES",
+    ids: { why: "why", how: "how-it-works", privacy: "privacy", features: "features", connect: "integrations", who: "who", pricing: "pricing", faq: "faq", install: "install" },
   },
 };
 
@@ -169,6 +203,11 @@ const ICONS = {
   box: '<path d="M21 8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>',
   train: '<path d="M4 15.5V6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v9.5a3.5 3.5 0 0 1-3.5 3.5h-9A3.5 3.5 0 0 1 4 15.5z"/><path d="M4 11h16M8 15h.01M16 15h.01M8 19l-2 3M16 19l2 3"/>',
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  filter: '<path d="M22 3H2l8 9.46V19l4 2v-8.54z"/>',
+  mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
+  send: '<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/>',
+  message: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/>',
+  login: '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/>',
 };
 const icon = (key, size = 22) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[key]}</svg>`;
 const check = '<svg class="ck" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
@@ -180,11 +219,11 @@ const checks = (items) => `<ul class="checks">${items.map((x) => `<li>${check}<s
 // ---------------------------------------------------------------------------------------------------------------
 // Cabecera y pie
 // ---------------------------------------------------------------------------------------------------------------
-function header(locale, s, { onHome }) {
+function header(locale, s, { onHome, altPath }) {
   const l = L[locale];
   const a = (id, text) => `<a href="${onHome ? "" : l.home}#${l.ids[id]}">${esc(text)}</a>`;
   const links = `${a("how", s.navFeatures)}${a("who", s.navWho)}${a("pricing", s.navPricing)}${a("faq", s.navFaq)}${a("install", s.navInstall)}`;
-  const otherHref = onHome ? L[l.other].home : L[l.other].license;
+  const otherHref = altPath;
   return `<header class="top"><div class="wrap top-in">
 <a class="brand" href="${l.home}">${logo(28)}<span>Pizarro</span></a>
 <nav class="nav" aria-label="${esc(s.menu)}">${links}</nav>
@@ -208,28 +247,41 @@ function footer(locale, s, { onHome }) {
 <p class="foot-note">${esc(s.footerSource)}</p>
 </div>
 <nav class="foot-col" aria-label="${esc(s.footerProduct)}"><h2>${esc(s.footerProduct)}</h2><ul>${a("how", s.navFeatures)}${a("who", s.navWho)}${a("pricing", s.navPricing)}${a("faq", s.navFaq)}${a("install", s.navInstall)}</ul></nav>
-<nav class="foot-col" aria-label="${esc(s.footerDocs)}"><h2>${esc(s.footerDocs)}</h2><ul>${x(LINKS.guide, s.installGuide)}${x(LINKS.manual, s.footerManual)}${x(LINKS.manualPdf, s.footerManualPdf)}${x(LINKS.changelog, s.footerChangelog)}</ul></nav>
+<nav class="foot-col" aria-label="${esc(s.footerDocs)}"><h2>${esc(s.footerDocs)}</h2><ul>${x(LINKS.guide, s.installGuide)}<li><a href="${l.guides}">${esc(s.footerGuides)}</a></li>${x(LINKS.manual, s.footerManual)}${x(LINKS.manualPdf, s.footerManualPdf)}${x(LINKS.changelog, s.footerChangelog)}</ul></nav>
 <nav class="foot-col" aria-label="${esc(s.footerProject)}"><h2>${esc(s.footerProject)}</h2><ul>${x(product.REPO_URL, s.footerCode)}<li><a href="${l.license}">${esc(s.footerLicense)}</a></li><li><a href="${L[l.other].home}" hreflang="${l.other}" lang="${l.other}">${l.otherLabel}</a></li></ul></nav>
-</div></footer>`;
+</div>
+<div class="wrap foot-by"><p>${esc(s.footerBy).replace("{site}", ext(AUTHOR_URL, esc(AUTHOR_SITE)))}</p></div>
+</footer>`;
 }
 
-function page(locale, { path, title, description, main, onHome }) {
+/** Página completa. `alt`: la misma página en el otro idioma (la española es la de x-default). */
+function page(locale, { path, alt, title, description, main, onHome }) {
   const t = makeT(locale);
   const s = siteText(t, product.LICENSE_PRICE_EUR);
   const l = L[locale];
-  const alt = onHome ? L[l.other].home : L[l.other].license;
   const canonical = [
     `<link rel="canonical" href="${SITE}${path}">`,
     `<link rel="alternate" hreflang="${locale}" href="${SITE}${path}">`,
     `<link rel="alternate" hreflang="${l.other}" href="${SITE}${alt}">`,
-    `<link rel="alternate" hreflang="x-default" href="${SITE}${onHome ? "/" : "/licencia/"}">`,
+    `<link rel="alternate" hreflang="x-default" href="${SITE}${locale === "es" ? path : alt}">`,
   ].join("\n");
   return fill(layout, {
     lang: locale, title: esc(title), description: esc(description), canonical, url: `${SITE}${path}`, site: SITE,
     ogLocale: l.og, ogLocaleAlt: L[l.other].og, ogImage: `${SITE}/${l.ogImage}`, ogImageAlt: esc(s.ogAlt), skip: esc(s.skip),
-    header: header(locale, s, { onHome }), main, footer: footer(locale, s, { onHome }),
+    header: header(locale, s, { onHome, altPath: alt }), main, footer: footer(locale, s, { onHome }),
   });
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Integraciones de la portada («Se conecta con…»): icono y enlaces de cada una (a su guía; el email, a la de instalación)
+// ---------------------------------------------------------------------------------------------------------------
+const guideA = (locale, slug, text) => `<a class="link" href="${L[locale].guides}${guide(locale, slug).slug}/">${esc(text)} ${arrow}</a>`;
+const CONNECT = {
+  email: { icon: "mail", links: (locale, s) => [ext(LINKS.guide, `${esc(s.installGuide)} ${arrow}`, "link")] },
+  messaging: { icon: "send", links: (locale) => [guideA(locale, "telegram", "Telegram"), guideA(locale, "whatsapp", "WhatsApp")] },
+  "google-login": { icon: "login", links: (locale, s) => [guideA(locale, "google-login", s.guideRead)] },
+  "google-docs": { icon: "google", links: (locale, s) => [guideA(locale, "google-docs", s.guideRead)] },
+};
 
 // ---------------------------------------------------------------------------------------------------------------
 // Portada
@@ -271,7 +323,6 @@ ${checks(b.points)}
   const main = `
 <section class="hero">
 <div class="wrap hero-in">
-<p class="eyebrow">${esc(s.eyebrow)}</p>
 <h1>${esc(s.heroTitle)}</h1>
 <p class="lead">${esc(s.heroLead)}</p>
 <p class="actions"><a class="btn btn-primary btn-lg" href="#${ids.install}">${esc(s.heroCta)} ${arrow}</a><a class="btn btn-secondary btn-lg" href="#${ids.how}">${esc(s.heroSecondary)}</a></p>
@@ -338,6 +389,16 @@ ${s.privacyItems.map((p) => `<li><span class="ico">${icon(p.icon)}</span><h3>${e
 <ul class="grid g4 features">
 ${s.features.map((f) => `<li><span class="ico ico-sm">${icon(f.icon, 20)}</span><div><h3>${esc(f.title)}</h3><p class="muted">${esc(f.text)}</p></div></li>`).join("\n")}
 </ul>
+<div class="connect" id="${ids.connect}">
+<header class="connect-head">
+<h3>${esc(s.connectTitle)}</h3>
+<p class="muted">${esc(s.connectLead)}</p>
+</header>
+<ul class="grid g4 connect-list">
+${s.connect.map((c) => `<li class="card"><span class="ico ico-sm">${icon(CONNECT[c.key].icon, 20)}</span><h4>${esc(c.title)}</h4><p class="muted">${esc(c.text)}</p><p class="connect-links">${CONNECT[c.key].links(locale, s).join("")}</p></li>`).join("\n")}
+</ul>
+<p class="center connect-all"><a class="link" href="${l.guides}">${esc(s.connectAll)} ${arrow}</a></p>
+</div>
 </div>
 </section>
 
@@ -404,7 +465,7 @@ ${s.installLinks.map((x) => `<li>${ext(LINKS[x.key], `<span class="ico ico-sm">$
 </section>
 <script>document.querySelectorAll("[data-copy]").forEach(function(b){b.hidden=false;b.addEventListener("click",function(){var c=document.getElementById(b.dataset.copy),o=b.textContent;if(!navigator.clipboard)return;navigator.clipboard.writeText(c.textContent).then(function(){b.textContent=b.dataset.done;setTimeout(function(){b.textContent=o},1800)})})})</script>
 `;
-  return page(locale, { path: l.home, title: s.metaTitle, description: s.metaDescription, main, onHome: true });
+  return page(locale, { path: l.home, alt: L[l.other].home, title: s.metaTitle, description: s.metaDescription, main, onHome: true });
 }
 
 function licensePage(locale) {
@@ -419,11 +480,63 @@ function licensePage(locale) {
 <p class="crumbs"><a href="${l.home}">Pizarro</a> <span aria-hidden="true">/</span> ${esc(s.footerLicense)}</p>
 <h1>${esc(heading)}</h1>
 <p class="small"><a class="link" href="${L[l.other].license}" hreflang="${l.other}" lang="${l.other}">${other}</a></p>
-${markdown(md)}
+${markdownToHtml(md)}
 <p class="after"><a class="link" href="${l.home}#${l.ids.pricing}"><span aria-hidden="true">←</span> ${esc(s.navPricing)}</a></p>
 </article>
 `;
-  return page(locale, { path: l.license, title: `${s.licenseTitle} · Pizarro`, description: s.licenseDescription, main, onHome: false });
+  return page(locale, { path: l.license, alt: L[l.other].license, title: `${s.licenseTitle} · Pizarro`, description: s.licenseDescription, main, onHome: false });
+}
+
+/** Índice de las guías de conexión: una tarjeta por guía. */
+function guidesIndex(locale) {
+  const t = makeT(locale);
+  const s = siteText(t, product.LICENSE_PRICE_EUR);
+  const l = L[locale];
+  const main = `
+<section class="sec guides">
+<div class="wrap">
+<p class="crumbs"><a href="${l.home}">Pizarro</a> <span aria-hidden="true">/</span> ${esc(s.guidesNav)}</p>
+<header class="sec-head">
+<h1>${esc(s.guidesTitle)}</h1>
+<p class="muted big">${esc(s.guidesLead)}</p>
+</header>
+<ul class="grid g2 guide-cards">
+${GUIDES[locale].map((g) => `<li><a class="card guide-card" href="${l.guides}${g.slug}/"><span class="ico">${icon(guideIcon(g), 22)}</span><span><strong>${esc(g.title)}</strong><span class="muted">${esc(g.description)}</span><span class="link">${esc(s.guideRead)} ${arrow}</span></span></a></li>`).join("\n")}
+</ul>
+<p class="center muted after">${esc(s.guidesInstall)} ${ext(LINKS.guide, `${esc(s.installGuide)} ${arrow}`, "link")}</p>
+</div>
+</section>
+`;
+  return page(locale, { path: l.guides, alt: L[l.other].guides, title: `${s.guidesTitle} · Pizarro`, description: s.guidesDescription, main, onHome: false });
+}
+
+function guideIcon(g) {
+  if (!g.icon) return "book";
+  if (!ICONS[g.icon]) throw new Error(`${g.file}: icono «${g.icon}» desconocido (usa uno de: ${Object.keys(ICONS).join(", ")})`);
+  return g.icon;
+}
+
+/** Una guía: su Markdown convertido, con migas, el enlace al otro idioma y las demás guías al final. */
+function guidePage(locale, g) {
+  const t = makeT(locale);
+  const s = siteText(t, product.LICENSE_PRICE_EUR);
+  const l = L[locale];
+  const other = locale === "es" ? "Read it in English" : "Léela en español";
+  const rest = GUIDES[locale].filter((x) => x.slug !== g.slug);
+  const path = `${l.guides}${g.slug}/`;
+  const alt = `${L[l.other].guides}${g.slug}/`;
+  const main = `
+<article class="wrap narrow sec prose guide">
+<p class="crumbs"><a href="${l.home}">Pizarro</a> <span aria-hidden="true">/</span> <a href="${l.guides}">${esc(s.guidesNav)}</a> <span aria-hidden="true">/</span> ${esc(g.title)}</p>
+<h1>${esc(g.title)}</h1>
+<p class="guide-lead">${esc(g.description)}</p>
+<p class="small"><a class="link" href="${alt}" hreflang="${l.other}" lang="${l.other}">${other}</a></p>
+${markdownToHtml(g.body, { link: guideLink(locale, g.file) })}
+${rest.length ? `<nav class="guide-more" aria-labelledby="mas-guias"><h2 id="mas-guias">${esc(s.guideOther)}</h2><ul>${rest.map((x) => `<li><a href="${l.guides}${x.slug}/"><span class="ico ico-sm">${icon(guideIcon(x), 18)}</span><span>${esc(x.title)}</span></a></li>`).join("")}</ul></nav>` : ""}
+<p class="after"><a class="link" href="${l.guides}"><span aria-hidden="true">←</span> ${esc(s.guideAll)}</a></p>
+</article>
+`;
+  return page(locale, { path, alt, title: `${g.title} · Pizarro`, description: g.description, main, onHome: false });
 }
 
 function notFound() {
@@ -459,7 +572,7 @@ function notFound() {
 }
 
 function sitemap() {
-  const pairs = [["/", "/en/"], ["/licencia/", "/en/license/"]];
+  const pairs = [["/", "/en/"], ["/licencia/", "/en/license/"], [L.es.guides, L.en.guides], ...guideSlugs.map((g) => [`${L.es.guides}${g}/`, `${L.en.guides}${g}/`])];
   const urls = pairs.flatMap(([es, en]) => [es, en].map((loc) => `  <url>
     <loc>${SITE}${loc}</loc>
     <xhtml:link rel="alternate" hreflang="es" href="${SITE}${es}"/>
@@ -487,6 +600,10 @@ write("index.html", home("es"));
 write("en/index.html", home("en"));
 write("licencia/index.html", licensePage("es"));
 write("en/license/index.html", licensePage("en"));
+for (const locale of ["es", "en"]) {
+  write(`${L[locale].guides.slice(1)}index.html`, guidesIndex(locale));
+  for (const g of GUIDES[locale]) write(`${L[locale].guides.slice(1)}${g.slug}/index.html`, guidePage(locale, g));
+}
 write("404.html", notFound());
 write("sitemap.xml", sitemap());
 write(".nojekyll", "");

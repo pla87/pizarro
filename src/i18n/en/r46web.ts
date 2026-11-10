@@ -44,8 +44,6 @@ export const r46web: Record<string, string> = {
   // Web getpizarro.com
   "Pizarro es un tablero Kanban sencillo para equipos pequeños y familias. Pagas una vez y es tuyo; tus datos se quedan en tu servidor. Gratis para uso personal y educativo.":
     "Pizarro is a simple Kanban board for small teams and families. Pay once and it's yours; your data stays on your server. Free for personal and educational use.",
-  "Pizarro es un Kanban que se instala en tu propio servidor: tareas, comentarios y notas de versión, sin suscripción ni cuota por persona. Para empresas y profesionales, {price} € una sola vez.":
-    "Pizarro is a Kanban board you install on your own server: tasks, comments and release notes, with no subscription and no per-person fee. For businesses and professionals, €{price} once.",
   "Cada tipo de tarea trae sus subtareas y su texto de partida": "Each task type brings its own subtasks and starting text",
   "Coste, horas, cliente o fecha de inicio, solo si los usas": "Cost, hours, client or start date, only if you use them",
   "Un aviso cuando una tarea lleva días esperando a alguien": "A reminder when a task has been waiting on someone for days",

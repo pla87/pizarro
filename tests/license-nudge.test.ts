@@ -67,7 +67,14 @@ describe("web del producto (getpizarro.com)", () => {
     const en = makeT("en");
     assert.equal(siteText(en, 100).soon, "Coming soon");
     assert.notEqual(siteText(en, 100).heroTitle, es.heroTitle);
-    assert.match(siteText(en, 100).heroLead, /€100 once/);
+    // La entrada no habla de precio (está en su sección) y no hay etiqueta encima del título.
+    for (const s of [es, siteText(en, 100)]) {
+      assert.doesNotMatch(s.heroLead, /€|100/);
+      assert.ok(!("eyebrow" in s));
+    }
+    assert.deepEqual(es.connect.map((c) => c.key), ["email", "messaging", "google-login", "google-docs"]);
+    assert.match(es.footerBy, /\{site\}/);
+    assert.match(siteText(en, 100).footerBy, /\{site\}/);
     assert.match(licenseFaq(en, 100)[1]?.a ?? "", /€100 \+ VAT/);
   });
 

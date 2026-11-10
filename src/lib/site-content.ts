@@ -1,14 +1,18 @@
 // Textos propios de la web estática del producto (getpizarro.com, carpeta site/), además de los de la presentación
 // (landing-content.ts). Los usa solo scripts/build-site.mjs, que importa este fichero con Node tal cual: solo
 // `import type`, sin alias «@/». Están en src/ para que `npm run i18n:check` compruebe su traducción al inglés
-// (src/i18n/en/web2.ts y licencia2.ts).
+// (src/i18n/en/web2.ts, licencia2.ts, r46web.ts y web3.ts).
 import type { T } from "../i18n/shared";
 
 /** Icono de cada función de la lista compacta (los dibuja scripts/build-site.mjs). */
 export type SiteIcon =
-  | "calendar" | "inbox" | "docs" | "report" | "flag" | "repeat" | "google" | "columns" | "lock" | "shield" | "eye" | "export";
+  | "calendar" | "inbox" | "docs" | "report" | "flag" | "repeat" | "filter" | "columns" | "lock" | "shield" | "eye" | "export";
 
-export function siteText(t: T, priceEur: number) {
+/** Integraciones de la portada («Se conecta con…»); build-site les pone icono y enlaces a sus guías. */
+export type SiteConnect = "email" | "messaging" | "google-login" | "google-docs";
+
+// `_priceEur`: ya no lo usa ningún texto (el precio está en su sección, con licenseFaq y buyNote); se mantiene la firma.
+export function siteText(t: T, _priceEur: number) {
   return {
     metaTitle: t("Pizarro: un tablero Kanban sencillo en tu propio servidor"),
     metaDescription: t("Pizarro es un tablero Kanban sencillo para equipos pequeños y familias. Pagas una vez y es tuyo; tus datos se quedan en tu servidor. Gratis para uso personal y educativo."),
@@ -22,9 +26,8 @@ export function siteText(t: T, priceEur: number) {
     menu: t("Menú"),
 
     // Portada
-    eyebrow: t("Kanban en tu servidor · pago único"),
     heroTitle: t("El tablero sencillo para equipos pequeños y familias"),
-    heroLead: t("Pizarro es un Kanban que se instala en tu propio servidor: tareas, comentarios y notas de versión, sin suscripción ni cuota por persona. Para empresas y profesionales, {price} € una sola vez.", { price: priceEur }),
+    heroLead: t("Pizarro es un Kanban que se instala en tu propio servidor: tareas, comentarios y notas de versión, sin suscripción ni cuota por persona."),
     heroCta: t("Pruébalo gratis"),
     heroSecondary: t("Ver cómo funciona"),
     heroPoints: [t("Gratis para uso personal y educativo"), t("En tu servidor"), t("Sin rastreadores")],
@@ -99,9 +102,20 @@ export function siteText(t: T, priceEur: number) {
       { icon: "report" as SiteIcon, title: t("Informe PDF"), text: t("El estado del proyecto en una página, también por email cada semana.") },
       { icon: "flag" as SiteIcon, title: t("Entregables"), text: t("Hitos con fecha y su avance, en el calendario y en el informe.") },
       { icon: "repeat" as SiteIcon, title: t("Tareas que se repiten"), text: t("Cada día, cada semana o cada mes, sin volver a crearlas.") },
-      { icon: "google" as SiteIcon, title: t("Google Docs y Sheets"), text: t("Crea un documento desde la tarea y queda enlazado en ella.") },
+      { icon: "filter" as SiteIcon, title: t("Filtros"), text: t("Lo tuyo, lo vencido o lo de esta semana, y por etiqueta, tipo o persona.") },
       { icon: "columns" as SiteIcon, title: t("Columnas con función"), text: t("Una columna puede sumar el presupuesto, juntar las subtareas en una lista o sacar el PDF de la semana.") },
     ],
+
+    // Integraciones (con enlace a cada guía de conexión)
+    connectTitle: t("Se conecta con lo que ya usas"),
+    connectLead: t("Todo es opcional: lo activa un administrador cuando hace falta."),
+    connect: [
+      { key: "email" as SiteConnect, title: t("Avisos por email"), text: t("Invitaciones, menciones, recordatorios y un resumen diario, con Gmail o el correo de tu empresa.") },
+      { key: "messaging" as SiteConnect, title: t("Telegram y WhatsApp"), text: t("Los avisos, también en el móvil por Telegram o WhatsApp.") },
+      { key: "google-login" as SiteConnect, title: t("Iniciar sesión con Google"), text: t("Entra con tu cuenta de Google, sin otra contraseña que recordar.") },
+      { key: "google-docs" as SiteConnect, title: t("Google Docs y Sheets"), text: t("Crea un documento desde la tarea y queda enlazado en ella.") },
+    ],
+    connectAll: t("Todas las guías de conexión"),
 
     // Para quién
     whoTitle: t("Pensado para grupos pequeños"),
@@ -151,11 +165,24 @@ export function siteText(t: T, priceEur: number) {
     footerDocs: t("Documentación"),
     footerProject: t("Proyecto"),
     footerManual: t("Manual de uso"),
+    footerGuides: t("Guías de conexión"),
+    // {site}: la web del autor, enlazada (la pone scripts/build-site.mjs).
+    footerBy: t("Un proyecto de {site}"),
     footerManualPdf: t("Manual en PDF"),
     footerChangelog: t("Novedades de cada versión"),
     footerLicense: t("Licencia"),
     footerCode: t("Código en GitHub"),
     installGuide: t("Guía de instalación"),
+
+    // Guías de conexión (índice y cada guía; el texto de cada una sale de docs/guias)
+    guidesNav: t("Guías"),
+    guidesTitle: t("Guías de conexión"),
+    guidesLead: t("Paso a paso para conectar Pizarro con Google, Telegram y WhatsApp. Todo es opcional y lo configura un administrador de tu instalación."),
+    guidesDescription: t("Guías paso a paso para conectar Pizarro con Google (inicio de sesión, Docs y Sheets), Telegram y WhatsApp."),
+    guidesInstall: t("¿Aún no has instalado Pizarro?"),
+    guideRead: t("Leer la guía"),
+    guideOther: t("Otras guías"),
+    guideAll: t("Todas las guías"),
 
     // Licencia y 404
     licenseTitle: t("Licencia de Pizarro"),
