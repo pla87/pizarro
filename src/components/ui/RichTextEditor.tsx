@@ -179,7 +179,15 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
         ...(placeholder ? { "aria-label": placeholder } : {}),
       },
       // Tablas pegadas (Word, Google Docs, Excel, una web): cada una entra como tabla Markdown; el resto del HTML, igual que siempre.
-      transformPastedHTML: (html) => replaceHtmlTables(html),
+      // Si la conversión falla (un HTML que no se esperaba), se pega el original: un error aquí perdería el pegado.
+      transformPastedHTML: (html) => {
+        try {
+          return replaceHtmlTables(html);
+        } catch (err) {
+          console.error("[paste] tablas", err);
+          return html;
+        }
+      },
       handleDOMEvents: {
         // Solo archivos (una captura, «Copiar imagen»): no hay texto que pegar aquí; los adjunta el diálogo (ui/pasteFiles).
         // Sin esto ProseMirror movía el foco a una caja oculta y volvía a procesar el mismo pegado 50 ms después.

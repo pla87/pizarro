@@ -4,7 +4,8 @@
 #   2. crea la GitHub Release con las notas de esa versión tomadas de changelog.json.
 # La release se crea al final: si la imagen falla, no se anuncia una versión que no se puede instalar.
 # También se puede lanzar a mano (Actions → Release → Run workflow, rama main): publica la versión de
-# package.json de ese commit y crea la etiqueta vX.Y.Z junto con la release.
+# package.json de ese commit y crea la etiqueta vX.Y.Z junto con la release. A mano solo desde main: lanzado desde
+# otra rama, los jobs no se ejecutan (no se publica nada).
 name: Release
 
 on:
@@ -21,6 +22,8 @@ jobs:
   image:
     name: Imagen Docker
     runs-on: ubuntu-latest
+    # Con etiqueta, siempre; a mano, solo desde main.
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
     permissions:
       contents: read
       packages: write
@@ -76,6 +79,7 @@ jobs:
     name: GitHub Release
     runs-on: ubuntu-latest
     needs: image
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
     permissions:
       contents: write
     steps:

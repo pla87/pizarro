@@ -735,6 +735,10 @@ model Notification {
   actorId        String?
   type           NotificationType @default(MENTION)
   taskId         String?
+  /// Comentario que creó el aviso (COMMENT, REPLY y MENTION de un comentario): al editarlo, deshacer la edición o
+  /// borrarlo se actualiza el extracto por este id. Sin clave ajena: borrar un comentario y deshacerlo lo recrea con
+  /// el mismo id. Null en los demás avisos y en los de comentarios anteriores a la columna.
+  commentId      String?
   excerpt        String           @default("")
   readAt         DateTime?
   emailSentAt    DateTime?
@@ -750,6 +754,7 @@ model Notification {
   @@index([taskId])
   @@index([readAt, createdAt])
   @@index([actorId])
+  @@index([commentId])
 }
 
 /// Cambio de fecha límite pendiente de avisar (uno por tarea y destinatario). Se actualiza con cada cambio

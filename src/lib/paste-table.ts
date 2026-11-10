@@ -13,6 +13,10 @@ const BLOCK = new Set(["p", "div", "li", "ul", "ol", "dl", "dt", "dd", "h1", "h2
 
 /** Tope de celdas combinadas (un colspan/rowspan disparatado no debe colgar la página). */
 const MAX_SPAN = 100;
+/** Tope de celdas de la rejilla de una tabla (con las combinadas ya repartidas): más grande, se pega como antes. */
+export const MAX_TABLE_CELLS = 50_000;
+/** Tope del HTML pegado que se mira en busca de tablas: más grande, se pega como antes, sin convertir nada. */
+export const MAX_TABLE_HTML = 2 * 1024 * 1024;
 
 type Token =
   | { kind: "open"; name: string; attrs: Record<string, string>; selfClosing: boolean; start: number; end: number }
@@ -44,8 +48,11 @@ function parseAttrs(src: string): Record<string, string> {
   return attrs;
 }
 
-/** Etiqueta de apertura o cierre en una posición dada (los atributos entre comillas pueden llevar «>»). */
-const TAG = /<(\/?)([a-zA-Z][\w:.-]*)((?:"[^"]*"|'[^']*'|[^'">])*)>/y;
+/**
+ * Etiqueta de apertura o cierre en una posición dada (los atributos entre comillas pueden llevar «>»). Fuera de las
+ * comillas no admite «<»: si no, cada «<» sin cerrar recorrería el resto del texto (tiempo cuadrático).
+ */
+const TAG = /<(\/?)([a-zA-Z][\w:.-]*)((?:"[^"]*"|'[^']*'|[^'"<>])*)>/y;
 
 /** Etiquetas, textos y sus posiciones. Sin comentarios ni contenido de <style>/<script>. */
 function tokenize(html: string): Token[] {
@@ -320,12 +327,21 @@ function readTable(tokens: readonly Token[]): Row[] {
 
 /** Tabla Markdown de una tabla HTML (de <table> a </table>), o null si no merece serlo (vacía o de una sola celda). */
 export function htmlTableToMarkdown(tableHtml: string): string | null {
+  if (tableHtml.length > MAX_TABLE_HTML) return null;
   return tableFromTokens(tokenize(tableHtml));
 }
 
 function tableFromTokens(tokens: readonly Token[]): string | null {
   const rows = readTable(tokens);
   if (!rows.length) return null;
+  // Celdas combinadas que se multiplican (300 celdas de 100×100 serían 3 millones): una tabla así no se convierte.
+  let cells = 0;
+  for (let r = 0; r < rows.length; r++) {
+    for (const cell of rows[r]!.cells) {
+      cells += cell.colspan * Math.min(cell.rowspan, rows.length - r);
+      if (cells > MAX_TABLE_CELLS) return null;
+    }
+  }
   // Rejilla con las celdas combinadas: el contenido en la primera posición, el resto vacío.
   const grid: (Cell | null)[][] = rows.map(() => []);
   rows.forEach((row, r) => {
@@ -338,7 +354,9 @@ function tableFromTokens(tokens: readonly Token[]): string | null {
       c += cell.colspan;
     }
   });
-  const width = Math.max(0, ...grid.map((g) => g.length));
+  // Sin «Math.max(...)»: con muchas filas, repartir el array en argumentos desborda la pila.
+  const width = grid.reduce((w, g) => Math.max(w, g.length), 0);
+  if (width * grid.length > MAX_TABLE_CELLS) return null;
   const text = (cell: Cell | null | undefined, header: boolean) => {
     if (!cell) return "";
     // En la cabecera, una celda toda en negrita va sin «**» (la cabecera ya se ve en negrita).
@@ -370,10 +388,10 @@ export function markdownTablePlaceholder(md: string): string {
 
 /**
  * Cambia cada tabla de primer nivel del HTML pegado por el marcador de su tabla Markdown; lo demás queda igual. Sin
- * tablas (o si ninguna se puede convertir) devuelve el mismo texto.
+ * tablas (o si ninguna se puede convertir, o el HTML pasa de MAX_TABLE_HTML) devuelve el mismo texto.
  */
 export function replaceHtmlTables(html: string, toPlaceholder: (md: string) => string = markdownTablePlaceholder): string {
-  if (!/<table[\s>]/i.test(html)) return html;
+  if (html.length > MAX_TABLE_HTML || !/<table[\s>]/i.test(html)) return html;
   const tokens = tokenize(html);
   let out = "";
   let last = 0;

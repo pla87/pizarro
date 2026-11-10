@@ -4,6 +4,8 @@ import { Prisma } from "@/generated/prisma/client";
 import { actionContext } from "./action-context";
 import { forgetAttachments } from "./attachment-cache";
 import { isUniqueColumnRole } from "./constants";
+import { excerpt } from "./mentions";
+import { commentNoticesWhere } from "./notify";
 import { db } from "./db";
 import { assertTaskCapacity } from "./caps";
 import { blockProblem, lockBlocking } from "./blocking";
@@ -820,8 +822,11 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           break;
         }
         case "comment.set": {
+          const c = await db.taskComment.findFirst({ where: { id: op.id, deletedAt: null, task: { projectId } }, select: { id: true, taskId: true, authorId: true, createdAt: true, body: true } });
           const { count } = await db.taskComment.updateMany({ where: { id: op.id, deletedAt: null, task: { projectId } }, data: { body: op.body, editedAt: date(op.editedAt) } });
           if (!count) miss++;
+          // Los avisos del comentario vuelven a mostrar el texto que queda (si no, al borrarlo seguirían con el deshecho).
+          else if (c) await db.notification.updateMany({ where: commentNoticesWhere(c), data: { excerpt: excerpt(op.body) } });
           break;
         }
         case "attachment.remove": {

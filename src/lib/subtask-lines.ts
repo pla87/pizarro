@@ -24,3 +24,11 @@ export function subtaskLines(text: string, maxLength: number): string[] {
     .filter((line) => line !== "" && !/^(?:[-*+•–]|\[[ xX]?\])$/.test(line))
     .map((line) => clampLength(line, maxLength));
 }
+
+/**
+ * Lo que se envía de un pegado de muchas líneas (como mucho `max`, lo que admite el servidor) y cuántas se quedan fuera
+ * sin enviar: se suman a las que el servidor no pudo añadir para que el aviso diga cuántas faltan en total.
+ */
+export function subtaskBatch(lines: readonly string[], max: number): { send: string[]; dropped: number } {
+  return { send: lines.slice(0, max), dropped: Math.max(0, lines.length - max) };
+}

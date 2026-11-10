@@ -52,7 +52,7 @@ import { planUploads } from "@/lib/upload-queue";
 import { formatDate } from "@/lib/format";
 import { normalizeLinkUrl } from "@/lib/link-url";
 import { sortByFileName } from "@/lib/attachment-sort";
-import { subtaskLines } from "@/lib/subtask-lines";
+import { subtaskBatch, subtaskLines } from "@/lib/subtask-lines";
 import { fieldsError, fieldsFormOf, fieldsPatch, TaskFieldsGroup, type FieldsForm } from "./TaskFieldsGroup";
 import { draftKey, useDraftAutosave, type EditTaskDraft } from "./drafts";
 import { setUndoTask, UNDONE_EVENT } from "../undo-context";
@@ -1356,9 +1356,12 @@ function Subtasks({ taskId, detail, setDetail, flushRef, draftRef, onUndo }: {
   const addMany = async (titles: string[]) => {
     const room = MAX_SUBTASKS - list.length;
     if (room <= 0) return toast(t("Una tarea no puede tener más de 100 subtareas."), "error");
-    const res = await board.track(addSubtasks(taskId, titles.slice(0, MAX_SUBTASKS)));
+    // Se envían como mucho MAX_SUBTASKS; las que se quedan fuera cuentan en el aviso de las que no caben.
+    const { send, dropped } = subtaskBatch(titles, MAX_SUBTASKS);
+    const res = await board.track(addSubtasks(taskId, send));
     if (!res.ok) return toast(res.error, "error");
-    const { created, skipped, undo } = res.data;
+    const { created, undo } = res.data;
+    const skipped = res.data.skipped + dropped;
     update((l) => [...l, ...created.filter((c) => !l.some((x) => x.id === c.id))]);
     if (skipped) toast(t("Se añadieron {n} subtareas; {m} no caben (máximo {max} por tarea).", { n: created.length, m: skipped, max: MAX_SUBTASKS }), "error");
     else toast(t("{n} subtareas añadidas", { n: created.length }), "undo", onUndo ? { label: t("Deshacer"), onClick: () => onUndo(undo.id) } : undefined);
