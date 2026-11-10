@@ -13,7 +13,7 @@ import { getCurrentUser, requireUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { quotaError } from "@/lib/quota-message";
 import { createAttachmentWithinLimit, roundMb } from "@/lib/attachment-limit";
-import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, processImage, removeAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveRawAttachmentFile } from "@/lib/uploads";
+import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, newFileId, processImage, removeAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveRawAttachmentFile } from "@/lib/uploads";
 import { attachmentTotals } from "@/lib/board";
 import { acquireUploadSlot, BodyTooLargeError, declaredLength, readBodyLimited, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError } from "@/lib/upload-slots";
 import { effectiveFileMaxMb, MULTIPART_OVERHEAD_BYTES } from "@/lib/upload-size";
@@ -81,12 +81,26 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     const originalName = (file.name || "captura").replace(/[^\p{L}\p{N}._ -]/gu, "_").slice(0, 120) || "captura";
     const mimeType = image ? "image/webp" : sanitizeMime(file.type);
     const storedBytes = image ? image.full.length : buffer.length;
+    // Primero el fichero y después la fila (newFileId): un corte entre medias (apagado que no da tiempo, caída) deja como
+    // mucho un fichero sin fila, que borra la limpieza de huérfanos; nunca un adjunto roto que además cuenta en la cuota.
+    const id = newFileId();
+    try {
+      if (image) await saveAttachmentFiles(id, image);
+      else await saveRawAttachmentFile(id, buffer);
+    } catch (err) {
+      await removeAttachmentFiles([id]);
+      throw err;
+    }
     // Tope del proyecto para la suma de adjuntos de la tarea y cuotas de almacenamiento (por proyecto y, si está
-    // configurada, total): sumas y alta atómicas. Si no cabe, se rechaza con el uso actual.
+    // configurada, total): sumas y alta atómicas. Si no cabe, se rechaza con el uso actual (y se borra el fichero).
     const created = await createAttachmentWithinLimit(
-      { taskId, originalName, mimeType, isImage: !!image, width: image?.width ?? null, height: image?.height ?? null, size: storedBytes, createdById: user.id },
+      { id, taskId, originalName, mimeType, isImage: !!image, width: image?.width ?? null, height: image?.height ?? null, size: storedBytes, createdById: user.id },
       { id: true, originalName: true, mimeType: true, isImage: true, width: true, height: true, size: true },
-    );
+    ).catch(async (err) => {
+      await removeAttachmentFiles([id]);
+      throw err;
+    });
+    if (!created.ok) await removeAttachmentFiles([id]);
     if (!created.ok && created.reason === "quota") {
       throw quotaError(await getT(), created.quota, { projectId, isAdmin: user.role === "ADMIN" });
     }
@@ -101,14 +115,6 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
       );
     }
     const attachment = created.attachment;
-    try {
-      if (image) await saveAttachmentFiles(attachment.id, image);
-      else await saveRawAttachmentFile(attachment.id, buffer);
-    } catch (err) {
-      await db.taskAttachment.delete({ where: { id: attachment.id } });
-      await removeAttachmentFiles([attachment.id]);
-      throw err;
-    }
     logEvent({
       category: "api", action: "attachments.upload", message: `${image ? "Imagen" : "Archivo"} «${attachment.originalName}» subido (${Math.round(storedBytes / 1024)} KB)`,
       userId: user.id, userName: user.name, path: `/api/tasks/${taskId}/attachments`, ip, durationMs: performance.now() - start,

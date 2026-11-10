@@ -13,7 +13,7 @@ import { quotaError } from "@/lib/quota-message";
 import { roundMb } from "@/lib/attachment-limit";
 import { confirmDocumentKind, detectDocumentKind, documentMime, sanitizeDocumentName, type DocumentKindName } from "@/lib/document-kind";
 import { createDocumentWithinLimit } from "@/lib/documents";
-import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, processImage, removeDocumentFiles, sanitizeMime, saveDocumentFile } from "@/lib/uploads";
+import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, newFileId, processImage, removeDocumentFiles, sanitizeMime, saveDocumentFile } from "@/lib/uploads";
 import { acquireUploadSlot, BodyTooLargeError, declaredLength, readBodyLimited, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError } from "@/lib/upload-slots";
 import { effectiveFileMaxMb, MULTIPART_OVERHEAD_BYTES } from "@/lib/upload-size";
 
@@ -77,7 +77,20 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
       else kind = "OTHER"; // no es una imagen que sharp entienda: queda como descarga
     }
     const mimeType = documentMime(kind, sanitizeMime(file.type));
-    const created = await createDocumentWithinLimit({ projectId, name, mimeType, size: stored.length, kind, createdById: user.id });
+    // Primero el fichero y después la fila (ver newFileId): un corte entre medias deja como mucho un fichero sin fila, que
+    // borra la limpieza de huérfanos; nunca un documento roto que además cuenta en la cuota.
+    const id = newFileId();
+    try {
+      await saveDocumentFile(id, stored);
+    } catch (err) {
+      await removeDocumentFiles([id]);
+      throw err;
+    }
+    const created = await createDocumentWithinLimit({ id, projectId, name, mimeType, size: stored.length, kind, createdById: user.id }).catch(async (err) => {
+      await removeDocumentFiles([id]);
+      throw err;
+    });
+    if (!created.ok) await removeDocumentFiles([id]);
     if (!created.ok) {
       const t = await getT();
       if (created.reason === "count") {
@@ -86,13 +99,6 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
       throw quotaError(t, created.quota, { projectId, isAdmin: user.role === "ADMIN" });
     }
     const document = created.document;
-    try {
-      await saveDocumentFile(document.id, stored);
-    } catch (err) {
-      await db.projectDocument.deleteMany({ where: { id: document.id } });
-      await removeDocumentFiles([document.id]);
-      throw err;
-    }
     logEvent({
       category: "api", action: "documents.upload", message: `Documento «${document.name}» subido (${Math.round(stored.length / 1024)} KB)`,
       userId: user.id, userName: user.name, path: `/api/projects/${projectId}/documents`, ip, durationMs: performance.now() - start,

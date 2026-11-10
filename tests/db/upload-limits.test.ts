@@ -2,7 +2,7 @@
 // mismo tope de subidas por minuto (con Retry-After) en adjuntos y documentos, etiqueta de deshacer traducible y
 // el informe de errores del navegador con su cuerpo acotado.
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
@@ -12,6 +12,7 @@ import { POST as documentsRoute } from "../../src/app/api/projects/[projectId]/d
 import { POST as clientErrorsRoute } from "../../src/app/api/client-errors/route";
 import { rateLimit, resetRateLimit } from "../../src/lib/rate-limit";
 import { decodeLabel } from "../../src/lib/undo-label";
+import { attachmentPath, documentPath } from "../../src/lib/uploads";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-upl-"));
 const MB = 1024 * 1024;
@@ -116,6 +117,33 @@ describe("subidas fuera del proxy", () => {
     assert.equal(res.status, 201);
     const entry = await db.undoEntry.findFirstOrThrow({ where: { userId: m.id, taskId: task.id }, orderBy: { createdAt: "desc" } });
     assert.deepEqual(decodeLabel(entry.label), { k: "Subió «{name}»", p: { name: "informe.txt" } });
+  });
+
+  test("primero el fichero y después la fila: lo subido tiene su fichero y lo rechazado no deja ninguno", async () => {
+    const m = await makeUser();
+    const f = await makeProject({ members: [m] });
+    const task = await makeTask(f);
+    await loginAs(m);
+    const files = async () => (await readdir(process.env.UPLOAD_DIR!, { recursive: true })).filter((n) => n.endsWith(".bin") || n.endsWith(".webp")).sort();
+    const before = await files();
+    const res = await attachRoute(formUpload(`${ORIGIN}/api/tasks/${task.id}/attachments`, new File(["contenido"], "nota.txt")), { params: Promise.resolve({ taskId: task.id }) });
+    assert.equal(res.status, 201);
+    const { id } = (await res.json()) as { id: string };
+    assert.equal(await readFile(attachmentPath(id, "file"), "utf8"), "contenido");
+    const doc = await documentsRoute(formUpload(`${ORIGIN}/api/projects/${f.project.id}/documents`, new File(["doc"], "d.txt", { type: "text/plain" })), { params: Promise.resolve({ projectId: f.project.id }) });
+    assert.equal(doc.status, 201);
+    assert.equal(await readFile(documentPath(((await doc.json()) as { id: string }).id), "utf8"), "doc");
+    assert.equal((await files()).length, before.length + 2);
+
+    // Lo que no cabe en el máximo de la tarea se rechaza después de escribir el fichero: el fichero se borra.
+    await db.project.update({ where: { id: f.project.id }, data: { taskAttachMaxMb: 1, fileMaxMb: 1 } });
+    await db.taskAttachment.update({ where: { id }, data: { size: MB - 10 } });
+    const after = await files();
+    const over = await attachRoute(formUpload(`${ORIGIN}/api/tasks/${task.id}/attachments`, new File(["x".repeat(100)], "otra.txt")), { params: Promise.resolve({ taskId: task.id }) });
+    assert.equal(over.status, 413);
+    assert.equal((await over.json()).code, "task_total");
+    assert.deepEqual(await files(), after);
+    assert.equal(await db.taskAttachment.count({ where: { taskId: task.id } }), 1);
   });
 });
 
