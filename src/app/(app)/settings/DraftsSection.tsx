@@ -30,6 +30,7 @@ export function DraftsSection({ initial }: { initial: boolean }) {
         <input type="checkbox" checked={on} onChange={(e) => void change(e.target.checked)} />
         {t("Borrar los borradores al cerrar sesión")}
       </label>
+      <p className="mt-1 text-xs text-slate-500">{t("Los borradores de comentarios se borran siempre al cerrar sesión.")}</p>
     </section>
   );
 }

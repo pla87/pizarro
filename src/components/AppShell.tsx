@@ -17,7 +17,7 @@ import type { CurrentUser } from "@/lib/session";
 import { AppBadge } from "./AppBadge";
 import { InstallApp } from "./InstallApp";
 import { LicenseNudge } from "./LicenseNudge";
-import { clearAllDrafts } from "./board/drafts";
+import { clearDraftsOnLogout } from "./board/drafts";
 import { filesFrom, hasFiles } from "./board/upload";
 import { uploadDocument } from "./docs/uploadDocuments";
 import { installDragMove } from "./ui/dragMove";
@@ -289,7 +289,7 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
             <div className="truncate text-sm font-medium">{user.name}</div>
             <Link href="/changelog" className="text-xs text-slate-500 hover:underline">v{version}</Link>
           </div>
-          <form action={logout} onSubmit={() => user.clearDraftsOnLogout && clearAllDrafts()}>
+          <form action={logout} onSubmit={() => clearDraftsOnLogout(user.clearDraftsOnLogout)}>
             <button type="submit" className="btn-icon" title={t("Cerrar sesión")} aria-label={t("Cerrar sesión")}>
               <LogOut size={17} />
             </button>
@@ -363,20 +363,11 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: strin
   );
 }
 
-/** Una opción de «Empezar desde» del proyecto nuevo (radio con título, explicación y, si hace falta, un control debajo). */
-function StartOption({ checked, onSelect, title, description, children }: { checked: boolean; onSelect: () => void; title: string; description: string; children?: React.ReactNode }) {
-  return (
-    <div className={`rounded-lg border p-2 text-sm ${checked ? "border-brand-500 bg-brand-50/50 dark:bg-brand-500/10" : "border-slate-200 dark:border-slate-700"}`}>
-      <label className="flex cursor-pointer items-start gap-2">
-        <input type="radio" name="project-start" className="mt-1" checked={checked} onChange={onSelect} />
-        <span>
-          <span className="font-medium">{title}</span>
-          {description && <span className="block text-xs text-slate-500">{description}</span>}
-        </span>
-      </label>
-      {children && <div className="pl-6">{children}</div>}
-    </div>
-  );
+/** «example:clave» → ["example", "clave"]; «blank» → ["blank", ""]. */
+function splitOrigin(value: string): ["blank" | "example" | "template", string] {
+  const i = value.indexOf(":");
+  const kind = i < 0 ? value : value.slice(0, i);
+  return [kind === "example" || kind === "template" ? kind : "blank", i < 0 ? "" : value.slice(i + 1)];
 }
 
 function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () => void }) {
@@ -394,7 +385,6 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   // Con qué empieza el proyecto: una sola opción a la vez (en blanco, un ejemplo o una plantilla), nunca dos mezcladas.
   const [origin, setOrigin] = useState<{ kind: "blank" } | { kind: "example"; key: string } | { kind: "template"; id: string }>({ kind: "blank" });
   const exampleKey = origin.kind === "example" ? origin.key : "";
-  const [templateId, setTemplateId] = useState("");
   // Último nombre puesto por el autocompletado de un ejemplo: solo se sustituye o se quita mientras siga sin tocarse.
   const autoName = useRef("");
   // Quien no es administrador solo puede crear proyectos privados.
@@ -415,10 +405,7 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
     if (!isAdmin) return;
     let cancelled = false;
     listTemplates().then((res) => {
-      if (!cancelled && res.ok) {
-        setTemplates(res.data);
-        setTemplateId((id) => id || (res.data[0]?.id ?? ""));
-      }
+      if (!cancelled && res.ok) setTemplates(res.data);
     });
     return () => { cancelled = true; };
   }, [isAdmin]);
@@ -428,6 +415,15 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
     if (target && pathname === target) onClose();
   }, [target, pathname, onClose]);
   const showTemplates = isAdmin && templates.length > 0;
+  // Valor del desplegable «Empezar con» y la línea que describe la opción elegida.
+  const originValue = origin.kind === "example" ? `example:${origin.key}` : origin.kind === "template" ? `template:${origin.id}` : "blank";
+  const example = origin.kind === "example" ? examples.find((ex) => ex.key === origin.key) : undefined;
+  const template = origin.kind === "template" ? templates.find((tpl) => tpl.id === origin.id) : undefined;
+  const originHelp = example
+    ? t("{description} Con tarjetas de muestra que puedes borrar.", { description: example.description })
+    : template
+      ? template.description.trim() || t("La estructura de la plantilla (columnas, tipos, etiquetas y campos), sin tarjetas.")
+      : t("Columnas por defecto, sin tarjetas.");
   // Elegir un ejemplo propone su nombre (si el campo está vacío o aún tiene el que puso otro ejemplo); lo demás lo quita.
   const pickOrigin = (next: typeof origin, exampleName?: string) => {
     setOrigin(next);
@@ -470,51 +466,37 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
         <div>
           <label className="label" htmlFor="project-name">{t("Nombre")}</label>
           <input id="project-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required data-autofocus />
-          <p className="mt-1 text-xs text-slate-500">{t("Luego puedes cambiar las columnas, tipos y etiquetas.")}</p>
         </div>
-        {(examples.length > 0 || showTemplates) && (
-          <fieldset>
-            <legend className="label">{t("Empezar desde")}</legend>
-            <div className="space-y-1">
-              <StartOption checked={origin.kind === "blank"} onSelect={() => pickOrigin({ kind: "blank" })} title={t("Proyecto en blanco")} description={t("Columnas por defecto, sin tarjetas.")} />
-            </div>
+        {/* Un solo desplegable: en blanco, un ejemplo (con tarjetas de muestra) o una plantilla (solo admins), nunca dos a la vez.
+            Siempre visible (los ejemplos llegan al momento y se añaden sin mover nada); debajo, una línea que describe la opción. */}
+        <div>
+          <label className="label" htmlFor="project-start">{t("Empezar con")}</label>
+          <select
+            id="project-start"
+            className="input"
+            value={originValue}
+            aria-describedby="project-start-help"
+            onChange={(e) => {
+              const [kind, id] = splitOrigin(e.target.value);
+              if (kind === "example") pickOrigin({ kind, key: id }, examples.find((ex) => ex.key === id)?.name);
+              else if (kind === "template") pickOrigin({ kind, id });
+              else pickOrigin({ kind: "blank" });
+            }}
+          >
+            <option value="blank">{t("Proyecto en blanco")}</option>
             {examples.length > 0 && (
-              <div className="mt-3">
-                <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">{t("Ejemplos con tarjetas de muestra")}</p>
-                <p className="mb-1 text-xs text-slate-500">{t("Un proyecto ya preparado con unas tarjetas para ver cómo se trabaja. Para cualquier persona.")}</p>
-                <div className="space-y-1">
-                  {examples.map((ex) => <StartOption key={ex.key} checked={exampleKey === ex.key} onSelect={() => pickOrigin({ kind: "example", key: ex.key }, ex.name)} title={ex.name} description={ex.description} />)}
-                </div>
-                {exampleKey && <p className="mt-1 text-xs text-slate-500">{t("Incluye unas tarjetas de muestra con la etiqueta «Ejemplo» que puedes borrar cuando quieras.")}</p>}
-              </div>
+              <optgroup label={t("Ejemplos")}>
+                {examples.map((ex) => <option key={ex.key} value={`example:${ex.key}`}>{ex.name}</option>)}
+              </optgroup>
             )}
             {showTemplates && (
-              <div className="mt-3">
-                <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">{t("Plantillas de proyecto")}</p>
-                <p className="mb-1 text-xs text-slate-500">{t("Solo la estructura (columnas, tipos, etiquetas, campos y plantillas de release), sin tarjetas. Se editan en Administración › Tipos y plantillas.")}</p>
-                <StartOption
-                  checked={origin.kind === "template"}
-                  onSelect={() => pickOrigin({ kind: "template", id: templateId })}
-                  title={t("Usar una plantilla")}
-                  description={templates.find((tpl) => tpl.id === templateId)?.description ?? ""}
-                >
-                  <select
-                    className="input mt-1.5 py-1.5"
-                    aria-label={t("Plantilla")}
-                    value={templateId}
-                    onChange={(e) => {
-                      setTemplateId(e.target.value);
-                      pickOrigin({ kind: "template", id: e.target.value });
-                    }}
-                    onFocus={() => origin.kind !== "template" && pickOrigin({ kind: "template", id: templateId })}
-                  >
-                    {templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.name}</option>)}
-                  </select>
-                </StartOption>
-              </div>
+              <optgroup label={t("Plantillas")}>
+                {templates.map((tpl) => <option key={tpl.id} value={`template:${tpl.id}`}>{tpl.name}</option>)}
+              </optgroup>
             )}
-          </fieldset>
-        )}
+          </select>
+          <p id="project-start-help" className="mt-1 line-clamp-3 text-xs text-slate-500">{originHelp}</p>
+        </div>
         {isAdmin ? (
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
@@ -525,13 +507,14 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
             <PrivateIcon /> {t("Será un proyecto privado: solo lo verás tú hasta que añadas más miembros.")}
           </p>
         )}
-        <div className="flex items-center justify-between gap-2">
-          {isAdmin ? (
-            <button type="button" className="shrink-0 whitespace-nowrap text-sm text-slate-500 underline hover:text-brand-600" onClick={() => setImporting(true)}>
+        {/* Pie: el enlace discreto de importar a la izquierda; si no cabe en la misma línea (móvil), los botones bajan. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-3 pt-1">
+          {isAdmin && (
+            <button type="button" className="shrink-0 whitespace-nowrap text-sm text-slate-500 underline underline-offset-2 hover:text-brand-600" onClick={() => setImporting(true)}>
               {t("Importar desde un archivo…")}
             </button>
-          ) : <span />}
-          <div className="flex gap-2">
+          )}
+          <div className="ml-auto flex gap-2">
             <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
             <button type="submit" className="btn-primary" disabled={pending || !!target || !name.trim()}>{t("Crear")}</button>
           </div>

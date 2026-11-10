@@ -38,6 +38,19 @@ export function writeDraft(key: string, value: unknown): void {
   }
 }
 
+/**
+ * Lo que hay que borrar al cerrar sesión: los borradores de comentarios siempre (pueden contener menciones y texto
+ * a medio escribir de una tarea ajena, y son de un día); el resto de borradores, solo si la persona lo pidió en su perfil.
+ */
+export function clearDraftsOnLogout(all: boolean): void {
+  if (all) return clearAllDrafts();
+  try {
+    for (const key of Object.keys(localStorage)) if (key.startsWith(COMMENT_PREFIX)) localStorage.removeItem(key);
+  } catch {
+    // Sin acceso a localStorage no hay borradores que borrar.
+  }
+}
+
 export function clearDraft(key: string): void {
   writeDraft(key, null);
 }
