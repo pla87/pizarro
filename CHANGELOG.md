@@ -2,6 +2,35 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.49.0 — 2026-11-10 23:41
+
+Gratis también para centros educativos, «Nuevo proyecto» mucho más simple, web más concisa con «Instalación» en el menú, y correcciones de la revisión
+
+### Nuevas funcionalidades
+
+- Pizarro es gratis también para centros educativos: docencia, aprendizaje, investigación académica y gestión del propio centro.
+
+### Mejoras
+
+- «Nuevo proyecto» es mucho más simple: nombre, un desplegable «Empezar con» y una línea que describe la opción.
+- Cerrar una tarea con un comentario a medio editar pide confirmación, y «Descartar cambios» también descarta el renombrado de una subtarea.
+- Los borradores de comentarios se borran siempre al cerrar sesión.
+- La web tiene «Instalación» en el menú y deja solo lo que distingue a Pizarro.
+- Mientras subes un archivo, los comentarios de otras personas siguen apareciendo al momento.
+- Los textos en inglés repetidos usan siempre la mejor traducción (por ejemplo, «Inline code» en la barra de formato).
+
+### Correcciones
+
+- Deshacer un comentario recién escrito ya no deja su texto en los avisos de otras personas.
+- Deshacer el borrado de un comentario devuelve el texto a sus avisos.
+- Una escritura de archivo fallida ya no deja ficheros sueltos.
+- Relanzar a mano la publicación de una versión ya publicada se detiene antes de cambiar nada.
+
+### Cambios técnicos / DB
+
+- Limpieza: traducciones sin uso y repetidas, restos antiguos y nuevo `npm run i18n:unused`.
+- Las pruebas en navegador buscan solas el Chromium instalado.
+
 ## v1.48.0 — 2026-11-10 02:03
 
 Nueva web de getpizarro.com con capturas reales, deshacer mucho más rápido, apagado que espera a las subidas, micrófono del título solo al editarlo y columnas que indican que siguen
