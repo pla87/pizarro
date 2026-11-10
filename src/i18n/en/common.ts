@@ -21,8 +21,6 @@ export const common: Record<string, string> = {
   "No tienes proyectos.": "You have no projects.",
   "Nuevo proyecto": "New project",
   "Nombre": "Name",
-  "Luego puedes cambiar las columnas, tipos y etiquetas.": "You can change the columns, types and labels later.",
-  "Plantilla": "Template",
   "Cancelar": "Cancel",
   "Crear": "Create",
   "Instalar app": "Install app",

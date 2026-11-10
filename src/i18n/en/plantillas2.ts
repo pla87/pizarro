@@ -9,8 +9,4 @@ export const plantillas2: Record<string, string> = {
   "Nueva cabecera": "New header",
   "Nuevo pie": "New footer",
   // Nuevo proyecto: «Empezar desde»
-  "Ejemplos con tarjetas de muestra": "Examples with sample cards",
-  "Un proyecto ya preparado con unas tarjetas para ver cómo se trabaja. Para cualquier persona.": "A ready-made project with a few cards to show how it works. Available to everyone.",
-  "Solo la estructura (columnas, tipos, etiquetas, campos y plantillas de release), sin tarjetas. Se editan en Administración › Tipos y plantillas.": "Structure only (columns, types, labels, fields and release templates), no cards. Edit them in Administration › Types and templates.",
-  "Usar una plantilla": "Use a template",
 };

@@ -144,8 +144,6 @@ export const proyectos: Record<string, string> = {
   "Interrumpido por un reinicio": "Interrupted by a restart",
   "La exportación todavía no está lista.": "The export is not ready yet.",
   "El archivo de esta exportación ha caducado. Vuelve a exportar el proyecto.": "This export file has expired. Export the project again.",
-  "Empezar desde": "Start from",
   "Proyecto en blanco": "Blank project",
   "Columnas por defecto, sin tarjetas.": "Default columns, no cards.",
-  "Incluye unas tarjetas de muestra con la etiqueta «Ejemplo» que puedes borrar cuando quieras.": "Includes a few sample cards with the “Example” label that you can delete whenever you like.",
 };
