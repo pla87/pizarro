@@ -77,7 +77,7 @@ export const proyectos: Record<string, string> = {
   "{n} usuario(s) se han añadido como miembros del proyecto por figurar en el archivo.": "{n} user(s) were added as project members because they appear in the file.",
   "Personas sin emparejar ({n})": "Unmatched people ({n})",
   "No hay un usuario activo con el mismo email (o el proyecto es privado), así que sus tarjetas quedan sin asignar y sus comentarios conservan el nombre original.": "There is no active user with the same email (or the project is private), so their cards are left unassigned and their comments keep the original name.",
-  "Avisos": "Warnings",
+  "Advertencias": "Warnings",
   "Abrir proyecto": "Open project",
   "(importado)": "(imported)",
   "«{name}» supera el tamaño máximo de archivo del proyecto y no se ha importado.": "“{name}” exceeds the project's maximum file size and was not imported.",
