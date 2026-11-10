@@ -4,7 +4,6 @@ export const licencia: Record<string, string> = {
   "Este registro es solo informativo: Pizarro funciona igual con o sin él, sin comprobaciones ni llamadas a internet.": "This record is informational only: Pizarro works the same with or without it, with no checks and no internet calls.",
   "Qué uso necesita licencia": "Which use needs a licence",
   "Gratis: uso personal y familiar, sin fines comerciales.": "Free: personal and family use, non-commercial.",
-  "Necesita licencia: cualquier uso empresarial o profesional (empresa, autónomo, asociación, centro educativo…).": "Needs a licence: any business or professional use (company, freelancer, association, school…).",
   "La licencia es un pago único por servidor, con actualizaciones incluidas.": "The licence is a one-off payment per server, updates included.",
   "El texto completo y vinculante es el de la licencia.": "The full, binding text is the licence itself.",
   "Leer la licencia": "Read the licence",

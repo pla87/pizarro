@@ -37,7 +37,6 @@ export const legal: Record<string, string> = {
   "Condiciones": "Terms",
   "Licencia": "Licence",
   "Licencia de Pizarro": "Pizarro licence",
-  "Licencia de código disponible: gratis para uso personal y de pago único por servidor para empresas y profesionales.": "Source-available licence: free for personal use, one-time payment per server for companies and professionals.",
   "Ver la licencia en el otro idioma": "View the licence in the other language",
   "Paso {n}": "Step {n}",
   "Guía: conseguir el ID y el secreto de cliente (gratis)": "Guide: get the client ID and secret (free)",
