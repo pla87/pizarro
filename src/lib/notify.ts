@@ -205,10 +205,27 @@ export async function notifyMentions(opts: {
   projectId: string;
   recipientIds: string[];
   text: string;
+  /** Comentario en el que se menciona (para actualizar el aviso al editarlo o borrarlo). */
+  commentId?: string;
 }): Promise<string[]> {
-  const n = await notifyTask({ type: "MENTION", actorId: opts.actorId, taskId: opts.taskId, projectId: opts.projectId, recipientIds: opts.recipientIds, excerpt: makeExcerpt(opts.text) });
+  const n = await notifyTask({ type: "MENTION", actorId: opts.actorId, taskId: opts.taskId, projectId: opts.projectId, recipientIds: opts.recipientIds, excerpt: makeExcerpt(opts.text), commentId: opts.commentId });
   if (n.recipients.length) await followTask(opts.taskId, n.recipients);
   return n.recipients;
+}
+
+/**
+ * Avisos que creó un comentario, para cambiar su extracto al editarlo, deshacer la edición o borrarlo. Los que llevan
+ * `commentId` se localizan por él; los anteriores a esa columna, por la heurística de antes: del mismo autor, creados
+ * en el primer minuto del comentario y con el extracto de su texto actual (`body`).
+ */
+export function commentNoticesWhere(c: { id: string; taskId: string; authorId: string | null; createdAt: Date; body: string }): Prisma.NotificationWhereInput {
+  const legacy: Prisma.NotificationWhereInput[] = c.authorId
+    ? [{
+        commentId: null, taskId: c.taskId, actorId: c.authorId, type: { in: ["COMMENT", "REPLY", "MENTION"] }, excerpt: makeExcerpt(c.body),
+        createdAt: { gte: c.createdAt, lte: new Date(c.createdAt.getTime() + 60_000) },
+      }]
+    : [];
+  return { OR: [{ commentId: c.id }, ...legacy] };
 }
 
 /**
@@ -223,6 +240,8 @@ export async function notifyTask(opts: {
   projectId: string;
   recipientIds: string[];
   excerpt: string;
+  /** Comentario que provoca el aviso (COMMENT, REPLY y MENTION de un comentario). */
+  commentId?: string;
   /** Fuera de una petición (planificador): el envío externo se hace aquí mismo, sin `after`. */
   immediate?: boolean;
 }): Promise<{ recipients: string[] }> {
@@ -236,7 +255,7 @@ export async function notifyTask(opts: {
   });
   if (!recipients.length) return { recipients: [] };
   const created = await db.notification.createManyAndReturn({
-    data: recipients.map((r) => ({ userId: r.id, actorId: opts.actorId, taskId: opts.taskId, type: opts.type, excerpt: opts.excerpt })),
+    data: recipients.map((r) => ({ userId: r.id, actorId: opts.actorId, taskId: opts.taskId, type: opts.type, excerpt: opts.excerpt, commentId: opts.commentId ?? null })),
     select: { id: true, userId: true },
   });
   const createdIds = created.map((c) => c.id);

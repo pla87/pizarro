@@ -14,6 +14,14 @@ import { useToast } from "./ui/Toast";
 
 const SEEN_AFTER_MS = 3000;
 
+/** Evento de ventana: se registró la licencia o se declaró el uso personal (Administración → Licencia). */
+const LICENSE_RESOLVED_EVENT = "pizarro:license-resolved";
+
+/** Cierra el recordatorio si está a la vista (sigue montado al ir a Administración → Licencia y volver). */
+export function licenseResolved(): void {
+  window.dispatchEvent(new Event(LICENSE_RESOLVED_EVENT));
+}
+
 /** Texto de la confirmación «Es uso personal» (también la usa Administración → Licencia). */
 export function personalUseConfirm(t: T) {
   return {
@@ -44,6 +52,12 @@ export function LicenseNudge({ buyHref }: { buyHref: string }) {
   const [pending, start] = useTransition();
   const marked = useRef(false);
   const onLicensePage = pathname.startsWith("/admin/license");
+
+  useEffect(() => {
+    const close = () => setOpen(false);
+    window.addEventListener(LICENSE_RESOLVED_EVENT, close);
+    return () => window.removeEventListener(LICENSE_RESOLVED_EVENT, close);
+  }, []);
 
   // Verlo cuenta como el aviso del mes: tras unos segundos en pantalla se pospone 30 días (aunque no se pulse nada).
   // La espera evita gastarlo en una carga que redirige al momento (p. ej. «/» → último tablero).

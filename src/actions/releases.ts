@@ -103,10 +103,11 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
       if (target) await lockColumns(tx, [target.id]);
       // Las tareas se leyeron fuera de la transacción: si alguien ha archivado (o borrado o movido) alguna entre
       // medias, la release la incluiría y la sacaría a producción sin quitarle archivedAt. Se bloquean aquí las que
-      // siguen activas en el proyecto (un archivado en curso termina antes y deja de contar) y se repite el aviso.
+      // siguen activas en el proyecto (un archivado en curso termina antes y deja de contar) y se repite el aviso. En
+      // orden de id, como las acciones en bloque: dos transacciones que bloquean las mismas tareas no se cruzan (40P01).
       const ids = tasks.map((t) => t.id);
       const still = ids.length
-        ? await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "Task" WHERE "id" IN (${Prisma.join(ids)}) AND "projectId" = ${data.projectId} AND "archivedAt" IS NULL FOR UPDATE`
+        ? await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "Task" WHERE "id" IN (${Prisma.join(ids)}) AND "projectId" = ${data.projectId} AND "archivedAt" IS NULL ORDER BY "id" FOR UPDATE`
         : [];
       await assertNoneMissing(ids.length - still.length);
       const last = await tx.release.findFirst({ where: { projectId: data.projectId }, orderBy: { number: "desc" }, select: { number: true } });

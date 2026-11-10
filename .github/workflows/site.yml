@@ -23,10 +23,9 @@ on:
       - ".github/workflows/site.yml"
   workflow_dispatch:
 
+# Lo mínimo por defecto; cada job pide lo suyo (solo el despliegue puede escribir en Pages).
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # Una sola publicación a la vez; no se cancela una que ya está en marcha.
 concurrency:
@@ -37,6 +36,8 @@ jobs:
   build:
     name: Generar la web
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -48,8 +49,6 @@ jobs:
       - name: Generar site/dist
         run: node scripts/build-site.mjs
 
-      - uses: actions/configure-pages@v5
-
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/dist
@@ -58,9 +57,15 @@ jobs:
     name: Publicar en GitHub Pages
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # Lee la configuración de Pages con la API: va aquí, con los permisos de Pages (la generación solo lee el código).
+      - uses: actions/configure-pages@v5
+
       - id: deployment
         uses: actions/deploy-pages@v4

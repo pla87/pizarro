@@ -352,15 +352,17 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     }
   }, [refresh]);
   // Avisos del servidor (SSE) pendientes de decidir y ids de cambios propios (los que devolvieron mis acciones):
-  // el aviso de un cambio propio no refresca (el tablero ya aplicó el resultado); cualquier otro, sí.
-  const incoming = useRef<(string | null)[]>([]);
+  // el aviso de un cambio propio no refresca (el tablero ya aplicó el resultado) ni se reenvía a la página (los
+  // comentarios abiertos ya muestran el suyo); cualquier otro, sí.
+  const incoming = useRef<{ cid: string | null; change: unknown }[]>([]);
   const ownChanges = useRef(new Set<string>());
   const drainIncoming = useCallback(() => {
     if (pending.current > 0 || !incoming.current.length) return;
-    const foreign = incoming.current.some((cid) => !cid || !ownChanges.current.has(cid));
-    for (const cid of incoming.current) if (cid) ownChanges.current.delete(cid);
+    const foreign = incoming.current.filter(({ cid }) => !cid || !ownChanges.current.has(cid));
+    for (const { cid } of incoming.current) if (cid) ownChanges.current.delete(cid);
     incoming.current = [];
-    if (foreign) refresh();
+    for (const { change } of foreign) announceRemoteChange(change);
+    if (foreign.length) refresh();
   }, [refresh]);
   // Contador de operaciones en curso (evita refrescos intermedios). Sin capturar errores: lo usan las subidas, que informan por excepción.
   const trackRaw = useCallback(async <T,>(p: Promise<T>): Promise<T> => {
@@ -464,14 +466,16 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     });
     source.addEventListener("change", (e) => {
       let cid: string | null = null;
+      let change: unknown = null;
       try {
         const parsed = JSON.parse((e as MessageEvent<string>).data) as { cid?: unknown };
         if (typeof parsed.cid === "string") cid = parsed.cid;
-        announceRemoteChange(parsed);
+        change = parsed;
       } catch {
         // Aviso ilegible: se trata como ajeno y se refresca.
       }
-      incoming.current.push(cid);
+      // Se reenvía a la página al decidir (drainIncoming), cuando ya se sabe si es de una acción propia.
+      incoming.current.push({ cid, change });
       if (timer) clearTimeout(timer);
       // Con acciones en vuelo se decide al terminar la última (trackRaw), cuando ya se conocen sus ids.
       timer = setTimeout(() => {
