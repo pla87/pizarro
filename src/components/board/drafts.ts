@@ -5,7 +5,7 @@ import type { FieldsForm } from "@/lib/fields-form";
 import { clearDraft, writeDraft } from "./draft-storage";
 
 // Almacenamiento (sin React, compartido con los borradores de comentarios): ver draft-storage.ts.
-export { clearAllDrafts, readDraft } from "./draft-storage";
+export { clearAllDrafts, clearDraftsOnLogout, readDraft } from "./draft-storage";
 export { purgeExpiredCommentDrafts, readCommentDraft, saveCommentDraft, type CommentDraft } from "./draft-storage";
 
 // Borradores locales de las tareas que se están creando o editando: se guardan cada 5 s en el

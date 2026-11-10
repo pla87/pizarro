@@ -2,7 +2,9 @@
 // de la descripción de la tarea (desc: pegar Markdown con código dentro de una negrita, tablas, conflicto), de los
 // comentarios (com: borrador local, editar los propios con aviso en vivo, menciones legibles mientras se escribe) y del
 // detalle (det: adjuntos por nombre y contador, subtareas pegadas, https automático, confirmar al cerrar con cambios) y de
-// la ronda 44 (r44: micrófono del título solo al editarlo; columnas que siguen por abajo, sin esquinas inferiores).
+// la ronda 44 (r44: micrófono del título solo al editarlo; columnas que siguen por abajo, sin esquinas inferiores) y de
+// la ronda 46 (r46: «Nuevo proyecto» con un solo desplegable; cerrar el detalle con un comentario o un renombrado a medias;
+// borradores de comentarios al cerrar sesión).
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,7 +14,7 @@ import * as U from "./qa/ui.mjs";
 const { COL, sleep } = L;
 const APP = process.env.APP_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "b1,f3,m1,f1,dlg,vt,desc,com,det,r44").split(",");
+const only = (process.env.PART || "b1,f3,m1,f1,dlg,vt,desc,com,det,r44,r46").split(",");
 
 await L.prepareUsers();
 
@@ -1086,6 +1088,268 @@ if (only.includes("r44")) {
     await mp.screenshot({ path: `${SHOTS}/r44-columnas-movil-release-${scheme}.png` });
   }
   L.assertNoErrors("C2 móvil", [m]);
+  await m.ctx.close();
+}
+
+// ---------------------------------------------------------------- R46
+if (only.includes("r46")) {
+  L.scenario("R46: «Nuevo proyecto» mínimo; cerrar el detalle con un comentario o un renombrado a medias; borradores al cerrar sesión");
+  await L.cleanBoard();
+  const [adm] = await L.q(`SELECT id FROM "User" WHERE email=$1`, [L.ADMIN]);
+  const before = (await L.q(`SELECT id FROM "Project"`)).map((r) => r.id);
+  // El diálogo es de administradores: la sesión se abre como miembro (sin el segundo paso) y después pasa a admin.
+  const asAdmin = (on) => L.q(`UPDATE "User" SET role=$1 WHERE email=$2`, [on ? "ADMIN" : "MEMBER", L.ADMIN]);
+  const newProjectDialog = (page) => page.locator("[role=dialog]").filter({ has: page.locator("#project-name") });
+  const openNewProject = async (page, mobile = false) => {
+    if (mobile) {
+      await page.getByRole("button", { name: "Abrir menú" }).tap();
+      await sleep(400);
+    }
+    const scope = mobile ? page.locator("aside[role=dialog]") : page.locator("aside").first();
+    await scope.locator("button[aria-haspopup]").first().click();
+    await page.getByRole("menuitem", { name: "Nuevo proyecto" }).click();
+    const nd = newProjectDialog(page);
+    await nd.waitFor();
+    await sleep(300);
+    return nd;
+  };
+  const structure = (nd) => nd.locator("#project-start").evaluate((sel) => [...sel.children].map((c) => (c.tagName === "OPTGROUP" ? { group: c.label, n: c.children.length } : c.textContent)));
+  const help = (nd) => nd.locator("#project-start-help").innerText();
+  const [{ name: firstTemplate, columns: tplColumns }] = await L.q(`SELECT name, columns FROM "ProjectTemplate" ORDER BY name LIMIT 1`);
+  let s = await L.session({ viewport: { width: 1366, height: 768 } });
+  let p = s.page;
+  await asAdmin(true);
+  try {
+    await L.reload(p);
+    let nd = await openNewProject(p);
+    await L.eqEventually("R46M1: «Empezar con» es un solo desplegable: en blanco, «Ejemplos» (4) y «Plantillas»", async () => {
+      const st = await structure(nd);
+      return [st[0], st[1], st[2]?.group, (st[2]?.n ?? 0) > 0];
+    }, ["Proyecto en blanco", { group: "Ejemplos", n: 4 }, "Plantillas", true]);
+    L.eq("R46M1: sin tarjetas-radio, sin cabeceras en mayúsculas y una sola línea de ayuda", await nd.evaluate((el) => ({
+      radios: el.querySelectorAll("input[type=radio]").length,
+      upper: [...el.querySelectorAll("*")].filter((x) => getComputedStyle(x).textTransform === "uppercase" && x.textContent.trim()).length,
+      paragraphs: el.querySelectorAll("p").length,
+    })), { radios: 0, upper: 0, paragraphs: 1 });
+    L.eq("R46M1: por defecto, proyecto en blanco", [await nd.locator("#project-start").inputValue(), await help(nd)], ["blank", "Columnas por defecto, sin tarjetas."]);
+    L.eq("R46M1: casilla de privado e «Importar desde un archivo…» en el pie", [await nd.getByLabel("Crear como proyecto privado inicialmente").count(), await nd.getByRole("button", { name: "Importar desde un archivo…" }).count()], [1, 1]);
+    const sel = nd.locator("#project-start");
+    const nameBox = nd.locator("#project-name");
+    await sel.selectOption({ label: "Familia y casa" });
+    L.eq("R46M1: elegir un ejemplo propone su nombre", await nameBox.inputValue(), "Familia y casa");
+    L.check("R46M1: la ayuda describe el ejemplo y avisa de las tarjetas de muestra", /^Compras.*Con tarjetas de muestra que puedes borrar\.$/.test(await help(nd)), await help(nd));
+    await p.screenshot({ path: `${SHOTS}/r46-nuevo-proyecto-ejemplo.png` });
+    await sel.selectOption({ label: "Equipo de software" });
+    L.eq("R46M1: otro ejemplo cambia el nombre propuesto", await nameBox.inputValue(), "Equipo de software");
+    await sel.selectOption("blank");
+    L.eq("R46M1: volver a «en blanco» quita el nombre propuesto", await nameBox.inputValue(), "");
+    await nameBox.fill("Mi casa R46");
+    await sel.selectOption({ label: "Familia y casa" });
+    L.eq("R46M1: un nombre escrito a mano no se pisa", await nameBox.inputValue(), "Mi casa R46");
+    await sel.selectOption({ label: firstTemplate });
+    L.check("R46M1: la plantilla tiene su línea de ayuda", (await help(nd)) !== "Columnas por defecto, sin tarjetas." && (await help(nd)).length > 0, await help(nd));
+    await p.screenshot({ path: `${SHOTS}/r46-nuevo-proyecto-plantilla.png` });
+    await sel.selectOption({ label: "Familia y casa" });
+    await nd.getByLabel("Crear como proyecto privado inicialmente").check();
+    await nd.getByRole("button", { name: "Crear", exact: true }).click();
+    await p.waitForURL(/\/p\/[^/]+\/settings/, { timeout: 15000 });
+    const [made] = await L.q(`SELECT p.id, p."isPrivate", (SELECT count(*)::int FROM "Task" t WHERE t."projectId"=p.id) AS tasks FROM "Project" p WHERE name='Mi casa R46'`);
+    L.check("R46M1: crea el proyecto del ejemplo, privado y con tarjetas de muestra", !!made && made.isPrivate && made.tasks > 0, JSON.stringify(made));
+    // Plantilla: la estructura de la plantilla, sin tarjetas.
+    nd = await openNewProject(p);
+    await L.eqEventually("R46M1: las plantillas llegan al desplegable", async () => (await structure(nd))[2]?.group, "Plantillas");
+    await nd.locator("#project-start").selectOption({ label: firstTemplate });
+    await nd.locator("#project-name").fill("Plantilla R46");
+    await nd.getByRole("button", { name: "Crear", exact: true }).click();
+    await p.waitForURL(/\/p\/[^/]+\/settings/, { timeout: 15000 });
+    await sleep(500);
+    const [fromTpl] = await L.q(`SELECT p.id, (SELECT count(*)::int FROM "Task" t WHERE t."projectId"=p.id) AS tasks, (SELECT json_agg(c.name ORDER BY c.position) FROM "Column" c WHERE c."projectId"=p.id) AS cols FROM "Project" p WHERE name='Plantilla R46'`);
+    L.eq("R46M1: con una plantilla, sus columnas y sin tarjetas", [fromTpl?.cols, fromTpl?.tasks], [tplColumns.map((c) => c.name), 0]);
+    // Importar desde un archivo: sigue en el mismo diálogo y «Volver» regresa al formulario.
+    nd = await openNewProject(p);
+    await nd.getByRole("button", { name: "Importar desde un archivo…" }).click();
+    await sleep(300);
+    const importer = p.locator("[role=dialog]").filter({ has: p.locator("input[type=file]") });
+    L.check("R46M1: «Importar desde un archivo…» abre la importación", (await importer.count()) === 1 && (await importer.getByLabel("Crear como proyecto privado inicialmente").count()) === 1);
+    await importer.getByRole("button", { name: "Volver" }).click();
+    L.check("R46M1: «Volver» regresa al formulario", await p.locator("#project-start").waitFor({ timeout: 3000 }).then(() => true, () => false));
+    await p.emulateMedia({ colorScheme: "dark" });
+    await sleep(200);
+    await p.screenshot({ path: `${SHOTS}/r46-nuevo-proyecto-oscuro.png` });
+    await p.emulateMedia({ colorScheme: "light" });
+    await newProjectDialog(p).getByRole("button", { name: "Cancelar" }).click();
+    L.assertNoErrors("R46M1 escritorio", [s]);
+    await s.ctx.close();
+
+    // Móvil: cabe en 390 px sin scroll horizontal y el pie no se sale.
+    await asAdmin(false);
+    const m = await L.session({ viewport: { width: 390, height: 844 }, mobile: true });
+    await asAdmin(true);
+    await L.reload(m.page);
+    nd = await openNewProject(m.page, true);
+    await L.eqEventually("R46M1 móvil: los ejemplos llegan al desplegable", async () => (await structure(nd))[1]?.group, "Ejemplos");
+    await nd.locator("#project-start").selectOption({ label: "Preparación de un evento" });
+    await sleep(200);
+    const fit = await nd.evaluate((el) => ({
+      overflow: document.documentElement.scrollWidth > innerWidth || el.scrollWidth > el.clientWidth + 1,
+      inside: [...el.querySelectorAll("button, select, input")].every((x) => { const r = x.getBoundingClientRect(); return r.width === 0 || (r.left >= 0 && r.right <= innerWidth); }),
+    }));
+    L.eq("R46M1 móvil: sin scroll horizontal y todo dentro de la pantalla", fit, { overflow: false, inside: true });
+    L.eq("R46M1 móvil: el ejemplo propone su nombre", await nd.locator("#project-name").inputValue(), "Preparación de un evento");
+    await m.page.screenshot({ path: `${SHOTS}/r46-nuevo-proyecto-movil.png` });
+    await nd.getByRole("button", { name: "Cancelar" }).tap();
+    L.assertNoErrors("R46M1 móvil", [m]);
+    await m.ctx.close();
+  } finally {
+    await asAdmin(false);
+    await L.q(`DELETE FROM "Project" WHERE NOT (id = ANY($1::text[]))`, [before]);
+  }
+
+  // Detalle: un comentario en edición con cambios pide confirmación al cerrar; un renombrado a medias no se guarda al descartar.
+  const [tid] = await L.seedTasks(COL.backlog, ["Detalle R46"]);
+  await L.q(`INSERT INTO "Subtask"(id,"taskId",title,position) VALUES ('r46sub',$1,'Sub original',1024)`, [tid]);
+  await L.q(`INSERT INTO "TaskComment"(id,"taskId","authorId",body) VALUES ('r46com',$1,$2,'Comentario original')`, [tid, adm.id]);
+  const subTitle = async () => (await L.q(`SELECT title FROM "Subtask" WHERE id='r46sub'`))[0].title;
+  const comBody = async () => (await L.q(`SELECT body FROM "TaskComment" WHERE id='r46com'`))[0].body;
+  const taskRow = async () => (await L.q(`SELECT title, description FROM "Task" WHERE id=$1`, [tid]))[0];
+  const confirmOf = (page, text) => page.locator("[role=dialog]").filter({ hasText: text });
+  s = await L.session({ viewport: { width: 1366, height: 768 } });
+  p = s.page;
+  let d = U.dialog(p);
+  const closeX = () => d.getByRole("button", { name: "Cerrar", exact: true }).first();
+  const comConfirm = confirmOf(p, "Estás editando un comentario y tiene cambios sin guardar");
+  const subConfirm = confirmOf(p, "Hay una subtarea a medio escribir");
+  await U.openTask(p, "Detalle R46");
+  const mine = d.locator("[data-comment-id]").first();
+  await mine.hover();
+  await mine.getByRole("button", { name: "Editar comentario" }).click();
+  const edit = d.locator('textarea[aria-label="Editar comentario"]');
+  await edit.waitFor();
+  await p.keyboard.type(" cambiado");
+  await closeX().click();
+  L.check("R46a: cerrar con un comentario en edición con cambios pregunta", await comConfirm.waitFor({ timeout: 4000 }).then(() => true, () => false));
+  await p.screenshot({ path: `${SHOTS}/r46-comentario-confirmar.png` });
+  await comConfirm.getByRole("button", { name: "Seguir editando" }).click();
+  await sleep(400);
+  L.eq("R46a: «Seguir editando» deja la edición abierta con el texto", await edit.inputValue().catch((e) => e.message), "Comentario original cambiado");
+  await p.mouse.click(5, 5);
+  L.check("R46a: clic fuera también pregunta", await comConfirm.waitFor({ timeout: 4000 }).then(() => true, () => false));
+  await comConfirm.getByRole("button", { name: "Descartar cambios" }).click();
+  await d.waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+  await sleep(500);
+  L.eq("R46a: «Descartar cambios» cierra y el comentario sigue como estaba", [await p.locator("[role=dialog]").count(), await comBody()], [0, "Comentario original"]);
+  await U.openTask(p, "Detalle R46");
+  await mine.hover();
+  await mine.getByRole("button", { name: "Editar comentario" }).click();
+  await edit.waitFor();
+  await closeX().click();
+  L.check("R46a: un comentario abierto sin cambios no pregunta", await d.waitFor({ state: "detached", timeout: 4000 }).then(() => true, () => false));
+
+  // Renombrar una subtarea y cerrar: también pregunta con la X (antes la X la guardaba sin preguntar).
+  await U.openTask(p, "Detalle R46");
+  const subSpan = d.locator("li span[tabindex='0']", { hasText: "Sub original" });
+  await subSpan.dblclick();
+  const subInput = d.locator("li input.input");
+  await subInput.fill("Sub renombrada");
+  await closeX().click();
+  L.check("R46b: cerrar con la X durante un renombrado pregunta", await subConfirm.waitFor({ timeout: 4000 }).then(() => true, () => false));
+  await subConfirm.getByRole("button", { name: "Seguir editando" }).click();
+  await sleep(400);
+  L.eq("R46b: «Seguir editando» vuelve al campo con su texto, sin guardar", [await p.evaluate(() => document.activeElement?.value), await subTitle()], ["Sub renombrada", "Sub original"]);
+  await p.mouse.click(5, 5);
+  L.check("R46b: clic fuera pregunta", await subConfirm.waitFor({ timeout: 4000 }).then(() => true, () => false));
+  await subConfirm.getByRole("button", { name: "Descartar cambios" }).click();
+  await d.waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+  await sleep(800);
+  L.eq("R46b: «Descartar cambios» no guarda el renombrado", await subTitle(), "Sub original");
+  // Salir del campo sin cerrar sigue guardando.
+  await U.openTask(p, "Detalle R46");
+  await subSpan.dblclick();
+  await subInput.fill("Sub guardada");
+  await d.getByRole("heading", { name: "Subtareas" }).click();
+  await L.eqEventually("R46b: salir del campo (sin cerrar) guarda el renombrado", subTitle, "Sub guardada");
+  await closeX().click();
+  await d.waitFor({ state: "detached", timeout: 4000 }).catch(() => {});
+  L.assertNoErrors("R46 detalle escritorio", [s]);
+
+  // Cerrar sesión: los borradores de comentarios se borran siempre; los demás, según la opción del perfil.
+  const keys = () => p.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("pz-draft-")).sort());
+  const seedDrafts = () => p.evaluate((uid) => {
+    const v = JSON.stringify({ at: Date.now(), value: { text: "borrador" } });
+    localStorage.setItem(`pz-draft-comment:${uid}:x`, v);
+    localStorage.setItem(`pz-draft-edit:${uid}:y`, v);
+  }, adm.id);
+  const logout = async () => {
+    await p.locator("aside").first().getByRole("button", { name: "Cerrar sesión" }).click();
+    await p.waitForURL(/\/login/, { timeout: 10000 });
+    await sleep(300);
+  };
+  await L.q(`UPDATE "User" SET "clearDraftsOnLogout"=false WHERE id=$1`, [adm.id]);
+  await L.reload(p);
+  await seedDrafts();
+  await logout();
+  L.eq("R46c: sin la opción, al cerrar sesión se borran solo los borradores de comentarios", await keys(), [`pz-draft-edit:${adm.id}:y`]);
+  await L.q(`UPDATE "User" SET "clearDraftsOnLogout"=true WHERE id=$1`, [adm.id]);
+  await L.login(p, L.ADMIN);
+  await seedDrafts();
+  await logout();
+  L.eq("R46c: con la opción, se borran todos", await keys(), []);
+  await L.q(`UPDATE "User" SET "clearDraftsOnLogout"=false WHERE id=$1`, [adm.id]);
+  await s.ctx.close();
+
+  // Móvil con el botón atrás: el renombrado sigue en su campo mientras se pregunta y «Descartar» no lo guarda.
+  const m = await L.session({ viewport: { width: 390, height: 844 }, mobile: true });
+  const mp = m.page;
+  d = U.dialog(mp);
+  const boardUrl = mp.url();
+  const mSub = confirmOf(mp, "Hay una subtarea a medio escribir");
+  await U.openTask(mp, "Detalle R46");
+  await d.getByRole("button", { name: "Editar subtarea" }).first().tap();
+  await d.locator("li input.input").fill("Sub móvil");
+  await mp.goBack();
+  L.check("R46b móvil: atrás durante un renombrado pregunta", await mSub.waitFor({ timeout: 4000 }).then(() => true, () => false));
+  await sleep(300);
+  L.eq("R46b móvil: mientras pregunta, el renombrado no se ha guardado", await subTitle(), "Sub guardada");
+  await mp.screenshot({ path: `${SHOTS}/r46-movil-renombrado-confirmar.png` });
+  await mSub.getByRole("button", { name: "Seguir editando" }).tap();
+  await sleep(500);
+  L.eq("R46b móvil: «Seguir editando» vuelve al campo con su texto", [await mp.evaluate(() => document.activeElement?.value), await subTitle()], ["Sub móvil", "Sub guardada"]);
+  await mp.goBack();
+  L.check("R46b móvil: atrás otra vez vuelve a preguntar", await mSub.waitFor({ timeout: 4000 }).then(() => true, () => false));
+  await mSub.getByRole("button", { name: "Descartar cambios" }).tap();
+  await d.waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+  await sleep(800);
+  L.eq("R46b móvil: «Descartar cambios» no guarda el renombrado y sigue en el tablero", [await subTitle(), await mp.locator("[role=dialog]").count(), mp.url().split("?")[0]], ["Sub guardada", 0, boardUrl.split("?")[0]]);
+  // Título en edición con la descripción a medias: «Descartar» descarta la descripción y el título se guarda al cerrar
+  // (como al salir del campo, igual que en escritorio).
+  await U.openTask(mp, "Detalle R46");
+  await d.getByRole("button", { name: "Añade una descripción…" }).tap();
+  await sleep(600);
+  await mp.keyboard.type("Descripción móvil");
+  await d.getByRole("button", { name: "Título", exact: true }).first().tap();
+  await sleep(300);
+  await mp.keyboard.press("Control+a");
+  await mp.keyboard.type("Detalle R46 título");
+  await mp.goBack();
+  const mDesc = confirmOf(mp, "La descripción tiene cambios sin guardar");
+  L.check("R46b móvil: atrás con la descripción a medias pregunta", await mDesc.waitFor({ timeout: 4000 }).then(() => true, () => false));
+  await mDesc.getByRole("button", { name: "Descartar cambios" }).tap();
+  await d.waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+  await L.eqEventually("R46b móvil: tras descartar, el título se guarda y la descripción no", async () => { const r = await taskRow(); return [r.title, r.description]; }, ["Detalle R46 título", ""]);
+  // Comentario en edición + atrás.
+  await U.openTask(mp, "Detalle R46 título");
+  const mMine = d.locator("[data-comment-id]").first();
+  await mMine.getByRole("button", { name: "Editar comentario" }).tap();
+  await d.locator('textarea[aria-label="Editar comentario"]').waitFor();
+  await mp.keyboard.type(" desde el móvil");
+  await mp.goBack();
+  const mCom = confirmOf(mp, "Estás editando un comentario y tiene cambios sin guardar");
+  L.check("R46a móvil: atrás con un comentario en edición pregunta", await mCom.waitFor({ timeout: 4000 }).then(() => true, () => false));
+  await mCom.getByRole("button", { name: "Descartar cambios" }).tap();
+  await d.waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+  await sleep(500);
+  L.eq("R46a móvil: «Descartar cambios» deja el comentario como estaba", await comBody(), "Comentario original");
+  L.assertNoErrors("R46 móvil", [m]);
   await m.ctx.close();
 }
 

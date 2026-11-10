@@ -3,7 +3,7 @@
 import { takePrefetchedTaskDetail } from "./taskDetailPrefetch";
 import { Archive, Camera, Check, ChevronDown, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   addSubtask, addSubtasks, archiveTask, deleteAttachment, deleteSubtask, deleteTask, deleteTaskLink, getTaskDetail,
   moveTask, reorderSubtask, restoreTaskSnapshot, updateSubtask, updateTask,
@@ -100,35 +100,47 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const subtaskDraftPending = useRef<(() => boolean) | null>(null);
   // ¿La descripción abierta tiene cambios de la persona? (la comunica el editor; ver DescriptionEditor).
   const descDirtyCheck = useRef<(() => boolean) | null>(null);
-  const confirmingClose = useRef(false);
+  // ¿Hay un comentario en edición con cambios? (lo comunica la lista de comentarios).
+  const commentEditDirty = useRef<(() => boolean) | null>(null);
+  // Cierre en curso: «confirming» mientras se pregunta, «discarding» tras «Descartar cambios». En ambos, salir del campo
+  // de renombrar una subtarea no la guarda: al abrirse la pregunta el campo pierde el foco (atrás en el móvil, clic fuera)
+  // y antes eso guardaba el renombrado aunque luego se eligiera descartar.
+  const closeGuard = useRef<"idle" | "confirming" | "discarding">("idle");
+  const blurHeld = useCallback(() => closeGuard.current !== "idle", []);
   /**
-   * Cerrar con la X, clic fuera, Escape o el botón atrás: si la descripción tiene cambios sin guardar (o hay una subtarea
-   * a medio escribir), se pregunta antes de descartarlos; sin cambios se cierra directamente. Lo que se guarda al salir de
-   * su campo (título, enlace, campos opcionales, renombrar una subtarea) se guarda también al cerrar. `false` si no se cerró.
+   * Cerrar con la X, clic fuera, Escape o el botón atrás: si la descripción tiene cambios sin guardar, hay una subtarea a
+   * medio escribir o renombrándose, o un comentario en edición con cambios, se pregunta antes de descartarlos; sin cambios
+   * se cierra directamente. Lo que se guarda al salir de su campo (título, enlace, campos opcionales) se guarda también al
+   * cerrar. `false` si no se cerró.
    */
   const requestClose = async (): Promise<boolean> => {
-    if (confirmingClose.current) return false;
+    if (closeGuard.current !== "idle") return false;
     const desc = descLive.current;
     const descDirty = desc !== null && desc !== (detail?.description ?? "") && (descDirtyCheck.current?.() ?? true);
     const subDirty = subtaskDraftPending.current?.() ?? false;
-    if (descDirty || subDirty) {
-      confirmingClose.current = true;
+    const commentDirty = commentEditDirty.current?.() ?? false;
+    if (descDirty || subDirty || commentDirty) {
+      closeGuard.current = "confirming";
       const ok = await confirm({
         title: t("Cambios sin guardar"),
-        message: descDirty && subDirty
-          ? t("La descripción tiene cambios sin guardar y hay una subtarea a medio escribir. ¿Cerrar la tarea y descartarlos?")
+        message: [descDirty, subDirty, commentDirty].filter(Boolean).length > 1
+          ? descDirty && subDirty && !commentDirty
+            ? t("La descripción tiene cambios sin guardar y hay una subtarea a medio escribir. ¿Cerrar la tarea y descartarlos?")
+            : t("Hay varios cambios sin guardar (descripción, subtareas o un comentario en edición). ¿Cerrar la tarea y descartarlos?")
           : descDirty
             ? t("La descripción tiene cambios sin guardar. ¿Cerrar la tarea y descartarlos?")
-            : t("Hay una subtarea a medio escribir. ¿Cerrar la tarea y descartarla?"),
+            : subDirty
+              ? t("Hay una subtarea a medio escribir. ¿Cerrar la tarea y descartarla?")
+              : t("Estás editando un comentario y tiene cambios sin guardar. ¿Cerrar la tarea y descartarlos?"),
         confirmLabel: t("Descartar cambios"),
         cancelLabel: t("Seguir editando"),
         danger: true,
-      }).finally(() => {
-        confirmingClose.current = false;
-      });
+      }).catch(() => false);
+      closeGuard.current = ok ? "discarding" : "idle";
       if (!ok) return false;
     }
     // Salir del campo con el foco guarda lo que se guarda al salir (blur): sin esto, Escape o el clic fuera lo perdían.
+    // Tras «Descartar cambios» el renombrado de una subtarea no se guarda (ver closeGuard).
     const active = document.activeElement;
     if (active instanceof HTMLElement && rootRef.current?.closest("[role=dialog]")?.contains(active)) active.blur();
     onClose();
@@ -706,7 +718,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           {/* Móvil: el detalle ocupa la pantalla y tapa la cabecera; deshacer y rehacer (de esta tarea) van aquí. */}
           {mobile && <UndoButton projectId={board.project.id} inDialog className="shrink-0" />}
           {/* Fuera del orden de Tab (Título → descripción directo); Escape también cierra. */}
-          <button type="button" className="btn-icon" tabIndex={-1} onClick={() => void requestClose()} aria-label={t("Cerrar")}>
+          {/* Sin quitar el foco al pulsarla: así el campo en edición sigue abierto mientras se pregunta (si hace falta) y se
+              decide entonces si guardarlo o descartarlo, igual que con Escape, clic fuera o atrás. */}
+          <button type="button" className="btn-icon" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => void requestClose()} aria-label={t("Cerrar")}>
             <X size={18} />
           </button>
         </div>
@@ -743,7 +757,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               if (await save({ description: "" }, { hasDescription: false })) toast(t("Descripción borrada"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange() });
             }}
           />
-          <Subtasks taskId={task.id} detail={detail} setDetail={setDetail} flushRef={flushSubtasks} draftRef={subtaskDraftPending} onUndo={(id) => void undoLastChange(id)} />
+          <Subtasks taskId={task.id} detail={detail} setDetail={setDetail} flushRef={flushSubtasks} draftRef={subtaskDraftPending} blurHeld={blurHeld} onUndo={(id) => void undoLastChange(id)} />
           <section>
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-sm font-semibold">
@@ -812,7 +826,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             )}
           </section>
           <GoogleLinks taskId={task.id} detail={detail} setDetail={setDetail} onCreate={createGoogle} />
-          <Comments taskId={task.id} detail={detail} setDetail={setDetail} users={board.users} onGoogle={createGoogle} />
+          <Comments taskId={task.id} detail={detail} setDetail={setDetail} users={board.users} onGoogle={createGoogle} editDirtyRef={commentEditDirty} />
           <TaskHistory taskId={task.id} />
         </div>
 
@@ -1297,13 +1311,15 @@ function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, o
   );
 }
 
-function Subtasks({ taskId, detail, setDetail, flushRef, draftRef, onUndo }: {
+function Subtasks({ taskId, detail, setDetail, flushRef, draftRef, blurHeld, onUndo }: {
   taskId: string;
   detail: TaskDetail | null;
   setDetail: React.Dispatch<React.SetStateAction<TaskDetail | null>>;
   flushRef?: React.MutableRefObject<(() => Promise<boolean>) | null>;
   /** ¿Hay una subtarea a medio escribir o un renombrado sin confirmar? (para avisar antes de cerrar). */
   draftRef?: React.MutableRefObject<(() => boolean) | null>;
+  /** `true` mientras se pregunta al cerrar el detalle (o tras descartar): salir del campo no guarda el renombrado. */
+  blurHeld?: () => boolean;
   /** Deshace la entrada indicada (el «Deshacer» del aviso tras pegar varias subtareas) y recarga. */
   onUndo?: (entryId?: string) => void;
 }) {
@@ -1481,7 +1497,7 @@ function Subtasks({ taskId, detail, setDetail, flushRef, draftRef, onUndo }: {
         <SortableContext items={list.map((s) => s.id)} strategy={verticalListSortingStrategy}>
           <ul className="space-y-0.5">
             {list.map((s) => (
-              <SubtaskRow key={s.id} s={s} editing={editingId === s.id} onEdit={() => setEditingId(s.id)} onRename={(v) => void rename(s, v)} onDraft={(v) => (renameDraft.current = { id: s.id, title: v })} onToggle={() => toggle(s)} onRemove={() => remove(s)} />
+              <SubtaskRow key={s.id} s={s} editing={editingId === s.id} blurHeld={blurHeld} onEdit={() => setEditingId(s.id)} onRename={(v) => void rename(s, v)} onDraft={(v) => (renameDraft.current = { id: s.id, title: v })} onToggle={() => toggle(s)} onRemove={() => remove(s)} />
             ))}
           </ul>
         </SortableContext>
@@ -1495,8 +1511,8 @@ function Subtasks({ taskId, detail, setDetail, flushRef, draftRef, onUndo }: {
 }
 
 /** Fila ordenable: agarre de seis puntos, título editable (doble clic, Enter/F2 o lápiz) y borrado. */
-function SubtaskRow({ s, editing, onEdit, onRename, onDraft, onToggle, onRemove }: {
-  s: SubtaskInfo; editing: boolean; onEdit: () => void; onRename: (title: string) => void; onDraft: (title: string) => void; onToggle: () => void; onRemove: () => void;
+function SubtaskRow({ s, editing, blurHeld, onEdit, onRename, onDraft, onToggle, onRemove }: {
+  s: SubtaskInfo; editing: boolean; blurHeld?: () => boolean; onEdit: () => void; onRename: (title: string) => void; onDraft: (title: string) => void; onToggle: () => void; onRemove: () => void;
 }) {
   const t = useT();
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: s.id });
@@ -1509,8 +1525,11 @@ function SubtaskRow({ s, editing, onEdit, onRename, onDraft, onToggle, onRemove 
     if (save) onRename(draft.trim());
     else onRename("");
   };
+  // El texto se selecciona solo al empezar a editar; al volver al campo (p. ej. con «Seguir editando») queda como estaba.
+  const selected = useRef(false);
   const startEdit = () => {
     settled.current = false;
+    selected.current = false;
     setDraft(s.title);
     onDraft(s.title);
     onEdit();
@@ -1539,7 +1558,11 @@ function SubtaskRow({ s, editing, onEdit, onRename, onDraft, onToggle, onRemove 
           value={draft}
           maxLength={MAX_TITLE}
           autoFocus
-          onFocus={(e) => e.currentTarget.select()}
+          onFocus={(e) => {
+            if (selected.current) return;
+            selected.current = true;
+            e.currentTarget.select();
+          }}
           onChange={(e) => {
             setDraft(e.target.value);
             onDraft(e.target.value);
@@ -1548,7 +1571,9 @@ function SubtaskRow({ s, editing, onEdit, onRename, onDraft, onToggle, onRemove 
             setDraft(v);
             onDraft(v);
           })}
-          onBlur={() => finish(true)}
+          // Con la pregunta de cierre abierta (o tras «Descartar cambios») perder el foco no guarda: el campo sigue con su
+          // texto para «Seguir editando», y descartar no lo guarda.
+          onBlur={() => !blurHeld?.() && finish(true)}
           onKeyDown={(e) => {
             if (e.nativeEvent.isComposing) return;
             if (e.key === "Enter") {
