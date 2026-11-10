@@ -12,7 +12,6 @@ export const board: Record<string, string> = {
   "{n} tareas borradas": "{n} tasks deleted",
   "Arrastrar para reordenar": "Drag to reorder",
   "{n} tarjetas": "{n} cards",
-  "Archivadas": "Archived",
   "Crear varias tareas pegando una lista": "Create several tasks by pasting a list",
   "Varias tareas": "Several tasks",
   "Nueva tarea": "New task",
@@ -28,7 +27,6 @@ export const board: Record<string, string> = {
   "No hay tarjetas en esta columna": "There are no cards in this column",
   "Generar Release": "Generate release",
   "Arrastra tarjetas aquí": "Drag cards here",
-  "Error": "Error",
   "Renombrar columna": "Rename column",
   "Plazo de espera": "Waiting period",
   "Solo se pueden borrar columnas vacías.": "Only empty columns can be deleted.",
@@ -72,7 +70,6 @@ export const board: Record<string, string> = {
   "Añadir columna": "Add column",
   "Nueva columna": "New column",
   "Nombre de la columna": "Column name",
-  "Cancelar": "Cancel",
   // PromptDialog
   "Aceptar": "OK",
   // Presence
@@ -88,7 +85,6 @@ export const board: Record<string, string> = {
   "Subtareas (opcional)": "Subtasks (optional)",
   "Quitar subtarea": "Remove subtask",
   "Hay cambios sin guardar. ¿Descartar la nueva tarea?": "You have unsaved changes. Discard the new task?",
-  "Añadir subtarea…": "Add subtask…",
   "Añadir subtarea": "Add subtask",
   "Columna": "Column",
   "Entregable (opcional)": "Deliverable (optional)",
@@ -97,7 +93,6 @@ export const board: Record<string, string> = {
   "Sin asignar": "Unassigned",
   "{name} (yo)": "{name} (me)",
   "Fecha límite (opcional)": "Due date (optional)",
-  "Fija en la release (evergreen)": "Pinned in the release (evergreen)",
   "Capturas y adjuntos": "Screenshots and attachments",
   "Adjuntar «{name}»": "Attach “{name}”",
   "«{name}» ya está adjunto": "“{name}” is already attached",
@@ -139,7 +134,6 @@ export const board: Record<string, string> = {
   "Tarea recuperada en «{name}»": "Task restored to “{name}”",
   "Tareas archivadas": "Archived tasks",
   "Filtrar por título o release…": "Filter by title or release…",
-  "Ninguna tarea coincide.": "No tasks match.",
   "Cargar más": "Load more",
   "No hay tareas archivadas.": "There are no archived tasks.",
   "Archivada el {date}": "Archived on {date}",
@@ -156,7 +150,6 @@ export const board: Record<string, string> = {
   "Mover a…": "Move to…",
   "Release con selección": "Release with selection",
   "Archivar": "Archive",
-  "Borrar": "Delete",
   "Limpiar selección": "Clear selection",
   // ReleaseDialog
   "Cabecera": "Header",
@@ -268,7 +261,6 @@ export const board: Record<string, string> = {
   "día {n}": "day {n}",
   "Al terminarla o archivarla se crea la siguiente, sin las subtareas marcadas.": "When it is completed or archived the next one is created, with the subtasks unchecked.",
   "Duplicar": "Duplicate",
-  "Crea una copia justo detrás de esta tarea": "Creates a copy right after this task",
   "Añadir las subtareas predefinidas de cada tipo": "Add each type's predefined subtasks",
   // Confirmaciones (ui/ConfirmDialog)
   "Borrar tarea": "Delete task",

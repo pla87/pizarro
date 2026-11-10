@@ -50,7 +50,7 @@ expliquen las opciones con su coste y beneficio y una recomendación.
 ## 3. Brief común para los agentes
 
 - Trabajan en su propio worktree. Dependencias: **solo dentro de su worktree** (comprobar `pwd`):
-  `[ -e node_modules ] || ln -s <repo>/node_modules node_modules`. Nunca tocar el `node_modules` del repositorio
+  `[ -e node_modules ] || cp -al <repo>/node_modules node_modules`. Nunca tocar el `node_modules` del repositorio
   principal (un agente lo sustituyó una vez por un enlace a sí mismo).
 - Copian el `.env` y apuntan `DATABASE_URL` a una base propia (`pz_<agente>`), puerto propio. Si PostgreSQL no
   arranca: `pg_ctlcluster 16 main start`. Solo borran las bases que crearon.
@@ -72,18 +72,24 @@ npx tsc --noEmit
 npm run lint
 npm test                 # unitarias
 npm run i18n:check
+npm run i18n:unused      # solo informa (ver abajo)
 npm run test:db          # con base de datos (crea y borra pizarro_test_*)
 npx next build --webpack && node scripts/postbuild.mjs && npm run build:boot
 ```
 
 Pruebas en navegador (ver `e2e/README.md`): la suite QA (`e2e/qa/run-all.mjs`, ~350 comprobaciones), la del
-tablero (`e2e/board-e2e.mjs`, unas 270) y la de pegado (`e2e/paste-e2e.mjs`, ~72: imágenes y tablas pegadas; misma
+tablero (`e2e/board-e2e.mjs`, unas 310) y la de pegado (`e2e/paste-e2e.mjs`, ~72: imágenes y tablas pegadas; misma
 base `pz_qa` y servidor que la del tablero). Si cambias el rol o la etiqueta de un elemento que la suite usa,
 actualiza el script correspondiente. Las suites declaran la instalación de uso personal en `prepareUsers`
-(`e2e/qa/lib.mjs`) para que no salga el recordatorio de licencia.
+(`e2e/qa/lib.mjs`) para que no salga el recordatorio de licencia. Chromium: `CHROME` o, si no, el más reciente de
+`/opt/pw-browsers`.
 
 Guardas que conviene conocer:
 
+- `npm run i18n:unused` (solo informa): traducciones sin uso, repetidas o que solo usan las pruebas. Antes de
+  borrar una, comprueba que no puede venir del historial de las tareas (un año), del deshacer (7 días) ni de los
+  errores de exportar/importar, que se traducen al leerlos. Las que se conservan por eso van bajo el comentario
+  «Textos guardados por versiones anteriores».
 - `tests/db/undo-perf.test.ts` (dentro de `npm run test:db`): guarda de rendimiento del deshacer. Mide las
   consultas y los bytes leídos al deshacer y rehacer «Mover a…» de cientos de tarjetas; si falla, algo ha vuelto a
   leer las descripciones completas o a hacer consultas entrada a entrada.
@@ -125,14 +131,18 @@ llevan enlaces de sesión ni nombres de modelos.
   marcha (Pages, DNS, HTTPS, verificación del dominio): `docs/VENTA.md` §8.
 - Hecho: recordatorio de licencia para administradores (franja bajo la cabecera, como mucho cada 30 días, nunca en
   los 7 primeros días): lógica en `shouldShowLicenseNudge` (`src/lib/license-core.ts`), interfaz en
-  `src/components/LicenseNudge.tsx`. Se oculta con licencia registrada o declarando uso personal.
-- Modelo de venta decidido: gratis para uso personal; empresas y profesionales, pago único por servidor con
-  actualizaciones gratis para siempre y sin soporte. Precio: 100 € + IVA (pago con tarjeta y factura, NIF opcional); botón Comprar con `BUY_URL` en `src/lib/product.ts` (vacía hasta que el propietario cree el Payment Link de Stripe, ver `docs/VENTA.md`); *Administración → Licencia* solo informa. Sin excepciones: todo uso no personal paga. Listas de funciones candidatas a licencia profesional y de ideas de otros Kanban: `docs/IDEAS.md`.
+  `src/components/LicenseNudge.tsx`. Se oculta con licencia registrada o declarando uso personal o educativo.
+- Modelo de venta decidido: gratis para uso personal y para uso educativo (centros de enseñanza públicos o
+  privados, también academias, con su profesorado y alumnado; definición en `LICENSE.md` §2); empresas y profesionales, pago único por servidor con
+  actualizaciones gratis para siempre y sin soporte. Precio: 100 € + IVA (pago con tarjeta y factura, NIF opcional); botón Comprar con `BUY_URL` en `src/lib/product.ts` (vacía hasta que el propietario cree el Payment Link de Stripe, ver `docs/VENTA.md`); *Administración → Licencia* solo informa. Todo uso que no sea personal ni educativo paga. Listas de funciones candidatas a licencia profesional y de ideas de otros Kanban: `docs/IDEAS.md`.
 - Pendiente de confirmar por el propietario: primera publicación con *Run workflow* y paquete GHCR público (el propietario prefiere seguir puliendo antes); prueba
   real en un VPS siguiendo `docs/PRUEBA-VPS.md`; plantilla de Railway (pasos en `docs/INSTALL.md`; la sintaxis de
   variables generadas debe verificarse en Railway).
-- Siguientes pasos: revisión de la licencia por un abogado, vídeo para la presentación (sustituye a la demo),
+- Siguientes pasos: revisión de la licencia por un abogado (en especial las definiciones de «centro educativo» y
+  «uso educativo» de §2: academias privadas, gestión del centro, administraciones educativas y formadores autónomos), vídeo para la presentación (sustituye a la demo),
   capturas reales sin datos personales, poner en marcha getpizarro.com (`docs/VENTA.md` §8) y el Payment Link.
+- A partir del 17-nov-2026 se pueden quitar las huellas de deshacer antiguas (las de `fingerprintOps` sin el prefijo
+  `v2:`, en `src/lib/undo.ts`): para entonces ya no quedarán entradas de deshacer guardadas con ellas.
 
 **Ideas pospuestas por decisión del propietario:**
 

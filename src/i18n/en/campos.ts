@@ -48,6 +48,7 @@ export const campos: Record<string, string> = {
   "prioridad": "priority",
   "cliente": "client",
   "fecha de inicio": "start date",
+  // Textos guardados por versiones anteriores: el historial de las tareas (TaskEvent, un año) se traduce al leerlo
   "enlace de referencia": "reference link",
   // Columna Presupuesto
   "Presupuesto": "Budget",

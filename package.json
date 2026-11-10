@@ -1,6 +1,6 @@
 {
   "name": "pizarro",
-  "version": "1.48.0",
+  "version": "1.49.0",
   "private": true,
   "license": "SEE LICENSE IN LICENSE.md",
   "type": "module",
@@ -29,6 +29,7 @@
     "keys:rotate": "node --env-file-if-exists=.env --import tsx scripts/rotate-keys.ts",
     "doctor": "node --env-file-if-exists=.env --import tsx scripts/doctor.ts",
     "i18n:check": "node scripts/i18n-check.mjs",
+    "i18n:unused": "node scripts/i18n-unused.mjs",
     "license:sync": "node scripts/license-sync.mjs"
   },
   "dependencies": {

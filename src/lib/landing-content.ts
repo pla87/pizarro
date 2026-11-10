@@ -48,16 +48,20 @@ export function landingFaq(t: T): { q: string; a: string }[] {
     { q: t("¿Hay que pagar por cada usuario?"), a: t("No. Invitas a quien quieras; el límite lo pone tu servidor.") },
     { q: t("¿Qué servidor necesito?"), a: t("Un Linux con Docker y 1 GB de RAM. También puedes desplegarla en Railway.") },
     { q: t("¿Cómo se actualiza?"), a: t("Repitiendo el comando de instalación, que conserva tus datos. La app avisa a los administradores cuando hay una versión nueva.") },
-    { q: t("¿Puedo usarla gratis?"), a: t("Sí, para uso personal y familiar no comercial. Cualquier otro uso (empresa, autónomo, asociación, centro educativo…) necesita la licencia.") },
+    { q: t("¿Puedo usarla gratis?"), a: t("Sí, para uso personal y familiar no comercial, y para la enseñanza en colegios, institutos, universidades, academias y otros centros educativos. Cualquier otro uso (empresa, autónomo, asociación, administración…) necesita la licencia.") },
   ];
 }
 
-/** Preguntas sobre la licencia (web del producto): qué es uso personal, qué pasa sin pagar y el recordatorio. */
+/**
+ * Preguntas sobre la licencia (web del producto): qué es uso personal, qué pasa sin pagar, el recordatorio, si se
+ * bloquea algo y los centros educativos. scripts/build-site.mjs las elige por su posición: añade las nuevas al final.
+ */
 export function licenseFaq(t: T, priceEur: number): { q: string; a: string }[] {
   return [
-    { q: t("¿Qué es uso personal?"), a: t("El de una persona en su propio servidor, para fines personales, domésticos o familiares: organizar la casa, tus aficiones o tus proyectos propios sin fines comerciales. Si lo usas en una empresa, como autónomo o profesional, o en cualquier organización (también asociaciones, ONG, administraciones y centros educativos), necesitas licencia.") },
+    { q: t("¿Qué es uso personal?"), a: t("El de una persona en su propio servidor, para fines personales, domésticos o familiares: organizar la casa, tus aficiones o tus proyectos propios sin fines comerciales. Si lo usas en una empresa, como autónomo o profesional, o en cualquier otra organización (también asociaciones, ONG y administraciones), necesitas licencia; la enseñanza es la excepción.") },
     { q: t("¿Qué pasa si no pago?"), a: t("Pizarro funciona exactamente igual: no hay versión de prueba, ni funciones recortadas, ni fecha de caducidad. La licencia se basa en la buena voluntad. Si lo usas para trabajar, comprarla ({price} € + IVA, una sola vez) es lo que permite seguir mejorándolo.", { price: priceEur }) },
-    { q: t("¿Me lo va a recordar?"), a: t("Solo a los administradores, con un aviso discreto como mucho una vez al mes, y nunca en la primera semana. Desaparece para siempre al registrar la licencia o al declarar que es uso personal en Administración → Licencia.") },
+    { q: t("¿Me lo va a recordar?"), a: t("Solo a los administradores, con un aviso discreto como mucho una vez al mes, y nunca en la primera semana. Desaparece para siempre al registrar la licencia o al declarar que es uso personal o educativo en Administración → Licencia.") },
     { q: t("¿Se bloquea algo?"), a: t("No. Nada se bloquea nunca y la licencia no se comprueba por internet.") },
+    { q: t("¿Y los centros educativos?"), a: t("También es gratis. Colegios, institutos, universidades, centros de formación profesional y academias, públicos o privados, con su profesorado y su alumnado, pueden usarlo sin pagar para dar clase, aprender, investigar y organizar el propio centro. Solo necesita licencia la actividad comercial ajena a la enseñanza.") },
   ];
 }

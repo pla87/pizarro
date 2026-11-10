@@ -9,8 +9,6 @@ export const calendar: Record<string, string> = {
   "Deshacer": "Undo",
   "Filtros del calendario": "Calendar filters",
   "Todos los proyectos": "All projects",
-  "Proyectos": "Projects",
-  "Todos": "All",
   "1 proyecto": "1 project",
   "{n} proyectos": "{n} projects",
   "Cualquier persona": "Anyone",

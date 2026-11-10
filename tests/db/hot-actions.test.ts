@@ -217,7 +217,9 @@ describe("updateTask", () => {
     assert.equal(row.recurrenceDay, 5);
     assert.equal(row.contentUpdatedById, user.id);
     const names = { ...fixtureNames(f), [a.id]: "A", [user.id]: "USER", [kind2.id]: "KIND2", [label.id]: "LABEL" };
-    assert.deepEqual(norm(await traces(f.project.id, "tasks.updateTask", since), names), {
+    // Los eventos se insertan juntos y comparten instante: su orden entre ellos no está definido.
+    const byLabel = <T extends { events: { label: string }[] }>(x: T): T => ({ ...x, events: [...x.events].sort((a, b) => a.label.localeCompare(b.label)) });
+    assert.deepEqual(byLabel(norm(await traces(f.project.id, "tasks.updateTask", since), names) as { events: { label: string }[] }), byLabel({
       undo: [{
         kind: "UNDO",
         label: "{\"k\":\"Modificó «{title}»: {changes}\",\"p\":{\"title\":\"Nuevo\",\"changes\":{\"k\":\"{list} y {last}\",\"p\":{\"list\":[{\"k\":\"título\"},{\"k\":\"descripción\"},{\"k\":\"tipo\"},{\"k\":\"responsable\"},{\"k\":\"etiquetas\"},{\"k\":\"fecha límite\"}],\"last\":{\"k\":\"repetición\"}}}}}",
@@ -233,7 +235,7 @@ describe("updateTask", () => {
         { taskId: "A", code: "update", label: "{\"k\":\"Cambió {changes}\",\"p\":{\"changes\":{\"k\":\"etiquetas\"}}}" },
       ],
       logs: [{ level: "info", message: "Modificó «Nuevo»: título, descripción, tipo, responsable, etiquetas, fecha límite y repetición" }],
-    });
+    }));
   });
 
   test("solo la repetición: el día sale de la fecha límite", async () => {

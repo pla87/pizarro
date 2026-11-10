@@ -21,7 +21,7 @@ async function stateOf(projectId: string) {
       blockedBy: { select: { title: true } },
       recurrenceFrom: { select: { title: true } },
       subtasks: { orderBy: { position: "asc" }, select: { title: true, done: true, position: true } },
-      comments: { orderBy: { createdAt: "asc" }, select: { body: true, authorId: true, parent: { select: { body: true } } } },
+      comments: { orderBy: [{ createdAt: "asc" }, { body: "asc" }], select: { body: true, authorId: true, parent: { select: { body: true } } } },
       links: { orderBy: { title: "asc" }, select: { title: true, url: true, kind: true } },
       attachments: { orderBy: { originalName: "asc" }, select: { originalName: true, size: true } },
     },

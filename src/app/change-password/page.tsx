@@ -18,7 +18,7 @@ export default async function ChangePasswordPage() {
   const t = await getT();
   return (
     <AuthCard title={t("Elige una contraseña nueva")}>
-      <ChangePasswordForm email={user.email} googleOnly={googleOnly(googlePolicyEnv())} />
+      <ChangePasswordForm email={user.email} googleOnly={googleOnly(googlePolicyEnv())} clearAllDraftsOnLogout={user.clearDraftsOnLogout} />
     </AuthCard>
   );
 }

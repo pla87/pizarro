@@ -5,7 +5,8 @@
 # La release se crea al final: si la imagen falla, no se anuncia una versión que no se puede instalar.
 # También se puede lanzar a mano (Actions → Release → Run workflow, rama main): publica la versión de
 # package.json de ese commit y crea la etiqueta vX.Y.Z junto con la release. A mano solo desde main: lanzado desde
-# otra rama, los jobs no se ejecutan (no se publica nada).
+# otra rama, los jobs no se ejecutan (no se publica nada). Si esa versión ya tiene etiqueta vX.Y.Z, se para con un
+# error sin publicar nada: hay que subir la versión (npm run version:bump).
 name: Release
 
 on:
@@ -14,8 +15,10 @@ on:
       - "v*.*.*"
   workflow_dispatch:
 
+# Un solo grupo para todas: la ejecución por etiqueta y la lanzada a mano (que tienen distinto github.ref) no corren
+# a la vez publicando la misma versión.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
@@ -39,6 +42,18 @@ jobs:
           if [ "$tag" != "$pkg" ]; then
             echo "La etiqueta $GITHUB_REF_NAME no coincide con la versión de package.json ($pkg)." >&2
             exit 1
+          fi
+          # A mano con una versión ya etiquetada se volverían a publicar :X.Y.Z y :latest con otro commit (y luego
+          # fallaría al crear la release): se para antes de construir nada.
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            if ! existing="$(git ls-remote --tags origin "refs/tags/v$pkg")"; then
+              echo "No se pudo consultar las etiquetas del repositorio." >&2
+              exit 1
+            fi
+            if [ -n "$existing" ]; then
+              echo "La versión $pkg ya está publicada (existe la etiqueta v$pkg); sube la versión con npm run version:bump." >&2
+              exit 1
+            fi
           fi
           echo "VERSION=$tag" >> "$GITHUB_ENV"
 

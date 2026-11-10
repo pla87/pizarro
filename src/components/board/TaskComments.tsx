@@ -32,12 +32,14 @@ const isBefore = (c: CommentInfo, ref: CommentInfo) => c.createdAt < ref.created
 let purged = false;
 
 /** Comentarios de la tarea, con respuestas (un solo nivel: las respuestas salen sangradas bajo su comentario). */
-export function Comments({ taskId, detail, setDetail, users, onGoogle }: {
+export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirtyRef }: {
   taskId: string;
   detail: TaskDetail | null;
   setDetail: React.Dispatch<React.SetStateAction<TaskDetail | null>>;
   users: UserOption[];
   onGoogle: (kind: MentionCommand) => Promise<TaskLinkInfo | null>;
+  /** ¿Hay un comentario en edición con cambios sin guardar? (cerrar el detalle con él pide confirmación). */
+  editDirtyRef?: React.MutableRefObject<(() => boolean) | null>;
 }) {
   const t = useT();
   const locale = useIntlLocale();
@@ -61,6 +63,22 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle }: {
   const [savingEdit, setSavingEdit] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const comments = detail?.comments ?? [];
+  // Edición con cambios: el texto escrito difiere del guardado (sin contar espacios al principio o al final, como al guardar).
+  const editDirtyLatest = useRef<() => boolean>(() => false);
+  useEffect(() => {
+    editDirtyLatest.current = () => {
+      if (!editing) return false;
+      const original = comments.find((c) => c.id === editing.id);
+      return !!original && editing.text.trim() !== original.body;
+    };
+  });
+  useEffect(() => {
+    if (!editDirtyRef) return;
+    editDirtyRef.current = () => editDirtyLatest.current();
+    return () => {
+      editDirtyRef.current = null;
+    };
+  }, [editDirtyRef]);
   const older = detail?.olderComments ?? 0;
   // Respuestas por comentario raíz. Una respuesta cuyo comentario aún no se ha cargado sale suelta, con un aviso.
   const ids = new Set(comments.map((c) => c.id));

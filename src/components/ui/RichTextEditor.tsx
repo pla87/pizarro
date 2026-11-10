@@ -223,7 +223,7 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
             return true;
           }
         } catch {
-          // Markdown que el editor no admite: antes se perdía el pegado entero; ahora entra con el pegado normal (texto).
+          // Markdown que el editor no admite: entra con el pegado normal (texto) en vez de perderse.
         }
         return false;
       },

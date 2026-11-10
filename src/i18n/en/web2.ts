@@ -12,7 +12,6 @@ export const web2: Record<string, string> = {
     "Pizarro is a Kanban board you install on your own server: tasks, comments and release notes, with no subscription and no per-person fee. Free for personal use, and €{price} once for work.",
   "Pruébalo gratis": "Try it for free",
   "Ver cómo funciona": "See how it works",
-  "Pago único": "One-off payment",
   "En tu servidor": "On your server",
   "Sin rastreadores": "No trackers",
   "El tablero de Pizarro con las columnas Por hacer, En curso, Revisión, Siguiente release y Hecho, y tarjetas con responsable, fecha, etiquetas y subtareas":
@@ -33,10 +32,6 @@ export const web2: Record<string, string> = {
   "Cada tarea, con todo lo que necesita": "Every task, with everything it needs",
   "Cada columna es una fase y cada tarjeta, una tarea. Arrástralas según avanzan; al abrir una tienes la descripción, las subtareas, los archivos y la conversación en el mismo sitio.":
     "Each column is a stage and each card is a task. Drag them along as they progress; open one and the description, subtasks, files and conversation are all in one place.",
-  "Subtareas con barra de progreso": "Subtasks with a progress bar",
-  "Tipos, etiquetas y prioridad": "Types, labels and priority",
-  "Fechas límite que cambian de color al acercarse": "Due dates that change colour as they approach",
-  "Tareas que se repiten solas": "Tasks that repeat on their own",
   "Detalle de una tarea con descripción, subtareas a medio hacer, etiquetas, fecha límite y comentarios":
     "A task's details with its description, half-done subtasks, labels, due date and comments",
   "Notas de versión": "Release notes",
@@ -54,8 +49,6 @@ export const web2: Record<string, string> = {
     "Comment on the task and mention someone with @: they get a notification in the app or by email. What someone else changes shows up on your screen straight away, without reloading.",
   "Comentarios con respuestas y menciones": "Comments with replies and mentions",
   "Avisos en la app, por email o en un resumen diario": "Notifications in the app, by email or in a daily digest",
-  "Sigue una tarea para no perderte nada": "Follow a task so you don't miss a thing",
-  "Ctrl+Z deshace cualquier cambio": "Ctrl+Z undoes any change",
   "Comentarios de una tarea con una respuesta y una mención a medio escribir que sugiere a una persona del equipo":
     "A task's comments with a reply and a half-typed mention suggesting a team member",
   "Móvil y voz": "Mobile and voice",
@@ -90,9 +83,6 @@ export const web2: Record<string, string> = {
   "Tareas que se repiten": "Repeating tasks",
   "Cada día, cada semana o cada mes, sin volver a crearlas.": "Every day, week or month, without creating them again.",
   "Crea un documento desde la tarea y queda enlazado en ella.": "Create a document from the task and it stays linked to it.",
-  "Mover, borrar o archivar: todo se puede deshacer.": "Move, delete or archive: everything can be undone.",
-  "Temas y colores": "Themes and colours",
-  "Claro u oscuro, y el color de acento que prefiera cada persona.": "Light or dark, and the accent colour each person prefers.",
 
   // Para quién
   "Pensado para grupos pequeños": "Made for small groups",

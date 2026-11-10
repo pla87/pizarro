@@ -156,12 +156,8 @@ const ICONS = {
   report: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 18v-3M12 18v-6M16 18v-4"/>',
   flag: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/>',
   repeat: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
-  mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/>',
-  phone: '<rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M11 18h2"/>',
   google: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h8"/>',
-  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
-  palette: '<path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.6-.7 1.6-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.7 1.7-1.7h2c3 0 5.5-2.5 5.5-5.5C22 6 17.5 2 12 2z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10.5" cy="7" r="1"/><circle cx="15.5" cy="7.5" r="1"/>',
-  globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+  columns: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18"/>',
   lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
   eye: '<path d="M9.9 9.9a3 3 0 1 0 4.2 4.2"/><path d="M10.7 5.1A10.4 10.4 0 0 1 12 5c7 0 10 7 10 7a13.2 13.2 0 0 1-1.7 2.7"/><path d="M6.6 6.6A13.5 13.5 0 0 0 2 12s3 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M2 2l20 20"/>',
@@ -187,7 +183,7 @@ const checks = (items) => `<ul class="checks">${items.map((x) => `<li>${check}<s
 function header(locale, s, { onHome }) {
   const l = L[locale];
   const a = (id, text) => `<a href="${onHome ? "" : l.home}#${l.ids[id]}">${esc(text)}</a>`;
-  const links = `${a("how", s.navFeatures)}${a("who", s.navWho)}${a("pricing", s.navPricing)}${a("faq", s.navFaq)}`;
+  const links = `${a("how", s.navFeatures)}${a("who", s.navWho)}${a("pricing", s.navPricing)}${a("faq", s.navFaq)}${a("install", s.navInstall)}`;
   const otherHref = onHome ? L[l.other].home : L[l.other].license;
   return `<header class="top"><div class="wrap top-in">
 <a class="brand" href="${l.home}">${logo(28)}<span>Pizarro</span></a>
@@ -196,7 +192,7 @@ function header(locale, s, { onHome }) {
 <a class="lang" href="${otherHref}" hreflang="${l.other}" lang="${l.other}" title="${l.otherLabel}"><span aria-hidden="true">${l.otherShort}</span><span class="sr">${l.otherLabel}</span></a>
 ${ext(product.REPO_URL, `${github}<span class="sr">GitHub</span>`, "icon-link hide-sm")}
 <a class="btn btn-primary btn-sm" href="${onHome ? "" : l.home}#${l.ids.install}">${esc(s.navCta)}</a>
-<details class="menu"><summary aria-label="${esc(s.menu)}">${icon("menu", 22)}</summary><nav class="menu-list" aria-label="${esc(s.menu)}">${links}${a("install", s.navInstall)}${ext(product.REPO_URL, "GitHub")}</nav></details>
+<details class="menu"><summary aria-label="${esc(s.menu)}">${icon("menu", 22)}</summary><nav class="menu-list" aria-label="${esc(s.menu)}">${links}${ext(product.REPO_URL, "GitHub")}</nav></details>
 </div>
 </div></header>`;
 }
@@ -244,8 +240,8 @@ function home(locale) {
   const l = L[locale];
   const ids = l.ids;
   const [faqPerUser, faqServer, faqUpdate] = landingFaq(t);
-  const [faqPersonal, faqNoPay, , faqBlocked] = licenseFaq(t, product.LICENSE_PRICE_EUR);
-  const faq = [faqPerUser, faqPersonal, faqNoPay, faqBlocked, faqServer, faqUpdate];
+  const [faqPersonal, faqNoPay, , faqBlocked, faqEducation] = licenseFaq(t, product.LICENSE_PRICE_EUR);
+  const faq = [faqPerUser, faqPersonal, faqEducation, faqNoPay, faqBlocked, faqServer, faqUpdate];
   const price = t("{price} € + IVA", { price: product.LICENSE_PRICE_EUR });
   const wide = "(min-width: 1240px) 1160px, calc(100vw - 32px)";
   const half = "(min-width: 1240px) 680px, (min-width: 960px) 56vw, calc(100vw - 32px)";

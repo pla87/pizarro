@@ -1,6 +1,61 @@
 {
   "versions": [
     {
+      "version": "1.49.0",
+      "date": "2026-11-10",
+      "releasedAt": "2026-11-10T23:41:00+01:00",
+      "summary": "Gratis también para centros educativos, «Nuevo proyecto» mucho más simple, web más concisa con «Instalación» en el menú, y correcciones de la revisión",
+      "changes": {
+        "nuevas": [
+          "Pizarro es gratis también para centros educativos: docencia, aprendizaje, investigación académica y gestión del propio centro."
+        ],
+        "mejoras": [
+          "«Nuevo proyecto» es mucho más simple: nombre, un desplegable «Empezar con» y una línea que describe la opción.",
+          "Cerrar una tarea con un comentario a medio editar pide confirmación, y «Descartar cambios» también descarta el renombrado de una subtarea.",
+          "Los borradores de comentarios se borran siempre al cerrar sesión.",
+          "La web tiene «Instalación» en el menú y deja solo lo que distingue a Pizarro.",
+          "Mientras subes un archivo, los comentarios de otras personas siguen apareciendo al momento.",
+          "Los textos en inglés repetidos usan siempre la mejor traducción (por ejemplo, «Inline code» en la barra de formato)."
+        ],
+        "correcciones": [
+          "Deshacer un comentario recién escrito ya no deja su texto en los avisos de otras personas.",
+          "Deshacer el borrado de un comentario devuelve el texto a sus avisos.",
+          "Una escritura de archivo fallida ya no deja ficheros sueltos.",
+          "Relanzar a mano la publicación de una versión ya publicada se detiene antes de cambiar nada."
+        ],
+        "tecnicos": [
+          "Limpieza: traducciones sin uso y repetidas, restos antiguos y nuevo `npm run i18n:unused`.",
+          "Las pruebas en navegador buscan solas el Chromium instalado."
+        ]
+      },
+      "en": {
+        "summary": "Also free for educational institutions, a much simpler «New project», a more concise website with «Installation» in the menu, and review fixes",
+        "changes": {
+          "nuevas": [
+            "Pizarro is also free for educational institutions: teaching, learning, academic research and running the institution itself."
+          ],
+          "mejoras": [
+            "«New project» is much simpler: name, a «Start with» dropdown and one line describing the option.",
+            "Closing a task with a half-edited comment asks for confirmation, and «Discard changes» also discards a subtask rename.",
+            "Comment drafts are always deleted when you sign out.",
+            "The website has «Installation» in the menu and keeps only what makes Pizarro different.",
+            "While you upload a file, other people's comments keep appearing right away.",
+            "Duplicate English texts always use the best translation (for example, «Inline code» in the formatting bar)."
+          ],
+          "correcciones": [
+            "Undoing a just-written comment no longer leaves its text in other people's notifications.",
+            "Undoing a comment deletion puts its text back in its notifications.",
+            "A failed file write no longer leaves stray files.",
+            "Re-running the release of a version already published stops before changing anything."
+          ],
+          "tecnicos": [
+            "Cleanup: unused and duplicate translations, old leftovers and a new `npm run i18n:unused`.",
+            "Browser tests find the installed Chromium by themselves."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.48.0",
       "date": "2026-11-10",
       "releasedAt": "2026-11-10T02:03:15+01:00",

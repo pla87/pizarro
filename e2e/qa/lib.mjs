@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import fs from "node:fs";
 
 const require = createRequire(import.meta.url);
 const pg = require(process.env.PG_PATH || "pg");
@@ -11,7 +12,28 @@ const pg = require(process.env.PG_PATH || "pg");
 export const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const BASE = process.env.BASE || "http://localhost:3231";
 export const DATABASE_URL = process.env.DATABASE_URL || "postgresql://tablon:tablon@localhost:5432/pz_qa";
-export const CHROME = process.env.CHROME || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+/**
+ * Chromium: el de la variable CHROME; si no, el más reciente instalado por Playwright en PLAYWRIGHT_BROWSERS_PATH (o
+ * /opt/pw-browsers), carpetas chromium-<revisión>/chrome-linux*\/chrome; si no hay ninguno, undefined y playwright-core
+ * usa el suyo (`npx playwright-core install chromium`).
+ */
+export function findChrome() {
+  if (process.env.CHROME) return process.env.CHROME;
+  const base = process.env.PLAYWRIGHT_BROWSERS_PATH || "/opt/pw-browsers";
+  let dirs = [];
+  try { dirs = fs.readdirSync(base); } catch { return undefined; }
+  const revisions = dirs.map((d) => /^chromium-(\d+)$/.exec(d)).filter(Boolean).sort((a, b) => Number(b[1]) - Number(a[1]));
+  for (const [dir] of revisions) {
+    let subs = [];
+    try { subs = fs.readdirSync(path.join(base, dir)).filter((s) => s.startsWith("chrome-linux")).sort().reverse(); } catch { continue; }
+    for (const s of subs) {
+      const exe = path.join(base, dir, s, "chrome");
+      if (fs.existsSync(exe)) return exe;
+    }
+  }
+  return undefined;
+}
+export const CHROME = findChrome();
 export const PASSWORD = "cambia-esta-clave";
 export const ADMIN = "admin@example.com";
 export const USER2 = "qa2@example.com";

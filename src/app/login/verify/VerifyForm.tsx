@@ -24,7 +24,7 @@ export function VerifyForm({ method, emailSent }: { method: "TOTP" | "EMAIL"; em
             : t("Escribe el código de 6 dígitos de tu app de autenticación, o un código de recuperación.")}
         </p>
         <div>
-          <label className="label" htmlFor="code">{t("Código")}</label>
+          <label className="label" htmlFor="code">{t("Código de verificación")}</label>
           <input id="code" name="code" className="input" autoComplete="one-time-code" autoFocus required maxLength={24} />
         </div>
         <label className="flex items-center gap-2 text-sm">

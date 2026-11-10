@@ -19,4 +19,3 @@ deploy
 **/.env
 e2e
 site
-CNAME

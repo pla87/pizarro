@@ -67,7 +67,6 @@ export const cuentas: Record<string, string> = {
   "El enlace no es válido o ha caducado. Repite el cambio desde tu perfil.": "The link is invalid or has expired. Repeat the change from your profile.",
   "El enlace no es válido o ha caducado. Pide uno nuevo.": "The link is invalid or has expired. Request a new one.",
   "Pedir un enlace nuevo": "Request a new link",
-  "Volver a iniciar sesión": "Back to sign in",
   "Confirmar el nuevo email": "Confirm the new email",
   "Confirmar el cambio de contraseña": "Confirm the password change",
   "Si existe una cuenta con ese email, te hemos enviado un enlace para elegir una contraseña nueva. Caduca en 30 minutos.":
@@ -168,8 +167,6 @@ export const cuentas: Record<string, string> = {
     "Two-step verification reset",
   "Se borrarán su método y sus códigos de recuperación. Si es administrador, tendrá que configurar uno nuevo antes de entrar; si es miembro, puede volver a activarlo desde «Mi perfil».":
     "Their method and recovery codes will be deleted. If they are an administrator, they will have to set up a new one before signing in; if they are a member, they can enable it again from “My profile”.",
-  "Verificación en dos pasos":
-    "Two-step verification",
   "Obligatoria para administradores, también al entrar con Google.":
     "Required for administrators, also when signing in with Google.",
   "Añade un segundo código al entrar con contraseña. Al entrar con Google no se pide: Google ya tiene la suya.":
@@ -192,8 +189,6 @@ export const cuentas: Record<string, string> = {
     "Enable",
   "Generar códigos de recuperación nuevos":
     "Generate new recovery codes",
-  "Desactivar":
-    "Disable",
   "Verificación en dos pasos desactivada.":
     "Two-step verification disabled.",
   "Generar":
@@ -216,8 +211,6 @@ export const cuentas: Record<string, string> = {
     "Enter the 6-digit code we emailed you, or a recovery code.",
   "Escribe el código de 6 dígitos de tu app de autenticación, o un código de recuperación.":
     "Enter the 6-digit code from your authenticator app, or a recovery code.",
-  "Código":
-    "Code",
   "Recordar este dispositivo 14 días":
     "Remember this device for 14 days",
   "Verificar":

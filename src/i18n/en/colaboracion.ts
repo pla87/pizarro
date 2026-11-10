@@ -80,12 +80,7 @@ export const colaboracion: Record<string, string> = {
   "Programó el informe semanal por email": "Scheduled the weekly report by email",
   "Desactivó el informe semanal por email": "Turned off the weekly report by email",
   // Mis tareas
-  "Todas": "All",
-  "Vencidas": "Overdue",
-  "Hoy": "Today",
-  "Esta semana": "This week",
   "Más adelante": "Later",
-  "Sin fecha": "No date",
   "Filtrar mis tareas": "Filter my tasks",
   "No hay tareas en este filtro.": "No tasks in this filter.",
   "Cambió la cadencia en la release a «{to}»": "Changed the release cadence to “{to}”",

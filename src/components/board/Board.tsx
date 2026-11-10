@@ -1,7 +1,7 @@
 "use client";
 
 import { prefetchTaskDetail } from "./taskDetailPrefetch";
-import { announceRemoteChange } from "./remoteChange";
+import { announceOnArrival, announceRemoteChange, settleIncoming, type IncomingChange } from "./remoteChange";
 import { actionThrowMessage } from "@/lib/stale-action";
 import {
   closestCorners, DndContext, type CollisionDetection, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
@@ -353,16 +353,16 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   }, [refresh]);
   // Avisos del servidor (SSE) pendientes de decidir y ids de cambios propios (los que devolvieron mis acciones):
   // el aviso de un cambio propio no refresca (el tablero ya aplicó el resultado) ni se reenvía a la página (los
-  // comentarios abiertos ya muestran el suyo); cualquier otro, sí.
-  const incoming = useRef<{ cid: string | null; change: unknown }[]>([]);
+  // comentarios abiertos ya muestran el suyo); cualquier otro, sí. Los de otras personas se reenvían al llegar
+  // (announceOnArrival) y aquí solo esperan para refrescar el tablero.
+  const incoming = useRef<IncomingChange[]>([]);
   const ownChanges = useRef(new Set<string>());
   const drainIncoming = useCallback(() => {
     if (pending.current > 0 || !incoming.current.length) return;
-    const foreign = incoming.current.filter(({ cid }) => !cid || !ownChanges.current.has(cid));
-    for (const { cid } of incoming.current) if (cid) ownChanges.current.delete(cid);
+    const { announce, refresh: stale } = settleIncoming(incoming.current, ownChanges.current);
     incoming.current = [];
-    for (const { change } of foreign) announceRemoteChange(change);
-    if (foreign.length) refresh();
+    for (const change of announce) announceRemoteChange(change);
+    if (stale) refresh();
   }, [refresh]);
   // Contador de operaciones en curso (evita refrescos intermedios). Sin capturar errores: lo usan las subidas, que informan por excepción.
   const trackRaw = useCallback(async <T,>(p: Promise<T>): Promise<T> => {
@@ -474,8 +474,11 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       } catch {
         // Aviso ilegible: se trata como ajeno y se refresca.
       }
-      // Se reenvía a la página al decidir (drainIncoming), cuando ya se sabe si es de una acción propia.
-      incoming.current.push({ cid, change });
+      // Lo de otra persona se reenvía a la página ya, aunque haya acciones propias en vuelo (una subida larga); lo propio,
+      // al decidir (drainIncoming), cuando ya se sabe si es de una acción de esta pestaña.
+      const announced = announceOnArrival(change, data.currentUserId);
+      if (announced) announceRemoteChange(change);
+      incoming.current.push({ cid, change, announced });
       if (timer) clearTimeout(timer);
       // Con acciones en vuelo se decide al terminar la última (trackRaw), cuando ya se conocen sus ids.
       timer = setTimeout(() => {
@@ -489,7 +492,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       source.close();
       live.open = false;
     };
-  }, [data.project.id, drainIncoming, sseEpoch]);
+  }, [data.project.id, data.currentUserId, drainIncoming, sseEpoch]);
 
   // Refresco ligero de respaldo (por si el canal de avisos no llega) y al volver a la ventana. Al volver no se recarga cada
   // vez: se espacia según el estado del canal en vivo (reglas en lib/focus-refresh.ts).

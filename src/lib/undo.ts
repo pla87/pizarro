@@ -616,6 +616,8 @@ type TaskRestoreOp = Extract<UndoOp, { t: "task.restore" }>;
 const BATCHED: ReadonlySet<UndoOp["t"]> = new Set(["task.set", "task.remove", "task.restore"]);
 /** Tamaño máximo de un lote (filas por sentencia). */
 const BATCH_CHUNK = 500;
+/** Lo que commentNoticesWhere necesita de un comentario para encontrar sus avisos. */
+const COMMENT_NOTICE_SELECT = { id: true, taskId: true, authorId: true, createdAt: true, body: true } as const satisfies Prisma.TaskCommentSelect;
 
 /** Tipo SQL de cada campo restaurable, para el UPDATE … FROM (VALUES …) de los lotes (los valores viajan como texto). */
 const TASK_SQL_TYPE: Record<TaskField, string> = {
@@ -800,9 +802,15 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           await db.subtask.create({ data: op.row });
           break;
         }
+        // Como deleteComment: al quitar o vaciar un comentario se vacía el extracto de los avisos que creó (si no,
+        // seguirían mostrando su texto), y al devolverlo vuelven a mostrarlo. Se buscan por commentId (sin clave ajena:
+        // sobrevive al borrado) y, los antiguos sin él, por la heurística de commentNoticesWhere (con extracto vacío
+        // cuando ya se vaciaron).
         case "comment.remove": {
+          const c = await db.taskComment.findFirst({ where: { id: op.id, task: { projectId } }, select: COMMENT_NOTICE_SELECT });
           const { count } = await db.taskComment.deleteMany({ where: { id: op.id, task: { projectId } } });
           if (!count) miss++;
+          else if (c) await db.notification.updateMany({ where: commentNoticesWhere(c), data: { excerpt: "" } });
           break;
         }
         case "comment.restore": {
@@ -811,20 +819,25 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           const author = r.authorId && (await db.user.count({ where: { id: r.authorId } })) ? r.authorId : null;
           const parentId = r.parentId && (await db.taskComment.count({ where: { id: r.parentId } })) ? r.parentId : null;
           await db.taskComment.create({ data: { ...r, parentId, authorId: author, createdAt: new Date(r.createdAt), editedAt: date(r.editedAt), deletedAt: date(r.deletedAt) } });
+          if (!r.deletedAt) await db.notification.updateMany({ where: commentNoticesWhere({ ...r, createdAt: new Date(r.createdAt), body: "" }), data: { excerpt: excerpt(r.body) } });
           break;
         }
         case "comment.undelete": {
+          const c = await db.taskComment.findFirst({ where: { id: op.id, deletedAt: { not: null }, task: { projectId } }, select: COMMENT_NOTICE_SELECT });
           const { count } = await db.taskComment.updateMany({ where: { id: op.id, deletedAt: { not: null }, task: { projectId } }, data: { body: op.body, deletedAt: null } });
           if (!count) miss++;
+          else if (c) await db.notification.updateMany({ where: commentNoticesWhere({ ...c, body: "" }), data: { excerpt: excerpt(op.body) } });
           break;
         }
         case "comment.softdelete": {
+          const c = await db.taskComment.findFirst({ where: { id: op.id, deletedAt: null, task: { projectId } }, select: COMMENT_NOTICE_SELECT });
           const { count } = await db.taskComment.updateMany({ where: { id: op.id, deletedAt: null, task: { projectId } }, data: { body: "", deletedAt: new Date() } });
           if (!count) miss++;
+          else if (c) await db.notification.updateMany({ where: commentNoticesWhere(c), data: { excerpt: "" } });
           break;
         }
         case "comment.set": {
-          const c = await db.taskComment.findFirst({ where: { id: op.id, deletedAt: null, task: { projectId } }, select: { id: true, taskId: true, authorId: true, createdAt: true, body: true } });
+          const c = await db.taskComment.findFirst({ where: { id: op.id, deletedAt: null, task: { projectId } }, select: COMMENT_NOTICE_SELECT });
           const { count } = await db.taskComment.updateMany({ where: { id: op.id, deletedAt: null, task: { projectId } }, data: { body: op.body, editedAt: date(op.editedAt) } });
           if (!count) miss++;
           // Los avisos del comentario vuelven a mostrar el texto que queda (si no, al borrarlo seguirían con el deshecho).

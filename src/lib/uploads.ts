@@ -147,16 +147,25 @@ async function processImageNow(input: Buffer): Promise<ProcessedImage> {
 
 async function writeAtomic(file: string, data: Buffer): Promise<void> {
   const tmp = `${file}.${process.pid}.tmp`;
-  await writeFile(tmp, data);
-  await rename(tmp, file);
+  try {
+    await writeFile(tmp, data);
+    await rename(tmp, file);
+  } catch (err) {
+    // Disco lleno o similar: no se deja el temporal a medias.
+    await rm(tmp, { force: true }).catch(() => {});
+    throw err;
+  }
 }
 
 export async function saveAttachmentFiles(id: string, image: ProcessedImage): Promise<void> {
   await mkdir(uploadDir(), { recursive: true });
-  await Promise.all([
+  // Se esperan las dos escrituras aunque una falle: quien llama borra los ficheros al fallar, y la otra no debe
+  // terminar después (con su rename) y dejar un fichero huérfano.
+  const results = await Promise.allSettled([
     writeAtomic(attachmentPath(id, "full"), image.full),
     writeAtomic(attachmentPath(id, "thumb"), image.thumb),
   ]);
+  for (const r of results) if (r.status === "rejected") throw r.reason;
 }
 
 /** Guarda un adjunto que no es imagen, sin transformarlo. */

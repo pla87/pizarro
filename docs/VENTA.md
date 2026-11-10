@@ -1,6 +1,6 @@
 # Guía de venta de la licencia (Stripe, sin programar)
 
-Esta guía explica cómo cobrar la licencia comercial de Pizarro (100 € **más IVA**, pago único por servidor) con tarjeta en la web y con factura automática, usando solo el panel de Stripe. No hace falta escribir código: al final se pega un enlace en un fichero del proyecto.
+Esta guía explica cómo cobrar la licencia comercial de Pizarro (100 € **más IVA**, pago único por servidor; el uso personal y el educativo son gratuitos) con tarjeta en la web y con factura automática, usando solo el panel de Stripe. No hace falta escribir código: al final se pega un enlace en un fichero del proyecto.
 
 > Los pasos y nombres de menú de Stripe cambian de vez en cuando. Si algo no coincide exactamente, busca la opción por su nombre en el panel (o en su ayuda). No guardes en el repositorio ninguna clave ni secreto de Stripe: para esto no hacen falta, solo se usa un enlace público.
 
@@ -15,6 +15,8 @@ Esta guía es técnica, no es asesoramiento fiscal. Antes de publicar el enlace 
 5. Que la **factura que genera Stripe** cumple los requisitos de factura que exige su caso (datos del emisor, numeración, mención de la inversión del sujeto pasivo cuando proceda), o si prefiere emitirla con su propio sistema.
 6. Cómo se declaran los ingresos que Stripe liquida en la cuenta bancaria, y la **comisión** de Stripe (que no es el precio de la factura).
 7. Qué cuenta de Stripe usar (a nombre del autor o de la sociedad) y el país de la cuenta.
+
+Y con un abogado, el texto de `LICENSE.md`. En especial, las definiciones de **centro educativo** y **uso educativo** (sección 2), que son gratuitos: incluyen los centros privados con ánimo de lucro (academias) y la gestión interna del propio centro, permiten que la administración de la que depende un centro público instale Pizarro para sus centros, y dejan fuera la actividad comercial ajena a la enseñanza y la formación interna de las empresas. Conviene confirmar que esos límites se entienden sin ambigüedad (por ejemplo, el caso de un profesor particular o formador autónomo, que hoy no se menciona y cuenta como profesional).
 
 ## 1. Crear la cuenta de Stripe
 
@@ -107,7 +109,7 @@ La web del producto es un sitio estático (sin cookies ni analítica, sin recurs
 
 ### Pasos del propietario (una sola vez)
 
-1. **Activar Pages con origen «GitHub Actions» (imprescindible):** en el repositorio, **Settings → Pages → Build and deployment → Source** y elige **GitHub Actions** en el desplegable. **No** elijas «Deploy from a branch»: con esa opción GitHub no usa la web generada, sino que publica el `README.md` del repositorio con Jekyll (se ve el README con un tema genérico en lugar de la presentación de Pizarro). Si ya estaba en «Deploy from a branch», cámbialo a **GitHub Actions**; no hace falta borrar nada.
+1. **Activar Pages con origen «GitHub Actions» (imprescindible):** en el repositorio, **Settings → Pages → Build and deployment → Source** y elige **GitHub Actions** en el desplegable. **No** elijas «Deploy from a branch»: con esa opción GitHub no usa la web generada, sino que publica el `README.md` del repositorio con Jekyll (se ve el README con un tema genérico en lugar de la presentación de Pizarro). Si ya estaba en «Deploy from a branch», cámbialo a **GitHub Actions**. Si GitHub llegó a crear un fichero `CNAME` en la raíz del repositorio (un commit «Create CNAME» al poner el dominio), sobra y se puede borrar: la web lleva el suyo en `site/static/CNAME`.
    Después lanza el workflow: **Actions → Web → Run workflow** (rama `main`) y pulsa el botón verde **Run workflow**. También se lanza solo al subir a `main` un cambio en `site/` o en sus textos.
 2. **DNS en el registrador del dominio** `getpizarro.com` (en su panel de DNS):
    - Cuatro registros **A** del dominio raíz (`@`) a `185.199.108.153`, `185.199.109.153`, `185.199.110.153` y `185.199.111.153`.

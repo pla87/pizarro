@@ -46,7 +46,7 @@ export async function removeLicense() {
 }
 
 /**
- * Declara que la instalación es de uso personal (o retira la declaración). Oculta para siempre el recordatorio de
+ * Declara que la instalación es de uso personal o educativo (o retira la declaración). Oculta para siempre el recordatorio de
  * licencia en toda la instalación. Si había una licencia registrada, se quita (los dos estados se excluyen).
  */
 export async function setPersonalUseDeclared(personal: boolean) {
@@ -56,12 +56,12 @@ export async function setPersonalUseDeclared(personal: boolean) {
     if (flag) {
       const rec = (await getPersonalUse()) ?? { date: today() };
       await setPersonalUse(rec);
-      describeAction("Declaró la instalación de uso personal");
+      describeAction("Declaró la instalación de uso personal o educativo");
       revalidatePath("/", "layout");
       return rec;
     }
     await setPersonalUse(null);
-    describeAction("Retiró la declaración de uso personal");
+    describeAction("Retiró la declaración de uso personal o educativo");
     revalidatePath("/", "layout");
     return null;
   });

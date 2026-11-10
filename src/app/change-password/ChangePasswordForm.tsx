@@ -4,10 +4,11 @@ import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { logout, setNewPassword } from "@/actions/auth";
+import { clearDraftsOnLogout } from "@/components/board/drafts";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useT } from "@/i18n/client";
 
-export function ChangePasswordForm({ email, googleOnly = false }: { email: string; googleOnly?: boolean }) {
+export function ChangePasswordForm({ email, googleOnly = false, clearAllDraftsOnLogout = false }: { email: string; googleOnly?: boolean; clearAllDraftsOnLogout?: boolean }) {
   const t = useT();
   const router = useRouter();
   const [password, setPassword] = useState("");
@@ -45,7 +46,7 @@ export function ChangePasswordForm({ email, googleOnly = false }: { email: strin
         {pending && <Loader2 size={16} className="animate-spin" />}
         {t("Guardar contraseña")}
       </button>
-      <button type="button" className="btn-secondary w-full" disabled={pending} onClick={() => start(() => logout())}>{t("Cerrar sesión")}</button>
+      <button type="button" className="btn-secondary w-full" disabled={pending} onClick={() => { clearDraftsOnLogout(clearAllDraftsOnLogout); start(() => logout()); }}>{t("Cerrar sesión")}</button>
     </form>
   );
 }
