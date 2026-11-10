@@ -14,7 +14,7 @@ import { useToast } from "./ui/Toast";
 
 const SEEN_AFTER_MS = 3000;
 
-/** Evento de ventana: se registró la licencia o se declaró el uso personal (Administración → Licencia). */
+/** Evento de ventana: se registró la licencia o se declaró el uso personal o educativo (Administración → Licencia). */
 const LICENSE_RESOLVED_EVENT = "pizarro:license-resolved";
 
 /** Cierra el recordatorio si está a la vista (sigue montado al ir a Administración → Licencia y volver). */
@@ -22,18 +22,22 @@ export function licenseResolved(): void {
   window.dispatchEvent(new Event(LICENSE_RESOLVED_EVENT));
 }
 
-/** Texto de la confirmación «Es uso personal» (también la usa Administración → Licencia). */
+/**
+ * Texto de la confirmación «Uso personal o educativo» (también la usa Administración → Licencia). Se guarda igual que
+ * la antigua declaración de uso personal (AppState «licensePersonalUse»): los dos usos son gratuitos.
+ */
 export function personalUseConfirm(t: T) {
   return {
-    title: t("¿Es uso personal?"),
+    title: t("¿Es uso personal o educativo?"),
     message: (
       <div className="space-y-2">
         <p>{t("Uso personal es el de una persona en su propio servidor, para fines personales, domésticos o familiares, sin fines comerciales ni profesionales.")}</p>
-        <p>{t("Si usas Pizarro en una empresa, como autónomo o en cualquier organización (también asociaciones y centros educativos), necesitas una licencia.")}</p>
+        <p>{t("Uso educativo es el de un centro de enseñanza, público o privado (colegio, instituto, universidad, centro de formación profesional, academia…), y de su profesorado y alumnado, para dar clase, aprender, investigar u organizar el propio centro.")}</p>
+        <p>{t("Si usas Pizarro en una empresa, como autónomo o en cualquier otra organización (también asociaciones y administraciones), necesitas una licencia.")}</p>
         <p>{t("El recordatorio dejará de salir para todos los administradores. Puedes cambiarlo en Administración → Licencia.")}</p>
       </div>
     ),
-    confirmLabel: t("Sí, es uso personal"),
+    confirmLabel: t("Sí, es uso personal o educativo"),
   };
 }
 
@@ -88,7 +92,7 @@ export function LicenseNudge({ buyHref }: { buyHref: string }) {
       const res = await setPersonalUseDeclared(true).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
       setOpen(false);
-      toast(t("Anotado: uso personal. No volverá a salir el recordatorio."), "success");
+      toast(t("Anotado: uso personal o educativo. No volverá a salir el recordatorio."), "success");
       router.refresh();
     });
   };
@@ -102,11 +106,11 @@ export function LicenseNudge({ buyHref }: { buyHref: string }) {
       <KeyRound size={15} className="mt-1 shrink-0 max-sm:hidden text-brand-600 dark:text-brand-300" aria-hidden />
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
         <p className="mr-1 min-w-0">
-          {t("¿Usas Pizarro en una empresa o para trabajar? Necesitas una licencia ({price} € + IVA, pago único). Gratis para uso personal.", { price: LICENSE_PRICE_EUR })}
+          {t("¿Usas Pizarro en una empresa o para trabajar? Necesitas una licencia ({price} € + IVA, pago único). Gratis para uso personal y educativo.", { price: LICENSE_PRICE_EUR })}
         </p>
         <span className="flex flex-wrap items-center gap-1">
           <Link href="/admin/license" className={btn} onClick={later} data-testid="license-nudge-have">{t("Ya tengo licencia")}</Link>
-          <button type="button" className={btn} onClick={personal} disabled={pending} data-testid="license-nudge-personal">{t("Es uso personal")}</button>
+          <button type="button" className={btn} onClick={personal} disabled={pending} data-testid="license-nudge-personal">{t("Uso personal o educativo")}</button>
           <a
             href={buyHref}
             {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}

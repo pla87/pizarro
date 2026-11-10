@@ -6,13 +6,12 @@ import type { T } from "../i18n/shared";
 
 /** Icono de cada función de la lista compacta (los dibuja scripts/build-site.mjs). */
 export type SiteIcon =
-  | "calendar" | "inbox" | "docs" | "report" | "flag" | "repeat" | "mic" | "phone" | "google" | "undo" | "palette" | "globe"
-  | "lock" | "shield" | "eye" | "export";
+  | "calendar" | "inbox" | "docs" | "report" | "flag" | "repeat" | "google" | "columns" | "lock" | "shield" | "eye" | "export";
 
 export function siteText(t: T, priceEur: number) {
   return {
     metaTitle: t("Pizarro: un tablero Kanban sencillo en tu propio servidor"),
-    metaDescription: t("Pizarro es un tablero Kanban sencillo para equipos pequeños y familias. Pagas una vez y es tuyo; tus datos se quedan en tu servidor. Gratis para uso personal."),
+    metaDescription: t("Pizarro es un tablero Kanban sencillo para equipos pequeños y familias. Pagas una vez y es tuyo; tus datos se quedan en tu servidor. Gratis para uso personal y educativo."),
     skip: t("Saltar al contenido"),
     navFeatures: t("Funciones"),
     navWho: t("Para quién"),
@@ -25,10 +24,10 @@ export function siteText(t: T, priceEur: number) {
     // Portada
     eyebrow: t("Kanban en tu servidor · pago único"),
     heroTitle: t("El tablero sencillo para equipos pequeños y familias"),
-    heroLead: t("Pizarro es un Kanban que se instala en tu propio servidor: tareas, comentarios y notas de versión, sin suscripción ni cuota por persona. Gratis para uso personal y {price} € una sola vez para trabajar.", { price: priceEur }),
+    heroLead: t("Pizarro es un Kanban que se instala en tu propio servidor: tareas, comentarios y notas de versión, sin suscripción ni cuota por persona. Para empresas y profesionales, {price} € una sola vez.", { price: priceEur }),
     heroCta: t("Pruébalo gratis"),
     heroSecondary: t("Ver cómo funciona"),
-    heroPoints: [t("Pago único"), t("En tu servidor"), t("Sin rastreadores")],
+    heroPoints: [t("Gratis para uso personal y educativo"), t("En tu servidor"), t("Sin rastreadores")],
     heroAlt: t("El tablero de Pizarro con las columnas Por hacer, En curso, Revisión, Siguiente release y Hecho, y tarjetas con responsable, fecha, etiquetas y subtareas"),
 
     // Problema y solución
@@ -51,7 +50,7 @@ export function siteText(t: T, priceEur: number) {
         kicker: t("Tareas"),
         title: t("Cada tarea, con todo lo que necesita"),
         text: t("Cada columna es una fase y cada tarjeta, una tarea. Arrástralas según avanzan; al abrir una tienes la descripción, las subtareas, los archivos y la conversación en el mismo sitio."),
-        points: [t("Subtareas con barra de progreso"), t("Tipos, etiquetas y prioridad"), t("Fechas límite que cambian de color al acercarse"), t("Tareas que se repiten solas")],
+        points: [t("Cada tipo de tarea trae sus subtareas y su texto de partida"), t("Coste, horas, cliente o fecha de inicio, solo si los usas")],
         alt: t("Detalle de una tarea con descripción, subtareas a medio hacer, etiquetas, fecha límite y comentarios"),
       },
       {
@@ -67,7 +66,7 @@ export function siteText(t: T, priceEur: number) {
         kicker: t("Colaboración"),
         title: t("En equipo, cada uno desde su sitio"),
         text: t("Comenta en la tarea y menciona a alguien con @: le llega el aviso en la app o por email. Lo que cambia otra persona aparece en tu pantalla al momento, sin recargar."),
-        points: [t("Comentarios con respuestas y menciones"), t("Avisos en la app, por email o en un resumen diario"), t("Sigue una tarea para no perderte nada"), t("Ctrl+Z deshace cualquier cambio")],
+        points: [t("Comentarios con respuestas y menciones"), t("Avisos en la app, por email o en un resumen diario"), t("Un aviso cuando una tarea lleva días esperando a alguien")],
         alt: t("Comentarios de una tarea con una respuesta y una mención a medio escribir que sugiere a una persona del equipo"),
       },
     ],
@@ -100,12 +99,8 @@ export function siteText(t: T, priceEur: number) {
       { icon: "report" as SiteIcon, title: t("Informe PDF"), text: t("El estado del proyecto en una página, también por email cada semana.") },
       { icon: "flag" as SiteIcon, title: t("Entregables"), text: t("Hitos con fecha y su avance, en el calendario y en el informe.") },
       { icon: "repeat" as SiteIcon, title: t("Tareas que se repiten"), text: t("Cada día, cada semana o cada mes, sin volver a crearlas.") },
-      { icon: "mic" as SiteIcon, title: t("Dictado por voz"), text: t("Crea y describe tareas hablando, sin teclear.") },
-      { icon: "phone" as SiteIcon, title: t("App en el móvil"), text: t("Se instala desde el navegador como una app, en Android, iPhone y escritorio.") },
       { icon: "google" as SiteIcon, title: t("Google Docs y Sheets"), text: t("Crea un documento desde la tarea y queda enlazado en ella.") },
-      { icon: "undo" as SiteIcon, title: t("Deshacer"), text: t("Mover, borrar o archivar: todo se puede deshacer.") },
-      { icon: "palette" as SiteIcon, title: t("Temas y colores"), text: t("Claro u oscuro, y el color de acento que prefiera cada persona.") },
-      { icon: "globe" as SiteIcon, title: t("Español e inglés"), text: t("Cada persona usa Pizarro en su idioma.") },
+      { icon: "columns" as SiteIcon, title: t("Columnas con función"), text: t("Una columna puede sumar el presupuesto, juntar las subtareas en una lista o sacar el PDF de la semana.") },
     ],
 
     // Para quién
@@ -121,14 +116,14 @@ export function siteText(t: T, priceEur: number) {
     // Precio
     pricingTitle: t("Un precio, una sola vez"),
     pricingLead: t("Las dos modalidades tienen todas las funciones: solo cambia para qué usas Pizarro."),
-    freeTitle: t("Gratis para uso personal"),
+    freeTitle: t("Gratis para uso personal y educativo"),
     freePrice: t("0 €"),
-    freeText: t("Para ti y tu familia, sin fines comerciales."),
+    freeText: t("Para ti y tu familia sin fines comerciales, y para la enseñanza: colegios, institutos, universidades y academias."),
     freePer: t("para siempre"),
     freeItems: [t("Todas las funciones, sin límite de tiempo"), t("Actualizaciones gratis"), t("En tu propio servidor")],
     freeCta: t("Instalar gratis"),
     paidTitle: t("Licencia para cualquier otro uso"),
-    paidText: t("Empresas, autónomos y profesionales, asociaciones, centros educativos y cualquier otra organización."),
+    paidText: t("Empresas, autónomos y profesionales, asociaciones, administraciones y cualquier otra organización."),
     paidItems: [t("Sin suscripción ni cuota por usuario"), t("Todas las actualizaciones futuras, gratis"), t("Un servidor, tantas personas como quieras"), t("Sin soporte incluido")],
     buy: t("Comprar licencia"),
     soon: t("Próximamente"),
@@ -151,7 +146,7 @@ export function siteText(t: T, priceEur: number) {
 
     // Pie
     footerTagline: t("Un tablero Kanban sencillo para equipos pequeños y familias, en tu propio servidor."),
-    footerSource: t("Pizarro es software de código disponible: puedes leer todo el código. Gratis para uso personal; para cualquier otro uso necesitas licencia."),
+    footerSource: t("Pizarro es software de código disponible: puedes leer todo el código. Gratis para uso personal y educativo; para cualquier otro uso necesitas licencia."),
     footerProduct: t("Producto"),
     footerDocs: t("Documentación"),
     footerProject: t("Proyecto"),
@@ -164,7 +159,7 @@ export function siteText(t: T, priceEur: number) {
 
     // Licencia y 404
     licenseTitle: t("Licencia de Pizarro"),
-    licenseDescription: t("Licencia de código disponible: gratis para uso personal y de pago único por servidor para empresas y profesionales."),
+    licenseDescription: t("Licencia de código disponible: gratis para uso personal y educativo, y de pago único por servidor para empresas y profesionales."),
     notFoundTitle: t("Página no encontrada"),
     notFoundText: t("Esta dirección no existe en getpizarro.com."),
     notFoundHome: t("Ir al inicio"),

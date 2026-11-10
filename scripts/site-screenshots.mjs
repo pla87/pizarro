@@ -14,6 +14,8 @@
 //   4. Capturas:        node --env-file=.env scripts/site-screenshots.mjs [--base http://localhost:3252] [--only es]
 //      Chromium: el de Playwright (variable CHROME o /opt/pw-browsers/...); playwright-core y sharp vienen en
 //      node_modules. Para comprobar sin escribir en site/static: --out /tmp/capturas.
+//      Solo las imágenes para redes (og.png y og-en.png, p. ej. al cambiar su texto), sin base de datos ni app,
+//      con la captura del tablero que ya hay en site/static/img:  node scripts/site-screenshots.mjs --og-only
 //   5. Borra la base de datos de pruebas.
 //
 // Las fechas son relativas a hoy (el calendario muestra el mes en curso). Los textos de la demo están aquí abajo
@@ -34,11 +36,12 @@ const BASE = arg("base", "http://localhost:3252").replace(/\/$/, "");
 const OUT = arg("out", join(root, "site/static/img"));
 const OG_OUT = arg("out", join(root, "site/static"));
 const ONLY = arg("only", "");
+const OG_ONLY = process.argv.includes("--og-only");
 const CHROME = process.env.CHROME || "/opt/pw-browsers/chromium-1243/chrome-linux64/chrome";
 const PASSWORD = "demo-site-Pizarro-2026";
 
-if (!process.env.DATABASE_URL) throw new Error("Falta DATABASE_URL (node --env-file=.env scripts/site-screenshots.mjs)");
-if (/railway|amazonaws|rds\.|supabase|neon\.tech/.test(process.env.DATABASE_URL)) throw new Error("DATABASE_URL parece una base de datos real: usa una local de pruebas");
+if (!OG_ONLY && !process.env.DATABASE_URL) throw new Error("Falta DATABASE_URL (node --env-file=.env scripts/site-screenshots.mjs)");
+if (/railway|amazonaws|rds\.|supabase|neon\.tech/.test(process.env.DATABASE_URL ?? "")) throw new Error("DATABASE_URL parece una base de datos real: usa una local de pruebas");
 
 const { Client } = require("pg");
 const bcrypt = require("bcryptjs");
@@ -442,9 +445,9 @@ async function capture(browser, lang, ctx) {
 /** Imagen Open Graph (1200x630) hecha con la captura real del tablero. */
 async function ogImage(browser, lang) {
   const isEs = lang === "es";
-  const img = await sharp(join(OUT, `board-${lang}-light-2400.webp`)).png().toBuffer();
+  const img = await sharp(join(OG_ONLY ? join(root, "site/static/img") : OUT, `board-${lang}-light-2400.webp`)).png().toBuffer();
   const title = isEs ? "El tablero Kanban sencillo, en tu propio servidor." : "The simple Kanban board, on your own server.";
-  const sub = isEs ? "Para equipos pequeños y familias · Pago único · Gratis para uso personal" : "For small teams and families · One-off payment · Free for personal use";
+  const sub = isEs ? "Para equipos pequeños y familias · Pago único · Gratis para uso personal y educativo" : "For small teams and families · One-off payment · Free for personal and educational use";
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     html,body{margin:0;width:1200px;height:630px;overflow:hidden;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
     body{background:radial-gradient(1200px 500px at 85% -10%,#6366f1 0,transparent 60%),linear-gradient(135deg,#1e1b4b 0%,#312e81 55%,#4338ca 100%);color:#fff;position:relative}
@@ -470,15 +473,32 @@ async function ogImage(browser, lang) {
   shots.push(file.replace(root + "/", ""));
 }
 
+const launch = (lang) => {
+  // Un navegador por idioma: --lang fija también el formato de los campos de fecha.
+  const lc = lang === "es" ? "es_ES" : "en_GB";
+  return chromium.launch({ executablePath: CHROME, args: [`--lang=${lc.replace("_", "-")}`], env: { ...process.env, LANG: `${lc}.UTF-8`, LANGUAGE: lc, LC_ALL: `${lc}.UTF-8` } });
+};
+if (OG_ONLY) {
+  for (const lang of ["es", "en"]) {
+    if (ONLY && ONLY !== lang) continue;
+    const browser = await launch(lang);
+    try {
+      await ogImage(browser, lang);
+    } finally {
+      await browser.close();
+    }
+  }
+  console.log(`Imágenes para redes:\n  ${shots.join("\n  ")}`);
+  process.exit(0);
+}
+
 const db = new Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
 try {
   for (const lang of ["es", "en"]) {
     if (ONLY && ONLY !== lang) continue;
     const ctx = await seed(db, DEMO[lang]);
-    // Un navegador por idioma: --lang fija también el formato de los campos de fecha.
-    const lc = lang === "es" ? "es_ES" : "en_GB";
-    const browser = await chromium.launch({ executablePath: CHROME, args: [`--lang=${lc.replace("_", "-")}`], env: { ...process.env, LANG: `${lc}.UTF-8`, LANGUAGE: lc, LC_ALL: `${lc}.UTF-8` } });
+    const browser = await launch(lang);
     try {
       await capture(browser, lang, ctx);
       await ogImage(browser, lang);

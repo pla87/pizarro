@@ -70,4 +70,23 @@ describe("web del producto (getpizarro.com)", () => {
     assert.match(siteText(en, 100).heroLead, /€100 once/);
     assert.match(licenseFaq(en, 100)[1]?.a ?? "", /€100 \+ VAT/);
   });
+
+  test("gratis para uso personal y educativo; nada de funciones básicas de relleno", () => {
+    for (const locale of ["es", "en"] as const) {
+      const t = makeT(locale);
+      const s = siteText(t, 100);
+      const free = locale === "es" ? /uso personal y educativo/ : /personal and educational use/;
+      assert.match(s.freeTitle, free);
+      assert.match(s.heroPoints[0] ?? "", free);
+      assert.match(s.footerSource, free);
+      assert.match(s.licenseDescription, free);
+      // Los centros educativos ya no aparecen entre quienes pagan, y su pregunta va la última (build-site la elige por posición).
+      assert.doesNotMatch(s.paidText, locale === "es" ? /educativ/ : /school|education/i);
+      const faq = licenseFaq(t, 100);
+      assert.equal(faq.length, 5);
+      assert.match(faq[4]?.q ?? "", locale === "es" ? /centros educativos/ : /schools/);
+      const all = JSON.stringify(s);
+      assert.doesNotMatch(all, /Ctrl\+Z|Deshacer|\bUndo\b/);
+    }
+  });
 });
