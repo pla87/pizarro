@@ -4,7 +4,8 @@
 // detalle (det: adjuntos por nombre y contador, subtareas pegadas, https automático, confirmar al cerrar con cambios) y de
 // la ronda 44 (r44: micrófono del título solo al editarlo; columnas que siguen por abajo, sin esquinas inferiores) y de
 // la ronda 46 (r46: «Nuevo proyecto» con un solo desplegable; cerrar el detalle con un comentario o un renombrado a medias;
-// borradores de comentarios al cerrar sesión).
+// borradores de comentarios al cerrar sesión) y de la ronda 47 (r47: abrir un diálogo en un tablero recién abierto no lo
+// devuelve al esqueleto de carga).
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -14,7 +15,7 @@ import * as U from "./qa/ui.mjs";
 const { COL, sleep } = L;
 const APP = process.env.APP_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "b1,f3,m1,f1,dlg,vt,desc,com,det,r44,r46").split(",");
+const only = (process.env.PART || "b1,f3,m1,f1,dlg,vt,desc,com,det,r44,r46,r47").split(",");
 
 await L.prepareUsers();
 
@@ -1351,6 +1352,73 @@ if (only.includes("r46")) {
   L.eq("R46a móvil: «Descartar cambios» deja el comentario como estaba", await comBody(), "Comentario original");
   L.assertNoErrors("R46 móvil", [m]);
   await m.ctx.close();
+}
+
+// ---------------------------------------------------------------- R47
+if (only.includes("r47")) {
+  L.scenario("R47: abrir diálogos, filtros o la vista de lista en un tablero recién abierto no lo devuelve al esqueleto de carga");
+  await L.cleanBoard();
+  await L.seedTasks(COL.backlog, ["R47 tarea"]);
+  await L.seedTasks(COL.next, ["R47 release"]);
+  // Vigía en la página: anota cada momento en que aparece el esqueleto del tablero (loading.tsx) o en que dejan de verse
+  // la cabecera de la columna Backlog (vista de tablero) o el botón «Nueva tarea» (cualquier vista). Un Suspense que cae
+  // hasta el loading.tsx esconde el tablero con display:none sin quitarlo del DOM: por eso se mira si se ve, no si está.
+  const init = () => {
+    const state = { armed: false, cols: true, bad: [] };
+    window.__r47 = state;
+    const look = () => {
+      if (!state.armed) return;
+      const skeleton = document.querySelector("div.w-72.animate-pulse");
+      const visible = (sel) => { const el = document.querySelector(sel); return !!el && el.checkVisibility(); };
+      const problems = [skeleton && "esqueleto", state.cols && !visible('[aria-label="Backlog"]') && "sin columnas", !visible('button[aria-label="Nueva tarea"]') && "sin cabecera"].filter(Boolean);
+      if (problems.length) state.bad.push(problems.join("+"));
+    };
+    new MutationObserver(look).observe(document, { subtree: true, childList: true, attributes: true });
+    const frame = () => { look(); requestAnimationFrame(frame); };
+    requestAnimationFrame(frame);
+  };
+  const s = await L.session({ viewport: { width: 1400, height: 900 }, init });
+  const p = s.page;
+  // Los trozos de JavaScript que aún no ha descargado el tablero llegan con retraso (como en una red real): sin esto, en
+  // local se descargan antes de que se note nada.
+  const slowChunks = (route) => sleep(800).then(() => route.continue()).catch(() => {}); // ya resuelta al quitar la ruta
+  const cases = [
+    ["«Nueva tarea» de la cabecera", () => p.getByRole("button", { name: "Nueva tarea", exact: true }).click()],
+    ["«+» de una columna", () => p.getByRole("button", { name: `Añadir tarea en ${COL.backlog}` }).click()],
+    ["el atajo Alt+N", () => p.keyboard.press("Alt+n")],
+    ["el detalle de una tarea", () => L.cardLoc(p, "R47 tarea").click()],
+    ["«Generar Release»", () => p.getByRole("button", { name: "Generar Release" }).first().click()],
+    ["«Varias tareas»", () => p.getByRole("button", { name: "Varias tareas" }).click()],
+    ["«Archivadas»", () => p.getByRole("button", { name: "Archivadas", exact: true }).click()],
+    ["los filtros", () => p.getByRole("button", { name: "Filtros" }).first().click()],
+  ];
+  for (const [label, act] of cases) {
+    await L.reload(p);
+    await p.route("**/_next/static/chunks/**", slowChunks);
+    await p.evaluate(() => { window.__r47.bad = []; window.__r47.cols = true; window.__r47.armed = true; });
+    await act();
+    const opened = await U.dialog(p).waitFor({ timeout: 8000 }).then(() => true, () => false);
+    await sleep(300);
+    const bad = await p.evaluate(() => { window.__r47.armed = false; return window.__r47.bad; });
+    await p.unroute("**/_next/static/chunks/**", slowChunks);
+    L.check(`R46M4: ${label} abre su diálogo`, opened);
+    L.eq(`R46M4: ${label}: el tablero no vuelve al esqueleto de carga (las cabeceras de columna se ven en todo momento)`, [...new Set(bad)], []);
+    await U.closeDialog(p);
+  }
+  // Cambiar de vista: en la lista no hay columnas, pero la cabecera del tablero sigue y no sale el esqueleto.
+  await L.reload(p);
+  await p.route("**/_next/static/chunks/**", slowChunks);
+  await p.evaluate(() => { window.__r47.bad = []; window.__r47.cols = false; window.__r47.armed = true; });
+  await p.getByRole("button", { name: "Ver como lista" }).click();
+  await sleep(1200);
+  await p.getByRole("button", { name: "Ver como tablero" }).click();
+  await L.colLoc(p, COL.backlog).waitFor();
+  await sleep(1200);
+  const viewBad = await p.evaluate(() => { window.__r47.armed = false; return window.__r47.bad; });
+  await p.unroute("**/_next/static/chunks/**", slowChunks);
+  L.eq("R46M4: cambiar a la lista y volver al tablero no pasa por el esqueleto de carga", [...new Set(viewBad)], []);
+  L.assertNoErrors("R47", [s]);
+  await s.ctx.close();
 }
 
 await L.closeBrowser(); await L.closeDb();
