@@ -29,6 +29,15 @@ export async function lockColumns(tx: Tx, columnIds: string[]): Promise<void> {
   }
 }
 
+/**
+ * Bloquea las filas de esas tareas hasta el final de la transacción, en orden de id (como el despliegue de una
+ * release). Un UPDATE … WHERE id IN (…) las bloquea en el orden en que las recorre, que puede ser cualquiera: dos
+ * acciones en bloque sobre las mismas tareas se interbloquearían (40P01) en vez de esperar una a la otra.
+ */
+export async function lockTaskRows(tx: Tx, ids: string[]): Promise<void> {
+  if (ids.length) await tx.$queryRaw`SELECT "id" FROM "Task" WHERE "id" = ANY(${ids}::text[]) ORDER BY "id" FOR UPDATE`;
+}
+
 /** Última posición de la columna (todas sus tareas, salvo `exclude`), o null si no hay ninguna. */
 export async function lastPositionIn(tx: Tx, columnId: string, exclude?: string): Promise<number | null> {
   const last = await tx.task.findFirst({

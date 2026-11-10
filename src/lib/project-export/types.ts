@@ -222,10 +222,6 @@ export const projectDataSchema = z.object({
 });
 
 export type ProjectExportData = z.infer<typeof projectDataSchema>;
-export type ExportUser = z.infer<typeof userSchema>;
-export type ExportTask = z.infer<typeof taskSchema>;
-export type ExportRelease = z.infer<typeof releaseSchema>;
-export type ExportDocument = z.infer<typeof documentSchema>;
 
 export const COUNT_KEYS = ["columns", "kinds", "labels", "deliverables", "tasks", "archivedTasks", "subtasks", "comments", "taskAttachments", "releases", "releaseAttachments", "documents", "events", "files"] as const;
 export type ExportCounts = Record<(typeof COUNT_KEYS)[number], number>;

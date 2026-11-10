@@ -10,7 +10,7 @@ export async function uiOrder(page, colName) {
   return (await colLoc(page, colName).locator("[data-task-card] p").allTextContents()).map((s) => s.trim());
 }
 /** Espera a que no haya guardados pendientes (red en reposo + margen corto para el render). */
-export async function settle(page) {
+export async function settle(_page) {
   await sleep(500);
 }
 /** Comprueba (con reintentos: el log se escribe tras la respuesta) que existe un AppLog con ese mensaje. */

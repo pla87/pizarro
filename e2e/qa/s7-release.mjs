@@ -45,7 +45,7 @@ export async function run() {
   const txt = path.join(dir, "notas.txt"); fs.writeFileSync(txt, "Notas de la release\nlínea 2\n");
   await L.seedTasks(COL.prod, ["Previa"]);
   await L.seedTasks(COL.backlog, ["Suelta"]);
-  const [alpha, beta, gamma, fija] = await L.seedTasks(COL.next, ["Alpha", "Beta", "Gamma", "Fija"]);
+  const [alpha, beta, , fija] = await L.seedTasks(COL.next, ["Alpha", "Beta", "Gamma", "Fija"]);
   await L.q(`UPDATE "Task" SET "kindId"='kind_correccion', description='Detalle de **Beta**' WHERE id=$1`, [beta]);
   await L.q(`UPDATE "Task" SET description='Descripción de Alpha' WHERE id=$1`, [alpha]);
   await L.q(`UPDATE "Task" SET evergreen=true WHERE id=$1`, [fija]);

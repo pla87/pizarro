@@ -112,7 +112,7 @@ steps:
 | `TOKEN_SECRET` | Recomendada | 48+ caracteres aleatorios | Clave HMAC de los enlaces de email, códigos de recuperación, códigos 2FA por email y dispositivos recordados. Sin ella se usa `SESSION_SECRET`. |
 | `ENCRYPTION_KEY` | Recomendada | 48+ caracteres aleatorios | Clave con la que se cifran (AES-256-GCM) los secretos TOTP y los tokens de Google. Sin ella se usa `SESSION_SECRET`. Con esta y `TOKEN_SECRET` definidas, rotar `SESSION_SECRET` solo cierra las sesiones. Guárdala fuera del servidor. |
 | `TOKEN_SECRET_PREVIOUS` / `ENCRYPTION_KEY_PREVIOUS` | Solo al rotar | la clave anterior | Siguen aceptando lo guardado con la clave anterior. Tras cambiar `ENCRYPTION_KEY`, `node dist/rotate-keys.mjs` (`npm run keys:rotate`) lo re-cifra todo y la anterior se puede quitar. Ver el manual, 4.4. |
-| `APP_URL` | Sí | `https://tablon.up.railway.app` | URL pública. Con `https://` la cookie se marca `Secure` y usa el prefijo `__Host-`. |
+| `APP_URL` | Sí | `https://pizarro.up.railway.app` | URL pública. Con `https://` la cookie se marca `Secure` y usa el prefijo `__Host-`. |
 | `UPLOAD_DIR` | Sí | `/app/uploads` | Carpeta de capturas (la ruta del volumen). |
 | `PORT` | No | Lo inyecta Railway | Puerto HTTP (por defecto 3000). |
 | `SEED_ADMIN_EMAIL` | Solo el primer arranque (Railway) | `admin@tu-dominio.com` | Email del administrador inicial. Si no defines `SEED_ADMIN_*`, con la base de datos vacía el servidor imprime en su log un código de un solo uso y el asistente web `/setup` crea el administrador (servidor propio con Docker Compose, ver `docs/INSTALL.md`). |
@@ -173,7 +173,7 @@ Las integraciones son **opcionales**: si faltan sus variables, la app funciona i
 
 ### 3. Variables de entorno
 
-> Crea las variables **en el servicio de la app** (`tablon` → *Variables*), no como *Shared Variables* del proyecto. Las compartidas no llegan solas a los servicios: hay que enlazarlas en cada uno con `${{shared.NOMBRE}}`. Además, una variable compartida no puede apuntar a otra de un servicio, como `${{Postgres.DATABASE_URL}}`, y llega vacía. Tras crear o cambiar variables, pulsa **Deploy** para aplicar los cambios pendientes.
+> Crea las variables **en el servicio de la app** (`pizarro` → *Variables*), no como *Shared Variables* del proyecto. Las compartidas no llegan solas a los servicios: hay que enlazarlas en cada uno con `${{shared.NOMBRE}}`. Además, una variable compartida no puede apuntar a otra de un servicio, como `${{Postgres.DATABASE_URL}}`, y llega vacía. Tras crear o cambiar variables, pulsa **Deploy** para aplicar los cambios pendientes.
 
 En el servicio de la app → **Variables** → **Raw Editor**, pega lo siguiente (ajusta los valores):
 
@@ -200,7 +200,7 @@ Sin volumen, las imágenes se pierden en cada despliegue.
 3. **Mount path**: `/app/uploads`. Debe coincidir con `UPLOAD_DIR`.
 4. Guarda. Railway redespliega el servicio con el volumen montado.
 
-> El `Dockerfile` **no** usa la instrucción `VOLUME`: Railway la rechaza al construir la imagen ("The VOLUME keyword is banned"). El punto de montaje se define con el Volume del panel. Para Docker local usa `-v tablon_uploads:/app/uploads`.
+> El `Dockerfile` **no** usa la instrucción `VOLUME`: Railway la rechaza al construir la imagen ("The VOLUME keyword is banned"). El punto de montaje se define con el Volume del panel. Para Docker local usa `-v pizarro_uploads:/app/uploads`.
 >
 > Railway monta los volúmenes como `root`. El script de arranque ajusta el propietario de `/app/uploads` y después ejecuta la app como el usuario sin privilegios `node`. No hace falta `RAILWAY_RUN_UID`.
 
@@ -289,7 +289,7 @@ Se usa la **WhatsApp Cloud API** oficial de Meta. Pasos:
    - asígnale la app y la cuenta de WhatsApp;
    - genera un token con los permisos `whatsapp_business_messaging` y `whatsapp_business_management`. Ese es el `WHATSAPP_TOKEN`.
 5. **Plantilla** en **WhatsApp Manager → Plantillas de mensajes → Crear**:
-   - Categoría **Utilidad**, nombre `mencion_tablon`, idioma **Español (es)**.
+   - Categoría **Utilidad**, nombre `mencion_pizarro`, idioma **Español (es)**.
    - Cuerpo (los 4 parámetros, en este orden):
      ```
      {{1}} te ha mencionado en la tarea «{{2}}» ({{3}}). Ábrela aquí: {{4}}
@@ -299,7 +299,7 @@ Se usa la **WhatsApp Cloud API** oficial de Meta. Pasos:
    ```env
    WHATSAPP_TOKEN=<token permanente>
    WHATSAPP_PHONE_NUMBER_ID=<id del número>
-   WHATSAPP_TEMPLATE_NAME=mencion_tablon
+   WHATSAPP_TEMPLATE_NAME=mencion_pizarro
    WHATSAPP_TEMPLATE_LANG=es
    ```
 7. Cada usuario activa **WhatsApp** en *Mi perfil → Avisos de menciones* y escribe su número en formato internacional (`+34…`).

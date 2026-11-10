@@ -4,6 +4,8 @@ import { Prisma } from "@/generated/prisma/client";
 import { actionContext } from "./action-context";
 import { forgetAttachments } from "./attachment-cache";
 import { isUniqueColumnRole } from "./constants";
+import { excerpt } from "./mentions";
+import { commentNoticesWhere } from "./notify";
 import { db } from "./db";
 import { assertTaskCapacity } from "./caps";
 import { blockProblem, lockBlocking } from "./blocking";
@@ -132,11 +134,13 @@ function toTaskData(row: TaskRowFull, fields: readonly TaskField[]): TaskData {
 /** Estado actual de esos campos de varias tareas, para restaurarlos al deshacer. */
 export async function captureTasks(ids: string[], fields: readonly TaskField[], withLabels = false): Promise<UndoOp[]> {
   if (!ids.length) return [];
+  // Solo los campos pedidos: un «Mover a…» de 300 tarjetas no trae sus descripciones (hasta 20 KB cada una).
+  const only = Object.fromEntries(fields.filter((f) => f in TASK_SELECT).map((f) => [f, true])) as Partial<Record<TaskField, true>>;
   const rows = await db.task.findMany({
     where: { id: { in: ids } },
-    select: { id: true, ...TASK_SELECT, ...(withLabels ? { labels: { select: { labelId: true } } } : {}) },
+    select: { id: true, ...only, ...(withLabels ? { labels: { select: { labelId: true } } } : {}) },
   });
-  return rows.map((r) => taskSetOp(r, fields, withLabels ? (r as unknown as { labels: { labelId: string }[] }).labels : undefined));
+  return rows.map((r) => taskSetOp(r as unknown as TaskRowFull & { id: string }, fields, withLabels ? (r as unknown as { labels: { labelId: string }[] }).labels : undefined));
 }
 
 /** Campos que necesita taskSetOp: quien ya ha leído la tarea los incluye en su consulta y se ahorra captureTasks. */
@@ -820,8 +824,11 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           break;
         }
         case "comment.set": {
+          const c = await db.taskComment.findFirst({ where: { id: op.id, deletedAt: null, task: { projectId } }, select: { id: true, taskId: true, authorId: true, createdAt: true, body: true } });
           const { count } = await db.taskComment.updateMany({ where: { id: op.id, deletedAt: null, task: { projectId } }, data: { body: op.body, editedAt: date(op.editedAt) } });
           if (!count) miss++;
+          // Los avisos del comentario vuelven a mostrar el texto que queda (si no, al borrarlo seguirían con el deshecho).
+          else if (c) await db.notification.updateMany({ where: commentNoticesWhere(c), data: { excerpt: excerpt(op.body) } });
           break;
         }
         case "attachment.remove": {
@@ -1076,12 +1083,27 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
  * Se calcula al crear la entrada contraria y se compara antes de aplicarla: si difiere, otra persona
  * ha cambiado esas filas entretanto (las acciones propias vacían la pila de rehacer). Task.updatedAt
  * no cambia con subtareas, comentarios o etiquetas, por eso se incluyen sus filas en la huella.
+ *
+ * `stored`: la huella guardada con la que se va a comparar. Las de antes de la versión 2 (sin prefijo) llevaban la
+ * descripción entera; para ellas se calcula igual que entonces, así que siguen valiendo tras actualizar la app.
  */
-export async function fingerprintOps(projectId: string, ops: UndoOp[]): Promise<string> {
+export async function fingerprintOps(projectId: string, ops: UndoOp[], stored?: string | null): Promise<string> {
+  return (await fingerprintsOf(projectId, [{ ops, stored }]))[0]!;
+}
+
+/** Prefijo de las huellas actuales: la descripción cuenta por su hash (sha256 en SQL), no por su texto. */
+const FP_V2 = "v2:";
+/** Ids por consulta al leer el estado (una entrada puede tocar 500 tareas y se leen varias a la vez). */
+const FP_CHUNK = 1000;
+
+type FpModel = "subtask" | "taskComment" | "taskAttachment" | "taskLink";
+
+/** Lo que cubre la huella de una lista de operaciones (las filas hijas, por su id: su tarea se busca después). */
+function fingerprintSubjects(ops: UndoOp[]) {
   const taskIds = new Set<string>();
   const columnIds = new Set<string>();
   const releaseIds = new Set<string>();
-  const lookups: { model: "subtask" | "taskComment" | "taskAttachment" | "taskLink"; id: string }[] = [];
+  const lookups: { model: FpModel; id: string }[] = [];
   for (const op of ops) {
     switch (op.t) {
       case "task.set": case "task.remove": taskIds.add(op.id); break;
@@ -1097,36 +1119,93 @@ export async function fingerprintOps(projectId: string, ops: UndoOp[]): Promise<
       case "release.remove": releaseIds.add(op.id); break;
     }
   }
-  // Las filas hijas que ya no existen se anotan como ausentes; las que existen suman su tarea.
-  const lines: string[] = [];
-  const found = await Promise.all(
-    lookups.map((l) => (db[l.model] as unknown as { findUnique: (a: unknown) => Promise<{ taskId: string } | null> }).findUnique({ where: { id: l.id }, select: { taskId: true } })),
-  );
-  lookups.forEach((l, i) => {
-    const row = found[i];
-    if (row) taskIds.add(row.taskId); else lines.push(`${l.model}:${l.id}:absent`);
+  return { taskIds, columnIds, releaseIds, lookups };
+}
+
+/** Lo que se lee de cada tarea, menos la descripción (va aparte, por su hash). Contenido, no la hora de escritura. */
+const FP_TASK_SELECT = {
+  id: true, title: true, kindId: true, color: true, linkUrl: true, position: true, columnId: true, assigneeId: true,
+  dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, evergreenEvery: true, recurrence: true, recurrenceDay: true,
+  cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
+  labels: { select: { labelId: true }, orderBy: { labelId: "asc" } },
+  subtasks: { select: { id: true, title: true, done: true, position: true }, orderBy: { id: "asc" } },
+  comments: { select: { id: true, editedAt: true, deletedAt: true }, orderBy: { id: "asc" } },
+  attachments: { select: { id: true }, orderBy: { id: "asc" } },
+  links: { select: { id: true, title: true, url: true }, orderBy: { id: "asc" } },
+} as const satisfies Prisma.TaskSelect;
+
+/** El de las huellas antiguas (sin prefijo), tal cual: con la descripción entera y en este orden (cambia el JSON). */
+const FP_LEGACY_TASK_SELECT = {
+  id: true, title: true, description: true, kindId: true, color: true, linkUrl: true, position: true, columnId: true, assigneeId: true,
+  dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, evergreenEvery: true, recurrence: true, recurrenceDay: true,
+  cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
+  labels: FP_TASK_SELECT.labels, subtasks: FP_TASK_SELECT.subtasks, comments: FP_TASK_SELECT.comments, attachments: FP_TASK_SELECT.attachments, links: FP_TASK_SELECT.links,
+} as const satisfies Prisma.TaskSelect;
+
+function chunks<T>(items: T[]): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += FP_CHUNK) out.push(items.slice(i, i + FP_CHUNK));
+  return out;
+}
+
+/**
+ * Las huellas de varias entradas con una sola lectura del estado: cada fila (tarea, columna, release, fila hija) se
+ * lee una vez aunque la cubran varias entradas, por lotes (`id IN (…)`) y una consulta detrás de otra, sin saturar el
+ * pool. Cada huella sale igual que si se calculara sola (fingerprintOps). La descripción entra por su sha256,
+ * calculado en PostgreSQL: un cambio en ella cambia la huella igual que antes, sin traer 20 KB por tarjeta.
+ */
+export async function fingerprintsOf(projectId: string, items: { ops: UndoOp[]; stored?: string | null }[]): Promise<string[]> {
+  const subjects = items.map((it) => ({ ...fingerprintSubjects(it.ops), legacy: !!it.stored && !it.stored.startsWith(FP_V2) }));
+  // Filas hijas: su tarea entra en la huella; las que ya no existen se anotan como ausentes.
+  const byModel = new Map<FpModel, Set<string>>();
+  for (const s of subjects) for (const l of s.lookups) (byModel.get(l.model) ?? byModel.set(l.model, new Set()).get(l.model)!).add(l.id);
+  const owner = new Map<string, string>();
+  for (const [model, ids] of byModel) {
+    for (const part of chunks([...ids])) {
+      const rows = await (db[model] as unknown as { findMany: (a: unknown) => Promise<{ id: string; taskId: string }[]> }).findMany({
+        where: { id: { in: part } }, select: { id: true, taskId: true },
+      });
+      for (const r of rows) owner.set(`${model}:${r.id}`, r.taskId);
+    }
+  }
+  const lines = subjects.map((s) => {
+    const out: string[] = [];
+    for (const l of s.lookups) {
+      const taskId = owner.get(`${l.model}:${l.id}`);
+      if (taskId) s.taskIds.add(taskId); else out.push(`${l.model}:${l.id}:absent`);
+    }
+    return out;
   });
-  const tasks = await db.task.findMany({
-    where: { id: { in: [...taskIds] }, projectId },
-    select: {
-      // Contenido, no la hora de escritura: reescribir lo mismo (p. ej. un deshacer propio) no cuenta como cambio.
-      id: true, title: true, description: true, kindId: true, color: true, linkUrl: true, position: true, columnId: true, assigneeId: true,
-      dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, evergreenEvery: true, recurrence: true, recurrenceDay: true,
-      cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
-      labels: { select: { labelId: true }, orderBy: { labelId: "asc" } },
-      subtasks: { select: { id: true, title: true, done: true, position: true }, orderBy: { id: "asc" } },
-      comments: { select: { id: true, editedAt: true, deletedAt: true }, orderBy: { id: "asc" } },
-      attachments: { select: { id: true }, orderBy: { id: "asc" } },
-      links: { select: { id: true, title: true, url: true }, orderBy: { id: "asc" } },
-    },
+
+  const current = new Set<string>();
+  const legacy = new Set<string>();
+  for (const s of subjects) for (const id of s.taskIds) (s.legacy ? legacy : current).add(id);
+  const tasks = new Map<string, string>();
+  for (const part of chunks([...current])) {
+    const rows = await db.task.findMany({ where: { id: { in: part }, projectId }, select: FP_TASK_SELECT });
+    const hashes = await db.$queryRaw<{ id: string; d: string }[]>`
+      SELECT "id", encode(sha256(convert_to("description", 'UTF8')), 'hex') AS "d" FROM "Task" WHERE "id" = ANY(${part}::text[]) AND "projectId" = ${projectId}`;
+    const hashById = new Map(hashes.map((h) => [h.id, h.d]));
+    for (const r of rows) tasks.set(r.id, JSON.stringify({ ...r, description: hashById.get(r.id) ?? null }));
+  }
+  const legacyTasks = new Map<string, string>();
+  for (const part of chunks([...legacy])) {
+    for (const r of await db.task.findMany({ where: { id: { in: part }, projectId }, select: FP_LEGACY_TASK_SELECT })) legacyTasks.set(r.id, JSON.stringify(r));
+  }
+  const columnIds = [...new Set(subjects.flatMap((s) => [...s.columnIds]))];
+  const cols = new Map<string, string>();
+  for (const part of chunks(columnIds)) for (const c of await db.column.findMany({ where: { id: { in: part }, projectId } })) cols.set(c.id, JSON.stringify(c));
+  const releaseIds = [...new Set(subjects.flatMap((s) => [...s.releaseIds]))];
+  const rels = new Set<string>();
+  for (const part of chunks(releaseIds)) for (const r of await db.release.findMany({ where: { id: { in: part }, projectId }, select: { id: true } })) rels.add(r.id);
+
+  return subjects.map((s, i) => {
+    const out = lines[i]!;
+    const taskLines = s.legacy ? legacyTasks : tasks;
+    for (const id of s.taskIds) out.push(`task:${id}:${taskLines.get(id) ?? '"absent"'}`);
+    for (const id of s.columnIds) out.push(`column:${id}:${cols.get(id) ?? '"absent"'}`);
+    for (const id of s.releaseIds) out.push(`release:${id}:${rels.has(id) ? "present" : "absent"}`);
+    const hash = createHash("sha256").update(out.sort().join("\n")).digest("hex");
+    return s.legacy ? hash : `${FP_V2}${hash}`;
   });
-  const byId = new Map(tasks.map((t) => [t.id, t]));
-  for (const id of taskIds) lines.push(`task:${id}:${JSON.stringify(byId.get(id) ?? "absent")}`);
-  const cols = await db.column.findMany({ where: { id: { in: [...columnIds] }, projectId } });
-  const colById = new Map(cols.map((c) => [c.id, c]));
-  for (const id of columnIds) lines.push(`column:${id}:${JSON.stringify(colById.get(id) ?? "absent")}`);
-  const rels = await db.release.findMany({ where: { id: { in: [...releaseIds] }, projectId }, select: { id: true } });
-  const relIds = new Set(rels.map((r) => r.id));
-  for (const id of releaseIds) lines.push(`release:${id}:${relIds.has(id) ? "present" : "absent"}`);
-  return createHash("sha256").update(lines.sort().join("\n")).digest("hex");
 }

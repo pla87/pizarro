@@ -2,6 +2,38 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.48.0 — 2026-11-10 02:03
+
+Nueva web de getpizarro.com con capturas reales, deshacer mucho más rápido, apagado que espera a las subidas, micrófono del título solo al editarlo y columnas que indican que siguen
+
+### Nuevas funcionalidades
+
+- Nueva web del producto en getpizarro.com: explica qué es Pizarro con capturas reales de la app, en español e inglés y en modo claro y oscuro.
+
+### Mejoras
+
+- El micrófono del título solo aparece mientras editas el título, sin que el título se mueva.
+- Las columnas con más tarjetas de las que caben tienen las esquinas inferiores rectas para indicar que siguen.
+- Deshacer y rehacer tras mover cientos de tarjetas es mucho más rápido y ya no satura la base de datos.
+- Al reiniciar o actualizar, el servidor espera a que terminen las subidas en curso y avisa al balanceador.
+- Al pegar más de 100 subtareas, el aviso dice cuántas no caben.
+
+### Correcciones
+
+- Una subida cortada por un reinicio ya no deja un adjunto roto.
+- Los avisos de un comentario editado o borrado ya no conservan el texto antiguo.
+- Quitar y volver a poner una mención ya no avisa dos veces.
+- Pegar HTML enorme o malformado ya no congela la pestaña.
+- El recordatorio de licencia desaparece en cuanto registras la licencia o declaras uso personal.
+- Mover o archivar muchas tarjetas mientras se genera una release ya no puede chocar con ella.
+- El menú lateral en inglés vuelve a decir «Notifications».
+
+### Cambios técnicos / DB
+
+- Limpieza del repositorio: código muerto, scripts sueltos y restos del nombre antiguo.
+- La publicación manual de versiones solo funciona desde main y los permisos de los workflows son mínimos.
+- Nueva columna Notification.commentId (migración 20261119110000).
+
 ## v1.47.0 — 2026-11-09 21:25
 
 Web getpizarro.com y recordatorio de licencia, comentarios editables con borrador y menciones legibles, pegado de imágenes y tablas fiable, detalle de tarea más cómodo

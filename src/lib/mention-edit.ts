@@ -121,11 +121,3 @@ export function normalizeModel(model: MentionModel): MentionModel {
 export function mentionTouching(model: MentionModel, pos: number, dir: "backward" | "forward"): MentionSpan | undefined {
   return model.mentions.find((m) => (dir === "backward" ? m.end === pos : m.start === pos));
 }
-
-/** Iguales (mismo texto y mismas menciones). */
-export function sameModel(a: MentionModel, b: MentionModel): boolean {
-  return a.text === b.text && a.mentions.length === b.mentions.length && a.mentions.every((m, i) => {
-    const o = b.mentions[i]!;
-    return m.start === o.start && m.end === o.end && m.id === o.id && m.name === o.name;
-  });
-}

@@ -47,14 +47,45 @@ export function pickClipboardFiles(files: ArrayLike<File> | null | undefined, it
   return dedupeFiles([...fromFiles, ...fromItems]);
 }
 
-/** ¿El HTML tiene texto visible (no solo etiquetas, una imagen o espacios)? */
+const RAW_OPEN = /^<(style|script|head|title)\b/i;
+const visibleText = (s: string) => /\S/.test(s.replace(/&nbsp;|&#160;|&#xa0;/gi, " "));
+
+/**
+ * ¿El HTML tiene texto visible (no solo etiquetas, una imagen o espacios)? Sin comentarios ni el contenido de
+ * <style>/<script>/<head>/<title>. Recorre el texto una vez: con expresiones regulares, muchos «<» o «<style» sin cerrar
+ * tardaban un tiempo cuadrático (segundos con un pegado de unos cientos de KB).
+ */
 export function htmlHasText(html: string): boolean {
-  const text = html
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/<(style|script|head|title)\b[\s\S]*?<\/\1\s*>/gi, "")
-    .replace(/<[^>]*>/g, "")
-    .replace(/&nbsp;|&#160;|&#xa0;/gi, " ");
-  return /\S/.test(text);
+  /** Etiquetas sin cierre más adelante (si no lo hay desde aquí, tampoco desde más lejos: no se vuelve a buscar). */
+  const unclosed = new Set<string>();
+  for (let i = 0; i < html.length; ) {
+    const lt = html.indexOf("<", i);
+    if (visibleText(html.slice(i, lt < 0 ? html.length : lt))) return true;
+    if (lt < 0) return false;
+    if (html.startsWith("<!--", lt)) {
+      const end = html.indexOf("-->", lt + 4);
+      if (end >= 0) {
+        i = end + 3;
+        continue;
+      }
+    }
+    const raw = RAW_OPEN.exec(html.slice(lt, lt + 7))?.[1]?.toLowerCase();
+    if (raw && !unclosed.has(raw)) {
+      const close = new RegExp(`</${raw}\\s*>`, "gi");
+      close.lastIndex = lt;
+      const m = close.exec(html);
+      if (m) {
+        i = m.index + m[0].length;
+        continue;
+      }
+      unclosed.add(raw);
+    }
+    // Una etiqueta cualquiera, hasta su «>»; un «<» suelto, sin «>» después, es texto.
+    const gt = html.indexOf(">", lt);
+    if (gt < 0) return true;
+    i = gt + 1;
+  }
+  return false;
 }
 
 /**

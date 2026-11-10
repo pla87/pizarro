@@ -103,7 +103,8 @@ export type DocumentCreateResult =
  * común de las subidas, así que subidas simultáneas no pueden pasarse juntas.
  */
 export async function createDocumentWithinLimit(data: {
-  projectId: string; name: string; mimeType: string; size: number; kind: DocumentKindName; createdById: string;
+  /** Id elegido antes (newFileId): el fichero se escribe antes que la fila. */
+  id?: string; projectId: string; name: string; mimeType: string; size: number; kind: DocumentKindName; createdById: string;
 }): Promise<DocumentCreateResult> {
   return db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:attachment-quota'))::text`;

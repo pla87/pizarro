@@ -88,7 +88,6 @@ export function templateTaskFields(t: { taskFields?: readonly string[]; columns:
   return normalizeTaskFields(keys);
 }
 
-export type TemplateReleaseTemplate = z.output<typeof templateReleaseSchema>;
 export type TemplateInput = z.input<typeof templateInputSchema>;
 export type TemplateData = z.output<typeof templateInputSchema>;
 

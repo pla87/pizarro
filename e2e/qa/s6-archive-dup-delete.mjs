@@ -14,7 +14,7 @@ export async function run() {
   await L.cleanBoard();
   const p0 = await L.project();
   await L.q(`INSERT INTO "Label"(id,"projectId",name,color) VALUES ('qlab1',$1,'Urgente','#ef4444')`, [p0.id]);
-  const [a, b, c, d] = await L.seedTasks(COL.doing, ["T1", "T2", "T3", "T4"]);
+  const [, b] = await L.seedTasks(COL.doing, ["T1", "T2", "T3", "T4"]);
   const [u2] = await L.q(`SELECT id FROM "User" WHERE email=$1`, [L.USER2]);
   const [deliv] = await L.q(`SELECT id FROM "Deliverable" LIMIT 1`);
   await L.q(`UPDATE "Task" SET description='Descripción **rica**', "assigneeId"=$2, "dueDate"='2026-12-24', "deliverableId"=$3, color='#ef4444', "kindId"='kind_correccion' WHERE id=$1`, [b, u2.id, deliv.id]);

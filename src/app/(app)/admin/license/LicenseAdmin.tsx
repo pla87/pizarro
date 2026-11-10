@@ -4,7 +4,7 @@ import { ExternalLink, Loader2, ShoppingCart } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { removeLicense, saveLicense, setPersonalUseDeclared } from "@/actions/license";
-import { personalUseConfirm } from "@/components/LicenseNudge";
+import { licenseResolved, personalUseConfirm } from "@/components/LicenseNudge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useIntlLocale, useT } from "@/i18n/client";
@@ -44,6 +44,7 @@ export function LicenseAdmin({ status: initial, buyHref }: { status: LicenseStat
       const res = await saveLicense({ holder, reference, email }).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
       setStatus({ kind: "licensed", license: res.data });
+      licenseResolved();
       done(t("Licencia registrada."));
     });
   const remove = () =>
@@ -63,6 +64,7 @@ export function LicenseAdmin({ status: initial, buyHref }: { status: LicenseStat
       const res = await setPersonalUseDeclared(true).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
       if (res.data) setStatus({ kind: "personal", personal: res.data });
+      licenseResolved();
       setHolder("");
       setReference("");
       setEmail("");

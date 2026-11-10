@@ -16,7 +16,7 @@ import { addUndo, captureTasks, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SE
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
-import { lastPositionIn, lockColumns, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
+import { lastPositionIn, lockColumns, lockTaskRows, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertTaskCapacity, assertTaskCreateRate } from "@/lib/caps";
 import { getMaxCommentsPerTask } from "@/lib/app-settings";
@@ -30,7 +30,7 @@ import { shareRule } from "@/lib/google-share";
 import { excerpt as makeExcerpt, extractMentionIds, mentionsToPlain } from "@/lib/mentions";
 import { dropPendingDueChanges, queueDueChange } from "@/lib/due-notices";
 import { assignedBatchExcerpt } from "@/lib/notification-text";
-import { followTask, notifyMentions, notifyTask, taskFollowerIds } from "@/lib/notify";
+import { commentNoticesWhere, followTask, notifyMentions, notifyTask, taskFollowerIds } from "@/lib/notify";
 import { isFollowing } from "@/lib/followers";
 import { loadTaskHistory } from "@/lib/task-events";
 import { localizeGeneralKinds } from "@/lib/kinds-localize";
@@ -646,6 +646,8 @@ export async function moveTasks(taskIds: string[], columnId: string) {
     const undo = await captureTasks(toMove.map((t) => t.id), ["columnId", "position", "evergreen", "evergreenEvery"]);
     const moved = await db.$transaction(async (tx) => {
       await lockColumns(tx, [column.id]);
+      // Columna → tareas (en orden de id), como moveTask y el despliegue de una release.
+      await lockTaskRows(tx, toMove.map((t) => t.id));
       let pos = (await lastPositionIn(tx, column.id)) ?? 0;
       const list = toMove.map((t) => ({ id: t.id, position: (pos += POSITION_STEP) }));
       await setTaskColumnPositions(list, column.id, { clearEvergreen: true, client: tx });
@@ -718,7 +720,11 @@ export async function archiveTasks(taskIds: string[]) {
     // Las que ya estaban archivadas (otra pestaña) no cuentan ni se registran: sin ninguna activa no se toca nada.
     if (!active.length) return { archived: 0, spawned: [] as Awaited<ReturnType<typeof spawnRecurrences>> };
     addUndo(...(await captureTasks(active, ARCHIVE_FIELDS)));
-    await db.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId", "evergreen" = false, "evergreenEvery" = 1 WHERE "id" IN (${Prisma.join(active)}) AND "archivedAt" IS NULL`;
+    // Filas bloqueadas antes, en orden de id: el UPDATE solo las bloquearía en el orden en que las recorre (40P01).
+    await db.$transaction(async (tx) => {
+      await lockTaskRows(tx, active);
+      await tx.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId", "evergreen" = false, "evergreenEvery" = 1 WHERE "id" IN (${Prisma.join(active)}) AND "archivedAt" IS NULL`;
+    });
     const spawned = await spawnRecurrences(active, user.id);
     describeAction("Archivó {count}", { count: tasksN(active.length) }, { taskIds: active });
     for (const id of active) recordTaskEvent(id, "archive", { k: "Archivó la tarea" });
@@ -1464,16 +1470,16 @@ export async function addComment(taskId: string, body: string, parentId?: string
       return tx.taskComment.create({ data: { taskId, authorId: user.id, body: text, parentId: parent ? (parent.parentId ?? parent.id) : null }, select: commentSelect });
     });
     addUndo({ t: "comment.remove", id: comment.id });
-    const mentioned = await notifyMentions({ actorId: user.id, taskId, projectId, recipientIds: extractMentionIds(text), text });
+    const mentioned = await notifyMentions({ actorId: user.id, taskId, projectId, recipientIds: extractMentionIds(text), text, commentId: comment.id });
     // Quien comenta sigue la tarea. Avisos: respuesta al autor del comentario; comentario a quien la sigue (sin repetir a nadie).
     await followTask(taskId, [user.id]);
     const notified = [user.id, ...mentioned];
     if (parent?.authorId && !notified.includes(parent.authorId)) {
-      const { recipients } = await notifyTask({ type: "REPLY", actorId: user.id, taskId, projectId, recipientIds: [parent.authorId], excerpt: makeExcerpt(text) });
+      const { recipients } = await notifyTask({ type: "REPLY", actorId: user.id, taskId, projectId, recipientIds: [parent.authorId], excerpt: makeExcerpt(text), commentId: comment.id });
       notified.push(...recipients, parent.authorId);
     }
     const followers = await taskFollowerIds(taskId, notified);
-    if (followers.length) await notifyTask({ type: "COMMENT", actorId: user.id, taskId, projectId, recipientIds: followers, excerpt: makeExcerpt(text) });
+    if (followers.length) await notifyTask({ type: "COMMENT", actorId: user.id, taskId, projectId, recipientIds: followers, excerpt: makeExcerpt(text), commentId: comment.id });
     describeAction(parent ? "Respondió a un comentario en «{title}»" : "Comentó en «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
     return toCommentInfo(comment);
   });
@@ -1482,7 +1488,8 @@ export async function addComment(taskId: string, body: string, parentId?: string
 /**
  * Edita un comentario propio. Solo su autor: un admin puede borrar comentarios ajenos, pero no cambiar lo que otra
  * persona escribió. Mismas reglas de texto que al crear; avisa solo a quien se menciona por primera vez en este
- * comentario, actualiza el extracto de los avisos que creó y se puede deshacer.
+ * comentario (ni a quien ya estaba en el texto anterior ni a quien ya tiene un aviso de mención de él: quitar y volver
+ * a poner una mención no avisa otra vez), actualiza el extracto de los avisos que creó y se puede deshacer.
  */
 export async function editComment(commentId: string, body: string) {
   return runAction({ name: "tasks.editComment", args: [commentId, body] }, async (): Promise<CommentInfo> => {
@@ -1505,25 +1512,22 @@ export async function editComment(commentId: string, body: string) {
       const [row] = await tx.$queryRaw<{ body: string; editedAt: Date | null; deletedAt: Date | null }[]>`SELECT "body", "editedAt", "deletedAt" FROM "TaskComment" WHERE "id" = ${found.id} FOR UPDATE`;
       if (!row || row.deletedAt) throw notFound();
       if (row.body === text) return { before: row, updated: null };
-      return { before: row, updated: await tx.taskComment.update({ where: { id: found.id }, data: { body: text, editedAt: new Date() }, select: commentSelect }) };
+      const updated = await tx.taskComment.update({ where: { id: found.id }, data: { body: text, editedAt: new Date() }, select: commentSelect });
+      // Los avisos que creó el comentario llevan un extracto de su texto: pasan a mostrar el nuevo.
+      await tx.notification.updateMany({ where: commentNoticesWhere({ ...found, body: row.body }), data: { excerpt: makeExcerpt(text) } });
+      return { before: row, updated };
     });
     // Sin cambios: no hay nada que anotar ni deshacer.
     if (!updated) return toCommentInfo((await db.taskComment.findUniqueOrThrow({ where: { id: found.id }, select: commentSelect })));
     addUndo({ t: "comment.set", id: found.id, body: before.body, editedAt: before.editedAt?.toISOString() ?? null });
     describeAction("Editó un comentario en «{title}»", { title: found.task.title }, { taskId });
-    // Los avisos que creó el comentario llevan un extracto de su texto: pasan a mostrar el nuevo.
-    if (found.authorId) {
-      await db.notification.updateMany({
-        where: {
-          taskId, actorId: found.authorId, type: { in: ["COMMENT", "REPLY", "MENTION"] }, excerpt: makeExcerpt(before.body),
-          createdAt: { gte: found.createdAt, lte: new Date(found.createdAt.getTime() + 60_000) },
-        },
-        data: { excerpt: makeExcerpt(text) },
-      });
-    }
     const old = new Set(extractMentionIds(before.body));
-    const added = extractMentionIds(text).filter((id) => !old.has(id));
-    if (added.length) await notifyMentions({ actorId: user.id, taskId, projectId, recipientIds: added, text });
+    const candidates = extractMentionIds(text).filter((id) => !old.has(id));
+    const notified = candidates.length
+      ? new Set((await db.notification.findMany({ where: { commentId: found.id, type: "MENTION", userId: { in: candidates } }, select: { userId: true } })).map((n) => n.userId))
+      : new Set<string>();
+    const added = candidates.filter((id) => !notified.has(id));
+    if (added.length) await notifyMentions({ actorId: user.id, taskId, projectId, recipientIds: added, text, commentId: found.id });
     return toCommentInfo(updated);
   });
 }
@@ -1544,7 +1548,7 @@ export async function deleteComment(commentId: string) {
     const user = await requireUser();
     const comment = await db.taskComment.findFirst({
       where: { id: v.id.parse(commentId), deletedAt: null, task: { project: visibleProjectsWhere(user) } },
-      include: { task: { select: { projectId: true, title: true } }, parent: true, _count: { select: { replies: true } } },
+      select: { id: true, taskId: true, authorId: true, task: { select: { projectId: true, title: true } } },
     });
     if (!comment) throw notFound();
     if (comment.authorId !== user.id && user.role !== "ADMIN") throw new AppError("Solo puedes borrar tus comentarios.", 403);
@@ -1552,32 +1556,34 @@ export async function deleteComment(commentId: string) {
     noteTask(comment.taskId);
     await assertNotArchived(comment.taskId);
     describeAction("Borró un comentario de «{title}»", { title: comment.task.title }, { taskId: comment.taskId });
-    // Los avisos ya creados llevan un extracto del texto: se vacía para que no sobreviva al borrado.
-    const scrub = (): Prisma.PrismaPromise<unknown>[] =>
-      comment.authorId
-        ? [db.notification.updateMany({
-            where: {
-              taskId: comment.taskId, actorId: comment.authorId, type: { in: ["COMMENT", "REPLY", "MENTION"] }, excerpt: makeExcerpt(comment.body),
-              createdAt: { gte: comment.createdAt, lte: new Date(comment.createdAt.getTime() + 60_000) },
-            },
-            data: { excerpt: "" },
-          })]
-        : [];
-    if (comment._count.replies > 0) {
-      addUndo({ t: "comment.undelete", id: comment.id, body: comment.body });
-      await db.$transaction([db.taskComment.update({ where: { id: comment.id }, data: { body: "", deletedAt: new Date() } }), ...scrub()]);
-      return { soft: true, removed: [] };
-    }
-    const { task: _task, parent, _count, ...row } = comment;
-    const ops: UndoOp[] = [{ t: "comment.restore", row: commentRow(row) }];
-    const ops2: Prisma.PrismaPromise<unknown>[] = [db.taskComment.delete({ where: { id: comment.id } }), ...scrub()];
-    // Era la última respuesta de un comentario borrado: el marcador ya no sirve. Se restaura primero (las operaciones se aplican de la última a la primera).
-    if (parent?.deletedAt && (await db.taskComment.count({ where: { parentId: parent.id, id: { not: comment.id } } })) === 0) {
-      ops.push({ t: "comment.restore", row: commentRow(parent) });
-      ops2.push(db.taskComment.delete({ where: { id: parent.id } }));
-    }
+    // Se relee con la fila bloqueada: si se editó entre la comprobación y el borrado, el deshacer guarda el texto vigente
+    // (y se vacían los avisos que lo muestran).
+    const { ops, soft } = await db.$transaction(async (tx) => {
+      const [locked] = await tx.$queryRaw<{ deletedAt: Date | null }[]>`SELECT "deletedAt" FROM "TaskComment" WHERE "id" = ${comment.id} FOR UPDATE`;
+      if (!locked || locked.deletedAt) throw notFound();
+      const row = await tx.taskComment.findUniqueOrThrow({ where: { id: comment.id } });
+      // Los avisos ya creados llevan un extracto del texto: se vacía para que no sobreviva al borrado.
+      await tx.notification.updateMany({ where: commentNoticesWhere(row), data: { excerpt: "" } });
+      if ((await tx.taskComment.count({ where: { parentId: comment.id } })) > 0) {
+        await tx.taskComment.update({ where: { id: comment.id }, data: { body: "", deletedAt: new Date() } });
+        const undelete: UndoOp[] = [{ t: "comment.undelete", id: comment.id, body: row.body }];
+        return { ops: undelete, soft: true };
+      }
+      const ops: UndoOp[] = [{ t: "comment.restore", row: commentRow(row) }];
+      await tx.taskComment.delete({ where: { id: comment.id } });
+      // Era la última respuesta de un comentario borrado: el marcador ya no sirve. Se restaura primero (las operaciones se aplican de la última a la primera).
+      if (row.parentId) {
+        await tx.$queryRaw`SELECT 1 FROM "TaskComment" WHERE "id" = ${row.parentId} FOR UPDATE`;
+        const parent = await tx.taskComment.findUnique({ where: { id: row.parentId } });
+        if (parent?.deletedAt && (await tx.taskComment.count({ where: { parentId: parent.id } })) === 0) {
+          ops.push({ t: "comment.restore", row: commentRow(parent) });
+          await tx.taskComment.delete({ where: { id: parent.id } });
+        }
+      }
+      return { ops, soft: false };
+    });
     addUndo(...ops);
-    await db.$transaction(ops2);
+    if (soft) return { soft: true, removed: [] };
     return { soft: false, removed: ops.map((op) => (op.t === "comment.restore" ? op.row.id : "")) };
   });
 }

@@ -1,6 +1,67 @@
 {
   "versions": [
     {
+      "version": "1.48.0",
+      "date": "2026-11-10",
+      "releasedAt": "2026-11-10T02:03:15+01:00",
+      "summary": "Nueva web de getpizarro.com con capturas reales, deshacer mucho más rápido, apagado que espera a las subidas, micrófono del título solo al editarlo y columnas que indican que siguen",
+      "changes": {
+        "nuevas": [
+          "Nueva web del producto en getpizarro.com: explica qué es Pizarro con capturas reales de la app, en español e inglés y en modo claro y oscuro."
+        ],
+        "mejoras": [
+          "El micrófono del título solo aparece mientras editas el título, sin que el título se mueva.",
+          "Las columnas con más tarjetas de las que caben tienen las esquinas inferiores rectas para indicar que siguen.",
+          "Deshacer y rehacer tras mover cientos de tarjetas es mucho más rápido y ya no satura la base de datos.",
+          "Al reiniciar o actualizar, el servidor espera a que terminen las subidas en curso y avisa al balanceador.",
+          "Al pegar más de 100 subtareas, el aviso dice cuántas no caben."
+        ],
+        "correcciones": [
+          "Una subida cortada por un reinicio ya no deja un adjunto roto.",
+          "Los avisos de un comentario editado o borrado ya no conservan el texto antiguo.",
+          "Quitar y volver a poner una mención ya no avisa dos veces.",
+          "Pegar HTML enorme o malformado ya no congela la pestaña.",
+          "El recordatorio de licencia desaparece en cuanto registras la licencia o declaras uso personal.",
+          "Mover o archivar muchas tarjetas mientras se genera una release ya no puede chocar con ella.",
+          "El menú lateral en inglés vuelve a decir «Notifications»."
+        ],
+        "tecnicos": [
+          "Limpieza del repositorio: código muerto, scripts sueltos y restos del nombre antiguo.",
+          "La publicación manual de versiones solo funciona desde main y los permisos de los workflows son mínimos.",
+          "Nueva columna Notification.commentId (migración 20261119110000)."
+        ]
+      },
+      "en": {
+        "summary": "New getpizarro.com website with real screenshots, much faster undo, shutdown that waits for uploads, title microphone only while editing it, and columns that show they continue",
+        "changes": {
+          "nuevas": [
+            "New product website at getpizarro.com: explains Pizarro with real app screenshots, in Spanish and English, in light and dark mode."
+          ],
+          "mejoras": [
+            "The title microphone only appears while you edit the title, without the title moving.",
+            "Columns with more cards than fit have square bottom corners to show they continue.",
+            "Undo and redo after moving hundreds of cards is much faster and no longer overloads the database.",
+            "When restarting or updating, the server waits for uploads in progress and tells the load balancer.",
+            "When pasting more than 100 subtasks, the notice says how many don't fit."
+          ],
+          "correcciones": [
+            "An upload cut off by a restart no longer leaves a broken attachment.",
+            "Notifications for an edited or deleted comment no longer keep the old text.",
+            "Removing and re-adding a mention no longer notifies twice.",
+            "Pasting huge or malformed HTML no longer freezes the tab.",
+            "The licence reminder disappears as soon as you register the licence or declare personal use.",
+            "Moving or archiving many cards while a release is generated can no longer clash with it.",
+            "The English side menu says «Notifications» again."
+          ],
+          "tecnicos": [
+            "Repository cleanup: dead code, stray scripts and leftovers of the old name.",
+            "Manual releases only run from main and workflow permissions are minimal.",
+            "New column Notification.commentId (migration 20261119110000)."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.47.0",
       "date": "2026-11-09",
       "releasedAt": "2026-11-09T21:25:47+01:00",

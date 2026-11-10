@@ -1,4 +1,5 @@
 import "server-only";
+import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
@@ -11,6 +12,13 @@ const INPUT_FORMATS = new Set(["png", "jpeg", "webp", "gif", "avif", "heif"]);
 // Limita la memoria de sharp en un contenedor pequeño.
 sharp.cache({ memory: 64, items: 20 });
 sharp.concurrency(2);
+
+/**
+ * Id para una fila con fichero (adjunto, documento) que se elige antes de crearla: así el fichero se escribe primero y la
+ * fila después. Si el proceso se corta entre medias queda como mucho un fichero sin fila, que la limpieza de huérfanos
+ * borra (pasadas 24 h); nunca una fila sin fichero. Mismo formato que los de la importación (letras y cifras, como cuid).
+ */
+export const newFileId = (): string => `c${randomBytes(12).toString("hex")}`;
 
 /** Los ids son cuid: nunca contienen separadores, pero se valida igualmente. */
 /**

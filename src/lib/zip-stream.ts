@@ -16,9 +16,6 @@ export interface StreamZipEntry {
 export const ZIP_LIMIT = 0xffffffff;
 export const ZIP_MAX_ENTRIES = 0xffff;
 
-/** CRC-32 incremental de un buffer (continúa desde `prev`). */
-export const crc32Update = (data: Uint8Array, prev = 0): number => crc32(data, prev);
-
 function dosDateTime(date: Date): { time: number; date: number } {
   const year = Math.min(Math.max(date.getFullYear(), 1980), 2107);
   return {

@@ -12,10 +12,14 @@ import { requestContext } from "./request-context";
 import { getCurrentUser, getPendingUser } from "./session";
 import { toLocale, translate } from "@/i18n/core";
 
-/** Acciones revisadas cuyo resultado basta para actualizar la pestaña que las lanza (ver `cid`). */
+/**
+ * Acciones revisadas cuyo resultado basta para actualizar la pestaña que las lanza (ver `cid`). Los comentarios: el
+ * detalle abierto aplica su resultado y el recuento de la tarjeta; sin cid, su propio aviso volvía a pedirlos.
+ */
 const ECHO_SAFE_ACTIONS = new Set([
   "tasks.updateTask", "tasks.moveTask", "tasks.moveTasks", "tasks.archiveTask", "tasks.archiveTasks",
   "tasks.deleteTask", "tasks.deleteTasks", "tasks.duplicateTask", "tasks.makeEvergreen",
+  "tasks.addComment", "tasks.editComment", "tasks.deleteComment",
 ]);
 
 /**

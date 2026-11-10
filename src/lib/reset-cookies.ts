@@ -2,7 +2,7 @@ import { PASSWORD_CHANGE_COOKIE, cookieSecure, sessionCookieName } from "./sessi
 
 // Cookies de acceso de un navegador: sesión, cambio de contraseña pendiente, verificación en dos pasos (LoginChallenge)
 // y dispositivo conocido. Los nombres de las dos últimas están duplicados a propósito (two-factor.ts y devices.ts
-// son «server-only» con base de datos); tests/reset-cookies.test.ts comprueba que siguen coincidiendo.
+// son «server-only» con base de datos); tests/db/client-errors.test.ts comprueba que siguen coincidiendo.
 export const CHALLENGE_COOKIE_NAME = "pz_2fa";
 export const DEVICE_COOKIE_NAME = "pz_device";
 
