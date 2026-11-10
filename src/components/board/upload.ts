@@ -185,7 +185,8 @@ export async function uploadBatch(
         done++;
         report();
       },
-      stopWhen: (reason) => reason instanceof UploadError && (reason.code === "task_total" || reason.code === "quota_total" || reason.code === "quota_project"),
+      // Sin sitio (tope de la tarea, cuota o disco del servidor lleno): los demás archivos tampoco cabrían.
+      stopWhen: (reason) => reason instanceof UploadError && (reason.code === "task_total" || reason.code === "quota_total" || reason.code === "quota_project" || reason.code === "disk_full"),
       signal: opts.signal,
     },
   );
