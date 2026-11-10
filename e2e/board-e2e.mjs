@@ -1,7 +1,8 @@
 // Verificación de R16B1, R16F3, R16M1 y R16F1 (agente «board»), de los diálogos propios del menú de la columna (dlg),
 // de la descripción de la tarea (desc: pegar Markdown con código dentro de una negrita, tablas, conflicto), de los
 // comentarios (com: borrador local, editar los propios con aviso en vivo, menciones legibles mientras se escribe) y del
-// detalle (det: adjuntos por nombre y contador, subtareas pegadas, https automático, confirmar al cerrar con cambios).
+// detalle (det: adjuntos por nombre y contador, subtareas pegadas, https automático, confirmar al cerrar con cambios) y de
+// la ronda 44 (r44: micrófono del título solo al editarlo; columnas que siguen por abajo, sin esquinas inferiores).
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,7 +12,7 @@ import * as U from "./qa/ui.mjs";
 const { COL, sleep } = L;
 const APP = process.env.APP_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "b1,f3,m1,f1,dlg,vt,desc,com,det").split(",");
+const only = (process.env.PART || "b1,f3,m1,f1,dlg,vt,desc,com,det,r44").split(",");
 
 await L.prepareUsers();
 
@@ -839,6 +840,253 @@ if (only.includes("det")) {
   await L.eqEventually("R43: Nueva tarea crea una subtarea por línea pegada", async () => (await L.q(`SELECT s.title FROM "Subtask" s JOIN "Task" t ON t.id=s."taskId" WHERE t.title='Nueva R43' ORDER BY s.position`)).map((r) => r.title), ["uno", "dos", "tres"]);
   L.assertNoErrors("R43 nueva tarea", [n]);
   await n.ctx.close();
+}
+
+if (only.includes("r44")) {
+  // Reconocimiento de voz simulado: empieza a «escuchar» y no termina hasta que se para (Chromium sin servicio de voz).
+  const fakeSpeech = () => {
+    window.SpeechRecognition = class {
+      start() { window.__dictating = true; }
+      stop() { window.__dictating = false; this.onend?.(); }
+      abort() { window.__dictating = false; }
+    };
+  };
+  const micOf = (scope) => scope.locator("[data-while-editing]").first();
+  // Oculto: transparente y sin recibir clics (sigue en el orden de Tab y montado, para no cortar un dictado).
+  const shown = (loc) => loc.evaluate((el) => getComputedStyle(el).opacity === "1" && getComputedStyle(el).pointerEvents !== "none");
+  const box = async (loc) => {
+    const b = await loc.boundingBox();
+    return b && { w: Math.round(b.width), h: Math.round(b.height), x: Math.round(b.x), y: Math.round(b.y) };
+  };
+
+  L.scenario("R44C1: el micrófono del título solo se ve al editarlo");
+  await L.cleanBoard();
+  const long = "Revisar el flujo completo de facturación trimestral con el equipo de soporte y dejar anotadas las dudas abiertas";
+  await L.seedTasks(COL.backlog, ["Micro R44", long]);
+  for (const [label, viewport, mobile] of [["1440", { width: 1440, height: 900 }, false], ["1366", { width: 1366, height: 768 }, false], ["móvil", { width: 390, height: 844 }, true]]) {
+    const s = await L.session({ viewport, mobile, init: fakeSpeech });
+    const p = s.page;
+    for (const title of mobile ? ["Micro R44"] : ["Micro R44", long]) {
+      const tag = `C1 ${label} «${title.slice(0, 12)}»`;
+      await U.openTask(p, title);
+      const d = U.dialog(p);
+      const mic = micOf(d);
+      const ta = d.locator("textarea[aria-label='Título']").first();
+      // En móvil, sin editar, el título es un botón (dos líneas como mucho); en escritorio, el propio campo.
+      const field = mobile ? d.getByRole("button", { name: "Título" }).first() : ta;
+      L.check(`${tag}: sin editar, el micrófono no se ve`, !(await shown(mic)));
+      // Pulsar donde iría el micrófono es pulsar el título.
+      L.check(`${tag}: sin editar, el hueco del micrófono no recibe clics`, await mic.locator("button").evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return !el.contains(hit) && !!hit?.closest("[aria-label='Título']");
+      }));
+      const head = d.locator("[data-save-status]").locator("..");
+      const before = [await box(field), await box(head)];
+      if (title === "Micro R44") await p.screenshot({ path: `${SHOTS}/r44-micro-${label}-reposo.png` });
+      if (mobile) await field.tap();
+      else await field.click();
+      await sleep(200);
+      L.check(`${tag}: al editar el título se ve el micrófono`, await shown(mic));
+      const after = [await box(ta), await box(head)];
+      if (!mobile) L.eq(`${tag}: el título y la cabecera no cambian de tamaño al salir el micrófono`, after.map((b) => [b.w, b.h]), before.map((b) => [b.w, b.h]));
+      if (title === "Micro R44") await p.screenshot({ path: `${SHOTS}/r44-micro-${label}-editando.png` });
+      // Pulsar el micrófono no quita el foco al título (ni en el mousedown) y empieza a dictar.
+      const btn = mic.locator("button");
+      if (mobile) await btn.tap();
+      else {
+        const mb = await btn.boundingBox();
+        await p.mouse.move(mb.x + mb.width / 2, mb.y + mb.height / 2);
+        await p.mouse.down();
+        L.check(`${tag}: al pulsar el micrófono el título conserva el foco`, await ta.evaluate((el) => el === document.activeElement));
+        await p.mouse.up();
+      }
+      await sleep(100);
+      L.check(`${tag}: el micrófono dicta`, (await btn.getAttribute("aria-pressed")) === "true" && (await p.evaluate(() => window.__dictating)));
+      // Si el foco sale sin pulsar fuera (p. ej., al cambiar de ventana), el dictado sigue y el botón se sigue viendo.
+      await ta.evaluate((el) => el.blur());
+      await sleep(200);
+      L.check(`${tag}: dictando, el micrófono sigue a la vista aunque el título pierda el foco`, (await shown(mic)) && (await p.evaluate(() => window.__dictating)));
+      if (mobile) await btn.tap();
+      else await btn.click();
+      await sleep(200);
+      L.check(`${tag}: al parar el dictado sin foco en el título, el micrófono se oculta`, !(await shown(mic)) && !(await p.evaluate(() => window.__dictating)));
+      if (!mobile) {
+        // Con el teclado: Tab desde el título llega al micrófono, que sigue visible.
+        await ta.focus();
+        await p.keyboard.press("Tab");
+        L.check(`${tag}: con Tab desde el título el foco pasa al micrófono, visible`, (await btn.evaluate((el) => el === document.activeElement)) && (await shown(mic)));
+      }
+      await U.closeDialog(p);
+      if (await p.locator("[role=dialog]").count()) await U.closeDialog(p);
+    }
+    if (!mobile) {
+      // Nueva tarea: el título entra con el foco (se ve el micrófono); al pasar a otro campo se oculta, sin mover el campo.
+      await p.keyboard.press("Alt+n");
+      const nt = p.locator('input[id$="-title"]').first();
+      await nt.waitFor();
+      await sleep(400);
+      const nd = U.dialog(p);
+      const nmic = micOf(nd);
+      const nb = await box(nt);
+      L.check(`C1 ${label} Nueva tarea: con el foco en el título se ve el micrófono`, (await nt.evaluate((el) => el === document.activeElement)) && (await shown(nmic)));
+      await p.screenshot({ path: `${SHOTS}/r44-nueva-${label}-titulo.png` });
+      await nd.locator("select").first().focus();
+      await sleep(150);
+      L.check(`C1 ${label} Nueva tarea: con el foco en otro campo no se ve`, !(await shown(nmic)));
+      L.eq(`C1 ${label} Nueva tarea: el campo del título no cambia de tamaño`, await box(nt), nb);
+      const others = await nd.locator("button[data-dictation]").evaluateAll((els) => els.filter((e) => !e.closest("[data-while-editing]") && getComputedStyle(e).visibility === "visible").length);
+      L.check(`C1 ${label} Nueva tarea: el micrófono de la descripción no cambia (sigue a la vista)`, others >= 1, `visibles: ${others}`);
+      await p.screenshot({ path: `${SHOTS}/r44-nueva-${label}-otro-campo.png` });
+      await p.keyboard.press("Escape");
+      await sleep(500);
+      if (await p.locator("[role=dialog]").count()) await p.keyboard.press("Escape");
+      await sleep(300);
+    }
+    // Oscuro: mismo comportamiento (capturas).
+    await p.emulateMedia({ colorScheme: "dark" });
+    await U.openTask(p, "Micro R44");
+    const dd = U.dialog(p);
+    L.check(`C1 ${label} oscuro: sin editar, el micrófono no se ve`, !(await shown(micOf(dd))));
+    await p.screenshot({ path: `${SHOTS}/r44-micro-${label}-oscuro-reposo.png` });
+    if (mobile) await dd.getByRole("button", { name: "Título" }).first().tap();
+    else await dd.locator("textarea[aria-label='Título']").first().click();
+    await sleep(200);
+    L.check(`C1 ${label} oscuro: al editar, sí`, await shown(micOf(dd)));
+    await p.screenshot({ path: `${SHOTS}/r44-micro-${label}-oscuro-editando.png` });
+    await U.closeDialog(p);
+    L.assertNoErrors(`C1 ${label}`, [s]);
+    await s.ctx.close();
+  }
+
+  L.scenario("R44C2: columnas que siguen por abajo, sin esquinas inferiores");
+  await L.cleanBoard();
+  const pad = (i) => String(i).padStart(2, "0");
+  await L.seedTasks(COL.backlog, Array.from({ length: 20 }, (_, i) => `B${pad(i + 1)}`));
+  await L.seedTasks(COL.doing, ["E1", "E2", "E3"]);
+  await L.seedTasks(COL.next, Array.from({ length: 16 }, (_, i) => `R${pad(i + 1)}`));
+  // Oráculo independiente del cálculo de la app: la última tarjeta acaba por debajo de lo visible de la lista o de la ventana.
+  const state = (page, name) => L.colLoc(page, name).evaluate((col) => {
+    const list = col.querySelector("[data-card-list]");
+    const cards = list.querySelectorAll("[data-task-card]");
+    const last = cards[cards.length - 1];
+    const bottom = Math.min(list.getBoundingClientRect().bottom, window.innerHeight);
+    return {
+      attr: col.hasAttribute("data-more-below"),
+      radius: getComputedStyle(col).borderBottomLeftRadius,
+      hidden: !!last && last.getBoundingClientRect().bottom > bottom + 1,
+      overflow: list.scrollHeight > list.clientHeight,
+    };
+  });
+  const scrollList = (page, name, to) => L.colLoc(page, name).evaluate((col, f) => {
+    const list = col.querySelector("[data-card-list]");
+    list.scrollTop = f === "end" ? list.scrollHeight : f === "top" ? 0 : list.scrollHeight - list.clientHeight - Number(f);
+  }, to);
+  for (const [label, viewport] of [["1366", { width: 1366, height: 768 }], ["1440", { width: 1440, height: 900 }]]) {
+    const s = await L.session({ viewport });
+    const p = s.page;
+    for (const scheme of ["light", "dark"]) {
+      await p.emulateMedia({ colorScheme: scheme });
+      await sleep(300);
+      const b = await state(p, COL.backlog);
+      L.check(`C2 ${label} ${scheme}: Backlog con tarjetas cortadas abajo → esquinas inferiores rectas`, b.hidden && b.attr && b.radius === "0px", JSON.stringify(b));
+      const e = await state(p, COL.doing);
+      L.check(`C2 ${label} ${scheme}: «En progreso» (todo cabe) → redondeada`, !e.hidden && !e.attr && e.radius !== "0px", JSON.stringify(e));
+      const r = await state(p, COL.next);
+      L.check(`C2 ${label} ${scheme}: la de la release (con «Siempre en la release») sigue redondeada aunque tenga scroll`, r.overflow && !r.attr && r.radius !== "0px", JSON.stringify(r));
+      await p.screenshot({ path: `${SHOTS}/r44-columnas-${label}-${scheme}.png` });
+    }
+    await p.emulateMedia({ colorScheme: "light" });
+    await scrollList(p, COL.backlog, "end");
+    await sleep(200);
+    let b = await state(p, COL.backlog);
+    L.check(`C2 ${label}: al llegar al final del scroll → redondeada`, !b.hidden && !b.attr && b.radius !== "0px", JSON.stringify(b));
+    await p.screenshot({ path: `${SHOTS}/r44-columnas-${label}-final.png` });
+    // Solo queda por ver el hueco del final (la última tarjeta se ve entera): sigue redondeada.
+    await scrollList(p, COL.backlog, 10);
+    await sleep(200);
+    b = await state(p, COL.backlog);
+    L.check(`C2 ${label}: con solo el hueco del final por ver → redondeada`, !b.hidden && !b.attr, JSON.stringify(b));
+    await scrollList(p, COL.backlog, 150);
+    await sleep(200);
+    b = await state(p, COL.backlog);
+    L.check(`C2 ${label}: subiendo un poco (la última tarjeta se corta) → recta otra vez`, b.hidden && b.attr, JSON.stringify(b));
+    await scrollList(p, COL.backlog, "top");
+    await sleep(200);
+    L.check(`C2 ${label}: arriba del todo → recta`, (await state(p, COL.backlog)).attr);
+    // Ventana más baja: «En progreso» deja de caber; al volver, cabe otra vez.
+    await p.setViewportSize({ width: viewport.width, height: 320 });
+    await sleep(300);
+    const lo = await state(p, COL.doing);
+    L.check(`C2 ${label}: al encoger la ventana, «En progreso» ya no cabe → recta`, lo.hidden && lo.attr, JSON.stringify(lo));
+    await p.setViewportSize(viewport);
+    await sleep(300);
+    L.check(`C2 ${label}: al volver al tamaño, redondeada`, !(await state(p, COL.doing)).attr);
+    L.assertNoErrors(`C2 ${label}`, [s]);
+    await s.ctx.close();
+  }
+
+  // En vivo y al añadir/quitar tarjetas: otra persona pasa tarjetas a «En progreso» con Alt+→ hasta que no caben.
+  const a = await L.session({ viewport: { width: 1366, height: 768 } });
+  const o = await L.session({ email: L.USER2, viewport: { width: 1366, height: 768 } });
+  await sleep(1500); // canal en vivo
+  let moved = 0;
+  for (let i = 1; i <= 20 && !(await state(a.page, COL.doing)).hidden; i++) {
+    await L.cardLoc(o.page, `B${pad(i)}`).focus();
+    await o.page.keyboard.press("Alt+ArrowRight");
+    moved = i;
+    await L.waitFor(async () => (await U.uiOrder(a.page, COL.doing)).includes(`B${pad(i)}`), { timeout: 5000 });
+    await sleep(300);
+  }
+  let st = await state(a.page, COL.doing);
+  L.check(`C2 en vivo: con las tarjetas que llegan de otra persona (${moved}) «En progreso» pasa a recta`, st.hidden && st.attr, JSON.stringify(st));
+  await a.page.screenshot({ path: `${SHOTS}/r44-columnas-en-vivo.png` });
+  // Quitarlas desde aquí (Alt+←) la devuelve a redondeada en cuanto vuelve a caber.
+  for (let i = moved; i >= 1 && (await state(a.page, COL.doing)).hidden; i--) {
+    await L.cardLoc(a.page, `B${pad(i)}`).focus();
+    await a.page.keyboard.press("Alt+ArrowLeft");
+    await sleep(500);
+  }
+  st = await state(a.page, COL.doing);
+  L.check("C2: al quitar tarjetas hasta que vuelven a caber → redondeada", !st.hidden && !st.attr, JSON.stringify(st));
+  // Arrastre con el ratón: soltar tarjetas en «En progreso» hasta que no caben.
+  const inDoing = (await U.uiOrder(a.page, COL.doing)).length;
+  for (let i = 0; i < 4 && !(await state(a.page, COL.doing)).hidden; i++) {
+    const title = (await U.uiOrder(a.page, COL.backlog))[0];
+    await L.cardLoc(a.page, title).scrollIntoViewIfNeeded();
+    await U.drag(a.page, title, { column: COL.doing });
+  }
+  await sleep(300);
+  st = await state(a.page, COL.doing);
+  await a.page.screenshot({ path: `${SHOTS}/r44-columnas-arrastre.png` });
+  L.check("C2 arrastre: al soltar tarjetas hasta no caber → recta", st.hidden && st.attr, JSON.stringify({ ...st, antes: inDoing, ahora: (await U.uiOrder(a.page, COL.doing)).length }));
+  L.assertNoErrors("C2 en vivo", [a, o]);
+  await o.ctx.close();
+  await a.ctx.close();
+
+  // Móvil: una columna a la vista, mismo criterio; al cambiar de pestaña se recalcula.
+  const m = await L.session({ viewport: { width: 390, height: 844 }, mobile: true });
+  const mp = m.page;
+  const tab = (name) => mp.locator("[data-mobile-tabs] button", { hasText: name }).first();
+  for (const scheme of ["light", "dark"]) {
+    await mp.emulateMedia({ colorScheme: scheme });
+    await tab(COL.backlog).tap();
+    await sleep(600);
+    const mb = await state(mp, COL.backlog);
+    L.check(`C2 móvil ${scheme}: Backlog con tarjetas cortadas → recta`, mb.hidden && mb.attr && mb.radius === "0px", JSON.stringify(mb));
+    await mp.screenshot({ path: `${SHOTS}/r44-columnas-movil-${scheme}.png` });
+    await tab(COL.closed).tap();
+    await sleep(600);
+    const mc = await state(mp, COL.closed);
+    L.check(`C2 móvil ${scheme}: columna vacía → redondeada`, !mc.attr && mc.radius !== "0px", JSON.stringify(mc));
+    await tab("Siguiente salto").tap();
+    await sleep(600);
+    const mr = await state(mp, COL.next);
+    L.check(`C2 móvil ${scheme}: la de la release, redondeada siempre`, mr.overflow && !mr.attr && mr.radius !== "0px", JSON.stringify(mr));
+    await mp.screenshot({ path: `${SHOTS}/r44-columnas-movil-release-${scheme}.png` });
+  }
+  L.assertNoErrors("C2 móvil", [m]);
+  await m.ctx.close();
 }
 
 await L.closeBrowser(); await L.closeDb();
