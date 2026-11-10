@@ -40,6 +40,7 @@ export const READ_ACTIONS = [
   "release.zipDownload",
   "storage.previewCleanup",
   "storage.largestAttachments",
+  "admin.techInfo",
 ];
 
 type Params = Record<string, string | string[] | undefined>;

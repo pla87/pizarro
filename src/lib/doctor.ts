@@ -16,7 +16,7 @@ import { backupsDir, uploadDir } from "./upload-dir";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Carpeta de migraciones: en desarrollo ./prisma; en el contenedor, la del migrador; con `npm start`, dos niveles arriba. */
-async function migrationFolder(): Promise<string[] | null> {
+export async function migrationFolder(): Promise<string[] | null> {
   const cwd = process.cwd();
   const candidates = [
     process.env.DOCTOR_MIGRATIONS_DIR,
@@ -36,7 +36,7 @@ async function migrationFolder(): Promise<string[] | null> {
 }
 
 /** Identificador de la compilación: el que Next incrusta o, desde la línea de órdenes, el fichero .next/BUILD_ID. */
-async function buildId(): Promise<string | null> {
+export async function buildId(): Promise<string | null> {
   if (process.env.NEXT_PUBLIC_BUILD_ID) return process.env.NEXT_PUBLIC_BUILD_ID;
   for (const p of [path.join(/*turbopackIgnore: true*/ process.cwd(), ".next", "BUILD_ID"), path.join(/*turbopackIgnore: true*/ process.cwd(), ".next", "standalone", ".next", "BUILD_ID")]) {
     try {
@@ -85,7 +85,9 @@ export async function collectDiagnostics(opts: DoctorOptions): Promise<Record<st
   const report: Record<string, unknown> = {
     generatedAt: now.toISOString(),
     source: opts.source,
-    app: { name: "pizarro", version: (pkg as { version?: string }).version ?? null, buildId: await buildId() },
+    // official: «docker»/«railway» si es una build oficial sin modificar (src/lib/bug-report-core.ts); null si no o desde
+    // la línea de órdenes (allí no llegan los valores fijados al compilar la app).
+    app: { name: "pizarro", version: (pkg as { version?: string }).version ?? null, buildId: await buildId(), commit: process.env.NEXT_PUBLIC_GIT_COMMIT || null, official: process.env.NEXT_PUBLIC_OFFICIAL_BUILD || null },
     runtime: {
       node: process.version,
       platform: process.platform,

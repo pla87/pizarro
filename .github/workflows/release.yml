@@ -1,8 +1,12 @@
 # Al subir una etiqueta vX.Y.Z (npm run release:tag + git push origin vX.Y.Z):
 #   1. construye la imagen Docker (linux/amd64 y linux/arm64) y la publica en GHCR
 #      como ghcr.io/pla87/pizarro:X.Y.Z y :latest;
-#   2. crea la GitHub Release con las notas de esa versión tomadas de changelog.json.
+#   2. crea la GitHub Release con las notas de esa versión tomadas de changelog.json;
+#   3. mueve la rama «stable» a ese commit (solo versiones X.Y.Z sin sufijo y nunca hacia atrás). Railway y quien
+#      construya desde el código siguen «stable»: así nadie recibe commits sueltos de main, solo versiones publicadas.
 # La release se crea al final: si la imagen falla, no se anuncia una versión que no se puede instalar.
+# Las acciones van fijadas a un commit exacto (SHA de 40 caracteres, con su versión en el comentario); Dependabot
+# propone las actualizaciones (.github/dependabot.yml, revisión en docs/HANDOFF.md).
 # También se puede lanzar a mano (Actions → Release → Run workflow, rama main): publica la versión de
 # package.json de ese commit y crea la etiqueta vX.Y.Z junto con la release. A mano solo desde main: lanzado desde
 # otra rama, los jobs no se ejecutan (no se publica nada). Si esa versión ya tiene etiqueta vX.Y.Z, se para con un
@@ -31,7 +35,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Comprobar que la etiqueta coincide con package.json
         run: |
@@ -57,10 +61,10 @@ jobs:
           fi
           echo "VERSION=$tag" >> "$GITHUB_ENV"
 
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -74,15 +78,19 @@ jobs:
           case "$VERSION" in *[!0-9.]*) ;; *) tags="$tags,ghcr.io/pla87/pizarro:latest" ;; esac
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.tags.outputs.tags }}
+          # OFFICIAL_BUILD + RELEASE_VERSION marcan la imagen como build oficial (next.config.ts): solo entonces la app
+          # muestra «Informar de un error». Cualquiera puede pasarlas al construir: es una pista, no una garantía.
           build-args: |
             GIT_SHA=${{ github.sha }}
+            OFFICIAL_BUILD=1
+            RELEASE_VERSION=${{ env.VERSION }}
           labels: |
             org.opencontainers.image.source=https://github.com/pla87/pizarro
             org.opencontainers.image.version=${{ env.VERSION }}
@@ -98,7 +106,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Versión
         run: |
@@ -123,3 +131,35 @@ jobs:
             gh release create "$TAG" \
               --title "Pizarro $TAG" --notes-file release-notes.md --verify-tag
           fi
+
+  stable:
+    name: Rama stable
+    runs-on: ubuntu-latest
+    needs: release
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
+    # Lo único que escribe en el repositorio desde aquí: mover refs/heads/stable.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Mover stable a la versión publicada
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          case "$version" in
+            *[!0-9.]*) echo "$version es una preversión: stable no se mueve."; exit 0 ;;
+          esac
+          # Commit actual de stable (vacío si aún no existe).
+          current="$(git ls-remote origin refs/heads/stable | cut -f1)"
+          if [ "$current" = "$GITHUB_SHA" ]; then echo "stable ya está en $GITHUB_SHA."; exit 0; fi
+          if [ -n "$current" ]; then
+            git fetch --depth=1 origin "$current"
+            prev="$(git show "$current:package.json" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).version))")"
+            # Nunca hacia atrás: publicar una corrección de una versión antigua no debe bajar a nadie de versión.
+            newer="$(node -e "const p=v=>v.split('.').map(Number);const [a,b]=[p(process.argv[1]),p(process.argv[2])];let c=0;for(let i=0;i<3&&!c;i++)c=a[i]-b[i];console.log(c>0?1:0)" "$version" "$prev")"
+            if [ "$newer" != 1 ]; then echo "stable ya tiene la $prev (>= $version): no se mueve."; exit 0; fi
+          fi
+          # --force-with-lease con el commit leído arriba: si otro proceso la movió entretanto, falla en vez de pisarla.
+          # Con «current» vacío exige que la rama no exista todavía.
+          git push --force-with-lease="refs/heads/stable:$current" origin "$GITHUB_SHA:refs/heads/stable"
+          echo "stable → $GITHUB_SHA (v$version)."

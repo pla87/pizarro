@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { NextConfig } from "next";
+import { buildCommit, officialBuild } from "./src/lib/bug-report-core";
 import { PROXY_BODY_LIMIT_BYTES } from "./src/lib/upload-size";
 
 const isDev = process.env.NODE_ENV !== "production";
@@ -11,6 +12,9 @@ const isDev = process.env.NODE_ENV !== "production";
 const version = (JSON.parse(readFileSync("package.json", "utf8")) as { version?: string }).version ?? "0.0.0";
 const commit = (process.env.GIT_SHA || process.env.RAILWAY_GIT_COMMIT_SHA || "").replace(/[^0-9a-z]/gi, "").slice(0, 12);
 const buildId = `${version}-${commit || Date.now().toString(36)}` + (isDev ? "-dev" : "");
+// ¿Build oficial sin modificar? (imagen del workflow Release o Railway desde la rama stable del repositorio oficial;
+// ver src/lib/bug-report-core.ts). Solo entonces la app ofrece «Informar de un error».
+const official = isDev ? null : officialBuild(process.env, version);
 
 const nextConfig: NextConfig = {
   // Servidor autocontenido (.next/standalone): imagen Docker mucho más pequeña.
@@ -21,7 +25,7 @@ const nextConfig: NextConfig = {
   // responde con otro (despliegue nuevo), hace una navegación completa en vez de usar código y acciones que ya no existen.
   deploymentId: buildId.replace(/[^a-zA-Z0-9_-]/g, "-"),
   // La zona horaria ya no se fija aquí: el navegador la recibe del servidor (data-tz en <html>, ver lib/format.ts).
-  env: { NEXT_PUBLIC_BUILD_ID: buildId },
+  env: { NEXT_PUBLIC_BUILD_ID: buildId, NEXT_PUBLIC_GIT_COMMIT: buildCommit(process.env), NEXT_PUBLIC_OFFICIAL_BUILD: official ?? "" },
   reactStrictMode: true,
   serverExternalPackages: ["sharp", "@react-pdf/renderer"],
   experimental: {

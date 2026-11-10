@@ -89,6 +89,6 @@ test("workflows: la web solo escribe en Pages al desplegar y la release a mano s
   const release = readFileSync(".github/workflows/release.yml", "utf8");
   const guard = "if: github.event_name == 'push' || github.ref == 'refs/heads/main'";
   const releaseJobs = release.split(/^jobs:$/m)[1]!.split(/^ {2}(?=\w)/m).filter((j) => j.trim());
-  assert.deepEqual(releaseJobs.map((j) => j.split(":")[0]), ["image", "release"]);
+  assert.deepEqual(releaseJobs.map((j) => j.split(":")[0]), ["image", "release", "stable"]);
   for (const job of releaseJobs) assert.ok(job.includes(guard), `job sin la condición de main: ${job.split("\n")[0]}`);
 });

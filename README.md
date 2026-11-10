@@ -3,9 +3,10 @@
 Kanban ligero y generador de *release notes* para equipos pequeños (hasta 10 personas por defecto, `MAX_USERS`). Tiene tableros multiproyecto, capturas pegadas desde el portapapeles y exportación de releases agrupadas por tipo, con cabecera y pie personalizados por usuario.
 
 - **Stack:** Next.js 16 (App Router, TypeScript, Tailwind CSS 4) · PostgreSQL · Prisma 7 · `@dnd-kit` · `sharp` · `lucide-react`.
-- **Despliegue:** un único contenedor Docker (monolito) en Railway, con un volumen persistente para las capturas. También se instala en un servidor propio con Docker Compose (Caddy + Pizarro + PostgreSQL): ver [docs/INSTALL.md](docs/INSTALL.md). Instalación en un paso en un servidor Linux: `curl -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com`. Cada versión se publica como imagen Docker ya construida (`ghcr.io/pla87/pizarro`, amd64 y arm64); actualizar o volver a una versión anterior: [docs/INSTALL.md](docs/INSTALL.md), sección 5. Railway sigue construyendo desde el repositorio.
+- **Despliegue:** un único contenedor Docker (monolito) en Railway, con un volumen persistente para las capturas. También se instala en un servidor propio con Docker Compose (Caddy + Pizarro + PostgreSQL): ver [docs/INSTALL.md](docs/INSTALL.md). Instalación en un paso en un servidor Linux: `curl -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com`. Cada versión se publica como imagen Docker ya construida (`ghcr.io/pla87/pizarro`, amd64 y arm64); actualizar o volver a una versión anterior: [docs/INSTALL.md](docs/INSTALL.md), sección 5. Railway sigue construyendo desde el repositorio, desde la rama `stable` (solo versiones publicadas).
 - **Web:** [getpizarro.com](https://getpizarro.com) (qué es, cómo se instala y precios; se genera desde `site/`, ver [docs/VENTA.md](docs/VENTA.md), sección 8).
 - **Documentación:** [Manual de operaciones (PDF)](MANUAL.pdf) · [fuente Markdown](docs/MANUAL.md) · [Changelog](CHANGELOG.md).
+- **Errores:** con el formulario de [incidencias](https://github.com/pla87/pizarro/issues/new/choose) (o *Informar de un error* en *Historial de versiones* dentro de la app). Solo se atienden versiones publicadas sin modificar. Los fallos de seguridad, en privado: [SECURITY.md](SECURITY.md).
 
 ---
 
@@ -169,7 +170,14 @@ Las integraciones son **opcionales**: si faltan sus variables, la app funciona i
 
 1. En el mismo proyecto: **+ New → GitHub Repo** y selecciona este repositorio. Si es la primera vez, autoriza la app de Railway en GitHub.
 2. Railway detecta el `Dockerfile` y el `railway.json`. Estos fijan el builder Docker, el comando de arranque `sh scripts/start.sh`, el *healthcheck* en `/api/health` y una única réplica.
-3. En el servicio, **Settings → Source**: elige la rama que quieras desplegar (por ejemplo `main`).
+3. En el servicio, **Settings → Source → Branch** (en inglés *Branch connected to production*): elige **`stable`**. Esa rama solo avanza cuando se publica una versión (la mueve el workflow *Release* al commit de esa versión), así que Railway solo redespliega con versiones con nombre (`v1.49.0`, `v1.50.0`…), nunca con cada commit de `main`. `main` es la rama de desarrollo: despliégala solo si quieres probar cambios aún sin publicar (y entonces la app no ofrece *Informar de un error*, porque no es una versión oficial).
+
+#### Cambiar una instalación existente de `main` a `stable`
+
+1. Mira qué versión tienes (*Historial de versiones* en la app) y cuál es la última publicada ([Releases](https://github.com/pla87/pizarro/releases)). Si la tuya es **más nueva** que la última publicada (desplegaste commits de `main` posteriores), espera a que se publique la siguiente versión antes de cambiar: volver atrás puede no entender una base de datos ya migrada.
+2. Haz una copia de seguridad (*Administración → Copias de seguridad*).
+3. En el servicio de Pizarro: **Settings → Source → Branch** → `stable`. Railway despliega el commit de la última versión publicada; a partir de ahí, solo cuando se publique otra.
+4. Comprueba en *Historial de versiones* que la versión es la esperada. Si `stable` no aparece en la lista, es que aún no se ha publicado ninguna versión con este flujo: sigue en `main` (o en la etiqueta de la última versión) hasta entonces.
 
 ### 3. Variables de entorno
 

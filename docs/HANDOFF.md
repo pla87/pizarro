@@ -14,7 +14,9 @@ Railway. Se está preparando para venderse como producto.
 - **Repositorio:** `github.com/pla87/pizarro` (antes se llamaba `tablon`; algunas herramientas siguen usando ese
   nombre). Rama principal `main`.
 - **Producción:** Railway despliega `main` automáticamente (si un despliegue no llega, en Railway ⌘K →
-  «Deploy Latest Commit»). Dominio propio configurado en `APP_URL`.
+  «Deploy Latest Commit»). Dominio propio configurado en `APP_URL`. Las instalaciones de los usuarios en Railway
+  deben seguir la rama `stable` (solo versiones publicadas; la mueve el workflow Release). Si la producción propia
+  también debe recibir solo versiones, cámbiala a `stable` (pasos en el README, «Guía de despliegue en Railway»).
 - **Versión actual:** la de `package.json` y el primer bloque de `changelog.json`.
 - **Cómo funciona todo:** `docs/MANUAL.md` (y `MANUAL.pdf`, generado). Instalación: `docs/INSTALL.md`. Prueba en un
   VPS: `docs/PRUEBA-VPS.md`.
@@ -112,7 +114,37 @@ llevan enlaces de sesión ni nombres de modelos.
 4. Commit «vX.Y.Z: …», PR a `main` y fusionar.
 5. Publicar la versión (etiqueta, imagen Docker y GitHub Release): en GitHub, **Actions → Release → Run workflow**
    sobre `main` (la publicación manual solo funciona desde `main`: lanzada desde otra rama no hace nada), o `npm run release:tag` y `git push origin vX.Y.Z` desde un equipo con permiso para subir
-   etiquetas. Tras la primera publicación, el paquete `ghcr.io/pla87/pizarro` debe hacerse público.
+   etiquetas. Tras la primera publicación, el paquete `ghcr.io/pla87/pizarro` debe hacerse público. El mismo
+   workflow mueve la rama `stable` al commit publicado (job «Rama stable», el único con permiso para escribir en el
+   repositorio además de la release): de ella despliegan las instalaciones de Railway. Si se protege `stable` en
+   GitHub, hay que permitir que la mueva GitHub Actions. La imagen se construye con `OFFICIAL_BUILD=1` y
+   `RELEASE_VERSION`: así la app sabe que es una build oficial y ofrece «Informar de un error».
+
+### Actualizaciones de dependencias (Dependabot)
+
+`.github/dependabot.yml` abre PR contra `main`:
+
+- **Acciones de GitHub**, un PR semanal con todas juntas. En los workflows cada acción va fijada a un commit exacto
+  (`uses: owner/acción@<SHA de 40 caracteres> # vX.Y.Z`): nunca se vuelve a poner una etiqueta móvil como `@v4`.
+  Para fijar una acción nueva a mano: `git ls-remote https://github.com/<owner>/<acción> refs/tags/<tag>` (si la
+  etiqueta es anotada, el commit es el de la línea `^{}`).
+- **npm**, un PR mensual con todas las versiones menores y parches. Las versiones mayores no se proponen (se hacen a
+  mano, leyendo sus notas de cambios). Las de seguridad llegan en cuanto hay aviso, en su propio PR (requiere
+  *Settings → Code security → Dependabot security updates* activado).
+
+Cómo se revisa cada PR:
+
+1. Leer qué cambia: en las acciones, que el SHA nuevo corresponde a la etiqueta del comentario (enlace «Release
+   notes» del PR) y que la acción sigue siendo del mismo propietario; en npm, las notas de los paquetes con cambios
+   de comportamiento (Next, Prisma, TipTap, @dnd-kit, sharp…). Prisma: `prisma` y `@prisma/*` deben ir a la misma
+   versión; Next y `@next/swc-*`, también.
+2. Bajarse la rama y pasar **todas** las comprobaciones de la sección 4 (incluidas `npm run test:db` y el build de
+   producción) y, si toca Next, TipTap o @dnd-kit, las suites e2e.
+3. **Una actualización de dependencias se aprueba solo si pasan todas las pruebas.** Si algo falla, se cierra el PR
+   (o se ignora esa versión con `@dependabot ignore this minor version`) y se anota en la sección 6. Nunca se
+   «arregla» una prueba para que pase con la dependencia nueva sin entender por qué fallaba.
+4. Se fusiona en `main` como cualquier otro cambio; llega a los usuarios con la siguiente versión publicada (nunca
+   antes: las instalaciones siguen las releases o la rama `stable`).
 
 ## 6. Estado y pendientes
 

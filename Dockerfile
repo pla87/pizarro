@@ -23,6 +23,13 @@ COPY . .
 # Railway pasa RAILWAY_GIT_COMMIT_SHA solo si se declara aquí. Sin ninguno de los dos se usa la hora del build.
 ARG GIT_SHA=""
 ARG RAILWAY_GIT_COMMIT_SHA=""
+# Build oficial (solo informa; ver src/lib/bug-report-core.ts): el workflow Release pasa OFFICIAL_BUILD=1 y
+# RELEASE_VERSION; en Railway cuentan el repositorio y la rama de origen (deben declararse aquí para recibirlos).
+ARG OFFICIAL_BUILD=""
+ARG RELEASE_VERSION=""
+ARG RAILWAY_GIT_REPO_OWNER=""
+ARG RAILWAY_GIT_REPO_NAME=""
+ARG RAILWAY_GIT_BRANCH=""
 # prisma generate no conecta a la base de datos; solo necesita la variable definida.
 RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" npm run build
 
