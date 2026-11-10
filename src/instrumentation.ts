@@ -30,7 +30,7 @@ export async function register() {
   } catch (err) {
     console.error("[instrumentation] no se pudieron registrar los errores del proceso", err);
   }
-  // Apagado ordenado (SIGTERM/SIGINT): guarda los registros pendientes y espera a los emails en curso. Requiere
+  // Apagado ordenado (SIGTERM/SIGINT): espera a las peticiones y los emails en curso y guarda los registros. Requiere
   // NEXT_MANUAL_SIG_HANDLE=1 (Dockerfile, scripts/start.sh, `npm start`); ver lib/shutdown.ts.
   try {
     const { installShutdownHandlers } = await import("@/lib/shutdown");

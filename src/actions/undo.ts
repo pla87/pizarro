@@ -1,6 +1,6 @@
 "use server";
 
-import type { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { assertProjectAccess } from "@/lib/access";
 import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
@@ -13,7 +13,7 @@ import { getT } from "@/i18n/server";
 import { makeT, type T } from "@/i18n/core";
 import { actionContext } from "@/lib/action-context";
 import { findUndoConflicts, type UndoConflicts } from "@/lib/undo-conflicts";
-import { applyUndo, discardEntries, fingerprintOps, mirrorOps, saveUndo, type SavedEvent, type UndoKind, type UndoOp } from "@/lib/undo";
+import { applyUndo, discardEntries, fingerprintsOf, mirrorOps, saveUndo, type SavedEvent, type UndoKind, type UndoOp } from "@/lib/undo";
 import * as v from "@/lib/validation";
 
 type Result = { label: string; remaining: number; skipped: number; redoable: number };
@@ -119,13 +119,22 @@ async function applyEntry(kind: UndoKind, user: { id: string }, pid: string, ent
         },
       })
       .catch(() => {});
-  let current: string | null = null;
+  // Otras entradas con huella (de la misma persona y proyecto) que siguen intactas: este cambio es suyo, así que tras
+  // aplicarlo se les actualiza la huella para que no cuente como ajeno. Las huellas de esta entrada y de las demás
+  // salen de una sola lectura del estado (fingerprintsOf), antes y después de aplicar, no de una lectura por entrada.
+  let siblings: { id: string; ops: unknown; fingerprint: string | null }[];
+  let prints: string[];
   try {
-    if (entry.fingerprint) current = await fingerprintOps(pid, ops);
+    siblings = await db.undoEntry.findMany({ where: { userId: user.id, projectId: pid, fingerprint: { not: null }, id: { not: entry.id } }, select: { id: true, ops: true, fingerprint: true } });
+    prints = await fingerprintsOf(pid, [
+      ...(entry.fingerprint ? [{ ops, stored: entry.fingerprint }] : []),
+      ...siblings.map((s) => ({ ops: s.ops as unknown as UndoOp[], stored: s.fingerprint })),
+    ]);
   } catch (err) {
     await restore();
     throw err;
   }
+  const current = entry.fingerprint ? prints.shift()! : null;
   // Si otra persona ha cambiado lo afectado desde que se creó esta entrada, aplicarla pisaría su trabajo:
   // se descarta (para no bloquear la pila) y se avisa. Las acciones propias ya vacían la pila de rehacer.
   // Con `force` la persona ya lo ha confirmado (undoChecked/redoChecked): se aplica igualmente.
@@ -135,15 +144,10 @@ async function applyEntry(kind: UndoKind, user: { id: string }, pid: string, ent
       undo ? "Otra persona ha cambiado esto después de rehacerlo: no se puede deshacer." : "Otra persona ha cambiado esto después de deshacerlo: no se puede rehacer.",
     );
   }
-  let intact: { id: string; ops: unknown }[];
+  const intact = siblings.filter((s, i) => prints[i] === s.fingerprint);
   let counter: UndoOp[];
   let skipped: number;
   try {
-    // Otras entradas con huella (de la misma persona y proyecto) que siguen intactas: este cambio es suyo,
-    // así que tras aplicarlo se les actualiza la huella para que no cuente como ajeno.
-    const siblings = await db.undoEntry.findMany({ where: { userId: user.id, projectId: pid, fingerprint: { not: null }, id: { not: entry.id } }, select: { id: true, ops: true, fingerprint: true } });
-    const prints = await Promise.all(siblings.map((s) => fingerprintOps(pid, s.ops as unknown as UndoOp[])));
-    intact = siblings.filter((s, i) => prints[i] === s.fingerprint);
     // Antes de aplicar, el estado actual de lo que se va a tocar: es lo que hace la entrada contraria.
     counter = await mirrorOps(pid, ops);
     skipped = await applyUndo(pid, ops, { keepFiles: true });
@@ -158,10 +162,17 @@ async function applyEntry(kind: UndoKind, user: { id: string }, pid: string, ent
     : { eventIds: await restoreTaskEvents((entry.events ?? []) as unknown as SavedEvent[], pid) };
   // Una release desplegada no se puede recrear: rehacer volvería a mover las tareas sin ella. No hay entrada de rehacer.
   const recreatable = !(undo && ops.some((op) => op.t === "release.remove"));
-  if (recreatable && counter.length) await saveUndo(user.id, pid, entry.label, counter, entry.taskId, undo ? "REDO" : "UNDO", false, await fingerprintOps(pid, counter), history);
-  await Promise.all(
-    intact.map(async (s) => db.undoEntry.updateMany({ where: { id: s.id }, data: { fingerprint: await fingerprintOps(pid, s.ops as unknown as UndoOp[]) } })),
-  );
+  const saveCounter = recreatable && counter.length > 0;
+  // Después de aplicar: la huella de la entrada contraria y la nueva de las intactas, otra vez con una sola lectura.
+  // Se recalculan todas (no solo las que comparten tareas con esta): aplicar también puede mover otras filas
+  // (renumerar una columna, quitar la marca de fija, llevar tareas de una columna borrada a otra). Solo se escriben
+  // las que han cambiado.
+  const after = await fingerprintsOf(pid, [...(saveCounter ? [{ ops: counter }] : []), ...intact.map((s) => ({ ops: s.ops as unknown as UndoOp[] }))]);
+  if (saveCounter) await saveUndo(user.id, pid, entry.label, counter, entry.taskId, undo ? "REDO" : "UNDO", false, after.shift()!, history);
+  const changed = intact.flatMap((s, i) => (after[i] !== s.fingerprint ? [Prisma.sql`(${s.id}::text, ${after[i]!}::text)`] : []));
+  if (changed.length) {
+    await db.$executeRaw`UPDATE "UndoEntry" AS u SET "fingerprint" = v."fp" FROM (VALUES ${Prisma.join(changed)}) AS v("id", "fp") WHERE u."id" = v."id"`;
+  }
   const [remaining, redoable] = await Promise.all([
     db.undoEntry.count({ where: { userId: user.id, projectId: pid, kind: "UNDO" } }),
     db.undoEntry.count({ where: { userId: user.id, projectId: pid, kind: "REDO" } }),

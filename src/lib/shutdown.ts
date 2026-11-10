@@ -4,10 +4,12 @@
 // nuestro estado en memoria: los registros pendientes de escribir (lib/log.ts, se guardan en lote cada 3 s) y los emails
 // que aún se están enviando se perdían. Con NEXT_MANUAL_SIG_HANDLE=1 Next no instala sus manejadores y este módulo se
 // encarga (se registra desde instrumentation.ts). Orden:
-//   1. Se marca el apagado: no se aceptan canales en vivo nuevos ni se lanzan tareas de fondo nuevas.
-//   2. Se deja de escuchar en el puerto (best effort: Next no expone su servidor HTTP) y se cierran los canales en vivo
-//      (los navegadores reconectan solos a la instancia nueva).
-//   3. Se espera como mucho GRACE_MS a los envíos de email en curso.
+//   1. Se marca el apagado: no se aceptan canales en vivo nuevos ni se lanzan tareas de fondo nuevas, y /api/health
+//      responde 503 (el balanceador deja de mandar tráfico por las conexiones que sigan abiertas).
+//   2. Se deja de escuchar en el puerto (Next no expone su servidor HTTP: se busca entre los manejadores activos) y se
+//      cierran los canales en vivo (los navegadores reconectan solos a la instancia nueva), que si no lo retendrían.
+//   3. Se espera como mucho GRACE_MS a las peticiones HTTP en curso (una subida a medias, una acción) y a los envíos de
+//      email; las conexiones que quedan libres se cierran según terminan. Sin nada en curso no se espera nada.
 //   4. Se escriben los registros pendientes (como mucho FLUSH_MS) y se sale.
 
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -60,21 +62,53 @@ export function resetShutdownForTests(): void {
   state.inflight.clear();
 }
 
-/** Deja de aceptar conexiones nuevas en el puerto. Next no da acceso a su servidor HTTP: se busca entre los manejadores activos. */
-export async function stopListening(): Promise<number> {
+/** Lo que devuelve stopListening: cuántos puertos se cerraron y la espera a las peticiones que siguen en curso. */
+export interface Listening {
+  closed: number;
+  /** Espera como mucho `ms` a que terminen las peticiones en curso; devuelve cuántas conexiones siguen abiertas. */
+  drained: (ms: number) => Promise<number>;
+}
+
+type HttpLikeServer = import("node:net").Server & { closeIdleConnections?: () => void };
+
+/** Cada cuánto se cierran las conexiones que han quedado libres (keep-alive) mientras se espera. */
+const IDLE_SWEEP_MS = 50;
+
+/**
+ * Deja de aceptar conexiones nuevas en el puerto y prepara la espera a las que siguen abiertas. Next no da acceso a su
+ * servidor HTTP: se busca entre los manejadores activos. server.close() avisa cuando se ha cerrado la última conexión;
+ * las que quedan libres al terminar su petición (keep-alive) se cierran en cada barrido, así que el aviso llega en cuanto
+ * acaba la última petición en curso, sin esperar al plazo del keep-alive.
+ */
+export async function stopListening(): Promise<Listening> {
   try {
     const { Server } = await import("node:net");
     const handles = (process as unknown as { _getActiveHandles?: () => unknown[] })._getActiveHandles?.() ?? [];
-    let closed = 0;
-    for (const h of handles) {
-      if (h instanceof Server && h.listening) {
-        h.close();
-        closed++;
-      }
-    }
-    return closed;
+    const servers = handles.filter((h): h is HttpLikeServer => h instanceof Server && h.listening);
+    const closed = servers.map((s) => new Promise<void>((resolve) => s.close(() => resolve())));
+    const sweep = () => {
+      for (const s of servers) s.closeIdleConnections?.();
+    };
+    sweep();
+    const open = () =>
+      Promise.all(servers.map((s) => new Promise<number>((resolve) => s.getConnections((err, n) => resolve(err ? 0 : n))))).then((ns) => ns.reduce((a, n) => a + n, 0));
+    return {
+      closed: servers.length,
+      drained: async (ms) => {
+        if (!servers.length) return 0;
+        const timer = setInterval(sweep, IDLE_SWEEP_MS);
+        let deadline: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([Promise.all(closed), new Promise<void>((resolve) => (deadline = setTimeout(resolve, ms)))]);
+        } finally {
+          clearInterval(timer);
+          clearTimeout(deadline);
+        }
+        return open();
+      },
+    };
   } catch {
-    return 0;
+    return { closed: 0, drained: async () => 0 };
   }
 }
 
@@ -82,7 +116,7 @@ export interface ShutdownDeps {
   flushLogs: () => Promise<void>;
   logEvent: (e: { level?: "info" | "warn" | "error"; category: string; action: string; message: string; details?: unknown }) => void;
   closeStreams: () => number;
-  stopListening: () => Promise<number>;
+  stopListening: () => Promise<Listening>;
   exit: (code: number) => void;
   graceMs: number;
   flushMs: number;
@@ -120,18 +154,23 @@ export async function runShutdown(signal: NodeJS.Signals, deps?: ShutdownDeps): 
   hard.unref?.();
   console.info(`[shutdown] ${signal}: apagado ordenado`);
   let pending = 0;
+  let open = 0;
   let listeners = 0;
   let streams = 0;
   try {
-    listeners = await d.stopListening();
+    const listening = await d.stopListening();
+    listeners = listening.closed;
+    // Los canales en vivo no terminan nunca por sí solos: se cierran antes de esperar a las peticiones.
     streams = d.closeStreams();
-    pending = await waitForInFlight(d.graceMs);
+    // Peticiones y emails en curso, a la vez y con el mismo plazo.
+    [open, pending] = await Promise.all([listening.drained(d.graceMs), waitForInFlight(d.graceMs)]);
+    const left = [open && `${open} conexión(es) con peticiones sin terminar`, pending && `${pending} envío(s) de email sin terminar`].filter(Boolean);
     d.logEvent({
-      level: pending ? "warn" : "info",
+      level: left.length ? "warn" : "info",
       category: "system",
       action: "system.shutdown",
-      message: `Apagado ordenado (${signal}): ${pending ? `${pending} envío(s) de email sin terminar tras ${d.graceMs / 1000} s` : "sin envíos pendientes"}`,
-      details: { signal, pendingSends: pending, closedStreams: streams, closedListeners: listeners, ms: Date.now() - started },
+      message: `Apagado ordenado (${signal}): ${left.length ? `${left.join(" y ")} tras ${d.graceMs / 1000} s` : "sin peticiones ni envíos pendientes"}`,
+      details: { signal, openConnections: open, pendingSends: pending, closedStreams: streams, closedListeners: listeners, ms: Date.now() - started },
     });
     // Los avisos que registran los envíos al terminar (continuaciones de la misma cola de microtareas) ya se han añadido.
     await new Promise<void>((resolve) => setImmediate(resolve));
