@@ -17,6 +17,8 @@ on:
       - "src/lib/product.ts"
       - "src/lib/landing-content.ts"
       - "src/lib/site-content.ts"
+      - "src/lib/site-markdown.ts"
+      - "docs/guias/**"
       - "src/i18n/en/**"
       - "src/app/icon.svg"
       - "src/app/favicon.ico"

@@ -43,7 +43,6 @@ export const licencia2: Record<string, string> = {
   "Funciones": "Features",
   "Instalación": "Installation",
   "Preguntas": "FAQ",
-  "Kanban en tu servidor · pago único": "Kanban on your server · one-off payment",
   "Por hacer": "To do",
   "Hecho": "Done",
   "Documentos y archivos de cada proyecto, junto a sus tareas.": "Each project's documents and files, right next to its tasks.",
