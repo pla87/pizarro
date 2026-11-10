@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 process.env.SESSION_SECRET = "x".repeat(48);
-process.env.WHATSAPP_TEMPLATE_NAME = "mencion_tablon";
+process.env.WHATSAPP_TEMPLATE_NAME = "mencion_pizarro";
 // notify importa el cliente de BD; no se conecta hasta la primera consulta.
 process.env.DATABASE_URL ??= "postgresql://test:test@localhost:5432/test";
 
@@ -31,7 +31,7 @@ test("email de mención escapa HTML", () => {
 test("payload de WhatsApp con plantilla y 4 parámetros", () => {
   const p = whatsappPayload("+34600111222", msg);
   assert.equal(p.to, "34600111222");
-  assert.equal(p.template.name, "mencion_tablon");
+  assert.equal(p.template.name, "mencion_pizarro");
   assert.equal(p.template.language.code, "es");
   assert.deepEqual(p.template.components[0]!.parameters.map((x) => x.text), ["Ana <script>", "Pantalla", "Web", msg.url]);
 });

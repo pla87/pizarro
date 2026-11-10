@@ -17,3 +17,6 @@ tests
 CHANGELOG.md
 deploy
 **/.env
+e2e
+site
+CNAME
