@@ -2,7 +2,6 @@
 export const documentacion: Record<string, string> = {
   "Documentación": "Documentation",
   "Subir archivos": "Upload files",
-  "Descartar": "Dismiss",
   "Documento subido": "Document uploaded",
   "{n} documentos subidos": "{n} documents uploaded",
   "Reducir imagen": "Zoom out",

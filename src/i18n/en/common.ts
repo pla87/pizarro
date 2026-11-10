@@ -107,7 +107,6 @@ export const common: Record<string, string> = {
   "Violeta": "Purple",
   "Rosa": "Pink",
   "Otro color": "Other color",
-  "Elegir otro color": "Choose another color",
   "Error": "Error",
   "{n} tarea(s)": "{n} task(s)",
   "Orden actualizado": "Order updated",

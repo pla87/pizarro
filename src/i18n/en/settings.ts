@@ -67,7 +67,6 @@ export const settings: Record<string, string> = {
   "Entrar": "Log in",
   "Iniciar sesión": "Log in",
   "El error ha quedado registrado. Prueba a recargar.": "The error has been recorded. Try reloading.",
-  "Plantillas de release notes": "Release notes templates",
   "Puedes tener varias cabeceras y varios pies. Al generar una release eliges cuáles usar y se insertan en el texto. Admiten Markdown.": "You can have several headers and footers. When generating a release you choose which ones to use and they are inserted into the text. They support Markdown.",
   "Cabeceras": "Headers",
   "Pies": "Footers",
@@ -212,7 +211,6 @@ export const settings: Record<string, string> = {
   "Crea un proyecto privado desde el selector del menú o pide a un administrador que te dé acceso.": "Create a private project from the menu selector or ask an administrator to give you access.",
   "1 subtarea predefinida": "1 predefined subtask",
   "{n} subtareas predefinidas": "{n} predefined subtasks",
-  "Subtareas predefinidas": "Predefined subtasks",
   "Una por línea": "One per line",
   "Se añaden al elegir este tipo al crear una tarea (máx. {n}, sin repetir las que ya estén).": "Added when this type is chosen while creating a task (max. {n}, skipping any already there).",
   // Confirmaciones (ui/ConfirmDialog)
@@ -237,7 +235,6 @@ export const settings: Record<string, string> = {
   "Límites de los adjuntos de las tareas y de los paquetes ZIP al generar o descargar una release.": "Limits for task attachments and for the ZIP packages when generating or downloading a release.",
   "Plantillas de release notes del proyecto": "Project release notes templates",
   "Cabeceras y pies compartidos por todo el equipo. En «Generar release» salen después de las plantillas de cada persona, en este orden, bajo «Del proyecto». Admiten Markdown.": "Headers and footers shared by the whole team. In “Generate release” they appear after each person's own templates, in this order, under “From the project”. They support Markdown.",
-  "Dictado por voz": "Voice dictation",
   "Un botón de micrófono en los títulos y descripciones de las tareas para escribir hablando. Se guarda solo en este navegador.": "A microphone button in task titles and descriptions to type by speaking. Saved in this browser only.",
   "Este navegador no admite el dictado (Firefox no lo tiene). Chrome, Edge, Safari y Chrome para Android sí.": "This browser does not support dictation (Firefox does not). Chrome, Edge, Safari and Chrome for Android do.",
   "Mostrar botón de dictado": "Show dictation button",

@@ -10,7 +10,6 @@ export const ics: Record<string, string> = {
   "Suscribirse": "Subscribe",
   "Suscribirse al calendario": "Subscribe to the calendar",
   "Añade tus fechas límite y entregables a Google Calendar, Apple Calendar u Outlook. El calendario se actualiza solo.": "Add your due dates and deliverables to Google Calendar, Apple Calendar or Outlook. The calendar updates by itself.",
-  "Qué incluye": "What it includes",
   "Solo las tareas asignadas a mí": "Only tasks assigned to me",
   "Todas las de mis proyectos": "All tasks in my projects",
   "Enlace privado": "Private link",
