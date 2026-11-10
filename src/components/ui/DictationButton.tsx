@@ -198,7 +198,7 @@ export function useDictation(onText: (text: string) => void, within?: () => Scop
  * (Firefox) o si la persona lo desactivó en Mi perfil → Preferencias. `onText` inserta cada frase donde corresponda
  * (`insertIntoField` / `insertIntoEditor`).
  */
-export function DictationButton({ onText, within, variant = "field", placement = "beside", tabIndex, className }: {
+export function DictationButton({ onText, within, variant = "field", placement = "beside", whileEditing = false, tabIndex, className }: {
   onText: (text: string) => void;
   /** Campo (o editor con su barra) al que dicta: el dictado se para al pasar el foco a otro sitio o al pulsar fuera de él y del botón. */
   within: () => Scope;
@@ -206,6 +206,15 @@ export function DictationButton({ onText, within, variant = "field", placement =
   variant?: "toolbar" | "field";
   /** «inside» (solo «field»): el botón va dentro de la caja del campo, a la derecha (el contenedor debe ser `relative` y el campo llevar `pr-9`); «Escuchando…» sale debajo. */
   placement?: "beside" | "inside";
+  /**
+   * Solo se ve mientras se edita el campo: con el foco en él (o en el propio botón, al llegar con Tab) o mientras dicta,
+   * aunque el foco haya salido. Es CSS puro: el campo (o su envoltorio) lleva la clase `peer` y va justo antes del botón
+   * en el mismo contenedor. Oculto es transparente y no recibe clics (pulsar ahí es pulsar el campo), pero sigue montado
+   * (no corta un dictado en curso) y en el orden de Tab: al salir del campo con Tab el foco llega al botón y este se ve
+   * (con `visibility: hidden` el foco se perdería, porque el botón se oculta al salir el foco del campo, antes de recibirlo).
+   * Con `placement="inside"` no ocupa sitio: el campo no cambia de tamaño al aparecer ni al irse.
+   */
+  whileEditing?: boolean;
   tabIndex?: number;
   className?: string;
 }) {
@@ -222,7 +231,16 @@ export function DictationButton({ onText, within, variant = "field", placement =
   return (
     // Dentro del campo: mismo tamaño y misma distancia al borde derecho (borde + relleno de la barra de formato) que el
     // micrófono de la barra de la descripción, para que los dos queden en la misma vertical.
-    <span className={cn(inside ? "absolute right-[5px] z-10" : "inline-flex shrink-0 items-center gap-1.5", inside && !className && "top-0.5", className)}>
+    <span
+      className={cn(
+        inside ? "absolute right-[5px] z-10" : "inline-flex shrink-0 items-center gap-1.5",
+        inside && !className && "top-0.5",
+        whileEditing &&
+          "pointer-events-none opacity-0 peer-focus-within:pointer-events-auto peer-focus-within:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 has-[[aria-pressed=true]]:pointer-events-auto has-[[aria-pressed=true]]:opacity-100",
+        className,
+      )}
+      data-while-editing={whileEditing || undefined}
+    >
       <button
         ref={btn}
         type="button"

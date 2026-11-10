@@ -15,7 +15,8 @@ import { useToast } from "../ui/Toast";
 import { cn } from "../ui/cn";
 import { overTitleLimit, TITLE_INPUT_LIMIT, TITLE_INVALID_CLASSES, TitleLimitHint } from "./TitleLimit";
 
-// pr-9: deja sitio al micrófono, que va dentro del campo, a la derecha.
+// pr-9: deja sitio al micrófono, que va dentro del campo, a la derecha. Se reserva siempre, también sin editar (cuando el
+// micrófono no se ve): así el texto no se recoloca al entrar o salir del campo y el título no cambia de alto.
 const CLASSES = "field-sizing-content w-full min-w-0 resize-none rounded-md bg-transparent py-0.5 pr-9 pl-1 text-lg font-semibold outline-none focus:bg-slate-50 dark:focus:bg-slate-800";
 
 const NARROW = "(max-width: 639px)";
@@ -74,6 +75,7 @@ export function TitleField({ value, onChange, onCommit, users }: {
       }}
       within={() => box.current}
       placement="inside"
+      whileEditing
     />
   );
 
@@ -113,12 +115,13 @@ export function TitleField({ value, onChange, onCommit, users }: {
           className={cn(CLASSES, over && TITLE_INVALID_CLASSES)}
           aria-invalid={over || undefined}
           aria-describedby={over ? hintId : undefined}
-          wrapperClassName="min-w-0"
+          // `peer`: con el foco en el campo se ve el micrófono (ver `whileEditing`).
+          wrapperClassName="peer min-w-0"
           aria-label={t("Título")}
         />
       )}
-      {/* En móvil, el micrófono solo sale al editar el título (absoluto: no mueve nada ni quita el foco). */}
-      {(!narrow || editing) && mic}
+      {/* El micrófono solo se ve al editar el título o mientras dicta (absoluto: no mueve nada; pulsarlo no quita el foco). */}
+      {mic}
       <TitleLimitHint id={hintId} value={value} className="pl-1" />
     </div>
   );

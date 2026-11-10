@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { AlertTriangle, ArrowLeft, ArrowRight, CalendarDays, Check, CheckCircle2, FileDown, Gauge, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Tag, Trash2, Wallet } from "lucide-react";
@@ -49,12 +49,16 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
   const wipOver = wipExceeded(cardCount, column.wipLimit);
   // Archivos soltados en el hueco bajo las tarjetas: nueva tarea en esta columna.
   const fileZone = useFileZone((files) => openNewTask(column.id, false, files));
+  // Esquinas inferiores rectas mientras quedan tarjetas por ver abajo (la de la release acaba siempre en su panel fijo).
+  const listRef = useRef<HTMLDivElement>(null);
+  useMoreBelow(listRef, !isNextRelease);
 
   return (
     <section
       ref={setNodeRef}
       className={cn(
-        "flex w-full shrink-0 flex-col rounded-xl",
+        // data-more-below (ver useMoreBelow): quedan tarjetas por debajo de lo visible; la columna sigue, sin esquinas abajo.
+        "group/column flex w-full shrink-0 flex-col rounded-xl data-[more-below]:rounded-b-none",
         wipOver ? "bg-red-50/90 ring-1 ring-red-300 dark:bg-red-950/30 dark:ring-red-500/40" : "bg-slate-100/80 dark:bg-slate-900/60",
         // Con cuatro columnas o más, en escritorio se reparten el ancho del tablero (mínimo 18 rem; si no caben, scroll).
         // Con 1-3 miden lo mismo que con 4: (ancho útil - barra «+» de 2.5 rem - 4 huecos de 0.75 rem) / 4. Es CSS puro, sin estado.
@@ -123,9 +127,11 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
       )}
       <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
         <div
+          ref={listRef}
+          data-card-list
           className={cn(
             // pt y -mt: margen interior para que el anillo de foco de la primera tarjeta no lo recorte el scroll.
-            "-mt-1.5 flex min-h-20 flex-1 flex-col gap-2 overflow-y-auto rounded-b-xl px-2 pt-1.5 transition-colors",
+            "-mt-1.5 flex min-h-20 flex-1 flex-col gap-2 overflow-y-auto rounded-b-xl px-2 pt-1.5 transition-colors group-data-[more-below]/column:rounded-b-none",
             // Hueco fijo al final (con el de la zona de archivos) para que la última tarjeta pueda quedar por encima
             // de la barra de selección y, sin ella, de los botones flotantes. Es el mismo haya o no selección: la barra
             // flota encima sin cambiar el alto ni el contenido de la columna, y el scroll no salta al aparecer.
@@ -151,6 +157,72 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
       {isNextRelease && <EvergreenPanel columnId={column.id} taskIds={evergreenIds} />}
     </section>
   );
+}
+
+/**
+ * Marca `data-more-below` en la columna (el padre de la lista) mientras hay tarjetas, o parte de una, por debajo de lo que
+ * se ve: la lista tiene scroll y no se ha llegado a la última, o la columna se corta por el borde inferior de la ventana.
+ * El hueco del final (zona de archivos y relleno) no cuenta: con la última tarjeta a la vista no queda nada más. Sin estado
+ * de React (atributo + CSS, como `data-stuck` de la barra de formato): se mide como mucho una vez por fotograma, con el
+ * scroll de la lista o de la página (pasivos), al cambiar la ventana o el viewport visual, y con un ResizeObserver sobre la
+ * lista y cada tarjeta (añadir, quitar o arrastrar tarjetas, cambios en vivo, pasar de una columna a otra en móvil).
+ */
+function useMoreBelow(listRef: RefObject<HTMLDivElement | null>, enabled: boolean) {
+  useEffect(() => {
+    const list = listRef.current;
+    const col = list?.parentElement;
+    if (!list || !col) return;
+    const set = (more: boolean) => {
+      if (more !== col.hasAttribute("data-more-below")) col.toggleAttribute("data-more-below", more);
+    };
+    if (!enabled) return set(false);
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const zone = list.querySelector<HTMLElement>(":scope > [data-file-zone]");
+      // Sin tarjetas (solo la zona de archivos) o columna oculta (móvil): nada abajo.
+      if (list.childElementCount < 2 || list.clientHeight === 0) return set(false);
+      const cs = getComputedStyle(list);
+      const tail = (parseFloat(cs.rowGap) || 0) + (zone?.offsetHeight ?? 0) + (parseFloat(cs.paddingBottom) || 0);
+      const vv = window.visualViewport;
+      const viewBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+      const cut = Math.max(0, list.getBoundingClientRect().bottom - viewBottom);
+      set(list.scrollHeight - list.scrollTop - list.clientHeight + cut - tail > 1);
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(measure);
+    };
+    const ro = new ResizeObserver(schedule);
+    const observeAll = () => {
+      ro.disconnect();
+      ro.observe(list);
+      for (const el of list.children) ro.observe(el);
+    };
+    observeAll();
+    const mo = new MutationObserver(() => {
+      observeAll();
+      schedule();
+    });
+    mo.observe(list, { childList: true });
+    const vvp = window.visualViewport;
+    const opts = { passive: true } as const;
+    list.addEventListener("scroll", schedule, opts);
+    window.addEventListener("scroll", schedule, opts);
+    window.addEventListener("resize", schedule, opts);
+    vvp?.addEventListener("resize", schedule, opts);
+    vvp?.addEventListener("scroll", schedule, opts);
+    measure();
+    return () => {
+      cancelAnimationFrame(frame);
+      ro.disconnect();
+      mo.disconnect();
+      list.removeEventListener("scroll", schedule);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      vvp?.removeEventListener("resize", schedule);
+      vvp?.removeEventListener("scroll", schedule);
+    };
+  }, [listRef, enabled]);
 }
 
 /** Suma del coste de las tareas (no archivadas) de una columna «Presupuesto», en la cabecera. */

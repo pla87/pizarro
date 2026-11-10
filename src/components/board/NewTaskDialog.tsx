@@ -390,8 +390,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         <div>
           <label className="label" htmlFor={`${uid}-title`}>{t("Título")}</label>
           <div className="relative">
-            <input ref={titleRef} id={`${uid}-title`} className={cn("input min-w-0 w-full pr-10", overTitleLimit(title) && TITLE_INVALID_CLASSES)} value={title} onChange={(e) => setTitle(e.target.value)} onPaste={(e) => pasteAsOneLine(e, setTitle)} maxLength={TITLE_INPUT_LIMIT} aria-invalid={overTitleLimit(title) || undefined} aria-describedby={overTitleLimit(title) ? `${uid}-title-hint` : undefined} required data-autofocus />
-            <DictationButton onText={(s) => insertIntoField(titleRef.current, s, setTitle)} within={() => titleRef.current?.parentElement?.parentElement ?? null} placement="inside" className="top-1/2 -translate-y-1/2" />
+            <input ref={titleRef} id={`${uid}-title`} className={cn("peer input min-w-0 w-full pr-10", overTitleLimit(title) && TITLE_INVALID_CLASSES)} value={title} onChange={(e) => setTitle(e.target.value)} onPaste={(e) => pasteAsOneLine(e, setTitle)} maxLength={TITLE_INPUT_LIMIT} aria-invalid={overTitleLimit(title) || undefined} aria-describedby={overTitleLimit(title) ? `${uid}-title-hint` : undefined} required data-autofocus />
+            <DictationButton onText={(s) => insertIntoField(titleRef.current, s, setTitle)} within={() => titleRef.current?.parentElement?.parentElement ?? null} placement="inside" whileEditing className="top-1/2 -translate-y-1/2" />
           </div>
           <TitleLimitHint id={`${uid}-title-hint`} value={title} className="mt-1" />
         </div>
