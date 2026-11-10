@@ -82,7 +82,7 @@ export async function run() {
   await U.undoKey(p, "Alt+Shift+z", "REDO"); // rehace B
   await L.eqEventually("rehacer cruce: B otra vez entre X e Y", () => L.dbOrder(COL.doing), ["X", "B", "Y"]);
   L.eq("rehacer: reordenado de A también rehecho", await L.dbOrder(COL.backlog), ["C", "D", "A"]);
-  L.eq("rehacer cruce: UI", await U.uiOrder(p, COL.doing), ["X", "B", "Y"]);
+  await L.eqEventually("rehacer cruce: UI", () => U.uiOrder(p, COL.doing), ["X", "B", "Y"]);
 
   // --- a una columna vacía terminada ---
   await U.drag(p, "C", { column: COL.closed });
