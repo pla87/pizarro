@@ -29,7 +29,7 @@ export async function generateMetadata({ searchParams }: { searchParams: Search 
   const t = makeT(await resolveLocale(searchParams));
   return {
     title: t("Licencia de Pizarro"),
-    description: t("Licencia de código disponible: gratis para uso personal y de pago único por servidor para empresas y profesionales."),
+    description: t("Licencia de código disponible: gratis para uso personal y educativo, y de pago único por servidor para empresas y profesionales."),
     robots: { index: true, follow: true },
   };
 }

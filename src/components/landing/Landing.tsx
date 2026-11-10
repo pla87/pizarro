@@ -101,8 +101,8 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
           <SectionTitle id="precios" title={t("Precios")} />
           <div className="grid gap-4 md:grid-cols-2" data-testid="pricing">
             <article className="card p-6">
-              <h3 className="text-lg font-bold">{t("Gratis para uso personal")}</h3>
-              <p className="mt-2 text-slate-600 dark:text-slate-400">{t("Para ti y tu familia, sin fines comerciales.")}</p>
+              <h3 className="text-lg font-bold">{t("Gratis para uso personal y educativo")}</h3>
+              <p className="mt-2 text-slate-600 dark:text-slate-400">{t("Para ti y tu familia sin fines comerciales, y para la enseñanza: colegios, institutos, universidades y academias.")}</p>
             </article>
             <article className="card p-6">
               <h3 className="text-lg font-bold">{t("Licencia para empresas")}</h3>

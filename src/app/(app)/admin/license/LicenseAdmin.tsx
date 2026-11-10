@@ -13,7 +13,7 @@ import { LICENSE_PRICE_EUR, SITE_URL } from "@/lib/product";
 import { actionThrowResult } from "@/lib/stale-action";
 
 /**
- * «Licencia»: estado de la licencia de esta instalación (registrada, declarada de uso personal o sin registrar) y
+ * «Licencia»: estado de la licencia de esta instalación (registrada, declarada de uso personal o educativo o sin registrar) y
  * formulario para registrarla. Todo es informativo (buena voluntad): no bloquea ninguna función ni comprueba nada.
  */
 export function LicenseAdmin({ status: initial, buyHref }: { status: LicenseStatus; buyHref: string }) {
@@ -58,7 +58,7 @@ export function LicenseAdmin({ status: initial, buyHref }: { status: LicenseStat
       done(t("Registro de licencia quitado."));
     });
   const declarePersonal = async () => {
-    if (status.kind === "licensed" && !(await confirm({ ...personalUseConfirm(t), message: t("Se quitará la licencia registrada a nombre de {holder}. Uso personal es el de una persona en su propio servidor, sin fines comerciales ni profesionales.", { holder: status.license.holder }) }))) return;
+    if (status.kind === "licensed" && !(await confirm({ ...personalUseConfirm(t), message: t("Se quitará la licencia registrada a nombre de {holder}. Uso personal es el de una persona en su propio servidor, sin fines comerciales ni profesionales; uso educativo, el de un centro de enseñanza y su profesorado y alumnado para dar clase, aprender, investigar u organizar el centro.", { holder: status.license.holder }) }))) return;
     if (status.kind !== "licensed" && !(await confirm(personalUseConfirm(t)))) return;
     start(async () => {
       const res = await setPersonalUseDeclared(true).catch((e) => actionThrowResult(e, t));
@@ -68,7 +68,7 @@ export function LicenseAdmin({ status: initial, buyHref }: { status: LicenseStat
       setHolder("");
       setReference("");
       setEmail("");
-      done(t("Anotado: uso personal. No volverá a salir el recordatorio."));
+      done(t("Anotado: uso personal o educativo. No volverá a salir el recordatorio."));
     });
   };
   const undeclarePersonal = () =>
@@ -76,7 +76,7 @@ export function LicenseAdmin({ status: initial, buyHref }: { status: LicenseStat
       const res = await setPersonalUseDeclared(false).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
       setStatus({ kind: "none" });
-      done(t("Declaración de uso personal retirada."));
+      done(t("Declaración de uso personal o educativo retirada."));
     });
 
   return (
@@ -95,7 +95,7 @@ export function LicenseAdmin({ status: initial, buyHref }: { status: LicenseStat
         )}
         {status.kind === "personal" && (
           <>
-            <p className="text-sm font-medium" data-testid="license-personal">{t("Declarada uso personal")}</p>
+            <p className="text-sm font-medium" data-testid="license-personal">{t("Declarada de uso personal o educativo")}</p>
             <p className="text-sm text-slate-600 dark:text-slate-400">
               {status.personal.date ? `${t("Desde el {date}.", { date: day(status.personal.date) })} ` : ""}
               {t("Si empiezas a usar Pizarro en una empresa o para trabajar, registra la licencia más abajo.")}
@@ -105,12 +105,12 @@ export function LicenseAdmin({ status: initial, buyHref }: { status: LicenseStat
         {status.kind === "none" && (
           <>
             <p className="text-sm font-medium" data-testid="license-none">{t("Sin licencia registrada")}</p>
-            <p className="text-sm text-slate-600 dark:text-slate-400">{t("Si es uso personal, decláralo y los administradores dejarán de ver el recordatorio. Si es para una empresa o para trabajar, registra la licencia más abajo.")}</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400">{t("Si es uso personal o educativo, decláralo y los administradores dejarán de ver el recordatorio. Si es para una empresa o para trabajar, registra la licencia más abajo.")}</p>
           </>
         )}
         <div className="flex flex-wrap gap-2 pt-1">
           {status.kind !== "personal" && (
-            <button type="button" className="btn-secondary" onClick={declarePersonal} disabled={pending} data-testid="license-declare-personal">{t("Es uso personal")}</button>
+            <button type="button" className="btn-secondary" onClick={declarePersonal} disabled={pending} data-testid="license-declare-personal">{t("Uso personal o educativo")}</button>
           )}
           {status.kind === "personal" && (
             <button type="button" className="btn-secondary" onClick={undeclarePersonal} disabled={pending} data-testid="license-undeclare-personal">{t("Quitar la declaración")}</button>
@@ -126,7 +126,8 @@ export function LicenseAdmin({ status: initial, buyHref }: { status: LicenseStat
         <h2 className="text-sm font-semibold">{t("Qué uso necesita licencia")}</h2>
         <ul className="list-disc space-y-1 pl-5 text-sm">
           <li>{t("Gratis: uso personal y familiar, sin fines comerciales.")}</li>
-          <li>{t("Necesita licencia: cualquier uso empresarial o profesional (empresa, autónomo, asociación, centro educativo…).")}</li>
+          <li>{t("Gratis: uso educativo en centros de enseñanza públicos o privados (colegios, institutos, universidades, formación profesional, academias), con su profesorado y alumnado.")}</li>
+          <li>{t("Necesita licencia: cualquier otro uso empresarial o profesional (empresa, autónomo, asociación, administración…).")}</li>
           <li>{t("La licencia es un pago único por servidor, con actualizaciones incluidas.")}</li>
         </ul>
         <p className="text-sm text-slate-600 dark:text-slate-400">{t("El texto completo y vinculante es el de la licencia.")}</p>

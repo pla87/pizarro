@@ -21,6 +21,17 @@ describe("licencia", () => {
     assert.match(LICENSE_ES, /propiedad intelectual/);
     assert.doesNotMatch(md, /@|https?:\/\//);
   });
+  test("el uso educativo es gratuito y está definido, en los dos idiomas", () => {
+    assert.match(LICENSE_ES, /## 3\. Uso personal y educativo gratuito/);
+    assert.match(LICENSE_ES, /\*\*Centro educativo\*\*/);
+    assert.match(LICENSE_ES, /\*\*Uso educativo\*\*/);
+    assert.match(LICENSE_ES, /todo uso que no sea personal ni educativo necesita licencia/);
+    assert.doesNotMatch(LICENSE_ES, /centros educativos se consideran organizaciones/);
+    assert.match(LICENSE_EN, /## 3\. Free personal and educational use/);
+    assert.match(LICENSE_EN, /\*\*Educational institution\*\*/);
+    assert.match(LICENSE_EN, /\*\*Educational use\*\*/);
+    assert.match(LICENSE_EN, /neither personal nor educational needs a licence/);
+  });
   test("el precio se publica sin IVA y el pago es con pasarela y factura automática", () => {
     assert.match(LICENSE_ES, /más los impuestos aplicables \(IVA\)/);
     assert.match(LICENSE_ES, /pasarela de pago/);

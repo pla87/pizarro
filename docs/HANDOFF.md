@@ -125,13 +125,15 @@ llevan enlaces de sesión ni nombres de modelos.
   marcha (Pages, DNS, HTTPS, verificación del dominio): `docs/VENTA.md` §8.
 - Hecho: recordatorio de licencia para administradores (franja bajo la cabecera, como mucho cada 30 días, nunca en
   los 7 primeros días): lógica en `shouldShowLicenseNudge` (`src/lib/license-core.ts`), interfaz en
-  `src/components/LicenseNudge.tsx`. Se oculta con licencia registrada o declarando uso personal.
-- Modelo de venta decidido: gratis para uso personal; empresas y profesionales, pago único por servidor con
-  actualizaciones gratis para siempre y sin soporte. Precio: 100 € + IVA (pago con tarjeta y factura, NIF opcional); botón Comprar con `BUY_URL` en `src/lib/product.ts` (vacía hasta que el propietario cree el Payment Link de Stripe, ver `docs/VENTA.md`); *Administración → Licencia* solo informa. Sin excepciones: todo uso no personal paga. Listas de funciones candidatas a licencia profesional y de ideas de otros Kanban: `docs/IDEAS.md`.
+  `src/components/LicenseNudge.tsx`. Se oculta con licencia registrada o declarando uso personal o educativo.
+- Modelo de venta decidido: gratis para uso personal y para uso educativo (centros de enseñanza públicos o
+  privados, también academias, con su profesorado y alumnado; definición en `LICENSE.md` §2); empresas y profesionales, pago único por servidor con
+  actualizaciones gratis para siempre y sin soporte. Precio: 100 € + IVA (pago con tarjeta y factura, NIF opcional); botón Comprar con `BUY_URL` en `src/lib/product.ts` (vacía hasta que el propietario cree el Payment Link de Stripe, ver `docs/VENTA.md`); *Administración → Licencia* solo informa. Todo uso que no sea personal ni educativo paga. Listas de funciones candidatas a licencia profesional y de ideas de otros Kanban: `docs/IDEAS.md`.
 - Pendiente de confirmar por el propietario: primera publicación con *Run workflow* y paquete GHCR público (el propietario prefiere seguir puliendo antes); prueba
   real en un VPS siguiendo `docs/PRUEBA-VPS.md`; plantilla de Railway (pasos en `docs/INSTALL.md`; la sintaxis de
   variables generadas debe verificarse en Railway).
-- Siguientes pasos: revisión de la licencia por un abogado, vídeo para la presentación (sustituye a la demo),
+- Siguientes pasos: revisión de la licencia por un abogado (en especial las definiciones de «centro educativo» y
+  «uso educativo» de §2: academias privadas, gestión del centro, administraciones educativas y formadores autónomos), vídeo para la presentación (sustituye a la demo),
   capturas reales sin datos personales, poner en marcha getpizarro.com (`docs/VENTA.md` §8) y el Payment Link.
 
 **Ideas pospuestas por decisión del propietario:**
