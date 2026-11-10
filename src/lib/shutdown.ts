@@ -160,6 +160,17 @@ export async function runShutdown(signal: NodeJS.Signals, deps?: ShutdownDeps): 
   try {
     const listening = await d.stopListening();
     listeners = listening.closed;
+    // Sin el servidor HTTP (Next cambió cómo lo guarda o falló la búsqueda) no se corta la entrada ni se espera a las
+    // peticiones en curso: que conste en el registro, en vez de apagarse a ciegas.
+    if (!listeners && process.env.NODE_ENV === "production") {
+      d.logEvent({
+        level: "warn",
+        category: "system",
+        action: "system.shutdown.no_listener",
+        message: `Apagado ordenado (${signal}): no se encontró el servidor HTTP entre los manejadores activos; no se dejó de aceptar conexiones ni se esperó a las peticiones en curso`,
+        details: { signal },
+      });
+    }
     // Los canales en vivo no terminan nunca por sí solos: se cierran antes de esperar a las peticiones.
     streams = d.closeStreams();
     // Peticiones y emails en curso, a la vez y con el mismo plazo.
