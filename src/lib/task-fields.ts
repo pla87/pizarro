@@ -4,8 +4,6 @@
 export const TASK_FIELDS = ["cost", "hours", "priority", "client", "startDate"] as const;
 export type TaskFieldKey = (typeof TASK_FIELDS)[number];
 
-export const isTaskFieldKey = (k: string): k is TaskFieldKey => (TASK_FIELDS as readonly string[]).includes(k);
-
 /** Deja solo claves válidas, sin repetir y en el orden canónico. */
 export function normalizeTaskFields(keys: readonly string[]): TaskFieldKey[] {
   return TASK_FIELDS.filter((f) => keys.includes(f));

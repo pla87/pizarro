@@ -279,10 +279,7 @@ export function releaseFileName(date: Date, ext: "md" | "txt", timeZone?: string
   return `release-${isoDate(date, timeZone)}.${ext}`;
 }
 
-/** Cadencias de una tarea fija: cada cuántas releases entra (1 = todas, 2 = las pares, 3 = múltiplos de 3). */
-export const EVERGREEN_CADENCES = [1, 2, 3] as const;
-
-/** Siguiente cadencia al pulsar el interruptor: 1 → 2 → 3 → 1. */
+/** Siguiente cadencia de una tarea fija (cada cuántas releases entra: 1 = todas, 2 = las pares, 3 = múltiplos de 3) al pulsar el interruptor: 1 → 2 → 3 → 1. */
 export function nextEvergreenEvery(every: number): number {
   return every === 1 ? 2 : every === 2 ? 3 : 1;
 }

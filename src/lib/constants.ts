@@ -82,8 +82,7 @@ export const MAX_SUBTASKS = 100;
 export const MAX_DESCRIPTION = 20_000;
 export const MAX_TEMPLATE = 20_000;
 export const MAX_RELEASE_CONTENT = 200_000;
-/** Tope del ZIP de adjuntos de una release (MB): valor por defecto y límites que admite el ajuste del proyecto. */
-export const RELEASE_ZIP_DEFAULT_MB = 80;
+/** Tope del ZIP de adjuntos de una release (MB): límites que admite el ajuste del proyecto (por defecto 80, en el esquema). */
 export const RELEASE_ZIP_MIN_MB = 10;
 export const RELEASE_ZIP_MAX_MB = 500;
 

@@ -56,11 +56,6 @@ export async function diskStats(dir: string): Promise<{ free: number; total: num
   }
 }
 
-/** Bytes libres para un proceso sin privilegios en el volumen de `dir`; null si el sistema no lo informa. */
-export async function freeDiskBytes(dir: string): Promise<number | null> {
-  return (await diskStats(dir))?.free ?? null;
-}
-
 /** ¿Es un error de disco lleno del sistema operativo? */
 export const isNoSpaceError = (err: unknown): boolean => (err as { code?: string } | null)?.code === "ENOSPC";
 

@@ -55,9 +55,6 @@ export interface BoardTask extends TaskFieldValues {
   blockedBy?: { id: string; title: string } | null;
 }
 
-/** Resultado de crear o editar una tarea: `titleClipped` (el máximo) solo viene si el título llegó más largo y se recortó. No se guarda en el tablero. */
-export type ClippedTask = BoardTask & { titleClipped?: number };
-
 export interface KindOption {
   id: string;
   name: string;

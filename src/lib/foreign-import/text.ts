@@ -1,5 +1,5 @@
 // Utilidades de texto y fechas comunes a los lectores de otros Kanban. Sin dependencias de Node.
-import { MAX_DESCRIPTION, MAX_TITLE, PALETTE } from "../constants";
+import { MAX_DESCRIPTION, MAX_TITLE } from "../constants";
 
 /** Quita lo que un texto importado nunca debe llevar: caracteres de control y NUL, y menciones @[x](user:id) falsas. */
 function basic(s: string): string {
@@ -182,22 +182,6 @@ export function safeHttpUrl(raw: unknown): string | null {
 export function mdLink(text: string, url: string): string {
   const label = text.replace(/\s+/g, " ").trim().replace(/([[\]\\])/g, "\\$1") || url;
   return `[${label}](${url})`;
-}
-
-/** Color de la paleta de la aplicación más cercano a uno hexadecimal cualquiera. */
-export function nearestPaletteColor(hex: string): string {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!m) return PALETTE[0];
-  const n = parseInt(m[1]!, 16);
-  const rgb = [n >> 16, (n >> 8) & 255, n & 255];
-  let best: string = PALETTE[0];
-  let bestD = Infinity;
-  for (const p of PALETTE) {
-    const q = parseInt(p.slice(1), 16);
-    const d = (rgb[0]! - (q >> 16)) ** 2 + (rgb[1]! - ((q >> 8) & 255)) ** 2 + (rgb[2]! - (q & 255)) ** 2;
-    if (d < bestD) { bestD = d; best = p; }
-  }
-  return best;
 }
 
 /** Sin acentos, en minúsculas y con espacios simples: para comparar cabeceras y valores. */
