@@ -29,3 +29,30 @@ export function touchesComments(change: RemoteChange, taskId: string): boolean {
   if (change.taskId === taskId) return /comment/i.test(change.action);
   return !change.taskId && /^undo\./.test(change.action);
 }
+
+/** Aviso del canal a la espera de decidir si refresca el tablero (`announced`: ya se reenvió a la página al llegar). */
+export interface IncomingChange {
+  cid: string | null;
+  change: unknown;
+  announced: boolean;
+}
+
+/**
+ * ¿Se reenvía a la página en cuanto llega? Si es de otra persona (o del sistema), sí: no puede ser de una acción de
+ * esta pestaña, y esperar a que terminen las propias en vuelo (una subida puede durar minutos) dejaría el detalle abierto
+ * sin sus comentarios. Los de la propia persona esperan a saber si son de una acción de aquí (por su id de cambio).
+ */
+export function announceOnArrival(change: unknown, currentUserId: string): boolean {
+  const userId = change && typeof change === "object" ? (change as { userId?: unknown }).userId : undefined;
+  return userId !== currentUserId;
+}
+
+/**
+ * Decide la cola cuando no quedan acciones en vuelo: lo que no es de una acción propia refresca el tablero y, si no se
+ * reenvió al llegar, se reenvía ahora. Retira de `own` los ids ya vistos.
+ */
+export function settleIncoming(queue: IncomingChange[], own: Set<string>): { announce: unknown[]; refresh: boolean } {
+  const foreign = queue.filter(({ cid }) => !cid || !own.has(cid));
+  for (const { cid } of queue) if (cid) own.delete(cid);
+  return { announce: foreign.filter((c) => !c.announced).map((c) => c.change), refresh: foreign.length > 0 };
+}
