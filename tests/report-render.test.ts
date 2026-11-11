@@ -3,7 +3,7 @@ import { after, describe, test } from "node:test";
 
 process.env.SESSION_SECRET ??= "x".repeat(48);
 process.env.DATABASE_URL ??= "postgresql://none:none@localhost:5432/none";
-const { pdfWorkerSpec, renderInWorker, stopPdfWorker } = await import("../src/lib/report-render");
+const { PDF_OUT_OF_MEMORY_MESSAGE, pdfWorkerMaxMb, pdfWorkerSpec, renderInWorker, stopPdfWorker } = await import("../src/lib/report-render");
 const { queuedRender, PdfTimeoutError } = await import("../src/lib/report-build");
 type PdfJob = import("../src/lib/report-pdf").PdfJob;
 
@@ -48,6 +48,32 @@ describe("worker de PDF", () => {
     );
     assert.ok(performance.now() - started < 5000);
     assert.ok(isPdf(await queuedRender((signal) => renderInWorker(delivery(2), signal))));
+  });
+
+  test("tope de memoria del worker: 256 MB por defecto, ajustable con PDF_WORKER_MAX_MB (64–4096)", () => {
+    assert.equal(pdfWorkerMaxMb({}), 256);
+    assert.equal(pdfWorkerMaxMb({ PDF_WORKER_MAX_MB: "512" }), 512);
+    assert.equal(pdfWorkerMaxMb({ PDF_WORKER_MAX_MB: "8" }), 64);
+    assert.equal(pdfWorkerMaxMb({ PDF_WORKER_MAX_MB: "99999" }), 4096);
+    assert.equal(pdfWorkerMaxMb({ PDF_WORKER_MAX_MB: "mucho" }), 256);
+  });
+
+  test("sin memoria: solo cae el worker, el PDF falla con un error normal y el siguiente arranca otro", async () => {
+    stopPdfWorker(); // el siguiente worker arranca con el tope de abajo
+    const prev = process.env.PDF_WORKER_MAX_MB;
+    process.env.PDF_WORKER_MAX_MB = "64";
+    try {
+      // Unas 4000 tarjetas con títulos de miles de caracteres: el maquetado pasa de 64 MB enseguida.
+      await assert.rejects(renderInWorker(delivery(4000, "Tarea larga ".repeat(200))), (err: Error) => {
+        assert.ok(err.message.startsWith(PDF_OUT_OF_MEMORY_MESSAGE), err.message);
+        assert.equal((err.cause as { code?: string }).code, "ERR_WORKER_OUT_OF_MEMORY");
+        return true;
+      });
+    } finally {
+      if (prev === undefined) delete process.env.PDF_WORKER_MAX_MB;
+      else process.env.PDF_WORKER_MAX_MB = prev;
+    }
+    assert.ok(isPdf(await renderInWorker(delivery(2))));
   });
 
   test("con la señal ya abortada no se arranca nada", async () => {

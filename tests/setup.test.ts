@@ -8,6 +8,7 @@ import {
   generateSetupCode,
   hashSetupCode,
   normalizeSetupCode,
+  parseSetupEmail,
   parseStoredCode,
   setupPending,
   validTimeZone,
@@ -106,5 +107,22 @@ describe("ajustes de la instalación", () => {
     assert.equal(validTimeZone("Europe/Madrid"), true);
     assert.equal(validTimeZone("UTC"), true);
     assert.equal(validTimeZone("Mars/Olympus"), false);
+  });
+});
+
+describe("parseSetupEmail (email del administrador y de prueba)", () => {
+  test("acepta direcciones normales y las normaliza como el resto de la app", () => {
+    assert.equal(parseSetupEmail("  Admin@Example.com "), "admin@example.com");
+    assert.equal(parseSetupEmail("nombre.apellido+avisos@sub.example.com"), "nombre.apellido+avisos@sub.example.com");
+  });
+  test("rechaza comillas, < > ; y espacios en la parte local (podrían colar destinatarios en la cabecera To)", () => {
+    for (const bad of ['"a"@example.com', '"a b"@example.com', "a>b@example.com", "a<b@example.com", "a;b@example.com", "x@example.com;y@example.com", "a b@example.com", "a@example.com>"]) {
+      assert.equal(parseSetupEmail(bad), null, bad);
+    }
+  });
+  test("rechaza lo que no es un email y lo demasiado largo", () => {
+    for (const bad of ["", "admin", "admin@", "@example.com", "admin@example", null, undefined, 42, `${"a".repeat(195)}@example.com`]) {
+      assert.equal(parseSetupEmail(bad), null, String(bad));
+    }
   });
 });

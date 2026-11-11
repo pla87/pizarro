@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { updateTask } from "../../src/actions/tasks";
-import { DUE_NOTIFY_DELAY_MS, deliverDueNotices } from "../../src/lib/due-notices";
+import { DUE_NOTICE_CLAIM_MS, DUE_NOTIFY_DELAY_MS, deliverDueNotices, queueDueChange } from "../../src/lib/due-notices";
+import { notifyTask } from "../../src/lib/notify";
 
 const dueNotices = (taskId: string) => db.notification.findMany({ where: { taskId, type: "DUE_CHANGED" } });
 const after = (ms: number) => new Date(Date.now() + ms);
@@ -101,5 +102,58 @@ describe("avisos de cambio de fecha agrupados", () => {
     expectOk(await updateTask(task.id, { dueDate: "2026-11-20" }));
     assert.equal(await deliverDueNotices(after(DUE_NOTIFY_DELAY_MS + 30_000)), 0);
     assert.equal((await dueNotices(task.id)).length, 0);
+  });
+
+  test("si el aviso falla, la fila no se pierde: queda reclamada y se reintenta al pasar el reclamo", async () => {
+    const { assignee, task } = await setup();
+    expectOk(await updateTask(task.id, { dueDate: "2026-11-15" }));
+    const due = after(DUE_NOTIFY_DELAY_MS + 30_000);
+    let calls = 0;
+    const failing: typeof notifyTask = async () => {
+      calls++;
+      throw new Error("fallo simulado (SMTP caído, proceso detenido…)");
+    };
+    assert.equal(await deliverDueNotices(due, failing), 0);
+    assert.equal(calls, 1);
+    const claimed = await db.pendingDueNotice.findFirstOrThrow({ where: { taskId: task.id } });
+    assert.equal(claimed.sendAfter.getTime(), due.getTime() + DUE_NOTICE_CLAIM_MS);
+    // Mientras dura el reclamo, otra pasada (u otro proceso) no la toca.
+    assert.equal(await deliverDueNotices(new Date(due.getTime() + 60_000), failing), 0);
+    assert.equal(calls, 1);
+    // Pasado el reclamo se envía (una vez) y se borra.
+    assert.equal(await deliverDueNotices(new Date(due.getTime() + DUE_NOTICE_CLAIM_MS + 1000)), 1);
+    const got = await dueNotices(task.id);
+    assert.deepEqual(got.map((n) => [n.userId, n.excerpt]), [[assignee.id, "2026-11-01>2026-11-15"]]);
+    assert.equal(await db.pendingDueNotice.count({ where: { taskId: task.id } }), 0);
+  });
+
+  test("un cambio de fecha mientras se envía no se borra con la fila reclamada: sale después con la fecha nueva", async () => {
+    const { actor, assignee, task } = await setup();
+    expectOk(await updateTask(task.id, { dueDate: "2026-11-15" }));
+    const due = after(DUE_NOTIFY_DELAY_MS + 30_000);
+    const racing: typeof notifyTask = async (opts) => {
+      const r = await notifyTask(opts);
+      // Justo entonces alguien vuelve a mover la fecha (como haría updateTask).
+      await db.task.update({ where: { id: task.id }, data: { dueDate: new Date("2026-11-20T00:00:00Z") } });
+      await queueDueChange({ taskId: task.id, recipientId: assignee.id, actorId: actor.id, from: "2026-11-15", to: "2026-11-20", now: due });
+      return r;
+    };
+    assert.equal(await deliverDueNotices(due, racing), 1);
+    const pending = await db.pendingDueNotice.findFirstOrThrow({ where: { taskId: task.id } });
+    assert.equal(pending.toDue, "2026-11-20");
+    assert.equal(await deliverDueNotices(new Date(due.getTime() + DUE_NOTICE_CLAIM_MS + 1000)), 1);
+    assert.deepEqual((await dueNotices(task.id)).map((n) => n.excerpt).sort(), ["2026-11-01>2026-11-15", "2026-11-01>2026-11-20"]);
+    assert.equal(await db.pendingDueNotice.count({ where: { taskId: task.id } }), 0);
+  });
+
+  test("una fila que lleva más de un día fallando se descarta sin avisar", async () => {
+    const { actor, assignee, task } = await setup();
+    await db.pendingDueNotice.create({
+      data: { taskId: task.id, recipientId: assignee.id, actorId: actor.id, fromDue: "2026-10-01", toDue: "2026-11-01", sendAfter: new Date(Date.now() - 60_000), createdAt: new Date(Date.now() - 25 * 60 * 60_000) },
+    });
+    let calls = 0;
+    assert.equal(await deliverDueNotices(new Date(), async () => { calls++; return { recipients: [] }; }), 0);
+    assert.equal(calls, 0);
+    assert.equal(await db.pendingDueNotice.count({ where: { taskId: task.id } }), 0);
   });
 });

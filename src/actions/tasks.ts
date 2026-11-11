@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { forgetAttachments, forgetTaskAttachments } from "@/lib/attachment-cache";
 import { runAction } from "@/lib/action";
 import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjectAccess, assertTaskAccess, loadTaskWithAccess, visibleProjectsWhere } from "@/lib/access";
-import { appTimeZone, attachmentTotals, boardTaskSelect, listKinds, loadBoardTask, projectClients, projectUsers, toBoardTask } from "@/lib/board";
+import { appTimeZone, attachmentTotals, listKinds, loadBoardTask, loadBoardTasksByIds, projectClients, projectUsers } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
 import { MAX_SUBTASKS, MAX_TITLE } from "@/lib/constants";
 import { clampTitle } from "@/lib/title-clamp";
@@ -303,10 +303,10 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
     if (data.assigneeId && ids[0]) {
       await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId: ids[0], projectId: data.projectId, recipientIds: [data.assigneeId], excerpt: ids.length === 1 ? makeExcerpt(data.tasks[0]!.title) : assignedBatchExcerpt(ids.length) });
     }
-    const rows = await db.task.findMany({ where: { id: { in: ids } }, orderBy: TASK_ORDER, select: boardTaskSelect });
+    const rows = await loadBoardTasksByIds(ids);
     // `ids` conserva el orden de entrada (la tarea i es la línea i): ahí se sabe qué título llegó demasiado largo.
     const clips = new Map(ids.map((id, i) => [id, clipOf(input.tasks[i]?.title)] as const));
-    return rows.map((row) => withClip(toBoardTask(row), clips.get(row.id)));
+    return rows.map((row) => withClip(row, clips.get(row.id)));
   });
 }
 

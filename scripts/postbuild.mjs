@@ -4,7 +4,9 @@
 //    que el standalone no lo incluye. En Docker, dist/ se copia entero a la imagen (Dockerfile); para `npm start`, el
 //    fichero se copia también a .next/standalone/dist (server.js se ejecuta desde esa carpeta).
 // 2. Copia los recursos estáticos dentro de .next/standalone para `npm start` (en Docker se copian en el propio Dockerfile).
-import { cpSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+// 3. Quita del standalone los datos y secretos que no deben ir en él (ver más abajo).
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import path from "node:path";
 import { build } from "esbuild";
 
 // pdfkit carga las 14 fuentes estándar (Helvetica…) con un require() creado en tiempo de ejecución
@@ -45,3 +47,17 @@ mkdirSync(".next/standalone/dist", { recursive: true });
 cpSync("dist/pdf-worker.mjs", ".next/standalone/dist/pdf-worker.mjs");
 cpSync(".next/static", ".next/standalone/.next/static", { recursive: true });
 if (existsSync("public")) cpSync("public", ".next/standalone/public", { recursive: true });
+// Fuera de Docker (donde .dockerignore los aparta) el standalone acababa con datos y secretos: Next copia el .env por su
+// cuenta, y con Turbopack el trazado de instrumentation.js (al que no se aplica outputFileTracingExcludes de
+// next.config.ts, que sí cubre las rutas) arrastra las subidas (path.resolve("./uploads") en upload-dir.ts) y las
+// copias. No hacen falta: `npm start` lee el .env del proyecto y el contenedor recibe las variables del entorno.
+const standalone = ".next/standalone";
+const uploadRel = path.relative(process.cwd(), path.resolve(process.env.UPLOAD_DIR || "./uploads"));
+const unwanted = [
+  ...readdirSync(standalone).filter((f) => f.startsWith(".env")),
+  "uploads",
+  "backups",
+  ...(uploadRel && !uploadRel.startsWith("..") && !path.isAbsolute(uploadRel) ? [uploadRel] : []),
+  ...(existsSync(`${standalone}/deploy`) ? readdirSync(`${standalone}/deploy`).filter((f) => f.startsWith(".env") || f.startsWith("recovery-kit")).map((f) => `deploy/${f}`) : []),
+];
+for (const f of new Set(unwanted)) rmSync(path.join(standalone, f), { recursive: true, force: true });

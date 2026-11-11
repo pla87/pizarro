@@ -61,7 +61,6 @@ export default async function ReleasesPage({
           content: true,
           deployedAt: true,
           createdBy: { select: { name: true } },
-          _count: { select: { tasks: true } },
           attachments: { orderBy: { position: "asc" }, select: { fileName: true } },
         },
       },
@@ -70,6 +69,12 @@ export default async function ReleasesPage({
   if (!project) notFound();
   const hasMore = !q && project.releases.length > limit;
   const releases = hasMore ? project.releases.slice(0, limit) : project.releases;
+  // Tareas de cada release mostrada, filtrando por sus ids: un `_count` de relación agruparía en cada carga todas las
+  // ReleaseTask del servidor (Prisma 7 lo hace con un LEFT JOIN a un GROUP BY sin filtro).
+  const taskGroups = releases.length
+    ? await db.releaseTask.groupBy({ by: ["releaseId"], where: { releaseId: { in: releases.map((r) => r.id) } }, _count: { _all: true } })
+    : [];
+  const taskCount = new Map(taskGroups.map((g) => [g.releaseId, g._count._all]));
 
   return (
     <div className="mx-auto max-w-4xl p-4 md:p-6">
@@ -92,7 +97,7 @@ export default async function ReleasesPage({
             content: r.content,
             deployedAt: r.deployedAt.toISOString(),
             author: r.createdBy?.name ?? null,
-            taskCount: r._count.tasks,
+            taskCount: taskCount.get(r.id) ?? 0,
             attachments: r.attachments.map((a) => a.fileName),
           }))}
         />

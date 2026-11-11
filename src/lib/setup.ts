@@ -5,7 +5,7 @@ import { AppError } from "./errors";
 import { INSTANCE_LOCALE_KEY, INSTANCE_ORG_KEY, INSTANCE_TZ_KEY, invalidateInstance } from "./instance";
 import { hashPassword, passwordSchema } from "./password";
 import { createInitialAdmin, seed } from "./seed";
-import { generateSetupCode, hashSetupCode, parseStoredCode, setupPending, validTimeZone, verifySetupCode, type StoredSetupCode } from "./setup-core";
+import { generateSetupCode, hashSetupCode, parseSetupEmail, parseStoredCode, setupPending, validTimeZone, verifySetupCode, type StoredSetupCode } from "./setup-core";
 
 export const SETUP_CODE_KEY = "setup.code";
 /** Clave del bloqueo consultivo de Postgres que serializa la finalización del asistente. */
@@ -70,8 +70,6 @@ export interface SetupInput {
   adminPassword: string;
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
 /** Valida los datos del asistente; lanza AppError con el primer problema. */
 export function validateSetupInput(i: Omit<SetupInput, "code">): { orgName: string; adminName: string; adminEmail: string } {
   const orgName = i.orgName.trim();
@@ -80,8 +78,8 @@ export function validateSetupInput(i: Omit<SetupInput, "code">): { orgName: stri
   if (!validTimeZone(i.timeZone)) throw new AppError("Zona horaria no válida.");
   const adminName = i.adminName.trim();
   if (!adminName || adminName.length > 100) throw new AppError("Escribe tu nombre (hasta 100 caracteres).");
-  const adminEmail = i.adminEmail.trim().toLowerCase();
-  if (adminEmail.length > 200 || !EMAIL_RE.test(adminEmail)) throw new AppError("El email no es válido.");
+  const adminEmail = parseSetupEmail(i.adminEmail);
+  if (!adminEmail) throw new AppError("El email no es válido.");
   const pw = passwordSchema().safeParse(i.adminPassword);
   if (!pw.success) throw new AppError(pw.error.issues[0]?.message ?? "Contraseña no válida.");
   return { orgName, adminName, adminEmail };
