@@ -105,7 +105,11 @@ export async function getMessagingAdminView(): Promise<MessagingAdminView> {
 }
 
 export interface MyChannelsView {
-  telegram: { available: boolean; botUsername: string; connected: boolean; label: string; prefs: ChannelPrefs } | null;
+  telegram: {
+    available: boolean; botUsername: string; connected: boolean; label: string; prefs: ChannelPrefs;
+    /** Caducidad (ISO) del enlace de conexión pendiente, o null si no hay (gastado, caducado o borrado al cambiar de bot). */
+    linkExpiresAt: string | null;
+  } | null;
   whatsapp: {
     available: boolean;
     phone: string;
@@ -125,13 +129,21 @@ const prefsOf = (r: ChannelPrefs): ChannelPrefs => ({ notifyMention: r.notifyMen
 
 /** Canales de una persona. Cada canal aparece si el administrador lo ha activado o si la persona ya lo tenía conectado. */
 export async function getMyChannels(userId: string): Promise<MyChannelsView> {
-  const [cfg, rows] = await Promise.all([loadMessagingConfig(), db.userChannel.findMany({ where: { userId } })]);
+  const [cfg, rows, link] = await Promise.all([
+    loadMessagingConfig(),
+    db.userChannel.findMany({ where: { userId } }),
+    // createTelegramLinkCode anula los anteriores: como mucho hay uno vigente.
+    db.telegramLinkCode.findFirst({ where: { userId, expiresAt: { gt: new Date() } }, orderBy: { expiresAt: "desc" }, select: { expiresAt: true } }),
+  ]);
   const tg = rows.find((r) => r.channel === "TELEGRAM");
   const wa = rows.find((r) => r.channel === "WHATSAPP");
   return {
     appUrl: appUrl(),
     telegram: cfg.telegram.active || tg
-      ? { available: cfg.telegram.active, botUsername: cfg.telegram.botUsername, connected: Boolean(tg), label: tg?.label ?? "", prefs: tg ? prefsOf(tg) : { ...DEFAULT_CHANNEL_PREFS } }
+      ? {
+          available: cfg.telegram.active, botUsername: cfg.telegram.botUsername, connected: Boolean(tg), label: tg?.label ?? "", prefs: tg ? prefsOf(tg) : { ...DEFAULT_CHANNEL_PREFS },
+          linkExpiresAt: link?.expiresAt.toISOString() ?? null,
+        }
       : null,
     whatsapp: cfg.whatsapp.active || wa
       ? {

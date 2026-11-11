@@ -349,7 +349,7 @@ function WeekPlanDocument({ r, t, locale }: { r: WeekPlanPdfInput; t: T; locale:
           <Text style={s.eyebrow}>{t("Planificación semanal")}</Text>
           <Text style={s.title}>{r.column}</Text>
           <Text style={s.meta}>
-            {r.project} · {t("Semana del {date}", { date: formatDay(r.today, undefined, locale) })} · {byDay ? t("Por día") : t("Por persona")} · {t("{n} tareas", { n: total })}
+            {r.project} · {t("Semana del {date}", { date: formatDay(r.today, undefined, locale) })} · {byDay ? t("Por día") : t("Por persona")} · {total === 1 ? t("1 tarea") : t("{n} tareas", { n: total })}
           </Text>
         </View>
         {r.sections.length === 0 && <Text style={s.small}>{t("No hay tareas en esta columna.")}</Text>}
@@ -444,7 +444,7 @@ function DeliveryDocument({ r, t, locale }: { r: DeliveryPdfInput; t: T; locale:
         <View style={s.header}>
           <Text style={s.eyebrow}>{t("Resumen para el cliente")}</Text>
           <Text style={s.title}>{r.project}</Text>
-          <Text style={s.meta}>{r.column} · {formatDay(r.today, undefined, locale)} · {t("{n} tareas", { n: r.tasks.length })}</Text>
+          <Text style={s.meta}>{r.column} · {formatDay(r.today, undefined, locale)} · {r.tasks.length === 1 ? t("1 tarea") : t("{n} tareas", { n: r.tasks.length })}</Text>
         </View>
         {r.tasks.length === 0 && <Text style={s.small}>{t("No hay tareas en esta columna.")}</Text>}
         {r.tasks.map((x, i) => (

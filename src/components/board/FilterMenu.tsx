@@ -40,7 +40,7 @@ export function FilterMenu({ filters, onChange, labels, kinds, users, currentUse
         <button
           type="button"
           className={cn("btn-icon relative h-8 w-8", count > 0 && "text-brand-600")}
-          aria-label={count ? t("Filtros ({n} activos)", { n: count }) : t("Filtros")}
+          aria-label={count === 1 ? t("Filtros (1 activo)") : count ? t("Filtros ({n} activos)", { n: count }) : t("Filtros")}
           title={t("Filtros")}
           {...props}
         >

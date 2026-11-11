@@ -104,7 +104,9 @@ Guardas que conviene conocer:
   `scripts/local-paths.mjs`, probada en `tests/local-paths.test.ts`) y después carga `.next/standalone/server.js`.
   Sin eso, una ruta relativa acababa dentro de `.next/standalone/` y cada compilación la borraba. `postbuild.mjs`
   quita del standalone las subidas, las copias y los `.env` que Next copiaba allí. El contenedor no usa este script
-  (`scripts/start.sh`).
+  (`scripts/start.sh`). El script `start` empieza por `exec` (sin él, el `sh -c` de npm moría con el SIGTERM sin
+  pasarlo y el servidor quedaba huérfano escuchando) y, por si npm muere de golpe, `scripts/parent-watch.mjs` lanza el
+  apagado ordenado cuando desaparece el proceso padre (solo si lo arrancó npm). Pruebas: `tests/start-signals.test.ts`.
 
 Antes de cada fusión en `main`, comprueba que no se cuela ningún dato personal del propietario en el diff ni en el
 PDF del manual (busca su nombre, email y dominios; pídeselos si no los sabes) y que los mensajes de commit no

@@ -37,6 +37,7 @@ import { subtaskLines } from "@/lib/subtask-lines";
 import { documentDownloadName, type DocumentKindName } from "@/lib/document-kind";
 import { draftKey, useDraftAutosave, type NewTaskDraft } from "./drafts";
 import { actionThrowResult } from "@/lib/stale-action";
+import { subtasksDidNotFit } from "./count-texts";
 
 interface Props {
   initialColumnId?: string;
@@ -277,7 +278,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     const room = Math.max(0, MAX_NEW_SUBTASKS - subtasks.length);
     const added = lines.slice(0, room);
     if (added.length) setSubtasks((l) => [...l, ...added].slice(0, MAX_NEW_SUBTASKS));
-    if (added.length < lines.length) toast(t("Se añadieron {n} subtareas; {m} no caben (máximo {max} por tarea).", { n: added.length, m: lines.length - added.length, max: MAX_NEW_SUBTASKS }), "error");
+    if (added.length < lines.length) toast(subtasksDidNotFit(t, added.length, lines.length - added.length, MAX_NEW_SUBTASKS), "error");
   };
 
   const addSubtaskDraft = () => {

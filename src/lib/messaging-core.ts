@@ -176,9 +176,23 @@ export function noticeHeadline(m: NoticeMessage, t: T): string {
   return oneLine(notificationHeadline(m.type ?? "MENTION", t, { actor: m.actorName, task: t("«{title}»", { title: clip(oneLine(m.taskTitle), 120) }) }));
 }
 
+/**
+ * Texto bajo la cabecera del aviso (el extracto: comentario, cambio de fecha…). En una asignación el extracto es el
+ * título de la tarea, que ya va en la cabecera: si coincide (o es su principio recortado), no se repite. Si la tarea
+ * cambió de título desde el aviso, el extracto (el título de entonces) sí se muestra.
+ */
+export function noticeBody(m: NoticeMessage, t: T): string {
+  const body = notificationBody(m.type ?? "MENTION", m.excerpt, t, m.locale ?? "es-ES");
+  if ((m.type ?? "MENTION") === "ASSIGNED") {
+    const [b, title] = [oneLine(body), oneLine(m.taskTitle)];
+    if (b === title || (b.endsWith("…") && title.startsWith(b.slice(0, -1)))) return "";
+  }
+  return body;
+}
+
 /** Mensaje de Telegram (HTML de Telegram, todo el contenido escapado): cabecera, proyecto, extracto y enlace. */
 export function telegramNoticeText(m: NoticeMessage, t: T): TelegramHtml {
-  const body = oneLine(notificationBody(m.type ?? "MENTION", m.excerpt, t, m.locale ?? "es-ES"));
+  const body = oneLine(noticeBody(m, t));
   const lines = [telegramHtml`<b>${noticeHeadline(m, t)}</b>`, telegramPlain(clip(oneLine(m.projectName), 100))];
   if (body) lines.push(telegramHtml`<i>${clip(body, 300)}</i>`);
   lines.push(telegramPlain(""), telegramHtml`<a href="${m.url}">${t("Abrir la tarea")}</a>`);

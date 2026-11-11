@@ -17,6 +17,7 @@ const { createTelegramLinkCode, syncTelegram, telegramStatus } = await import(".
 const { resetShutdownForTests, runShutdown } = await import("../../src/lib/shutdown");
 const { collectTechInfo } = await import("../../src/lib/tech-info");
 const { flushLogs } = await import("../../src/lib/log");
+const { telegramWaitState } = await import("../../src/lib/telegram-wait");
 
 const TOKEN = "123456789:AAHfiqksKZ8WmR2zSjiQ7_v4TMAKdiHm9T0";
 const WA_TOKEN = "EAAGwhatsappTokenDePrueba1234567890";
@@ -205,6 +206,28 @@ describe("Telegram: webhook y enlace con código", () => {
     assert.ok(second.qr.startsWith("data:image/svg+xml;base64,"));
     assert.notEqual(first.url, second.url);
     assert.equal(await db.telegramLinkCode.count({ where: { userId: user.id } }), 1);
+  });
+
+  test("«Esperando a que pulses Iniciar» se corta si el enlace deja de valer (otro enlace u otro bot)", async () => {
+    await cleanConfig();
+    await telegramOn();
+    const user = await makeUser();
+    await loginAs(user);
+    const first = expectOk(await connectTelegram());
+    assert.equal(first.bot, "pizarro_test_bot");
+    assert.equal((await getMyChannels(user.id)).telegram?.linkExpiresAt, first.expiresAt);
+    assert.equal(telegramWaitState(first, (await getMyChannels(user.id)).telegram), "waiting");
+    // Otra pestaña pide otro enlace: el primero ya no vale.
+    const second = expectOk(await connectTelegram());
+    assert.equal(telegramWaitState(first, (await getMyChannels(user.id)).telegram), "stale");
+    assert.equal(telegramWaitState(second, (await getMyChannels(user.id)).telegram), "waiting");
+    // «Cambiar de bot»: se borran los enlaces pendientes y el bot es otro.
+    replies.getMe = ok({ id: 43, is_bot: true, username: "otro_test_bot", first_name: "Otro" });
+    await loginAs(await makeUser({ role: "ADMIN" }));
+    expectOk(await saveTelegramBot({ token: TOKEN2 }));
+    const after = (await getMyChannels(user.id)).telegram;
+    assert.deepEqual([after?.botUsername, after?.linkExpiresAt], ["otro_test_bot", null]);
+    assert.equal(telegramWaitState(second, after), "botChanged");
   });
 });
 

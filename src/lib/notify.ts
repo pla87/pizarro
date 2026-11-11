@@ -8,10 +8,10 @@ import { appUrl, emailEnabled, escapeHtml, sendMail } from "./mail";
 import { logEvent } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
 import { excerpt as makeExcerpt, mentionsToPlain } from "./mentions";
-import { notificationBody, notificationHeadline, type NotificationKind } from "./notification-text";
+import { notificationHeadline, type NotificationKind } from "./notification-text";
 import { loadMessagingConfig, type MessagingConfig } from "./messaging-config";
 import {
-  CHANNEL_LIMIT_PER_HOUR, channelUsable, channelWants, classifyFailure, maskPhone, scrubSecrets, telegramNoticeText, type ChannelPrefs, type NoticeMessage,
+  CHANNEL_LIMIT_PER_HOUR, channelUsable, channelWants, classifyFailure, maskPhone, noticeBody, scrubSecrets, telegramNoticeText, type ChannelPrefs, type NoticeMessage,
 } from "./messaging-core";
 import { disconnectTelegramChat, sendTelegramMessage } from "./telegram";
 import { sendWhatsappNotice, whatsappLocale } from "./whatsapp";
@@ -31,7 +31,8 @@ export type MentionMessage = NoticeMessage;
 /** Email de un aviso: asunto, texto plano y HTML (todo el contenido del usuario va escapado). */
 export function mentionEmail(m: MentionMessage, t: T = makeT("es")) {
   const type = m.type ?? "MENTION";
-  const body = notificationBody(type, m.excerpt, t, m.locale ?? "es-ES");
+  // Sin repetir el título en una asignación (ya va en el asunto y en la cabecera).
+  const body = noticeBody(m, t);
   // Las comillas del título van en la plantilla traducida: «…» en español, “…” en inglés.
   const task = t("«{title}»", { title: m.taskTitle });
   const subject = notificationHeadline(type, t, { actor: m.actorName, task });

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { logEvent } from "@/lib/log";
+import { isNextNavigationSignal } from "@/lib/next-navigation-signal";
 import { redactPath } from "@/lib/redact-path";
 import { rateIp, rateLimit } from "@/lib/rate-limit";
 import { BodyTooLargeError, declaredLength, readBodyLimited } from "@/lib/upload-slots";
@@ -45,6 +46,9 @@ export async function POST(req: Request) {
   const parsed = schema.safeParse(body);
   if (!parsed.success) return new Response(null, { status: 400 });
   const e = parsed.data;
+  // Redirección o «no encontrado» de Next con la página a medio enviar (navegadores con una versión anterior del código
+  // que aún lo envían): no es un fallo.
+  if (isNextNavigationSignal(e.digest, e.message)) return new Response(null, { status: 204 });
   const path = e.path ? redactPath(e.path) : undefined;
   logEvent({
     level: "error",

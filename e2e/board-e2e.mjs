@@ -208,7 +208,7 @@ if (only.includes("f1")) {
   await p.getByRole("button", { name: "Mis tareas" }).tap(); await sleep(300);
   await p.keyboard.press("Escape"); await sleep(300);
   L.eq("F1: el filtro «Mis tareas» se aplica", (await p.locator("[data-task-card]:visible p").allTextContents()).map((x) => x.trim()), ["Mía"]);
-  L.check("F1: el botón muestra el contador", await vis("Filtros (1 activos)"));
+  L.check("F1: el botón muestra el contador", await vis("Filtros (1 activo)"));
   await p.getByRole("button", { name: "Quitar el filtro" }).first().tap(); await sleep(300);
   L.eq("F1: quitar el filtro", (await p.locator("[data-task-card]:visible p").allTextContents()).map((x) => x.trim()), ["Mía", "Otra"]);
   // Deshacer y rehacer desde la barra superior (mover con el asa y deshacer).

@@ -120,6 +120,10 @@ export async function createDocumentWithinLimit(data: {
 }): Promise<DocumentCreateResult> {
   return db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:attachment-quota'))::text`;
+    // Proyecto borrado durante la subida: 404 en vez del fallo de clave ajena (P2003) al dar de alta la fila (ver
+    // createAttachmentWithinLimit). Quien llama borra el fichero ya escrito.
+    const alive = await tx.$queryRaw<unknown[]>`SELECT 1 FROM "Project" WHERE id = ${data.projectId} FOR KEY SHARE`;
+    if (!alive.length) throw new AppError("El proyecto ya no existe.", 404, "project_gone");
     const problem = await documentLimitProblem(data.projectId, data.size, tx);
     if (problem) return { ok: false as const, ...problem };
     const row = await tx.projectDocument.create({ data, select: SELECT });

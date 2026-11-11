@@ -115,7 +115,7 @@ export function ReleaseEntry({ release }: Props) {
   };
 
   const removeAttachments = async () => {
-    if (!(await confirm({ title: t("Borrar adjuntos"), message: t("¿Borrar los {n} adjuntos de esta release? El texto se conserva.", { n: attachments.length }), confirmLabel: t("Borrar"), danger: true }))) return;
+    if (!(await confirm({ title: t("Borrar adjuntos"), message: attachments.length === 1 ? t("¿Borrar el adjunto de esta release? El texto se conserva.") : t("¿Borrar los {n} adjuntos de esta release? El texto se conserva.", { n: attachments.length }), confirmLabel: t("Borrar"), danger: true }))) return;
     setBusy(true);
     const res = await deleteReleaseAttachments(release.id);
     setBusy(false);

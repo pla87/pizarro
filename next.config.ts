@@ -54,6 +54,14 @@ const nextConfig: NextConfig = {
     // (p. ej. a /login, sin cuenta) ya no ocupa su tamaño en memoria mientras llega.
     proxyClientMaxBodySize: PROXY_BODY_LIMIT_BYTES,
   },
+  // Direcciones que solo redirigen: aquí la redirección es un 307 antes de pintar nada. Con redirect() en la página llegaba
+  // dentro del Suspense de loading.tsx, con la página ya a medio enviar (y el navegador lo registraba como error).
+  async redirects() {
+    return [
+      { source: "/admin", destination: "/admin/users", permanent: false },
+      { source: "/admin/types", destination: "/admin/templates?vista=tipos", permanent: false },
+    ];
+  },
   async headers() {
     return [
       {

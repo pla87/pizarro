@@ -10,6 +10,7 @@ import { useT } from "@/i18n/client";
 import type { ChannelPrefs } from "@/lib/messaging-core";
 import type { MyChannelsView } from "@/lib/messaging";
 import { actionThrowResult } from "@/lib/stale-action";
+import { telegramWaitState } from "@/lib/telegram-wait";
 
 type Channel = "TELEGRAM" | "WHATSAPP";
 
@@ -39,22 +40,33 @@ function TelegramBlock({ view, refresh }: { view: NonNullable<MyChannelsView["te
   const t = useT();
   const toast = useToast();
   const [pending, start] = useTransition();
-  const [link, setLink] = useState<{ url: string; qr: string; expiresAt: string } | null>(null);
+  const [link, setLink] = useState<{ url: string; qr: string; expiresAt: string; bot: string } | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Mientras el enlace está abierto se pregunta cada 3 s si ya se ha conectado (hasta que caduca).
+  // Mientras el enlace está abierto se pregunta cada 3 s si ya se ha conectado (hasta que caduca). Si el enlace deja de
+  // valer (el administrador cambia o quita el bot, o se pide otro enlace en otra pestaña), se deja de esperar con un aviso.
   useEffect(() => {
     if (!link) return;
     const until = new Date(link.expiresAt).getTime();
+    let stale = 0;
     timer.current = setInterval(async () => {
       if (Date.now() > until) {
         setLink(null);
         return;
       }
       const v = await refresh();
-      if (v?.telegram?.connected) {
+      if (!v) return; // sin respuesta (red): se sigue esperando
+      const state = telegramWaitState(link, v.telegram);
+      if (state === "connected") {
         setLink(null);
         toast(t("Telegram conectado."), "success");
+        return;
+      }
+      // Sin código pendiente puede ser el instante en que se gasta (justo antes de conectar): se confirma en la siguiente consulta.
+      stale = state === "stale" ? stale + 1 : 0;
+      if (state === "botChanged" || stale >= 2) {
+        setLink(null);
+        toast(t("Este enlace ya no vale: el administrador ha cambiado el bot de Telegram o se ha pedido otro enlace. Vuelve a pulsar «Conectar Telegram»."), "error");
       }
     }, 3_000);
     return () => {

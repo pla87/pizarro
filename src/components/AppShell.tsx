@@ -140,7 +140,7 @@ function Shell({ user, projects, version, unread, lastProjectId = null, backupAl
           </div>
           {current && inProject && <Presence projectId={current.id} compact />}
           {unread > 0 && (
-            <Link href="/notifications" className="ml-auto flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white" aria-label={t("{n} avisos sin leer", { n: unread })}>
+            <Link href="/notifications" className="ml-auto flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white" aria-label={unread === 1 ? t("1 aviso sin leer") : t("{n} avisos sin leer", { n: unread })}>
               <Bell size={13} /> {unread}
             </Link>
           )}
@@ -273,7 +273,7 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
         <NavLink href="/my-tasks" icon={ListChecks} active={pathname === "/my-tasks"}>{t("Mis tareas asignadas")}</NavLink>
         <NavLink href="/calendar" icon={CalendarDays} active={pathname === "/calendar"}>{t("Calendario")}</NavLink>
         <NavLink href="/settings" icon={Settings} active={pathname === "/settings"}>{t("Mi perfil")}</NavLink>
-        {isAdmin && <NavLink href="/admin" icon={Shield} active={pathname.startsWith("/admin")}>
+        {isAdmin && <NavLink href="/admin/users" icon={Shield} active={pathname.startsWith("/admin")}>
           <span className="flex-1">{t("Administración")}</span>
           {backupAlert && <span className="h-2 w-2 rounded-full bg-amber-500" role="img" aria-label={t("Copia de seguridad atrasada")} title={t("Copia de seguridad atrasada")} />}
           {updateAvailable && <span className="h-2 w-2 rounded-full bg-sky-500" role="img" aria-label={t("Hay una versión nueva de Pizarro")} title={t("Hay una versión nueva de Pizarro")} />}

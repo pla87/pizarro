@@ -281,12 +281,12 @@ export function parseCsvBoard(text: string, opts: CsvOptions): ForeignBoard {
     task.subtasks = list.slice(0, FOREIGN_LIMITS.subtasksPerTask);
   }
 
-  if (noTitle) warnings.push(t("{n} filas no tenían título y se han ignorado.", { n: noTitle }));
-  if (clipped.n) warnings.push(t("{n} textos eran más largos de lo permitido y se han recortado.", { n: clipped.n }));
-  if (badDates) warnings.push(t("{n} fechas límite no se pudieron interpretar y se han ignorado.", { n: badDates }));
-  if (badPriorities) warnings.push(t("{n} prioridades no se reconocieron y se han ignorado.", { n: badPriorities }));
-  if (extraLabels) warnings.push(t("{n} etiquetas de tareas sobraban (máximo {max} por tarea) y no se han importado.", { n: extraLabels, max: FOREIGN_LIMITS.labelsPerTask }));
-  if (extraSubtasks) warnings.push(t("{n} subtareas sobraban (máximo {max} por tarea) y no se han importado.", { n: extraSubtasks, max: FOREIGN_LIMITS.subtasksPerTask }));
+  if (noTitle) warnings.push(noTitle === 1 ? t("1 fila no tenía título y se ha ignorado.") : t("{n} filas no tenían título y se han ignorado.", { n: noTitle }));
+  if (clipped.n) warnings.push(clipped.n === 1 ? t("1 texto era más largo de lo permitido y se ha recortado.") : t("{n} textos eran más largos de lo permitido y se han recortado.", { n: clipped.n }));
+  if (badDates) warnings.push(badDates === 1 ? t("1 fecha límite no se pudo interpretar y se ha ignorado.") : t("{n} fechas límite no se pudieron interpretar y se han ignorado.", { n: badDates }));
+  if (badPriorities) warnings.push(badPriorities === 1 ? t("1 prioridad no se reconoció y se ha ignorado.") : t("{n} prioridades no se reconocieron y se han ignorado.", { n: badPriorities }));
+  if (extraLabels) warnings.push(extraLabels === 1 ? t("1 etiqueta de tarea sobraba (máximo {max} por tarea) y no se ha importado.", { max: FOREIGN_LIMITS.labelsPerTask }) : t("{n} etiquetas de tareas sobraban (máximo {max} por tarea) y no se han importado.", { n: extraLabels, max: FOREIGN_LIMITS.labelsPerTask }));
+  if (extraSubtasks) warnings.push(extraSubtasks === 1 ? t("1 subtarea sobraba (máximo {max} por tarea) y no se ha importado.", { max: FOREIGN_LIMITS.subtasksPerTask }) : t("{n} subtareas sobraban (máximo {max} por tarea) y no se han importado.", { n: extraSubtasks, max: FOREIGN_LIMITS.subtasksPerTask }));
   if (!tasks.length) throw new AppError("El CSV no tiene ninguna fila con título.");
 
   // Las columnas que cuentan como terminadas («Hecho», «Done», «Cerrado»…) van al final; cada grupo conserva su orden.

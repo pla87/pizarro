@@ -264,7 +264,8 @@ export async function connectTelegram() {
     const { code, expiresAt } = await createTelegramLinkCode(user.id);
     const url = telegramStartUrl(cfg.telegram.botUsername, code);
     const svg = await QRCode.toString(url, { type: "svg", margin: 1, errorCorrectionLevel: "M" });
-    return { url, expiresAt: expiresAt.toISOString(), qr: `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}` };
+    // bot: la pantalla deja de esperar si el administrador lo cambia mientras tanto (ver telegramWaitState).
+    return { url, bot: cfg.telegram.botUsername, expiresAt: expiresAt.toISOString(), qr: `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}` };
   });
 }
 

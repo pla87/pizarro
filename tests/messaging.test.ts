@@ -10,6 +10,8 @@ const core = await import("../src/lib/messaging-core");
 const { messagingFlags } = await import("../src/lib/doctor-core");
 const { makeT } = await import("../src/i18n/core");
 const { telegramCall, getBot } = await import("../src/lib/telegram");
+const { mentionEmail } = await import("../src/lib/notify");
+const { assignedBatchExcerpt } = await import("../src/lib/notification-text");
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -166,6 +168,27 @@ test("mensaje de Telegram: corto, en el idioma de la persona, con el contenido e
   assert.match(en, /^<b>Ana &lt;b&gt; assigned “Pantalla &amp; menú” to you<\/b>/, "comillas del idioma, como en el email");
   const long = core.telegramNoticeText({ ...m, excerpt: "a".repeat(2000) }, makeT("es"));
   assert.ok(long.length < 700, "el extracto se recorta");
+});
+
+test("asignación: el título va en la cabecera y no se repite debajo (Telegram y email); WhatsApp solo lleva la cabecera", () => {
+  const m = { type: "ASSIGNED" as const, actorName: "Ana", taskTitle: "Pantalla  de\ninicio", projectName: "Web", excerpt: "Pantalla de inicio", url: "https://pizarro.example.com/p/1?task=2" };
+  const tg = core.telegramNoticeText(m, makeT("es"));
+  assert.equal(tg, '<b>Ana te ha asignado «Pantalla de inicio»</b>\nWeb\n\n<a href="https://pizarro.example.com/p/1?task=2">Abrir la tarea</a>');
+  assert.doesNotMatch(tg, /<i>/);
+  // Título largo: el extracto es su principio recortado.
+  const longTitle = "x".repeat(300);
+  assert.doesNotMatch(core.telegramNoticeText({ ...m, taskTitle: longTitle, excerpt: `${"x".repeat(179)}…` }, makeT("es")), /<i>/);
+  // Si la tarea cambió de título desde el aviso, el de entonces sí se ve; y en un lote, «3 tareas».
+  assert.match(core.telegramNoticeText({ ...m, excerpt: "Portada" }, makeT("es")), /<i>Portada<\/i>/);
+  assert.match(core.telegramNoticeText({ ...m, excerpt: assignedBatchExcerpt(3) }, makeT("es")), /<i>3 tareas<\/i>/);
+  // Los demás avisos conservan su extracto aunque coincida con el título.
+  assert.match(core.telegramNoticeText({ ...m, type: "MENTION" }, makeT("es")), /<i>Pantalla de inicio<\/i>/);
+  const mail = mentionEmail(m, makeT("es"));
+  assert.equal(mail.text, "Ana te ha asignado «Pantalla  de\ninicio» (Web)\n\nAbrir la tarea: https://pizarro.example.com/p/1?task=2\n");
+  assert.doesNotMatch(mail.html, /<blockquote/);
+  assert.match(mentionEmail({ ...m, type: "COMMENT", excerpt: "Mira esto" }, makeT("es")).html, /<blockquote[^>]*>Mira esto</);
+  const wa = core.whatsappPayload("+34600111222", m, { templateName: "aviso_pizarro", templateLang: "es", templateLangEn: "en", legacy: false }, makeT("es"));
+  assert.deepEqual(wa.template.components[0]!.parameters.map((p) => p.text), ["Ana te ha asignado «Pantalla de inicio»", "Web", m.url]);
 });
 
 test("Telegram HTML: lo interpolado se escapa siempre; el texto sin formato, entero", () => {

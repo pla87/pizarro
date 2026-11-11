@@ -58,6 +58,7 @@ import { draftKey, useDraftAutosave, type EditTaskDraft } from "./drafts";
 import { setUndoTask, UNDONE_EVENT } from "../undo-context";
 import { useIsMobile } from "../ui/useIsMobile";
 import { UndoButton } from "../UndoButton";
+import { subtasksDidNotFit } from "./count-texts";
 
 export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecondBulk, draft }: {
   task: BoardTask;
@@ -1428,8 +1429,8 @@ function Subtasks({ taskId, detail, setDetail, flushRef, draftRef, blurHeld, onU
     const { created, undo } = res.data;
     const skipped = res.data.skipped + dropped;
     update((l) => [...l, ...created.filter((c) => !l.some((x) => x.id === c.id))]);
-    if (skipped) toast(t("Se añadieron {n} subtareas; {m} no caben (máximo {max} por tarea).", { n: created.length, m: skipped, max: MAX_SUBTASKS }), "error");
-    else toast(t("{n} subtareas añadidas", { n: created.length }), "undo", onUndo ? { label: t("Deshacer"), onClick: () => onUndo(undo.id) } : undefined);
+    if (skipped) toast(subtasksDidNotFit(t, created.length, skipped, MAX_SUBTASKS), "error");
+    else toast(created.length === 1 ? t("1 subtarea añadida") : t("{n} subtareas añadidas", { n: created.length }), "undo", onUndo ? { label: t("Deshacer"), onClick: () => onUndo(undo.id) } : undefined);
   };
 
   const setDone = (id: string, value: boolean) => update((l) => l.map((x) => (x.id === id ? { ...x, done: value } : x)));

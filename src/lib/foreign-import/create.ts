@@ -107,7 +107,7 @@ export async function createProjectFromBoard(board: ForeignBoard, source: Foreig
       labelRows.push({ id, projectId, name: l.name, color: l.color ?? AUTO_COLORS[labelRows.length % AUTO_COLORS.length]! });
     }
   }
-  if (droppedLabels) warnings.push(t("{n} etiquetas sobraban (máximo {max} por proyecto) y no se han importado.", { n: droppedLabels, max: FOREIGN_LIMITS.labels }));
+  if (droppedLabels) warnings.push(droppedLabels === 1 ? t("1 etiqueta sobraba (máximo {max} por proyecto) y no se ha importado.", { max: FOREIGN_LIMITS.labels }) : t("{n} etiquetas sobraban (máximo {max} por proyecto) y no se han importado.", { n: droppedLabels, max: FOREIGN_LIMITS.labels }));
 
   // --- Tareas.
   const now = new Date();
@@ -156,7 +156,7 @@ export async function createProjectFromBoard(board: ForeignBoard, source: Foreig
     task.subtasks.forEach((s, i) => subtaskRows.push({ taskId: id, title: s.title, done: s.done, position: (i + 1) * POSITION_STEP }));
     for (const c of task.comments) commentRows.push({ id: newId(), taskId: id, authorId: user.id, body: c.body, createdAt: c.createdAt && c.createdAt.getTime() <= now.getTime() ? c.createdAt : now });
   });
-  if (extraLabels) warnings.push(t("{n} etiquetas de tareas sobraban (máximo {max} por tarea) y no se han importado.", { n: extraLabels, max: FOREIGN_LIMITS.labelsPerTask }));
+  if (extraLabels) warnings.push(extraLabels === 1 ? t("1 etiqueta de tarea sobraba (máximo {max} por tarea) y no se ha importado.", { max: FOREIGN_LIMITS.labelsPerTask }) : t("{n} etiquetas de tareas sobraban (máximo {max} por tarea) y no se han importado.", { n: extraLabels, max: FOREIGN_LIMITS.labelsPerTask }));
   const fields = normalizeTaskFields(board.tasks.some((x) => x.priority) ? ["priority"] : []);
   const projectName = await freeProjectName(user, board.name, t("(importado)"));
   const last = await db.project.findFirst({ orderBy: { position: "desc" }, select: { position: true } });

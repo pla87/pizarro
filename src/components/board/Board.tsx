@@ -52,6 +52,7 @@ import { claimPaste, isTextTarget, pastedFiles, pasteClaimed, recoverEmptyImages
 import { draftKey, readDraft, type EditTaskDraft, type NewTaskDraft } from "./drafts";
 import { mentionsToPlain } from "@/lib/mentions";
 import { shouldRefreshOnFocus } from "@/lib/focus-refresh";
+import { cardCount } from "./count-texts";
 
 /**
  * Un diálogo cargado aparte, con su propio Suspense sin nada que mostrar mientras llega su código. next/dynamic (con
@@ -1071,7 +1072,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <span
             className="shrink-0 text-sm text-slate-500"
             aria-live="polite"
-            title={filtering ? undefined : t("{n} tarjetas", { n: tasks.length })}
+            title={filtering ? undefined : cardCount(t, tasks.length)}
           >
             {filtering ? (
               t("{shown} de {total}", { shown: shownCount, total: tasks.length })
@@ -1079,7 +1080,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               <>
                 {/* Con poco ancho, solo el número (el texto completo queda en el tooltip y para lectores de pantalla). */}
                 <span className="@min-[1000px]:hidden" aria-hidden>{tasks.length}</span>
-                <span className="@max-[999px]:sr-only">{t("{n} tarjetas", { n: tasks.length })}</span>
+                <span className="@max-[999px]:sr-only">{cardCount(t, tasks.length)}</span>
               </>
             )}
           </span>
@@ -1243,7 +1244,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             {/* En móvil los filtros ya están en la barra de pestañas. */}
             <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="max-md:hidden" />
             <ViewToggle view={view} onChange={changeView} className="max-md:hidden" />
-            <span className="shrink-0 text-xs text-slate-500" aria-live="polite">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : t("{n} tarjetas", { n: tasks.length })}</span>
+            <span className="shrink-0 text-xs text-slate-500" aria-live="polite">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : cardCount(t, tasks.length)}</span>
             {(mobileSearch || filtering) && (
               <button
                 type="button"

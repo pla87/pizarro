@@ -77,7 +77,7 @@ describe("Trello JSON", () => {
     assert.match(textos.description, /Responsable en el archivo original: Luis Muestra\./);
     assert.deepEqual(s.unmappedUsers, [{ name: "Luis Muestra", email: "" }]);
     assert.equal(s.addedMembers, 1);
-    assert.ok(s.warnings.some((w) => /archivos adjuntos subidos a Trello/.test(w)));
+    assert.ok(s.warnings.includes("1 archivo adjunto subido a Trello no se ha importado (solo se importan los enlaces)."), s.warnings.join(" | "));
   });
 
   test("proyecto privado: solo se asigna quien importa; el nombre ya existente recibe «(importado)»", async () => {

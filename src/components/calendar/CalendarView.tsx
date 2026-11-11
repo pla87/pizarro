@@ -700,7 +700,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
                     {bands.length > MAX_BANDS && (
                       <div className="relative col-span-7">
                         <button type="button" data-day-toggle onClick={() => setOpenDay(openDay === `d:${week[0]!.iso}` ? null : `d:${week[0]!.iso}`)} aria-expanded={openDay === `d:${week[0]!.iso}`} className="rounded px-1 text-[11px] font-medium text-brand-700 hover:bg-slate-100 dark:text-brand-300 dark:hover:bg-slate-800">
-                          {t("+{n} entregables más", { n: bands.length - MAX_BANDS })}
+                          {bands.length - MAX_BANDS === 1 ? t("+1 entregable más") : t("+{n} entregables más", { n: bands.length - MAX_BANDS })}
                         </button>
                         {openDay === `d:${week[0]!.iso}` && (
                           <div data-day-popover role="dialog" aria-label={t("Entregables")} className="absolute left-0 top-5 z-30 w-72 max-w-[80vw] space-y-0.5 rounded-lg border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
@@ -754,7 +754,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
                     {rangeBands.length > MAX_RANGES && (
                       <div className="relative col-span-7">
                         <button type="button" data-day-toggle onClick={() => setOpenDay(openDay === `r:${week[0]!.iso}` ? null : `r:${week[0]!.iso}`)} aria-expanded={openDay === `r:${week[0]!.iso}`} className="rounded px-1 text-[11px] font-medium text-brand-700 hover:bg-slate-100 dark:text-brand-300 dark:hover:bg-slate-800">
-                          {t("+{n} tareas con rango más", { n: rangeBands.length - MAX_RANGES })}
+                          {rangeBands.length - MAX_RANGES === 1 ? t("+1 tarea con rango más") : t("+{n} tareas con rango más", { n: rangeBands.length - MAX_RANGES })}
                         </button>
                         {openDay === `r:${week[0]!.iso}` && (
                           <div data-day-popover role="dialog" aria-label={t("Tareas con rango de fechas")} className="absolute left-0 top-5 z-30 w-72 max-w-[80vw] space-y-0.5 rounded-lg border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
