@@ -11,14 +11,17 @@ import { MailSettingsSection } from "./MailSettingsSection";
 import { StorageSettingsSection } from "./StorageSettingsSection";
 import type { StorageAdminView } from "@/lib/storage-stats";
 import { GoogleSettingsSection } from "./GoogleSettingsSection";
+import { TechInfoButton } from "./TechInfoButton";
 import type { GoogleSettingsView } from "@/lib/google-config";
+import type { MessagingAdminView } from "@/lib/messaging";
+import { MessagingSettingsSection } from "./MessagingSettingsSection";
 
 // Mismos márgenes que el servidor (src/lib/app-settings.ts, que no se puede importar desde el cliente).
 const MIN = 1;
 const MAX = 1000;
 
 /** «Ajustes»: parámetros generales de la aplicación. */
-export function SettingsAdmin({ maxComments, mail, google, storage }: { maxComments: number; mail: MailSettingsView; google: GoogleSettingsView; storage: StorageAdminView }) {
+export function SettingsAdmin({ maxComments, mail, google, storage, messaging }: { maxComments: number; mail: MailSettingsView; google: GoogleSettingsView; storage: StorageAdminView; messaging: MessagingAdminView }) {
   const t = useT();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -92,6 +95,7 @@ export function SettingsAdmin({ maxComments, mail, google, storage }: { maxComme
       <StorageSettingsSection view={storage} />
       <MailSettingsSection initial={mail.settings} env={mail.env} outbox={mail.outbox} />
       <GoogleSettingsSection view={google} />
+      <MessagingSettingsSection view={messaging} />
       <section className="card space-y-3 p-5">
         <div>
           <h2 className="text-sm font-semibold">{t("Diagnóstico para soporte")}</h2>
@@ -99,9 +103,15 @@ export function SettingsAdmin({ maxComments, mail, google, storage }: { maxComme
             {t("Un fichero JSON con el estado técnico de la instalación (versión, base de datos, migraciones, disco, tareas, copias, errores de las últimas 24 h por tipo y qué variables están definidas) para enviarlo a quien te ayude. No lleva datos personales, mensajes de los logs ni el valor de ninguna variable o clave.")}
           </p>
         </div>
-        <button className="btn-secondary w-fit py-1.5" onClick={downloadDoctor} disabled={doctorBusy}>
-          {doctorBusy ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} {t("Descargar diagnóstico")}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button className="btn-secondary w-fit py-1.5" onClick={downloadDoctor} disabled={doctorBusy}>
+            {doctorBusy ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} {t("Descargar diagnóstico")}
+          </button>
+          <TechInfoButton />
+        </div>
+        <p className="text-xs text-slate-500">
+          {t("«Copiar información técnica» copia unas líneas (versión, commit, Node, base de datos, funciones activas y nombres de las variables definidas, nunca sus valores) para pegarlas al informar de un error.")}
+        </p>
       </section>
     </div>
   );

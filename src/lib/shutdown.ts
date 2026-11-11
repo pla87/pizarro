@@ -21,6 +21,8 @@ interface ShutdownState {
   stopping: boolean;
   installed: boolean;
   inflight: Set<Promise<unknown>>;
+  /** Trabajos de fondo que hay que parar al apagar (p. ej. el sondeo de Telegram), por nombre: uno por módulo. */
+  hooks?: Map<string, () => Promise<void> | void>;
 }
 
 // En globalThis: instrumentation.ts y las rutas se compilan en paquetes distintos y deben ver el mismo estado.
@@ -54,6 +56,20 @@ export async function waitForInFlight(ms: number): Promise<number> {
     clearTimeout(timer);
   }
   return state.inflight.size;
+}
+
+/**
+ * Registra (o sustituye, con el mismo nombre) algo que hay que parar al empezar el apagado. Se lanza justo tras marcar
+ * el apagado y cuenta como trabajo en curso: el apagado lo espera con el mismo plazo que a las peticiones.
+ */
+export function onShutdown(name: string, fn: () => Promise<void> | void): void {
+  (state.hooks ??= new Map()).set(name, fn);
+}
+
+function runHooks(): void {
+  for (const [name, fn] of state.hooks ?? []) {
+    void trackInFlight(async () => fn()).catch((err) => console.error(`[shutdown] ${name}`, err));
+  }
 }
 
 /** Solo pruebas: vuelve al estado inicial (sin apagado en marcha ni trabajos anotados). */
@@ -140,6 +156,7 @@ export async function runShutdown(signal: NodeJS.Signals, deps?: ShutdownDeps): 
     return;
   }
   state.stopping = true;
+  runHooks();
   const started = Date.now();
   let d: ShutdownDeps;
   try {

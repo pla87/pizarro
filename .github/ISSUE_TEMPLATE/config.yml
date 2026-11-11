@@ -1,0 +1,12 @@
+# Solo se abren incidencias con el formulario (bug_report.yml); el resto, a la documentación o en privado.
+blank_issues_enabled: false
+contact_links:
+  - name: "Fallo de seguridad / Security vulnerability"
+    url: https://github.com/pla87/pizarro/security/advisories/new
+    about: "En privado, nunca en una incidencia pública (ver SECURITY.md). / Privately, never in a public issue (see SECURITY.md)."
+  - name: "Documentación / Documentation"
+    url: https://github.com/pla87/pizarro/blob/main/docs/MANUAL.md
+    about: "Cómo funciona todo. / How everything works."
+  - name: "Instalación y actualizaciones / Installing and updating"
+    url: https://github.com/pla87/pizarro/blob/main/docs/INSTALL.md
+    about: "Docker Compose, Railway, actualizar y resolución de problemas. / Docker Compose, Railway, updating and troubleshooting."

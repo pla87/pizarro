@@ -12,10 +12,13 @@ export const downloadUrl = (id: string) => `/api/transfer-jobs/${id}/download`;
 /** Botón de descarga del archivo de una exportación lista (descarga normal del navegador, en flujo). */
 export function DownloadButton({ id, size, className = "btn-primary" }: { id: string; size?: number; className?: string }) {
   const t = useT();
+  const locale = useIntlLocale();
+  // Con la coma decimal del idioma: «(0,1 MB)» en español.
+  const mb = size ? new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(Math.max(0.1, Math.round((size / 1048576) * 10) / 10)) : null;
   return (
     <a className={className} href={downloadUrl(id)} download data-testid="transfer-download">
       <Download size={15} /> {t("Descargar")}
-      {size ? <span className="text-xs opacity-80">({Math.max(0.1, Math.round((size / 1048576) * 10) / 10)} MB)</span> : null}
+      {mb ? <span className="text-xs opacity-80">({mb} MB)</span> : null}
     </a>
   );
 }

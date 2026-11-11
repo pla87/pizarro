@@ -1,5 +1,6 @@
 // Lógica pura (sin base de datos) del asistente de primer arranque: cuándo está pendiente y el código de un solo uso.
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import * as v from "./validation";
 
 /** Caducidad del código de un solo uso: 24 horas desde el arranque que lo generó. */
 export const SETUP_CODE_TTL_MS = 24 * 60 * 60_000;
@@ -79,4 +80,14 @@ export function validTimeZone(tz: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Email del asistente (administrador y email de prueba), con el mismo validador que el resto de la app (v.email): sin
+ * comillas, `<`, `>`, `;` ni espacios en la parte local, que en una cabecera To podrían colar otros destinatarios.
+ * Devuelve la dirección normalizada (sin espacios y en minúsculas) o null si no vale.
+ */
+export function parseSetupEmail(raw: unknown): string | null {
+  const r = v.email.safeParse(String(raw ?? ""));
+  return r.success ? r.data : null;
 }

@@ -133,6 +133,7 @@ export async function setColumnWipLimit(columnId: string, limit: number | null) 
     if (value === column.wipLimit) return;
     addUndo({ t: "column.set", id: column.id, data: { wipLimit: column.wipLimit } });
     if (value === null) describeAction("Quitó el límite de tarjetas de la columna «{name}»", { name: column.name });
+    else if (value === 1) describeAction("Puso un límite de 1 tarjeta a la columna «{name}»", { name: column.name });
     else describeAction("Puso un límite de {n} tarjetas a la columna «{name}»", { name: column.name, n: value });
     await db.column.update({ where: { id: columnId }, data: { wipLimit: value } });
   });

@@ -10,16 +10,33 @@ import { saveUndo } from "@/lib/undo";
 import { encodeLabel } from "@/lib/undo-label";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser, requireUser } from "@/lib/session";
-import { getT } from "@/i18n/server";
-import { quotaError } from "@/lib/quota-message";
-import { createAttachmentWithinLimit, roundMb } from "@/lib/attachment-limit";
+import { intlLocale } from "@/i18n/core";
+import { getLocale, getT } from "@/i18n/server";
+import { mbNumber, quotaError } from "@/lib/quota-message";
+import { attachmentLimitProblem, createAttachmentWithinLimit, roundMb, type AttachmentLimitProblem } from "@/lib/attachment-limit";
+import { uploadWriteError } from "@/lib/disk-space";
 import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, newFileId, processImage, removeAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveRawAttachmentFile } from "@/lib/uploads";
 import { attachmentTotals } from "@/lib/board";
 import { acquireUploadSlot, BodyTooLargeError, declaredLength, readBodyLimited, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError } from "@/lib/upload-slots";
 import { effectiveFileMaxMb, MULTIPART_OVERHEAD_BYTES } from "@/lib/upload-size";
 import type { UploadedAttachment } from "@/lib/types";
+import { cleanFileName } from "@/lib/file-name";
 
 export const runtime = "nodejs";
+
+/** Tope de la tarea o cuota superados: el mismo error en la comprobación previa y en la definitiva. */
+async function limitError(problem: AttachmentLimitProblem, projectId: string, isAdmin: boolean): Promise<AppError> {
+  const t = await getT();
+  const locale = intlLocale(await getLocale());
+  if (problem.reason === "quota") return quotaError(t, problem.quota, { projectId, isAdmin, locale });
+  return new AppError(
+    t("Los adjuntos de la tarea superarían el máximo del proyecto ({limit} MB por tarea; ya tiene {used} MB). Puedes cambiarlo en los ajustes del proyecto.", {
+      limit: mbNumber(problem.limitMb, locale), used: mbNumber(roundMb(problem.usedBytes), locale),
+    }),
+    413,
+    "task_total",
+  );
+}
 
 /** Sube un archivo cualquiera (imagen → WebP + miniatura; otros tal cual) (campo "file" de un multipart/form-data) a una tarea. */
 async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string }> }) {
@@ -78,9 +95,14 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
         return null;
       });
     }
-    const originalName = (file.name || "captura").replace(/[^\p{L}\p{N}._ -]/gu, "_").slice(0, 120) || "captura";
+    // Como lo escribió la persona (paréntesis, comas, &…); si es muy largo se recorta el nombre, no la extensión.
+    const originalName = cleanFileName(file.name, "captura");
     const mimeType = image ? "image/webp" : sanitizeMime(file.type);
     const storedBytes = image ? image.full.length : buffer.length;
+    // Comprobación previa, orientativa y sin candado (la definitiva va con el alta, más abajo): si ya no cabe, se rechaza
+    // con el mismo mensaje antes de escribir nada en el disco.
+    const early = await attachmentLimitProblem(taskId, storedBytes);
+    if (early) throw await limitError(early, projectId, user.role === "ADMIN");
     // Primero el fichero y después la fila (newFileId): un corte entre medias (apagado que no da tiempo, caída) deja como
     // mucho un fichero sin fila, que borra la limpieza de huérfanos; nunca un adjunto roto que además cuenta en la cuota.
     const id = newFileId();
@@ -89,7 +111,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
       else await saveRawAttachmentFile(id, buffer);
     } catch (err) {
       await removeAttachmentFiles([id]);
-      throw err;
+      throw uploadWriteError(err, { action: "attachments.noSpace", bytes: storedBytes, details: { taskId, projectId } });
     }
     // Tope del proyecto para la suma de adjuntos de la tarea y cuotas de almacenamiento (por proyecto y, si está
     // configurada, total): sumas y alta atómicas. Si no cabe, se rechaza con el uso actual (y se borra el fichero).
@@ -100,19 +122,9 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
       await removeAttachmentFiles([id]);
       throw err;
     });
-    if (!created.ok) await removeAttachmentFiles([id]);
-    if (!created.ok && created.reason === "quota") {
-      throw quotaError(await getT(), created.quota, { projectId, isAdmin: user.role === "ADMIN" });
-    }
     if (!created.ok) {
-      const t = await getT();
-      throw new AppError(
-        t("Los adjuntos de la tarea superarían el máximo del proyecto ({limit} MB por tarea; ya tiene {used} MB). Puedes cambiarlo en los ajustes del proyecto.", {
-          limit: created.limitMb, used: roundMb(created.usedBytes),
-        }),
-        413,
-        "task_total",
-      );
+      await removeAttachmentFiles([id]);
+      throw await limitError(created, projectId, user.role === "ADMIN");
     }
     const attachment = created.attachment;
     logEvent({

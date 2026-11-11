@@ -37,6 +37,7 @@ import { subtaskLines } from "@/lib/subtask-lines";
 import { documentDownloadName, type DocumentKindName } from "@/lib/document-kind";
 import { draftKey, useDraftAutosave, type NewTaskDraft } from "./drafts";
 import { actionThrowResult } from "@/lib/stale-action";
+import { subtasksDidNotFit } from "./count-texts";
 
 interface Props {
   initialColumnId?: string;
@@ -277,7 +278,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     const room = Math.max(0, MAX_NEW_SUBTASKS - subtasks.length);
     const added = lines.slice(0, room);
     if (added.length) setSubtasks((l) => [...l, ...added].slice(0, MAX_NEW_SUBTASKS));
-    if (added.length < lines.length) toast(t("Se añadieron {n} subtareas; {m} no caben (máximo {max} por tarea).", { n: added.length, m: lines.length - added.length, max: MAX_NEW_SUBTASKS }), "error");
+    if (added.length < lines.length) toast(subtasksDidNotFit(t, added.length, lines.length - added.length, MAX_NEW_SUBTASKS), "error");
   };
 
   const addSubtaskDraft = () => {
@@ -425,7 +426,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
               {subtasks.map((s, i) => (
                 <li key={i} className="flex items-center gap-2 rounded-md bg-slate-50 py-0.5 pr-0.5 pl-2 text-sm dark:bg-slate-800/50">
                   <span className="min-w-0 flex-1 break-words">{s}</span>
-                  <button type="button" className="btn-icon h-6 w-6 shrink-0" onClick={() => setSubtasks((l) => l.filter((_, j) => j !== i))} aria-label={t("Quitar subtarea")}>
+                  <button type="button" className="btn-icon h-6 w-6 shrink-0" onClick={() => setSubtasks((l) => l.filter((_, j) => j !== i))} aria-label={t("Quitar la subtarea «{name}»", { name: s })}>
                     <X size={14} />
                   </button>
                 </li>
@@ -500,7 +501,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
             {files.map((f, i) => (
               <div key={`${previews[i]}`} className="relative">
                 {isImageFile(f) ? (
-                  <button type="button" className="block" onClick={() => setLightbox(imageIndexes.indexOf(i))} aria-label={t("Ver imagen")}>
+                  <button type="button" className="block" onClick={() => setLightbox(imageIndexes.indexOf(i))} aria-label={t("Ver {name}", { name: f.name })}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={previews[i]} alt="" className="h-14 w-20 rounded-lg border border-slate-200 object-cover dark:border-slate-700" />
                   </button>
@@ -510,7 +511,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
                     <span className="line-clamp-2 break-all">{f.name}</span>
                   </div>
                 )}
-                <button type="button" className="absolute -top-1.5 -right-1.5 rounded-full bg-slate-900 p-0.5 text-white" onClick={() => setFiles((l) => l.filter((_, j) => j !== i))} aria-label={t("Quitar archivo")}>
+                <button type="button" className="absolute -top-1.5 -right-1.5 rounded-full bg-slate-900 p-0.5 text-white" onClick={() => setFiles((l) => l.filter((_, j) => j !== i))} aria-label={t("Quitar «{name}»", { name: f.name })}>
                   <X size={13} />
                 </button>
               </div>

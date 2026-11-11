@@ -672,7 +672,8 @@ describe("importar: endurecimiento (ronda 15)", () => {
     assert.equal(task.title.length, 210);
     assert.equal(task.updatedAt.toISOString(), "2026-03-01T08:00:00.000Z");
     assert.ok(s.warnings.some((w) => /2 enlaces/.test(w)));
-    assert.ok(s.warnings.some((w) => /1 títulos/.test(w)));
+    // Con uno solo, en singular (antes «1 títulos eran…»).
+    assert.ok(s.warnings.includes("1 título era más largo de lo permitido y se ha recortado."), s.warnings.join(" | "));
     // Una mención cortada a medias no queda en el título.
     assert.equal(capTitle(`${"x".repeat(205)}@[Nombre](user:abc)`), "x".repeat(205));
     assert.equal(capTitle("corto"), "corto");

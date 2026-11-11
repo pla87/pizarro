@@ -3,9 +3,10 @@
 Kanban ligero y generador de *release notes* para equipos pequeños (hasta 10 personas por defecto, `MAX_USERS`). Tiene tableros multiproyecto, capturas pegadas desde el portapapeles y exportación de releases agrupadas por tipo, con cabecera y pie personalizados por usuario.
 
 - **Stack:** Next.js 16 (App Router, TypeScript, Tailwind CSS 4) · PostgreSQL · Prisma 7 · `@dnd-kit` · `sharp` · `lucide-react`.
-- **Despliegue:** un único contenedor Docker (monolito) en Railway, con un volumen persistente para las capturas. También se instala en un servidor propio con Docker Compose (Caddy + Pizarro + PostgreSQL): ver [docs/INSTALL.md](docs/INSTALL.md). Instalación en un paso en un servidor Linux: `curl -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com`. Cada versión se publica como imagen Docker ya construida (`ghcr.io/pla87/pizarro`, amd64 y arm64); actualizar o volver a una versión anterior: [docs/INSTALL.md](docs/INSTALL.md), sección 5. Railway sigue construyendo desde el repositorio.
+- **Despliegue:** un único contenedor Docker (monolito) en Railway, con un volumen persistente para las capturas. También se instala en un servidor propio con Docker Compose (Caddy + Pizarro + PostgreSQL): ver [docs/INSTALL.md](docs/INSTALL.md). Instalación en un paso en un servidor Linux: `curl -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com`. Cada versión se publica como imagen Docker ya construida (`ghcr.io/pla87/pizarro`, amd64 y arm64); actualizar o volver a una versión anterior: [docs/INSTALL.md](docs/INSTALL.md), sección 5. Railway sigue construyendo desde el repositorio, desde la rama `stable` (solo versiones publicadas).
 - **Web:** [getpizarro.com](https://getpizarro.com) (qué es, cómo se instala y precios; se genera desde `site/`, ver [docs/VENTA.md](docs/VENTA.md), sección 8).
 - **Documentación:** [Manual de operaciones (PDF)](MANUAL.pdf) · [fuente Markdown](docs/MANUAL.md) · [Changelog](CHANGELOG.md).
+- **Errores:** con el formulario de [incidencias](https://github.com/pla87/pizarro/issues/new/choose) (o *Informar de un error* en *Historial de versiones* dentro de la app). Solo se atienden versiones publicadas sin modificar. Los fallos de seguridad, en privado: [SECURITY.md](SECURITY.md).
 
 ---
 
@@ -21,7 +22,7 @@ Kanban ligero y generador de *release notes* para equipos pequeños (hasta 10 pe
 | Plazos y entregables | Fecha límite en cada tarjeta (avisos de vencida, hoy o próxima) y **entregables**: hitos con fecha objetivo que agrupan tarjetas. Las columnas pueden contar como «terminadas». |
 | Informe PDF | Botón **Informe PDF** en cada proyecto: resumen y avance, estado por columna, entregables, plazos vencidos y próximos, carga por persona, tipos, últimas releases y detalle de cada columna. |
 | Google Docs / Sheets | Escribe `@docs` o `@sheets` en la descripción o en un comentario, o pulsa *Nuevo Doc* / *Nuevo Sheet*. Se crea el archivo en tu Google Drive, se abre en otra pestaña y queda enlazado a la tarjeta. Cada usuario conecta su cuenta una vez (permiso mínimo `drive.file`). |
-| Comentarios y menciones | Comentarios en las tarjetas con `@persona` (autocompletado). La persona mencionada recibe un aviso en la app (campana con contador), por **email** y, si lo activa, por **WhatsApp**. |
+| Comentarios y menciones | Comentarios en las tarjetas con `@persona` (autocompletado). La persona mencionada recibe un aviso en la app (campana con contador), por **email** y, si el administrador lo activa y la persona lo conecta, por **Telegram** (gratis) o **WhatsApp** (de pago). |
 | Vistas | *Mis tareas asignadas*, *Avisos*, histórico de releases por proyecto, *Historial de versiones* de la propia app. |
 | Móvil | **Instalable como app** (Android, iPhone y escritorio). Pestañas por columna (arrastra una tarjeta sobre otra pestaña para cambiarla de columna), botón flotante (+) para crear tareas o subir capturas, cámara en el detalle de la tarea, cambio rápido de proyecto desde el título. |
 | Personalización | Cada usuario elige el aspecto de las tarjetas: franja de color a la izquierda o tarjeta entera teñida. |
@@ -56,7 +57,7 @@ Para generar un `SESSION_SECRET`: `openssl rand -base64 48`.
 | Script | Descripción |
 |---|---|
 | `npm run dev` | Servidor de desarrollo. |
-| `npm run build` / `npm start` | Build de producción (salida *standalone*) y arranque. |
+| `npm run build` / `npm start` | Build de producción (salida *standalone*) y arranque (`scripts/start-local.mjs`: deja las subidas en la carpeta del proyecto y no dentro de `.next/standalone`, que se borra en cada build). |
 | `npm run check` | Lint + typecheck + tests. |
 | `npm test` | Tests unitarios (generador de releases, posiciones, validación, imágenes, changelog). |
 | `npm run test:db` | Tests de integración (permisos y deshacer) contra una PostgreSQL efímera; ver «Tests de integración». |
@@ -113,7 +114,7 @@ steps:
 | `ENCRYPTION_KEY` | Recomendada | 48+ caracteres aleatorios | Clave con la que se cifran (AES-256-GCM) los secretos TOTP y los tokens de Google. Sin ella se usa `SESSION_SECRET`. Con esta y `TOKEN_SECRET` definidas, rotar `SESSION_SECRET` solo cierra las sesiones. Guárdala fuera del servidor. |
 | `TOKEN_SECRET_PREVIOUS` / `ENCRYPTION_KEY_PREVIOUS` | Solo al rotar | la clave anterior | Siguen aceptando lo guardado con la clave anterior. Tras cambiar `ENCRYPTION_KEY`, `node dist/rotate-keys.mjs` (`npm run keys:rotate`) lo re-cifra todo y la anterior se puede quitar. Ver el manual, 4.4. |
 | `APP_URL` | Sí | `https://pizarro.up.railway.app` | URL pública. Con `https://` la cookie se marca `Secure` y usa el prefijo `__Host-`. |
-| `UPLOAD_DIR` | Sí | `/app/uploads` | Carpeta de capturas (la ruta del volumen). |
+| `UPLOAD_DIR` | Sí | `/app/uploads` | Carpeta de capturas (la ruta del volumen). Una ruta relativa (`./uploads`) se resuelve contra la carpeta del proyecto, también con `npm start`. |
 | `PORT` | No | Lo inyecta Railway | Puerto HTTP (por defecto 3000). |
 | `SEED_ADMIN_EMAIL` | Solo el primer arranque (Railway) | `admin@tu-dominio.com` | Email del administrador inicial. Si no defines `SEED_ADMIN_*`, con la base de datos vacía el servidor imprime en su log un código de un solo uso y el asistente web `/setup` crea el administrador (servidor propio con Docker Compose, ver `docs/INSTALL.md`). |
 | `SEED_ADMIN_PASSWORD` | Solo el primer arranque | mínimo 10 caracteres | Contraseña inicial: cámbiala después desde *Mi perfil*. |
@@ -125,6 +126,7 @@ steps:
 | `UPLOAD_QUOTA_MB_PER_PROJECT` | No | `2048` | Cuota de adjuntos por proyecto (MB). Pasada la cuota, la subida se rechaza mostrando el uso. |
 | `UPLOAD_QUOTA_MB_TOTAL` | No | (sin límite) | Cuota total de adjuntos de todo el servidor (MB). |
 | `PROJECT_IMPORT_MAX_MB` | No | `500` | Tamaño máximo (MB) del archivo `.pizarro.zip` al importar un proyecto (Nuevo proyecto, «Importar desde un archivo…»). Para JSON de Trello y CSV el tope es 25 MB, o este valor si es menor. Se lee en cada importación. |
+| `PDF_WORKER_MAX_MB` | No | `256` | Memoria máxima (MB, de 64 a 4096) del proceso aparte que genera los PDF (informe del proyecto, lista consolidada, resumen de entrega, planificación semanal). Si un PDF la supera, solo falla ese PDF con el error habitual («No se pudo generar el informe») y queda anotado en *Logs*; el servidor sigue funcionando. Súbela si un informe muy grande falla por memoria y el contenedor tiene margen. |
 | `BACKUP_KEY` | Para copias automáticas | `openssl rand -base64 32` | Clave AES-256 (32 bytes en base64, o 64 caracteres hexadecimales con `openssl rand -hex 32`) con la que se cifran las copias (base de datos y ficheros). Sin ella las copias están desactivadas. **Guárdala fuera del servidor: sin ella las copias no se pueden abrir.** |
 | `BACKUP_LOCAL_FILES` | No | (auto) | Sin definir: la copia local (`UPLOAD_DIR/backups`) incluye los ficheros solo si no hay destino externo. `1`/`0` lo fuerzan. |
 | `BACKUP_PAUSE` | No | `1` | Detiene las tareas automáticas de copia (la diaria, la subida al destino externo y la prueba de restauración mensual) mientras se restaura tras perder la base de datos o el volumen, para que la copia de la instalación vacía no llegue al destino externo. Los botones de *Administración → Copias de seguridad* siguen funcionando. Quítala al terminar. |
@@ -149,7 +151,7 @@ steps:
 | `AUTH_GOOGLE_ONLY` | No | `true` | Solo se entra con Google (necesita `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `APP_URL`; sin ellos no tiene efecto). Ver [Acceso con Google y dos pasos](#74-acceso-con-google-y-verificación-en-dos-pasos). |
 | `AUTH_ALLOW_ADMIN_PASSWORD` | No | `true` | Con `AUTH_GOOGLE_ONLY`, deja entrar con contraseña (y segundo paso) a los administradores: acceso de emergencia. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Para avisos por email | `smtp.gmail.com` / `465` / … | Servidor de correo saliente. Ver [Email](#72-avisos-por-email). |
-| `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_TEMPLATE_NAME` | Para avisos por WhatsApp | (de Meta) | WhatsApp Cloud API. Ver [WhatsApp](#73-avisos-por-whatsapp). |
+| `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_TEMPLATE_NAME` | No | (de Meta) / `aviso_pizarro` | WhatsApp Cloud API. Lo normal es configurarlo en *Administración → Ajustes*; estas variables rellenan los campos que no se guarden allí. Ver [WhatsApp](#73-avisos-por-telegram-y-whatsapp). |
 | `WHATSAPP_TEMPLATE_LANG` / `WHATSAPP_API_VERSION` | No | `es` / `v23.0` | Idioma de la plantilla y versión de la API de Meta. |
 
 Las integraciones son **opcionales**: si faltan sus variables, la app funciona igual y esas opciones aparecen como «no configuradas».
@@ -169,7 +171,14 @@ Las integraciones son **opcionales**: si faltan sus variables, la app funciona i
 
 1. En el mismo proyecto: **+ New → GitHub Repo** y selecciona este repositorio. Si es la primera vez, autoriza la app de Railway en GitHub.
 2. Railway detecta el `Dockerfile` y el `railway.json`. Estos fijan el builder Docker, el comando de arranque `sh scripts/start.sh`, el *healthcheck* en `/api/health` y una única réplica.
-3. En el servicio, **Settings → Source**: elige la rama que quieras desplegar (por ejemplo `main`).
+3. En el servicio, **Settings → Source → Branch** (en inglés *Branch connected to production*): elige **`stable`**. Esa rama solo avanza cuando se publica una versión (la mueve el workflow *Release* al commit de esa versión), así que Railway solo redespliega con versiones con nombre (`v1.49.0`, `v1.50.0`…), nunca con cada commit de `main`. `main` es la rama de desarrollo: despliégala solo si quieres probar cambios aún sin publicar (y entonces la app no ofrece *Informar de un error*, porque no es una versión oficial).
+
+#### Cambiar una instalación existente de `main` a `stable`
+
+1. Mira qué versión tienes (*Historial de versiones* en la app) y cuál es la última publicada ([Releases](https://github.com/pla87/pizarro/releases)). Si la tuya es **más nueva** que la última publicada (desplegaste commits de `main` posteriores), espera a que se publique la siguiente versión antes de cambiar: volver atrás puede no entender una base de datos ya migrada.
+2. Haz una copia de seguridad (*Administración → Copias de seguridad*).
+3. En el servicio de Pizarro: **Settings → Source → Branch** → `stable`. Railway despliega el commit de la última versión publicada; a partir de ahí, solo cuando se publique otra.
+4. Comprueba en *Historial de versiones* que la versión es la esperada. Si `stable` no aparece en la lista, es que aún no se ha publicado ninguna versión con este flujo: sigue en `main` (o en la etiqueta de la última versión) hasta entonces.
 
 ### 3. Variables de entorno
 
@@ -274,37 +283,34 @@ Con Google Workspace, lo más sencillo es enviar desde una cuenta dedicada (por 
 
 Sirve cualquier otro SMTP (Resend, Brevo, Mailgun…) con sus datos. Con el puerto `465` se usa TLS directo; con `587`, STARTTLS.
 
-#### 7.3 Avisos por WhatsApp
+#### 7.3 Avisos por Telegram y WhatsApp
 
-Se usa la **WhatsApp Cloud API** oficial de Meta. Pasos:
+Los dos se activan en **Administración → Ajustes → 3. Avisos por Telegram y WhatsApp**, sin tocar variables ni
+redesplegar. Después cada persona conecta su canal en *Mi perfil → Avisos* y elige qué avisos recibe por él (por
+defecto, menciones y asignaciones). Los tokens se guardan cifrados con `ENCRYPTION_KEY` y nunca vuelven al navegador.
 
-1. Crea o usa un **portfolio de Meta Business** en [business.facebook.com](https://business.facebook.com).
-2. En [developers.facebook.com](https://developers.facebook.com) → **Mis apps → Crear app** → tipo **Empresa (Business)** → añade el producto **WhatsApp**.
-3. **WhatsApp → Configuración de la API**:
-   - Meta te da un **número de prueba**, que puede enviar a un máximo de 5 destinatarios verificados. Basta para un equipo de 5; añade sus números en «Para».
-   - Para producción, añade un número propio dedicado, que no esté en uso en la app de WhatsApp, y verifícalo.
-   - Copia el **Phone number ID** → `WHATSAPP_PHONE_NUMBER_ID`.
-4. **Token permanente**: en **Configuración del negocio → Usuarios del sistema**:
-   - crea un usuario del sistema (Admin);
-   - asígnale la app y la cuenta de WhatsApp;
-   - genera un token con los permisos `whatsapp_business_messaging` y `whatsapp_business_management`. Ese es el `WHATSAPP_TOKEN`.
-5. **Plantilla** en **WhatsApp Manager → Plantillas de mensajes → Crear**:
-   - Categoría **Utilidad**, nombre `mencion_pizarro`, idioma **Español (es)**.
-   - Cuerpo (los 4 parámetros, en este orden):
-     ```
-     {{1}} te ha mencionado en la tarea «{{2}}» ({{3}}). Ábrela aquí: {{4}}
-     ```
-   - Envíala a revisión y espera a que esté **Aprobada**. Suele tardar minutos.
-6. En Railway:
-   ```env
-   WHATSAPP_TOKEN=<token permanente>
-   WHATSAPP_PHONE_NUMBER_ID=<id del número>
-   WHATSAPP_TEMPLATE_NAME=mencion_pizarro
-   WHATSAPP_TEMPLATE_LANG=es
-   ```
-7. Cada usuario activa **WhatsApp** en *Mi perfil → Avisos de menciones* y escribe su número en formato internacional (`+34…`).
+- **Telegram (gratis)**: crea un bot con @BotFather, pega su token y pulsa *Guardar y activar*. Con `APP_URL` https
+  pública, Telegram avisa a Pizarro por webhook (`/api/telegram/webhook`, con secreto); si no, Pizarro le pregunta en
+  segundo plano cada pocos segundos, así que también funciona en una red local (ese modo es para una sola instancia: con
+  varias réplicas, usa el webhook). Guía paso a paso:
+  [docs/guias/telegram.md](docs/guias/telegram.md).
+- **WhatsApp (de pago, Cloud API de Meta)**: hace falta una app de Meta con un número, un token permanente de usuario
+  del sistema y la plantilla de utilidad `aviso_pizarro` aprobada (el texto exacto está en la guía). Meta cobra cada
+  aviso entregado. Guía paso a paso, con costes: [docs/guias/whatsapp.md](docs/guias/whatsapp.md).
 
-> Meta cobra por cada mensaje de plantilla de utilidad (céntimos en España; consulta su tabla de precios). Si el idioma de la plantilla aprobada es `es_ES` en vez de `es`, cambia `WHATSAPP_TEMPLATE_LANG`. Los errores de envío quedan en los logs con el prefijo `[notify]`.
+Precedencia en WhatsApp: lo guardado en Ajustes manda campo a campo; los campos vacíos usan las variables `WHATSAPP_*`
+(así las instalaciones que ya las tenían siguen funcionando). Una plantilla que solo viene de `WHATSAPP_TEMPLATE_NAME`
+(o la antigua `mencion_pizarro`) se usa con el formato antiguo de 4 variables y solo para menciones, hasta que se
+escribe su nombre en Ajustes. Cada persona confirma su número con un código de 6 cifras que le llega por WhatsApp
+(15 minutos, 5 intentos; como mucho 3 envíos al día por número y 5 por persona).
+
+Límites: como mucho 30 mensajes de Telegram y 10 de WhatsApp por persona y hora (el resto queda en la campana), además
+de los de siempre (un envío externo por persona y tarea cada 10 minutos y 40 por hora por autor). Los envíos salen tras
+responder, con hasta 3 intentos (en WhatsApp solo se reintentan el 429 y los fallos de conexión antes de enviar, para no
+cobrar dos veces), y el apagado ordenado espera a los que están en curso. Los fallos quedan en
+*Administración → Logs* sin tokens y con el teléfono enmascarado; si alguien bloquea el bot, se le desconecta.
+
+English guides: [docs/guias/en/telegram.md](docs/guias/en/telegram.md), [docs/guias/en/whatsapp.md](docs/guias/en/whatsapp.md).
 
 #### 7.4 Acceso con Google y verificación en dos pasos
 

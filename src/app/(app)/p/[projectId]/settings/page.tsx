@@ -44,11 +44,11 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
       labels: { orderBy: { name: "asc" }, select: { id: true, name: true, color: true } },
       kinds: {
         orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-        select: { id: true, name: true, color: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true, _count: { select: { tasks: true } } },
+        select: { id: true, name: true, color: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true },
       },
       deliverables: {
         orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { position: "asc" }],
-        select: { id: true, name: true, description: true, dueDate: true, _count: { select: { tasks: { where: { archivedAt: null } } } } },
+        select: { id: true, name: true, description: true, dueDate: true },
       },
     },
   });
@@ -60,10 +60,18 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
   // en la pestaña Adjuntos. Los administradores asignan usuarios a los proyectos de equipo; los miembros de un privado
   // añaden a otros usuarios.
   const showStorage = tab === "adjuntos" && canManage;
-  const [releaseTemplates, generalKinds, generalUsage, users, schedule, editorRow, storageInitial, storageLargest] = await Promise.all([
+  // Tareas por tipo y por entregable con groupBy filtrado por sus ids: un `_count` de relación en la consulta del proyecto
+  // agrupaba TODAS las tareas del servidor en cada carga (Prisma 7 lo hace con un LEFT JOIN a un GROUP BY sin filtro).
+  const kindIds = project.kinds.map((k) => k.id);
+  const deliverableIds = project.deliverables.map((d) => d.id);
+  const [releaseTemplates, generalKinds, generalUsage, kindUsage, deliverableUsage, users, schedule, editorRow, storageInitial, storageLargest] = await Promise.all([
     tab === "releases" ? projectReleaseTemplates(project.id) : Promise.resolve({ headers: [], footers: [] }),
     listKinds(),
     db.task.groupBy({ by: ["kindId"], where: { projectId: project.id }, _count: { _all: true } }),
+    kindIds.length ? db.task.groupBy({ by: ["kindId"], where: { kindId: { in: kindIds } }, _count: { _all: true } }) : Promise.resolve([]),
+    deliverableIds.length
+      ? db.task.groupBy({ by: ["deliverableId"], where: { deliverableId: { in: deliverableIds }, archivedAt: null }, _count: { _all: true } })
+      : Promise.resolve([]),
     canManage ? db.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, role: true } }) : Promise.resolve([]),
     db.reportSchedule.findUnique({ where: { projectId: project.id }, select: { enabled: true, recipient: true, weekday: true, hour: true } }),
     db.user.findUnique({ where: { id: user.id }, select: { editorMode: true } }),
@@ -72,6 +80,8 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
   ]);
   const hidden = new Set(project.hiddenKinds.map((h) => h.kindId));
   const usage = new Map(generalUsage.map((g) => [g.kindId, g._count._all]));
+  const kindTasks = new Map(kindUsage.map((g) => [g.kindId, g._count._all]));
+  const deliverableTasks = new Map(deliverableUsage.map((g) => [g.deliverableId, g._count._all]));
   const editorMode = editorRow?.editorMode ?? "MARKDOWN";
 
   const storageSection = storageInitial && storageLargest
@@ -99,9 +109,9 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
         members: project.members.map((m) => ({ id: m.userId, name: m.user.name, active: m.user.active })),
       }}
       labels={project.labels}
-      kinds={project.kinds.map((k) => ({ id: k.id, name: k.name, color: k.color, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate, subtaskTemplate: k.subtaskTemplate, taskCount: k._count.tasks }))}
+      kinds={project.kinds.map((k) => ({ id: k.id, name: k.name, color: k.color, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate, subtaskTemplate: k.subtaskTemplate, taskCount: kindTasks.get(k.id) ?? 0 }))}
       generalKinds={generalKinds.map((k) => ({ ...k, enabled: !hidden.has(k.id), taskCount: usage.get(k.id) ?? 0 }))}
-      deliverables={project.deliverables.map((d) => ({ id: d.id, name: d.name, description: d.description, dueDate: dateToIso(d.dueDate), taskCount: d._count.tasks }))}
+      deliverables={project.deliverables.map((d) => ({ id: d.id, name: d.name, description: d.description, dueDate: dateToIso(d.dueDate), taskCount: deliverableTasks.get(d.id) ?? 0 }))}
       users={users}
       editorMode={editorMode}
       google={{ enabled: googleEnabled(), domain: googleWorkspaceDomain() ?? null }}
@@ -111,6 +121,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
           initial={schedule ?? { enabled: false, recipient: user.email, weekday: 1, hour: 8 }}
           emailAvailable={emailEnabled()}
           timeZone={appTimeZone()}
+          recipients={project.isPrivate ? "members" : isAdmin ? "any" : "team"}
         />
       }
     />

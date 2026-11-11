@@ -81,7 +81,10 @@ export async function run() {
   const [dl] = await Promise.all([p.waitForEvent("download", { timeout: 15000 }), zipBtn.click()]);
   const zpath = path.join(dir, "dl.zip"); await dl.saveAs(zpath);
   const zbuf = fs.readFileSync(zpath);
-  L.check("ZIP del diálogo: nombre release-AAAA-MM-DD-adjuntos.zip", /^release-\d{4}-\d{2}-\d{2}-adjuntos\.zip$/.test(dl.suggestedFilename()), dl.suggestedFilename());
+  // Mismo nombre que desde la página Releases (antes cada sitio daba uno distinto): fecha, número y proyecto.
+  const zipName = dl.suggestedFilename();
+  const projectPart = (await L.project()).name.replace(/\s+/g, "_");
+  L.check("ZIP del diálogo: nombre release-AAAA-MM-DD-R1-Proyecto-adjuntos.zip", zipName === `release-${zipName.slice(8, 18)}-R1-${projectPart}-adjuntos.zip` && /^\d{4}-\d{2}-\d{2}$/.test(zipName.slice(8, 18)), zipName);
   L.check("ZIP del diálogo: no vacío y empieza por PK", zbuf.length > 100 && zbuf[0] === 0x50 && zbuf[1] === 0x4b, String(zbuf.length));
   L.check("ZIP del diálogo: contiene R1F1_captura.webp y R1C1_notas.txt", zbuf.includes("R1F1_captura.webp") && zbuf.includes("R1C1_notas.txt"));
 
@@ -122,7 +125,7 @@ export async function run() {
   await histZipBtn.waitFor({ timeout: 10000 });
   L.check("Releases: botón «Descargar adjuntos» visible", await histZipBtn.isVisible());
   const [histDl] = await Promise.all([p.waitForEvent("download", { timeout: 15000 }), histZipBtn.click()]);
-  L.check("Releases: el botón descarga un .zip", /\.zip$/.test(histDl.suggestedFilename()), histDl.suggestedFilename());
+  L.eq("Releases: el botón descarga el ZIP con el mismo nombre que el diálogo", histDl.suggestedFilename(), zipName);
   const href = `/api/releases/${rel.id}/attachments`;
   const z = await p.evaluate(async (h) => { const r = await fetch(h); const b = new Uint8Array(await r.arrayBuffer()); return { status: r.status, len: b.length, pk: b[0] === 0x50 && b[1] === 0x4b, ct: r.headers.get("content-type") }; }, href);
   L.eq("ZIP del histórico: 200, application/zip, PK", [z.status, z.ct, z.pk], [200, "application/zip", true]);
@@ -204,6 +207,57 @@ export async function run() {
   await L.eqEventually("archivar una fija: archivada y no fija", async () => { const t = await L.dbTask("Fija"); return [!!t.archivedAt, t.evergreen]; }, [true, false]);
   await U.undoKey(p, "Control+z");
   await L.eqEventually("deshacer archivar la fija: vuelve fija", async () => { const t = await L.dbTask("Fija"); return [!!t.archivedAt, t.evergreen]; }, [false, true]);
+
+  // --- otra persona mueve una tarea de columna mientras se revisa el texto: no se despliega (manual 3.11) ---
+  // Antes la release salía igual y devolvía a producción la tarea que la otra persona había sacado de la columna.
+  await L.seedTasks(COL.next, ["Movida", "Quieta"]);
+  await L.reload(p);
+  const other = await L.session({ email: L.USER2 });
+  const moveAs = async (title, colName) => {
+    await U.openTask(other.page, title);
+    await U.dialog(other.page).locator("select").first().selectOption({ label: colName });
+    await L.eqEventually(`la otra persona mueve «${title}» a «${colName}»`, async () => (await L.dbTask(title)).columnName, colName);
+    await U.closeDialog(other.page);
+    await L.sleep(1200); // llega en vivo al tablero de quien despliega
+  };
+  const relCount = async () => (await rels()).length;
+  const before = await relCount();
+  await p.getByRole("button", { name: "Generar Release" }).click();
+  const d5 = U.dialog(p);
+  await d5.getByText("Paso 1 de 2").waitFor();
+  await d5.getByRole("button", { name: /Generar con \d+ tarea/ }).click();
+  await d5.getByText("Paso 2 de 2").waitFor();
+  await moveAs("Movida", COL.doing);
+  await d5.getByRole("button", { name: "Marcar como desplegado" }).click();
+  await p.locator("[role=dialog]").last().getByRole("button", { name: "Continuar" }).click();
+  const moved5 = p.getByText("Una de las tareas se ha movido a otra columna mientras tanto: vuelve a generar la release.");
+  await moved5.first().waitFor({ timeout: 8000 }).catch(() => {});
+  L.check("tarea movida entretanto: se avisa para volver a generar la release", (await moved5.count()) > 0);
+  L.eq("tarea movida entretanto: no se registra la release", await relCount(), before);
+  L.eq("tarea movida entretanto: sigue donde la dejó la otra persona", (await L.dbTask("Movida")).columnName, COL.doing);
+  L.eq("tarea movida entretanto: las demás no salen", await L.dbOrder(COL.next), ["Fija", "Quieta"]);
+  await p.keyboard.press("Escape");
+  await p.locator("[role=dialog]").first().waitFor({ state: "detached", timeout: 5000 }).catch(async () => {
+    // «Cerrar» pide confirmar si el texto se editó; aquí no, pero por si acaso.
+    await p.locator("[role=dialog]").last().getByRole("button", { name: /Continuar|Descartar|Cerrar/ }).first().click().catch(() => {});
+  });
+  // Lo mismo con «Release con selección» (tareas de varias columnas).
+  await L.reload(p);
+  for (const t of ["Movida", "Quieta"]) await L.cardLoc(p, t).locator("button[aria-label='Seleccionar']").click();
+  await p.getByRole("button", { name: "Release con selección" }).click();
+  const d6 = U.dialog(p);
+  await d6.getByText("Paso 1 de 2").waitFor();
+  await d6.getByRole("button", { name: /Generar con 2 tarea/ }).click();
+  await d6.getByText("Paso 2 de 2").waitFor();
+  await moveAs("Quieta", COL.backlog);
+  await d6.getByRole("button", { name: "Marcar como desplegado" }).click();
+  await p.locator("[role=dialog]").last().getByRole("button", { name: "Continuar" }).click();
+  const moved6 = p.getByText("Una de las tareas se ha movido a otra columna mientras tanto: vuelve a generar la release.");
+  await moved6.first().waitFor({ timeout: 8000 }).catch(() => {});
+  L.check("con selección, tarea movida entretanto: se avisa", (await moved6.count()) > 0);
+  L.eq("con selección, tarea movida entretanto: no se registra la release", await relCount(), before);
+  L.eq("con selección, tarea movida entretanto: ninguna pasa a producción", [(await L.dbTask("Movida")).columnName, (await L.dbTask("Quieta")).columnName], [COL.doing, COL.backlog]);
+  await other.ctx.close();
 
   L.assertNoErrors("escenario 7", [s]);
   await s.ctx.close();

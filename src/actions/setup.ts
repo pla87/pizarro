@@ -7,9 +7,10 @@ import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import { logEvent } from "@/lib/log";
 import { emailEnabled, sendMail } from "@/lib/mail";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateIp, rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { checkSetupCode, completeSetup, isSetupPending } from "@/lib/setup";
+import { parseSetupEmail } from "@/lib/setup-core";
 import { translate, type Locale } from "@/i18n/core";
 
 // Los errores de estas acciones salen en el idioma elegido en el asistente (todavía no hay usuario con idioma).
@@ -21,7 +22,7 @@ const WINDOW = 15 * 60_000;
 async function guardCode(code: string, l: Locale): Promise<string> {
   if (!(await isSetupPending(db))) throw new AppError(translate(l, "La instalación ya está configurada."), 404);
   const ip = clientIp(await headers());
-  const ipKey = `setup:fail:ip:${ip}`;
+  const ipKey = `setup:fail:ip:${rateIp(ip)}`;
   const allKey = "setup:fail:all";
   // Con SETUP_TOKEN no cuenta el tope global: si no, cualquiera que llegue a /setup podría bloquear al instalador legítimo.
   const token = process.env.SETUP_TOKEN?.trim() ?? "";
@@ -50,9 +51,9 @@ export async function sendSetupTestEmail(code: string, language: string, to: str
     const l = lang(language);
     const ip = await guardCode(String(code ?? ""), l);
     if (!emailEnabled()) throw new AppError(translate(l, "El envío de emails no está configurado."));
-    if (!rateLimit(`setup:mail:${ip}`, 5, WINDOW)) throw new AppError(translate(l, "Demasiados intentos. Espera unos minutos."), 429);
-    const address = String(to ?? "").trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(address) || address.length > 200) throw new AppError(translate(l, "El email no es válido."));
+    if (!rateLimit(`setup:mail:${rateIp(ip)}`, 5, WINDOW)) throw new AppError(translate(l, "Demasiados intentos. Espera unos minutos."), 429);
+    const address = parseSetupEmail(to);
+    if (!address) throw new AppError(translate(l, "El email no es válido."));
     try {
       await sendMail({
         to: address,

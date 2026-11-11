@@ -70,7 +70,7 @@ describe("Trello JSON", () => {
     assert.match(d, /\*\*Adjuntos de Trello\*\*\n- \[Guía de estilo\]\(https:\/\/example\.com\/guia-%28v2%29\.pdf\)/);
     assert.doesNotMatch(d, /logo\.png/);
     assert.match(d, /Tarjeta original en Trello: https:\/\/trello\.example\.com\/c\/abc123/);
-    assert.ok(board.warnings.some((w) => /1 archivos adjuntos subidos a Trello no se han importado/.test(w)));
+    assert.ok(board.warnings.includes("1 archivo adjunto subido a Trello no se ha importado (solo se importan los enlaces)."), board.warnings.join(" | "));
   });
 
   test("descripción: Markdown conservado, HTML en bruto y enlaces javascript: fuera, y las menciones falsas desactivadas", () => {
@@ -254,8 +254,9 @@ describe("CSV: tablero", () => {
     assert.deepEqual(b.tasks.map((x) => x.priority), [null, null]);
     assert.equal(b.warnings.length, 3);
     assert.ok(b.warnings.some((w) => /2 fechas límite/.test(w)));
-    assert.ok(b.warnings.some((w) => /1 prioridades/.test(w)));
-    assert.ok(b.warnings.some((w) => /1 filas no tenían título/.test(w)));
+    // Con uno solo, en singular (antes «1 prioridades no se reconocieron», «1 filas no tenían título»).
+    assert.ok(b.warnings.includes("1 prioridad no se reconoció y se ha ignorado."), b.warnings.join(" | "));
+    assert.ok(b.warnings.includes("1 fila no tenía título y se ha ignorado."), b.warnings.join(" | "));
   });
 
   test("columna «archivada»", () => {
@@ -506,6 +507,6 @@ describe("entradas hostiles y rendimiento", () => {
     assert.equal(board.description.length, 2000);
     assert.ok(board.warnings.some((w) => /^2 tarjetas no tenían título/.test(w)));
     assert.ok(board.warnings.some((w) => /^3 etiquetas de tareas sobraban \(máximo 20 por tarea\)/.test(w)));
-    assert.ok(board.warnings.some((w) => /^1 textos eran más largos/.test(w)), "el recorte de la descripción del tablero se cuenta antes del aviso");
+    assert.ok(board.warnings.includes("1 texto era más largo de lo permitido y se ha recortado."), "el recorte de la descripción del tablero se cuenta antes del aviso");
   });
 });

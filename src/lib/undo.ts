@@ -9,7 +9,7 @@ import { commentNoticesWhere } from "./notify";
 import { db } from "./db";
 import { assertTaskCapacity } from "./caps";
 import { blockProblem, lockBlocking } from "./blocking";
-import { resolvePositionTies } from "./task-positions";
+import { lockTaskRows, lockTaskRowsForDelete, resolvePositionTies } from "./task-positions";
 import { removeAttachmentFiles, removeReleaseAttachmentFiles } from "./uploads";
 
 // Deshacer: cada acción deshacible deja sus operaciones inversas (addUndo) y runAction las guarda
@@ -565,13 +565,25 @@ async function ensureCostField(projectId: string): Promise<void> {
 /**
  * Una tarea fija solo existe en la columna de la release del proyecto. Lo que devuelve una entrada (la marca de una
  * tarea, el rol de una columna, una tarea borrada) puede dejar alguna fuera de ella si entretanto cambió otra cosa:
- * esas pasan a normales, en una sola sentencia.
+ * esas pasan a normales (una lectura y, solo si hay alguna, un UPDATE con sus filas bloqueadas en orden de id).
  */
 async function clearStrayEvergreen(projectId: string): Promise<void> {
-  await db.$executeRaw`
-    UPDATE "Task" AS t SET "evergreen" = false, "evergreenEvery" = 1, "updatedAt" = ${new Date()}
+  // Lo normal es que no haya ninguna: una lectura sin candados y, solo si las hay, la transacción.
+  const stray = await db.$queryRaw<{ id: string }[]>`
+    SELECT t."id" FROM "Task" AS t
     WHERE t."projectId" = ${projectId} AND t."evergreen"
       AND NOT EXISTS (SELECT 1 FROM "Column" AS c WHERE c."id" = t."columnId" AND c."role" = 'NEXT_RELEASE')`;
+  if (!stray.length) return;
+  const ids = stray.map((r) => r.id);
+  await db.$transaction(async (tx) => {
+    // Filas en orden de id antes del UPDATE (que las bloquearía en el orden en que las recorre): otra acción en bloque
+    // sobre las mismas tareas espera en vez de cruzarse (40P01). Las condiciones se vuelven a comprobar ya bloqueadas.
+    await lockTaskRows(tx, ids);
+    await tx.$executeRaw`
+      UPDATE "Task" AS t SET "evergreen" = false, "evergreenEvery" = 1, "updatedAt" = ${new Date()}
+      WHERE t."id" = ANY(${ids}::text[]) AND t."projectId" = ${projectId} AND t."evergreen"
+        AND NOT EXISTS (SELECT 1 FROM "Column" AS c WHERE c."id" = t."columnId" AND c."role" = 'NEXT_RELEASE')`;
+  });
 }
 
 /** Campos que taskUpdateData acepta: las entradas antiguas pueden traer otros (p. ej. externalUrl) y se ignoran. */
@@ -969,6 +981,10 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           const cols = Prisma.raw(g.keys.map((k) => `"${k}"`).join(", "));
           const sets = Prisma.raw(g.keys.map((k) => `"${k}" = v."${k}"`).join(", "));
           const values = Prisma.join(g.rows.map((r) => Prisma.sql`(${r.op.id}::text, ${Prisma.join(g.keys.map((k) => taskValueSql(k, r.data[k])))})`));
+          // En orden de id antes del UPDATE … FROM (VALUES …), que las bloquearía en el orden en que recorre la tabla:
+          // otra persona moviendo o archivando esas mismas tarjetas en bloque (también en orden de id) espera en vez de
+          // cruzarse (40P01). Aquí no se toma ningún otro candado (ni de proyecto ni de columna) antes ni después.
+          await lockTaskRows(tx, g.rows.map((r) => r.op.id));
           const n = await tx.$executeRaw`UPDATE "Task" AS t SET ${sets}, "updatedAt" = ${now} FROM (VALUES ${values}) AS v("id", ${cols}) WHERE t."id" = v."id"`;
           if (g.withLabels) {
             await tx.taskLabel.deleteMany({ where: { taskId: { in: g.rows.map((r) => r.op.id) } } });
@@ -992,7 +1008,12 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
     try {
       const atts = await db.taskAttachment.findMany({ where: { taskId: { in: ids } }, select: { id: true, taskId: true } });
       const deleted = new Set(
-        (await db.$queryRaw<{ id: string }[]>`DELETE FROM "Task" WHERE "id" = ANY(${ids}::text[]) AND "projectId" = ${projectId} RETURNING "id"`).map((r) => r.id),
+        await db.$transaction(async (tx) => {
+          // Como en setTasks: filas en orden de id antes del DELETE … ANY (que las bloquea en el orden en que las encuentra),
+          // y ya con FOR UPDATE, el bloqueo del DELETE (ver lockTaskRowsForDelete).
+          await lockTaskRowsForDelete(tx, ids);
+          return (await tx.$queryRaw<{ id: string }[]>`DELETE FROM "Task" WHERE "id" = ANY(${ids}::text[]) AND "projectId" = ${projectId} RETURNING "id"`).map((r) => r.id);
+        }),
       );
       const gone = atts.filter((a) => deleted.has(a.taskId)).map((a) => a.id);
       filesToRemove.push(...gone);

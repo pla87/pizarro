@@ -8,8 +8,6 @@ export const web2: Record<string, string> = {
 
   // Portada
   "El tablero sencillo para equipos pequeños y familias": "The simple board for small teams and families",
-  "Pizarro es un Kanban que se instala en tu propio servidor: tareas, comentarios y notas de versión, sin suscripción ni cuota por persona. Gratis para uso personal y {price} € una sola vez para trabajar.":
-    "Pizarro is a Kanban board you install on your own server: tasks, comments and release notes, with no subscription and no per-person fee. Free for personal use, and €{price} once for work.",
   "Pruébalo gratis": "Try it for free",
   "Ver cómo funciona": "See how it works",
   "En tu servidor": "On your server",

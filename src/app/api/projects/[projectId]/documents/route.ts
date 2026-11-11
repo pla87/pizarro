@@ -8,16 +8,25 @@ import { publishChange } from "@/lib/realtime";
 import { rateLimit, rateLimitRetryAfterSec } from "@/lib/rate-limit";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser, requireUser } from "@/lib/session";
-import { getT } from "@/i18n/server";
+import { intlLocale } from "@/i18n/core";
+import { getLocale, getT } from "@/i18n/server";
 import { quotaError } from "@/lib/quota-message";
 import { roundMb } from "@/lib/attachment-limit";
 import { confirmDocumentKind, detectDocumentKind, documentMime, sanitizeDocumentName, type DocumentKindName } from "@/lib/document-kind";
-import { createDocumentWithinLimit } from "@/lib/documents";
+import { createDocumentWithinLimit, documentLimitProblem, type DocumentLimitProblem } from "@/lib/documents";
+import { uploadWriteError } from "@/lib/disk-space";
 import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, newFileId, processImage, removeDocumentFiles, sanitizeMime, saveDocumentFile } from "@/lib/uploads";
 import { acquireUploadSlot, BodyTooLargeError, declaredLength, readBodyLimited, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError } from "@/lib/upload-slots";
 import { effectiveFileMaxMb, MULTIPART_OVERHEAD_BYTES } from "@/lib/upload-size";
 
 export const runtime = "nodejs";
+
+/** Máximo de documentos o cuota superados: el mismo error en la comprobación previa y en la definitiva. */
+async function limitError(problem: DocumentLimitProblem, projectId: string, isAdmin: boolean): Promise<AppError> {
+  const t = await getT();
+  if (problem.reason === "count") return new AppError(t("La documentación del proyecto ya tiene el máximo de {n} archivos.", { n: problem.limit }), 413);
+  return quotaError(t, problem.quota, { projectId, isAdmin, locale: intlLocale(await getLocale()) });
+}
 
 /** Sube un documento a la documentación del proyecto (campo "file" de un multipart/form-data). */
 async function handlePost(req: Request, ctx: { params: Promise<{ projectId: string }> }) {
@@ -77,6 +86,10 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
       else kind = "OTHER"; // no es una imagen que sharp entienda: queda como descarga
     }
     const mimeType = documentMime(kind, sanitizeMime(file.type));
+    // Comprobación previa, orientativa y sin candado (la definitiva va con el alta, más abajo): si ya no cabe, se rechaza
+    // con el mismo mensaje antes de escribir nada en el disco.
+    const early = await documentLimitProblem(projectId, stored.length);
+    if (early) throw await limitError(early, projectId, user.role === "ADMIN");
     // Primero el fichero y después la fila (ver newFileId): un corte entre medias deja como mucho un fichero sin fila, que
     // borra la limpieza de huérfanos; nunca un documento roto que además cuenta en la cuota.
     const id = newFileId();
@@ -84,19 +97,15 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
       await saveDocumentFile(id, stored);
     } catch (err) {
       await removeDocumentFiles([id]);
-      throw err;
+      throw uploadWriteError(err, { action: "documents.noSpace", bytes: stored.length, details: { projectId } });
     }
     const created = await createDocumentWithinLimit({ id, projectId, name, mimeType, size: stored.length, kind, createdById: user.id }).catch(async (err) => {
       await removeDocumentFiles([id]);
       throw err;
     });
-    if (!created.ok) await removeDocumentFiles([id]);
     if (!created.ok) {
-      const t = await getT();
-      if (created.reason === "count") {
-        throw new AppError(t("La documentación del proyecto ya tiene el máximo de {n} archivos.", { n: created.limit }), 413);
-      }
-      throw quotaError(t, created.quota, { projectId, isAdmin: user.role === "ADMIN" });
+      await removeDocumentFiles([id]);
+      throw await limitError(created, projectId, user.role === "ADMIN");
     }
     const document = created.document;
     logEvent({

@@ -372,7 +372,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
       updatedAt: date(x.updatedAt),
     }));
 
-    if (cappedTitles) warnings.push(t("{n} títulos eran más largos de lo permitido y se han recortado.", { n: cappedTitles }));
+    if (cappedTitles) warnings.push(cappedTitles === 1 ? t("1 título era más largo de lo permitido y se ha recortado.") : t("{n} títulos eran más largos de lo permitido y se han recortado.", { n: cappedTitles }));
     const linkRows: Prisma.TaskLinkCreateManyInput[] = [];
     let badLinks = 0;
     for (const x of data.tasks) {
@@ -381,7 +381,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
         linkRows.push({ taskId: taskIds.get(x.ref)!, kind: l.kind, title: l.title, url: l.url, createdById: uid(l.createdBy), createdAt: date(l.createdAt) });
       }
     }
-    if (badLinks) warnings.push(t("{n} enlaces de Google no tenían una dirección válida de Google y no se han importado.", { n: badLinks }));
+    if (badLinks) warnings.push(badLinks === 1 ? t("1 enlace de Google no tenía una dirección válida de Google y no se ha importado.") : t("{n} enlaces de Google no tenían una dirección válida de Google y no se han importado.", { n: badLinks }));
     const tzFrom = zipTimeZone;
     if (data.reportSchedule && tzFrom && tzFrom !== appTimeZone()) {
       warnings.push(t("El informe semanal se programó en la zona horaria {from} y aquí se usa {to}: revisa el día y la hora.", { from: tzFrom, to: appTimeZone() }));

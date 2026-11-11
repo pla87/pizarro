@@ -171,13 +171,13 @@ export function parseTrello(text: string, opts: TrelloOptions): ForeignBoard {
   // La descripción del tablero también cuenta como recorte: se limpia antes de emitir el aviso.
   const boardDescription = cleanMarkdown(str(data.desc), 2000, clipped);
 
-  if (noTitle) warnings.push(t("{n} tarjetas no tenían título y se han ignorado.", { n: noTitle }));
-  if (clipped.n) warnings.push(t("{n} textos eran más largos de lo permitido y se han recortado.", { n: clipped.n }));
-  if (uploads) warnings.push(t("{n} archivos adjuntos subidos a Trello no se han importado (solo se importan los enlaces).", { n: uploads }));
-  if (badDates) warnings.push(t("{n} fechas límite no se pudieron interpretar y se han ignorado.", { n: badDates }));
-  if (extraLabels) warnings.push(t("{n} etiquetas de tareas sobraban (máximo {max} por tarea) y no se han importado.", { n: extraLabels, max: FOREIGN_LIMITS.labelsPerTask }));
-  if (extraSubtasks) warnings.push(t("{n} elementos de checklist sobraban (máximo {max} subtareas por tarea) y no se han importado.", { n: extraSubtasks, max: FOREIGN_LIMITS.subtasksPerTask }));
-  if (extraComments) warnings.push(t("{n} comentarios antiguos no se han importado: de cada tarjeta con más de {max} se guardan los {max} más recientes.", { n: extraComments, max: FOREIGN_LIMITS.commentsPerTask }));
+  if (noTitle) warnings.push(noTitle === 1 ? t("1 tarjeta no tenía título y se ha ignorado.") : t("{n} tarjetas no tenían título y se han ignorado.", { n: noTitle }));
+  if (clipped.n) warnings.push(clipped.n === 1 ? t("1 texto era más largo de lo permitido y se ha recortado.") : t("{n} textos eran más largos de lo permitido y se han recortado.", { n: clipped.n }));
+  if (uploads) warnings.push(uploads === 1 ? t("1 archivo adjunto subido a Trello no se ha importado (solo se importan los enlaces).") : t("{n} archivos adjuntos subidos a Trello no se han importado (solo se importan los enlaces).", { n: uploads }));
+  if (badDates) warnings.push(badDates === 1 ? t("1 fecha límite no se pudo interpretar y se ha ignorado.") : t("{n} fechas límite no se pudieron interpretar y se han ignorado.", { n: badDates }));
+  if (extraLabels) warnings.push(extraLabels === 1 ? t("1 etiqueta de tarea sobraba (máximo {max} por tarea) y no se ha importado.", { max: FOREIGN_LIMITS.labelsPerTask }) : t("{n} etiquetas de tareas sobraban (máximo {max} por tarea) y no se han importado.", { n: extraLabels, max: FOREIGN_LIMITS.labelsPerTask }));
+  if (extraSubtasks) warnings.push(extraSubtasks === 1 ? t("1 elemento de checklist sobraba (máximo {max} subtareas por tarea) y no se ha importado.", { max: FOREIGN_LIMITS.subtasksPerTask }) : t("{n} elementos de checklist sobraban (máximo {max} subtareas por tarea) y no se han importado.", { n: extraSubtasks, max: FOREIGN_LIMITS.subtasksPerTask }));
+  if (extraComments) warnings.push(extraComments === 1 ? t("1 comentario antiguo no se ha importado: de cada tarjeta con más de {max} se guardan los {max} más recientes.", { max: FOREIGN_LIMITS.commentsPerTask }) : t("{n} comentarios antiguos no se han importado: de cada tarjeta con más de {max} se guardan los {max} más recientes.", { n: extraComments, max: FOREIGN_LIMITS.commentsPerTask }));
 
   return {
     name: cleanName(str(data.name), 80) || cleanName(opts.fileName ?? "", 80) || "Trello",

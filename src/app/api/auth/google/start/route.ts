@@ -6,7 +6,7 @@ import { GOOGLE_LOGIN_COOKIE, buildLoginAuthUrl, newPkce, randomToken } from "@/
 import { googleLoginRedirectUri } from "@/lib/google-login";
 import { logEvent } from "@/lib/log";
 import { appUrl } from "@/lib/mail";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateIp, rateLimit } from "@/lib/rate-limit";
 import { safeNextPath } from "@/lib/redirect";
 import { clientIp } from "@/lib/request";
 import { cookieSecure } from "@/lib/session-config";
@@ -17,7 +17,7 @@ export const runtime = "nodejs";
 export async function GET(req: Request) {
   const ip = clientIp(req.headers);
   if (!googleEnabled()) redirect(`${appUrl()}/login?error=google_disabled`);
-  if (!rateLimit(`glogin:start:${ip}`, 30, 15 * 60_000)) redirect(`${appUrl()}/login?error=rate`);
+  if (!rateLimit(`glogin:start:${rateIp(ip)}`, 30, 15 * 60_000)) redirect(`${appUrl()}/login?error=rate`);
   const state = randomToken();
   const nonce = randomToken();
   const pkce = newPkce();

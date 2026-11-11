@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { forgetAttachments, forgetTaskAttachments } from "@/lib/attachment-cache";
 import { runAction } from "@/lib/action";
 import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjectAccess, assertTaskAccess, loadTaskWithAccess, visibleProjectsWhere } from "@/lib/access";
-import { appTimeZone, attachmentTotals, boardTaskSelect, listKinds, loadBoardTask, projectClients, projectUsers, toBoardTask } from "@/lib/board";
+import { appTimeZone, attachmentTotals, listKinds, loadBoardTask, loadBoardTasksByIds, projectClients, projectUsers } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
 import { MAX_SUBTASKS, MAX_TITLE } from "@/lib/constants";
 import { clampTitle } from "@/lib/title-clamp";
@@ -28,6 +28,7 @@ import { spawnRecurrences } from "@/lib/recurrence";
 import { createDriveFile, type GoogleFileKind } from "@/lib/google";
 import { shareRule } from "@/lib/google-share";
 import { excerpt as makeExcerpt, extractMentionIds, mentionsToPlain } from "@/lib/mentions";
+import { ACCENTED, foldedContains, UNACCENTED } from "@/lib/search-accents";
 import { dropPendingDueChanges, queueDueChange } from "@/lib/due-notices";
 import { assignedBatchExcerpt } from "@/lib/notification-text";
 import { commentNoticesWhere, followTask, notifyMentions, notifyTask, taskFollowerIds } from "@/lib/notify";
@@ -303,10 +304,10 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
     if (data.assigneeId && ids[0]) {
       await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId: ids[0], projectId: data.projectId, recipientIds: [data.assigneeId], excerpt: ids.length === 1 ? makeExcerpt(data.tasks[0]!.title) : assignedBatchExcerpt(ids.length) });
     }
-    const rows = await db.task.findMany({ where: { id: { in: ids } }, orderBy: TASK_ORDER, select: boardTaskSelect });
+    const rows = await loadBoardTasksByIds(ids);
     // `ids` conserva el orden de entrada (la tarea i es la línea i): ahí se sabe qué título llegó demasiado largo.
     const clips = new Map(ids.map((id, i) => [id, clipOf(input.tasks[i]?.title)] as const));
-    return rows.map((row) => withClip(toBoardTask(row), clips.get(row.id)));
+    return rows.map((row) => withClip(row, clips.get(row.id)));
   });
 }
 
@@ -740,6 +741,25 @@ function parseArchivedCursor(raw: string): { archivedAt: Date; id: string } {
 }
 
 /**
+ * Ids de la página siguiente de archivadas que coinciden con la búsqueda, por título de la tarea o título/número de una
+ * release suya, sin distinguir mayúsculas ni tildes («camion» encuentra «Camión»), como la búsqueda de releases.
+ */
+async function archivedMatchIds(projectId: string, q: string, releaseNumber: number | null, cursor: { archivedAt: Date; id: string } | null): Promise<string[]> {
+  const needle = foldedContains(q);
+  const fold = (column: Prisma.Sql) => Prisma.sql`translate(lower(${column}), ${ACCENTED}, ${UNACCENTED})`;
+  const after = cursor ? Prisma.sql`AND (t."archivedAt" < ${cursor.archivedAt} OR (t."archivedAt" = ${cursor.archivedAt} AND t."id" < ${cursor.id}))` : Prisma.empty;
+  const rows = await db.$queryRaw<{ id: string }[]>`
+    SELECT t."id" FROM "Task" t
+    WHERE t."projectId" = ${projectId} AND t."archivedAt" IS NOT NULL ${after}
+      AND (${fold(Prisma.sql`t."title"`)} LIKE ${needle}
+        OR EXISTS (SELECT 1 FROM "ReleaseTask" rt JOIN "Release" r ON r."id" = rt."releaseId"
+          WHERE rt."taskId" = t."id" AND (${fold(Prisma.sql`r."title"`)} LIKE ${needle} OR r."number" = ${releaseNumber ?? -1})))
+    ORDER BY t."archivedAt" DESC, t."id" DESC
+    LIMIT ${ARCHIVED_PAGE + 1}`;
+  return rows.map((r) => r.id);
+}
+
+/**
  * Tareas archivadas del proyecto, las más recientes primero, en páginas (`cursor` = «archivedAt|id» de la última recibida:
  * paginación por claves, que no se rompe si esa fila se desarchiva o se borra entre dos páginas).
  * `query` busca en el servidor por título de la tarea o por título/número de release.
@@ -756,14 +776,7 @@ export async function getArchivedTasks(projectId: string, opts: { query?: string
       projectId,
       archivedAt: { not: null },
       ...(cursor ? { AND: [{ OR: [{ archivedAt: { lt: cursor.archivedAt } }, { archivedAt: cursor.archivedAt, id: { lt: cursor.id } }] }] } : {}),
-      ...(q
-        ? {
-            OR: [
-              { title: { contains: q, mode: "insensitive" } },
-              { releases: { some: { release: { OR: [{ title: { contains: q, mode: "insensitive" } }, ...(num ? [{ number: Number(num[1]) }] : [])] } } } },
-            ],
-          }
-        : {}),
+      ...(q ? { id: { in: await archivedMatchIds(projectId, q, num ? Number(num[1]) : null, cursor) } } : {}),
     };
     const found = await db.task.findMany({
       where,
@@ -1465,7 +1478,7 @@ export async function addComment(taskId: string, body: string, parentId?: string
       await lockTaskRow(tx, taskId);
       if ((await tx.taskComment.count({ where: { taskId, deletedAt: null } })) >= maxComments) {
         const t = await getT();
-        throw new AppError(t("Esta tarea ya tiene el máximo de {n} comentarios.", { n: maxComments }));
+        throw new AppError(maxComments === 1 ? t("Esta tarea ya tiene el máximo de 1 comentario.") : t("Esta tarea ya tiene el máximo de {n} comentarios.", { n: maxComments }));
       }
       return tx.taskComment.create({ data: { taskId, authorId: user.id, body: text, parentId: parent ? (parent.parentId ?? parent.id) : null }, select: commentSelect });
     });

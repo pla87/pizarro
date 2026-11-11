@@ -1,4 +1,5 @@
 // Documentación del proyecto: tipos de fichero y nombres. Funciones puras (sin dependencias de servidor).
+import { cleanFileName } from "./file-name";
 
 export type DocumentKindName = "TEXT" | "MARKDOWN" | "PDF" | "IMAGE" | "OTHER";
 
@@ -71,17 +72,14 @@ export function confirmDocumentKind(declared: DocumentKindName, content: Uint8Ar
   return declared;
 }
 
-/** Nombre apto para guardar y mostrar: sin rutas ni caracteres raros, sin punto inicial, 120 caracteres como mucho. */
+/**
+ * Nombre apto para guardar y mostrar: sin rutas, sin punto inicial, sin los caracteres que no admite un nombre de
+ * archivo ni controles (ver cleanFileName: paréntesis, comas, &, +, #… se conservan) y con 120 caracteres como mucho,
+ * recortando el nombre y no la extensión (de ella depende el tipo de documento).
+ */
 export function sanitizeDocumentName(raw: string | null | undefined): string {
   const base = (raw ?? "").split(/[\\/]/).pop() ?? "";
-  const clean = base
-    .replace(/[^\p{L}\p{N}._ -]/gu, "_")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/^[.\s]+/, "")
-    .slice(0, 120)
-    .trim();
-  return clean || "documento";
+  return cleanFileName(base, "").replace(/^[.\s]+/, "") || "documento";
 }
 
 /** MIME guardado según el tipo confirmado (OTHER: el que declaró el cliente, ya normalizado). */

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
@@ -29,6 +31,117 @@ test("workflow de release: etiquetas v*.*.*, GHCR con amd64+arm64, caché gha y 
   assert.match(wf, /secrets\.GITHUB_TOKEN/);
   assert.match(wf, /scripts\/release-notes\.mjs/);
   assert.match(wf, /needs: image/);
+});
+
+test("workflows: cada acción fijada a un commit exacto con su versión en el comentario", () => {
+  for (const f of readdirSync(".github/workflows").filter((n) => /\.ya?ml$/.test(n))) {
+    const wf = readFileSync(`.github/workflows/${f}`, "utf8");
+    const uses = [...wf.matchAll(/^\s*(?:-\s+)?uses:\s*(.+)$/gm)].map((m) => m[1]!.trim());
+    assert.ok(uses.length > 0, f);
+    for (const u of uses) assert.match(u, /^[\w.-]+\/[\w.\/-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+$/, `${f}: ${u}`);
+  }
+  const dep = readFileSync(".github/dependabot.yml", "utf8");
+  assert.match(dep, /package-ecosystem: github-actions/);
+  assert.match(dep, /package-ecosystem: npm/);
+  assert.match(dep, /version-update:semver-major/);
+});
+
+test("workflow de release: build oficial y rama stable movida solo por su job, con --force-with-lease", () => {
+  const wf = readFileSync(".github/workflows/release.yml", "utf8");
+  assert.match(wf, /OFFICIAL_BUILD=1/);
+  assert.match(wf, /RELEASE_VERSION=\$\{\{ env\.VERSION \}\}/);
+  const stable = wf.slice(wf.indexOf("\n  stable:"));
+  assert.ok(stable.length > 20);
+  assert.match(stable, /needs: release/);
+  assert.match(stable, /contents: write/);
+  assert.match(stable, /git push --force-with-lease="refs\/heads\/stable:\$current" origin "\$GITHUB_SHA:refs\/heads\/stable"/);
+  // El Dockerfile declara las variables que la build usa para saberse oficial (Railway solo pasa las declaradas).
+  const df = readFileSync("Dockerfile", "utf8");
+  for (const a of ["OFFICIAL_BUILD", "RELEASE_VERSION", "RAILWAY_GIT_REPO_OWNER", "RAILWAY_GIT_REPO_NAME", "RAILWAY_GIT_BRANCH", "RAILWAY_GIT_COMMIT_SHA", "GIT_SHA"]) {
+    assert.match(df, new RegExp(`^ARG ${a}=`, "m"), a);
+  }
+});
+
+/** El script del paso «Mover stable a la versión publicada» (las líneas bajo «run: |», sin su sangría). */
+function stableScript(): string {
+  const wf = readFileSync(".github/workflows/release.yml", "utf8");
+  const stable = wf.slice(wf.indexOf("\n  stable:"));
+  const lines = stable.slice(stable.indexOf("Mover stable a la versión publicada")).split("\n");
+  const start = lines.findIndex((l) => /^\s+run: \|\s*$/.test(l));
+  const body: string[] = [];
+  for (const l of lines.slice(start + 1)) {
+    if (l.trim() && !l.startsWith("          ")) break;
+    body.push(l.slice(10));
+  }
+  return body.join("\n");
+}
+
+test("workflow de release: stable usa STABLE_PUSH_TOKEN si existe y no se mueve a un commit que no está en main", () => {
+  const wf = readFileSync(".github/workflows/release.yml", "utf8");
+  const stable = wf.slice(wf.indexOf("\n  stable:"));
+  assert.match(stable, /token: \$\{\{ secrets\.STABLE_PUSH_TOKEN \|\| github\.token \}\}/);
+  assert.match(stable, /fetch-depth: 0/);
+  const script = stableScript();
+  assert.ok(script.indexOf('git merge-base --is-ancestor "$GITHUB_SHA" origin/main') > 0);
+  assert.ok(script.indexOf("merge-base") < script.indexOf("git push"), "la comprobación va antes del push");
+
+  // Ensayo con un repositorio local de origen: main con dos versiones y una rama aparte.
+  const dir = mkdtempSync(join(tmpdir(), "pz-stable-"));
+  try {
+    const git = (cwd: string, ...args: string[]) => {
+      const r = spawnSync("git", ["-c", "user.name=Prueba", "-c", "user.email=prueba@example.com", "-c", "init.defaultBranch=main", ...args], { cwd, encoding: "utf8" });
+      assert.equal(r.status, 0, r.stderr);
+      return r.stdout.trim();
+    };
+    const origin = join(dir, "origin.git");
+    const work = join(dir, "work");
+    git(dir, "init", "--bare", "-q", origin);
+    git(dir, "clone", "-q", origin, work);
+    const commit = (version: string) => {
+      writeFileSync(join(work, "package.json"), JSON.stringify({ version }));
+      git(work, "add", "package.json");
+      git(work, "commit", "-q", "-m", `v${version}`);
+      return git(work, "rev-parse", "HEAD");
+    };
+    const v1 = commit("1.0.0");
+    git(work, "push", "-q", "origin", "HEAD:main");
+    const v2 = commit("1.1.0");
+    git(work, "push", "-q", "origin", "HEAD:main");
+    git(work, "checkout", "-q", "-b", "side", v1);
+    const side = commit("1.2.0");
+    git(work, "push", "-q", "origin", "side");
+    git(work, "checkout", "-q", "main");
+    const summary = join(dir, "summary.md");
+    const run = (sha: string, hasToken = "false") =>
+      spawnSync("bash", ["-e", "-c", script], { cwd: work, encoding: "utf8", env: { ...process.env, GITHUB_SHA: sha, GITHUB_STEP_SUMMARY: summary, HAS_STABLE_PUSH_TOKEN: hasToken, GIT_TERMINAL_PROMPT: "0" } });
+    const stableAt = () => spawnSync("git", ["ls-remote", origin, "refs/heads/stable"], { encoding: "utf8" }).stdout.split("\t")[0];
+
+    let r = run(v2);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(stableAt(), v2);
+    // Una etiqueta en un commit fuera de main: stable no se mueve (y el job no falla).
+    r = run(side);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /no está en main/);
+    assert.equal(stableAt(), v2);
+
+    // GitHub rechaza el push con GITHUB_TOKEN (cambian workflows): el job falla diciendo qué secreto crear.
+    git(work, "checkout", "-q", "main");
+    const v3 = commit("1.3.0");
+    git(work, "push", "-q", "origin", "HEAD:main");
+    const hook = join(origin, "hooks", "pre-receive");
+    writeFileSync(hook, "#!/bin/sh\necho \"refusing to allow a GitHub App to create or update workflow \\`.github/workflows/release.yml\\` without \\`workflows\\` permission\" >&2\nexit 1\n");
+    chmodSync(hook, 0o755);
+    r = run(v3);
+    assert.equal(r.status, 1);
+    assert.match(r.stdout, /::error::.*STABLE_PUSH_TOKEN.*Contents y Workflows/);
+    assert.match(readFileSync(summary, "utf8"), /STABLE_PUSH_TOKEN/);
+    assert.equal(stableAt(), v2);
+    r = run(v3, "true");
+    assert.match(r.stdout, /::error::.*no tiene el permiso Workflows/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("compose: usa la imagen publicada por defecto y compose.build.yml permite construir", () => {

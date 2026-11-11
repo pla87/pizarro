@@ -14,15 +14,17 @@ export function parseCommentLimit(raw: string | null | undefined): number {
 }
 
 // Memoria de proceso: se lee a menudo (cada comentario) y casi nunca cambia. Se invalida al guardar;
-// el tiempo de vida corto cubre otros procesos que compartan la base de datos.
+// el tiempo de vida corto cubre otros procesos que compartan la base de datos. En globalThis: Next carga una copia del
+// módulo por cada bundle (rutas /api, acciones) y la invalidación de una no llegaba a las demás.
 const TTL_MS = 30_000;
-let cached: { value: number; at: number } | null = null;
+const cache = ((globalThis as unknown as { __pzCommentLimit?: { value: { value: number; at: number } | null } }).__pzCommentLimit ??= { value: null });
 
 export async function getMaxCommentsPerTask(now: number = Date.now()): Promise<number> {
+  const cached = cache.value;
   if (cached && now - cached.at < TTL_MS) return cached.value;
   const row = await db.appState.findUnique({ where: { key: COMMENT_LIMIT_KEY }, select: { value: true } });
   const value = parseCommentLimit(row?.value);
-  cached = { value, at: now };
+  cache.value = { value, at: now };
   return value;
 }
 
@@ -33,5 +35,5 @@ export async function setMaxCommentsPerTask(value: number): Promise<void> {
 }
 
 export function invalidateAppSettings(): void {
-  cached = null;
+  cache.value = null;
 }

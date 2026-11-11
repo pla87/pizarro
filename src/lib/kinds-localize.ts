@@ -2,7 +2,8 @@
  * Tipos de tarea generales de serie en el idioma del usuario. Se guardan en español (migraciones v1.2 y v1.8);
  * quien usa la interfaz en inglés los ve en inglés mientras el valor guardado siga siendo el de serie.
  * Si un administrador los renombró o cambió sus plantillas, se muestra lo que él escribió.
- * Solo para mostrar: el editor de tipos y los ajustes del proyecto trabajan con los valores guardados.
+ * Solo para mostrar: el editor de tipos y los ajustes del proyecto trabajan con los valores guardados. Un tipo traducido
+ * lleva su nombre guardado en `codeName`.
  */
 import type { Locale } from "@/i18n/core";
 
@@ -32,7 +33,9 @@ export function localizeGeneralKind<K extends { id: string; name: string }>(kind
   if (locale !== "en") return kind;
   const seed = SEEDS[kind.id];
   if (!seed || kind.name !== seed.es.name) return kind;
-  const out: Record<string, unknown> = { ...kind, name: seed.en.name };
+  // `codeName`: el nombre guardado, para lo que no debe depender del idioma de quien lo usa (códigos de release, ver
+  // computeReleaseCodes).
+  const out: Record<string, unknown> = { ...kind, name: seed.en.name, codeName: kind.name };
   const k = kind as Partial<SeedKind>;
   if (k.titleTemplate === seed.es.titleTemplate) out.titleTemplate = seed.en.titleTemplate;
   if (k.descriptionTemplate === seed.es.descriptionTemplate) out.descriptionTemplate = seed.en.descriptionTemplate;

@@ -70,7 +70,9 @@ test("sanitizeDocumentName: quita rutas, caracteres raros y puntos iniciales", (
   assert.equal(sanitizeDocumentName(""), "documento");
   assert.equal(sanitizeDocumentName(null), "documento");
   assert.equal(sanitizeDocumentName("ñandú café.md"), "ñandú café.md");
-  assert.equal(sanitizeDocumentName("a\n\tb.txt"), "a__b.txt");
+  assert.equal(sanitizeDocumentName("a\n\tb.txt"), "a b.txt");
+  assert.equal(sanitizeDocumentName("informe (final), v2 & anexo+1 #3.pdf"), "informe (final), v2 & anexo+1 #3.pdf");
+  assert.equal(sanitizeDocumentName("x".repeat(300) + ".pdf"), "x".repeat(116) + ".pdf");
   assert.equal(sanitizeDocumentName("x".repeat(300) + ".pdf").length <= 120, true);
 });
 

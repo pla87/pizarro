@@ -39,7 +39,8 @@ export async function gatherDigest(user: { id: string; role: "ADMIN" | "MEMBER" 
   // Lo asignado a la persona sale aunque un admin no haya elegido ese proyecto (sigue pudiendo verlo).
   const mine = { project: visibleProjectsWhere(user as CurrentUser), archivedAt: null };
   const [created, done, comments, assigned, due] = await Promise.all([
-    db.task.findMany({ where: { ...live, createdAt: { gte: since } }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: taskSelect }),
+    // «Tareas nuevas»: las que crearon otras personas (las suyas ya las conoce, como sus comentarios).
+    db.task.findMany({ where: { ...live, createdAt: { gte: since }, OR: [{ createdById: null }, { createdById: { not: user.id } }] }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: taskSelect }),
     db.taskEvent.findMany({ where: { code: "done", createdAt: { gte: since }, task: live }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
     db.taskComment.findMany({ where: { deletedAt: null, createdAt: { gte: since }, OR: [{ authorId: null }, { authorId: { not: user.id } }], task: live }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
     db.notification.findMany({ where: { userId: user.id, type: "ASSIGNED", createdAt: { gte: since }, task: mine }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),

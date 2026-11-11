@@ -1,0 +1,47 @@
+# Actualizaciones de dependencias propuestas por Dependabot (PR contra main). Cómo se revisan: docs/HANDOFF.md,
+# «Actualizaciones de dependencias». Regla: una actualización solo se aprueba si pasan todas las pruebas.
+version: 2
+updates:
+  # Acciones de GitHub de .github/workflows/: van fijadas a un commit exacto (SHA + «# vX.Y.Z»); Dependabot actualiza
+  # el SHA y el comentario. Todas juntas en un solo PR a la semana.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Madrid
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "ci"
+    groups:
+      acciones:
+        patterns: ["*"]
+
+  # Paquetes de npm (package.json / package-lock.json): una vez al mes, menores y parches en un solo PR. Las versiones
+  # mayores no se proponen solas (suelen romper algo y se hacen a mano, leyendo sus notas). Las actualizaciones de
+  # seguridad no esperan al calendario ni a estos límites: Dependabot las abre en cuanto se publica el aviso (requiere
+  # «Dependabot security updates» activado en Settings → Code security), agrupadas en su propio PR.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+      time: "06:00"
+      timezone: Europe/Madrid
+    open-pull-requests-limit: 2
+    versioning-strategy: increase
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+    groups:
+      menores-y-parches:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
+      seguridad:
+        applies-to: security-updates
+        patterns: ["*"]
+    ignore:
+      # Mayores: a mano. Si un arreglo de seguridad exigiera subir de versión mayor, la alerta sigue saliendo en
+      # Security → Dependabot y se hace a mano.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

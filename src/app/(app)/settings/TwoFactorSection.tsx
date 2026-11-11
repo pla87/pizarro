@@ -54,7 +54,7 @@ export function TwoFactorSection({ method, admin, emailAvailable, codesLeft }: P
           <p className="text-sm">
             {method
               ? <><span className="badge bg-emerald-50 text-emerald-700 ring-emerald-500/20">{t("Activada")}</span>{" "}
-                  {method === "TOTP" ? t("App de autenticación") : t("Código por email")} · {t("{n} códigos de recuperación sin usar", { n: codesLeft })}</>
+                  {method === "TOTP" ? t("App de autenticación") : t("Código por email")} · {codesLeft === 1 ? t("1 código de recuperación sin usar") : t("{n} códigos de recuperación sin usar", { n: codesLeft })}</>
               : <span className="badge bg-slate-100 text-slate-600 ring-slate-500/20">{t("Desactivada")}</span>}
           </p>
 

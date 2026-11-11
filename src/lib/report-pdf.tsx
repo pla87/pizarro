@@ -7,9 +7,11 @@ import type { ChecklistGroup, ChecklistGroupBy } from "./checklist";
 import type { WeekPlanGroupBy, WeekPlanSection, WeekPlanTask } from "./week-plan";
 import { RECENT_DONE_DAYS, UPCOMING_DAYS, type DeliverableStatus, type Report, type ReportFieldRow, type ReportTask } from "./report";
 import { formatEuro, formatHours, PRIORITY_LABEL } from "./task-fields";
+import { pdfSafeData, pdfWordParts } from "./pdf-text";
 
-// Sin partición de palabras con guion: en español quedaba «re-sumen».
-Font.registerHyphenationCallback((word) => [word]);
+// Sin partición de palabras por sílabas (en español quedaba «re-sumen»), salvo las palabras muy largas (URLs, textos
+// sin espacios), que se pueden cortar en trozos para no salirse de la celda ni de la página.
+Font.registerHyphenationCallback(pdfWordParts);
 
 const C = {
   text: "#0f172a",
@@ -267,8 +269,8 @@ function ReportDocument({ r, t, locale }: { r: Report; t: T; locale: string }) {
               rows={people}
               cols={[
                 { label: t("Persona"), width: "60%", render: (p) => p.name },
-                { label: "Pendientes", width: "20%", render: (p) => String(p.open) },
-                { label: "Vencidas", width: "20%", render: (p) => <Text style={p.overdue ? { color: C.red, fontFamily: "Helvetica-Bold" } : undefined}>{p.overdue}</Text> },
+                { label: t("Pendientes"), width: "20%", render: (p) => String(p.open) },
+                { label: t("Vencidas"), width: "20%", render: (p) => <Text style={p.overdue ? { color: C.red, fontFamily: "Helvetica-Bold" } : undefined}>{p.overdue}</Text> },
               ]}
             />
           </>
@@ -347,7 +349,7 @@ function WeekPlanDocument({ r, t, locale }: { r: WeekPlanPdfInput; t: T; locale:
           <Text style={s.eyebrow}>{t("Planificación semanal")}</Text>
           <Text style={s.title}>{r.column}</Text>
           <Text style={s.meta}>
-            {r.project} · {t("Semana del {date}", { date: formatDay(r.today, undefined, locale) })} · {byDay ? t("Por día") : t("Por persona")} · {t("{n} tareas", { n: total })}
+            {r.project} · {t("Semana del {date}", { date: formatDay(r.today, undefined, locale) })} · {byDay ? t("Por día") : t("Por persona")} · {total === 1 ? t("1 tarea") : t("{n} tareas", { n: total })}
           </Text>
         </View>
         {r.sections.length === 0 && <Text style={s.small}>{t("No hay tareas en esta columna.")}</Text>}
@@ -442,7 +444,7 @@ function DeliveryDocument({ r, t, locale }: { r: DeliveryPdfInput; t: T; locale:
         <View style={s.header}>
           <Text style={s.eyebrow}>{t("Resumen para el cliente")}</Text>
           <Text style={s.title}>{r.project}</Text>
-          <Text style={s.meta}>{r.column} · {formatDay(r.today, undefined, locale)} · {t("{n} tareas", { n: r.tasks.length })}</Text>
+          <Text style={s.meta}>{r.column} · {formatDay(r.today, undefined, locale)} · {r.tasks.length === 1 ? t("1 tarea") : t("{n} tareas", { n: r.tasks.length })}</Text>
         </View>
         {r.tasks.length === 0 && <Text style={s.small}>{t("No hay tareas en esta columna.")}</Text>}
         {r.tasks.map((x, i) => (
@@ -478,8 +480,9 @@ export type PdfJob =
   | { kind: "checklist"; locale: Locale; input: ChecklistPdfInput }
   | { kind: "delivery"; locale: Locale; input: DeliveryPdfInput };
 
-/** Pinta el PDF de un trabajo (en el worker). */
-export function renderPdfJob(job: PdfJob): Promise<Buffer> {
+/** Pinta el PDF de un trabajo (en el worker). Los textos de los datos se adaptan antes a la fuente (ver pdf-text.ts). */
+export function renderPdfJob(raw: PdfJob): Promise<Buffer> {
+  const job = { ...raw, input: pdfSafeData(raw.input) } as PdfJob;
   const t = makeT(job.locale);
   const locale = intlLocale(job.locale);
   switch (job.kind) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { isNextNavigationSignal } from "@/lib/next-navigation-signal";
 import { isStaleActionError } from "@/lib/stale-action";
 import { reloadForNewVersion } from "./VersionWatcher";
 
@@ -11,6 +12,9 @@ const sent = new Map<string, number>();
 export function reportClientError(source: Source, error: unknown, digest?: string) {
   try {
     const err = error instanceof Error ? error : new Error(typeof error === "string" ? error : JSON.stringify(error));
+    const errDigest = digest ?? (err as Error & { digest?: string }).digest;
+    // Redirección o «no encontrado» de Next que llegó con la página a medio enviar: no es un fallo (ver isNextNavigationSignal).
+    if (isNextNavigationSignal(errDigest, err.message)) return;
     const key = `${source}:${err.message}`;
     const now = Date.now();
     if ((sent.get(key) ?? 0) > now - 60_000) return;
@@ -19,7 +23,7 @@ export function reportClientError(source: Source, error: unknown, digest?: strin
     const body = JSON.stringify({
       source,
       message: err.message.slice(0, 2000) || "(sin mensaje)",
-      digest: digest ?? (err as Error & { digest?: string }).digest,
+      digest: errDigest,
       stack: err.stack?.slice(0, 4000),
       path: (window.location.pathname + window.location.search).slice(0, 500),
     });

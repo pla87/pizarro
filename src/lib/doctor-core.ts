@@ -1,4 +1,5 @@
 import { parseBackupKey } from "./backup-core";
+import { parseWhatsappSettings, resolveWhatsappConfig, TELEGRAM_ENABLED_KEY, TELEGRAM_TOKEN_KEY, telegramMode } from "./messaging-core";
 
 // Parte pura del diagnóstico para soporte (Administración → Ajustes → «Descargar diagnóstico» y node dist/doctor.mjs):
 // qué variables se comprueban, cómo se describen sin revelar su valor y cómo se limpian los textos.
@@ -6,13 +7,20 @@ import { parseBackupKey } from "./backup-core";
 
 type Env = Record<string, string | undefined>;
 
-/** Variables documentadas (.env.example, docs/INSTALL.md). Solo se informa de si están definidas. */
+/**
+ * Variables de la app documentadas (.env.example, deploy/.env.example, README, docs/INSTALL.md). Solo se informa de si
+ * están definidas. tests/doctor.test.ts falla si .env.example, deploy/.env.example o la tabla del README documentan una
+ * que no esté aquí (salvo las que solo usan Docker Compose o la compilación).
+ */
 export const DOCUMENTED_ENV_VARS = [
   "DATABASE_URL", "SESSION_SECRET", "TOKEN_SECRET", "TOKEN_SECRET_PREVIOUS", "ENCRYPTION_KEY", "ENCRYPTION_KEY_PREVIOUS",
-  "APP_URL", "CANONICAL_REDIRECT", "UPLOAD_DIR", "PORT", "NODE_ENV",
+  "APP_URL", "CANONICAL_REDIRECT", "LANDING_AT_ROOT", "SETUP_TOKEN", "UPLOAD_DIR", "PORT", "NODE_ENV",
   "SEED_ADMIN_EMAIL", "SEED_ADMIN_PASSWORD", "SEED_ADMIN_NAME",
   "MAX_USERS", "MAX_UPLOAD_MB", "DATABASE_POOL_SIZE", "COOKIE_SECURE", "UPLOAD_QUOTA_MB_PER_PROJECT", "UPLOAD_QUOTA_MB_TOTAL",
-  "BACKUP_KEY", "BACKUP_PAUSE", "APP_TIMEZONE", "LOG_RETENTION_DAYS", "HEALTH_MIN_FREE_MB", "EXIT_ON_UNCAUGHT_EXCEPTION",
+  "PROJECT_IMPORT_MAX_MB", "PROJECT_TRANSFER_CONCURRENCY", "PDF_WORKER_MAX_MB", "DISK_MIN_FREE_MB",
+  "BACKUP_KEY", "BACKUP_PAUSE", "BACKUP_LOCAL_FILES", "BACKUP_EXTERNAL_DIR",
+  "BACKUP_S3_ENDPOINT", "BACKUP_S3_BUCKET", "BACKUP_S3_ACCESS_KEY_ID", "BACKUP_S3_SECRET_ACCESS_KEY", "BACKUP_S3_REGION", "BACKUP_S3_PREFIX",
+  "APP_TIMEZONE", "LOG_RETENTION_DAYS", "HEALTH_MIN_FREE_MB", "EXIT_ON_UNCAUGHT_EXCEPTION", "UPDATE_CHECK",
   "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_WORKSPACE_DOMAIN", "GOOGLE_SHARE_ROLE", "AUTH_GOOGLE_ONLY", "AUTH_ALLOW_ADMIN_PASSWORD",
   "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "SMTP_FROM", "MAIL_OUTBOX_DIR", "MAIL_OUTBOX_IN_PRODUCTION",
   "WHATSAPP_TOKEN", "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_TEMPLATE_NAME", "WHATSAPP_TEMPLATE_LANG", "WHATSAPP_API_VERSION",
@@ -47,11 +55,35 @@ export function configFlags(env: Env = process.env) {
     smtp: Boolean(env.SMTP_HOST && env.SMTP_FROM),
     mailOutbox: outbox,
     email: outbox || Boolean(env.SMTP_HOST && env.SMTP_FROM),
+    // Solo con las variables WHATSAPP_* (el diagnóstico completo lo corrige con lo guardado en Ajustes: messagingFlags).
     whatsapp: Boolean(env.WHATSAPP_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID && env.WHATSAPP_TEMPLATE_NAME),
     backups: Boolean(parseBackupKey(env.BACKUP_KEY)),
     separateTokenSecret: Boolean(env.TOKEN_SECRET?.trim()),
     separateEncryptionKey: Boolean(env.ENCRYPTION_KEY?.trim()),
     keyRotationInProgress: Boolean(env.TOKEN_SECRET_PREVIOUS?.trim() || env.ENCRYPTION_KEY_PREVIOUS?.trim()),
+  };
+}
+
+/**
+ * Telegram y WhatsApp (Administración → Ajustes y variables WHATSAPP_*), sin valores: si están configurados y activos,
+ * de dónde sale cada dato de WhatsApp y cómo recibe Pizarro los mensajes del bot (webhook o sondeo).
+ */
+export function messagingFlags(env: Env, rows: { key: string; value: string }[], channels: { telegram: number; whatsapp: number; whatsappPending: number } | null = null) {
+  const has = (k: string) => rows.some((r) => r.key === k && r.value.trim() !== "");
+  const telegramConfigured = has(TELEGRAM_TOKEN_KEY);
+  const saved = parseWhatsappSettings(rows);
+  // El token no se descifra: basta saber si está guardado.
+  const wa = resolveWhatsappConfig(env, saved, saved.hasToken ? "saved" : "");
+  return {
+    telegram: telegramConfigured && rows.some((r) => r.key === TELEGRAM_ENABLED_KEY && r.value === "true"),
+    telegramConfigured,
+    telegramMode: telegramMode(env.APP_URL).mode,
+    whatsapp: wa.active,
+    whatsappConfigured: wa.complete,
+    // Nombres que el limpiador del informe no tacha (quita los campos llamados token, phone…).
+    whatsappSources: { credential: wa.sources.token, numberId: wa.sources.phoneNumberId, template: wa.sources.templateName, language: wa.sources.templateLang },
+    whatsappLegacyTemplate: wa.legacy,
+    ...(channels ? { connectedChannels: channels } : {}),
   };
 }
 

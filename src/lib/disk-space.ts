@@ -1,6 +1,7 @@
 import "server-only";
 import { mkdir, statfs } from "node:fs/promises";
 import { AppError } from "./errors";
+import { logEvent } from "./log";
 
 /** Mensaje único cuando no cabe lo que se va a escribir (comprobación previa o ENOSPC durante la escritura). */
 export const NO_SPACE_MESSAGE = "No hay espacio suficiente en el disco del servidor para esta operación.";
@@ -58,6 +59,24 @@ export async function diskStats(dir: string): Promise<{ free: number; total: num
 
 /** ¿Es un error de disco lleno del sistema operativo? */
 export const isNoSpaceError = (err: unknown): boolean => (err as { code?: string } | null)?.code === "ENOSPC";
+
+/** Mensaje de una subida (adjunto, documento) que no se pudo escribir por falta de espacio en el disco. */
+export const UPLOAD_NO_SPACE_MESSAGE = "El servidor no tiene espacio para guardar el archivo.";
+
+/**
+ * Error al escribir el fichero de una subida: si es ENOSPC lo anota en el registro del sistema (es un problema del
+ * servidor que la administración debe ver, no un fallo de quien sube) y devuelve un 507 con un mensaje claro en vez del
+ * 500 genérico; cualquier otro error se devuelve tal cual. Quien llama ya ha borrado lo que se llegara a escribir.
+ */
+export function uploadWriteError(err: unknown, what: { action: string; bytes: number; details?: Record<string, unknown> }): unknown {
+  if (!isNoSpaceError(err)) return err;
+  logEvent({
+    level: "error", category: "system", action: what.action,
+    message: `Disco lleno: no se pudo guardar una subida de ${Math.round(what.bytes / 1024)} KB`,
+    details: { bytes: what.bytes, ...what.details, error: err instanceof Error ? err.message : String(err) },
+  });
+  return new AppError(UPLOAD_NO_SPACE_MESSAGE, 507, "disk_full");
+}
 
 /**
  * Falla (507) si en el volumen de `dir` no caben `needed` bytes más el margen. Si el sistema de ficheros no informa

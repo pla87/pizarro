@@ -1,0 +1,111 @@
+# Formulario de errores. El enlace «Informar de un error» de la app (Historial de versiones) abre
+# /issues/new?template=bug_report.yml y rellena por URL los campos version, commit, install, browser y language
+# (src/lib/bug-report-core.ts): si cambias el id de un campo, cámbialo también allí.
+name: "Informar de un error / Bug report"
+description: "Un fallo en una versión publicada de Pizarro sin modificar. / A bug in an unmodified released version of Pizarro."
+title: "[Error] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Este repositorio es público.** No incluyas datos personales (nombres, emails, teléfonos), la dirección de tu instalación, contenido de tus proyectos ni capturas con información privada. Recorta o tapa lo que haga falta.
+        *This repository is public. Do not include personal data (names, emails, phone numbers), your installation's address, project content or screenshots with private information.*
+
+        **¿Es un fallo de seguridad?** No lo publiques aquí: [infórmalo en privado](https://github.com/pla87/pizarro/security/advisories/new) (ver [SECURITY.md](https://github.com/pla87/pizarro/blob/main/SECURITY.md)).
+        *Security issue? Do not post it here: [report it privately](https://github.com/pla87/pizarro/security/advisories/new).*
+
+        Solo se atienden errores de versiones publicadas sin modificar. La forma más fácil de rellenar los datos técnicos es el enlace **Informar de un error** de *Historial de versiones* dentro de la app.
+        *Only bugs in unmodified released versions are handled. The easiest way to fill in the technical details is the app's "Report a bug" link in "Version history".*
+
+  - type: input
+    id: version
+    attributes:
+      label: "Versión de Pizarro"
+      description: "La de «Historial de versiones», p. ej. 1.49.0. / The one shown in \"Version history\", e.g. 1.49.0."
+      placeholder: "1.49.0"
+    validations:
+      required: true
+
+  - type: input
+    id: commit
+    attributes:
+      label: "Commit"
+      description: "Lo rellena el enlace de la app; si no, déjalo en blanco. / Filled in by the app's link; otherwise leave it blank."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: "Cómo se instaló"
+      description: "Cómo está instalado Pizarro. / How Pizarro is installed."
+      options:
+        - "Docker Compose"
+        - "Railway"
+        - "Otro / Other"
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: "Navegador y sistema"
+      description: "P. ej. Chrome 140 · Windows. / Browser and operating system, e.g. Chrome 140 · Windows."
+    validations:
+      required: true
+
+  - type: input
+    id: language
+    attributes:
+      label: "Idioma de la app"
+      description: "es o en. / App language: es or en."
+    validations:
+      required: false
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Pasos para reproducirlo"
+      description: "Qué hiciste, paso a paso, para que pase el error. / Steps to reproduce the bug."
+      placeholder: |
+        1. Abro un tablero…
+        2. Arrastro una tarjeta a…
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: "Qué esperabas"
+      description: "Lo que debería haber pasado. / What you expected to happen."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: "Qué pasó"
+      description: "Lo que pasó en realidad, con el mensaje de error si lo hubo. Revisa las capturas antes de adjuntarlas. / What actually happened, including any error message. Check screenshots before attaching them."
+    validations:
+      required: true
+
+  - type: textarea
+    id: techinfo
+    attributes:
+      label: "Información técnica (opcional)"
+      description: "Administradores: Administración → Ajustes → «Copiar información técnica» y pégala aquí. No lleva datos personales ni el valor de ninguna variable. / Admins: Administration → Settings → \"Copy technical information\" and paste it here. It contains no personal data and no variable values."
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: "Confirmación / Confirmation"
+      options:
+        - label: "Uso una versión publicada sin modificar. / I use an unmodified released version."
+          required: true
+        - label: "He quitado los datos personales y la información privada del texto y de las capturas. / I removed personal data and private information from the text and screenshots."
+          required: true

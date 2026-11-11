@@ -6,10 +6,17 @@ import { decodeEntities } from "./markdown-entities";
 import { mentionsToPlain } from "./mentions";
 import { MAX_TITLE } from "./constants";
 import { partSuffix } from "./zip-plan";
+import { esT, type T } from "@/i18n/shared";
 
 interface ReleaseKind {
   id: string;
+  /** Nombre que se muestra (el de serie, traducido al idioma de quien genera la release). */
   name: string;
+  /**
+   * Nombre guardado del tipo, si `name` es una traducción (ver localizeGeneralKind). Los códigos (R32C1) salen de este,
+   * no del traducido: van en el título de las tareas y deben ser iguales en todo el equipo, use el idioma que use.
+   */
+  codeName?: string;
 }
 
 interface ReleaseAttachmentInput {
@@ -44,6 +51,7 @@ function escapeLinkText(text: string): string {
   return text.replace(/([\[\]\\])/g, "\\$1");
 }
 
+/** Nombre de la sección de tipos desconocidos para los códigos (O1, O2…); el título de la sección se traduce. */
 const OTHERS_NAME = "Otros";
 const MAX_PREFIX_LETTERS = 4;
 
@@ -92,7 +100,7 @@ export function computeReleaseCodes(
   releaseNumber?: number | null,
 ): Map<string, string> {
   const release = releaseNumber ? `R${releaseNumber}` : "";
-  const prefixes = kindPrefixes([...kinds.map((k) => k.name), OTHERS_NAME]);
+  const prefixes = kindPrefixes([...kinds.map((k) => k.codeName ?? k.name), OTHERS_NAME]);
   const prefixByKind = new Map(kinds.map((k, i) => [k.id, prefixes[i]!]));
   const othersPrefix = prefixes[kinds.length]!;
   const counters = new Map<string, number>();
@@ -143,9 +151,9 @@ export function attachmentFileNames(code: string, attachments: ReleaseAttachment
   });
 }
 
-export function formatReleaseLine(task: Pick<ReleaseTaskInput, "title" | "linkUrl">, code?: string): string {
+export function formatReleaseLine(task: Pick<ReleaseTaskInput, "title" | "linkUrl">, code?: string, t: T = esT): string {
   const title = mentionsToPlain(task.title).replace(/\s+/g, " ").trim();
-  const link = task.linkUrl ? ` ([enlace](<${task.linkUrl.replace(/[<>]/g, "")}>))` : "";
+  const link = task.linkUrl ? ` ([${escapeLinkText(t("enlace"))}](<${task.linkUrl.replace(/[<>]/g, "")}>))` : "";
   return `- ${code ? `**${code}** · ` : ""}${escapeLinkText(title)}${link}`;
 }
 
@@ -163,34 +171,46 @@ function formatReleaseDescription(description: string | null | undefined): strin
 }
 
 /** Línea de la tarea + adjuntos + descripción (los adjuntos antes, para que una lista al final de la descripción no los absorba). */
-function formatReleaseTask(task: ReleaseTaskInput, code: string): string {
-  const lines = [formatReleaseLine(task, code)];
-  if (task.attachments?.length) lines.push(`  Adjuntos: ${attachmentFileNames(code, task.attachments).join(", ")}`);
+function formatReleaseTask(task: ReleaseTaskInput, code: string, t: T): string {
+  const lines = [formatReleaseLine(task, code, t)];
+  if (task.attachments?.length) lines.push(`  ${t("Adjuntos")}: ${attachmentFileNames(code, task.attachments).join(", ")}`);
   lines.push(...formatReleaseDescription(task.description));
   return lines.join("\n");
 }
 
 /** Secciones por tipo (sin título, cabecera ni pie). */
-function buildSections(input: Pick<ReleaseInput, "kinds" | "tasks" | "releaseNumber">): string[] {
+function buildSections(input: Pick<ReleaseInput, "kinds" | "tasks" | "releaseNumber">, t: T): string[] {
   const parts: string[] = [];
   const codes = computeReleaseCodes(input.kinds, input.tasks, input.releaseNumber);
-  const line = (t: ReleaseTaskInput) => formatReleaseTask(t, codes.get(t.id)!);
+  const line = (task: ReleaseTaskInput) => formatReleaseTask(task, codes.get(task.id)!, t);
   const known = new Set(input.kinds.map((k) => k.id));
   for (const kind of input.kinds) {
     const items = input.tasks.filter((t) => t.kindId === kind.id);
     if (items.length) parts.push([`### ${kind.name}`, ...items.map(line)].join("\n"));
   }
-  const others = input.tasks.filter((t) => !known.has(t.kindId));
-  if (others.length) parts.push([`### ${OTHERS_NAME}`, ...others.map(line)].join("\n"));
-  if (input.tasks.length === 0) parts.push("_Sin tareas seleccionadas._");
+  const others = input.tasks.filter((task) => !known.has(task.kindId));
+  if (others.length) parts.push([`### ${t("Otros")}`, ...others.map(line)].join("\n"));
+  if (input.tasks.length === 0) parts.push(`_${t("Sin tareas seleccionadas.")}_`);
   return parts;
 }
 
-/** Orden: cabecera, secciones, pie. El título de la release no forma parte del texto. */
-export function buildReleaseMarkdown(input: ReleaseInput): string {
-  const header = input.header.trim();
-  const footer = input.footer.trim();
-  return [header, ...buildSections(input), footer].filter(Boolean).join("\n\n") + "\n";
+/**
+ * Texto de una plantilla de cabecera o pie tal como entra en la release. El editor con barra las guardaba con
+ * `&lt;`, `&gt;` o `&amp;` (como las descripciones, que también se decodifican): en el texto plano de la release salen
+ * los caracteres reales.
+ */
+export function releaseTemplateText(raw: string): string {
+  return decodeEntities(raw).trim();
+}
+
+/**
+ * Orden: cabecera, secciones, pie. El título de la release no forma parte del texto. `t`: idioma de quien la genera
+ * (secciones fijas como «Otros», «Adjuntos», «enlace»); sin él, en español.
+ */
+export function buildReleaseMarkdown(input: ReleaseInput, t: T = esT): string {
+  const header = releaseTemplateText(input.header);
+  const footer = releaseTemplateText(input.footer);
+  return [header, ...buildSections(input, t), footer].filter(Boolean).join("\n\n") + "\n";
 }
 
 /**
@@ -198,8 +218,9 @@ export function buildReleaseMarkdown(input: ReleaseInput): string {
  * intacto se sustituye; si no, el nuevo se añade al principio (cabecera) o al final (pie).
  */
 export function swapTemplateBlock(text: string, previous: string, next: string, where: "start" | "end"): string {
-  const prev = previous.trim();
-  const nxt = next.trim();
+  // Igual que al generar el texto (buildReleaseMarkdown): si no, la cabecera con `&lt;` no se encontraba para cambiarla.
+  const prev = releaseTemplateText(previous);
+  const nxt = releaseTemplateText(next);
   if (prev) {
     const idx = where === "start" ? text.indexOf(prev) : text.lastIndexOf(prev);
     if (idx >= 0) {
@@ -255,15 +276,28 @@ export function zonedDayRange(dayIso: string, timeZone: string): { start: Date; 
   return { start: midnight(y, m, d), end: midnight(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate()) };
 }
 
-/** Nombre del ZIP de adjuntos del histórico: título saneado + «-adjuntos.zip» (con «-1de3» si hay varios paquetes). */
-export function releaseZipName(title: string, part = 1, total = 1): string {
-  const base = title
+/** Trozo de nombre de fichero: espacios y símbolos a «_», sin repetidos ni en los extremos. */
+function fileNamePart(text: string, max: number): string {
+  return text
     .replace(/\s+/g, "_")
     .replace(/[^\p{L}\p{N}._-]/gu, "_")
     .replace(/_{2,}/g, "_")
     .replace(/^[_.-]+|[_.-]+$/g, "")
-    .slice(0, 80);
-  return `${base || "release"}-adjuntos${partSuffix(part, total)}.zip`;
+    .slice(0, max)
+    .replace(/[_.-]+$/, "");
+}
+
+/**
+ * Nombre del ZIP de adjuntos de una release, el mismo desde el diálogo de generarla y desde el histórico:
+ * `release-2026-11-11-R12-Proyecto-adjuntos.zip` (fecha del despliegue en la zona de la app, número de la release y
+ * proyecto), con «-1de3», «-2de3»… si va en varios paquetes. El número coincide con el de los códigos (R12F1_…) de los
+ * ficheros de dentro; sin número o sin proyecto, se omiten. En inglés, `…-attachments.zip` y «-1of3»: el sufijo va en
+ * el idioma de quien lo descarga (no es un texto del diccionario: forma parte del nombre del fichero).
+ */
+export function releaseZipName(opts: { day: string; number?: number | null; project?: string | null }, part = 1, total = 1, locale: "es" | "en" = "es"): string {
+  const project = fileNamePart(opts.project ?? "", 60);
+  const pieces = ["release", opts.day, opts.number ? `R${opts.number}` : "", project].filter(Boolean);
+  return `${pieces.join("-")}-${locale === "en" ? "attachments" : "adjuntos"}${partSuffix(part, total, locale)}.zip`;
 }
 
 /** Fecha en formato YYYY-MM-DD: en la zona horaria indicada (la de la app) o, sin ella, la local del navegador. */

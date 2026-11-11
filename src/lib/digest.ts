@@ -72,7 +72,7 @@ function heading(key: DigestSectionKey, t: T): string {
 }
 
 function itemText(i: DigestItem, t: T): string {
-  const title = `«${mentionsToPlain(i.title)}»`;
+  const title = t("«{title}»", { title: mentionsToPlain(i.title) });
   return i.count && i.count > 1 ? `${title} (${t("{n} comentarios", { n: i.count })})` : title;
 }
 

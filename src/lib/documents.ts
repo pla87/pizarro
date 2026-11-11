@@ -92,10 +92,22 @@ export async function findDocumentForUser(user: CurrentUser, documentId: string)
   });
 }
 
-export type DocumentCreateResult =
-  | { ok: true; document: DocumentRow }
-  | { ok: false; reason: "count"; limit: number }
-  | { ok: false; reason: "quota"; quota: QuotaExceeded };
+/** Por qué no cabe un documento: el máximo de documentos del proyecto o una cuota de almacenamiento. */
+export type DocumentLimitProblem = { reason: "count"; limit: number } | { reason: "quota"; quota: QuotaExceeded };
+
+export type DocumentCreateResult = { ok: true; document: DocumentRow } | ({ ok: false } & DocumentLimitProblem);
+
+/**
+ * ¿Cabe un documento de `size` bytes en el proyecto? null si cabe. Como attachmentLimitProblem: dentro de la transacción
+ * con el candado de las subidas es la comprobación definitiva; fuera, orientativa (antes de escribir el fichero).
+ */
+export async function documentLimitProblem(projectId: string, size: number, client: Prisma.TransactionClient | typeof db = db): Promise<DocumentLimitProblem | null> {
+  // El máximo cuenta solo los documentos fuera de la papelera; su tamaño, en cambio, sigue contando en la cuota hasta la purga.
+  const count = await client.projectDocument.count({ where: { projectId, deletedAt: null } });
+  if (count >= DOCUMENTS_MAX_PER_PROJECT) return { reason: "count", limit: DOCUMENTS_MAX_PER_PROJECT };
+  const quota = await quotaExceededFor(projectId, size, client);
+  return quota ? { reason: "quota", quota } : null;
+}
 
 /**
  * Da de alta el documento solo si no se supera el máximo de documentos del proyecto ni sus cuotas de almacenamiento
@@ -108,11 +120,12 @@ export async function createDocumentWithinLimit(data: {
 }): Promise<DocumentCreateResult> {
   return db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:attachment-quota'))::text`;
-    // El máximo cuenta solo los documentos fuera de la papelera; su tamaño, en cambio, sigue contando en la cuota hasta la purga.
-    const count = await tx.projectDocument.count({ where: { projectId: data.projectId, deletedAt: null } });
-    if (count >= DOCUMENTS_MAX_PER_PROJECT) return { ok: false as const, reason: "count" as const, limit: DOCUMENTS_MAX_PER_PROJECT };
-    const quota = await quotaExceededFor(data.projectId, data.size, tx);
-    if (quota) return { ok: false as const, reason: "quota" as const, quota };
+    // Proyecto borrado durante la subida: 404 en vez del fallo de clave ajena (P2003) al dar de alta la fila (ver
+    // createAttachmentWithinLimit). Quien llama borra el fichero ya escrito.
+    const alive = await tx.$queryRaw<unknown[]>`SELECT 1 FROM "Project" WHERE id = ${data.projectId} FOR KEY SHARE`;
+    if (!alive.length) throw new AppError("El proyecto ya no existe.", 404, "project_gone");
+    const problem = await documentLimitProblem(data.projectId, data.size, tx);
+    if (problem) return { ok: false as const, ...problem };
     const row = await tx.projectDocument.create({ data, select: SELECT });
     return { ok: true as const, document: toDocumentRow(row) };
   });

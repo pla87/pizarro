@@ -9,15 +9,15 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/components/ui/Toast";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
+import { formatSize } from "@/lib/format-size";
 import type { BackupAlert } from "@/lib/backup-alert-core";
 import type { BackupFileInfo, BackupRun, BackupStatus, ExternalRun, RestoreTestRun } from "@/lib/backup";
 import type { BackupKeyDiagnosis } from "@/lib/backup-core";
 import type { DestinationId } from "@/lib/backup-dest";
 import type { JobRunInfo } from "@/lib/jobs";
 
-function kb(bytes: number): string {
-  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
-}
+/** Tamaño con la coma decimal del idioma («2,3 MB»). */
+const sizeText = (bytes: number, locale: string): string => formatSize(Math.max(bytes, 1024), locale);
 
 /** Nombre legible de cada tarea de mantenimiento (las claves están en lib/maintenance.ts). */
 function jobLabel(t: (s: string) => string, name: string): string {
@@ -125,9 +125,9 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
         {r.ok ? (
           <p className="mt-1 text-slate-500">
             {r.file} · {r.rows} {t("filas")} · {r.tables} {t("tablas")}
-            {r.bytes ? ` · ${kb(r.bytes)}` : ""}
-            {r.files !== undefined && ` · ${t("{n} ficheros", { n: r.files })}${r.filesBytes ? ` (${kb(r.filesBytes)})` : ""}`}
-            {what === "backup" && r.filesNew ? ` · ${t("{n} nuevos", { n: r.filesNew })}` : ""}
+            {r.bytes ? ` · ${sizeText(r.bytes, locale)}` : ""}
+            {r.files !== undefined && ` · ${r.files === 1 ? t("1 fichero") : t("{n} ficheros", { n: r.files })}${r.filesBytes ? ` (${sizeText(r.filesBytes, locale)})` : ""}`}
+            {what === "backup" && r.filesNew ? ` · ${r.filesNew === 1 ? t("1 nuevo") : t("{n} nuevos", { n: r.filesNew })}` : ""}
           </p>
         ) : (
           <p className="mt-1 break-words text-red-600 dark:text-red-400">{r.error}</p>
@@ -146,8 +146,8 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
         </p>
         {r.ok ? (
           <p className="mt-1 text-slate-500">
-            {r.file} · {t("{n} ficheros nuevos", { n: r.uploaded ?? 0 })} · {t("{n} ya estaban", { n: r.skipped ?? 0 })}
-            {r.bytes ? ` · ${kb(r.bytes)}` : ""}
+            {r.file} · {r.uploaded === 1 ? t("1 fichero nuevo") : t("{n} ficheros nuevos", { n: r.uploaded ?? 0 })} · {r.skipped === 1 ? t("1 ya estaba") : t("{n} ya estaban", { n: r.skipped ?? 0 })}
+            {r.bytes ? ` · ${sizeText(r.bytes, locale)}` : ""}
           </p>
         ) : (
           <p className="mt-1 break-words text-red-600 dark:text-red-400">{r.error}</p>
@@ -281,7 +281,7 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
             {files.map((f) => (
               <li key={f.name} className="flex justify-between gap-3 py-1.5">
                 <span className="truncate">{f.name}</span>
-                <span className="shrink-0 text-slate-500">{kb(f.bytes)}</span>
+                <span className="shrink-0 text-slate-500">{sizeText(f.bytes, locale)}</span>
               </li>
             ))}
           </ul>

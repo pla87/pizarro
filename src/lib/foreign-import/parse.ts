@@ -73,7 +73,7 @@ export function parseForeign(text: string, format: ForeignFormat, opts: ParseOpt
   if (archived.length > FOREIGN_LIMITS.archivedTasks) {
     const drop = new Set(archived.slice(FOREIGN_LIMITS.archivedTasks));
     board.tasks = board.tasks.filter((x) => !drop.has(x));
-    board.warnings.push(opts.t("{n} tareas archivadas sobraban (máximo {max}) y no se han importado.", { n: drop.size, max: FOREIGN_LIMITS.archivedTasks }));
+    board.warnings.push(drop.size === 1 ? opts.t("1 tarea archivada sobraba (máximo {max}) y no se ha importado.", { max: FOREIGN_LIMITS.archivedTasks }) : opts.t("{n} tareas archivadas sobraban (máximo {max}) y no se han importado.", { n: drop.size, max: FOREIGN_LIMITS.archivedTasks }));
   }
   if (!board.tasks.length) throw new AppError("El archivo no tiene ninguna tarea que importar.");
   return board;

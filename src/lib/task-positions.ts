@@ -40,6 +40,16 @@ export async function lockTaskRows(tx: Tx, ids: string[]): Promise<void> {
   if (ids.length) await tx.$queryRaw`SELECT "id" FROM "Task" WHERE "id" = ANY(${ids}::text[]) ORDER BY "id" FOR NO KEY UPDATE`;
 }
 
+/**
+ * Como lockTaskRows, pero antes de BORRAR esas tareas: FOR UPDATE, el bloqueo que necesita el DELETE. Con FOR NO KEY
+ * UPDATE, una alta que apunta a la tarea (comentario, adjunto, historial: FOR KEY SHARE) podría colarse entre el
+ * bloqueo y el DELETE, que tendría que subir el bloqueo fila a fila en el orden en que las recorre (y volver a
+ * cruzarse con otra transacción, 40P01).
+ */
+export async function lockTaskRowsForDelete(tx: Tx, ids: string[]): Promise<void> {
+  if (ids.length) await tx.$queryRaw`SELECT "id" FROM "Task" WHERE "id" = ANY(${ids}::text[]) ORDER BY "id" FOR UPDATE`;
+}
+
 /** Última posición de la columna (todas sus tareas, salvo `exclude`), o null si no hay ninguna. */
 export async function lastPositionIn(tx: Tx, columnId: string, exclude?: string): Promise<number | null> {
   const last = await tx.task.findFirst({

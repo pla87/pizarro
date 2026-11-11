@@ -11,7 +11,7 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { Archive, Plus, Search, Upload, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from "react";
 import { createPortal } from "react-dom";
 import { archiveTasks, deleteTasks, duplicateTask, makeEvergreen, moveTask, moveTasks } from "@/actions/tasks";
 import { createBoardCollisionDetection } from "@/lib/collision";
@@ -52,16 +52,34 @@ import { claimPaste, isTextTarget, pastedFiles, pasteClaimed, recoverEmptyImages
 import { draftKey, readDraft, type EditTaskDraft, type NewTaskDraft } from "./drafts";
 import { mentionsToPlain } from "@/lib/mentions";
 import { shouldRefreshOnFocus } from "@/lib/focus-refresh";
+import { cardCount } from "./count-texts";
+
+/**
+ * Un diálogo cargado aparte, con su propio Suspense sin nada que mostrar mientras llega su código. next/dynamic (con
+ * ssr, como aquí) no pone ninguno: la carga suspendía hasta el del loading.tsx del proyecto y, al abrir un diálogo en un
+ * tablero recién abierto, el tablero se cambiaba un instante por el esqueleto de columnas. Así el tablero sigue a la
+ * vista y el diálogo aparece en cuanto llega; cada uno con el suyo, para que abrir el segundo no esconda el primero.
+ */
+function ownSuspense<P extends object>(Dialog: ComponentType<P>): ComponentType<P> {
+  function WithSuspense(props: P) {
+    return (
+      <Suspense fallback={null}>
+        <Dialog {...props} />
+      </Suspense>
+    );
+  }
+  return WithSuspense;
+}
 
 // Los diálogos (con el editor de texto y el Markdown) no van en el código inicial del tablero:
 // se cargan al abrirlos y se precargan cuando el navegador está libre.
 const loadTaskDialog = () => import("./TaskDialog");
 const loadNewTaskDialog = () => import("./NewTaskDialog");
-const TaskDialog = dynamic(() => loadTaskDialog().then((m) => m.TaskDialog));
-const NewTaskDialog = dynamic(() => loadNewTaskDialog().then((m) => m.NewTaskDialog));
-const ReleaseDialog = dynamic(() => import("./ReleaseDialog").then((m) => m.ReleaseDialog));
-const BulkTaskDialog = dynamic(() => import("./BulkTaskDialog").then((m) => m.BulkTaskDialog));
-const ArchivedDialog = dynamic(() => import("./ArchivedDialog").then((m) => m.ArchivedDialog));
+const TaskDialog = ownSuspense(dynamic(() => loadTaskDialog().then((m) => m.TaskDialog)));
+const NewTaskDialog = ownSuspense(dynamic(() => loadNewTaskDialog().then((m) => m.NewTaskDialog)));
+const ReleaseDialog = ownSuspense(dynamic(() => import("./ReleaseDialog").then((m) => m.ReleaseDialog)));
+const BulkTaskDialog = ownSuspense(dynamic(() => import("./BulkTaskDialog").then((m) => m.BulkTaskDialog)));
+const ArchivedDialog = ownSuspense(dynamic(() => import("./ArchivedDialog").then((m) => m.ArchivedDialog)));
 
 const COLUMN_PREFIX = "col:";
 /** Contenedor virtual del arrastre de una tarea fija (evergreen): origen fuera de las listas ordenables. */
@@ -1054,7 +1072,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <span
             className="shrink-0 text-sm text-slate-500"
             aria-live="polite"
-            title={filtering ? undefined : t("{n} tarjetas", { n: tasks.length })}
+            title={filtering ? undefined : cardCount(t, tasks.length)}
           >
             {filtering ? (
               t("{shown} de {total}", { shown: shownCount, total: tasks.length })
@@ -1062,7 +1080,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               <>
                 {/* Con poco ancho, solo el número (el texto completo queda en el tooltip y para lectores de pantalla). */}
                 <span className="@min-[1000px]:hidden" aria-hidden>{tasks.length}</span>
-                <span className="@max-[999px]:sr-only">{t("{n} tarjetas", { n: tasks.length })}</span>
+                <span className="@max-[999px]:sr-only">{cardCount(t, tasks.length)}</span>
               </>
             )}
           </span>
@@ -1226,7 +1244,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             {/* En móvil los filtros ya están en la barra de pestañas. */}
             <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="max-md:hidden" />
             <ViewToggle view={view} onChange={changeView} className="max-md:hidden" />
-            <span className="shrink-0 text-xs text-slate-500" aria-live="polite">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : t("{n} tarjetas", { n: tasks.length })}</span>
+            <span className="shrink-0 text-xs text-slate-500" aria-live="polite">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : cardCount(t, tasks.length)}</span>
             {(mobileSearch || filtering) && (
               <button
                 type="button"

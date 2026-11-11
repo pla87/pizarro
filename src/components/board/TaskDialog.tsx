@@ -33,7 +33,7 @@ import { useConfirm } from "../ui/ConfirmDialog";
 import { copyText } from "../ui/clipboard";
 import { pasteAsOneLine } from "../ui/textarea-edit";
 import { usePasteFiles } from "../ui/pasteFiles";
-import { useToast } from "../ui/Toast";
+import { isSessionExpiredMessage, useToast } from "../ui/Toast";
 import { boardClients, useBoard } from "./context";
 import { isTypingTarget, useShortcut } from "./shortcuts";
 import { weekdayName } from "./recurrence-ui";
@@ -58,6 +58,7 @@ import { draftKey, useDraftAutosave, type EditTaskDraft } from "./drafts";
 import { setUndoTask, UNDONE_EVENT } from "../undo-context";
 import { useIsMobile } from "../ui/useIsMobile";
 import { UndoButton } from "../UndoButton";
+import { subtasksDidNotFit } from "./count-texts";
 
 export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecondBulk, draft }: {
   task: BoardTask;
@@ -147,11 +148,17 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     return true;
   };
 
-  // Si el título cambia desde fuera (recarga tras un conflicto, deshacer), se muestra el nuevo.
+  // Si el título cambia desde fuera (otra persona, deshacer, recarga tras un conflicto), se muestra el nuevo, pero solo
+  // si no se está editando: lo que se esté escribiendo (distinto de lo que se mostraba) no se pisa, como el enlace. Antes
+  // se sustituía siempre y, cuando otra persona guardaba su título, lo escrito aquí se perdía sin aviso. Al guardarlo,
+  // `detail.textVersion` sigue siendo la versión sobre la que se escribió (solo avanza con la actualización en vivo si
+  // no se estaba editando, ver `seenText`), así que el servidor responde con el conflicto y el aviso ofrece
+  // «Copiar tu texto» (ver `save`). Si el guardado falla, la
+  // tarjeta vuelve a lo guardado y el campo, que mostraba lo enviado, pasa al título actual.
   const [shownTitle, setShownTitle] = useState(task.title);
   if (shownTitle !== task.title) {
     setShownTitle(task.title);
-    setTitle(task.title);
+    if (title === shownTitle) setTitle(task.title);
   }
   // Se incrementa al cambiar la descripción desde fuera del editor para que se remonte con el texto nuevo.
   const [descVersion, setDescVersion] = useState(0);
@@ -223,6 +230,39 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       alive = false;
     };
   }, [task.id, toast]);
+
+  // Título cambiado desde fuera (otra persona, en vivo) sin que aquí se esté editando: el campo ya muestra el nuevo (ver
+  // `shownTitle`), así que la versión del texto avanza con él. Sin esto `detail.textVersion` se quedaba en la de la
+  // apertura y, al editar luego ese título, el servidor respondía con un falso conflicto. Se vuelve a leer el detalle: la
+  // versión solo avanza si es la de la tarjeta y la descripción no cambió (aquí no se actualiza en vivo; si el mismo
+  // guardado ajeno la cambió, al guardar la propia llega el conflicto, como antes). Con el título o la descripción en
+  // edición tampoco avanza: al guardarlos llega el conflicto, como debe.
+  const seenText = useRef({ version: task.textVersion, title: task.title });
+  const textState = useRef({ detail, title, shownTitle, version: task.textVersion });
+  useEffect(() => {
+    textState.current = { detail, title, shownTitle, version: task.textVersion };
+  });
+  const editingText = () => {
+    const { detail: d, title: typed, shownTitle: shown } = textState.current;
+    const desc = descLive.current;
+    return typed !== shown || (!!d && desc !== null && desc !== d.description && (descDirtyCheck.current?.() ?? true));
+  };
+  useEffect(() => {
+    const seen = seenText.current;
+    if (task.textVersion === seen.version) return;
+    seenText.current = { version: task.textVersion, title: task.title };
+    if (task.title === seen.title || !detail || detail.textVersion === task.textVersion || editingText()) return;
+    let alive = true;
+    void getTaskDetail(task.id).catch(() => null).then((res) => {
+      const { detail: d, version } = textState.current;
+      if (!alive || !res?.ok || !d || res.data.textVersion !== version || res.data.description !== d.description || editingText()) return;
+      setDetail((cur) => (cur && cur.description === res.data.description ? { ...cur, textVersion: res.data.textVersion } : cur));
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al cambiar la versión del texto de la tarjeta
+  }, [task.textVersion]);
 
   // Indicador «Guardando… / Guardado»: cuenta los guardados en curso de este diálogo.
   const [saving, setSaving] = useState(0);
@@ -388,11 +428,18 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     const res = await tracked(updateTask(task.id, patch, editsText ? (detail?.textVersion ?? null) : undefined));
     if (!res.ok) {
       if (before) board.upsertTask(before);
+      // Sesión caducada: lo escrito se queda en el campo (y en el borrador local) para guardarlo tras volver a entrar; el
+      // aviso lleva «Iniciar sesión» (ver Toast). Sin esto, el título volvía al guardado y se perdía con el borrador.
+      const expired = isSessionExpiredMessage(res.error, t);
+      if (expired && patch.title !== undefined && before) {
+        setShownTitle(before.title);
+        setTitle(patch.title);
+      }
       // El texto que no se pudo guardar (p. ej. otra persona cambió la tarea a la vez y se recarga con lo suyo) no se
       // pierde: el aviso permite copiarlo para volver a aplicarlo.
       const rejected = [patch.title, patch.description].filter((x): x is string => !!x?.trim()).join("\n\n");
-      toast(res.error, "error", rejected ? { label: t("Copiar tu texto"), onClick: () => void copyText(rejected).then((ok) => ok && toast(t("Copiado al portapapeles"))) } : undefined);
-      if (editsText) await reload();
+      toast(res.error, "error", rejected && !expired ? { label: t("Copiar tu texto"), onClick: () => void copyText(rejected).then((ok) => ok && toast(t("Copiado al portapapeles"))) } : undefined);
+      if (editsText && !expired) await reload();
       return false;
     }
     board.upsertTask(res.data);
@@ -645,6 +692,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const commitTitle = (next?: string) => {
     const value = (next ?? title).trim();
     if (!value) return setTitle(task.title);
+    // El campo queda con lo que se envía (sin espacios sobrantes): coincide con la tarjeta y, si el guardado falla, el
+    // título guardado lo sustituye (ver `shownTitle`).
+    if (value !== title) setTitle(value);
     if (value !== task.title) save({ title: value }, { title: value });
   };
 
@@ -1379,8 +1429,8 @@ function Subtasks({ taskId, detail, setDetail, flushRef, draftRef, blurHeld, onU
     const { created, undo } = res.data;
     const skipped = res.data.skipped + dropped;
     update((l) => [...l, ...created.filter((c) => !l.some((x) => x.id === c.id))]);
-    if (skipped) toast(t("Se añadieron {n} subtareas; {m} no caben (máximo {max} por tarea).", { n: created.length, m: skipped, max: MAX_SUBTASKS }), "error");
-    else toast(t("{n} subtareas añadidas", { n: created.length }), "undo", onUndo ? { label: t("Deshacer"), onClick: () => onUndo(undo.id) } : undefined);
+    if (skipped) toast(subtasksDidNotFit(t, created.length, skipped, MAX_SUBTASKS), "error");
+    else toast(created.length === 1 ? t("1 subtarea añadida") : t("{n} subtareas añadidas", { n: created.length }), "undo", onUndo ? { label: t("Deshacer"), onClick: () => onUndo(undo.id) } : undefined);
   };
 
   const setDone = (id: string, value: boolean) => update((l) => l.map((x) => (x.id === id ? { ...x, done: value } : x)));

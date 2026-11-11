@@ -15,6 +15,7 @@ import { TypeBadge } from "../ui/TypeBadge";
 import { cn } from "../ui/cn";
 import { useBoard, useTask } from "./context";
 import { ariaSortOf, DEFAULT_LIST_SORT, nextSort, sortTasks, type ListSort, type ListSortKey } from "./listSort";
+import { cardCount } from "./count-texts";
 
 type Translate = ReturnType<typeof useT>;
 
@@ -72,7 +73,7 @@ export function ListView({ tasks, matchingIds, filtering }: { tasks: BoardTask[]
     { key: "subtasks", label: t("Subtareas") },
   ];
   const sortLabel = headers.find((h) => h.key === sort.key)?.label ?? "";
-  const status = filtering ? t("{shown} de {total}", { shown: rows.length, total: tasks.length }) : t("{n} tarjetas", { n: tasks.length });
+  const status = filtering ? t("{shown} de {total}", { shown: rows.length, total: tasks.length }) : cardCount(t, tasks.length);
   const announce = `${status}. ${t("Orden: {col}, {dir}", { col: sortLabel, dir: sort.dir === "asc" ? t("ascendente") : t("descendente") })}`;
 
   return (

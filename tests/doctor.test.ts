@@ -1,5 +1,6 @@
 // Diagnóstico para soporte (lib/doctor-core.ts): nunca valores de variables, emails ni nombres.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 
 const {
@@ -34,6 +35,21 @@ describe("presencia de variables", () => {
     assert.equal(p.OTHER_UNDOCUMENTED, undefined);
     const json = JSON.stringify(p);
     for (const v of Object.values(env)) if (v.length > 4) assert.ok(!json.includes(v), v);
+  });
+
+  test("la lista cubre todas las variables de la app documentadas en .env.example, deploy/.env.example y el README", () => {
+    // Solo de Docker Compose o de la compilación: no las lee el proceso de la app.
+    const notApp = new Set(["DOMAIN", "POSTGRES_PASSWORD", "APP_DB_USER", "APP_DB_PASSWORD", "APP_MEM_LIMIT", "APP_HEAP_MB", "POSTGRES_MEM_LIMIT", "CADDY_MEM_LIMIT", "COMPOSE_FILE", "PIZARRO_IMAGE", "GIT_SHA"]);
+    const listed = new Set<string>(DOCUMENTED_ENV_VARS);
+    const fromEnvFile = (path: string) => [...readFileSync(path, "utf8").matchAll(/^#?[ \t]*([A-Z][A-Z0-9_]{2,})=/gm)].map((m) => m[1]!);
+    // Primera columna de la tabla de variables del README («| `A` / `B` | …»).
+    const fromReadme = readFileSync("README.md", "utf8").split("\n").filter((l) => /^\| `[A-Z]/.test(l))
+      .flatMap((l) => [...l.split("|")[1]!.matchAll(/`([A-Z][A-Z0-9_]+)`/g)].map((m) => m[1]!));
+    for (const [source, names] of [[".env.example", fromEnvFile(".env.example")], ["deploy/.env.example", fromEnvFile("deploy/.env.example")], ["README.md", fromReadme]] as const) {
+      assert.ok(names.length > 10, `${source}: no se ha leído ninguna variable`);
+      const missing = [...new Set(names)].filter((n) => !listed.has(n) && !notApp.has(n));
+      assert.deepEqual(missing, [], `${source} documenta variables que faltan en DOCUMENTED_ENV_VARS (src/lib/doctor-core.ts)`);
+    }
   });
 
   test("flags de configuración", () => {

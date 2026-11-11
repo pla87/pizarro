@@ -31,19 +31,39 @@ export const boardTaskSelect = {
   subtasks: { select: { done: true } },
   // Solo el flag de cada adjunto: la tarjeta distingue imágenes de otros ficheros.
   attachments: { select: { isImage: true, size: true } },
+  // Para UNA tarea (loadBoardTask) el planificador filtra el recuento por su id. Para listas no: Prisma 7 lo convierte en
+  // un LEFT JOIN a un GROUP BY de TODA la tabla de comentarios y de enlaces del servidor; ahí se cuenta aparte (taskCounts).
   _count: { select: { comments: { where: { deletedAt: null } }, links: true } },
 } satisfies Prisma.TaskSelect;
 
-/** Igual que boardTaskSelect pero sin la descripción: en el tablero completo solo hace falta saber si la hay. */
-const { description: _description, ...boardTaskListSelect } = boardTaskSelect;
+/** Igual que boardTaskSelect pero sin recuentos (taskCounts). */
+const { _count: _counts, ...boardTaskManySelect } = boardTaskSelect;
+/** Además sin la descripción: en el tablero completo solo hace falta saber si la hay. */
+const { description: _description, ...boardTaskListSelect } = boardTaskManySelect;
 
-type BoardTaskRow = Omit<Prisma.TaskGetPayload<{ select: typeof boardTaskSelect }>, "description"> & { description?: string };
+type BoardTaskBaseRow = Omit<Prisma.TaskGetPayload<{ select: typeof boardTaskManySelect }>, "description"> & { description?: string };
+type BoardTaskRow = BoardTaskBaseRow & { _count: TaskCounts };
+interface TaskCounts { comments: number; links: number }
 
 export function toBoardTask(t: BoardTaskRow): BoardTask {
-  return toBoardTaskWith(t, (t.description ?? "").trim().length > 0);
+  return toBoardTaskWith(t, (t.description ?? "").trim().length > 0, t._count);
 }
 
-function toBoardTaskWith(t: BoardTaskRow, hasDescription: boolean): BoardTask {
+/**
+ * Comentarios (sin los borrados) y enlaces por tarea, con dos groupBy filtrados (por proyecto o por ids) que usan los
+ * índices por taskId: solo leen las filas de esas tareas, no las de todo el servidor.
+ */
+async function taskCounts(scope: { task: Prisma.TaskWhereInput } | { taskId: { in: string[] } }): Promise<(id: string) => TaskCounts> {
+  const [comments, links] = await Promise.all([
+    db.taskComment.groupBy({ by: ["taskId"], where: { deletedAt: null, ...scope }, _count: { _all: true } }),
+    db.taskLink.groupBy({ by: ["taskId"], where: scope, _count: { _all: true } }),
+  ]);
+  const c = new Map(comments.map((r) => [r.taskId, r._count._all]));
+  const l = new Map(links.map((r) => [r.taskId, r._count._all]));
+  return (id) => ({ comments: c.get(id) ?? 0, links: l.get(id) ?? 0 });
+}
+
+function toBoardTaskWith(t: BoardTaskBaseRow, hasDescription: boolean, counts: TaskCounts): BoardTask {
   return {
     id: t.id,
     columnId: t.columnId,
@@ -62,8 +82,8 @@ function toBoardTaskWith(t: BoardTaskRow, hasDescription: boolean): BoardTask {
     hasDescription,
     dueDate: dateToIso(t.dueDate),
     deliverableId: t.deliverableId,
-    commentCount: t._count.comments,
-    linkCount: t._count.links,
+    commentCount: counts.comments,
+    linkCount: counts.links,
     evergreen: t.evergreen,
     evergreenEvery: t.evergreenEvery,
     recurrence: t.recurrence,
@@ -87,12 +107,23 @@ function toBoardTaskWith(t: BoardTaskRow, hasDescription: boolean): BoardTask {
  */
 export async function loadBoardTasks(projectId: string): Promise<BoardTask[]> {
   const where = { projectId, archivedAt: null };
-  const [rows, described] = await Promise.all([
+  const [rows, described, counts] = await Promise.all([
     db.task.findMany({ where, orderBy: TASK_ORDER, select: boardTaskListSelect }),
     db.task.findMany({ where: { ...where, description: { not: "" } }, select: { id: true } }),
+    taskCounts({ task: where }),
   ]);
   const withText = new Set(described.map((d) => d.id));
-  return rows.map((r) => toBoardTaskWith(r, withText.has(r.id)));
+  return rows.map((r) => toBoardTaskWith(r, withText.has(r.id), counts(r.id)));
+}
+
+/** Varias tareas por id (p. ej. las recién creadas), en el orden del tablero y con sus recuentos. */
+export async function loadBoardTasksByIds(ids: string[]): Promise<BoardTask[]> {
+  if (!ids.length) return [];
+  const [rows, counts] = await Promise.all([
+    db.task.findMany({ where: { id: { in: ids } }, orderBy: TASK_ORDER, select: boardTaskManySelect }),
+    taskCounts({ taskId: { in: ids } }),
+  ]);
+  return rows.map((r) => toBoardTaskWith(r, r.description.trim().length > 0, counts(r.id)));
 }
 
 /**

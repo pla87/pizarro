@@ -16,7 +16,7 @@ import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { completeLogin } from "@/lib/login";
 import { requestContext } from "@/lib/request-context";
 import { dummyVerify, hashPassword, passwordSchema, verifyPassword } from "@/lib/password";
-import { LOGIN_ACCOUNT_LIMIT, LOGIN_ACCOUNT_LIMIT_TRUSTED, loginRateKeys, rateLimit, rateLimitReached, resetRateLimit } from "@/lib/rate-limit";
+import { LOGIN_ACCOUNT_LIMIT, LOGIN_ACCOUNT_LIMIT_TRUSTED, loginRateKeys, rateIp, rateLimit, rateLimitReached, resetRateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { safeNextPath } from "@/lib/redirect";
 import { createSession, destroySession, getCurrentUser, requirePendingUser } from "@/lib/session";
@@ -132,7 +132,7 @@ export async function requestPasswordReset(email: string) {
     const parsed = v.email.safeParse(email);
     const key = parsed.success ? parsed.data : String(email).slice(0, 200).toLowerCase();
     // Los dos límites cuentan igual con cuentas que existen y que no: no delatan nada.
-    if (!rateLimit(`reset:ip:${ip}`, 10, 15 * 60_000) || !rateLimit(`reset:email:${key}`, 3, 15 * 60_000)) {
+    if (!rateLimit(`reset:ip:${rateIp(ip)}`, 10, 15 * 60_000) || !rateLimit(`reset:email:${key}`, 3, 15 * 60_000)) {
       throw new AppError("Demasiados intentos. Espera unos minutos.");
     }
     if (parsed.success) {
@@ -155,7 +155,7 @@ const INVALID_LINK = "El enlace no es válido o ha caducado.";
 export async function resetPassword(token: string, password: string) {
   return runAction({ name: "auth.resetPassword", args: [] }, async () => {
     const ip = clientIp(await headers());
-    if (!rateLimit(`reset-submit:ip:${ip}`, 20, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
+    if (!rateLimit(`reset-submit:ip:${rateIp(ip)}`, 20, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
     const pw = passwordSchema().parse(password);
     const row = await findUsableToken(String(token), ["PASSWORD_RESET", "INVITE"]);
     if (!row || !(await consumeToken(row.id))) throw new AppError(INVALID_LINK);
@@ -172,7 +172,7 @@ export async function resetPassword(token: string, password: string) {
 export async function confirmAccountChange(token: string) {
   return runAction({ name: "auth.confirmAccountChange", args: [] }, async () => {
     const ip = clientIp(await headers());
-    if (!rateLimit(`confirm:ip:${ip}`, 30, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
+    if (!rateLimit(`confirm:ip:${rateIp(ip)}`, 30, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
     const row = await findUsableToken(String(token), ["PASSWORD_CHANGE", "EMAIL_CHANGE"]);
     if (!row) throw new AppError(INVALID_LINK);
     const data = z.object({ passwordHash: z.string().min(20).optional(), newEmail: v.email.optional() }).parse(row.data ?? {});

@@ -3,10 +3,11 @@ import { db } from "@/lib/db";
 import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
-import { releaseZipName } from "@/lib/release";
+import { appTimeZone } from "@/lib/format";
+import { isoDate, releaseZipName } from "@/lib/release";
 import { acquireZipSlot, buildZipPart, planZipEntries, zipBodyStream, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict, type ZipEntry } from "@/lib/release-zip";
 import { getCurrentUser } from "@/lib/session";
-import { getT } from "@/i18n/server";
+import { getLocale, getT } from "@/i18n/server";
 import { readReleaseAttachmentFile, releaseAttachmentFileSize } from "@/lib/uploads";
 
 export const runtime = "nodejs";
@@ -28,7 +29,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
   if (!/^[a-z0-9]{1,40}$/i.test(releaseId)) return new Response(t("No encontrado"), { status: 404 });
   const release = await db.release.findFirst({
     where: { id: releaseId, project: visibleProjectsWhere(user) },
-    select: { title: true, projectId: true, project: { select: { releaseZipMaxMb: true } }, attachments: { orderBy: { position: "asc" }, select: { id: true, fileName: true } } },
+    select: { title: true, number: true, deployedAt: true, projectId: true, project: { select: { name: true, releaseZipMaxMb: true } }, attachments: { orderBy: { position: "asc" }, select: { id: true, fileName: true } } },
   });
   if (!release) return new Response(t("No encontrado"), { status: 404 });
 
@@ -64,7 +65,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
     return new Response(t("No hay adjuntos disponibles"), { status: 404 });
   }
 
-  const name = releaseZipName(release.title, mode.part, packages.length);
+  // El mismo nombre que da la página (y el diálogo de generarla): fecha, número y proyecto.
+  const name = releaseZipName({ day: isoDate(release.deployedAt, appTimeZone()), number: release.number, project: release.project.name }, mode.part, packages.length, await getLocale());
   logEvent({
     category: "api", action: "release.zipDownload", message: `ZIP de adjuntos de la release «${release.title}» (paquete ${mode.part}/${packages.length}, ${fileCount} ficheros, ${Math.round(zip.length / 1024)} KB)`,
     userId: user.id, userName: user.name, projectId: release.projectId, path: `/api/releases/${releaseId}/attachments`, ip: clientIp(req.headers),

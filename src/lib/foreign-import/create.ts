@@ -107,7 +107,7 @@ export async function createProjectFromBoard(board: ForeignBoard, source: Foreig
       labelRows.push({ id, projectId, name: l.name, color: l.color ?? AUTO_COLORS[labelRows.length % AUTO_COLORS.length]! });
     }
   }
-  if (droppedLabels) warnings.push(t("{n} etiquetas sobraban (máximo {max} por proyecto) y no se han importado.", { n: droppedLabels, max: FOREIGN_LIMITS.labels }));
+  if (droppedLabels) warnings.push(droppedLabels === 1 ? t("1 etiqueta sobraba (máximo {max} por proyecto) y no se ha importado.", { max: FOREIGN_LIMITS.labels }) : t("{n} etiquetas sobraban (máximo {max} por proyecto) y no se han importado.", { n: droppedLabels, max: FOREIGN_LIMITS.labels }));
 
   // --- Tareas.
   const now = new Date();
@@ -134,7 +134,8 @@ export async function createProjectFromBoard(board: ForeignBoard, source: Foreig
       } else if (label) {
         // Sin usuario que coincida, o una segunda persona (la tarea solo tiene un responsable): queda en la descripción.
         lost.push(label);
-        if (!found) unmapped.set(label.toLowerCase(), { name: p.name ?? p.email ?? "", email: p.email ?? "" });
+        // Solo con email (una columna de CSV con direcciones): sin nombre, para no mostrar el email dos veces.
+        if (!found) unmapped.set(label.toLowerCase(), { name: p.name ?? "", email: p.email ?? "" });
       }
     }
     const description = lost.length ? clip(`${task.description}${task.description ? "\n\n" : ""}_${t("Responsable en el archivo original: {names}.", { names: lost.join(", ") })}_`, 20_000) : task.description;
@@ -155,7 +156,7 @@ export async function createProjectFromBoard(board: ForeignBoard, source: Foreig
     task.subtasks.forEach((s, i) => subtaskRows.push({ taskId: id, title: s.title, done: s.done, position: (i + 1) * POSITION_STEP }));
     for (const c of task.comments) commentRows.push({ id: newId(), taskId: id, authorId: user.id, body: c.body, createdAt: c.createdAt && c.createdAt.getTime() <= now.getTime() ? c.createdAt : now });
   });
-  if (extraLabels) warnings.push(t("{n} etiquetas de tareas sobraban (máximo {max} por tarea) y no se han importado.", { n: extraLabels, max: FOREIGN_LIMITS.labelsPerTask }));
+  if (extraLabels) warnings.push(extraLabels === 1 ? t("1 etiqueta de tarea sobraba (máximo {max} por tarea) y no se ha importado.", { max: FOREIGN_LIMITS.labelsPerTask }) : t("{n} etiquetas de tareas sobraban (máximo {max} por tarea) y no se han importado.", { n: extraLabels, max: FOREIGN_LIMITS.labelsPerTask }));
   const fields = normalizeTaskFields(board.tasks.some((x) => x.priority) ? ["priority"] : []);
   const projectName = await freeProjectName(user, board.name, t("(importado)"));
   const last = await db.project.findFirst({ orderBy: { position: "desc" }, select: { position: true } });

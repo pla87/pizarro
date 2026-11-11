@@ -65,4 +65,13 @@ export async function register() {
   } catch (err) {
     console.error("[instrumentation] no se pudo cargar la configuración de Google", err);
   }
+  // Bot de Telegram activado en Administración: se vuelve a registrar el webhook (por si cambió APP_URL) o se arranca
+  // el sondeo en segundo plano. Sin esperar: Telegram puede tardar y el arranque no depende de ello. Si falla (Telegram
+  // no responde, la BD aún no está lista), syncTelegram se reintenta sola con espera creciente hasta el apagado.
+  try {
+    const { syncTelegram } = await import("@/lib/telegram");
+    void syncTelegram().catch((err) => console.error("[instrumentation] no se pudo preparar el bot de Telegram", err));
+  } catch (err) {
+    console.error("[instrumentation] no se pudo preparar el bot de Telegram", err);
+  }
 }

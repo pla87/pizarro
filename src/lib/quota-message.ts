@@ -3,6 +3,11 @@ import type { QuotaExceeded } from "./quota";
 
 type T = (key: string, vars?: Record<string, string | number>) => string;
 
+/** Megas con un decimal como mucho y el separador del idioma: «12,5» (es-ES), «12.5» (en-GB). */
+export function mbNumber(mb: number, locale: string): string {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(mb);
+}
+
 /** Dónde se libera espacio o se amplía la cuota de un proyecto (el cliente lo convierte en enlace). */
 export const projectStoragePath = (projectId: string) => `/p/${projectId}/settings?tab=adjuntos`;
 export const ADMIN_STORAGE_PATH = "/admin/settings";
@@ -11,8 +16,9 @@ export const ADMIN_STORAGE_PATH = "/admin/settings";
  * Error de cuota superada con qué hacer: liberar espacio en los ajustes del proyecto o pedir que amplíen la cuota; a un
  * administrador se le añade la ruta (los avisos la pintan como enlace). `projectId` null: proyecto aún sin crear (importación).
  */
-export function quotaError(t: T, q: QuotaExceeded, opts: { projectId: string | null; isAdmin: boolean }): AppError {
-  const vars = { used: q.usedMb, limit: q.limitMb };
+export function quotaError(t: T, q: QuotaExceeded, opts: { projectId: string | null; isAdmin: boolean; /** Locale de Intl: «12,5» en español. */ locale?: string }): AppError {
+  const mb = (n: number) => (opts.locale ? mbNumber(n, opts.locale) : n);
+  const vars = { used: mb(q.usedMb), limit: mb(q.limitMb) };
   if (q.scope === "total") {
     return new AppError(
       opts.isAdmin

@@ -4,7 +4,9 @@
 // detalle (det: adjuntos por nombre y contador, subtareas pegadas, https automático, confirmar al cerrar con cambios) y de
 // la ronda 44 (r44: micrófono del título solo al editarlo; columnas que siguen por abajo, sin esquinas inferiores) y de
 // la ronda 46 (r46: «Nuevo proyecto» con un solo desplegable; cerrar el detalle con un comentario o un renombrado a medias;
-// borradores de comentarios al cerrar sesión).
+// borradores de comentarios al cerrar sesión), de la ronda 47 (r47: abrir un diálogo en un tablero recién abierto no lo
+// devuelve al esqueleto de carga) y de bh1 (un miembro crea proyectos privados desde el selector; sesión caducada a mitad
+// de trabajo: aviso con «Iniciar sesión» que vuelve a la página con el borrador).
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -14,7 +16,7 @@ import * as U from "./qa/ui.mjs";
 const { COL, sleep } = L;
 const APP = process.env.APP_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "b1,f3,m1,f1,dlg,vt,desc,com,det,r44,r46").split(",");
+const only = (process.env.PART || "b1,f3,m1,f1,dlg,vt,desc,com,det,r44,r46,r47,bh1").split(",");
 
 await L.prepareUsers();
 
@@ -206,7 +208,7 @@ if (only.includes("f1")) {
   await p.getByRole("button", { name: "Mis tareas" }).tap(); await sleep(300);
   await p.keyboard.press("Escape"); await sleep(300);
   L.eq("F1: el filtro «Mis tareas» se aplica", (await p.locator("[data-task-card]:visible p").allTextContents()).map((x) => x.trim()), ["Mía"]);
-  L.check("F1: el botón muestra el contador", await vis("Filtros (1 activos)"));
+  L.check("F1: el botón muestra el contador", await vis("Filtros (1 activo)"));
   await p.getByRole("button", { name: "Quitar el filtro" }).first().tap(); await sleep(300);
   L.eq("F1: quitar el filtro", (await p.locator("[data-task-card]:visible p").allTextContents()).map((x) => x.trim()), ["Mía", "Otra"]);
   // Deshacer y rehacer desde la barra superior (mover con el asa y deshacer).
@@ -1351,6 +1353,140 @@ if (only.includes("r46")) {
   L.eq("R46a móvil: «Descartar cambios» deja el comentario como estaba", await comBody(), "Comentario original");
   L.assertNoErrors("R46 móvil", [m]);
   await m.ctx.close();
+}
+
+// ---------------------------------------------------------------- R47
+if (only.includes("r47")) {
+  L.scenario("R47: abrir diálogos, filtros o la vista de lista en un tablero recién abierto no lo devuelve al esqueleto de carga");
+  await L.cleanBoard();
+  await L.seedTasks(COL.backlog, ["R47 tarea"]);
+  await L.seedTasks(COL.next, ["R47 release"]);
+  // Vigía en la página: anota cada momento en que aparece el esqueleto del tablero (loading.tsx) o en que dejan de verse
+  // la cabecera de la columna Backlog (vista de tablero) o el botón «Nueva tarea» (cualquier vista). Un Suspense que cae
+  // hasta el loading.tsx esconde el tablero con display:none sin quitarlo del DOM: por eso se mira si se ve, no si está.
+  const init = () => {
+    const state = { armed: false, cols: true, bad: [] };
+    window.__r47 = state;
+    const look = () => {
+      if (!state.armed) return;
+      const skeleton = document.querySelector("div.w-72.animate-pulse");
+      const visible = (sel) => { const el = document.querySelector(sel); return !!el && el.checkVisibility(); };
+      const problems = [skeleton && "esqueleto", state.cols && !visible('[aria-label="Backlog"]') && "sin columnas", !visible('button[aria-label="Nueva tarea"]') && "sin cabecera"].filter(Boolean);
+      if (problems.length) state.bad.push(problems.join("+"));
+    };
+    new MutationObserver(look).observe(document, { subtree: true, childList: true, attributes: true });
+    const frame = () => { look(); requestAnimationFrame(frame); };
+    requestAnimationFrame(frame);
+  };
+  const s = await L.session({ viewport: { width: 1400, height: 900 }, init });
+  const p = s.page;
+  // Los trozos de JavaScript que aún no ha descargado el tablero llegan con retraso (como en una red real): sin esto, en
+  // local se descargan antes de que se note nada.
+  const slowChunks = (route) => sleep(800).then(() => route.continue()).catch(() => {}); // ya resuelta al quitar la ruta
+  const cases = [
+    ["«Nueva tarea» de la cabecera", () => p.getByRole("button", { name: "Nueva tarea", exact: true }).click()],
+    ["«+» de una columna", () => p.getByRole("button", { name: `Añadir tarea en ${COL.backlog}` }).click()],
+    ["el atajo Alt+N", () => p.keyboard.press("Alt+n")],
+    ["el detalle de una tarea", () => L.cardLoc(p, "R47 tarea").click()],
+    ["«Generar Release»", () => p.getByRole("button", { name: "Generar Release" }).first().click()],
+    ["«Varias tareas»", () => p.getByRole("button", { name: "Varias tareas" }).click()],
+    ["«Archivadas»", () => p.getByRole("button", { name: "Archivadas", exact: true }).click()],
+    ["los filtros", () => p.getByRole("button", { name: "Filtros" }).first().click()],
+  ];
+  for (const [label, act] of cases) {
+    await L.reload(p);
+    await p.route("**/_next/static/chunks/**", slowChunks);
+    await p.evaluate(() => { window.__r47.bad = []; window.__r47.cols = true; window.__r47.armed = true; });
+    await act();
+    const opened = await U.dialog(p).waitFor({ timeout: 8000 }).then(() => true, () => false);
+    await sleep(300);
+    const bad = await p.evaluate(() => { window.__r47.armed = false; return window.__r47.bad; });
+    await p.unroute("**/_next/static/chunks/**", slowChunks);
+    L.check(`R46M4: ${label} abre su diálogo`, opened);
+    L.eq(`R46M4: ${label}: el tablero no vuelve al esqueleto de carga (las cabeceras de columna se ven en todo momento)`, [...new Set(bad)], []);
+    await U.closeDialog(p);
+  }
+  // Cambiar de vista: en la lista no hay columnas, pero la cabecera del tablero sigue y no sale el esqueleto.
+  await L.reload(p);
+  await p.route("**/_next/static/chunks/**", slowChunks);
+  await p.evaluate(() => { window.__r47.bad = []; window.__r47.cols = false; window.__r47.armed = true; });
+  await p.getByRole("button", { name: "Ver como lista" }).click();
+  await sleep(1200);
+  await p.getByRole("button", { name: "Ver como tablero" }).click();
+  await L.colLoc(p, COL.backlog).waitFor();
+  await sleep(1200);
+  const viewBad = await p.evaluate(() => { window.__r47.armed = false; return window.__r47.bad; });
+  await p.unroute("**/_next/static/chunks/**", slowChunks);
+  L.eq("R46M4: cambiar a la lista y volver al tablero no pasa por el esqueleto de carga", [...new Set(viewBad)], []);
+  L.assertNoErrors("R47", [s]);
+  await s.ctx.close();
+}
+
+// ---------------------------------------------------------------- BH1
+if (only.includes("bh1")) {
+  L.scenario("BH1: un miembro crea un proyecto privado desde el selector; sesión caducada con «Iniciar sesión»");
+  await L.cleanBoard();
+  // Miembro (no admin): antes no veía «Nuevo proyecto» en el selector aunque el manual y el servidor se lo permiten.
+  const s = await L.session({ email: L.USER2, viewport: { width: 1366, height: 768 } });
+  const p = s.page;
+  await p.locator("aside").first().locator("button[aria-haspopup]").first().click();
+  const item = p.getByRole("menuitem", { name: "Nuevo proyecto" });
+  L.check("BH1: «Nuevo proyecto» en el selector de un miembro", await item.isVisible().catch(() => false));
+  if (await item.isVisible().catch(() => false)) {
+    await item.click();
+    const nd = p.locator("[role=dialog]").filter({ has: p.locator("#project-name") });
+    await nd.waitFor();
+    await sleep(300);
+    L.eq("BH1: sin casilla de privado, sin importar y sin plantillas de admin", [
+      await nd.getByRole("checkbox").count(),
+      await nd.getByRole("button", { name: "Importar desde un archivo…" }).count(),
+      await nd.locator("optgroup[label='Plantillas']").count(),
+    ], [0, 0, 0]);
+    const note = nd.getByText("Será un proyecto privado: solo lo verás tú hasta que añadas más miembros.");
+    L.check("BH1: una línea gris indica que será privado", await note.isVisible() && /text-slate-500/.test(await note.getAttribute("class")));
+    await nd.locator("#project-name").fill("Privado BH1");
+    await nd.getByRole("button", { name: "Crear", exact: true }).click();
+    await p.waitForURL(/\/p\/[^/]+\/settings/, { timeout: 15000 });
+    const [made] = await L.q(`SELECT p."isPrivate", (SELECT count(*)::int FROM "ProjectMember" m WHERE m."projectId"=p.id) AS members FROM "Project" p WHERE name='Privado BH1'`);
+    L.eq("BH1: se crea privado y con quien lo crea como único miembro", [made?.isPrivate, made?.members], [true, 1]);
+    await L.q(`DELETE FROM "Project" WHERE name='Privado BH1'`);
+  }
+  await s.ctx.close();
+
+  // Sesión caducada mientras se escribe: el aviso lleva «Iniciar sesión» (antes solo el texto, sin enlace ni salida) y
+  // lleva a /login?next=<ruta> sin perder el borrador.
+  await L.seedTasks(COL.backlog, ["Tarea BH1"]);
+  const a = await L.session({ viewport: { width: 1366, height: 768 } });
+  const ap = a.page;
+  await U.openTask(ap, "Tarea BH1");
+  const ta = U.dialog(ap).locator("textarea[aria-label='Título']").first();
+  await ta.click(); await ap.keyboard.press("Control+A"); await ap.keyboard.type("Borrador BH1 sin guardar");
+  const [me] = await L.q(`SELECT id FROM "User" WHERE email=$1`, [L.ADMIN]);
+  await L.q(`DELETE FROM "Session" WHERE "userId"=$1`, [me.id]);
+  await ta.evaluate((el) => el.blur());
+  const expired = ap.locator("[role=alert]").filter({ hasText: "Sesión caducada. Vuelve a iniciar sesión." }).first();
+  await expired.waitFor({ timeout: 8000 }).catch(() => {});
+  const loginBtn = expired.getByRole("button", { name: "Iniciar sesión" });
+  L.check("BH1: el aviso de sesión caducada lleva el botón «Iniciar sesión»", await loginBtn.isVisible().catch(() => false));
+  await ap.screenshot({ path: `${SHOTS}/bh1-sesion-caducada.png` });
+  L.check("BH1: no se redirige sin avisar (sigue en el tablero con la tarea abierta)", /\/p\//.test(ap.url()) && (await ap.locator("[role=dialog]").count()) === 1);
+  // Más acciones fallidas no apilan más avisos iguales.
+  // (con el foco por teclado: el aviso, arriba, tapa la cabecera del diálogo)
+  await ta.focus(); await ap.keyboard.press("End"); await ap.keyboard.type("!"); await ta.evaluate((el) => el.blur()); await sleep(800);
+  L.eq("BH1: un solo aviso de sesión caducada", await ap.locator("[role=alert]").filter({ hasText: "Sesión caducada" }).count(), 1);
+  if (await loginBtn.isVisible().catch(() => false)) {
+    const from = new URL(ap.url());
+    await loginBtn.click();
+    await ap.waitForURL(/\/login/, { timeout: 10000 });
+    L.eq("BH1: «Iniciar sesión» lleva a /login?next=<ruta actual>", new URL(ap.url()).searchParams.get("next"), from.pathname + from.search);
+    await ap.fill("#email", L.ADMIN); await ap.fill("#password", L.PASSWORD);
+    await ap.click("button[type=submit]");
+    await ap.waitForURL((u) => u.pathname === from.pathname, { timeout: 20000 });
+    const reopened = U.dialog(ap).locator("textarea[aria-label='Título']").first();
+    await reopened.waitFor({ timeout: 10000 }).catch(() => {});
+    L.eq("BH1: al volver a entrar, la tarea se reabre con lo que se estaba escribiendo", await reopened.inputValue().catch(() => null), "Borrador BH1 sin guardar!");
+  }
+  await a.ctx.close();
 }
 
 await L.closeBrowser(); await L.closeDb();

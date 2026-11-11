@@ -185,7 +185,8 @@ export async function uploadBatch(
         done++;
         report();
       },
-      stopWhen: (reason) => reason instanceof UploadError && (reason.code === "task_total" || reason.code === "quota_total" || reason.code === "quota_project"),
+      // Sin sitio (tope de la tarea, cuota o disco del servidor lleno): los demás archivos tampoco cabrían.
+      stopWhen: (reason) => reason instanceof UploadError && (reason.code === "task_total" || reason.code === "quota_total" || reason.code === "quota_project" || reason.code === "disk_full"),
       signal: opts.signal,
     },
   );
@@ -212,7 +213,7 @@ export function skippedMessage(t: T, locale: string, skipped: SkippedFile[], fil
   if (skipped.length === 1 && skipped[0]!.reason === "empty" && skipped[0]!.name === CLIPBOARD_IMAGE_NAME) {
     return t("La imagen pegada ha llegado vacía desde el portapapeles. Vuelve a copiarla y pégala otra vez, o guárdala como archivo y adjúntala.");
   }
-  const list = summarizeSkipped(skipped, (s) => `«${s.name || t("archivo")}» (${why(s)})`);
+  const list = summarizeSkipped(skipped, (s) => `${t("«{title}»", { title: s.name || t("archivo") })} (${why(s)})`);
   return skipped.length === 1 ? t("1 archivo no se ha adjuntado: {list}", { list }) : t("{n} archivos no se han adjuntado: {list}", { n: skipped.length, list });
 }
 

@@ -82,6 +82,20 @@ describe("/api/client-errors", () => {
     assert.deepEqual(statuses.slice(0, 10), Array(10).fill(204));
     assert.deepEqual(statuses.slice(10), [429, 429]);
   });
+
+  test("las redirecciones y los «no encontrado» de Next que llegan a medio enviar la página no se registran", async () => {
+    const minified = "Minified React error #419; visit https://react.dev/errors/419 for the full message";
+    for (const digest of ["NEXT_REDIRECT;replace;/admin/users;307;", "NEXT_HTTP_ERROR_FALLBACK;404", "NEXT_NOT_FOUND"]) {
+      assert.equal((await post({ source: "window", message: minified, digest, path: "/admin" })).status, 204);
+    }
+    // En desarrollo llega el mensaje sin minificar y sin digest.
+    assert.equal((await post({ source: "window", message: "NEXT_REDIRECT", path: "/admin" })).status, 204);
+    // Un #419 de verdad (otro digest) sí se registra.
+    assert.equal((await post({ source: "window", message: minified, digest: "3891245", path: "/admin" })).status, 204);
+    await flushLogs();
+    const rows = await db.appLog.findMany({ where: { category: "client", path: "/admin" }, select: { details: true } });
+    assert.deepEqual(rows.map((r) => (r.details as { digest?: string }).digest), ["3891245"]);
+  });
 });
 
 test("la salida limpia borra las cookies con los nombres reales de verificación y dispositivo", () => {

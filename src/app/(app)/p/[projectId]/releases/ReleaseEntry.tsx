@@ -3,15 +3,16 @@
 import { appTimeZone } from "@/lib/format";
 import { ChevronDown, ClipboardCopy, Download, FileArchive, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { deleteRelease, deleteReleaseAttachments } from "@/actions/releases";
 import { copyText, downloadText } from "@/components/ui/clipboard";
 import { cn } from "@/components/ui/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Markdown } from "@/components/ui/Markdown";
 import { useToast } from "@/components/ui/Toast";
-import { releaseFileName, releaseZipName } from "@/lib/release";
-import { useIntlLocale, useT } from "@/i18n/client";
+import { isoDate, releaseFileName, releaseZipName } from "@/lib/release";
+import { ProjectsContext } from "@/components/ProjectMenu";
+import { useIntlLocale, useLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 
 interface Props {
@@ -20,11 +21,15 @@ interface Props {
 
 export function ReleaseEntry({ release }: Props) {
   const t = useT();
+  const uiLocale = useLocale();
   const locale = useIntlLocale();
   const [open, setOpen] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
   const router = useRouter();
+  // Nombre del proyecto para el ZIP (el mismo que da el diálogo de generar la release).
+  const { projects, currentId } = useContext(ProjectsContext);
+  const projectName = projects.find((p) => p.id === currentId)?.name ?? null;
   const [busy, setBusy] = useState(false);
   const [attachments, setAttachments] = useState(release.attachments);
   // Las copias de los adjuntos se guardan unos segundos después del despliegue: al refrescar la página
@@ -88,7 +93,7 @@ export function ReleaseEntry({ release }: Props) {
       const href = URL.createObjectURL(await res.blob());
       const a = document.createElement("a");
       a.href = href;
-      a.download = releaseZipName(release.title, part, plan.parts);
+      a.download = releaseZipName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, part, plan.parts, uiLocale);
       a.click();
       setTimeout(() => URL.revokeObjectURL(href), 1000);
     } catch {
@@ -110,7 +115,7 @@ export function ReleaseEntry({ release }: Props) {
   };
 
   const removeAttachments = async () => {
-    if (!(await confirm({ title: t("Borrar adjuntos"), message: t("¿Borrar los {n} adjuntos de esta release? El texto se conserva.", { n: attachments.length }), confirmLabel: t("Borrar"), danger: true }))) return;
+    if (!(await confirm({ title: t("Borrar adjuntos"), message: attachments.length === 1 ? t("¿Borrar el adjunto de esta release? El texto se conserva.") : t("¿Borrar los {n} adjuntos de esta release? El texto se conserva.", { n: attachments.length }), confirmLabel: t("Borrar"), danger: true }))) return;
     setBusy(true);
     const res = await deleteReleaseAttachments(release.id);
     setBusy(false);

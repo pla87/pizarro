@@ -45,7 +45,7 @@ export function planPackages(items: PlanItem[], maxBytes: number): ZipPackage[] 
   return packages;
 }
 
-/** Sufijo «-1de3» de los paquetes cuando hay más de uno; vacío con un solo paquete. */
-export function partSuffix(part: number, total: number): string {
-  return total > 1 ? `-${part}de${total}` : "";
+/** Sufijo «-1de3» («-1of3» en inglés) de los paquetes cuando hay más de uno; vacío con un solo paquete. */
+export function partSuffix(part: number, total: number, locale: "es" | "en" = "es"): string {
+  return total > 1 ? `-${part}${locale === "en" ? "of" : "de"}${total}` : "";
 }

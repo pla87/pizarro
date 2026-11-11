@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { AUTH_LINK_HEADER } from "@/lib/auth-link-path";
 import { canonicalRedirect } from "@/lib/canonical-url";
 import { PASSWORD_CHANGE_COOKIE, sessionCookieName, sessionCookieOptions } from "@/lib/session-config";
 
@@ -53,6 +54,10 @@ export function proxy(req: NextRequest) {
   if (isLogin || landingAtRoot) {
     const headers = new Headers(req.headers);
     headers.delete("x-pz-path");
+    // Enlaces de email (elegir o confirmar contraseña, confirmar email): el servidor no conoce la ruta y la necesita para
+    // pintar la pantalla en el idioma de la persona del enlace (ver getLocale). La que traiga el navegador no vale.
+    headers.delete(AUTH_LINK_HEADER);
+    if (pathname.startsWith("/reset/") || pathname.startsWith("/confirm/")) headers.set(AUTH_LINK_HEADER, pathname);
     if (nonce && csp) {
       headers.set("x-nonce", nonce);
       headers.set("Content-Security-Policy", csp);
@@ -84,6 +89,7 @@ export function proxy(req: NextRequest) {
   // Solo GET (las acciones POST re-renderizan la página pero no son visitas) y sin precargas.
   const headers = new Headers(req.headers);
   headers.delete("x-pz-path");
+  headers.delete(AUTH_LINK_HEADER);
   if (nonce && csp) {
     headers.set("x-nonce", nonce);
     headers.set("Content-Security-Policy", csp);
@@ -106,5 +112,6 @@ export const config = {
   // comprueba por sí misma el origen, la sesión (también la contraseña pendiente de cambiar) y los permisos antes de leer
   // el cuerpo, y lo lee con su propio tope; de este proxy no necesitan nada (son API: sin CSP ni renovación de cookie,
   // y la redirección canónica no toca /api). Solo admiten POST; con otro método, Next responde 405.
-  matcher: ["/((?!api/auth/google/|api/projects/import$|api/tasks/[^/]+/attachments$|api/projects/[^/]+/documents$|api/health|_next/static|_next/image|favicon.ico|icon.svg|icons/|apple-touch-icon.png|pizarro-logo-120.png|sw.js|manifest.webmanifest).*)"],
+  // El webhook del bot de Telegram tampoco pasa: lo llama Telegram, sin sesión; se protege con su secreto y lee con tope.
+  matcher: ["/((?!api/auth/google/|api/telegram/webhook$|api/projects/import$|api/tasks/[^/]+/attachments$|api/projects/[^/]+/documents$|api/health|_next/static|_next/image|favicon.ico|icon.svg|icons/|apple-touch-icon.png|pizarro-logo-120.png|sw.js|manifest.webmanifest).*)"],
 };
