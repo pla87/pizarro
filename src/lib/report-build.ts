@@ -84,6 +84,18 @@ export function queuedRender<T>(render: (signal: AbortSignal) => Promise<T>, tim
 /** Genera un PDF en el worker, en la cola y con tiempo máximo. */
 export const renderPdf = (job: PdfJob): Promise<Uint8Array> => queuedRender((signal) => renderInWorker(job, signal));
 
+/**
+ * Añade a cada release su número de tareas con un groupBy filtrado por sus ids (un `_count` de relación agruparía todas
+ * las ReleaseTask del servidor: Prisma 7 lo hace con un LEFT JOIN a un GROUP BY sin filtro).
+ */
+async function withReleaseTaskCounts<R extends { id: string }>(releases: R[]): Promise<(R & { taskCount: number })[]> {
+  const groups = releases.length
+    ? await db.releaseTask.groupBy({ by: ["releaseId"], where: { releaseId: { in: releases.map((r) => r.id) } }, _count: { _all: true } })
+    : [];
+  const count = new Map(groups.map((g) => [g.releaseId, g._count._all]));
+  return releases.map((r) => ({ ...r, taskCount: count.get(r.id) ?? 0 }));
+}
+
 export function generateProjectReportPdf(projectId: string, opts: { generatedBy: string; locale: Locale }): Promise<ProjectReportPdf | null> {
   return buildProjectReportPdf(projectId, opts);
 }
@@ -113,7 +125,7 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
       },
     }),
     db.deliverable.findMany({ where: { projectId }, orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { position: "asc" }], select: { id: true, name: true, description: true, dueDate: true } }),
-    db.release.findMany({ where: { projectId }, orderBy: { deployedAt: "desc" }, take: 5, select: { number: true, title: true, deployedAt: true, _count: { select: { tasks: true } } } }),
+    db.release.findMany({ where: { projectId }, orderBy: { deployedAt: "desc" }, take: 5, select: { id: true, number: true, title: true, deployedAt: true } }).then(withReleaseTaskCounts),
     db.task.count({ where: { projectId, archivedAt: { not: null } } }),
     listKinds(projectId),
     // Cuándo pasó cada tarea por última vez a una columna terminada: «terminadas recientemente» no depende de
@@ -163,7 +175,7 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
       },
     })),
     deliverables: deliverables.map((d) => ({ ...d, dueDate: dateToIso(d.dueDate) })),
-    releases: releases.map((r) => ({ number: r.number, title: r.title, deployedAt: r.deployedAt.toISOString(), taskCount: r._count.tasks })),
+    releases: releases.map((r) => ({ number: r.number, title: r.title, deployedAt: r.deployedAt.toISOString(), taskCount: r.taskCount })),
     archivedCount,
     taskFields: normalizeTaskFields(project.taskFields),
   }, t);

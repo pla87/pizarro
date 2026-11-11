@@ -4,7 +4,7 @@ import { feedRateKey, tokenFromFilename } from "@/lib/calendar-feed-core";
 import { db } from "@/lib/db";
 import { ifNoneMatchHas } from "@/lib/etag";
 import { logEvent } from "@/lib/log";
-import { rateLimit, rateLimitRetryAfterSec } from "@/lib/rate-limit";
+import { rateIp, rateLimit, rateLimitRetryAfterSec } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { maskSecretsFor } from "@/lib/secret-path";
 
@@ -39,7 +39,7 @@ async function serveFeed(req: Request, file: string, ip: string, start: number):
   const token = tokenFromFilename(file);
   // Límite por IP (cuenta todo, también lo que no vale) y por token.
   const tooMany = (key: string, cfg: { limit: number; windowMs: number }) => !rateLimit(key, cfg.limit, cfg.windowMs);
-  const ipKey = `calfeed:ip:${ip}`;
+  const ipKey = `calfeed:ip:${rateIp(ip)}`;
   const tokenKey = feedRateKey(token ?? file);
   if (tooMany(ipKey, PER_IP) || tooMany(tokenKey, PER_TOKEN)) {
     return new Response("Too many requests", { status: 429, headers: { "Retry-After": String(rateLimitRetryAfterSec(tokenKey)), "Cache-Control": "no-store" } });

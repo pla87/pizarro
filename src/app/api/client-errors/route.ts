@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { logEvent } from "@/lib/log";
 import { redactPath } from "@/lib/redact-path";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateIp, rateLimit } from "@/lib/rate-limit";
 import { BodyTooLargeError, declaredLength, readBodyLimited } from "@/lib/upload-slots";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
@@ -23,11 +23,11 @@ export async function POST(req: Request) {
   if (!isSameOrigin(req)) return new Response(null, { status: 403 });
   const ip = clientIp(req.headers);
   // Límite grueso por IP antes de consultar la sesión: una avalancha de cookies basura no debe llegar a la base de datos.
-  if (!rateLimit(`client-errors:ip:${ip}`, 60, 60_000)) return new Response(null, { status: 429 });
+  if (!rateLimit(`client-errors:ip:${rateIp(ip)}`, 60, 60_000)) return new Response(null, { status: 429 });
   // Sin sesión también se acepta (la pantalla de acceso, la verificación en dos pasos o una sesión caducada fallan sin ella
   // y su error es justo el que hay que ver), con un límite más estricto por IP y un cuerpo más pequeño.
   const user = await getCurrentUser().catch(() => null);
-  if (!rateLimit(`client-errors:${user ? "u" : "anon"}:${ip}`, user ? 20 : 10, 60_000)) return new Response(null, { status: 429 });
+  if (!rateLimit(`client-errors:${user ? "u" : "anon"}:${rateIp(ip)}`, user ? 20 : 10, 60_000)) return new Response(null, { status: 429 });
   const max = user ? 16_384 : ANON_MAX_BODY;
   const declared = declaredLength(req.headers);
   if (declared !== null && declared > max) return new Response(null, { status: 413 });

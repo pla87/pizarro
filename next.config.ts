@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import path from "node:path";
 import type { NextConfig } from "next";
 import { buildCommit, officialBuild } from "./src/lib/bug-report-core";
 import { PROXY_BODY_LIMIT_BYTES } from "./src/lib/upload-size";
@@ -16,9 +17,25 @@ const buildId = `${version}-${commit || Date.now().toString(36)}` + (isDev ? "-d
 // ver src/lib/bug-report-core.ts). Solo entonces la app ofrece «Informar de un error».
 const official = isDev ? null : officialBuild(process.env, version);
 
+// Datos que nunca deben acabar en .next/standalone. Al compilar fuera de Docker (donde .dockerignore no los aparta), el
+// trazado de ficheros sigue rutas como path.resolve("./uploads") (upload-dir.ts) y copiaba las subidas, las copias de
+// seguridad y los .env con sus secretos. Si UPLOAD_DIR apunta a otra carpeta dentro del proyecto, también se excluye.
+// Esto cubre las rutas; lo que se escapa (el .env que Next copia por su cuenta y, con Turbopack, el trazado de
+// instrumentation.js, al que no se aplica) lo borra scripts/postbuild.mjs.
+const uploadRel = path.relative(process.cwd(), path.resolve(process.env.UPLOAD_DIR || "./uploads")).split(path.sep).join("/");
+const tracingExcludes = [
+  "./uploads/**",
+  "./backups/**",
+  "./.env*",
+  "./deploy/.env*",
+  "./deploy/recovery-kit*",
+  ...(uploadRel && !uploadRel.startsWith("..") && !path.isAbsolute(uploadRel) && uploadRel !== "uploads" ? [`./${uploadRel}/**`] : []),
+];
+
 const nextConfig: NextConfig = {
   // Servidor autocontenido (.next/standalone): imagen Docker mucho más pequeña.
   output: "standalone",
+  outputFileTracingExcludes: { "*": tracingExcludes },
   poweredByHeader: false,
   generateBuildId: () => buildId,
   // Protección frente a desajuste de versión: Next añade el identificador a las peticiones del navegador y, si el servidor

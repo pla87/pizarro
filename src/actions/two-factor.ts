@@ -14,7 +14,7 @@ import { completeLogin } from "@/lib/login";
 import { logEvent } from "@/lib/log";
 import { emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { verifyPassword } from "@/lib/password";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateIp, rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { safeNextPath } from "@/lib/redirect";
 import { requireUser } from "@/lib/session";
@@ -35,7 +35,7 @@ export interface VerifyState {
 
 async function ipLimit(): Promise<string> {
   const ip = clientIp(await headers());
-  if (!rateLimit(`2fa:ip:${ip}`, 60, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
+  if (!rateLimit(`2fa:ip:${rateIp(ip)}`, 60, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
   return ip;
 }
 
@@ -47,7 +47,7 @@ export async function verifyLoginCode(_prev: VerifyState, formData: FormData): P
   const ch = await readChallenge();
   if (!ch || ch.kind !== "LOGIN") redirect("/login?error=twofactor_expired");
   const ip = clientIp(await headers());
-  if (!rateLimit(`2fa:ip:${ip}`, 60, 15 * 60_000)) return { error: t("Demasiados intentos. Espera unos minutos.") };
+  if (!rateLimit(`2fa:ip:${rateIp(ip)}`, 60, 15 * 60_000)) return { error: t("Demasiados intentos. Espera unos minutos.") };
   const result = await checkCode(ch, String(formData.get("code") ?? ""));
   if (result === "locked") {
     logEvent({ level: "warn", category: "auth", action: "auth.secondStepLocked", message: `${ch.user.name}: demasiados códigos incorrectos, hay que volver a entrar`, userId: ch.userId, userName: ch.user.name, path: "/login/verify", ip });

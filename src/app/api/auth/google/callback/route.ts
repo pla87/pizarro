@@ -7,7 +7,7 @@ import { exchangeAndVerify, findUserForGoogle } from "@/lib/google-login";
 import { completeLogin } from "@/lib/login";
 import { logEvent } from "@/lib/log";
 import { appUrl } from "@/lib/mail";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateIp, rateLimit } from "@/lib/rate-limit";
 import { safeNextPath } from "@/lib/redirect";
 import { secondStepFor, sendEmailCode, startChallenge } from "@/lib/two-factor";
 import { clientIp } from "@/lib/request";
@@ -34,7 +34,7 @@ export async function GET(req: Request) {
   };
 
   if (!googleEnabled()) return fail("google_disabled", "Google no está configurado");
-  if (!rateLimit(`glogin:cb:${ip}`, 20, 15 * 60_000)) return fail("rate", "demasiados intentos");
+  if (!rateLimit(`glogin:cb:${rateIp(ip)}`, 20, 15 * 60_000)) return fail("rate", "demasiados intentos");
 
   const url = new URL(req.url);
   const [state, nonce, verifier, nextB64] = raw.split(".");

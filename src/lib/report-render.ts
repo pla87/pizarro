@@ -15,6 +15,22 @@ import type { PdfWorkerRequest, PdfWorkerResponse } from "./report-pdf-worker";
 export const PDF_WORKER_IDLE_MS = 60_000;
 
 /**
+ * Memoria máxima (heap de V8, MB) del worker: sin tope heredaría el del proceso (~700 MB en un contenedor pequeño) y un
+ * informe enorme podría dejar sin memoria al servidor entero. Al pasarse, Node termina SOLO el worker
+ * (ERR_WORKER_OUT_OF_MEMORY): ese PDF falla con un error normal y el siguiente arranca otro worker.
+ * Ajustable con PDF_WORKER_MAX_MB (64–4096).
+ */
+export const PDF_WORKER_MAX_MB = 256;
+
+export function pdfWorkerMaxMb(env: Partial<NodeJS.ProcessEnv> = process.env): number {
+  const n = Number(env.PDF_WORKER_MAX_MB);
+  return Number.isFinite(n) && n > 0 ? Math.min(4096, Math.max(64, Math.floor(n))) : PDF_WORKER_MAX_MB;
+}
+
+/** Mensaje del error con el que se rechaza un PDF cuyo worker se quedó sin memoria. */
+export const PDF_OUT_OF_MEMORY_MESSAGE = "El generador de PDF se quedó sin memoria";
+
+/**
  * Fichero del worker. En producción, el empaquetado por scripts/postbuild.mjs (dist/pdf-worker.mjs, junto al server.js
  * del standalone y en la imagen Docker); en desarrollo y en los tests, el código fuente con tsx (sin compilar nada).
  */
@@ -50,7 +66,8 @@ function startWorker(): Slot {
   if (!existsSync(spec.file)) {
     throw new Error(`No se encuentra el generador de PDF (${path.relative(process.cwd(), spec.file)}); vuelve a compilar con «npm run build»`);
   }
-  const worker = new Worker(/*turbopackIgnore: true*/ spec.file, { execArgv: spec.execArgv, name: "pdf" });
+  const maxMb = pdfWorkerMaxMb();
+  const worker = new Worker(/*turbopackIgnore: true*/ spec.file, { execArgv: spec.execArgv, name: "pdf", resourceLimits: { maxOldGenerationSizeMb: maxMb } });
   const slot: Slot = { worker, jobs: new Map() };
   worker.on("message", (msg: PdfWorkerResponse) => {
     const p = slot.jobs.get(msg.id);
@@ -60,8 +77,12 @@ function startWorker(): Slot {
     else p.reject(new Error(msg.error));
     if (!slot.jobs.size) idle(slot);
   });
-  // Un fallo del propio worker (p. ej. sin memoria) rechaza lo pendiente; el siguiente PDF arranca otro.
-  worker.on("error", (err) => drop(slot, err));
+  // Un fallo del propio worker rechaza lo pendiente; el siguiente PDF arranca otro. Sin memoria, el error lo dice (con el
+  // tope y la variable) para los logs; quien lo pidió recibe el «No se pudo generar el informe» de siempre.
+  worker.on("error", (err) => {
+    const oom = (err as NodeJS.ErrnoException).code === "ERR_WORKER_OUT_OF_MEMORY";
+    drop(slot, oom ? new Error(`${PDF_OUT_OF_MEMORY_MESSAGE} (límite ${maxMb} MB, PDF_WORKER_MAX_MB)`, { cause: err }) : err);
+  });
   worker.on("exit", (code) => drop(slot, new Error(`El generador de PDF se detuvo (código ${code})`)));
   return slot;
 }

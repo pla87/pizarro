@@ -61,19 +61,24 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         name: true,
         dueDate: true,
         project: { select: { id: true, name: true } },
-        _count: { select: { tasks: true } },
       },
     }),
   ]);
 
-  // Hechas por entregable (en columna terminada o archivadas por una release): se cuentan en la BD, sin traer las tareas.
-  const doneGroups = deliverableRows.length
-    ? await db.task.groupBy({
-        by: ["deliverableId"],
-        where: { deliverableId: { in: deliverableRows.map((d) => d.id) }, OR: [{ archivedAt: { not: null } }, { column: { isDone: true } }] },
-        _count: { _all: true },
-      })
-    : [];
+  // Total y hechas por entregable (en columna terminada o archivadas por una release): se cuentan en la BD, sin traer las
+  // tareas, filtrando por los ids (un `_count` de relación agruparía todas las tareas del servidor).
+  const deliverableIds = deliverableRows.map((d) => d.id);
+  const [totalGroups, doneGroups] = deliverableIds.length
+    ? await Promise.all([
+        db.task.groupBy({ by: ["deliverableId"], where: { deliverableId: { in: deliverableIds } }, _count: { _all: true } }),
+        db.task.groupBy({
+          by: ["deliverableId"],
+          where: { deliverableId: { in: deliverableIds }, OR: [{ archivedAt: { not: null } }, { column: { isDone: true } }] },
+          _count: { _all: true },
+        }),
+      ])
+    : [[], []];
+  const totalBy = new Map(totalGroups.map((g) => [g.deliverableId, g._count._all]));
   const doneBy = new Map(doneGroups.map((g) => [g.deliverableId, g._count._all]));
   // Un id arbitrario en la URL no revela ningún nombre ni filtra nada: solo valen el propio usuario, quienes tienen tareas
   // visibles en el rango y quienes pueden usar alguno de los proyectos a la vista (projectUsersWhere).
@@ -133,7 +138,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     due: dateToIso(d.dueDate)!,
     projectId: d.project.id,
     projectName: d.project.name,
-    total: d._count.tasks,
+    total: totalBy.get(d.id) ?? 0,
     done: doneBy.get(d.id) ?? 0,
   }));
 
