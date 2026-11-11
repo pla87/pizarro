@@ -77,7 +77,7 @@ describe("subidas: comprobación previa antes de escribir el fichero", () => {
     const body = await res.json();
     assert.equal(res.status, 413, JSON.stringify(body));
     assert.equal(body.code, "task_total");
-    assert.match(body.error, /^Los adjuntos de la tarea superarían el máximo del proyecto \(1 MB por tarea; ya tiene 0\.9 MB\)/);
+    assert.match(body.error, /^Los adjuntos de la tarea superarían el máximo del proyecto \(1 MB por tarea; ya tiene 0,9 MB\)/);
     assert.equal(await db.taskAttachment.count({ where: { taskId: task.id } }), 1);
   });
 

@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
 import type { EditorModeValue } from "@/lib/types";
 import { MAX_DESCRIPTION, PALETTE } from "@/lib/constants";
+import { markdownToPlain } from "@/lib/ics";
 import { describeKindAutomation, MAX_KIND_SUBTASKS, parseSubtaskLines } from "@/lib/kinds-special";
 
 export interface KindRow {
@@ -32,16 +33,9 @@ const EMPTY_FORM = { name: "", color: "#6366f1", titleTemplate: "", descriptionT
 const DESC_MAX = MAX_DESCRIPTION;
 const NO_USERS: never[] = [];
 
-/** Markdown a texto plano de una línea para la vista previa de la lista. */
+/** Markdown a texto plano de una línea para la vista previa de la lista (entidades y escapes del editor incluidos). */
 function stripMarkdown(md: string): string {
-  return md
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/^\s{0,3}(#{1,6}\s+|>\s?|[-*+]\s+|\d+[.)]\s+)/gm, "")
-    .replace(/(\*\*|__|~~|\+\+|[*_`])/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return markdownToPlain(md).replace(/\s+/g, " ").trim();
 }
 const COLORS = [...PALETTE, "#84cc16", "#06b6d4", "#d946ef", "#78716c"];
 
@@ -107,8 +101,8 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
                 )}
               </div>
               <div className="ml-auto flex items-center">
-                <button className="btn-icon" disabled={i === 0 || pending} onClick={() => run(() => moveKind(k.id, -1), t("Orden actualizado"))} aria-label={t("Subir")}><ArrowUp size={15} /></button>
-                <button className="btn-icon" disabled={i === kinds.length - 1 || pending} onClick={() => run(() => moveKind(k.id, 1), t("Orden actualizado"))} aria-label={t("Bajar")}><ArrowDown size={15} /></button>
+                <button className="btn-icon" disabled={i === 0 || pending} onClick={() => run(() => moveKind(k.id, -1), t("Orden actualizado"))} aria-label={t("Subir {name}", { name: k.name })}><ArrowUp size={15} /></button>
+                <button className="btn-icon" disabled={i === kinds.length - 1 || pending} onClick={() => run(() => moveKind(k.id, 1), t("Orden actualizado"))} aria-label={t("Bajar {name}", { name: k.name })}><ArrowDown size={15} /></button>
                 <button className="btn-icon" onClick={() => { setEditing(k.id); setForm({ name: k.name, color: k.color, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate, subtasks: k.subtaskTemplate.join("\n") }); }} aria-label={t("Editar {name}", { name: k.name })}><Pencil size={15} /></button>
                 <button
                   className="btn-icon hover:text-red-600"

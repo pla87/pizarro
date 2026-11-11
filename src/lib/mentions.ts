@@ -1,4 +1,5 @@
 // Menciones: se guardan en el texto como @[Nombre](user:ID).
+import { decodeEntities } from "./markdown-entities";
 
 const MENTION_RE = /@\[([^\]\n]{1,80})\]\(user:([a-z0-9]{1,40})\)/gi;
 
@@ -25,8 +26,12 @@ export function mentionsToMarkdown(text: string): string {
   return text.replace(MENTION_RE, (_m, name: string, id: string) => `[@${name}](#mention-${id})`);
 }
 
+/**
+ * Extracto de un texto para avisos y emails, en texto plano: las entidades que guarda el editor (`&lt;`, `&amp;`,
+ * `&nbsp;`…) pasan a su carácter, porque el extracto se muestra (y se escapa) como texto, no como HTML.
+ */
 export function excerpt(text: string, max = 180): string {
-  const plain = mentionsToPlain(text).replace(/\s+/g, " ").trim();
+  const plain = decodeEntities(mentionsToPlain(text)).replace(/\s+/g, " ").trim();
   return plain.length > max ? plain.slice(0, max - 1) + "…" : plain;
 }
 

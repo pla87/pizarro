@@ -25,6 +25,11 @@ export function useT(): T {
   return useContext(I18nContext).t;
 }
 
+/** Idioma de la interfaz (es / en), p. ej. para localizeGeneralKind. */
+export function useLocale(): Locale {
+  return useContext(I18nContext).locale;
+}
+
 /** Locale de Intl (es-ES / en-GB) para formatear fechas. */
 export function useIntlLocale(): string {
   return intlLocale(useContext(I18nContext).locale);

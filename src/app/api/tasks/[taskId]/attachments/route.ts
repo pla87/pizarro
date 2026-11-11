@@ -10,8 +10,9 @@ import { saveUndo } from "@/lib/undo";
 import { encodeLabel } from "@/lib/undo-label";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser, requireUser } from "@/lib/session";
-import { getT } from "@/i18n/server";
-import { quotaError } from "@/lib/quota-message";
+import { intlLocale } from "@/i18n/core";
+import { getLocale, getT } from "@/i18n/server";
+import { mbNumber, quotaError } from "@/lib/quota-message";
 import { attachmentLimitProblem, createAttachmentWithinLimit, roundMb, type AttachmentLimitProblem } from "@/lib/attachment-limit";
 import { uploadWriteError } from "@/lib/disk-space";
 import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, newFileId, processImage, removeAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveRawAttachmentFile } from "@/lib/uploads";
@@ -19,16 +20,18 @@ import { attachmentTotals } from "@/lib/board";
 import { acquireUploadSlot, BodyTooLargeError, declaredLength, readBodyLimited, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError } from "@/lib/upload-slots";
 import { effectiveFileMaxMb, MULTIPART_OVERHEAD_BYTES } from "@/lib/upload-size";
 import type { UploadedAttachment } from "@/lib/types";
+import { cleanFileName } from "@/lib/file-name";
 
 export const runtime = "nodejs";
 
 /** Tope de la tarea o cuota superados: el mismo error en la comprobación previa y en la definitiva. */
 async function limitError(problem: AttachmentLimitProblem, projectId: string, isAdmin: boolean): Promise<AppError> {
   const t = await getT();
-  if (problem.reason === "quota") return quotaError(t, problem.quota, { projectId, isAdmin });
+  const locale = intlLocale(await getLocale());
+  if (problem.reason === "quota") return quotaError(t, problem.quota, { projectId, isAdmin, locale });
   return new AppError(
     t("Los adjuntos de la tarea superarían el máximo del proyecto ({limit} MB por tarea; ya tiene {used} MB). Puedes cambiarlo en los ajustes del proyecto.", {
-      limit: problem.limitMb, used: roundMb(problem.usedBytes),
+      limit: mbNumber(problem.limitMb, locale), used: mbNumber(roundMb(problem.usedBytes), locale),
     }),
     413,
     "task_total",
@@ -92,7 +95,8 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
         return null;
       });
     }
-    const originalName = (file.name || "captura").replace(/[^\p{L}\p{N}._ -]/gu, "_").slice(0, 120) || "captura";
+    // Como lo escribió la persona (paréntesis, comas, &…); si es muy largo se recorta el nombre, no la extensión.
+    const originalName = cleanFileName(file.name, "captura");
     const mimeType = image ? "image/webp" : sanitizeMime(file.type);
     const storedBytes = image ? image.full.length : buffer.length;
     // Comprobación previa, orientativa y sin candado (la definitiva va con el alta, más abajo): si ya no cabe, se rechaza

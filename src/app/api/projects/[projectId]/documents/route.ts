@@ -8,7 +8,8 @@ import { publishChange } from "@/lib/realtime";
 import { rateLimit, rateLimitRetryAfterSec } from "@/lib/rate-limit";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser, requireUser } from "@/lib/session";
-import { getT } from "@/i18n/server";
+import { intlLocale } from "@/i18n/core";
+import { getLocale, getT } from "@/i18n/server";
 import { quotaError } from "@/lib/quota-message";
 import { roundMb } from "@/lib/attachment-limit";
 import { confirmDocumentKind, detectDocumentKind, documentMime, sanitizeDocumentName, type DocumentKindName } from "@/lib/document-kind";
@@ -24,7 +25,7 @@ export const runtime = "nodejs";
 async function limitError(problem: DocumentLimitProblem, projectId: string, isAdmin: boolean): Promise<AppError> {
   const t = await getT();
   if (problem.reason === "count") return new AppError(t("La documentación del proyecto ya tiene el máximo de {n} archivos.", { n: problem.limit }), 413);
-  return quotaError(t, problem.quota, { projectId, isAdmin });
+  return quotaError(t, problem.quota, { projectId, isAdmin, locale: intlLocale(await getLocale()) });
 }
 
 /** Sube un documento a la documentación del proyecto (campo "file" de un multipart/form-data). */

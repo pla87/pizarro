@@ -32,9 +32,11 @@ export type MentionMessage = NoticeMessage;
 export function mentionEmail(m: MentionMessage, t: T = makeT("es")) {
   const type = m.type ?? "MENTION";
   const body = notificationBody(type, m.excerpt, t, m.locale ?? "es-ES");
-  const subject = notificationHeadline(type, t, { actor: m.actorName, task: `«${m.taskTitle}»` });
-  const text = `${notificationHeadline(type, t, { actor: m.actorName, task: `«${m.taskTitle}»` })} (${m.projectName})${body ? `:\n\n${body}` : ""}\n\n${t("Abrir la tarea")}: ${m.url}\n`;
-  const headline = notificationHeadline(type, t, { actor: `<strong>${escapeHtml(m.actorName)}</strong>`, task: `<strong>«${escapeHtml(m.taskTitle)}»</strong>` });
+  // Las comillas del título van en la plantilla traducida: «…» en español, “…” en inglés.
+  const task = t("«{title}»", { title: m.taskTitle });
+  const subject = notificationHeadline(type, t, { actor: m.actorName, task });
+  const text = `${subject} (${m.projectName})${body ? `:\n\n${body}` : ""}\n\n${t("Abrir la tarea")}: ${m.url}\n`;
+  const headline = notificationHeadline(type, t, { actor: `<strong>${escapeHtml(m.actorName)}</strong>`, task: `<strong>${escapeHtml(task)}</strong>` });
   const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
 <p>${headline} · ${escapeHtml(m.projectName)}</p>
 ${body ? `<blockquote style="margin:12px 0;padding:8px 12px;border-left:4px solid #6366f1;background:#f8fafc;color:#334155">${escapeHtml(body)}</blockquote>` : ""}

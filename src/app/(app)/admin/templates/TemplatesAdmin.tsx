@@ -281,9 +281,9 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                       <label className="flex items-center gap-1 text-sm">
                         <input type="checkbox" checked={c.isDone} onChange={(e) => setCol({ isDone: e.target.checked })} /> {t("Cuenta como terminada")}
                       </label>
-                      <button type="button" className="btn-icon" disabled={i === 0} onClick={() => patch({ columns: move(draft.columns, i, -1) })} aria-label={t("Subir")}><ArrowUp size={15} /></button>
-                      <button type="button" className="btn-icon" disabled={i === draft.columns.length - 1} onClick={() => patch({ columns: move(draft.columns, i, 1) })} aria-label={t("Bajar")}><ArrowDown size={15} /></button>
-                      <button type="button" className="btn-icon hover:text-red-600" disabled={draft.columns.length <= 1} onClick={() => patch({ columns: draft.columns.filter((_, j) => j !== i) })} aria-label={t("Quitar columna")}><Trash2 size={15} /></button>
+                      <button type="button" className="btn-icon" disabled={i === 0} onClick={() => patch({ columns: move(draft.columns, i, -1) })} aria-label={t("Subir la columna {n}", { n: i + 1 })}><ArrowUp size={15} /></button>
+                      <button type="button" className="btn-icon" disabled={i === draft.columns.length - 1} onClick={() => patch({ columns: move(draft.columns, i, 1) })} aria-label={t("Bajar la columna {n}", { n: i + 1 })}><ArrowDown size={15} /></button>
+                      <button type="button" className="btn-icon hover:text-red-600" disabled={draft.columns.length <= 1} onClick={() => patch({ columns: draft.columns.filter((_, j) => j !== i) })} aria-label={t("Quitar la columna {n}", { n: i + 1 })}><Trash2 size={15} /></button>
                     </li>
                   );
                 })}
@@ -302,9 +302,9 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                     <li key={i} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                       <div className="flex items-center gap-2">
                         <input className="input min-w-0 flex-1" value={k.name} onChange={(e) => setKind({ name: e.target.value })} maxLength={40} placeholder={t("Nombre")} aria-label={t("Nombre del tipo {n}", { n: i + 1 })} />
-                        <button type="button" className="btn-icon" disabled={i === 0} onClick={() => patch({ kinds: move(draft.kinds, i, -1) })} aria-label={t("Subir")}><ArrowUp size={15} /></button>
-                        <button type="button" className="btn-icon" disabled={i === draft.kinds.length - 1} onClick={() => patch({ kinds: move(draft.kinds, i, 1) })} aria-label={t("Bajar")}><ArrowDown size={15} /></button>
-                        <button type="button" className="btn-icon hover:text-red-600" onClick={() => patch({ kinds: draft.kinds.filter((_, j) => j !== i) })} aria-label={t("Quitar tipo")}><Trash2 size={15} /></button>
+                        <button type="button" className="btn-icon" disabled={i === 0} onClick={() => patch({ kinds: move(draft.kinds, i, -1) })} aria-label={t("Subir el tipo {n}", { n: i + 1 })}><ArrowUp size={15} /></button>
+                        <button type="button" className="btn-icon" disabled={i === draft.kinds.length - 1} onClick={() => patch({ kinds: move(draft.kinds, i, 1) })} aria-label={t("Bajar el tipo {n}", { n: i + 1 })}><ArrowDown size={15} /></button>
+                        <button type="button" className="btn-icon hover:text-red-600" onClick={() => patch({ kinds: draft.kinds.filter((_, j) => j !== i) })} aria-label={t("Quitar el tipo {n}", { n: i + 1 })}><Trash2 size={15} /></button>
                       </div>
                       <ColorField value={k.color} onChange={(color) => setKind({ color })} colors={KIND_COLORS} />
                       <input className="input" value={k.titleTemplate} onChange={(e) => setKind({ titleTemplate: e.target.value })} maxLength={200} placeholder={t("Título automático (opcional)")} aria-label={t("Título automático")} />
@@ -372,9 +372,9 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                         <li key={index} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                           <div className="flex items-center gap-2">
                             <input className="input min-w-0 flex-1" value={r.name} onChange={(e) => setRel(index, { name: e.target.value })} maxLength={60} placeholder={t("Nombre")} aria-label={t("Nombre de la plantilla de release {n}", { n: pos + 1 })} />
-                            <button type="button" className="btn-icon" disabled={pos === 0} onClick={() => patch({ releaseTemplates: swapWith(draft.releaseTemplates, index, items[pos - 1]!.index) })} aria-label={t("Subir")}><ArrowUp size={15} /></button>
-                            <button type="button" className="btn-icon" disabled={pos === items.length - 1} onClick={() => patch({ releaseTemplates: swapWith(draft.releaseTemplates, index, items[pos + 1]!.index) })} aria-label={t("Bajar")}><ArrowDown size={15} /></button>
-                            <button type="button" className="btn-icon hover:text-red-600" onClick={() => patch({ releaseTemplates: draft.releaseTemplates.filter((_, j) => j !== index) })} aria-label={t("Quitar plantilla de release")}><Trash2 size={15} /></button>
+                            <button type="button" className="btn-icon" disabled={pos === 0} onClick={() => patch({ releaseTemplates: swapWith(draft.releaseTemplates, index, items[pos - 1]!.index) })} aria-label={t("Subir la plantilla de release {n}", { n: pos + 1 })}><ArrowUp size={15} /></button>
+                            <button type="button" className="btn-icon" disabled={pos === items.length - 1} onClick={() => patch({ releaseTemplates: swapWith(draft.releaseTemplates, index, items[pos + 1]!.index) })} aria-label={t("Bajar la plantilla de release {n}", { n: pos + 1 })}><ArrowDown size={15} /></button>
+                            <button type="button" className="btn-icon hover:text-red-600" onClick={() => patch({ releaseTemplates: draft.releaseTemplates.filter((_, j) => j !== index) })} aria-label={t("Quitar la plantilla de release {n}", { n: pos + 1 })}><Trash2 size={15} /></button>
                           </div>
                           <DescriptionField mode={editorMode} textareaClassName="input field-sizing-content min-h-20 font-mono text-[13px]" value={r.content} onValueChange={(v) => setRel(index, { content: v.slice(0, MAX_TEMPLATE) })} users={NO_USERS} placeholder={t("Contenido (Markdown)")} />
                         </li>
@@ -397,7 +397,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                     <li key={i} className="flex flex-wrap items-center gap-2">
                       <input className="input min-w-0 flex-1 basis-40" value={l.name} onChange={(e) => setLabel({ name: e.target.value })} maxLength={40} placeholder={t("Nombre")} aria-label={t("Nombre de la etiqueta {n}", { n: i + 1 })} />
                       <ColorField value={l.color} onChange={(color) => setLabel({ color: color as typeof l.color })} colors={PALETTE} />
-                      <button type="button" className="btn-icon hover:text-red-600" onClick={() => patch({ labels: draft.labels.filter((_, j) => j !== i) })} aria-label={t("Quitar etiqueta")}><Trash2 size={15} /></button>
+                      <button type="button" className="btn-icon hover:text-red-600" onClick={() => patch({ labels: draft.labels.filter((_, j) => j !== i) })} aria-label={t("Quitar la etiqueta {n}", { n: i + 1 })}><Trash2 size={15} /></button>
                     </li>
                   );
                 })}

@@ -108,8 +108,6 @@ export const common: Record<string, string> = {
   "Error": "Error",
   "{n} tarea(s)": "{n} task(s)",
   "Orden actualizado": "Order updated",
-  "Subir": "Move up",
-  "Bajar": "Move down",
   "Editar {name}": "Edit {name}",
   "Borrar {name}": "Delete {name}",
   "Debe quedar al menos un tipo": "At least one type must remain",

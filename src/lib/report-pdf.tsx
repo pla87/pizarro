@@ -7,9 +7,11 @@ import type { ChecklistGroup, ChecklistGroupBy } from "./checklist";
 import type { WeekPlanGroupBy, WeekPlanSection, WeekPlanTask } from "./week-plan";
 import { RECENT_DONE_DAYS, UPCOMING_DAYS, type DeliverableStatus, type Report, type ReportFieldRow, type ReportTask } from "./report";
 import { formatEuro, formatHours, PRIORITY_LABEL } from "./task-fields";
+import { pdfSafeData, pdfWordParts } from "./pdf-text";
 
-// Sin partición de palabras con guion: en español quedaba «re-sumen».
-Font.registerHyphenationCallback((word) => [word]);
+// Sin partición de palabras por sílabas (en español quedaba «re-sumen»), salvo las palabras muy largas (URLs, textos
+// sin espacios), que se pueden cortar en trozos para no salirse de la celda ni de la página.
+Font.registerHyphenationCallback(pdfWordParts);
 
 const C = {
   text: "#0f172a",
@@ -267,8 +269,8 @@ function ReportDocument({ r, t, locale }: { r: Report; t: T; locale: string }) {
               rows={people}
               cols={[
                 { label: t("Persona"), width: "60%", render: (p) => p.name },
-                { label: "Pendientes", width: "20%", render: (p) => String(p.open) },
-                { label: "Vencidas", width: "20%", render: (p) => <Text style={p.overdue ? { color: C.red, fontFamily: "Helvetica-Bold" } : undefined}>{p.overdue}</Text> },
+                { label: t("Pendientes"), width: "20%", render: (p) => String(p.open) },
+                { label: t("Vencidas"), width: "20%", render: (p) => <Text style={p.overdue ? { color: C.red, fontFamily: "Helvetica-Bold" } : undefined}>{p.overdue}</Text> },
               ]}
             />
           </>
@@ -478,8 +480,9 @@ export type PdfJob =
   | { kind: "checklist"; locale: Locale; input: ChecklistPdfInput }
   | { kind: "delivery"; locale: Locale; input: DeliveryPdfInput };
 
-/** Pinta el PDF de un trabajo (en el worker). */
-export function renderPdfJob(job: PdfJob): Promise<Buffer> {
+/** Pinta el PDF de un trabajo (en el worker). Los textos de los datos se adaptan antes a la fuente (ver pdf-text.ts). */
+export function renderPdfJob(raw: PdfJob): Promise<Buffer> {
+  const job = { ...raw, input: pdfSafeData(raw.input) } as PdfJob;
   const t = makeT(job.locale);
   const locale = intlLocale(job.locale);
   switch (job.kind) {

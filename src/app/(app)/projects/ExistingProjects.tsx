@@ -39,8 +39,8 @@ export function ExistingProjects({ projects, userId }: { projects: Row[]; userId
             {p.picked && (
               <span className="inline-flex items-center gap-1 text-xs text-slate-500"><Check size={13} /> {t("En mis proyectos")}</span>
             )}
-            <Link href={`/p/${p.id}`} className="btn-secondary">{t("Abrir")}</Link>
-            <button type="button" className={p.picked ? "btn-secondary" : "btn-primary"} disabled={pending} onClick={() => toggle(p)}>
+            <Link href={`/p/${p.id}`} className="btn-secondary" aria-label={t("Abrir «{name}»", { name: p.name })}>{t("Abrir")}</Link>
+            <button type="button" className={p.picked ? "btn-secondary" : "btn-primary"} disabled={pending} onClick={() => toggle(p)} aria-label={p.picked ? t("Quitar «{name}» de mis proyectos", { name: p.name }) : t("Añadir «{name}» a mis proyectos", { name: p.name })}>
               {p.picked ? t("Quitar de mis proyectos") : t("Añadir a mis proyectos")}
             </button>
           </li>

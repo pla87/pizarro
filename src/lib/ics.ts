@@ -1,6 +1,8 @@
 // iCalendar (RFC 5545) para exportar a calendario las tareas de una columna Agenda. Funciones puras.
 import { addDaysIso } from "./dates";
+import { decodeEntities } from "./markdown-entities";
 import { mentionsToPlain } from "./mentions";
+import { UNDERLINE_HREF, underlineToLink } from "./markdown-underline";
 
 export interface IcsEvent {
   /** Identificador estable (sobrescribe el evento al volver a importar). */
@@ -127,22 +129,42 @@ export function descriptionToPlain(md: string, max = 1500): string {
   return markdownToPlain(cutChars(md, max));
 }
 
-/** Markdown de la descripción de una tarea a texto plano legible. */
+// Etiquetas HTML de verdad (las que puede traer un texto importado o pegado): un elemento HTML conocido y, si acaso,
+// atributos con valor entre comillas. Así «Promise<void>» o «a<b y b>c» no pierden lo que hay entre los signos.
+const HTML_TAG = /<\/?(?:a|abbr|b|big|blockquote|br|center|cite|code|dd|del|details|div|dl|dt|em|font|h[1-6]|hr|i|img|ins|kbd|li|mark|ol|p|pre|q|s|small|span|strike|strong|sub|summary|sup|table|tbody|td|tfoot|th|thead|tr|tt|u|ul)(?:\s+[a-z][a-z0-9-]*\s*=\s*(?:"[^"<>\n]*"|'[^'<>\n]*'))*\s*\/?>/gi;
+// Escapes de Markdown (\*, \#, \>, \[…) que pone el editor: mientras se convierte, cada carácter escapado se guarda
+// como un carácter de uso privado (U+E100 + código) para que no cuente como marca; al final vuelve a ser él mismo.
+const ESCAPED = /\\([!-/:-@[-`{-~])/g;
+const PRIVATE = /[\uE000-\uE1FF]/g;
+
+/**
+ * Markdown de la descripción de una tarea a texto plano legible. El código (bloques y en línea) sale tal cual; fuera de
+ * él se quitan las marcas, los escapes y las etiquetas HTML, y las entidades que guarda el editor (`&lt;`, `&amp;`…)
+ * pasan a su carácter al final (decodificarlas antes haría que «&lt;b>» pareciera una etiqueta).
+ */
 export function markdownToPlain(md: string): string {
-  const plain = mentionsToPlain(md)
-    .replace(/```[^\n]*\n([\s\S]*?)```/g, "$1")
+  const code: string[] = [];
+  const keep = (body: string) => `\uE001${code.push(body) - 1}\uE002`;
+  const marked = mentionsToPlain(md.replace(PRIVATE, ""))
+    .replace(/```[^\n]*\n([\s\S]*?)```/g, (_m, body: string) => keep(body))
+    .replace(/`([^`]+)`/g, (_m, body: string) => keep(body))
+    .replace(ESCAPED, (_m, c: string) => String.fromCharCode(0xe100 + c.charCodeAt(0)));
+  // El subrayado (++texto++) pasa a ser un enlace interno y se queda solo el texto.
+  const prose = underlineToLink(marked)
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\[([^\]]+)\]\(([^)\s]+)[^)]*\)/g, (_m, text: string, href: string) => (text === href ? text : `${text} (${href})`))
-    .replace(/<[^>\n]+>/g, "")
+    .replace(/\[([^\]]+)\]\(([^)\s]+)[^)]*\)/g, (_m, text: string, href: string) => (text === href || href === UNDERLINE_HREF ? text : `${text} (${href})`))
+    .replace(HTML_TAG, "")
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/^\s*>\s?/gm, "");
   // Énfasis solo en límite de palabra: no toca guiones bajos de URL ni de snake_case, ni 2*3*4.
-  return stripEmphasis(stripEmphasis(plain, ["**", "__"], isInner), ["*", "_"], isInnerSingle)
+  const plain = stripEmphasis(stripEmphasis(prose, ["**", "__"], isInner), ["*", "_"], isInnerSingle)
     .replace(/~~(.+?)~~/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
     .replace(/^\s*[-*+]\s+\[( |x)\]\s+/gim, (_m, c: string) => (c === " " ? "[ ] " : "[x] "))
     .replace(/^\s*[-*+]\s+/gm, "- ")
-    .replace(/\n{3,}/g, "\n\n")
+    .replace(/\n{3,}/g, "\n\n");
+  return decodeEntities(plain)
+    .replace(/[\uE121-\uE17E]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xe100))
+    .replace(/\uE001(\d+)\uE002/g, (_m, i: string) => code[Number(i)] ?? "")
     .trim();
 }
 

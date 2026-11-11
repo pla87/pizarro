@@ -8,7 +8,8 @@ import {
   createDeliverable, createLabel, deleteDeliverable, deleteLabel, addProjectMember, deleteProject, removeProjectMember, setProjectVisibility, setAttachmentLimits, setGoogleShareMode, setTaskFields, updateDeliverable, updateLabel, updateProject,
 } from "@/actions/projects";
 import { formatDay } from "@/lib/dates";
-import { useIntlLocale, useT } from "@/i18n/client";
+import { useIntlLocale, useLocale, useT } from "@/i18n/client";
+import { localizeGeneralKind, localizeGeneralKinds } from "@/lib/kinds-localize";
 import { TaskFieldToggles } from "@/components/TaskFieldToggles";
 import { ColorPicker } from "@/components/ui/ColorPicker";
 import { cn } from "@/components/ui/cn";
@@ -80,6 +81,7 @@ function Section({ title, description, children, id }: { title: string; descript
 
 export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode, google, reportSchedule, storageSection, releaseTemplates, tab }: Props) {
   const t = useT();
+  const uiLocale = useLocale();
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
@@ -284,7 +286,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
       >
         <GeneralKinds projectId={project.id} generalKinds={generalKinds} projectKinds={kinds} />
         <div className="mt-4 mb-2 text-xs font-medium text-slate-500">{t("Tipos propios del proyecto")}</div>
-        <KindsManager kinds={kinds} projectId={project.id} otherKinds={generalKinds.filter((k) => k.enabled)} embedded editorMode={editorMode} />
+        <KindsManager kinds={kinds} projectId={project.id} otherKinds={localizeGeneralKinds(generalKinds.filter((k) => k.enabled), uiLocale)} embedded editorMode={editorMode} />
       </Section>
 
       <Section id="labels" title="Etiquetas" description="Etiquetas propias de este proyecto para clasificar tarjetas.">
@@ -436,6 +438,8 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate }: 
                 className="btn-secondary"
                 disabled={pending || lastOne}
                 title={lastOne ? t("Eres el último miembro: si ya no lo necesitas, borra el proyecto.") : undefined}
+                // Varios «Quitar» seguidos: el lector de pantalla dice a quién quita cada uno.
+                aria-label={isMe ? undefined : t("Quitar a {name}", { name: m.name })}
                 onClick={async () => {
                   if (isMe && !(await confirm({ title: t("Salir del proyecto"), message: t("¿Salir del proyecto? Dejarás de verlo salvo que otro miembro te vuelva a añadir."), confirmLabel: t("Salir"), danger: true }))) return;
                   run(
@@ -482,10 +486,10 @@ function LabelRow({ label, onSaved, onDeleted }: { label: LabelOption; onSaved: 
     return (
       <li className="flex items-center gap-2">
         <span className="rounded px-2 py-0.5 text-xs font-medium" style={{ backgroundColor: label.color, color: onColor(label.color), boxShadow: isWhite(label.color) ? "inset 0 0 0 1px rgb(0 0 0 / 0.2)" : undefined }}>{label.name}</span>
-        <button className="btn-icon ml-auto h-7 w-7" onClick={() => setEditing(true)} aria-label={t("Editar etiqueta")}><Pencil size={14} /></button>
+        <button className="btn-icon ml-auto h-7 w-7" onClick={() => setEditing(true)} aria-label={t("Editar {name}", { name: label.name })}><Pencil size={14} /></button>
         <button
           className="btn-icon h-7 w-7 hover:text-red-600"
-          aria-label={t("Borrar etiqueta")}
+          aria-label={t("Borrar {name}", { name: label.name })}
           onClick={async () => {
             if (!(await confirm({ title: t("Borrar etiqueta"), message: t("¿Borrar la etiqueta «{name}»? Se quitará de todas las tarjetas.", { name: label.name }), confirmLabel: t("Borrar"), danger: true }))) return;
             const res = await deleteLabel(label.id);
@@ -603,12 +607,12 @@ function Deliverables({ projectId, initial }: { projectId: string; initial: Deli
               </div>
               {d.description && <p className="mt-0.5 text-xs text-slate-500">{d.description}</p>}
             </div>
-            <button className="btn-icon h-7 w-7" aria-label={t("Editar entregable")} onClick={() => open(d)}>
+            <button className="btn-icon h-7 w-7" aria-label={t("Editar {name}", { name: d.name })} onClick={() => open(d)}>
               <Pencil size={14} />
             </button>
             <button
               className="btn-icon h-7 w-7 hover:text-red-600"
-              aria-label={t("Borrar entregable")}
+              aria-label={t("Borrar {name}", { name: d.name })}
               onClick={async () => {
                 if (!(await confirm({ title: t("Borrar entregable"), message: t("¿Borrar el entregable «{name}»? Sus tarjetas se conservan, sin entregable.", { name: d.name }), confirmLabel: t("Borrar"), danger: true }))) return;
                 const res = await deleteDeliverable(d.id);
@@ -666,6 +670,9 @@ function GeneralKinds({ projectId, generalKinds, projectKinds }: {
   projectKinds: KindRow[];
 }) {
   const t = useT();
+  const locale = useLocale();
+  // Los tipos de serie se guardan en español: se muestran en el idioma de la interfaz (se envía igual su id).
+  const shown = <K extends { id: string; name: string }>(k: K) => localizeGeneralKind(k, locale);
   const router = useRouter();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -704,20 +711,20 @@ function GeneralKinds({ projectId, generalKinds, projectKinds }: {
                 } else apply(k.id, !k.enabled, null);
               }}
             />
-            <TypeBadge kind={k} />
+            <TypeBadge kind={shown(k)} />
             {k.taskCount > 0 && <span className="text-xs text-slate-500">{k.taskCount}</span>}
           </label>
         ))}
       </div>
       <p className="mt-1 text-xs text-slate-500">{t("Los desmarcados no aparecen en los selectores ni en las releases de este proyecto.")}</p>
       {disabling && (
-        <Modal open onClose={() => setDisabling(null)} title={t("Dejar de usar «{name}»", { name: disabling.name })} size="sm">
+        <Modal open onClose={() => setDisabling(null)} title={t("Dejar de usar «{name}»", { name: shown(disabling).name })} size="sm">
           <div className="space-y-3">
             <p className="text-sm">
               {disabling.taskCount === 1 ? t("Su tarea en este proyecto pasará al tipo:") : t("Sus {n} tareas en este proyecto pasarán al tipo:", { n: disabling.taskCount })}
             </p>
             <select className="input" value={replacement} onChange={(e) => setReplacement(e.target.value)} aria-label={t("Tipo de destino")}>
-              {targets(disabling.id).map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
+              {targets(disabling.id).map((k) => <option key={k.id} value={k.id}>{shown(k).name}</option>)}
             </select>
             <div className="flex justify-end gap-2">
               <button className="btn-secondary" onClick={() => setDisabling(null)}>{t("Cancelar")}</button>
