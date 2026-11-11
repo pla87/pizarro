@@ -30,6 +30,40 @@ describe("deployRelease", () => {
     expectOk(await deployRelease({ ...input, taskIds: [ok.id, ok.id] }));
   });
 
+  test("rechaza el despliegue si otra persona movió alguna tarea de columna desde que se generó el texto", async () => {
+    const { f, prod } = await setup();
+    const a = await makeTask(f, { title: "A", columnId: f.columns.done });
+    const b = await makeTask(f, { title: "B", columnId: f.columns.done });
+    // Al generar, las dos estaban en la columna de la release; luego otra persona devuelve «B» a «En curso».
+    const columns = [{ taskId: a.id, columnId: f.columns.done }, { taskId: b.id, columnId: f.columns.done }];
+    await db.task.update({ where: { id: b.id }, data: { columnId: f.columns.doing } });
+    const input = { projectId: f.project.id, title: "R", content: "Cambios", destination: "IN_PRODUCTION" as const, taskIds: [a.id, b.id] };
+    expectFail(await deployRelease({ ...input, columns }), /Una de las tareas se ha movido a otra columna mientras tanto: vuelve a generar la release/);
+    assert.equal(await db.release.count({ where: { projectId: f.project.id } }), 0);
+    // Nada sale a producción ni se renombra.
+    const rows = await db.task.findMany({ where: { id: { in: [a.id, b.id] } }, orderBy: { title: "asc" } });
+    assert.deepEqual(rows.map((r) => [r.title, r.columnId]), [["A", f.columns.done], ["B", f.columns.doing]]);
+    await db.task.update({ where: { id: a.id }, data: { columnId: f.columns.todo } });
+    expectFail(await deployRelease({ ...input, columns }), /2 de las tareas se han movido a otra columna/);
+    // Con lo que hay ahora (texto generado de nuevo) sí se despliega.
+    const fresh = [{ taskId: a.id, columnId: f.columns.todo }, { taskId: b.id, columnId: f.columns.doing }];
+    expectOk(await deployRelease({ ...input, columns: fresh }));
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: b.id } })).columnId, prod.id);
+  });
+
+  test("los códigos del título no dependen del idioma de quien despliega (nombre guardado del tipo)", async () => {
+    const user = await makeUser();
+    await db.user.update({ where: { id: user.id }, data: { locale: "EN" } });
+    const f = await makeProject({ members: [user] });
+    await db.column.create({ data: { projectId: f.project.id, name: "En producción", position: 4000, role: "IN_PRODUCTION" } });
+    await loginAs(user);
+    const fix = await makeTask(f, { title: "Arreglo", columnId: f.columns.done });
+    await db.task.update({ where: { id: fix.id }, data: { kindId: "kind_correccion" } });
+    expectOk(await deployRelease({ projectId: f.project.id, title: "R", content: "Cambios", destination: "IN_PRODUCTION", taskIds: [fix.id] }));
+    // En inglés el tipo se ve como «Bug fix», pero el código sale de «Corrección» (R1C1, no R1B1), como en español.
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: fix.id } })).title, "R1C1: Arreglo");
+  });
+
   test("dos despliegues a la vez del mismo proyecto salen con números consecutivos", async () => {
     const { f } = await setup();
     const a = await makeTask(f, { columnId: f.columns.done });

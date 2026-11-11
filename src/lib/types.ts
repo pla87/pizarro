@@ -58,6 +58,8 @@ export interface BoardTask extends TaskFieldValues {
 export interface KindOption {
   id: string;
   name: string;
+  /** Nombre guardado cuando `name` es la traducción de un tipo de serie (ver localizeGeneralKind): da los códigos de release. */
+  codeName?: string;
   color: string;
   /** Automatización al elegir el tipo (vacío = nada). */
   titleTemplate: string;

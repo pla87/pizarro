@@ -5,8 +5,7 @@ import { ArrowLeft, Check, ClipboardCopy, Download, Eye, FileArchive, FileText, 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { countReleasesOn, deployRelease, getReleaseTaskDetails } from "@/actions/releases";
-import { partSuffix } from "@/lib/zip-plan";
-import { buildReleaseMarkdown, computeReleaseCodes, defaultReleaseTitle, evergreenDue, isoDate, releaseFileName, releasesUntilDue, swapTemplateBlock } from "@/lib/release";
+import { buildReleaseMarkdown, computeReleaseCodes, defaultReleaseTitle, evergreenDue, isoDate, releaseFileName, releasesUntilDue, releaseZipName, swapTemplateBlock } from "@/lib/release";
 import type { BoardTask, TemplateOption } from "@/lib/types";
 import { useT } from "@/i18n/client";
 import { copyText, downloadText } from "../ui/clipboard";
@@ -70,6 +69,12 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   /** Cuándo le toca a una tarea fija respecto a la release que se genera: «ahora», «en la siguiente», «dentro de 2»… */
   const dueHint = (n: number) => (n === 0 ? t("ahora") : n === 1 ? t("en la siguiente") : t("dentro de {n}", { n }));
   const [generatedNumber, setGeneratedNumber] = useState<number | null>(null);
+  /**
+   * Tareas del texto generado y la columna en la que estaban: se despliegan esas (no la selección viva, de la que
+   * desaparece una tarea que otra persona archiva o borra) y el servidor rechaza el despliegue si alguna ha cambiado
+   * de columna entretanto.
+   */
+  const [generatedTasks, setGeneratedTasks] = useState<{ taskId: string; columnId: string }[]>([]);
   const selectedTasks = useMemo(() => tasks.filter((t) => chosen.has(t.id)), [tasks, chosen]);
   const [headerId, setHeaderId] = useState(templates.headers[0]?.id ?? "");
   const [footerId, setFooterId] = useState(templates.footers[0]?.id ?? "");
@@ -152,6 +157,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
       description: details.get(t.id)?.description ?? "",
       attachments: details.get(t.id)?.attachments ?? [],
     }));
+    setGeneratedTasks(selectedTasks.map((x) => ({ taskId: x.id, columnId: x.columnId })));
     const codes = computeReleaseCodes(board.kinds, releaseTasks, releaseNumber);
     setZipItems(
       releaseTasks.filter((t) => t.attachments.length).map((t) => ({ taskId: t.id, code: codes.get(t.id)!, count: t.attachments.length })),
@@ -162,7 +168,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
       kinds: board.kinds,
       tasks: releaseTasks,
       releaseNumber,
-    });
+    }, t);
     setContent(md);
     setGenerated(md);
     setGeneratedNumber(releaseNumber);
@@ -208,7 +214,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
         const href = URL.createObjectURL(await res.blob());
         const a = document.createElement("a");
         a.href = href;
-        a.download = `release-${isoDate(now, appTimeZone())}-adjuntos${partSuffix(part, total)}.zip`;
+        a.download = releaseZipName({ day: isoDate(now, appTimeZone()), number: generatedNumber, project: board.project.name }, part, total);
         a.click();
         setTimeout(() => URL.revokeObjectURL(href), 1000);
         // Pausa corta para que el navegador no agrupe ni descarte las descargas seguidas.
@@ -227,8 +233,8 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
 
   const deploy = async () => {
     const message = destination === "IN_PRODUCTION"
-      ? t("Se guardará la release y {n} tarjeta(s) pasarán a «{name}». ¿Continuar?", { n: selectedTasks.length, name: inProduction?.name ?? "" })
-      : t("Se guardará la release y {n} tarjeta(s) pasarán al archivo. ¿Continuar?", { n: selectedTasks.length });
+      ? t("Se guardará la release y {n} tarjeta(s) pasarán a «{name}». ¿Continuar?", { n: generatedTasks.length, name: inProduction?.name ?? "" })
+      : t("Se guardará la release y {n} tarjeta(s) pasarán al archivo. ¿Continuar?", { n: generatedTasks.length });
     if (!(await confirm({ title: t("Desplegar la release"), message, confirmLabel: t("Continuar") }))) return;
     setBusy(true);
     const res = await board.track(
@@ -236,7 +242,8 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
         projectId: board.project.id,
         title,
         content,
-        taskIds: selectedTasks.map((t) => t.id),
+        taskIds: generatedTasks.map((x) => x.taskId),
+        columns: generatedTasks,
         destination,
         attachments: zipItems.map(({ taskId, code }) => ({ taskId, code })),
         number: generatedNumber ?? undefined,

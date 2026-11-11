@@ -352,11 +352,10 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: strin
             {t("Ver proyectos existentes")}
           </Link>
         )}
-        {isAdmin && (
-          <MenuItem icon={Plus} className="rounded-md text-brand-600" onClick={() => setCreating(true)}>
-            {t("Nuevo proyecto")}
-          </MenuItem>
-        )}
+        {/* Para todos: quien no es administrador crea proyectos privados (el diálogo lo indica y el servidor lo exige). */}
+        <MenuItem icon={Plus} className="rounded-md text-brand-600" onClick={() => setCreating(true)}>
+          {t("Nuevo proyecto")}
+        </MenuItem>
       </DropdownMenu>
       {creating && <NewProjectModal isAdmin={isAdmin} onClose={() => setCreating(false)} />}
     </div>
@@ -503,7 +502,7 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
             <span className="whitespace-nowrap">{t("Crear como proyecto privado inicialmente")}</span>
           </label>
         ) : (
-          <p className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+          <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
             <PrivateIcon /> {t("Será un proyecto privado: solo lo verás tú hasta que añadas más miembros.")}
           </p>
         )}
