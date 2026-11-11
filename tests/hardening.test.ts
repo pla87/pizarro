@@ -26,12 +26,12 @@ test("matcher del proxy (compilado como lo compila Next): las rutas que reciben 
   const { getMiddlewareRouteMatcher } = nextRequire("next/dist/shared/lib/router/utils/middleware-route-matcher.js");
   const match = getMiddlewareRouteMatcher(getMiddlewareMatchers(proxyConfig.matcher, {})) as (path: string, req: unknown, query: unknown) => boolean;
   const passes = (path: string) => match(path, { headers: {} }, {});
-  for (const path of ["/api/tasks/abc123/attachments", "/api/projects/abc123/documents", "/api/projects/import", "/api/health", "/api/auth/google/callback"]) {
+  for (const path of ["/api/tasks/abc123/attachments", "/api/projects/abc123/documents", "/api/projects/import", "/api/health", "/api/auth/google/callback", "/api/telegram/webhook"]) {
     assert.equal(passes(path), false, `${path} no pasa por el proxy`);
   }
   for (const path of [
     "/", "/login", "/p/abc123", "/api/tasks/abc123/viewers", "/api/tasks/abc123/attachments/x", "/api/tasks/a/b/attachments", "/api/projects/abc123/documents/x",
-    "/api/documents/abc123", "/api/attachments/abc123", "/api/projects/abc123/release-attachments", "/api/projects/abc123/export", "/api/client-errors", "/api/projects/importar",
+    "/api/documents/abc123", "/api/attachments/abc123", "/api/projects/abc123/release-attachments", "/api/projects/abc123/export", "/api/client-errors", "/api/projects/importar", "/api/telegram/webhooks", "/api/telegram/webhook/x",
   ]) {
     assert.equal(passes(path), true, `${path} pasa por el proxy`);
   }

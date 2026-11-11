@@ -21,7 +21,7 @@ Kanban ligero y generador de *release notes* para equipos pequeños (hasta 10 pe
 | Plazos y entregables | Fecha límite en cada tarjeta (avisos de vencida, hoy o próxima) y **entregables**: hitos con fecha objetivo que agrupan tarjetas. Las columnas pueden contar como «terminadas». |
 | Informe PDF | Botón **Informe PDF** en cada proyecto: resumen y avance, estado por columna, entregables, plazos vencidos y próximos, carga por persona, tipos, últimas releases y detalle de cada columna. |
 | Google Docs / Sheets | Escribe `@docs` o `@sheets` en la descripción o en un comentario, o pulsa *Nuevo Doc* / *Nuevo Sheet*. Se crea el archivo en tu Google Drive, se abre en otra pestaña y queda enlazado a la tarjeta. Cada usuario conecta su cuenta una vez (permiso mínimo `drive.file`). |
-| Comentarios y menciones | Comentarios en las tarjetas con `@persona` (autocompletado). La persona mencionada recibe un aviso en la app (campana con contador), por **email** y, si lo activa, por **WhatsApp**. |
+| Comentarios y menciones | Comentarios en las tarjetas con `@persona` (autocompletado). La persona mencionada recibe un aviso en la app (campana con contador), por **email** y, si el administrador lo activa y la persona lo conecta, por **Telegram** (gratis) o **WhatsApp** (de pago). |
 | Vistas | *Mis tareas asignadas*, *Avisos*, histórico de releases por proyecto, *Historial de versiones* de la propia app. |
 | Móvil | **Instalable como app** (Android, iPhone y escritorio). Pestañas por columna (arrastra una tarjeta sobre otra pestaña para cambiarla de columna), botón flotante (+) para crear tareas o subir capturas, cámara en el detalle de la tarea, cambio rápido de proyecto desde el título. |
 | Personalización | Cada usuario elige el aspecto de las tarjetas: franja de color a la izquierda o tarjeta entera teñida. |
@@ -149,7 +149,7 @@ steps:
 | `AUTH_GOOGLE_ONLY` | No | `true` | Solo se entra con Google (necesita `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `APP_URL`; sin ellos no tiene efecto). Ver [Acceso con Google y dos pasos](#74-acceso-con-google-y-verificación-en-dos-pasos). |
 | `AUTH_ALLOW_ADMIN_PASSWORD` | No | `true` | Con `AUTH_GOOGLE_ONLY`, deja entrar con contraseña (y segundo paso) a los administradores: acceso de emergencia. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Para avisos por email | `smtp.gmail.com` / `465` / … | Servidor de correo saliente. Ver [Email](#72-avisos-por-email). |
-| `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_TEMPLATE_NAME` | Para avisos por WhatsApp | (de Meta) | WhatsApp Cloud API. Ver [WhatsApp](#73-avisos-por-whatsapp). |
+| `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_TEMPLATE_NAME` | No | (de Meta) / `aviso_pizarro` | WhatsApp Cloud API. Lo normal es configurarlo en *Administración → Ajustes*; estas variables rellenan los campos que no se guarden allí. Ver [WhatsApp](#73-avisos-por-telegram-y-whatsapp). |
 | `WHATSAPP_TEMPLATE_LANG` / `WHATSAPP_API_VERSION` | No | `es` / `v23.0` | Idioma de la plantilla y versión de la API de Meta. |
 
 Las integraciones son **opcionales**: si faltan sus variables, la app funciona igual y esas opciones aparecen como «no configuradas».
@@ -274,37 +274,30 @@ Con Google Workspace, lo más sencillo es enviar desde una cuenta dedicada (por 
 
 Sirve cualquier otro SMTP (Resend, Brevo, Mailgun…) con sus datos. Con el puerto `465` se usa TLS directo; con `587`, STARTTLS.
 
-#### 7.3 Avisos por WhatsApp
+#### 7.3 Avisos por Telegram y WhatsApp
 
-Se usa la **WhatsApp Cloud API** oficial de Meta. Pasos:
+Los dos se activan en **Administración → Ajustes → 3. Avisos por Telegram y WhatsApp**, sin tocar variables ni
+redesplegar. Después cada persona conecta su canal en *Mi perfil → Avisos* y elige qué avisos recibe por él (por
+defecto, menciones y asignaciones). Los tokens se guardan cifrados con `ENCRYPTION_KEY` y nunca vuelven al navegador.
 
-1. Crea o usa un **portfolio de Meta Business** en [business.facebook.com](https://business.facebook.com).
-2. En [developers.facebook.com](https://developers.facebook.com) → **Mis apps → Crear app** → tipo **Empresa (Business)** → añade el producto **WhatsApp**.
-3. **WhatsApp → Configuración de la API**:
-   - Meta te da un **número de prueba**, que puede enviar a un máximo de 5 destinatarios verificados. Basta para un equipo de 5; añade sus números en «Para».
-   - Para producción, añade un número propio dedicado, que no esté en uso en la app de WhatsApp, y verifícalo.
-   - Copia el **Phone number ID** → `WHATSAPP_PHONE_NUMBER_ID`.
-4. **Token permanente**: en **Configuración del negocio → Usuarios del sistema**:
-   - crea un usuario del sistema (Admin);
-   - asígnale la app y la cuenta de WhatsApp;
-   - genera un token con los permisos `whatsapp_business_messaging` y `whatsapp_business_management`. Ese es el `WHATSAPP_TOKEN`.
-5. **Plantilla** en **WhatsApp Manager → Plantillas de mensajes → Crear**:
-   - Categoría **Utilidad**, nombre `mencion_pizarro`, idioma **Español (es)**.
-   - Cuerpo (los 4 parámetros, en este orden):
-     ```
-     {{1}} te ha mencionado en la tarea «{{2}}» ({{3}}). Ábrela aquí: {{4}}
-     ```
-   - Envíala a revisión y espera a que esté **Aprobada**. Suele tardar minutos.
-6. En Railway:
-   ```env
-   WHATSAPP_TOKEN=<token permanente>
-   WHATSAPP_PHONE_NUMBER_ID=<id del número>
-   WHATSAPP_TEMPLATE_NAME=mencion_pizarro
-   WHATSAPP_TEMPLATE_LANG=es
-   ```
-7. Cada usuario activa **WhatsApp** en *Mi perfil → Avisos de menciones* y escribe su número en formato internacional (`+34…`).
+- **Telegram (gratis)**: crea un bot con @BotFather, pega su token y pulsa *Guardar y activar*. Con `APP_URL` https
+  pública, Telegram avisa a Pizarro por webhook (`/api/telegram/webhook`, con secreto); si no, Pizarro le pregunta en
+  segundo plano cada pocos segundos, así que también funciona en una red local. Guía paso a paso:
+  [docs/guias/telegram.md](docs/guias/telegram.md).
+- **WhatsApp (de pago, Cloud API de Meta)**: hace falta una app de Meta con un número, un token permanente de usuario
+  del sistema y la plantilla de utilidad `aviso_pizarro` aprobada (el texto exacto está en la guía). Meta cobra cada
+  aviso entregado. Guía paso a paso, con costes: [docs/guias/whatsapp.md](docs/guias/whatsapp.md).
 
-> Meta cobra por cada mensaje de plantilla de utilidad (céntimos en España; consulta su tabla de precios). Si el idioma de la plantilla aprobada es `es_ES` en vez de `es`, cambia `WHATSAPP_TEMPLATE_LANG`. Los errores de envío quedan en los logs con el prefijo `[notify]`.
+Precedencia en WhatsApp: lo guardado en Ajustes manda campo a campo; los campos vacíos usan las variables `WHATSAPP_*`
+(así las instalaciones que ya las tenían siguen funcionando). La plantilla antigua `mencion_pizarro` se sigue admitiendo,
+solo para menciones.
+
+Límites: como mucho 30 mensajes de Telegram y 10 de WhatsApp por persona y hora (el resto queda en la campana), además
+de los de siempre (un envío externo por persona y tarea cada 10 minutos y 40 por hora por autor). Los envíos salen tras
+responder, con hasta 3 intentos, y el apagado ordenado espera a los que están en curso. Los fallos quedan en
+*Administración → Logs* sin tokens y con el teléfono enmascarado; si alguien bloquea el bot, se le desconecta.
+
+English guides: [docs/guias/en/telegram.md](docs/guias/en/telegram.md), [docs/guias/en/whatsapp.md](docs/guias/en/whatsapp.md).
 
 #### 7.4 Acceso con Google y verificación en dos pasos
 

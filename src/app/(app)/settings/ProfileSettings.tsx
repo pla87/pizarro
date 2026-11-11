@@ -45,13 +45,10 @@ interface Props {
   locale: "ES" | "EN";
   notifications: {
     notifyEmail: boolean;
-    notifyWhatsapp: boolean;
-    whatsappPhone: string;
     emailAvailable: boolean;
-    whatsappAvailable: boolean;
   };
   google: { enabled: boolean; email: string | null; message: { ok: boolean; text: string } | null };
-  /** Bloque extra bajo «Avisos» (avisos por email de más tipos y resumen diario). */
+  /** Bloque extra bajo «Avisos» (Telegram y WhatsApp, avisos por email de más tipos y resumen diario). */
   notificationExtras?: React.ReactNode;
   tab: ProfileTab;
   /** Pestaña «Cuenta»: cambio de email, verificación en dos pasos y sesiones (secciones del servidor). */
@@ -310,18 +307,16 @@ function NotificationSection({ prefs }: { prefs: Props["notifications"] }) {
   const toast = useToast();
   const [pending, start] = useTransition();
   const [notifyEmail, setNotifyEmail] = useState(prefs.notifyEmail);
-  const [notifyWhatsapp, setNotifyWhatsapp] = useState(prefs.notifyWhatsapp);
-  const [phone, setPhone] = useState(prefs.whatsappPhone);
   return (
     <section className="card p-5">
       <h2 className="flex items-center gap-2 font-semibold"><Bell size={17} /> {t("Avisos de menciones")}</h2>
-      <p className="mt-0.5 text-sm text-slate-500">{t("Cuando alguien te menciona con @ en una tarjeta o comentario, siempre te aparece en la campana de avisos. Además puedes recibirlo por:")}</p>
+      <p className="mt-0.5 text-sm text-slate-500">{t("Cuando alguien te menciona con @ en una tarjeta o comentario, siempre te aparece en la campana de avisos. Además puedes recibirlo por email:")}</p>
       <form
         className="mt-4 space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
           start(async () => {
-            const res = await updateNotificationPrefs({ notifyEmail, notifyWhatsapp, whatsappPhone: phone });
+            const res = await updateNotificationPrefs({ notifyEmail });
             toast(res.ok ? t("Preferencias guardadas") : res.error, res.ok ? "success" : "error");
           });
         }}
@@ -333,23 +328,6 @@ function NotificationSection({ prefs }: { prefs: Props["notifications"] }) {
             {!prefs.emailAvailable && <span className="block text-xs text-slate-500">{t("El envío de emails aún no está configurado en el servidor.")}</span>}
           </span>
         </label>
-        <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" className="mt-0.5" checked={notifyWhatsapp} onChange={(e) => setNotifyWhatsapp(e.target.checked)} />
-          <span>
-            WhatsApp
-            <span className="block text-xs text-slate-500">
-              {prefs.whatsappAvailable
-                ? t("Al activarlo aceptas recibir estos avisos en tu número de WhatsApp.")
-                : t("El envío por WhatsApp aún no está configurado en el servidor; tu preferencia se guardará para cuando lo esté.")}
-            </span>
-          </span>
-        </label>
-        {notifyWhatsapp && (
-          <div className="max-w-xs">
-            <label className="label" htmlFor="wa-phone">{t("Número de WhatsApp (formato internacional)")}</label>
-            <input id="wa-phone" type="tel" inputMode="tel" className="input" placeholder="+34600111222" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />
-          </div>
-        )}
         <button className="btn-primary" disabled={pending}>{t("Guardar avisos")}</button>
       </form>
     </section>

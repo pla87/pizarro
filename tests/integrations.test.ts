@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 process.env.SESSION_SECRET = "x".repeat(48);
-process.env.WHATSAPP_TEMPLATE_NAME = "mencion_pizarro";
 // notify importa el cliente de BD; no se conecta hasta la primera consulta.
 process.env.DATABASE_URL ??= "postgresql://test:test@localhost:5432/test";
 
 const { encryptSecret, decryptSecret } = await import("../src/lib/crypto");
-const { mentionEmail, whatsappPayload } = await import("../src/lib/notify");
+const { mentionEmail } = await import("../src/lib/notify");
+const { whatsappPayload } = await import("../src/lib/messaging-core");
+const { makeT } = await import("../src/i18n/core");
 const { phoneE164 } = await import("../src/lib/validation");
 
 test("cifrado AES-GCM de tokens", () => {
@@ -28,12 +29,25 @@ test("email de mención escapa HTML", () => {
   assert.ok(m.text.includes(msg.url));
 });
 
-test("payload de WhatsApp con plantilla y 4 parámetros", () => {
-  const p = whatsappPayload("+34600111222", msg);
+test("payload de WhatsApp: plantilla antigua mencion_pizarro con 4 parámetros", () => {
+  const p = whatsappPayload("+34600111222", msg, { templateName: "mencion_pizarro", templateLang: "es", templateLangEn: "", legacy: true }, makeT("es"));
   assert.equal(p.to, "34600111222");
   assert.equal(p.template.name, "mencion_pizarro");
   assert.equal(p.template.language.code, "es");
   assert.deepEqual(p.template.components[0]!.parameters.map((x) => x.text), ["Ana <script>", "Pantalla", "Web", msg.url]);
+});
+
+test("payload de WhatsApp: plantilla aviso_pizarro con 3 parámetros, en el idioma de la persona", () => {
+  const cfg = { templateName: "aviso_pizarro", templateLang: "es", templateLangEn: "en_US", legacy: false };
+  const es = whatsappPayload("+34600111222", { ...msg, type: "ASSIGNED" as const }, cfg, makeT("es"));
+  assert.deepEqual(es.template.components[0]!.parameters.map((x) => x.text), ["Ana <script> te ha asignado «Pantalla»", "Web", msg.url]);
+  assert.equal(es.template.language.code, "es");
+  const en = whatsappPayload("+34600111222", { ...msg, type: "ASSIGNED" as const }, cfg, makeT("en"), true);
+  assert.equal(en.template.language.code, "en_US");
+  assert.match(en.template.components[0]!.parameters[0]!.text, /assigned/);
+  // Meta no admite saltos de línea en las variables.
+  const multi = whatsappPayload("+34600111222", { ...msg, taskTitle: "a\n\tb    c" }, cfg, makeT("es"));
+  assert.ok(!/[\n\t]| {5}/.test(multi.template.components[0]!.parameters[0]!.text));
 });
 
 test("teléfono E.164", () => {

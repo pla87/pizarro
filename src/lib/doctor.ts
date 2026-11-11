@@ -5,7 +5,7 @@ import path from "node:path";
 import pkg from "../../package.json";
 import { parseBackupFileName } from "./backup-core";
 import { db } from "./db";
-import { configFlags, envPresence, groupLogCounts, migrationStatus, scrubDeep, scrubText, secretEnvValues, type ScrubContext } from "./doctor-core";
+import { configFlags, envPresence, groupLogCounts, messagingFlags, migrationStatus, scrubDeep, scrubText, secretEnvValues, type ScrubContext } from "./doctor-core";
 import { checkUploads, evaluateHealth, minFreeBytes } from "./health";
 import { backupsDir, uploadDir } from "./upload-dir";
 
@@ -118,6 +118,18 @@ export async function collectDiagnostics(opts: DoctorOptions): Promise<Record<st
     features.googleSource = envGoogleCredentials() ? "env" : inApp ? "app" : "none";
     features.google = (envGoogleCredentials() || inApp) && Boolean(process.env.APP_URL);
     features.googleWorkspaceDomain = Boolean(features.googleWorkspaceDomain) || has("google.workspaceDomain");
+  }, ctx);
+
+  // Telegram y WhatsApp (Ajustes y variables WHATSAPP_*): sin tokens, teléfonos ni nombres de bot; solo si están activos,
+  // de dónde sale cada dato y cuántas personas los han conectado.
+  await section(async () => {
+    const rows = await db.appState.findMany({ where: { key: { startsWith: "telegram." } }, select: { key: true, value: true } });
+    const wa = await db.appState.findMany({ where: { key: { startsWith: "whatsapp." } }, select: { key: true, value: true } });
+    const counts = await db.userChannel.groupBy({ by: ["channel"], _count: { _all: true } });
+    const pending = await db.userChannel.count({ where: { channel: "WHATSAPP", verifiedAt: null } });
+    const n = (c: string) => counts.find((r) => r.channel === c)?._count._all ?? 0;
+    const flags = messagingFlags(process.env, [...rows, ...wa], { telegram: n("TELEGRAM"), whatsapp: n("WHATSAPP") - pending, whatsappPending: pending });
+    Object.assign(report.features as Record<string, unknown>, flags);
   }, ctx);
 
   report.health =await section(async () => {

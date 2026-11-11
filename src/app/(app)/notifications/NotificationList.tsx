@@ -1,6 +1,6 @@
 "use client";
 
-import { AtSign, Bell, CalendarClock, Check, CheckCheck, Mail, MessageCircle, MessageSquare, Reply, UserPlus, Hourglass } from "lucide-react";
+import { AtSign, Bell, CalendarClock, Check, CheckCheck, Mail, MessageCircle, MessageSquare, Reply, Send, UserPlus, Hourglass } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -19,6 +19,7 @@ interface Item {
   read: boolean;
   viaEmail: boolean;
   viaWhatsapp: boolean;
+  viaTelegram?: boolean;
   actor: { id: string; name: string } | null;
   task: { id: string; title: string; projectId: string; projectName: string } | null;
 }
@@ -105,6 +106,7 @@ export function NotificationList({ items: initial, moreHref }: { items: Item[]; 
                       {formatDate(n.createdAt, "dateTimeShort", locale)}
                       {n.viaEmail && <span className="inline-flex items-center gap-0.5" title={t("Enviado por email")}><Mail size={12} /></span>}
                       {n.viaWhatsapp && <span className="inline-flex items-center gap-0.5" title={t("Enviado por WhatsApp")}><MessageCircle size={12} /></span>}
+                      {n.viaTelegram && <span className="inline-flex items-center gap-0.5" title={t("Enviado por Telegram")}><Send size={12} /></span>}
                     </p>
                   </div>
                   {!n.read && <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-brand-600" aria-label={t("Sin leer")} />}

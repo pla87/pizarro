@@ -7,6 +7,7 @@ import { outboxDir } from "@/lib/mail";
 import { requireAdminPage } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { storageAdminView } from "@/lib/storage-stats";
+import { getMessagingAdminView } from "@/lib/messaging";
 import { SettingsAdmin } from "./SettingsAdmin";
 
 export async function generateMetadata() {
@@ -19,11 +20,12 @@ export default async function SettingsPage() {
   // Dirección con la que entra el administrador ahora (para avisar si no coincide con APP_URL).
   const h = await headers();
   const origin = originFromHeaders({ host: h.get("host"), forwardedHost: h.get("x-forwarded-host"), forwardedProto: h.get("x-forwarded-proto") });
-  const [maxComments, mail, google, storage] = await Promise.all([
+  const [maxComments, mail, google, storage, messaging] = await Promise.all([
     getMaxCommentsPerTask(),
     getMailSettingsView(Boolean(outboxDir())),
     getGoogleSettingsView(origin),
     storageAdminView(),
+    getMessagingAdminView(),
   ]);
-  return <SettingsAdmin maxComments={maxComments} mail={mail} google={google} storage={storage} />;
+  return <SettingsAdmin maxComments={maxComments} mail={mail} google={google} storage={storage} messaging={messaging} />;
 }
