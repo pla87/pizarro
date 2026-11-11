@@ -121,6 +121,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
           initial={schedule ?? { enabled: false, recipient: user.email, weekday: 1, hour: 8 }}
           emailAvailable={emailEnabled()}
           timeZone={appTimeZone()}
+          recipients={project.isPrivate ? "members" : isAdmin ? "any" : "team"}
         />
       }
     />

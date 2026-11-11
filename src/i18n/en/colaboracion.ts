@@ -65,7 +65,6 @@ export const colaboracion: Record<string, string> = {
   "Destinatario": "Recipient",
   "Día": "Day",
   "Hora": "Time",
-  "Hora de la app ({tz}). Cualquier dirección es válida; el informe se genera con tus permisos, así que deja de enviarse si pierdes el acceso al proyecto.": "App time ({tz}). Any address is valid; the report is generated with your permissions, so it stops being sent if you lose access to the project.",
   "Informe semanal de «{project}»": "Weekly report for “{project}”",
   "Adjuntamos el informe PDF de estado del proyecto «{project}».": "Attached is the status PDF report for the project “{project}”.",
   "Recibes este correo porque alguien configuró el informe semanal en los ajustes del proyecto.": "You are receiving this email because someone set up the weekly report in the project settings.",

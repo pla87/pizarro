@@ -291,12 +291,13 @@ function fileNamePart(text: string, max: number): string {
  * Nombre del ZIP de adjuntos de una release, el mismo desde el diálogo de generarla y desde el histórico:
  * `release-2026-11-11-R12-Proyecto-adjuntos.zip` (fecha del despliegue en la zona de la app, número de la release y
  * proyecto), con «-1de3», «-2de3»… si va en varios paquetes. El número coincide con el de los códigos (R12F1_…) de los
- * ficheros de dentro; sin número o sin proyecto, se omiten.
+ * ficheros de dentro; sin número o sin proyecto, se omiten. En inglés, `…-attachments.zip` y «-1of3»: el sufijo va en
+ * el idioma de quien lo descarga (no es un texto del diccionario: forma parte del nombre del fichero).
  */
-export function releaseZipName(opts: { day: string; number?: number | null; project?: string | null }, part = 1, total = 1): string {
+export function releaseZipName(opts: { day: string; number?: number | null; project?: string | null }, part = 1, total = 1, locale: "es" | "en" = "es"): string {
   const project = fileNamePart(opts.project ?? "", 60);
   const pieces = ["release", opts.day, opts.number ? `R${opts.number}` : "", project].filter(Boolean);
-  return `${pieces.join("-")}-adjuntos${partSuffix(part, total)}.zip`;
+  return `${pieces.join("-")}-${locale === "en" ? "attachments" : "adjuntos"}${partSuffix(part, total, locale)}.zip`;
 }
 
 /** Fecha en formato YYYY-MM-DD: en la zona horaria indicada (la de la app) o, sin ella, la local del navegador. */

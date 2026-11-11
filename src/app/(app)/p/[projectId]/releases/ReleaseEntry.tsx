@@ -12,7 +12,7 @@ import { Markdown } from "@/components/ui/Markdown";
 import { useToast } from "@/components/ui/Toast";
 import { isoDate, releaseFileName, releaseZipName } from "@/lib/release";
 import { ProjectsContext } from "@/components/ProjectMenu";
-import { useIntlLocale, useT } from "@/i18n/client";
+import { useIntlLocale, useLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 
 interface Props {
@@ -21,6 +21,7 @@ interface Props {
 
 export function ReleaseEntry({ release }: Props) {
   const t = useT();
+  const uiLocale = useLocale();
   const locale = useIntlLocale();
   const [open, setOpen] = useState(false);
   const toast = useToast();
@@ -92,7 +93,7 @@ export function ReleaseEntry({ release }: Props) {
       const href = URL.createObjectURL(await res.blob());
       const a = document.createElement("a");
       a.href = href;
-      a.download = releaseZipName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, part, plan.parts);
+      a.download = releaseZipName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, part, plan.parts, uiLocale);
       a.click();
       setTimeout(() => URL.revokeObjectURL(href), 1000);
     } catch {

@@ -24,6 +24,7 @@ export async function cookies() {
   return scope.getStore() ?? makeCookieStore();
 }
 
+// Cabeceras extra que un test fija (p. ej. las que pone el proxy, como x-pz-auth-link): state.headers.
 export async function headers() {
-  return new Headers({ "user-agent": "pizarro-db-tests", "x-real-ip": "127.0.0.1" });
+  return new Headers({ "user-agent": "pizarro-db-tests", "x-real-ip": "127.0.0.1", ...(state.headers ?? {}) });
 }

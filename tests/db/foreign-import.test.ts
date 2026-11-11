@@ -140,7 +140,8 @@ describe("CSV", () => {
     const docs = p.tasks.find((x) => x.title === "Escribir docs")!;
     assert.equal(docs.assigneeId, null);
     assert.match(docs.description, /Responsable en el archivo original: nadie@example\.com\./);
-    assert.deepEqual(s.unmappedUsers, [{ name: "nadie@example.com", email: "nadie@example.com" }]);
+    // Solo con el email: sin nombre (el resumen no lo repite, «nadie@example.com · nadie@example.com»).
+    assert.deepEqual(s.unmappedUsers, [{ name: "", email: "nadie@example.com" }]);
     assert.deepEqual(p.members.map((m) => m.userId), [dev.id]);
   });
 

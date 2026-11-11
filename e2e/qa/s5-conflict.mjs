@@ -17,7 +17,7 @@ async function editDescription(page, text) {
 export async function run() {
   L.scenario("5. Conflicto de edición simultánea del texto");
   await L.cleanBoard();
-  await L.seedTasks(COL.backlog, ["Compartida", "Titulo2", "Titulo3"]);
+  await L.seedTasks(COL.backlog, ["Compartida", "Titulo2", "Titulo3", "Titulo4"]);
   const t0 = await L.dbNow();
   const a = await L.session({ viewport: U.WIDE });
   const b = await L.session({ email: L.USER2, viewport: U.WIDE });
@@ -106,6 +106,22 @@ export async function run() {
   L.check("a la vez: el aviso ofrece «Copiar tu texto»", (await b.page.getByRole("button", { name: "Copiar tu texto" }).count()) > 0);
   L.eq("a la vez: la BD conserva el título de A", [(await L.dbTask("Titulo3 de A")) !== undefined, (await L.dbTask("Titulo3 de B")) === undefined], [true, true]);
   await L.eqEventually("a la vez: tras el conflicto el campo de B muestra el título guardado", () => bt3.inputValue(), "Titulo3 de A");
+
+  // Cambio ajeno sin que B esté editando: el campo de B pasa en vivo al título de A y, si B lo edita luego, se guarda sin
+  // falso conflicto (antes la versión del texto de B seguía siendo la de la apertura y el servidor lo rechazaba).
+  await U.closeDialog(a.page); await U.closeDialog(b.page);
+  await b.page.getByText(/ha cambiado el texto/).first().waitFor({ state: "detached", timeout: 10000 }).catch(() => {});
+  await U.openTask(a.page, "Titulo4"); await U.openTask(b.page, "Titulo4");
+  const at4 = U.dialog(a.page).locator("textarea[aria-label='Título']").first();
+  const bt4 = U.dialog(b.page).locator("textarea[aria-label='Título']").first();
+  await at4.click(); await a.page.keyboard.press("Control+A"); await a.page.keyboard.type("Titulo4 de A"); await a.page.keyboard.press("Enter");
+  await L.eqEventually("en vivo: A guarda su título", async () => (await L.dbTask("Titulo4 de A")) !== undefined, true);
+  await L.eqEventually("en vivo: el campo de B (sin editar) pasa al título de A", () => bt4.inputValue(), "Titulo4 de A");
+  await b.page.waitForTimeout(800);
+  await bt4.click(); await b.page.keyboard.press("End"); await b.page.keyboard.type(" y B"); await b.page.keyboard.press("Enter");
+  const falseConflict = await b.page.getByText(/ha cambiado el texto de esta tarea/).first().waitFor({ timeout: 3000 }).then(() => true, () => false);
+  L.check("en vivo: B no recibe un falso conflicto", !falseConflict);
+  await L.eqEventually("en vivo: B edita después y se guarda", async () => (await L.dbTask("Titulo4 de A y B")) !== undefined, true);
 
   L.assertNoErrors("escenario 5 (A)", [a]);
   L.check("escenario 5 (B): sin errores de página (los avisos de conflicto son toasts)", b.errors.filter((e) => /pageerror/.test(e)).length === 0, b.errors.join(" | "));

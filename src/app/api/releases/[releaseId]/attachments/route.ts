@@ -7,7 +7,7 @@ import { appTimeZone } from "@/lib/format";
 import { isoDate, releaseZipName } from "@/lib/release";
 import { acquireZipSlot, buildZipPart, planZipEntries, zipBodyStream, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict, type ZipEntry } from "@/lib/release-zip";
 import { getCurrentUser } from "@/lib/session";
-import { getT } from "@/i18n/server";
+import { getLocale, getT } from "@/i18n/server";
 import { readReleaseAttachmentFile, releaseAttachmentFileSize } from "@/lib/uploads";
 
 export const runtime = "nodejs";
@@ -66,7 +66,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
   }
 
   // El mismo nombre que da la página (y el diálogo de generarla): fecha, número y proyecto.
-  const name = releaseZipName({ day: isoDate(release.deployedAt, appTimeZone()), number: release.number, project: release.project.name }, mode.part, packages.length);
+  const name = releaseZipName({ day: isoDate(release.deployedAt, appTimeZone()), number: release.number, project: release.project.name }, mode.part, packages.length, await getLocale());
   logEvent({
     category: "api", action: "release.zipDownload", message: `ZIP de adjuntos de la release «${release.title}» (paquete ${mode.part}/${packages.length}, ${fileCount} ficheros, ${Math.round(zip.length / 1024)} KB)`,
     userId: user.id, userName: user.name, projectId: release.projectId, path: `/api/releases/${releaseId}/attachments`, ip: clientIp(req.headers),

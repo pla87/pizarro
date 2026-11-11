@@ -12,17 +12,17 @@ import { appUrl } from "@/lib/mail";
 import { getMyChannels } from "@/lib/messaging";
 import { clearTelegram, loadMessagingConfig, saveTelegramToken, saveWhatsappSettings as persistWhatsapp, setTelegramEnabled, setWhatsappEnabled } from "@/lib/messaging-config";
 import {
-  isTelegramToken, isWhatsappToken, maskPhone, normalizeWhatsappCode, safeEqual, scrubSecrets, telegramStartUrl, telegramTestText, validateWhatsappSettings,
+  classifyFailure, isTelegramToken, isWhatsappToken, maskPhone, normalizeWhatsappCode, safeEqual, scrubSecrets, telegramStartUrl, telegramTestText, validateWhatsappSettings,
   WHATSAPP_CODE_ATTEMPTS, WHATSAPP_CODE_MINUTES, WHATSAPP_TESTS_PER_DAY, type WhatsappSettingsInput,
 } from "@/lib/messaging-core";
 import { labelledHmac, labelledHmacCandidates } from "@/lib/keyring";
 import { rateLimit, rateLimitReached } from "@/lib/rate-limit";
 import { requireAdmin, requireUser } from "@/lib/session";
-import { createTelegramLinkCode, getBot, releaseTelegramBot, sendTelegramMessage, syncTelegram } from "@/lib/telegram";
+import { createTelegramLinkCode, disconnectTelegramChat, getBot, releaseTelegramBot, sendTelegramMessage, syncTelegram } from "@/lib/telegram";
 import * as v from "@/lib/validation";
-import { sendWhatsappNotice } from "@/lib/whatsapp";
+import { sendWhatsappNotice, whatsappLocale } from "@/lib/whatsapp";
 import { getT } from "@/i18n/server";
-import { makeT, toLocale } from "@/i18n/core";
+import { makeT, toLocale, type T } from "@/i18n/core";
 
 // Telegram y WhatsApp: Administración → Ajustes (solo administradores) y Mi perfil → Avisos (cada persona).
 // Los tokens nunca se registran ni se devuelven: los args de las acciones de administración NO se pasan a runAction.
@@ -143,7 +143,12 @@ export async function saveWhatsappSettings(form: WhatsappForm) {
     if (!checked.ok) throw new AppError(checked.error);
     const token = typeof form.token === "string" ? form.token.trim() : "";
     if (token && !isWhatsappToken(token)) throw new AppError("El token de WhatsApp no es válido.");
-    const change = await persistWhatsapp(checked.value, { token, clearToken: Boolean(form.clearToken) });
+    // La primera vez que se guarda desde aquí, «activado» queda guardado como estaba: una instalación nueva no empieza
+    // a enviar avisos de pago solo por guardar (se activa con «Activar») y la que ya funcionaba con las variables
+    // WHATSAPP_* del servidor sigue activa. Antes, sin el valor guardado, contaba como activa en cuanto estaba completa.
+    const before = await loadMessagingConfig({ fresh: true });
+    const enabled = before.whatsappSettings.enabled === null ? before.whatsapp.active : undefined;
+    const change = await persistWhatsapp(checked.value, { token, clearToken: Boolean(form.clearToken), enabled });
     const cfg = (await loadMessagingConfig({ fresh: true })).whatsapp;
     describeAction("Cambió la configuración de WhatsApp", { template: cfg.templateName, lang: cfg.templateLang, langEn: checked.value.templateLangEn || null, complete: cfg.complete, active: cfg.active, authChange: change });
     revalidatePath("/admin/settings");
@@ -179,26 +184,30 @@ export async function testWhatsapp(input: { to: string }) {
 
 type WhatsappCfg = Awaited<ReturnType<typeof loadMessagingConfig>>["whatsapp"];
 
-/** Envía la plantilla con `headline` como texto del aviso ({{1}}; con la plantilla antigua, como «tarea»). */
-async function sendTemplateText(cfg: WhatsappCfg, to: string, locale: string, text: string, errorPrefix: string) {
-  const t = makeT(toLocale(locale));
+/**
+ * Envía la plantilla con `text` como texto del aviso ({{1}}; con la plantilla antigua, como «tarea»). El texto se escribe
+ * en el idioma de la plantilla que se envía (ver whatsappLocale): sin «Idioma en inglés», en español.
+ */
+async function sendTemplateText(cfg: WhatsappCfg, to: string, locale: string, text: (t: T) => string, errorPrefix: string) {
+  const lang = whatsappLocale(cfg, toLocale(locale));
+  const t = makeT(lang);
+  const headline = text(t);
   try {
     await sendWhatsappNotice(cfg, to, {
-      headline: text,
+      headline,
       actorName: "Pizarro",
-      taskTitle: text,
+      taskTitle: headline,
       projectName: "Pizarro",
       excerpt: "",
       url: `${appUrl()}/settings?tab=avisos`,
-    }, t, toLocale(locale) === "en");
+    }, t, lang === "en");
   } catch (err) {
     throw await apiFailure(errorPrefix, err, [cfg.token, to, to.replace(/^\+/, "")]);
   }
 }
 
 async function sendTest(cfg: WhatsappCfg, to: string, locale: string) {
-  const t = makeT(toLocale(locale));
-  await sendTemplateText(cfg, to, locale, t("Mensaje de prueba de Pizarro: si lo lees, los avisos por WhatsApp funcionan"), "No se pudo enviar el WhatsApp de prueba.");
+  await sendTemplateText(cfg, to, locale, (t) => t("Mensaje de prueba de Pizarro: si lo lees, los avisos por WhatsApp funcionan"), "No se pudo enviar el WhatsApp de prueba.");
 }
 
 // --- Código de verificación de WhatsApp (Mi perfil) ---
@@ -232,8 +241,7 @@ async function issueWhatsappCode(cfg: WhatsappCfg, user: { id: string; locale: s
     where: { userId_channel: { userId: user.id, channel: "WHATSAPP" } },
     data: { verifiedAt: null, verifyCodeHash: labelledHmac("whatsapp-verify", codeHashInput(user.id, phone, code)), verifyExpiresAt: expires, verifyAttempts: 0 },
   });
-  const t = makeT(toLocale(user.locale));
-  await sendTemplateText(cfg, phone, user.locale, t("Tu código de verificación de Pizarro es {code}", { code }), "No se pudo enviar el código por WhatsApp.");
+  await sendTemplateText(cfg, phone, user.locale, (t) => t("Tu código de verificación de Pizarro es {code}", { code }), "No se pudo enviar el código por WhatsApp.");
 }
 
 // --- Mi perfil → Avisos ---
@@ -386,6 +394,13 @@ export async function testMyChannel(channel: "TELEGRAM" | "WHATSAPP") {
       try {
         await sendTelegramMessage(cfg.telegram.token, row.address, telegramTestText(t));
       } catch (err) {
+        // Bot bloqueado o chat borrado (403): se desconecta, como con los avisos de verdad (notify.ts). Antes solo se
+        // mostraba el error y Telegram seguía como conectado.
+        if (classifyFailure("TELEGRAM", err) === "disconnect") {
+          await disconnectTelegramChat(row.address, "send-failed");
+          revalidatePath("/settings");
+          throw new AppError("Telegram no deja enviarte mensajes (has bloqueado el bot o borrado el chat), así que se ha desconectado. Vuelve a conectarlo para recibir avisos.");
+        }
         throw await apiFailure("No se pudo enviar el mensaje de prueba.", err, [cfg.telegram.token]);
       }
     } else {

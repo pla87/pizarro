@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n/client";
+import { personLine } from "@/lib/person-line";
 import { announceQueued } from "./transfer/client";
 import { TransferJobs } from "./transfer/TransferJobs";
 import { TransferProgress } from "./transfer/TransferProgress";
@@ -127,7 +128,7 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
                 : t("No hay un usuario activo con el mismo email (o el proyecto es privado), así que sus tarjetas quedan sin asignar y sus comentarios conservan el nombre original.")}
             </p>
             <ul className="mt-1 max-h-32 list-disc overflow-y-auto pl-5 text-xs">
-              {summary.unmappedUsers.map((u) => <li key={`${u.name}|${u.email}`}>{u.email ? `${u.name} · ${u.email}` : u.name}</li>)}
+              {summary.unmappedUsers.map((u) => <li key={`${u.name}|${u.email}`}>{personLine(u)}</li>)}
             </ul>
           </div>
         )}

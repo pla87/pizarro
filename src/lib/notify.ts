@@ -14,7 +14,7 @@ import {
   CHANNEL_LIMIT_PER_HOUR, channelUsable, channelWants, classifyFailure, maskPhone, scrubSecrets, telegramNoticeText, type ChannelPrefs, type NoticeMessage,
 } from "./messaging-core";
 import { disconnectTelegramChat, sendTelegramMessage } from "./telegram";
-import { sendWhatsappNotice } from "./whatsapp";
+import { sendWhatsappNotice, whatsappLocale } from "./whatsapp";
 import { followerIds } from "./followers";
 import { rateLimit } from "./rate-limit";
 
@@ -141,7 +141,11 @@ export async function deliver(notificationIds: string[]): Promise<void> {
           await sendTelegramMessage(messaging.telegram.token, ch.address, telegramNoticeText(msg, t));
           update.telegramSentAt = new Date();
         } else {
-          await sendWhatsappNotice(messaging.whatsapp, ch.address, msg, t, locale === "en");
+          // Sin la plantilla en inglés, el aviso va entero en español (ver whatsappLocale).
+          const waLocale = whatsappLocale(messaging.whatsapp, locale);
+          const tw = waLocale === locale ? t : makeT(waLocale);
+          const waMsg = waLocale === locale ? msg : { ...msg, locale: intlLocale(waLocale), actorName: n.actor?.name ?? tw("Alguien") };
+          await sendWhatsappNotice(messaging.whatsapp, ch.address, waMsg, tw, waLocale === "en");
           update.whatsappSentAt = new Date();
         }
         logEvent({ ...base, action: `notify.${key}`, message: `${name}: aviso (${n.type}) enviado a ${n.user.name}`, durationMs: performance.now() - t0, details });

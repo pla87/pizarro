@@ -36,5 +36,6 @@ import { mensajeria } from "./mensajeria";
 import { bh1a } from "./bh1a";
 import { bh1b } from "./bh1b";
 import { rev2 } from "./rev2";
+import { bh2 } from "./bh2";
 
-export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing, ...almacenamiento, ...licencia, ...wip, ...importar, ...ics, ...lista, ...acceso, ...plantillas2, ...pegado, ...licencia2, ...comentarios, ...detalle, ...web2, ...r46ui, ...r46web, ...soporte, ...web3, ...r47, ...mensajeria, ...bh1a, ...bh1b, ...rev2 };
+export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing, ...almacenamiento, ...licencia, ...wip, ...importar, ...ics, ...lista, ...acceso, ...plantillas2, ...pegado, ...licencia2, ...comentarios, ...detalle, ...web2, ...r46ui, ...r46web, ...soporte, ...web3, ...r47, ...mensajeria, ...bh1a, ...bh1b, ...rev2, ...bh2 };

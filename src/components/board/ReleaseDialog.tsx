@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { countReleasesOn, deployRelease, getReleaseTaskDetails } from "@/actions/releases";
 import { buildReleaseMarkdown, computeReleaseCodes, defaultReleaseTitle, evergreenDue, isoDate, releaseFileName, releasesUntilDue, releaseZipName, swapTemplateBlock } from "@/lib/release";
 import type { BoardTask, TemplateOption } from "@/lib/types";
-import { useT } from "@/i18n/client";
+import { useLocale, useT } from "@/i18n/client";
 import { copyText, downloadText } from "../ui/clipboard";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { cn } from "../ui/cn";
@@ -45,6 +45,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   const toast = useToast();
   const confirm = useConfirm();
   const t = useT();
+  const uiLocale = useLocale();
   const [step, setStep] = useState<"select" | "edit">("select");
   const [chosen, setChosen] = useState<Set<string>>(new Set(preselected));
   /** Si la persona ya marcó o desmarcó alguna tarea, la cadencia de las fijas no vuelve a tocar la selección. */
@@ -214,7 +215,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
         const href = URL.createObjectURL(await res.blob());
         const a = document.createElement("a");
         a.href = href;
-        a.download = releaseZipName({ day: isoDate(now, appTimeZone()), number: generatedNumber, project: board.project.name }, part, total);
+        a.download = releaseZipName({ day: isoDate(now, appTimeZone()), number: generatedNumber, project: board.project.name }, part, total, uiLocale);
         a.click();
         setTimeout(() => URL.revokeObjectURL(href), 1000);
         // Pausa corta para que el navegador no agrupe ni descarte las descargas seguidas.

@@ -150,8 +150,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // Si el título cambia desde fuera (otra persona, deshacer, recarga tras un conflicto), se muestra el nuevo, pero solo
   // si no se está editando: lo que se esté escribiendo (distinto de lo que se mostraba) no se pisa, como el enlace. Antes
   // se sustituía siempre y, cuando otra persona guardaba su título, lo escrito aquí se perdía sin aviso. Al guardarlo,
-  // `detail.textVersion` sigue siendo la versión sobre la que se escribió (no avanza con la actualización en vivo), así
-  // que el servidor responde con el conflicto y el aviso ofrece «Copiar tu texto» (ver `save`). Si el guardado falla, la
+  // `detail.textVersion` sigue siendo la versión sobre la que se escribió (solo avanza con la actualización en vivo si
+  // no se estaba editando, ver `seenText`), así que el servidor responde con el conflicto y el aviso ofrece
+  // «Copiar tu texto» (ver `save`). Si el guardado falla, la
   // tarjeta vuelve a lo guardado y el campo, que mostraba lo enviado, pasa al título actual.
   const [shownTitle, setShownTitle] = useState(task.title);
   if (shownTitle !== task.title) {
@@ -228,6 +229,39 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       alive = false;
     };
   }, [task.id, toast]);
+
+  // Título cambiado desde fuera (otra persona, en vivo) sin que aquí se esté editando: el campo ya muestra el nuevo (ver
+  // `shownTitle`), así que la versión del texto avanza con él. Sin esto `detail.textVersion` se quedaba en la de la
+  // apertura y, al editar luego ese título, el servidor respondía con un falso conflicto. Se vuelve a leer el detalle: la
+  // versión solo avanza si es la de la tarjeta y la descripción no cambió (aquí no se actualiza en vivo; si el mismo
+  // guardado ajeno la cambió, al guardar la propia llega el conflicto, como antes). Con el título o la descripción en
+  // edición tampoco avanza: al guardarlos llega el conflicto, como debe.
+  const seenText = useRef({ version: task.textVersion, title: task.title });
+  const textState = useRef({ detail, title, shownTitle, version: task.textVersion });
+  useEffect(() => {
+    textState.current = { detail, title, shownTitle, version: task.textVersion };
+  });
+  const editingText = () => {
+    const { detail: d, title: typed, shownTitle: shown } = textState.current;
+    const desc = descLive.current;
+    return typed !== shown || (!!d && desc !== null && desc !== d.description && (descDirtyCheck.current?.() ?? true));
+  };
+  useEffect(() => {
+    const seen = seenText.current;
+    if (task.textVersion === seen.version) return;
+    seenText.current = { version: task.textVersion, title: task.title };
+    if (task.title === seen.title || !detail || detail.textVersion === task.textVersion || editingText()) return;
+    let alive = true;
+    void getTaskDetail(task.id).catch(() => null).then((res) => {
+      const { detail: d, version } = textState.current;
+      if (!alive || !res?.ok || !d || res.data.textVersion !== version || res.data.description !== d.description || editingText()) return;
+      setDetail((cur) => (cur && cur.description === res.data.description ? { ...cur, textVersion: res.data.textVersion } : cur));
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al cambiar la versión del texto de la tarjeta
+  }, [task.textVersion]);
 
   // Indicador «Guardando… / Guardado»: cuenta los guardados en curso de este diálogo.
   const [saving, setSaving] = useState(0);
