@@ -9,30 +9,24 @@ import { logEvent } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
 import { excerpt as makeExcerpt, mentionsToPlain } from "./mentions";
 import { notificationBody, notificationHeadline, type NotificationKind } from "./notification-text";
+import { loadMessagingConfig, type MessagingConfig } from "./messaging-config";
+import {
+  CHANNEL_LIMIT_PER_HOUR, channelUsable, channelWants, classifyFailure, maskPhone, scrubSecrets, telegramNoticeText, type ChannelPrefs, type NoticeMessage,
+} from "./messaging-core";
+import { disconnectTelegramChat, sendTelegramMessage } from "./telegram";
+import { sendWhatsappNotice } from "./whatsapp";
 import { followerIds } from "./followers";
 import { rateLimit } from "./rate-limit";
 
-// Avisos (menciones, asignaciones, cambios de fecha, comentarios y respuestas): en la app (tabla
-// Notification), por email (SMTP) y, solo las menciones, por WhatsApp (Cloud API de Meta). Los envíos
-// externos se hacen tras responder al usuario (after), para que avisar no añada espera.
+// Avisos (menciones, asignaciones, cambios de fecha, comentarios y respuestas): en la app (tabla Notification), por
+// email (SMTP) y por los canales que cada persona conecta en Mi perfil → Avisos (Telegram y WhatsApp, si el
+// administrador los ha activado en Administración → Ajustes). Los envíos externos se hacen tras responder al usuario
+// (after), para que avisar no añada espera.
 
 export { emailEnabled };
 
-export function whatsappEnabled(): boolean {
-  return Boolean(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_TEMPLATE_NAME);
-}
-
-interface MentionMessage {
-  /** Tipo de aviso; sin indicar, una mención. */
-  type?: NotificationKind;
-  actorName: string;
-  taskTitle: string;
-  projectName: string;
-  excerpt: string;
-  url: string;
-  /** Idioma de Intl para formatear fechas (cambio de fecha límite). */
-  locale?: string;
-}
+/** Datos de un aviso para el email y los mensajes (mismo contenido en todos los canales). */
+export type MentionMessage = NoticeMessage;
 
 /** Email de un aviso: asunto, texto plano y HTML (todo el contenido del usuario va escapado). */
 export function mentionEmail(m: MentionMessage, t: T = makeT("es")) {
@@ -60,47 +54,27 @@ export function emailWanted(type: NotificationKind, u: { notifyEmail: boolean; n
   }
 }
 
-/** Cuerpo de la petición a la Cloud API: plantilla con 4 parámetros (ver README). */
-export function whatsappPayload(to: string, m: MentionMessage) {
-  const param = (text: string) => ({ type: "text", text: text.replace(/\s+/g, " ").slice(0, 300) });
-  return {
-    messaging_product: "whatsapp",
-    to: to.replace(/^\+/, ""),
-    type: "template",
-    template: {
-      name: process.env.WHATSAPP_TEMPLATE_NAME,
-      language: { code: process.env.WHATSAPP_TEMPLATE_LANG ?? "es" },
-      components: [
-        { type: "body", parameters: [param(m.actorName), param(m.taskTitle), param(m.projectName), param(m.url)] },
-      ],
-    },
-  };
+const CHANNEL_SELECT = { channel: true, address: true, verifiedAt: true, consentAt: true, notifyMention: true, notifyAssigned: true, notifyDue: true, notifyComment: true } as const;
+type ChannelRow = { channel: "TELEGRAM" | "WHATSAPP"; address: string; verifiedAt: Date | null; consentAt: Date | null } & ChannelPrefs;
+
+/** Canales por los que puede salir este aviso ahora: activados por el administrador, conectados y queridos para este tipo. */
+function channelsFor(type: NotificationKind, channels: ChannelRow[], cfg: MessagingConfig): ChannelRow[] {
+  return channels.filter((ch) =>
+    (ch.channel === "TELEGRAM" ? cfg.telegram.active : cfg.whatsapp.active) && channelUsable(ch, type, cfg.whatsapp.legacy) && channelWants(type, ch));
 }
 
-async function sendWhatsapp(to: string, m: MentionMessage): Promise<void> {
-  const version = process.env.WHATSAPP_API_VERSION ?? "v23.0";
-  const res = await fetch(`https://graph.facebook.com/${version}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify(whatsappPayload(to, m)),
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!res.ok) {
-    const json = await res.json().catch(() => ({}));
-    throw new Error(`WhatsApp ${res.status}: ${json?.error?.message ?? "error"}`);
-  }
-}
-
-/** Envía por email/WhatsApp los avisos indicados (tras responder). Exportada para los tests. */
+/** Envía por email, Telegram y WhatsApp los avisos indicados (tras responder). Exportada para los tests. */
 export async function deliver(notificationIds: string[]): Promise<void> {
-  if (!notificationIds.length || (!emailEnabled() && !whatsappEnabled())) return;
+  if (!notificationIds.length) return;
+  const messaging = await loadMessagingConfig();
+  if (!emailEnabled() && !messaging.telegram.active && !messaging.whatsapp.active) return;
   const rows = await db.notification.findMany({
     where: { id: { in: notificationIds } },
     select: {
       id: true,
       type: true,
       excerpt: true,
-      user: { select: { id: true, name: true, email: true, locale: true, active: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, notifyWhatsapp: true, whatsappPhone: true } },
+      user: { select: { id: true, name: true, email: true, locale: true, active: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, channels: { select: CHANNEL_SELECT } } },
       actor: { select: { name: true } },
       task: { select: { id: true, title: true, project: { select: { id: true, name: true, isPrivate: true } } } },
     },
@@ -125,17 +99,18 @@ export async function deliver(notificationIds: string[]): Promise<void> {
       logEvent({ category: "notify", action: "notify.skippedNoAccess", message: `Envío externo omitido: ${n.user.name} ya no tiene acceso al proyecto`, userId: n.user.id, userName: n.user.name, projectId: n.task.project.id, details: { notificationId: n.id, taskId: n.task.id } });
       continue;
     }
-    const t = makeT(toLocale(n.user.locale));
+    const locale = toLocale(n.user.locale);
+    const t = makeT(locale);
     const msg: MentionMessage = {
       type: n.type,
-      locale: intlLocale(toLocale(n.user.locale)),
+      locale: intlLocale(locale),
       actorName: n.actor?.name ?? t("Alguien"),
       taskTitle: mentionsToPlain(n.task.title),
       projectName: n.task.project.name,
       excerpt: n.excerpt,
       url: `${appUrl()}/p/${n.task.project.id}?task=${n.task.id}`,
     };
-    const update: { emailSentAt?: Date; whatsappSentAt?: Date; deliveryError?: string } = {};
+    const update: { emailSentAt?: Date; whatsappSentAt?: Date; telegramSentAt?: Date; deliveryError?: string } = {};
     const errors: string[] = [];
     const base = { category: "notify", userId: n.user.id, userName: n.user.name, projectId: n.task.project.id };
     if (emailEnabled() && emailWanted(n.type, n.user)) {
@@ -149,16 +124,31 @@ export async function deliver(notificationIds: string[]): Promise<void> {
         logEvent({ ...base, level: "error", action: "notify.emailFailed", message: `Fallo al enviar email a ${n.user.name}: ${maskEmailsIn((err as Error).message)}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId: n.task.id, to: maskEmail(n.user.email) } });
       }
     }
-    // WhatsApp solo para menciones: la plantilla aprobada por Meta es la de mención.
-    if (n.type === "MENTION" && whatsappEnabled() && n.user.notifyWhatsapp && n.user.whatsappPhone) {
+    for (const ch of channelsFor(n.type, n.user.channels, messaging)) {
+      const name = ch.channel === "TELEGRAM" ? "Telegram" : "WhatsApp";
+      const key = ch.channel === "TELEGRAM" ? "telegram" : "whatsapp";
+      const details = { notificationId: n.id, taskId: n.task.id, type: n.type, ...(ch.channel === "WHATSAPP" ? { to: maskPhone(ch.address) } : {}) };
+      // Tope por persona y canal: una avalancha de avisos no se convierte en una avalancha de mensajes (ni de gasto).
+      if (!rateLimit(`notify:${key}:${n.user.id}`, CHANNEL_LIMIT_PER_HOUR[ch.channel], 60 * 60_000)) {
+        if (rateLimit(`notify:${key}:${n.user.id}:warned`, 1, 60 * 60_000)) logEvent({ ...base, level: "warn", action: `notify.${key}RateLimited`, message: `Tope de ${CHANNEL_LIMIT_PER_HOUR[ch.channel]} mensajes por hora de ${name} alcanzado para ${n.user.name}: los siguientes avisos de esta hora solo quedan en la app`, details });
+        continue;
+      }
       const t0 = performance.now();
       try {
-        await sendWhatsapp(n.user.whatsappPhone, msg);
-        update.whatsappSentAt = new Date();
-        logEvent({ ...base, action: "notify.whatsapp", message: `WhatsApp de mención enviado a ${n.user.name}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId: n.task.id } });
+        if (ch.channel === "TELEGRAM") {
+          await sendTelegramMessage(messaging.telegram.token, ch.address, telegramNoticeText(msg, t));
+          update.telegramSentAt = new Date();
+        } else {
+          await sendWhatsappNotice(messaging.whatsapp, ch.address, msg, t, locale === "en");
+          update.whatsappSentAt = new Date();
+        }
+        logEvent({ ...base, action: `notify.${key}`, message: `${name}: aviso (${n.type}) enviado a ${n.user.name}`, durationMs: performance.now() - t0, details });
       } catch (err) {
-        errors.push((err as Error).message);
-        logEvent({ ...base, level: "error", action: "notify.whatsappFailed", message: `Fallo al enviar WhatsApp a ${n.user.name}: ${(err as Error).message}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId: n.task.id } });
+        const reason = scrubSecrets((err as Error).message, [messaging.telegram.token, messaging.whatsapp.token, ch.address]);
+        errors.push(`${key}: ${reason}`);
+        logEvent({ ...base, level: "error", action: `notify.${key}Failed`, message: `Fallo al enviar ${name} a ${n.user.name}: ${reason}`, durationMs: performance.now() - t0, details });
+        // Telegram 403: la persona bloqueó el bot o borró el chat. Se desconecta para no seguir intentándolo.
+        if (ch.channel === "TELEGRAM" && classifyFailure("TELEGRAM", err) === "disconnect") await disconnectTelegramChat(ch.address, "send-failed").catch(() => {});
       }
     }
     if (errors.length) {
@@ -259,7 +249,7 @@ export async function notifyTask(opts: {
     select: { id: true, userId: true },
   });
   const createdIds = created.map((c) => c.id);
-  // Por email solo si la persona lo quiere para este tipo; WhatsApp, solo menciones (lo decide deliver).
+  // Por email, Telegram o WhatsApp solo si la persona lo quiere para este tipo (lo decide deliver).
   const external = await externalAllowed(opts.actorId, opts.type, opts.taskId, created.map((c) => c.userId), createdIds);
   logEvent({
     category: "notify", action: `notify.${opts.type.toLowerCase()}`, message: `${createdIds.length} aviso(s) ${opts.type} creados (${external.size} con envío externo)`,
@@ -275,13 +265,13 @@ export async function notifyTask(opts: {
   return { recipients: created.map((c) => c.userId) };
 }
 
-/** Ventana en la que no se repite email/WhatsApp a la misma persona por la misma tarea. */
+/** Ventana en la que no se repite email/Telegram/WhatsApp a la misma persona por la misma tarea. */
 const DEDUPE_MINUTES = 10;
 /** Máximo de envíos externos por hora que puede provocar una misma persona (o el sistema a una misma persona). */
 const MAX_EXTERNAL_PER_HOUR = 40;
 
 /**
- * Los avisos en la app se crean siempre; el email y el WhatsApp (que pueden costar dinero)
+ * Los avisos en la app se crean siempre; el email, Telegram y WhatsApp (que puede costar dinero)
  * se limitan: uno por persona y tarea cada 10 minutos y un tope por hora: por autor o, en los avisos del sistema,
  * por destinatario.
  */
@@ -301,11 +291,14 @@ async function externalAllowed(actorId: string | null, type: NotificationKind, t
   });
   const skip = new Set(recent.map((r) => r.userId));
   // Quien no quiere ningún envío externo de este tipo no gasta el límite por hora.
-  const prefs = await db.user.findMany({
-    where: { id: { in: recipientIds } },
-    select: { id: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, notifyWhatsapp: true, whatsappPhone: true },
-  });
-  const wanted = new Set(prefs.filter((u) => emailWanted(type, u) || (type === "MENTION" && u.notifyWhatsapp && !!u.whatsappPhone)).map((u) => u.id));
+  const [prefs, messaging] = await Promise.all([
+    db.user.findMany({
+      where: { id: { in: recipientIds } },
+      select: { id: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, channels: { select: CHANNEL_SELECT } },
+    }),
+    loadMessagingConfig(),
+  ]);
+  const wanted = new Set(prefs.filter((u) => emailWanted(type, u) || channelsFor(type, u.channels, messaging).length > 0).map((u) => u.id));
   const allowed = new Set<string>();
   for (const id of recipientIds) {
     if (skip.has(id) || !wanted.has(id)) continue;

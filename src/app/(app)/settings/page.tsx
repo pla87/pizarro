@@ -3,7 +3,9 @@ import { userTemplates } from "@/lib/board";
 import { db } from "@/lib/db";
 import { googleEnabled } from "@/lib/google";
 import { appTimeZone } from "@/lib/board";
-import { emailEnabled, whatsappEnabled } from "@/lib/notify";
+import { emailEnabled } from "@/lib/notify";
+import { getMyChannels } from "@/lib/messaging";
+import { MessagingSection } from "./MessagingSection";
 import { NotificationExtras } from "./NotificationExtras";
 import { currentSessionId, requireUserPage } from "@/lib/session";
 import { recoveryCodesLeft } from "@/lib/two-factor";
@@ -51,8 +53,6 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       accent: true,
       locale: true,
       notifyEmail: true,
-      notifyWhatsapp: true,
-      whatsappPhone: true,
       twoFactorMethod: true,
       notifyAssignedEmail: true,
       notifyDueEmail: true,
@@ -95,17 +95,17 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         locale={row.locale}
         notifications={{
           notifyEmail: row.notifyEmail,
-          notifyWhatsapp: row.notifyWhatsapp,
-          whatsappPhone: row.whatsappPhone ?? "",
           emailAvailable: emailEnabled(),
-          whatsappAvailable: whatsappEnabled(),
         }}
         notificationExtras={
+          <>
+          {tab === "avisos" && <MessagingSection initial={await getMyChannels(user.id)} />}
           <NotificationExtras
             prefs={{ notifyAssignedEmail: row.notifyAssignedEmail, notifyDueEmail: row.notifyDueEmail, notifyCommentEmail: row.notifyCommentEmail, dailyDigest: row.dailyDigest, digestHour: row.digestHour }}
             emailAvailable={emailEnabled()}
             timeZone={appTimeZone()}
           />
+          </>
         }
         tab={tab}
         preferencesExtra={

@@ -30,6 +30,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
       readAt: true,
       emailSentAt: true,
       whatsappSentAt: true,
+      telegramSentAt: true,
       actor: { select: { id: true, name: true } },
       task: { select: { id: true, title: true, project: { select: { id: true, name: true } } } },
     },
@@ -48,6 +49,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
         read: Boolean(n.readAt),
         viaEmail: Boolean(n.emailSentAt),
         viaWhatsapp: Boolean(n.whatsappSentAt),
+        viaTelegram: Boolean(n.telegramSentAt),
         actor: n.actor,
         task: n.task ? { id: n.task.id, title: mentionsToPlain(n.task.title), projectId: n.task.project.id, projectName: n.task.project.name } : null,
       }))}

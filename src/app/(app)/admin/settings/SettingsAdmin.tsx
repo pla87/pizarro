@@ -13,13 +13,15 @@ import type { StorageAdminView } from "@/lib/storage-stats";
 import { GoogleSettingsSection } from "./GoogleSettingsSection";
 import { TechInfoButton } from "./TechInfoButton";
 import type { GoogleSettingsView } from "@/lib/google-config";
+import type { MessagingAdminView } from "@/lib/messaging";
+import { MessagingSettingsSection } from "./MessagingSettingsSection";
 
 // Mismos márgenes que el servidor (src/lib/app-settings.ts, que no se puede importar desde el cliente).
 const MIN = 1;
 const MAX = 1000;
 
 /** «Ajustes»: parámetros generales de la aplicación. */
-export function SettingsAdmin({ maxComments, mail, google, storage }: { maxComments: number; mail: MailSettingsView; google: GoogleSettingsView; storage: StorageAdminView }) {
+export function SettingsAdmin({ maxComments, mail, google, storage, messaging }: { maxComments: number; mail: MailSettingsView; google: GoogleSettingsView; storage: StorageAdminView; messaging: MessagingAdminView }) {
   const t = useT();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -93,6 +95,7 @@ export function SettingsAdmin({ maxComments, mail, google, storage }: { maxComme
       <StorageSettingsSection view={storage} />
       <MailSettingsSection initial={mail.settings} env={mail.env} outbox={mail.outbox} />
       <GoogleSettingsSection view={google} />
+      <MessagingSettingsSection view={messaging} />
       <section className="card space-y-3 p-5">
         <div>
           <h2 className="text-sm font-semibold">{t("Diagnóstico para soporte")}</h2>

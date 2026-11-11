@@ -57,11 +57,8 @@ model User {
   clearDraftsOnLogout Boolean @default(false)
   /// Cómo se editan las descripciones: escribiendo Markdown o con barra de formato.
   editorMode     EditorMode @default(WYSIWYG)
-  /// Preferencias de aviso de menciones.
+  /// Aviso de menciones por email (Telegram y WhatsApp: UserChannel).
   notifyEmail    Boolean   @default(true)
-  notifyWhatsapp Boolean   @default(false)
-  /// Teléfono en formato E.164 (+34600111222).
-  whatsappPhone  String?
   /// Avisos por email de los demás tipos (los avisos en la app se crean siempre).
   notifyAssignedEmail Boolean @default(false)
   notifyDueEmail      Boolean @default(false)
@@ -113,6 +110,8 @@ model User {
   pendingDueSent    PendingDueNotice[] @relation("PendingDueActor")
   undoEntries       UndoEntry[]
   followedTasks     TaskFollower[]
+  channels          UserChannel[]
+  telegramLinks     TelegramLinkCode[]
 }
 
 model Session {
@@ -743,6 +742,7 @@ model Notification {
   readAt         DateTime?
   emailSentAt    DateTime?
   whatsappSentAt DateTime?
+  telegramSentAt DateTime?
   deliveryError  String?
   createdAt      DateTime         @default(now())
   user           User             @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
@@ -945,6 +945,49 @@ model UndoEntry {
 }
 
 /// Estado interno clave-valor (p. ej. cuándo se avisó por última vez de que faltan copias de seguridad), para que un reinicio no repita avisos.
+enum MessagingChannel {
+  TELEGRAM
+  WHATSAPP
+}
+
+/// Canal de mensajería que una persona conecta en Mi perfil → Avisos (lib/messaging.ts). Uno por canal.
+model UserChannel {
+  id             String           @id @default(cuid())
+  userId         String
+  channel        MessagingChannel
+  /// Telegram: chat_id del chat privado con el bot. WhatsApp: teléfono E.164 (+34600111222).
+  address        String
+  /// Solo para mostrar: @usuario o nombre en Telegram.
+  label          String           @default("")
+  /// WhatsApp: la persona confirmó que le llegó el mensaje de prueba. Sin esto no se le envían avisos.
+  verifiedAt     DateTime?
+  /// Cuándo aceptó recibir avisos por este canal.
+  consentAt      DateTime?
+  /// Qué avisos recibe por este canal. Por defecto, solo menciones y asignaciones.
+  notifyMention  Boolean          @default(true)
+  notifyAssigned Boolean          @default(true)
+  notifyDue      Boolean          @default(false)
+  notifyComment  Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channel])
+  @@index([channel, address])
+}
+
+/// Código de un solo uso de «Conectar Telegram» (t.me/<bot>?start=<código>). Solo se guarda su HMAC; caduca en minutos.
+model TelegramLinkCode {
+  hash      String   @id
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
 model AppState {
   key       String   @id
   value     String

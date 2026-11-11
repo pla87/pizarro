@@ -227,13 +227,11 @@ export async function revokeOtherSessions() {
   });
 }
 
-export async function updateNotificationPrefs(input: { notifyEmail: boolean; notifyWhatsapp: boolean; whatsappPhone: string }) {
+/** Email de las menciones (Telegram y WhatsApp se conectan aparte: actions/messaging.ts). */
+export async function updateNotificationPrefs(input: { notifyEmail: boolean }) {
   return runAction({ name: "profile.updateNotificationPrefs", args: [input] }, async () => {
     const user = await requireUser();
-    const data = z
-      .object({ notifyEmail: z.boolean(), notifyWhatsapp: z.boolean(), whatsappPhone: v.phoneE164 })
-      .parse(input);
-    if (data.notifyWhatsapp && !data.whatsappPhone) throw new AppError("Indica tu número de WhatsApp para activar los avisos.");
+    const data = z.object({ notifyEmail: z.boolean() }).parse(input);
     await db.user.update({ where: { id: user.id }, data });
   });
 }

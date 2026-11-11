@@ -106,5 +106,6 @@ export const config = {
   // comprueba por sí misma el origen, la sesión (también la contraseña pendiente de cambiar) y los permisos antes de leer
   // el cuerpo, y lo lee con su propio tope; de este proxy no necesitan nada (son API: sin CSP ni renovación de cookie,
   // y la redirección canónica no toca /api). Solo admiten POST; con otro método, Next responde 405.
-  matcher: ["/((?!api/auth/google/|api/projects/import$|api/tasks/[^/]+/attachments$|api/projects/[^/]+/documents$|api/health|_next/static|_next/image|favicon.ico|icon.svg|icons/|apple-touch-icon.png|pizarro-logo-120.png|sw.js|manifest.webmanifest).*)"],
+  // El webhook del bot de Telegram tampoco pasa: lo llama Telegram, sin sesión; se protege con su secreto y lee con tope.
+  matcher: ["/((?!api/auth/google/|api/telegram/webhook$|api/projects/import$|api/tasks/[^/]+/attachments$|api/projects/[^/]+/documents$|api/health|_next/static|_next/image|favicon.ico|icon.svg|icons/|apple-touch-icon.png|pizarro-logo-120.png|sw.js|manifest.webmanifest).*)"],
 };

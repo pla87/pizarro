@@ -1,4 +1,5 @@
 import { parseBackupKey } from "./backup-core";
+import { parseWhatsappSettings, resolveWhatsappConfig, TELEGRAM_ENABLED_KEY, TELEGRAM_TOKEN_KEY, telegramMode } from "./messaging-core";
 
 // Parte pura del diagnóstico para soporte (Administración → Ajustes → «Descargar diagnóstico» y node dist/doctor.mjs):
 // qué variables se comprueban, cómo se describen sin revelar su valor y cómo se limpian los textos.
@@ -47,11 +48,35 @@ export function configFlags(env: Env = process.env) {
     smtp: Boolean(env.SMTP_HOST && env.SMTP_FROM),
     mailOutbox: outbox,
     email: outbox || Boolean(env.SMTP_HOST && env.SMTP_FROM),
+    // Solo con las variables WHATSAPP_* (el diagnóstico completo lo corrige con lo guardado en Ajustes: messagingFlags).
     whatsapp: Boolean(env.WHATSAPP_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID && env.WHATSAPP_TEMPLATE_NAME),
     backups: Boolean(parseBackupKey(env.BACKUP_KEY)),
     separateTokenSecret: Boolean(env.TOKEN_SECRET?.trim()),
     separateEncryptionKey: Boolean(env.ENCRYPTION_KEY?.trim()),
     keyRotationInProgress: Boolean(env.TOKEN_SECRET_PREVIOUS?.trim() || env.ENCRYPTION_KEY_PREVIOUS?.trim()),
+  };
+}
+
+/**
+ * Telegram y WhatsApp (Administración → Ajustes y variables WHATSAPP_*), sin valores: si están configurados y activos,
+ * de dónde sale cada dato de WhatsApp y cómo recibe Pizarro los mensajes del bot (webhook o sondeo).
+ */
+export function messagingFlags(env: Env, rows: { key: string; value: string }[], channels: { telegram: number; whatsapp: number; whatsappPending: number } | null = null) {
+  const has = (k: string) => rows.some((r) => r.key === k && r.value.trim() !== "");
+  const telegramConfigured = has(TELEGRAM_TOKEN_KEY);
+  const saved = parseWhatsappSettings(rows);
+  // El token no se descifra: basta saber si está guardado.
+  const wa = resolveWhatsappConfig(env, saved, saved.hasToken ? "saved" : "");
+  return {
+    telegram: telegramConfigured && rows.some((r) => r.key === TELEGRAM_ENABLED_KEY && r.value === "true"),
+    telegramConfigured,
+    telegramMode: telegramMode(env.APP_URL).mode,
+    whatsapp: wa.active,
+    whatsappConfigured: wa.complete,
+    // Nombres que el limpiador del informe no tacha (quita los campos llamados token, phone…).
+    whatsappSources: { credential: wa.sources.token, numberId: wa.sources.phoneNumberId, template: wa.sources.templateName, language: wa.sources.templateLang },
+    whatsappLegacyTemplate: wa.legacy,
+    ...(channels ? { connectedChannels: channels } : {}),
   };
 }
 
