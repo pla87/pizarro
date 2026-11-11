@@ -291,19 +291,23 @@ defecto, menciones y asignaciones). Los tokens se guardan cifrados con `ENCRYPTI
 
 - **Telegram (gratis)**: crea un bot con @BotFather, pega su token y pulsa *Guardar y activar*. Con `APP_URL` https
   pública, Telegram avisa a Pizarro por webhook (`/api/telegram/webhook`, con secreto); si no, Pizarro le pregunta en
-  segundo plano cada pocos segundos, así que también funciona en una red local. Guía paso a paso:
+  segundo plano cada pocos segundos, así que también funciona en una red local (ese modo es para una sola instancia: con
+  varias réplicas, usa el webhook). Guía paso a paso:
   [docs/guias/telegram.md](docs/guias/telegram.md).
 - **WhatsApp (de pago, Cloud API de Meta)**: hace falta una app de Meta con un número, un token permanente de usuario
   del sistema y la plantilla de utilidad `aviso_pizarro` aprobada (el texto exacto está en la guía). Meta cobra cada
   aviso entregado. Guía paso a paso, con costes: [docs/guias/whatsapp.md](docs/guias/whatsapp.md).
 
 Precedencia en WhatsApp: lo guardado en Ajustes manda campo a campo; los campos vacíos usan las variables `WHATSAPP_*`
-(así las instalaciones que ya las tenían siguen funcionando). La plantilla antigua `mencion_pizarro` se sigue admitiendo,
-solo para menciones.
+(así las instalaciones que ya las tenían siguen funcionando). Una plantilla que solo viene de `WHATSAPP_TEMPLATE_NAME`
+(o la antigua `mencion_pizarro`) se usa con el formato antiguo de 4 variables y solo para menciones, hasta que se
+escribe su nombre en Ajustes. Cada persona confirma su número con un código de 6 cifras que le llega por WhatsApp
+(15 minutos, 5 intentos; como mucho 3 envíos al día por número y 5 por persona).
 
 Límites: como mucho 30 mensajes de Telegram y 10 de WhatsApp por persona y hora (el resto queda en la campana), además
 de los de siempre (un envío externo por persona y tarea cada 10 minutos y 40 por hora por autor). Los envíos salen tras
-responder, con hasta 3 intentos, y el apagado ordenado espera a los que están en curso. Los fallos quedan en
+responder, con hasta 3 intentos (en WhatsApp solo se reintentan el 429 y los fallos de conexión antes de enviar, para no
+cobrar dos veces), y el apagado ordenado espera a los que están en curso. Los fallos quedan en
 *Administración → Logs* sin tokens y con el teléfono enmascarado; si alguien bloquea el bot, se le desconecta.
 
 English guides: [docs/guias/en/telegram.md](docs/guias/en/telegram.md), [docs/guias/en/whatsapp.md](docs/guias/en/whatsapp.md).

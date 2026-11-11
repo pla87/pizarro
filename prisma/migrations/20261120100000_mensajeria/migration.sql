@@ -13,6 +13,9 @@ CREATE TABLE "UserChannel" (
     "label" TEXT NOT NULL DEFAULT '',
     "verifiedAt" TIMESTAMP(3),
     "consentAt" TIMESTAMP(3),
+    "verifyCodeHash" TEXT,
+    "verifyExpiresAt" TIMESTAMP(3),
+    "verifyAttempts" INTEGER NOT NULL DEFAULT 0,
     "notifyMention" BOOLEAN NOT NULL DEFAULT true,
     "notifyAssigned" BOOLEAN NOT NULL DEFAULT true,
     "notifyDue" BOOLEAN NOT NULL DEFAULT false,
@@ -60,6 +63,13 @@ INSERT INTO "UserChannel" ("id", "userId", "channel", "address", "verifiedAt", "
 SELECT 'wa_' || "id", "id", 'WHATSAPP', "whatsappPhone", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, true, false, false, false, CURRENT_TIMESTAMP
 FROM "User"
 WHERE "notifyWhatsapp" = true AND "whatsappPhone" IS NOT NULL AND "whatsappPhone" <> '';
+
+-- Quien tenía el número guardado pero los avisos por WhatsApp desactivados no lo pierde: queda como canal sin
+-- consentimiento ni verificación (no recibe nada). En Mi perfil aparece el número para activarlo con su código.
+INSERT INTO "UserChannel" ("id", "userId", "channel", "address", "verifiedAt", "consentAt", "notifyMention", "notifyAssigned", "notifyDue", "notifyComment", "updatedAt")
+SELECT 'wa_' || "id", "id", 'WHATSAPP', "whatsappPhone", NULL, NULL, true, false, false, false, CURRENT_TIMESTAMP
+FROM "User"
+WHERE "notifyWhatsapp" = false AND "whatsappPhone" IS NOT NULL AND "whatsappPhone" <> '';
 
 -- AlterTable
 ALTER TABLE "User" DROP COLUMN "notifyWhatsapp",

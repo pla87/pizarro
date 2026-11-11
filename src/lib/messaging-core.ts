@@ -133,6 +133,28 @@ export function safeEqual(a: string, b: string): boolean {
 
 export const escapeTelegramHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
+/**
+ * Texto preparado para Telegram con parse_mode HTML. Solo sale de `telegramHtml` (escapa todo lo interpolado), de
+ * `telegramPlain` (escapa el texto entero) o de `joinTelegramHtml`: sendTelegramMessage no admite un string cualquiera,
+ * así que un nombre con «&» o «<» no rompe el mensaje (400 de Telegram) ni cuela etiquetas o enlaces.
+ */
+export type TelegramHtml = string & { readonly __telegramHtml: true };
+
+/** Plantilla con el HTML fijo del código; cada valor interpolado se escapa siempre. */
+export function telegramHtml(strings: TemplateStringsArray, ...values: (string | number)[]): TelegramHtml {
+  let out = strings[0] ?? "";
+  values.forEach((v, i) => {
+    out += escapeTelegramHtml(String(v)) + (strings[i + 1] ?? "");
+  });
+  return out as TelegramHtml;
+}
+
+/** Texto sin formato (respuestas del bot, con nombres interpolados por t()): se escapa entero. */
+export const telegramPlain = (text: string): TelegramHtml => escapeTelegramHtml(text) as TelegramHtml;
+
+/** Une trozos ya preparados (el separador es fijo). */
+export const joinTelegramHtml = (parts: TelegramHtml[], sep: "\n" | " " = "\n"): TelegramHtml => parts.join(sep) as TelegramHtml;
+
 /** Lo que hace falta para escribir un aviso (mismo contenido que el email). */
 export interface NoticeMessage {
   type?: NotificationKind;
@@ -157,15 +179,18 @@ export function noticeHeadline(m: NoticeMessage, t: T): string {
 }
 
 /** Mensaje de Telegram (HTML de Telegram, todo el contenido escapado): cabecera, proyecto, extracto y enlace. */
-export function telegramNoticeText(m: NoticeMessage, t: T): string {
+export function telegramNoticeText(m: NoticeMessage, t: T): TelegramHtml {
   const body = oneLine(notificationBody(m.type ?? "MENTION", m.excerpt, t, m.locale ?? "es-ES"));
-  const lines = [`<b>${escapeTelegramHtml(noticeHeadline(m, t))}</b>`, escapeTelegramHtml(clip(oneLine(m.projectName), 100))];
-  if (body) lines.push(`<i>${escapeTelegramHtml(clip(body, 300))}</i>`);
-  lines.push("", `<a href="${escapeTelegramHtml(m.url)}">${escapeTelegramHtml(t("Abrir la tarea"))}</a>`);
-  return lines.join("\n");
+  const lines = [telegramHtml`<b>${noticeHeadline(m, t)}</b>`, telegramPlain(clip(oneLine(m.projectName), 100))];
+  if (body) lines.push(telegramHtml`<i>${clip(body, 300)}</i>`);
+  lines.push(telegramPlain(""), telegramHtml`<a href="${m.url}">${t("Abrir la tarea")}</a>`);
+  return joinTelegramHtml(lines);
 }
 
-export function telegramSendBody(chatId: string, text: string) {
+/** Mensaje de prueba de Telegram (Ajustes y Mi perfil). */
+export const telegramTestText = (t: T): TelegramHtml => telegramHtml`<b>${t("Mensaje de prueba de Pizarro")}</b>\n${t("Si lo lees, los avisos por Telegram funcionan.")}`;
+
+export function telegramSendBody(chatId: string, text: TelegramHtml) {
   return { chat_id: chatId, text, parse_mode: "HTML", link_preview_options: { is_disabled: true } };
 }
 
@@ -210,7 +235,10 @@ export interface WhatsappConfig {
   templateLang: string;
   templateLangEn: string;
   apiVersion: string;
-  /** Plantilla antigua «mencion_pizarro»: 4 variables y solo menciones. */
+  /**
+   * Formato antiguo (4 variables y solo menciones): la plantilla «mencion_pizarro» o cualquiera que venga solo de la
+   * variable WHATSAPP_TEMPLATE_NAME (instalaciones anteriores a la configuración en Ajustes).
+   */
   legacy: boolean;
   sources: { token: Source; phoneNumberId: Source; templateName: Source; templateLang: Source };
 }
@@ -239,7 +267,10 @@ export function resolveWhatsappConfig(env: Env, saved: WhatsappSettings, savedTo
     templateLang,
     templateLangEn: saved.templateLangEn,
     apiVersion: clean(env.WHATSAPP_API_VERSION) || DEFAULT_WHATSAPP_API_VERSION,
-    legacy: templateName === LEGACY_WHATSAPP_TEMPLATE,
+    // Antes de poder configurarse en Ajustes, la plantilla solo podía venir de WHATSAPP_TEMPLATE_NAME y tenía 4 variables
+    // (fuera cual fuera su nombre). Mientras siga saliendo de ahí, se usa ese formato (y solo menciones); al guardar un
+    // nombre en Ajustes, el administrador confirma que es la plantilla nueva (salvo que sea la antigua mencion_pizarro).
+    legacy: templateName === LEGACY_WHATSAPP_TEMPLATE || templateSrc === "env",
     sources: { token: tokenSrc, phoneNumberId: phoneSrc, templateName: templateSrc, templateLang: langSrc },
   };
 }
@@ -332,12 +363,41 @@ export class MessagingApiError extends Error {
   }
 }
 
+/** Fallo de red de fetch, con su código (ECONNREFUSED, ENOTFOUND…) y el mensaje ya sin secretos. */
+export class MessagingNetworkError extends Error {
+  constructor(message: string, readonly code: string | null) {
+    super(message);
+    this.name = "MessagingNetworkError";
+  }
+}
+
+/** Código de un error de red de fetch (undici lo deja en `cause.code`). */
+export function networkErrorCode(err: unknown): string | null {
+  const e = err as { code?: unknown; cause?: { code?: unknown } } | null;
+  const code = e?.cause?.code ?? e?.code;
+  return typeof code === "string" ? code : null;
+}
+
+/**
+ * Errores de red en los que la petición no llegó a salir (no se pudo resolver el nombre ni abrir la conexión). Con
+ * WhatsApp solo se reintentan estos: un ECONNRESET o un 5xx pueden llegar después de que Meta aceptara (y cobrara) el
+ * mensaje, y repetirlo lo enviaría (y cobraría) dos veces.
+ */
+export const PRE_SEND_NETWORK_CODES: ReadonlySet<string> = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "UND_ERR_CONNECT_TIMEOUT"]);
+
 /** Qué hacer tras un fallo: reintentar, dar el canal por desconectado (bot bloqueado, chat borrado) o rendirse. */
 export function classifyFailure(channel: "TELEGRAM" | "WHATSAPP", err: unknown): "retry" | "disconnect" | "fail" {
-  if (!(err instanceof MessagingApiError)) return "retry"; // red: no llegó a enviarse
+  if (!(err instanceof MessagingApiError)) {
+    // Telegram es gratis y un aviso repetido no cuesta nada: cualquier fallo de red se reintenta.
+    if (channel === "TELEGRAM") return "retry";
+    const code = err instanceof MessagingNetworkError ? err.code : networkErrorCode(err);
+    return code && PRE_SEND_NETWORK_CODES.has(code) ? "retry" : "fail";
+  }
   // Tiempo agotado: en WhatsApp puede haberse enviado (y cobrado), así que no se repite; en Telegram, sí.
   if (err.status === 408) return channel === "TELEGRAM" ? "retry" : "fail";
-  if (err.status === 429 || err.status >= 500) return "retry";
+  if (err.status === 429) return "retry";
+  // 5xx: en WhatsApp, Meta puede haberlo enviado igualmente; no se repite.
+  if (err.status >= 500) return channel === "TELEGRAM" ? "retry" : "fail";
   if (channel === "TELEGRAM" && (err.status === 403 || (err.status === 400 && /chat not found|user is deactivated|bot was blocked/i.test(err.message)))) return "disconnect";
   return "fail";
 }
@@ -388,6 +448,24 @@ export async function withRetries<T>(
 
 /** Envíos por canal y persona en una hora, como mucho (WhatsApp cuesta dinero: menos). */
 export const CHANNEL_LIMIT_PER_HOUR = { TELEGRAM: 30, WHATSAPP: 10 } as const;
+/** Espera antes de volver a preparar el bot tras un fallo (n = fallos seguidos): 5 s, 10 s, 20 s… hasta 5 minutos. */
+export const telegramSyncRetryMs = (n: number, baseMs = 5_000) => Math.min(5 * 60_000, baseMs * 2 ** Math.max(0, Math.min(n - 1, 20)));
+
+/** Código de verificación de WhatsApp: 6 cifras, válido 15 minutos y 5 intentos. */
+export const WHATSAPP_CODE_MINUTES = 15;
+export const WHATSAPP_CODE_ATTEMPTS = 5;
+/**
+ * Mensajes de prueba o con código desde Mi perfil, al día (cada uno cuesta dinero y llega a un número que todavía no
+ * se ha comprobado): por persona y por número de destino, sea quien sea quien lo pida.
+ */
+export const WHATSAPP_TESTS_PER_DAY = { user: 5, number: 3 } as const;
+
+/** «123456» → solo 6 cifras (admite espacios o guiones al copiarlo). */
+export function normalizeWhatsappCode(input: unknown): string | null {
+  const s = String(input ?? "").replace(/[\s-]/g, "");
+  return /^\d{6}$/.test(s) ? s : null;
+}
+
 /** Minutos de validez del código de «Conectar Telegram». */
 export const TELEGRAM_LINK_MINUTES = 10;
 /** Tamaño máximo del cuerpo que se acepta en el webhook de Telegram. */

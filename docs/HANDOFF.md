@@ -119,6 +119,23 @@ llevan enlaces de sesión ni nombres de modelos.
    repositorio además de la release): de ella despliegan las instalaciones de Railway. Si se protege `stable` en
    GitHub, hay que permitir que la mueva GitHub Actions. La imagen se construye con `OFFICIAL_BUILD=1` y
    `RELEASE_VERSION`: así la app sabe que es una build oficial y ofrece «Informar de un error».
+   El job solo mueve `stable` a un commit que ya está en `main` (`git merge-base --is-ancestor`); una etiqueta puesta
+   en otra rama publica la imagen y la release, pero deja `stable` donde estaba (con un aviso en el job).
+6. **Secreto `STABLE_PUSH_TOKEN` (una vez).** GitHub no deja que `GITHUB_TOKEN` mueva una rama si entre su commit
+   anterior y el nuevo cambia algún fichero de `.github/workflows/` (error «refusing to allow a GitHub App to create
+   or update workflow … without `workflows` permission»; el bloque `permissions:` no tiene un permiso `workflows`).
+   Para esas versiones el job usa el secreto `STABLE_PUSH_TOKEN` si existe (si no, `GITHUB_TOKEN`). Crearlo:
+   1. GitHub → *Settings* (de tu cuenta) → *Developer settings* → *Personal access tokens* → *Fine-grained tokens* →
+      *Generate new token*. Propietario: el del repositorio; *Repository access*: **Only select repositories** → solo
+      este repositorio; caducidad: la que admita la organización (apunta cuándo renovarlo).
+   2. *Repository permissions*: **Contents: Read and write** y **Workflows: Read and write** (nada más; *Metadata:
+      Read* se añade solo).
+   3. En el repositorio: *Settings → Secrets and variables → Actions → New repository secret*, nombre
+      `STABLE_PUSH_TOKEN`, valor el token.
+   Si falta (o le falta el permiso) y la versión cambia los workflows, el job «Rama stable» termina en rojo con un
+   mensaje que dice qué secreto crear; la imagen y la release ya están publicadas y no se tocan. Tras crear el
+   secreto, *Re-run failed jobs* en esa ejecución mueve `stable`. Si `stable` está protegida, la regla debe permitir
+   el push del propietario del token (o de GitHub Actions si no hay token).
 
 ### Actualizaciones de dependencias (Dependabot)
 

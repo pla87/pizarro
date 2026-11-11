@@ -63,13 +63,21 @@ Pizarro picks the method by itself, based on the installation's public address (
   only difference is that connecting Telegram may take a couple of seconds longer.
 
 Notices are sent the same way in both cases. If you change `APP_URL`, Pizarro registers the webhook again when it starts.
+If Telegram doesn't answer when Pizarro starts (or the database isn't ready yet), Pizarro tries again by itself, waiting
+longer each time (up to every 5 minutes), until it works.
+
+The mode without https (Pizarro asks Telegram) is for **a single instance** of Pizarro. With several replicas behind a
+load balancer, they would all ask for the same bot messages at once (Telegram rejects the second one): in that case use
+a public https `APP_URL` so that Telegram calls the webhook. When it shuts down, Pizarro tells Telegram which messages it
+has already processed, so the next instance doesn't repeat them.
 
 ## Turning it off or changing bots
 
 - **Turn off**: stops sending Telegram notices; the bot and the connections are kept for when you turn it back on.
 - **Remove the bot**: deletes the token and disconnects everyone.
 - **Change bots** (paste another bot's token with **Replace**): everyone has to connect their Telegram again, because
-  the new bot can't write to people who haven't opened it.
+  the new bot can't write to people who haven't opened it. Pizarro removes the previous bot's webhook (it stops getting
+  its messages) and creates a new secret for the new bot's webhook.
 
 ## Common problems
 

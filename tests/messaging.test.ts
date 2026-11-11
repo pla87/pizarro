@@ -64,16 +64,27 @@ test("WhatsApp solo con número confirmado y consentimiento; con la plantilla an
   assert.equal(core.channelUsable({ channel: "TELEGRAM", verifiedAt: null, consentAt: null }, "ASSIGNED", true), true);
 });
 
-test("errores: 403 de Telegram desconecta, 429 y 5xx se reintentan, el tiempo agotado de WhatsApp no se repite", () => {
+test("errores: 403 de Telegram desconecta; Telegram reintenta 429, 5xx y red; WhatsApp solo 429 y lo que no llegó a salir", () => {
   const E = core.MessagingApiError;
   assert.equal(core.classifyFailure("TELEGRAM", new E("Forbidden: bot was blocked by the user", 403)), "disconnect");
   assert.equal(core.classifyFailure("TELEGRAM", new E("Bad Request: chat not found", 400)), "disconnect");
   assert.equal(core.classifyFailure("TELEGRAM", new E("Bad Request: message is too long", 400)), "fail");
   assert.equal(core.classifyFailure("TELEGRAM", new E("Too Many Requests", 429, 3)), "retry");
-  assert.equal(core.classifyFailure("WHATSAPP", new E("x", 503)), "retry");
+  assert.equal(core.classifyFailure("TELEGRAM", new E("x", 502)), "retry");
+  assert.equal(core.classifyFailure("TELEGRAM", new Error("ECONNRESET")), "retry");
+  // WhatsApp cobra cada mensaje: un 5xx, un ECONNRESET o un tiempo agotado pueden llegar con el mensaje ya enviado.
+  assert.equal(core.classifyFailure("WHATSAPP", new E("x", 503)), "fail");
+  assert.equal(core.classifyFailure("WHATSAPP", new E("x", 500)), "fail");
+  assert.equal(core.classifyFailure("WHATSAPP", new E("x", 429)), "retry");
   assert.equal(core.classifyFailure("WHATSAPP", new E("x", 401)), "fail");
   assert.equal(core.classifyFailure("WHATSAPP", new E("timeout", 408)), "fail");
-  assert.equal(core.classifyFailure("WHATSAPP", new Error("ECONNRESET")), "retry");
+  assert.equal(core.classifyFailure("WHATSAPP", new core.MessagingNetworkError("x", "ECONNRESET")), "fail");
+  assert.equal(core.classifyFailure("WHATSAPP", new Error("ECONNRESET")), "fail");
+  for (const code of ["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN"]) {
+    assert.equal(core.classifyFailure("WHATSAPP", new core.MessagingNetworkError("x", code)), "retry", code);
+    // Tal cual lo lanza fetch (undici): TypeError «fetch failed» con el código en cause.
+    assert.equal(core.classifyFailure("WHATSAPP", Object.assign(new TypeError("fetch failed"), { cause: { code } })), "retry", code);
+  }
 });
 
 test("reintentos limitados: 3 intentos, respeta Retry-After corto, no reintenta lo que no tiene arreglo ni al apagar", async () => {
@@ -118,6 +129,15 @@ test("precedencia de WhatsApp: lo guardado manda campo a campo; las variables WH
   assert.equal(mixed.legacy, false);
   assert.equal(mixed.templateLang, "es_ES", "el idioma no guardado sale de la variable");
 
+  // Una plantilla que solo viene de WHATSAPP_TEMPLATE_NAME es de antes de la configuración en Ajustes: formato antiguo
+  // (4 variables), se llame como se llame. Al guardar su nombre en Ajustes, se usa el formato nuevo.
+  const otherEnv = core.resolveWhatsappConfig({ ...env, WHATSAPP_TEMPLATE_NAME: "mi_plantilla" }, empty, "");
+  assert.equal(otherEnv.legacy, true);
+  const savedName = core.parseWhatsappSettings([{ key: core.WHATSAPP_TEMPLATE_KEY, value: "mi_plantilla" }]);
+  assert.equal(core.resolveWhatsappConfig({ ...env, WHATSAPP_TEMPLATE_NAME: "mi_plantilla" }, savedName, "").legacy, false);
+  assert.equal(core.resolveWhatsappConfig(env, core.parseWhatsappSettings([{ key: core.WHATSAPP_TEMPLATE_KEY, value: "mencion_pizarro" }]), "").legacy, true);
+  assert.equal(core.resolveWhatsappConfig({ WHATSAPP_TOKEN: "t".repeat(24), WHATSAPP_PHONE_NUMBER_ID: "1" }, empty, "").legacy, false, "el nombre por defecto (aviso_pizarro) es el formato nuevo");
+
   const off = core.resolveWhatsappConfig(env, { ...empty, enabled: false }, "");
   assert.equal(off.active, false, "el administrador puede desactivarlo aunque estén las variables");
   const nothing = core.resolveWhatsappConfig({}, empty, "");
@@ -146,6 +166,32 @@ test("mensaje de Telegram: corto, en el idioma de la persona, con el contenido e
   assert.match(en, /assigned/);
   const long = core.telegramNoticeText({ ...m, excerpt: "a".repeat(2000) }, makeT("es"));
   assert.ok(long.length < 700, "el extracto se recorta");
+});
+
+test("Telegram HTML: lo interpolado se escapa siempre; el texto sin formato, entero", () => {
+  const name = "Ana & <b>Bea</b>";
+  assert.equal(core.telegramHtml`<b>${name}</b> ${3}`, "<b>Ana &amp; &lt;b&gt;Bea&lt;/b&gt;</b> 3");
+  assert.equal(core.telegramPlain(`Listo, ${name}: <a href="https://evil.example.com">x</a>`), "Listo, Ana &amp; &lt;b&gt;Bea&lt;/b&gt;: &lt;a href=&quot;https://evil.example.com&quot;&gt;x&lt;/a&gt;");
+  assert.equal(core.telegramTestText(makeT("es")), "<b>Mensaje de prueba de Pizarro</b>\nSi lo lees, los avisos por Telegram funcionan.");
+  assert.equal(core.joinTelegramHtml([core.telegramPlain("a<"), core.telegramPlain("b")]), "a&lt;\nb");
+});
+
+test("código de WhatsApp: 6 cifras (admite espacios y guiones al copiarlo)", () => {
+  assert.equal(core.normalizeWhatsappCode("123456"), "123456");
+  assert.equal(core.normalizeWhatsappCode(" 123 456 "), "123456");
+  assert.equal(core.normalizeWhatsappCode("123-456"), "123456");
+  assert.equal(core.normalizeWhatsappCode("12345"), null);
+  assert.equal(core.normalizeWhatsappCode("1234567"), null);
+  assert.equal(core.normalizeWhatsappCode("12345a"), null);
+  assert.equal(core.normalizeWhatsappCode(undefined), null);
+  assert.deepEqual([core.WHATSAPP_CODE_MINUTES, core.WHATSAPP_CODE_ATTEMPTS], [15, 5]);
+  assert.deepEqual(core.WHATSAPP_TESTS_PER_DAY, { user: 5, number: 3 });
+});
+
+test("reintentos de syncTelegram: espera creciente con tope de 5 minutos", () => {
+  assert.deepEqual([1, 2, 3, 4].map((n) => core.telegramSyncRetryMs(n)), [5_000, 10_000, 20_000, 40_000]);
+  assert.equal(core.telegramSyncRetryMs(10), 5 * 60_000);
+  assert.equal(core.telegramSyncRetryMs(1_000), 5 * 60_000);
 });
 
 test("registros sin secretos: token del bot, tokens largos y teléfono enmascarado", () => {

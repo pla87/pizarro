@@ -959,10 +959,14 @@ model UserChannel {
   address        String
   /// Solo para mostrar: @usuario o nombre en Telegram.
   label          String           @default("")
-  /// WhatsApp: la persona confirmó que le llegó el mensaje de prueba. Sin esto no se le envían avisos.
+  /// WhatsApp: la persona escribió el código de 6 cifras que le llegó por WhatsApp. Sin esto no se le envían avisos.
   verifiedAt     DateTime?
   /// Cuándo aceptó recibir avisos por este canal.
   consentAt      DateTime?
+  /// WhatsApp: HMAC del código de 6 cifras del último mensaje de verificación, su caducidad y los intentos gastados.
+  verifyCodeHash  String?
+  verifyExpiresAt DateTime?
+  verifyAttempts  Int             @default(0)
   /// Qué avisos recibe por este canal. Por defecto, solo menciones y asignaciones.
   notifyMention  Boolean          @default(true)
   notifyAssigned Boolean          @default(true)

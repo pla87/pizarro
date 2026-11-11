@@ -7,13 +7,15 @@ import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, ma
 
 process.env.APP_URL = "https://pizarro.example.com";
 
-const { confirmMyWhatsapp, connectTelegram, disconnectChannel, saveChannelPrefs, saveMyWhatsapp, saveTelegramBot, saveWhatsappSettings, setWhatsappActive, testWhatsapp } = await import("../../src/actions/messaging");
+const { confirmMyWhatsapp, connectTelegram, disconnectChannel, resendMyWhatsappCode, saveChannelPrefs, saveMyWhatsapp, saveTelegramBot, saveWhatsappSettings, setWhatsappActive, testMyChannel, testWhatsapp } = await import("../../src/actions/messaging");
 const { POST: webhook } = await import("../../src/app/api/telegram/webhook/route");
 const { decryptSecret } = await import("../../src/lib/crypto");
-const { getMessagingAdminView } = await import("../../src/lib/messaging");
+const { getMessagingAdminView, getMyChannels } = await import("../../src/lib/messaging");
 const { loadMessagingConfig, reloadMessagingConfig, saveTelegramToken, setTelegramEnabled } = await import("../../src/lib/messaging-config");
 const { deliver } = await import("../../src/lib/notify");
-const { createTelegramLinkCode } = await import("../../src/lib/telegram");
+const { createTelegramLinkCode, syncTelegram, telegramStatus } = await import("../../src/lib/telegram");
+const { resetShutdownForTests, runShutdown } = await import("../../src/lib/shutdown");
+const { collectTechInfo } = await import("../../src/lib/tech-info");
 const { flushLogs } = await import("../../src/lib/log");
 
 const TOKEN = "123456789:AAHfiqksKZ8WmR2zSjiQ7_v4TMAKdiHm9T0";
@@ -22,7 +24,7 @@ const WA_TOKEN = "EAAGwhatsappTokenDePrueba1234567890";
 interface Call { url: string; body: Record<string, unknown> & { chat_id?: string; text?: string } }
 let calls: Call[] = [];
 /** Respuesta simulada por método (sendMessage, getMe…) o por «graph» para Meta. */
-let replies: Record<string, () => Response> = {};
+let replies: Record<string, (call: Call) => Response | Promise<Response>> = {};
 const realFetch = globalThis.fetch;
 const ok = (result: unknown) => () => new Response(JSON.stringify({ ok: true, result }));
 
@@ -38,12 +40,13 @@ beforeEach(() => {
   globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
     const url = String(input);
     const body = init?.body ? JSON.parse(String(init.body)) : {};
-    calls.push({ url, body });
-    if (url.startsWith("https://graph.facebook.com/")) return replies.graph!();
+    const call = { url, body };
+    calls.push(call);
+    if (url.startsWith("https://graph.facebook.com/")) return replies.graph!(call);
     const method = url.split("/").pop()!;
     const reply = replies[method];
     if (!url.startsWith("https://api.telegram.org/") || !reply) throw new Error(`fetch inesperado: ${url}`);
-    return reply();
+    return reply(call);
   }) as typeof fetch;
 });
 afterEach(() => {
@@ -71,6 +74,15 @@ async function whatsappOn() {
 }
 
 const sends = (chatId?: string) => calls.filter((c) => c.url.endsWith("/sendMessage") && (!chatId || c.body.chat_id === chatId));
+const graphCalls = () => calls.filter((c) => c.url.includes("graph.facebook.com"));
+/** El código de 6 cifras del último WhatsApp enviado (va en la variable {{1}} de la plantilla). */
+function lastWhatsappCode(): string {
+  const body = graphCalls().at(-1)?.body as { template?: { components: { parameters: { text: string }[] }[] } } | undefined;
+  const text = body?.template?.components[0]?.parameters[0]?.text ?? "";
+  const m = /código de verificación de Pizarro es (\d{6})/.exec(text) ?? /verification code is (\d{6})/.exec(text);
+  assert.ok(m, `sin código en «${text}»`);
+  return m[1]!;
+}
 const update = (text: string, chatId = 5550001, extra: Record<string, unknown> = {}) => ({ update_id: Math.floor(Math.random() * 1e9), message: { text, chat: { id: chatId, type: "private" }, from: { username: "ana_tg", language_code: "es" }, ...extra } });
 const post = (body: unknown, secret: string, headers: Record<string, string> = {}) =>
   webhook(new Request("https://pizarro.example.com/api/telegram/webhook", { method: "POST", headers: { "content-type": "application/json", "x-telegram-bot-api-secret-token": secret, ...headers }, body: typeof body === "string" ? body : JSON.stringify(body) }));
@@ -293,7 +305,7 @@ describe("envío por Telegram y WhatsApp", () => {
     assert.equal(sends("1110001").length, 0);
   });
 
-  test("WhatsApp en Mi perfil: exige consentimiento, envía un mensaje de prueba y queda pendiente hasta confirmarlo", async () => {
+  test("WhatsApp en Mi perfil: exige consentimiento, envía un código y queda pendiente hasta escribirlo", async () => {
     await cleanConfig();
     await whatsappOn();
     const user = await makeUser();
@@ -308,7 +320,8 @@ describe("envío por Telegram y WhatsApp", () => {
     assert.equal(ch.address, "+34600999888");
     assert.ok(ch.consentAt);
     assert.equal(ch.verifiedAt, null);
-    expectOk(await confirmMyWhatsapp());
+    expectFail(await confirmMyWhatsapp({ code: "" }), /código de 6 cifras/);
+    expectOk(await confirmMyWhatsapp({ code: lastWhatsappCode() }));
     ch = await db.userChannel.findUniqueOrThrow({ where: { id: ch.id } });
     assert.ok(ch.verifiedAt);
     // El registro de actividad no lleva el número completo.
@@ -330,5 +343,250 @@ describe("envío por Telegram y WhatsApp", () => {
     calls = [];
     await deliver([await notice("MENTION", { userId: user.id, taskId: task.id })]);
     assert.equal(calls.filter((c) => c.url.includes("graph.facebook.com")).length, 0);
+  });
+});
+
+// --- Revisión: respuestas escapadas, sondeo por bot, reintentos de syncTelegram y apagado ---
+
+const TOKEN2 = "987654321:CCHfiqksKZ8WmR2zSjiQ7_v4TMAKdiHm9T1";
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+async function waitFor(cond: () => boolean, ms = 4_000): Promise<void> {
+  const end = Date.now() + ms;
+  while (!cond()) {
+    if (Date.now() > end) throw new Error("tiempo agotado esperando la condición");
+    await pause(10);
+  }
+}
+const updatesFor = (token: string) => calls.filter((c) => c.url === `https://api.telegram.org/bot${token}/getUpdates`);
+const pollState = () => (globalThis as unknown as { __pizarroTelegram: { retryBaseMs: number } }).__pizarroTelegram;
+
+describe("Telegram: respuestas del bot", () => {
+  test("el nombre de la persona va escapado (parse_mode HTML): ni rompe el mensaje ni cuela etiquetas", async () => {
+    await cleanConfig();
+    const cfg = await telegramOn();
+    const user = await makeUser({ name: "Ana & <b>Bea</b> <a href=\"https://evil.example.com\">x</a>" });
+    const { code } = await createTelegramLinkCode(user.id);
+    assert.equal((await post(update(`/start ${code}`, 5550009), cfg.webhookSecret)).status, 200);
+    const sent = sends("5550009")[0]!;
+    const text = String(sent.body.text);
+    assert.equal((sent.body as { parse_mode?: string }).parse_mode, "HTML");
+    assert.ok(text.includes("Listo, Ana &amp; &lt;b&gt;Bea&lt;/b&gt; &lt;a href=&quot;https://evil.example.com&quot;&gt;"), text);
+    assert.ok(!/<[a-z]/i.test(text), "ninguna etiqueta sin escapar");
+  });
+});
+
+describe("Telegram: sondeo (sin webhook)", () => {
+  const appUrl = process.env.APP_URL;
+  afterEach(async () => {
+    process.env.APP_URL = appUrl;
+    // Ningún bucle debe seguir preguntando a Telegram (con el fetch real) después de la prueba.
+    await setTelegramEnabled(false);
+    await syncTelegram();
+  });
+  /** getUpdates simulado: el primer lote de cada token trae `first`; después, una espera corta sin nada. */
+  function fakeUpdates(first: Record<string, unknown[]>) {
+    const served = new Set<string>();
+    replies.getUpdates = (c) => {
+      const token = Object.keys(first).find((k) => c.url.includes(k)) ?? "";
+      const batch = token && !served.has(token) ? (served.add(token), first[token]!) : null;
+      return new Promise((r) => setTimeout(() => r(new Response(JSON.stringify({ ok: true, result: batch ?? [] }))), batch ? 0 : 30));
+    };
+  }
+
+  test("otro bot: el sondeo se reinicia con el token nuevo y su propio offset; se quita el webhook del anterior y cambia el secreto", async () => {
+    await cleanConfig();
+    process.env.APP_URL = "http://pizarro.local:3000";
+    await loginAs(await makeUser({ role: "ADMIN" }));
+    fakeUpdates({ [TOKEN]: [{ update_id: 1000, message: { text: "/help", chat: { id: 5551, type: "private" }, from: { language_code: "es" } } }], [TOKEN2]: [] });
+    replies.getMe = (c) => new Response(JSON.stringify({ ok: true, result: c.url.includes(TOKEN2) ? { id: 43, is_bot: true, username: "otro_test_bot" } : { id: 42, is_bot: true, username: "pizarro_test_bot" } }));
+    assert.equal(expectOk(await saveTelegramBot({ token: TOKEN })).mode, "polling");
+    await waitFor(() => updatesFor(TOKEN).some((c) => c.body.offset === 1001));
+    const secret1 = (await loadMessagingConfig({ fresh: true })).telegram.webhookSecret;
+
+    const mark = calls.length;
+    expectOk(await saveTelegramBot({ token: TOKEN2 }));
+    assert.ok(calls.slice(mark).some((c) => c.url === `https://api.telegram.org/bot${TOKEN}/deleteWebhook`), "el bot anterior deja de llamar a Pizarro");
+    await waitFor(() => updatesFor(TOKEN2).length > 0);
+    assert.equal(updatesFor(TOKEN2)[0]!.body.offset, undefined, "el bot nuevo empieza desde su primera actualización");
+    const secret2 = (await loadMessagingConfig({ fresh: true })).telegram.webhookSecret;
+    assert.ok(secret2.length >= 32 && secret2 !== secret1, "secreto del webhook nuevo");
+    // El bucle viejo no sigue preguntando con el token anterior.
+    const old = updatesFor(TOKEN).length;
+    await pause(150);
+    assert.equal(updatesFor(TOKEN).length, old);
+  });
+
+  test("al apagar, confirma a Telegram el último lote (getUpdates con su offset y sin espera)", async () => {
+    await cleanConfig();
+    process.env.APP_URL = "http://pizarro.local:3000";
+    await loginAs(await makeUser({ role: "ADMIN" }));
+    fakeUpdates({ [TOKEN]: [{ update_id: 2000, message: { text: "/help", chat: { id: 5552, type: "private" }, from: { language_code: "es" } } }] });
+    expectOk(await saveTelegramBot({ token: TOKEN }));
+    await waitFor(() => updatesFor(TOKEN).some((c) => c.body.offset === 2001));
+    const mark = calls.length;
+    try {
+      await runShutdown("SIGTERM", { flushLogs: async () => {}, logEvent: () => {}, closeStreams: () => 0, stopListening: async () => ({ closed: 0, drained: async () => 0 }), exit: () => {}, graceMs: 3_000, flushMs: 10 });
+      const ack = calls.slice(mark).find((c) => c.url.endsWith("/getUpdates") && c.body.timeout === 0);
+      assert.ok(ack, "confirma el último lote antes de salir");
+      assert.equal(ack.body.offset, 2001);
+      assert.equal(telegramStatus().polling, false);
+    } finally {
+      resetShutdownForTests();
+    }
+  });
+});
+
+describe("Telegram: reintentos al preparar el bot", () => {
+  test("si Telegram falla al registrar el webhook, syncTelegram se reintenta solo hasta que sale bien", async () => {
+    await cleanConfig();
+    pollState().retryBaseMs = 20;
+    try {
+      let failures = 2;
+      replies.setWebhook = () => (failures-- > 0 ? new Response(JSON.stringify({ ok: false, error_code: 502, description: "Bad Gateway" }), { status: 502 }) : new Response(JSON.stringify({ ok: true, result: true })));
+      await telegramOn();
+      const first = await syncTelegram();
+      assert.match(first.error ?? "", /502/);
+      assert.ok(telegramStatus().retryAt > 0, "queda un reintento programado");
+      await waitFor(() => telegramStatus().lastError === null);
+      assert.equal(calls.filter((c) => c.url.endsWith("/setWebhook")).length, 3);
+      assert.equal(telegramStatus().retryAt, 0, "sin más reintentos tras salir bien");
+    } finally {
+      pollState().retryBaseMs = 5_000;
+    }
+  });
+});
+
+describe("WhatsApp: código de verificación y topes", () => {
+  const save = (phone: string) => saveMyWhatsapp({ phone, consent: true });
+  const channel = (userId: string) => db.userChannel.findUniqueOrThrow({ where: { userId_channel: { userId, channel: "WHATSAPP" } } });
+
+  test("el código va en la plantilla, solo se guarda su HMAC y hay que escribirlo bien; sin él no se confirma", async () => {
+    await cleanConfig();
+    await whatsappOn();
+    const user = await makeUser();
+    await loginAs(user);
+    calls = [];
+    expectOk(await save("+34611000001"));
+    const code = lastWhatsappCode();
+    const body = graphCalls()[0]!.body as { template: { name: string; components: { parameters: { text: string }[] }[] } };
+    assert.equal(body.template.name, "aviso_pizarro");
+    assert.equal(body.template.components[0]!.parameters[0]!.text, `Tu código de verificación de Pizarro es ${code}`);
+    const row = await channel(user.id);
+    assert.ok(row.verifyCodeHash && !row.verifyCodeHash.includes(code));
+    assert.ok(row.verifyExpiresAt && row.verifyExpiresAt.getTime() - Date.now() > 14 * 60_000 && row.verifyExpiresAt.getTime() - Date.now() <= 15 * 60_000);
+    const wrong = code === "000000" ? "111111" : "000000";
+    expectFail(await confirmMyWhatsapp({ code: wrong }), /no es correcto\. Te quedan 4 intentos/);
+    assert.equal((await channel(user.id)).verifiedAt, null);
+    // Un aviso no sale mientras no se confirme; la prueba desde Mi perfil tampoco.
+    expectFail(await testMyChannel("WHATSAPP"), /Confirma primero tu número/);
+    expectOk(await confirmMyWhatsapp({ code: `${code.slice(0, 3)} ${code.slice(3)}` }));
+    const done = await channel(user.id);
+    assert.ok(done.verifiedAt);
+    assert.equal(done.verifyCodeHash, null);
+    // Guardar otra vez el mismo número confirmado no envía nada.
+    calls = [];
+    assert.deepEqual(expectOk(await save("+34611000001")), { verified: true, sent: false });
+    assert.equal(graphCalls().length, 0);
+  });
+
+  test("5 intentos como mucho y caducidad de 15 minutos; «Enviar otro código» anula el anterior", async () => {
+    await cleanConfig();
+    await whatsappOn();
+    const user = await makeUser();
+    await loginAs(user);
+    expectOk(await save("+34611000002"));
+    const code = lastWhatsappCode();
+    const wrong = code === "000000" ? "111111" : "000000";
+    for (let i = 0; i < 4; i++) expectFail(await confirmMyWhatsapp({ code: wrong }), /no es correcto/);
+    expectFail(await confirmMyWhatsapp({ code: wrong }), /ya no quedan intentos/);
+    // Ni el bueno vale ya.
+    expectFail(await confirmMyWhatsapp({ code }), /caducado o ya no vale/);
+    assert.equal((await channel(user.id)).verifiedAt, null);
+
+    expectOk(await resendMyWhatsappCode());
+    const second = lastWhatsappCode();
+    await db.userChannel.updateMany({ where: { userId: user.id }, data: { verifyExpiresAt: new Date(Date.now() - 1_000) } });
+    expectFail(await confirmMyWhatsapp({ code: second }), /caducado/);
+    expectOk(await resendMyWhatsappCode());
+    const third = lastWhatsappCode();
+    if (third !== second) expectFail(await confirmMyWhatsapp({ code: second }), /no es correcto/);
+    expectOk(await confirmMyWhatsapp({ code: third }));
+    assert.ok((await channel(user.id)).verifiedAt);
+  });
+
+  test("topes de mensajes de prueba: 3 al día por número (sea quien sea quien los pida) y 5 al día por persona", async () => {
+    await cleanConfig();
+    await whatsappOn();
+    const a = await makeUser();
+    const b = await makeUser();
+    await loginAs(a);
+    expectOk(await save("+34611000003"));
+    expectOk(await resendMyWhatsappCode());
+    expectOk(await resendMyWhatsappCode());
+    calls = [];
+    expectFail(await resendMyWhatsappCode(), /máximo de mensajes de WhatsApp de prueba/);
+    // Otra persona tampoco puede seguir enviando a ese número.
+    await loginAs(b);
+    expectFail(await save("+34611000003"), /máximo de mensajes de WhatsApp de prueba/);
+    assert.equal(graphCalls().length, 0);
+    assert.equal(await db.userChannel.count({ where: { userId: b.id } }), 0, "no se guarda el número si no se puede enviar el código");
+
+    const c = await makeUser();
+    await loginAs(c);
+    expectOk(await save("+34611000004"));
+    expectOk(await resendMyWhatsappCode());
+    expectOk(await save("+34611000005"));
+    expectOk(await resendMyWhatsappCode());
+    expectOk(await save("+34611000006"));
+    expectFail(await resendMyWhatsappCode(), /máximo de mensajes de WhatsApp de prueba/);
+  });
+
+  test("un 5xx o una conexión cortada de Meta no se reintentan (podría estar enviado y cobrado)", async () => {
+    await cleanConfig();
+    await whatsappOn();
+    const user = await makeUser();
+    await db.user.update({ where: { id: user.id }, data: { notifyEmail: false } });
+    const f = await makeProject({ members: [user] });
+    const task = await makeTask(f);
+    await db.userChannel.create({ data: { userId: user.id, channel: "WHATSAPP", address: "+34611000007", consentAt: new Date(), verifiedAt: new Date() } });
+    replies.graph = () => new Response(JSON.stringify({ error: { message: "Service Unavailable", code: 1 } }), { status: 503 });
+    calls = [];
+    const first = await notice("MENTION", { userId: user.id, taskId: task.id });
+    await deliver([first]);
+    assert.equal(graphCalls().length, 1);
+    assert.equal((await db.notification.findUniqueOrThrow({ where: { id: first } })).whatsappSentAt, null);
+    replies.graph = () => {
+      throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNRESET", message: "socket hang up" } });
+    };
+    calls = [];
+    await deliver([await notice("ASSIGNED", { userId: user.id, taskId: task.id })]);
+    assert.equal(graphCalls().length, 1);
+  });
+
+  test("Mi perfil: un número de una versión anterior sin consentimiento se ve, pero no recibe nada hasta confirmarlo", async () => {
+    await cleanConfig();
+    await whatsappOn();
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const task = await makeTask(f);
+    await db.userChannel.create({ data: { userId: user.id, channel: "WHATSAPP", address: "+34611000008" } });
+    const view = await getMyChannels(user.id);
+    assert.deepEqual([view.whatsapp?.phone, view.whatsapp?.consented, view.whatsapp?.verified], ["+34611000008", false, false]);
+    calls = [];
+    await deliver([await notice("MENTION", { userId: user.id, taskId: task.id })]);
+    assert.equal(graphCalls().length, 0);
+    const admin = await getMessagingAdminView();
+    assert.deepEqual([admin.whatsapp.connected, admin.whatsapp.pending], [0, 0]);
+  });
+});
+
+describe("información técnica", () => {
+  test("«Copiar información técnica» refleja Telegram y WhatsApp configurados en Ajustes", async () => {
+    await cleanConfig();
+    await telegramOn();
+    await whatsappOn();
+    const line = (await collectTechInfo()).split("\n").find((l) => l.startsWith("Features:")) ?? "";
+    assert.match(line, /\btelegram\b/);
+    assert.match(line, /\bwhatsapp\b/);
   });
 });

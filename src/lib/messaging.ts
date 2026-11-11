@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "./db";
 import { appUrl } from "./mail";
 import { loadMessagingConfig } from "./messaging-config";
-import { DEFAULT_WHATSAPP_TEMPLATE, telegramMode, WHATSAPP_PRICING_URL, WHATSAPP_TEMPLATE_BODY, type ChannelPrefs, type Source } from "./messaging-core";
+import { DEFAULT_WHATSAPP_TEMPLATE, telegramMode, WHATSAPP_CODE_ATTEMPTS, WHATSAPP_PRICING_URL, WHATSAPP_TEMPLATE_BODY, type ChannelPrefs, type Source } from "./messaging-core";
 import { telegramStatus, webhookInfo } from "./telegram";
 
 // Lo que ven las pantallas de Telegram y WhatsApp: Administración → Ajustes («Telegram y WhatsApp») y Mi perfil → Avisos.
@@ -40,6 +40,8 @@ export interface MessagingAdminView {
     complete: boolean;
     active: boolean;
     legacy: boolean;
+    /** De dónde sale el formato antiguo: el nombre mencion_pizarro o la variable WHATSAPP_TEMPLATE_NAME. */
+    legacyFromEnv: boolean;
     connected: number;
     pending: number;
     /** Texto de la plantilla que hay que crear en Meta, nombre por defecto y página de precios (el cliente no importa messaging-core). */
@@ -53,7 +55,10 @@ export async function getMessagingAdminView(): Promise<MessagingAdminView> {
   const cfg = await loadMessagingConfig({ fresh: true });
   const m = telegramMode(process.env.APP_URL);
   const counts = await db.userChannel.groupBy({ by: ["channel"], where: { user: { active: true } }, _count: { _all: true } });
-  const pending = await db.userChannel.count({ where: { channel: "WHATSAPP", verifiedAt: null, user: { active: true } } });
+  // Pendientes: dieron su número y su consentimiento pero aún no han escrito el código. Los números que vienen de una
+  // versión anterior sin avisos activados (sin consentimiento) no cuentan ni como conectados ni como pendientes.
+  const pending = await db.userChannel.count({ where: { channel: "WHATSAPP", verifiedAt: null, consentAt: { not: null }, user: { active: true } } });
+  const verified = await db.userChannel.count({ where: { channel: "WHATSAPP", verifiedAt: { not: null }, consentAt: { not: null }, user: { active: true } } });
   const count = (c: "TELEGRAM" | "WHATSAPP") => counts.find((r) => r.channel === c)?._count._all ?? 0;
   const status = telegramStatus();
   const info = cfg.telegram.active && m.mode === "webhook" ? await webhookInfo(cfg.telegram.token) : null;
@@ -89,7 +94,8 @@ export async function getMessagingAdminView(): Promise<MessagingAdminView> {
       complete: w.complete,
       active: w.active,
       legacy: w.legacy,
-      connected: count("WHATSAPP") - pending,
+      legacyFromEnv: w.legacy && w.sources.templateName === "env",
+      connected: verified,
       pending,
       templateBody: { ...WHATSAPP_TEMPLATE_BODY },
       defaultTemplate: DEFAULT_WHATSAPP_TEMPLATE,
@@ -100,7 +106,17 @@ export async function getMessagingAdminView(): Promise<MessagingAdminView> {
 
 export interface MyChannelsView {
   telegram: { available: boolean; botUsername: string; connected: boolean; label: string; prefs: ChannelPrefs } | null;
-  whatsapp: { available: boolean; phone: string; verified: boolean; prefs: ChannelPrefs; mentionsOnly: boolean } | null;
+  whatsapp: {
+    available: boolean;
+    phone: string;
+    verified: boolean;
+    /** Aceptó recibir avisos (un número que viene de una versión anterior con WhatsApp desactivado, no). */
+    consented: boolean;
+    /** Hay un código enviado que aún vale (sin caducar ni gastar sus intentos). */
+    codePending: boolean;
+    prefs: ChannelPrefs;
+    mentionsOnly: boolean;
+  } | null;
   /** Dirección de la app (para el texto de ayuda). */
   appUrl: string;
 }
@@ -119,7 +135,15 @@ export async function getMyChannels(userId: string): Promise<MyChannelsView> {
       ? { available: cfg.telegram.active, botUsername: cfg.telegram.botUsername, connected: Boolean(tg), label: tg?.label ?? "", prefs: tg ? prefsOf(tg) : DEFAULT }
       : null,
     whatsapp: cfg.whatsapp.active || wa
-      ? { available: cfg.whatsapp.active, phone: wa?.address ?? "", verified: Boolean(wa?.verifiedAt && wa.consentAt), prefs: wa ? prefsOf(wa) : DEFAULT, mentionsOnly: cfg.whatsapp.legacy }
+      ? {
+          available: cfg.whatsapp.active,
+          phone: wa?.address ?? "",
+          verified: Boolean(wa?.verifiedAt && wa.consentAt),
+          consented: Boolean(wa?.consentAt),
+          codePending: Boolean(wa?.verifyCodeHash && wa.verifyExpiresAt && wa.verifyExpiresAt.getTime() > Date.now() && wa.verifyAttempts < WHATSAPP_CODE_ATTEMPTS),
+          prefs: wa ? prefsOf(wa) : DEFAULT,
+          mentionsOnly: cfg.whatsapp.legacy,
+        }
       : null,
   };
 }

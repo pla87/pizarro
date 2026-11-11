@@ -9,7 +9,7 @@ import { commentNoticesWhere } from "./notify";
 import { db } from "./db";
 import { assertTaskCapacity } from "./caps";
 import { blockProblem, lockBlocking } from "./blocking";
-import { lockTaskRows, resolvePositionTies } from "./task-positions";
+import { lockTaskRows, lockTaskRowsForDelete, resolvePositionTies } from "./task-positions";
 import { removeAttachmentFiles, removeReleaseAttachmentFiles } from "./uploads";
 
 // Deshacer: cada acción deshacible deja sus operaciones inversas (addUndo) y runAction las guarda
@@ -1009,8 +1009,9 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
       const atts = await db.taskAttachment.findMany({ where: { taskId: { in: ids } }, select: { id: true, taskId: true } });
       const deleted = new Set(
         await db.$transaction(async (tx) => {
-          // Como en setTasks: filas en orden de id antes del DELETE … ANY (que las bloquea en el orden en que las encuentra).
-          await lockTaskRows(tx, ids);
+          // Como en setTasks: filas en orden de id antes del DELETE … ANY (que las bloquea en el orden en que las encuentra),
+          // y ya con FOR UPDATE, el bloqueo del DELETE (ver lockTaskRowsForDelete).
+          await lockTaskRowsForDelete(tx, ids);
           return (await tx.$queryRaw<{ id: string }[]>`DELETE FROM "Task" WHERE "id" = ANY(${ids}::text[]) AND "projectId" = ${projectId} RETURNING "id"`).map((r) => r.id);
         }),
       );
