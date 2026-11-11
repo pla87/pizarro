@@ -33,7 +33,7 @@ import { useConfirm } from "../ui/ConfirmDialog";
 import { copyText } from "../ui/clipboard";
 import { pasteAsOneLine } from "../ui/textarea-edit";
 import { usePasteFiles } from "../ui/pasteFiles";
-import { useToast } from "../ui/Toast";
+import { isSessionExpiredMessage, useToast } from "../ui/Toast";
 import { boardClients, useBoard } from "./context";
 import { isTypingTarget, useShortcut } from "./shortcuts";
 import { weekdayName } from "./recurrence-ui";
@@ -147,11 +147,16 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     return true;
   };
 
-  // Si el título cambia desde fuera (recarga tras un conflicto, deshacer), se muestra el nuevo.
+  // Si el título cambia desde fuera (otra persona, deshacer, recarga tras un conflicto), se muestra el nuevo, pero solo
+  // si no se está editando: lo que se esté escribiendo (distinto de lo que se mostraba) no se pisa, como el enlace. Antes
+  // se sustituía siempre y, cuando otra persona guardaba su título, lo escrito aquí se perdía sin aviso. Al guardarlo,
+  // `detail.textVersion` sigue siendo la versión sobre la que se escribió (no avanza con la actualización en vivo), así
+  // que el servidor responde con el conflicto y el aviso ofrece «Copiar tu texto» (ver `save`). Si el guardado falla, la
+  // tarjeta vuelve a lo guardado y el campo, que mostraba lo enviado, pasa al título actual.
   const [shownTitle, setShownTitle] = useState(task.title);
   if (shownTitle !== task.title) {
     setShownTitle(task.title);
-    setTitle(task.title);
+    if (title === shownTitle) setTitle(task.title);
   }
   // Se incrementa al cambiar la descripción desde fuera del editor para que se remonte con el texto nuevo.
   const [descVersion, setDescVersion] = useState(0);
@@ -388,11 +393,18 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     const res = await tracked(updateTask(task.id, patch, editsText ? (detail?.textVersion ?? null) : undefined));
     if (!res.ok) {
       if (before) board.upsertTask(before);
+      // Sesión caducada: lo escrito se queda en el campo (y en el borrador local) para guardarlo tras volver a entrar; el
+      // aviso lleva «Iniciar sesión» (ver Toast). Sin esto, el título volvía al guardado y se perdía con el borrador.
+      const expired = isSessionExpiredMessage(res.error, t);
+      if (expired && patch.title !== undefined && before) {
+        setShownTitle(before.title);
+        setTitle(patch.title);
+      }
       // El texto que no se pudo guardar (p. ej. otra persona cambió la tarea a la vez y se recarga con lo suyo) no se
       // pierde: el aviso permite copiarlo para volver a aplicarlo.
       const rejected = [patch.title, patch.description].filter((x): x is string => !!x?.trim()).join("\n\n");
-      toast(res.error, "error", rejected ? { label: t("Copiar tu texto"), onClick: () => void copyText(rejected).then((ok) => ok && toast(t("Copiado al portapapeles"))) } : undefined);
-      if (editsText) await reload();
+      toast(res.error, "error", rejected && !expired ? { label: t("Copiar tu texto"), onClick: () => void copyText(rejected).then((ok) => ok && toast(t("Copiado al portapapeles"))) } : undefined);
+      if (editsText && !expired) await reload();
       return false;
     }
     board.upsertTask(res.data);
@@ -645,6 +657,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const commitTitle = (next?: string) => {
     const value = (next ?? title).trim();
     if (!value) return setTitle(task.title);
+    // El campo queda con lo que se envía (sin espacios sobrantes): coincide con la tarjeta y, si el guardado falla, el
+    // título guardado lo sustituye (ver `shownTitle`).
+    if (value !== title) setTitle(value);
     if (value !== task.title) save({ title: value }, { title: value });
   };
 

@@ -15,7 +15,6 @@ import { POSITION_STEP } from "@/lib/positions";
 import { spawnRecurrences } from "@/lib/recurrence";
 import { lastPositionIn, lockColumns, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { computeReleaseCodes, titleWithReleaseCode, zonedDayRange } from "@/lib/release";
-import { localizeGeneralKinds } from "@/lib/kinds-localize";
 import { runReleaseAttachmentsJob, type PendingJob } from "@/lib/release-attachments";
 import { requireUser } from "@/lib/session";
 import { checkQuota } from "@/lib/quota";
@@ -25,7 +24,7 @@ import { removeReleaseAttachmentFiles } from "@/lib/uploads";
 import { addUndo, captureTasks } from "@/lib/undo";
 import { tasksN } from "@/lib/undo-label";
 import * as v from "@/lib/validation";
-import { getLocale, getT } from "@/i18n/server";
+import { getT } from "@/i18n/server";
 import { mentionsToPlain } from "@/lib/mentions";
 
 const deploySchema = z.object({
@@ -38,18 +37,40 @@ const deploySchema = z.object({
   attachments: z.array(z.object({ taskId: v.id, code: z.string().regex(/^(R\d{1,5})?[A-Z]{1,4}\d{1,4}$/) })).max(200).optional(),
   /** Número con el que se generaron los códigos (R32…): si otra persona desplegó antes, no coincide. */
   number: z.number().int().positive().optional(),
+  /**
+   * Columna en la que estaba cada tarea al generar el texto (lo que vio quien despliega). Si otra persona ha movido
+   * alguna entretanto (p. ej. de vuelta a «En progreso»), no se despliega: la sacaría a producción.
+   */
+  columns: z.array(z.object({ taskId: v.id, columnId: v.id })).max(500).optional(),
 });
 
-/** 409 si `missing` tareas de la release ya no están en el tablero: el texto generado no coincidiría con el histórico. */
-async function assertNoneMissing(missing: number) {
-  if (missing <= 0) return;
+/**
+ * 409 si `missing` tareas de la release ya no están en el tablero, o `moved` han cambiado de columna desde que se
+ * generó el texto: el texto no coincidiría con el histórico (o se sacaría a producción una tarea que ya no toca).
+ */
+async function assertNoneMissing(missing: number, moved = 0) {
+  if (missing <= 0 && moved <= 0) return;
   const t = await getT();
+  if (missing > 0) {
+    throw new AppError(
+      missing === 1
+        ? t("Una de las tareas ya no está en el tablero (archivada, borrada o movida a otro proyecto): vuelve a generar la release.")
+        : t("{n} de las tareas ya no están en el tablero (archivadas, borradas o movidas a otro proyecto): vuelve a generar la release.", { n: missing }),
+      409,
+    );
+  }
   throw new AppError(
-    missing === 1
-      ? t("Una de las tareas ya no está en el tablero (archivada, borrada o movida a otro proyecto): vuelve a generar la release.")
-      : t("{n} de las tareas ya no están en el tablero (archivadas, borradas o movidas a otro proyecto): vuelve a generar la release.", { n: missing }),
+    moved === 1
+      ? t("Una de las tareas se ha movido a otra columna mientras tanto: vuelve a generar la release.")
+      : t("{n} de las tareas se han movido a otra columna mientras tanto: vuelve a generar la release.", { n: moved }),
     409,
   );
+}
+
+/** Cuántas de las tareas leídas no están en la columna en la que estaban al generar el texto. */
+function movedCount(rows: { id: string; columnId: string }[], expected: Map<string, string> | null): number {
+  if (!expected) return 0;
+  return rows.filter((r) => expected.has(r.id) && expected.get(r.id) !== r.columnId).length;
 }
 
 /**
@@ -67,11 +88,12 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     const tasks = await db.task.findMany({
       where: { id: { in: data.taskIds }, projectId: data.projectId, archivedAt: null },
       orderBy: [{ column: { position: "asc" } }, ...TASK_ORDER],
-      select: { id: true, title: true, evergreen: true, kindId: true, kind: { select: { name: true } } },
+      select: { id: true, title: true, evergreen: true, kindId: true, columnId: true, kind: { select: { name: true } } },
     });
-    // El texto llega ya generado del cliente: si alguna tarea se ha archivado, borrado o movido de proyecto
-    // mientras tanto, el histórico no coincidiría con lo que dice el texto. Se pide volver a generarlo.
-    await assertNoneMissing(new Set(data.taskIds).size - tasks.length);
+    // El texto llega ya generado del cliente: si alguna tarea se ha archivado, borrado o movido de proyecto o de
+    // columna mientras tanto, el histórico no coincidiría con lo que dice el texto. Se pide volver a generarlo.
+    const expectedColumns = data.columns ? new Map(data.columns.map((c) => [c.taskId, c.columnId])) : null;
+    await assertNoneMissing(new Set(data.taskIds).size - tasks.length, movedCount(tasks, expectedColumns));
 
     // Deshacer: dónde estaba cada tarea (solo las de este proyecto); la release del histórico se quita (ver más abajo).
     // La columna de destino se busca a la vez.
@@ -85,7 +107,9 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     // Orden y tipos del diálogo para que los códigos coincidan con los del texto.
     const byId = new Map(tasks.map((t) => [t.id, t]));
     const ordered = [...new Set(data.taskIds)].map((id) => ({ id, kindId: byId.get(id)!.kindId }));
-    const kinds = localizeGeneralKinds(await listKinds(data.projectId), await getLocale());
+    // Con los nombres guardados de los tipos, no los traducidos al idioma de quien despliega: el código va en el título
+    // de las tareas y debe ser el mismo para todo el equipo (el diálogo usa `codeName`, ver localizeGeneralKind).
+    const kinds = await listKinds(data.projectId);
     if (data.destination === "IN_PRODUCTION" && !target) {
       throw new AppError("No hay ninguna columna con el rol «En producción». Asígnalo en el menú de una columna o elige archivar.");
     }
@@ -105,11 +129,12 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
       // medias, la release la incluiría y la sacaría a producción sin quitarle archivedAt. Se bloquean aquí las que
       // siguen activas en el proyecto (un archivado en curso termina antes y deja de contar) y se repite el aviso. En
       // orden de id, como las acciones en bloque: dos transacciones que bloquean las mismas tareas no se cruzan (40P01).
+      // También su columna: si otra persona ha movido alguna desde que se generó el texto, no se despliega.
       const ids = tasks.map((t) => t.id);
       const still = ids.length
-        ? await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "Task" WHERE "id" IN (${Prisma.join(ids)}) AND "projectId" = ${data.projectId} AND "archivedAt" IS NULL ORDER BY "id" FOR UPDATE`
+        ? await tx.$queryRaw<{ id: string; columnId: string }[]>`SELECT "id", "columnId" FROM "Task" WHERE "id" IN (${Prisma.join(ids)}) AND "projectId" = ${data.projectId} AND "archivedAt" IS NULL ORDER BY "id" FOR UPDATE`
         : [];
-      await assertNoneMissing(ids.length - still.length);
+      await assertNoneMissing(ids.length - still.length, movedCount(still, expectedColumns));
       const last = await tx.release.findFirst({ where: { projectId: data.projectId }, orderBy: { number: "desc" }, select: { number: true } });
       const number = (last?.number ?? 0) + 1;
       if (data.number && data.number !== number) {

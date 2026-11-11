@@ -89,11 +89,54 @@ test("rango del día local en una zona horaria", () => {
   assert.equal(dst.end.toISOString(), "2026-10-25T23:00:00.000Z");
 });
 
-test("nombre del ZIP del histórico", () => {
-  assert.equal(releaseZipName("Release 2026-10-18 (2) · Proyecto"), "Release_2026-10-18_2_Proyecto-adjuntos.zip");
-  assert.equal(releaseZipName("///"), "release-adjuntos.zip");
-  assert.equal(releaseZipName("Release 1", 2, 3), "Release_1-adjuntos-2de3.zip");
-  assert.equal(releaseZipName("Release 1", 1, 1), "Release_1-adjuntos.zip");
+test("nombre del ZIP de adjuntos: el mismo desde el diálogo y desde el histórico", () => {
+  // Antes el diálogo daba «release-2026-11-11-adjuntos.zip» y el histórico «Release_2026-11-11_Proyecto_de_ejemplo-adjuntos.zip».
+  assert.equal(releaseZipName({ day: "2026-11-11", number: 12, project: "Proyecto de ejemplo" }), "release-2026-11-11-R12-Proyecto_de_ejemplo-adjuntos.zip");
+  assert.equal(releaseZipName({ day: "2026-11-11", number: 12, project: "Proyecto de ejemplo" }, 2, 3), "release-2026-11-11-R12-Proyecto_de_ejemplo-adjuntos-2de3.zip");
+  assert.equal(releaseZipName({ day: "2026-11-11", number: 3, project: "Web · Año 2" }, 1, 1), "release-2026-11-11-R3-Web_Año_2-adjuntos.zip");
+  // Sin número o sin proyecto (o un nombre sin letras), se omiten.
+  assert.equal(releaseZipName({ day: "2026-11-11" }), "release-2026-11-11-adjuntos.zip");
+  assert.equal(releaseZipName({ day: "2026-11-11", number: null, project: "///" }, 1, 3), "release-2026-11-11-adjuntos-1de3.zip");
+  // Un nombre muy largo se recorta.
+  assert.ok(releaseZipName({ day: "2026-11-11", number: 1, project: "x".repeat(300) }).length < 110);
+});
+
+test("release notes en el idioma de quien la genera: «Otros», «Adjuntos», «enlace» y sin tareas", () => {
+  const en = (s: string) => ({ Otros: "Others", Adjuntos: "Attachments", enlace: "link", "Sin tareas seleccionadas.": "No tasks selected." })[s] ?? s;
+  const md = buildReleaseMarkdown({
+    header: "",
+    footer: "",
+    kinds: [{ id: "k1", name: "Feature", codeName: "Funcionalidad" }],
+    tasks: [
+      { id: "a", title: "Uno", kindId: "k1", linkUrl: "https://example.com/1", attachments: [{ originalName: "foto.png" }] },
+      { id: "b", title: "Dos", kindId: "borrado" },
+    ],
+  }, en);
+  assert.match(md, /### Feature\n- \*\*F1\*\* · Uno \(\[link\]\(<https:\/\/example\.com\/1>\)\)\n {2}Attachments: F1_foto\.webp/);
+  // La sección se traduce, pero el código sigue saliendo del nombre de serie («Otros» → O1).
+  assert.match(md, /### Others\n- \*\*O1\*\* · Dos/);
+  assert.doesNotMatch(md, /Adjuntos|enlace|Otros/);
+  assert.equal(buildReleaseMarkdown({ header: "", footer: "", kinds, tasks: [] }, en), "_No tasks selected._\n");
+  // Sin traductor, en español (como hasta ahora).
+  assert.equal(buildReleaseMarkdown({ header: "", footer: "", kinds, tasks: [] }), "_Sin tareas seleccionadas._\n");
+});
+
+test("códigos con el nombre guardado del tipo, no con el traducido (iguales para todo el equipo)", () => {
+  // Tipos de serie vistos en inglés (localizeGeneralKind deja el nombre guardado en codeName) y en español.
+  const asEn = [{ id: "kind_funcionalidad", name: "Feature", codeName: "Funcionalidad" }, { id: "kind_correccion", name: "Bug fix", codeName: "Corrección" }, { id: "kd", name: "Diseño" }];
+  const asEs = [{ id: "kind_funcionalidad", name: "Funcionalidad" }, { id: "kind_correccion", name: "Corrección" }, { id: "kd", name: "Diseño" }];
+  const tasks = [{ id: "a", kindId: "kind_correccion" }, { id: "b", kindId: "kind_funcionalidad" }, { id: "c", kindId: "kd" }];
+  const es = computeReleaseCodes(asEs, tasks, 4);
+  assert.deepEqual([...es.values()], ["R4C1", "R4F1", "R4D1"]);
+  assert.deepEqual([...computeReleaseCodes(asEn, tasks, 4).values()], [...es.values()]);
+});
+
+test("cabecera y pie de release con entidades guardadas por el editor (&lt; …) salen con los caracteres reales", () => {
+  const md = buildReleaseMarkdown({ header: "Versión &lt;2.0&gt; &amp; notas", footer: "  Equipo &quot;QA&quot; -&gt; listo ", kinds, tasks: [{ id: "a", title: "x", kindId: "k1" }] });
+  assert.ok(md.startsWith('Versión <2.0> & notas\n\n'), md);
+  assert.ok(md.endsWith('Equipo "QA" -> listo\n'), md);
+  // Cambiar de cabecera en el texto ya generado encuentra la anterior aunque la plantilla lleve entidades.
+  assert.equal(swapTemplateBlock(md, "Versión &lt;2.0&gt; &amp; notas", "Otra &lt;cabecera&gt;", "start").split("\n")[0], "Otra <cabecera>");
 });
 
 test("códigos: prefijo por tipo, colisiones y numeración por tipo", () => {
