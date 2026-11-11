@@ -1,27 +1,12 @@
 import type { MetadataRoute } from "next";
+import { getInstanceSettings } from "@/lib/instance";
+import { webManifest } from "@/lib/web-manifest";
+
+// Se genera en cada petición (no al compilar): sale en el idioma de la instalación, que se elige en /setup y puede
+// cambiarse después. Antes estaba fijo en español.
+export const dynamic = "force-dynamic";
 
 /** Manifiesto para instalar Pizarro como app en Android, iPhone y escritorio. */
-export default function manifest(): MetadataRoute.Manifest {
-  return {
-    name: "Pizarro",
-    short_name: "Pizarro",
-    description: "Kanban ligero y generador de release notes.",
-    lang: "es",
-    start_url: "/",
-    scope: "/",
-    display: "standalone",
-    orientation: "any",
-    background_color: "#0b1020",
-    theme_color: "#4f46e5",
-    // Accesos directos al mantener pulsado el icono de la app instalada.
-    shortcuts: [
-      { name: "Mis tareas", short_name: "Mis tareas", url: "/my-tasks", icons: [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }] },
-      { name: "Avisos", short_name: "Avisos", url: "/notifications", icons: [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }] },
-    ],
-    icons: [
-      { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
-      { src: "/icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
-    ],
-  };
+export default async function manifest(): Promise<MetadataRoute.Manifest> {
+  return webManifest((await getInstanceSettings()).locale);
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n/client";
 import { cn } from "./cn";
+import { isSessionExpiredMessage, SESSION_EXPIRED } from "./session-expired";
 
 type ToastKind = "success" | "error" | "undo";
 interface ToastItem {
@@ -27,15 +28,10 @@ export function useToast() {
 
 let nextId = 1;
 
-/** Error de las acciones sin sesión (requireUser, 401): el servidor lo traduce al idioma de la instalación si ya no sabe quién eres. */
-const SESSION_EXPIRED = "Sesión caducada. Vuelve a iniciar sesión.";
 /** El aviso de sesión caducada se queda más tiempo: es lo único que lleva a volver a entrar sin perder lo escrito. */
 const SESSION_TOAST_MS = 30000;
 
-/** ¿Es el error de sesión caducada (en español o en el idioma de la interfaz)? */
-export function isSessionExpiredMessage(message: string, t: (s: string) => string): boolean {
-  return message === SESSION_EXPIRED || message === t(SESSION_EXPIRED);
-}
+export { isSessionExpiredMessage };
 
 /**
  * A la pantalla de acceso, con vuelta a la página actual (`next`). Navegación completa a propósito: al salir de la página
@@ -98,7 +94,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       }
       const id = nextId++;
       sessionToast.current = { id, timer: hide(id) };
-      setItems((prev) => [...prev.slice(-3), { id, kind, message, action: { label: t("Iniciar sesión"), onClick: goToLogin } }]);
+      // Con el texto en el idioma de la interfaz: el servidor, sin sesión, lo manda en el de la instalación.
+      setItems((prev) => [...prev.slice(-3), { id, kind, message: t(SESSION_EXPIRED), action: { label: t("Iniciar sesión"), onClick: goToLogin } }]);
       return;
     }
     // Un aviso idéntico al anterior (mismo texto y tipo) y reciente no se repite: varias acciones seguidas con el mismo

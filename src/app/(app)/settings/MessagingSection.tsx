@@ -276,6 +276,8 @@ function ChannelControls({ channel, prefs, canTest, mentionsOnly, refresh }: { c
     start(async () => {
       const res = await testMyChannel(channel).catch((e) => actionThrowResult(e, t));
       toast(res.ok ? t("Mensaje de prueba enviado.") : res.error, res.ok ? "success" : "error");
+      // Si falló porque el bot está bloqueado, el servidor ha desconectado Telegram: se muestra ya desconectado.
+      if (!res.ok) await refresh();
     });
   const disconnect = () =>
     start(async () => {

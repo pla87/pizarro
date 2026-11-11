@@ -134,7 +134,8 @@ export async function createProjectFromBoard(board: ForeignBoard, source: Foreig
       } else if (label) {
         // Sin usuario que coincida, o una segunda persona (la tarea solo tiene un responsable): queda en la descripción.
         lost.push(label);
-        if (!found) unmapped.set(label.toLowerCase(), { name: p.name ?? p.email ?? "", email: p.email ?? "" });
+        // Solo con email (una columna de CSV con direcciones): sin nombre, para no mostrar el email dos veces.
+        if (!found) unmapped.set(label.toLowerCase(), { name: p.name ?? "", email: p.email ?? "" });
       }
     }
     const description = lost.length ? clip(`${task.description}${task.description ? "\n\n" : ""}_${t("Responsable en el archivo original: {names}.", { names: lost.join(", ") })}_`, 20_000) : task.description;

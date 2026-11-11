@@ -12,21 +12,25 @@ export const QUOTA_PROJECT_KEY = "uploadQuotaMbPerProject";
 export const QUOTA_TOTAL_KEY = "uploadQuotaMbTotal";
 
 // Memoria de proceso como el resto de ajustes (app-settings.ts): se invalida al guardar y caduca a los 30 s
-// por si otro proceso comparte la base de datos.
+// por si otro proceso comparte la base de datos. Vive en globalThis: las rutas /api (las subidas) son otra copia del
+// módulo que la de las acciones que guardan el ajuste, y con una variable del módulo no les llegaba la invalidación
+// (la cuota nueva tardaba hasta 30 s en aplicarse a las subidas).
 const TTL_MS = 30_000;
-let cached: { project: QuotaSetting; total: QuotaSetting; at: number } | null = null;
+const cache = ((globalThis as unknown as { __pzQuotaSettings?: { value: { project: QuotaSetting; total: QuotaSetting; at: number } | null } }).__pzQuotaSettings ??= { value: null });
 
 export function invalidateQuotaSettings(): void {
-  cached = null;
+  cache.value = null;
 }
 
 /** Ajustes guardados en la aplicación (sin tener en cuenta las variables de entorno). */
 export async function getQuotaSettings(now: number = Date.now()): Promise<{ project: QuotaSetting; total: QuotaSetting }> {
+  const cached = cache.value;
   if (cached && now - cached.at < TTL_MS) return cached;
   const rows = await db.appState.findMany({ where: { key: { in: [QUOTA_PROJECT_KEY, QUOTA_TOTAL_KEY] } }, select: { key: true, value: true } });
   const get = (key: string) => rows.find((r) => r.key === key)?.value;
-  cached = { project: parseQuotaSetting(get(QUOTA_PROJECT_KEY)), total: parseQuotaSetting(get(QUOTA_TOTAL_KEY)), at: now };
-  return cached;
+  const value = { project: parseQuotaSetting(get(QUOTA_PROJECT_KEY)), total: parseQuotaSetting(get(QUOTA_TOTAL_KEY)), at: now };
+  cache.value = value;
+  return value;
 }
 
 export async function saveQuotaSettings(next: { project: QuotaSetting; total: QuotaSetting }): Promise<void> {

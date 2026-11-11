@@ -1,11 +1,20 @@
 import "server-only";
-import type { T } from "../i18n/core";
+import type { Locale, T } from "../i18n/core";
 import { MessagingApiError, MessagingNetworkError, networkErrorCode, scrubSecrets, whatsappPayload, withRetries, type NoticeMessage, type WhatsappConfig } from "./messaging-core";
 import { isShuttingDown, trackInFlight } from "./shutdown";
 
 // WhatsApp Cloud API de Meta (https://developers.facebook.com/docs/whatsapp/cloud-api). Fuera de una conversación
 // abierta por la persona, Meta solo deja enviar plantillas aprobadas: Pizarro usa una (aviso_pizarro, ver
 // docs/guias/whatsapp.md) y Meta cobra por cada mensaje entregado.
+
+/**
+ * Idioma en que se escribe un WhatsApp: el inglés solo si la plantilla tiene su traducción configurada («Idioma en
+ * inglés»). Sin ella se envía la plantilla en español, y sus variables deben ir también en español: antes salía el texto
+ * en español con el aviso en inglés dentro.
+ */
+export function whatsappLocale(cfg: Pick<WhatsappConfig, "templateLangEn">, locale: Locale): Locale {
+  return locale === "en" && cfg.templateLangEn ? "en" : "es";
+}
 
 /**
  * Envía un aviso con la plantilla configurada. Reintentos limitados y solo de lo que Meta no pudo cobrar: 429 y errores

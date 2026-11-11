@@ -91,16 +91,21 @@ function TelegramAdmin({ view }: { view: MessagingAdminView["telegram"] }) {
       if (!res.ok) return setError(res.error);
       setToken("");
       setReplacing(false);
-      if (res.data.error) setError(res.data.error);
-      toast(t("Bot @{bot} guardado y activado.", { bot: res.data.bot }), "success");
+      // Guardado, pero Telegram falló al preparar el webhook o el sondeo: el aviso no puede ser verde.
+      if (res.data.error) {
+        setError(res.data.error);
+        toast(t("Bot @{bot} guardado, pero Telegram ha respondido con un error al prepararlo.", { bot: res.data.bot }), "error");
+      } else toast(t("Bot @{bot} guardado y activado.", { bot: res.data.bot }), "success");
       if (res.data.reset) toast(t("Has cambiado de bot: cada persona tiene que volver a conectar Telegram."), "success");
     });
   const toggle = (enabled: boolean) =>
     run(async () => {
       const res = await setTelegramActive(enabled).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return setError(res.error);
-      if (res.data.error) setError(res.data.error);
-      toast(enabled ? t("Avisos por Telegram activados.") : t("Avisos por Telegram desactivados."), "success");
+      if (res.data.error) {
+        setError(res.data.error);
+        toast(enabled ? t("Avisos por Telegram activados, pero Telegram ha respondido con un error al preparar el bot.") : t("Avisos por Telegram desactivados, pero Telegram ha respondido con un error."), "error");
+      } else toast(enabled ? t("Avisos por Telegram activados.") : t("Avisos por Telegram desactivados."), "success");
     });
   const test = () =>
     run(async () => {
@@ -212,7 +217,8 @@ function WhatsappAdmin({ view }: { view: MessagingAdminView["whatsapp"] }) {
       setToken("");
       setClearToken(false);
       setReplacing(false);
-      toast(t("Configuración de WhatsApp guardada."), "success");
+      // La primera vez no se activa sola (cada aviso cuesta dinero): se activa con «Activar».
+      toast(res.data.complete && !res.data.active ? t("Configuración de WhatsApp guardada. Pulsa «Activar» para empezar a enviar avisos (de pago).") : t("Configuración de WhatsApp guardada."), "success");
     });
   const toggle = (enabled: boolean) =>
     run(async () => {

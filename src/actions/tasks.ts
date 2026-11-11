@@ -1478,7 +1478,7 @@ export async function addComment(taskId: string, body: string, parentId?: string
       await lockTaskRow(tx, taskId);
       if ((await tx.taskComment.count({ where: { taskId, deletedAt: null } })) >= maxComments) {
         const t = await getT();
-        throw new AppError(t("Esta tarea ya tiene el máximo de {n} comentarios.", { n: maxComments }));
+        throw new AppError(maxComments === 1 ? t("Esta tarea ya tiene el máximo de 1 comentario.") : t("Esta tarea ya tiene el máximo de {n} comentarios.", { n: maxComments }));
       }
       return tx.taskComment.create({ data: { taskId, authorId: user.id, body: text, parentId: parent ? (parent.parentId ?? parent.id) : null }, select: commentSelect });
     });

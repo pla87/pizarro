@@ -5,12 +5,11 @@ import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
-import { attachmentFileNames, isoDate } from "@/lib/release";
+import { attachmentFileNames, isoDate, releaseZipName } from "@/lib/release";
 import { acquireZipSlot, buildZipPart, planZipEntries, zipBodyStream, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict, type ZipEntry } from "@/lib/release-zip";
-import { partSuffix } from "@/lib/zip-plan";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
-import { getT } from "@/i18n/server";
+import { getLocale, getT } from "@/i18n/server";
 import { attachmentPath } from "@/lib/uploads";
 import * as v from "@/lib/validation";
 
@@ -105,7 +104,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
     headers: {
       "Content-Type": "application/zip",
       "Content-Length": String(zip.length),
-      "Content-Disposition": `attachment; filename="release-${isoDate(new Date(), appTimeZone())}-adjuntos${partSuffix(mode.part, packages.length)}.zip"`,
+      "Content-Disposition": `attachment; filename="${releaseZipName({ day: isoDate(new Date(), appTimeZone()) }, mode.part, packages.length, await getLocale())}"`,
       "Cache-Control": "private, no-store",
       "X-Zip-Parts": String(packages.length),
       "X-Content-Type-Options": "nosniff",

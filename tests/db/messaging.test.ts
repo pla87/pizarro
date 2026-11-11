@@ -71,6 +71,8 @@ async function whatsappOn() {
   const admin = await makeUser({ role: "ADMIN" });
   await loginAs(admin);
   expectOk(await saveWhatsappSettings({ phoneNumberId: "1234567890", templateName: "aviso_pizarro", templateLang: "es", templateLangEn: "en", token: WA_TOKEN }));
+  // Guardar la primera vez no lo activa (es de pago): hay que pulsar «Activar».
+  expectOk(await setWhatsappActive(true));
 }
 
 const sends = (chatId?: string) => calls.filter((c) => c.url.endsWith("/sendMessage") && (!chatId || c.body.chat_id === chatId));

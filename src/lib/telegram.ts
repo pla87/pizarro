@@ -380,10 +380,10 @@ export async function handleTelegramUpdate(u: TelegramUpdate, cfg?: MessagingCon
   const cmd = telegramCommand(msg.text);
   if (cmd === "start") {
     const code = parseStartCode(msg.text);
-    if (!code) return reply(token, chatId, t("Hola. Soy el bot de avisos de Pizarro. Para recibir aquí tus avisos, pulsa «Conectar Telegram» en Mi perfil → Avisos de Pizarro."));
+    if (!code) return reply(token, chatId, t("Hola. Soy el bot de avisos de Pizarro. Para recibir aquí tus avisos, pulsa «Conectar Telegram» en Pizarro, en Mi perfil → Avisos."));
     if (!rateLimit(`telegram:link:${chatId}`, 10, 10 * 60_000)) return;
     const user = await consumeTelegramLinkCode(code);
-    if (!user) return reply(token, chatId, t("Este enlace ha caducado o ya se ha usado. Vuelve a pulsar «Conectar Telegram» en Mi perfil → Avisos de Pizarro."));
+    if (!user) return reply(token, chatId, t("Este enlace ha caducado o ya se ha usado. Vuelve a pulsar «Conectar Telegram» en Pizarro, en Mi perfil → Avisos."));
     const label = (msg.from?.username ? `@${msg.from.username}` : (msg.from?.first_name ?? "")).slice(0, 64);
     const now = new Date();
     await db.userChannel.upsert({
@@ -399,5 +399,5 @@ export async function handleTelegramUpdate(u: TelegramUpdate, cfg?: MessagingCon
     const n = await disconnectTelegramChat(chatId, "stop");
     return reply(token, chatId, n ? t("Hecho: ya no recibirás avisos de Pizarro aquí. Puedes volver a conectarte desde Mi perfil → Avisos.") : t("Este chat no está conectado a ninguna cuenta de Pizarro."));
   }
-  return reply(token, chatId, t("Soy el bot de avisos de Pizarro: no leo mensajes. Para conectar o desconectar los avisos, ve a Mi perfil → Avisos de Pizarro (o escribe /stop)."));
+  return reply(token, chatId, t("Soy el bot de avisos de Pizarro: no leo mensajes. Para conectar o desconectar los avisos, ve en Pizarro a Mi perfil → Avisos (o escribe /stop)."));
 }

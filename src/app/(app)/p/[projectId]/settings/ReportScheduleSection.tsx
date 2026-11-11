@@ -16,11 +16,17 @@ export interface ReportScheduleValue {
 const WEEKDAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
 /** Informe PDF semanal por email del proyecto: destinatario, día de la semana y hora. */
-export function ReportScheduleSection({ projectId, initial, emailAvailable, timeZone }: {
+export function ReportScheduleSection({ projectId, initial, emailAvailable, timeZone, recipients }: {
   projectId: string;
   initial: ReportScheduleValue;
   emailAvailable: boolean;
   timeZone: string;
+  /**
+   * A quién puede ir (las reglas de report-recipient.ts): «any» = administrador en un proyecto de equipo (también una
+   * dirección externa), «team» = miembro en un proyecto de equipo (miembros y administradores), «members» = proyecto
+   * privado (solo sus miembros).
+   */
+  recipients: "any" | "team" | "members";
 }) {
   const t = useT();
   const toast = useToast();
@@ -64,7 +70,13 @@ export function ReportScheduleSection({ projectId, initial, emailAvailable, time
             </select>
           </div>
         </div>
-        <p className="text-xs text-slate-500">{t("Hora de la app ({tz}). Cualquier dirección es válida; el informe se genera con tus permisos, así que deja de enviarse si pierdes el acceso al proyecto.", { tz: timeZone })}</p>
+        <p className="text-xs text-slate-500">
+          {recipients === "any"
+            ? t("Hora de la app ({tz}). Vale la dirección de un miembro del proyecto, la de un administrador o una externa. El informe se genera con tus permisos, así que deja de enviarse si pierdes el acceso al proyecto.", { tz: timeZone })
+            : recipients === "team"
+              ? t("Hora de la app ({tz}). Vale la dirección de un miembro del proyecto o la de un administrador (una dirección externa solo puede ponerla un administrador). El informe se genera con tus permisos, así que deja de enviarse si pierdes el acceso al proyecto.", { tz: timeZone })
+              : t("Hora de la app ({tz}). El proyecto es privado: solo vale la dirección de uno de sus miembros. El informe se genera con tus permisos, así que deja de enviarse si pierdes el acceso al proyecto.", { tz: timeZone })}
+        </p>
         {!emailAvailable && form.enabled && <p className="text-xs text-amber-700 dark:text-amber-300">{t("El envío de emails aún no está configurado en el servidor.")}</p>}
         <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
       </form>
