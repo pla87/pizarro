@@ -229,7 +229,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
               ) : (
                 <>
                   <span className="min-w-0 shrink text-xs text-red-600 dark:text-red-400" role="alert"><MessageWithLinks message={u.error ?? ""} /></span>
-                  <button type="button" className="btn-icon shrink-0" aria-label={t("Descartar")} onClick={() => setUploads((x) => x.filter((i) => i.key !== u.key))}>
+                  <button type="button" className="btn-icon shrink-0" aria-label={t("Descartar «{name}»", { name: u.name })} onClick={() => setUploads((x) => x.filter((i) => i.key !== u.key))}>
                     <X size={14} />
                   </button>
                 </>
@@ -264,13 +264,13 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
                       </span>
                     </span>
                     <span className="flex shrink-0 gap-1.5">
-                      <button type="button" className="btn-secondary" onClick={() => setOpenId(d.id)} disabled={busyId === d.id}>
+                      <button type="button" className="btn-secondary" onClick={() => setOpenId(d.id)} disabled={busyId === d.id} aria-label={t("Ver {name}", { name: d.name })}>
                         <Eye size={16} /> {t("Ver")}
                       </button>
-                      <button type="button" className="btn-secondary" onClick={() => void restore(d)} disabled={busyId === d.id}>
+                      <button type="button" className="btn-secondary" onClick={() => void restore(d)} disabled={busyId === d.id} aria-label={t("Restaurar «{name}»", { name: d.name })}>
                         <RotateCcw size={16} /> {t("Restaurar")}
                       </button>
-                      <button type="button" className="btn-danger" onClick={() => void removeForever(d)} disabled={busyId === d.id}>
+                      <button type="button" className="btn-danger" onClick={() => void removeForever(d)} disabled={busyId === d.id} aria-label={t("Borrar definitivamente «{name}»", { name: d.name })}>
                         <Trash2 size={16} /> {t("Borrar definitivamente")}
                       </button>
                     </span>

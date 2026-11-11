@@ -28,6 +28,7 @@ import { spawnRecurrences } from "@/lib/recurrence";
 import { createDriveFile, type GoogleFileKind } from "@/lib/google";
 import { shareRule } from "@/lib/google-share";
 import { excerpt as makeExcerpt, extractMentionIds, mentionsToPlain } from "@/lib/mentions";
+import { ACCENTED, foldedContains, UNACCENTED } from "@/lib/search-accents";
 import { dropPendingDueChanges, queueDueChange } from "@/lib/due-notices";
 import { assignedBatchExcerpt } from "@/lib/notification-text";
 import { commentNoticesWhere, followTask, notifyMentions, notifyTask, taskFollowerIds } from "@/lib/notify";
@@ -740,6 +741,25 @@ function parseArchivedCursor(raw: string): { archivedAt: Date; id: string } {
 }
 
 /**
+ * Ids de la página siguiente de archivadas que coinciden con la búsqueda, por título de la tarea o título/número de una
+ * release suya, sin distinguir mayúsculas ni tildes («camion» encuentra «Camión»), como la búsqueda de releases.
+ */
+async function archivedMatchIds(projectId: string, q: string, releaseNumber: number | null, cursor: { archivedAt: Date; id: string } | null): Promise<string[]> {
+  const needle = foldedContains(q);
+  const fold = (column: Prisma.Sql) => Prisma.sql`translate(lower(${column}), ${ACCENTED}, ${UNACCENTED})`;
+  const after = cursor ? Prisma.sql`AND (t."archivedAt" < ${cursor.archivedAt} OR (t."archivedAt" = ${cursor.archivedAt} AND t."id" < ${cursor.id}))` : Prisma.empty;
+  const rows = await db.$queryRaw<{ id: string }[]>`
+    SELECT t."id" FROM "Task" t
+    WHERE t."projectId" = ${projectId} AND t."archivedAt" IS NOT NULL ${after}
+      AND (${fold(Prisma.sql`t."title"`)} LIKE ${needle}
+        OR EXISTS (SELECT 1 FROM "ReleaseTask" rt JOIN "Release" r ON r."id" = rt."releaseId"
+          WHERE rt."taskId" = t."id" AND (${fold(Prisma.sql`r."title"`)} LIKE ${needle} OR r."number" = ${releaseNumber ?? -1})))
+    ORDER BY t."archivedAt" DESC, t."id" DESC
+    LIMIT ${ARCHIVED_PAGE + 1}`;
+  return rows.map((r) => r.id);
+}
+
+/**
  * Tareas archivadas del proyecto, las más recientes primero, en páginas (`cursor` = «archivedAt|id» de la última recibida:
  * paginación por claves, que no se rompe si esa fila se desarchiva o se borra entre dos páginas).
  * `query` busca en el servidor por título de la tarea o por título/número de release.
@@ -756,14 +776,7 @@ export async function getArchivedTasks(projectId: string, opts: { query?: string
       projectId,
       archivedAt: { not: null },
       ...(cursor ? { AND: [{ OR: [{ archivedAt: { lt: cursor.archivedAt } }, { archivedAt: cursor.archivedAt, id: { lt: cursor.id } }] }] } : {}),
-      ...(q
-        ? {
-            OR: [
-              { title: { contains: q, mode: "insensitive" } },
-              { releases: { some: { release: { OR: [{ title: { contains: q, mode: "insensitive" } }, ...(num ? [{ number: Number(num[1]) }] : [])] } } } },
-            ],
-          }
-        : {}),
+      ...(q ? { id: { in: await archivedMatchIds(projectId, q, num ? Number(num[1]) : null, cursor) } } : {}),
     };
     const found = await db.task.findMany({
       where,

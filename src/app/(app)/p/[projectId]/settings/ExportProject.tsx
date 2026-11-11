@@ -2,7 +2,7 @@
 
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useT } from "@/i18n/client";
+import { useIntlLocale, useT } from "@/i18n/client";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { announceQueued } from "@/components/transfer/client";
@@ -51,6 +51,7 @@ function ExportProgress({ jobId, onClose }: { jobId: string; onClose: () => void
 /** Botón «Exportar proyecto» de los ajustes: pregunta adjuntos y alcance y prepara el .pizarro.zip en segundo plano. */
 export function ExportProject({ projectId }: { projectId: string }) {
   const t = useT();
+  const locale = useIntlLocale();
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [attachments, setAttachments] = useState<Attachments>("with");
@@ -137,7 +138,8 @@ export function ExportProject({ projectId }: { projectId: string }) {
             {estimate === "error" && t("No se pudo calcular el tamaño.")}
             {estimate && estimate !== "error" &&
               t("Se exportarán {tasks} tarjetas ({archived} archivadas), {releases} releases y {attachments} adjuntos (unos {size} MB).", {
-                tasks: estimate.tasks, archived: estimate.archivedTasks, releases: estimate.releases, attachments: estimate.attachments, size: Math.max(0.1, Math.round((estimate.bytes / 1048576) * 10) / 10),
+                tasks: estimate.tasks, archived: estimate.archivedTasks, releases: estimate.releases, attachments: estimate.attachments, // Con la coma decimal del idioma («unos 0,1 MB» en español).
+                size: new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(Math.max(0.1, Math.round((estimate.bytes / 1048576) * 10) / 10)),
               })}
           </p>
           <div className="flex justify-end gap-2">

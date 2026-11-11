@@ -170,7 +170,6 @@ export const settings: Record<string, string> = {
   "para confirmar": "to confirm",
   "Nombre del proyecto": "Project name",
   "Proyecto borrado": "Project deleted",
-  "Editar etiqueta": "Edit label",
   "Borrar etiqueta": "Delete label",
   "¿Borrar la etiqueta «{name}»? Se quitará de todas las tarjetas.": "Delete the label “{name}”? It will be removed from all cards.",
   "Nueva etiqueta": "New label",
