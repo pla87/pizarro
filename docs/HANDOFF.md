@@ -79,8 +79,8 @@ npm run test:db          # con base de datos (crea y borra pizarro_test_*)
 npx next build --webpack && node scripts/postbuild.mjs && npm run build:boot
 ```
 
-Pruebas en navegador (ver `e2e/README.md`): la suite QA (`e2e/qa/run-all.mjs`, ~350 comprobaciones), la del
-tablero (`e2e/board-e2e.mjs`, unas 310) y la de pegado (`e2e/paste-e2e.mjs`, ~72: imágenes y tablas pegadas; misma
+Pruebas en navegador (ver `e2e/README.md`): la suite QA (`e2e/qa/run-all.mjs`, ~378 comprobaciones), la del
+tablero (`e2e/board-e2e.mjs`, unas 340) y la de pegado (`e2e/paste-e2e.mjs`, ~72: imágenes y tablas pegadas; misma
 base `pz_qa` y servidor que la del tablero). Si cambias el rol o la etiqueta de un elemento que la suite usa,
 actualiza el script correspondiente. Las suites declaran la instalación de uso personal en `prepareUsers`
 (`e2e/qa/lib.mjs`) para que no salga el recordatorio de licencia. Chromium: `CHROME` o, si no, el más reciente de
@@ -98,7 +98,13 @@ Guardas que conviene conocer:
 - Apagado ordenado (`src/lib/shutdown.ts`): al recibir la señal, `/api/health` responde `503` (`shutting_down`),
   se cierran los canales en vivo y se espera hasta 5 s a las peticiones en curso (subidas incluidas) y a los
   emails. Una ruta nueva de larga duración debe contar como petición en curso; lo que no termine queda en
-  `system.shutdown`.
+  `system.shutdown`. Con Telegram en modo sondeo, al apagarse confirma a Telegram los mensajes ya procesados.
+- `npm start` fuera de Docker (`scripts/start-local.mjs`): carga el `.env` y `scripts/server.env`, convierte en
+  absolutas las rutas de datos relativas (`UPLOAD_DIR`, `MAIL_OUTBOX_DIR`, `BACKUP_EXTERNAL_DIR`; lógica en
+  `scripts/local-paths.mjs`, probada en `tests/local-paths.test.ts`) y después carga `.next/standalone/server.js`.
+  Sin eso, una ruta relativa acababa dentro de `.next/standalone/` y cada compilación la borraba. `postbuild.mjs`
+  quita del standalone las subidas, las copias y los `.env` que Next copiaba allí. El contenedor no usa este script
+  (`scripts/start.sh`).
 
 Antes de cada fusión en `main`, comprueba que no se cuela ningún dato personal del propietario en el diff ni en el
 PDF del manual (busca su nombre, email y dominios; pídeselos si no los sabes) y que los mensajes de commit no
@@ -118,7 +124,12 @@ llevan enlaces de sesión ni nombres de modelos.
    workflow mueve la rama `stable` al commit publicado (job «Rama stable», el único con permiso para escribir en el
    repositorio además de la release): de ella despliegan las instalaciones de Railway. Si se protege `stable` en
    GitHub, hay que permitir que la mueva GitHub Actions. La imagen se construye con `OFFICIAL_BUILD=1` y
-   `RELEASE_VERSION`: así la app sabe que es una build oficial y ofrece «Informar de un error».
+   `RELEASE_VERSION`: así la app sabe que es una build oficial y ofrece «Informar de un error» (en Railway, también
+   si el código viene del repositorio oficial y de la rama `stable`; lógica en `src/lib/bug-report-core.ts`). El
+   botón abre el formulario `.github/ISSUE_TEMPLATE/bug_report.yml` con datos técnicos rellenos (versión, commit,
+   tipo de instalación, navegador y sistema, idioma); nunca usuarios, proyectos, emails ni la dirección de la
+   instalación. Los fallos de seguridad van en privado (`SECURITY.md`). *Copiar información técnica* (Ajustes) sale
+   de `src/lib/tech-info.ts`. Si cambian esos campos, actualiza a la vez el formulario y `tests/bug-report.test.ts`.
    El job solo mueve `stable` a un commit que ya está en `main` (`git merge-base --is-ancestor`); una etiqueta puesta
    en otra rama publica la imagen y la release, pero deja `stable` donde estaba (con un aviso en el job).
 6. **Secreto `STABLE_PUSH_TOKEN` (una vez).** GitHub no deja que `GITHUB_TOKEN` mueva una rama si entre su commit
@@ -178,6 +189,12 @@ Cómo se revisa cada PR:
   imágenes `og.png`/`og-en.png` se regeneran con `scripts/site-screenshots.mjs` (instrucciones en su cabecera;
   siempre contra una base de pruebas con datos de demostración) cuando cambie el aspecto de la app. Puesta en
   marcha (Pages, DNS, HTTPS, verificación del dominio): `docs/VENTA.md` §8.
+- Hecho: guías de conexión en la web (`/guias/`, `/en/guides/`): una página por cada `docs/guias/<nombre>.md` con su
+  `docs/guias/en/<nombre>.md` (Google, Google Docs y Sheets, Telegram, WhatsApp). La cabecera del fichero (`titulo`,
+  `descripcion`, `orden`, `icono`) da la tarjeta del índice; `build-site.mjs` las añade solas al índice y al sitemap
+  y falla si falta la versión en inglés, el título o la descripción. El workflow «Web» también se lanza al cambiar
+  `docs/guias/`. La portada enlaza a cada guía desde «Se conecta con lo que ya usas». El pie lleva una línea de
+  autoría: no escribas en ella ni en el manual dominios personales.
 - Hecho: recordatorio de licencia para administradores (franja bajo la cabecera, como mucho cada 30 días, nunca en
   los 7 primeros días): lógica en `shouldShowLicenseNudge` (`src/lib/license-core.ts`), interfaz en
   `src/components/LicenseNudge.tsx`. Se oculta con licencia registrada o declarando uso personal o educativo.
@@ -202,9 +219,22 @@ Cómo se revisa cada PR:
 **Otros:**
 
 - Telegram y WhatsApp: los dos están implementados y se configuran en *Administración → Ajustes → Avisos por
-  Telegram y WhatsApp* (las variables `WHATSAPP_*` solo rellenan lo que no se guarde allí; guías en `docs/guias/`).
-  Telegram es gratis. La única decisión pendiente del propietario es de coste: si activa WhatsApp en su instalación
-  (Meta cobra cada aviso entregado con plantilla, ver `docs/guias/whatsapp.md`).
+  Telegram y WhatsApp* (las variables `WHATSAPP_*` solo rellenan lo que no se guarde allí; guías en `docs/guias/`;
+  manual §3.9, §3.16 y §4.7b). Telegram es gratis. La única decisión pendiente del propietario es de coste: si activa
+  WhatsApp en su instalación (Meta cobra cada aviso entregado con plantilla, ver `docs/guias/whatsapp.md`).
+  - Código: `src/lib/messaging-core.ts` (lógica pura: textos, topes de 30/h por Telegram y 10/h por WhatsApp por
+    persona, clasificación de errores), `src/lib/messaging-config.ts` (Ajustes en `AppState`, tokens cifrados con
+    `ENCRYPTION_KEY`; `rotate-keys` los cubre), `src/lib/telegram.ts`, `src/lib/whatsapp.ts`, `src/lib/notify.ts`
+    (envío tras responder) y `src/actions/messaging.ts`. Datos: `UserChannel` (canal, dirección, código de WhatsApp,
+    qué avisos) y `TelegramLinkCode`; las preferencias de WhatsApp ya no están en `User`.
+  - Telegram: webhook `APP_URL/api/telegram/webhook` (fuera del proxy de sesión, con el secreto en
+    `X-Telegram-Bot-Api-Secret-Token`) si `APP_URL` es https pública; si no, sondeo con `getUpdates`, que solo vale
+    con una instancia. El arranque reintenta con espera creciente (hasta 5 min) si Telegram o la base no responden.
+  - WhatsApp: plantilla de utilidad `aviso_pizarro` (3 variables); la antigua `mencion_pizarro` (4 variables) solo
+    envía menciones. Guardar la configuración no activa el envío (hay que pulsar *Activar*). Un fallo que Meta pudo
+    haber enviado (5xx, corte, tiempo agotado) no se reintenta, para no cobrar dos veces. Cada número se confirma con
+    un código de 6 cifras (15 min, 5 intentos; 5 mensajes al día por persona y 3 por número).
+  - Pruebas: `tests/messaging.test.ts`, `tests/db/messaging.test.ts` y `tests/db/messaging-migration.test.ts`.
 - Entorno de la nube: `npm ci` instala solo el binario SWC musl; para `next build` hace falta
   `@next/swc-linux-x64-gnu` (misma versión que `next`) extraído en `node_modules/@next/`. La suite QA necesita
   `SEED_ADMIN_PASSWORD="cambia-esta-clave"` en el `.env` local.
