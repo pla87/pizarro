@@ -7,7 +7,6 @@ export const soporte: Record<string, string> = {
   "Versión": "Version",
   "Commit": "Commit",
   "Navegador y sistema": "Browser and system",
-  "Idioma": "Language",
   "Continuar en GitHub": "Continue on GitHub",
   "Se abrirá el formulario de incidencias de Pizarro en GitHub con estos datos técnicos ya rellenos:": "Pizarro's issue form on GitHub will open with these technical details already filled in:",
   "No se envía nada de tus proyectos ni de tu cuenta, ni tu email ni la dirección de esta instalación. Lo demás lo escribes tú, y no se publica nada hasta que lo envíes en GitHub.": "Nothing from your projects or your account is sent, nor your email or this installation's address. You write the rest, and nothing is published until you submit it on GitHub.",
