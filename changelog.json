@@ -1,6 +1,91 @@
 {
   "versions": [
     {
+      "version": "1.50.0",
+      "date": "2026-11-11",
+      "releasedAt": "2026-11-11T03:19:09+01:00",
+      "summary": "Avisos por Telegram y WhatsApp, guías de conexión en getpizarro.com, versiones con nombre para todas las instalaciones, informar de errores y tres vueltas de revisión y caza de bugs",
+      "changes": {
+        "nuevas": [
+          "Avisos por Telegram (gratis) y WhatsApp (de pago, API oficial de Meta): los activa un administrador en Ajustes y cada persona conecta su canal en Mi perfil, eligiendo qué avisos recibe.",
+          "Guías de conexión en getpizarro.com: iniciar sesión con Google, Google Docs y Sheets, Telegram y WhatsApp.",
+          "«Informar de un error» en Historial de versiones (en versiones oficiales) y «Copiar información técnica» para administradores.",
+          "Las instalaciones de Railway pueden seguir la rama stable, que solo avanza con versiones publicadas."
+        ],
+        "mejoras": [
+          "El tablero, los ajustes, el calendario, las releases y el informe cargan mucho más rápido en instalaciones grandes.",
+          "Abrir «Nueva tarea» u otros diálogos ya no hace parpadear el tablero.",
+          "Las personas que no son administradoras pueden crear proyectos privados desde el selector.",
+          "Dos personas pueden editar el título de la misma tarea sin que se pierda lo que escribe ninguna.",
+          "La sesión caducada ofrece «Iniciar sesión» y conserva lo que estabas escribiendo.",
+          "Las pantallas a las que llegas desde un email y la verificación en dos pasos salen en tu idioma.",
+          "Los adjuntos y documentos conservan su nombre con paréntesis, comas o &, y la extensión aunque el nombre sea largo.",
+          "La búsqueda de archivadas ignora las tildes.",
+          "La web ya no repite el precio en la portada y enlaza a las guías; el pie indica la autoría del proyecto.",
+          "Las acciones de GitHub van fijadas a commits exactos y Dependabot propone las actualizaciones."
+        ],
+        "correcciones": [
+          "Una release ya no se despliega si otra persona movió alguna de sus tareas mientras tanto.",
+          "Las release notes, el informe PDF, los avisos y los ajustes ya no mezclan textos en español en la interfaz en inglés.",
+          "Los códigos de release son los mismos para todo el equipo aunque cada persona use un idioma.",
+          "El texto con `<`, `>` o `&` ya no sale como `&lt;` en avisos, emails, releases ni en el calendario suscrito.",
+          "El informe PDF corta los títulos muy largos y ya no imprime los emojis como basura.",
+          "Un cambio de cuota se aplica al momento a las subidas, y una subida que no cabe se rechaza antes de guardarla; con el disco lleno, el aviso lo dice.",
+          "Deshacer muchas tarjetas ya no choca con otra persona que mueve las mismas.",
+          "Los avisos de cambio de fecha ya no se pierden si el servidor se reinicia, aunque esté parado más de un día.",
+          "Con `npm start`, las subidas ya no se guardan dentro de la carpeta que borra cada compilación.",
+          "El resumen diario ya no cuenta como nuevas tus propias tareas."
+        ],
+        "tecnicos": [
+          "Migraciones 20261120100000 (mensajería: UserChannel, TelegramLinkCode; las preferencias de WhatsApp salen de User) y 20261120130000 (primer intento de los avisos de fecha).",
+          "Límite de memoria del generador de PDF (PDF_WORKER_MAX_MB) y limitador de intentos con IPv6 /64 y bloqueos de seguridad aparte.",
+          "El workflow Release mueve la rama stable (con STABLE_PUSH_TOKEN opcional) y no republica una versión ya etiquetada.",
+          "Plantilla de incidencias, SECURITY.md y Dependabot."
+        ]
+      },
+      "en": {
+        "summary": "Telegram and WhatsApp notifications, connection guides on getpizarro.com, named versions for every installation, bug reporting and three rounds of review and bug hunting",
+        "changes": {
+          "nuevas": [
+            "Notifications on Telegram (free) and WhatsApp (paid, Meta's official API): an administrator enables them in Settings and each person connects their channel in My profile, choosing which notifications to receive.",
+            "Connection guides on getpizarro.com: Google sign-in, Google Docs and Sheets, Telegram and WhatsApp.",
+            "«Report a bug» in Version history (on official versions) and «Copy technical information» for administrators.",
+            "Railway installations can follow the stable branch, which only moves with published versions."
+          ],
+          "mejoras": [
+            "The board, settings, calendar, releases and report load much faster on large installations.",
+            "Opening «New task» or other dialogs no longer makes the board flicker.",
+            "People who are not administrators can create private projects from the picker.",
+            "Two people can edit the title of the same task without losing what either of them types.",
+            "An expired session offers «Log in» and keeps what you were writing.",
+            "Screens you reach from an email and two-step verification are shown in your language.",
+            "Attachments and documents keep their names with brackets, commas or &, and their extension even when the name is long.",
+            "Searching archived tasks ignores accents.",
+            "The website no longer repeats the price on the home page and links to the guides; the footer shows who makes the project.",
+            "GitHub actions are pinned to exact commits and Dependabot proposes updates."
+          ],
+          "correcciones": [
+            "A release is no longer deployed if someone moved one of its tasks in the meantime.",
+            "Release notes, the PDF report, notifications and settings no longer mix Spanish text into the English interface.",
+            "Release codes are the same for the whole team even when each person uses a different language.",
+            "Text with `<`, `>` or `&` no longer shows as `&lt;` in notifications, emails, releases or the subscribed calendar.",
+            "The PDF report wraps very long titles and no longer prints emojis as garbage.",
+            "A quota change applies to uploads straight away, and an upload that does not fit is rejected before being saved; with a full disk, the message says so.",
+            "Undoing many cards no longer clashes with someone else moving the same ones.",
+            "Due-date notifications are no longer lost if the server restarts, even after more than a day down.",
+            "With `npm start`, uploads are no longer saved inside the folder every build deletes.",
+            "The daily summary no longer counts your own tasks as new."
+          ],
+          "tecnicos": [
+            "Migrations 20261120100000 (messaging: UserChannel, TelegramLinkCode; WhatsApp preferences move out of User) and 20261120130000 (first attempt of due-date notices).",
+            "Memory limit for the PDF generator (PDF_WORKER_MAX_MB) and rate limiter with IPv6 /64 and separate security locks.",
+            "The Release workflow moves the stable branch (with optional STABLE_PUSH_TOKEN) and does not republish an already tagged version.",
+            "Issue template, SECURITY.md and Dependabot."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.49.0",
       "date": "2026-11-10",
       "releasedAt": "2026-11-10T23:41:00+01:00",

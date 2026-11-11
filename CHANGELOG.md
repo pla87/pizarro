@@ -2,6 +2,50 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.50.0 — 2026-11-11 03:19
+
+Avisos por Telegram y WhatsApp, guías de conexión en getpizarro.com, versiones con nombre para todas las instalaciones, informar de errores y tres vueltas de revisión y caza de bugs
+
+### Nuevas funcionalidades
+
+- Avisos por Telegram (gratis) y WhatsApp (de pago, API oficial de Meta): los activa un administrador en Ajustes y cada persona conecta su canal en Mi perfil, eligiendo qué avisos recibe.
+- Guías de conexión en getpizarro.com: iniciar sesión con Google, Google Docs y Sheets, Telegram y WhatsApp.
+- «Informar de un error» en Historial de versiones (en versiones oficiales) y «Copiar información técnica» para administradores.
+- Las instalaciones de Railway pueden seguir la rama stable, que solo avanza con versiones publicadas.
+
+### Mejoras
+
+- El tablero, los ajustes, el calendario, las releases y el informe cargan mucho más rápido en instalaciones grandes.
+- Abrir «Nueva tarea» u otros diálogos ya no hace parpadear el tablero.
+- Las personas que no son administradoras pueden crear proyectos privados desde el selector.
+- Dos personas pueden editar el título de la misma tarea sin que se pierda lo que escribe ninguna.
+- La sesión caducada ofrece «Iniciar sesión» y conserva lo que estabas escribiendo.
+- Las pantallas a las que llegas desde un email y la verificación en dos pasos salen en tu idioma.
+- Los adjuntos y documentos conservan su nombre con paréntesis, comas o &, y la extensión aunque el nombre sea largo.
+- La búsqueda de archivadas ignora las tildes.
+- La web ya no repite el precio en la portada y enlaza a las guías; el pie indica la autoría del proyecto.
+- Las acciones de GitHub van fijadas a commits exactos y Dependabot propone las actualizaciones.
+
+### Correcciones
+
+- Una release ya no se despliega si otra persona movió alguna de sus tareas mientras tanto.
+- Las release notes, el informe PDF, los avisos y los ajustes ya no mezclan textos en español en la interfaz en inglés.
+- Los códigos de release son los mismos para todo el equipo aunque cada persona use un idioma.
+- El texto con `<`, `>` o `&` ya no sale como `&lt;` en avisos, emails, releases ni en el calendario suscrito.
+- El informe PDF corta los títulos muy largos y ya no imprime los emojis como basura.
+- Un cambio de cuota se aplica al momento a las subidas, y una subida que no cabe se rechaza antes de guardarla; con el disco lleno, el aviso lo dice.
+- Deshacer muchas tarjetas ya no choca con otra persona que mueve las mismas.
+- Los avisos de cambio de fecha ya no se pierden si el servidor se reinicia, aunque esté parado más de un día.
+- Con `npm start`, las subidas ya no se guardan dentro de la carpeta que borra cada compilación.
+- El resumen diario ya no cuenta como nuevas tus propias tareas.
+
+### Cambios técnicos / DB
+
+- Migraciones 20261120100000 (mensajería: UserChannel, TelegramLinkCode; las preferencias de WhatsApp salen de User) y 20261120130000 (primer intento de los avisos de fecha).
+- Límite de memoria del generador de PDF (PDF_WORKER_MAX_MB) y limitador de intentos con IPv6 /64 y bloqueos de seguridad aparte.
+- El workflow Release mueve la rama stable (con STABLE_PUSH_TOKEN opcional) y no republica una versión ya etiquetada.
+- Plantilla de incidencias, SECURITY.md y Dependabot.
+
 ## v1.49.0 — 2026-11-10 23:41
 
 Gratis también para centros educativos, «Nuevo proyecto» mucho más simple, web más concisa con «Instalación» en el menú, y correcciones de la revisión
