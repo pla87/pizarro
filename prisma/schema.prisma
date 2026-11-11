@@ -769,6 +769,9 @@ model PendingDueNotice {
   toDue       String?
   sendAfter   DateTime
   createdAt   DateTime @default(now())
+  /// Primer intento de envío (reclamo). Los reintentos se abandonan a las 24 h desde aquí, no desde el primer cambio,
+  /// para no tirar los avisos que esperaban durante un apagado largo. Vuelve a null con cada cambio de fecha nuevo.
+  claimedAt   DateTime?
   task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   recipient   User     @relation("PendingDueRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
   actor       User?    @relation("PendingDueActor", fields: [actorId], references: [id], onDelete: SetNull)

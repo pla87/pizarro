@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { test } from "node:test";
 import { loginRateKeys, rateIp, rateLimit, rateLimitReached, rateLimitRetryAfterSec, resetRateLimit } from "../src/lib/rate-limit";
 
@@ -85,4 +87,22 @@ test("rateLimit: los bloqueos de seguridad también se limpian al caducar", () =
   } finally {
     Date.now = realNow;
   }
+});
+
+test("las claves por IP pasan por rateIp (IPv6 agrupada por /64), también las del webhook de Telegram", () => {
+  const files: string[] = [];
+  const walk = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === "generated") continue;
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.tsx?$/.test(e.name)) files.push(p);
+    }
+  };
+  walk("src");
+  // Una IP sin agrupar en la clave: `${ip}`, `${clientIp(...)}`, `${req.ip}`…
+  const raw = /rateLimit[A-Za-z]*\(\s*`[^`]*\$\{\s*(?:[\w.]*\bip|clientIp\([^)]*\))\s*\}/i;
+  const offenders = files.filter((f) => raw.test(readFileSync(f, "utf8")));
+  assert.deepEqual(offenders, []);
+  assert.match(readFileSync("src/app/api/telegram/webhook/route.ts", "utf8"), /telegram:webhook:bad:\$\{rateIp\(ip\)\}/);
 });

@@ -57,7 +57,7 @@ Para generar un `SESSION_SECRET`: `openssl rand -base64 48`.
 | Script | Descripción |
 |---|---|
 | `npm run dev` | Servidor de desarrollo. |
-| `npm run build` / `npm start` | Build de producción (salida *standalone*) y arranque. |
+| `npm run build` / `npm start` | Build de producción (salida *standalone*) y arranque (`scripts/start-local.mjs`: deja las subidas en la carpeta del proyecto y no dentro de `.next/standalone`, que se borra en cada build). |
 | `npm run check` | Lint + typecheck + tests. |
 | `npm test` | Tests unitarios (generador de releases, posiciones, validación, imágenes, changelog). |
 | `npm run test:db` | Tests de integración (permisos y deshacer) contra una PostgreSQL efímera; ver «Tests de integración». |
@@ -114,7 +114,7 @@ steps:
 | `ENCRYPTION_KEY` | Recomendada | 48+ caracteres aleatorios | Clave con la que se cifran (AES-256-GCM) los secretos TOTP y los tokens de Google. Sin ella se usa `SESSION_SECRET`. Con esta y `TOKEN_SECRET` definidas, rotar `SESSION_SECRET` solo cierra las sesiones. Guárdala fuera del servidor. |
 | `TOKEN_SECRET_PREVIOUS` / `ENCRYPTION_KEY_PREVIOUS` | Solo al rotar | la clave anterior | Siguen aceptando lo guardado con la clave anterior. Tras cambiar `ENCRYPTION_KEY`, `node dist/rotate-keys.mjs` (`npm run keys:rotate`) lo re-cifra todo y la anterior se puede quitar. Ver el manual, 4.4. |
 | `APP_URL` | Sí | `https://pizarro.up.railway.app` | URL pública. Con `https://` la cookie se marca `Secure` y usa el prefijo `__Host-`. |
-| `UPLOAD_DIR` | Sí | `/app/uploads` | Carpeta de capturas (la ruta del volumen). |
+| `UPLOAD_DIR` | Sí | `/app/uploads` | Carpeta de capturas (la ruta del volumen). Una ruta relativa (`./uploads`) se resuelve contra la carpeta del proyecto, también con `npm start`. |
 | `PORT` | No | Lo inyecta Railway | Puerto HTTP (por defecto 3000). |
 | `SEED_ADMIN_EMAIL` | Solo el primer arranque (Railway) | `admin@tu-dominio.com` | Email del administrador inicial. Si no defines `SEED_ADMIN_*`, con la base de datos vacía el servidor imprime en su log un código de un solo uso y el asistente web `/setup` crea el administrador (servidor propio con Docker Compose, ver `docs/INSTALL.md`). |
 | `SEED_ADMIN_PASSWORD` | Solo el primer arranque | mínimo 10 caracteres | Contraseña inicial: cámbiala después desde *Mi perfil*. |

@@ -1,7 +1,7 @@
 import { logEvent } from "@/lib/log";
 import { loadMessagingConfig } from "@/lib/messaging-config";
 import { safeEqual, scrubSecrets, telegramMode, TELEGRAM_WEBHOOK_MAX_BYTES } from "@/lib/messaging-core";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateIp, rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { handleTelegramUpdate, type TelegramUpdate } from "@/lib/telegram";
 import { BodyTooLargeError, declaredLength, readBodyLimited } from "@/lib/upload-slots";
@@ -16,12 +16,12 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   const ip = clientIp(req.headers);
-  if (!rateLimit(`telegram:webhook:${ip}`, 120, 60_000)) return new Response(null, { status: 429 });
+  if (!rateLimit(`telegram:webhook:${rateIp(ip)}`, 120, 60_000)) return new Response(null, { status: 429 });
   const cfg = await loadMessagingConfig();
   if (!cfg.telegram.active || !cfg.telegram.webhookSecret || telegramMode(process.env.APP_URL).mode !== "webhook") return new Response(null, { status: 404 });
   if (!safeEqual(req.headers.get("x-telegram-bot-api-secret-token") ?? "", cfg.telegram.webhookSecret)) {
     // Quien no sabe el secreto no llega a leer el cuerpo; los fallos repetidos desde una IP se frenan.
-    if (rateLimit(`telegram:webhook:bad:${ip}`, 1, 10 * 60_000)) logEvent({ level: "warn", category: "api", action: "telegram.webhookUnauthorized", message: "Llamada al webhook de Telegram con un secreto incorrecto", ip });
+    if (rateLimit(`telegram:webhook:bad:${rateIp(ip)}`, 1, 10 * 60_000)) logEvent({ level: "warn", category: "api", action: "telegram.webhookUnauthorized", message: "Llamada al webhook de Telegram con un secreto incorrecto", ip });
     return new Response(null, { status: 401 });
   }
   const declared = declaredLength(req.headers);

@@ -141,9 +141,10 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
         const t = await getT();
         throw new AppError(t("Mientras tanto se ha desplegado la release {prev}: vuelve a generar el texto para que los códigos lleven R{number}.", { prev: number - 1, number }));
       }
-      // Los códigos de los títulos se calculan aquí, con los mismos datos y orden que el diálogo (tipos del
-      // proyecto en su idioma, tareas en el orden de taskIds); nunca se usa texto del cliente (los códigos
-      // que envía para el ZIP solo nombran ficheros).
+      // Los códigos de los títulos se calculan aquí, con los mismos datos y orden que el diálogo: los nombres de los
+      // tipos tal como están guardados (a propósito, no traducidos al idioma de quien despliega, para que el código
+      // sea el mismo para todo el equipo; el diálogo usa `codeName`) y las tareas en el orden de taskIds. Nunca se
+      // usa texto del cliente (los códigos que envía para el ZIP solo nombran ficheros).
       const codes = computeReleaseCodes(kinds, ordered, number);
       const release = await tx.release.create({
         data: {

@@ -224,7 +224,7 @@ describe("envío por Telegram y WhatsApp", () => {
     await deliver([mention, comment]);
     const tg = sends("7770001");
     assert.equal(tg.length, 1, "por defecto, los comentarios no salen por Telegram");
-    assert.match(String(tg[0]!.body.text), /Carlos mentioned you in «Pantalla»/);
+    assert.match(String(tg[0]!.body.text), /Carlos mentioned you in “Pantalla”/);
     assert.ok(String(tg[0]!.body.text).includes(`https://pizarro.example.com/p/${f.project.id}?task=${task.id}`));
     assert.equal(calls.filter((c) => c.url.includes("graph.facebook.com")).length, 0, "WhatsApp sin confirmar no envía");
     const row = await db.notification.findUniqueOrThrow({ where: { id: mention } });
@@ -242,7 +242,7 @@ describe("envío por Telegram y WhatsApp", () => {
     assert.equal(wa.body.to, "34600111222");
     assert.equal(template.name, "aviso_pizarro");
     assert.equal(template.language.code, "en");
-    assert.match(template.components[0]!.parameters[0]!.text, /^Carlos assigned «Pantalla» to you$/);
+    assert.match(template.components[0]!.parameters[0]!.text, /^Carlos assigned “Pantalla” to you$/);
     assert.ok((await db.notification.findUniqueOrThrow({ where: { id: assigned } })).whatsappSentAt);
 
     // Quitar los comentarios de Telegram también los quita; activarlos los envía.

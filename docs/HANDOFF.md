@@ -201,9 +201,10 @@ Cómo se revisa cada PR:
 
 **Otros:**
 
-- WhatsApp: la integración con la API oficial de Meta ya existe (variables `WHATSAPP_*`); falta que el propietario
-  decida si la activa (coste aproximado por aviso fuera de la ventana de 24 h; alternativa gratuita: un bot de
-  Telegram, no implementado).
+- Telegram y WhatsApp: los dos están implementados y se configuran en *Administración → Ajustes → Avisos por
+  Telegram y WhatsApp* (las variables `WHATSAPP_*` solo rellenan lo que no se guarde allí; guías en `docs/guias/`).
+  Telegram es gratis. La única decisión pendiente del propietario es de coste: si activa WhatsApp en su instalación
+  (Meta cobra cada aviso entregado con plantilla, ver `docs/guias/whatsapp.md`).
 - Entorno de la nube: `npm ci` instala solo el binario SWC musl; para `next build` hace falta
   `@next/swc-linux-x64-gnu` (misma versión que `next`) extraído en `node_modules/@next/`. La suite QA necesita
   `SEED_ADMIN_PASSWORD="cambia-esta-clave"` en el `.env` local.

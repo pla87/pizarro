@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n/client";
 import { cn } from "./cn";
+import { pushToast } from "./toast-queue";
 
 type ToastKind = "success" | "error" | "undo";
 interface ToastItem {
@@ -98,7 +99,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       }
       const id = nextId++;
       sessionToast.current = { id, timer: hide(id) };
-      setItems((prev) => [...prev.slice(-3), { id, kind, message, action: { label: t("Iniciar sesión"), onClick: goToLogin } }]);
+      setItems((prev) => pushToast(prev, { id, kind, message, action: { label: t("Iniciar sesión"), onClick: goToLogin } }, id));
       return;
     }
     // Un aviso idéntico al anterior (mismo texto y tipo) y reciente no se repite: varias acciones seguidas con el mismo
@@ -115,7 +116,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     const ms = kind === "error" || action ? 6000 : 2500;
     const timer = setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== id)), ms);
     last.current = { message, kind, at: now, id, timer, ms };
-    setItems((prev) => [...prev.slice(-3), { id, kind, message, action }]);
+    // Con muchos avisos seguidos se van los más antiguos, nunca el de sesión caducada (su temporizador sigue en marcha
+    // y, si se quitara, durante 30 s no habría forma de volver a entrar).
+    const pinned = sessionToast.current?.id ?? null;
+    setItems((prev) => pushToast(prev, { id, kind, message, action }, pinned));
   }, []);
   return (
     <ToastContext.Provider value={show}>
@@ -139,6 +143,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 className="ml-1 shrink-0 rounded px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-sky-300 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
                 onClick={() => {
                   setItems((prev) => prev.filter((x) => x.id !== item.id));
+                  if (sessionToast.current?.id === item.id) {
+                    clearTimeout(sessionToast.current.timer);
+                    sessionToast.current = null;
+                  }
                   item.action!.onClick();
                 }}
               >

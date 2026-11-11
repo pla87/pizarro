@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { updateTask } from "../../src/actions/tasks";
-import { DUE_NOTICE_CLAIM_MS, DUE_NOTIFY_DELAY_MS, deliverDueNotices, queueDueChange } from "../../src/lib/due-notices";
+import { DUE_NOTICE_CLAIM_MS, DUE_NOTICE_GIVE_UP_MS, DUE_NOTIFY_DELAY_MS, deliverDueNotices, queueDueChange } from "../../src/lib/due-notices";
+import { flushLogs } from "../../src/lib/log";
 import { notifyTask } from "../../src/lib/notify";
 
 const dueNotices = (taskId: string) => db.notification.findMany({ where: { taskId, type: "DUE_CHANGED" } });
@@ -146,14 +147,54 @@ describe("avisos de cambio de fecha agrupados", () => {
     assert.equal(await db.pendingDueNotice.count({ where: { taskId: task.id } }), 0);
   });
 
-  test("una fila que lleva más de un día fallando se descarta sin avisar", async () => {
+  test("una fila que lleva más de un día fallando desde su primer intento se descarta sin avisar", async () => {
     const { actor, assignee, task } = await setup();
+    const start = after(DUE_NOTIFY_DELAY_MS + 30_000);
     await db.pendingDueNotice.create({
-      data: { taskId: task.id, recipientId: assignee.id, actorId: actor.id, fromDue: "2026-10-01", toDue: "2026-11-01", sendAfter: new Date(Date.now() - 60_000), createdAt: new Date(Date.now() - 25 * 60 * 60_000) },
+      data: { taskId: task.id, recipientId: assignee.id, actorId: actor.id, fromDue: "2026-10-01", toDue: "2026-11-01", sendAfter: new Date(start.getTime() - 60_000) },
     });
     let calls = 0;
-    assert.equal(await deliverDueNotices(new Date(), async () => { calls++; return { recipients: [] }; }), 0);
-    assert.equal(calls, 0);
+    const failing: typeof notifyTask = async () => {
+      calls++;
+      throw new Error("fallo simulado");
+    };
+    assert.equal(await deliverDueNotices(start, failing), 0);
+    const claimed = await db.pendingDueNotice.findFirstOrThrow({ where: { taskId: task.id } });
+    assert.equal(claimed.claimedAt?.getTime(), start.getTime(), "el primer reclamo queda anotado");
+    // Los reintentos no lo mueven.
+    assert.equal(await deliverDueNotices(new Date(start.getTime() + DUE_NOTICE_CLAIM_MS + 1000), failing), 0);
+    assert.equal(calls, 2);
+    assert.equal((await db.pendingDueNotice.findFirstOrThrow({ where: { taskId: task.id } })).claimedAt?.getTime(), start.getTime());
+    // Más de un día después del primer intento: se descarta sin llamar a notify y queda en el registro.
+    const late = new Date(start.getTime() + DUE_NOTICE_GIVE_UP_MS + 60_000);
+    assert.equal(await deliverDueNotices(late, failing), 0);
+    assert.equal(calls, 2);
     assert.equal(await db.pendingDueNotice.count({ where: { taskId: task.id } }), 0);
+    await flushLogs();
+    const log = await db.appLog.findFirst({ where: { action: "notify.dueGaveUp", details: { path: ["taskId"], equals: task.id } } });
+    assert.match(log?.message ?? "", /más de un día fallando desde el primer intento/);
+  });
+
+  test("tras un apagado de más de un día, los avisos que esperaban se envían (el plazo cuenta desde el primer intento)", async () => {
+    const { actor, assignee, task } = await setup();
+    // Cambio de fecha hace dos días; el servidor estuvo apagado y nunca llegó a intentarlo.
+    const changed = new Date(Date.now() - 2 * 24 * 60 * 60_000);
+    await db.task.update({ where: { id: task.id }, data: { dueDate: new Date("2026-11-20T00:00:00Z") } });
+    await db.pendingDueNotice.create({
+      data: { taskId: task.id, recipientId: assignee.id, actorId: actor.id, fromDue: "2026-11-01", toDue: "2026-11-20", sendAfter: new Date(changed.getTime() + DUE_NOTIFY_DELAY_MS), createdAt: changed },
+    });
+    assert.equal(await deliverDueNotices(new Date()), 1);
+    assert.deepEqual((await dueNotices(task.id)).map((n) => [n.userId, n.excerpt]), [[assignee.id, "2026-11-01>2026-11-20"]]);
+    assert.equal(await db.pendingDueNotice.count({ where: { taskId: task.id } }), 0);
+  });
+
+  test("un cambio de fecha nuevo reinicia el plazo de reintentos", async () => {
+    const { actor, assignee, task } = await setup();
+    expectOk(await updateTask(task.id, { dueDate: "2026-11-15" }));
+    const due = after(DUE_NOTIFY_DELAY_MS + 30_000);
+    assert.equal(await deliverDueNotices(due, async () => { throw new Error("fallo simulado"); }), 0);
+    assert.ok((await db.pendingDueNotice.findFirstOrThrow({ where: { taskId: task.id } })).claimedAt);
+    await queueDueChange({ taskId: task.id, recipientId: assignee.id, actorId: actor.id, from: "2026-11-15", to: "2026-11-18", now: due });
+    assert.equal((await db.pendingDueNotice.findFirstOrThrow({ where: { taskId: task.id } })).claimedAt, null);
   });
 });

@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "./db";
 import { appUrl } from "./mail";
 import { loadMessagingConfig } from "./messaging-config";
-import { DEFAULT_WHATSAPP_TEMPLATE, telegramMode, WHATSAPP_CODE_ATTEMPTS, WHATSAPP_PRICING_URL, WHATSAPP_TEMPLATE_BODY, type ChannelPrefs, type Source } from "./messaging-core";
+import { DEFAULT_CHANNEL_PREFS, DEFAULT_WHATSAPP_TEMPLATE, telegramMode, WHATSAPP_CODE_ATTEMPTS, WHATSAPP_PRICING_URL, WHATSAPP_TEMPLATE_BODY, type ChannelPrefs, type Source } from "./messaging-core";
 import { telegramStatus, webhookInfo } from "./telegram";
 
 // Lo que ven las pantallas de Telegram y WhatsApp: Administración → Ajustes («Telegram y WhatsApp») y Mi perfil → Avisos.
@@ -122,7 +122,6 @@ export interface MyChannelsView {
 }
 
 const prefsOf = (r: ChannelPrefs): ChannelPrefs => ({ notifyMention: r.notifyMention, notifyAssigned: r.notifyAssigned, notifyDue: r.notifyDue, notifyComment: r.notifyComment });
-const DEFAULT: ChannelPrefs = { notifyMention: true, notifyAssigned: true, notifyDue: false, notifyComment: false };
 
 /** Canales de una persona. Cada canal aparece si el administrador lo ha activado o si la persona ya lo tenía conectado. */
 export async function getMyChannels(userId: string): Promise<MyChannelsView> {
@@ -132,7 +131,7 @@ export async function getMyChannels(userId: string): Promise<MyChannelsView> {
   return {
     appUrl: appUrl(),
     telegram: cfg.telegram.active || tg
-      ? { available: cfg.telegram.active, botUsername: cfg.telegram.botUsername, connected: Boolean(tg), label: tg?.label ?? "", prefs: tg ? prefsOf(tg) : DEFAULT }
+      ? { available: cfg.telegram.active, botUsername: cfg.telegram.botUsername, connected: Boolean(tg), label: tg?.label ?? "", prefs: tg ? prefsOf(tg) : { ...DEFAULT_CHANNEL_PREFS } }
       : null,
     whatsapp: cfg.whatsapp.active || wa
       ? {
@@ -141,7 +140,7 @@ export async function getMyChannels(userId: string): Promise<MyChannelsView> {
           verified: Boolean(wa?.verifiedAt && wa.consentAt),
           consented: Boolean(wa?.consentAt),
           codePending: Boolean(wa?.verifyCodeHash && wa.verifyExpiresAt && wa.verifyExpiresAt.getTime() > Date.now() && wa.verifyAttempts < WHATSAPP_CODE_ATTEMPTS),
-          prefs: wa ? prefsOf(wa) : DEFAULT,
+          prefs: wa ? prefsOf(wa) : { ...DEFAULT_CHANNEL_PREFS },
           mentionsOnly: cfg.whatsapp.legacy,
         }
       : null,

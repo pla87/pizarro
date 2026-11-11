@@ -30,7 +30,8 @@ export async function queueDueChange(opts: { taskId: string; recipientId: string
   await db.pendingDueNotice.upsert({
     where: { taskId_recipientId: { taskId, recipientId } },
     create: { taskId, recipientId, actorId, fromDue: opts.from, toDue: opts.to, sendAfter },
-    update: { actorId, toDue: opts.to, sendAfter },
+    // Un cambio nuevo empieza otra espera: sus reintentos cuentan desde su propio primer intento.
+    update: { actorId, toDue: opts.to, sendAfter, claimedAt: null },
   });
 }
 
@@ -46,10 +47,14 @@ const BATCH = 100;
  * pasada la reintenta (el aviso puede llegar dos veces si el fallo fue después de crearlo, pero no se pierde).
  */
 export const DUE_NOTICE_CLAIM_MS = 10 * 60_000;
-/** Una fila que lleva más que esto desde el primer cambio (reintentos fallidos) se descarta sin avisar. */
+/**
+ * Una fila que lleva más que esto desde su primer intento de envío (`claimedAt`, el primer reclamo) se descarta sin
+ * avisar: sus reintentos llevan un día fallando. Se cuenta desde el primer reclamo y no desde el cambio de fecha
+ * para que un apagado de más de un día no tire los avisos que esperaban (al volver, su primer intento es entonces).
+ */
 export const DUE_NOTICE_GIVE_UP_MS = 24 * 60 * 60_000;
 
-interface ClaimedNotice { id: string; taskId: string; recipientId: string; actorId: string | null; fromDue: string | null; toDue: string | null; sendAfter: Date; createdAt: Date }
+interface ClaimedNotice { id: string; taskId: string; recipientId: string; actorId: string | null; fromDue: string | null; toDue: string | null; sendAfter: Date; claimedAt: Date }
 
 type Notify = typeof notifyTask;
 
@@ -66,9 +71,9 @@ export async function deliverDueNotices(now: Date = new Date(), notify: Notify =
   const claimUntil = new Date(now.getTime() + DUE_NOTICE_CLAIM_MS);
   for (;;) {
     const rows = await db.$queryRaw<ClaimedNotice[]>`
-      UPDATE "PendingDueNotice" SET "sendAfter" = ${claimUntil} WHERE "id" IN (
+      UPDATE "PendingDueNotice" SET "sendAfter" = ${claimUntil}, "claimedAt" = COALESCE("claimedAt", ${now}) WHERE "id" IN (
         SELECT "id" FROM "PendingDueNotice" WHERE "sendAfter" <= ${now} ORDER BY "sendAfter" LIMIT ${BATCH} FOR UPDATE SKIP LOCKED
-      ) RETURNING "id", "taskId", "recipientId", "actorId", "fromDue", "toDue", "sendAfter", "createdAt"`;
+      ) RETURNING "id", "taskId", "recipientId", "actorId", "fromDue", "toDue", "sendAfter", "claimedAt"`;
     for (const row of rows) {
       try {
         const projectId = await noticeProject(row, now);
@@ -93,8 +98,8 @@ export async function deliverDueNotices(now: Date = new Date(), notify: Notify =
 /** Proyecto de la tarea si el aviso sigue valiendo; null si no (la fila se borra sin avisar). */
 async function noticeProject(row: ClaimedNotice, now: Date): Promise<string | null> {
   if (row.fromDue === row.toDue || !row.actorId) return null; // vuelta a la fecha original: nada que contar
-  if (now.getTime() - row.createdAt.getTime() > DUE_NOTICE_GIVE_UP_MS) {
-    logEvent({ level: "warn", category: "notify", action: "notify.dueGaveUp", message: "Aviso de cambio de fecha descartado tras fallar sus reintentos durante un día", details: { taskId: row.taskId } });
+  if (now.getTime() - row.claimedAt.getTime() > DUE_NOTICE_GIVE_UP_MS) {
+    logEvent({ level: "warn", category: "notify", action: "notify.dueGaveUp", message: "Aviso de cambio de fecha descartado: su envío lleva más de un día fallando desde el primer intento", details: { taskId: row.taskId, firstAttemptAt: row.claimedAt.toISOString() } });
     return null;
   }
   const task = await db.task.findUnique({ where: { id: row.taskId }, select: { projectId: true, archivedAt: true, assigneeId: true, dueDate: true } });

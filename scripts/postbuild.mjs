@@ -47,10 +47,14 @@ mkdirSync(".next/standalone/dist", { recursive: true });
 cpSync("dist/pdf-worker.mjs", ".next/standalone/dist/pdf-worker.mjs");
 cpSync(".next/static", ".next/standalone/.next/static", { recursive: true });
 if (existsSync("public")) cpSync("public", ".next/standalone/public", { recursive: true });
-// Fuera de Docker (donde .dockerignore los aparta) el standalone acababa con datos y secretos: Next copia el .env por su
-// cuenta, y con Turbopack el trazado de instrumentation.js (al que no se aplica outputFileTracingExcludes de
-// next.config.ts, que sí cubre las rutas) arrastra las subidas (path.resolve("./uploads") en upload-dir.ts) y las
-// copias. No hacen falta: `npm start` lee el .env del proyecto y el contenedor recibe las variables del entorno.
+// Fuera de Docker (donde .dockerignore los aparta) el standalone acababa con COPIAS de datos y secretos: Next copia el
+// .env por su cuenta, y con Turbopack el trazado de instrumentation.js (al que no se aplica outputFileTracingExcludes de
+// next.config.ts, que sí cubre las rutas) arrastra la carpeta de subidas del proyecto (path.resolve("./uploads") en
+// upload-dir.ts) con sus copias de seguridad. No hacen falta: `npm start` lee el .env del proyecto y el contenedor
+// recibe las variables del entorno. Borrarlas no toca datos reales: `npm start` (scripts/start-local.mjs) resuelve
+// UPLOAD_DIR relativa contra la raíz del proyecto antes de que server.js cambie a .next/standalone, así que el
+// servidor nunca escribe aquí (antes, con UPLOAD_DIR="./uploads", las subidas acababan en .next/standalone/uploads y
+// cada compilación las borraba).
 const standalone = ".next/standalone";
 const uploadRel = path.relative(process.cwd(), path.resolve(process.env.UPLOAD_DIR || "./uploads"));
 const unwanted = [

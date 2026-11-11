@@ -163,7 +163,7 @@ test("mensaje de Telegram: corto, en el idioma de la persona, con el contenido e
   assert.ok(es.includes('<a href="https://pizarro.example.com/p/1?task=2&amp;x=1">Abrir la tarea</a>'));
   assert.ok(!es.includes("<esto>"));
   const en = core.telegramNoticeText({ ...m, type: "ASSIGNED" }, makeT("en"));
-  assert.match(en, /assigned/);
+  assert.match(en, /^<b>Ana &lt;b&gt; assigned “Pantalla &amp; menú” to you<\/b>/, "comillas del idioma, como en el email");
   const long = core.telegramNoticeText({ ...m, excerpt: "a".repeat(2000) }, makeT("es"));
   assert.ok(long.length < 700, "el extracto se recorta");
 });

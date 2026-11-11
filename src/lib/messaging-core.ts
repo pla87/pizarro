@@ -82,8 +82,6 @@ export function resolveTelegramConfig(saved: TelegramSettings, token: string, we
 /** Formato del token que da @BotFather: «123456789:AA…». */
 export const TELEGRAM_TOKEN_RE = /^\d{4,20}:[A-Za-z0-9_-]{30,60}$/;
 
-export const BOT_USERNAME_RE = /^[A-Za-z][A-Za-z0-9_]{3,40}$/;
-
 const PRIVATE_HOST = /^(localhost|.*\.localhost|.*\.local|.*\.internal|.*\.lan|.*\.home|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|0\.0\.0\.0|\[.*\])$/i;
 /** Puertos que Telegram admite para un webhook. */
 const WEBHOOK_PORTS = new Set(["", "443", "80", "88", "8443"]);
@@ -172,10 +170,10 @@ export interface NoticeMessage {
 const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
-/** Frase del aviso con la tarea entre comillas, en una línea («Ana te ha asignado «Pantalla»»). */
+/** Frase del aviso con la tarea entre comillas del idioma (como en el email), en una línea («Ana te ha asignado «Pantalla»»). */
 export function noticeHeadline(m: NoticeMessage, t: T): string {
   if (m.headline) return oneLine(m.headline);
-  return oneLine(notificationHeadline(m.type ?? "MENTION", t, { actor: m.actorName, task: `«${clip(oneLine(m.taskTitle), 120)}»` }));
+  return oneLine(notificationHeadline(m.type ?? "MENTION", t, { actor: m.actorName, task: t("«{title}»", { title: clip(oneLine(m.taskTitle), 120) }) }));
 }
 
 /** Mensaje de Telegram (HTML de Telegram, todo el contenido escapado): cabecera, proyecto, extracto y enlace. */

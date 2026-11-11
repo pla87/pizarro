@@ -44,7 +44,7 @@ test("payload de WhatsApp: plantilla aviso_pizarro con 3 parámetros, en el idio
   assert.equal(es.template.language.code, "es");
   const en = whatsappPayload("+34600111222", { ...msg, type: "ASSIGNED" as const }, cfg, makeT("en"), true);
   assert.equal(en.template.language.code, "en_US");
-  assert.match(en.template.components[0]!.parameters[0]!.text, /assigned/);
+  assert.match(en.template.components[0]!.parameters[0]!.text, /assigned “Pantalla”/, "comillas del idioma, como en el email");
   // Meta no admite saltos de línea en las variables.
   const multi = whatsappPayload("+34600111222", { ...msg, taskTitle: "a\n\tb    c" }, cfg, makeT("es"));
   assert.ok(!/[\n\t]| {5}/.test(multi.template.components[0]!.parameters[0]!.text));
