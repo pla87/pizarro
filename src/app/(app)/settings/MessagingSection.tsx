@@ -3,7 +3,7 @@
 import { Loader2, MessageCircle, Send, Smartphone } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
-  confirmMyWhatsapp, connectTelegram, disconnectChannel, myChannels, saveChannelPrefs, saveMyWhatsapp, testMyChannel,
+  confirmMyWhatsapp, connectTelegram, disconnectChannel, myChannels, resendMyWhatsappCode, saveChannelPrefs, saveMyWhatsapp, testMyChannel,
 } from "@/actions/messaging";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
@@ -109,9 +109,11 @@ function WhatsappBlock({ view, refresh }: { view: NonNullable<MyChannelsView["wh
   const t = useT();
   const toast = useToast();
   const [pending, start] = useTransition();
-  const [editing, setEditing] = useState(!view.phone);
+  // Un número sin consentimiento (de una versión anterior, con WhatsApp desactivado) se muestra en el formulario.
+  const [editing, setEditing] = useState(!view.phone || !view.consented);
   const [phone, setPhone] = useState(view.phone);
   const [consent, setConsent] = useState(false);
+  const [code, setCode] = useState("");
 
   const save = () =>
     start(async () => {
@@ -120,21 +122,39 @@ function WhatsappBlock({ view, refresh }: { view: NonNullable<MyChannelsView["wh
       await refresh();
       setEditing(false);
       setConsent(false);
-      toast(res.data.sent ? t("Te hemos enviado un mensaje de prueba por WhatsApp.") : t("Número guardado."), "success");
+      setCode("");
+      toast(res.data.sent ? t("Te hemos enviado un código por WhatsApp.") : t("Número guardado."), "success");
     });
 
   const confirm = () =>
     start(async () => {
-      const res = await confirmMyWhatsapp().catch((e) => actionThrowResult(e, t));
-      if (!res.ok) return toast(res.error, "error");
+      const res = await confirmMyWhatsapp({ code }).catch((e) => actionThrowResult(e, t));
+      if (!res.ok) {
+        await refresh();
+        return toast(res.error, "error");
+      }
+      setCode("");
       await refresh();
       toast(t("WhatsApp conectado."), "success");
     });
 
   const resend = () =>
     start(async () => {
-      const res = await testMyChannel("WHATSAPP").catch((e) => actionThrowResult(e, t));
-      toast(res.ok ? t("Te hemos enviado un mensaje de prueba por WhatsApp.") : res.error, res.ok ? "success" : "error");
+      const res = await resendMyWhatsappCode().catch((e) => actionThrowResult(e, t));
+      if (res.ok) {
+        setCode("");
+        await refresh();
+      }
+      toast(res.ok ? t("Te hemos enviado otro código por WhatsApp.") : res.error, res.ok ? "success" : "error");
+    });
+
+  const forget = () =>
+    start(async () => {
+      const res = await disconnectChannel("WHATSAPP").catch((e) => actionThrowResult(e, t));
+      if (!res.ok) return toast(res.error, "error");
+      setPhone("");
+      await refresh();
+      toast(t("Número borrado."), "success");
     });
 
   return (
@@ -151,6 +171,9 @@ function WhatsappBlock({ view, refresh }: { view: NonNullable<MyChannelsView["wh
             save();
           }}
         >
+          {view.phone && !view.consented && (
+            <p className="text-xs text-slate-500">{t("Este número estaba guardado en tu perfil, pero los avisos por WhatsApp no están activados. Para activarlos, acepta recibirlos y confírmalo con el código que te enviaremos.")}</p>
+          )}
           <div className="max-w-xs">
             <label className="label" htmlFor="wa-phone">{t("Número de WhatsApp (formato internacional)")}</label>
             <input id="wa-phone" type="tel" inputMode="tel" className="input" placeholder="+34600111222" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" maxLength={25} />
@@ -161,22 +184,53 @@ function WhatsappBlock({ view, refresh }: { view: NonNullable<MyChannelsView["wh
           </label>
           <div className="flex flex-wrap gap-2">
             <button className="btn-primary" disabled={pending || !consent || !phone.trim()}>
-              {pending && <Loader2 size={15} className="animate-spin" />} {t("Guardar y enviar mensaje de prueba")}
+              {pending && <Loader2 size={15} className="animate-spin" />} {t("Guardar y enviar código")}
             </button>
-            {view.phone && <button type="button" className="btn-secondary" onClick={() => { setEditing(false); setPhone(view.phone); }}>{t("Cancelar")}</button>}
+            {view.phone && view.consented && <button type="button" className="btn-secondary" onClick={() => { setEditing(false); setPhone(view.phone); }}>{t("Cancelar")}</button>}
+            {view.phone && !view.consented && <button type="button" className="btn-secondary" onClick={forget} disabled={pending}>{t("Borrar el número")}</button>}
           </div>
         </form>
-      ) : view.phone && !view.verified ? (
-        <div className="space-y-2 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/50">
-          <p>{t("Te hemos enviado un mensaje de prueba a {phone}. ¿Te ha llegado?", { phone: view.phone })}</p>
+      ) : view.phone && view.consented && !view.verified ? (
+        <form
+          className="space-y-2 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/50"
+          onSubmit={(e) => {
+            e.preventDefault();
+            confirm();
+          }}
+        >
+          <p>
+            {view.codePending
+              ? t("Te hemos enviado un código de 6 cifras por WhatsApp a {phone}. Escríbelo aquí para confirmar que el número es tuyo.", { phone: view.phone })
+              : t("El código enviado a {phone} ha caducado o ya no vale. Pide otro.", { phone: view.phone })}
+          </p>
+          {view.codePending && (
+            <div className="max-w-[10rem]">
+              <label className="label" htmlFor="wa-code">{t("Código de WhatsApp")}</label>
+              <input
+                id="wa-code"
+                className="input tracking-widest"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9 ]*"
+                maxLength={7}
+                placeholder="123456"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+              />
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn-primary py-1.5" onClick={confirm} disabled={pending}>{t("Sí, me ha llegado")}</button>
-            <button type="button" className="btn-secondary py-1.5" onClick={resend} disabled={pending || !view.available}>{t("Reenviar")}</button>
+            {view.codePending && (
+              <button className="btn-primary py-1.5" disabled={pending || code.replace(/\D/g, "").length !== 6}>
+                {pending && <Loader2 size={15} className="animate-spin" />} {t("Confirmar")}
+              </button>
+            )}
+            <button type="button" className="btn-secondary py-1.5" onClick={resend} disabled={pending || !view.available}>{t("Enviar otro código")}</button>
             <button type="button" className="btn-secondary py-1.5" onClick={() => setEditing(true)} disabled={pending || !view.available}>{t("Cambiar número")}</button>
           </div>
-          <p className="text-xs text-slate-500">{t("Hasta que lo confirmes no se te envían avisos por WhatsApp. Si no llega, revisa el número o pide al administrador que compruebe la configuración.")}</p>
-        </div>
-      ) : view.phone ? (
+          <p className="text-xs text-slate-500">{t("El código caduca a los 15 minutos y admite 5 intentos. Hasta que lo confirmes no se te envían avisos por WhatsApp. Si no llega, revisa el número o pide al administrador que compruebe la configuración.")}</p>
+        </form>
+      ) : view.phone && view.verified ? (
         <>
           <p className="flex flex-wrap items-center gap-2 text-sm">
             {t("Conectado: {phone}.", { phone: view.phone })}
@@ -185,6 +239,11 @@ function WhatsappBlock({ view, refresh }: { view: NonNullable<MyChannelsView["wh
           {view.mentionsOnly && <p className="text-xs text-slate-500">{t("Con la plantilla de WhatsApp que usa esta instalación solo se envían las menciones.")}</p>}
           <ChannelControls channel="WHATSAPP" prefs={view.prefs} canTest={view.available} mentionsOnly={view.mentionsOnly} refresh={refresh} />
         </>
+      ) : view.phone ? (
+        <p className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+          {t("Número guardado: {phone}. Los avisos por WhatsApp no están activados.", { phone: view.phone })}
+          <button type="button" className="btn-secondary px-2 py-1 text-xs" onClick={forget} disabled={pending}>{t("Borrar el número")}</button>
+        </p>
       ) : null}
       {editing && view.available && <p className="text-xs text-slate-500">{t("WhatsApp le cuesta dinero a tu organización por cada mensaje: actívalo solo si lo vas a usar.")}</p>}
     </div>

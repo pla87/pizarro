@@ -64,14 +64,22 @@ Pizarro elige solo la forma, según la dirección pública de la instalación (v
   80, 88 u 8443): Pizarro pregunta a Telegram cada pocos segundos. No hace falta abrir puertos ni tener dominio. Lo único
   que cambia es que conectar Telegram puede tardar un par de segundos más.
 
-Los avisos salen igual en los dos casos. Si cambias `APP_URL`, Pizarro vuelve a registrar el webhook al arrancar.
+Los avisos salen igual en los dos casos. Si cambias `APP_URL`, Pizarro vuelve a registrar el webhook al arrancar. Si al
+arrancar Telegram no responde (o la base de datos aún no está lista), Pizarro lo vuelve a intentar solo, cada vez más
+espaciado (hasta cada 5 minutos), hasta que sale bien.
+
+El modo sin https (Pizarro pregunta a Telegram) es para **una sola instancia** de Pizarro. Con varias réplicas detrás de
+un balanceador, todas preguntarían a la vez por los mismos mensajes del bot (Telegram rechaza la segunda): en ese caso
+usa una `APP_URL` https pública para que Telegram llame al webhook. Al apagarse, Pizarro avisa a Telegram de los mensajes
+que ya ha procesado, para que la instancia siguiente no los repita.
 
 ## Desactivar o cambiar de bot
 
 - **Desactivar**: deja de enviar avisos por Telegram; el bot y las conexiones se conservan para cuando lo reactives.
 - **Quitar el bot**: borra el token y desconecta a todo el mundo.
 - **Cambiar de bot** (pegar el token de otro bot con **Reemplazar**): cada persona tiene que volver a conectar su
-  Telegram, porque el bot nuevo no puede escribir a quien no lo ha abierto.
+  Telegram, porque el bot nuevo no puede escribir a quien no lo ha abierto. Pizarro quita el webhook del bot anterior
+  (deja de recibir sus mensajes) y crea un secreto nuevo para el webhook del nuevo.
 
 ## Problemas frecuentes
 

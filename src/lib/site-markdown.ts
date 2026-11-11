@@ -23,18 +23,75 @@ export function safeHref(href: string): string | null {
   return null;
 }
 
-const emphasis = (s: string) =>
-  escapeHtml(s)
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/(^|[^\w])_(?!\s)(.+?)_(?!\w)/g, "$1<em>$2</em>");
+type Delim = { ch: "*" | "_"; n: number; opens: string[]; closes: string[] };
+
+const SPACE = /\s/u;
+const PUNCT = /[\p{P}\p{S}]/u;
+
+/**
+ * **negrita**, *cursiva* y _cursiva_ con las reglas de CommonMark para abrir y cerrar (un «_» dentro de una palabra,
+ * como en snake_case, no cuenta) y siempre bien anidadas: un cierre empareja con la apertura más cercana del mismo
+ * carácter y las que quedan entre medias se ven como texto. Lineal (una pila: cada marca entra y sale una vez); sin la
+ * «regla del 3» de CommonMark, que aquí no hace falta.
+ */
+function emphasis(s: string): string {
+  const out: (string | Delim)[] = [];
+  const stack: Delim[] = [];
+  const open = { "*": 0, _: 0 };
+  let i = 0;
+  while (i < s.length) {
+    let j = i;
+    while (j < s.length && s[j] !== "*" && s[j] !== "_") j++;
+    if (j > i) out.push(escapeHtml(s.slice(i, j)));
+    if (j >= s.length) break;
+    const ch = s[j] as "*" | "_";
+    let k = j;
+    while (k < s.length && s[k] === ch) k++;
+    const before = j > 0 ? s[j - 1]! : " ";
+    const after = k < s.length ? s[k]! : " ";
+    const left = !SPACE.test(after) && (!PUNCT.test(after) || SPACE.test(before) || PUNCT.test(before));
+    const right = !SPACE.test(before) && (!PUNCT.test(before) || SPACE.test(after) || PUNCT.test(after));
+    const canOpen = ch === "*" ? left : left && (!right || PUNCT.test(before));
+    const canClose = ch === "*" ? right : right && (!left || PUNCT.test(after));
+    const d: Delim = { ch, n: k - j, opens: [], closes: [] };
+    out.push(d);
+    if (canClose) {
+      while (d.n > 0 && open[ch] > 0) {
+        // Las marcas abiertas después de la apertura que se cierra quedan como texto (así no se cruzan las etiquetas).
+        let top = stack[stack.length - 1]!;
+        while (top.ch !== ch) {
+          stack.pop();
+          open[top.ch]--;
+          top = stack[stack.length - 1]!;
+        }
+        const use = top.n >= 2 && d.n >= 2 ? 2 : 1;
+        const tag = use === 2 ? "strong" : "em";
+        top.n -= use;
+        d.n -= use;
+        top.opens.push(`<${tag}>`);
+        d.closes.push(`</${tag}>`);
+        if (top.n === 0) {
+          stack.pop();
+          open[ch]--;
+        }
+      }
+    }
+    if (d.n > 0 && canOpen) {
+      stack.push(d);
+      open[ch]++;
+    }
+    i = k;
+  }
+  // Cada apertura: lo que sobra de la marca, como texto, y después sus etiquetas (la última emparejada es la exterior).
+  return out.map((p) => (typeof p === "string" ? p : `${p.closes.join("")}${p.ch.repeat(p.n)}${p.opens.reverse().join("")}`)).join("");
+}
 
 /** Texto en línea: código, enlaces y énfasis; todo lo demás, escapado. */
 export function inlineMarkdown(s: string, link: LinkResolver = safeHref): string {
   const links = (part: string) => {
     let out = "";
     let last = 0;
-    for (const m of part.matchAll(/(!?)\[([^\]]+)\]\(([^()\s]+)\)|<(https?:\/\/[^\s<>]+)>/g)) {
+    for (const m of part.matchAll(/(!?)\[([^[\]]+)\]\(([^()\s]+)\)|<(https?:\/\/[^\s<>]+)>/g)) {
       out += emphasis(part.slice(last, m.index));
       last = (m.index ?? 0) + m[0].length;
       const text = m[2] ?? m[4] ?? "";
@@ -59,7 +116,7 @@ export function inlineMarkdown(s: string, link: LinkResolver = safeHref): string
 
 /** Texto plano de una línea de Markdown (para descripciones y títulos). */
 export const plainText = (s: string) =>
-  s.replace(/!?\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/<(https?:\/\/[^>]+)>/g, "$1").replace(/[*_`]/g, "").replace(/\s+/g, " ").trim();
+  s.replace(/!?\[([^[\]]+)\]\([^)]*\)/g, "$1").replace(/<(https?:\/\/[^>]+)>/g, "$1").replace(/[*_`]/g, "").replace(/\s+/g, " ").trim();
 
 const LIST = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/;
 const FENCE = /^\s*(```|~~~)/;
@@ -73,10 +130,16 @@ const startsBlock = (l: string) => FENCE.test(l) || HEADING.test(l) || RULE.test
 /** Markdown → HTML. `link` decide qué enlaces se admiten (y puede reescribirlos). */
 export function markdownToHtml(md: string, { link = safeHref }: { link?: LinkResolver } = {}): string {
   const ids = new Set<string>();
-  return blocks(md.replace(/\r\n?/g, "\n").replace(/<!--[\s\S]*?-->/g, "").split("\n"), link, ids);
+  return blocks(md.replace(/\r\n?/g, "\n").replace(/<!--[\s\S]*?-->/g, "").split("\n"), link, ids, 0);
 }
 
-function blocks(lines: string[], link: LinkResolver, ids: Set<string>): string {
+/**
+ * Niveles de citas y listas anidadas que se interpretan; más adentro, las líneas se ven como texto. Sin tope, 5.000
+ * «>» seguidos o 2.000 niveles de lista agotaban la pila (y la memoria: cada nivel copia sus líneas).
+ */
+export const MAX_NESTING = 20;
+
+function blocks(lines: string[], link: LinkResolver, ids: Set<string>, depth: number): string {
   const html: string[] = [];
   let i = 0;
   while (i < lines.length) {
@@ -111,10 +174,10 @@ function blocks(lines: string[], link: LinkResolver, ids: Set<string>): string {
       i++;
       continue;
     }
-    if (/^\s*>/.test(line)) {
+    if (depth < MAX_NESTING && /^\s*>/.test(line)) {
       const quote: string[] = [];
       while (i < lines.length && /^\s*>/.test(lines[i] ?? "")) quote.push((lines[i++] ?? "").replace(/^\s*> ?/, ""));
-      html.push(`<blockquote>${blocks(quote, link, ids)}</blockquote>`);
+      html.push(`<blockquote>${blocks(quote, link, ids, depth + 1)}</blockquote>`);
       continue;
     }
     if (line.trimStart().startsWith("|") && TABLE_SEP.test(lines[i + 1] ?? "")) {
@@ -127,14 +190,16 @@ function blocks(lines: string[], link: LinkResolver, ids: Set<string>): string {
       html.push(`<div class="table"><table><thead>${tr(head, "th")}</thead><tbody>${rows.map((r) => tr(r, "td")).join("")}</tbody></table></div>`);
       continue;
     }
-    if (LIST.test(line)) {
-      i = list(lines, i, link, ids, html);
+    if (depth < MAX_NESTING && LIST.test(line)) {
+      i = list(lines, i, link, ids, html, depth);
       continue;
     }
     const para: string[] = [];
-    while (i < lines.length && !blank(lines[i] ?? "") && (para.length === 0 || !startsBlock(lines[i] ?? ""))) {
+    // Pasado el tope de anidamiento, las citas y listas que quedan son texto del párrafo.
+    const stops = (l: string) => (depth < MAX_NESTING ? startsBlock(l) : FENCE.test(l) || HEADING.test(l) || RULE.test(l));
+    while (i < lines.length && !blank(lines[i] ?? "") && (para.length === 0 || !stops(lines[i] ?? ""))) {
       const l = lines[i++] ?? "";
-      const hard = / {2,}$|\\$/.test(l);
+      const hard = l.endsWith("  ") || l.endsWith("\\"); // sin regex: « {2,}$» es cuadrática con mucha sangría
       para.push(l.trim().replace(/\\$/, "") + (hard ? "\u0000" : ""));
     }
     html.push(`<p>${inlineMarkdown(para.join(" ").replace(/\u0000 /g, "\u0000").replace(/\u0000$/, ""), link).replace(/\u0000/g, "<br>")}</p>`);
@@ -143,7 +208,7 @@ function blocks(lines: string[], link: LinkResolver, ids: Set<string>): string {
 }
 
 /** Una lista (con sus sublistas) desde la línea `start`; devuelve la línea siguiente. */
-function list(lines: string[], start: number, link: LinkResolver, ids: Set<string>, html: string[]): number {
+function list(lines: string[], start: number, link: LinkResolver, ids: Set<string>, html: string[], depth: number): number {
   const first = LIST.exec(lines[start] ?? "");
   const indent = first?.[1]?.length ?? 0;
   const ordered = /\d/.test(first?.[2] ?? "");
@@ -178,9 +243,10 @@ function list(lines: string[], start: number, link: LinkResolver, ids: Set<strin
   }
   const body = items.map((item) => {
     const rest = item.slice(1);
-    const pad = Math.min(...rest.filter((l) => !blank(l)).map(indentOf), Infinity);
+    let pad = Infinity;
+    for (const l of rest) if (!blank(l)) pad = Math.min(pad, indentOf(l));
     const text = [item[0] ?? "", ...rest.map((l) => (blank(l) ? "" : l.slice(Number.isFinite(pad) ? pad : 0)))].join("\n");
-    let inner = blocks(text.split("\n"), link, ids);
+    let inner = blocks(text.split("\n"), link, ids, depth + 1);
     if (!loose) inner = inner.replace(/^<p>([\s\S]*?)<\/p>/, "$1");
     return `<li>${inner}</li>`;
   }).join("");

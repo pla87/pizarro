@@ -77,6 +77,44 @@ describe("deshacer en bloque: filas bloqueadas en orden de id", () => {
     assert.equal(await db.task.count({ where: { id: { in: [low, high] } } }), 0);
   });
 
+  test("lote de task.remove: bloquea con FOR UPDATE antes del DELETE (ninguna alta nueva apunta a lo que va a borrar)", async () => {
+    const f = await makeProject();
+    const [low, high] = await pair(f);
+    const holder = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    const probe = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await holder.connect();
+    await probe.connect();
+    try {
+      // Una alta en curso que apunta a la tarea de id mayor (un comentario: FOR KEY SHARE).
+      await holder.query("BEGIN");
+      await holder.query(`SELECT 1 FROM "Task" WHERE "id" = $1 FOR KEY SHARE`, [high]);
+      const pending = applyUndo(f.project.id, [{ t: "task.remove", id: low }, { t: "task.remove", id: high }]);
+      let waited = false;
+      for (let i = 0; i < 250 && !waited; i++) {
+        const { rows } = await probe.query(`SELECT count(*)::int AS n FROM pg_locks WHERE locktype IN ('transactionid', 'tuple') AND NOT granted`);
+        waited = rows[0].n > 0;
+        if (!waited) await new Promise((r) => setTimeout(r, 20));
+      }
+      assert.ok(waited, "el deshacer debería esperar a la alta en curso");
+      // Mientras espera, la de id menor ya está bloqueada para borrarla: otra alta sobre ella tiene que esperar.
+      let blocked = false;
+      await probe.query("BEGIN");
+      try {
+        await probe.query(`SELECT 1 FROM "Task" WHERE "id" = $1 FOR KEY SHARE NOWAIT`, [low]);
+      } catch (err) {
+        blocked = (err as { code?: string }).code === "55P03";
+      }
+      await probe.query("ROLLBACK");
+      await holder.query("COMMIT");
+      assert.equal(await pending, 0);
+      assert.ok(blocked, "con FOR NO KEY UPDATE una alta podría colarse sobre una tarea a punto de borrarse");
+      assert.equal(await db.task.count({ where: { id: { in: [low, high] } } }), 0);
+    } finally {
+      await holder.end();
+      await probe.end();
+    }
+  });
+
   test("tareas fijas fuera de la columna de la release: se limpian bloqueando en orden de id", async () => {
     const f = await makeProject();
     // El proyecto de prueba no tiene columna «Siguiente salto»: las dos fijas están fuera de su sitio.

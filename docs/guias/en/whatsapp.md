@@ -30,6 +30,11 @@ You need:
   10 and 35 € a month.
 - To avoid surprises, Pizarro sends at most **10 WhatsApp messages per person per hour** (the rest stay in Pizarro's
   bell) and, by default, each person only gets **mentions and assignments**.
+- Messages with the verification code and test messages from My profile are charged too: at most **5 a day per person**
+  and **3 a day per destination number** (whoever asks for them).
+- A notice that fails is not repeated if Meta may have sent it (5xx error, dropped connection or timeout): only
+  rejections for sending too much (429) and connection failures before sending are retried. That way nothing is
+  charged twice.
 
 ## Step 1. Create a Meta Business account
 
@@ -129,13 +134,17 @@ The token is stored encrypted and never shown again (only its last 4 characters)
 
 1. **My profile → Notices → Notices on your phone → WhatsApp**: type your number in international format (`+34…`).
 2. Tick the **consent** box (you agree to receive Pizarro notices on WhatsApp at that number).
-3. Press **Save and send a test message**. A test WhatsApp arrives.
-4. Press **Yes, I got it**. From then on you get notices on WhatsApp.
+3. Press **Save and send code**. A WhatsApp from Pizarro arrives with “Your Pizarro verification code is 123456”.
+4. Type those **6 digits** in My profile and press **Confirm**. From then on you get notices on WhatsApp.
 5. Choose which notices you want on WhatsApp and press **Save**. By default, mentions and assignments.
 
-Pizarro doesn't use a verification code because that would need a second template (in the “Authentication” category),
-with its own approval and cost. Instead, nobody gets notices until they confirm the test message arrived, and they can
-disconnect at any time.
+The code goes in the same `aviso_pizarro` template (in the `{{1}}` variable): no separate template is needed. It expires
+after **15 minutes** and allows **5 attempts**; if it expires or they run out, press **Send another code** (the previous
+one stops working). Without the code nobody gets notices: that way nobody can enter someone else's number and send them
+paid notices. People can disconnect at any time.
+
+If the number was already saved from an earlier version with WhatsApp turned off, it shows up in the form: to turn
+notices on, tick the consent box and confirm it with the code (or press **Delete the number**).
 
 ## Environment variables (earlier installations)
 
@@ -146,9 +155,12 @@ Installations that already set up WhatsApp with server variables keep working wi
 Precedence: **what you save in Administration → Settings wins, field by field**; empty fields use those variables. Until
 you press Enable or Turn off, WhatsApp is on if the settings are complete.
 
-If you used the old `mencion_pizarro` template (four variables), Pizarro still accepts it, but with it only
-**mentions** are sent. To send every kind of notice, create `aviso_pizarro` (step 5) and change the template name in
-Pizarro.
+Before, the template could only be set with `WHATSAPP_TEMPLATE_NAME` and had **four variables** (who mentions, the task,
+the project and the link), whatever its name. That is why, **as long as the template comes from that variable**,
+Pizarro uses that old format and only sends **mentions** (Settings says so). The same goes for the `mencion_pizarro`
+template, wherever it comes from. To send every kind of notice, create `aviso_pizarro` (step 5, three variables), type
+its name in **Template name** in Administration → Settings and save: what is saved there wins over the variable. If
+your template with another name already has the three variables of `aviso_pizarro`, just type its name in Settings.
 
 ## Common problems
 
@@ -158,5 +170,7 @@ Pizarro.
 - **Error 131030 (recipient not allowed)**: with the test number, add the number in the **To** field of “API Setup”.
 - **Error 190 or 401 (token)**: the token expired or lacks permissions. Generate a permanent one (step 4).
 - **Error 131026 (couldn't be delivered)**: that number has no WhatsApp or doesn't accept business messages.
-- **Nothing arrives**: check that the person confirmed their number in My profile and that the notice is ticked for
-  WhatsApp. Failures are recorded in **Administration → Logs** (with the phone masked and without the token).
+- **The code doesn't arrive**: check the number (international format) and, with Meta's test number, that it is one of
+  the 5 verified numbers. After 3 sends to the same number (or 5 from one person) you have to wait until the next day.
+- **Nothing arrives**: check that the person confirmed their number with the code in My profile and that the notice is
+  ticked for WhatsApp. Failures are recorded in **Administration → Logs** (with the phone masked and without the token).

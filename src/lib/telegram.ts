@@ -4,12 +4,13 @@ import { makeT, toLocale, type Locale } from "../i18n/core";
 import { db } from "./db";
 import { labelledHmac, labelledHmacCandidates } from "./keyring";
 import { logEvent } from "./log";
-import { loadMessagingConfig, type MessagingConfig } from "./messaging-config";
+import { loadMessagingConfig, readMessagingConfigStrict, type MessagingConfig } from "./messaging-config";
 import {
-  MessagingApiError, parseStartCode, scrubSecrets, telegramCommand, telegramMode, telegramSendBody, TELEGRAM_LINK_MINUTES, withRetries,
+  MessagingApiError, parseStartCode, scrubSecrets, telegramCommand, telegramMode, telegramPlain, telegramSendBody, telegramSyncRetryMs,
+  TELEGRAM_LINK_MINUTES, withRetries, type TelegramHtml,
 } from "./messaging-core";
 import { rateLimit } from "./rate-limit";
-import { isShuttingDown, trackInFlight } from "./shutdown";
+import { isShuttingDown, onShutdown, trackInFlight } from "./shutdown";
 
 // Bot de Telegram (Bot API, https://core.telegram.org/bots/api). Pizarro solo usa sendMessage para los avisos y recibe
 // tres cosas del bot: «/start <código>» (enlaza el chat con la persona que pulsó «Conectar Telegram»), «/stop»
@@ -18,7 +19,8 @@ import { isShuttingDown, trackInFlight } from "./shutdown";
 // Cómo llegan los mensajes del bot: con APP_URL https pública, por webhook (Telegram llama a /api/telegram/webhook con
 // el secreto en X-Telegram-Bot-Api-Secret-Token). Si no (instalación en una red local, sin https), Pizarro pregunta a
 // Telegram en segundo plano (getUpdates con espera larga): no hace falta abrir puertos. El sondeo es un solo bucle por
-// proceso, se para al desactivar el bot o al apagar (las actualizaciones que no se confirmaron se vuelven a recibir).
+// proceso, se para al desactivar el bot o al apagar (antes de salir confirma a Telegram lo ya procesado). El sondeo es
+// para una sola instancia: con varias réplicas detrás de un balanceador, usa el webhook (APP_URL https pública).
 
 const API = "https://api.telegram.org";
 const ALLOWED_UPDATES = ["message", "my_chat_member"];
@@ -66,8 +68,11 @@ export async function getBot(token: string): Promise<BotInfo> {
   return { id: String(me.id), username: me.username, name: me.first_name ?? me.username };
 }
 
-/** Envía un mensaje (HTML de Telegram) con reintentos limitados. El apagado ordenado espera a los envíos en curso. */
-export function sendTelegramMessage(token: string, chatId: string, html: string): Promise<void> {
+/**
+ * Envía un mensaje (HTML de Telegram) con reintentos limitados. El apagado ordenado espera a los envíos en curso. Solo
+ * admite TelegramHtml (telegramHtml/telegramPlain): todo lo que venga de fuera llega escapado.
+ */
+export function sendTelegramMessage(token: string, chatId: string, html: TelegramHtml): Promise<void> {
   return trackInFlight(() => withRetries("TELEGRAM", () => telegramCall(token, "sendMessage", telegramSendBody(chatId, html)), { stopping: isShuttingDown }).then(() => undefined));
 }
 
@@ -76,23 +81,37 @@ export function sendTelegramMessage(token: string, chatId: string, html: string)
 interface PollState {
   running: boolean;
   gen: number;
+  /** Siguiente update_id que pedir a Telegram, y de qué bot es (cada bot tiene su propia numeración). */
   offset: number;
+  offsetBot: string;
+  /** HMAC del token con el que corre el bucle: si se guarda otro, el bucle se reinicia. */
+  tokenKey: string;
   abort: AbortController | null;
+  /** El bucle en curso (el apagado espera a que confirme el último lote). */
+  loop: Promise<void> | null;
   /** Último resultado de registrar el webhook o de preguntar a Telegram. */
   lastError: string | null;
   lastOkAt: number;
   mode: "webhook" | "polling" | "off";
+  /** Reintento de syncTelegram tras un fallo: fallos seguidos, temporizador, cuándo, y espera base (las pruebas la acortan). */
+  syncFailures: number;
+  retryTimer: ReturnType<typeof setTimeout> | null;
+  retryAt: number;
+  retryBaseMs: number;
 }
 
 const GLOBAL = "__pizarroTelegram";
 function poll(): PollState {
   const g = globalThis as unknown as Record<string, PollState | undefined>;
-  return (g[GLOBAL] ??= { running: false, gen: 0, offset: 0, abort: null, lastError: null, lastOkAt: 0, mode: "off" });
+  return (g[GLOBAL] ??= {
+    running: false, gen: 0, offset: 0, offsetBot: "", tokenKey: "", abort: null, loop: null, lastError: null, lastOkAt: 0, mode: "off",
+    syncFailures: 0, retryTimer: null, retryAt: 0, retryBaseMs: 5_000,
+  });
 }
 
-export function telegramStatus(): { mode: PollState["mode"]; polling: boolean; lastError: string | null; lastOkAt: number } {
+export function telegramStatus(): { mode: PollState["mode"]; polling: boolean; lastError: string | null; lastOkAt: number; retryAt: number } {
   const p = poll();
-  return { mode: p.mode, polling: p.running, lastError: p.lastError, lastOkAt: p.lastOkAt };
+  return { mode: p.mode, polling: p.running, lastError: p.lastError, lastOkAt: p.lastOkAt, retryAt: p.retryTimer ? p.retryAt : 0 };
 }
 
 function stopPolling(): void {
@@ -101,30 +120,63 @@ function stopPolling(): void {
   p.abort?.abort();
   p.abort = null;
   p.running = false;
+  p.loop = null;
 }
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/** Espera `ms` o hasta que se aborte `signal` (parar el sondeo o apagar no esperan a que acabe la pausa). */
+const sleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    if (signal?.aborted) return resolve();
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done, { once: true });
+  });
 
-function startPolling(): void {
+const tokenKeyOf = (token: string) => labelledHmac("telegram-poll", token);
+
+/**
+ * Sondeo (getUpdates con espera larga). Un solo bucle por proceso, y pensado para una sola instancia: con varias
+ * réplicas, todas pedirían las mismas actualizaciones (Telegram responde 409 a la segunda); entonces, webhook.
+ */
+function startPolling(token: string): void {
   const p = poll();
-  if (p.running) return;
+  const key = tokenKeyOf(token);
+  if (p.running && p.tokenKey === key) return;
+  // Otro token (otro bot, o el mismo con un token nuevo): se para el bucle viejo y se empieza otro.
+  if (p.running) stopPolling();
   p.running = true;
+  p.tokenKey = key;
   const gen = ++p.gen;
-  void (async () => {
+  p.loop = (async () => {
     let backoff = 0;
+    let last: MessagingConfig | null = null;
     while (gen === p.gen && !isShuttingDown()) {
       const cfg = await loadMessagingConfig().catch(() => null);
+      // Mientras se leía la configuración se pudo parar o reiniciar el sondeo: este bucle ya no manda.
+      if (gen !== p.gen || isShuttingDown()) break;
       if (!cfg?.telegram.active || telegramMode(process.env.APP_URL).mode !== "polling") break;
+      last = cfg;
+      // Cada bot numera sus actualizaciones: con otro bot se empieza de cero (si no, se descartarían sus /start).
+      const bot = cfg.telegramSettings.botId || tokenKeyOf(cfg.telegram.token);
+      if (p.offsetBot !== bot) {
+        p.offsetBot = bot;
+        p.offset = 0;
+      }
+      const abort = (p.abort = new AbortController());
       try {
-        p.abort = new AbortController();
-        const updates = await telegramCall<TelegramUpdate[]>(cfg.telegram.token, "getUpdates", { offset: p.offset || undefined, timeout: 25, allowed_updates: ALLOWED_UPDATES }, { timeoutMs: 40_000, signal: p.abort.signal });
+        const updates = await telegramCall<TelegramUpdate[]>(cfg.telegram.token, "getUpdates", { offset: p.offset || undefined, timeout: 25, allowed_updates: ALLOWED_UPDATES }, { timeoutMs: 40_000, signal: abort.signal });
+        if (gen !== p.gen) break;
         backoff = 0;
         p.lastError = null;
         p.lastOkAt = Date.now();
         for (const u of updates) {
+          if (gen !== p.gen) break;
           // Se confirma aunque falle: una actualización que siempre falla no debe repetirse para siempre.
           p.offset = Math.max(p.offset, u.update_id + 1);
-          if (gen !== p.gen) break;
           await trackInFlight(() => handleTelegramUpdate(u, cfg)).catch((err) => console.error("[telegram] actualización", scrubSecrets(String(err), [cfg.telegram.token])));
         }
       } catch (err) {
@@ -132,25 +184,72 @@ function startPolling(): void {
         p.lastError = scrubSecrets((err as Error).message, [cfg.telegram.token]);
         // 409: otro proceso pregunta con el mismo bot (o hay un webhook puesto): se espera más.
         backoff = err instanceof MessagingApiError && err.status === 409 ? 30_000 : Math.min(60_000, backoff ? backoff * 2 : 2_000);
-        await sleep(backoff);
+        await sleep(backoff, abort.signal);
       }
     }
-    if (gen === p.gen) p.running = false;
+    // Al apagar: confirma a Telegram lo ya procesado (getUpdates con ese offset y sin espera). Si no, la instancia
+    // siguiente volvería a recibir (y a contestar) el último lote.
+    if (isShuttingDown() && last?.telegram.token && p.offset && p.offsetBot === (last.telegramSettings.botId || tokenKeyOf(last.telegram.token))) {
+      await telegramCall(last.telegram.token, "getUpdates", { offset: p.offset, timeout: 0, limit: 1, allowed_updates: ALLOWED_UPDATES }, { timeoutMs: 3_000 }).catch(() => {});
+    }
+    if (gen === p.gen) {
+      p.running = false;
+      p.loop = null;
+    }
   })();
+}
+
+// Al apagar: no más reintentos, se corta la espera larga en curso y se espera a que el bucle confirme el último lote.
+onShutdown("telegram", async () => {
+  const p = poll();
+  if (p.retryTimer) clearTimeout(p.retryTimer);
+  p.retryTimer = null;
+  const loop = p.loop;
+  if (!loop) return;
+  p.abort?.abort();
+  await loop;
+});
+
+function scheduleSyncRetry(): void {
+  const p = poll();
+  if (p.retryTimer) clearTimeout(p.retryTimer);
+  p.retryTimer = null;
+  if (isShuttingDown()) return;
+  const wait = telegramSyncRetryMs(p.syncFailures, p.retryBaseMs);
+  p.retryAt = Date.now() + wait;
+  p.retryTimer = setTimeout(() => {
+    p.retryTimer = null;
+    if (!isShuttingDown()) void syncTelegram().catch(() => {});
+  }, wait);
+  p.retryTimer.unref?.();
 }
 
 /**
  * Pone el bot como diga la configuración: webhook (APP_URL https pública), sondeo en segundo plano o nada (desactivado).
- * Se llama al arrancar y al guardar. Devuelve el error de Telegram, si lo hubo (sin el token).
+ * Se llama al arrancar y al guardar. Devuelve el error de Telegram, si lo hubo (sin el token). Si falla (Telegram no
+ * responde, la BD aún no está lista al arrancar…), se vuelve a intentar solo con una espera creciente (5 s, 10 s…
+ * hasta 5 minutos) hasta que salga bien o hasta el apagado.
  */
 export async function syncTelegram(): Promise<{ mode: PollState["mode"]; error: string | null }> {
   const p = poll();
-  const cfg = await loadMessagingConfig({ fresh: true });
+  if (p.retryTimer) clearTimeout(p.retryTimer);
+  p.retryTimer = null;
+  let cfg: MessagingConfig;
+  try {
+    cfg = await readMessagingConfigStrict();
+  } catch (err) {
+    p.syncFailures++;
+    p.lastError = scrubSecrets(`No se pudo leer la configuración: ${(err as Error)?.message ?? String(err)}`, []);
+    if (p.syncFailures === 1) console.error(`[telegram] ${p.lastError}. Se volverá a intentar solo.`);
+    scheduleSyncRetry();
+    return { mode: p.mode, error: p.lastError };
+  }
   const { token } = cfg.telegram;
   if (!cfg.telegram.active) {
     stopPolling();
     p.mode = "off";
     p.lastError = null;
+    p.syncFailures = 0;
     // Sin webhook: Telegram deja de llamar a Pizarro (si el token sigue guardado).
     if (token) await telegramCall(token, "deleteWebhook", {}, { timeoutMs: 10_000 }).catch(() => {});
     return { mode: "off", error: null };
@@ -166,16 +265,25 @@ export async function syncTelegram(): Promise<{ mode: PollState["mode"]; error: 
       p.mode = "polling";
       // Con un webhook puesto, getUpdates no funciona.
       await telegramCall(token, "deleteWebhook", {}, { timeoutMs: 10_000 });
-      startPolling();
+      startPolling(token);
     }
     p.lastError = null;
     p.lastOkAt = Date.now();
+    p.syncFailures = 0;
     return { mode: p.mode, error: null };
   } catch (err) {
     p.lastError = scrubSecrets((err as Error).message, [token]);
-    logEvent({ level: "error", category: "system", action: "telegram.syncFailed", message: `No se pudo preparar el bot de Telegram (${m.mode}): ${p.lastError}` });
+    p.syncFailures++;
+    // Se registra el primero de una racha, no cada reintento.
+    if (p.syncFailures === 1) logEvent({ level: "error", category: "system", action: "telegram.syncFailed", message: `No se pudo preparar el bot de Telegram (${m.mode}): ${p.lastError}. Se volverá a intentar solo.` });
+    scheduleSyncRetry();
     return { mode: p.mode, error: p.lastError };
   }
+}
+
+/** Deja de recibir los mensajes de un bot que se sustituye (su webhook seguiría llamando a Pizarro). No lanza. */
+export async function releaseTelegramBot(token: string): Promise<void> {
+  if (token) await telegramCall(token, "deleteWebhook", {}, { timeoutMs: 10_000 }).catch(() => {});
 }
 
 type WebhookInfo = { url: string; pending: number; lastError: string | null };
@@ -238,10 +346,11 @@ export interface TelegramUpdate {
 const tFor = (locale: Locale) => makeT(locale);
 const langOf = (code: string | undefined): Locale => (code?.toLowerCase().startsWith("es") ? "es" : code ? "en" : "es");
 
+/** Respuesta del bot: texto sin formato, escapado entero (lleva nombres que eligió la persona). */
 async function reply(token: string, chatId: string, text: string): Promise<void> {
   // Tope por chat: el bot nunca entra en una conversación sin fin con nadie.
   if (!rateLimit(`telegram:reply:${chatId}`, 10, 10 * 60_000)) return;
-  await sendTelegramMessage(token, chatId, text).catch((err) => console.error("[telegram] respuesta", scrubSecrets(String(err), [token])));
+  await sendTelegramMessage(token, chatId, telegramPlain(text)).catch((err) => console.error("[telegram] respuesta", scrubSecrets(String(err), [token])));
 }
 
 /** Desconecta todos los perfiles enlazados a este chat (bot bloqueado, /stop, chat borrado). */
@@ -284,7 +393,7 @@ export async function handleTelegramUpdate(u: TelegramUpdate, cfg?: MessagingCon
     });
     logEvent({ category: "notify", action: "notify.telegramLinked", message: `Telegram conectado para ${user.name}`, userId: user.id, userName: user.name });
     const ut = tFor(toLocale(user.locale));
-    return reply(token, chatId, ut("Listo, {name}: a partir de ahora recibirás aquí tus avisos de Pizarro. Para dejar de recibirlos, escribe /stop o desconéctalo en Mi perfil → Avisos.", { name: user.name }));
+    return reply(token, chatId, ut("Listo, {name}: a partir de ahora recibirás aquí tus avisos de Pizarro. Para dejar de recibirlos, escribe /stop o desconéctalo en Mi perfil → Avisos.", { name: user.name.replace(/\s+/g, " ").trim().slice(0, 60) }));
   }
   if (cmd === "stop") {
     const n = await disconnectTelegramChat(chatId, "stop");

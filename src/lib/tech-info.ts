@@ -3,12 +3,21 @@ import pkg from "../../package.json";
 import { formatTechInfo, type InstallKind } from "./bug-report-core";
 import { db } from "./db";
 import { buildId, migrationFolder } from "./doctor";
-import { configFlags, envPresence, migrationStatus } from "./doctor-core";
+import { configFlags, envPresence, messagingFlags, migrationStatus } from "./doctor-core";
 
 /** Texto de «Copiar información técnica»: versión, commit, Node, base de datos y nombres de variables (sin valores). */
 export async function collectTechInfo(): Promise<string> {
   const presence = envPresence();
-  const flags = configFlags();
+  // Telegram y WhatsApp configurados en Administración → Ajustes, no solo con las variables WHATSAPP_* (como el diagnóstico).
+  const messaging = await db.appState
+    .findMany({ where: { OR: [{ key: { startsWith: "telegram." } }, { key: { startsWith: "whatsapp." } }] }, select: { key: true, value: true } })
+    .then((rows) => messagingFlags(process.env, rows), () => null);
+  const flags: Record<string, boolean> = { ...configFlags() };
+  if (messaging) {
+    flags.whatsapp = messaging.whatsapp;
+    flags.telegram = messaging.telegram;
+    flags.whatsappLegacyTemplate = messaging.whatsapp && messaging.whatsappLegacyTemplate;
+  }
   const [postgres, migrations] = await Promise.all([
     db.$queryRaw<{ version: string }[]>`SELECT current_setting('server_version') AS version`.then((r) => r[0]?.version ?? null, () => null),
     db.$queryRaw<{ migration_name: string; finished_at: Date | null; rolled_back_at: Date | null }[]>`

@@ -128,9 +128,10 @@ export async function collectDiagnostics(opts: DoctorOptions): Promise<Record<st
     const rows = await db.appState.findMany({ where: { key: { startsWith: "telegram." } }, select: { key: true, value: true } });
     const wa = await db.appState.findMany({ where: { key: { startsWith: "whatsapp." } }, select: { key: true, value: true } });
     const counts = await db.userChannel.groupBy({ by: ["channel"], _count: { _all: true } });
-    const pending = await db.userChannel.count({ where: { channel: "WHATSAPP", verifiedAt: null } });
+    const pending = await db.userChannel.count({ where: { channel: "WHATSAPP", verifiedAt: null, consentAt: { not: null } } });
+    const waVerified = await db.userChannel.count({ where: { channel: "WHATSAPP", verifiedAt: { not: null }, consentAt: { not: null } } });
     const n = (c: string) => counts.find((r) => r.channel === c)?._count._all ?? 0;
-    const flags = messagingFlags(process.env, [...rows, ...wa], { telegram: n("TELEGRAM"), whatsapp: n("WHATSAPP") - pending, whatsappPending: pending });
+    const flags = messagingFlags(process.env, [...rows, ...wa], { telegram: n("TELEGRAM"), whatsapp: waVerified, whatsappPending: pending });
     Object.assign(report.features as Record<string, unknown>, flags);
   }, ctx);
 

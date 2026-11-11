@@ -30,6 +30,10 @@ Necesitas:
   entre 10 y 35 € al mes.
 - Para no llevarte sorpresas, Pizarro envía como mucho **10 WhatsApp por persona y hora** (el resto de avisos quedan en
   la campana de Pizarro) y, por defecto, cada persona recibe solo **menciones y asignaciones**.
+- Los mensajes con el código de verificación y los de prueba desde Mi perfil también se cobran: como mucho **5 al día por
+  persona** y **3 al día por número de destino** (pida quien los pida).
+- Un aviso que falla no se repite si Meta pudo haberlo enviado (error 5xx, conexión cortada o tiempo agotado): solo se
+  reintentan los rechazos por exceso de envíos (429) y los fallos de conexión antes de enviar. Así no se cobra dos veces.
 
 ## Paso 1. Crea una cuenta de Meta Business
 
@@ -128,13 +132,18 @@ El token se guarda cifrado y no se vuelve a mostrar (solo sus 4 últimos caracte
 
 1. **Mi perfil → Avisos → Avisos en el móvil → WhatsApp**: escribe tu número en formato internacional (`+34…`).
 2. Marca la casilla de **consentimiento** (aceptas recibir avisos de Pizarro por WhatsApp en ese número).
-3. Pulsa **Guardar y enviar mensaje de prueba**. Te llega un WhatsApp de prueba.
-4. Pulsa **Sí, me ha llegado**. Desde ese momento recibes avisos por WhatsApp.
+3. Pulsa **Guardar y enviar código**. Te llega un WhatsApp de Pizarro con «Tu código de verificación de Pizarro es
+   123456».
+4. Escribe esas **6 cifras** en Mi perfil y pulsa **Confirmar**. Desde ese momento recibes avisos por WhatsApp.
 5. Elige qué avisos quieres por WhatsApp y pulsa **Guardar**. Por defecto, menciones y asignaciones.
 
-Pizarro no usa un código de verificación porque exigiría una segunda plantilla (de categoría «Autenticación»), con su
-aprobación y su coste aparte. A cambio, nadie recibe avisos hasta confirmar que le llegó el mensaje de prueba, y la
-persona puede desconectarse en cualquier momento.
+El código va en la misma plantilla `aviso_pizarro` (en la variable `{{1}}`): no hace falta una plantilla aparte. Caduca a
+los **15 minutos** y admite **5 intentos**; si caduca o se agotan, pulsa **Enviar otro código** (el anterior deja de
+valer). Sin el código nadie recibe avisos: así no se puede apuntar el número de otra persona y mandarle avisos de pago.
+La persona puede desconectarse en cualquier momento.
+
+Si el número ya estaba guardado de una versión anterior con WhatsApp desactivado, aparece en el formulario: para activar
+los avisos hay que marcar la casilla de consentimiento y confirmarlo con el código (o pulsar **Borrar el número**).
 
 ## Variables de entorno (instalaciones anteriores)
 
@@ -145,9 +154,13 @@ Las instalaciones que ya configuraban WhatsApp con variables del servidor siguen
 Precedencia: **lo que se guarda en Administración → Ajustes manda, campo a campo**; los campos vacíos usan esas
 variables. Mientras no pulses Activar ni Desactivar, WhatsApp está activo si la configuración está completa.
 
-Si usabas la plantilla antigua `mencion_pizarro` (cuatro variables), Pizarro la sigue admitiendo, pero con ella solo se
-envían **menciones**. Para enviar todos los tipos de aviso, crea `aviso_pizarro` (paso 5) y cambia el nombre de la
-plantilla en Pizarro.
+Antes, la plantilla solo podía configurarse con `WHATSAPP_TEMPLATE_NAME` y tenía **cuatro variables** (quien menciona,
+la tarea, el proyecto y el enlace), se llamara como se llamara. Por eso, **mientras la plantilla salga de esa variable**,
+Pizarro usa ese formato antiguo y solo envía **menciones** (Ajustes lo indica). Lo mismo con la plantilla
+`mencion_pizarro`, venga de donde venga. Para enviar todos los tipos de aviso, crea `aviso_pizarro` (paso 5, tres
+variables), escribe su nombre en **Nombre de la plantilla** en Administración → Ajustes y guarda: lo guardado ahí manda
+sobre la variable. Si tu plantilla con otro nombre ya tiene las tres variables de `aviso_pizarro`, basta con escribir
+su nombre en Ajustes.
 
 ## Problemas frecuentes
 
@@ -158,5 +171,8 @@ plantilla en Pizarro.
   «Configuración de la API».
 - **Error 190 o 401 (token)**: el token caducó o le faltan permisos. Genera uno permanente (paso 4).
 - **Error 131026 (no se pudo entregar)**: ese número no tiene WhatsApp o no acepta mensajes de empresas.
-- **No llega nada**: comprueba que la persona confirmó su número en Mi perfil y que el aviso está marcado para WhatsApp.
+- **No llega el código**: revisa el número (formato internacional) y, con el número de prueba de Meta, que esté entre los
+  5 verificados. Tras 3 envíos a un mismo número (o 5 de una persona) hay que esperar al día siguiente.
+- **No llega nada**: comprueba que la persona confirmó su número con el código en Mi perfil y que el aviso está marcado
+  para WhatsApp.
   Los fallos quedan en **Administración → Logs** (con el teléfono enmascarado y sin el token).

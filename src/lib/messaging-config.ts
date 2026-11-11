@@ -94,6 +94,18 @@ export function refreshMessagingConfig(): Promise<MessagingConfig> {
   return s.loading;
 }
 
+/**
+ * Lectura de la BD sin red de seguridad: si falla, lanza (en vez de devolver la última conocida o «nada configurado»).
+ * La usa syncTelegram, que debe distinguir «Telegram desactivado» de «no se pudo leer la configuración» para reintentar.
+ */
+export async function readMessagingConfigStrict(): Promise<MessagingConfig> {
+  const s = store();
+  const config = await read();
+  s.config = config;
+  s.at = Date.now();
+  return config;
+}
+
 /** Tras guardar: se espera a una lectura en curso (con datos anteriores) y se vuelve a leer. */
 export async function reloadMessagingConfig(): Promise<MessagingConfig> {
   const s = store();
@@ -109,16 +121,20 @@ async function upsert(entries: [string, string][], remove: string[] = []): Promi
   });
 }
 
-/** Guarda el token del bot (ya comprobado con getMe) y su nombre. Crea el secreto del webhook si no lo hay. */
+/**
+ * Guarda el token del bot (ya comprobado con getMe) y su nombre. Crea el secreto del webhook si no lo hay y lo cambia
+ * si es otro bot (el secreto del anterior no debe valer para el nuevo).
+ */
 export async function saveTelegramToken(token: string, bot: { username: string; id: string }): Promise<void> {
   const cur = await loadMessagingConfig({ fresh: true });
+  const otherBot = Boolean(cur.telegramSettings.botId) && cur.telegramSettings.botId !== bot.id;
   const entries: [string, string][] = [
     [TELEGRAM_TOKEN_KEY, encryptSecret(token)],
     [TELEGRAM_LAST4_KEY, last4(token)],
     [TELEGRAM_BOT_KEY, bot.username],
     [TELEGRAM_BOT_ID_KEY, bot.id],
   ];
-  if (!cur.telegram.webhookSecret) entries.push([TELEGRAM_SECRET_KEY, encryptSecret(randomBytes(32).toString("base64url"))]);
+  if (!cur.telegram.webhookSecret || otherBot) entries.push([TELEGRAM_SECRET_KEY, encryptSecret(randomBytes(32).toString("base64url"))]);
   await upsert(entries);
   await reloadMessagingConfig();
 }

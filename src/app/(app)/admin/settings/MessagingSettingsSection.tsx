@@ -241,7 +241,13 @@ function WhatsappAdmin({ view }: { view: MessagingAdminView["whatsapp"] }) {
         {t("Meta cobra cada aviso entregado (plantilla de utilidad: unos céntimos por mensaje según el país).")}{" "}
         <a className="underline" href={view.pricingUrl} target="_blank" rel="noopener noreferrer">{t("Precios de Meta")}</a>
       </p>
-      {view.legacy && <p className="text-xs text-amber-600">{t("Usas la plantilla antigua mencion_pizarro: solo se envían menciones. Crea aviso_pizarro (abajo) para enviar todos los tipos de aviso.")}</p>}
+      {view.legacy && (
+        <p className="text-xs text-amber-600">
+          {view.legacyFromEnv
+            ? t("La plantilla sale de la variable WHATSAPP_TEMPLATE_NAME: se usa el formato antiguo (4 variables) y solo se envían menciones. Si tu plantilla ya es la nueva (3 variables, abajo), escribe su nombre en «Nombre de la plantilla» y guarda.")
+            : t("Usas la plantilla antigua mencion_pizarro: solo se envían menciones. Crea aviso_pizarro (abajo) para enviar todos los tipos de aviso.")}
+        </p>
+      )}
 
       <details className="text-xs text-slate-600 dark:text-slate-300" open={!view.complete}>
         <summary className="cursor-pointer font-medium">{t("Qué necesitas de Meta")}</summary>
