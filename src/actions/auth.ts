@@ -15,7 +15,7 @@ import { logEvent } from "@/lib/log";
 import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { completeLogin } from "@/lib/login";
 import { requestContext } from "@/lib/request-context";
-import { dummyVerify, hashPassword, isPasswordBusy, passwordSchema, verifyPassword } from "@/lib/password";
+import { dummyVerify, hashPassword, isPasswordBusy, passwordSchema, verifyPassword, verifyPasswordCounted } from "@/lib/password";
 import { LOGIN_ACCOUNT_LIMIT, LOGIN_ACCOUNT_LIMIT_TRUSTED, loginRateKeys, rateIp, rateLimit, rateLimitReached, releaseRateLimit, resetRateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { safeNextPath } from "@/lib/redirect";
@@ -212,10 +212,11 @@ export async function confirmAccountChange(token: string) {
 export async function setNewPassword(password: string) {
   return runAction({ name: "auth.setNewPassword", args: [] }, async () => {
     const user = await requirePendingUser();
-    if (!rateLimit(`password:${user.id}`, 10, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
+    const rateKey = `password:${user.id}`;
+    if (!rateLimit(rateKey, 10, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
     const pw = passwordSchema().parse(password);
     const row = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { passwordHash: true } });
-    if (await verifyPassword(pw, row.passwordHash)) throw new AppError("La contraseña nueva debe ser distinta de la actual.");
+    if (await verifyPasswordCounted(pw, row.passwordHash, rateKey)) throw new AppError("La contraseña nueva debe ser distinta de la actual.");
     await applyNewPassword(user.id, await hashPassword(pw));
     await createSession(user.id, { mustChangePassword: false });
     logEvent({ category: "auth", action: "auth.passwordChosen", message: `${user.name} ha elegido una contraseña nueva`, userId: user.id, userName: user.name });

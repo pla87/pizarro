@@ -2,6 +2,7 @@
 // docs/guias/*.md con su versión en inglés (scripts/build-site.mjs genera una página por cada uno).
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
+import { posix } from "node:path";
 import { describe, test } from "node:test";
 import { inlineMarkdown, markdownToHtml, parseGuide } from "../src/lib/site-markdown";
 
@@ -181,4 +182,24 @@ describe("guía de instalación de la web (docs/web)", () => {
     assert.equal(update.updateDocsUrl("en"), "https://getpizarro.com/en/install/#update");
     assert.match(readFileSync("docs/INSTALL.md", "utf8").split("\n").slice(0, 4).join("\n"), /https:\/\/getpizarro\.com\/instalar\//);
   });
+});
+
+test("workflow de la web: se lanza al cambiar cualquier módulo que carga build-site.mjs (también los que importan esos)", () => {
+  const paths = [...readFileSync(".github/workflows/site.yml", "utf8").matchAll(/^ {6}- "([^"]+)"$/gm)].map((m) => m[1]!);
+  const covered = (file: string) => paths.some((p) => (p.endsWith("/**") ? file.startsWith(p.slice(0, -2)) : p.includes("*") ? new RegExp(`^${p.replace(/\./g, "\\.").replace(/\*/g, "[^/]*")}$`).test(file) : p === file));
+  const pending = [...readFileSync("scripts/build-site.mjs", "utf8").matchAll(/imp\("(src\/[^"]+\.ts)"\)/g)].map((m) => m[1]!);
+  assert.ok(pending.length >= 4, "build-site.mjs carga los módulos con imp(\"src/…\")");
+  const seen = new Set<string>();
+  while (pending.length) {
+    const file = pending.pop()!;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    assert.ok(covered(file), `${file} no está en paths de .github/workflows/site.yml`);
+    // Solo los imports que existen al ejecutar (los «import type» desaparecen).
+    for (const m of readFileSync(file, "utf8").matchAll(/^import (?!type\b)[^;]*? from "(\.\.?\/[^"]+)";/gm)) {
+      const target = posix.normalize(posix.join(posix.dirname(file), m[1]!));
+      pending.push(target.endsWith(".ts") ? target : `${target}.ts`);
+    }
+  }
+  assert.ok(seen.has("src/lib/html-escape.ts"));
 });

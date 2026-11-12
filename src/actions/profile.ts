@@ -11,7 +11,7 @@ import { sendEmailChangeMail, sendEmailChangeRequestedMail, sendPasswordChangeMa
 import { issueAuthToken } from "@/lib/auth-token";
 import { appUrl, emailEnabled } from "@/lib/mail";
 import { logMailError } from "@/lib/mask-email";
-import { hashPassword, passwordSchema, verifyPassword } from "@/lib/password";
+import { hashPassword, passwordSchema, verifyPasswordCounted } from "@/lib/password";
 import { POSITION_STEP } from "@/lib/positions";
 import { createSession, currentSessionId, requireUser } from "@/lib/session";
 import { disconnectGoogleAccount } from "@/lib/google";
@@ -155,12 +155,14 @@ export async function changePassword(current: string, next: string) {
   return runAction({ name: "profile.changePassword", args: [] }, async () => {
     const user = await requireUser();
     const pw = passwordSchema("La nueva contraseña debe tener al menos 10 caracteres.").parse(next);
-    if (!rateLimit(`password:${user.id}`, 5, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
+    const rateKey = `password:${user.id}`;
+    if (!rateLimit(rateKey, 5, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
     const row = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { passwordHash: true } });
-    if (!(await verifyPassword(z.string().max(200).parse(current), row.passwordHash))) {
+    // Con el servidor ocupado, el intento no cuenta (verifyPasswordCounted lo devuelve).
+    if (!(await verifyPasswordCounted(z.string().max(200).parse(current), row.passwordHash, rateKey))) {
       throw new AppError("La contraseña actual no es correcta.");
     }
-    if (await verifyPassword(pw, row.passwordHash)) throw new AppError("La contraseña nueva debe ser distinta de la actual.");
+    if (await verifyPasswordCounted(pw, row.passwordHash, rateKey)) throw new AppError("La contraseña nueva debe ser distinta de la actual.");
     const passwordHash = await hashPassword(pw);
     if (emailEnabled()) {
       const token = await issueAuthToken(user.id, "PASSWORD_CHANGE", { passwordHash });
@@ -185,9 +187,10 @@ export async function requestEmailChange(newEmail: string, currentPassword: stri
     const user = await requireUser();
     if (!emailEnabled()) throw new AppError("El envío de emails no está configurado.");
     const email = v.email.parse(newEmail);
-    if (!rateLimit(`email-change:${user.id}`, 5, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
+    const rateKey = `email-change:${user.id}`;
+    if (!rateLimit(rateKey, 5, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
     const row = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { passwordHash: true } });
-    if (!(await verifyPassword(z.string().max(200).parse(currentPassword), row.passwordHash))) throw new AppError("La contraseña actual no es correcta.");
+    if (!(await verifyPasswordCounted(z.string().max(200).parse(currentPassword), row.passwordHash, rateKey))) throw new AppError("La contraseña actual no es correcta.");
     if (email === user.email) throw new AppError("Ese ya es tu email.");
     if (await db.user.count({ where: { email } })) throw new AppError("Ya existe un usuario con ese email.");
     const token = await issueAuthToken(user.id, "EMAIL_CHANGE", { newEmail: email });

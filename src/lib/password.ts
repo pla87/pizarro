@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { runBcrypt } from "./bcrypt-pool";
 import { AppError } from "./errors";
+import { releaseRateLimit } from "./rate-limit";
 import { isSemaphoreFull, Semaphore } from "./semaphore";
 
 const COST = 11;
@@ -23,10 +24,17 @@ export function passwordSchema(minMessage = "La contraseña debe tener al menos 
 
 // Cuántas comprobaciones (y cálculos) de contraseña van a la vez en todo el servidor. bcrypt es caro a propósito (~0,2 s
 // cada una): sin tope, una ráfaga de intentos de acceso ocupaba la CPU y, en el hilo principal, dejaba esperando a todos.
-// Lo que no cabe espera en una cola corta; si está llena o la espera se alarga, se responde «demasiados a la vez».
+// Lo que no cabe espera su turno; si la espera pasa de PASSWORD_MAX_WAIT_MS (el tope real), o la cola ya tiene todo lo
+// que se puede atender en ese tiempo, se responde «demasiados a la vez».
 export const PASSWORD_CHECKS_AT_ONCE = 2;
-export const PASSWORD_QUEUE = 8;
 export const PASSWORD_MAX_WAIT_MS = 3_000;
+/** Lo que tarda una comprobación (coste 11), para dimensionar la cola. */
+const BCRYPT_ESTIMATE_MS = 200;
+/**
+ * Cola: las que caben en la espera máxima (3 s / 0,2 s × 2 = 30). Antes eran 8 y una ráfaga de 20 accesos a la vez (una
+ * clase entera entrando) rechazaba 10 al instante aunque las demás terminaban en ~1,5 s.
+ */
+export const PASSWORD_QUEUE = Math.floor((PASSWORD_MAX_WAIT_MS / BCRYPT_ESTIMATE_MS) * PASSWORD_CHECKS_AT_ONCE);
 
 /** Respuesta cuando ya hay demasiadas comprobaciones de contraseña en curso (no dice nada de la cuenta). */
 export const PASSWORD_BUSY_MESSAGE = "Demasiados intentos a la vez, prueba en unos segundos.";
@@ -61,8 +69,10 @@ async function limited<T>(fn: () => Promise<T>, bounded: boolean): Promise<T> {
 }
 
 /**
- * Hash de una contraseña nueva. Comparte el tope con las comprobaciones, pero espera su turno sin límite: solo lo
- * piden personas ya identificadas (cambio de contraseña, alta de usuarios), no se puede provocar desde fuera.
+ * Hash de una contraseña nueva. Comparte el tope con las comprobaciones, pero espera su turno sin límite de cola ni de
+ * tiempo: lo piden personas con sesión (cambio de contraseña, altas de usuarios), quien trae un enlace válido de
+ * restablecimiento o de invitación (el enlace se gasta antes de calcularlo, y la ruta tiene su límite por IP), el
+ * asistente de instalación y la semilla. Nadie puede provocarlo en ráfaga sin cuenta ni enlace.
  */
 export function hashPassword(plain: string): Promise<string> {
   return limited(() => runBcrypt({ op: "hash", plain, cost: COST }, () => bcrypt.hash(plain, COST)), false);
@@ -71,6 +81,20 @@ export function hashPassword(plain: string): Promise<string> {
 /** ¿Es `plain` la contraseña de `hash`? Lanza PasswordBusyError si ya hay demasiadas comprobaciones en curso. */
 export function verifyPassword(plain: string, hash: string): Promise<boolean> {
   return limited(() => runBcrypt({ op: "compare", plain, hash }, () => bcrypt.compare(plain, hash)), true);
+}
+
+/**
+ * verifyPassword tras un límite de intentos ya contado en `rateKey` (rateLimit antes de comprobar): si el servidor está
+ * ocupado, la contraseña no se ha llegado a mirar, así que ese intento se devuelve (no gasta el cupo de la persona) y
+ * se relanza el PasswordBusyError («demasiados intentos a la vez, prueba en unos segundos»). Como en el acceso.
+ */
+export async function verifyPasswordCounted(plain: string, hash: string, rateKey: string): Promise<boolean> {
+  try {
+    return await verifyPassword(plain, hash);
+  } catch (err) {
+    if (isPasswordBusy(err)) releaseRateLimit(rateKey);
+    throw err;
+  }
 }
 
 // Hash fijo (de un valor sin uso, con el mismo coste) para igualar el tiempo de respuesta cuando el usuario no existe.

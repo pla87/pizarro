@@ -130,6 +130,10 @@ plantilla no se escribe: el texto lo pone Meta.
 
 El mensaje que llega es «Tu código de verificación es **123456**.» con el botón **Copiar código**.
 
+Si en tu equipo hay gente que usa Pizarro en inglés y quieres que el código le llegue en inglés, añade a `codigo_pizarro`
+el idioma **Inglés** (`en`, mismas opciones) y ponlo en **Idioma en inglés de la verificación** (paso 7). Es aparte del
+«Idioma en inglés» de los avisos: si la plantilla de verificación no tiene esa traducción, Meta rechazaría el código.
+
 ## Paso 7. Configúralo en Pizarro
 
 1. En Pizarro, ve a **Administración → Ajustes → 3. Avisos por Telegram y WhatsApp → WhatsApp**.
@@ -141,6 +145,8 @@ El mensaje que llega es «Tu código de verificación es **123456**.» con el bo
    - **Idioma en inglés** (opcional): `en` si añadiste la traducción inglesa.
    - **Plantilla de verificación**: `codigo_pizarro` (es el valor por defecto si lo dejas vacío).
    - **Idioma de la verificación**: vacío (usa el mismo que los avisos) o el código con el que se aprobó.
+   - **Idioma en inglés de la verificación** (opcional): `en` si añadiste a `codigo_pizarro` la traducción inglesa. Quien
+     usa Pizarro en inglés recibe el código en ese idioma; vacío, todos lo reciben en el idioma de la verificación.
 3. Pulsa **Guardar** y después **Activar**.
 
 El token se guarda cifrado y no se vuelve a mostrar (solo sus 4 últimos caracteres).

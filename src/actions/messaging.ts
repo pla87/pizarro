@@ -12,7 +12,7 @@ import { appUrl } from "@/lib/mail";
 import { getMyChannels } from "@/lib/messaging";
 import { clearTelegram, loadMessagingConfig, saveTelegramToken, saveWhatsappSettings as persistWhatsapp, setTelegramEnabled, setWhatsappCodeTemplateError, setWhatsappEnabled } from "@/lib/messaging-config";
 import {
-  classifyFailure, isTelegramToken, isWhatsappToken, maskPhone, MessagingApiError, normalizeWhatsappCode, safeEqual, scrubSecrets, telegramStartUrl, telegramTestText, validateWhatsappSettings,
+  classifyFailure, isTelegramToken, isWhatsappToken, maskPhone, MessagingApiError, normalizeWhatsappCode, safeEqual, scrubSecrets, telegramStartUrl, telegramTestText, validateWhatsappSettings, whatsappCodeLang,
   WHATSAPP_CODE_ATTEMPTS, WHATSAPP_CODE_MINUTES, WHATSAPP_SAMPLE_CODE, WHATSAPP_TESTS_PER_DAY, whatsappTemplateProblem, type WhatsappSettingsInput,
 } from "@/lib/messaging-core";
 import { labelledHmac, labelledHmacCandidates } from "@/lib/keyring";
@@ -153,6 +153,7 @@ export async function saveWhatsappSettings(form: WhatsappForm) {
     const cfg = (await loadMessagingConfig({ fresh: true })).whatsapp;
     describeAction("Cambió la configuración de WhatsApp", {
       template: cfg.templateName, lang: cfg.templateLang, langEn: checked.value.templateLangEn || null, codeTemplate: cfg.codeTemplateName, codeLang: cfg.codeTemplateLang,
+      codeLangEn: cfg.codeTemplateLangEn || null,
       complete: cfg.complete, active: cfg.active, authChange: change,
     });
     revalidatePath("/admin/settings");
@@ -183,7 +184,8 @@ export async function testWhatsapp(input: { to: string }) {
     if (!to) throw new AppError("Escribe el número al que enviar la prueba.");
     const cfg = (await loadMessagingConfig({ fresh: true })).whatsapp;
     if (!cfg.complete) throw new AppError("Faltan datos: el token, el identificador del número y la plantilla.");
-    const failure = (err: unknown) => (err instanceof AppError ? err.message : String(err));
+    // Un error que no es AppError (p. ej. de la base de datos) llega en bruto: sin el token ni el número.
+    const failure = (err: unknown) => (err instanceof AppError ? err.message : scrubSecrets((err as Error)?.message ?? String(err), [cfg.token, to, to.replace(/^\+/, "")]));
     let noticeError: string | null = null;
     let codeError: string | null = null;
     try {
@@ -192,7 +194,7 @@ export async function testWhatsapp(input: { to: string }) {
       noticeError = failure(err);
     }
     try {
-      await sendCodeTemplate(cfg, to, WHATSAPP_SAMPLE_CODE, "admin");
+      await sendCodeTemplate(cfg, to, WHATSAPP_SAMPLE_CODE, "admin", admin.locale);
     } catch (err) {
       codeError = failure(err);
     }
@@ -260,13 +262,16 @@ const CODE_TEMPLATE_REJECTED = "whatsapp-code-template";
  * aprobada, no es de autenticación o está en pausa), lo apunta para que Ajustes y Mi perfil lo expliquen y da un error
  * claro: al administrador, qué crear en Meta; a la persona, que avise al administrador. Un envío bueno lo olvida.
  */
-async function sendCodeTemplate(cfg: WhatsappCfg, to: string, code: string, audience: "admin" | "user"): Promise<void> {
+async function sendCodeTemplate(cfg: WhatsappCfg, to: string, code: string, audience: "admin" | "user", locale: string): Promise<void> {
+  // En inglés solo si la verificación tiene ese idioma configurado (ver whatsappCodeLang).
+  const english = toLocale(locale) === "en";
   try {
-    await sendWhatsappCode(cfg, to, code);
+    await sendWhatsappCode(cfg, to, code, english);
   } catch (err) {
     const problem = whatsappTemplateProblem(err);
     if (!problem) throw await apiFailure("No se pudo enviar el código por WhatsApp.", err, [cfg.token, to, to.replace(/^\+/, "")]);
-    const info = { name: cfg.codeTemplateName, lang: cfg.codeTemplateLang, code: (err as MessagingApiError).code ?? 0 };
+    // El idioma con que se envió de verdad: si falla el de inglés, Ajustes dice que falta esa traducción.
+    const info = { name: cfg.codeTemplateName, lang: whatsappCodeLang(cfg, english), code: (err as MessagingApiError).code ?? 0 };
     await setWhatsappCodeTemplateError({ ...info, at: new Date().toISOString() }).catch(() => {});
     const t = await getT();
     throw new AppError(audience === "admin" ? codeTemplateAdminText(t, problem, info) : codeTemplateUserText(t), 400, CODE_TEMPLATE_REJECTED);
@@ -282,7 +287,7 @@ async function issueWhatsappCode(cfg: WhatsappCfg, user: { id: string; locale: s
   const verifyCodeHash = labelledHmac("whatsapp-verify", codeHashInput(user.id, phone, code));
   await db.userChannel.update({ where, data: { verifiedAt: null, verifyCodeHash, verifyExpiresAt: expires, verifyAttempts: 0 } });
   try {
-    await sendCodeTemplate(cfg, phone, code, "user");
+    await sendCodeTemplate(cfg, phone, code, "user", user.locale);
   } catch (err) {
     // Meta rechazó la plantilla: el código no ha salido y Mi perfil no debe decir «te hemos enviado un código». (Tras un
     // 5xx o un tiempo agotado sí puede haber llegado, así que entonces se conserva.)

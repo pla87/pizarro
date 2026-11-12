@@ -13,7 +13,7 @@ import { AppError } from "@/lib/errors";
 import { completeLogin } from "@/lib/login";
 import { logEvent } from "@/lib/log";
 import { emailEnabled, sendMailInBackground } from "@/lib/mail";
-import { verifyPassword } from "@/lib/password";
+import { verifyPasswordCounted } from "@/lib/password";
 import { rateIp, rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { safeNextPath } from "@/lib/redirect";
@@ -145,9 +145,11 @@ async function startMethod(challengeId: string, user: { name: string; email: str
 // --- Desde «Mi perfil» (con sesión) ---
 
 async function requirePassword(userId: string, password: string): Promise<void> {
-  if (!rateLimit(`2fa:pw:${userId}`, 10, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
+  const rateKey = `2fa:pw:${userId}`;
+  if (!rateLimit(rateKey, 10, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
   const row = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { passwordHash: true } });
-  if (!(await verifyPassword(String(password).slice(0, 200), row.passwordHash))) throw new AppError("La contraseña actual no es correcta.");
+  // Con el servidor ocupado, el intento no cuenta (verifyPasswordCounted lo devuelve).
+  if (!(await verifyPasswordCounted(String(password).slice(0, 200), row.passwordHash, rateKey))) throw new AppError("La contraseña actual no es correcta.");
 }
 
 const enrollInclude = {

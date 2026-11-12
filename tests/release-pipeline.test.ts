@@ -250,6 +250,30 @@ test("move-stable.sh --latest: la versión vX.Y.Z más alta publicada que está 
   }
 });
 
+test("move-stable.sh --latest: si no puede leer las etiquetas del origen, falla sin mover stable (no usa las locales)", () => {
+  const { dir, work, git, commit, run, stableAt, summary } = stableSandbox();
+  try {
+    commit("1.0.0");
+    git(work, "push", "-q", "origin", "HEAD:main", "--tags");
+    // Etiqueta local (en main) que el origen ya no tiene: solo se elegiría si se ignorase el fallo del fetch.
+    commit("1.1.0");
+    git(work, "push", "-q", "origin", "HEAD:main");
+    // git falso: el fetch de las etiquetas falla (red, permisos…); todo lo demás va al git de verdad.
+    const realGit = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+    const bin = join(dir, "bin");
+    mkdirSync(bin);
+    writeFileSync(join(bin, "git"), `#!/bin/sh\ncase "$*" in *refs/tags/v*) echo "fatal: fallo simulado" >&2; exit 128 ;; esac\nexec "${realGit}" "$@"\n`);
+    chmodSync(join(bin, "git"), 0o755);
+    const r = run(["move", "--latest"], { PATH: `${bin}:${process.env.PATH}` });
+    assert.equal(r.status, 1, r.stdout);
+    assert.match(r.stdout, /::error::No se pudieron leer las etiquetas del repositorio/);
+    assert.match(readFileSync(summary, "utf8"), /No se pudieron leer las etiquetas/);
+    assert.equal(stableAt(), "", "stable no se mueve");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("move-stable.sh check-token: sin mostrar el token, distingue caducado, sin acceso y sin permiso de escritura", () => {
   const { dir, work, git, commit, run, stableAt, hidden } = stableSandbox();
   try {

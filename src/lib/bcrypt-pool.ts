@@ -115,41 +115,86 @@ function newSlot(file: string): Slot {
   return slot;
 }
 
-async function runInWorker(file: string, job: BcryptOp): Promise<unknown> {
-  const slot = state.slots.find((s) => !s.busy) ?? newSlot(file);
+/**
+ * Tope de una operación en un hilo (arranque incluido): una comprobación tarda ~0,2 s; si un hilo se queda colgado, se
+ * termina y la operación se repite en el hilo principal. Sin tope, el hueco del semáforo de password.ts quedaba ocupado
+ * para siempre y, con dos así, nadie más podía entrar.
+ */
+export const BCRYPT_OP_TIMEOUT_MS = 10_000;
+
+const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+async function runInWorker(file: string, job: BcryptOp, timeoutMs: number): Promise<unknown> {
+  let slot: Slot;
+  try {
+    slot = state.slots.find((s) => !s.busy) ?? newSlot(file);
+  } catch (err) {
+    // new Worker puede fallar en el acto (sin memoria, demasiados hilos…): como un hilo que falla, al hilo principal.
+    state.failures++;
+    console.error("[bcrypt] no se pudo crear el hilo de trabajo", messageOf(err));
+    throw new WorkerUnavailable(messageOf(err));
+  }
   slot.busy = true;
   slot.worker.ref();
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await slot.ready;
-    return await new Promise((resolve, reject) => {
-      const id = state.nextId++;
-      slot.pending = { id, resolve, reject };
-      slot.worker.postMessage({ id, ...job });
+    const work = (async () => {
+      await slot.ready;
+      return await new Promise((resolve, reject) => {
+        const id = state.nextId++;
+        slot.pending = { id, resolve, reject };
+        try {
+          slot.worker.postMessage({ id, ...job });
+        } catch (err) {
+          // Un error al enviar (p. ej. el hilo ya se cerró) no es un error de bcrypt: se calcula en el hilo principal.
+          slot.pending = null;
+          reject(new WorkerUnavailable(messageOf(err)));
+        }
+      });
+    })();
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        state.failures++;
+        console.error(`[bcrypt] el hilo de trabajo no respondió en ${timeoutMs} ms: se termina`);
+        // Fuera de la lista antes de terminarlo: nadie más lo usa mientras se cierra.
+        dropSlot(slot, new Error("tiempo agotado"));
+        void slot.worker.terminate().catch(() => 0);
+        reject(new WorkerUnavailable("tiempo agotado"));
+      }, timeoutMs);
     });
+    return await Promise.race([work, timeout]);
   } finally {
+    clearTimeout(timer);
     slot.busy = false;
     slot.worker.unref();
   }
 }
 
 /**
- * Ejecuta la operación en un hilo de trabajo; si no hay hilos (o el hilo falla), con `fallback` en el hilo principal.
- * Un error del propio bcrypt (p. ej. un hash con formato inválido) se propaga igual que en el hilo principal.
+ * Ejecuta la operación en un hilo de trabajo; si no hay hilos (o el hilo falla o no responde a tiempo), con `fallback`
+ * en el hilo principal. Un error del propio bcrypt (p. ej. un hash con formato inválido) se propaga igual que en el hilo
+ * principal. `timeoutMs`: solo para pruebas.
  */
-export async function runBcrypt<T>(job: BcryptOp, fallback: () => Promise<T>): Promise<T> {
+export async function runBcrypt<T>(job: BcryptOp, fallback: () => Promise<T>, { timeoutMs = BCRYPT_OP_TIMEOUT_MS }: { timeoutMs?: number } = {}): Promise<T> {
   const file = bcryptWorkersEnabled() ? bcryptPath() : null;
   if (!file) return fallback();
   try {
-    return (await runInWorker(file, job)) as T;
+    return (await runInWorker(file, job, timeoutMs)) as T;
   } catch (err) {
     if (isWorkerUnavailable(err)) return fallback();
     throw err;
   }
 }
 
-/** Cierra los hilos (pruebas). */
+/** Hilos abiertos y fallos contados (pruebas y diagnóstico). */
+export function bcryptPoolStats(): { workers: number; busy: number; failures: number } {
+  return { workers: state.slots.length, busy: state.slots.filter((s) => s.busy).length, failures: state.failures };
+}
+
+/** Cierra los hilos y olvida los fallos (pruebas). */
 export async function closeBcryptWorkers(): Promise<void> {
   const slots = state.slots;
   state.slots = [];
+  state.failures = 0;
   await Promise.all(slots.map((s) => s.worker.terminate().catch(() => 0)));
 }

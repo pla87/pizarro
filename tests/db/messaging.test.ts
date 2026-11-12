@@ -639,7 +639,22 @@ describe("WhatsApp: plantilla de verificación (autenticación)", () => {
     calls = [];
     expectOk(await saveMyWhatsapp({ phone: "+34611000020", consent: true }));
     const code = graphCalls()[0]!.body as { template: { name: string; language: { code: string } } };
-    assert.deepEqual([code.template.name, code.template.language.code], ["mi_codigo", "es_ES"]);
+    assert.deepEqual([code.template.name, code.template.language.code], ["mi_codigo", "es_ES"], "sin idioma en inglés de la verificación, el de la verificación");
+
+    // Con «Idioma en inglés de la verificación», quien usa inglés recibe el código en inglés (y los demás, igual que antes).
+    await loginAs(await makeUser({ role: "ADMIN" }));
+    expectOk(await saveWhatsappSettings({ phoneNumberId: "1234567890", templateName: "aviso_pizarro", templateLang: "es", templateLangEn: "en", codeTemplateName: "mi_codigo", codeTemplateLang: "es_ES", codeTemplateLangEn: "en_US" }));
+    assert.equal((await getMessagingAdminView()).whatsapp.codeTemplateLangEn, "en_US");
+    await loginAs(user);
+    calls = [];
+    expectOk(await resendMyWhatsappCode());
+    assert.equal((graphCalls()[0]!.body as { template: { language: { code: string } } }).template.language.code, "en_US");
+    const es = await makeUser();
+    await loginAs(es);
+    calls = [];
+    expectOk(await saveMyWhatsapp({ phone: "+34611000023", consent: true }));
+    assert.equal((graphCalls()[0]!.body as { template: { language: { code: string } } }).template.language.code, "es_ES");
+    await loginAs(user);
 
     // El aviso de siempre: aviso_pizarro, en inglés, solo cuerpo con sus 3 variables.
     await db.userChannel.updateMany({ where: { userId: user.id }, data: { verifiedAt: new Date() } });

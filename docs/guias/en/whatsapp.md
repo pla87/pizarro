@@ -131,6 +131,10 @@ text.
 The message reads “**123456** is your verification code.” (in Spanish, “Tu código de verificación es **123456**.”) with
 a **Copy code** button.
 
+If some people in your team use Pizarro in English and should get the code in English, add the **English** language
+(`en`, same options) to `codigo_pizarro` and enter it in **English verification language** (step 7). It's separate from
+the notices' “English language”: if the verification template lacks that translation, Meta would reject the code.
+
 ## Step 7. Set it up in Pizarro
 
 1. In Pizarro, go to **Administration → Settings → 3. Telegram and WhatsApp notices → WhatsApp**.
@@ -144,6 +148,9 @@ a **Copy code** button.
      English.
    - **Verification template**: `codigo_pizarro` (the default if you leave it empty).
    - **Verification language**: empty (uses the same as the notices) or the code it was approved with.
+   - **English verification language** (optional): `en` if you added the English translation to `codigo_pizarro`.
+     People who have Pizarro in English get the code in that language; if empty, everyone gets it in the verification
+     language.
 3. Press **Save** and then **Enable**.
 
 The token is stored encrypted and never shown again (only its last 4 characters).

@@ -1,5 +1,6 @@
 // Tareas de fondo: bloqueo de Postgres (un proceso a la vez) y última ejecución persistente en JobRun.
 import assert from "node:assert/strict";
+import { createServer, type Socket } from "node:net";
 import { describe, test } from "node:test";
 import { db } from "./helpers";
 import { runJob, withAdvisoryLock, listJobRuns } from "../../src/lib/jobs";
@@ -26,6 +27,31 @@ describe("bloqueo del mantenimiento", () => {
     release();
     assert.deepEqual(await first, { ran: true, value: "primero" });
     assert.deepEqual(await withAdvisoryLock(KEY, async () => 2), { ran: true, value: 2 });
+  });
+
+  test("si la base no contesta, falla al cumplirse el tope para conectar (no se queda esperando) y no ejecuta la tarea", async () => {
+    const open = new Set<Socket>();
+    const server = createServer((sock) => {
+      open.add(sock);
+      sock.resume();
+      sock.on("close", () => open.delete(sock));
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const { port } = server.address() as { port: number };
+    let ran = false;
+    try {
+      const started = Date.now();
+      await assert.rejects(withAdvisoryLock(KEY, async () => (ran = true), { url: `postgresql://postgres:x@127.0.0.1:${port}/nada`, connectTimeoutMs: 200 }), /timeout|terminated/i);
+      assert.ok(Date.now() - started < 5_000);
+      assert.equal(ran, false);
+      await new Promise((r) => setTimeout(r, 100));
+      assert.equal(open.size, 0, "la conexión fallida se cierra");
+    } finally {
+      for (const s of open) s.destroy();
+      await new Promise((r) => server.close(() => r(undefined)));
+    }
+    // La siguiente pasada, con la base de verdad, entra.
+    assert.deepEqual(await withAdvisoryLock(KEY, async () => "ok"), { ran: true, value: "ok" });
   });
 
   test("si la tarea falla, el error sale y el bloqueo queda libre", async () => {

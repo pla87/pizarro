@@ -5,7 +5,7 @@ import { decryptSecret, encryptSecret } from "./keyring";
 import {
   last4, NO_TELEGRAM, parseTelegramSettings, parseWhatsappSettings, resolveTelegramConfig, resolveWhatsappConfig,
   TELEGRAM_BOT_ID_KEY, TELEGRAM_BOT_KEY, TELEGRAM_ENABLED_KEY, TELEGRAM_KEYS, TELEGRAM_LAST4_KEY, TELEGRAM_SECRET_KEY, TELEGRAM_TOKEN_KEY,
-  WHATSAPP_CODE_ERROR_KEY, WHATSAPP_CODE_LANG_KEY, WHATSAPP_CODE_TEMPLATE_KEY, WHATSAPP_ENABLED_KEY, WHATSAPP_KEYS, WHATSAPP_LANG_EN_KEY, WHATSAPP_LANG_KEY, WHATSAPP_LAST4_KEY, WHATSAPP_PHONE_ID_KEY, WHATSAPP_TEMPLATE_KEY, WHATSAPP_TOKEN_KEY,
+  WHATSAPP_CODE_ERROR_KEY, WHATSAPP_CODE_LANG_EN_KEY, WHATSAPP_CODE_LANG_KEY, WHATSAPP_CODE_TEMPLATE_KEY, WHATSAPP_ENABLED_KEY, WHATSAPP_KEYS, WHATSAPP_LANG_EN_KEY, WHATSAPP_LANG_KEY, WHATSAPP_LAST4_KEY, WHATSAPP_PHONE_ID_KEY, WHATSAPP_TEMPLATE_KEY, WHATSAPP_TOKEN_KEY,
   type CodeTemplateError, type TelegramConfig, type TelegramSettings, type WhatsappConfig, type WhatsappSettings, type WhatsappSettingsInput,
 } from "./messaging-core";
 
@@ -159,6 +159,7 @@ export async function saveWhatsappSettings(input: Required<WhatsappSettingsInput
     [WHATSAPP_LANG_EN_KEY, input.templateLangEn],
     [WHATSAPP_CODE_TEMPLATE_KEY, input.codeTemplateName],
     [WHATSAPP_CODE_LANG_KEY, input.codeTemplateLang],
+    [WHATSAPP_CODE_LANG_EN_KEY, input.codeTemplateLangEn],
   ];
   if (opts.enabled !== undefined) entries.push([WHATSAPP_ENABLED_KEY, String(opts.enabled)]);
   // Al guardar se olvida el último rechazo de la plantilla de verificación: el administrador puede haberla arreglado

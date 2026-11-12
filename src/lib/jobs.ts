@@ -1,6 +1,6 @@
 import "server-only";
-import pg from "pg";
 import { db } from "./db";
+import { connectPgClient } from "./pg-connect";
 
 // Tareas de fondo: un solo proceso a la vez (bloqueo consultivo de Postgres) y la última ejecución de cada
 // una guardada en la tabla JobRun, para que los reinicios y los despliegues solapados no las repitan.
@@ -17,11 +17,10 @@ type LockResult<T> = { ran: true; value: T } | { ran: false };
  * abierta mientras dura `fn`; si otro proceso lo tiene, devuelve { ran: false } sin esperar. Si el proceso
  * muere, Postgres suelta el bloqueo al cerrarse la conexión. Los errores de `fn` se propagan.
  */
-export async function withAdvisoryLock<T>(key: number, fn: () => Promise<T>): Promise<LockResult<T>> {
-  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
-  // Sin este oyente, un corte de la conexión del bloqueo sería un error no capturado del proceso.
-  client.on("error", (err) => console.error("[jobs] conexión del bloqueo", err.message));
-  await client.connect();
+export async function withAdvisoryLock<T>(key: number, fn: () => Promise<T>, opts: { url?: string; connectTimeoutMs?: number } = {}): Promise<LockResult<T>> {
+  // Con tope para conectar y keepalive (pg-connect.ts): si la base no contesta, la pasada falla y la siguiente lo
+  // vuelve a intentar, en vez de quedarse esperando para siempre. `opts`: solo para pruebas.
+  const client = await connectPgClient(opts.url ?? process.env.DATABASE_URL ?? "", { label: "jobs", connectTimeoutMs: opts.connectTimeoutMs });
   try {
     const { rows } = await client.query<{ ok: boolean }>("SELECT pg_try_advisory_lock($1) AS ok", [key]);
     if (!rows[0]?.ok) return { ran: false };

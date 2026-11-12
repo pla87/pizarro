@@ -160,6 +160,9 @@ test("validación del formulario de WhatsApp", () => {
   assert.deepEqual(none.ok && [none.value.codeTemplateName, none.value.codeTemplateLang], ["", ""]);
   assert.equal(core.validateWhatsappSettings({ phoneNumberId: "", templateName: "", templateLang: "", templateLangEn: "", codeTemplateName: "Código Pizarro" }).ok, false);
   assert.equal(core.validateWhatsappSettings({ phoneNumberId: "", templateName: "", templateLang: "", templateLangEn: "", codeTemplateLang: "español" }).ok, false);
+  assert.equal(core.validateWhatsappSettings({ phoneNumberId: "", templateName: "", templateLang: "", templateLangEn: "", codeTemplateLangEn: "inglés" }).ok, false);
+  const withEn = core.validateWhatsappSettings({ phoneNumberId: "", templateName: "", templateLang: "", templateLangEn: "", codeTemplateLangEn: " en_US " });
+  assert.equal(withEn.ok && withEn.value.codeTemplateLangEn, "en_US");
   assert.equal(core.isTelegramToken("123456789:AAHfiqksKZ8WmR2zSjiQ7_v4TMAKdiHm9T0"), true);
   assert.equal(core.isTelegramToken("123456789:corto"), false);
 });
@@ -224,6 +227,16 @@ test("código de verificación: plantilla de AUTENTICACIÓN con el código en el
       ],
     },
   });
+  // Quien usa Pizarro en inglés: con «Idioma en inglés de la verificación», en ese idioma; sin él, en el de la verificación.
+  assert.equal(core.whatsappCodePayload("+34600111222", "012345", def, true).template.language.code, "es_ES");
+  const en = core.resolveWhatsappConfig({}, core.parseWhatsappSettings([{ key: core.WHATSAPP_CODE_LANG_EN_KEY, value: "en_US" }, { key: core.WHATSAPP_LANG_KEY, value: "es" }]), "");
+  assert.deepEqual([en.codeTemplateLang, en.codeTemplateLangEn], ["es", "en_US"]);
+  assert.equal(core.whatsappCodePayload("+34600111222", "012345", en, true).template.language.code, "en_US");
+  assert.equal(core.whatsappCodePayload("+34600111222", "012345", en).template.language.code, "es");
+  // No se toma el «Idioma en inglés» de los avisos: codigo_pizarro puede no tener esa traducción.
+  const noticeOnly = core.resolveWhatsappConfig({}, core.parseWhatsappSettings([{ key: core.WHATSAPP_LANG_EN_KEY, value: "en" }]), "");
+  assert.equal(core.whatsappCodePayload("+34600111222", "012345", noticeOnly, true).template.language.code, "es");
+  assert.ok((core.WHATSAPP_KEYS as readonly string[]).includes(core.WHATSAPP_CODE_LANG_EN_KEY));
   // Los avisos no cambian: siguen con aviso_pizarro y solo el cuerpo con sus 3 variables.
   const notice = core.whatsappPayload("+34600111222", { type: "MENTION", actorName: "Ana", taskTitle: "T", projectName: "Web", excerpt: "", url: "https://pizarro.example.com/p/1" }, def, makeT("es"));
   assert.equal(notice.template.name, "aviso_pizarro");

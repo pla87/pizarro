@@ -25,11 +25,13 @@ export interface SemaphoreOptions {
   maxWaitMs: number;
 }
 
-type Waiter = { grant: () => void; timer: ReturnType<typeof setTimeout> | null };
+type Waiter = { grant: () => void; timer: ReturnType<typeof setTimeout> | null; bounded: boolean };
 
 export class Semaphore {
   private active = 0;
   private queue: Waiter[] = [];
+  /** Esperas con tope en la cola (las que cuentan para maxQueue): un contador, sin recorrer la cola en cada llegada. */
+  private boundedWaiting = 0;
   constructor(private readonly opts: SemaphoreOptions) {}
 
   /** Tareas en marcha y en espera (para pruebas y diagnóstico). */
@@ -55,19 +57,24 @@ export class Semaphore {
       this.active++;
       return Promise.resolve();
     }
-    if (bounded && this.queue.filter((w) => w.timer).length >= this.opts.maxQueue) return Promise.reject(new SemaphoreFullError("queue"));
+    if (bounded && this.boundedWaiting >= this.opts.maxQueue) return Promise.reject(new SemaphoreFullError("queue"));
     return new Promise<void>((resolve, reject) => {
       const waiter: Waiter = {
         grant: () => {
           if (waiter.timer) clearTimeout(waiter.timer);
+          if (waiter.bounded) this.boundedWaiting--;
           this.active++;
           resolve();
         },
         timer: null,
+        bounded,
       };
       if (bounded) {
+        this.boundedWaiting++;
         waiter.timer = setTimeout(() => {
-          this.queue = this.queue.filter((w) => w !== waiter);
+          this.boundedWaiting--;
+          const i = this.queue.indexOf(waiter);
+          if (i >= 0) this.queue.splice(i, 1);
           reject(new SemaphoreFullError("timeout"));
         }, this.opts.maxWaitMs);
       }

@@ -25,9 +25,12 @@ export function sendWhatsappNotice(cfg: WhatsappConfig, to: string, m: NoticeMes
   return trackInFlight(() => withRetries("WHATSAPP", () => post(cfg, whatsappPayload(to, m, cfg, t, english), to), { stopping: isShuttingDown }));
 }
 
-/** Envía el código de verificación con la plantilla de autenticación (botón «Copiar código»). Mismos reintentos que un aviso. */
-export function sendWhatsappCode(cfg: WhatsappConfig, to: string, code: string): Promise<void> {
-  return trackInFlight(() => withRetries("WHATSAPP", () => post(cfg, whatsappCodePayload(to, code, cfg), to), { stopping: isShuttingDown }));
+/**
+ * Envía el código de verificación con la plantilla de autenticación (botón «Copiar código»). Mismos reintentos que un
+ * aviso. `english`: la persona usa Pizarro en inglés (sale en inglés si la verificación tiene ese idioma configurado).
+ */
+export function sendWhatsappCode(cfg: WhatsappConfig, to: string, code: string, english = false): Promise<void> {
+  return trackInFlight(() => withRetries("WHATSAPP", () => post(cfg, whatsappCodePayload(to, code, cfg, english), to), { stopping: isShuttingDown }));
 }
 
 async function post(cfg: WhatsappConfig, body: unknown, to: string): Promise<void> {

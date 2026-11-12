@@ -16,6 +16,9 @@
 # PUBLISHED_TAGS (opcional, con --latest: etiquetas con release publicada, una por línea).
 # Solo para pruebas: STABLE_REMOTE_URL (destino del push) y GITHUB_API_URL.
 set -euo pipefail
+# Que set -e valga también dentro de $(...) (p. ej. tag="$(latest_tag)"): sin esto, bash lo desactiva en las
+# sustituciones y un fallo a mitad de función seguía adelante con lo que hubiera (etiquetas locales antiguas).
+shopt -s inherit_errexit
 
 repo="${GITHUB_REPOSITORY:-}"
 server="${GITHUB_SERVER_URL:-https://github.com}"
@@ -99,7 +102,7 @@ version_at() {
 
 # Última versión vX.Y.Z (la más alta) cuyo commit está en main y, si se da PUBLISHED_TAGS, que tiene release publicada.
 latest_tag() {
-  git fetch --no-tags --force origin '+refs/tags/v*:refs/tags/v*' > /dev/null
+  git fetch --no-tags --force origin '+refs/tags/v*:refs/tags/v*' > /dev/null || return 1
   local tag
   for tag in $(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -rV); do
     if [ -n "${PUBLISHED_TAGS:-}" ] && ! printf '%s\n' "$PUBLISHED_TAGS" | grep -qxF "$tag"; then continue; fi
@@ -113,7 +116,8 @@ move() {
   # Solo commits que ya están en main: una etiqueta puesta en otra rama (o en un commit suelto) no llega a stable.
   git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
   if [ "$target" = "--latest" ]; then
-    tag="$(latest_tag)"
+    # Si no se pueden leer las etiquetas del origen, se para: con las locales (quizá antiguas) podría elegir otra versión.
+    tag="$(latest_tag)" || fail "No se pudieron leer las etiquetas del repositorio." "git fetch de las etiquetas vX.Y.Z ha fallado (ver el log): stable no se mueve. Vuelve a lanzar el workflow."
     [ -n "$tag" ] || fail "No hay ninguna versión publicada en main." "No se ha encontrado ninguna etiqueta vX.Y.Z con release publicada cuyo commit esté en main: stable no se mueve."
     sha="$(git rev-parse "$tag^{commit}")"
     echo "Última versión publicada en main: $tag ($sha)."

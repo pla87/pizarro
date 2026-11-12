@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { getT } from "@/i18n/server";
 import { AppError } from "@/lib/errors";
 import { logEvent } from "@/lib/log";
-import { verifyPassword } from "@/lib/password";
+import { verifyPasswordCounted } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
 import { requireAdmin } from "@/lib/session";
 import { verifyTotpFor } from "@/lib/two-factor";
@@ -56,12 +56,13 @@ export async function requestBackupDownload(input: { password?: string; code?: s
       logEvent({ level: "warn", category: "auth", action: "backups.downloadDenied", message: `${admin.name}: confirmación fallida para descargar la copia (${kind})`, userId: admin.id, userName: admin.name });
       throw new AppError(kind === "code" ? "Código incorrecto o caducado." : "La contraseña no es correcta.");
     };
-    if (!rateLimit(`backup-dl:${admin.id}`, 5, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
+    const rateKey = `backup-dl:${admin.id}`;
+    if (!rateLimit(rateKey, 5, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
     const row = await db.user.findUniqueOrThrow({ where: { id: admin.id }, select: { passwordHash: true, twoFactorMethod: true, totpSecretEnc: true, totpLastStep: true } });
     if (input.code) {
       if (row.twoFactorMethod !== "TOTP") throw new AppError("Para descargar la copia confirma con tu contraseña.");
       if (!(await verifyTotpFor(row.totpSecretEnc, String(input.code).replace(/\s/g, "").slice(0, 12), admin.id, row.totpLastStep))) fail("code");
-    } else if (!(await verifyPassword(String(input.password ?? "").slice(0, 200), row.passwordHash))) {
+    } else if (!(await verifyPasswordCounted(String(input.password ?? "").slice(0, 200), row.passwordHash, rateKey))) {
       fail("password");
     }
     logEvent({ category: "auth", action: "backups.downloadAuthorized", message: `${admin.name} ha confirmado su identidad para descargar la copia`, userId: admin.id, userName: admin.name });

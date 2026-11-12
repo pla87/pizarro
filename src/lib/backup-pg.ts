@@ -2,9 +2,10 @@
 // de restauración, la prueba mensual y el volcado de cada copia: así no hace falta cargar Prisma, ni apuntar el cliente
 // de la app a otra base, ni ocupar una conexión de su pool durante toda la copia.
 
-import pg from "pg";
+import type pg from "pg";
 import type { BackupManifest } from "./backup-core";
 import { dumpDatabase, type Client, type RawSql } from "./backup-db";
+import { connectPgClient } from "./pg-connect";
 
 export class PgSql implements Client {
   private inTx = false;
@@ -54,13 +55,12 @@ export class PgSql implements Client {
   }
 }
 
-export async function connectPg(url: string, opts: { applicationName?: string } = {}): Promise<PgSql> {
-  const client = new pg.Client({ connectionString: url, ...(opts.applicationName ? { application_name: opts.applicationName } : {}) });
-  // Sin este oyente, un corte de la conexión inactiva sería una excepción no capturada (y con
-  // EXIT_ON_UNCAUGHT_EXCEPTION=1, un reinicio de la app); la siguiente consulta ya falla con su error.
-  client.on("error", (err) => console.error("[backup-pg] conexión perdida", err.message));
-  await client.connect();
-  return new PgSql(client);
+/**
+ * Conexión propia con tope para conectar (15 s) y keepalive: si la base no contesta, falla en vez de esperar para
+ * siempre (y la copia en curso termina como fallida, así que se puede volver a lanzar). `connectTimeoutMs`: pruebas.
+ */
+export async function connectPg(url: string, opts: { applicationName?: string; connectTimeoutMs?: number } = {}): Promise<PgSql> {
+  return new PgSql(await connectPgClient(url, { label: "backup-pg", ...opts }));
 }
 
 /** La misma URL con otra base de datos (conserva usuario, servidor y parámetros como sslmode). */
@@ -77,15 +77,15 @@ export const DUMP_TIMEOUT_MS = 30 * 60_000;
  * Volcado de la copia en una conexión propia, fuera del pool de la app: la transacción REPEATABLE READ (todas las
  * tablas del mismo instante) puede durar minutos, y con el cliente de la app ocupaba una de sus conexiones todo ese
  * tiempo. La conexión se cierra siempre al terminar, falle o no; si el volcado pasa de `timeoutMs`, se corta (la
- * consulta en curso falla y la copia queda como fallida). `onConnect`: solo para pruebas.
+ * consulta en curso falla y la copia queda como fallida). `onConnect` y `connectTimeoutMs`: solo para pruebas.
  */
 export async function dumpDatabaseOwnConnection(
   url: string,
   file: string,
   key: Buffer,
-  { timeoutMs = DUMP_TIMEOUT_MS, onConnect }: { timeoutMs?: number; onConnect?: (sql: PgSql) => void } = {},
+  { timeoutMs = DUMP_TIMEOUT_MS, onConnect, connectTimeoutMs }: { timeoutMs?: number; onConnect?: (sql: PgSql) => void; connectTimeoutMs?: number } = {},
 ): Promise<{ manifest: BackupManifest; bytes: number }> {
-  const sql = await connectPg(url, { applicationName: "pizarro-backup" });
+  const sql = await connectPg(url, { applicationName: "pizarro-backup", connectTimeoutMs });
   onConnect?.(sql);
   let timedOut = false;
   const timer = setTimeout(() => {

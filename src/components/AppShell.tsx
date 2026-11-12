@@ -29,6 +29,7 @@ import { ReportButton } from "./ReportButton";
 import { ImportProjectPanel } from "./ImportProjectPanel";
 import { TransferJobWatcher } from "./transfer/TransferJobWatcher";
 import { cn } from "./ui/cn";
+import { HoverPrefetchLink } from "./ui/HoverPrefetchLink";
 import { Menu as DropdownMenu, MenuItem } from "./ui/Menu";
 import { Modal } from "./ui/Modal";
 import { ConfirmProvider } from "./ui/ConfirmDialog";
@@ -154,8 +155,9 @@ function Shell({ user, projects, version, unread, lastProjectId = null, backupAl
 }
 
 function NavLink({ href, icon: Icon, children, active, extra, highlight = false }: { href: string; icon: typeof Menu; children: React.ReactNode; active: boolean; extra?: Record<string, unknown>; highlight?: boolean }) {
+  // Se precarga al pasar el ratón, no al verse: cada router.refresh() del tablero repetía la precarga de todos.
   return (
-    <Link
+    <HoverPrefetchLink
       href={href}
       {...extra}
       aria-current={active ? "page" : undefined}
@@ -170,7 +172,7 @@ function NavLink({ href, icon: Icon, children, active, extra, highlight = false 
     >
       <Icon size={17} />
       {children}
-    </Link>
+    </HoverPrefetchLink>
   );
 }
 
@@ -287,7 +289,7 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
           <Avatar id={user.id} name={user.name} size="md" />
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium">{user.name}</div>
-            <Link href="/changelog" className="text-xs text-slate-500 hover:underline">v{version}</Link>
+            <HoverPrefetchLink href="/changelog" className="text-xs text-slate-500 hover:underline">v{version}</HoverPrefetchLink>
           </div>
           <form action={logout} onSubmit={() => clearDraftsOnLogout(user.clearDraftsOnLogout)}>
             <button type="submit" className="btn-icon" title={t("Cerrar sesión")} aria-label={t("Cerrar sesión")}>

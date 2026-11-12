@@ -34,11 +34,17 @@ export const WHATSAPP_ENABLED_KEY = "whatsapp.enabled";
 /** Plantilla de AUTENTICACIÓN con la que sale el código de verificación (vacío = codigo_pizarro) y su idioma (vacío = el de los avisos). */
 export const WHATSAPP_CODE_TEMPLATE_KEY = "whatsapp.codeTemplateName";
 export const WHATSAPP_CODE_LANG_KEY = "whatsapp.codeTemplateLang";
+/**
+ * Idioma de la plantilla de verificación para quien usa Pizarro en inglés (vacío = el mismo que para el resto). Aparte de
+ * «Idioma en inglés» de los avisos: codigo_pizarro puede no tener la traducción aunque aviso_pizarro sí, y Meta rechaza
+ * un idioma que la plantilla no tiene (y entonces el código no saldría para nadie hasta revisarlo).
+ */
+export const WHATSAPP_CODE_LANG_EN_KEY = "whatsapp.codeTemplateLangEn";
 /** Último rechazo de Meta a la plantilla de verificación (JSON: código de error, plantilla, idioma y fecha); se borra al enviar bien un código o al guardar. */
 export const WHATSAPP_CODE_ERROR_KEY = "whatsapp.codeTemplateError";
 export const WHATSAPP_KEYS = [
   WHATSAPP_TOKEN_KEY, WHATSAPP_LAST4_KEY, WHATSAPP_PHONE_ID_KEY, WHATSAPP_TEMPLATE_KEY, WHATSAPP_LANG_KEY, WHATSAPP_LANG_EN_KEY, WHATSAPP_ENABLED_KEY,
-  WHATSAPP_CODE_TEMPLATE_KEY, WHATSAPP_CODE_LANG_KEY, WHATSAPP_CODE_ERROR_KEY,
+  WHATSAPP_CODE_TEMPLATE_KEY, WHATSAPP_CODE_LANG_KEY, WHATSAPP_CODE_LANG_EN_KEY, WHATSAPP_CODE_ERROR_KEY,
 ] as const;
 
 /** Plantilla que espera Pizarro (3 variables: aviso, proyecto y enlace). Ver docs/guias/whatsapp.md. */
@@ -233,6 +239,7 @@ export interface WhatsappSettings {
   /** Plantilla de verificación y su idioma tal como se guardaron (vacío = valor por defecto). */
   codeTemplateName: string;
   codeTemplateLang: string;
+  codeTemplateLangEn: string;
   /** Último rechazo de Meta a la plantilla de verificación, o null. */
   codeTemplateError: CodeTemplateError | null;
   /** null = no se ha guardado: activo si la configuración está completa. */
@@ -270,6 +277,7 @@ export function parseWhatsappSettings(rows: Rows): WhatsappSettings {
     templateLangEn: get(WHATSAPP_LANG_EN_KEY).trim(),
     codeTemplateName: get(WHATSAPP_CODE_TEMPLATE_KEY).trim(),
     codeTemplateLang: get(WHATSAPP_CODE_LANG_KEY).trim(),
+    codeTemplateLangEn: get(WHATSAPP_CODE_LANG_EN_KEY).trim(),
     codeTemplateError: parseCodeTemplateError(get(WHATSAPP_CODE_ERROR_KEY)),
     enabled: enabled === "" ? null : enabled === "true",
   };
@@ -291,6 +299,8 @@ export interface WhatsappConfig {
   /** Plantilla de autenticación del código de verificación (por defecto codigo_pizarro) y su idioma (por defecto, el de los avisos). */
   codeTemplateName: string;
   codeTemplateLang: string;
+  /** Idioma de la verificación para quien usa Pizarro en inglés; vacío = el de codeTemplateLang para todos. */
+  codeTemplateLangEn: string;
   apiVersion: string;
   /**
    * Formato antiguo (4 variables y solo menciones): la plantilla «mencion_pizarro» o cualquiera que venga solo de la
@@ -325,6 +335,7 @@ export function resolveWhatsappConfig(env: Env, saved: WhatsappSettings, savedTo
     templateLangEn: saved.templateLangEn,
     codeTemplateName: saved.codeTemplateName || DEFAULT_WHATSAPP_CODE_TEMPLATE,
     codeTemplateLang: saved.codeTemplateLang || templateLang,
+    codeTemplateLangEn: saved.codeTemplateLangEn,
     apiVersion: clean(env.WHATSAPP_API_VERSION) || DEFAULT_WHATSAPP_API_VERSION,
     // Antes de poder configurarse en Ajustes, la plantilla solo podía venir de WHATSAPP_TEMPLATE_NAME y tenía 4 variables
     // (fuera cual fuera su nombre). Mientras siga saliendo de ahí, se usa ese formato (y solo menciones); al guardar un
@@ -345,9 +356,10 @@ export interface WhatsappSettingsInput {
   templateName: string;
   templateLang: string;
   templateLangEn: string;
-  /** Plantilla de verificación (vacío = codigo_pizarro) y su idioma (vacío = el de los avisos). */
+  /** Plantilla de verificación (vacío = codigo_pizarro), su idioma (vacío = el de los avisos) y el de inglés (vacío = el mismo). */
   codeTemplateName?: string;
   codeTemplateLang?: string;
+  codeTemplateLangEn?: string;
 }
 
 /** Valida y normaliza el formulario de WhatsApp (los campos vacíos usan las variables del servidor o el valor por defecto). */
@@ -358,10 +370,11 @@ export function validateWhatsappSettings(input: WhatsappSettingsInput): { ok: tr
   const templateLangEn = String(input.templateLangEn ?? "").trim();
   const codeTemplateName = String(input.codeTemplateName ?? "").trim();
   const codeTemplateLang = String(input.codeTemplateLang ?? "").trim();
+  const codeTemplateLangEn = String(input.codeTemplateLangEn ?? "").trim();
   if (phoneNumberId && !WA_PHONE_ID_RE.test(phoneNumberId)) return { ok: false, error: "El identificador del número de WhatsApp son solo cifras (Phone number ID)." };
   for (const name of [templateName, codeTemplateName]) if (name && !WA_TEMPLATE_RE.test(name)) return { ok: false, error: "El nombre de la plantilla solo admite minúsculas, cifras y guiones bajos." };
-  for (const lang of [templateLang, templateLangEn, codeTemplateLang]) if (lang && !WA_LANG_RE.test(lang)) return { ok: false, error: "El idioma de la plantilla no es válido (por ejemplo es, es_ES o en_US)." };
-  return { ok: true, value: { phoneNumberId, templateName, templateLang, templateLangEn, codeTemplateName, codeTemplateLang } };
+  for (const lang of [templateLang, templateLangEn, codeTemplateLang, codeTemplateLangEn]) if (lang && !WA_LANG_RE.test(lang)) return { ok: false, error: "El idioma de la plantilla no es válido (por ejemplo es, es_ES o en_US)." };
+  return { ok: true, value: { phoneNumberId, templateName, templateLang, templateLangEn, codeTemplateName, codeTemplateLang, codeTemplateLangEn } };
 }
 
 /** Texto de una variable de plantilla: Meta no admite saltos de línea, tabuladores ni más de 4 espacios seguidos. */
@@ -388,12 +401,20 @@ export function whatsappPayload(to: string, m: NoticeMessage, cfg: Pick<Whatsapp
 }
 
 /**
+ * Idioma con que sale el código de verificación: el de inglés («Idioma en inglés de la verificación») si la persona usa
+ * Pizarro en inglés y está configurado; si no, el de la verificación (por defecto, el de los avisos).
+ */
+export function whatsappCodeLang(cfg: Pick<WhatsappConfig, "codeTemplateLang" | "codeTemplateLangEn">, english: boolean): string {
+  return (english && cfg.codeTemplateLangEn) || cfg.codeTemplateLang || "es";
+}
+
+/**
  * Cuerpo de la petición del código de verificación con la plantilla de AUTENTICACIÓN (botón «Copiar código»). Formato
  * de Meta: el código va dos veces, como parámetro del cuerpo ({{1}}) y del botón (sub_type «url», índice 0), y como mucho
  * con 15 caracteres. Ver https://developers.facebook.com/docs/whatsapp/business-management-api/authentication-templates
  * (Copy code authentication templates → Sending authentication templates).
  */
-export function whatsappCodePayload(to: string, code: string, cfg: Pick<WhatsappConfig, "codeTemplateName" | "codeTemplateLang">) {
+export function whatsappCodePayload(to: string, code: string, cfg: Pick<WhatsappConfig, "codeTemplateName" | "codeTemplateLang" | "codeTemplateLangEn">, english = false) {
   const parameters = [{ type: "text", text: code }];
   return {
     messaging_product: "whatsapp",
@@ -402,7 +423,7 @@ export function whatsappCodePayload(to: string, code: string, cfg: Pick<Whatsapp
     type: "template",
     template: {
       name: cfg.codeTemplateName,
-      language: { code: cfg.codeTemplateLang || "es" },
+      language: { code: whatsappCodeLang(cfg, english) },
       components: [
         { type: "body", parameters },
         { type: "button", sub_type: "url", index: "0", parameters },

@@ -37,9 +37,10 @@ export interface MessagingAdminView {
     env: { token: boolean; phoneNumberId: string; templateName: string; templateLang: string };
     sources: Record<"token" | "phoneNumberId" | "templateName" | "templateLang", Source>;
     effective: { phoneNumberId: string; templateName: string; templateLang: string; codeTemplateName: string; codeTemplateLang: string };
-    /** Plantilla de verificación (autenticación) y su idioma tal como se guardaron (vacío = por defecto). */
+    /** Plantilla de verificación (autenticación) y sus idiomas tal como se guardaron (vacío = por defecto). */
     codeTemplateName: string;
     codeTemplateLang: string;
+    codeTemplateLangEn: string;
     defaultCodeTemplate: string;
     /** Meta rechazó la plantilla de verificación la última vez que se envió un código (se olvida al enviar uno bien o al guardar). */
     codeTemplateError: { problem: CodeTemplateProblem; code: number; name: string; lang: string; at: string } | null;
@@ -104,6 +105,7 @@ export async function getMessagingAdminView(): Promise<MessagingAdminView> {
       effective: { phoneNumberId: w.phoneNumberId, templateName: w.templateName, templateLang: w.templateLang, codeTemplateName: w.codeTemplateName, codeTemplateLang: w.codeTemplateLang },
       codeTemplateName: ws.codeTemplateName,
       codeTemplateLang: ws.codeTemplateLang,
+      codeTemplateLangEn: ws.codeTemplateLangEn,
       defaultCodeTemplate: DEFAULT_WHATSAPP_CODE_TEMPLATE,
       codeTemplateError: codeError(ws.codeTemplateError),
       enabled: w.enabled,
