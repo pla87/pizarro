@@ -21,7 +21,7 @@ export const taskFieldShape = {
   startDate: v.dayIso.optional(),
 };
 export const taskFieldSchema = z.object(taskFieldShape);
-export type TaskFieldPatch = z.infer<typeof taskFieldSchema>;
+type TaskFieldPatch = z.infer<typeof taskFieldSchema>;
 
 /** Nombre (en español, clave de traducción) de cada interruptor para los errores. */
 const FIELD_NAME: Record<TaskFieldKey, string> = {

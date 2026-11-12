@@ -2,9 +2,10 @@
 
 import { Search } from "lucide-react";
 import { useState } from "react";
-import { CHANGE_CATEGORIES, type Changes } from "@/lib/changelog";
+import { CHANGE_CATEGORIES, type Changes } from "@/lib/changelog-core";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
+import { normalizeSearch } from "@/lib/search-accents";
 
 interface VersionRow {
   id: string;
@@ -14,16 +15,13 @@ interface VersionRow {
   changes: Changes;
 }
 
-/** Minúsculas y sin acentos, para buscar sin distinguir ni mayúsculas ni tildes. */
-const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-
 /** Versiones con un buscador por número, resumen y cambios; al buscar solo se muestran los cambios que coinciden. */
 export function ChangelogList({ versions, currentVersion }: { versions: VersionRow[]; currentVersion: string }) {
   const t = useT();
   const locale = useIntlLocale();
   const [query, setQuery] = useState("");
-  const q = fold(query.trim());
-  const has = (s: string) => fold(s).includes(q);
+  const q = normalizeSearch(query.trim());
+  const has = (s: string) => normalizeSearch(s).includes(q);
 
   const shown = versions.flatMap((v) => {
     if (!q) return [{ v, changes: v.changes }];

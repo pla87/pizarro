@@ -1,16 +1,13 @@
-// Arreglos de la revisión de v1.46: carreras (descripción, release, tipos ocultos) y textos sin traducir.
+// Acciones a la vez de dos personas, contra PostgreSQL real: el texto de una tarea guardado por dos (conflicto dentro
+// de la transacción), una tarea archivada mientras se despliega la release y ocultar a la vez los dos últimos tipos.
 import assert from "node:assert/strict";
 import type { AsyncLocalStorage } from "node:async_hooks";
 import { describe, test } from "node:test";
 import { db, expectFail, expectOk, loginAs, makeKind, makeProject, makeTask, makeUser } from "./helpers";
 import { createSession } from "../../src/lib/session";
-import { createTasks, updateTask } from "../../src/actions/tasks";
+import { updateTask } from "../../src/actions/tasks";
 import { deployRelease } from "../../src/actions/releases";
 import { setGeneralKindEnabled } from "../../src/actions/project-kinds";
-import { setColumnWipLimit } from "../../src/actions/columns";
-import { mentionEmail } from "../../src/lib/notify";
-import { notificationBody } from "../../src/lib/notification-text";
-import { makeT } from "../../src/i18n/core";
 
 /**
  * Ejecuta `fn` como una petición de `user` con su propia cookie (no la del «jar» global), para que dos personas
@@ -136,40 +133,5 @@ describe("setGeneralKindEnabled: ocultar a la vez los dos últimos tipos", () =>
     expectFail(results.find((r) => !r.ok)!, /al menos un tipo de tarea/);
     const hidden = await db.projectHiddenKind.count({ where: { projectId: f.project.id, kindId: { in: [g1.id, g2.id] } } });
     assert.equal(hidden, 1);
-  });
-});
-
-describe("textos traducidos", () => {
-  test("el aviso de asignación de un lote se muestra y se envía en el idioma de quien lo recibe", async () => {
-    const actor = await makeUser();
-    const assignee = await makeUser();
-    await db.user.update({ where: { id: assignee.id }, data: { locale: "EN" } });
-    const f = await makeProject({ members: [actor, assignee] });
-    await loginAs(actor);
-    expectOk(await createTasks({ projectId: f.project.id, columnId: f.columns.todo, assigneeId: assignee.id, tasks: ["a", "b", "c"].map((title) => ({ title, kindId: f.kindId })) }));
-    const n = await db.notification.findFirstOrThrow({ where: { userId: assignee.id, type: "ASSIGNED" } });
-    const en = makeT("en");
-    assert.equal(notificationBody("ASSIGNED", n.excerpt, en, "en-GB"), "3 tasks");
-    assert.equal(notificationBody("ASSIGNED", n.excerpt, makeT("es"), "es-ES"), "3 tareas");
-    const mail = mentionEmail({ type: "ASSIGNED", actorName: "X", taskTitle: "a", projectName: "P", excerpt: n.excerpt, url: "https://example.com" }, en);
-    assert.match(mail.text, /3 tasks/);
-    assert.doesNotMatch(mail.text + mail.html, /tareas/);
-    // Una sola tarea: el extracto sigue siendo su título.
-    expectOk(await createTasks({ projectId: f.project.id, columnId: f.columns.todo, assigneeId: assignee.id, tasks: [{ title: "Sola", kindId: f.kindId }] }));
-    const one = await db.notification.findFirstOrThrow({ where: { userId: assignee.id, type: "ASSIGNED", excerpt: { not: n.excerpt } } });
-    assert.equal(notificationBody("ASSIGNED", one.excerpt, en, "en-GB"), "Sola");
-  });
-
-  test("el límite de tarjetas fuera de rango da el mensaje traducido", async () => {
-    const user = await makeUser();
-    await db.user.update({ where: { id: user.id }, data: { locale: "EN" } });
-    const f = await makeProject({ members: [user] });
-    await loginAs(user);
-    expectFail(await setColumnWipLimit(f.columns.todo, 0), /^Enter a whole number between 1 and 999, or leave it empty\.$/);
-    expectFail(await setColumnWipLimit(f.columns.todo, 1000), /^Enter a whole number between 1 and 999/);
-    expectFail(await setColumnWipLimit(f.columns.todo, 2.5), /^Enter a whole number of cards\.$/);
-    expectOk(await setColumnWipLimit(f.columns.todo, 5));
-    await db.user.update({ where: { id: user.id }, data: { locale: "ES" } });
-    expectFail(await setColumnWipLimit(f.columns.todo, 0), /^Indica un número entero entre 1 y 999, o déjalo vacío\.$/);
   });
 });

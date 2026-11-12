@@ -55,7 +55,7 @@ const KEEP = "[data-dictation-keep]";
  * cada frase ya reconocida. Esc (o llamar a `stop`) lo para; se para también al desmontarse el componente y, mientras
  * escucha, cuando el foco pasa a otro elemento o se pulsa/toca fuera de lo que devuelve `within` (el campo asociado).
  */
-export function useDictation(onText: (text: string) => void, within?: () => Scope) {
+function useDictation(onText: (text: string) => void, within?: () => Scope) {
   const t = useT();
   const toast = useToast();
   const intl = useIntlLocale();

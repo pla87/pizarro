@@ -39,7 +39,7 @@ export function startOfDayInZone(day: string, tz: string): Date {
   return new Date(guess);
 }
 
-export type ExportRange =
+type ExportRange =
   | { ok: true; from: string; to: string; gte: Date; lt: Date }
   | { ok: false; error: "invalid" | "order" | "too_long" };
 

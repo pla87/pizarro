@@ -17,6 +17,7 @@ import { markdownFromPaste } from "@/lib/markdown-paste";
 import { htmlHasText } from "@/lib/clipboard-files";
 import { replaceHtmlTables } from "@/lib/paste-table";
 import type { UserOption } from "@/lib/types";
+import { normalizeSearch } from "@/lib/search-accents";
 import { Avatar } from "./Avatar";
 import { cn } from "./cn";
 import { DictationButton, insertIntoEditor } from "./DictationButton";
@@ -33,8 +34,6 @@ const COMMANDS: { id: MentionCommand; label: string; hint: string; keys: string[
   { id: "GOOGLE_SHEET", label: "Crear Google Sheet", hint: "Hoja de cálculo nueva enlazada a la tarea", keys: ["sheets", "sheet", "hoja", "excel", "google"] },
   { id: "GOOGLE_DOC", label: "Crear Google Doc", hint: "Documento nuevo enlazado a la tarea", keys: ["docs", "doc", "documento", "google"] },
 ];
-
-const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 interface Popup {
   items: Option[];
@@ -103,13 +102,13 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
           char: "@",
           allowedPrefixes: [" ", "("],
           items: ({ query }): Option[] => {
-            const q = norm(query);
+            const q = normalizeSearch(query);
             const { users: list = [], onCommand: cmd } = mentionData.current;
             const cmds: Option[] = cmd
               ? COMMANDS.filter((c) => !q || c.keys.some((k) => k.startsWith(q))).map((c) => ({ kind: "command", id: c.id, label: c.label, hint: c.hint }))
               : [];
             const people: Option[] = list
-              .filter((u) => !q || norm(u.name).split(/\s+/).some((part) => part.startsWith(q)) || norm(u.name).startsWith(q))
+              .filter((u) => !q || normalizeSearch(u.name).split(/\s+/).some((part) => part.startsWith(q)) || normalizeSearch(u.name).startsWith(q))
               .slice(0, 6)
               .map((u) => ({ kind: "user", id: u.id, label: u.name }));
             return [...people, ...cmds];

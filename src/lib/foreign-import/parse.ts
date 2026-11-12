@@ -57,7 +57,7 @@ export function assertBoardLimits(board: ForeignBoard): void {
   }
 }
 
-export interface ParseOptions {
+interface ParseOptions {
   t: T;
   timeZone?: string;
   /** Nombre del archivo sin extensión. */

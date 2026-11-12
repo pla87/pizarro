@@ -13,7 +13,7 @@ import type { CalendarFeedScope, Prisma } from "@/generated/prisma/client";
 
 // Calendario vivo de una persona: sus tareas con fecha límite y los entregables con fecha de los proyectos que puede ver.
 
-export interface FeedOwner {
+interface FeedOwner {
   id: string;
   name: string;
   role: "ADMIN" | "MEMBER";

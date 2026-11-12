@@ -51,7 +51,7 @@ export function publishChange(change: Omit<ProjectChange, "at" | "cid">): string
 /** Máximo de canales SSE simultáneos por usuario (varias pestañas/proyectos; frena abusos). */
 export const MAX_STREAMS_PER_USER = 10;
 
-export interface OpenStream {
+interface OpenStream {
   userId: string;
   projectId: string;
   sessionId: string;

@@ -16,7 +16,7 @@ import { getT } from "@/i18n/server";
 // Administración → Ajustes → «Envío de emails». Solo administradores. La contraseña nunca se registra ni se devuelve.
 // Los args de la acción NO se pasan a runAction (llevarían la contraseña al registro).
 
-export interface MailSettingsForm extends MailSettingsInput {
+interface MailSettingsForm extends MailSettingsInput {
   /** Contraseña nueva; vacía o ausente = conservar la guardada. */
   password?: string;
   /** Borrar la contraseña guardada. */

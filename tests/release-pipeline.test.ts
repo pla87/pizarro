@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { describe, test } from "node:test";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
 
@@ -151,4 +151,52 @@ test("compose: usa la imagen publicada por defecto y compose.build.yml permite c
   const b = readFileSync("deploy/compose.build.yml", "utf8");
   assert.match(b, /^\s+build:/m);
   assert.match(b, /dockerfile: Dockerfile/);
+});
+
+describe("workflow de release: versión ya publicada", () => {
+  /** El script del paso que comprueba la versión, ejecutado con un `git` falso (ls-remote devuelve FAKE_LS). */
+  function runCheck(env: Record<string, string>) {
+    const wf = readFileSync(".github/workflows/release.yml", "utf8");
+    const m = /- name: Comprobar que la etiqueta coincide con package\.json\n\s+run: \|\n((?: {10}.*\n|\n)+)/.exec(wf);
+    assert.ok(m, "paso de comprobación");
+    const script = m[1]!.replace(/^ {10}/gm, "");
+    const dir = mkdtempSync(join(tmpdir(), "pz-release-"));
+    const bin = join(dir, "bin");
+    mkdirSync(bin);
+    writeFileSync(join(bin, "git"), `#!/bin/sh\necho "$*" >> "${dir}/git-calls"\n[ -n "$FAKE_FAIL" ] && exit 128\nprintf "%s" "$FAKE_LS"\n`);
+    chmodSync(join(bin, "git"), 0o755);
+    const ghEnv = join(dir, "env");
+    writeFileSync(ghEnv, "");
+    const r = spawnSync("bash", ["-e", "-c", script], { encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, GITHUB_ENV: ghEnv, ...env } });
+    return { status: r.status, stderr: r.stderr, env: readFileSync(ghEnv, "utf8"), gitCalls: existsSync(join(dir, "git-calls")) ? readFileSync(join(dir, "git-calls"), "utf8") : "" };
+  }
+  const version = (JSON.parse(readFileSync("package.json", "utf8")) as { version: string }).version;
+
+  test("a mano con la etiqueta ya en el remoto: para con un error claro antes de publicar", () => {
+    const r = runCheck({ GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_REF_NAME: "main", FAKE_LS: `abc123\trefs/tags/v${version}\n` });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, new RegExp(`La versión ${version.replace(/\./g, "\\.")} ya está publicada`));
+    assert.match(r.stderr, /npm run version:bump/);
+    assert.equal(r.env, "", "no llega a fijar VERSION");
+    assert.match(r.gitCalls, new RegExp(`ls-remote --tags origin refs/tags/v${version.replace(/\./g, "\\.")}`));
+  });
+
+  test("a mano con una versión nueva sigue; si no se puede consultar el remoto, para", () => {
+    const ok = runCheck({ GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_REF_NAME: "main", FAKE_LS: "" });
+    assert.equal(ok.status, 0, ok.stderr);
+    assert.equal(ok.env, `VERSION=${version}\n`);
+    const down = runCheck({ GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_REF_NAME: "main", FAKE_LS: "", FAKE_FAIL: "1" });
+    assert.equal(down.status, 1);
+  });
+
+  test("con etiqueta (push) no consulta el remoto: la etiqueta es la que se publica", () => {
+    const r = runCheck({ GITHUB_EVENT_NAME: "push", GITHUB_REF_NAME: `v${version}`, FAKE_LS: `abc\trefs/tags/v${version}\n` });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.gitCalls, "");
+  });
+
+  test("un solo grupo de concurrencia para la ejecución por etiqueta y la manual", () => {
+    const wf = readFileSync(".github/workflows/release.yml", "utf8");
+    assert.match(wf, /^concurrency:\n {2}group: release\n {2}cancel-in-progress: false$/m);
+  });
 });

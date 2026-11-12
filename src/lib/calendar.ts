@@ -3,7 +3,7 @@
 import { addDaysIso, daysBetween, isoWeekday } from "./dates";
 
 /** Mes en formato YYYY-MM. */
-export type MonthKey = string;
+type MonthKey = string;
 
 const MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
 
@@ -28,7 +28,7 @@ export interface CalendarDay {
   inMonth: boolean;
 }
 
-export interface MonthGrid {
+interface MonthGrid {
   weeks: CalendarDay[][];
   start: string;
   end: string;

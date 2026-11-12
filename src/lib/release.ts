@@ -199,7 +199,7 @@ function buildSections(input: Pick<ReleaseInput, "kinds" | "tasks" | "releaseNum
  * `&lt;`, `&gt;` o `&amp;` (como las descripciones, que también se decodifican): en el texto plano de la release salen
  * los caracteres reales.
  */
-export function releaseTemplateText(raw: string): string {
+function releaseTemplateText(raw: string): string {
   return decodeEntities(raw).trim();
 }
 

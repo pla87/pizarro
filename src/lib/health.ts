@@ -14,7 +14,7 @@ export function minFreeBytes(env: Record<string, string | undefined> = process.e
   return Number.isFinite(mb) && mb >= 0 ? Math.round(mb * MB) : DEFAULT_MIN_FREE_MB * MB;
 }
 
-export interface UploadsCheck {
+interface UploadsCheck {
   writable: boolean;
   /** Bytes libres para el usuario del proceso; null si no se pudo saber (no cuenta como fallo). */
   freeBytes: number | null;
@@ -47,8 +47,8 @@ export async function checkUploads(dir: string): Promise<UploadsCheck> {
   return { writable, freeBytes };
 }
 
-export type HealthReason = "database" | "uploads_not_writable" | "low_disk_space";
-export type HealthResult = { ok: true } | { ok: false; reason: HealthReason };
+type HealthReason = "database" | "uploads_not_writable" | "low_disk_space";
+type HealthResult = { ok: true } | { ok: false; reason: HealthReason };
 
 /** Veredicto a partir de las comprobaciones (en orden de gravedad). */
 export function evaluateHealth(input: { dbOk: boolean; uploads: UploadsCheck; minFreeBytes: number }): HealthResult {

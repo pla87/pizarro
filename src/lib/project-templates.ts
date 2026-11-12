@@ -6,10 +6,8 @@ import { POSITION_STEP } from "./positions";
 import * as v from "./validation";
 import { MAX_KIND_SUBTASKS } from "./kinds-special";
 import { normalizeTaskFields, TASK_FIELDS, type TaskFieldKey } from "./task-fields";
+import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS } from "./project-templates-core";
 
-export const MAX_TEMPLATE_COLUMNS = 20;
-export const MAX_TEMPLATE_KINDS = 30;
-export const MAX_TEMPLATE_LABELS = 50;
 
 /** Comparación de nombres sin distinguir mayúsculas ni espacios sobrantes. */
 const nameKey = (s: string) => s.trim().toLowerCase();

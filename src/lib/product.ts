@@ -16,6 +16,7 @@ export const REPO_URL = "https://github.com/pla87/pizarro";
 export const INSTALL_URL = `${REPO_URL}/blob/main/docs/INSTALL.md`;
 /** Imagen Docker publicada con cada versión (GitHub Container Registry). */
 export const IMAGE = "ghcr.io/pla87/pizarro";
+/** @public (scripts/build-site.mjs) */
 export const IMAGE_URL = `${REPO_URL}/pkgs/container/pizarro`;
 
 /**

@@ -9,14 +9,15 @@
 // imágenes se quedan en su texto alternativo y un enlace que no sea http(s), un ancla (#…) o lo que acepte `link`
 // se queda en su texto.
 
-export type LinkResolver = (href: string) => string | null;
+// Con la extensión: Node (build-site.mjs) carga este fichero sin empaquetador y no resuelve rutas sin ella.
+import { escapeHtml } from "./html-escape.ts";
 
-export const escapeHtml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+type LinkResolver = (href: string) => string | null;
 
 /** Identificador de un encabezado: minúsculas, sin acentos, palabras unidas con «-». */
-export const slugify = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const slugify = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-/** Enlaces admitidos por defecto: http(s) absolutos y anclas de la misma página. */
+/** Enlaces admitidos por defecto: http(s) absolutos y anclas de la misma página. @public (scripts/build-site.mjs) */
 export function safeHref(href: string): string | null {
   if (/^https?:\/\/[^\s"'<>`]+$/i.test(href)) return href;
   if (/^#[\w-]+$/.test(href)) return href;
@@ -115,7 +116,7 @@ export function inlineMarkdown(s: string, link: LinkResolver = safeHref): string
 }
 
 /** Texto plano de una línea de Markdown (para descripciones y títulos). */
-export const plainText = (s: string) =>
+const plainText = (s: string) =>
   s.replace(/!?\[([^[\]]+)\]\([^)]*\)/g, "$1").replace(/<(https?:\/\/[^>]+)>/g, "$1").replace(/[*_`]/g, "").replace(/\s+/g, " ").trim();
 
 const LIST = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/;
@@ -137,7 +138,7 @@ export function markdownToHtml(md: string, { link = safeHref }: { link?: LinkRes
  * Niveles de citas y listas anidadas que se interpretan; más adentro, las líneas se ven como texto. Sin tope, 5.000
  * «>» seguidos o 2.000 niveles de lista agotaban la pila (y la memoria: cada nivel copia sus líneas).
  */
-export const MAX_NESTING = 20;
+const MAX_NESTING = 20;
 
 function blocks(lines: string[], link: LinkResolver, ids: Set<string>, depth: number): string {
   const html: string[] = [];
@@ -255,7 +256,7 @@ function list(lines: string[], start: number, link: LinkResolver, ids: Set<strin
   return i;
 }
 
-export type Guide = { title: string; description: string; order: number; icon: string | null; body: string };
+type Guide = { title: string; description: string; order: number; icon: string | null; body: string };
 
 /**
  * Cabecera y cuerpo de una guía de docs/guias. La cabecera puede ser un front-matter mínimo

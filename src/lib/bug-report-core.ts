@@ -4,13 +4,13 @@
 // Regla de privacidad: la dirección del formulario solo lleva datos técnicos (versión, commit, tipo de instalación,
 // navegador y sistema, idioma). Nunca datos de usuarios ni proyectos, emails ni la dirección de la instalación.
 
-export const OFFICIAL_REPO = "pla87/pizarro";
-export const BUG_REPORT_URL = `https://github.com/${OFFICIAL_REPO}/issues/new`;
+const OFFICIAL_REPO = "pla87/pizarro";
+const BUG_REPORT_URL = `https://github.com/${OFFICIAL_REPO}/issues/new`;
 export const BUG_REPORT_TEMPLATE = "bug_report.yml";
 /** Fallos de seguridad: en privado (GitHub Security Advisories, «Report a vulnerability»), nunca en una incidencia. */
 export const SECURITY_REPORT_URL = `https://github.com/${OFFICIAL_REPO}/security/advisories/new`;
 /** Rama que solo recibe versiones publicadas (la mueve el workflow Release). */
-export const STABLE_BRANCH = "stable";
+const STABLE_BRANCH = "stable";
 
 export type InstallKind = "docker" | "railway";
 
@@ -42,7 +42,7 @@ export function officialBuild(env: Env, version: string): InstallKind | null {
 }
 
 /** Texto de la opción del desplegable «Cómo se instaló» de .github/ISSUE_TEMPLATE/bug_report.yml. */
-export function installLabel(kind: InstallKind | null): string {
+function installLabel(kind: InstallKind | null): string {
   return kind === "docker" ? "Docker Compose" : kind === "railway" ? "Railway" : "";
 }
 
@@ -94,7 +94,7 @@ export function bugReportUrl(f: BugReportFields): string {
   return `${BUG_REPORT_URL}?${q.toString()}`;
 }
 
-export interface TechInfo {
+interface TechInfo {
   version: string;
   commit: string;
   buildId: string | null;

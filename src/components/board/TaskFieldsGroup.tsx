@@ -5,7 +5,7 @@ import { useT } from "@/i18n/client";
 import { fieldsError, type FieldsForm } from "@/lib/fields-form";
 import { HOURS_STEP, MAX_CLIENT, PRIORITY_LABEL, TASK_PRIORITIES, type TaskFieldKey } from "@/lib/task-fields";
 
-export { EMPTY_FIELDS_FORM, fieldsError, fieldsForCreate, fieldsFormOf, fieldsPatch, type FieldsForm } from "@/lib/fields-form";
+export { fieldsError, fieldsForCreate, fieldsFormOf, fieldsPatch, type FieldsForm } from "@/lib/fields-form";
 
 /**
  * Importe u horas: campo de texto con teclado decimal que admite coma o punto (el servidor entiende los dos). Con

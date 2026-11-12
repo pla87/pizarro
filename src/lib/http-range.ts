@@ -1,6 +1,6 @@
 // Descargas reanudables: interpreta la cabecera Range (un solo rango de bytes) y If-Range. Sin dependencias del servidor.
 
-export type RangeResult =
+type RangeResult =
   | { kind: "full" }
   | { kind: "partial"; start: number; end: number }
   | { kind: "invalid" };

@@ -5,12 +5,12 @@ import path from "node:path";
 // Muy conservadora: solo regulares (nunca enlaces simbólicos), solo con nombre reconocido, solo dentro
 // de la carpeta de subidas y solo con más de 24 h (una subida en curso o recién hecha nunca se toca).
 
-export const ORPHAN_MIN_AGE_MS = 24 * 60 * 60 * 1000;
+const ORPHAN_MIN_AGE_MS = 24 * 60 * 60 * 1000;
 /** Si más de esta fracción de los ficheros parecen huérfanos, algo va mal (¿BD equivocada?): no se borra nada. */
 const MAX_ORPHAN_FRACTION = 0.5;
 const MIN_FILES_FOR_GUARD = 50;
 
-export interface OrphanReport {
+interface OrphanReport {
   scanned: number;
   orphans: number;
   deleted: number;

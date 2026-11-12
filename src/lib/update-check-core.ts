@@ -1,7 +1,7 @@
 // Aviso de versión nueva: lógica pura (sin base de datos ni red directa), probada en tests/update-check.test.ts.
 
 export const UPDATE_CHECK_URL = "https://api.github.com/repos/pla87/pizarro/releases/latest";
-export const UPDATE_RELEASES_URL = "https://github.com/pla87/pizarro/releases";
+const UPDATE_RELEASES_URL = "https://github.com/pla87/pizarro/releases";
 export const UPDATE_DOCS_URL = "https://github.com/pla87/pizarro/blob/main/docs/INSTALL.md#5-actualizar";
 /** Como mucho una consulta a GitHub cada 12 horas. */
 export const UPDATE_CHECK_INTERVAL_MS = 12 * 3600_000;

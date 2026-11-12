@@ -34,11 +34,11 @@ export interface TransferProgress {
 /** Máximo de trabajos en cola o en marcha por persona. */
 export const MAX_JOBS_PER_USER = 2;
 /** Cuánto vive el fichero exportado (y el resumen de una importación) tras terminar. */
-export const TRANSFER_TTL_MS = 24 * 60 * 60 * 1000;
+const TRANSFER_TTL_MS = 24 * 60 * 60 * 1000;
 /** Las filas terminadas se borran del todo pasado este tiempo. */
 const ROW_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 /** Un trabajo RUNNING sin escribir nada desde hace esto se da por muerto (el trabajador late cada HEARTBEAT_MS). */
-export const STALE_MS = 40_000;
+const STALE_MS = 40_000;
 const HEARTBEAT_MS = 10_000;
 const SWEEP_EVERY_MS = 20_000;
 /** Veces que una exportación interrumpida por un reinicio se vuelve a poner en cola antes de darla por fallida. */
@@ -49,7 +49,7 @@ const INTERRUPTED = "Interrumpido por un reinicio";
 const IMPORT_FACTOR = 1.5;
 
 /** Trabajos simultáneos por defecto. Cada uno tiene en memoria como mucho el project.json (64 MB) o un adjunto de importación (~100 MB), así que dos caben de sobra. */
-export const DEFAULT_CONCURRENCY = 2;
+const DEFAULT_CONCURRENCY = 2;
 
 /** Trabajos simultáneos en todo el servidor (PROJECT_TRANSFER_CONCURRENCY, 2 por defecto). Se lee cada vez. */
 export function transferConcurrency(raw: string | undefined = process.env.PROJECT_TRANSFER_CONCURRENCY): number {
@@ -101,7 +101,7 @@ export async function createImportJob(userId: string, tempFile: string, bytes: n
 // ---------------------------------------------------------------------------------------------------------------
 // Consulta (con permisos) y forma pública
 
-export interface TransferViewer {
+interface TransferViewer {
   id: string;
   role: "ADMIN" | "MEMBER";
 }
@@ -392,7 +392,7 @@ export async function runNextTransferJob(): Promise<string | null> {
 }
 
 /** Despierta al trabajador (no espera). Se llama al encolar y al terminar cada trabajo; no hace nada hasta que arranca (startTransferWorker). */
-export function kickTransferWorker(): void {
+function kickTransferWorker(): void {
   if (!state.started) return;
   setImmediate(() => void pump());
 }

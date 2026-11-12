@@ -18,6 +18,7 @@ import { DOCUMENT_PREVIEW_MAX_BYTES, DOCUMENT_TRASH_DAYS, isPreviewable, type Do
 import type { DocumentRow, TrashedDocumentRow } from "@/lib/documents";
 import type { EditorModeValue } from "@/lib/types";
 import { formatDate } from "@/lib/format";
+import { normalizeSearch } from "@/lib/search-accents";
 
 interface Props {
   projectId: string;
@@ -46,9 +47,6 @@ const ICONS: Record<DocumentKindName, { icon: typeof FileIcon; className: string
   IMAGE: { icon: FileImage, className: "text-emerald-600 bg-emerald-50 dark:bg-emerald-500/15 dark:text-emerald-300" },
   OTHER: { icon: FileIcon, className: "text-slate-400 bg-slate-100 dark:bg-slate-800 dark:text-slate-400" },
 };
-
-/** Minúsculas y sin tildes, para que el buscador no distinga «Guía» de «guia». */
-const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 let nextKey = 1;
 
@@ -118,8 +116,8 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
     return () => document.removeEventListener("paste", onPaste);
   });
 
-  const needle = fold(query.trim());
-  const shown = needle ? documents.filter((d) => fold(d.name).includes(needle)) : documents;
+  const needle = normalizeSearch(query.trim());
+  const shown = needle ? documents.filter((d) => normalizeSearch(d.name).includes(needle)) : documents;
   const open = documents.find((d) => d.id === openId) ?? null;
   const openTrashed = trashed.find((d) => d.id === openId) ?? null;
   const full = documents.length >= maxCount;

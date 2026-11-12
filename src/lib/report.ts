@@ -66,7 +66,7 @@ export interface ReportFields {
 }
 
 /** Máximo de filas de la tabla de campos opcionales del PDF. */
-export const MAX_FIELD_ROWS = 300;
+const MAX_FIELD_ROWS = 300;
 
 export type DeliverableStatus = "Completado" | "Retrasado" | "En riesgo" | "En plazo" | "Sin fecha" | "Sin tareas";
 

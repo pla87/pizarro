@@ -3,7 +3,7 @@
 // El mantenimiento se ejecuta cada hora, no en punto: un envío «a las 8» sale en la primera pasada a
 // partir de las 8 (hora local de la app) de ese día, y solo una vez al día.
 
-export interface LocalParts {
+interface LocalParts {
   /** YYYY-MM-DD en la zona horaria indicada. */
   date: string;
   /** 0-23 */

@@ -6,12 +6,11 @@ import { useT } from "@/i18n/client";
 import { blockerIsDone, wouldCycle } from "@/lib/blocked";
 import { mentionsToPlain } from "@/lib/mentions";
 import type { BoardTask } from "@/lib/types";
+import { normalizeSearch } from "@/lib/search-accents";
 import { MentionText } from "../ui/MentionText";
 import { useBoard, useTasks } from "./context";
 
 const MAX_RESULTS = 8;
-
-const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 /**
  * «Bloqueada por»: muestra la tarea que bloquea (con enlace que la abre) y un buscador de las tareas del proyecto para
@@ -31,14 +30,14 @@ export function BlockerPicker({ task, onChange }: { task: BoardTask; onChange: (
   const title = mentionsToPlain(live?.title ?? blocked?.title ?? "");
 
   const byId = new Map(tasks.map((x) => [x.id, x]));
-  const words = norm(query).split(/\s+/).filter(Boolean);
+  const words = normalizeSearch(query).split(/\s+/).filter(Boolean);
   // Primero el texto; wouldCycle (que sigue la cadena) solo se calcula sobre los que se van a enseñar, sin recorrer todo el tablero.
   const candidates: BoardTask[] = [];
   if (searching) {
     for (const x of tasks) {
       if (candidates.length >= MAX_RESULTS) break;
       if (x.id === task.id || x.id === blocked?.id) continue;
-      if (!words.every((w) => norm(mentionsToPlain(x.title)).includes(w))) continue;
+      if (!words.every((w) => normalizeSearch(mentionsToPlain(x.title)).includes(w))) continue;
       if (wouldCycle(task.id, x.id, (id) => byId.get(id)?.blockedBy?.id)) continue;
       candidates.push(x);
     }

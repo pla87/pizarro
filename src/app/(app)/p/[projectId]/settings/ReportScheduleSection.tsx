@@ -5,7 +5,7 @@ import { saveReportSchedule } from "@/actions/report-schedule";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 
-export interface ReportScheduleValue {
+interface ReportScheduleValue {
   enabled: boolean;
   recipient: string;
   /** 1 = lunes … 7 = domingo */

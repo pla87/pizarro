@@ -12,7 +12,7 @@ const pageIsEnglish = () => typeof document !== "undefined" && document.document
  * El de TipTap excluye cualquier otra marca: el Markdown con código dentro de una negrita o de un enlace no cabía en el
  * documento y pegarlo (o abrirlo) lanzaba «Invalid collection of marks for node text: bold,code» sin pegar nada.
  */
-export const InlineCode = Code.extend({ excludes: "code" });
+const InlineCode = Code.extend({ excludes: "code" });
 
 /** Celdas de una tabla GFM («| a | b |»), sin la fila separadora; el texto de cada celda tal cual (con su Markdown). */
 export function tableRows(raw: string): string[][] {
@@ -33,7 +33,7 @@ export function tableRows(raw: string): string[][] {
  * solo lectura, se edita en el modo Markdown) y se guarda exactamente con el texto original. Sin este nodo, abrir y
  * guardar una descripción con una tabla en el editor con barra la borraba.
  */
-export const MarkdownTable = Node.create({
+const MarkdownTable = Node.create({
   name: "markdownTable",
   group: "block",
   atom: true,
@@ -68,7 +68,7 @@ export const MarkdownTable = Node.create({
  * Imagen de Markdown (`![texto](/api/attachments/…)`): se ve en el editor si es un adjunto (como en la descripción
  * guardada) y se guarda con el texto original. Sin este nodo el editor con barra la convertía en su texto alternativo.
  */
-export const MarkdownImage = Node.create({
+const MarkdownImage = Node.create({
   name: "markdownImage",
   group: "inline",
   inline: true,

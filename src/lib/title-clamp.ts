@@ -3,7 +3,7 @@
 import { MAX_TITLE } from "./constants";
 import { mentionRegex, mentionsToPlain } from "./mentions";
 
-export interface ClampedTitle {
+interface ClampedTitle {
   /** Título ya cortado (con las menciones enteras). */
   value: string;
   /** true si el original superaba el máximo y se ha cortado. */

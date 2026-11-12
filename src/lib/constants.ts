@@ -34,7 +34,7 @@ export const COLUMN_ROLE_LABEL: Record<ColumnRoleValue, string> = {
   BUDGET: "Presupuesto (suma el coste)",
 };
 
-export const DEFAULT_COLUMNS: { name: string; nameEn: string; role: ColumnRoleValue; isDone: boolean }[] = [
+const DEFAULT_COLUMNS: { name: string; nameEn: string; role: ColumnRoleValue; isDone: boolean }[] = [
   { name: "Backlog", nameEn: "Backlog", role: "NONE", isDone: false },
   { name: "En progreso", nameEn: "In progress", role: "NONE", isDone: false },
   { name: "Siguiente salto a producción", nameEn: "Next release", role: "NEXT_RELEASE", isDone: false },
@@ -57,7 +57,7 @@ export const PALETTE = [
 const WHITE_COLOR = "#ffffff";
 export const isWhite = (c: string | null | undefined) => c?.toLowerCase() === WHITE_COLOR;
 /** ¿Color tan claro (blanco o casi) que sobre un fondo claro no se distingue? */
-export function isVeryLight(c: string | null | undefined) {
+function isVeryLight(c: string | null | undefined) {
   const m = /^#([0-9a-f]{6})$/i.exec(c ?? "");
   if (!m) return false;
   const n = parseInt(m[1]!, 16);

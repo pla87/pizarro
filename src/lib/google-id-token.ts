@@ -3,8 +3,8 @@ import { createHash, createPublicKey, randomBytes, verify } from "node:crypto";
 // Parte pura del «Iniciar sesión con Google» (OpenID Connect): URL de autorización con PKCE, comprobación
 // de la firma del id_token con las claves públicas de Google y validación de sus campos. Sin red ni BD.
 
-export const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
-export const GOOGLE_ISSUERS = ["https://accounts.google.com", "accounts.google.com"];
+const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
+const GOOGLE_ISSUERS = ["https://accounts.google.com", "accounts.google.com"];
 /** Cookie temporal del flujo (state, nonce, verificador PKCE y ruta de destino); solo la leen las rutas /api/auth/google. */
 export const GOOGLE_LOGIN_COOKIE = "pz_glogin";
 const CLOCK_SKEW_SECONDS = 60;
@@ -77,7 +77,7 @@ export function idTokenKeyId(idToken: string): string | null {
 
 export type ClaimsFailure = "format" | "issuer" | "audience" | "expired" | "nonce" | "email_unverified" | "domain";
 
-export type ClaimsResult =
+type ClaimsResult =
   | { ok: true; sub: string; email: string; name: string | null }
   | { ok: false; reason: ClaimsFailure };
 

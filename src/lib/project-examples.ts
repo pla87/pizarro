@@ -15,9 +15,9 @@ export type ExampleLocale = "es" | "en";
 
 /** Tipos generales de serie que una tarjeta de ejemplo puede usar (se buscan por su id estable). */
 export const GENERAL_KIND_IDS = { feature: "kind_funcionalidad", bugfix: "kind_correccion" } as const;
-export type GeneralKindRef = keyof typeof GENERAL_KIND_IDS;
+type GeneralKindRef = keyof typeof GENERAL_KIND_IDS;
 
-export interface ExampleTask {
+interface ExampleTask {
   title: string;
   description?: string;
   /** Posición (desde 0) de la columna en `template.columns`. */
@@ -43,7 +43,7 @@ export interface ExampleTask {
   client?: string;
 }
 
-export interface ExampleDeliverable {
+interface ExampleDeliverable {
   name: string;
   description?: string;
   /** Fecha objetivo: días desde hoy. */
@@ -60,7 +60,7 @@ export interface ProjectExampleContent {
   tasks: ExampleTask[];
 }
 
-export interface ProjectExample {
+interface ProjectExample {
   /** Identificador estable (lo recibe createProject). */
   key: string;
   es: ProjectExampleContent;
@@ -399,7 +399,7 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
 
 export const EXAMPLE_KEYS = PROJECT_EXAMPLES.map((e) => e.key);
 
-export function exampleByKey(key: string | null | undefined): ProjectExample | undefined {
+function exampleByKey(key: string | null | undefined): ProjectExample | undefined {
   return key ? PROJECT_EXAMPLES.find((e) => e.key === key) : undefined;
 }
 

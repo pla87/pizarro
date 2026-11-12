@@ -31,7 +31,7 @@ const ENTITIES: Record<string, string> = {
   uuml: "ü", Uuml: "Ü", ccedil: "ç", Ccedil: "Ç", ordm: "º", ordf: "ª", shy: "",
 };
 
-export function decodeEntities(s: string): string {
+function decodeEntities(s: string): string {
   return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]*);?/gi, (m, ref: string) => {
     if (ref[0] === "#") {
       const code = ref[1] === "x" || ref[1] === "X" ? parseInt(ref.slice(2), 16) : parseInt(ref.slice(1), 10);

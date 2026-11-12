@@ -9,7 +9,7 @@ import { cn } from "./cn";
 import { copyText } from "./clipboard";
 
 /** Copia la descripción con formato (text/html) y como Markdown (text/plain); sin ClipboardItem, solo el Markdown. */
-export async function copyDescription(markdown: string): Promise<boolean> {
+async function copyDescription(markdown: string): Promise<boolean> {
   try {
     if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
       const { markdownToHtml } = await import("@/lib/markdown-html");

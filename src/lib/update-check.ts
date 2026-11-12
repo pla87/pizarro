@@ -11,7 +11,7 @@ const CACHE_KEY = "updateCheck";
 const DISMISS_KEY = "updateDismissed";
 
 /** UPDATE_CHECK=0 (o false/off) desactiva por completo la consulta a GitHub. */
-export function updateCheckEnabled(): boolean {
+function updateCheckEnabled(): boolean {
   return !/^(0|false|off|no)$/i.test((process.env.UPDATE_CHECK ?? "").trim());
 }
 
@@ -55,7 +55,7 @@ function refreshInBackground(row: string | undefined, now: number): Promise<void
  * si toca consultar GitHub, la consulta va en segundo plano y esta respuesta usa lo que ya había en caché.
  * Con `wait` (tests) espera a la consulta.
  */
-export async function computeUpdateNotice(now: number = Date.now(), wait = false): Promise<UpdateInfo | null> {
+async function computeUpdateNotice(now: number = Date.now(), wait = false): Promise<UpdateInfo | null> {
   if (!updateCheckEnabled()) return null;
   try {
     const [row, dismissed] = await Promise.all([

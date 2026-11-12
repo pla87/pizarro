@@ -60,14 +60,14 @@ export function mbText(bytes: number, locale = "es-ES"): string {
 }
 
 /** Fallo de subida; `code` = «task_total» cuando se supera el máximo de adjuntos de la tarea. */
-export class UploadError extends Error {
+class UploadError extends Error {
   constructor(message: string, public readonly code?: string, public readonly status?: number, public readonly retryAfterSec?: number | null) {
     super(message);
   }
 }
 
 /** `onCreate`: adjunto de una tarea recién creada (deshacer la creación se lo lleva, no cuenta aparte). Reintenta con calma ante 429/503. */
-export async function uploadFile(taskId: string, file: File, onCreate = false, t: T = esT, signal?: AbortSignal): Promise<UploadedAttachment> {
+async function uploadFile(taskId: string, file: File, onCreate = false, t: T = esT, signal?: AbortSignal): Promise<UploadedAttachment> {
   const isImage = isImageFile(file);
   const fallback = isImage ? `${t("captura")}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png` : t("archivo");
   const name = file.name && !(isImage && file.name === "image.png") ? file.name : fallback;
@@ -143,7 +143,7 @@ export interface BatchProgress {
   active: string[];
 }
 
-export interface BatchResult {
+interface BatchResult {
   uploaded: UploadedAttachment[];
   /** Mensajes de error de las subidas fallidas (sin las que no llegaron a empezar). */
   errors: string[];

@@ -17,7 +17,7 @@ import { buildWeekPlan, type WeekPlanGroupBy } from "./week-plan";
 // Genera el informe PDF de un proyecto. Lo usan la descarga (API) y el envío semanal por email;
 // quien llama comprueba antes que la persona puede ver el proyecto.
 
-export interface ProjectReportPdf {
+interface ProjectReportPdf {
   project: { id: string; name: string };
   pdf: Uint8Array;
   today: string;
@@ -34,8 +34,8 @@ export interface ProjectReportPdf {
 // lo pidió recibe un error claro.
 let reportQueue: Promise<unknown> = Promise.resolve();
 
-export const PDF_RENDER_TIMEOUT_MS = 90_000;
-export const PDF_TIMEOUT_MESSAGE = "El PDF tardó demasiado; inténtalo de nuevo";
+const PDF_RENDER_TIMEOUT_MS = 90_000;
+const PDF_TIMEOUT_MESSAGE = "El PDF tardó demasiado; inténtalo de nuevo";
 
 /** Error de un render que superó el tiempo máximo (504 para las rutas). */
 export class PdfTimeoutError extends AppError {
@@ -82,7 +82,7 @@ export function queuedRender<T>(render: (signal: AbortSignal) => Promise<T>, tim
 }
 
 /** Genera un PDF en el worker, en la cola y con tiempo máximo. */
-export const renderPdf = (job: PdfJob): Promise<Uint8Array> => queuedRender((signal) => renderInWorker(job, signal));
+const renderPdf = (job: PdfJob): Promise<Uint8Array> => queuedRender((signal) => renderInWorker(job, signal));
 
 /**
  * Añade a cada release su número de tareas con un groupBy filtrado por sus ids (un `_count` de relación agruparía todas

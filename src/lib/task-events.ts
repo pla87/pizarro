@@ -9,9 +9,9 @@ import type { T } from "../i18n/core";
 // se conserva un año. Lo escribe runAction junto al registro de actividad: o bien los eventos que la
 // acción fija con recordTaskEvent, o bien, si no hay, la propia etiqueta de describeAction.
 
-export const TASK_EVENT_RETENTION_DAYS = 365;
+const TASK_EVENT_RETENTION_DAYS = 365;
 /** Máximo de eventos que se devuelven al abrir el historial. */
-export const TASK_HISTORY_LIMIT = 200;
+const TASK_HISTORY_LIMIT = 200;
 
 /** Acciones con etiqueta que no merecen una línea de historial. */
 const IGNORED = new Set(["tasks.reorderSubtask", "undo.undoLast", "undo.redoLast"]);

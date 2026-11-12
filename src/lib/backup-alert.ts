@@ -6,6 +6,7 @@ import { backupDestinationsInfo, backupKeyState, listBackups, readStatus } from 
 import { db } from "./db";
 import { logEvent } from "./log";
 import { emailEnabled } from "./mail";
+import { logMailError } from "./mask-email";
 
 const MAIL_STATE_KEY = "backupAlertMailAt";
 
@@ -56,7 +57,7 @@ export async function notifyBackupAlertIfDue(now: number = Date.now()): Promise<
       await sendBackupAlertMail(a, { lastAt: alert.lastAt, external: alert.reason === "externalNone" || alert.reason === "externalStale" });
       sent++;
     } catch (err) {
-      console.error("[backup-alert] email", err);
+      logMailError("[backup-alert] email", err);
     }
   }
   logEvent({

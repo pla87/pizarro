@@ -26,7 +26,7 @@ const running = ((globalThis as unknown as { __pzReleaseCopies?: Set<string> }).
  * Si el proceso muere a mitad, el pendiente queda en la BD y `resumePendingReleaseAttachments` lo retoma.
  * Es idempotente: se omiten los adjuntos cuya copia (mismo nombre) ya existe en la release.
  */
-export async function saveReleaseAttachments(releaseId: string, job: PendingJob): Promise<void> {
+async function saveReleaseAttachments(releaseId: string, job: PendingJob): Promise<void> {
   if (running.has(releaseId)) return;
   running.add(releaseId);
   try {

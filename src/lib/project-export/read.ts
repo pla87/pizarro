@@ -155,7 +155,7 @@ const dup = (what: string, values: string[]) => {
 };
 
 /** Coherencia de las referencias internas y de los límites que tiene un proyecto normal. */
-export function validateRefs(data: ProjectExportData, fileShas: Set<string>): void {
+function validateRefs(data: ProjectExportData, fileShas: Set<string>): void {
   const columns = dup("una columna", data.columns.map((c) => c.ref));
   const kinds = dup("un tipo", data.kinds.map((k) => k.ref));
   const labels = dup("una etiqueta", data.labels.map((l) => l.ref));

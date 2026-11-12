@@ -4,7 +4,7 @@
 // se guarda además una fila en TaskFollower. Una fila con `muted` (dejar de seguir) gana siempre al
 // seguimiento implícito, y una sin `muted` (seguir) sirve aunque no se cumpla ninguna condición.
 
-export interface FollowInput {
+interface FollowInput {
   createdById: string | null;
   assigneeId: string | null;
   rows: { userId: string; muted: boolean }[];

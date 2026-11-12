@@ -198,3 +198,20 @@ describe("avisos de cambio de fecha agrupados", () => {
     assert.equal((await db.pendingDueNotice.findFirstOrThrow({ where: { taskId: task.id } })).claimedAt, null);
   });
 });
+
+describe("avisos de fecha obsoletos", () => {
+  test("si la fecha actual ya no es la del aviso pendiente, no se envía", async () => {
+    await db.pendingDueNotice.deleteMany();
+    const actor = await makeUser();
+    const assignee = await makeUser();
+    const f = await makeProject({ members: [actor, assignee] });
+    const task = await makeTask(f, { dueDate: new Date("2026-11-01T00:00:00Z") });
+    await db.task.update({ where: { id: task.id }, data: { assigneeId: assignee.id } });
+    await loginAs(actor);
+    expectOk(await updateTask(task.id, { dueDate: "2026-11-05" }));
+    // La fecha cambia por otra vía (Cancelar, deshacer…) sin pasar por el aviso.
+    await db.task.update({ where: { id: task.id }, data: { dueDate: new Date("2026-11-09T00:00:00Z") } });
+    assert.equal(await deliverDueNotices(new Date(Date.now() + DUE_NOTIFY_DELAY_MS + 30_000)), 0);
+    assert.equal(await db.notification.count({ where: { taskId: task.id, type: "DUE_CHANGED" } }), 0);
+  });
+});

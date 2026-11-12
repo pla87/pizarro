@@ -7,7 +7,7 @@ import { setMyProjectPicks } from "@/actions/projects";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 
-export interface PickProject {
+interface PickProject {
   id: string;
   name: string;
   isPrivate: boolean;

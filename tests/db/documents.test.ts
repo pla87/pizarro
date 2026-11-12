@@ -8,7 +8,7 @@ import { describe, test } from "node:test";
 import { asUser, db, expectFail, expectOk, loginAs, logout, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
 import { deleteDocument, renameDocument } from "../../src/actions/documents";
 import { DOCUMENTS_MAX_PER_PROJECT } from "../../src/lib/document-kind";
-import { createDocumentWithinLimit, findDocumentForUser, listProjectDocuments } from "../../src/lib/documents";
+import { createDocumentWithinLimit, findDocumentForUser, listProjectDocuments, listProjectDocumentsOf, listTrashedDocumentsOf } from "../../src/lib/documents";
 import { createAttachmentWithinLimit } from "../../src/lib/attachment-limit";
 import { purgeProject } from "../../src/lib/project-delete";
 import { storageUsage } from "../../src/lib/storage-usage";
@@ -289,5 +289,13 @@ describe("documentación: borrar y renombrar", () => {
     const doc = await db.projectDocument.create({ data: row(f.project.id, author.id) });
     await db.user.delete({ where: { id: author.id } });
     assert.equal((await db.projectDocument.findUniqueOrThrow({ where: { id: doc.id } })).createdById, null);
+  });
+});
+
+describe("documentación: listados sin comprobación de acceso", () => {
+  test("listProjectDocumentsOf / listTrashedDocumentsOf listan sin comprobar el acceso", async () => {
+    const f = await makeProject({ members: [] });
+    assert.deepEqual(await listProjectDocumentsOf(f.project.id), []);
+    assert.deepEqual(await listTrashedDocumentsOf(f.project.id), []);
   });
 });

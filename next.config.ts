@@ -44,7 +44,9 @@ const nextConfig: NextConfig = {
   // La zona horaria ya no se fija aquí: el navegador la recibe del servidor (data-tz en <html>, ver lib/format.ts).
   env: { NEXT_PUBLIC_BUILD_ID: buildId, NEXT_PUBLIC_GIT_COMMIT: buildCommit(process.env), NEXT_PUBLIC_OFFICIAL_BUILD: official ?? "" },
   reactStrictMode: true,
-  serverExternalPackages: ["sharp", "@react-pdf/renderer"],
+  // @react-pdf/renderer no está aquí: el servidor de Next no lo carga (solo importa sus tipos); el PDF se genera en un
+  // worker con su propio paquete, dist/pdf-worker.mjs (scripts/postbuild.mjs).
+  serverExternalPackages: ["sharp"],
   experimental: {
     // Las imágenes van por /api/tasks/[id]/attachments; las acciones solo mueven JSON.
     serverActions: { bodySizeLimit: "1mb" },

@@ -10,6 +10,7 @@ import { applyNewPassword } from "@/lib/account";
 import { sendEmailChangeMail, sendEmailChangeRequestedMail, sendPasswordChangeMail } from "@/lib/auth-mail";
 import { issueAuthToken } from "@/lib/auth-token";
 import { appUrl, emailEnabled } from "@/lib/mail";
+import { logMailError } from "@/lib/mask-email";
 import { hashPassword, passwordSchema, verifyPassword } from "@/lib/password";
 import { POSITION_STEP } from "@/lib/positions";
 import { createSession, currentSessionId, requireUser } from "@/lib/session";
@@ -166,7 +167,7 @@ export async function changePassword(current: string, next: string) {
       try {
         await sendPasswordChangeMail(user, `${appUrl()}/confirm/${token}`);
       } catch (err) {
-        console.error("[profile] email de confirmación", err);
+        logMailError("[profile] email de confirmación", err);
         throw new AppError("No se pudo enviar el email de confirmación. Inténtalo más tarde.");
       }
       return { pending: true };
@@ -193,11 +194,11 @@ export async function requestEmailChange(newEmail: string, currentPassword: stri
     try {
       await sendEmailChangeMail(user, email, `${appUrl()}/confirm/${token}`);
     } catch (err) {
-      console.error("[profile] email de confirmación", err);
+      logMailError("[profile] email de confirmación", err);
       throw new AppError("No se pudo enviar el email de confirmación. Inténtalo más tarde.");
     }
     // Aviso a la dirección actual; si falla, el cambio sigue pendiente de confirmar.
-    await sendEmailChangeRequestedMail(user, email).catch((err) => console.error("[profile] aviso al email antiguo", err));
+    await sendEmailChangeRequestedMail(user, email).catch((err) => logMailError("[profile] aviso al email antiguo", err));
   });
 }
 

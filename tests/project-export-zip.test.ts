@@ -12,6 +12,7 @@ import { EXPORT_FORMAT, EXPORT_FORMAT_VERSION, type ExportManifest } from "../sr
 import { assertSupportedVersion, upgrade } from "../src/lib/project-export/upgrade";
 import { isSafeEntryName, ZipFile, ZipReadError } from "../src/lib/zip-read";
 import { streamZip, streamZipSize, type StreamZipEntry } from "../src/lib/zip-stream";
+import { personLine } from "../src/lib/person-line";
 
 const dir = mkdtempSync(path.join(tmpdir(), "pz-pexport-"));
 
@@ -189,4 +190,11 @@ test("el lector rechaza un directorio central desproporcionado para su número d
   const file = path.join(dir, "cd-enorme.zip");
   writeFileSync(file, Buffer.concat([body, eocd]));
   await assert.rejects(ZipFile.open(file), /Directorio central no válido/);
+});
+
+test("resumen de importación: el email no se repite", () => {
+  assert.equal(personLine({ name: "", email: "desconocido@example.com" }), "desconocido@example.com");
+  assert.equal(personLine({ name: "Desconocido@Example.com", email: "desconocido@example.com" }), "desconocido@example.com");
+  assert.equal(personLine({ name: "Ana", email: "ana@example.com" }), "Ana · ana@example.com");
+  assert.equal(personLine({ name: "Ana", email: "" }), "Ana");
 });

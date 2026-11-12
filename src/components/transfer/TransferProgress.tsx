@@ -5,7 +5,7 @@ import { useT } from "@/i18n/client";
 import { percent, type TransferJobView } from "./client";
 
 /** Texto de la fase en la que va el trabajo (con «N de M» cuando se conoce). */
-export function usePhaseLabel() {
+function usePhaseLabel() {
   const t = useT();
   return (job: TransferJobView): string => {
     if (job.status === "QUEUED") return job.ahead > 0 ? t("En cola ({n} por delante)…", { n: job.ahead }) : t("En cola…");
