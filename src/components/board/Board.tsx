@@ -34,6 +34,7 @@ import { BoardContext, useSelectionSize, type BoardApi } from "./context";
 import { createBoardStores, createStore, mergeTasks, tasksById, useStableValue } from "./stores";
 import { ColumnView } from "./ColumnView";
 import { wipExceeded } from "@/lib/wip";
+import { boardDragA11y } from "./drag-a11y";
 import { EVERGREEN_DROPPABLE_PREFIX } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
 import { useCardActions } from "./cardActions";
@@ -1038,6 +1039,29 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     useSensor(PointerSensor, POINTER_OPTIONS),
     useSensor(KeyboardSensor, KEYBOARD_OPTIONS),
   );
+  // Avisos del lector de pantalla al arrastrar: título de la tarjeta y nombre de la columna (no el id).
+  const dragAccessibility = boardDragA11y(
+    t,
+    (id) => {
+      const task = taskById.get(id);
+      return task ? mentionsToPlain(task.title) : t("Tarea");
+    },
+    (id) => {
+      const name = (columnId: string | undefined) => columns.find((c) => c.id === columnId)?.name;
+      if (id.startsWith(EVERGREEN_DROPPABLE_PREFIX)) {
+        const column = name(id.slice(EVERGREEN_DROPPABLE_PREFIX.length));
+        return column ? { evergreen: column } : null;
+      }
+      const container = findContainer(dragItems ?? baseItems, id);
+      // Tarea fija aún sin soltar: sigue en el panel de su columna.
+      if (container === EVERGREEN_ORIGIN) {
+        const column = name(taskById.get(id)?.columnId);
+        return column ? { evergreen: column } : null;
+      }
+      const column = name(container);
+      return column ? { column } : null;
+    },
+  );
 
   const onDragStart = ({ active, activatorEvent }: DragStartEvent) => {
     const id = String(active.id);
@@ -1340,6 +1364,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           sensors={sensors}
           collisionDetection={boardCollisionDetection}
           measuring={MEASURING}
+          accessibility={dragAccessibility}
           onDragStart={onDragStart}
           onDragOver={onDragOver}
           onDragEnd={onDragEnd}

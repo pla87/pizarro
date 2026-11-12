@@ -189,7 +189,7 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
         <div
           ref={backdrop}
           aria-hidden
-          className={cn(className, "pointer-events-none absolute inset-0 overflow-hidden text-transparent!")}
+          className={cn(className, "pointer-events-none absolute inset-0 overflow-hidden text-transparent!", rest.disabled && "bg-slate-100 dark:bg-slate-800/60")}
           style={{ whiteSpace: "pre-wrap", overflowWrap: "break-word" }}
           data-mention-backdrop=""
         >

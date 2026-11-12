@@ -180,7 +180,8 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
 function EvergreenCard({ id }: { id: string }) {
   const { kindById, openTask, dragHandle, setEvergreenEvery } = useBoard();
   const t = useT();
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({ id });
+  // Rol que lee el lector de pantalla (dnd-kit dice «draggable»).
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({ id, attributes: { roleDescription: t("arrastrable") } });
   // Archivos soltados sobre la tarea: se adjuntan a ella (y no abren la tarea nueva del panel).
   const fileDrop = useCardFileDrop(id, true);
   const task = useTask(id);

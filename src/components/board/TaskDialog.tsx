@@ -38,6 +38,7 @@ import { isOfflineMessage, loadWhenOnline } from "@/lib/connection";
 import { actionThrowMessage } from "@/lib/stale-action";
 import { textHash, type TextSince } from "@/lib/text-version";
 import { boardClients, useBoard } from "./context";
+import { subtaskDragA11y } from "./drag-a11y";
 import { isTypingTarget, useShortcut } from "./shortcuts";
 import { weekdayName } from "./recurrence-ui";
 import { TaskViewers } from "./TaskViewers";
@@ -1686,6 +1687,15 @@ function Subtasks({ taskId, detail, setDetail, flushRef, draftRef, blurHeld, onU
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+  // Avisos del lector de pantalla al arrastrar: título y posición de la subtarea (no su id).
+  const dragAccessibility = subtaskDragA11y(
+    t,
+    (id) => list.find((x) => x.id === id)?.title ?? t("Subtareas"),
+    (id) => {
+      const n = list.findIndex((x) => x.id === id);
+      return n < 0 ? null : { n: n + 1, total: list.length };
+    },
+  );
 
   const onDragEnd = async ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return;
@@ -1734,7 +1744,7 @@ function Subtasks({ taskId, detail, setDetail, flushRef, draftRef, blurHeld, onU
           />
         </div>
       </div>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} accessibility={dragAccessibility} onDragEnd={onDragEnd}>
         <SortableContext items={list.map((s) => s.id)} strategy={verticalListSortingStrategy}>
           <ul className="space-y-0.5">
             {list.map((s) => (
@@ -1756,7 +1766,8 @@ function SubtaskRow({ s, editing, blurHeld, onEdit, onRename, onDraft, onToggle,
   s: SubtaskInfo; editing: boolean; blurHeld?: () => boolean; onEdit: () => void; onRename: (title: string) => void; onDraft: (title: string) => void; onToggle: () => void; onRemove: () => void;
 }) {
   const t = useT();
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: s.id });
+  // Rol que lee el lector de pantalla en el asa (dnd-kit dice «sortable»).
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: s.id, attributes: { roleDescription: t("ordenable") } });
   const [draft, setDraft] = useState(s.title);
   // Evita guardar dos veces (Enter y el blur posterior) o guardar tras Escape.
   const settled = useRef(false);
