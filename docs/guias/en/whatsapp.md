@@ -9,7 +9,7 @@ icono: message
 
 Pizarro can send notices (mentions, assignments, comments…) through WhatsApp using Meta's official **WhatsApp Cloud
 API**. Unlike Telegram, **it's paid**: Meta charges for every notice it delivers. Setting it up takes from half an hour
-to a day (Meta has to approve the message template).
+to a day (Meta has to approve both message templates: the one for notices and the one for the code).
 
 If you want something free and quicker to set up, use [Telegram](telegram.md).
 
@@ -30,6 +30,9 @@ You need:
   10 and 35 € a month.
 - To avoid surprises, Pizarro sends at most **10 WhatsApp messages per person per hour** (the rest stay in Pizarro's
   bell) and, by default, each person only gets **mentions and assignments**.
+- The verification code (sent once, when a number is connected) uses an **Authentication** template: in Spain, roughly
+  **2 euro cents** per message (about €0.017 on the October 2026 rates). Meta charges each delivered message, not
+  conversations.
 - Messages with the verification code and test messages from My profile are charged too: at most **5 a day per person**
   and **3 a day per destination number** (whoever asks for them).
 - A notice that fails is not repeated if Meta may have sent it (5xx error, dropped connection or timeout): only
@@ -70,10 +73,10 @@ The temporary token shown in “API Setup” expires after 24 hours. Pizarro nee
    `whatsapp_business_management` permissions.
 4. Copy the token (it starts with `EAA…`). It isn't shown again.
 
-## Step 5. Create the message template
+## Step 5. Create the notice template
 
-Outside a conversation started by the person, WhatsApp only lets you send **approved templates**. Pizarro uses a single
-one for every notice.
+Outside a conversation started by the person, WhatsApp only lets you send **approved templates**. Pizarro uses two: this
+one, for every notice, and the verification code one (step 6).
 
 1. Go to [WhatsApp Manager](https://business.facebook.com/wa/manage/message-templates/) → **Message templates → Create
    template**.
@@ -109,7 +112,26 @@ You can change these notices in your Pizarro profile.
 
 Pizarro fills in the variables in each person's language; the rest of the text is the template's.
 
-## Step 6. Set it up in Pizarro
+## Step 6. Create the verification code template
+
+Each person confirms their number with a 6-digit code. Meta requires one-time codes to go in an **Authentication**
+template (if they go in a utility one, Meta may recategorise or pause it). You don't write this template: Meta sets the
+text.
+
+1. In [WhatsApp Manager](https://business.facebook.com/wa/manage/message-templates/) → **Message templates → Create
+   template**.
+2. Category: **Authentication** (one-time passcode).
+3. Name: `codigo_pizarro` (exactly like that).
+4. Language: the main language of `aviso_pizarro` (the one in **Language** in Pizarro, for example **Spanish**, `es`).
+5. Code delivery: **Copy code**. Keep the button text Meta suggests (“Copy code”).
+6. Optional: add the security recommendation (“For your security, do not share this code”) and the expiry, set to
+   **15 minutes** (how long the code lasts in Pizarro).
+7. Press **Submit**. Authentication templates are usually approved within minutes.
+
+The message reads “**123456** is your verification code.” (in Spanish, “Tu código de verificación es **123456**.”) with
+a **Copy code** button.
+
+## Step 7. Set it up in Pizarro
 
 1. In Pizarro, go to **Administration → Settings → 3. Telegram and WhatsApp notices → WhatsApp**.
 2. Fill in:
@@ -120,25 +142,30 @@ Pizarro fills in the variables in each person's language; the rest of the text i
      `es_ES` or `en_US`).
    - **English language** (optional): `en` if the template has both languages; it's used for people who have Pizarro in
      English.
+   - **Verification template**: `codigo_pizarro` (the default if you leave it empty).
+   - **Verification language**: empty (uses the same as the notices) or the code it was approved with.
 3. Press **Save** and then **Enable**.
 
 The token is stored encrypted and never shown again (only its last 4 characters).
 
-## Step 7. Test sending
+## Step 8. Test sending
 
 1. In the same section, type a number in international format (for example `+34600111222`) and press **Test**. With
    Meta's test number, it must be one of the 5 verified numbers.
-2. A WhatsApp with “Pizarro test message…” arrives. If it fails, Pizarro shows the error Meta returned.
+2. Two WhatsApp messages arrive: “Pizarro test message…” (notice template) and a sample code, `123456` (verification
+   template). If either fails, Pizarro says which one and shows the error Meta returned.
 
-## Step 8. Each person connects their WhatsApp
+## Step 9. Each person connects their WhatsApp
 
 1. **My profile → Notices → Notices on your phone → WhatsApp**: type your number in international format (`+34…`).
 2. Tick the **consent** box (you agree to receive Pizarro notices on WhatsApp at that number).
-3. Press **Save and send code**. A WhatsApp from Pizarro arrives with “Your Pizarro verification code is 123456”.
+3. Press **Save and send code**. A WhatsApp arrives with “123456 is your verification code.” and a **Copy code**
+   button.
 4. Type those **6 digits** in My profile and press **Confirm**. From then on you get notices on WhatsApp.
 5. Choose which notices you want on WhatsApp and press **Save**. By default, mentions and assignments.
 
-The code goes in the same `aviso_pizarro` template (in the `{{1}}` variable): no separate template is needed. It expires
+The code goes in the `codigo_pizarro` verification template (step 6). If Meta doesn't have it or it isn't approved,
+the person is told to let the administrator know and **Administration → Settings** shows the reason. It expires
 after **15 minutes** and allows **5 attempts**; if it expires or they run out, press **Send another code** (the previous
 one stops working). Without the code nobody gets notices: that way nobody can enter someone else's number and send them
 paid notices. People can disconnect at any time.
@@ -150,7 +177,10 @@ notices on, tick the consent box and confirm it with the code (or press **Delete
 
 Installations that already set up WhatsApp with server variables keep working without changes: `WHATSAPP_TOKEN`,
 `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANG` and `WHATSAPP_API_VERSION` (default
-`v23.0`).
+`v23.0`). The verification template has no variable: it is set in Settings and, otherwise, it is `codigo_pizarro`.
+
+If you already sent WhatsApp notices with an earlier version, create the `codigo_pizarro` template (step 6): until then
+nobody can connect a new number. People who were already connected keep getting notices.
 
 Precedence: **what you save in Administration → Settings wins, field by field**; empty fields use those variables. Until
 you press Enable or Turn off, WhatsApp is on if the settings are complete.
@@ -167,6 +197,8 @@ your template with another name already has the three variables of `aviso_pizarr
 - **Error 132001 (template doesn't exist)**: the name or language don't match the approved template. Check **Template
   name** and **Language** (`es` isn't the same as `es_ES`).
 - **Error 132000 (number of parameters)**: the template doesn't have exactly the variables `{{1}}`, `{{2}}` and `{{3}}`.
+- **Error 132001 or 132000 with `codigo_pizarro`**: the verification template is missing, not approved yet, in another
+  language or was created as Utility. It must be in the **Authentication** category with **Copy code** (step 6).
 - **Error 131030 (recipient not allowed)**: with the test number, add the number in the **To** field of “API Setup”.
 - **Error 190 or 401 (token)**: the token expired or lacks permissions. Generate a permanent one (step 4).
 - **Error 131026 (couldn't be delivered)**: that number has no WhatsApp or doesn't accept business messages.

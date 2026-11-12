@@ -5,8 +5,8 @@ import { decryptSecret, encryptSecret } from "./keyring";
 import {
   last4, NO_TELEGRAM, parseTelegramSettings, parseWhatsappSettings, resolveTelegramConfig, resolveWhatsappConfig,
   TELEGRAM_BOT_ID_KEY, TELEGRAM_BOT_KEY, TELEGRAM_ENABLED_KEY, TELEGRAM_KEYS, TELEGRAM_LAST4_KEY, TELEGRAM_SECRET_KEY, TELEGRAM_TOKEN_KEY,
-  WHATSAPP_ENABLED_KEY, WHATSAPP_KEYS, WHATSAPP_LANG_EN_KEY, WHATSAPP_LANG_KEY, WHATSAPP_LAST4_KEY, WHATSAPP_PHONE_ID_KEY, WHATSAPP_TEMPLATE_KEY, WHATSAPP_TOKEN_KEY,
-  type TelegramConfig, type TelegramSettings, type WhatsappConfig, type WhatsappSettings, type WhatsappSettingsInput,
+  WHATSAPP_CODE_ERROR_KEY, WHATSAPP_CODE_LANG_KEY, WHATSAPP_CODE_TEMPLATE_KEY, WHATSAPP_ENABLED_KEY, WHATSAPP_KEYS, WHATSAPP_LANG_EN_KEY, WHATSAPP_LANG_KEY, WHATSAPP_LAST4_KEY, WHATSAPP_PHONE_ID_KEY, WHATSAPP_TEMPLATE_KEY, WHATSAPP_TOKEN_KEY,
+  type CodeTemplateError, type TelegramConfig, type TelegramSettings, type WhatsappConfig, type WhatsappSettings, type WhatsappSettingsInput,
 } from "./messaging-core";
 
 // Configuración de Telegram y WhatsApp guardada en Administración → Ajustes (AppState, con los tokens cifrados con
@@ -151,15 +151,19 @@ export async function clearTelegram(): Promise<void> {
 }
 
 /** Guarda los ajustes de WhatsApp. `token`: "" = conservar el guardado; `clearToken` lo borra (vuelve a usarse WHATSAPP_TOKEN si existe). */
-export async function saveWhatsappSettings(input: WhatsappSettingsInput, opts: { token?: string; clearToken?: boolean; enabled?: boolean }): Promise<"set" | "cleared" | "unchanged"> {
+export async function saveWhatsappSettings(input: Required<WhatsappSettingsInput>, opts: { token?: string; clearToken?: boolean; enabled?: boolean }): Promise<"set" | "cleared" | "unchanged"> {
   const entries: [string, string][] = [
     [WHATSAPP_PHONE_ID_KEY, input.phoneNumberId],
     [WHATSAPP_TEMPLATE_KEY, input.templateName],
     [WHATSAPP_LANG_KEY, input.templateLang],
     [WHATSAPP_LANG_EN_KEY, input.templateLangEn],
+    [WHATSAPP_CODE_TEMPLATE_KEY, input.codeTemplateName],
+    [WHATSAPP_CODE_LANG_KEY, input.codeTemplateLang],
   ];
   if (opts.enabled !== undefined) entries.push([WHATSAPP_ENABLED_KEY, String(opts.enabled)]);
-  const remove: string[] = [];
+  // Al guardar se olvida el último rechazo de la plantilla de verificación: el administrador puede haberla arreglado
+  // (el siguiente código, o «Probar», lo vuelve a comprobar).
+  const remove: string[] = [WHATSAPP_CODE_ERROR_KEY];
   let change: "set" | "cleared" | "unchanged" = "unchanged";
   if (opts.clearToken) {
     remove.push(WHATSAPP_TOKEN_KEY, WHATSAPP_LAST4_KEY);
@@ -175,5 +179,16 @@ export async function saveWhatsappSettings(input: WhatsappSettingsInput, opts: {
 
 export async function setWhatsappEnabled(enabled: boolean): Promise<void> {
   await upsert([[WHATSAPP_ENABLED_KEY, String(enabled)]]);
+  await reloadMessagingConfig();
+}
+
+/**
+ * Apunta (o, con null, olvida) que Meta rechazó la plantilla de verificación, para que Ajustes y Mi perfil lo expliquen.
+ * Solo escribe si cambia algo: se llama tras cada envío de un código.
+ */
+export async function setWhatsappCodeTemplateError(err: CodeTemplateError | null): Promise<void> {
+  const cur = (await loadMessagingConfig({ fresh: true })).whatsappSettings.codeTemplateError;
+  if (!err && !cur) return;
+  await upsert(err ? [[WHATSAPP_CODE_ERROR_KEY, JSON.stringify(err)]] : [], err ? [] : [WHATSAPP_CODE_ERROR_KEY]);
   await reloadMessagingConfig();
 }

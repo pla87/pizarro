@@ -1,8 +1,7 @@
 // Revisión de la mensajería (Telegram y WhatsApp): código de verificación de WhatsApp, topes de los mensajes de
 // prueba y plantillas configuradas por variables. Clave: texto exacto en español.
 export const rev2: Record<string, string> = {
-  // Mensaje con el código (variable {{1}} de la plantilla) y su comprobación.
-  "Tu código de verificación de Pizarro es {code}": "Your Pizarro verification code is {code}",
+  // Envío del código y su comprobación.
   "No se pudo enviar el código por WhatsApp.": "The code could not be sent by WhatsApp.",
   "Escribe el código de 6 cifras que te ha llegado por WhatsApp.": "Enter the 6-digit code you received on WhatsApp.",
   "El código no es correcto. Te queda 1 intento.": "That code is not correct. You have 1 attempt left.",

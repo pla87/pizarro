@@ -47,7 +47,7 @@ afterEach(async () => {
   invalidateAppSettings();
 });
 
-type Template = { language: { code: string }; components: { parameters: { text: string }[] }[] };
+type Template = { name: string; language: { code: string }; components: { parameters: { text: string }[] }[] };
 const lastTemplate = () => calls.filter((c) => c.url.includes("graph.facebook.com")).at(-1)?.body.template as Template | undefined;
 
 describe("idioma de quien se identifica sin sesión", () => {
@@ -127,21 +127,17 @@ describe("WhatsApp en inglés sin «Idioma en inglés»", () => {
     assert.match(tpl.components[0]!.parameters[0]!.text, /^Carlos te ha asignado/);
   });
 
-  test("el código de verificación, igual; con la plantilla en inglés, en inglés", async () => {
-    let user = await setup("");
-    await loginAs(user);
-    expectOk(await saveMyWhatsapp({ phone: "+34600111333", consent: true }));
-    let tpl = lastTemplate()!;
-    assert.equal(tpl.language.code, "es");
-    assert.match(tpl.components[0]!.parameters[0]!.text, /^Tu código de verificación de Pizarro es \d{6}$/);
-
-    await db.appState.deleteMany({ where: { key: { startsWith: "whatsapp." } } });
-    user = await setup("en");
-    await loginAs(user);
-    expectOk(await saveMyWhatsapp({ phone: "+34600111444", consent: true }));
-    tpl = lastTemplate()!;
-    assert.equal(tpl.language.code, "en");
-    assert.match(tpl.components[0]!.parameters[0]!.text, /^Your Pizarro verification code is \d{6}$/);
+  test("el código de verificación va en la plantilla de autenticación y en su idioma (el texto lo pone Meta), haya o no traducción inglesa de los avisos", async () => {
+    for (const [langEn, phone] of [["", "+34600111333"], ["en", "+34600111444"]] as const) {
+      await db.appState.deleteMany({ where: { key: { startsWith: "whatsapp." } } });
+      const user = await setup(langEn);
+      await loginAs(user);
+      expectOk(await saveMyWhatsapp({ phone, consent: true }));
+      const tpl = lastTemplate()!;
+      assert.equal(tpl.name, "codigo_pizarro");
+      assert.equal(tpl.language.code, "es");
+      assert.match(tpl.components[0]!.parameters[0]!.text, /^\d{6}$/);
+    }
   });
 });
 

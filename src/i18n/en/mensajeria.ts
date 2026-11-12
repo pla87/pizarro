@@ -42,7 +42,6 @@ export const mensajeria: Record<string, string> = {
   "Configuración de WhatsApp guardada.": "WhatsApp settings saved.",
   "Avisos por WhatsApp activados.": "WhatsApp notices turned on.",
   "Avisos por WhatsApp desactivados.": "WhatsApp notices turned off.",
-  "WhatsApp de prueba enviado a {to}.": "Test WhatsApp sent to {to}.",
   "Vacío = {value} (variable {name} del servidor)": "Empty = {value} (server variable {name})",
   "WhatsApp (de pago, Cloud API de Meta)": "WhatsApp (paid, Meta Cloud API)",
   "Activo: {n} persona(s) conectada(s) y {p} pendiente(s) de confirmar su número.": "On: {n} person(s) connected and {p} still to confirm their number.",
@@ -67,7 +66,6 @@ export const mensajeria: Record<string, string> = {
   "opcional, p. ej. en": "optional, e.g. en",
   "Lo que guardas aquí manda; los campos vacíos usan las variables WHATSAPP_* del servidor, si las hay. «Idioma en inglés» se usa con quien tiene Pizarro en inglés (añade esa traducción a la misma plantilla en Meta).": "What you save here wins; empty fields use the server's WHATSAPP_* variables, if any. “English language” is used for people who have Pizarro in English (add that translation to the same template in Meta).",
   "Número para la prueba": "Number for the test",
-  "Envía la plantilla con un texto de prueba a ese número (con el número de prueba de Meta, solo a los números verificados).": "Sends the template with a test text to that number (with Meta's test number, only to verified numbers).",
 
   // Mi perfil → Avisos
   "Cuando alguien te menciona con @ en una tarjeta o comentario, siempre te aparece en la campana de avisos. Además puedes recibirlo por email:": "When someone mentions you with @ on a card or comment, it always appears in the notices bell. You can also get it by email:",

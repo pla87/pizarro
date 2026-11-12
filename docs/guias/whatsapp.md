@@ -9,7 +9,7 @@ icono: message
 
 Pizarro puede enviar los avisos (menciones, asignaciones, comentarios…) por WhatsApp con la **WhatsApp Cloud API**
 oficial de Meta. A diferencia de Telegram, **es de pago**: Meta cobra cada aviso que entrega. Prepararlo lleva entre
-media hora y un día (Meta tiene que aprobar la plantilla del mensaje).
+media hora y un día (Meta tiene que aprobar las dos plantillas de los mensajes: la de los avisos y la del código).
 
 Si buscas algo gratis y más rápido de preparar, usa [Telegram](telegram.md).
 
@@ -30,6 +30,9 @@ Necesitas:
   entre 10 y 35 € al mes.
 - Para no llevarte sorpresas, Pizarro envía como mucho **10 WhatsApp por persona y hora** (el resto de avisos quedan en
   la campana de Pizarro) y, por defecto, cada persona recibe solo **menciones y asignaciones**.
+- El código de verificación (llega una vez, al conectar el número) va en una plantilla de **Autenticación**: en España,
+  del orden de **2 céntimos de euro** por mensaje (unos 0,017 € en las tarifas de octubre de 2026). Meta cobra cada
+  mensaje entregado, no conversaciones.
 - Los mensajes con el código de verificación y los de prueba desde Mi perfil también se cobran: como mucho **5 al día por
   persona** y **3 al día por número de destino** (pida quien los pida).
 - Un aviso que falla no se repite si Meta pudo haberlo enviado (error 5xx, conexión cortada o tiempo agotado): solo se
@@ -69,10 +72,10 @@ El token temporal que aparece en «Configuración de la API» caduca en 24 horas
    `whatsapp_business_messaging` y `whatsapp_business_management`.
 4. Copia el token (empieza por `EAA…`). No se vuelve a mostrar.
 
-## Paso 5. Crea la plantilla del mensaje
+## Paso 5. Crea la plantilla de los avisos
 
 Fuera de una conversación que haya empezado la persona, WhatsApp solo deja enviar **plantillas aprobadas**. Pizarro usa
-una sola para todos los avisos.
+dos: esta, para todos los avisos, y la del código de verificación (paso 6).
 
 1. Ve a [WhatsApp Manager](https://business.facebook.com/wa/manage/message-templates/) → **Plantillas de mensajes →
    Crear plantilla**.
@@ -109,7 +112,25 @@ You can change these notices in your Pizarro profile.
 
 Las variables las rellena Pizarro en el idioma de cada persona; el resto del texto es el de la plantilla.
 
-## Paso 6. Configúralo en Pizarro
+## Paso 6. Crea la plantilla del código de verificación
+
+Cada persona confirma su número con un código de 6 cifras. Meta exige que los códigos de un solo uso vayan en una
+plantilla de categoría **Autenticación** (si van en una de utilidad, Meta puede reclasificarla o pausarla). Esta
+plantilla no se escribe: el texto lo pone Meta.
+
+1. En [WhatsApp Manager](https://business.facebook.com/wa/manage/message-templates/) → **Plantillas de mensajes →
+   Crear plantilla**.
+2. Categoría: **Autenticación** (contraseña o código de un solo uso).
+3. Nombre: `codigo_pizarro` (exactamente así).
+4. Idioma: el mismo que el de `aviso_pizarro` (**Español**, `es`).
+5. Entrega del código: **Copiar código**. El texto del botón, el que propone Meta («Copiar código»).
+6. Opcional: añade la recomendación de seguridad («Por tu seguridad, no lo compartas») y la caducidad, con
+   **15 minutos** (lo que dura el código en Pizarro).
+7. Pulsa **Enviar**. Las plantillas de autenticación suelen aprobarse en unos minutos.
+
+El mensaje que llega es «Tu código de verificación es **123456**.» con el botón **Copiar código**.
+
+## Paso 7. Configúralo en Pizarro
 
 1. En Pizarro, ve a **Administración → Ajustes → 3. Avisos por Telegram y WhatsApp → WhatsApp**.
 2. Rellena:
@@ -118,26 +139,30 @@ Las variables las rellena Pizarro en el idioma de cada persona; el resto del tex
    - **Nombre de la plantilla**: `aviso_pizarro` (es el valor por defecto si lo dejas vacío).
    - **Idioma**: `es` (o el código exacto con el que se aprobó, por ejemplo `es_ES`).
    - **Idioma en inglés** (opcional): `en` si añadiste la traducción inglesa.
+   - **Plantilla de verificación**: `codigo_pizarro` (es el valor por defecto si lo dejas vacío).
+   - **Idioma de la verificación**: vacío (usa el mismo que los avisos) o el código con el que se aprobó.
 3. Pulsa **Guardar** y después **Activar**.
 
 El token se guarda cifrado y no se vuelve a mostrar (solo sus 4 últimos caracteres).
 
-## Paso 7. Prueba el envío
+## Paso 8. Prueba el envío
 
 1. En la misma sección, escribe un número en formato internacional (por ejemplo `+34600111222`) y pulsa **Probar**.
    Con el número de prueba de Meta, tiene que ser uno de los 5 verificados.
-2. Llega un WhatsApp con «Mensaje de prueba de Pizarro…». Si falla, Pizarro muestra el error que devuelve Meta.
+2. Llegan dos WhatsApp: «Mensaje de prueba de Pizarro…» (plantilla de avisos) y un código de muestra, `123456`
+   (plantilla de verificación). Si alguna falla, Pizarro dice cuál y muestra el error que devuelve Meta.
 
-## Paso 8. Cada persona conecta su WhatsApp
+## Paso 9. Cada persona conecta su WhatsApp
 
 1. **Mi perfil → Avisos → Avisos en el móvil → WhatsApp**: escribe tu número en formato internacional (`+34…`).
 2. Marca la casilla de **consentimiento** (aceptas recibir avisos de Pizarro por WhatsApp en ese número).
-3. Pulsa **Guardar y enviar código**. Te llega un WhatsApp de Pizarro con «Tu código de verificación de Pizarro es
-   123456».
+3. Pulsa **Guardar y enviar código**. Te llega un WhatsApp con «Tu código de verificación es 123456.» y un botón
+   **Copiar código**.
 4. Escribe esas **6 cifras** en Mi perfil y pulsa **Confirmar**. Desde ese momento recibes avisos por WhatsApp.
 5. Elige qué avisos quieres por WhatsApp y pulsa **Guardar**. Por defecto, menciones y asignaciones.
 
-El código va en la misma plantilla `aviso_pizarro` (en la variable `{{1}}`): no hace falta una plantilla aparte. Caduca a
+El código va en la plantilla de verificación `codigo_pizarro` (paso 6). Si Meta no la tiene o no está aprobada, la
+persona ve que tiene que avisar al administrador y **Administración → Ajustes** muestra el motivo. Caduca a
 los **15 minutos** y admite **5 intentos**; si caduca o se agotan, pulsa **Enviar otro código** (el anterior deja de
 valer). Sin el código nadie recibe avisos: así no se puede apuntar el número de otra persona y mandarle avisos de pago.
 La persona puede desconectarse en cualquier momento.
@@ -149,7 +174,11 @@ los avisos hay que marcar la casilla de consentimiento y confirmarlo con el cód
 
 Las instalaciones que ya configuraban WhatsApp con variables del servidor siguen funcionando sin tocar nada:
 `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANG` y
-`WHATSAPP_API_VERSION` (por defecto `v23.0`).
+`WHATSAPP_API_VERSION` (por defecto `v23.0`). La plantilla de verificación no tiene variable: se configura en Ajustes
+y, si no, es `codigo_pizarro`.
+
+Si ya enviabas avisos por WhatsApp con una versión anterior, crea la plantilla `codigo_pizarro` (paso 6): hasta entonces
+nadie puede conectar un número nuevo. Quien ya estaba conectado sigue recibiendo avisos.
 
 Precedencia: **lo que se guarda en Administración → Ajustes manda, campo a campo**; los campos vacíos usan esas
 variables. Mientras no pulses Activar ni Desactivar, WhatsApp está activo si la configuración está completa.
@@ -167,6 +196,8 @@ su nombre en Ajustes.
 - **Error 132001 (la plantilla no existe)**: el nombre o el idioma no coinciden con los de la plantilla aprobada.
   Revisa **Nombre de la plantilla** e **Idioma** (`es` no es lo mismo que `es_ES`).
 - **Error 132000 (número de parámetros)**: la plantilla no tiene exactamente las variables `{{1}}`, `{{2}}` y `{{3}}`.
+- **Error 132001 o 132000 con `codigo_pizarro`**: falta la plantilla de verificación, aún no está aprobada, tiene otro
+  idioma o se creó como Utilidad. Tiene que ser de categoría **Autenticación** con **Copiar código** (paso 6).
 - **Error 131030 (destinatario no permitido)**: con el número de prueba, añade el número en el campo **Para** de
   «Configuración de la API».
 - **Error 190 o 401 (token)**: el token caducó o le faltan permisos. Genera uno permanente (paso 4).

@@ -79,12 +79,13 @@ async function whatsappOn() {
 const sends = (chatId?: string) => calls.filter((c) => c.url.endsWith("/sendMessage") && (!chatId || c.body.chat_id === chatId));
 const graphCalls = () => calls.filter((c) => c.url.includes("graph.facebook.com"));
 /** El código de 6 cifras del último WhatsApp enviado (va en la variable {{1}} de la plantilla). */
+/** Código del último envío con la plantilla de verificación (codigo_pizarro): va en el cuerpo y en el botón. */
 function lastWhatsappCode(): string {
-  const body = graphCalls().at(-1)?.body as { template?: { components: { parameters: { text: string }[] }[] } } | undefined;
+  const body = graphCalls().at(-1)?.body as { template?: { name: string; components: { parameters: { text: string }[] }[] } } | undefined;
+  assert.equal(body?.template?.name, "codigo_pizarro", "el código sale con la plantilla de autenticación");
   const text = body?.template?.components[0]?.parameters[0]?.text ?? "";
-  const m = /código de verificación de Pizarro es (\d{6})/.exec(text) ?? /verification code is (\d{6})/.exec(text);
-  assert.ok(m, `sin código en «${text}»`);
-  return m[1]!;
+  assert.match(text, /^\d{6}$/, `sin código en «${text}»`);
+  return text;
 }
 const update = (text: string, chatId = 5550001, extra: Record<string, unknown> = {}) => ({ update_id: Math.floor(Math.random() * 1e9), message: { text, chat: { id: chatId, type: "private" }, from: { username: "ana_tg", language_code: "es" }, ...extra } });
 const post = (body: unknown, secret: string, headers: Record<string, string> = {}) =>
@@ -493,9 +494,23 @@ describe("WhatsApp: código de verificación y topes", () => {
     calls = [];
     expectOk(await save("+34611000001"));
     const code = lastWhatsappCode();
-    const body = graphCalls()[0]!.body as { template: { name: string; components: { parameters: { text: string }[] }[] } };
-    assert.equal(body.template.name, "aviso_pizarro");
-    assert.equal(body.template.components[0]!.parameters[0]!.text, `Tu código de verificación de Pizarro es ${code}`);
+    // Cuerpo exacto que recibe Meta: plantilla de autenticación con el código en el cuerpo y en el botón «Copiar código».
+    assert.equal(graphCalls().length, 1);
+    assert.equal(graphCalls()[0]!.url, "https://graph.facebook.com/v23.0/1234567890/messages");
+    assert.deepEqual(graphCalls()[0]!.body, {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: "34611000001",
+      type: "template",
+      template: {
+        name: "codigo_pizarro",
+        language: { code: "es" },
+        components: [
+          { type: "body", parameters: [{ type: "text", text: code }] },
+          { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: code }] },
+        ],
+      },
+    });
     const row = await channel(user.id);
     assert.ok(row.verifyCodeHash && !row.verifyCodeHash.includes(code));
     assert.ok(row.verifyExpiresAt && row.verifyExpiresAt.getTime() - Date.now() > 14 * 60_000 && row.verifyExpiresAt.getTime() - Date.now() <= 15 * 60_000);
@@ -602,6 +617,96 @@ describe("WhatsApp: código de verificación y topes", () => {
     assert.equal(graphCalls().length, 0);
     const admin = await getMessagingAdminView();
     assert.deepEqual([admin.whatsapp.connected, admin.whatsapp.pending], [0, 0]);
+  });
+});
+
+describe("WhatsApp: plantilla de verificación (autenticación)", () => {
+  const metaError = (code: number, message: string) => () => new Response(JSON.stringify({ error: { message, code, error_data: { details: message } } }), { status: 404 });
+
+  test("se configura en Ajustes (nombre e idioma); los avisos siguen con aviso_pizarro, idénticos", async () => {
+    await cleanConfig();
+    await whatsappOn();
+    expectOk(await saveWhatsappSettings({ phoneNumberId: "1234567890", templateName: "aviso_pizarro", templateLang: "es", templateLangEn: "en", codeTemplateName: "mi_codigo", codeTemplateLang: "es_ES" }));
+    const view = await getMessagingAdminView();
+    assert.deepEqual([view.whatsapp.codeTemplateName, view.whatsapp.codeTemplateLang, view.whatsapp.defaultCodeTemplate], ["mi_codigo", "es_ES", "codigo_pizarro"]);
+    assert.deepEqual([view.whatsapp.effective.codeTemplateName, view.whatsapp.effective.codeTemplateLang], ["mi_codigo", "es_ES"]);
+    expectFail(await saveWhatsappSettings({ phoneNumberId: "1234567890", templateName: "aviso_pizarro", templateLang: "es", templateLangEn: "en", codeTemplateName: "Mi Código" }), /minúsculas/);
+
+    // Una persona en inglés: el código va en la plantilla de verificación y su idioma (el texto lo pone Meta).
+    const user = await makeUser();
+    await db.user.update({ where: { id: user.id }, data: { locale: "EN", notifyEmail: false } });
+    await loginAs(user);
+    calls = [];
+    expectOk(await saveMyWhatsapp({ phone: "+34611000020", consent: true }));
+    const code = graphCalls()[0]!.body as { template: { name: string; language: { code: string } } };
+    assert.deepEqual([code.template.name, code.template.language.code], ["mi_codigo", "es_ES"]);
+
+    // El aviso de siempre: aviso_pizarro, en inglés, solo cuerpo con sus 3 variables.
+    await db.userChannel.updateMany({ where: { userId: user.id }, data: { verifiedAt: new Date() } });
+    const f = await makeProject({ members: [user] });
+    const task = await makeTask(f, { title: "Pantalla" });
+    calls = [];
+    await deliver([await notice("MENTION", { userId: user.id, taskId: task.id })]);
+    assert.equal(graphCalls().length, 1);
+    const body = graphCalls()[0]!.body as { recipient_type?: string; template: { name: string; language: { code: string }; components: { type: string; parameters: { text: string }[] }[] } };
+    assert.equal(body.template.name, "aviso_pizarro");
+    assert.equal(body.template.language.code, "en");
+    assert.equal(body.recipient_type, undefined);
+    assert.deepEqual(body.template.components.map((c) => [c.type, c.parameters.length]), [["body", 3]]);
+    assert.equal(body.template.components[0]!.parameters[2]!.text, `https://pizarro.example.com/p/${f.project.id}?task=${task.id}`);
+  });
+
+  test("Meta no tiene la plantilla (132001): error claro, el código no queda pendiente y Ajustes y Mi perfil lo explican", async () => {
+    await cleanConfig();
+    await whatsappOn();
+    const user = await makeUser();
+    await loginAs(user);
+    replies.graph = metaError(132001, "(#132001) Template name does not exist in the translation");
+    calls = [];
+    expectFail(await saveMyWhatsapp({ phone: "+34611000021", consent: true }), /el administrador de Pizarro tiene que crear \(o revisar\) en Meta la plantilla de verificación/);
+    assert.equal(graphCalls().length, 1, "un error de plantilla no se reintenta");
+    const row = await db.userChannel.findUniqueOrThrow({ where: { userId_channel: { userId: user.id, channel: "WHATSAPP" } } });
+    assert.deepEqual([row.verifiedAt, row.verifyCodeHash, row.verifyExpiresAt], [null, null, null], "no se dice «te hemos enviado un código»");
+    const mine = await getMyChannels(user.id);
+    assert.deepEqual([mine.whatsapp?.codePending, mine.whatsapp?.codeBlocked], [false, true]);
+    const admin = await getMessagingAdminView();
+    assert.deepEqual(admin.whatsapp.codeTemplateError && [admin.whatsapp.codeTemplateError.problem, admin.whatsapp.codeTemplateError.code, admin.whatsapp.codeTemplateError.name], ["missing", 132001, "codigo_pizarro"]);
+    await flushLogs();
+    assert.equal(JSON.stringify(await db.appLog.findMany({ where: { userId: user.id }, select: { message: true, details: true } })).includes("611000021"), false);
+
+    // El administrador la crea: el siguiente código sale y se olvida el error.
+    replies.graph = () => new Response(JSON.stringify({ messages: [{ id: "wamid.2" }] }));
+    expectOk(await resendMyWhatsappCode());
+    expectOk(await confirmMyWhatsapp({ code: lastWhatsappCode() }));
+    assert.equal((await getMessagingAdminView()).whatsapp.codeTemplateError, null);
+    assert.equal((await getMyChannels(user.id)).whatsapp?.codeBlocked, false);
+  });
+
+  test("«Probar» de Ajustes envía las dos plantillas y dice cuál falla (una de utilidad con ese nombre: 132000)", async () => {
+    await cleanConfig();
+    await whatsappOn();
+    calls = [];
+    const both = expectOk(await testWhatsapp({ to: "+34611000022" }));
+    assert.deepEqual([both.noticeError, both.codeError], [null, null]);
+    assert.deepEqual(graphCalls().map((c) => (c.body.template as { name: string }).name), ["aviso_pizarro", "codigo_pizarro"]);
+    assert.deepEqual((graphCalls()[1]!.body.template as { components: unknown[] }).components, [
+      { type: "body", parameters: [{ type: "text", text: "123456" }] },
+      { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: "123456" }] },
+    ]);
+
+    replies.graph = (call) => ((call.body.template as { name: string }).name === "codigo_pizarro"
+      ? metaError(132000, "(#132000) Number of parameters does not match the expected number of params")()
+      : new Response(JSON.stringify({ messages: [{ id: "wamid.3" }] })));
+    const one = expectOk(await testWhatsapp({ to: "+34611000022" }));
+    assert.equal(one.noticeError, null);
+    assert.match(one.codeError ?? "", /plantilla de verificación «codigo_pizarro» no tiene la forma que espera Pizarro \(error 132000\): tiene que ser de categoría Autenticación/);
+    assert.equal((await getMessagingAdminView()).whatsapp.codeTemplateError?.problem, "params");
+
+    // Las dos fallan: error de la acción con los dos motivos. Guardar los ajustes olvida el rechazo anterior.
+    replies.graph = metaError(132001, "(#132001) Template name does not exist in the translation");
+    expectFail(await testWhatsapp({ to: "+34611000022" }), /No se pudo enviar el WhatsApp de prueba\..*no existe en Meta o aún no está aprobada \(error 132001\)/);
+    expectOk(await saveWhatsappSettings({ phoneNumberId: "1234567890", templateName: "aviso_pizarro", templateLang: "es", templateLangEn: "en" }));
+    assert.equal((await getMessagingAdminView()).whatsapp.codeTemplateError, null);
   });
 });
 
