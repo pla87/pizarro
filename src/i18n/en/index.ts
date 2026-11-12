@@ -44,5 +44,6 @@ import { opt48 } from "./opt48";
 import { rev48b } from "./rev48b";
 import { bh48a } from "./bh48a";
 import { bh48c } from "./bh48c";
+import { bh48b } from "./bh48b";
 
-export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing, ...almacenamiento, ...licencia, ...wip, ...importar, ...ics, ...lista, ...acceso, ...plantillas2, ...pegado, ...licencia2, ...comentarios, ...detalle, ...web2, ...r46ui, ...r46web, ...soporte, ...web3, ...r47, ...mensajeria, ...bh1a, ...bh1b, ...rev2, ...bh2, ...bh3, ...waauth, ...instalar, ...opt48, ...rev48b, ...bh48a, ...bh48c };
+export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing, ...almacenamiento, ...licencia, ...wip, ...importar, ...ics, ...lista, ...acceso, ...plantillas2, ...pegado, ...licencia2, ...comentarios, ...detalle, ...web2, ...r46ui, ...r46web, ...soporte, ...web3, ...r47, ...mensajeria, ...bh1a, ...bh1b, ...rev2, ...bh2, ...bh3, ...waauth, ...instalar, ...opt48, ...rev48b, ...bh48a, ...bh48c, ...bh48b };

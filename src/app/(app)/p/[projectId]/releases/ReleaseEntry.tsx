@@ -2,7 +2,6 @@
 
 import { appTimeZone } from "@/lib/format";
 import { ChevronDown, ClipboardCopy, Download, FileArchive, Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useCallback, useContext, useEffect, useState } from "react";
 import { deleteRelease, deleteReleaseAttachments } from "@/actions/releases";
 import { copyText, downloadText } from "@/components/ui/clipboard";
@@ -14,6 +13,7 @@ import { isoDate, releaseFileName, releaseZipName } from "@/lib/release";
 import { ProjectsContext } from "@/components/ProjectMenu";
 import { useIntlLocale, useLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
+import { useSafeRefresh } from "@/components/useSafeRefresh";
 
 interface Props {
   release: { id: string; number: number; title: string; content: string; deployedAt: string; author: string | null; taskCount: number; attachments: string[] };
@@ -26,14 +26,14 @@ export function ReleaseEntry({ release }: Props) {
   const [open, setOpen] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
-  const router = useRouter();
+  const safeRefresh = useSafeRefresh();
   // Nombre del proyecto para el ZIP (el mismo que da el diálogo de generar la release).
   const { projects, currentId } = useContext(ProjectsContext);
   const projectName = projects.find((p) => p.id === currentId)?.name ?? null;
   const [busy, setBusy] = useState(false);
   const [attachments, setAttachments] = useState(release.attachments);
   // Las copias de los adjuntos se guardan unos segundos después del despliegue: al refrescar la página
-  // (router.refresh) llegan más y se muestran sin tener que volver a montar la entrada.
+  // (el refresco de la página) llegan más y se muestran sin tener que volver a montar la entrada.
   const [seen, setSeen] = useState(release.attachments.join("\n"));
   if (release.attachments.join("\n") !== seen) {
     setSeen(release.attachments.join("\n"));
@@ -111,7 +111,7 @@ export function ReleaseEntry({ release }: Props) {
     if (!res.ok) return toast(res.error, "error");
     setRemoved(true);
     toast(t("Release borrada"));
-    router.refresh();
+    safeRefresh();
   };
 
   const removeAttachments = async () => {
@@ -122,7 +122,7 @@ export function ReleaseEntry({ release }: Props) {
     if (!res.ok) return toast(res.error, "error");
     setAttachments([]);
     toast(t("Adjuntos borrados"));
-    router.refresh();
+    safeRefresh();
   };
 
   if (removed) return null;

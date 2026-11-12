@@ -34,6 +34,7 @@ import { copyText } from "../ui/clipboard";
 import { pasteAsOneLine } from "../ui/textarea-edit";
 import { usePasteFiles } from "../ui/pasteFiles";
 import { isSessionExpiredMessage, useToast } from "../ui/Toast";
+import { isOfflineMessage } from "@/lib/connection";
 import { boardClients, useBoard } from "./context";
 import { isTypingTarget, useShortcut } from "./shortcuts";
 import { weekdayName } from "./recurrence-ui";
@@ -54,15 +55,17 @@ import { normalizeLinkUrl } from "@/lib/link-url";
 import { sortByFileName } from "@/lib/attachment-sort";
 import { subtaskBatch, subtaskLines } from "@/lib/subtask-lines";
 import { fieldsError, fieldsFormOf, fieldsPatch, TaskFieldsGroup, type FieldsForm } from "./TaskFieldsGroup";
-import { draftKey, useDraftAutosave, type EditTaskDraft } from "./drafts";
+import { draftKey, readCommentDraft, useDraftAutosave, type EditTaskDraft } from "./drafts";
 import { setUndoTask, UNDONE_EVENT } from "../undo-context";
 import { useIsMobile } from "../ui/useIsMobile";
 import { UndoButton } from "../UndoButton";
 import { subtasksDidNotFit } from "./count-texts";
 
-export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecondBulk, draft }: {
+export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecondBulk, draft, gone }: {
   task: BoardTask;
   onClose: () => void;
+  /** La tarea ya no está en el tablero (otra persona la borró o archivó): el aviso. El diálogo lo muestra y se cierra. */
+  gone?: string;
   side?: "left" | "right" | "center";
   onAddSecond?: () => void;
   onAddSecondBulk?: () => void;
@@ -108,6 +111,19 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // y antes eso guardaba el renombrado aunque luego se eligiera descartar.
   const closeGuard = useRef<"idle" | "confirming" | "discarding">("idle");
   const blurHeld = useCallback(() => closeGuard.current !== "idle", []);
+  // El último guardado del título o del enlace falló (sin conexión, sesión caducada…) y lo escrito sigue en el campo:
+  // cerrar pregunta antes de descartarlo (ver requestClose).
+  const textSaveFailed = useRef(false);
+  // Último guardado en curso del título o del enlace (para esperar su resultado al cerrar).
+  const textSaving = useRef<Promise<boolean> | null>(null);
+  /** Título o enlace escritos que difieren de lo guardado tras un guardado fallido (lee lo último, también tras esperar). */
+  const unsavedAfterFailure = (): boolean => {
+    if (!textSaveFailed.current) return false;
+    const { title: typed, link: typedLink } = textState.current;
+    const saved = board.getTask(task.id) ?? task;
+    const value = typed.trim();
+    return (!!value && value !== saved.title) || normalizeLinkUrl(typedLink) !== (saved.linkUrl ?? "");
+  };
   /**
    * Cerrar con la X, clic fuera, Escape o el botón atrás: si la descripción tiene cambios sin guardar, hay una subtarea a
    * medio escribir o renombrándose, o un comentario en edición con cambios, se pregunta antes de descartarlos; sin cambios
@@ -140,10 +156,29 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       closeGuard.current = ok ? "discarding" : "idle";
       if (!ok) return false;
     }
+    // Título o enlace escritos y sin guardar: al salir del campo se guardan (abajo) y se espera a ver si se guardaron.
+    const textPending = textSaveFailed.current || (!!title.trim() && title.trim() !== task.title) || normalizeLinkUrl(link) !== (task.linkUrl ?? "");
     // Salir del campo con el foco guarda lo que se guarda al salir (blur): sin esto, Escape o el clic fuera lo perdían.
     // Tras «Descartar cambios» el renombrado de una subtarea no se guarda (ver closeGuard).
     const active = document.activeElement;
     if (active instanceof HTMLElement && rootRef.current?.closest("[role=dialog]")?.contains(active)) active.blur();
+    if (textPending && closeGuard.current === "idle") {
+      // Si no se pudo guardar (sin conexión, sesión caducada, otro error), lo escrito sigue en el campo: antes el diálogo se
+      // cerraba igual y se perdía, borrador incluido. Ahora se pregunta.
+      closeGuard.current = "confirming";
+      // El guardado empieza al salir del campo (justo arriba): se espera a su resultado.
+      await new Promise((r) => setTimeout(r, 0));
+      await textSaving.current;
+      const ok = !unsavedAfterFailure() || await confirm({
+        title: t("Cambios sin guardar"),
+        message: t("No se ha podido guardar el título o el enlace. ¿Cerrar la tarea y descartarlo?"),
+        confirmLabel: t("Descartar cambios"),
+        cancelLabel: t("Seguir editando"),
+        danger: true,
+      }).catch(() => false);
+      closeGuard.current = "idle";
+      if (!ok) return false;
+    }
     onClose();
     return true;
   };
@@ -247,9 +282,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // guardado ajeno la cambió, al guardar la propia llega el conflicto, como antes). Con el título o la descripción en
   // edición tampoco avanza: al guardarlos llega el conflicto, como debe.
   const seenText = useRef({ version: task.textVersion, title: task.title });
-  const textState = useRef({ detail, title, shownTitle, version: task.textVersion });
+  const textState = useRef({ detail, title, shownTitle, version: task.textVersion, link });
   useEffect(() => {
-    textState.current = { detail, title, shownTitle, version: task.textVersion };
+    textState.current = { detail, title, shownTitle, version: task.textVersion, link };
   });
   const editingText = () => {
     const { detail: d, title: typed, shownTitle: shown } = textState.current;
@@ -320,6 +355,24 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       window.removeEventListener(UNDONE_EVENT, onUndone);
     };
   }, [task.id]);
+
+  // La tarea ha desaparecido (otra persona la borró o archivó): antes el detalle se esfumaba sin aviso, con lo escrito, y
+  // si luego se deshacía volvía a abrirse solo. Ahora se avisa (quién, si se sabe), se ofrece copiar lo que no estaba
+  // guardado (título, descripción y comentario a medio escribir) y se cierra del todo.
+  useEffect(() => {
+    if (!gone) return;
+    const typed = textState.current.title.trim();
+    const desc = descLive.current;
+    const parts = [
+      typed && typed !== task.title ? mentionsToPlain(typed) : "",
+      desc !== null && desc !== (textState.current.detail?.description ?? "") && (descDirtyCheck.current?.() ?? true) ? desc : "",
+      mentionsToPlain(readCommentDraft(board.currentUserId, task.id)?.text ?? ""),
+    ].filter((x) => x.trim());
+    const text = parts.join("\n\n");
+    toast(gone, "error", text ? { label: t("Copiar tu texto"), onClick: () => void copyText(text).then((ok) => ok && toast(t("Copiado al portapapeles"))) } : undefined);
+    onClose();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo cuando desaparece
+  }, [gone]);
 
   /**
    * Botón Guardar / Alt+S: guarda TODO lo que se esté editando aunque aún no se haya confirmado (título,
@@ -429,7 +482,12 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   };
 
   /** Guardado optimista de campos de la tarjeta. */
-  const save = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>): Promise<boolean> => {
+  const save = (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>): Promise<boolean> => {
+    const done = saveNow(patch, optimistic);
+    if (patch.title !== undefined || patch.linkUrl !== undefined) textSaving.current = done.catch(() => false);
+    return done;
+  };
+  const saveNow = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>): Promise<boolean> => {
     const before = board.getTask(task.id);
     board.patchTask(task.id, optimistic);
     // Título y descripción: se envía qué versión se estaba editando para no pisar a otra persona ni lo guardado desde otra
@@ -446,20 +504,24 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     } else res = await tracked(updateTask(task.id, patch, undefined));
     if (!res.ok) {
       if (before) board.upsertTask(before);
-      // Sesión caducada: lo escrito se queda en el campo (y en el borrador local) para guardarlo tras volver a entrar; el
-      // aviso lleva «Iniciar sesión» (ver Toast). Sin esto, el título volvía al guardado y se perdía con el borrador.
+      // Sesión caducada o sin conexión: lo escrito se queda en el campo (y en el borrador local) para guardarlo luego; el
+      // aviso de sesión lleva «Iniciar sesión» (ver Toast). Sin esto, el título volvía al guardado y se perdía con el borrador.
       const expired = isSessionExpiredMessage(res.error, t);
-      if (expired && patch.title !== undefined && before) {
+      const offline = isOfflineMessage(res.error, t);
+      if ((expired || offline) && patch.title !== undefined && before) {
         setShownTitle(before.title);
         setTitle(patch.title);
       }
+      if (patch.title !== undefined || patch.linkUrl !== undefined) textSaveFailed.current = true;
       // El texto que no se pudo guardar (p. ej. otra persona cambió la tarea a la vez y se recarga con lo suyo) no se
       // pierde: el aviso permite copiarlo para volver a aplicarlo.
       const rejected = [patch.title, patch.description].filter((x): x is string => !!x?.trim()).join("\n\n");
-      toast(res.error, "error", rejected && !expired ? { label: t("Copiar tu texto"), onClick: () => void copyText(rejected).then((ok) => ok && toast(t("Copiado al portapapeles"))) } : undefined);
-      if (editsText && !expired) await reload();
+      // Sin conexión ya lo ha avisado board.track, y lo escrito sigue en su campo: no se repite el aviso.
+      if (!offline) toast(res.error, "error", rejected && !expired ? { label: t("Copiar tu texto"), onClick: () => void copyText(rejected).then((ok) => ok && toast(t("Copiado al portapapeles"))) } : undefined);
+      if (editsText && !expired && !offline) await reload();
       return false;
     }
+    if (patch.title !== undefined || patch.linkUrl !== undefined) textSaveFailed.current = false;
     board.upsertTask(res.data);
     if (editsText) setDetail((d) => (d ? { ...d, textVersion: res.data.textVersion } : d));
     return true;

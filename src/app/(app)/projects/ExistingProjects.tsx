@@ -2,11 +2,11 @@
 
 import { Check } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { setAdminProjectPick } from "@/actions/projects";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
+import { useSafeRefresh } from "@/components/useSafeRefresh";
 
 interface Row {
   id: string;
@@ -17,7 +17,7 @@ interface Row {
 /** Lista de proyectos de equipo con el botón para añadirlos (o quitarlos) de los proyectos de trabajo del administrador. */
 export function ExistingProjects({ projects, userId }: { projects: Row[]; userId: string }) {
   const t = useT();
-  const router = useRouter();
+  const safeRefresh = useSafeRefresh();
   const toast = useToast();
   const [pending, start] = useTransition();
   const toggle = (p: Row) =>
@@ -25,7 +25,7 @@ export function ExistingProjects({ projects, userId }: { projects: Row[]; userId
       const res = await setAdminProjectPick(p.id, userId, !p.picked);
       if (!res.ok) return toast(res.error, "error");
       toast(p.picked ? t("Proyecto quitado de tus proyectos") : t("Proyecto añadido a tus proyectos"));
-      router.refresh();
+      safeRefresh();
     });
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-4 sm:p-6">

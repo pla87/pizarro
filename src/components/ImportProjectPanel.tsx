@@ -9,6 +9,7 @@ import { announceQueued } from "./transfer/client";
 import { TransferJobs } from "./transfer/TransferJobs";
 import { TransferProgress } from "./transfer/TransferProgress";
 import { useTransferJob } from "./transfer/useTransferJob";
+import { useSafeRefresh } from "@/components/useSafeRefresh";
 
 interface Summary {
   projectId: string;
@@ -29,6 +30,7 @@ interface Summary {
 export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, onBusyChange }: { isPrivate: boolean; privateToggle: React.ReactNode; onBack: () => void; onClose: () => void; onBusyChange?: (busy: boolean) => void }) {
   const t = useT();
   const router = useRouter();
+  const safeRefresh = useSafeRefresh();
   const input = useRef<HTMLInputElement>(null);
   const xhr = useRef<XMLHttpRequest | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -42,7 +44,7 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
     setJobId(null);
     if (done.status === "DONE" && done.result && "counts" in done.result) {
       setSummary(done.result as Summary);
-      router.refresh();
+      safeRefresh();
     } else setError(done.error ?? t("No se pudo importar el proyecto."));
   });
   const busy = progress !== null || processing;

@@ -61,4 +61,17 @@ servidor:
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48c-e2e.mjs   # PART=comments,desc,tabs,rel
 ```
 
-Capturas en `SHOTS_DIR` (por defecto la carpeta temporal del sistema). Al terminar, borra la base `pz_qa`.
+Capturas en `SHOTS_DIR` (por defecto la carpeta temporal del sistema).
+
+## Sin conexión, pestañas y tareas que desaparecen (caza de bugs 48b, ~65 comprobaciones)
+
+Sin red y con el servidor caído la página no se cambia por la de error del navegador y lo escrito se conserva (avisos
+«Sin conexión» y «Conexión recuperada»); 8 pestañas por HTTP/1.1 (se simula cuál está delante: las ocultas cierran su
+canal en vivo); la tarea abierta que otra persona borra o archiva (aviso con su nombre, «Copiar tu texto», no se reabre
+al deshacer); cerrar el detalle tras un guardado fallido del título; «Nueva tarea» con la columna borrada; `?task=` al
+cerrar y enlaces a tareas que no están. Misma base y servidor (por HTTP, sin TLS). Hace muchos inicios de sesión: tras
+las otras suites, reinicia el servidor si salta el límite de intentos.
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48b-e2e.mjs
+```

@@ -1,8 +1,10 @@
 "use client";
 
 import { prefetchTaskDetail } from "./taskDetailPrefetch";
-import { announceOnArrival, announceRemoteChange, DEFAULT_LIVE_REFRESH_JITTER_MS, foreignRefreshDelay, settleIncoming, type IncomingChange } from "./remoteChange";
+import { advanceCursor, announceOnArrival, announceRemoteChange, DEFAULT_LIVE_REFRESH_JITTER_MS, foreignRefreshDelay, missedWhileClosed, removalOf, settleIncoming, type IncomingChange, type LiveCursor, type Removal } from "./remoteChange";
 import { actionThrowMessage } from "@/lib/stale-action";
+import { isNetworkError, refreshWhenOnline, reportOffline, reportReachable, safeRefresh } from "@/lib/connection";
+import { afterModalHistory } from "../ui/useBackToClose";
 import {
   closestCorners, DndContext, type CollisionDetection, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
   useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent,
@@ -29,7 +31,7 @@ import { useConfirm } from "../ui/ConfirmDialog";
 import { useToast } from "../ui/Toast";
 import { cn } from "../ui/cn";
 import { BoardContext, useSelectionSize, type BoardApi } from "./context";
-import { createBoardStores, mergeTasks, tasksById, useStableValue } from "./stores";
+import { createBoardStores, createStore, mergeTasks, tasksById, useStableValue } from "./stores";
 import { ColumnView } from "./ColumnView";
 import { wipExceeded } from "@/lib/wip";
 import { EVERGREEN_DROPPABLE_PREFIX } from "./EvergreenPanel";
@@ -101,6 +103,30 @@ const boardCollisionDetection: CollisionDetection = (args) => {
   }
   return baseCollisionDetection(args);
 };
+
+/**
+ * ¿La pestaña está a la vista? Oculta (otra pestaña delante, ventana minimizada) no mantiene abierto el canal en vivo:
+ * por HTTP/1.1 (red local sin TLS) el navegador solo abre 6 conexiones por servidor, y con 6 pestañas abiertas cada canal
+ * ocupaba una y la séptima ya no cargaba ni guardaba nada.
+ */
+function usePageVisible(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      document.addEventListener("visibilitychange", cb);
+      return () => document.removeEventListener("visibilitychange", cb);
+    },
+    () => document.visibilityState !== "hidden",
+    () => true,
+  );
+}
+
+/** Quita `?task=` de la dirección sin pedir la página otra vez (ni recargar el tablero). */
+function dropTaskParam(): void {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("task")) return;
+  url.searchParams.delete("task");
+  window.history.replaceState(window.history.state, "", url);
+}
 
 /** Pantalla táctil: las tarjetas se arrastran con su asa para que el resto de la tarjeta deje hacer scroll. */
 const COARSE_QUERY = "(pointer: coarse)";
@@ -205,7 +231,31 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const setTasks = stores.tasks.set;
   const setSelected = stores.selection.set;
   const [labels, setLabels] = useState<LabelOption[]>(data.labels);
-  const [openTaskId, setOpenTaskId] = useState<string | null>(initialTaskId);
+  // Enlace ?task= a una tarea que no está en el tablero (no existe, archivada o sin acceso): no se abre nada y se avisa.
+  const [badTaskLink] = useState(() => (initialTaskId && !data.tasks.some((x) => x.id === initialTaskId) ? initialTaskId : null));
+  const [openTaskId, setOpenTaskId] = useState<string | null>(badTaskLink ? null : initialTaskId);
+  const openTaskRef = useRef(openTaskId);
+  useEffect(() => {
+    openTaskRef.current = openTaskId;
+  });
+  // La tarea abierta ha desaparecido del tablero (otra persona la borró o archivó): su última versión y el aviso. El detalle
+  // sigue montado lo justo para avisar y ofrecer lo que había sin guardar, y se cierra (ver TaskDialog `gone`). En un
+  // almacén como el de las tareas: los dos cambios se pintan juntos (con la tarea ya quitada y sin el aviso aún, el
+  // detalle se desmontaría y se perdería lo escrito).
+  const [goneStore] = useState(() => createStore<{ task: BoardTask; message: string } | null>(null));
+  const goneTask = useSyncExternalStore(goneStore.subscribe, goneStore.get, goneStore.get);
+  const setGoneTask = goneStore.set;
+  useEffect(() => {
+    if (!badTaskLink) return;
+    toast(t("La tarea no existe, está archivada o no tienes acceso"), "error");
+    // Solo al abrir el tablero.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Sin tarea abierta, la dirección no lleva ?task= (la de un enlace ya cerrado, o la de uno a una tarea que no está): al
+  // recargar no se reabre. Se cambia tras retirar el diálogo su entrada del historial (useBackToClose), que también la lleva.
+  useEffect(() => {
+    if (!openTaskId) afterModalHistory(dropTaskParam);
+  }, [openTaskId]);
   const [newTask, setNewTask] = useState<{ columnId?: string; files?: File[]; evergreen?: boolean; draft?: NewTaskDraft | null } | null>(null);
   const [editDraft, setEditDraft] = useState<EditTaskDraft | null>(null);
   const [secondNew, setSecondNew] = useState<{ columnId?: string } | null>(null);
@@ -356,10 +406,11 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // Para espaciar el refresco al enfocar la ventana (lib/focus-refresh.ts): cuándo se sincronizó el tablero por última vez y
   // estado del canal en vivo (abierto ahora; cortado desde la última sincronización, con avisos que pudieron perderse).
   const lastSyncAt = useRef(0); // se rellena al montar (efecto de datos)
-  const channel = useRef({ open: false, gap: false });
+  // `paused`: cerrado por tener la pestaña oculta (al volver a verse se reabre y su saludo decide si refrescar).
+  const channel = useRef({ open: false, gap: false, paused: false });
   // Refresco escalonado pendiente por un cambio de otra persona (ver foreignRefreshDelay): cualquier refresco lo cubre.
   const foreignTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const refresh = useCallback(() => {
+  const doRefresh = useCallback(() => {
     if (foreignTimer.current) {
       clearTimeout(foreignTimer.current);
       foreignTimer.current = null;
@@ -370,6 +421,9 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (channel.current.open) channel.current.gap = false;
     router.refresh();
   }, [router]);
+  // Sin conexión no se pide la página: Next, si no la consigue, la sustituye por la de error del navegador y se pierde lo
+  // escrito. Se comprueba antes que el servidor responde; si no, el refresco queda pendiente hasta que vuelva (lib/connection.ts).
+  const refresh = useCallback(() => void safeRefresh(doRefresh, router), [doRefresh, router]);
   const flushStale = useCallback(() => {
     if (staleRefresh.current && pending.current === 0) {
       staleRefresh.current = false;
@@ -410,6 +464,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     pending.current++;
     try {
       const res = await p;
+      // Ha respondido el servidor: si se daba la conexión por perdida, ha vuelto.
+      reportReachable();
       // Acción con cambio publicado: se anota su id para no refrescar con su propio aviso.
       const cid = res && typeof res === "object" && "cid" in res ? (res as { cid?: unknown }).cid : null;
       if (typeof cid === "string") {
@@ -426,6 +482,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   }, [flushStale, drainIncoming]);
   // Para server actions: si lanzan (sin red, acción inexistente tras un despliegue) se avisa, se refresca
   // desde el servidor para deshacer lo optimista y se devuelve un fallo como el de cualquier acción.
+  // Si no llegó al servidor (sin red o caído), no se refresca: «Sin conexión: no se ha guardado», quien llamó deshace lo
+  // optimista (como con cualquier fallo) y lo escrito se queda donde estaba; al volver la conexión se refresca.
   const track = useCallback(async <T,>(p: Promise<T>): Promise<T> => {
     try {
       return await trackRaw(p);
@@ -434,10 +492,13 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       toast(error, "error");
       // Un refresco ya pedido antes del cambio podría traer datos viejos: se fuerza uno nuevo.
       mutationAt.current = 0;
-      refresh();
+      if (isNetworkError(e)) {
+        reportOffline();
+        refreshWhenOnline(doRefresh, router);
+      } else refresh();
       return { ok: false, error } as T;
     }
-  }, [trackRaw, toast, t, refresh]);
+  }, [trackRaw, toast, t, refresh, doRefresh, router]);
 
   const settle = useCallback(async () => {
     // Un guardado empezado al perder el foco (clic en un botón) puede no haber arrancado aún: un turno de espera.
@@ -464,6 +525,21 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     [setTasks],
   );
 
+  // Último aviso visto del canal (lo numera el servidor): al reabrirlo se sabe si se perdió alguno mientras estuvo cerrado.
+  const liveCursor = useRef<LiveCursor | null>(data.live ?? null);
+  // Últimos borrados y archivados que han llegado por el canal: quién borró o archivó la tarea abierta (ver TaskDialog).
+  const removals = useRef(new Map<string, Removal & { at: number }>());
+  /** Aviso de que la tarea abierta ya no está: quién la borró o archivó, si llegó por el canal; si no, uno genérico. */
+  const goneMessage = (taskId: string): string => {
+    const bulk = removals.current.get("*");
+    const r = removals.current.get(taskId) ?? (bulk && performance.now() - bulk.at < 60_000 ? bulk : undefined);
+    if (!r) return t("Esta tarea ya no está en el tablero: la han borrado o archivado");
+    const deleted = r.kind === "deleted";
+    if (r.userId === data.currentUserId) return deleted ? t("Has borrado esta tarea desde otra pestaña") : t("Has archivado esta tarea desde otra pestaña");
+    const name = data.users.find((u) => u.id === r.userId)?.name;
+    if (name) return deleted ? t("{name} ha borrado esta tarea", { name }) : t("{name} ha archivado esta tarea", { name });
+    return deleted ? t("Han borrado esta tarea") : t("Han archivado esta tarea");
+  };
   // Sincroniza con el servidor cuando llegan datos nuevos (router.refresh).
   useEffect(() => {
     lastSyncAt.current = performance.now();
@@ -473,9 +549,13 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       if (!activeId) flushStale();
       return;
     }
+    const openId = openTaskRef.current;
+    const before = openId ? stores.tasks.get().find((x) => x.id === openId) : undefined;
+    if (before && !data.tasks.some((x) => x.id === openId)) setGoneTask({ task: before, message: goneMessage(openId!) });
     setColumns(data.columns);
     setTasks((prev) => mergeTasks(prev, data.tasks));
     setLabels(data.labels);
+    liveCursor.current = advanceCursor(liveCursor.current, data.live);
     // Quita de la selección múltiple lo que ya no existe (borrado o archivado desde otra pestaña).
     const present = new Set(data.tasks.map((t) => t.id));
     const sel = stores.selection.get();
@@ -485,14 +565,20 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
 
   // Vuelve a abrir el canal en vivo cuando el navegador lo da por cerrado (ver el manejador de «error»).
   const [sseEpoch, setSseEpoch] = useState(0);
+  const visible = usePageVisible();
   // Cambios de otras pestañas y personas casi al momento: el servidor avisa (Server-Sent Events) y
   // se refresca (lo de otras personas, tras una espera al azar: drainIncoming). Se agrupan los avisos seguidos; si la
-  // conexión cae, EventSource reconecta solo.
+  // conexión cae, EventSource reconecta solo. Con la pestaña oculta el canal se cierra (usePageVisible) y, al volver, se
+  // abre otra vez: el primer mensaje del servidor dice si hubo cambios mientras tanto y, si los hubo, se refresca.
   useEffect(() => {
     if (typeof EventSource === "undefined") return;
+    const live = channel.current;
+    if (!visible) {
+      live.paused = true;
+      return;
+    }
     let timer: ReturnType<typeof setTimeout> | null = null;
     const source = new EventSource(`/api/projects/${data.project.id}/events`);
-    const live = channel.current;
     source.addEventListener("open", () => {
       live.open = true;
     });
@@ -503,17 +589,33 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     source.addEventListener("error", () => {
       live.open = false;
       live.gap = true;
+      // Sin canal, el respaldo (al volver a la ventana, cada 2 minutos) vuelve a decidir los refrescos.
+      live.paused = false;
       if (source.readyState === EventSource.CLOSED && !retry) retry = setTimeout(() => setSseEpoch((n) => n + 1), 5000);
+    });
+    // Saludo del servidor al conectar (también al reconectar solo): si se perdió algún aviso, se refresca.
+    source.addEventListener("hello", (e) => {
+      const missed = missedWhileClosed(liveCursor, (e as MessageEvent<string>).data);
+      live.paused = false;
+      if (missed) refresh();
+      else live.gap = false;
     });
     source.addEventListener("change", (e) => {
       let cid: string | null = null;
       let change: unknown = null;
       try {
-        const parsed = JSON.parse((e as MessageEvent<string>).data) as { cid?: unknown };
+        const parsed = JSON.parse((e as MessageEvent<string>).data) as { cid?: unknown; seq?: unknown };
         if (typeof parsed.cid === "string") cid = parsed.cid;
         change = parsed;
+        const cursor = liveCursor.current;
+        if (typeof parsed.seq === "number" && cursor && parsed.seq > cursor.seq) liveCursor.current = { boot: cursor.boot, seq: parsed.seq };
       } catch {
         // Aviso ilegible: se trata como ajeno y se refresca.
+      }
+      const removal = removalOf(change);
+      if (removal) {
+        removals.current.set(removal.taskId ?? "*", { ...removal, at: performance.now() });
+        if (removals.current.size > 100) removals.current.delete(removals.current.keys().next().value as string);
       }
       // Lo de otra persona se reenvía a la página ya, aunque haya acciones propias en vuelo (una subida larga); lo propio,
       // al decidir (drainIncoming), cuando ya se sabe si es de una acción de esta pestaña.
@@ -532,8 +634,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       if (retry) clearTimeout(retry);
       source.close();
       live.open = false;
+      // Lo que llegue mientras está cerrado no se ve: al reabrir decide el saludo del servidor (o, sin él, el respaldo).
+      live.gap = true;
     };
-  }, [data.project.id, data.currentUserId, drainIncoming, sseEpoch]);
+  }, [data.project.id, data.currentUserId, drainIncoming, refresh, sseEpoch, visible]);
 
   // Refresco ligero de respaldo (por si el canal de avisos no llega) y al volver a la ventana. Al volver no se recarga cada
   // vez: se espacia según el estado del canal en vivo (reglas en lib/focus-refresh.ts).
@@ -544,7 +648,9 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     };
     const onFocus = () => {
       if (!idle()) return;
-      const { open, gap } = channel.current;
+      const { open, gap, paused } = channel.current;
+      // Canal cerrado por tener la pestaña oculta y reabriéndose: decide su saludo (no se refresca dos veces).
+      if (paused && typeof EventSource !== "undefined") return;
       if (shouldRefreshOnFocus({ sinceSyncMs: performance.now() - lastSyncAt.current, channelOpen: open, channelGap: gap })) refresh();
     };
     const timer = setInterval(tick, REFRESH_MS);
@@ -1045,7 +1151,11 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   };
 
   // Dos modales a la vez (escritorio): el «+» del abierto crea un segundo de nueva tarea (columna «Backlog» si existe, si no la primera; no hay rol BACKLOG).
-  const primaryOpen = !!newTask || (!!openTaskId && taskById.has(openTaskId));
+  const openTask = openTaskId ? (taskById.get(openTaskId) ?? (goneTask?.task.id === openTaskId ? goneTask.task : undefined)) : undefined;
+  const openGone = !!openTask && !taskById.has(openTask.id) ? goneTask?.message : undefined;
+  // Tarea abierta que ya no está (y sin aviso pendiente): se olvida. Si no, al reaparecer (deshacer) se volvía a abrir sola.
+  if (openTaskId && !openTask) setOpenTaskId(null);
+  const primaryOpen = !!newTask || !!openTask;
   // Mientras hay un diálogo de tarea, los botones de la cabecera (deshacer, «Nueva tarea») quedan por encima del fondo.
   useEffect(() => {
     setBoardModalOpen(primaryOpen);
@@ -1350,14 +1460,16 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         />
 
 
-        {openTaskId && taskById.has(openTaskId) && (
+        {openTask && (
           <TaskDialog
-            key={openTaskId}
-            task={taskById.get(openTaskId)!}
-            draft={editDraft?.taskId === openTaskId ? editDraft : null}
+            key={openTask.id}
+            task={openTask}
+            gone={openGone}
+            draft={editDraft?.taskId === openTask.id ? editDraft : null}
             onClose={() => {
               setOpenTaskId(null);
               setEditDraft(null);
+              setGoneTask(null);
             }}
             side={secondOpen ? "left" : "center"}
             onAddSecond={secondOpen ? undefined : addSecond}

@@ -235,6 +235,8 @@ Los límites por defecto están pensados para 2 GB: app 1 GB (montón de Node 64
 
 En `.env`: `DOMAIN=":80"` y `APP_URL="http://<ip-del-servidor>"`. Caddy sirve solo HTTP y la cookie de sesión no se marca *Secure*. No lo expongas así a Internet.
 
+Por HTTP sin TLS el navegador habla HTTP/1.1 y abre como mucho 6 conexiones a la vez con el mismo servidor, compartidas por todas las pestañas. Cada tablero a la vista mantiene una abierta para los cambios en vivo; las pestañas ocultas cierran la suya y la vuelven a abrir al mostrarse (si hubo cambios mientras tanto, el tablero se pone al día solo). Aun así, con muchas ventanas de Pizarro a la vista a la vez (no pestañas: ventanas visibles) puede tardar en cargar o guardar. Con HTTPS (un dominio, o un certificado propio en Caddy) el navegador usa HTTP/2, que lleva todo por una sola conexión, y ese límite desaparece: si en tu red se usa mucho Pizarro en varias ventanas, es la opción recomendada.
+
 > **Importante:** la aplicación se fía de la cabecera `X-Real-IP` para saber la IP del cliente (límites de intentos, registro de actividad). Por eso el puerto 3000 de Pizarro nunca debe quedar expuesto directamente: solo a través del Caddy incluido (o de otro proxy que sobrescriba `X-Real-IP`). Si no, cualquiera podría falsear su IP.
 
 ### 3.4 Arquitecturas
@@ -535,4 +537,5 @@ Notas:
 | La app se reinicia sola a menudo | Falta de memoria o un error | `docker compose logs app` y *Administración → Logs*; sube `APP_MEM_LIMIT`/`APP_HEAP_MB` si hay RAM. |
 | Las fechas salen con otra hora | La zona elegida en el asistente o `APP_TIMEZONE` no es la tuya | Define `APP_TIMEZONE` en `.env` y `docker compose up -d` (manda sobre la del asistente). |
 | El login no mantiene la sesión | `APP_URL` con `https://` pero se entra por `http://` | Entra por la URL de `APP_URL`. |
+| En red local por HTTP, con muchas ventanas de Pizarro abiertas, las páginas tardan en cargar o no guardan | Límite de 6 conexiones por servidor de HTTP/1.1 (ver 3.3) | Cierra o minimiza ventanas que no uses, o sirve Pizarro por HTTPS (HTTP/2). |
 | No llegan emails | Email sin configurar o credenciales erróneas | Revisa *Administración → Ajustes → Avisos por email* (o `SMTP_*`) y *Administración → Logs* (`[notify]`). |

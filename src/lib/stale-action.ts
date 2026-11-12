@@ -1,6 +1,8 @@
 // Pestañas abiertas antes de un despliegue: su código llama a acciones que el servidor nuevo ya no tiene.
 // Next lanza entonces «Failed to find Server Action …» (o «Server Action … was not found on the server»).
 
+import { isNetworkError, OFFLINE_MESSAGE } from "./connection";
+
 /** Acción de una versión anterior: el servidor se ha actualizado y la página tiene el código viejo. */
 export const STALE_ACTION = /Server Action .* was not found on the server|Failed to find Server Action|older or newer deployment/i;
 
@@ -14,13 +16,15 @@ export function isStaleActionError(err: unknown): boolean {
 
 /**
  * Para el `catch` de una server action que lanza. Si es una pestaña antigua, muestra el aviso «Recarga para
- * seguir» (VersionWatcher, sin recargar sola: puede haber texto sin guardar) y devuelve ese mensaje; si no, el genérico.
+ * seguir» (VersionWatcher, sin recargar sola: puede haber texto sin guardar) y devuelve ese mensaje; si la petición no
+ * llegó al servidor (sin red o servidor caído), «Sin conexión: no se ha guardado»; si no, el genérico.
  */
 export function actionThrowMessage(err: unknown, t: (s: string) => string): string {
   if (isStaleActionError(err) && typeof window !== "undefined") {
     window.dispatchEvent(new Event(NEW_VERSION_EVENT));
     return t("Hay una versión nueva de Pizarro. Recarga para seguir.");
   }
+  if (isNetworkError(err)) return t(OFFLINE_MESSAGE);
   return t("Error inesperado. Inténtalo de nuevo.");
 }
 

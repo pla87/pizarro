@@ -1,10 +1,10 @@
 "use client";
 
 import { Loader2, Redo2, Undo2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { redoChecked, undoChecked } from "@/actions/undo";
+import { actionThrowResult } from "@/lib/stale-action";
 import { useT } from "@/i18n/client";
 import { cn } from "./ui/cn";
 import { useConfirm } from "./ui/ConfirmDialog";
@@ -12,6 +12,7 @@ import { useToast } from "./ui/Toast";
 import { isTypingTarget, useShortcut } from "./board/shortcuts";
 import { UNDONE_EVENT, useBoardModalOpen, useUndoTask } from "./undo-context";
 import { useFloatingRect } from "./ui/useFloatingRect";
+import { useSafeRefresh } from "@/components/useSafeRefresh";
 
 /**
  * Deshacer y rehacer, uno junto al otro. Deshace la última acción del usuario en el proyecto (hasta 10
@@ -22,7 +23,7 @@ import { useFloatingRect } from "./ui/useFloatingRect";
  */
 export function UndoButton({ projectId, shortcut = false, inDialog = false, className }: { projectId: string; shortcut?: boolean; inDialog?: boolean; className?: string }) {
   const t = useT();
-  const router = useRouter();
+  const safeRefresh = useSafeRefresh();
   const toast = useToast();
   const confirm = useConfirm();
   const taskId = useUndoTask();
@@ -39,13 +40,14 @@ export function UndoButton({ projectId, shortcut = false, inDialog = false, clas
     setBusy(redo ? "redo" : "undo");
     try {
       const call = redo ? redoChecked : undoChecked;
-      let res = await call(projectId, scope);
+      // Sin conexión la acción lanza: se avisa («Sin conexión: no se ha guardado») en lugar de dejar el error suelto.
+      let res = await call(projectId, scope).catch((e: unknown) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
       // Otra persona cambió después lo que se va a deshacer: se pregunta y, si acepta, se aplica esa misma entrada.
       const conflict = res.data.conflict;
       if (conflict) {
         if (!(await confirm({ title: conflict.title, message: conflict.message, confirmLabel: conflict.confirmLabel, danger: conflict.danger }))) return;
-        res = await call(projectId, scope, conflict.entryId);
+        res = await call(projectId, scope, conflict.entryId).catch((e: unknown) => actionThrowResult(e, t));
         if (!res.ok) return toast(res.error, "error");
       }
       if (!res.data.applied) return;
@@ -58,12 +60,12 @@ export function UndoButton({ projectId, shortcut = false, inDialog = false, clas
       );
       // Con una tarea abierta se recarga su detalle también tras un Alt+Z (puede haber deshecho algo suyo).
       if (taskId) window.dispatchEvent(new CustomEvent(UNDONE_EVENT, { detail: { taskId } }));
-      router.refresh();
+      safeRefresh();
     } finally {
       busyRef.current = false;
       setBusy(null);
     }
-  }, [projectId, taskId, router, toast, t, confirm]);
+  }, [projectId, taskId, safeRefresh, toast, t, confirm]);
 
   useEffect(() => {
     if (!shortcut) return;
