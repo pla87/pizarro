@@ -1,6 +1,89 @@
 {
   "versions": [
     {
+      "version": "1.51.0",
+      "date": "2026-11-12",
+      "releasedAt": "2026-11-12T23:24:48+01:00",
+      "summary": "Guía de instalación en getpizarro.com, plantilla de autenticación de WhatsApp, funciona sin conexión, copias que siempre se restauran y cinco vueltas de revisión y caza de bugs",
+      "changes": {
+        "nuevas": [
+          "Guía de instalación completa y sencilla en getpizarro.com (/instalar/), en español e inglés.",
+          "WhatsApp: el código de verificación llega con una plantilla de autenticación («Copiar código»), como exige Meta.",
+          "Administración → Ajustes → Instalación: cambiar el nombre de la organización, el idioma por defecto y la zona horaria.",
+          "«Reenviar invitación» para quien aún no ha entrado, e idioma al crear un usuario.",
+          "Workflow «Mover stable» para poner la rama stable en la última versión sin publicar otra."
+        ],
+        "mejoras": [
+          "Sin conexión o con el servidor reiniciándose, la app ya no se cae: avisa, conserva lo escrito y se pone al día al volver.",
+          "Las pestañas en segundo plano liberan su conexión en vivo; en red local sin HTTPS ya no se cuelga con muchas pestañas.",
+          "Los conflictos de edición solo saltan si se cambia el mismo campo, también desde otra pestaña propia.",
+          "Varias personas pueden comentar a la vez y todas ven todos los comentarios.",
+          "Las contraseñas se comprueban en hilos aparte y con tope: un ataque de muchos intentos ya no frena la app.",
+          "Recargas escalonadas tras cambios ajenos, menos precargas, caché en Administración y menos JavaScript en el navegador.",
+          "Deshacer con muchos adjuntos, arrastrar con muchas tarjetas y la cabecera del tablero con nombres largos van mejor.",
+          "Accesibilidad: «Saltar al contenido», tarjetas y campos del detalle con nombre, atajos anunciados y foco correcto.",
+          "Los títulos cuentan los emojis como se ven y el contador dice cuánto cabe de verdad.",
+          "Los resúmenes por email ya no esperan a las copias de seguridad; la copia usa su propia conexión."
+        ],
+        "correcciones": [
+          "Las copias de instalaciones con más de 500 tareas o comentarios vuelven a restaurarse siempre.",
+          "Configurar un destino externo ya no borra de golpe los ficheros de las copias locales.",
+          "Una descripción preparada a propósito ya no puede congelar el servidor al generar un calendario .ics.",
+          "Con npm start, una instalación nueva muestra el código del asistente y crea las plantillas de serie.",
+          "Cambiar el idioma en el asistente o en Mi perfil ya no borra lo escrito.",
+          "Las invitaciones salen en el idioma de la instalación o el elegido.",
+          "Una release ya no se registra con el título antiguo de una tarea renombrada mientras tanto.",
+          "Si otra persona borra la tarea que tienes abierta, se avisa y se ofrece copiar tu texto.",
+          "Avatares y calendario con emojis en el nombre, caracteres nulos en filtros, cuotas imposibles y otros detalles."
+        ],
+        "tecnicos": [
+          "Bloqueos advisory en un único módulo, copia y subida externa con bloqueo entre procesos, conexiones pg con tope.",
+          "Pruebas más estables (sin esperas fijas ni topes frágiles), nuevas suites e2e e install-e2e, diccionarios por tema.",
+          "La rama stable se mueve con un token comprobado antes de usarlo."
+        ]
+      },
+      "en": {
+        "summary": "Installation guide on getpizarro.com, WhatsApp authentication template, works offline, backups that always restore, and five rounds of review and bug hunting",
+        "changes": {
+          "nuevas": [
+            "Complete and simple installation guide on getpizarro.com (/en/install/), in Spanish and English.",
+            "WhatsApp: the verification code arrives with an authentication template («Copy code»), as Meta requires.",
+            "Administration → Settings → Installation: change the organisation name, default language and time zone.",
+            "«Resend invitation» for people who have never signed in, and a language choice when creating a user.",
+            "«Move stable» workflow to set the stable branch to the latest version without publishing another one."
+          ],
+          "mejoras": [
+            "Offline or while the server restarts, the app no longer crashes: it warns, keeps what you typed and catches up when back.",
+            "Background tabs release their live connection; on a local network without HTTPS many tabs no longer hang.",
+            "Edit conflicts only show when the same field changed, also from another tab of your own.",
+            "Several people can comment at once and everyone sees every comment.",
+            "Passwords are checked on separate threads and with a cap: a flood of attempts no longer slows the app.",
+            "Staggered reloads after other people's changes, fewer prefetches, caching in Administration and less JavaScript in the browser.",
+            "Undo with many attachments, dragging with many cards and the board header with long names work better.",
+            "Accessibility: «Skip to content», named cards and detail fields, announced shortcuts and correct focus.",
+            "Titles count emojis as you see them and the counter shows how much really fits.",
+            "Email summaries no longer wait for backups; backups use their own connection."
+          ],
+          "correcciones": [
+            "Backups of installations with more than 500 tasks or comments always restore again.",
+            "Setting up an external destination no longer deletes the local backup files at once.",
+            "A crafted description can no longer freeze the server when generating an .ics calendar.",
+            "With npm start, a new installation shows the setup code and creates the default templates.",
+            "Changing the language in the setup wizard or in My profile no longer erases what you typed.",
+            "Invitations are sent in the installation's language or the one chosen.",
+            "A release is no longer recorded with the old title of a task renamed in the meantime.",
+            "If someone deletes the task you have open, you are told and offered to copy your text.",
+            "Avatars and calendar with emojis in names, null characters in filters, impossible quotas and other details."
+          ],
+          "tecnicos": [
+            "Advisory locks in a single module, backup and external upload locked across processes, pg connections with timeouts.",
+            "More stable tests (no fixed waits or fragile limits), new e2e and install-e2e suites, dictionaries by topic.",
+            "The stable branch is moved with a token that is checked before use."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.50.0",
       "date": "2026-11-11",
       "releasedAt": "2026-11-11T03:19:09+01:00",

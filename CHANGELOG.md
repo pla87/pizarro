@@ -2,6 +2,49 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.51.0 — 2026-11-12 23:24
+
+Guía de instalación en getpizarro.com, plantilla de autenticación de WhatsApp, funciona sin conexión, copias que siempre se restauran y cinco vueltas de revisión y caza de bugs
+
+### Nuevas funcionalidades
+
+- Guía de instalación completa y sencilla en getpizarro.com (/instalar/), en español e inglés.
+- WhatsApp: el código de verificación llega con una plantilla de autenticación («Copiar código»), como exige Meta.
+- Administración → Ajustes → Instalación: cambiar el nombre de la organización, el idioma por defecto y la zona horaria.
+- «Reenviar invitación» para quien aún no ha entrado, e idioma al crear un usuario.
+- Workflow «Mover stable» para poner la rama stable en la última versión sin publicar otra.
+
+### Mejoras
+
+- Sin conexión o con el servidor reiniciándose, la app ya no se cae: avisa, conserva lo escrito y se pone al día al volver.
+- Las pestañas en segundo plano liberan su conexión en vivo; en red local sin HTTPS ya no se cuelga con muchas pestañas.
+- Los conflictos de edición solo saltan si se cambia el mismo campo, también desde otra pestaña propia.
+- Varias personas pueden comentar a la vez y todas ven todos los comentarios.
+- Las contraseñas se comprueban en hilos aparte y con tope: un ataque de muchos intentos ya no frena la app.
+- Recargas escalonadas tras cambios ajenos, menos precargas, caché en Administración y menos JavaScript en el navegador.
+- Deshacer con muchos adjuntos, arrastrar con muchas tarjetas y la cabecera del tablero con nombres largos van mejor.
+- Accesibilidad: «Saltar al contenido», tarjetas y campos del detalle con nombre, atajos anunciados y foco correcto.
+- Los títulos cuentan los emojis como se ven y el contador dice cuánto cabe de verdad.
+- Los resúmenes por email ya no esperan a las copias de seguridad; la copia usa su propia conexión.
+
+### Correcciones
+
+- Las copias de instalaciones con más de 500 tareas o comentarios vuelven a restaurarse siempre.
+- Configurar un destino externo ya no borra de golpe los ficheros de las copias locales.
+- Una descripción preparada a propósito ya no puede congelar el servidor al generar un calendario .ics.
+- Con npm start, una instalación nueva muestra el código del asistente y crea las plantillas de serie.
+- Cambiar el idioma en el asistente o en Mi perfil ya no borra lo escrito.
+- Las invitaciones salen en el idioma de la instalación o el elegido.
+- Una release ya no se registra con el título antiguo de una tarea renombrada mientras tanto.
+- Si otra persona borra la tarea que tienes abierta, se avisa y se ofrece copiar tu texto.
+- Avatares y calendario con emojis en el nombre, caracteres nulos en filtros, cuotas imposibles y otros detalles.
+
+### Cambios técnicos / DB
+
+- Bloqueos advisory en un único módulo, copia y subida externa con bloqueo entre procesos, conexiones pg con tope.
+- Pruebas más estables (sin esperas fijas ni topes frágiles), nuevas suites e2e e install-e2e, diccionarios por tema.
+- La rama stable se mueve con un token comprobado antes de usarlo.
+
 ## v1.50.0 — 2026-11-11 03:19
 
 Avisos por Telegram y WhatsApp, guías de conexión en getpizarro.com, versiones con nombre para todas las instalaciones, informar de errores y tres vueltas de revisión y caza de bugs
