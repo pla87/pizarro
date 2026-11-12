@@ -112,8 +112,9 @@ describe("miembros de proyectos privados", () => {
 
 describe("contraseñas y cambio forzado", () => {
   test("ninguna acción de administración permite fijar la contraseña de otra persona", async () => {
-    // La API de usuarios solo ofrece alta (clave inicial obligada a cambiar), edición, forzar cambio, 2FA y borrado.
-    assert.deepEqual(Object.keys(usersActions).sort(), ["allowGoogleRelink", "createUser", "deleteUser", "forcePasswordChange", "resetUserTwoFactor", "unlinkGoogle", "updateUser"]);
+    // La API de usuarios solo ofrece alta (clave inicial obligada a cambiar), edición, forzar cambio, 2FA, borrado y
+    // reenviar la invitación (el enlace va al email de la persona; el admin no lo ve).
+    assert.deepEqual(Object.keys(usersActions).sort(), ["allowGoogleRelink", "createUser", "deleteUser", "forcePasswordChange", "resendInvite", "resetUserTwoFactor", "unlinkGoogle", "updateUser"]);
 
     const admin = await makeUser({ role: "ADMIN" });
     const target = await makeUser();

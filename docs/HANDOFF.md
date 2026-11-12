@@ -139,6 +139,31 @@ Guardas que conviene conocer:
   detecta que ha desaparecido el proceso padre (también si npm muere de golpe) y lanza el apagado ordenado en ~1 s
   (solo si lo arrancó npm). Pruebas: `tests/start-signals.test.ts` (arranca `npm start` de verdad con un servidor de
   prueba, lo para con SIGTERM al pid de npm y comprueba que no queda huérfano).
+  Antes de cargar `server.js`, `start-local.mjs` importa `dist/boot.mjs` y espera a `runBoot()`: las mismas tareas de
+  arranque que el contenedor (`system.boot`, historial de versiones, seed, código de `/setup` en la terminal y
+  plantillas de serie), en el mismo proceso y sin abrir otro servidor. Sin `dist/boot.mjs` o si fallan, no arranca.
+  `boot.ts` solo se ejecuta por sí mismo cuando se lanza directamente (`node dist/boot.mjs`); al terminar desconecta su cliente
+  de Prisma y lo quita de `globalThis` para que el servidor no herede uno cerrado. `start.sh` y `start-local.mjs` fijan
+  `PIZARRO_LAUNCHER` (`docker` / `npm`) para que el paso 1 de `/setup` diga dónde mirar el código
+  (`setupCodeSource`, `src/lib/setup-core.ts`; Railway se detecta por sus variables). Recorrido completo desde cero:
+  `e2e/install-e2e.mjs`.
+- Idioma en el cliente (`src/i18n/client.tsx`): `I18nProvider` pinta siempre el mismo `I18nContext.Provider` y solo
+  cambia `value`; el diccionario de inglés llega con `use()` (y `next/dynamic` solo para la precarga en el HTML). No
+  vuelvas a envolver los hijos en un componente distinto según el idioma: React desmontaba la página entera al cambiar
+  (el asistente volvía al paso 1). El layout raíz no se repinta en la navegación de cliente: un enlace de una pantalla
+  sin sesión que puede ir en otro idioma (`/reset`, `/confirm`, `/login/verify`, `/setup` → `/login`) es un `<a href>`
+  con recarga completa, no un `Link`.
+- Aviso de pg «DeprecationWarning: Calling client.query() when the client is already executing a query»: pg 8.23 lo
+  da cuando un mismo `pg.Client` recibe una tercera consulta con otras dos en curso (en pg 9 será un error). Buscado con
+  `NODE_OPTIONS=--trace-deprecation` y con `e2e/warn-hook.mjs` (anota cada aviso de Node con su pila en `WARN_LOG`) en:
+  `npm start` y `node dist/boot.mjs` sobre una base vacía y sobre una ya instalada, `prisma migrate deploy` con y sin
+  migraciones pendientes, la primera pasada de las tareas de fondo (copia cifrada con `BACKUP_KEY` incluida), el asistente
+  completo y las suites QA, tablero e instalación. No sale en ningún caso: ni la app ni Prisma (`@prisma/adapter-pg` usa
+  el pool, y en las transacciones interactivas no hay `Promise.all` sobre `tx`; `PgSql` de las copias encadena sus
+  consultas). El que se veía venía del arnés de las pruebas (`L.q` en paralelo en `e2e/qa/lib.mjs`, ya en fila desde la
+  caza de bugs anterior). `e2e/install-e2e.mjs` arranca el servidor con `warn-hook.mjs` y falla si vuelve a aparecer.
+  Para localizarlo en otro proceso: `WARN_LOG=/ruta/avisos.log NODE_OPTIONS="--import file://$PWD/e2e/warn-hook.mjs"`.
+  Ojo con código nuevo que use un `pg.Client` propio (`pg-connect.ts`): sus consultas, en fila.
 
 Antes de cada fusión en `main`, comprueba que no se cuela ningún dato personal del propietario en el diff ni en el
 PDF del manual (busca su nombre, email y dominios; pídeselos si no los sabes) y que los mensajes de commit no

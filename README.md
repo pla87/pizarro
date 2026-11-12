@@ -58,7 +58,7 @@ Para generar un `SESSION_SECRET`: `openssl rand -base64 48`.
 | Script | Descripción |
 |---|---|
 | `npm run dev` | Servidor de desarrollo. |
-| `npm run build` / `npm start` | Build de producción (salida *standalone*) y arranque (`scripts/start-local.mjs`: deja las subidas en la carpeta del proyecto y no dentro de `.next/standalone`, que se borra en cada build). |
+| `npm run build` / `npm start` | Build de producción (salida *standalone*) y arranque (`scripts/start-local.mjs`: deja las subidas en la carpeta del proyecto y no dentro de `.next/standalone`, que se borra en cada build, y antes de abrir el servidor ejecuta las mismas tareas de arranque que el contenedor, `dist/boot.mjs`: registro del arranque, historial de versiones, seed, código de `/setup` en la terminal y plantillas de serie). Las migraciones se aplican aparte (`npx prisma migrate deploy`). |
 | `npm run check` | Lint + typecheck + tests. |
 | `npm test` | Tests unitarios (generador de releases, posiciones, validación, imágenes, changelog). |
 | `npm run test:db` | Tests de integración (permisos y deshacer) contra una PostgreSQL efímera; ver «Tests de integración». |

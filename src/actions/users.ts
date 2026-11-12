@@ -21,6 +21,7 @@ import { requireAdmin } from "@/lib/session";
 import { clearTwoFactor } from "@/lib/two-factor";
 import * as v from "@/lib/validation";
 import { getT } from "@/i18n/server";
+import { getInstanceSettings } from "@/lib/instance";
 import { revokeUser } from "@/lib/revoke";
 
 const createSchema = z.object({
@@ -29,6 +30,8 @@ const createSchema = z.object({
   /** Solo se pide sin email configurado; con email, la persona elige la suya desde la invitación. */
   password: z.string().max(200).optional(),
   role: z.enum(["ADMIN", "MEMBER"]),
+  /** Idioma de su interfaz y de la invitación; sin indicar, el de la instalación. */
+  locale: z.enum(["ES", "EN"]).optional(),
 });
 
 /**
@@ -49,9 +52,10 @@ async function assertUserSlot(client: Prisma.TransactionClient | typeof db): Pro
 }
 
 export async function createUser(input: z.input<typeof createSchema>) {
-  return runAction({ name: "users.createUser", args: [{ name: input.name, email: input.email, role: input.role }] }, async () => {
+  return runAction({ name: "users.createUser", args: [{ name: input.name, email: input.email, role: input.role, locale: input.locale }] }, async () => {
     const admin = await requireAdmin();
     const data = createSchema.parse(input);
+    const locale = data.locale ?? ((await getInstanceSettings()).locale === "en" ? "EN" : "ES");
     const invite = emailEnabled();
     const initial = invite ? null : passwordSchema("La contraseña debe tener al menos 10 caracteres.").parse(data.password ?? "");
     await assertUserSlot(db);
@@ -62,7 +66,7 @@ export async function createUser(input: z.input<typeof createSchema>) {
     const created = await db.$transaction(async (tx) => {
       await assertUserSlot(tx);
       return tx.user.create({
-        data: { name: data.name, email: data.email, role: data.role, mustChangePassword: true, passwordHash },
+        data: { name: data.name, email: data.email, role: data.role, locale, mustChangePassword: true, passwordHash },
         select: { id: true, name: true, email: true, locale: true },
       });
     });
@@ -73,9 +77,43 @@ export async function createUser(input: z.input<typeof createSchema>) {
       await sendInviteMail(created, `${appUrl()}/reset/${token}`, admin.name);
     } catch (err) {
       logMailError("[users] invitación", err);
-      throw new AppError("Usuario creado, pero no se pudo enviar la invitación. Usa «Forzar cambio de contraseña» para reenviarla.");
+      throw new AppError("Usuario creado, pero no se pudo enviar la invitación. Revisa el envío de emails y pulsa «Reenviar invitación» en su fila.");
     }
     return { invited: true };
+  });
+}
+
+/**
+ * ¿Invitación pendiente? Debe elegir contraseña y nunca ha entrado: sin sesiones, sin dispositivos conocidos (cada acceso
+ * deja uno, que se conserva 400 días) y sin Google enlazado. Quien ya entró alguna vez usa «Forzar cambio de contraseña».
+ */
+async function invitePending(userId: string): Promise<boolean> {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { mustChangePassword: true, googleSub: true, _count: { select: { sessions: true, knownDevices: true } } },
+  });
+  return !!user && user.mustChangePassword && !user.googleSub && user._count.sessions === 0 && user._count.knownDevices === 0;
+}
+
+/** «Reenviar invitación»: enlace nuevo (72 h) por email; el anterior deja de valer. Solo para quien aún no ha entrado. */
+export async function resendInvite(userId: string) {
+  return runAction({ name: "users.resendInvite", args: [userId] }, async () => {
+    const admin = await requireAdmin();
+    if (!rateLimit(`resend-invite:${admin.id}`, 20, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
+    if (!emailEnabled()) throw new AppError("El envío de emails no está configurado.");
+    const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, name: true, email: true, locale: true, active: true } });
+    if (!user) throw notFound();
+    if (!user.active) throw new AppError("La cuenta está desactivada: actívala antes de reenviar la invitación.");
+    if (!(await invitePending(user.id))) throw new AppError("Esta persona ya ha entrado alguna vez: usa «Forzar cambio de contraseña».");
+    try {
+      // issueAuthToken borra antes la invitación pendiente: solo vale el enlace nuevo.
+      const token = await issueAuthToken(user.id, "INVITE");
+      await sendInviteMail(user, `${appUrl()}/reset/${token}`, admin.name);
+    } catch (err) {
+      logMailError("[users] reenviar invitación", err);
+      throw new AppError("No se pudo enviar la invitación. Revisa el envío de emails en Administración → Ajustes.");
+    }
+    describeAction(`Reenvió la invitación a «${user.name}»`);
   });
 }
 

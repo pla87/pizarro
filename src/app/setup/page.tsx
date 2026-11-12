@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { DEFAULT_TIME_ZONE } from "@/lib/format";
 import { emailEnabled } from "@/lib/mail";
 import { isSetupPending } from "@/lib/setup";
+import { setupCodeSource } from "@/lib/setup-core";
 import { SetupWizard } from "./SetupWizard";
 
 export const metadata = { title: "Setup" };
@@ -14,5 +15,5 @@ export default async function SetupPage() {
   const zones = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [DEFAULT_TIME_ZONE];
   if (!zones.includes("UTC")) zones.push("UTC");
   const envTz = process.env.APP_TIMEZONE || null;
-  return <SetupWizard zones={zones} defaultZone={envTz ?? DEFAULT_TIME_ZONE} zoneLocked={Boolean(envTz)} smtp={emailEnabled()} />;
+  return <SetupWizard zones={zones} defaultZone={envTz ?? DEFAULT_TIME_ZONE} zoneLocked={Boolean(envTz)} smtp={emailEnabled()} codeSource={setupCodeSource()} />;
 }

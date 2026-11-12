@@ -73,11 +73,14 @@ export async function resendLoginCode() {
   });
 }
 
-/** «Volver»: descarta el estado pendiente y regresa a la pantalla de acceso. */
+/**
+ * «Volver»: descarta el estado pendiente. Quien llama vuelve a /login con una recarga completa (BackToLogin): el acceso
+ * sale en el idioma de la instalación y esta pantalla en el de la persona, y en la navegación de cliente el layout raíz
+ * conservaría el de esta pantalla.
+ */
 export async function cancelSecondStep(): Promise<void> {
   const ch = await readChallenge();
   if (ch) await dropChallenge(ch.id);
-  redirect("/login");
 }
 
 /** Administrador sin método: elige cuál configurar. TOTP devuelve el secreto para la app; EMAIL envía un código de prueba. */

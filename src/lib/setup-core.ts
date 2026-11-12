@@ -91,3 +91,14 @@ export function parseSetupEmail(raw: unknown): string | null {
   const r = v.email.safeParse(String(raw ?? ""));
   return r.success ? r.data : null;
 }
+
+/** Dónde ve quien instala el código del asistente: el log del contenedor, la terminal de `npm start` o los logs de Railway. */
+export type SetupCodeSource = "docker" | "npm" | "railway" | "unknown";
+
+/** Según cómo se arrancó el servidor (scripts/start.sh y scripts/start-local.mjs fijan PIZARRO_LAUNCHER). */
+export function setupCodeSource(env: Record<string, string | undefined> = process.env): SetupCodeSource {
+  if (env.RAILWAY_ENVIRONMENT || env.RAILWAY_PROJECT_ID) return "railway";
+  if (env.PIZARRO_LAUNCHER === "npm") return "npm";
+  if (env.PIZARRO_LAUNCHER === "docker") return "docker";
+  return "unknown";
+}

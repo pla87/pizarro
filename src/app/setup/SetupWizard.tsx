@@ -1,13 +1,13 @@
 "use client";
 
 import { CheckCircle2, Loader2 } from "lucide-react";
-import Link from "next/link";
-import { useState, useTransition } from "react";
+import { startTransition, useState, useTransition } from "react";
 import { completeSetupAction, sendSetupTestEmail, verifySetupCodeAction } from "@/actions/setup";
 import { BrandMark } from "@/components/ui/BrandMark";
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { I18nProvider, useT } from "@/i18n/client";
+import { I18nProvider, preloadEnglish, useT } from "@/i18n/client";
 import type { Locale } from "@/i18n/core";
+import type { SetupCodeSource } from "@/lib/setup-core";
 
 interface Props {
   zones: string[];
@@ -15,13 +15,21 @@ interface Props {
   /** APP_TIMEZONE manda: la zona no se puede cambiar aquí. */
   zoneLocked: boolean;
   smtp: boolean;
+  /** Dónde se ve el código de configuración según cómo se arrancó el servidor. */
+  codeSource: SetupCodeSource;
 }
 
 const STEPS = 5;
 
 export function SetupWizard(props: Props) {
-  // El idioma elegido en el paso 2 cambia ya los textos del propio asistente.
-  const [lang, setLang] = useState<Locale>("es");
+  // El idioma elegido en el paso 2 cambia ya los textos del propio asistente. I18nProvider pinta siempre el mismo árbol,
+  // así que el cambio no desmonta <Wizard> (antes volvía al paso 1 y se perdía lo escrito). En una transición: mientras
+  // llega el diccionario de inglés se sigue viendo el asistente tal cual.
+  const [lang, setLangState] = useState<Locale>("es");
+  const setLang = (l: Locale) => {
+    if (l === "en") preloadEnglish().catch(() => {});
+    startTransition(() => setLangState(l));
+  };
   return (
     <I18nProvider locale={lang}>
       <Wizard {...props} lang={lang} setLang={setLang} />
@@ -29,7 +37,21 @@ export function SetupWizard(props: Props) {
   );
 }
 
-function Wizard({ zones, defaultZone, zoneLocked, smtp, lang, setLang }: Props & { lang: Locale; setLang: (l: Locale) => void }) {
+/** Texto del paso 1: dónde está el código según la instalación. */
+function codeHint(source: SetupCodeSource, t: ReturnType<typeof useT>): string {
+  switch (source) {
+    case "docker":
+      return t("Para asegurarnos de que eres quien instala el servidor, escribe el código de configuración que te dio el instalador o que aparece en el log del contenedor (docker compose logs app).");
+    case "npm":
+      return t("Para asegurarnos de que eres quien instala el servidor, escribe el código de configuración que aparece en la terminal donde ejecutaste npm start.");
+    case "railway":
+      return t("Para asegurarnos de que eres quien instala el servidor, escribe el código de configuración que aparece en los logs de Railway (servicio de la app → Deployments → View logs).");
+    default:
+      return t("Para asegurarnos de que eres quien instala el servidor, escribe el código de configuración que aparece en el log del servidor: con Docker, docker compose logs app; con npm start, la terminal; en Railway, los logs del despliegue.");
+  }
+}
+
+function Wizard({ zones, defaultZone, zoneLocked, smtp, codeSource, lang, setLang }: Props & { lang: Locale; setLang: (l: Locale) => void }) {
   const t = useT();
   const [step, setStep] = useState(1);
   const [code, setCode] = useState("");
@@ -93,7 +115,7 @@ function Wizard({ zones, defaultZone, zoneLocked, smtp, lang, setLang }: Props &
           {step === 1 && (
             <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); submitCode(); }}>
               <h1 className="text-lg font-semibold">{t("Configurar Pizarro")}</h1>
-              <p className="text-sm text-slate-500">{t("Para asegurarnos de que eres quien instala el servidor, escribe el código de configuración que aparece en el log del servidor (docker compose logs app) o que te dio el instalador.")}</p>
+              <p className="text-sm text-slate-500">{codeHint(codeSource, t)}</p>
               <div>
                 <label className="label" htmlFor="setup-code">{t("Código de configuración")}</label>
                 <input id="setup-code" className="input font-mono tracking-widest" autoComplete="off" autoCapitalize="characters" spellCheck={false} placeholder="XXXX-XXXX" required autoFocus value={code} onChange={(e) => setCode(e.target.value)} />
@@ -173,7 +195,7 @@ function Wizard({ zones, defaultZone, zoneLocked, smtp, lang, setLang }: Props &
                 </>
               ) : (
                 <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
-                  {t("El envío de emails (SMTP) no está configurado. Sin él no hay invitaciones por email ni «¿Olvidaste tu contraseña?». Puedes añadir las variables SMTP_* más adelante (docs/INSTALL.md).")}
+                  {t("El envío de emails (SMTP) no está configurado. Sin él no hay invitaciones por email ni «¿Olvidaste tu contraseña?». Podrás configurarlo después de entrar, en Administración → Ajustes → Avisos por email, o con las variables SMTP_* del servidor (docs/INSTALL.md).")}
                 </p>
               )}
               {infoBox}
@@ -195,7 +217,9 @@ function Wizard({ zones, defaultZone, zoneLocked, smtp, lang, setLang }: Props &
                 <h1 className="text-lg font-semibold">{t("Todo listo")}</h1>
               </div>
               <p className="text-sm text-slate-500">{t("Pizarro está configurado. Entra con tu email y tu contraseña; te pedirá activar la verificación en dos pasos.")}</p>
-              <Link href="/login" className="btn-primary w-full">{t("Ir a iniciar sesión")}</Link>
+              {/* Recarga completa: el acceso sale en el idioma recién elegido para la instalación (un Link conservaría el del
+                  layout, pintado antes de terminar el asistente). */}
+              <a href="/login" className="btn-primary w-full">{t("Ir a iniciar sesión")}</a>
             </div>
           )}
         </div>

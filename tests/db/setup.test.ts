@@ -97,6 +97,16 @@ describe("asistente de primer arranque", () => {
     assert.deepEqual(state, { "instance.orgName": "Acme", "instance.locale": "en", "instance.timeZone": "Europe/Lisbon" });
     assert.equal(await db.appState.count({ where: { key: SETUP_CODE_KEY } }), 0, "el código se borra");
     assert.equal(await db.project.count(), 1, "proyecto de ejemplo como con el seed");
+    // Instalación en inglés: el proyecto de ejemplo y las plantillas del administrador, también en inglés y sin jerga.
+    const project = await db.project.findFirstOrThrow({ include: { columns: true, labels: true, tasks: { include: { subtasks: true } }, deliverables: true } });
+    assert.equal(project.name, "Example project");
+    assert.doesNotMatch(project.description, /seed/i);
+    assert.match(project.description, /trying out Pizarro/);
+    assert.ok(project.columns.some((c) => c.name === "In progress"), "columnas en inglés");
+    assert.ok(project.labels.some((l) => l.name === "Urgent"));
+    assert.equal(project.deliverables[0]?.name, "Closed beta");
+    assert.ok(project.tasks.some((t) => t.title === "Data export screen" && t.subtasks.map((s) => s.title).join() === "Design,Implementation,Testing"));
+    assert.deepEqual(admin.releaseTemplates.map((r) => r.name).sort(), ["AI context", "Release checklist"]);
   });
 
   test("una segunda ejecución se bloquea (también con el código válido o SETUP_TOKEN)", async () => {
