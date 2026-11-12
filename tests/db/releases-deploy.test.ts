@@ -51,6 +51,30 @@ describe("deployRelease", () => {
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: b.id } })).columnId, prod.id);
   });
 
+  test("rechaza el despliegue si otra persona renombró alguna tarea desde que se generó el texto (título viejo en las notas)", async () => {
+    const { f, prod } = await setup();
+    const a = await makeTask(f, { title: "A", columnId: f.columns.done });
+    const b = await makeTask(f, { title: "B", columnId: f.columns.done });
+    const columns = [{ taskId: a.id, columnId: f.columns.done }, { taskId: b.id, columnId: f.columns.done }];
+    const titles = [{ taskId: a.id, title: "A" }, { taskId: b.id, title: "B" }];
+    // Al generar se llamaba «B»; luego otra persona la renombra.
+    await db.task.update({ where: { id: b.id }, data: { title: "B renombrada" } });
+    const input = { projectId: f.project.id, title: "R", content: "- A\n- B", destination: "IN_PRODUCTION" as const, taskIds: [a.id, b.id], columns };
+    expectFail(await deployRelease({ ...input, titles }), /Una de las tareas ha cambiado de título mientras tanto: vuelve a generar la release/);
+    assert.equal(await db.release.count({ where: { projectId: f.project.id } }), 0);
+    await db.task.update({ where: { id: a.id }, data: { title: "A renombrada" } });
+    expectFail(await deployRelease({ ...input, titles }), /2 de las tareas han cambiado de título/);
+    // Nada sale a producción ni se renombra.
+    const rows = await db.task.findMany({ where: { id: { in: [a.id, b.id] } }, orderBy: { title: "asc" } });
+    assert.deepEqual(rows.map((r) => [r.title, r.columnId]), [["A renombrada", f.columns.done], ["B renombrada", f.columns.done]]);
+    // Con el texto generado de nuevo (títulos de ahora) sí se despliega, y el histórico lleva esos títulos.
+    const fresh = [{ taskId: a.id, title: "A renombrada" }, { taskId: b.id, title: "B renombrada" }];
+    const res = expectOk(await deployRelease({ ...input, titles: fresh }));
+    const kept = await db.releaseTask.findMany({ where: { releaseId: res.releaseId }, orderBy: { title: "asc" } });
+    assert.deepEqual(kept.map((k) => k.title), ["A renombrada", "B renombrada"]);
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: b.id } })).columnId, prod.id);
+  });
+
   test("los códigos del título no dependen del idioma de quien despliega (nombre guardado del tipo)", async () => {
     const user = await makeUser();
     await db.user.update({ where: { id: user.id }, data: { locale: "EN" } });

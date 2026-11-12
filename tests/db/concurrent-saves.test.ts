@@ -78,14 +78,52 @@ describe("updateTask: conflicto de texto dentro de la transacción", () => {
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).description, winner);
   });
 
-  test("la misma persona puede volver a guardar sin conflicto", async () => {
+  test("una sola pestaña guarda varias veces seguidas (título, descripción, autoguardado) sin conflictos falsos", async () => {
+    const a = await makeUser();
+    const f = await makeProject({ members: [a] });
+    const task = await makeTask(f);
+    await loginAs(a);
+    // Como TaskDialog: cada guardado envía la versión del texto que devolvió el anterior.
+    let version: string | null = null;
+    for (const patch of [{ description: "<p>1</p>" }, { title: "Título 2" }, { description: "<p>3</p>" }, { title: "Título 4", description: "<p>4</p>" }, { description: "<p>5</p>" }]) {
+      version = expectOk(await updateTask(task.id, patch, version)).textVersion;
+    }
+    const row = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+    assert.deepEqual([row.title, row.description], ["Título 4", "<p>5</p>"]);
+    // Sin tocar el texto (otro campo) no se manda versión ni cambia.
+    expectOk(await updateTask(task.id, { linkUrl: "https://example.com/a" }));
+    expectOk(await updateTask(task.id, { description: "<p>6</p>" }, version));
+  });
+
+  test("dos pestañas o dispositivos de la misma persona: el segundo guardado no pisa el primero (409)", async () => {
+    const a = await makeUser({ name: "Ana" });
+    const f = await makeProject({ members: [a] });
+    const task = await makeTask(f, { title: "T" });
+    await loginAs(a);
+    // Las dos pestañas abrieron la tarea con la misma versión del texto.
+    const opened = expectOk(await updateTask(task.id, { description: "<p>Inicial</p>" }, null)).textVersion;
+    await new Promise((r) => setTimeout(r, 5));
+    // Pestaña A guarda su descripción.
+    expectOk(await updateTask(task.id, { description: "<p>Desde A</p>" }, opened));
+    // Pestaña B guarda la suya sobre la versión de la apertura: antes pasaba (misma persona) y se perdía lo de A.
+    expectFail(await updateTask(task.id, { description: "<p>Desde B</p>" }, opened), /Has cambiado el texto de esta tarea en otra pestaña u otro dispositivo/);
+    expectFail(await updateTask(task.id, { title: "Título de B" }, opened), /otra pestaña u otro dispositivo/);
+    const row = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+    assert.deepEqual([row.title, row.description], ["T", "<p>Desde A</p>"]);
+  });
+
+  test("dos guardados casi a la vez de la misma persona desde dos pestañas: solo pasa uno", async () => {
     const a = await makeUser();
     const f = await makeProject({ members: [a] });
     const task = await makeTask(f);
     const since = new Date().toISOString();
-    await loginAs(a);
-    expectOk(await updateTask(task.id, { description: "<p>1</p>" }, since));
-    expectOk(await updateTask(task.id, { description: "<p>2</p>" }, since));
+    await new Promise((r) => setTimeout(r, 5));
+    const results = await Promise.all([
+      asOwnRequest(a, () => updateTask(task.id, { description: "<p>A</p>" }, since)),
+      asOwnRequest(a, () => updateTask(task.id, { description: "<p>B</p>" }, since)),
+    ]);
+    assert.equal(results.filter((r) => r.ok).length, 1, JSON.stringify(results.map((r) => r.ok || r.error)));
+    expectFail(results.find((r) => !r.ok)!, /otra pestaña u otro dispositivo/);
   });
 });
 

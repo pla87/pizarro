@@ -444,18 +444,26 @@ async function recordUpdateEvents(
   skipTaskEvents();
 }
 
-/** 409 si otra persona ha cambiado el título o la descripción después de `since` (cuándo se cargó lo que se edita). */
+/**
+ * 409 si el título o la descripción han cambiado después de `since` (la versión del texto que se está editando,
+ * `textVersion`). Cuenta también un cambio de la misma persona: desde otra pestaña u otro dispositivo pisaría lo guardado
+ * allí sin aviso. Los guardados seguidos de una misma pestaña no chocan porque cada uno envía la versión que devolvió el
+ * anterior (ver `save` en TaskDialog).
+ */
 async function assertNoTextConflict(row: { contentUpdatedAt: Date | null; contentUpdatedById: string | null }, userId: string, since: string | null | undefined, client: Prisma.TransactionClient = db) {
   const base = since ? new Date(since).getTime() : 0;
-  if (!row.contentUpdatedAt || row.contentUpdatedById === userId || row.contentUpdatedAt.getTime() <= base) return;
-  const who = row.contentUpdatedById ? (await client.user.findUnique({ where: { id: row.contentUpdatedById }, select: { name: true } }))?.name : null;
+  if (!row.contentUpdatedAt || row.contentUpdatedAt.getTime() <= base) return;
   const t = await getT();
+  if (row.contentUpdatedById === userId) {
+    throw new AppError(t("Has cambiado el texto de esta tarea en otra pestaña u otro dispositivo mientras la editabas aquí. Se ha recargado con ese texto: vuelve a aplicar tus cambios."), 409);
+  }
+  const who = row.contentUpdatedById ? (await client.user.findUnique({ where: { id: row.contentUpdatedById }, select: { name: true } }))?.name : null;
   throw new AppError(who ? t("{who} ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos.", { who }) : t("Otra persona ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos."), 409);
 }
 
 /**
- * `since`: cuándo se cargó el título/descripción que se está editando. Si otra persona los ha
- * cambiado después, no se pisa su texto: se avisa para recargar.
+ * `since`: versión del título/descripción que se está editando (`textVersion`). Si han cambiado después (otra
+ * persona, u otra pestaña o dispositivo de la misma), no se pisa ese texto: se avisa para recargar.
  */
 export async function updateTask(taskId: string, patch: z.input<typeof updateSchema> & z.input<typeof taskFieldSchema>, since?: string | null) {
   return runAction({ name: "tasks.updateTask", args: [taskId, patch, since] }, async () => {
@@ -1216,13 +1224,8 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
     }
     const editsText = fields.title !== undefined || fields.description !== undefined;
     if (editsText && since !== undefined) {
-      // Misma regla que updateTask: no se pisa el texto que otra persona cambió mientras se editaba.
-      const base = since ? new Date(since).getTime() : 0;
-      if (task.contentUpdatedAt && task.contentUpdatedById !== user.id && task.contentUpdatedAt.getTime() > base) {
-        const who = task.contentUpdatedById ? (await db.user.findUnique({ where: { id: task.contentUpdatedById }, select: { name: true } }))?.name : null;
-        const t = await getT();
-        throw new AppError(who ? t("{who} ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos.", { who }) : t("Otra persona ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos."), 409);
-      }
+      // Misma regla que updateTask: no se pisa el texto cambiado (por otra persona o desde otra pestaña) mientras se editaba.
+      await assertNoTextConflict(task, user.id, since);
     }
     const fieldKeys = Object.keys(fields) as TaskField[];
     if (editsText) Object.assign(fields, { contentUpdatedAt: new Date(), contentUpdatedById: user.id });

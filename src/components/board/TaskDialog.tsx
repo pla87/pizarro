@@ -209,6 +209,15 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // del navegador) o, si no llegó a cargarse, la del navegador al abrirlo.
   const [openedAtLocal] = useState(() => new Date().toISOString());
   const [cancelling, setCancelling] = useState(false);
+  // Versión del texto contra la que se guarda: la del detalle, adelantada al instante por cada guardado propio (ver `save`).
+  // `ownTextVersion`: la del último guardado de texto de este diálogo («Cancelar» la usa: lo que cambie después, aunque
+  // sea desde otra pestaña, no se pisa).
+  const textVersion = useRef<string | null | undefined>(undefined);
+  const ownTextVersion = useRef<string | null | undefined>(undefined);
+  const textSaves = useRef<Promise<unknown>>(Promise.resolve());
+  useLayoutEffect(() => {
+    textVersion.current = detail?.textVersion;
+  }, [detail?.textVersion]);
 
   // Borrador recuperado: su texto se escribió sobre una versión anterior (la de `base`), y se guarda contra ella.
   const draftBase = useRef(
@@ -400,7 +409,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           attachmentIds: d0.attachments.map((a) => a.id),
           links: d0.links.map((l) => ({ id: l.id, kind: l.kind, title: l.title, url: l.url, shareStatus: l.shareStatus, shareFailed: l.shareFailed })),
         } : {}),
-      }, d0 ? d0.textVersion : undefined));
+      }, d0 ? (ownTextVersion.current !== undefined ? ownTextVersion.current : d0.textVersion) : undefined));
       if (!res.ok) {
         toast(res.error, "error");
         // Otra persona cambió el texto: se recarga con sus cambios y el diálogo sigue abierto.
@@ -423,9 +432,18 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const save = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>): Promise<boolean> => {
     const before = board.getTask(task.id);
     board.patchTask(task.id, optimistic);
-    // Título y descripción: se envía qué versión se estaba editando para no pisar a otra persona.
+    // Título y descripción: se envía qué versión se estaba editando para no pisar a otra persona ni lo guardado desde otra
+    // pestaña o dispositivo. Los de esta pestaña van de uno en uno y cada uno envía la versión que devolvió el anterior:
+    // guardar el título y enseguida la descripción no es un conflicto.
     const editsText = patch.title !== undefined || patch.description !== undefined;
-    const res = await tracked(updateTask(task.id, patch, editsText ? (detail?.textVersion ?? null) : undefined));
+    let res: Awaited<ReturnType<typeof updateTask>>;
+    if (editsText) {
+      const call = textSaves.current.then(() => tracked(updateTask(task.id, patch, textVersion.current !== undefined ? textVersion.current : task.textVersion)));
+      textSaves.current = call.then((r) => {
+        if (r.ok) textVersion.current = ownTextVersion.current = r.data.textVersion;
+      }, () => undefined);
+      res = await call;
+    } else res = await tracked(updateTask(task.id, patch, undefined));
     if (!res.ok) {
       if (before) board.upsertTask(before);
       // Sesión caducada: lo escrito se queda en el campo (y en el borrador local) para guardarlo tras volver a entrar; el
