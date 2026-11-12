@@ -6,6 +6,7 @@ import { useT } from "@/i18n/client";
 import { useToast } from "@/components/ui/Toast";
 import { TRANSFER_QUEUED_EVENT, ackJob, claimNotice, isFinal, shownJobs, watchingJobs, type TransferJobView } from "./client";
 import { downloadUrl } from "./TransferJobs";
+import { useSafeRefresh } from "@/components/useSafeRefresh";
 
 const POLL_MS = 4000;
 
@@ -17,6 +18,7 @@ export function TransferJobWatcher() {
   const t = useT();
   const toast = useToast();
   const router = useRouter();
+  const safeRefresh = useSafeRefresh();
   const latest = useRef({ t, toast, router });
   useEffect(() => {
     latest.current = { t, toast, router };
@@ -47,7 +49,7 @@ export function TransferJobWatcher() {
           toast(t("Exportación lista: ya puedes descargarla."), "success", { label: t("Descargar"), onClick: () => { window.location.href = downloadUrl(job.id); } });
         } else {
           const name = job.result && "counts" in job.result ? job.result.name : "";
-          router.refresh();
+          safeRefresh();
           toast(t("Proyecto «{name}» importado.", { name }), "success", job.projectId ? { label: t("Abrir proyecto"), onClick: () => router.push(`/p/${job.projectId}`) } : undefined);
         }
       }
@@ -61,6 +63,6 @@ export function TransferJobWatcher() {
       clearTimeout(timer);
       window.removeEventListener(TRANSFER_QUEUED_EVENT, onQueued);
     };
-  }, []);
+  }, [safeRefresh]);
   return null;
 }

@@ -2,7 +2,7 @@
 
 import { KeyRound } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { setPersonalUseDeclared, snoozeLicenseNudge } from "@/actions/license";
 import { useT } from "@/i18n/client";
@@ -11,6 +11,7 @@ import { LICENSE_PRICE_EUR } from "@/lib/product";
 import { actionThrowResult } from "@/lib/stale-action";
 import { useConfirm } from "./ui/ConfirmDialog";
 import { useToast } from "./ui/Toast";
+import { useSafeRefresh } from "@/components/useSafeRefresh";
 
 const SEEN_AFTER_MS = 3000;
 
@@ -50,7 +51,7 @@ export function LicenseNudge({ buyHref }: { buyHref: string }) {
   const t = useT();
   const toast = useToast();
   const confirm = useConfirm();
-  const router = useRouter();
+  const safeRefresh = useSafeRefresh();
   const pathname = usePathname();
   const [open, setOpen] = useState(true);
   const [pending, start] = useTransition();
@@ -93,7 +94,7 @@ export function LicenseNudge({ buyHref }: { buyHref: string }) {
       if (!res.ok) return toast(res.error, "error");
       setOpen(false);
       toast(t("Anotado: uso personal o educativo. No volverá a salir el recordatorio."), "success");
-      router.refresh();
+      safeRefresh();
     });
   };
 

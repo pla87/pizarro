@@ -256,9 +256,12 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
 
   // El menú se cierra solo al elegir una opción (ver Menu).
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, optimistic?: () => void) => {
+    // Sin conexión el refresco espera a que vuelva: lo optimista se deshace aquí (con conexión el refresco lo confirma).
+    const before = columns;
     optimistic?.();
     const res = await track(fn());
     if (!res.ok) {
+      if (optimistic) setColumns(before);
       toast(res.error ?? t("Error"), "error");
       refresh();
     }
@@ -444,9 +447,11 @@ function RoutineTargetDialog({ column, onClose }: { column: BoardColumn; onClose
     const target = value === column.id ? null : value;
     onClose();
     if (target === column.routineTargetColumnId) return;
+    const before = column.routineTargetColumnId;
     setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, routineTargetColumnId: target } : c)));
     const res = await track(setColumnRoutineTarget(column.id, target));
     if (!res.ok) {
+      setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, routineTargetColumnId: before } : c)));
       toast(res.error, "error");
       refresh();
     }

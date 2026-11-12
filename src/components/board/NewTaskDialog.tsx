@@ -216,6 +216,17 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     onClose();
     return true;
   };
+  // La columna elegida ya no existe (otra persona la borró con el diálogo abierto): el selector mostraba otra, pero se
+  // seguía enviando la borrada y crear fallaba siempre. Se pasa a una que exista (la de partida o la primera) y se avisa.
+  const [lostColumn, setLostColumn] = useState<{ name: string } | null>(null);
+  if (!loading && columnId && form.columns.length && !form.columns.some((c) => c.id === columnId)) {
+    const next = (form.project.id === board.project.id ? form.columns.find((c) => c.id === initialColumnId) : undefined) ?? form.columns[0]!;
+    setColumnId(next.id);
+    setLostColumn({ name: next.name });
+  }
+  useEffect(() => {
+    if (lostColumn) toast(t("La columna elegida ya no existe. La tarea se creará en «{name}».", { name: lostColumn.name }), "error");
+  }, [lostColumn, toast, t]);
   const isReleaseColumn = form.columns.find((c) => c.id === columnId)?.role === "NEXT_RELEASE";
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<BatchProgress | null>(null);

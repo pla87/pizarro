@@ -16,6 +16,14 @@ function whenNoSilentPops(fn: () => void) {
   if (silentPops === 0) fn();
   else afterSilent.push(fn);
 }
+/**
+ * Ejecuta `fn` cuando los modales ya cerrados han retirado su entrada del historial (al desmontarse hacen un «atrás»
+ * silencioso que termina más tarde): para tocar la dirección de la página (p. ej. quitar `?task=`) en la entrada buena y
+ * no en la del modal, que desaparece. Llamarla después de desmontarse el modal (en un efecto del padre).
+ */
+export function afterModalHistory(fn: () => void): void {
+  whenNoSilentPops(fn);
+}
 // Eventos popstate provocados por nosotros: los modales los ignoran aunque otro escuchador se ejecute antes
 // que el silenciador (no depende del orden de registro ni de la fase).
 const silentEvents = new WeakSet<Event>();

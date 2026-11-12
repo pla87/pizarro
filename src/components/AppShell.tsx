@@ -28,6 +28,7 @@ import { Avatar } from "./ui/Avatar";
 import { ReportButton } from "./ReportButton";
 import { ImportProjectPanel } from "./ImportProjectPanel";
 import { TransferJobWatcher } from "./transfer/TransferJobWatcher";
+import { ConnectionNotice } from "./ConnectionNotice";
 import { cn } from "./ui/cn";
 import { HoverPrefetchLink } from "./ui/HoverPrefetchLink";
 import { Menu as DropdownMenu, MenuItem } from "./ui/Menu";
@@ -37,6 +38,7 @@ import { PromptProvider } from "./ui/PromptDialog";
 import { ToastProvider, useToast } from "./ui/Toast";
 import { useEscapeClose } from "./ui/useEscapeClose";
 import { useFocusTrap } from "./ui/focusTrap";
+import { useSafeRefresh } from "@/components/useSafeRefresh";
 
 interface Props {
   user: CurrentUser;
@@ -60,6 +62,7 @@ export function AppShell(props: Props) {
       <ConfirmProvider>
         <PromptProvider>
           <TransferJobWatcher />
+          <ConnectionNotice />
           <Shell {...props} />
         </PromptProvider>
       </ConfirmProvider>
@@ -180,6 +183,7 @@ function NavLink({ href, icon: Icon, children, active, extra, highlight = false 
 function DocsNavLink({ projectId, active }: { projectId: string; active: boolean }) {
   const t = useT();
   const router = useRouter();
+  const safeRefresh = useSafeRefresh();
   const toast = useToast();
   const [over, setOver] = useState(false);
   const depth = useRef(0);
@@ -196,7 +200,7 @@ function DocsNavLink({ projectId, active }: { projectId: string; active: boolean
     }
     if (done > 0) {
       toast(done === 1 ? t("Documento subido") : t("{n} documentos subidos", { n: done }), "success", { label: t("Abrir Documentación"), onClick: open });
-      router.refresh();
+      safeRefresh();
     }
     if (firstError) toast(files.length > 1 ? t("{n} sin subir: {error}", { n: files.length - done, error: firstError }) : firstError, "error");
   }

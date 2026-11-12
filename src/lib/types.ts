@@ -115,6 +115,8 @@ export interface BoardData {
   today: string;
   /** Espera máxima (ms, al azar) antes de refrescar por un cambio de otra persona (LIVE_REFRESH_JITTER_MS; por defecto 2000). */
   liveRefreshJitterMs?: number;
+  /** Último aviso del canal en vivo del proyecto al pedir estos datos (ver realtime.ts `liveCursor`). */
+  live?: { boot: string; seq: number };
 }
 
 /** Opciones de un proyecto para el diálogo «Nueva tarea» cuando se crea en un proyecto distinto del abierto. */

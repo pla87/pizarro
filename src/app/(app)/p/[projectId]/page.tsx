@@ -7,6 +7,7 @@ import { appTimeZone, listKinds, loadBoardTasks, projectReleaseTemplates, projec
 import { dateToIso, todayIso } from "@/lib/dates";
 import { googleEnabled } from "@/lib/google";
 import { liveRefreshJitterMs } from "@/lib/live-refresh";
+import { liveCursor } from "@/lib/realtime";
 import { db } from "@/lib/db";
 import { getCurrentUser, requireUserPage } from "@/lib/session";
 import { normalizeTaskFields } from "@/lib/task-fields";
@@ -38,6 +39,8 @@ export default async function BoardPage({ params, searchParams }: Params) {
   const { projectId } = await params;
   const project = await visibleProject(projectId);
   if (!project) notFound();
+  // Antes de leer el tablero: un aviso publicado mientras se lee hará que la pestaña refresque al conectar (no se pierde).
+  const live = liveCursor(projectId);
 
   // Todas las consultas en paralelo: una sola ida y vuelta efectiva.
   const [columns, tasks, users, labels, me, deliverables, kinds, templates, projectTemplates] = await Promise.all([
@@ -71,6 +74,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
     google: { enabled: googleEnabled(), connected: Boolean(me.googleAccount) },
     today: todayIso(appTimeZone()),
     liveRefreshJitterMs: liveRefreshJitterMs(),
+    live,
   };
   const { task } = await searchParams;
   // Alt+N / Alt+Mayús+N pulsados antes de que la página hidrate se anotan y se ejecutan al montar (earlyShortcut.ts).

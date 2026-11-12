@@ -1,6 +1,6 @@
 import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
-import { MAX_STREAMS_PER_USER, openStreamCount, registerStream, subscribeProject } from "@/lib/realtime";
+import { liveCursor, MAX_STREAMS_PER_USER, openStreamCount, registerStream, subscribeProject } from "@/lib/realtime";
 import { currentSessionId, getCurrentUser, type CurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { isShuttingDown } from "@/lib/shutdown";
@@ -64,7 +64,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
         return;
       }
       send("retry: 3000\n\n");
-      const unsubscribe = subscribeProject(project.id, (c) => send(`event: change\ndata: ${JSON.stringify({ userId: c.userId, action: c.action, taskId: c.taskId ?? null, at: c.at, cid: c.cid })}\n\n`));
+      const unsubscribe = subscribeProject(project.id, (c) => send(`event: change\ndata: ${JSON.stringify({ userId: c.userId, action: c.action, taskId: c.taskId ?? null, at: c.at, seq: c.seq, cid: c.cid })}\n\n`));
+      // Saludo: último aviso publicado en el proyecto. La pestaña que reabre el canal (estuvo oculta o se cortó) sabe así si
+      // se perdió alguno y solo entonces pide el tablero (ver Board.tsx).
+      send(`event: hello\ndata: ${JSON.stringify(liveCursor(project.id))}\n\n`);
       // Comentario periódico: mantiene viva la conexión a través de proxies.
       const ping = setInterval(() => send(": ping\n\n"), PING_MS);
       let checking = false;
