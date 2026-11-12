@@ -88,7 +88,7 @@ if (only.includes("early")) {
   // Se retrasa el JavaScript de la página: el HTML ya está a la vista y los atajos de React aún no existen.
   await page.route(/\/_next\/static\/chunks\/.*\.js/, async (route) => {
     await sleep(2500);
-    await route.continue();
+    await route.continue().catch(() => {}); // ya atendida si se quitó el retraso entretanto
   });
   await page.goto(`${L.BASE}/p/${p.id}`, { waitUntil: "commit" });
   await page.locator('button[aria-label="Nueva tarea"]').first().waitFor({ state: "attached", timeout: 20000 });
