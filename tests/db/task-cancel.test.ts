@@ -59,7 +59,8 @@ describe("Cancelar la edición (restoreTaskSnapshot)", () => {
     const snap = await snapshotOf(task.id);
 
     // Sesión de edición: cambios sueltos, cada uno con su propia entrada de deshacer.
-    expectOk(await updateTask(task.id, { title: "Cambiado", description: "otra", assigneeId: other.id, labelIds: [label.id], color: "#0ea5e9" }));
+    // El diálogo Cancela con la versión del texto de su último guardado (ver TaskDialog).
+    const own = expectOk(await updateTask(task.id, { title: "Cambiado", description: "otra", assigneeId: other.id, labelIds: [label.id], color: "#0ea5e9" })).textVersion;
     expectOk(await updateSubtask(s1!.id, { done: true, title: "uno!" }));
     expectOk(await deleteSubtask(s2!.id));
     const added = expectOk(await addSubtask(task.id, "nueva"));
@@ -68,7 +69,7 @@ describe("Cancelar la edición (restoreTaskSnapshot)", () => {
     expectOk(await moveTask(task.id, f.columns.doing, null, null));
 
     const before = await undoCount(user.id, f.project.id);
-    const res = expectOk(await restoreTaskSnapshot(task.id, snap, null));
+    const res = expectOk(await restoreTaskSnapshot(task.id, snap, own));
     assert.equal(res.changed, true);
     // Todo vuelve a como estaba.
     const back = await db.task.findUniqueOrThrow({ where: { id: task.id }, include: { labels: true, subtasks: { orderBy: { position: "asc" } }, attachments: true } });
@@ -128,6 +129,28 @@ describe("Cancelar la edición (restoreTaskSnapshot)", () => {
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).title, "Ajeno");
   });
 
+  test("Cancelar tras guardar el texto aquí no choca; lo guardado después desde otra pestaña de la misma persona no se pisa", async () => {
+    const user = await makeUser();
+    const f = await makeProject();
+    await assign(f, user);
+    await loginAs(user);
+    const task = await makeTask(f, { title: "Original" });
+    const snap = await snapshotOf(task.id);
+    const opened = (await db.task.findUniqueOrThrow({ where: { id: task.id } })).contentUpdatedAt?.toISOString() ?? null;
+    // Este diálogo guarda el título y Cancela con la versión de su último guardado (ver TaskDialog): vuelve el original.
+    const own = expectOk(await updateTask(task.id, { title: "Mío" }, opened)).textVersion;
+    expectOk(await restoreTaskSnapshot(task.id, snap, own));
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).title, "Original");
+    // Otra vez, pero después la misma persona cambia el título desde otra pestaña: Cancelar aquí no lo pisa.
+    const snap2 = await snapshotOf(task.id);
+    const v1 = (await db.task.findUniqueOrThrow({ where: { id: task.id } })).contentUpdatedAt?.toISOString() ?? null;
+    const own2 = expectOk(await updateTask(task.id, { title: "Mío otra vez" }, v1)).textVersion;
+    await new Promise((r) => setTimeout(r, 5));
+    expectOk(await updateTask(task.id, { title: "Desde la otra pestaña" }, own2));
+    expectFail(await restoreTaskSnapshot(task.id, snap2, own2), /otra pestaña u otro dispositivo/);
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).title, "Desde la otra pestaña");
+  });
+
   test("con más acciones que entradas guarda la pila (12 subtareas marcadas), Cancelar lo devuelve todo, no solo las 10 últimas", async () => {
     const user = await makeUser();
     const f = await makeProject();
@@ -136,12 +159,12 @@ describe("Cancelar la edición (restoreTaskSnapshot)", () => {
     const task = await makeTask(f, { title: "Muchas", subtasks: titles });
     const snap = await snapshotOf(task.id);
     // La primera acción del rato (el título) y luego 12 marcas: las entradas más antiguas se descartan de la pila.
-    expectOk(await updateTask(task.id, { title: "Muchas (editada)" }));
+    const own = expectOk(await updateTask(task.id, { title: "Muchas (editada)" })).textVersion;
     for (const s of await db.subtask.findMany({ where: { taskId: task.id }, orderBy: { position: "asc" } })) expectOk(await updateSubtask(s.id, { done: true }));
     const extra = expectOk(await addSubtask(task.id, "añadida al final"));
     assert.equal(await undoCount(user.id, f.project.id), 10);
 
-    const res = expectOk(await restoreTaskSnapshot(task.id, snap, null));
+    const res = expectOk(await restoreTaskSnapshot(task.id, snap, own));
     assert.equal(res.changed, true);
     const back = await db.task.findUniqueOrThrow({ where: { id: task.id }, include: { subtasks: { orderBy: { position: "asc" } } } });
     assert.equal(back.title, "Muchas");
@@ -174,12 +197,12 @@ describe("Cancelar con la pila llena no pisa el trabajo de otras personas", () =
 
     // Ana: el título y 12 marcas (la pila se llena y las primeras entradas se descartan).
     await loginAs(ana);
-    expectOk(await updateTask(task.id, { title: "Compartida (Ana)" }));
+    const own = expectOk(await updateTask(task.id, { title: "Compartida (Ana)" })).textVersion;
     for (const s of subs.slice(0, 12)) expectOk(await updateSubtask(s.id, { done: true }));
     const deAna = expectOk(await addSubtask(task.id, "de Ana"));
     assert.equal(await undoCount(ana.id, f.project.id), 10);
 
-    expectOk(await restoreTaskSnapshot(task.id, snap, null));
+    expectOk(await restoreTaskSnapshot(task.id, snap, own));
     const back = await db.task.findUniqueOrThrow({ where: { id: task.id }, include: { subtasks: { orderBy: { position: "asc" } } } });
     // Lo de Ana vuelve…
     assert.equal(back.title, "Compartida");

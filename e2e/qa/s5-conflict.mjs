@@ -55,15 +55,21 @@ export async function run() {
   L.eq("la BD conserva el texto de B", await desc("Compartida"), "Segunda ya actualizada");
   await U.closeDialog(a.page); await U.closeDialog(b.page);
 
-  // Mismo usuario en dos pestañas: no hay conflicto (el último gana)
+  // Mismo usuario en dos pestañas: la segunda no pisa lo guardado en la primera (aviso propio); la primera puede volver a
+  // guardar sin conflicto (su versión avanza con cada guardado).
   const a2 = await a.ctx.newPage();
   const errs2 = []; a2.on("pageerror", (e) => errs2.push(e.message)); a2.on("console", (m) => m.type() === "error" && errs2.push(m.text()));
   await a2.goto(a.page.url()); await U.openTask(a2, "Titulo2"); await U.openTask(a.page, "Titulo2");
   await editDescription(a.page, "Desde la pestaña 1");
   await L.eqEventually("pestaña 1 guarda", () => desc("Titulo2"), "Desde la pestaña 1");
+  await editDescription(a.page, "Desde la pestaña 1 otra vez");
+  await L.eqEventually("pestaña 1 vuelve a guardar sin conflicto", () => desc("Titulo2"), "Desde la pestaña 1 otra vez");
+  L.eq("pestaña 1: sin aviso de conflicto", await a.page.getByText(/ha cambiado el texto|Has cambiado el texto/).count(), 0);
   await editDescription(a2, "Desde la pestaña 2");
-  await L.eqEventually("mismo usuario: la pestaña 2 sobrescribe sin conflicto", () => desc("Titulo2"), "Desde la pestaña 2");
-  L.eq("mismo usuario: sin aviso de conflicto", await a2.getByText(/ha cambiado el texto/).count(), 0);
+  const msg2 = a2.getByText(/Has cambiado el texto de esta tarea en otra pestaña u otro dispositivo/);
+  await msg2.first().waitFor({ timeout: 6000 }).catch(() => {});
+  L.check("mismo usuario: la pestaña 2 recibe el aviso de la otra pestaña", (await msg2.count()) > 0);
+  L.eq("mismo usuario: la pestaña 2 no pisa lo de la pestaña 1", await desc("Titulo2"), "Desde la pestaña 1 otra vez");
   await a2.close();
   await U.closeDialog(a.page);
 

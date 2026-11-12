@@ -49,4 +49,16 @@ aviso 99+ en móvil, ayuda de atajos y borrar un proyecto con espacios dobles. M
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48a-e2e.mjs
 ```
 
+## Comentarios a la vez, red lenta, dos pestañas y release renombrada (caza de bugs 48c, ~45 comprobaciones)
+
+Tres personas comentan a la vez la misma tarea en varias rondas (todas ven todos los comentarios, en orden y sin «Ver
+anteriores»), el editor de la descripción con red lenta (CDP, y el trozo del editor retrasado 6 s: lo tecleado antes y
+durante su llegada no se pierde), dos pestañas de la misma persona guardando la descripción (la segunda recibe el aviso;
+una sola pestaña guardando seguido no) y una release cuyo texto se generó antes de renombrar una tarea. Misma base y
+servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48c-e2e.mjs   # PART=comments,desc,tabs,rel
+```
+
 Capturas en `SHOTS_DIR` (por defecto la carpeta temporal del sistema). Al terminar, borra la base `pz_qa`.

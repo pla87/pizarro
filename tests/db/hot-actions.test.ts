@@ -269,9 +269,12 @@ describe("updateTask", () => {
     expectFail(await updateTask(a.id, { description: "d" }, null), /ha cambiado el texto/);
     expectOk(await updateTask(a.id, { color: "#ef4444" }, loaded)); // no toca el texto
     expectOk(await updateTask(a.id, { title: "sin since" }));
-    // Mi propio cambio no es conflicto.
-    await db.task.update({ where: { id: a.id }, data: { contentUpdatedAt: new Date(), contentUpdatedById: user.id } });
-    expectOk(await updateTask(a.id, { title: "mía otra vez" }, loaded));
+    // Mi propio cambio desde otra pestaña u otro dispositivo también es conflicto (aviso propio); con la versión que
+    // devolvió mi último guardado, no.
+    const mine = new Date();
+    await db.task.update({ where: { id: a.id }, data: { contentUpdatedAt: mine, contentUpdatedById: user.id } });
+    expectFail(await updateTask(a.id, { title: "mía otra vez" }, loaded), /Has cambiado el texto de esta tarea en otra pestaña u otro dispositivo/);
+    expectOk(await updateTask(a.id, { title: "mía otra vez" }, mine.toISOString()));
     // Cargado después del último cambio: tampoco.
     await db.task.update({ where: { id: a.id }, data: { contentUpdatedAt: new Date(Date.now() - 120_000), contentUpdatedById: other.id } });
     expectOk(await updateTask(a.id, { title: "posterior" }, loaded));

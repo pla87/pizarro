@@ -71,11 +71,11 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   const dueHint = (n: number) => (n === 0 ? t("ahora") : n === 1 ? t("en la siguiente") : t("dentro de {n}", { n }));
   const [generatedNumber, setGeneratedNumber] = useState<number | null>(null);
   /**
-   * Tareas del texto generado y la columna en la que estaban: se despliegan esas (no la selección viva, de la que
-   * desaparece una tarea que otra persona archiva o borra) y el servidor rechaza el despliegue si alguna ha cambiado
-   * de columna entretanto.
+   * Tareas del texto generado con la columna en la que estaban y su título: se despliegan esas (no la selección viva, de
+   * la que desaparece una tarea que otra persona archiva o borra) y el servidor rechaza el despliegue si alguna ha
+   * cambiado de columna o de título entretanto.
    */
-  const [generatedTasks, setGeneratedTasks] = useState<{ taskId: string; columnId: string }[]>([]);
+  const [generatedTasks, setGeneratedTasks] = useState<{ taskId: string; columnId: string; title: string }[]>([]);
   const selectedTasks = useMemo(() => tasks.filter((t) => chosen.has(t.id)), [tasks, chosen]);
   const [headerId, setHeaderId] = useState(templates.headers[0]?.id ?? "");
   const [footerId, setFooterId] = useState(templates.footers[0]?.id ?? "");
@@ -158,7 +158,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
       description: details.get(t.id)?.description ?? "",
       attachments: details.get(t.id)?.attachments ?? [],
     }));
-    setGeneratedTasks(selectedTasks.map((x) => ({ taskId: x.id, columnId: x.columnId })));
+    setGeneratedTasks(selectedTasks.map((x) => ({ taskId: x.id, columnId: x.columnId, title: x.title })));
     const codes = computeReleaseCodes(board.kinds, releaseTasks, releaseNumber);
     setZipItems(
       releaseTasks.filter((t) => t.attachments.length).map((t) => ({ taskId: t.id, code: codes.get(t.id)!, count: t.attachments.length })),
@@ -244,7 +244,8 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
         title,
         content,
         taskIds: generatedTasks.map((x) => x.taskId),
-        columns: generatedTasks,
+        columns: generatedTasks.map(({ taskId, columnId }) => ({ taskId, columnId })),
+        titles: generatedTasks.map(({ taskId, title }) => ({ taskId, title })),
         destination,
         attachments: zipItems.map(({ taskId, code }) => ({ taskId, code })),
         number: generatedNumber ?? undefined,
