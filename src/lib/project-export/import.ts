@@ -52,6 +52,8 @@ export interface ImportSummary {
   name: string;
   counts: {
     columns: number; kinds: number; labels: number; deliverables: number; tasks: number; archivedTasks: number; subtasks: number; comments: number;
+    /** Comentarios de nota añadidos a las tarjetas cuyo responsable o autor no se pudo emparejar (no cuentan en `comments`; ausente en resúmenes antiguos). */
+    notes?: number;
     taskAttachments: number; releases: number; releaseAttachments: number; documents: number; events: number;
   };
   /** Personas del archivo que no se pudieron emparejar con un usuario activo (por su email). */
@@ -543,7 +545,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
       counts: {
         columns: data.columns.length, kinds: kindRows.length, labels: data.labels.length, deliverables: data.deliverables.length,
         tasks: data.tasks.length, archivedTasks: data.tasks.filter((x) => x.archivedAt).length,
-        subtasks: data.tasks.reduce((n, x) => n + x.subtasks.length, 0), comments: commentRows.length,
+        subtasks: data.tasks.reduce((n, x) => n + x.subtasks.length, 0), comments: commentRows.length, notes: noteRows.length,
         taskAttachments: attachmentRows.length, releases: releaseRows.length, releaseAttachments: releaseAttachmentRows.length,
         documents: documentRows.length, events: data.events.length,
       },

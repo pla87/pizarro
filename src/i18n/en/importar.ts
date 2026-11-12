@@ -4,8 +4,6 @@ export const importar: Record<string, string> = {
   "Crea un proyecto a partir de un .pizarro.zip de Pizarro, un JSON exportado de Trello o un CSV de tareas (Asana, Notion, GitHub Projects, Wekan, Kanboard…). El formato se reconoce solo; las personas se emparejan por email o nombre y el nombre del proyecto sale del archivo.":
     "Creates a project from a Pizarro .pizarro.zip, a JSON exported from Trello or a CSV of tasks (Asana, Notion, GitHub Projects, Wekan, Kanboard…). The format is detected automatically; people are matched by email or name and the project name comes from the file.",
   "Archivo (.zip, .json o .csv)": "File (.zip, .json or .csv)",
-  "«{name}» se ha creado con {columns} columnas y {tasks} tareas ({archived} archivadas), con {subtasks} subtareas, {labels} etiquetas y {comments} comentarios.":
-    "“{name}” was created with {columns} columns and {tasks} tasks ({archived} archived), with {subtasks} subtasks, {labels} labels and {comments} comments.",
   "{n} usuario(s) se han añadido como miembros del proyecto por ser responsables de alguna tarea.": "{n} user(s) were added as project members because they are assignees of some task.",
   "Responsables sin emparejar ({n})": "Unmatched assignees ({n})",
   "No hay un usuario activo con ese email o nombre (o el proyecto es privado), así que sus tareas quedan sin asignar y el nombre figura en la descripción.":
@@ -69,4 +67,18 @@ export const importar: Record<string, string> = {
   "1 subtarea sobraba (máximo {max} por tarea) y no se ha importado.": "1 subtask was over the limit ({max} per task) and was not imported.",
   "1 etiqueta sobraba (máximo {max} por proyecto) y no se ha importado.": "1 label was over the limit ({max} per project) and was not imported.",
   "1 tarea archivada sobraba (máximo {max}) y no se ha importado.": "1 archived task was over the limit ({max}) and was not imported.",
+
+  // Resumen de la importación: cada número en singular o plural, y las notas de quien no se pudo emparejar
+  "«{name}» se ha creado con {items}.": "“{name}” was created with {items}.",
+  "(1 archivada)": "(1 archived)",
+  "({n} archivadas)": "({n} archived)",
+  "1 release": "1 release",
+  "{n} releases": "{n} releases",
+  "1 documento": "1 document",
+  "{n} documentos": "{n} documents",
+  "1 tarjeta lleva un comentario con quién la tenía asignada o la creó en el original, porque esa persona no está aquí.":
+    "1 card has a comment saying who it was assigned to or created by in the original, because that person is not here.",
+  "{n} tarjetas llevan un comentario con quién las tenía asignadas o las creó en el original, porque esas personas no están aquí.":
+    "{n} cards have a comment saying who they were assigned to or created by in the original, because those people are not here.",
+  "«{name}» importado (1 tarjeta).": "“{name}” imported (1 card).",
 };

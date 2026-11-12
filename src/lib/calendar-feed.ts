@@ -41,6 +41,17 @@ export async function resolveFeedToken(token: string): Promise<{ feedId: string;
   return { feedId: feed.id, scope: feed.scope, user: feed.user };
 }
 
+/**
+ * Qué incluye por defecto la suscripción de quien aún no tiene una: «Solo las mías» solo si al menos la mitad de las
+ * tareas pendientes de sus proyectos (los del calendario) tienen responsable; si no (uso familiar o personal, donde las
+ * tareas no suelen asignarse, o sin tareas), «Todas»: con «Solo las mías» el calendario saldría vacío.
+ */
+export async function defaultFeedScope(user: CurrentUser): Promise<CalendarFeedScope> {
+  const pending: Prisma.TaskWhereInput = { project: workingProjectsWhere(user), archivedAt: null, column: { isDone: false } };
+  const [total, assigned] = await Promise.all([db.task.count({ where: pending }), db.task.count({ where: { ...pending, assigneeId: { not: null } } })]);
+  return total > 0 && assigned * 2 >= total ? "MINE" : "ALL";
+}
+
 /** .ics con las tareas no archivadas ni terminadas con fecha límite y los entregables con fecha. Los permisos se evalúan aquí, en cada petición. */
 export async function buildFeedIcs(user: FeedOwner, scope: CalendarFeedScope, now: Date = new Date()): Promise<{ ics: string; tasks: number; deliverables: number }> {
   const t = makeT(toLocale(user.locale));

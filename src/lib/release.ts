@@ -306,8 +306,13 @@ export function isoDate(date = new Date(), timeZone?: string): string {
   return `${y}-${m}-${d}`;
 }
 
-export function releaseFileName(date: Date, ext: "md" | "txt", timeZone?: string): string {
-  return `release-${isoDate(date, timeZone)}.${ext}`;
+/**
+ * Nombre del .md o .txt de una release, con las mismas piezas que el ZIP de sus adjuntos:
+ * `release-2026-11-11-R12-Proyecto.md`. Sin número (aún no se sabe) o sin proyecto, se omiten.
+ */
+export function releaseFileName(opts: { day: string; number?: number | null; project?: string | null }, ext: "md" | "txt"): string {
+  const project = fileNamePart(opts.project ?? "", 60);
+  return `${["release", opts.day, opts.number ? `R${opts.number}` : "", project].filter(Boolean).join("-")}.${ext}`;
 }
 
 /** Siguiente cadencia de una tarea fija (cada cuántas releases entra: 1 = todas, 2 = las pares, 3 = múltiplos de 3) al pulsar el interruptor: 1 → 2 → 3 → 1. */

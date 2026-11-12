@@ -1,10 +1,11 @@
 import "server-only";
 import { db } from "./db";
 import { revokeProject } from "./revoke";
+import { discardProjectTransfers } from "./transfer-jobs";
 import { discardUndo } from "./undo";
 import { removeAttachmentFiles, removeDocumentFiles, removeReleaseAttachmentFiles } from "./uploads";
 
-/** Borra un proyecto con sus tareas, releases, documentación y los ficheros de sus adjuntos. */
+/** Borra un proyecto con sus tareas, releases, documentación, los ficheros de sus adjuntos y sus exportaciones. */
 export async function purgeProject(projectId: string): Promise<void> {
   // Antes que nada: libera los ficheros que solo retenía el historial de deshacer.
   await discardUndo({ projectId });
@@ -18,4 +19,6 @@ export async function purgeProject(projectId: string): Promise<void> {
   await removeAttachmentFiles(attachments.map((a) => a.id));
   await removeReleaseAttachmentFiles(releaseAttachments.map((a) => a.id));
   await removeDocumentFiles(documents.map((d) => d.id));
+  // Sus exportaciones (el .pizarro.zip en uploads/exports) y las importaciones que lo crearon.
+  await discardProjectTransfers(projectId);
 }

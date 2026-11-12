@@ -131,8 +131,10 @@ export function ReleaseEntry({ release }: Props) {
       <button className="flex w-full items-center gap-3 px-4 py-3 text-left" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-medium">
-            <span className="mr-1.5 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">R{release.number}</span>
-            {release.title}
+            {/* El espacio va en el mismo nodo de texto que el título: separa el número en el nombre accesible del botón
+                («R3 Release…», no «R3Release…»); Chrome no cuenta un nodo de texto que solo tiene un espacio. */}
+            <span className="mr-1 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">R{release.number}</span>
+            {` ${release.title}`}
           </h2>
           <p className="text-xs text-slate-500">
             {formatDate(date, "dateTime", locale)}
@@ -148,10 +150,10 @@ export function ReleaseEntry({ release }: Props) {
             <button className="btn-secondary py-1.5" onClick={async () => toast(await copyText(release.content) ? t("Copiado al portapapeles") : t("No se pudo copiar"))}>
               <ClipboardCopy size={15} /> {t("Copiar")}
             </button>
-            <button className="btn-secondary py-1.5" onClick={() => downloadText(release.content, releaseFileName(date, "md", appTimeZone()), "text/markdown")}>
+            <button className="btn-secondary py-1.5" onClick={() => downloadText(release.content, releaseFileName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, "md"), "text/markdown")}>
               <Download size={15} /> .md
             </button>
-            <button className="btn-secondary py-1.5" onClick={() => downloadText(release.content, releaseFileName(date, "txt", appTimeZone()), "text/plain")}>
+            <button className="btn-secondary py-1.5" onClick={() => downloadText(release.content, releaseFileName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, "txt"), "text/plain")}>
               <Download size={15} /> .txt
             </button>
             <button className="btn-secondary py-1.5 text-red-600 dark:text-red-400 sm:ml-auto" disabled={busy} onClick={remove}>

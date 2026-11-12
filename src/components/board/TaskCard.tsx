@@ -10,7 +10,7 @@ import { DEFAULT_WAITING_DAYS, isWhite, MAX_TITLE } from "@/lib/constants";
 import { formatEuro, PRIORITY_COLOR, PRIORITY_LABEL } from "@/lib/task-fields";
 import { daysBetween, dueStatus, formatDay, isoInZone } from "@/lib/dates";
 import { appTimeZone } from "@/lib/format";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useId, useRef, useState } from "react";
 import type { BoardTask } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { Avatar } from "../ui/Avatar";
@@ -54,6 +54,10 @@ export const SortableTaskCard = memo(function SortableTaskCard({ id }: { id: str
             onClick={(e) => e.stopPropagation()}
             className="-my-1 -mr-1.5 flex h-8 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-slate-400 active:text-brand-600"
             aria-label={t("Arrastrar para reordenar")}
+            // Solo para el dedo: con teclado se mueve con Alt+flechas sobre la propia tarjeta (que anuncia esos atajos).
+            // Fuera del Tab y del árbol accesible: un botón dentro de la tarjeta (role=button) no se puede anunciar aparte.
+            tabIndex={-1}
+            aria-hidden
           >
             <GripVertical size={16} />
           </button>
@@ -62,6 +66,9 @@ export const SortableTaskCard = memo(function SortableTaskCard({ id }: { id: str
     </div>
   );
 });
+
+/** Atajos de la tarjeta enfocada que se anuncian (aria-keyshortcuts): abrir, seleccionar, renombrar, mover, asignarme, fecha y duplicar. */
+const CARD_SHORTCUTS = "Enter Space F2 Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown Alt+M Alt+D Alt+Shift+D";
 
 export const TaskCard = memo(function TaskCard({ task, overlay = false, handle = null }: { task: BoardTask; overlay?: boolean; handle?: React.ReactNode }) {
   const { project, users, labels, openTask, toggleSelected, columns, today, kindById, cardStyle, assignToMe, moveToAdjacentColumn, moveWithinColumn, setDueDate, renameTask, duplicateTask } = useBoard();
@@ -87,6 +94,30 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
   // Campos opcionales del proyecto: insignias de prioridad y coste (si hay valor).
   const showPriority = project.taskFields.includes("priority") && task.priority;
   const showCost = project.taskFields.includes("cost") && task.cost !== null;
+
+  // Nombre accesible = el título; el resto (tipo, fecha, responsable…) va en la descripción, que lee el lector de pantalla
+  // después. Antes el nombre era todo el texto de la tarjeta, botones incluidos («Seleccionar … Arrastrar para reordenar…»).
+  const descId = useId();
+  const kind = kindById.get(task.kindId);
+  const description = [
+    ...taskLabels.map((l) => l.name),
+    kind?.name,
+    showPriority ? t("Prioridad: {p}", { p: t(PRIORITY_LABEL[task.priority!]) }) : null,
+    showCost ? `${formatEuro(task.cost, locale)} (${task.costPaid ? t("Coste (pagado)") : t("Coste (pendiente de pago)")})` : null,
+    task.dueDate ? `${due === "overdue" ? t("Plazo vencido") : t("Fecha límite")}: ${due === "today" ? t("Hoy") : formatDay(task.dueDate, today, locale)}` : null,
+    blockedBy !== null ? t("Bloqueada por: {title}", { title: blockedBy }) : null,
+    waitingDays !== null ? t("Esperando {n} d", { n: waitingDays }) : null,
+    nextRoutine ? t("Próxima: {date}", { date: formatDay(nextRoutine, today, locale) }) : null,
+    repeat,
+    task.hasDescription ? t("Con descripción") : null,
+    task.subtaskTotal > 0 ? t("Subtareas: {done} de {total}", { done: task.subtaskDone, total: task.subtaskTotal }) : null,
+    task.commentCount > 0 ? (task.commentCount === 1 ? t("1 comentario") : t("{n} comentarios", { n: task.commentCount })) : null,
+    task.linkCount > 0 ? `${t("Documentos de Google")}: ${task.linkCount}` : null,
+    task.imageCount > 0 ? (task.imageCount === 1 ? t("1 imagen") : t("{n} imágenes", { n: task.imageCount })) : null,
+    task.fileCount > 0 ? (task.fileCount === 1 ? t("1 archivo") : t("{n} archivos", { n: task.fileCount })) : null,
+    task.linkUrl ? t("Enlace externo") : null,
+    assignee ? t("Asignada a {name}", { name: assignee.name }) : null,
+  ].filter(Boolean).join(". ");
 
   // F2: renombrar en la propia tarjeta. Alt+D: fecha límite en un pequeño selector (junto a la tarjeta).
   const [renaming, setRenaming] = useState(false);
@@ -139,6 +170,11 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
       role="button"
       tabIndex={0}
       data-task-card={task.id}
+      aria-label={mentionsToPlain(task.title)}
+      aria-describedby={overlay ? undefined : descId}
+      // Selección múltiple (Espacio): botón que se queda pulsado mientras está seleccionada.
+      aria-pressed={overlay ? undefined : isSelected}
+      aria-keyshortcuts={overlay ? undefined : CARD_SHORTCUTS}
       onClick={() => openTask(task.id)}
       onKeyDown={onKeyDown}
       {...(overlay ? {} : fileDrop.handlers)}
@@ -159,6 +195,7 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
           {fileDrop.over ? t("Suelta para adjuntar") : (<><Loader2 size={15} className="animate-spin" /> {t("Subiendo…")}</>)}
         </div>
       )}
+      {!overlay && <span id={descId} hidden>{description}</span>}
       {task.color && !filled && <span className="absolute inset-y-0 left-0 w-1 ring-1 ring-inset ring-black/10 dark:ring-white/25" style={{ backgroundColor: task.color }} aria-hidden />}
       <div className="flex items-start gap-2">
         <button
@@ -177,7 +214,8 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
               : "border-slate-300 opacity-60 group-hover:opacity-100 max-md:opacity-100 dark:border-slate-600",
           )}
           aria-label={isSelected ? t("Quitar de la selección") : t("Seleccionar")}
-          aria-pressed={isSelected}
+          // Para el lector de pantalla la selección la expone la tarjeta (aria-pressed) y se alterna con Espacio.
+          aria-hidden
         >
           {isSelected && <Check size={12} strokeWidth={3} />}
         </button>
@@ -296,6 +334,9 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
             onPointerDown={(e) => e.stopPropagation()}
             className="hover:text-brand-600"
             aria-label={t("Abrir enlace externo")}
+            // Atajo para el ratón: con teclado o lector de pantalla, el enlace está en el detalle (la tarjeta lo menciona).
+            tabIndex={-1}
+            aria-hidden
           >
             <ExternalLink size={13} />
           </a>

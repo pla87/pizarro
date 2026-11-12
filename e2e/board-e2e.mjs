@@ -6,7 +6,9 @@
 // la ronda 46 (r46: «Nuevo proyecto» con un solo desplegable; cerrar el detalle con un comentario o un renombrado a medias;
 // borradores de comentarios al cerrar sesión), de la ronda 47 (r47: abrir un diálogo en un tablero recién abierto no lo
 // devuelve al esqueleto de carga) y de bh1 (un miembro crea proyectos privados desde el selector; sesión caducada a mitad
-// de trabajo: aviso con «Iniciar sesión» que vuelve a la página con el borrador).
+// de trabajo: aviso con «Iniciar sesión» que vuelve a la página con el borrador) y de la accesibilidad (acc: nombre,
+// descripción, estado y atajos de las tarjetas para el lector de pantalla; «Saltar al contenido» y el foco al entrar;
+// qué incluye por defecto la suscripción al calendario).
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -16,7 +18,7 @@ import * as U from "./qa/ui.mjs";
 const { COL, sleep } = L;
 const APP = process.env.APP_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "b1,f3,m1,f1,dlg,vt,desc,com,det,r44,r46,r47,bh1").split(",");
+const only = (process.env.PART || "b1,f3,m1,f1,dlg,vt,desc,com,det,r44,r46,r47,bh1,acc").split(",");
 
 await L.prepareUsers();
 
@@ -1487,6 +1489,88 @@ if (only.includes("bh1")) {
     L.eq("BH1: al volver a entrar, la tarea se reabre con lo que se estaba escribiendo", await reopened.inputValue().catch(() => null), "Borrador BH1 sin guardar!");
   }
   await a.ctx.close();
+}
+
+// ---------------------------------------------------------------- ACC
+if (only.includes("acc")) {
+  L.scenario("ACC: tarjetas para el lector de pantalla, «Saltar al contenido» y suscripción al calendario");
+  await L.cleanBoard();
+  const [cardId] = await L.seedTasks(COL.backlog, ["Tarjeta accesible", "Otra tarjeta"]);
+  const [me] = await L.q(`SELECT id,name FROM "User" WHERE email=$1`, [L.ADMIN]);
+  await L.q(`UPDATE "Task" SET description='Con texto', "assigneeId"=$2, "dueDate"=CURRENT_DATE + 3 WHERE id=$1`, [cardId, me.id]);
+  const s = await L.session({ viewport: { width: 1400, height: 900 } });
+  const p = s.page;
+
+  // Tras iniciar sesión, el foco está en el contenido principal (antes en el body: el lector empezaba por el menú).
+  L.eq("ACC: tras iniciar sesión, el foco en <main id=contenido>", await p.evaluate(() => document.activeElement?.id), "contenido");
+  // «Saltar al contenido»: primer elemento del Tab, visible al recibir el foco, y lleva el foco al contenido.
+  // (desde el principio de la página: un botón provisional al inicio del body, pues al quitar el foco de <main> Chrome
+  // seguiría el Tab desde allí)
+  await p.evaluate(() => { const b = document.createElement("button"); b.id = "acc-start"; document.body.prepend(b); b.focus(); });
+  await p.keyboard.press("Tab");
+  await p.evaluate(() => document.getElementById("acc-start")?.remove());
+  const skip = await p.evaluate(() => { const a = document.activeElement; const r = a?.getBoundingClientRect(); return { text: a?.textContent, href: a?.getAttribute("href"), w: r?.width ?? 0, h: r?.height ?? 0 }; });
+  L.check("ACC: el primer Tab es «Saltar al contenido» y se ve", skip.text === "Saltar al contenido" && skip.href === "#contenido" && skip.w > 20 && skip.h > 10, JSON.stringify(skip));
+  await p.keyboard.press("Enter");
+  L.eq("ACC: Enter en el enlace lleva el foco al contenido (sin cambiar la dirección)", [await p.evaluate(() => document.activeElement?.id), new URL(p.url()).hash], ["contenido", ""]);
+  await p.keyboard.press("Tab");
+  L.check("ACC: el siguiente Tab ya está dentro del contenido, no en el menú lateral", await p.evaluate(() => !!document.activeElement && document.getElementById("contenido").contains(document.activeElement) && document.activeElement.id !== "contenido"));
+
+  // Tarjeta: nombre = título; tipo, fecha, responsable… en la descripción; sin los botones de dentro; estado y atajos.
+  const card = L.cardLoc(p, "Tarjeta accesible");
+  const snap = async () => p.accessibility.snapshot({ root: await card.elementHandle() });
+  let a = await snap();
+  L.eq("ACC: la tarjeta es un botón cuyo nombre es solo el título", [a?.role, a?.name], ["button", "Tarjeta accesible"]);
+  L.check("ACC: sin «Seleccionar» ni «Arrastrar» en su árbol accesible", !/Seleccionar|Arrastrar|Quitar de la selección/.test(JSON.stringify(a)), JSON.stringify(a));
+  const desc = a?.description ?? "";
+  L.check("ACC: la descripción lleva tipo, fecha, descripción y responsable", /Funcionalidad/.test(desc) && /Fecha límite: /.test(desc) && /Con descripción/.test(desc) && desc.includes(`Asignada a ${me.name}`), desc);
+  L.eq("ACC: no seleccionada → aria-pressed=false", a?.pressed, false);
+  L.check("ACC: anuncia sus atajos (aria-keyshortcuts)", /^Enter Space F2 Alt\+ArrowLeft/.test((await card.getAttribute("aria-keyshortcuts")) ?? ""));
+  await card.focus();
+  await p.keyboard.press("Space");
+  a = await snap();
+  L.eq("ACC: Espacio la selecciona y lo expone (aria-pressed=true)", a?.pressed, true);
+  L.eq("ACC: el botón de selección (fuera del Tab) también fuera del árbol accesible", await card.locator("button[aria-label='Quitar de la selección']").getAttribute("aria-hidden"), "true");
+  await p.keyboard.press("Space");
+  L.eq("ACC: Espacio otra vez la quita", (await snap())?.pressed, false);
+  // Con teclado se sigue moviendo (Alt+→) y el foco se queda en la tarjeta.
+  await p.keyboard.press("Alt+ArrowRight");
+  await L.eqEventually("ACC: Alt+→ la mueve a «En progreso»", () => dbOrderById(COL.doing), ["Tarjeta accesible"]);
+  L.eq("ACC: el foco sigue en la tarjeta movida", await p.evaluate(() => document.activeElement?.getAttribute("aria-label")), "Tarjeta accesible");
+  L.assertNoErrors("ACC tablero", [s]);
+  await s.ctx.close();
+
+  // En móvil (asa de arrastre), el asa tampoco entra en el nombre ni en el Tab; arrastrar con el dedo sigue (QA s9).
+  const m = await L.session({ viewport: { width: 390, height: 800 }, mobile: true });
+  const mc = L.cardLoc(m.page, "Otra tarjeta");
+  const handle = mc.locator("button[aria-label='Arrastrar para reordenar']");
+  L.eq("ACC móvil: el asa existe, fuera del Tab y del árbol accesible", [await handle.count(), await handle.getAttribute("tabindex"), await handle.getAttribute("aria-hidden")], [1, "-1", "true"]);
+  L.eq("ACC móvil: nombre de la tarjeta = título", (await m.page.accessibility.snapshot({ root: await mc.elementHandle() }))?.name, "Otra tarjeta");
+  await m.ctx.close();
+
+  // Suscripción al calendario: sin responsables (uso familiar), «Todas» marcada por defecto y cada opción explicada.
+  await L.q(`DELETE FROM "CalendarFeed"`);
+  await L.q(`UPDATE "Task" SET "assigneeId"=NULL`);
+  const c = await L.session({ viewport: { width: 1400, height: 900 } });
+  const subscribe = async () => {
+    await c.page.goto(`${L.BASE}/calendar`);
+    await c.page.getByRole("button", { name: /Suscribirse/ }).first().click();
+    const dlg = c.page.locator("[role=dialog]").filter({ hasText: "Qué incluye" });
+    await dlg.waitFor();
+    return dlg;
+  };
+  const mine = (dlg) => dlg.getByRole("radio", { name: /Solo las tareas asignadas a mí/ });
+  const all = (dlg) => dlg.getByRole("radio", { name: /Todas las de mis proyectos/ });
+  let d = await subscribe();
+  L.eq("ACC calendario: sin responsables, «Todas las de mis proyectos» por defecto (antes «Solo las mías»: vacío)", [await all(d).isChecked(), await mine(d).isChecked()], [true, false]);
+  const described = async (radio) => c.page.locator(`#${await radio.getAttribute("aria-describedby")}`).innerText();
+  L.check("ACC calendario: cada opción explica qué incluye (y es su descripción)", /sin responsable no salen/.test(await described(mine(d))) && /tengan responsable o no/.test(await described(all(d))));
+  // Con casi todas asignadas (equipo), «Solo las mías».
+  await L.q(`UPDATE "Task" SET "assigneeId"=$1`, [me.id]);
+  d = await subscribe();
+  L.eq("ACC calendario: con responsables, «Solo las tareas asignadas a mí» por defecto", [await mine(d).isChecked(), await all(d).isChecked()], [true, false]);
+  L.assertNoErrors("ACC calendario", [c]);
+  await c.ctx.close();
 }
 
 await L.closeBrowser(); await L.closeDb();

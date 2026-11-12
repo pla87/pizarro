@@ -26,6 +26,7 @@ import { PrivateIcon, ProjectMenu, ProjectsContext, useProjectSwitchHref } from 
 import { UndoButton } from "./UndoButton";
 import { Avatar } from "./ui/Avatar";
 import { ReportButton } from "./ReportButton";
+import { MAIN_ID, SkipToContent } from "./SkipToContent";
 import { ImportProjectPanel } from "./ImportProjectPanel";
 import { TransferJobWatcher } from "./transfer/TransferJobWatcher";
 import { ConnectionNotice } from "./ConnectionNotice";
@@ -114,6 +115,7 @@ function Shell({ user, projects, version, unread, lastProjectId = null, backupAl
   return (
     <ProjectsContext.Provider value={{ projects, currentId: current?.id ?? null }}>
     <AppBadge count={unread} />
+    <SkipToContent />
     {/* Fijo al viewport: nunca hay scroll del documento. En Android con la barra de gestos dibujada
         encima (viewport-fit=cover) el contenido acaba justo antes de esa barra. */}
     <div className="fixed inset-0 flex overflow-hidden">
@@ -151,7 +153,7 @@ function Shell({ user, projects, version, unread, lastProjectId = null, backupAl
           )}
         </header>
         {nudgeHref && <LicenseNudge buyHref={nudgeHref} />}
-        <main className="min-h-0 flex-1 overflow-auto max-lg:pb-[env(safe-area-inset-bottom)]">{children}</main>
+        <main id={MAIN_ID} tabIndex={-1} className="min-h-0 flex-1 overflow-auto outline-none max-lg:pb-[env(safe-area-inset-bottom)]">{children}</main>
       </div>
     </div>
     </ProjectsContext.Provider>

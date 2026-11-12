@@ -17,8 +17,8 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 
 | Suite | Script | Comprobaciones | Tiempo |
 |---|---|---|---|
-| QA (9 escenarios) | `e2e/qa/run-all.mjs` | 380 | ~5 min |
-| Tablero | `e2e/board-e2e.mjs` | 339 | ~4 min |
+| QA (9 escenarios) | `e2e/qa/run-all.mjs` | 386 | ~5 min |
+| Tablero | `e2e/board-e2e.mjs` | 360 | ~4 min |
 | Pegar | `e2e/paste-e2e.mjs` | 72 | ~1 min |
 | Cabecera y atajos (caza de bugs 48a) | `e2e/bh48a-e2e.mjs` | 42 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) | `e2e/bh48b-e2e.mjs` | 120 | ~3 min |

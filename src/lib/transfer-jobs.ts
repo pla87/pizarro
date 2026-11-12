@@ -285,6 +285,29 @@ export async function executeJob(job: JobRow): Promise<void> {
     })
     .catch((err) => { console.error("[transfer] no se pudo anotar el final", err); return null; });
   if (finished?.count && error === null && job.kind === "EXPORT") await dropPreviousExports(job);
+  // Exportación terminada cuya fila ya no existe (se borró el proyecto mientras se exportaba): nadie la descargará.
+  // Solo si la fila ha desaparecido: un trabajador rezagado (la fila sigue, retomada por otro) no toca el archivo del vigente.
+  if (finished && !finished.count && job.kind === "EXPORT" && result && !(await db.projectTransferJob.count({ where: { id: job.id } }).catch(() => 1))) {
+    await rm(path.join(exportsDir(), (result as ExportJobResult).file), { force: true }).catch(() => {});
+  }
+}
+
+/**
+ * Al borrar un proyecto: borra sus exportaciones (filas y archivos, también las que están en cola o en marcha) y las
+ * importaciones que lo crearon, para que no quede en disco un .pizarro.zip de un proyecto que ya no existe ni un
+ * resumen que enlaza a él. Una exportación en marcha termina sin dejar nada (executeJob borra su archivo si la fila
+ * ya no está). Devuelve cuántos trabajos se borraron.
+ */
+export async function discardProjectTransfers(projectId: string): Promise<number> {
+  const jobs = await db.projectTransferJob.findMany({ where: { projectId } });
+  if (!jobs.length) return 0;
+  await db.projectTransferJob.deleteMany({ where: { id: { in: jobs.map((j) => j.id) } } });
+  for (const job of jobs) {
+    if (job.kind !== "EXPORT") continue;
+    // El archivo final siempre es `<id>.pizarro.zip` (runExport); el temporal de un intento en marcha lo borra su trabajador.
+    await rm(path.join(exportsDir(), `${job.id}.pizarro.zip`), { force: true }).catch(() => {});
+  }
+  return jobs.length;
 }
 
 /**
@@ -457,8 +480,9 @@ export async function recoverInterruptedJobs(now: Date = new Date(), staleMs: nu
 }
 
 /**
- * Mantenimiento: borra los archivos exportados de más de 24 h (la fila pasa a EXPIRED), los restos sin fila en exports/
- * y las filas terminadas hace más de 7 días. Devuelve cuántos archivos se borraron.
+ * Mantenimiento: borra los archivos exportados de más de 24 h (la fila pasa a EXPIRED), los trabajos terminados de
+ * proyectos que ya no existen (con su archivo), los restos sin fila en exports/ y las filas terminadas hace más de 7 días.
+ * Devuelve cuántos archivos se borraron.
  */
 export async function purgeTransferJobs(now: Date = new Date()): Promise<number> {
   let removed = 0;
@@ -470,6 +494,25 @@ export async function purgeTransferJobs(now: Date = new Date()): Promise<number>
       removed++;
     }
     await db.projectTransferJob.updateMany({ where: { id: job.id, status: "DONE" }, data: { status: "EXPIRED" } });
+  }
+  // Huérfanas: trabajos terminados de proyectos que ya no existen (una exportación lista de un proyecto borrado antes de
+  // que el borrado se llevara sus trabajos, o borrado por otra vía). Fuera el archivo y la fila, aunque no hayan caducado.
+  const finishedWithProject = await db.projectTransferJob.findMany({ where: { status: { in: ["DONE", "FAILED", "EXPIRED"] }, projectId: { not: null } }, select: { projectId: true } });
+  const referenced = [...new Set(finishedWithProject.map((j) => j.projectId!))];
+  if (referenced.length) {
+    const existing = new Set((await db.project.findMany({ where: { id: { in: referenced } }, select: { id: true } })).map((p) => p.id));
+    const gone = referenced.filter((id) => !existing.has(id));
+    if (gone.length) {
+      const orphans = await db.projectTransferJob.findMany({ where: { status: { in: ["DONE", "FAILED", "EXPIRED"] }, projectId: { in: gone } } });
+      for (const job of orphans) {
+        const f = exportFileOf(job);
+        if (f) {
+          await rm(f.file, { force: true }).catch(() => {});
+          removed++;
+        }
+      }
+      await db.projectTransferJob.deleteMany({ where: { id: { in: orphans.map((j) => j.id) } } });
+    }
   }
   // Restos: ficheros de exports/ que no pertenecen a ninguna exportación lista y llevan más de 24 h (temporales de un fallo).
   try {

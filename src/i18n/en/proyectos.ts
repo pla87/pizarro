@@ -65,7 +65,6 @@ export const proyectos: Record<string, string> = {
   "Importar": "Import",
   "Error de red al subir el archivo.": "Network error while uploading the file.",
   "Proyecto importado": "Project imported",
-  "«{name}» se ha creado con {tasks} tarjetas ({archived} archivadas), {columns} columnas, {comments} comentarios, {attachments} adjuntos, {releases} releases y {documents} documentos.": "“{name}” was created with {tasks} cards ({archived} archived), {columns} columns, {comments} comments, {attachments} attachments, {releases} releases and {documents} documents.",
   "{n} usuario(s) se han añadido como miembros del proyecto por figurar en el archivo.": "{n} user(s) were added as project members because they appear in the file.",
   "Personas sin emparejar ({n})": "Unmatched people ({n})",
   "No hay un usuario activo con el mismo email (o el proyecto es privado), así que sus tarjetas quedan sin asignar y sus comentarios conservan el nombre original.": "There is no active user with the same email (or the project is private), so their cards are left unassigned and their comments keep the original name.",

@@ -294,10 +294,10 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
             <button className="btn-secondary" onClick={copy}>
               {copied ? <Check size={15} /> : <ClipboardCopy size={15} />} {t("Copiar todo")}
             </button>
-            <button className="btn-secondary" onClick={() => downloadText(content, releaseFileName(now, "md", appTimeZone()), "text/markdown")}>
+            <button className="btn-secondary" onClick={() => downloadText(content, releaseFileName({ day: isoDate(now, appTimeZone()), number: generatedNumber, project: board.project.name }, "md"), "text/markdown")}>
               <Download size={15} /> .md
             </button>
-            <button className="btn-secondary" onClick={() => downloadText(content, releaseFileName(now, "txt", appTimeZone()), "text/plain")}>
+            <button className="btn-secondary" onClick={() => downloadText(content, releaseFileName({ day: isoDate(now, appTimeZone()), number: generatedNumber, project: board.project.name }, "txt"), "text/plain")}>
               <FileText size={15} /> .txt
             </button>
             {attachmentTotal > 0 && (
@@ -398,7 +398,8 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
           </div>
           <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
             <legend className="sr-only">{t("Al marcar como desplegado")}</legend>
-            <span className="text-xs font-medium text-slate-500">{t("Al marcar como desplegado:")}</span>
+            {/* El rótulo visible repite el del grupo (legend): oculto para el lector de pantalla, que ya lo anuncia. */}
+            <span className="text-xs font-medium text-slate-500" aria-hidden>{t("Al marcar como desplegado:")}</span>
             <label className="flex items-center gap-1.5">
               <input type="radio" name="dest" checked={destination === "IN_PRODUCTION"} onChange={() => setDestination("IN_PRODUCTION")} disabled={!inProduction} />
               {inProduction ? t("Mover a «{name}»", { name: inProduction.name }) : t("Mover a En producción (no hay columna con ese rol)")}

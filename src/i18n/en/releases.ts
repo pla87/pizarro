@@ -12,4 +12,8 @@ export const releases: Record<string, string> = {
 
   // Adjunto de una release
   "¿Borrar el adjunto de esta release? El texto se conserva.": "Delete this release's attachment? The text is kept.",
+
+  // Histórico vacío: con el nombre real de la columna que genera releases, o cómo crearla si no hay
+  "Aún no hay releases. Genera una desde la columna «{name}» del tablero.": "There are no releases yet. Generate one from the “{name}” column on the board.",
+  "Aún no hay releases. Para generarlas, elige en el menú de una columna del tablero el rol «{role}».": "There are no releases yet. To generate them, choose the “{role}” role in the menu of a column on the board.",
 };

@@ -18,6 +18,7 @@ import {
   MAX_JOBS_PER_USER, claimNextJob, listRecentJobs, createExportJob, createImportJob, executeJob, exportsDir, getJobFor, purgeTransferJobs, recoverInterruptedJobs,
   runNextTransferJob, startTransferWorker, stopTransferWorkerForTests, transferConcurrency, dropPreviousExports,
 } from "../../src/lib/transfer-jobs";
+import { purgeProject } from "../../src/lib/project-delete";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-transfer-"));
 const work = await mkdtemp(path.join(tmpdir(), "pz-transfer-zip-"));
@@ -339,8 +340,8 @@ describe("caducidad y limpieza", () => {
     const done = await db.projectTransferJob.findUniqueOrThrow({ where: { id: job.id } });
     const file = path.join(exportsDir(), (done.result as { file: string }).file);
     assert.equal(await exists(file), true);
-    // Aún no toca.
-    assert.equal(await purgeTransferJobs(new Date()), 0);
+    // Aún no toca (la limpieza sí puede borrar huérfanas de proyectos borrados en otras pruebas).
+    await purgeTransferJobs(new Date());
     assert.equal(await exists(file), true);
     // Pasadas 24 h: el trabajo de mantenimiento lo borra.
     assert.ok((await purgeTransferJobs(new Date(Date.now() + 25 * 3600_000))) >= 1);
@@ -370,6 +371,57 @@ describe("caducidad y limpieza", () => {
     const row = await db.projectTransferJob.create({ data: { kind: "EXPORT", status: "FAILED", userId: u.id, error: "x", finishedAt: new Date(Date.now() - 8 * 86_400_000) } });
     await purgeTransferJobs();
     assert.equal(await db.projectTransferJob.count({ where: { id: row.id } }), 0);
+  });
+});
+
+describe("al borrar el proyecto", () => {
+  test("se borran sus exportaciones (filas y .pizarro.zip) y la importación que lo creó; las de otros proyectos no", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const { f, job } = await exportJob(admin.id);
+    assert.equal(await runNextTransferJob(), job.id);
+    const file = path.join(exportsDir(), `${job.id}.pizarro.zip`);
+    assert.equal(await exists(file), true);
+    // Una exportación lista de otro proyecto, que no se toca.
+    const { job: other } = await exportJob(admin.id);
+    assert.equal(await runNextTransferJob(), other.id);
+    // Otra exportación del mismo proyecto aún en cola, y la importación que lo «creó».
+    const queued = await db.projectTransferJob.create({ data: { kind: "EXPORT", status: "QUEUED", userId: admin.id, projectId: f.project.id, options: { attachments: false, scope: "all" } } });
+    const imported = await db.projectTransferJob.create({ data: { kind: "IMPORT", status: "DONE", userId: admin.id, projectId: f.project.id, finishedAt: new Date(), result: {} } });
+    const otherFile = path.join(exportsDir(), `${other.id}.pizarro.zip`);
+
+    await purgeProject(f.project.id);
+    // Antes el trabajo seguía DONE y el archivo en uploads/exports.
+    assert.equal(await exists(file), false);
+    assert.equal(await db.projectTransferJob.count({ where: { id: { in: [job.id, queued.id, imported.id] } } }), 0);
+    assert.equal(await exists(otherFile), true);
+    assert.equal((await db.projectTransferJob.findUniqueOrThrow({ where: { id: other.id } })).status, "DONE");
+  });
+
+  test("una exportación en marcha cuya fila desaparece no deja su archivo en disco", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const { job } = await exportJob(admin.id);
+    const claimed = (await claimNextJob())!;
+    await db.projectTransferJob.delete({ where: { id: job.id } });
+    await executeJob(claimed);
+    assert.deepEqual((await readdir(exportsDir())).filter((n) => n.startsWith(job.id)), []);
+  });
+
+  test("la limpieza periódica borra las exportaciones listas de proyectos que ya no existen, aunque no hayan caducado", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const { f, job } = await exportJob(admin.id);
+    assert.equal(await runNextTransferJob(), job.id);
+    const file = path.join(exportsDir(), `${job.id}.pizarro.zip`);
+    // Borrado por otra vía (o antes de que el borrado se llevara sus trabajos): huérfana.
+    await db.task.deleteMany({ where: { projectId: f.project.id } });
+    await db.project.delete({ where: { id: f.project.id } });
+    const { job: alive } = await exportJob(admin.id);
+    assert.equal(await runNextTransferJob(), alive.id);
+    assert.ok((await purgeTransferJobs()) >= 1);
+    assert.equal(await exists(file), false);
+    assert.equal(await db.projectTransferJob.count({ where: { id: job.id } }), 0);
+    // La de un proyecto que sigue existiendo y aún no caduca, intacta.
+    assert.equal(await exists(path.join(exportsDir(), `${alive.id}.pizarro.zip`)), true);
+    assert.equal((await db.projectTransferJob.findUniqueOrThrow({ where: { id: alive.id } })).status, "DONE");
   });
 });
 

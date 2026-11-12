@@ -5,6 +5,8 @@ import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helper
 import { createCalendarFeed, disableCalendarFeed, setCalendarFeedScope } from "../../src/actions/calendar-feed";
 import { GET } from "../../src/app/api/calendar/[file]/route";
 import { onRequestError } from "../../src/instrumentation";
+import { createProject } from "../../src/actions/projects";
+import { defaultFeedScope } from "../../src/lib/calendar-feed";
 import { buildColumnIcs } from "../../src/lib/column-views";
 import { flushLogs } from "../../src/lib/log";
 
@@ -187,6 +189,36 @@ describe("calendario suscrito", () => {
     expectOk(await setCalendarFeedScope("ALL"));
     ({ text } = await fetchFeed(token));
     assert.ok(text.includes(mineTask.id) && text.includes(mateTask.id) && text.includes(del.id));
+  });
+
+  test("ámbito por defecto: «Todas» si las tareas de sus proyectos no suelen tener responsable (ejemplo «Familia y casa»)", async () => {
+    // Uso familiar: proyecto privado desde el ejemplo, cuyas tareas no tienen responsable. Antes salía marcado «Solo las
+    // mías» y la suscripción quedaba vacía.
+    const parent = await makeUser();
+    await loginAs(parent);
+    const home = expectOk(await createProject("Casa", { exampleKey: "familia-casa", isPrivate: true }));
+    const dentist = await db.task.findFirstOrThrow({ where: { projectId: home.id, dueDate: { not: null } } });
+    assert.equal(dentist.assigneeId, null);
+    assert.equal(await defaultFeedScope(parent), "ALL");
+    const { token } = await feedFor(parent, await defaultFeedScope(parent));
+    assert.ok((await fetchFeed(token)).text.includes(dentist.id));
+    // Equipo donde casi todo tiene responsable: «Solo las mías».
+    const dev = await makeUser();
+    const mate = await makeUser();
+    const f = await makeProject({ members: [dev, mate] });
+    for (const who of [dev, mate, mate]) await db.task.update({ where: { id: (await makeTask(f)).id }, data: { assigneeId: who.id } });
+    await makeTask(f); // una sin responsable no cambia la mayoría
+    assert.equal(await defaultFeedScope(dev), "MINE");
+    // Mitad sin responsable (3 de 6): aún «Solo las mías»; más de la mitad, «Todas». Las archivadas no cuentan.
+    await makeTask(f);
+    await makeTask(f);
+    assert.equal(await defaultFeedScope(dev), "MINE");
+    await makeTask(f);
+    assert.equal(await defaultFeedScope(dev), "ALL");
+    await db.task.updateMany({ where: { projectId: f.project.id, assigneeId: null }, data: { archivedAt: new Date() } });
+    assert.equal(await defaultFeedScope(dev), "MINE");
+    // Sin ninguna tarea pendiente, «Todas».
+    assert.equal(await defaultFeedScope(await makeUser()), "ALL");
   });
 
   test("excluye archivadas, sin fecha y fuera de la ventana; el rango usa la fecha de inicio solo si el proyecto la activa", async () => {

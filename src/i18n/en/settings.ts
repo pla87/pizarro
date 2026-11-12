@@ -37,7 +37,6 @@ export const settings: Record<string, string> = {
   "Google no devolvió un acceso permanente. Vuelve a conectar.": "Google did not return permanent access. Please reconnect.",
   "Google no confirmó la identidad de la cuenta. Vuelve a intentarlo.": "Google did not confirm the account's identity. Please try again.",
   "Histórico de despliegues de «{name}» con el texto final editado.": "Deployment history of “{name}” with the final edited text.",
-  "Aún no hay releases. Genera una desde la columna «Siguiente salto a producción» del tablero.": "There are no releases yet. Generate one from the “Siguiente salto a producción” column on the board.",
   "Buscar en título y contenido…": "Search in title and content…",
   "Buscar releases": "Search releases",
   "{n} resultados": "{n} results",

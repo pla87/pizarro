@@ -19,4 +19,7 @@ export const accesibilidad: Record<string, string> = {
   "Añadir «{name}» a mis proyectos": "Add “{name}” to my projects",
   "Quitar la subtarea «{name}»": "Remove subtask “{name}”",
   "Quitar «{name}»": "Remove “{name}”",
+
+  // Tarjeta del tablero: descripción para el lector de pantalla («Saltar al contenido» ya está en web.ts)
+  "Subtareas: {done} de {total}": "Subtasks: {done} of {total}",
 };

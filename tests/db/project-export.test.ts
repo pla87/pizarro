@@ -419,6 +419,9 @@ describe("importar: personas", () => {
     const note = t.comments.find((c) => c.authorId === admin.id)!;
     assert.match(note.body, /Desconocido Uno/);
     assert.match(note.body, /Persona Inactiva/);
+    // El resumen cuenta aparte esa nota: tres comentarios del archivo y una nota (antes la nota no se contaba).
+    assert.deepEqual([s.counts.comments, s.counts.notes], [3, 1]);
+    assert.equal(t.comments.length, 4);
     // Usuario de equipo (no administrador) emparejado: pasa a ser miembro.
     assert.equal(await db.projectMember.count({ where: { projectId: s.projectId, userId: member.id } }), 1);
   });

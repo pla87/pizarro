@@ -9,6 +9,7 @@ import {
   releasesUntilDue,
   nextEvergreenEvery,
   formatReleaseLine,
+  isoDate,
   releaseFileName,
   releaseZipName,
   swapTemplateBlock,
@@ -226,9 +227,16 @@ test("nombres de adjuntos: los no imagen conservan su extensión", () => {
   );
 });
 
-test("nombre de fichero con fecha local", () => {
-  assert.equal(releaseFileName(new Date(2026, 0, 5, 23, 30), "md"), "release-2026-01-05.md");
-  assert.equal(releaseFileName(new Date(2026, 11, 31), "txt"), "release-2026-12-31.txt");
+test("nombre del .md y el .txt: fecha, número de la release y proyecto, como el ZIP de sus adjuntos", () => {
+  // Antes era siempre «release-AAAA-MM-DD.md»: la segunda y la tercera release del día se llamaban igual.
+  assert.equal(releaseFileName({ day: isoDate(new Date(2026, 0, 5, 23, 30)), number: 2, project: "Web" }, "md"), "release-2026-01-05-R2-Web.md");
+  assert.equal(releaseFileName({ day: "2026-12-31", number: 3, project: "Proyecto de ejemplo" }, "txt"), "release-2026-12-31-R3-Proyecto_de_ejemplo.txt");
+  // Mismas piezas que el ZIP (sin el sufijo de adjuntos).
+  const opts = { day: "2026-11-11", number: 12, project: "Web · Año 2" };
+  assert.equal(releaseFileName(opts, "md").replace(/\.md$/, ""), releaseZipName(opts).replace(/-adjuntos\.zip$/, ""));
+  // Sin número (aún no generada) o sin proyecto, se omiten.
+  assert.equal(releaseFileName({ day: "2026-11-11" }, "md"), "release-2026-11-11.md");
+  assert.equal(releaseFileName({ day: "2026-11-11", number: null, project: "///" }, "txt"), "release-2026-11-11.txt");
 });
 
 test("evergreenDue: cadencia de las tareas fijas", () => {

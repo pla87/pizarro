@@ -87,6 +87,16 @@ export async function run() {
   L.check("ZIP del diálogo: nombre release-AAAA-MM-DD-R1-Proyecto-adjuntos.zip", zipName === `release-${zipName.slice(8, 18)}-R1-${projectPart}-adjuntos.zip` && /^\d{4}-\d{2}-\d{2}$/.test(zipName.slice(8, 18)), zipName);
   L.check("ZIP del diálogo: no vacío y empieza por PK", zbuf.length > 100 && zbuf[0] === 0x50 && zbuf[1] === 0x4b, String(zbuf.length));
   L.check("ZIP del diálogo: contiene R1F1_captura.webp y R1C1_notas.txt", zbuf.includes("R1F1_captura.webp") && zbuf.includes("R1C1_notas.txt"));
+  // El .md lleva el número de la release, como el ZIP (antes siempre «release-AAAA-MM-DD.md», también la 2.ª y la 3.ª).
+  const mdName = zipName.replace(/-adjuntos\.zip$/, ".md");
+  const [mdDl] = await Promise.all([p.waitForEvent("download", { timeout: 15000 }), dlg.getByRole("button", { name: ".md", exact: true }).click()]);
+  L.eq("diálogo: el .md se llama como el ZIP (release-AAAA-MM-DD-R1-Proyecto.md)", mdDl.suggestedFilename(), mdName);
+  // «Al marcar como desplegado» se anuncia una sola vez: el grupo lo nombra y el rótulo visible queda oculto al lector.
+  const destGroup = dlg.locator("fieldset").filter({ has: p.getByLabel("Archivar tarjetas") });
+  const destTree = await p.accessibility.snapshot({ root: await destGroup.elementHandle(), interestingOnly: false });
+  const texts = [];
+  (function walk(n) { if (n?.role === "text") texts.push(n.name); for (const c of n?.children ?? []) walk(c); })(destTree);
+  L.eq("diálogo: «Al marcar como desplegado» se lee una vez (antes, legend y rótulo)", [destTree?.name, texts.filter((x) => /Al marcar como desplegado/.test(x)).length], ["Al marcar como desplegado", 1]);
 
   // --- desplegar ---
   await dlg.getByRole("button", { name: "Marcar como desplegado" }).click();
@@ -119,8 +129,14 @@ export async function run() {
   await p.getByText("Release QA uno").first().waitFor({ timeout: 15000 });
   const bodyText = await p.locator("main").innerText();
   L.check("Releases: muestra título, número y «4 tareas» y «2 adjuntos»", /Release QA uno/.test(bodyText) && /4 tareas/.test(bodyText) && /2 adjuntos/.test(bodyText) && /\bR1(?!\d)/.test(bodyText), bodyText.slice(0, 300));
+  // El nombre accesible de la entrada separa el número del título («R1 Release QA uno…», antes «R1Release QA uno…»).
+  const entryBtn = p.locator("article button[aria-expanded]").first();
+  const entryName = (await p.accessibility.snapshot({ root: await entryBtn.elementHandle() }))?.name ?? "";
+  L.check("Releases: nombre accesible «R1 Release QA uno …» con separador", /^R1 Release QA uno\b/.test(entryName), entryName);
   // v1.22: la descarga es un botón (fetch con el token del plan); se comprueba el botón y la ruta.
   await p.getByText("Release QA uno").first().click();
+  const [histMd] = await Promise.all([p.waitForEvent("download", { timeout: 15000 }), p.getByRole("button", { name: ".md", exact: true }).first().click()]);
+  L.eq("Releases: el .md se llama igual que desde el diálogo", histMd.suggestedFilename(), mdName);
   const histZipBtn = p.getByRole("button", { name: /Descargar adjuntos/ }).first();
   await histZipBtn.waitFor({ timeout: 10000 });
   L.check("Releases: botón «Descargar adjuntos» visible", await histZipBtn.isVisible());
@@ -142,6 +158,19 @@ export async function run() {
   L.eq("deshacer despliegue: los títulos originales (sin código)", (await L.q(`SELECT title FROM "Task" WHERE title ~ '^R[0-9]'`)).length, 0);
   L.check("deshacer despliegue: la fija sigue fija", (await L.dbTask("Fija")).evergreen === true);
   L.eq("deshacer despliegue: ReleaseTask y ReleaseAttachment eliminados (cascada)", [Number((await L.q(`SELECT count(*) AS n FROM "ReleaseTask"`))[0].n), Number((await L.q(`SELECT count(*) AS n FROM "ReleaseAttachment"`))[0].n)], [0, 0]);
+
+  // --- histórico vacío: nombra la columna real que genera releases (antes, fijo «Siguiente salto a producción») ---
+  await L.q(`UPDATE "Column" SET name='Próximo salto QA' WHERE "projectId"=$1 AND role='NEXT_RELEASE'`, [proj.id]);
+  await p.goto(`${L.BASE}/p/${proj.id}/releases`);
+  await p.getByText(/^Aún no hay releases/).waitFor({ timeout: 15000 });
+  L.eq("Releases vacía: nombra la columna con el rol «Siguiente salto», con su nombre actual", (await p.getByText(/^Aún no hay releases/).innerText()).trim(), "Aún no hay releases. Genera una desde la columna «Próximo salto QA» del tablero.");
+  await L.q(`UPDATE "Column" SET role='NONE' WHERE "projectId"=$1 AND name='Próximo salto QA'`, [proj.id]);
+  await p.goto(`${L.BASE}/p/${proj.id}/releases`);
+  await p.getByText(/^Aún no hay releases/).waitFor({ timeout: 15000 });
+  L.eq("Releases vacía sin esa columna: explica qué rol ponerle a una", (await p.getByText(/^Aún no hay releases/).innerText()).trim(), "Aún no hay releases. Para generarlas, elige en el menú de una columna del tablero el rol «Siguiente salto (genera releases)».");
+  await L.q(`UPDATE "Column" SET name=$2, role='NEXT_RELEASE' WHERE "projectId"=$1 AND name='Próximo salto QA'`, [proj.id, COL.next]);
+  await p.goto(`${L.BASE}/p/${proj.id}`);
+  await L.board(p);
 
   // --- segunda release con selección y destino «archivar» ---
   await L.reload(p);
