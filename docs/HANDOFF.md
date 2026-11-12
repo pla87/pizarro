@@ -164,6 +164,8 @@ Guardas que conviene conocer:
   caza de bugs anterior). `e2e/install-e2e.mjs` arranca el servidor con `warn-hook.mjs` y falla si vuelve a aparecer.
   Para localizarlo en otro proceso: `WARN_LOG=/ruta/avisos.log NODE_OPTIONS="--import file://$PWD/e2e/warn-hook.mjs"`.
   Ojo con código nuevo que use un `pg.Client` propio (`pg-connect.ts`): sus consultas, en fila.
+  Excepción hallada después: Prisma 7 sí provoca este aviso con relaciones anidadas dentro de `$transaction` (p. ej.
+  `buildProjectExport`). No subas `pg` a la 9 sin revisarlo antes: allí será un error.
 
 Antes de cada fusión en `main`, comprueba que no se cuela ningún dato personal del propietario en el diff ni en el
 PDF del manual (busca su nombre, email y dominios; pídeselos si no los sabes) y que los mensajes de commit no
@@ -312,7 +314,10 @@ Cómo se revisa cada PR:
   - WhatsApp: plantilla de utilidad `aviso_pizarro` (3 variables); la antigua `mencion_pizarro` (4 variables) solo
     envía menciones. Guardar la configuración no activa el envío (hay que pulsar *Activar*). Un fallo que Meta pudo
     haber enviado (5xx, corte, tiempo agotado) no se reintenta, para no cobrar dos veces. Cada número se confirma con
-    un código de 6 cifras (15 min, 5 intentos; 5 mensajes al día por persona y 3 por número).
+    un código de 6 cifras (15 min, 5 intentos; 5 mensajes al día por persona y 3 por número), que va en la plantilla
+    de autenticación `codigo_pizarro` (Meta lo exige para códigos de un solo uso; ajustes `whatsapp.codeTemplate*` en
+    `AppState`, con traducción inglesa opcional). *Probar* envía las dos plantillas. Si Meta rechaza la de verificación,
+    Ajustes lo marca en rojo y nadie puede conectar un número nuevo hasta crearla (guía de WhatsApp, paso 6).
   - Pruebas: `tests/messaging.test.ts`, `tests/db/messaging.test.ts` y `tests/db/messaging-migration.test.ts`.
 - Entorno de la nube: `npm ci` instala solo el binario SWC musl; para `next build` hace falta
   `@next/swc-linux-x64-gnu` (misma versión que `next`) extraído en `node_modules/@next/`. La suite QA necesita
