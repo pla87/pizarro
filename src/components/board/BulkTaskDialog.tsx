@@ -97,7 +97,7 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
     applyForm(res.data);
   };
 
-  const { lines, clipped } = useMemo(() => parseTaskLinesInfo(text), [text]);
+  const { lines, limits } = useMemo(() => parseTaskLinesInfo(text), [text]);
   const tooMany = lines.length > MAX_BULK_TASKS;
   const kindOf = (title: string) => overrides[title] || kindId;
   const missingKind = lines.some((l) => !kindOf(l));
@@ -136,8 +136,11 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
     if (elsewhere) toast(`${done} · ${form.project.name}`, "success", { label: t("Ir al proyecto"), onClick: () => router.push(`/p/${projectId}`) });
     else toast(done);
     // Los títulos más largos que el máximo se han creado recortados (ya cortados aquí; el servidor también corta lo que llegue largo).
-    const cut = Math.max(clipped, res.data.filter((x) => x.titleClipped).length);
-    if (cut) toast(cut === 1 ? t("Título recortado a {max} caracteres", { max: MAX_TITLE }) : t("{n} títulos recortados a {max} caracteres", { n: cut, max: MAX_TITLE }));
+    // Cada uno, a cuántos caracteres se recortó: 210, o menos con emojis muy compuestos (manda el tope de unidades).
+    const serverCut = res.data.flatMap((x) => (x.titleClipped ? [x.titleClipped] : []));
+    const cut = limits.length >= serverCut.length ? limits : serverCut;
+    if (cut.length === 1) toast(t("Título recortado a {max} caracteres", { max: cut[0]! }));
+    else if (cut.length) toast(cut.every((n) => n === MAX_TITLE) ? t("{n} títulos recortados a {max} caracteres", { n: cut.length, max: MAX_TITLE }) : t("{n} títulos recortados: eran demasiado largos", { n: cut.length }));
     onClose();
     if (!elsewhere && res.data[0]) board.revealTask(res.data[0].id);
   };

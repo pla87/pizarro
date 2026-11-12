@@ -74,4 +74,6 @@ export const task: Record<string, string> = {
   "Título recortado a {max} caracteres": "Title shortened to {max} characters",
   "{n} títulos recortados a {max} caracteres": "{n} titles shortened to {max} characters",
   "Copiar tu texto": "Copy your text",
+  // Títulos recortados por el tope de unidades (emojis muy compuestos): sin el máximo de 210, que no es el real.
+  "{n} títulos recortados: eran demasiado largos": "{n} titles shortened: they were too long",
 };

@@ -8,7 +8,7 @@
 // Las referencias («ref») son ids propios del archivo, asignados en orden: nunca son ids de la base de datos.
 // Las personas se guardan como {nombre, email}; al importar se emparejan por email con usuarios activos.
 import { z } from "zod";
-import { COLUMN_ROLES, HEX_COLOR_RE, MAX_DESCRIPTION, MAX_RELEASE_CONTENT, MAX_TEMPLATE } from "../constants";
+import { COLUMN_ROLES, HEX_COLOR_RE, MAX_DESCRIPTION, MAX_RELEASE_CONTENT, MAX_TEMPLATE, MAX_TITLE_UNITS } from "../constants";
 import { GOOGLE_SHARE_MODES } from "../google-share";
 import { TASK_FIELDS, TASK_PRIORITIES } from "../task-fields";
 
@@ -114,9 +114,16 @@ const commentSchema = z.object({
   deletedAt: iso.nullable(),
 });
 
+/**
+ * Título de tarea tal como se guarda: hasta MAX_TITLE_UNITS unidades de texto visible (con emojis compuestos, 76
+ * familias 👨‍👩‍👧‍👦 son 836) más el marcado de las menciones. Con el tope antiguo de 500, un proyecto con un título así no se
+ * podía exportar (el exportador valida lo que escribe). El importador lo recorta al máximo de la aplicación.
+ */
+const taskTitle = text(MAX_TITLE_UNITS * 4);
+
 const taskSchema = z.object({
   ref,
-  title: text(500),
+  title: taskTitle,
   description: text(MAX_DESCRIPTION * 2),
   columnRef: ref,
   kindRef: ref,
@@ -168,7 +175,7 @@ const releaseSchema = z.object({
   content: text(MAX_RELEASE_CONTENT * 2),
   createdBy: person,
   deployedAt: iso,
-  tasks: z.array(z.object({ taskRef: ref.nullable(), title: text(500), kindName: text(80) })).max(LIMITS.tasks),
+  tasks: z.array(z.object({ taskRef: ref.nullable(), title: taskTitle, kindName: text(80) })).max(LIMITS.tasks),
   attachments: z.array(z.object({ fileName: text(300), size: int().min(0), isImage: z.boolean(), position: int().min(0), createdAt: iso, file: sha })).max(LIMITS.perTask * 10),
 });
 

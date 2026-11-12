@@ -19,7 +19,7 @@ import { InstallApp } from "./InstallApp";
 import { LicenseNudge } from "./LicenseNudge";
 import { clearDraftsOnLogout } from "./board/drafts";
 import { filesFrom, hasFiles } from "./board/upload";
-import { uploadDocument } from "./docs/uploadDocuments";
+import { documentFailuresMessage, documentUploadName, uploadDocument } from "./docs/uploadDocuments";
 import { installDragMove } from "./ui/dragMove";
 import { Presence } from "./board/Presence";
 import { PrivateIcon, ProjectMenu, ProjectsContext, useProjectSwitchHref } from "./ProjectMenu";
@@ -192,17 +192,19 @@ function DocsNavLink({ projectId, active }: { projectId: string; active: boolean
   async function upload(files: File[]) {
     toast(files.length === 1 ? t("Subiendo «{name}» a Documentación…", { name: files[0]!.name }) : t("Subiendo {n} archivos a Documentación…", { n: files.length }));
     let done = 0;
-    let firstError = "";
+    const failed: { name: string; error: string }[] = [];
     for (const file of files) {
       const res = await uploadDocument(projectId, file, t);
       if (res.ok) done++;
-      else firstError ||= res.error;
+      else failed.push({ name: documentUploadName(file, t), error: res.error });
     }
     if (done > 0) {
       toast(done === 1 ? t("Documento subido") : t("{n} documentos subidos", { n: done }), "success", { label: t("Abrir Documentación"), onClick: open });
       safeRefresh();
     }
-    if (firstError) toast(files.length > 1 ? t("{n} sin subir: {error}", { n: files.length - done, error: firstError }) : firstError, "error");
+    // Cuáles no se han subido y por qué (p. ej. con la cuota superada), no solo cuántos.
+    const failedMsg = documentFailuresMessage(t, failed, files.length);
+    if (failedMsg) toast(failedMsg, "error");
   }
 
   const extra = {

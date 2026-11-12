@@ -29,6 +29,9 @@ function buildCsp(nonce: string): string {
 // en el servidor. También renueva la caducidad de la cookie al navegar y fija la CSP con nonce.
 export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
+  // Un NUL en la ruta (/p/%00) no es ningún recurso, y como id llegaba a PostgreSQL, que no lo admite en un texto:
+  // error 22021 y página de error. Se responde 404 sin pasar por la página (los filtros de la URL lo quitan ellos).
+  if (/%00|\u0000/i.test(pathname)) return new NextResponse("Not Found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
   // Opcional (CANONICAL_REDIRECT=1): las direcciones distintas de APP_URL redirigen (308) a ella.
   const canonical = canonicalRedirect({ enabled: process.env.CANONICAL_REDIRECT, appUrl: process.env.APP_URL, host: req.headers.get("host"), forwardedHost: req.headers.get("x-forwarded-host"), method: req.method, pathname, search });
   if (canonical) return NextResponse.redirect(canonical, 308);

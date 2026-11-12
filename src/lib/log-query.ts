@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "./db";
 import { logRetentionDays } from "./log";
+import { cleanText, clipText } from "./log-clean";
 
 // Filtros compartidos por la página de logs y la descarga CSV (Administración → Logs).
 
@@ -53,9 +54,11 @@ export function parseLogFilters(p: Params): LogFilters {
   return {
     range,
     level,
-    category: first(p.category).slice(0, 40),
-    userId: first(p.user).slice(0, 40),
-    q: first(p.q).trim().slice(0, 100),
+    // Sin NUL (PostgreSQL no lo admite en un texto: /admin/logs?category=%00 daba el error 22021 y la página de error)
+    // ni medio emoji al recortar.
+    category: clipText(first(p.category), 40),
+    userId: clipText(first(p.user), 40),
+    q: clipText(cleanText(first(p.q)).trim(), 100),
     reads: first(p.consultas) === "1",
   };
 }

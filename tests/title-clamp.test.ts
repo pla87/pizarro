@@ -122,3 +122,28 @@ test("prefijo de release: no parte emojis compuestos y cuenta caracteres", () =>
   assert.ok(out.startsWith(`R1F1: ${family}`));
   assert.doesNotMatch(out, /[\uD800-\uDBFF]$|\u200d$/);
 });
+
+test("tope de unidades: el recorte dice a cu\u00e1ntos caracteres de verdad (100 familias \u2192 76), y el contador igual", async () => {
+  const family = "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66"; // 11 unidades: caben 76 (836 de 840)
+  const r = clampTitle(family.repeat(100));
+  assert.equal(r.clipped, true);
+  assert.equal(titleLength(r.value), 76);
+  assert.equal(r.limit, 76);
+  // Cuando manda el m\u00e1ximo de caracteres, el l\u00edmite es el m\u00e1ximo.
+  assert.equal(clampTitle("x".repeat(500)).limit, MAX_TITLE);
+  assert.equal(clampTitle(`${"a".repeat(MAX_TITLE - 1)} ${mention("Ana")}`).limit, MAX_TITLE);
+  // Una menci\u00f3n que no cabe por unidades (con el texto visible por debajo del m\u00e1ximo) tambi\u00e9n cuenta como tope de unidades.
+  const long = clampTitle(`${family.repeat(70)} ${mention("x".repeat(80))}`);
+  assert.equal(long.clipped, true);
+  assert.equal(long.limit, titleLength(long.value));
+  // Lo que cabe no trae l\u00edmite (los avisos no salen).
+  assert.equal(clampTitle(family.repeat(50)).limit, undefined);
+  // El contador del campo: \u00ab100/76\u00bb (antes \u00ab100/210\u00bb en rojo, con 100 < 210).
+  const { TitleLimitHint } = await import("../src/components/board/TitleLimit");
+  const hint = TitleLimitHint({ id: "h", value: family.repeat(100) }) as { props: { children: unknown[] } };
+  assert.equal(hint.props.children.join(""), "100/76");
+  const plain = TitleLimitHint({ id: "h", value: "x".repeat(300) }) as { props: { children: unknown[] } };
+  assert.equal(plain.props.children.join(""), `300/${MAX_TITLE}`);
+  // Alta en bloque: el l\u00edmite de cada l\u00ednea recortada.
+  assert.deepEqual(parseTaskLinesInfo(`${family.repeat(100)}\ncorta\n${"y".repeat(300)}`).limits, [76, MAX_TITLE]);
+});

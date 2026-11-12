@@ -18,7 +18,10 @@ interface Estimate {
   releases: number;
   documents: number;
   attachments: number;
+  /** Lo que suman los adjuntos. */
   bytes: number;
+  /** Lo demás: los datos del proyecto (project.json) y el envoltorio del ZIP. */
+  dataBytes: number;
 }
 
 /** Progreso de una exportación en cola: se consulta cada 2 s y, al terminar, ofrece «Descargar». */
@@ -137,9 +140,10 @@ export function ExportProject({ projectId }: { projectId: string }) {
             {estimate === null && t("Calculando…")}
             {estimate === "error" && t("No se pudo calcular el tamaño.")}
             {estimate && estimate !== "error" &&
-              t("Se exportarán {tasks} tarjetas ({archived} archivadas), {releases} releases y {attachments} adjuntos (unos {size} MB).", {
-                tasks: estimate.tasks, archived: estimate.archivedTasks, releases: estimate.releases, attachments: estimate.attachments, // Con la coma decimal del idioma («unos 0,1 MB» en español).
-                size: new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(Math.max(0.1, Math.round((estimate.bytes / 1048576) * 10) / 10)),
+              t("Se exportarán {tasks} tarjetas ({archived} archivadas), {releases} releases y {attachments} adjuntos: un archivo de unos {size} MB.", {
+                tasks: estimate.tasks, archived: estimate.archivedTasks, releases: estimate.releases, attachments: estimate.attachments,
+                // Adjuntos más los datos (sin estos, un proyecto sin adjuntos prometía «unos 0,1 MB» y pesaba 0,6). Con la coma decimal del idioma.
+                size: new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(Math.max(0.1, Math.round(((estimate.bytes + estimate.dataBytes) / 1048576) * 10) / 10)),
               })}
           </p>
           <div className="flex justify-end gap-2">

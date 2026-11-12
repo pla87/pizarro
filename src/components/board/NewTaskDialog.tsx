@@ -350,7 +350,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       board.upsertTask(task);
     }
     if (failed) toast(failed, "error");
-    if (sent.clipped || titleClipped) toast(t("Título recortado a {max} caracteres", { max: titleClipped ?? MAX_TITLE }));
+    if (sent.clipped || titleClipped) toast(t("Título recortado a {max} caracteres", { max: titleClipped ?? sent.limit ?? MAX_TITLE }));
     if (elsewhere) toast(t("Tarea creada en «{project}»", { project: form.project.name }), "success", { label: t("Ir al proyecto"), onClick: () => router.push(`/p/${projectId}`) });
     else if (!failed) toast(t("Tarea creada"));
     onClose();

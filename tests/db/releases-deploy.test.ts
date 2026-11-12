@@ -1,7 +1,7 @@
 // Despliegue de releases: tareas que ya no están y despliegues simultáneos, contra PostgreSQL real.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { afterDone, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { deployRelease } from "../../src/actions/releases";
 import { redoLast, undoLast } from "../../src/actions/undo";
 
@@ -136,5 +136,17 @@ describe("deshacer un despliegue", () => {
     expectOk(await deployRelease({ projectId: f.project.id, title: "R", content: "x", destination: "IN_PRODUCTION", taskIds: [a.id] }));
     expectOk(await undoLast(f.project.id));
     expectFail(await redoLast(f.project.id), /nada que rehacer/i);
+  });
+
+  test("aviso de cuota: el uso que da ya suma las copias de los adjuntos (antes «supera su cuota (0,6 de 1 MB)»)", async () => {
+    const { f } = await setup();
+    await db.project.update({ where: { id: f.project.id }, data: { storageQuotaMb: 1 } });
+    const a = await makeTask(f, { columnId: f.columns.done });
+    // 0,6 MB de adjuntos: con su copia en la release, 1,2 MB de una cuota de 1 MB (el fichero no existe: la copia falla, da igual).
+    await db.taskAttachment.create({ data: { taskId: a.id, originalName: "grande.pdf", isImage: false, mimeType: "application/pdf", size: Math.round(0.6 * 1024 * 1024) } });
+    const res = expectOk(await deployRelease({ projectId: f.project.id, title: "R", content: "x", destination: "IN_PRODUCTION", taskIds: [a.id], attachments: [{ taskId: a.id, code: "F1" }] }));
+    await afterDone();
+    assert.deepEqual(res.storageWarning, { usedMb: 1.2, limitMb: 1 });
+    assert.ok(res.storageWarning!.usedMb > res.storageWarning!.limitMb);
   });
 });

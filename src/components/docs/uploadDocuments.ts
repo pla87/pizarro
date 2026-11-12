@@ -37,3 +37,26 @@ export async function uploadDocument(projectId: string, file: File, t: T, fileMa
     return { ok: false, error: err instanceof DocumentUploadError ? err.message : t("No se pudo subir el archivo.") };
   }
 }
+
+/** Cuántos nombres se citan por motivo; del resto se dice cuántos más («… +3»). */
+const MAX_NAMES = 5;
+
+/**
+ * Aviso único de los archivos de una tanda que no se han subido a Documentación: cuáles y por qué, agrupados por motivo
+ * (««a.pdf», «b.pdf»: Cuota de almacenamiento del proyecto superada…»). Antes, con la cuota superada, dos archivos daban
+ * un solo «2 sin subir» con el primer error, sin decir cuáles. Con un solo archivo en la tanda, solo su error. null si
+ * no falló ninguno.
+ */
+export function documentFailuresMessage(t: T, failed: readonly { name: string; error: string }[], total: number): string | null {
+  if (!failed.length) return null;
+  if (total === 1) return failed[0]!.error;
+  const byError = new Map<string, string[]>();
+  for (const f of failed) byError.set(f.error, [...(byError.get(f.error) ?? []), f.name]);
+  const groups = [...byError].map(([error, names]) => {
+    const shown = names.slice(0, MAX_NAMES).map((name) => t("«{title}»", { title: name })).join(", ");
+    const more = names.length > MAX_NAMES ? ` … +${names.length - MAX_NAMES}` : "";
+    return `${shown}${more}: ${error}`;
+  });
+  const list = groups.join(" · ");
+  return failed.length === 1 ? t("1 archivo no se ha subido a Documentación: {list}", { list }) : t("{n} archivos no se han subido a Documentación: {list}", { n: failed.length, list });
+}

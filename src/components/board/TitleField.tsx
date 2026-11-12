@@ -57,7 +57,7 @@ export function TitleField({ value, onChange, onCommit, users }: {
   /** Título listo para guardar: si pasa del máximo se recorta (sin partir emojis ni menciones) y se avisa. */
   const commitClamped = (raw: string): string => {
     const c = clampTitle(raw.trim());
-    if (c.clipped) toast(t("Título recortado a {max} caracteres", { max: MAX_TITLE }));
+    if (c.clipped) toast(t("Título recortado a {max} caracteres", { max: c.limit ?? MAX_TITLE }));
     return c.value;
   };
   // Dictado: en el cursor del título; si ahora se ve con las menciones pintadas (sin campo), al final.

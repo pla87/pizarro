@@ -16,7 +16,8 @@ export async function generateMetadata() {
 }
 
 type Params = { month?: string | string[]; project?: string | string[]; person?: string | string[]; hideDone?: string | string[] };
-const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
+// Sin NUL: PostgreSQL no lo admite en un texto y ?project=%00 o ?person=%00 acababan en la página de error (22021).
+const one = (v: string | string[] | undefined) => ((Array.isArray(v) ? v[0] : v) ?? "").replaceAll("\u0000", "");
 
 /** Tope de tareas por mes: un tablero normal queda muy por debajo; evita enviar páginas enormes. */
 const MAX_TASKS = 1000;

@@ -18,6 +18,7 @@ import { Popover } from "@/components/ui/Popover";
 import { CalendarSubscribe } from "./CalendarSubscribe";
 import { useToast } from "@/components/ui/Toast";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
+import { initialsOf } from "@/lib/graphemes";
 
 export interface CalendarTask {
   id: string;
@@ -134,14 +135,8 @@ const STATUS_BAR: Record<DeliverableStatus, string> = {
   "Sin tareas": "bg-slate-500/20",
 };
 
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => [...w][0])
-    .join("")
-    .toUpperCase();
+/** Iniciales del proyecto: las dos primeras palabras con letras o números, sin puntuación («Trello «raro» 🎉» → «TR»). */
+const initials = (name: string) => initialsOf(name, "firstTwo");
 
 /** Casilla de las opciones del filtro de proyectos. */
 function CheckBox({ on }: { on: boolean }) {

@@ -304,4 +304,6 @@ export const cuentas: Record<string, string> = {
 
   // Códigos de recuperación: contador con 1
   "1 código de recuperación sin usar": "1 unused recovery code",
+  // Invitación completada: la cuenta es nueva, no hay sesiones que cerrar.
+  "Contraseña guardada. Ya puedes iniciar sesión con tu email y la contraseña que acabas de elegir.": "Password saved. You can now sign in with your email and the password you just chose.",
 };

@@ -29,7 +29,7 @@ export default async function ResetPage({ params }: { params: Promise<{ token: s
   }
   return (
     <AuthCard title={row.purpose === "INVITE" ? t("Elige tu contraseña") : t("Elige una contraseña nueva")}>
-      <ResetForm token={token} email={row.user.email} />
+      <ResetForm token={token} email={row.user.email} invite={row.purpose === "INVITE"} />
     </AuthCard>
   );
 }

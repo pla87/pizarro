@@ -7,7 +7,8 @@ import { resetPassword } from "@/actions/auth";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useT } from "@/i18n/client";
 
-export function ResetForm({ token, email }: { token: string; email: string }) {
+/** `invite`: el enlace es una invitación (cuenta nueva, sin sesiones que cerrar), no un «olvidé mi contraseña». */
+export function ResetForm({ token, email, invite = false }: { token: string; email: string; invite?: boolean }) {
   const t = useT();
   const [password, setPassword] = useState("");
   const [repeat, setRepeat] = useState("");
@@ -18,7 +19,7 @@ export function ResetForm({ token, email }: { token: string; email: string }) {
   if (done) {
     return (
       <div className="space-y-4 text-sm">
-        <p>{t("Contraseña guardada. Por seguridad se han cerrado todas las sesiones: inicia sesión con la nueva.")}</p>
+        <p>{invite ? t("Contraseña guardada. Ya puedes iniciar sesión con tu email y la contraseña que acabas de elegir.") : t("Contraseña guardada. Por seguridad se han cerrado todas las sesiones: inicia sesión con la nueva.")}</p>
         <Link href="/login" className="btn-primary w-full">{t("Iniciar sesión")}</Link>
       </div>
     );

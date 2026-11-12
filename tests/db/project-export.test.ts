@@ -573,6 +573,31 @@ describe("piezas del exportador", () => {
     assert.deepEqual([board.tasks, board.archivedTasks, board.releases, board.attachments, board.bytes], [2, 0, 0, 0, 0]);
   });
 
+  test("la estimación del tamaño cuenta los datos y se parece al archivo (antes «unos 0,1 MB» y pesaba 0,6)", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [admin] });
+    // Un proyecto sin adjuntos pero con datos: tarjetas con descripción, subtareas, comentarios, enlaces e historial.
+    const tasks = await db.task.createManyAndReturn({
+      data: Array.from({ length: 300 }, (_, i) => ({
+        projectId: f.project.id, columnId: f.columns.todo, kindId: f.kindId, position: (i + 1) * 1024, createdById: admin.id,
+        title: `Tarjeta ${i} con un título normal «y comillas»`, description: `<p>Descripción de la tarjeta ${i}.</p>\n`.repeat(8),
+        ...(i % 10 === 0 ? { archivedAt: new Date() } : {}),
+      })),
+      select: { id: true },
+    });
+    await db.subtask.createMany({ data: tasks.flatMap((t, i) => Array.from({ length: 3 }, (_, j) => ({ taskId: t.id, title: `Paso ${j} de ${i}`, position: j + 1 }))) });
+    await db.taskComment.createMany({ data: tasks.flatMap((t) => [{ taskId: t.id, authorId: admin.id, body: "Comentario con algo de texto, que es lo normal.".repeat(3) }]) });
+    await db.taskLink.createMany({ data: tasks.slice(0, 50).map((t) => ({ taskId: t.id, kind: "GOOGLE_DOC" as const, title: "Documento", url: "https://docs.google.com/document/d/abcdefghijklmnopqrstuvwxyz/edit", createdById: admin.id })) });
+    await db.taskEvent.createMany({ data: tasks.flatMap((t) => [{ taskId: t.id, projectId: f.project.id, userId: admin.id, userName: admin.name, code: "create", label: "Creó la tarea" }]) });
+    for (const options of [{ attachments: false, scope: "board" }, { attachments: false, scope: "all" }] satisfies ExportOptions[]) {
+      const est = await estimateProjectExport(f.project.id, options);
+      const built = await buildProjectExport(f.project.id, options);
+      const total = est.bytes + est.dataBytes;
+      // La estimación no lee nada: basta con que acierte el orden de magnitud (±35 %).
+      assert.ok(total > built.size * 0.65 && total < built.size * 1.35, `${options.scope}: estimado ${total} B, real ${built.size} B`);
+    }
+  });
+
   test("las mismas bytes de dos adjuntos se guardan una sola vez en el archivo", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const f = await makeProject({ members: [] });
@@ -677,6 +702,23 @@ describe("importar: endurecimiento (ronda 15)", () => {
     // Una mención cortada a medias no queda en el título.
     assert.equal(capTitle(`${"x".repeat(205)}@[Nombre](user:abc)`), "x".repeat(205));
     assert.equal(capTitle("corto"), "corto");
+    // Sin partir emojis: cuenta caracteres visibles como al guardar.
+    assert.equal(capTitle("👨‍👩‍👧‍👦".repeat(50)), "👨‍👩‍👧‍👦".repeat(50));
+    assert.equal(capTitle(`${"x".repeat(209)}😀😀`), `${"x".repeat(209)}😀`);
+  });
+
+  test("títulos de emojis compuestos: se exportan y se importan enteros (antes el tope de 500 tiraba la exportación)", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [admin] });
+    const family = "👨‍👩‍👧‍👦";
+    // Lo más largo que admite la aplicación: 76 familias (836 unidades), y 50 (550 unidades, que el importador cortaba a 210).
+    for (const n of [76, 50]) await makeTask(f, { title: family.repeat(n) });
+    const built = await buildProjectExport(f.project.id, { attachments: false, scope: "all" });
+    assert.deepEqual(projectJsonOf(built).tasks.map((x) => x.title).sort(), [family.repeat(50), family.repeat(76)]);
+    const s = await importProjectFile(await writeExport(built), asImporter(admin), { isPrivate: false });
+    const titles = (await db.task.findMany({ where: { projectId: s.projectId }, select: { title: true } })).map((x) => x.title).sort();
+    assert.deepEqual(titles, [family.repeat(50), family.repeat(76)]);
+    assert.ok(!s.warnings.some((w) => /recortado/.test(w)), s.warnings.join(" | "));
   });
 
   test("el esquema rechaza días inexistentes y enteros fuera de rango", async () => {

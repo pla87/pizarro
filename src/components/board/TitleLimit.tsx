@@ -1,7 +1,7 @@
 "use client";
 
 import { MAX_TITLE, MAX_TITLE_UNITS } from "@/lib/constants";
-import { titleLength, titleTooLong } from "@/lib/title-clamp";
+import { clampTitle, titleLength, titleTooLong } from "@/lib/title-clamp";
 import { cn } from "../ui/cn";
 
 /**
@@ -20,12 +20,16 @@ export function overTitleLimit(value: string): boolean {
 /** Clases del campo en rojo (mismo estilo que los demás campos con error). */
 export const TITLE_INVALID_CLASSES = "border-red-500 text-red-700 focus:border-red-500 focus:ring-red-500/30 dark:border-red-500 dark:text-red-300";
 
-/** Ayuda «n/máx» en rojo (n en caracteres visibles: un emoji de familia es uno); no pinta nada mientras el título cabe. El campo la enlaza con aria-describedby={id}. */
+/**
+ * Ayuda «n/máx» en rojo (n en caracteres visibles: un emoji de familia es uno); no pinta nada mientras el título cabe. El
+ * máximo es a cuántos caracteres se recortaría: 210, o menos si manda el tope de unidades (100 familias 👨‍👩‍👧‍👦 → «100/76»,
+ * como el aviso «Título recortado a 76 caracteres»). El campo la enlaza con aria-describedby={id}.
+ */
 export function TitleLimitHint({ id, value, className }: { id: string; value: string; className?: string }) {
   if (!overTitleLimit(value)) return null;
   return (
     <p id={id} className={cn("text-xs font-medium text-red-600 dark:text-red-400", className)}>
-      {titleLength(value)}/{MAX_TITLE}
+      {titleLength(value)}/{clampTitle(value.trim()).limit ?? MAX_TITLE}
     </p>
   );
 }

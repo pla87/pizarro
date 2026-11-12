@@ -106,9 +106,10 @@ const COMMENTS_MORE_PAGE = 100;
 /** Campos que cambian al archivar o recuperar una tarea. */
 const ARCHIVE_FIELDS: TaskField[] = ["archivedAt", "archivedFromColumnId", "columnId", "position", "evergreen", "evergreenEvery"];
 
-/** Máximo al que se recortó el título que llegó demasiado largo (para el aviso del cliente); undefined si cupo. */
+/** Caracteres a los que se recortó el título que llegó demasiado largo (para el aviso del cliente; menos de 210 si mandó el tope de unidades); undefined si cupo. */
 function clipOf(raw: unknown): number | undefined {
-  return typeof raw === "string" && clampTitle(raw.trim()).clipped ? MAX_TITLE : undefined;
+  const c = typeof raw === "string" ? clampTitle(raw.trim()) : null;
+  return c?.clipped ? (c.limit ?? MAX_TITLE) : undefined;
 }
 
 /** Tarea del tablero con el aviso de título recortado, solo si se recortó (el cliente lo muestra y no lo guarda). */

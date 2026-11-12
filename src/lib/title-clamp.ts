@@ -5,6 +5,7 @@
 // un solo carácter), no unidades UTF-16. Además hay un tope duro en unidades (MAX_TITLE_UNITS) para que el tamaño
 // guardado siga acotado aunque cada carácter sea un emoji compuesto.
 import { MAX_TITLE, MAX_TITLE_UNITS } from "./constants";
+import { graphemes } from "./graphemes";
 import { mentionRegex, mentionsToPlain } from "./mentions";
 
 interface ClampedTitle {
@@ -12,18 +13,12 @@ interface ClampedTitle {
   value: string;
   /** true si el original superaba el máximo y se ha cortado. */
   clipped: boolean;
-}
-
-let segmenter: Intl.Segmenter | null | undefined;
-
-/**
- * Trozos de texto sin partir emojis ni secuencias unidas (bandera, familia, tono de piel). Es perezoso: quien lo recorre
- * se para al llenar el máximo, así que un texto enorme (p. ej. 1 MB pegado en el título) no se segmenta entero.
- */
-function* graphemes(text: string): Generator<string> {
-  segmenter ??= typeof Intl !== "undefined" && "Segmenter" in Intl ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
-  if (segmenter) for (const s of segmenter.segment(text)) yield s.segment;
-  else yield* text;
+  /**
+   * Solo si se ha cortado: a cuántos caracteres visibles. Es el máximo, salvo cuando manda el tope de unidades (emojis
+   * muy compuestos): entonces caben menos y es lo que se ha guardado de verdad (100 familias 👨‍👩‍👧‍👦 → 76). Los avisos
+   * («Título recortado a {max} caracteres») y el contador «n/máx» usan este número.
+   */
+  limit?: number;
 }
 
 /** Número de grafemas (caracteres que se ven) de un texto. */
@@ -72,7 +67,11 @@ function clampLong(raw: string, max: number, maxUnits: number): ClampedTitle {
   // recorrido se para al llenar el máximo: un texto enorme no se segmenta entero.
   const take = (text: string): boolean => {
     for (const g of graphemes(text)) {
-      if (used + 1 > max || units + g.length > maxUnits) return false;
+      if (used + 1 > max) return false;
+      if (units + g.length > maxUnits) {
+        byUnits = true;
+        return false;
+      }
       out += g;
       used++;
       units += g.length;
@@ -80,6 +79,8 @@ function clampLong(raw: string, max: number, maxUnits: number): ClampedTitle {
     return true;
   };
   let full = true;
+  // ¿Se paró por el tope de unidades y no por el de caracteres? (el de caracteres se mira primero).
+  let byUnits = false;
   for (const m of raw.matchAll(mentionRegex())) {
     if (!take(raw.slice(last, m.index))) {
       full = false;
@@ -88,6 +89,7 @@ function clampLong(raw: string, max: number, maxUnits: number): ClampedTitle {
     const visible = `@${m[1]!}`;
     const visibleCount = graphemeCount(visible);
     if (used + visibleCount > max || units + visible.length > maxUnits) {
+      byUnits = used + visibleCount <= max;
       full = false;
       break;
     }
@@ -97,5 +99,6 @@ function clampLong(raw: string, max: number, maxUnits: number): ClampedTitle {
     last = m.index + m[0].length;
   }
   if (full && take(raw.slice(last))) return { value: raw, clipped: false };
-  return { value: out.trimEnd(), clipped: true };
+  const value = out.trimEnd();
+  return { value, clipped: true, limit: byUnits ? titleLength(value) : max };
 }

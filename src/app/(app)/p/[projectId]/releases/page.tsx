@@ -29,7 +29,8 @@ export default async function ReleasesPage({
   const t = await getT();
   const { projectId } = await params;
   const sp = await searchParams;
-  const q = (Array.isArray(sp.q) ? sp.q[0] : sp.q)?.trim().slice(0, 200) ?? "";
+  // Sin NUL (PostgreSQL no lo admite en un texto: ?q=a%00b daba el error 22021 y la página de error).
+  const q = (Array.isArray(sp.q) ? sp.q[0] : sp.q)?.replaceAll("\u0000", "").trim().slice(0, 200) ?? "";
   const rawLimit = Number(Array.isArray(sp.limit) ? sp.limit[0] : sp.limit);
   const limit = Number.isFinite(rawLimit) && rawLimit >= PAGE_STEP ? Math.min(Math.floor(rawLimit), 500) : PAGE_STEP;
   // Primero el acceso: la búsqueda no debe tocar proyectos ajenos.

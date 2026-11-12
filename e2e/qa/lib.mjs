@@ -78,7 +78,14 @@ export async function dbc() {
   if (!client) { client = new pg.Client({ connectionString: DATABASE_URL }); await client.connect(); }
   return client;
 }
-export async function q(sql, params = []) { return (await (await dbc()).query(sql, params)).rows; }
+// Una sola conexión: las consultas van en fila. Lanzadas a la vez (Promise.all con L.q, L.dbTask o L.events) pg avisa
+// «Calling client.query() when the client is already executing a query» (deprecado en pg 8, error en pg 9).
+let chain = Promise.resolve();
+export function q(sql, params = []) {
+  const next = chain.then(async () => (await (await dbc()).query(sql, params)).rows);
+  chain = next.catch(() => {});
+  return next;
+}
 export async function closeDb() { if (client) { await client.end(); client = null; } }
 
 /** Evita tocar nada que no sea una base de pruebas. */

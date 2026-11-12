@@ -19,6 +19,7 @@ import { useBoard } from "./context";
 import { MentionText } from "../ui/MentionText";
 import { mentionsToPlain } from "@/lib/mentions";
 import { actionThrowResult } from "@/lib/stale-action";
+import { mbNumber } from "@/lib/quota-message";
 
 interface DeployResult {
   moved: { id: string; columnId: string; position: number }[];
@@ -255,7 +256,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
     if (!res.ok) return toast(res.error, "error");
     toast(t("Release registrada como desplegada"));
     if (res.data.storageWarning) {
-      toast(t("Con los adjuntos de esta release el proyecto supera su cuota de almacenamiento ({used} de {limit} MB). Libera espacio, por ejemplo borrando adjuntos de releases antiguas: {link}", { used: res.data.storageWarning.usedMb, limit: res.data.storageWarning.limitMb, link: `/p/${board.project.id}/settings?tab=adjuntos` }), "error");
+      toast(t("Con los adjuntos de esta release el proyecto supera su cuota de almacenamiento ({used} de {limit} MB). Libera espacio, por ejemplo borrando adjuntos de releases antiguas: {link}", { used: mbNumber(res.data.storageWarning.usedMb, uiLocale), limit: mbNumber(res.data.storageWarning.limitMb, uiLocale), link: `/p/${board.project.id}/settings?tab=adjuntos` }), "error");
     }
     onDeployed(res.data);
   };

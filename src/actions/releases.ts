@@ -17,6 +17,7 @@ import { lastPositionIn, lockColumns, setTaskColumnPositions, TASK_ORDER } from 
 import { computeReleaseCodes, titleWithReleaseCode, zonedDayRange } from "@/lib/release";
 import { runReleaseAttachmentsJob, type PendingJob } from "@/lib/release-attachments";
 import { requireUser } from "@/lib/session";
+import { roundMb } from "@/lib/attachment-limit";
 import { checkQuota } from "@/lib/quota";
 import { getQuotaLimits } from "@/lib/quota-settings";
 import { storageUsage } from "@/lib/storage-usage";
@@ -315,14 +316,21 @@ export async function deleteReleaseAttachments(releaseId: string) {
   });
 }
 
-/** Aviso si el uso del proyecto, sumando las copias que se van a guardar (como mucho, el tamaño de los originales), supera su cuota. */
+/**
+ * Aviso si el uso del proyecto, sumando las copias que se van a guardar (como mucho, el tamaño de los originales), supera
+ * su cuota. `usedMb` es ese uso con las copias (antes salía sin ellas: «supera su cuota (0.6 de 1 MB)»).
+ */
 async function releaseStorageWarning(projectId: string, job: PendingJob | null): Promise<{ usedMb: number; limitMb: number } | null> {
   try {
     const limits = await getQuotaLimits(projectId);
     if (limits.project === null) return null;
     const copies = job ? (await db.taskAttachment.aggregate({ _sum: { size: true }, where: { taskId: { in: job.items.map((i) => i.taskId) } } }))._sum.size ?? 0 : 0;
-    const q = checkQuota(await storageUsage(projectId, db, { total: false }), copies, { project: limits.project, total: null });
-    return q ? { usedMb: q.usedMb, limitMb: q.limitMb } : null;
+    const usage = await storageUsage(projectId, db, { total: false });
+    const q = checkQuota(usage, copies, { project: limits.project, total: null });
+    if (!q) return null;
+    // Con un decimal; si al redondear no pasara de la cuota (1,04 MB de 1 MB → «1 de 1 MB»), una décima más.
+    const used = roundMb(usage.project + copies);
+    return { usedMb: used > q.limitMb ? used : Math.round((q.limitMb + 0.1) * 10) / 10, limitMb: q.limitMb };
   } catch {
     return null;
   }

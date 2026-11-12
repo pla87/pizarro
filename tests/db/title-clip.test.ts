@@ -83,4 +83,15 @@ describe("título demasiado largo: se recorta, no se rechaza", () => {
     assert.equal(long.title.length, MAX_TITLE);
     assert.equal(long.titleClipped, MAX_TITLE);
   });
+
+  test("con emojis compuestos manda el tope de unidades: el aviso dice a cuántos caracteres se ha recortado de verdad", async () => {
+    const { f } = await setup();
+    const family = "👨‍👩‍👧‍👦";
+    // 100 familias: 100 caracteres (menos de 210) pero 1100 unidades; caben 76. Antes decía «recortado a 210».
+    const task = expectOk(await createTask({ projectId: f.project.id, columnId: f.columns.todo, title: family.repeat(100), kindId: f.kindId }));
+    assert.equal(task.title, family.repeat(76));
+    assert.equal(task.titleClipped, 76);
+    const edited = expectOk(await updateTask(task.id, { title: family.repeat(120) }));
+    assert.equal(edited.titleClipped, 76);
+  });
 });
