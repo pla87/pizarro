@@ -1,7 +1,8 @@
 import "server-only";
 
 // Quién ha hecho algo en cada tablero hace poco (los círculos con iniciales de la cabecera).
-// Vive en memoria del proceso: basta con una sola instancia y se alimenta de los logs.
+// Vive en memoria del proceso: basta con una sola instancia. Se alimenta de los logs (cualquier acción) y de los sondeos
+// del tablero visible y de la tarea abierta (api/projects/[id]/presence y api/tasks/[id]/viewers).
 
 const PRESENCE_WINDOW_MS = 5 * 60 * 1000;
 

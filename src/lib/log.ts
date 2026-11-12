@@ -99,7 +99,8 @@ export function logEvent(e: LogEvent): void {
       ip: optText(e.ip, 100),
       details: e.details === undefined ? undefined : (sanitize(e.details) as Prisma.InputJsonValue),
     });
-    // Presencia en el tablero: cualquier acción, no las simples visitas (el tablero se refresca solo).
+    // Presencia en el tablero: cualquier acción. Las visitas de página no (el tablero se refresca solo): abrir el tablero o
+    // una tarea lo anotan sus propios sondeos (rutas de presence y viewers).
     // Solo acciones correctas: una fallida (p. ej. sin acceso) podría traer un projectId ajeno del cliente.
     if (projectId && e.userId && e.category !== "page" && (e.level ?? "info") === "info") notePresence(projectId, e.userId, e.userName ?? "?");
     if (e.level === "error") console.error(`[${e.category}] ${e.action}: ${message.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ")}`);

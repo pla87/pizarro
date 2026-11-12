@@ -76,7 +76,13 @@ export const COLOR_NAME: Record<string, string> = {
   "#0ea5e9": "Celeste", "#6366f1": "Índigo", "#1e3a8a": "Azul marino", "#a855f7": "Violeta", "#ec4899": "Rosa",
 };
 
+/** Máximo del título de una tarea en caracteres visibles (grafemas: un emoji de familia o una bandera cuentan como uno). */
 export const MAX_TITLE = 210;
+/**
+ * Tope duro del título en unidades UTF-16 del texto visible: protege el tamaño guardado aunque cada «carácter» sea un emoji
+ * compuesto de muchas unidades. Holgado: 210 emojis normales (2 unidades) caben de sobra.
+ */
+export const MAX_TITLE_UNITS = MAX_TITLE * 4;
 /** Subtareas por tarea como máximo. */
 export const MAX_SUBTASKS = 100;
 export const MAX_DESCRIPTION = 20_000;

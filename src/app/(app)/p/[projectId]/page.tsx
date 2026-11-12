@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { visibleProjectsWhere } from "@/lib/access";
@@ -13,6 +14,7 @@ import type { BoardData } from "@/lib/types";
 import { getLocale, getT } from "@/i18n/server";
 import { localizeGeneralKinds } from "@/lib/kinds-localize";
 import { Board } from "@/components/board/Board";
+import { EARLY_SHORTCUT_SCRIPT } from "@/components/board/earlyShortcut";
 
 type Params = { params: Promise<{ projectId: string }>; searchParams: Promise<{ task?: string }> };
 
@@ -69,5 +71,12 @@ export default async function BoardPage({ params, searchParams }: Params) {
     today: todayIso(appTimeZone()),
   };
   const { task } = await searchParams;
-  return <Board data={data} initialTaskId={typeof task === "string" ? task : null} />;
+  // Alt+N / Alt+Mayús+N pulsados antes de que la página hidrate se anotan y se ejecutan al montar (earlyShortcut.ts).
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+  return (
+    <>
+      <script nonce={nonce} dangerouslySetInnerHTML={{ __html: EARLY_SHORTCUT_SCRIPT }} />
+      <Board data={data} initialTaskId={typeof task === "string" ? task : null} />
+    </>
+  );
 }

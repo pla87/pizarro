@@ -72,13 +72,19 @@ export function confirmDocumentKind(declared: DocumentKindName, content: Uint8Ar
   return declared;
 }
 
+/** Ruta absoluta (la que algún navegador antiguo manda como nombre: «C:\fakepath\nota.txt», «\\servidor\…», «/home/…»). */
+const ABSOLUTE_PATH = /^(?:[A-Za-z]:[\\/]|\\\\|\/)/;
+
 /**
- * Nombre apto para guardar y mostrar: sin rutas, sin punto inicial, sin los caracteres que no admite un nombre de
- * archivo ni controles (ver cleanFileName: paréntesis, comas, &, +, #… se conservan) y con 120 caracteres como mucho,
- * recortando el nombre y no la extensión (de ella depende el tipo de documento).
+ * Nombre apto para guardar y mostrar: sin punto inicial, sin los caracteres que no admite un nombre de archivo ni
+ * controles (ver cleanFileName: paréntesis, comas, &, +, #… se conservan; «\» y «/» pasan a «_», como en los adjuntos)
+ * y con 120 caracteres como mucho, recortando el nombre y no la extensión (de ella depende el tipo de documento). Solo
+ * de una ruta absoluta se toma el último tramo: un nombre normal con «\» («Informe 1\2») no pierde lo anterior.
  */
 export function sanitizeDocumentName(raw: string | null | undefined): string {
-  const base = (raw ?? "").split(/[\\/]/).pop() ?? "";
+  const text = (raw ?? "").trim();
+  // Los «../» o «./» del principio (ruta relativa) se quitan; el resto de barras pasan a «_».
+  const base = ABSOLUTE_PATH.test(text) ? (text.split(/[\\/]/).pop() ?? "") : text.replace(/^(?:\.{1,2}[\\/])+/, "");
   return cleanFileName(base, "").replace(/^[.\s]+/, "") || "documento";
 }
 

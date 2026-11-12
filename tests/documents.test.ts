@@ -62,8 +62,15 @@ test("looksLikePdf / looksLikeText: casos límite", () => {
 
 test("sanitizeDocumentName: quita rutas, caracteres raros y puntos iniciales", () => {
   assert.equal(sanitizeDocumentName("informe final.pdf"), "informe final.pdf");
-  assert.equal(sanitizeDocumentName("../../etc/passwd"), "passwd");
+  // De una ruta absoluta (navegadores antiguos: «C:\fakepath\…») solo queda el nombre.
   assert.equal(sanitizeDocumentName("C:\\Users\\x\\nota.txt"), "nota.txt");
+  assert.equal(sanitizeDocumentName("C:\\fakepath\\informe.pdf"), "informe.pdf");
+  assert.equal(sanitizeDocumentName("/home/x/nota.md"), "nota.md");
+  // Un nombre normal con «\» o «/» no pierde lo anterior: pasan a «_», como en los adjuntos.
+  assert.equal(sanitizeDocumentName("Informe 1\\2 final.pdf"), "Informe 1_2 final.pdf");
+  assert.equal(sanitizeDocumentName("Ventas Q1/Q2.xlsx"), "Ventas Q1_Q2.xlsx");
+  assert.equal(sanitizeDocumentName("../../etc/passwd"), "etc_passwd");
+  assert.equal(sanitizeDocumentName("../nuevo<x>.md"), "nuevo_x_.md");
   assert.equal(sanitizeDocumentName("a<b>c|d?.txt"), "a_b_c_d_.txt");
   assert.equal(sanitizeDocumentName(".hidden"), "hidden");
   assert.equal(sanitizeDocumentName("  ...  "), "documento");

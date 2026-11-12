@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseTaskLinesInfo } from "../src/lib/bulk";
-import { MAX_TITLE } from "../src/lib/constants";
-import { clampTitle, titleLength } from "../src/lib/title-clamp";
+import { MAX_TITLE, MAX_TITLE_UNITS } from "../src/lib/constants";
+import { clampTitle, graphemeCount, titleLength, titleTooLong } from "../src/lib/title-clamp";
+import { titleWithReleaseCode } from "../src/lib/release";
 import { taskTitle } from "../src/lib/validation";
 
 const mention = (name: string, id = "u1") => `@[${name}](user:${id})`;
@@ -26,12 +27,15 @@ test("el corte no deja espacios al final", () => {
 });
 
 test("no parte un emoji por la mitad (par suplente ni secuencia unida)", () => {
+  // Cada emoji cuenta como un carácter: el que llena el máximo entra entero y el siguiente se queda fuera.
   const pair = clampTitle(`${"a".repeat(MAX_TITLE - 1)}😀😀`);
-  assert.equal(pair.value, "a".repeat(MAX_TITLE - 1));
+  assert.equal(pair.value, `${"a".repeat(MAX_TITLE - 1)}😀`);
   const family = "👨‍👩‍👧"; // varios puntos de código unidos: un solo emoji
-  const r = clampTitle(`${"a".repeat(MAX_TITLE - 3)}${family}`);
+  const r = clampTitle(`${"a".repeat(MAX_TITLE)}${family}`);
   assert.equal(r.clipped, true);
-  assert.equal(r.value, "a".repeat(MAX_TITLE - 3));
+  assert.equal(r.value, "a".repeat(MAX_TITLE));
+  const kept = clampTitle(`${"a".repeat(MAX_TITLE - 1)}${family}${family}`);
+  assert.equal(kept.value, `${"a".repeat(MAX_TITLE - 1)}${family}`);
   assert.doesNotMatch(r.value, /[\uD800-\uDBFF]$|‍$/);
 });
 
@@ -77,4 +81,44 @@ test("un título enorme (1 MB) se recorta rápido: no se segmenta entero ni se c
   assert.equal(parsed, r.value);
   assert.equal(again, r, "la segunda consulta (¿se recortó?) reutiliza el resultado");
   assert.ok(ms < 150, `tardó ${ms.toFixed(0)} ms`);
+});
+
+test("el máximo cuenta caracteres visibles (grafemas), no unidades UTF-16", () => {
+  const family = "👨‍👩‍👧‍👦"; // 11 unidades UTF-16, un solo carácter a la vista
+  assert.equal(family.length, 11);
+  assert.equal(graphemeCount(family), 1);
+  assert.equal(titleLength(`Hola ${family}`), 6);
+  assert.equal(titleLength("🇪🇸 e\u0301"), 3); // bandera y «e» + tilde combinada
+  // 50 familias son 550 unidades pero 50 caracteres: cabe y no se recorta.
+  const fifty = family.repeat(50);
+  assert.equal(titleTooLong(fifty), false);
+  assert.deepEqual(clampTitle(fifty), { value: fifty, clipped: false });
+  // 210 emojis normales (420 unidades) caben; uno más ya no.
+  const smile = "😀".repeat(MAX_TITLE);
+  assert.equal(titleTooLong(smile), false);
+  assert.equal(clampTitle(smile).clipped, false);
+  const over = clampTitle(smile + "😀");
+  assert.equal(over.clipped, true);
+  assert.equal(over.value, smile);
+  assert.equal(titleTooLong(smile + "😀"), true);
+});
+
+test("tope duro en unidades: un título de emojis muy compuestos no crece sin límite", () => {
+  const family = "👨‍👩‍👧‍👦";
+  const r = clampTitle(family.repeat(MAX_TITLE)); // 210 caracteres, 2310 unidades
+  assert.equal(r.clipped, true);
+  assert.ok(r.value.length <= MAX_TITLE_UNITS);
+  assert.equal(r.value, family.repeat(Math.floor(MAX_TITLE_UNITS / family.length)));
+  assert.equal(titleTooLong(family.repeat(MAX_TITLE)), true);
+  // El servidor guarda lo mismo que el cliente recorta.
+  assert.equal(taskTitle.parse(family.repeat(MAX_TITLE)), r.value);
+});
+
+test("prefijo de release: no parte emojis compuestos y cuenta caracteres", () => {
+  const family = "👨‍👩‍👧";
+  const out = titleWithReleaseCode(family.repeat(300), "R1F1");
+  assert.ok(titleLength(out) <= MAX_TITLE);
+  assert.ok(out.length <= MAX_TITLE_UNITS);
+  assert.ok(out.startsWith(`R1F1: ${family}`));
+  assert.doesNotMatch(out, /[\uD800-\uDBFF]$|\u200d$/);
 });

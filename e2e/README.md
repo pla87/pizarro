@@ -39,4 +39,14 @@ sitio), y tablas pegadas desde Word, Google Docs, una web o una hoja de cálculo
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node paste-e2e.mjs
 ```
 
+## Cabecera y atajos (caza de bugs 48a, ~45 comprobaciones)
+
+La cabecera del tablero no se sale de la pantalla con nombres cortos y largos (1920 a 390 px), Alt+Mayús+N con un
+diálogo abierto, Alt+N antes de hidratar, presencia al abrir el tablero, contador del título en caracteres visibles,
+aviso 99+ en móvil, ayuda de atajos y borrar un proyecto con espacios dobles. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48a-e2e.mjs
+```
+
 Capturas en `SHOTS_DIR` (por defecto la carpeta temporal del sistema). Al terminar, borra la base `pz_qa`.

@@ -8,8 +8,8 @@ import { runAction } from "@/lib/action";
 import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjectAccess, assertTaskAccess, loadTaskWithAccess, visibleProjectsWhere } from "@/lib/access";
 import { appTimeZone, attachmentTotals, listKinds, loadBoardTask, loadBoardTasksByIds, projectClients, projectUsers } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
-import { MAX_SUBTASKS, MAX_TITLE } from "@/lib/constants";
-import { clampTitle } from "@/lib/title-clamp";
+import { MAX_SUBTASKS, MAX_TITLE, MAX_TITLE_UNITS } from "@/lib/constants";
+import { clampTitle, graphemeCount } from "@/lib/title-clamp";
 import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { assertCanBlock, blockProblem, lockBlocking } from "@/lib/blocking";
 import { addUndo, captureTasks, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchEverything, touchedTask, type OthersActivity, type TaskField, type UndoOp } from "@/lib/undo";
@@ -341,7 +341,8 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
     });
     const t = await getT();
     const suffix = ` ${t("(copia)")}`;
-    const title = src.title.length + suffix.length > MAX_TITLE ? `${src.title.slice(0, MAX_TITLE - suffix.length).trimEnd()}${suffix}` : `${src.title}${suffix}`;
+    // Si no cabe, se recorta el original (caracteres visibles, sin partir emojis ni menciones) y se conserva «(copia)».
+    const title = `${clampTitle(src.title, MAX_TITLE - graphemeCount(suffix), MAX_TITLE_UNITS - suffix.length).value}${suffix}`;
     const columnId = dest?.columnId ?? src.columnId;
     const copy = await db.$transaction(async (tx) => {
       await assertTaskCapacity(tx, projectId);

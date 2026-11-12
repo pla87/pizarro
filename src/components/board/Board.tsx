@@ -11,7 +11,7 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { Archive, Plus, Search, Upload, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from "react";
+import { Suspense, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from "react";
 import { createPortal } from "react-dom";
 import { archiveTasks, deleteTasks, duplicateTask, makeEvergreen, moveTask, moveTasks } from "@/actions/tasks";
 import { createBoardCollisionDetection } from "@/lib/collision";
@@ -45,6 +45,7 @@ import { SelectionBar } from "./SelectionBar";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 import { useShortcut } from "./shortcuts";
 import { useBoardShortcuts } from "./useBoardShortcuts";
+import { HEADER_LABEL, HEADER_SHORT_LABEL, useHeaderFit } from "./useHeaderFit";
 import { TaskCard } from "./TaskCard";
 import { ReportButton } from "../ReportButton";
 import { filesFrom, hasFiles, isImageFile, useBlockStrayFileDrops } from "./upload";
@@ -140,6 +141,8 @@ function MobileTab({ active, onClick, over = false, title, children }: { active:
 const REFRESH_MS = 120_000;
 
 type Items = Record<string, string[]>;
+/** Lista vacía compartida: un `[]` nuevo en cada dibujo haría repintar columnas memorizadas que no han cambiado. */
+const NO_IDS: string[] = [];
 
 function groupItems(columns: BoardColumn[], tasks: BoardTask[]): Items {
   const items: Items = Object.fromEntries(columns.map((c) => [c.id, [] as string[]]));
@@ -536,7 +539,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
 
   const baseItems = useStableItems(useMemo(() => groupItems(columns, tasks), [columns, tasks]));
   // Filtro del buscador: por título, tipo, responsable y etiquetas (todas las palabras deben aparecer).
-  const terms = useMemo(() => normalize(query).split(/\s+/).filter(Boolean), [query]);
+  // Diferido: el campo responde al momento y el tablero se vuelve a filtrar sin bloquear (al limpiar el filtro con Escape
+  // reaparecen cientos de tarjetas de golpe).
+  const filterQuery = useDeferredValue(query);
+  const terms = useMemo(() => normalize(filterQuery).split(/\s+/).filter(Boolean), [filterQuery]);
   // Campos opcionales: prioridad y cliente filtran (y se buscan) solo si el proyecto los tiene activados.
   const priorityEnabled = data.project.taskFields.includes("priority");
   const clientEnabled = data.project.taskFields.includes("client");
@@ -1041,8 +1047,11 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       setNewTask({});
     },
     bulk: () => {
-      // Con un diálogo abierto y sitio al lado, «Varias tareas» ocupa el hueco del segundo.
-      if (document.querySelector("[role=dialog]") && primaryOpen && !secondOpen && window.matchMedia("(min-width: 1024px)").matches) return addSecondBulk();
+      // Con un diálogo abierto, «Varias tareas» ocupa el hueco de la derecha (lo mismo que su botón junto al diálogo).
+      if (document.querySelector("[role=dialog]")) {
+        if (primaryOpen && !secondOpen && window.matchMedia("(min-width: 1024px)").matches) addSecondBulk();
+        return;
+      }
       setBulk({});
     },
     search: () => {
@@ -1059,15 +1068,19 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   });
 
   const activeTask = activeId ? taskById.get(activeId) : null;
+  const headerRowRef = useRef<HTMLDivElement>(null);
+  const headerNameRef = useRef<HTMLHeadingElement>(null);
+  const headerFit = useHeaderFit(headerRowRef, headerNameRef);
 
   return (
     <BoardContext.Provider value={api}>
       <div className="flex h-full flex-col">
         {/* Contenedor de consulta: la cabecera se adapta al ancho que le deja la barra lateral, no al de la ventana. */}
         <div className="@container max-lg:hidden">
-        <div className="flex items-center gap-2 px-4 pt-4 pb-2 @min-[1000px]:gap-3 [&>*]:whitespace-nowrap [&_.btn-primary]:shrink-0 [&_.btn-secondary]:shrink-0">
-          {/* El nombre del proyecto no se encoge: el resto de la cabecera cede sitio antes (solo se trunca si ocupa media cabecera). */}
-          <h1 className="max-w-[45%] shrink-0"><ProjectMenu textClassName="text-lg" /></h1>
+        {/* Nunca se sale de la pantalla: el nombre se trunca (entero en el tooltip) y, si así le queda poco sitio, los botones
+            pasan a solo icono (useHeaderFit mide el espacio real; data-labels elige los textos). */}
+        <div ref={headerRowRef} data-labels={headerFit ?? undefined} className="flex items-center gap-2 px-4 pt-4 pb-2 @min-[1000px]:gap-3 [&>*]:whitespace-nowrap [&_.btn-primary]:shrink-0 [&_.btn-secondary]:shrink-0">
+          <h1 ref={headerNameRef} className="min-w-0 shrink-[8]"><ProjectMenu textClassName="text-lg" /></h1>
           <UndoButton projectId={data.project.id} shortcut className="-ml-2" />
           <span
             className="shrink-0 text-sm text-slate-500"
@@ -1085,7 +1098,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             )}
           </span>
           <Presence projectId={data.project.id} />
-          <div className="relative ml-auto w-36 min-w-16 shrink transition-[width] @min-[1000px]:focus-within:w-56">
+          <div data-fit-basis="144" className="relative ml-auto w-36 min-w-16 shrink transition-[width] @min-[1000px]:focus-within:w-56">
             <Search size={14} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" aria-hidden />
             <input
               ref={searchRef}
@@ -1120,10 +1133,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           )}
           <ReportButton projectId={data.project.id} variant="header" />
           <button className="btn-secondary" onClick={() => setArchivedOpen(true)} aria-label={t("Archivadas")} title={t("Archivadas")}>
-            <Archive size={16} /> <span className="hidden @min-[1240px]:inline">{t("Archivadas")}</span>
+            <Archive size={16} /> <span className={HEADER_LABEL}>{t("Archivadas")}</span>
           </button>
           <button className="btn-secondary" onClick={() => setBulk({})} aria-label={t("Varias tareas")} title={`${t("Crear varias tareas pegando una lista")} (${sc("Alt+Shift+N")})`}>
-            <PlusStack size={16} /> <span className="hidden @min-[1240px]:inline">{t("Varias tareas")}</span>
+            <PlusStack size={16} /> <span className={HEADER_LABEL}>{t("Varias tareas")}</span>
           </button>
           <button
             ref={newTaskBtnRef}
@@ -1157,7 +1170,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             }}
           >
             {/* Al arrastrar archivos solo cambian el icono y el estilo: el texto no varía para que el botón no cambie de tamaño. */}
-            {dropNew ? <Upload size={16} /> : <Plus size={16} />} <span className="@min-[1240px]:hidden">{t("Nueva")}</span><span className="hidden @min-[1240px]:inline">{t("Nueva tarea")}</span>
+            {dropNew ? <Upload size={16} /> : <Plus size={16} />} <span className={HEADER_SHORT_LABEL}>{t("Nueva")}</span><span className={HEADER_LABEL}>{t("Nueva tarea")}</span>
           </button>
           {/* Con un diálogo abierto, una copia encima del fondo difuminado: abre una segunda tarea al lado (como el «+» del modal). */}
           {primaryOpen && newTaskRect &&
@@ -1171,8 +1184,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
                 aria-disabled={secondOpen}
                 title={t("Abrir otra tarea nueva al lado")}
               >
-                {/* Mismo texto que el botón original: corto cuando la cabecera va justa de sitio. */}
-                <Plus size={16} /> {newTaskRect.width < 130 ? t("Nueva") : t("Nueva tarea")}
+                {/* Mismo texto que el botón original: corto cuando la cabecera va justa de sitio y solo el icono si no cabe más. */}
+                <Plus size={16} /> {newTaskRect.width < 60 ? null : newTaskRect.width < 130 ? t("Nueva") : t("Nueva tarea")}
               </button>,
               document.body,
             )}
@@ -1272,8 +1285,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               <ColumnView
                 key={column.id}
                 column={column}
-                taskIds={items[column.id] ?? []}
-                evergreenIds={shownEvergreen[column.id] ?? []}
+                taskIds={items[column.id] ?? NO_IDS}
+                evergreenIds={shownEvergreen[column.id] ?? NO_IDS}
                 cardCount={columnCardCount(column.id)}
                 index={i}
                 total={sortedColumns.length}

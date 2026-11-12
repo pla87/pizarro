@@ -35,8 +35,15 @@ describe("título demasiado largo: se recorta, no se rechaza", () => {
   test("crear: no parte un emoji ni una mención", async () => {
     const { user, f } = await setup();
     const head = "a".repeat(MAX_TITLE - 1);
+    // El emoji cuenta como un carácter: llena el máximo entero (el resto se queda fuera).
     const emoji = expectOk(await createTask({ projectId: f.project.id, columnId: f.columns.todo, title: `${head}😀 fin`, kindId: f.kindId }));
-    assert.equal(emoji.title, head);
+    assert.equal(emoji.title, `${head}😀`);
+    assert.equal(emoji.titleClipped, MAX_TITLE);
+    // Un emoji de familia (11 unidades UTF-16) también es un solo carácter: 50 (550 unidades) caben y no se recortan.
+    const family = "👨‍👩‍👧‍👦";
+    const families = expectOk(await createTask({ projectId: f.project.id, columnId: f.columns.todo, title: `Familia ${family.repeat(50)}`, kindId: f.kindId }));
+    assert.equal(families.title, `Familia ${family.repeat(50)}`);
+    assert.equal(families.titleClipped, undefined);
     const mention = mentionToken("Ana", user.id);
     const withMention = expectOk(await createTask({ projectId: f.project.id, columnId: f.columns.todo, title: `${"b".repeat(MAX_TITLE - 2)} ${mention}`, kindId: f.kindId }));
     assert.equal(withMention.title, "b".repeat(MAX_TITLE - 2));

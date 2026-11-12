@@ -1,6 +1,6 @@
 import { canAccessProject } from "@/lib/access-cache";
 import { db } from "@/lib/db";
-import { activeUsers, openTaskViewers } from "@/lib/presence";
+import { activeUsers, notePresence, openTaskViewers } from "@/lib/presence";
 import { getCurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import * as v from "@/lib/validation";
@@ -11,6 +11,9 @@ export const dynamic = "force-dynamic";
 /**
  * Personas (incluido el usuario actual) con actividad en el tablero en los últimos 5 minutos y, por tarea, las demás
  * personas que la tienen abierta ahora (círculos de las tarjetas). No se registra en los logs.
+ *
+ * Tener el tablero a la vista también cuenta como actividad: el tablero solo pregunta con la pestaña visible (cada 20 s y
+ * al volver a ella), así que una pestaña olvidada en segundo plano deja de contar a los 5 minutos.
  */
 export async function GET(_req: Request, ctx: { params: Promise<{ projectId: string }> }) {
   // El idioma (otra lectura de la sesión) solo hace falta para los mensajes de error.
@@ -21,6 +24,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
   // Acceso con caché breve (se consulta cada 15 s por pestaña); la sesión sí se comprueba siempre.
   if (!(await canAccessProject(user, parsed.data))) return new Response((await getT())("No encontrado"), { status: 404 });
   const project = { id: parsed.data };
+  notePresence(project.id, user.id, user.name);
   const users = activeUsers(project.id).map(({ id, name }) => ({ id, name }));
   // Tareas abiertas por otras personas, solo las de este proyecto (una consulta, y solo si hay alguna).
   const open = openTaskViewers(user.id);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { memo, useEffect, useRef, useState, type RefObject } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { AlertTriangle, ArrowLeft, ArrowRight, CalendarDays, Check, CheckCircle2, FileDown, Gauge, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Tag, Trash2, Wallet } from "lucide-react";
@@ -37,7 +37,13 @@ interface Props {
   mobileHidden: boolean;
 }
 
-export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, index, total, droppableId, mobileHidden }: Props) {
+const NO_IDS: string[] = [];
+
+/**
+ * Columna del tablero. Memorizada: al arrastrar una tarjeta de una columna a otra el tablero se redibuja, pero solo
+ * cambian las listas de origen y destino (Board conserva el mismo array en las demás), así que el resto no se repinta.
+ */
+export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenIds = NO_IDS, cardCount, index, total, droppableId, mobileHidden }: Props) {
   const { openNewTask, openRelease, setSelectedMany } = useBoard();
   const t = useT();
   const sc = useShortcut();
@@ -125,7 +131,8 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
           </button>
         </div>
       )}
-      <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
+      {/* La lista lleva el id de la columna: la detección de colisiones (lib/collision.ts) solo repasa las tarjetas de la columna bajo el puntero. */}
+      <SortableContext id={droppableId} items={taskIds} strategy={verticalListSortingStrategy}>
         <div
           ref={listRef}
           data-card-list
@@ -157,7 +164,7 @@ export function ColumnView({ column, taskIds, evergreenIds = [], cardCount, inde
       {isNextRelease && <EvergreenPanel columnId={column.id} taskIds={evergreenIds} />}
     </section>
   );
-}
+});
 
 /**
  * Marca `data-more-below` en la columna (el padre de la lista) mientras hay tarjetas, o parte de una, por debajo de lo que
