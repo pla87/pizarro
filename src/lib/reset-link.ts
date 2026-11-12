@@ -3,7 +3,7 @@ import { issueAuthToken } from "./auth-token-issue";
 
 // Enlace de restablecimiento sin email (node dist/reset-link.mjs). Sin «server-only»: lo usa el script de línea de órdenes.
 
-export type ResetLinkResult =
+type ResetLinkResult =
   | { ok: true; url: string; name: string; twoFactorCleared: boolean }
   | { ok: false; error: string };
 

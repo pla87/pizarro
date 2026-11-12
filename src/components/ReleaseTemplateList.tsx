@@ -15,7 +15,7 @@ const NO_USERS: never[] = [];
 type Result<T = void> = { ok: true; data: T } | { ok: false; error: string };
 
 /** Qué hace cada botón: las plantillas del usuario y las del proyecto usan la misma lista con acciones distintas. */
-export interface ReleaseTemplateActions {
+interface ReleaseTemplateActions {
   create: (kind: "HEADER" | "FOOTER", input: { name: string; content: string }) => Promise<Result<TemplateOption>>;
   update: (id: string, input: { name: string; content: string }) => Promise<Result>;
   move: (id: string, direction: -1 | 1) => Promise<Result>;

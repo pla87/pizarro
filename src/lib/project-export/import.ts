@@ -35,7 +35,7 @@ export interface ImportUser {
 }
 
 /** Opciones de importación. `t` y `onProgress` los pasa el trabajo en segundo plano (no hay petición de la que sacar el idioma). */
-export interface ImportOptions {
+interface ImportOptions {
   isPrivate: boolean;
   t?: T;
   onProgress?: (p: ImportProgress) => void;

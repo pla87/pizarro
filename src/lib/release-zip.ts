@@ -106,7 +106,7 @@ export function zipRateKey(mode: ZipRequestMode, userId: string): { key: string;
   return mode.explicit ? { key: `release-zip-part:${userId}`, limit: 120 } : { key: `release-zip:${userId}`, limit: 10 };
 }
 
-export type ZipRequestMode = { kind: "plan" } | { kind: "part"; part: number; explicit: boolean; version: string | null };
+type ZipRequestMode = { kind: "plan" } | { kind: "part"; part: number; explicit: boolean; version: string | null };
 
 /** Respuesta 409 cuando el token `?v=` ya no coincide con el reparto actual; null si coincide o no se envió (enlaces antiguos). */
 export function zipVersionConflict(mode: ZipRequestMode, entries: ZipEntry[], maxMb: number, message: string): Response | null {

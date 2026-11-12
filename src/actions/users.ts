@@ -12,6 +12,7 @@ import { randomBytes } from "node:crypto";
 import { sendEmailChangedMail, sendGoogleUnlinkedMail, sendInviteMail, sendPasswordResetMail, sendTwoFactorChangedMail } from "@/lib/auth-mail";
 import { issueAuthToken } from "@/lib/auth-token";
 import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
+import { logMailError } from "@/lib/mask-email";
 import { hashPassword, passwordSchema } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
 import { purgeProject } from "@/lib/project-delete";
@@ -71,7 +72,7 @@ export async function createUser(input: z.input<typeof createSchema>) {
       const token = await issueAuthToken(created.id, "INVITE");
       await sendInviteMail(created, `${appUrl()}/reset/${token}`, admin.name);
     } catch (err) {
-      console.error("[users] invitación", err);
+      logMailError("[users] invitación", err);
       throw new AppError("Usuario creado, pero no se pudo enviar la invitación. Usa «Forzar cambio de contraseña» para reenviarla.");
     }
     return { invited: true };
@@ -177,7 +178,7 @@ export async function forcePasswordChange(userId: string, opts?: { copyLink?: bo
       const token = await issueAuthToken(user.id, "PASSWORD_RESET");
       await sendPasswordResetMail(user, `${appUrl()}/reset/${token}`);
     } catch (err) {
-      console.error("[users] enlace de restablecimiento", err);
+      logMailError("[users] enlace de restablecimiento", err);
       throw new AppError("Se ha forzado el cambio, pero no se pudo enviar el email con el enlace.");
     }
     return { emailed: true, link: null as string | null };

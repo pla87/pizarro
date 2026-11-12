@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/lib/report-pdf-worker.ts",
+    "scripts/*.{mjs,ts}",
+    "tests/**/*.test.ts",
+    "tests/db/hooks.mjs",
+    "tests/db/register.mjs",
+    "tests/db/stubs/*.mjs",
+    "e2e/*.mjs",
+    "e2e/qa/*.mjs",
+    "public/sw.js",
+    "site/static/style.css"
+  ],
+  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{mjs,ts}", "tests/**/*.{ts,mjs}", "e2e/**/*.mjs", "*.{ts,mjs}"],
+  "ignoreDependencies": ["@prisma/client", "tailwindcss", "postcss"]
+}

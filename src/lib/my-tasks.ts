@@ -4,7 +4,7 @@ import { daysBetween } from "./dates";
 export type TaskBucket = "overdue" | "today" | "week" | "later" | "none";
 export type TaskFilter = "all" | "overdue" | "week";
 
-export const BUCKET_ORDER: TaskBucket[] = ["overdue", "today", "week", "later", "none"];
+const BUCKET_ORDER: TaskBucket[] = ["overdue", "today", "week", "later", "none"];
 
 /** Días que abarca «esta semana» desde hoy (hoy no incluido: tiene su propio grupo). */
 const WEEK_DAYS = 7;

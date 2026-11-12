@@ -6,7 +6,7 @@ import { mentionsToPlain } from "./mentions";
 export type DigestSectionKey = "assigned" | "overdue" | "dueToday" | "created" | "done" | "comments";
 
 /** Orden en el que salen las secciones: primero lo que te toca a ti. */
-export const DIGEST_ORDER: DigestSectionKey[] = ["assigned", "overdue", "dueToday", "created", "done", "comments"];
+const DIGEST_ORDER: DigestSectionKey[] = ["assigned", "overdue", "dueToday", "created", "done", "comments"];
 
 /** Máximo de tareas por sección en el correo (el resto se resume en «y N más»). */
 export const DIGEST_MAX_ITEMS = 25;
@@ -22,7 +22,7 @@ export interface DigestItem {
 
 export type DigestInput = Record<DigestSectionKey, DigestItem[]>;
 
-export interface DigestSection {
+interface DigestSection {
   key: DigestSectionKey;
   /** Tareas de la sección (también las que no caben en el correo). */
   total: number;

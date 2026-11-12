@@ -11,7 +11,7 @@ const MARGIN = 8;
 /** Elementos que reciben foco al abrir un panel con contenido libre (formularios, chips…). */
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 /** Opciones de un menú. */
-export const MENU_ITEMS = '[role^="menuitem"]:not([disabled]):not([aria-disabled="true"])';
+const MENU_ITEMS = '[role^="menuitem"]:not([disabled]):not([aria-disabled="true"])';
 
 /** Elementos con foco dentro de un panel, visibles. */
 function focusables(panel: HTMLElement): HTMLElement[] {

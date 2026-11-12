@@ -5,7 +5,7 @@
 
 type Env = Record<string, string | undefined>;
 
-export const isGoogleLoginConfigured = (env: Env = process.env): boolean => Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.APP_URL);
+const isGoogleLoginConfigured = (env: Env = process.env): boolean => Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.APP_URL);
 
 export const googleOnly = (env: Env = process.env): boolean => env.AUTH_GOOGLE_ONLY === "true" && isGoogleLoginConfigured(env);
 

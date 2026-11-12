@@ -28,8 +28,8 @@ export async function googleKeys(kid: string | null): Promise<Jwk[]> {
   return jwksCache.keys;
 }
 
-export type GoogleIdentity = { sub: string; email: string; name: string | null };
-export type GoogleLoginFailure = ClaimsFailure | "exchange" | "signature";
+type GoogleIdentity = { sub: string; email: string; name: string | null };
+type GoogleLoginFailure = ClaimsFailure | "exchange" | "signature";
 
 /** Cambia el código por tokens (con el verificador PKCE) y valida el id_token: firma, iss, aud, exp, nonce, email_verified y dominio. */
 export async function exchangeAndVerify(code: string, verifier: string, nonce: string): Promise<{ ok: true; identity: GoogleIdentity } | { ok: false; reason: GoogleLoginFailure }> {

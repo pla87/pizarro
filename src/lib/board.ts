@@ -6,7 +6,7 @@ import { db } from "./db";
 import { TASK_ORDER } from "./task-positions";
 import type { AttachmentTotals, BoardTask } from "./types";
 
-export const boardTaskSelect = {
+const boardTaskSelect = {
   id: true,
   columnId: true,
   title: true,
@@ -45,7 +45,7 @@ type BoardTaskBaseRow = Omit<Prisma.TaskGetPayload<{ select: typeof boardTaskMan
 type BoardTaskRow = BoardTaskBaseRow & { _count: TaskCounts };
 interface TaskCounts { comments: number; links: number }
 
-export function toBoardTask(t: BoardTaskRow): BoardTask {
+function toBoardTask(t: BoardTaskRow): BoardTask {
   return toBoardTaskWith(t, (t.description ?? "").trim().length > 0, t._count);
 }
 
@@ -153,9 +153,8 @@ export async function projectUsers(projectId: string, project: { isPrivate: bool
 /** Zona horaria de referencia para «hoy» en plazos e informes (la misma que usa el navegador, ver format.ts). */
 export { appTimeZone } from "./format";
 
-/** Tipos de tarea: sin proyecto, solo los generales; con proyecto, los generales y después los de ese proyecto. */
 /** Selección común de los tipos (con su automatización). */
-export const kindSelect = { id: true, name: true, color: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true } as const;
+const kindSelect = { id: true, name: true, color: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true } as const;
 
 /**
  * Tipos de tarea: sin proyecto, solo los generales; con proyecto, los generales que el proyecto

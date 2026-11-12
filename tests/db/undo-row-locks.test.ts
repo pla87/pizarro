@@ -1,12 +1,15 @@
 // Deshacer muchas tarjetas a la vez bloquea sus filas en orden de id (lockTaskRows) antes de las sentencias por lotes
 // (UPDATE … FROM (VALUES …), DELETE … ANY y la limpieza de tareas fijas fuera de su columna): otra persona que mueve o
 // archiva esas mismas tarjetas en bloque (también en orden de id) espera en vez de cruzarse con él (40P01).
-// Contra PostgreSQL real, como tests/db/review-fixes-r45.test.ts.
+// Lo mismo para «Mover a…» y archivar en bloque (moveTasks, archiveTasks), y el tipo de bloqueo de lockTaskRows (FOR NO
+// KEY UPDATE: no frena las altas que solo apuntan a la tarea). Contra PostgreSQL real.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import pg from "pg";
-import { db, makeProject, makeTask, type Fixture } from "./helpers";
+import { db, loginAs, makeProject, makeTask, makeUser, type Fixture } from "./helpers";
 import { applyUndo, type UndoOp } from "../../src/lib/undo";
+import { archiveTasks, moveTasks } from "../../src/actions/tasks";
+import { lockTaskRows } from "../../src/lib/task-positions";
 
 /**
  * Otra conexión bloquea la tarea de id menor y `run` se queda esperándola. Con el bloqueo en orden de id aún no ha
@@ -132,6 +135,99 @@ describe("deshacer en bloque: filas bloqueadas en orden de id", () => {
     for (let round = 0; round < 5; round++) {
       const skipped = await Promise.all([applyUndo(f.project.id, forward), applyUndo(f.project.id, backward)]);
       assert.deepEqual(skipped, [0, 0], `ronda ${round}`);
+    }
+  });
+});
+
+describe("acciones en bloque: filas bloqueadas en orden de id", () => {
+  /**
+   * Otra conexión bloquea la tarea de id menor y la acción se queda esperándola. Con el bloqueo en orden de id aún no ha
+   * tocado la de id mayor (que va antes en la columna y en el disco); sin él, ya la tendría bloqueada, y otra acción que
+   * bloqueara en orden de id (el despliegue de una release) se cruzaría con ella (40P01).
+   */
+  async function locksHigherFirst([low, high]: [string, string], run: (ids: string[]) => Promise<unknown>): Promise<boolean> {
+    const holder = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    const probe = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await holder.connect();
+    await probe.connect();
+    try {
+      await holder.query("BEGIN");
+      await holder.query(`SELECT 1 FROM "Task" WHERE "id" = $1 FOR UPDATE`, [low]);
+      const pending = run([high, low]);
+      // Hasta que la acción esté esperando la fila bloqueada.
+      for (let i = 0; i < 200; i++) {
+        const { rows } = await probe.query(`SELECT count(*)::int AS n FROM pg_locks WHERE locktype IN ('transactionid', 'tuple') AND NOT granted`);
+        if (rows[0].n > 0) break;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      let highLocked = false;
+      await probe.query("BEGIN");
+      try {
+        await probe.query(`SELECT 1 FROM "Task" WHERE "id" = $1 FOR UPDATE NOWAIT`, [high]);
+      } catch (err) {
+        highLocked = (err as { code?: string }).code === "55P03";
+      }
+      await probe.query("ROLLBACK");
+      await holder.query("COMMIT");
+      await pending;
+      return highLocked;
+    } finally {
+      await holder.end();
+      await probe.end();
+    }
+  }
+
+  /** Dos tareas: la de id mayor, primera en la columna y en el disco (la de id menor se reescribe después). */
+  async function pair(f: Awaited<ReturnType<typeof makeProject>>): Promise<[string, string]> {
+    const a = await makeTask(f, { position: 1000 });
+    const b = await makeTask(f, { position: 2000 });
+    const [low, high] = [a.id, b.id].sort() as [string, string];
+    await db.task.update({ where: { id: high }, data: { position: 500 } });
+    await db.task.update({ where: { id: low }, data: { position: 3000 } });
+    return [low, high];
+  }
+
+  test("moveTasks y archiveTasks bloquean primero la de id menor", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    const moving = await pair(f);
+    assert.equal(await locksHigherFirst(moving, (ids) => moveTasks(ids, f.columns.doing)), false, "moveTasks");
+    assert.equal(await db.task.count({ where: { id: { in: moving }, columnId: f.columns.doing } }), 2);
+    const archiving = await pair(f);
+    assert.equal(await locksHigherFirst(archiving, (ids) => archiveTasks(ids)), false, "archiveTasks");
+    assert.equal(await db.task.count({ where: { id: { in: archiving }, archivedAt: { not: null } } }), 2);
+  });
+});
+
+describe("lockTaskRows", () => {
+  test("FOR NO KEY UPDATE: no frena las altas que apuntan a la tarea (FOR KEY SHARE) y sí otro bloqueo de la fila", async () => {
+    const f = await makeProject();
+    const task = await makeTask(f);
+    const probe = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await probe.connect();
+    try {
+      await db.$transaction(async (tx) => {
+        await lockTaskRows(tx, [task.id]);
+        await probe.query("BEGIN");
+        try {
+          await probe.query(`SELECT 1 FROM "Task" WHERE "id" = $1 FOR KEY SHARE NOWAIT`, [task.id]);
+        } finally {
+          await probe.query("ROLLBACK");
+        }
+        await probe.query("BEGIN");
+        let code: string | undefined;
+        try {
+          await probe.query(`SELECT 1 FROM "Task" WHERE "id" = $1 FOR NO KEY UPDATE NOWAIT`, [task.id]);
+        } catch (err) {
+          code = (err as { code?: string }).code;
+        } finally {
+          await probe.query("ROLLBACK");
+        }
+        assert.equal(code, "55P03", "la fila sigue bloqueada para otra acción que la modifique");
+      });
+    } finally {
+      await probe.end();
     }
   });
 });

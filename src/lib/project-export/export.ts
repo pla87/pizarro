@@ -430,7 +430,7 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
   return { filename: exportFileName(project.name, now, appTimeZone()), manifest, entries, size, missingFiles };
 }
 
-export interface ExportEstimate {
+interface ExportEstimate {
   tasks: number;
   archivedTasks: number;
   releases: number;

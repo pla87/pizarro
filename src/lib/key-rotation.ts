@@ -37,7 +37,7 @@ export interface RotationDelegate {
 }
 export type RotationDb = Record<EncryptedField["model"], RotationDelegate>;
 
-export interface RotationCount {
+interface RotationCount {
   label: string;
   total: number;
   /** Ya cifrados con la clave actual. */

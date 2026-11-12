@@ -10,7 +10,7 @@ export const FOCUS_REFRESH_MIN_MS = 60_000;
 export const FOCUS_REFRESH_LIVE_MS = 5 * 60_000;
 export const FOCUS_REFRESH_GAP_MS = 10_000;
 
-export interface FocusRefreshInput {
+interface FocusRefreshInput {
   /** Milisegundos desde que los datos del tablero se pidieron o llegaron por última vez. */
   sinceSyncMs: number;
   /** ¿El canal en vivo está abierto ahora mismo? */

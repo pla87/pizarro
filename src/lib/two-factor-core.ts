@@ -41,14 +41,14 @@ export function base32Decode(text: string): Buffer {
   return Buffer.from(out);
 }
 
-export const TOTP_STEP_SECONDS = 30;
-export const TOTP_DIGITS = 6;
+const TOTP_STEP_SECONDS = 30;
+const TOTP_DIGITS = 6;
 
 /** Secreto nuevo de 160 bits en base32 (32 caracteres), el tamaño habitual de las apps. */
 export const generateTotpSecret = (): string => base32Encode(randomBytes(20));
 
 /** HOTP (RFC 4226) con HMAC-SHA1. */
-export function hotp(secret: Buffer, counter: number, digits: number = TOTP_DIGITS): string {
+function hotp(secret: Buffer, counter: number, digits: number = TOTP_DIGITS): string {
   const msg = Buffer.alloc(8);
   msg.writeBigUInt64BE(BigInt(counter));
   const h = createHmac("sha1", secret).update(msg).digest();

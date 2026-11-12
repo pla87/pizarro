@@ -19,7 +19,7 @@ const RichTextEditor = dynamic(() => import("./RichTextEditor").then((m) => m.Ri
 });
 import type { EditorModeValue, UserOption } from "@/lib/types";
 
-export const MARKDOWN_HINT = "**negrita**, *cursiva*, ~~tachado~~, ++subrayado++, # Título, - lista, 1. lista";
+const MARKDOWN_HINT = "**negrita**, *cursiva*, ~~tachado~~, ++subrayado++, # Título, - lista, 1. lista";
 
 interface Props {
   id?: string;

@@ -5,7 +5,7 @@ import { useT } from "@/i18n/client";
 import { Modal } from "./Modal";
 import { cn } from "./cn";
 
-export interface PromptOptions {
+interface PromptOptions {
   /** Título corto del diálogo («Renombrar columna»). */
   title: string;
   /** Etiqueta del campo. */
@@ -91,7 +91,7 @@ export function PromptProvider({ children }: { children: React.ReactNode }) {
 }
 
 /** El diálogo en sí (lo usa el proveedor; también sirve suelto). `onResult(null)` = cancelado. */
-export function PromptDialog({
+function PromptDialog({
   title, label, description, defaultValue = "", type = "text", min, max, maxLength, placeholder, confirmLabel, cancelLabel, validate, onResult,
 }: PromptOptions & { onResult: (value: string | null) => void }) {
   const t = useT();

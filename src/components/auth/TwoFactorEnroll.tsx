@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 import { useT } from "@/i18n/client";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
-export interface BeginData {
+interface BeginData {
   method: "TOTP" | "EMAIL";
   secret?: string;
   uri?: string;

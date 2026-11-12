@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { deployRelease } from "../../src/actions/releases";
-import { undoLast } from "../../src/actions/undo";
+import { redoLast, undoLast } from "../../src/actions/undo";
 
 async function setup() {
   const user = await makeUser();
@@ -99,5 +99,18 @@ describe("deployRelease", () => {
     now = await titles();
     assert.deepEqual(now, { [a.id]: "Uno", [b.id]: "R1F9: Dos", [fija.id]: "Fija" });
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: a.id } })).columnId, f.columns.done);
+  });
+});
+
+describe("deshacer un despliegue", () => {
+  test("deshacer un despliegue de release no deja entrada de rehacer", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await db.column.create({ data: { projectId: f.project.id, name: "En producción", position: 4000, role: "IN_PRODUCTION" } });
+    await loginAs(user);
+    const a = await makeTask(f, { columnId: f.columns.done, position: 1000 });
+    expectOk(await deployRelease({ projectId: f.project.id, title: "R", content: "x", destination: "IN_PRODUCTION", taskIds: [a.id] }));
+    expectOk(await undoLast(f.project.id));
+    expectFail(await redoLast(f.project.id), /nada que rehacer/i);
   });
 });

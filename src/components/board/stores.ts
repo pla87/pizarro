@@ -14,7 +14,7 @@ export interface Store<T> {
   subscribe: (listener: () => void) => () => void;
 }
 
-export function createStore<T>(initial: T): Store<T> {
+function createStore<T>(initial: T): Store<T> {
   let value = initial;
   const listeners = new Set<() => void>();
   return {

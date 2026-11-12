@@ -14,7 +14,7 @@ const stores = (g.__pzRateStores ??= {
  * Prefijos de las claves de bloqueo de seguridad (guardadas en su propio mapa). Las de una IP terminan en ella, así que
  * cualquier clave que empiece por uno de estos prefijos cuenta.
  */
-export const SECURITY_KEY_PREFIXES = ["login:", "reset:", "reset-submit:", "confirm:", "2fa:", "setup:", "glogin:", "password:", "email-change:", "force-password:"] as const;
+const SECURITY_KEY_PREFIXES = ["login:", "reset:", "reset-submit:", "confirm:", "2fa:", "setup:", "glogin:", "password:", "email-change:", "force-password:"] as const;
 
 const storeFor = (key: string): Store => (SECURITY_KEY_PREFIXES.some((p) => key.startsWith(p)) ? stores.security : stores.general);
 

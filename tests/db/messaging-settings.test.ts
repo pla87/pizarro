@@ -1,22 +1,15 @@
-// Caza de bugs (2) contra PostgreSQL real: idioma de las pantallas de una persona identificada sin sesión, WhatsApp que
-// no se activa solo al guardar y que sin plantilla en inglés va entero en español, la prueba de Telegram con el bot
-// bloqueado, el resumen diario sin las tareas propias y el máximo de 1 comentario.
+// Telegram y WhatsApp contra PostgreSQL real (con fetch simulado): WhatsApp no se activa solo al guardar y, sin plantilla
+// en inglés, va entero en español; «Probar» en Mi perfil → Avisos con el bot bloqueado desconecta como los avisos.
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
-import { db, expectFail, expectOk, loginAs, logout, makeProject, makeTask, makeUser } from "./helpers";
+import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 
 process.env.APP_URL = "https://pizarro.example.com";
 
 const { saveMyWhatsapp, saveWhatsappSettings, setWhatsappActive, testMyChannel } = await import("../../src/actions/messaging");
-const { addComment } = await import("../../src/actions/tasks");
-const { getLocale } = await import("../../src/i18n/server");
-const { issueAuthToken } = await import("../../src/lib/auth-token");
-const { AUTH_LINK_HEADER } = await import("../../src/lib/auth-link-path");
-const { setMaxCommentsPerTask, invalidateAppSettings, COMMENT_LIMIT_KEY } = await import("../../src/lib/app-settings");
+const { invalidateAppSettings, COMMENT_LIMIT_KEY } = await import("../../src/lib/app-settings");
 const { loadMessagingConfig, reloadMessagingConfig, saveTelegramToken, setTelegramEnabled } = await import("../../src/lib/messaging-config");
 const { deliver } = await import("../../src/lib/notify");
-const { gatherDigest } = await import("../../src/lib/periodic-mail");
-const { startChallenge } = await import("../../src/lib/two-factor");
 
 const request = (globalThis as unknown as { __pzTestRequest: { headers?: Record<string, string> } }).__pzTestRequest;
 const WA_TOKEN = "EAAGwhatsappTokenDePrueba1234567890";
@@ -49,36 +42,6 @@ afterEach(async () => {
 
 type Template = { name: string; language: { code: string }; components: { parameters: { text: string }[] }[] };
 const lastTemplate = () => calls.filter((c) => c.url.includes("graph.facebook.com")).at(-1)?.body.template as Template | undefined;
-
-describe("idioma de quien se identifica sin sesión", () => {
-  test("/reset/<token> y /confirm/<token>: el de la persona del enlace", async () => {
-    logout();
-    const user = await makeUser();
-    await db.user.update({ where: { id: user.id }, data: { locale: "EN" } });
-    assert.equal(await getLocale(), "es", "sin nada, el de la instalación");
-    const reset = await issueAuthToken(user.id, "PASSWORD_RESET");
-    request.headers = { [AUTH_LINK_HEADER]: `/reset/${reset}` };
-    assert.equal(await getLocale(), "en");
-    const confirm = await issueAuthToken(user.id, "EMAIL_CHANGE", { newEmail: "nuevo@example.com" });
-    request.headers = { [AUTH_LINK_HEADER]: `/confirm/${confirm}` };
-    assert.equal(await getLocale(), "en");
-    // Un enlace de otro tipo para esa ruta, o uno que no existe: el de la instalación.
-    request.headers = { [AUTH_LINK_HEADER]: `/confirm/${reset}` };
-    assert.equal(await getLocale(), "es");
-    request.headers = { [AUTH_LINK_HEADER]: "/reset/noexiste" };
-    assert.equal(await getLocale(), "es");
-  });
-
-  test("/login/verify: el de la persona del segundo paso pendiente", async () => {
-    logout();
-    const admin = await makeUser({ role: "ADMIN" });
-    await db.user.update({ where: { id: admin.id }, data: { locale: "EN" } });
-    assert.equal(await getLocale(), "es");
-    await startChallenge(admin.id, "SETUP");
-    assert.equal(await getLocale(), "en");
-    logout();
-  });
-});
 
 describe("WhatsApp: activar", () => {
   test("guardar la primera vez no lo activa; «Activar» sí", async () => {
@@ -162,31 +125,5 @@ describe("Mi perfil → Avisos → Probar con el bot bloqueado", () => {
     telegramReply = () => new Response(JSON.stringify({ ok: false, error_code: 400, description: "Bad Request: message is too long" }), { status: 400 });
     expectFail(await testMyChannel("TELEGRAM"), /No se pudo enviar el mensaje de prueba/);
     assert.equal(await db.userChannel.count({ where: { userId: user.id, channel: "TELEGRAM" } }), 1);
-  });
-});
-
-describe("resumen diario", () => {
-  test("«Tareas nuevas» no incluye las que creó la propia persona", async () => {
-    const user = await makeUser();
-    const other = await makeUser();
-    const f = await makeProject({ members: [user, other] });
-    await makeTask(f, { title: "Mía", createdById: user.id });
-    await makeTask(f, { title: "De otra persona", createdById: other.id });
-    await makeTask(f, { title: "Sin autor", createdById: null });
-    const now = new Date();
-    const d = await gatherDigest({ id: user.id, role: "MEMBER" }, now, now.toISOString().slice(0, 10));
-    assert.deepEqual(d.created.filter((x) => x.projectId === f.project.id).map((x) => x.title).sort(), ["De otra persona", "Sin autor"]);
-  });
-});
-
-describe("máximo de comentarios", () => {
-  test("con el máximo en 1, el aviso va en singular", async () => {
-    const user = await makeUser();
-    const f = await makeProject({ members: [user] });
-    const task = await makeTask(f);
-    await setMaxCommentsPerTask(1);
-    await loginAs(user);
-    expectOk(await addComment(task.id, "Primero"));
-    expectFail(await addComment(task.id, "Segundo"), /^Esta tarea ya tiene el máximo de 1 comentario\.$/);
   });
 });

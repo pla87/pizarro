@@ -3,7 +3,7 @@ import { db } from "./db";
 import { AppError } from "./errors";
 
 /** Por qué una tarea no puede quedar bloqueada por otra (null = sí puede). */
-export type BlockProblem = "missing" | "self" | "cycle" | null;
+type BlockProblem = "missing" | "self" | "cycle" | null;
 
 type Client = Pick<typeof db, "$queryRaw" | "$executeRaw">;
 

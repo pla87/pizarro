@@ -90,7 +90,7 @@ export function peekMailConfig(): MailConfig {
   return envMailConfig() ?? store().config ?? NO_MAIL_CONFIG;
 }
 
-export function invalidateMailConfig(): void {
+function invalidateMailConfig(): void {
   store().config = null;
 }
 

@@ -17,7 +17,8 @@ import type { EditorModeValue } from "@/lib/types";
 import { COLUMN_ROLES, isUniqueColumnRole, MAX_DESCRIPTION, MAX_RELEASE_TEMPLATES_PER_KIND, MAX_TEMPLATE, PALETTE, type ColumnRoleValue } from "@/lib/constants";
 import { parseSubtaskLines } from "@/lib/kinds-special";
 import { normalizeTaskFields, type TaskFieldKey } from "@/lib/task-fields";
-import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS, type TemplateDto, type TemplateInput } from "@/lib/project-templates";
+import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS } from "@/lib/project-templates-core";
+import type { TemplateDto, TemplateInput } from "@/lib/project-templates";
 
 const KIND_COLORS = [...PALETTE, "#84cc16", "#06b6d4", "#d946ef", "#78716c"];
 const ROLE_LABEL: Record<ColumnRoleValue, string> = { NONE: "Ninguno", NEXT_RELEASE: "Siguiente salto", IN_PRODUCTION: "En producción", WAITING: "Esperando", WEEKLY_PLAN: "Planificación semanal", CHECKLIST: "Lista consolidada", REVIEW: "Revisión con requisitos", AGENDA: "Agenda", ROUTINES: "Rutinas", DELIVERY: "Entrega al cliente", BUDGET: "Presupuesto" };

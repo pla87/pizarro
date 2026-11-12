@@ -10,7 +10,7 @@ export const QUOTA_MIN_MB = 1;
 export const QUOTA_MAX_MB = 10_000_000;
 
 /** Valor positivo de una variable de entorno en MB; vacío, 0 o inválido → null (como si no estuviera definida). */
-export function parseEnvMb(raw: string | undefined): number | null {
+function parseEnvMb(raw: string | undefined): number | null {
   if (raw === undefined || raw.trim() === "") return null;
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? n : null;

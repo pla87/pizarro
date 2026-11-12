@@ -54,7 +54,7 @@ export function labelledHmacCandidates(label: string, value: string, env: Env = 
 
 // --- Cifrado de secretos (AES-256-GCM) ---
 
-export interface EncryptionKey {
+interface EncryptionKey {
   /** Huella corta (8 caracteres base64url) que viaja en el valor cifrado. */
   id: string;
   key: Buffer;
@@ -63,7 +63,7 @@ export interface EncryptionKey {
 const derived = new Map<string, EncryptionKey>();
 
 /** Deriva la clave AES de un secreto. Es la derivación de siempre: con SESSION_SECRET da la misma clave que antes. */
-export function deriveEncryptionKey(secret: string): EncryptionKey {
+function deriveEncryptionKey(secret: string): EncryptionKey {
   let k = derived.get(secret);
   if (!k) {
     const key = Buffer.from(hkdfSync("sha256", secret, "tablon", "tablon-token-encryption-v1", 32));
@@ -97,7 +97,7 @@ function open(key: Buffer, iv: string, tag: string, data: string): string {
   return Buffer.concat([decipher.update(Buffer.from(data, "base64url")), decipher.final()]).toString("utf8");
 }
 
-export interface Decrypted {
+interface Decrypted {
   plain: string;
   /** true si no está cifrado con la clave actual en el formato actual: conviene volver a cifrarlo. */
   stale: boolean;

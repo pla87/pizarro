@@ -83,7 +83,7 @@ export async function largestAttachments(projectId: string, limit = 20): Promise
 // --- Vista del servidor (Administración → Ajustes) -------------------------------
 
 /** Suma el tamaño de los ficheros de una carpeta y sus subcarpetas (las carpetas de copias y exportaciones son pequeñas). */
-export async function dirBytes(dir: string, depth = 0): Promise<number> {
+async function dirBytes(dir: string, depth = 0): Promise<number> {
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });

@@ -105,7 +105,7 @@ const MULTI: Field[] = ["labels", "assignee", "assigneeEmail"];
 /** Columnas de la cabecera que se miran (el resto se ignoran): una cabecera de un millón de columnas no debe costar nada. */
 const MAX_HEADER_COLUMNS = 1000;
 
-export interface CsvMapping {
+interface CsvMapping {
   /** Índices de las columnas del archivo que alimentan cada campo. */
   columns: Partial<Record<Field, number[]>>;
 }
@@ -170,7 +170,7 @@ function people(cell: string, emailCell: string): ForeignPerson[] {
   return out;
 }
 
-export interface CsvOptions {
+interface CsvOptions {
   t: T;
   timeZone?: string;
   /** Nombre del archivo sin extensión: nombre del proyecto. */

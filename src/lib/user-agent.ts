@@ -2,7 +2,7 @@ import type { T } from "@/i18n/core";
 
 // Resumen sencillo del User-Agent (navegador y sistema) para mostrar dispositivos; sin dependencias.
 
-export interface DeviceSummary {
+interface DeviceSummary {
   browser: string | null;
   os: string | null;
 }

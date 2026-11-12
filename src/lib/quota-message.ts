@@ -9,8 +9,8 @@ export function mbNumber(mb: number, locale: string): string {
 }
 
 /** Dónde se libera espacio o se amplía la cuota de un proyecto (el cliente lo convierte en enlace). */
-export const projectStoragePath = (projectId: string) => `/p/${projectId}/settings?tab=adjuntos`;
-export const ADMIN_STORAGE_PATH = "/admin/settings";
+const projectStoragePath = (projectId: string) => `/p/${projectId}/settings?tab=adjuntos`;
+const ADMIN_STORAGE_PATH = "/admin/settings";
 
 /**
  * Error de cuota superada con qué hacer: liberar espacio en los ajustes del proyecto o pedir que amplíen la cuota; a un

@@ -19,7 +19,7 @@ import * as v from "@/lib/validation";
 type Result = { label: string; remaining: number; skipped: number; redoable: number };
 
 /** Lo que devuelve undoChecked/redoChecked: lo aplicado o, si otra persona cambió lo mismo después, qué preguntar. */
-export type CheckedResult =
+type CheckedResult =
   | { applied: Result; conflict?: undefined }
   | { applied?: undefined; conflict: { entryId: string; title: string; message: string; confirmLabel: string; danger: boolean } };
 

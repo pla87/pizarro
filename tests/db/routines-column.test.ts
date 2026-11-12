@@ -100,3 +100,40 @@ describe("rutinas", () => {
     }
   });
 });
+
+describe("destino de rutinas y borrado de columnas", () => {
+  test("el destino no puede ser una columna terminada ni de rutinas", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    expectOk(await setColumnRole(f.columns.todo, "ROUTINES"));
+    expectFail(await setColumnRoutineTarget(f.columns.todo, f.columns.done), /terminada/);
+    expectOk(await setColumnRole(f.columns.doing, "ROUTINES"));
+    expectFail(await setColumnRoutineTarget(f.columns.todo, f.columns.doing), /rutinas/);
+  });
+
+  test("deshacer el borrado de la columna destino la recrea con su destino y vuelve a apuntarla desde la de rutinas", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    const extra = await db.column.create({ data: { projectId: f.project.id, name: "Destino", position: 4000 } });
+    expectOk(await setColumnRole(f.columns.todo, "ROUTINES"));
+    expectOk(await setColumnRoutineTarget(f.columns.todo, extra.id));
+    expectOk(await deleteColumn(extra.id));
+    assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } })).routineTargetColumnId, null);
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await db.column.count({ where: { id: extra.id } }), 1);
+    assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } })).routineTargetColumnId, extra.id);
+  });
+
+  test("deshacer el borrado de una columna de rutinas conserva su destino", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    expectOk(await setColumnRole(f.columns.todo, "ROUTINES"));
+    expectOk(await setColumnRoutineTarget(f.columns.todo, f.columns.doing));
+    expectOk(await deleteColumn(f.columns.todo));
+    expectOk(await undoLast(f.project.id));
+    assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } })).routineTargetColumnId, f.columns.doing);
+  });
+});

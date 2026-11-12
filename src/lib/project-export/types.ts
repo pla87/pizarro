@@ -55,7 +55,7 @@ const hex = z.string().regex(HEX_COLOR_RE);
 
 const person = ref.nullable();
 
-export const userSchema = z.object({ ref, name: text(200), email: text(200) });
+const userSchema = z.object({ ref, name: text(200), email: text(200) });
 
 const columnSchema = z.object({
   ref,

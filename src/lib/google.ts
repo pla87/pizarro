@@ -158,7 +158,7 @@ async function accessToken(userId: string): Promise<string> {
 }
 
 /** Con quién se comparte el archivo: todo el dominio del Workspace o solo unas personas (proyectos privados). */
-export type DriveShareTarget = { type: "domain" } | { type: "users"; emails: string[] };
+type DriveShareTarget = { type: "domain" } | { type: "users"; emails: string[] };
 
 /** Permisos de Drive que hay que crear para ese destino y rol (el dominio sale de GOOGLE_WORKSPACE_DOMAIN). */
 export function sharePermissionBodies(target: DriveShareTarget, env: { domain?: string; role?: string } = { domain: googleWorkspaceDomain(), role: "writer" }): Record<string, string>[] {
@@ -170,7 +170,7 @@ export function sharePermissionBodies(target: DriveShareTarget, env: { domain?: 
 }
 
 /** Resultado de compartir: estado y, si falló alguno, cuántas personas se quedaron sin acceso. */
-export interface ShareOutcome { status: ShareStatus; failed: number }
+interface ShareOutcome { status: ShareStatus; failed: number }
 
 /** Crea el archivo y lo comparte con `share` y el rol `role` (según el modo del proyecto, ver google-share.ts). */
 export async function createDriveFile(userId: string, kind: GoogleFileKind, name: string, share: DriveShareTarget | null = { type: "domain" }, role = "writer") {

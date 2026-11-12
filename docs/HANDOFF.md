@@ -94,7 +94,17 @@ Guardas que conviene conocer:
   «Textos guardados por versiones anteriores».
 - `tests/db/undo-perf.test.ts` (dentro de `npm run test:db`): guarda de rendimiento del deshacer. Mide las
   consultas y los bytes leídos al deshacer y rehacer «Mover a…» de cientos de tarjetas; si falla, algo ha vuelto a
-  leer las descripciones completas o a hacer consultas entrada a entrada.
+  leer las descripciones completas o a hacer consultas entrada a entrada. También mide recortar la pila con 500
+  adjuntos huérfanos y 4.000 entradas guardadas (una sola pasada por `UndoEntry` en `stillRetained`, `src/lib/undo.ts`).
+- Código sin uso (solo informa, no está en las dependencias): `npx --yes knip@5`. La configuración está en `knip.json`
+  (entradas que Next no declara: pruebas, `e2e/`, `scripts/`, `public/sw.js`, el worker de los PDF…). Lo que aún
+  marca son falsos positivos conocidos: lo que `scripts/build-site.mjs` carga con `import()` de una ruta (márcalo con
+  `@public` en su comentario) y los re-exports usados a través de otro módulo. Antes de quitar un `export`, busca el
+  nombre en `src`, `tests`, `scripts` y `e2e`. Los nombres de las pruebas van por tema (`tests/db/comment-notices.test.ts`,
+  no `review-fixes-…`): una prueba nueva va al fichero del tema que prueba.
+- Lo que llega al navegador no debe importar `zod` (unos 85 KB): las constantes y tipos que usa un componente de cliente
+  van en un módulo `*-core.ts` sin zod (`changelog-core.ts`, `project-templates-core.ts`); los tipos derivados de un
+  esquema se importan con `import type`.
 - Apagado ordenado (`src/lib/shutdown.ts`): al recibir la señal, `/api/health` responde `503` (`shutting_down`),
   se cierran los canales en vivo y se espera hasta 5 s a las peticiones en curso (subidas incluidas) y a los
   emails. Una ruta nueva de larga duración debe contar como petición en curso; lo que no termine queda en

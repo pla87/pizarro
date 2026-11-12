@@ -13,7 +13,7 @@ function collator(locale?: string): Intl.Collator {
 }
 
 /** Compara dos nombres de archivo en orden natural, sin mayúsculas ni acentos. */
-export function compareFileNames(a: string, b: string, locale?: string): number {
+function compareFileNames(a: string, b: string, locale?: string): number {
   return collator(locale).compare(a, b);
 }
 

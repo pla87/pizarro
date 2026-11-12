@@ -13,8 +13,8 @@ export interface StreamZipEntry {
   body: Buffer | (() => AsyncIterable<Buffer | Uint8Array>);
 }
 
-export const ZIP_LIMIT = 0xffffffff;
-export const ZIP_MAX_ENTRIES = 0xffff;
+const ZIP_LIMIT = 0xffffffff;
+const ZIP_MAX_ENTRIES = 0xffff;
 
 function dosDateTime(date: Date): { time: number; date: number } {
   const year = Math.min(Math.max(date.getFullYear(), 1980), 2107);

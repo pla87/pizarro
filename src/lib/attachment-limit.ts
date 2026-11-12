@@ -14,12 +14,12 @@ export interface TaskTotalExceeded {
 /** Por qué no cabe un adjunto: el tope de la tarea o una cuota de almacenamiento. */
 export type AttachmentLimitProblem = ({ reason: "task_total" } & TaskTotalExceeded) | { reason: "quota"; quota: QuotaExceeded };
 
-export type AttachmentCreateResult<A> = { ok: true; attachment: A } | ({ ok: false } & AttachmentLimitProblem);
+type AttachmentCreateResult<A> = { ok: true; attachment: A } | ({ ok: false } & AttachmentLimitProblem);
 
 type Client = Prisma.TransactionClient | typeof db;
 
 /** La tarea ya no existe (borrada mientras se subía el archivo): 404, sin error en el registro (queda como aviso). */
-export const taskGone = () => new AppError("La tarea ya no existe.", 404, "task_gone");
+const taskGone = () => new AppError("La tarea ya no existe.", 404, "task_gone");
 
 /**
  * ¿Cabe un adjunto de `size` bytes en la tarea? null si cabe; si no, el motivo (primero el tope de la tarea, después las

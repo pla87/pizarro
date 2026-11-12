@@ -1,5 +1,14 @@
-// Búsquedas sin distinguir mayúsculas ni tildes en PostgreSQL sin la extensión unaccent: se comparan los dos lados en
-// minúsculas y con translate() de las letras acentuadas a su base (como la búsqueda de releases). Funciones puras.
+// Búsquedas sin distinguir mayúsculas ni tildes, en el navegador (normalizeSearch) y en PostgreSQL sin la extensión
+// unaccent (foldAccents/foldedContains: se comparan los dos lados en minúsculas y con translate() de las letras
+// acentuadas a su base, como la búsqueda de releases). Funciones puras, sin dependencias: valen en el cliente.
+
+/**
+ * Minúsculas y sin marcas diacríticas («Canción» → «cancion»), para filtrar en el navegador: se aplica igual al texto y
+ * a lo buscado. Quita cualquier marca combinante tras NFD, no solo las tildes del español.
+ */
+export function normalizeSearch(s: string): string {
+  return s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+}
 
 /** Letras acentuadas (también en mayúscula, por si lower() no las baja) y su letra base, posición a posición. */
 export const ACCENTED = "áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ";

@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { dialogOpen, isTypingTarget, OPEN_PROJECT_MENU_EVENT } from "./shortcuts";
 
-export interface BoardShortcutHandlers {
+interface BoardShortcutHandlers {
   /** Alt+N: nueva tarea (o segunda tarea al lado si hay un modal de tarea abierto). */
   newTask: () => void;
   /** Alt+Shift+N */

@@ -15,7 +15,7 @@ import { assertBoardLimits, decodeText, foreignMaxBytes, parseForeign } from "./
 import { cleanName, clip, isDoneName } from "./text";
 import { FOREIGN_LIMITS, type ForeignBoard, type ForeignFormat, type ForeignPerson } from "./types";
 
-export interface ForeignImportOptions {
+interface ForeignImportOptions {
   isPrivate: boolean;
   t: T;
   /** Nombre del archivo sin extensión (nombre del proyecto si el archivo no trae uno). */

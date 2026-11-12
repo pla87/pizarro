@@ -27,7 +27,7 @@ export function resetSetupCache(): void {
 }
 
 /** Código de un solo uso nuevo en AppState (sustituye al anterior). Devuelve el código en claro para mostrarlo en el log. */
-export async function issueSetupCode(db: Pick<PrismaClient, "appState">, now: number = Date.now()): Promise<{ code: string; stored: StoredSetupCode }> {
+async function issueSetupCode(db: Pick<PrismaClient, "appState">, now: number = Date.now()): Promise<{ code: string; stored: StoredSetupCode }> {
   const code = generateSetupCode();
   const stored = hashSetupCode(code, now);
   const value = JSON.stringify(stored);
@@ -71,7 +71,7 @@ export interface SetupInput {
 }
 
 /** Valida los datos del asistente; lanza AppError con el primer problema. */
-export function validateSetupInput(i: Omit<SetupInput, "code">): { orgName: string; adminName: string; adminEmail: string } {
+function validateSetupInput(i: Omit<SetupInput, "code">): { orgName: string; adminName: string; adminEmail: string } {
   const orgName = i.orgName.trim();
   if (!orgName || orgName.length > 80) throw new AppError("Escribe el nombre de la organización (hasta 80 caracteres).");
   if (i.locale !== "es" && i.locale !== "en") throw new AppError("Idioma no válido.");

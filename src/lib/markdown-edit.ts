@@ -179,7 +179,7 @@ export function toggleWrap(value: string, start: number, end: number, before: st
   return { value: next, start: start + before.length, end: start + before.length + text.length };
 }
 
-export type LineFormat = "ul" | "ol" | "task" | "quote" | "h2" | "h3";
+type LineFormat = "ul" | "ol" | "task" | "quote" | "h2" | "h3";
 
 const PREFIX_RE = /^(\s*)(?:[-*+]\s+\[[ xX]\]\s+|[-*+]\s+|\d{1,9}[.)]\s+|>\s?|#{1,6}\s+)/;
 

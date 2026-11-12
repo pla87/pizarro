@@ -52,6 +52,7 @@ import { claimPaste, isTextTarget, pastedFiles, pasteClaimed, recoverEmptyImages
 import { draftKey, readDraft, type EditTaskDraft, type NewTaskDraft } from "./drafts";
 import { mentionsToPlain } from "@/lib/mentions";
 import { shouldRefreshOnFocus } from "@/lib/focus-refresh";
+import { normalizeSearch as normalize } from "@/lib/search-accents";
 import { cardCount } from "./count-texts";
 
 /**
@@ -178,9 +179,6 @@ function useStableItems(items: Items): Items {
   setStable(next);
   return next;
 }
-
-/** Minúsculas y sin acentos, para comparar el filtro. */
-const normalize = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
 function findContainer(items: Items, id: string): string | undefined {
   if (id.startsWith(COLUMN_PREFIX)) return id.slice(COLUMN_PREFIX.length);

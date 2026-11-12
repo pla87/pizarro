@@ -34,7 +34,7 @@ export const GMAIL_PRESET = { host: "smtp.gmail.com", port: 465, secure: true } 
 export const EMPTY_MAIL_SETTINGS: MailSettings = { host: "", port: 465, secure: true, user: "", fromName: "", fromAddress: "", hasPassword: false, mode: "gmail" };
 
 /** Proveedor de correo con preajuste. `hint`: qué usuario y contraseña espera (clave de traducción). */
-export interface MailPreset {
+interface MailPreset {
   id: string;
   label: string;
   host: string;
@@ -66,8 +66,8 @@ export function detectMailPreset(host: string, port: number): MailPreset | null 
 const EMAIL_RE = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]{2,}$/;
 const HOST_RE = /^[A-Za-z0-9]([A-Za-z0-9.-]{0,253}[A-Za-z0-9])?$/;
 
-export const isEmailAddress = (s: string) => s.length <= 200 && EMAIL_RE.test(s);
-export const isMailHost = (s: string) => HOST_RE.test(s);
+const isEmailAddress = (s: string) => s.length <= 200 && EMAIL_RE.test(s);
+const isMailHost = (s: string) => HOST_RE.test(s);
 
 /**
  * Modo guardado; sin él (ajustes de versiones anteriores) se deduce del servidor. Con smtp.gmail.com, si el remitente

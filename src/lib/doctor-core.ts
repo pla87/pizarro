@@ -29,7 +29,7 @@ export const DOCUMENTED_ENV_VARS = [
 /** Claves que deben tener al menos 32 caracteres: de ellas se dice también si el valor no sirve (sin decir cuál es). */
 const MIN32 = new Set(["SESSION_SECRET", "TOKEN_SECRET", "TOKEN_SECRET_PREVIOUS", "ENCRYPTION_KEY", "ENCRYPTION_KEY_PREVIOUS"]);
 
-export type EnvPresence = "set" | "unset" | "invalid";
+type EnvPresence = "set" | "unset" | "invalid";
 
 /** Nombre → «set» / «unset» (o «invalid» si una clave está definida pero no es válida). Nunca el valor. */
 export function envPresence(env: Env = process.env): Record<string, EnvPresence> {
@@ -88,7 +88,7 @@ export function messagingFlags(env: Env, rows: { key: string; value: string }[],
 }
 
 /** ¿El nombre de la variable sugiere un secreto? (sus valores se buscan y se tachan en todo el informe) */
-export const SECRET_NAME = /SECRET|KEY|PASS|TOKEN|DATABASE_URL|CLIENT_ID|PHONE_NUMBER/i;
+const SECRET_NAME = /SECRET|KEY|PASS|TOKEN|DATABASE_URL|CLIENT_ID|PHONE_NUMBER/i;
 /** Claves de objeto que nunca se copian al informe. */
 const SECRET_FIELD = /pass(word)?|token|secret|authorization|cookie|phone|email|^name$|userName|^ip$/i;
 
@@ -153,7 +153,7 @@ export function scrubDeep(value: unknown, ctx: ScrubContext, depth = 0): unknown
   return null;
 }
 
-export interface MigrationStatus {
+interface MigrationStatus {
   folder: number;
   applied: number;
   /** En la carpeta pero sin aplicar (falta `prisma migrate deploy`). */

@@ -45,8 +45,9 @@ const nextConfig: NextConfig = {
   env: { NEXT_PUBLIC_BUILD_ID: buildId, NEXT_PUBLIC_GIT_COMMIT: buildCommit(process.env), NEXT_PUBLIC_OFFICIAL_BUILD: official ?? "" },
   reactStrictMode: true,
   // bcryptjs: fuera del paquete para que esté en node_modules de la salida standalone; los hilos de trabajo que comprueban
-  // las contraseñas lo cargan desde ahí (src/lib/bcrypt-pool.ts).
-  serverExternalPackages: ["sharp", "@react-pdf/renderer", "bcryptjs"],
+  // las contraseñas lo cargan desde ahí (src/lib/bcrypt-pool.ts). @react-pdf/renderer no está aquí: el servidor de Next no
+  // lo carga (solo importa sus tipos); el PDF se genera en un worker con su propio paquete, dist/pdf-worker.mjs (postbuild).
+  serverExternalPackages: ["sharp", "bcryptjs"],
   experimental: {
     // Las imágenes van por /api/tasks/[id]/attachments; las acciones solo mueven JSON.
     serverActions: { bodySizeLimit: "1mb" },

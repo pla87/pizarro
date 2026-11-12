@@ -10,7 +10,7 @@ export const LOCK_MAINTENANCE = 741_031_001;
 export const LOCK_RELEASE_RESUME = 741_031_002;
 export const LOCK_MAIL = 741_031_003;
 
-export type LockResult<T> = { ran: true; value: T } | { ran: false };
+type LockResult<T> = { ran: true; value: T } | { ran: false };
 
 /**
  * Ejecuta `fn` solo si este proceso consigue el bloqueo `key` (pg_try_advisory_lock) en una conexión propia,
@@ -43,7 +43,7 @@ export interface JobDef {
   everyMs?: number;
 }
 
-export type JobOutcome = "ok" | "error" | "skipped";
+type JobOutcome = "ok" | "error" | "skipped";
 
 const MAX_ERROR_CHARS = 500;
 

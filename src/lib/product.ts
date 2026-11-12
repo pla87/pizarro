@@ -23,6 +23,7 @@ export const installUrl = (locale: string = "es"): string => (locale === "en" ? 
 export const INSTALL_DOCS_URL = `${REPO_URL}/blob/main/docs/INSTALL.md`;
 /** Imagen Docker publicada con cada versión (GitHub Container Registry). */
 export const IMAGE = "ghcr.io/pla87/pizarro";
+/** @public (scripts/build-site.mjs) */
 export const IMAGE_URL = `${REPO_URL}/pkgs/container/pizarro`;
 
 /**

@@ -319,7 +319,7 @@ function ReportDocument({ r, t, locale }: { r: Report; t: T; locale: string }) {
   );
 }
 
-export function renderReportPdf(report: Report, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
+function renderReportPdf(report: Report, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
   return renderToBuffer(<ReportDocument r={report} t={t} locale={locale} />);
 }
 
@@ -368,7 +368,7 @@ function WeekPlanDocument({ r, t, locale }: { r: WeekPlanPdfInput; t: T; locale:
   );
 }
 
-export function renderWeekPlanPdf(input: WeekPlanPdfInput, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
+function renderWeekPlanPdf(input: WeekPlanPdfInput, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
   return renderToBuffer(<WeekPlanDocument r={input} t={t} locale={locale} />);
 }
 
@@ -417,12 +417,12 @@ function ChecklistDocument({ r, t, locale }: { r: ChecklistPdfInput; t: T; local
   );
 }
 
-export function renderChecklistPdf(input: ChecklistPdfInput, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
+function renderChecklistPdf(input: ChecklistPdfInput, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
   return renderToBuffer(<ChecklistDocument r={input} t={t} locale={locale} />);
 }
 
 /** Tarea tal como se entrega al cliente: sin comentarios, notas internas ni datos de personas. */
-export interface DeliveryTask {
+interface DeliveryTask {
   title: string;
   kind: string;
   dueDate: string | null;
@@ -469,7 +469,7 @@ function DeliveryDocument({ r, t, locale }: { r: DeliveryPdfInput; t: T; locale:
   );
 }
 
-export function renderDeliveryPdf(input: DeliveryPdfInput, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
+function renderDeliveryPdf(input: DeliveryPdfInput, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
   return renderToBuffer(<DeliveryDocument r={input} t={t} locale={locale} />);
 }
 

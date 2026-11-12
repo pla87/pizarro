@@ -22,7 +22,7 @@ import { removeAttachmentFiles, removeReleaseAttachmentFiles } from "./uploads";
 // otra entrada UNDO, así que se puede alternar. Cualquier acción nueva del usuario en el proyecto
 // vacía su pila de rehacer. Cada pila guarda 10 entradas por usuario y proyecto.
 
-export const UNDO_LIMIT = 10;
+const UNDO_LIMIT = 10;
 export const UNDO_MAX_AGE_DAYS = 7;
 
 /** Campos de una tarea que se pueden restaurar (fechas en ISO). */
@@ -299,7 +299,7 @@ export interface OthersActivity {
 }
 
 /** Sin actividad de otras personas. */
-export const NO_OTHERS: OthersActivity = { touched: touchedTask([], ""), complete: true, fields: false, subtasks: false };
+const NO_OTHERS: OthersActivity = { touched: touchedTask([], ""), complete: true, fields: false, subtasks: false };
 
 /**
  * Cuando las entradas pudieron recortarse (entriesMayBeTrimmed), lo que hizo la persona ya no se sabe entero: se da por
@@ -389,17 +389,20 @@ function retainedAttachmentIds(ops: UndoOp[]): string[] {
 
 /**
  * De esos adjuntos, los que otra entrada (deshacer o rehacer, de cualquier persona) aún puede devolver: su fichero
- * debe seguir en el disco. Una sola consulta con contención jsonb sobre las operaciones de cada entrada.
+ * debe seguir en el disco. Una sola pasada por UndoEntry: se sacan con jsonb_path_query los ids que retiene cada
+ * entrada (las dos formas de `retainedAttachmentIds`) y se cruzan con los pedidos. Antes era un EXISTS con `@>` por
+ * cada id, que recorría la tabla entera por adjunto (segundos con miles de entradas, pagados al recortar la pila).
  */
 async function stillRetained(ids: string[]): Promise<Set<string>> {
   if (!ids.length) return new Set();
   const rows = await db.$queryRaw<{ id: string }[]>`
-    SELECT a."id" FROM unnest(${ids}::text[]) AS a("id")
-    WHERE EXISTS (
-      SELECT 1 FROM "UndoEntry" u
-      WHERE u."ops" @> jsonb_build_array(jsonb_build_object('t', 'attachment.restore', 'row', jsonb_build_object('id', a."id")))
-         OR u."ops" @> jsonb_build_array(jsonb_build_object('t', 'task.restore', 'snap', jsonb_build_object('attachments', jsonb_build_array(jsonb_build_object('id', a."id")))))
-    )`;
+    SELECT DISTINCT r."id" FROM "UndoEntry" u
+    CROSS JOIN LATERAL (
+      SELECT jsonb_path_query(u."ops", '$[*] ? (@.t == "attachment.restore").row.id') #>> '{}'
+      UNION ALL
+      SELECT jsonb_path_query(u."ops", '$[*] ? (@.t == "task.restore").snap.attachments[*].id') #>> '{}'
+    ) AS r("id")
+    JOIN unnest(${ids}::text[]) AS a("id") ON a."id" = r."id"`;
   return new Set(rows.map((r) => r.id));
 }
 

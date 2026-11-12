@@ -21,7 +21,7 @@ export interface ZipEntryInfo {
   offset: number;
 }
 
-export interface ZipReadLimits {
+interface ZipReadLimits {
   maxEntries: number;
   /** Suma de los tamaños descomprimidos declarados. */
   maxTotalSize: number;
@@ -29,7 +29,7 @@ export interface ZipReadLimits {
   maxRatio: number;
 }
 
-export const DEFAULT_ZIP_LIMITS: ZipReadLimits = { maxEntries: 100_000, maxTotalSize: 8 * 1024 ** 3, maxRatio: 1000 };
+const DEFAULT_ZIP_LIMITS: ZipReadLimits = { maxEntries: 100_000, maxTotalSize: 8 * 1024 ** 3, maxRatio: 1000 };
 
 /** ¿Es un nombre de entrada seguro? Relativo, sin «..», sin barras invertidas, sin NUL ni unidades de Windows. */
 export function isSafeEntryName(name: string): boolean {

@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import { logEvent } from "@/lib/log";
 import { emailEnabled, sendMail } from "@/lib/mail";
+import { logMailError } from "@/lib/mask-email";
 import { rateIp, rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { checkSetupCode, completeSetup, isSetupPending } from "@/lib/setup";
@@ -61,13 +62,13 @@ export async function sendSetupTestEmail(code: string, language: string, to: str
         text: translate(l, "Si lees esto, el envío de emails de Pizarro funciona correctamente."),
       });
     } catch (err) {
-      console.error("[setup] No se pudo enviar el email de prueba:", err);
+      logMailError("[setup] No se pudo enviar el email de prueba:", err);
       throw new AppError(translate(l, "No se pudo enviar el email de prueba. Revisa las variables SMTP_* y los logs del contenedor."));
     }
   });
 }
 
-export interface SetupForm {
+interface SetupForm {
   code: string;
   orgName: string;
   language: string;

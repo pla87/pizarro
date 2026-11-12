@@ -25,11 +25,11 @@ const trelloColor = (raw: string): string => {
 };
 
 /** ¿Es (probablemente) la exportación de un tablero de Trello? */
-export function looksLikeTrello(data: unknown): data is Obj {
+function looksLikeTrello(data: unknown): data is Obj {
   return isObj(data) && Array.isArray(data.cards) && Array.isArray(data.lists);
 }
 
-export interface TrelloOptions {
+interface TrelloOptions {
   t: T;
   /** Zona horaria con la que se pasa la fecha límite (instante UTC) a día. */
   timeZone?: string;

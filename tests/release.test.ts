@@ -101,6 +101,13 @@ test("nombre del ZIP de adjuntos: el mismo desde el diálogo y desde el históri
   assert.ok(releaseZipName({ day: "2026-11-11", number: 1, project: "x".repeat(300) }).length < 110);
 });
 
+test("nombre del ZIP de adjuntos en el idioma de quien lo descarga", () => {
+  assert.equal(releaseZipName({ day: "2026-11-11", number: 12, project: "Web" }), "release-2026-11-11-R12-Web-adjuntos.zip");
+  assert.equal(releaseZipName({ day: "2026-11-11", number: 12, project: "Web" }, 2, 3, "es"), "release-2026-11-11-R12-Web-adjuntos-2de3.zip");
+  assert.equal(releaseZipName({ day: "2026-11-11", number: 12, project: "Web" }, 1, 1, "en"), "release-2026-11-11-R12-Web-attachments.zip");
+  assert.equal(releaseZipName({ day: "2026-11-11" }, 2, 3, "en"), "release-2026-11-11-attachments-2of3.zip");
+});
+
 test("release notes en el idioma de quien la genera: «Otros», «Adjuntos», «enlace» y sin tareas", () => {
   const en = (s: string) => ({ Otros: "Others", Adjuntos: "Attachments", enlace: "link", "Sin tareas seleccionadas.": "No tasks selected." })[s] ?? s;
   const md = buildReleaseMarkdown({

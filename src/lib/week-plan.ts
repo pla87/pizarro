@@ -23,7 +23,7 @@ const byDueThenTitle = (a: WeekPlanTask, b: WeekPlanTask) =>
   (a.dueDate ?? "9999-99-99").localeCompare(b.dueDate ?? "9999-99-99") || a.title.localeCompare(b.title);
 
 /** «lunes, 26 oct» en el idioma de quien lee. */
-export function weekDayLabel(iso: string, locale: string): string {
+function weekDayLabel(iso: string, locale: string): string {
   return isoToDate(iso).toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "short", timeZone: "UTC" });
 }
 

@@ -11,7 +11,7 @@ import { createSession } from "./session";
 import { deviceLabel } from "./user-agent";
 import { makeT, toLocale } from "../i18n/core";
 
-export interface LoginUser {
+interface LoginUser {
   id: string;
   name: string;
   email: string;
