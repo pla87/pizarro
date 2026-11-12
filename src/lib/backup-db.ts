@@ -13,8 +13,17 @@ export interface Client extends RawSql {
   $transaction<R>(fn: (tx: RawSql) => Promise<R>, options?: { maxWait?: number; timeout?: number; isolationLevel?: "RepeatableRead" }): Promise<R>;
 }
 
+export interface ForeignKey {
+  name: string;
+  child: string;
+  parent: string;
+  deferrable: boolean;
+  columns: string[];
+  refColumns: string[];
+}
+
 const FETCH_ROWS = 500;
-const INSERT_ROWS = 500;
+export const INSERT_ROWS = 500;
 /** Tablas de Prisma que no se copian: la restauración parte de una BD con las migraciones ya aplicadas. */
 const SKIP_TABLES = new Set(["_prisma_migrations"]);
 
@@ -30,15 +39,34 @@ export async function listTables(sql: RawSql): Promise<string[]> {
   return rows.map((r) => r.t).filter((t) => !SKIP_TABLES.has(t));
 }
 
-async function listForeignKeys(sql: RawSql): Promise<{ child: string; parent: string }[]> {
+/** Claves foráneas del esquema public: nombre, tablas, columnas y si ya se pueden aplazar. */
+export async function listForeignKeys(sql: RawSql): Promise<ForeignKey[]> {
   return sql.$queryRawUnsafe(
-    `SELECT c.relname AS child, p.relname AS parent
+    `SELECT k.conname AS name, c.relname AS child, p.relname AS parent, k.condeferrable AS deferrable,
+            ARRAY(SELECT a.attname::text FROM unnest(k.conkey) WITH ORDINALITY x(n, i) JOIN pg_attribute a ON a.attrelid = k.conrelid AND a.attnum = x.n ORDER BY x.i) AS columns,
+            ARRAY(SELECT a.attname::text FROM unnest(k.confkey) WITH ORDINALITY x(n, i) JOIN pg_attribute a ON a.attrelid = k.confrelid AND a.attnum = x.n ORDER BY x.i) AS "refColumns"
        FROM pg_constraint k
        JOIN pg_class c ON c.oid = k.conrelid
        JOIN pg_class p ON p.oid = k.confrelid
        JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE k.contype = 'f' AND n.nspname = 'public'`,
+      WHERE k.contype = 'f' AND n.nspname = 'public'
+      ORDER BY c.relname, k.conname`,
   );
+}
+
+/**
+ * Claves foráneas que la carga por lotes no puede comprobar al momento: las de una tabla a sí misma (Task.blockedById,
+ * Task.recurrenceFromId, TaskComment.parentId, Column.routineTargetColumnId…) y las que apuntan a una tabla que se carga
+ * después (un ciclo entre tablas). El volcado sigue el orden físico de las filas, y una fila editada se va al final:
+ * la que apunta a ella puede llegar en un lote anterior. Solo las que no son ya aplazables (`DEFERRABLE`).
+ */
+function foreignKeysToDefer(fks: ForeignKey[], order: string[]): ForeignKey[] {
+  const at = new Map(order.map((t, i) => [t, i]));
+  return fks.filter((k) => {
+    const child = at.get(k.child);
+    const parent = at.get(k.parent);
+    return !k.deferrable && child !== undefined && parent !== undefined && parent >= child;
+  });
 }
 
 /** Última migración aplicada con éxito (o null si la tabla no existe). */
@@ -113,9 +141,15 @@ export async function restoreDatabase(client: Client, file: string, key: Buffer,
     if (row?.n) throw new Error(`La base de datos NO está vacía (la tabla ${name} tiene filas). La restauración solo se hace sobre una base de datos recién migrada, sin usuarios ni proyectos (no arranques la app antes: el seed crea el administrador).`);
   }
 
+  // Las claves foráneas que no se pueden comprobar lote a lote (ver foreignKeysToDefer) se aplazan hasta el final de la
+  // carga dentro de la misma transacción y vuelven a ser como eran antes del COMMIT. Así sirven también las copias ya
+  // hechas, sin cambiar el formato ni el esquema.
+  const defer = foreignKeysToDefer(await listForeignKeys(client), m.tables.map((t) => t.name));
   await client.$transaction(
     async (tx) => {
       await tx.$executeRawUnsafe(`TRUNCATE TABLE ${tables.map(quoteIdent).join(", ")} CASCADE`);
+      for (const k of defer) await tx.$executeRawUnsafe(`ALTER TABLE ${quoteIdent(k.child)} ALTER CONSTRAINT ${quoteIdent(k.name)} DEFERRABLE INITIALLY IMMEDIATE`);
+      if (defer.length) await tx.$executeRawUnsafe(`SET CONSTRAINTS ${defer.map((k) => quoteIdent(k.name)).join(", ")} DEFERRED`);
       const inserted = new Map<string, number>();
       let table: string | null = null;
       let batch: string[] = [];
@@ -139,6 +173,13 @@ export async function restoreDatabase(client: Client, file: string, key: Buffer,
         if (batch.length >= INSERT_ROWS) await flush();
       }
       await flush();
+      if (defer.length) {
+        log("Comprobando las referencias entre filas…");
+        // Comprueba ahora lo aplazado (una referencia que de verdad falte hace fallar la restauración aquí) y deja las
+        // claves como estaban: sin eventos pendientes, ALTER TABLE ya se puede hacer en la misma transacción.
+        await tx.$executeRawUnsafe(`SET CONSTRAINTS ${defer.map((k) => quoteIdent(k.name)).join(", ")} IMMEDIATE`);
+        for (const k of defer) await tx.$executeRawUnsafe(`ALTER TABLE ${quoteIdent(k.child)} ALTER CONSTRAINT ${quoteIdent(k.name)} NOT DEFERRABLE`);
+      }
       for (const t of m.tables) {
         if ((inserted.get(t.name) ?? 0) !== t.rows) throw new Error(`Tabla ${t.name}: se esperaban ${t.rows} filas y se insertaron ${inserted.get(t.name) ?? 0}.`);
       }

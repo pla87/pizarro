@@ -15,6 +15,7 @@ import {
   selectBackupsToKeep,
   verifyBackupFile,
   writeBackupFile,
+  type ReferenceDef,
   type TableBatch,
 } from "../src/lib/backup-core";
 
@@ -180,4 +181,46 @@ test("retención: una copia hecha tras perder los datos no borra la buena del mi
   const many = Array.from({ length: 6 }, (_, i) => backupFileName(new Date(Date.UTC(2026, 10, 2, 10 + i))));
   const keep = selectBackupsToKeep(["pizarro-backup-20261101T031500Z.pzbak", ...many]);
   assert.deepEqual([...keep].sort(), ["pizarro-backup-20261101T031500Z.pzbak", ...many.slice(3)].sort());
+});
+
+test("copia cortada (sin manifiesto): restaurarla da un mensaje comprensible, no el de OpenSSL", async () => {
+  const { parseSource, restoreBackup } = await import("../src/lib/backup-restore");
+  await withTmp(async (dir) => {
+    const file = path.join(dir, "pizarro-backup-20261101T030000Z.pzbak");
+    await writeBackupFile({ file, key, tables: tables(), migration: "20261031120000_job_run" });
+    const good = await readFile(file);
+    await writeFile(file, good.subarray(0, good.length - 40));
+    const explained = (err: Error) => /incompleto o dañado/.test(err.message) && !/Unsupported state|authenticate data/.test(err.message);
+    await assert.rejects(verifyBackupFile(file, key), explained);
+    await assert.rejects(
+      restoreBackup({ databaseUrl: "postgresql://nadie@127.0.0.1:1/nada", source: parseSource(file, { localDir: dir }), key, migrationsDir: path.resolve("prisma/migrations") }),
+      explained,
+    );
+  });
+});
+
+test("verificación de referencias: hacia delante valen; si falta la fila apuntada, la copia no se podría restaurar", async () => {
+  const refs: ReferenceDef[] = [
+    { child: "Task", columns: ["blockedById"], parent: "Task", refColumns: ["id"] },
+    { child: "Task", columns: ["projectId"], parent: "Project", refColumns: ["id"] },
+    { child: "Comment", columns: ["parentId"], parent: "Comment", refColumns: ["id"] },
+  ];
+  const row = (o: object) => JSON.stringify(o);
+  const data = (dangling: boolean) =>
+    async function* (): AsyncGenerator<TableBatch> {
+      yield { name: "Project", rows: [row({ id: "p1" })] };
+      // t1 apunta a t3, que va después (lo normal tras editar t3); t2 no apunta a nada.
+      yield { name: "Task", rows: [row({ id: "t1", projectId: "p1", blockedById: "t3" }), row({ id: "t2", projectId: "p1", blockedById: null })] };
+      yield { name: "Task", rows: [row({ id: "t3", projectId: "p1", blockedById: dangling ? "t9" : "t1" })] };
+      yield { name: "Comment", rows: [row({ id: "c1", parentId: "c2" }), row({ id: "c2", parentId: null })] };
+    };
+  await withTmp(async (dir) => {
+    const file = path.join(dir, "a.pzbak");
+    await writeBackupFile({ file, key, tables: data(false)(), migration: null });
+    assert.equal((await verifyBackupFile(file, key, { references: refs })).referencesChecked, 6);
+    await writeBackupFile({ file, key, tables: data(true)(), migration: null });
+    await assert.rejects(verifyBackupFile(file, key, { references: refs }), /1 valores de Task \(blockedById\) apuntan a filas de Task que no están en la copia/);
+    // Sin referencias que comprobar, como antes.
+    assert.equal((await verifyBackupFile(file, key)).referencesChecked, 0);
+  });
 });

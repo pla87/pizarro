@@ -2,6 +2,7 @@
 // varios procesos, solo uno las ejecuta cada vez (bloqueo de Postgres) y la última ejecución queda en JobRun.
 
 import type { JobDef } from "./jobs";
+import { LOCK_MAIL, LOCK_MAINTENANCE, LOCK_RELEASE_RESUME } from "./advisory-locks";
 import { isShuttingDown } from "./shutdown";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -210,7 +211,7 @@ async function runLocked(key: LockName, jobs: readonly JobDef[]): Promise<void> 
   // Apagado del servidor en marcha: no se empieza trabajo nuevo.
   if (isShuttingDown()) return;
   try {
-    const { withAdvisoryLock, runJob, LOCK_MAINTENANCE, LOCK_MAIL, LOCK_RELEASE_RESUME } = await import("@/lib/jobs");
+    const { withAdvisoryLock, runJob } = await import("@/lib/jobs");
     const lockKey = { maintenance: LOCK_MAINTENANCE, mail: LOCK_MAIL, releaseResume: LOCK_RELEASE_RESUME }[key];
     const res = await withAdvisoryLock(lockKey, async () => {
       for (const job of jobs) await runJob(job);

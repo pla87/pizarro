@@ -327,6 +327,21 @@ describe("ficheros de adjuntos retenidos por varias entradas de deshacer", () =>
     await discardEntries([await db.undoEntry.findUniqueOrThrow({ where: { id: third }, select: { id: true, ops: true } })]);
     assert.equal(await exists(attachmentPath(x.id, "file")), false);
   });
+
+  test("la limpieza no borra el fichero de una entrada que un deshacer en curso ya ha retirado", async () => {
+    const { a, f } = await twoPeople();
+    const task = await makeTask(f);
+    const x = await att(task.id, "y.txt", a.id);
+    await writeFile(attachmentPath(x.id, "file"), "contenido");
+    await loginAs(a);
+    const id = expectOk(await deleteAttachment(x.id)).undo.id!;
+    // La limpieza de entradas viejas la lee (límite de 7 días)…
+    const stale = await db.undoEntry.findUniqueOrThrow({ where: { id }, select: { id: true, ops: true } });
+    // …y entre medias la persona pulsa «Deshacer»: applyEntry retira la entrada antes de devolver el adjunto.
+    await db.undoEntry.deleteMany({ where: { id } });
+    await discardEntries([stale]);
+    assert.ok(await exists(attachmentPath(x.id, "file")), "el deshacer en curso aún lo necesita");
+  });
 });
 
 describe("comentarios importados (sin usuario en Pizarro)", () => {

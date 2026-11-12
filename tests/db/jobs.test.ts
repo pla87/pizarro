@@ -107,7 +107,7 @@ describe("JobRun", () => {
 
 describe("correo programado", () => {
   test("va con su propio bloqueo: sale aunque la pasada de mantenimiento (copias) siga en marcha", async () => {
-    const { LOCK_MAINTENANCE } = await import("../../src/lib/jobs");
+    const { LOCK_MAINTENANCE } = await import("../../src/lib/advisory-locks");
     const { MAIL_JOBS, MAINTENANCE_JOBS, SCHEDULED_JOBS, runMail } = await import("../../src/lib/maintenance");
     const mail: string[] = MAIL_JOBS.map((j) => j.name);
     assert.deepEqual(mail, ["periodicMail", "waitingReminders"]);

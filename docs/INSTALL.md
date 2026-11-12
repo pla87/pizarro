@@ -364,6 +364,8 @@ services:
 ```
 
 Añade `BACKUP_EXTERNAL_DIR="/copias-externas"` a `.env` y `docker compose up -d`. Puedes usar a la vez S3 y una carpeta.
+La carpeta tiene que existir: Pizarro no la crea (si falta, la subida queda *Con error*: «La carpeta del destino externo
+no existe»), para no dejar las copias en el disco del sistema cuando el disco externo no está montado.
 
 ### 4.3 Copia manual (opcional)
 

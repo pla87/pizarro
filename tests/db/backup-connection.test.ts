@@ -1,8 +1,9 @@
 // El volcado de cada copia va en una conexión propia (no ocupa una del pool de la app durante minutos), con la misma
 // instantánea consistente (REPEATABLE READ) y la conexión cerrada siempre: al terminar, si falla y si pasa del tope.
+// También: una sola copia a la vez entre procesos y copias cortadas entre el volcado y el manifiesto.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createServer, type Server, type Socket } from "node:net";
@@ -130,5 +131,91 @@ describe("conexión propia con tope para conectar", () => {
       else process.env.UPLOAD_DIR = saved.up;
       await rm(uploads, { recursive: true, force: true });
     }
+  });
+});
+
+/** Ejecuta `fn` con una UPLOAD_DIR nueva, una BACKUP_KEY y estas variables; después deja el entorno como estaba. */
+async function withBackupEnv(vars: Record<string, string>, fn: (uploads: string) => Promise<void>): Promise<void> {
+  const uploads = await mkdtemp(path.join(tmpdir(), "pz-uploads-"));
+  const names = ["UPLOAD_DIR", "BACKUP_KEY", ...Object.keys(vars)];
+  const saved = Object.fromEntries(names.map((k) => [k, process.env[k]]));
+  Object.assign(process.env, { UPLOAD_DIR: uploads, BACKUP_KEY: randomBytes(32).toString("base64"), ...vars });
+  try {
+    await fn(uploads);
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    await rm(uploads, { recursive: true, force: true });
+  }
+}
+
+describe("copias: una sola a la vez y copias cortadas", () => {
+  test("una sola copia o subida a la vez entre procesos (bloqueo LOCK_BACKUP de Postgres)", async () => {
+    const { createBackup, listBackups, readStatus, syncExternal } = await import("../../src/lib/backup");
+    const { withAdvisoryLock } = await import("../../src/lib/jobs");
+    const { LOCK_BACKUP } = await import("../../src/lib/advisory-locks");
+    const external = await mkdtemp(path.join(tmpdir(), "pz-ext-"));
+    try {
+      await withBackupEnv({ BACKUP_EXTERNAL_DIR: external }, async () => {
+        const first = await createBackup();
+        assert.equal(first.ok, true, first.error);
+        const status = await readStatus();
+        // Otro proceso (otra conexión) está copiando: aquí no se hace nada, ni se anota como fallo.
+        let release!: () => void;
+        const held = new Promise<void>((r) => (release = r));
+        let entered!: () => void;
+        const inside = new Promise<void>((r) => (entered = r));
+        const other = withAdvisoryLock(LOCK_BACKUP, async () => {
+          entered();
+          await held;
+        });
+        await inside;
+        try {
+          await new Promise((r) => setTimeout(r, 1100)); // los nombres de las copias van por segundos
+          const busy = await createBackup();
+          assert.equal(busy.ok, false);
+          assert.match(busy.error ?? "", /Ya hay una copia en curso/);
+          assert.deepEqual(await syncExternal({ force: true }), [], "la subida tampoco");
+          assert.deepEqual((await listBackups()).map((b) => b.name), [first.file]);
+          assert.deepEqual(await readStatus(), status, "no cuenta como copia fallida");
+        } finally {
+          release();
+          await other;
+        }
+        const after = await createBackup();
+        assert.equal(after.ok, true, after.error);
+        assert.deepEqual((await syncExternal()).map((r) => r.ok), [true]);
+      });
+    } finally {
+      await rm(external, { recursive: true, force: true });
+    }
+  });
+
+  test("copia cortada entre el volcado y el manifiesto: no es la última ni frena la copia diaria", async () => {
+    const { createBackup, dailyBackupJob, latestBackupPath, listBackups, readStatus } = await import("../../src/lib/backup");
+    const { backupFileName } = await import("../../src/lib/backup-core");
+    await withBackupEnv({}, async (uploads) => {
+      const good = await createBackup();
+      assert.equal(good.ok, true, good.error);
+      const backups = path.join(uploads, "backups");
+      // Durante la copia, el volcado es un temporal; el .pzbak solo aparece con su manifiesto.
+      assert.deepEqual((await readdir(backups)).filter((n) => n.endsWith(".tmp")), []);
+      assert.ok((await readdir(backups)).includes(good.file!.replace(/\.pzbak$/, ".pzman")));
+      // Un volcado sin manifiesto, más reciente (de una versión anterior, o de un corte justo antes del manifiesto).
+      const cut = backupFileName(new Date(Date.now() + 20 * 3600 * 1000));
+      await copyFile(path.join(backups, good.file!), path.join(backups, cut));
+      assert.deepEqual((await listBackups()).map((b) => b.name), [good.file]);
+      assert.equal((await latestBackupPath())?.name, good.file, "ni se descarga ni se prueba como «la última»");
+      // Pasado un día desde la buena, la tarea diaria hace copia aunque el volcado cortado sea de hace 4 h.
+      const before = (await readStatus()).lastBackup?.at;
+      await new Promise((r) => setTimeout(r, 1100));
+      await dailyBackupJob(Date.now() + 24 * 3600 * 1000);
+      const last = (await readStatus()).lastBackup;
+      assert.notEqual(last?.at, before, "se ha hecho la copia diaria");
+      assert.equal(last?.ok, true, last?.error);
+      assert.equal((await listBackups()).length, 2);
+    });
   });
 });

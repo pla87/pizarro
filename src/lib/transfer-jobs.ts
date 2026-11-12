@@ -3,6 +3,7 @@ import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import type { Prisma } from "@/generated/prisma/client";
 import { makeT, toLocale, type T } from "@/i18n/core";
+import { LOCK_TRANSFER_CLAIM } from "./advisory-locks";
 import { db } from "./db";
 import { assertDiskRoom, isNoSpaceError, NO_SPACE_MESSAGE, releaseDisk, reserveDisk } from "./disk-space";
 import { AppError } from "./errors";
@@ -43,7 +44,6 @@ const HEARTBEAT_MS = 10_000;
 const SWEEP_EVERY_MS = 20_000;
 /** Veces que una exportación interrumpida por un reinicio se vuelve a poner en cola antes de darla por fallida. */
 const MAX_ATTEMPTS = 2;
-const LOCK_TRANSFER_CLAIM = 741_031_003;
 const INTERRUPTED = "Interrumpido por un reinicio";
 /** Hueco de más que se pide al disco sobre el tamaño del archivo al importar (imágenes recodificadas, temporales…). */
 const IMPORT_FACTOR = 1.5;

@@ -8,7 +8,7 @@ import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { backupStem, selectBackupsToKeep } from "./backup-core";
+import { backupStem, parseBackupFileName, selectBackupsToKeep } from "./backup-core";
 import { decodeManifest, encryptFileObject, mapLimit, objectKey, objectSize, selectGarbage, uniqueObjects, FILES_PREFIX, type FullManifest, type ManifestFile } from "./backup-files";
 import { parseS3Env, S3Client, type UploadBody } from "./backup-s3";
 
@@ -39,14 +39,28 @@ function safeKey(key: string): string {
 export const TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export class DirDestination implements BackupDestination {
-  constructor(readonly id: DestinationId, readonly root: string, readonly files: boolean, readonly label = root) {}
+  /**
+   * `mustExist`: la carpeta raíz no se crea sola (BACKUP_EXTERNAL_DIR). Si falta (disco sin montar, ruta mal escrita),
+   * subir falla con un error claro en vez de crearla y llenar el disco del sistema con lo que debía ir fuera.
+   */
+  constructor(readonly id: DestinationId, readonly root: string, readonly files: boolean, readonly label = root, readonly mustExist = false) {}
 
   private file(key: string): string {
     return path.join(this.root, ...safeKey(key).split("/"));
   }
 
+  private async checkRoot(): Promise<void> {
+    if (!this.mustExist) return;
+    const st = await stat(this.root).catch((err: NodeJS.ErrnoException) => {
+      if (err.code === "ENOENT") throw new Error(`La carpeta del destino externo no existe: ${this.root}. Créala o monta el disco; no se crea sola para no dejar las copias en el disco del sistema.`);
+      throw err;
+    });
+    if (!st.isDirectory()) throw new Error(`El destino externo no es una carpeta: ${this.root}.`);
+  }
+
   async put(key: string, body: UploadBody): Promise<void> {
     const file = this.file(key);
+    await this.checkRoot();
     await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
     const tmp = `${file}.${process.pid}.tmp`;
     try {
@@ -184,7 +198,7 @@ export function externalDestinations(env: Record<string, string | undefined> = p
   const dir = env.BACKUP_EXTERNAL_DIR?.trim();
   if (dir) {
     if (!path.isAbsolute(dir)) errors.push("BACKUP_EXTERNAL_DIR debe ser una ruta absoluta.");
-    else destinations.push(new DirDestination("dir", path.resolve(dir), true, `${path.resolve(dir)}`));
+    else destinations.push(new DirDestination("dir", path.resolve(dir), true, `${path.resolve(dir)}`, true));
   }
   const s3 = parseS3Env(env);
   if (s3.error) errors.push(s3.error);
@@ -208,8 +222,21 @@ export function localFilesEnabled(env: Record<string, string | undefined> = proc
 export const manifestKey = (stem: string) => `${stem}.pzman`;
 export const dumpKey = (stem: string) => `${stem}.pzbak`;
 
+export interface StemInfo {
+  stem: string;
+  hasManifest: boolean;
+  dumpBytes: number;
+  /**
+   * Copia cortada: volcado sin manifiesto, más reciente que alguna copia con manifiesto (el proceso se paró entre el
+   * volcado y el manifiesto). No cuenta como copia: ni como la última, ni para la tarea diaria, ni para la retención,
+   * que la borra pasadas 24 h. Las copias sin manifiesto anteriores a todas las que lo tienen son de versiones
+   * antiguas (solo base de datos) y siguen valiendo.
+   */
+  partial: boolean;
+}
+
 /** Raíces de las copias de un destino (las que tienen volcado), la más reciente primero. */
-export async function listStems(dest: BackupDestination): Promise<{ stem: string; hasManifest: boolean; dumpBytes: number }[]> {
+export async function listStems(dest: BackupDestination): Promise<StemInfo[]> {
   const byStem = new Map<string, { stem: string; hasManifest: boolean; dumpBytes: number; hasDump: boolean }>();
   for await (const { key, size } of dest.list("")) {
     const stem = backupStem(key);
@@ -222,7 +249,14 @@ export async function listStems(dest: BackupDestination): Promise<{ stem: string
     }
     byStem.set(stem, row);
   }
-  return [...byStem.values()].filter((r) => r.hasDump).map(({ stem, hasManifest, dumpBytes }) => ({ stem, hasManifest, dumpBytes })).sort((a, b) => b.stem.localeCompare(a.stem));
+  const rows = [...byStem.values()].filter((r) => r.hasDump).sort((a, b) => b.stem.localeCompare(a.stem));
+  const oldestWithManifest = rows.filter((r) => r.hasManifest).at(-1)?.stem;
+  return rows.map(({ stem, hasManifest, dumpBytes }) => ({ stem, hasManifest, dumpBytes, partial: !hasManifest && oldestWithManifest !== undefined && stem > oldestWithManifest }));
+}
+
+/** Fecha de una copia por su raíz (pizarro-backup-AAAAMMDDTHHMMSSZ). */
+export function stemDate(stem: string): Date | null {
+  return parseBackupFileName(dumpKey(stem));
 }
 
 async function readBuffer(src: AsyncIterable<Buffer>, limit = 512 * 1024 * 1024): Promise<Buffer> {
@@ -279,21 +313,45 @@ async function* streamFrom(open: () => Promise<AsyncIterable<Buffer>>): AsyncGen
 
 /** Por debajo de estos tamaños, la copia del destino es tan pequeña que no se compara (instalación recién empezada). */
 export const SHRINK_MIN_ROWS = 500;
+const SHRINK_MIN_CORE_ROWS = 50;
 export const SHRINK_MIN_FILES = 20;
 
+/**
+ * Tablas que dicen cuánto contenido hay (personas, proyectos y tareas). El total de filas no sirve: lo inflan los
+ * registros, el deshacer, las sesiones y los avisos, que se vacían solos (una limpieza de registros no es una pérdida).
+ */
+const SHRINK_CORE_TABLES = ["User", "Project", "Task"] as const;
+
 export interface ShrinkProblem {
-  what: "rows" | "files";
+  /** "core": personas, proyectos y tareas; "rows": todas las filas (manifiestos antiguos, sin cuentas por tabla). */
+  what: "core" | "rows" | "files";
   local: number;
   remote: number;
 }
 
+/** Filas de personas, proyectos y tareas de una copia, o null si su manifiesto es anterior a las cuentas por tabla. */
+export function coreRows(db: { counts?: Record<string, number> }): number | null {
+  if (!db.counts) return null;
+  return SHRINK_CORE_TABLES.reduce((n, t) => n + (db.counts![t] ?? 0), 0);
+}
+
+interface ShrinkSide {
+  rows: number;
+  fileCount: number;
+  /** Personas + proyectos + tareas (null o ausente: manifiesto sin cuentas por tabla). */
+  core?: number | null;
+}
+
 /**
- * ¿Es la copia nueva sospechosamente menor que la última del destino? Menos de la mitad de filas (con al menos
- * SHRINK_MIN_ROWS en el destino) o de ficheros (con al menos SHRINK_MIN_FILES). Pasa al arrancar sobre una base de
- * datos o un volumen nuevos tras perder los datos: subirla y aplicar la retención borraría la copia buena.
+ * ¿Es la copia nueva sospechosamente menor que la última del destino? Menos de la mitad de personas, proyectos y
+ * tareas (con al menos SHRINK_MIN_CORE_ROWS en el destino; si alguno de los dos manifiestos no tiene cuentas por tabla,
+ * de filas en total con al menos SHRINK_MIN_ROWS) o de ficheros (con al menos SHRINK_MIN_FILES). Pasa al arrancar sobre
+ * una base de datos o un volumen nuevos tras perder los datos: subirla y aplicar la retención borraría la copia buena.
  */
-export function backupShrink(local: { rows: number; fileCount: number }, remote: { rows: number; fileCount: number }): ShrinkProblem | null {
-  if (remote.rows >= SHRINK_MIN_ROWS && local.rows < remote.rows / 2) return { what: "rows", local: local.rows, remote: remote.rows };
+export function backupShrink(local: ShrinkSide, remote: ShrinkSide): ShrinkProblem | null {
+  if (local.core != null && remote.core != null) {
+    if (remote.core >= SHRINK_MIN_CORE_ROWS && local.core < remote.core / 2) return { what: "core", local: local.core, remote: remote.core };
+  } else if (remote.rows >= SHRINK_MIN_ROWS && local.rows < remote.rows / 2) return { what: "rows", local: local.rows, remote: remote.rows };
   if (remote.fileCount >= SHRINK_MIN_FILES && local.fileCount < remote.fileCount / 2) return { what: "files", local: local.fileCount, remote: remote.fileCount };
   return null;
 }
@@ -311,7 +369,10 @@ export async function checkShrink(dest: BackupDestination, manifest: FullManifes
   } catch (err) {
     return { problem: null, unreadable: `${latest.stem}: ${err instanceof Error ? err.message : err}` };
   }
-  const problem = backupShrink({ rows: manifest.db.rows, fileCount: manifest.fileCount }, { rows: remote.db.rows, fileCount: remote.fileCount });
+  const problem = backupShrink(
+    { rows: manifest.db.rows, fileCount: manifest.fileCount, core: coreRows(manifest.db) },
+    { rows: remote.db.rows, fileCount: remote.fileCount, core: coreRows(remote.db) },
+  );
   return { problem: problem && { ...problem, stem: latest.stem } };
 }
 
@@ -326,13 +387,15 @@ export interface SyncResult {
 /**
  * Copia una copia completa a `dest`: primero los objetos que faltan (lista una vez lo que ya hay, así se puede
  * reanudar tras un fallo), después el volcado y, al final, el manifiesto (que es lo que hace «existir» la copia).
- * `dump` abre el .pzbak local. Lanza en el primer error, sin subir el manifiesto.
+ * `dump` abre el .pzbak local; con `place` (el destino local), lo pone en su sitio en vez de copiarlo: el volcado se
+ * escribe como temporal y solo pasa a llamarse .pzbak justo antes del manifiesto. Lanza en el primer error, sin subir el
+ * manifiesto.
  */
 export async function syncBackup(
   dest: BackupDestination,
   manifest: FullManifest,
   manifestBytes: Buffer,
-  dump: { size: number; open: () => AsyncIterable<Buffer> },
+  dump: { size: number; open: () => AsyncIterable<Buffer>; place?: () => Promise<void> },
   src: ObjectSources,
   log: (m: string) => void = () => {},
 ): Promise<SyncResult> {
@@ -358,8 +421,11 @@ export async function syncBackup(
     });
   }
   if ((await dest.head(dumpKey(manifest.stem))) !== manifest.db.bytes) {
-    await dest.put(dumpKey(manifest.stem), { size: manifest.db.bytes, stream: dump.open });
-    result.bytes += manifest.db.bytes;
+    if (dump.place) await dump.place();
+    else {
+      await dest.put(dumpKey(manifest.stem), { size: manifest.db.bytes, stream: dump.open });
+      result.bytes += manifest.db.bytes;
+    }
   }
   await dest.put(manifestKey(manifest.stem), manifestBytes);
   result.bytes += manifestBytes.length;
@@ -367,6 +433,7 @@ export async function syncBackup(
 }
 
 export interface PruneResult {
+  /** Copias borradas por la retención (y copias cortadas de más de 24 h). */
   removedBackups: number;
   removedObjects: number;
   /** El almacén no se limpió porque algún manifiesto conservado no se pudo leer (por prudencia). */
@@ -378,36 +445,37 @@ export interface PruneResult {
 /**
  * Retención de un destino: conserva las copias de selectBackupsToKeep (14 diarias, 6 mensuales y las 3 más
  * recientes) y borra las demás; después borra los objetos que no nombra ningún manifiesto conservado. Si algún
- * manifiesto conservado no se puede leer, no se borra ningún objeto (mejor ocupar sitio que perder ficheros). En una
+ * manifiesto conservado no se puede leer, no se borra ningún objeto (mejor ocupar sitio que perder ficheros). Las copias
+ * cortadas (volcado sin manifiesto, ver StemInfo) no cuentan para la retención y se borran pasadas 24 h. En una
  * carpeta, además, borra los temporales de escrituras interrumpidas de más de 24 h.
+ *
+ * En un destino que ya no guarda ficheros (el local al configurar un destino externo, sin BACKUP_LOCAL_FILES=1), solo
+ * las copias hechas cuando sí los guardaba retienen objetos: así el almacén antiguo se vacía a medida que la retención
+ * borra esas copias, y no de golpe antes de que el destino externo tenga ninguna copia buena.
  */
 export async function pruneDestination(dest: BackupDestination, key: Buffer, opts: { daily?: number; monthly?: number; recent?: number; extraKeys?: (stem: string) => string[]; now?: number } = {}): Promise<PruneResult> {
   const removedTemp = dest instanceof DirDestination ? await dest.cleanTemp(TEMP_MAX_AGE_MS, opts.now) : undefined;
-  const result = await pruneBackups(dest, key, opts);
+  const result = await pruneBackups(dest, key, { ...opts, now: opts.now ?? Date.now() });
   return removedTemp === undefined ? result : { ...result, removedTemp };
 }
 
-async function pruneBackups(dest: BackupDestination, key: Buffer, opts: { daily?: number; monthly?: number; recent?: number; extraKeys?: (stem: string) => string[] }): Promise<PruneResult> {
+async function pruneBackups(dest: BackupDestination, key: Buffer, opts: { daily?: number; monthly?: number; recent?: number; extraKeys?: (stem: string) => string[]; now: number }): Promise<PruneResult> {
   const stems = await listStems(dest);
-  const keep = selectBackupsToKeep(stems.map((s) => dumpKey(s.stem)), opts.daily, opts.monthly, opts.recent);
+  const keep = selectBackupsToKeep(stems.filter((s) => !s.partial).map((s) => dumpKey(s.stem)), opts.daily, opts.monthly, opts.recent);
   let removedBackups = 0;
   for (const s of stems) {
-    if (keep.has(dumpKey(s.stem))) continue;
+    if (s.partial ? opts.now - (stemDate(s.stem)?.getTime() ?? 0) < TEMP_MAX_AGE_MS : keep.has(dumpKey(s.stem))) continue;
     // El manifiesto primero: una copia sin manifiesto ya no retiene objetos.
     for (const k of [manifestKey(s.stem), dumpKey(s.stem), ...(opts.extraKeys?.(s.stem) ?? [])]) await dest.delete(k);
     removedBackups++;
-  }
-  if (!dest.files) {
-    // Destino sin ficheros (BACKUP_LOCAL_FILES=0): lo que quedara de antes en su almacén ya no hace falta.
-    const all = [...(await listObjectKeys(dest))];
-    for (const k of all) await dest.delete(k);
-    return { removedBackups, removedObjects: all.length, gcSkipped: null };
   }
   const kept: { files: { o: string }[] }[] = [];
   for (const s of stems) {
     if (!keep.has(dumpKey(s.stem)) || !s.hasManifest) continue;
     try {
-      kept.push({ files: (await readManifest(dest, s.stem, key)).files.map((f) => ({ o: f.o })) });
+      const m = await readManifest(dest, s.stem, key);
+      // Sin ficheros en este destino, las copias hechas así no retienen nada (sus ficheros están en el externo).
+      if (dest.files || m.localFiles !== false) kept.push({ files: m.files.map((f) => ({ o: f.o })) });
     } catch (err) {
       return { removedBackups, removedObjects: 0, gcSkipped: `${s.stem}: ${err instanceof Error ? err.message : err}` };
     }

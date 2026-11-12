@@ -58,7 +58,14 @@ expliquen las opciones con su coste y beneficio y una recomendación.
   arranca: `pg_ctlcluster 16 main start`. Solo borran las bases que crearon.
 - i18n: el texto en español es la clave (`t("...")`); cada texto nuevo necesita su entrada en `src/i18n/en/*.ts`.
   `npm run i18n:check` debe pasar.
-- Migraciones nuevas: carpeta `prisma/migrations/<timestamp>_<nombre>` con un timestamp posterior al último.
+- Migraciones nuevas: carpeta `prisma/migrations/<timestamp>_<nombre>` con un timestamp posterior al último. Las ya
+  publicadas no se editan nunca (cambia su checksum y `prisma migrate deploy` falla en las instalaciones que la aplicaron).
+- Migraciones: **expandir y luego contraer**. No se borra ni se renombra una columna (o tabla, o valor de un enum) en
+  la misma versión que deja de usarla: primero sale la versión que ya no la lee ni la escribe (con una migración que
+  solo añade, si hace falta) y la columna se quita en una migración de la versión siguiente. Durante un despliegue la
+  versión anterior sigue sirviendo sobre la base ya migrada, y si el despliegue falla después de migrar, Railway la
+  mantiene activa: si la migración quitó algo que esa versión usa, falla. Igual para cambiar un tipo o volver
+  obligatoria una columna: columna nueva, copiar los datos, usarla, y quitar la vieja una versión después.
 - No tocan `changelog.json`, `CHANGELOG.md`, la versión de `package.json`, `docs/MANUAL.md` ni `MANUAL.pdf`: los
   actualiza la sesión principal al cerrar la versión. Terminan su informe con lo que debería decir el manual.
 - Commits con el mensaje terminado en la línea de coautoría que haya fijado el propietario. Nada de enlaces de

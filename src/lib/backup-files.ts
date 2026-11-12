@@ -39,10 +39,17 @@ export interface FullManifest {
   createdAt: string;
   migration: string | null;
   build: string | null;
-  db: { file: string; bytes: number; sha256: string; rows: number; tables: number; dataSha256: string };
+  /** `counts`: filas por tabla (los manifiestos más antiguos no las tienen). */
+  db: { file: string; bytes: number; sha256: string; rows: number; tables: number; dataSha256: string; counts?: Record<string, number> };
   files: ManifestFile[];
   fileCount: number;
   fileBytes: number;
+  /**
+   * ¿Guardaba el almacén local los ficheros cuando se hizo? (false con destino externo y sin BACKUP_LOCAL_FILES=1). En
+   * ese almacén, solo las copias que los guardaban retienen objetos (ver pruneDestination). Sin el campo (manifiestos
+   * anteriores), se supone que sí.
+   */
+  localFiles?: boolean;
 }
 
 // --- Manifiesto --------------------------------------------------------------------------------
@@ -57,7 +64,7 @@ async function* once(buf: Buffer): AsyncGenerator<Buffer> {
   yield buf;
 }
 
-export function buildManifest(opts: { stem: string; dbFile: string; dbBytes: number; dbSha256: string; db: BackupManifest; files: ManifestFile[] }): FullManifest {
+export function buildManifest(opts: { stem: string; dbFile: string; dbBytes: number; dbSha256: string; db: BackupManifest; files: ManifestFile[]; localFiles?: boolean }): FullManifest {
   return {
     version: MANIFEST_VERSION,
     kind: "pizarro-backup",
@@ -65,10 +72,14 @@ export function buildManifest(opts: { stem: string; dbFile: string; dbBytes: num
     createdAt: opts.db.createdAt,
     migration: opts.db.migration,
     build: opts.db.build,
-    db: { file: opts.dbFile, bytes: opts.dbBytes, sha256: opts.dbSha256, rows: opts.db.totalRows, tables: opts.db.tables.length, dataSha256: opts.db.sha256 },
+    db: {
+      file: opts.dbFile, bytes: opts.dbBytes, sha256: opts.dbSha256, rows: opts.db.totalRows, tables: opts.db.tables.length, dataSha256: opts.db.sha256,
+      counts: Object.fromEntries(opts.db.tables.map((t) => [t.name, t.rows])),
+    },
     files: opts.files,
     fileCount: opts.files.length,
     fileBytes: opts.files.reduce((n, f) => n + f.s, 0),
+    ...(opts.localFiles === undefined ? {} : { localFiles: opts.localFiles }),
   };
 }
 

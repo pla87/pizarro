@@ -19,7 +19,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileSha256, verifyBackupFile, type BackupManifest } from "./backup-core";
 import { quoteIdent, restoreDatabase } from "./backup-db";
-import { DirDestination, dumpKey, externalDestinations, listObjectKeys, listStems, readManifest, type BackupDestination } from "./backup-dest";
+import { DirDestination, dumpKey, externalDestinations, listObjectKeys, listStems, readManifest, type BackupDestination, type StemInfo } from "./backup-dest";
 import { decryptFileObject, mapLimit, objectKey, uniqueObjects, type FullManifest, type ManifestFile } from "./backup-files";
 import { connectPg, type PgSql } from "./backup-pg";
 
@@ -166,11 +166,13 @@ export function parseSource(spec: string, opts: { localDir: string; env?: Record
   return { dest: new DirDestination("dir", path.dirname(file), true), stem: stemOf(path.basename(file)) };
 }
 
-export async function resolveStem(src: Source): Promise<{ stem: string; hasManifest: boolean }> {
+export async function resolveStem(src: Source): Promise<StemInfo> {
   const stems = await listStems(src.dest);
   if (src.stem === "latest") {
-    if (!stems[0]) throw new Error(`No hay ninguna copia en ${src.dest.label}.`);
-    return stems[0];
+    // La última completa: una copia cortada entre el volcado y el manifiesto no es «la última».
+    const latest = stems.find((s) => !s.partial);
+    if (!latest) throw new Error(`No hay ninguna copia en ${src.dest.label}.`);
+    return latest;
   }
   const found = stems.find((s) => s.stem === src.stem);
   if (!found) throw new Error(`No existe la copia ${src.stem} en ${src.dest.label}.`);
@@ -323,10 +325,11 @@ export async function restoreFiles(dest: BackupDestination, manifest: FullManife
 /** Restauración completa desde un origen: base de datos y/o ficheros. */
 export async function restoreBackup(opts: RestoreOptions): Promise<RestoreResult> {
   const log = opts.log ?? (() => {});
-  const { stem, hasManifest } = await resolveStem(opts.source);
+  const { stem, hasManifest, partial } = await resolveStem(opts.source);
   log(`Copia: ${stem} (${opts.source.dest.label}).`);
   const manifest = hasManifest ? await readManifest(opts.source.dest, stem, opts.key) : null;
   if (manifest) log(`Manifiesto: ${manifest.db.rows} filas, ${manifest.fileCount} ficheros (${Math.round(manifest.fileBytes / 1024 / 1024)} MB), migración ${manifest.migration ?? "ninguna"}.`);
+  else if (partial) log("Copia SIN manifiesto y posterior a copias que sí lo tienen: probablemente se cortó a medias (el volcado puede estar incompleto). Mejor restaura otra (--list las muestra).");
   else log("Copia sin manifiesto (anterior a las copias con ficheros): solo se puede restaurar la base de datos.");
   const result: RestoreResult = { stem, manifest, db: null, migrationsBefore: 0, migrationsAfter: 0, files: null };
   if (opts.database !== false) {

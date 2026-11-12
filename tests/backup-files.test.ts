@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 import { backupStem, decryptChunks, encryptChunks, writeBackupFile, type TableBatch } from "../src/lib/backup-core";
-import { backupShrink, checkShrink, DirDestination, listObjectKeys, listStems, pruneDestination, readManifest, S3Destination, syncBackup, type BackupDestination } from "../src/lib/backup-dest";
+import { backupShrink, checkShrink, coreRows, DirDestination, listObjectKeys, listStems, pruneDestination, readManifest, S3Destination, syncBackup, type BackupDestination } from "../src/lib/backup-dest";
 import {
   buildManifest,
   decodeManifest,
@@ -128,14 +128,14 @@ async function* oneTable(): AsyncGenerator<TableBatch> {
 }
 
 /** Prepara UPLOAD_DIR con ficheros y una copia (volcado + manifiesto) con fecha `at`. */
-async function makeBackup(root: string, backups: string, at: Date): Promise<{ manifest: FullManifest; bytes: Buffer; dumpFile: string }> {
+async function makeBackup(root: string, backups: string, at: Date, opts: { localFiles?: boolean; tables?: () => AsyncGenerator<TableBatch> } = {}): Promise<{ manifest: FullManifest; bytes: Buffer; dumpFile: string }> {
   const stem = `pizarro-backup-${at.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "")}`;
   const dumpFile = path.join(backups, `${stem}.pzbak`);
   await mkdir(backups, { recursive: true });
-  const { manifest: dbm, bytes } = await writeBackupFile({ file: dumpFile, key, tables: oneTable(), migration: "20261031120000_job_run", now: at });
+  const { manifest: dbm, bytes } = await writeBackupFile({ file: dumpFile, key, tables: (opts.tables ?? oneTable)(), migration: "20261031120000_job_run", now: at });
   const { entries } = await hashFiles(await scanFiles(root, [backups]), {}, nameKey);
   const { fileSha256 } = await import("../src/lib/backup-core");
-  const manifest = buildManifest({ stem, dbFile: `${stem}.pzbak`, dbBytes: bytes, dbSha256: await fileSha256(dumpFile), db: dbm, files: entries });
+  const manifest = buildManifest({ stem, dbFile: `${stem}.pzbak`, dbBytes: bytes, dbSha256: await fileSha256(dumpFile), db: dbm, files: entries, localFiles: opts.localFiles });
   return { manifest, bytes: await encodeManifest(manifest, key), dumpFile };
 }
 
@@ -267,4 +267,110 @@ test("BACKUP_LOCAL_FILES: automático según haya destino externo; 1/0 lo fuerza
   assert.equal(localFilesEnabled({ BACKUP_EXTERNAL_DIR: "/copias" }), false);
   assert.equal(localFilesEnabled({ BACKUP_EXTERNAL_DIR: "/copias", BACKUP_LOCAL_FILES: "1" }), true);
   assert.equal(localFilesEnabled({ BACKUP_LOCAL_FILES: "0" }), false);
+});
+
+test("aviso de copia menor: compara personas, proyectos y tareas, no el total de filas (con manifiestos antiguos, el total)", async () => {
+  // Se vacían los registros (AppLog, deshacer, sesiones, avisos): menos filas, mismo contenido. No es una pérdida.
+  assert.equal(backupShrink({ rows: 3000, fileCount: 0, core: 300 }, { rows: 20_000, fileCount: 0, core: 310 }), null);
+  assert.deepEqual(backupShrink({ rows: 20_000, fileCount: 0, core: 12 }, { rows: 20_000, fileCount: 0, core: 300 }), { what: "core", local: 12, remote: 300 });
+  assert.equal(backupShrink({ rows: 10, fileCount: 0, core: 3 }, { rows: 5000, fileCount: 0, core: 40 }), null, "destino con poco contenido: no se compara");
+  assert.deepEqual(backupShrink({ rows: 40, fileCount: 0, core: 3 }, { rows: 5000, fileCount: 0, core: null }), { what: "rows", local: 40, remote: 5000 }, "manifiesto antiguo: el total");
+  assert.equal(coreRows({ counts: { User: 2, Project: 3, Task: 10, AppLog: 1000 } }), 15);
+  assert.equal(coreRows({}), null);
+
+  // Con manifiestos de verdad: el destino tiene muchos registros; la copia nueva, los mismos datos y casi ningún registro.
+  const rows = (n: number, prefix: string) => Array.from({ length: n }, (_, i) => JSON.stringify({ id: `${prefix}${i}` }));
+  const tablesWith = (logs: number) =>
+    async function* (): AsyncGenerator<TableBatch> {
+      yield { name: "User", rows: rows(5, "u") };
+      yield { name: "Project", rows: rows(5, "p") };
+      yield { name: "Task", rows: rows(100, "t") };
+      yield { name: "AppLog", rows: rows(logs, "l") };
+    };
+  const root = await tmp();
+  const dest = new DirDestination("dir", await tmp(), true);
+  const before = await makeBackup(root, path.join(root, "backups"), new Date("2026-11-03T03:00:00Z"), { tables: tablesWith(2000) });
+  assert.deepEqual(before.manifest.db.counts, { User: 5, Project: 5, Task: 100, AppLog: 2000 });
+  await syncBackup(dest, before.manifest, before.bytes, dumpOf(before.manifest, before.dumpFile), { key, uploadRoot: root });
+  const after = await makeBackup(root, path.join(root, "backups"), new Date("2026-11-04T03:00:00Z"), { tables: tablesWith(10) });
+  assert.deepEqual(await checkShrink(dest, after.manifest, key), { problem: null });
+  const lost = await makeBackup(root, path.join(root, "backups"), new Date("2026-11-04T04:00:00Z"), {
+    tables: async function* () {
+      yield { name: "User", rows: rows(1, "u") };
+      yield { name: "AppLog", rows: rows(5000, "l") };
+    },
+  });
+  assert.deepEqual((await checkShrink(dest, lost.manifest, key)).problem, { what: "core", local: 1, remote: 110, stem: before.manifest.stem });
+});
+
+test("almacén local que deja de guardar ficheros (destino externo nuevo): no se vacía de golpe, sino con la retención", async () => {
+  const root = await tmp();
+  const backups = path.join(root, "backups");
+  await writeFile(path.join(root, "f1.bin"), randomBytes(300));
+  await writeFile(path.join(root, "f2.bin"), randomBytes(300));
+  const withFiles = new DirDestination("local", backups, true);
+  for (const at of ["2026-10-01T03:00:00Z", "2026-10-02T03:00:00Z"]) {
+    const b = await makeBackup(root, backups, new Date(at)); // sin localFiles: como los manifiestos anteriores
+    await syncBackup(withFiles, b.manifest, b.bytes, dumpOf(b.manifest, b.dumpFile), { key, uploadRoot: root });
+  }
+  assert.equal((await listObjectKeys(withFiles)).size, 2);
+  // Se configura un destino externo: el local ya no guarda ficheros (BACKUP_LOCAL_FILES automático).
+  const noFiles = new DirDestination("local", backups, false);
+  await writeFile(path.join(root, "f3.bin"), randomBytes(300));
+  const b3 = await makeBackup(root, backups, new Date("2026-10-03T03:00:00Z"), { localFiles: false });
+  assert.equal((await syncBackup(noFiles, b3.manifest, b3.bytes, dumpOf(b3.manifest, b3.dumpFile), { key, uploadRoot: root })).uploaded, 0);
+  // La retención normal: las copias que guardaban ficheros siguen ahí y retienen los suyos.
+  const kept = await pruneDestination(noFiles, key);
+  assert.deepEqual([kept.removedBackups, kept.removedObjects, kept.gcSkipped], [0, 0, null]);
+  assert.equal((await listObjectKeys(noFiles)).size, 2, "las copias anteriores se pueden seguir restaurando con sus ficheros");
+  // Cuando la retención las borra, sus objetos se van con ellas (la nueva no retiene nada en este almacén).
+  const later = await pruneDestination(noFiles, key, { daily: 1, monthly: 0, recent: 0 });
+  assert.deepEqual([later.removedBackups, later.removedObjects], [2, 2]);
+  assert.equal((await listObjectKeys(noFiles)).size, 0);
+});
+
+test("copia cortada entre el volcado y el manifiesto: no es la última, no cuenta para la retención y se borra a las 24 h", async () => {
+  const { resolveStem } = await import("../src/lib/backup-restore");
+  const root = await tmp();
+  const backups = path.join(root, "backups");
+  const dest = new DirDestination("dir", await tmp(), true);
+  const good: string[] = [];
+  for (const at of ["2026-11-01T03:00:00Z", "2026-11-02T03:00:00Z"]) {
+    const b = await makeBackup(root, backups, new Date(at));
+    await syncBackup(dest, b.manifest, b.bytes, dumpOf(b.manifest, b.dumpFile), { key, uploadRoot: root });
+    good.push(b.manifest.stem);
+  }
+  // Una copia de una versión antigua (solo volcado, anterior a todas) y otra cortada a medias (solo volcado, posterior).
+  const legacy = "pizarro-backup-20260901T030000Z";
+  const cut = "pizarro-backup-20261103T030000Z";
+  for (const stem of [legacy, cut]) await writeFile(path.join(dest.root, `${stem}.pzbak`), await readFile(path.join(backups, `${good[0]}.pzbak`)));
+  assert.deepEqual(
+    (await listStems(dest)).map((s) => [s.stem, s.hasManifest, s.partial]),
+    [[cut, false, true], [good[1], true, false], [good[0], true, false], [legacy, false, false]],
+  );
+  assert.equal((await resolveStem({ dest, stem: "latest" })).stem, good[1], "«latest» es la última completa");
+  // Con las 2 más recientes: se conservan las dos buenas (la cortada no ocupa sitio) y se borra la antigua; la cortada
+  // aún no tiene 24 h.
+  const now = Date.parse("2026-11-03T12:00:00Z");
+  const first = await pruneDestination(dest, key, { daily: 0, monthly: 0, recent: 2, now });
+  assert.equal(first.removedBackups, 1);
+  assert.deepEqual((await listStems(dest)).map((s) => s.stem), [cut, good[1], good[0]]);
+  const second = await pruneDestination(dest, key, { daily: 0, monthly: 0, recent: 2, now: now + 24 * 3600 * 1000 });
+  assert.equal(second.removedBackups, 1);
+  assert.deepEqual((await listStems(dest)).map((s) => s.stem), [good[1], good[0]]);
+});
+
+test("BACKUP_EXTERNAL_DIR que no existe: no se crea sola y el error lo dice", async () => {
+  const { externalDestinations } = await import("../src/lib/backup-dest");
+  const root = await tmp();
+  const missing = path.join(await tmp(), "disco-sin-montar");
+  const [dest] = externalDestinations({ BACKUP_EXTERNAL_DIR: missing }).destinations;
+  await writeFile(path.join(root, "f.bin"), "x");
+  const b = await makeBackup(root, path.join(root, "backups"), new Date("2026-11-05T03:00:00Z"));
+  await assert.rejects(syncBackup(dest!, b.manifest, b.bytes, dumpOf(b.manifest, b.dumpFile), { key, uploadRoot: root }), /La carpeta del destino externo no existe/);
+  await assert.rejects(readdir(missing), "no se ha creado");
+  // La carpeta local de copias (UPLOAD_DIR/backups) sí se crea sola.
+  const local = new DirDestination("local", path.join(await tmp(), "backups"), true);
+  await syncBackup(local, b.manifest, b.bytes, dumpOf(b.manifest, b.dumpFile), { key, uploadRoot: root });
+  assert.equal((await listStems(local)).length, 1);
 });

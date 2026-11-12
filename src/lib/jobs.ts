@@ -5,10 +5,7 @@ import { connectPgClient } from "./pg-connect";
 // Tareas de fondo: un solo proceso a la vez (bloqueo consultivo de Postgres) y la última ejecución de cada
 // una guardada en la tabla JobRun, para que los reinicios y los despliegues solapados no las repitan.
 
-/** Claves de los bloqueos consultivos (números arbitrarios, fijos y distintos entre sí). */
-export const LOCK_MAINTENANCE = 741_031_001;
-export const LOCK_RELEASE_RESUME = 741_031_002;
-export const LOCK_MAIL = 741_031_003;
+// Las claves de los bloqueos están todas en advisory-locks.ts (para que no se repitan).
 
 type LockResult<T> = { ran: true; value: T } | { ran: false };
 
