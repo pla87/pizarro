@@ -6,7 +6,7 @@ import { addComment, deleteComment, getOlderComments, getTaskDetail } from "../.
 import { saveMaxCommentsPerTask } from "../../src/actions/settings";
 import { redoLast, undoLast } from "../../src/actions/undo";
 import { mentionToken } from "../../src/lib/mentions";
-import { COMMENT_LIMIT_DEFAULT, getMaxCommentsPerTask, invalidateAppSettings } from "../../src/lib/app-settings";
+import { COMMENT_LIMIT_DEFAULT, COMMENT_LIMIT_KEY, getMaxCommentsPerTask, invalidateAppSettings, setMaxCommentsPerTask } from "../../src/lib/app-settings";
 
 /** n comentarios con fechas crecientes (de 1 s en 1 s, para que el orden sea claro). */
 async function seed(taskId: string, authorId: string, n: number, sameInstant = false) {
@@ -247,7 +247,7 @@ describe("borrar un comentario con respuestas", () => {
     expectOk(await deleteComment(r2.id));
     assert.equal(await db.taskComment.count({ where: { taskId: task.id } }), 0);
     expectOk(await undoLast(f.project.id));
-    const back = await db.taskComment.findMany({ where: { taskId: task.id }, orderBy: { createdAt: "asc" } });
+    const back = await db.taskComment.findMany({ where: { taskId: task.id }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
     assert.deepEqual(back.map((c) => [c.body, !!c.deletedAt]), [["", true], ["r2", false]]);
     assert.equal(back[1]!.parentId, parent.id);
   });
@@ -266,5 +266,19 @@ describe("borrar un comentario con respuestas", () => {
     const row = await db.taskComment.findUniqueOrThrow({ where: { id: parent.id } });
     assert.equal(row.body, "");
     assert.ok(row.deletedAt);
+  });
+});
+
+describe("máximo de comentarios: el aviso", () => {
+  test("con el máximo en 1, el aviso va en singular", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const task = await makeTask(f);
+    await setMaxCommentsPerTask(1);
+    await loginAs(user);
+    expectOk(await addComment(task.id, "Primero"));
+    expectFail(await addComment(task.id, "Segundo"), /^Esta tarea ya tiene el máximo de 1 comentario\.$/);
+    await db.appState.deleteMany({ where: { key: COMMENT_LIMIT_KEY } });
+    invalidateAppSettings();
   });
 });

@@ -1,7 +1,6 @@
 "use client";
 
 import { AlertCircle, ArrowLeft, Download, Eye, File as FileIcon, FileCode, FileImage, FileText, FileType, Loader2, Pencil, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { deleteDocument, deleteDocumentForever, renameDocument, restoreDocument } from "@/actions/documents";
 import { filesFrom, formatBytes, useFileDrop } from "@/components/board/upload";
@@ -18,6 +17,8 @@ import { DOCUMENT_PREVIEW_MAX_BYTES, DOCUMENT_TRASH_DAYS, isPreviewable, type Do
 import type { DocumentRow, TrashedDocumentRow } from "@/lib/documents";
 import type { EditorModeValue } from "@/lib/types";
 import { formatDate } from "@/lib/format";
+import { normalizeSearch } from "@/lib/search-accents";
+import { useSafeRefresh } from "@/components/useSafeRefresh";
 
 interface Props {
   projectId: string;
@@ -47,15 +48,12 @@ const ICONS: Record<DocumentKindName, { icon: typeof FileIcon; className: string
   OTHER: { icon: FileIcon, className: "text-slate-400 bg-slate-100 dark:bg-slate-800 dark:text-slate-400" },
 };
 
-/** Minúsculas y sin tildes, para que el buscador no distinga «Guía» de «guia». */
-const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-
 let nextKey = 1;
 
 export function DocsManager({ projectId, projectName, documents, trashed, fileMaxMb, maxCount, currentUserId, editorMode, initialOpenId = null }: Props) {
   const t = useT();
   const locale = useIntlLocale();
-  const router = useRouter();
+  const safeRefresh = useSafeRefresh();
   const toast = useToast();
   const confirm = useConfirm();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -96,7 +94,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
       queue.current = queue.current.then(send).then(() => {
         // Al terminar la tanda se refresca la lista y se avisa una sola vez.
         if (--pending > 0) return;
-        router.refresh();
+        safeRefresh();
         if (done > 0) toast(done === 1 ? t("Documento subido") : t("{n} documentos subidos", { n: done }));
       });
     }
@@ -118,8 +116,8 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
     return () => document.removeEventListener("paste", onPaste);
   });
 
-  const needle = fold(query.trim());
-  const shown = needle ? documents.filter((d) => fold(d.name).includes(needle)) : documents;
+  const needle = normalizeSearch(query.trim());
+  const shown = needle ? documents.filter((d) => normalizeSearch(d.name).includes(needle)) : documents;
   const open = documents.find((d) => d.id === openId) ?? null;
   const openTrashed = trashed.find((d) => d.id === openId) ?? null;
   const full = documents.length >= maxCount;
@@ -144,11 +142,11 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
         void restoreDocument(d.id).then((r) => {
           if (!r.ok) return toast(r.error, "error");
           toast(t("Documento restaurado"));
-          router.refresh();
+          safeRefresh();
         });
       },
     });
-    router.refresh();
+    safeRefresh();
   }
 
   async function restore(d: DocumentRow) {
@@ -158,7 +156,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
     if (!res.ok) return toast(res.error, "error");
     setOpenId(null);
     toast(t("Documento restaurado"));
-    router.refresh();
+    safeRefresh();
   }
 
   async function removeForever(d: DocumentRow) {
@@ -175,7 +173,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
     if (!res.ok) return toast(res.error, "error");
     setOpenId(null);
     toast(t("Documento borrado definitivamente"));
-    router.refresh();
+    safeRefresh();
   }
 
   return (
@@ -360,7 +358,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
 function DocViewer({ doc, projectId, currentUserId, editorMode, onClose }: { doc: DocumentRow; projectId: string; currentUserId: string; editorMode: EditorModeValue; onClose: () => void }) {
   const t = useT();
   const locale = useIntlLocale();
-  const router = useRouter();
+  const safeRefresh = useSafeRefresh();
   const toast = useToast();
   const [name, setName] = useState(doc.name);
   const [editing, setEditing] = useState(false);
@@ -382,12 +380,12 @@ function DocViewer({ doc, projectId, currentUserId, editorMode, onClose }: { doc
         void restoreDocument(doc.id).then((r) => {
           if (!r.ok) return toast(r.error, "error");
           toast(t("Documento restaurado"));
-          router.refresh();
+          safeRefresh();
         });
       },
     });
     onClose();
-    router.refresh();
+    safeRefresh();
   }
 
   async function rename() {
@@ -399,7 +397,7 @@ function DocViewer({ doc, projectId, currentUserId, editorMode, onClose }: { doc
     if (!res.ok) return toast(res.error, "error");
     setName(res.data.name);
     setEditing(false);
-    router.refresh();
+    safeRefresh();
   }
 
   return (

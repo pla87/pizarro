@@ -11,11 +11,19 @@ export const LICENSE_PRICE_EUR = 100;
 /** Web del producto (sitio estático de `site/`, publicado con GitHub Pages: ver docs/VENTA.md). */
 export const SITE_URL = "https://getpizarro.com";
 
-/** Código fuente y guía de instalación. */
+/** Código fuente. */
 export const REPO_URL = "https://github.com/pla87/pizarro";
-export const INSTALL_URL = `${REPO_URL}/blob/main/docs/INSTALL.md`;
+/**
+ * Guía de instalación para usuarios, en la web (la genera scripts/build-site.mjs desde docs/web/instalar.md y
+ * docs/web/en/install.md). La referencia técnica completa sigue en docs/INSTALL.md, en el repositorio.
+ */
+export const INSTALL_URL = `${SITE_URL}/instalar/`;
+/** @public (scripts/build-site.mjs comprueba que coincide con la guía en inglés) */
+export const INSTALL_URL_EN = `${SITE_URL}/en/install/`;
+export const installUrl = (locale: string = "es"): string => (locale === "en" ? INSTALL_URL_EN : INSTALL_URL);
 /** Imagen Docker publicada con cada versión (GitHub Container Registry). */
 export const IMAGE = "ghcr.io/pla87/pizarro";
+/** @public (scripts/build-site.mjs) */
 export const IMAGE_URL = `${REPO_URL}/pkgs/container/pizarro`;
 
 /**

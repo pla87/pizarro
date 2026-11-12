@@ -4,13 +4,14 @@ import { ArrowUpCircle, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { dismissUpdate } from "@/actions/update-notice";
-import { useT } from "@/i18n/client";
+import { useLocale, useT } from "@/i18n/client";
 import { actionThrowResult } from "@/lib/stale-action";
-import { UPDATE_DOCS_URL } from "@/lib/update-check-core";
+import { updateDocsUrl } from "@/lib/update-check-core";
 
 /** Aviso discreto de versión nueva (solo administradores). Se oculta por versión. */
 export function UpdateNotice({ version, url, railway }: { version: string; url: string; railway: boolean }) {
   const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const [hidden, setHidden] = useState(false);
   const [, start] = useTransition();
@@ -25,7 +26,7 @@ export function UpdateNotice({ version, url, railway }: { version: string; url: 
           {" · "}
           <a className={link} href={url} target="_blank" rel="noopener noreferrer">{t("Ver novedades")}</a>
           {" · "}
-          <a className={link} href={UPDATE_DOCS_URL} target="_blank" rel="noopener noreferrer">{t("Cómo actualizar")}</a>
+          <a className={link} href={updateDocsUrl(locale)} target="_blank" rel="noopener noreferrer">{t("Cómo actualizar")}</a>
         </p>
         <p className="text-xs opacity-80">
           {railway

@@ -34,7 +34,7 @@ export interface GoogleConfig {
   domainSource: "env" | "db" | "none";
 }
 
-export const NO_GOOGLE_CONFIG: GoogleConfig = { source: "none", clientId: "", clientSecret: "", domain: "", domainSource: "none" };
+const NO_GOOGLE_CONFIG: GoogleConfig = { source: "none", clientId: "", clientSecret: "", domain: "", domainSource: "none" };
 
 const clean = (v: string | undefined) => (v ?? "").trim();
 
@@ -64,7 +64,7 @@ export function googleRedirectUris(appUrl: string | undefined): { login: string;
 const DOMAIN_RE = /^(?=.{3,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
 const CLIENT_ID_RE = /^[A-Za-z0-9._~-]{5,200}$/;
 
-export const isWorkspaceDomain = (s: string) => DOMAIN_RE.test(s);
+const isWorkspaceDomain = (s: string) => DOMAIN_RE.test(s);
 
 export function parseGoogleSettings(rows: { key: string; value: string }[]): GoogleSettings {
   const get = (k: string) => rows.find((r) => r.key === k)?.value ?? "";

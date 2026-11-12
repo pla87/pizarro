@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { describeAction, noteProject } from "@/lib/action-context";
+import { columnsLockName } from "@/lib/advisory-locks";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertProjectAccess, visibleProjectsWhere } from "@/lib/access";
@@ -37,7 +38,7 @@ export async function createColumn(projectId: string, name: string) {
     const colName = v.name.parse(name);
     // Bloqueo por proyecto: dos altas a la vez no pueden pasar del tope ni calcular la misma posición.
     const column = await db.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`columns:${projectId}`}))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${columnsLockName(projectId)}))`;
       const count = await tx.column.count({ where: { projectId } });
       if (count >= 30) throw new AppError("Máximo 30 columnas por proyecto.");
       const last = await tx.column.findFirst({ where: { projectId }, orderBy: { position: "desc" }, select: { position: true } });
@@ -210,15 +211,24 @@ export async function deleteColumn(columnId: string) {
       { t: "column.restore", row: { id: column.id, projectId: column.projectId, name: column.name, position: column.position, role: column.role, isDone: column.isDone, waitingDays: column.waitingDays, routineTargetColumnId: column.routineTargetColumnId, wipLimit: column.wipLimit } },
     );
     await db.$transaction(async (tx) => {
+      // Bloqueo de las columnas del proyecto (el de createColumn) y la otra columna, otra vez dentro: borrar a la vez las
+      // dos últimas columnas dejaba el proyecto sin ninguna (las dos veían a la otra antes de que nadie borrase).
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${columnsLockName(column.projectId)}))`;
+      const target = await tx.column.findFirst({
+        where: { projectId: column.projectId, id: { not: columnId } },
+        orderBy: { position: "asc" },
+        select: { id: true },
+      });
+      if (!target) throw new AppError("Un proyecto necesita al menos una columna.");
       const active = await tx.task.count({ where: { columnId, archivedAt: null } });
       if (active > 0) throw new AppError("La columna todavía tiene tarjetas. Muévelas antes de borrarla.");
       // Solo se reubican las archivadas, al final de la otra columna y en su orden (sin compartir posición con
       // las de allí). Si alguien suelta una tarjeta activa a la vez, la clave foránea (Restrict) hace fallar el
       // borrado en lugar de moverla en silencio.
-      await lockColumns(tx, [other.id]);
+      await lockColumns(tx, [target.id]);
       const rows = await tx.task.findMany({ where: { columnId, archivedAt: { not: null } }, orderBy: TASK_ORDER, select: { id: true } });
-      let pos = (await lastPositionIn(tx, other.id)) ?? 0;
-      await setTaskColumnPositions(rows.map((r) => ({ id: r.id, position: (pos += POSITION_STEP) })), other.id, { client: tx });
+      let pos = (await lastPositionIn(tx, target.id)) ?? 0;
+      await setTaskColumnPositions(rows.map((r) => ({ id: r.id, position: (pos += POSITION_STEP) })), target.id, { client: tx });
       await tx.column.delete({ where: { id: columnId } });
     });
     describeAction("Borró la columna «{name}»", { name: column.name });

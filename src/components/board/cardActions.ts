@@ -127,11 +127,11 @@ export function useCardActions(deps: Deps) {
       renameTask: async (id: string, title: string) => {
         const task = ref.current.getTask(id);
         // Más largo que el máximo: se guarda recortado (sin partir emojis ni menciones) y se avisa.
-        const { value, clipped } = clampTitle(title.trim());
+        const { value, clipped, limit } = clampTitle(title.trim());
         if (!task || !value || value === task.title) return true;
         // `since`: si otra persona cambió el texto mientras tanto, el servidor avisa en vez de pisarlo.
         const ok = await saveFields(id, { title: value }, { title: value }, task.textVersion);
-        if (ok && clipped) ref.current.toast(ref.current.t("Título recortado a {max} caracteres", { max: MAX_TITLE }));
+        if (ok && clipped) ref.current.toast(ref.current.t("Título recortado a {max} caracteres", { max: limit ?? MAX_TITLE }));
         return ok;
       },
 

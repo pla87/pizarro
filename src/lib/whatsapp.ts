@@ -1,11 +1,12 @@
 import "server-only";
 import type { Locale, T } from "../i18n/core";
-import { MessagingApiError, MessagingNetworkError, networkErrorCode, scrubSecrets, whatsappPayload, withRetries, type NoticeMessage, type WhatsappConfig } from "./messaging-core";
+import { MessagingApiError, MessagingNetworkError, networkErrorCode, scrubSecrets, whatsappCodePayload, whatsappPayload, withRetries, type NoticeMessage, type WhatsappConfig } from "./messaging-core";
 import { isShuttingDown, trackInFlight } from "./shutdown";
 
 // WhatsApp Cloud API de Meta (https://developers.facebook.com/docs/whatsapp/cloud-api). Fuera de una conversación
-// abierta por la persona, Meta solo deja enviar plantillas aprobadas: Pizarro usa una (aviso_pizarro, ver
-// docs/guias/whatsapp.md) y Meta cobra por cada mensaje entregado.
+// abierta por la persona, Meta solo deja enviar plantillas aprobadas: Pizarro usa dos (ver docs/guias/whatsapp.md), la
+// de utilidad aviso_pizarro para los avisos y la de autenticación codigo_pizarro para el código de verificación, y Meta
+// cobra por cada mensaje entregado.
 
 /**
  * Idioma en que se escribe un WhatsApp: el inglés solo si la plantilla tiene su traducción configurada («Idioma en
@@ -22,6 +23,14 @@ export function whatsappLocale(cfg: Pick<WhatsappConfig, "templateLangEn">, loca
  */
 export function sendWhatsappNotice(cfg: WhatsappConfig, to: string, m: NoticeMessage, t: T, english: boolean): Promise<void> {
   return trackInFlight(() => withRetries("WHATSAPP", () => post(cfg, whatsappPayload(to, m, cfg, t, english), to), { stopping: isShuttingDown }));
+}
+
+/**
+ * Envía el código de verificación con la plantilla de autenticación (botón «Copiar código»). Mismos reintentos que un
+ * aviso. `english`: la persona usa Pizarro en inglés (sale en inglés si la verificación tiene ese idioma configurado).
+ */
+export function sendWhatsappCode(cfg: WhatsappConfig, to: string, code: string, english = false): Promise<void> {
+  return trackInFlight(() => withRetries("WHATSAPP", () => post(cfg, whatsappCodePayload(to, code, cfg, english), to), { stopping: isShuttingDown }));
 }
 
 async function post(cfg: WhatsappConfig, body: unknown, to: string): Promise<void> {

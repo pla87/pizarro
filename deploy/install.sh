@@ -103,6 +103,28 @@ set_if_empty() { # $1 = nombre, $2 = valor
   return 1
 }
 
+# Dirección del modo red local, tal como irá en APP_URL (http://…): un nombre o una IPv4 (servidor.local, 192.168.1.10)
+# o una IPv6 entre corchetes ([fd00::1]), con :puerto opcional. Nada de espacios, comillas ni otros caracteres.
+valid_local_host() { # $1 = dirección
+  h=$1
+  port=""
+  case "$h" in
+    \[*\]:*) port=${h##*\]:}; h=${h%\]:*}; h=${h#\[}; v6=1 ;;
+    \[*\]) h=${h#\[}; h=${h%\]}; v6=1 ;;
+    *:*) port=${h##*:}; h=${h%:*}; v6=0 ;;
+    *) v6=0 ;;
+  esac
+  if [ -n "$port" ] || [ "$1" != "${1%:}" ]; then
+    case "$port" in ""|*[!0-9]*|0*) return 1 ;; esac
+    [ "${#port}" -le 5 ] && [ "$port" -le 65535 ] || return 1
+  fi
+  if [ "$v6" = 1 ]; then
+    case "$h" in ""|*[!0-9a-f:.]*) return 1 ;; *:*) return 0 ;; *) return 1 ;; esac
+  fi
+  case "$h" in ""|*[!a-z0-9.-]*|.*|-*|*..*|*.|*-) return 1 ;; esac
+  return 0
+}
+
 ask() { # $1 = pregunta, $2 = valor por defecto
   if [ -t 0 ]; then
     printf '%s [%s]: ' "$1" "$2" >&2
@@ -149,12 +171,16 @@ if [ -z "$cur_domain" ] || [ -z "$cur_url" ]; then
   if [ "$mode" = local ]; then
     ip=$(hostname -I 2>/dev/null | awk '{print $1}') || ip=""
     host=$(ask "Dirección con la que se entrará (IP o nombre del servidor)" "${ip:-localhost}")
+    # Como el dominio: sin http:// ni ruta y en minúsculas. Una IPv6 sin corchetes (la de hostname -I) se pone entre ellos.
+    host=$(printf '%s' "$host" | tr 'A-Z' 'a-z' | sed 's#^https\{0,1\}://##; s#/.*$##')
+    case "$host" in \[*) ;; *:*:*) host="[$host]" ;; esac
+    valid_local_host "$host" || die "La dirección «$host» no es válida: escribe una IP (192.168.1.10 o [fd00::1]) o el nombre del servidor (servidor.local), con :puerto si hace falta."
     set_var DOMAIN ":80"
     set_var APP_URL "http://$host"
   else
     dom="$DOMAIN_ARG"
     [ -n "$dom" ] || dom=$(ask "Dominio de Pizarro (p. ej. pizarro.miempresa.com)" "")
-    dom=$(printf '%s' "$dom" | sed 's#^https\{0,1\}://##; s#/.*$##' | tr 'A-Z' 'a-z')
+    dom=$(printf '%s' "$dom" | tr 'A-Z' 'a-z' | sed 's#^https\{0,1\}://##; s#/.*$##')
     case "$dom" in
       ""|*[!a-z0-9.-]*|.*|*..*) die "El dominio «$dom» no es válido." ;;
       *.*) ;;

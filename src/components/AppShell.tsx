@@ -19,16 +19,19 @@ import { InstallApp } from "./InstallApp";
 import { LicenseNudge } from "./LicenseNudge";
 import { clearDraftsOnLogout } from "./board/drafts";
 import { filesFrom, hasFiles } from "./board/upload";
-import { uploadDocument } from "./docs/uploadDocuments";
+import { documentFailuresMessage, documentUploadName, uploadDocument } from "./docs/uploadDocuments";
 import { installDragMove } from "./ui/dragMove";
 import { Presence } from "./board/Presence";
 import { PrivateIcon, ProjectMenu, ProjectsContext, useProjectSwitchHref } from "./ProjectMenu";
 import { UndoButton } from "./UndoButton";
 import { Avatar } from "./ui/Avatar";
 import { ReportButton } from "./ReportButton";
+import { MAIN_ID, SkipToContent } from "./SkipToContent";
 import { ImportProjectPanel } from "./ImportProjectPanel";
 import { TransferJobWatcher } from "./transfer/TransferJobWatcher";
+import { ConnectionNotice } from "./ConnectionNotice";
 import { cn } from "./ui/cn";
+import { HoverPrefetchLink } from "./ui/HoverPrefetchLink";
 import { Menu as DropdownMenu, MenuItem } from "./ui/Menu";
 import { Modal } from "./ui/Modal";
 import { ConfirmProvider } from "./ui/ConfirmDialog";
@@ -36,6 +39,8 @@ import { PromptProvider } from "./ui/PromptDialog";
 import { ToastProvider, useToast } from "./ui/Toast";
 import { useEscapeClose } from "./ui/useEscapeClose";
 import { useFocusTrap } from "./ui/focusTrap";
+import { useSafeRefresh } from "@/components/useSafeRefresh";
+import { loadWhenOnline } from "@/lib/connection";
 
 interface Props {
   user: CurrentUser;
@@ -59,6 +64,7 @@ export function AppShell(props: Props) {
       <ConfirmProvider>
         <PromptProvider>
           <TransferJobWatcher />
+          <ConnectionNotice />
           <Shell {...props} />
         </PromptProvider>
       </ConfirmProvider>
@@ -109,6 +115,7 @@ function Shell({ user, projects, version, unread, lastProjectId = null, backupAl
   return (
     <ProjectsContext.Provider value={{ projects, currentId: current?.id ?? null }}>
     <AppBadge count={unread} />
+    <SkipToContent />
     {/* Fijo al viewport: nunca hay scroll del documento. En Android con la barra de gestos dibujada
         encima (viewport-fit=cover) el contenido acaba justo antes de esa barra. */}
     <div className="fixed inset-0 flex overflow-hidden">
@@ -141,12 +148,12 @@ function Shell({ user, projects, version, unread, lastProjectId = null, backupAl
           {current && inProject && <Presence projectId={current.id} compact />}
           {unread > 0 && (
             <Link href="/notifications" className="ml-auto flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white" aria-label={unread === 1 ? t("1 aviso sin leer") : t("{n} avisos sin leer", { n: unread })}>
-              <Bell size={13} /> {unread}
+              <Bell size={13} /> {unread > 99 ? "99+" : unread}
             </Link>
           )}
         </header>
         {nudgeHref && <LicenseNudge buyHref={nudgeHref} />}
-        <main className="min-h-0 flex-1 overflow-auto max-lg:pb-[env(safe-area-inset-bottom)]">{children}</main>
+        <main id={MAIN_ID} tabIndex={-1} className="min-h-0 flex-1 overflow-auto outline-none max-lg:pb-[env(safe-area-inset-bottom)]">{children}</main>
       </div>
     </div>
     </ProjectsContext.Provider>
@@ -154,8 +161,9 @@ function Shell({ user, projects, version, unread, lastProjectId = null, backupAl
 }
 
 function NavLink({ href, icon: Icon, children, active, extra, highlight = false }: { href: string; icon: typeof Menu; children: React.ReactNode; active: boolean; extra?: Record<string, unknown>; highlight?: boolean }) {
+  // Se precarga al pasar el ratón, no al verse: cada router.refresh() del tablero repetía la precarga de todos.
   return (
-    <Link
+    <HoverPrefetchLink
       href={href}
       {...extra}
       aria-current={active ? "page" : undefined}
@@ -170,7 +178,7 @@ function NavLink({ href, icon: Icon, children, active, extra, highlight = false 
     >
       <Icon size={17} />
       {children}
-    </Link>
+    </HoverPrefetchLink>
   );
 }
 
@@ -178,6 +186,7 @@ function NavLink({ href, icon: Icon, children, active, extra, highlight = false 
 function DocsNavLink({ projectId, active }: { projectId: string; active: boolean }) {
   const t = useT();
   const router = useRouter();
+  const safeRefresh = useSafeRefresh();
   const toast = useToast();
   const [over, setOver] = useState(false);
   const depth = useRef(0);
@@ -186,17 +195,19 @@ function DocsNavLink({ projectId, active }: { projectId: string; active: boolean
   async function upload(files: File[]) {
     toast(files.length === 1 ? t("Subiendo «{name}» a Documentación…", { name: files[0]!.name }) : t("Subiendo {n} archivos a Documentación…", { n: files.length }));
     let done = 0;
-    let firstError = "";
+    const failed: { name: string; error: string }[] = [];
     for (const file of files) {
       const res = await uploadDocument(projectId, file, t);
       if (res.ok) done++;
-      else firstError ||= res.error;
+      else failed.push({ name: documentUploadName(file, t), error: res.error });
     }
     if (done > 0) {
       toast(done === 1 ? t("Documento subido") : t("{n} documentos subidos", { n: done }), "success", { label: t("Abrir Documentación"), onClick: open });
-      router.refresh();
+      safeRefresh();
     }
-    if (firstError) toast(files.length > 1 ? t("{n} sin subir: {error}", { n: files.length - done, error: firstError }) : firstError, "error");
+    // Cuáles no se han subido y por qué (p. ej. con la cuota superada), no solo cuántos.
+    const failedMsg = documentFailuresMessage(t, failed, files.length);
+    if (failedMsg) toast(failedMsg, "error");
   }
 
   const extra = {
@@ -287,7 +298,7 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
           <Avatar id={user.id} name={user.name} size="md" />
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium">{user.name}</div>
-            <Link href="/changelog" className="text-xs text-slate-500 hover:underline">v{version}</Link>
+            <HoverPrefetchLink href="/changelog" className="text-xs text-slate-500 hover:underline">v{version}</HoverPrefetchLink>
           </div>
           <form action={logout} onSubmit={() => clearDraftsOnLogout(user.clearDraftsOnLogout)}>
             <button type="submit" className="btn-icon" title={t("Cerrar sesión")} aria-label={t("Cerrar sesión")}>
@@ -392,21 +403,12 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   const [importing, setImporting] = useState(false);
   // Con una importación en curso el diálogo no se cierra (Esc, fondo, atrás): la subida sigue y se enseña su resultado.
   const [importBusy, setImportBusy] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    listProjectExamples().then((res) => {
-      if (!cancelled && res.ok) setExamples(res.data);
-    });
-    return () => { cancelled = true; };
-  }, []);
+  // Sin red se piden al volver la conexión (antes el fallo quedaba sin atender).
+  useEffect(() => loadWhenOnline(listProjectExamples, (res) => res.ok && setExamples(res.data), () => {}), []);
   // Las plantillas (solo administradores) se piden al abrir el modal.
   useEffect(() => {
     if (!isAdmin) return;
-    let cancelled = false;
-    listTemplates().then((res) => {
-      if (!cancelled && res.ok) setTemplates(res.data);
-    });
-    return () => { cancelled = true; };
+    return loadWhenOnline(listTemplates, (res) => res.ok && setTemplates(res.data), () => {});
   }, [isAdmin]);
   // Se cierra al llegar al proyecto nuevo, no antes: cerrar retira su entrada del historial
   // y eso cancelaría la navegación en curso.

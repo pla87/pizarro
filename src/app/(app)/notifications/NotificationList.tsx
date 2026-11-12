@@ -10,6 +10,7 @@ import { cn } from "@/components/ui/cn";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 import { notificationBody, notificationHeadline, type NotificationKind } from "@/lib/notification-text";
+import { useSafeRefresh } from "@/components/useSafeRefresh";
 
 interface Item {
   id: string;
@@ -35,6 +36,7 @@ const ICONS: Record<NotificationKind, typeof AtSign> = {
 
 export function NotificationList({ items: initial, moreHref }: { items: Item[]; moreHref: string | null }) {
   const router = useRouter();
+  const safeRefresh = useSafeRefresh();
   const t = useT();
   const locale = useIntlLocale();
   const [items, setItems] = useState(initial);
@@ -46,7 +48,7 @@ export function NotificationList({ items: initial, moreHref }: { items: Item[]; 
     setItems((list) => list.map((x) => (x.id === item.id ? { ...x, read: true } : x)));
     start(async () => {
       await markNotificationRead(item.id);
-      router.refresh();
+      safeRefresh();
     });
   };
 
@@ -70,7 +72,7 @@ export function NotificationList({ items: initial, moreHref }: { items: Item[]; 
               start(async () => {
                 setItems((list) => list.map((x) => ({ ...x, read: true })));
                 await markAllNotificationsRead();
-                router.refresh();
+                safeRefresh();
               })
             }
           >

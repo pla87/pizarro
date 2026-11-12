@@ -2,7 +2,7 @@
 // concurrencia limitada y reintentos educados. El servidor atiende 3 subidas a la vez (upload-slots).
 
 /** Subidas simultáneas desde el navegador: las mismas que admite el servidor. */
-export const UPLOAD_CONCURRENCY = 3;
+const UPLOAD_CONCURRENCY = 3;
 
 export type SkipReason = "empty" | "too_big" | "total";
 
@@ -44,7 +44,7 @@ export class QueueStopped extends Error {
   }
 }
 
-export interface QueueOptions {
+interface QueueOptions {
   concurrency?: number;
   onStart?: (index: number) => void;
   onSettle?: (index: number, result: PromiseSettledResult<unknown>) => void;
@@ -83,10 +83,10 @@ export async function runQueue<T, R>(items: readonly T[], worker: (item: T, inde
   return results;
 }
 
-export const RETRY_STATUSES = [429, 503];
+const RETRY_STATUSES = [429, 503];
 
 /** Espera total máxima de una subida entre reintentos (cubre una ventana de límite por persona de 60 s). */
-export const RETRY_MAX_WAIT_MS = 70_000;
+const RETRY_MAX_WAIT_MS = 70_000;
 
 /** Espera antes del reintento nº `attempt` (0, 1…): la indicada por el servidor (Retry-After, hasta 65 s) o 2, 4, 8 s…, con tope de 30 s. */
 export function retryDelayMs(attempt: number, retryAfterSec?: number | null): number {

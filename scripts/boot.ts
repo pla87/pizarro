@@ -1,5 +1,9 @@
-// Tareas de arranque del contenedor (tras las migraciones): sincroniza el
-// changelog y ejecuta el seed idempotente. Un solo proceso para arrancar rápido.
+// Tareas de arranque (tras las migraciones): registra el arranque, sincroniza el changelog, ejecuta el seed idempotente,
+// anuncia el código del asistente /setup y prepara las plantillas de serie. El contenedor lo ejecuta como proceso aparte
+// (`node dist/boot.mjs`, en scripts/start.sh); `npm start` lo importa y llama a runBoot() antes de cargar el servidor
+// (scripts/start-local.mjs), así las dos formas de arrancar hacen lo mismo.
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { db } from "@/lib/db";
 import { syncChangelog } from "@/lib/changelog-sync";
 import { seed } from "@/lib/seed";
@@ -31,9 +35,25 @@ async function main() {
   }
 }
 
-main()
-  .catch((err) => {
+/**
+ * Ejecuta las tareas de arranque y cierra su conexión. Lanza si fallan (base inaccesible, migraciones sin aplicar).
+ * Fuera de producción src/lib/db.ts deja el cliente en globalThis para reutilizarlo; aquí se quita al terminar: si no,
+ * el servidor cargado después en el mismo proceso (`npm start`) heredaría este cliente ya desconectado.
+ */
+export async function runBoot(): Promise<void> {
+  try {
+    await main();
+  } finally {
+    await db.$disconnect();
+    const g = globalThis as unknown as { prisma?: unknown };
+    if (g.prisma === db) delete g.prisma;
+  }
+}
+
+// Ejecutado directamente (`node dist/boot.mjs`), no importado.
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  runBoot().catch((err) => {
     console.error("[boot] Error:", err);
     process.exitCode = 1;
-  })
-  .finally(() => db.$disconnect());
+  });
+}

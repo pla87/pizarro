@@ -58,7 +58,7 @@ async function section<T>(fn: () => Promise<T>, ctx: ScrubContext): Promise<T | 
   }
 }
 
-export interface DoctorOptions {
+interface DoctorOptions {
   /** Quién lo genera: la app (proceso del servidor) o la línea de órdenes (proceso aparte). */
   source: "app" | "cli";
   now?: Date;

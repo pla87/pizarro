@@ -123,3 +123,22 @@ test("/api/auth/reset rechaza la petición iniciada desde otro sitio y acepta la
     assert.equal(res.headers.get("location"), "/login");
   }
 });
+
+test("NUL en la URL: los filtros de Logs lo quitan y una ruta con NUL da 404 sin llegar a PostgreSQL (error 22021)", async () => {
+  const { parseLogFilters } = await import("../src/lib/log-query");
+  const f = parseLogFilters({ category: "\u0000", user: "u\u00001", q: " a\u0000b ", range: "7d" });
+  assert.equal(f.category, "");
+  assert.equal(f.userId, "u1");
+  assert.equal(f.q, "ab");
+  assert.equal(f.range, "7d");
+  // El recorte no deja medio emoji (jsonb y la búsqueda lo rechazarían igual).
+  assert.ok(parseLogFilters({ q: `${"a".repeat(99)}😀` }).q.isWellFormed());
+  const { NextRequest } = await import("next/server");
+  const { proxy } = await import("../src/proxy");
+  for (const path of ["/p/%00", "/p/%00/settings", "/api/tasks/a%00b", "/api/releases/%00"]) {
+    const res = proxy(new NextRequest(`http://localhost:3000${path}`, { headers: { cookie: "tablon_session=x" } }));
+    assert.equal(res.status, 404, path);
+  }
+  // Lo normal sigue pasando (un %00 en la búsqueda lo limpia la página, no el proxy).
+  assert.notEqual(proxy(new NextRequest("http://localhost:3000/admin/logs?q=a%00b", { headers: { cookie: "tablon_session=x" } })).status, 404);
+});

@@ -1,7 +1,8 @@
 // Copias completas de punta a punta: copia (base de datos + ficheros) → subida a un S3 falso y a una carpeta externa
 // → «se pierde todo» → restauración sin git en una base de datos nueva y una carpeta de subidas vacía → mismos datos
 // y mismos ficheros. También: migraciones hasta la de la copia y después hacia delante, negativa a pisar una base con
-// datos, compatibilidad con `prisma migrate` y la prueba de restauración mensual en una base temporal.
+// datos, compatibilidad con `prisma migrate`, la prueba de restauración mensual en una base temporal y las filas que
+// apuntan a otras de la misma tabla que van más de un lote después.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -16,7 +17,8 @@ const { createBackup, readStatus, runRestoreTest, syncExternal } = await import(
 const { computeBackupAlert } = await import("../../src/lib/backup-alert");
 const { applyMigrations, listMigrations, parseSource, restoreBackup } = await import("../../src/lib/backup-restore");
 const { connectPg, withDatabase } = await import("../../src/lib/backup-pg");
-const { dumpDatabase } = await import("../../src/lib/backup-db");
+const { dumpDatabase, INSERT_ROWS, listForeignKeys } = await import("../../src/lib/backup-db");
+const { readLines, splitDataLine, verifyBackupFile } = await import("../../src/lib/backup-core");
 
 const MIGRATIONS = path.resolve("prisma/migrations");
 const baseUrl = process.env.DATABASE_URL!;
@@ -196,6 +198,111 @@ describe("copias completas", () => {
       assert.equal((await computeBackupAlert()).reason, "externalNone");
     } finally {
       process.env.BACKUP_S3_BUCKET = saved;
+    }
+  });
+});
+
+describe("referencias entre filas de la misma tabla", () => {
+  test("filas que apuntan a otras que van más de un lote después (Task, TaskComment, Column): se restaura igual", async () => {
+    // El volcado va en orden físico y una fila editada se va al final: la que apunta a ella puede quedar en un lote
+    // anterior. Se reproduce sin depender de cómo coloque Postgres las filas: con los disparadores de las claves
+    // foráneas apagados en esta sesión, primero las filas que apuntan y después, lejos, las apuntadas.
+    const srcUrl = await newDatabase();
+    const src = await connectPg(srcUrl);
+    const dir = await tmp();
+    const dump = path.join(dir, "pizarro-backup-20261110T030000Z.pzbak");
+    const key = randomBytes(32);
+    const far = INSERT_ROWS + 100;
+    let fks: Awaited<ReturnType<typeof listForeignKeys>>;
+    try {
+      await applyMigrations(src, MIGRATIONS);
+      fks = await listForeignKeys(src);
+      // Todas las claves de una tabla a sí misma están cubiertas por esta prueba.
+      assert.deepEqual(
+        fks.filter((k) => k.child === k.parent).map((k) => `${k.child}.${k.columns.join(",")}`).sort(),
+        ["Column.routineTargetColumnId", "Task.blockedById", "Task.recurrenceFromId", "TaskComment.parentId"],
+        "¿una autorreferencia nueva? Añádela a esta prueba",
+      );
+      await src.exec(`
+        SET session_replication_role = replica;
+        INSERT INTO "User" (id, email, name, "passwordHash", "updatedAt") VALUES ('u1', 'lotes@example.com', 'Lotes', '!', now());
+        INSERT INTO "Project" (id, name, "updatedAt") VALUES ('p1', 'Lotes', now());
+        INSERT INTO "Column" (id, "projectId", name, position, "routineTargetColumnId")
+          SELECT 'col' || i, 'p1', 'C' || i, i, CASE WHEN i = 0 THEN 'col${far}' END FROM generate_series(0, ${far}) i;
+        INSERT INTO "Task" (id, "projectId", "columnId", title, position, "updatedAt", "kindId", "blockedById", "recurrenceFromId")
+          SELECT 't' || i, 'p1', 'col1', 'T' || i, i, now(), 'kind_funcionalidad',
+                 CASE WHEN i = 0 THEN 't${far}' END, CASE WHEN i = 1 THEN 't${far - 1}' END
+            FROM generate_series(0, ${far}) i;
+        INSERT INTO "TaskComment" (id, "taskId", body, "parentId")
+          SELECT 'c' || i, 't2', 'comentario ' || i, CASE WHEN i = 0 THEN 'c${far}' END FROM generate_series(0, ${far}) i;
+        SET session_replication_role = origin;
+      `);
+      await dumpDatabase(src, dump, key);
+    } finally {
+      await src.end();
+    }
+    // En la copia, cada fila que apunta va más de un lote (INSERT_ROWS) antes que la apuntada.
+    const at = new Map<string, number>();
+    let n = 0;
+    for await (const line of readLines(dump, key)) {
+      const p = splitDataLine(line);
+      if (p) at.set(`${p.table}:${(JSON.parse(p.row) as { id: string }).id}`, n++);
+    }
+    const pairs: [string, string][] = [["Column:col0", `Column:col${far}`], ["Task:t0", `Task:t${far}`], ["Task:t1", `Task:t${far - 1}`], ["TaskComment:c0", `TaskComment:c${far}`]];
+    for (const [from, to] of pairs) {
+      assert.ok(at.get(to)! - at.get(from)! > INSERT_ROWS, `${from} → ${to}`);
+    }
+    // La comprobación de la prueba mensual sin base temporal («verify») la da por buena: no falta ninguna fila apuntada.
+    assert.ok((await verifyBackupFile(dump, key, { references: fks })).referencesChecked > 3 * far);
+
+    const url = await newDatabase();
+    await restoreBackup({ databaseUrl: url, source: parseSource(dump, { localDir: "/nada" }), key, migrationsDir: MIGRATIONS });
+    assert.deepEqual(await fingerprint(url), await fingerprint(srcUrl));
+    // Las claves foráneas quedan como estaban (no aplazables).
+    const sql = await connectPg(url);
+    try {
+      assert.deepEqual((await listForeignKeys(sql)).filter((k) => k.deferrable).map((k) => k.name), []);
+      const [t] = await sql.$queryRawUnsafe<{ b: string; r: string }[]>(`SELECT "blockedById" AS b, (SELECT "recurrenceFromId" FROM "Task" WHERE id = 't1') AS r FROM "Task" WHERE id = 't0'`);
+      assert.deepEqual(t, { b: `t${far}`, r: `t${far - 1}` });
+      // Y siguen comprobando: una referencia a una tarea que no existe se rechaza al momento.
+      await assert.rejects(sql.$executeRawUnsafe(`UPDATE "Task" SET "blockedById" = 'no-existe' WHERE id = 't3'`), /foreign key/);
+    } finally {
+      await sql.end();
+    }
+  });
+
+  test("una referencia que de verdad falta: la restauración falla entera y la verificación lo dice", async () => {
+    const srcUrl = await newDatabase();
+    const src = await connectPg(srcUrl);
+    const dir = await tmp();
+    const dump = path.join(dir, "pizarro-backup-20261110T040000Z.pzbak");
+    const key = randomBytes(32);
+    let fks: Awaited<ReturnType<typeof listForeignKeys>>;
+    try {
+      await applyMigrations(src, MIGRATIONS);
+      fks = await listForeignKeys(src);
+      await src.exec(`
+        SET session_replication_role = replica;
+        INSERT INTO "Project" (id, name, "updatedAt") VALUES ('p1', 'Rota', now());
+        INSERT INTO "Column" (id, "projectId", name, position) VALUES ('col1', 'p1', 'C', 1);
+        INSERT INTO "Task" (id, "projectId", "columnId", title, position, "updatedAt", "kindId", "blockedById")
+          VALUES ('t1', 'p1', 'col1', 'T', 1, now(), 'kind_funcionalidad', 'no-existe');
+        SET session_replication_role = origin;
+      `);
+      await dumpDatabase(src, dump, key);
+    } finally {
+      await src.end();
+    }
+    await assert.rejects(verifyBackupFile(dump, key, { references: fks }), /1 valores de Task \(blockedById\) apuntan a filas de Task/);
+    const url = await newDatabase();
+    await assert.rejects(restoreBackup({ databaseUrl: url, source: parseSource(dump, { localDir: "/nada" }), key, migrationsDir: MIGRATIONS }), /foreign key|clave foránea/);
+    const sql = await connectPg(url);
+    try {
+      const [row] = await sql.$queryRawUnsafe<{ n: number }[]>(`SELECT count(*)::int AS n FROM "Project"`);
+      assert.equal(row!.n, 0, "nada a medias");
+      assert.deepEqual((await listForeignKeys(sql)).filter((k) => k.deferrable).map((k) => k.name), []);
+    } finally {
+      await sql.end();
     }
   });
 });

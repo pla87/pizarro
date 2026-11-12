@@ -17,6 +17,7 @@ import { lastPositionIn, lockColumns, setTaskColumnPositions, TASK_ORDER } from 
 import { computeReleaseCodes, titleWithReleaseCode, zonedDayRange } from "@/lib/release";
 import { runReleaseAttachmentsJob, type PendingJob } from "@/lib/release-attachments";
 import { requireUser } from "@/lib/session";
+import { roundMb } from "@/lib/attachment-limit";
 import { checkQuota } from "@/lib/quota";
 import { getQuotaLimits } from "@/lib/quota-settings";
 import { storageUsage } from "@/lib/storage-usage";
@@ -42,14 +43,20 @@ const deploySchema = z.object({
    * alguna entretanto (p. ej. de vuelta a «En progreso»), no se despliega: la sacaría a producción.
    */
   columns: z.array(z.object({ taskId: v.id, columnId: v.id })).max(500).optional(),
+  /**
+   * Título de cada tarea con el que se generó el texto. Si otra persona ha renombrado alguna entretanto, no se despliega:
+   * las notas llevarían el título viejo y el histórico de la release, el nuevo.
+   */
+  titles: z.array(z.object({ taskId: v.id, title: z.string().max(5000) })).max(500).optional(),
 });
 
 /**
- * 409 si `missing` tareas de la release ya no están en el tablero, o `moved` han cambiado de columna desde que se
- * generó el texto: el texto no coincidiría con el histórico (o se sacaría a producción una tarea que ya no toca).
+ * 409 si `missing` tareas de la release ya no están en el tablero, `moved` han cambiado de columna o `renamed` han
+ * cambiado de título desde que se generó el texto: el texto no coincidiría con el histórico (o se sacaría a producción
+ * una tarea que ya no toca).
  */
-async function assertNoneMissing(missing: number, moved = 0) {
-  if (missing <= 0 && moved <= 0) return;
+async function assertNoneMissing(missing: number, moved = 0, renamed = 0) {
+  if (missing <= 0 && moved <= 0 && renamed <= 0) return;
   const t = await getT();
   if (missing > 0) {
     throw new AppError(
@@ -59,12 +66,26 @@ async function assertNoneMissing(missing: number, moved = 0) {
       409,
     );
   }
+  if (moved > 0) {
+    throw new AppError(
+      moved === 1
+        ? t("Una de las tareas se ha movido a otra columna mientras tanto: vuelve a generar la release.")
+        : t("{n} de las tareas se han movido a otra columna mientras tanto: vuelve a generar la release.", { n: moved }),
+      409,
+    );
+  }
   throw new AppError(
-    moved === 1
-      ? t("Una de las tareas se ha movido a otra columna mientras tanto: vuelve a generar la release.")
-      : t("{n} de las tareas se han movido a otra columna mientras tanto: vuelve a generar la release.", { n: moved }),
+    renamed === 1
+      ? t("Una de las tareas ha cambiado de título mientras tanto: vuelve a generar la release.")
+      : t("{n} de las tareas han cambiado de título mientras tanto: vuelve a generar la release.", { n: renamed }),
     409,
   );
+}
+
+/** Cuántas de las tareas leídas no tienen ya el título con el que se generó el texto. */
+function renamedCount(rows: { id: string; title: string }[], expected: Map<string, string> | null): number {
+  if (!expected) return 0;
+  return rows.filter((r) => expected.has(r.id) && expected.get(r.id) !== r.title).length;
 }
 
 /** Cuántas de las tareas leídas no están en la columna en la que estaban al generar el texto. */
@@ -93,7 +114,8 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     // El texto llega ya generado del cliente: si alguna tarea se ha archivado, borrado o movido de proyecto o de
     // columna mientras tanto, el histórico no coincidiría con lo que dice el texto. Se pide volver a generarlo.
     const expectedColumns = data.columns ? new Map(data.columns.map((c) => [c.taskId, c.columnId])) : null;
-    await assertNoneMissing(new Set(data.taskIds).size - tasks.length, movedCount(tasks, expectedColumns));
+    const expectedTitles = data.titles ? new Map(data.titles.map((c) => [c.taskId, c.title])) : null;
+    await assertNoneMissing(new Set(data.taskIds).size - tasks.length, movedCount(tasks, expectedColumns), renamedCount(tasks, expectedTitles));
 
     // Deshacer: dónde estaba cada tarea (solo las de este proyecto); la release del histórico se quita (ver más abajo).
     // La columna de destino se busca a la vez.
@@ -129,12 +151,16 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
       // medias, la release la incluiría y la sacaría a producción sin quitarle archivedAt. Se bloquean aquí las que
       // siguen activas en el proyecto (un archivado en curso termina antes y deja de contar) y se repite el aviso. En
       // orden de id, como las acciones en bloque: dos transacciones que bloquean las mismas tareas no se cruzan (40P01).
-      // También su columna: si otra persona ha movido alguna desde que se generó el texto, no se despliega.
+      // También su columna y su título: si otra persona ha movido o renombrado alguna desde que se generó el texto, no
+      // se despliega (con el título leído fuera, las notas dirían el viejo y el histórico el nuevo, o al revés).
       const ids = tasks.map((t) => t.id);
       const still = ids.length
-        ? await tx.$queryRaw<{ id: string; columnId: string }[]>`SELECT "id", "columnId" FROM "Task" WHERE "id" IN (${Prisma.join(ids)}) AND "projectId" = ${data.projectId} AND "archivedAt" IS NULL ORDER BY "id" FOR UPDATE`
+        ? await tx.$queryRaw<{ id: string; columnId: string; title: string }[]>`SELECT "id", "columnId", "title" FROM "Task" WHERE "id" IN (${Prisma.join(ids)}) AND "projectId" = ${data.projectId} AND "archivedAt" IS NULL ORDER BY "id" FOR UPDATE`
         : [];
-      await assertNoneMissing(ids.length - still.length, movedCount(still, expectedColumns));
+      await assertNoneMissing(ids.length - still.length, movedCount(still, expectedColumns), renamedCount(still, expectedTitles));
+      // Títulos de ahora (con la fila bloqueada) para el histórico y el código: nunca los leídos antes del candado.
+      const titleNow = new Map(still.map((r) => [r.id, r.title]));
+      const titleOf = (t: { id: string; title: string }) => titleNow.get(t.id) ?? t.title;
       const last = await tx.release.findFirst({ where: { projectId: data.projectId }, orderBy: { number: "desc" }, select: { number: true } });
       const number = (last?.number ?? 0) + 1;
       if (data.number && data.number !== number) {
@@ -154,15 +180,15 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
           content: data.content,
           createdById: user.id,
           ...(job ? { attachmentsPending: job } : {}),
-          tasks: { create: tasks.map((t) => ({ taskId: t.id, title: mentionsToPlain(t.title), kindName: t.kind.name })) },
+          tasks: { create: tasks.map((t) => ({ taskId: t.id, title: mentionsToPlain(titleOf(t)), kindName: t.kind.name })) },
         },
         select: { id: true },
       });
       // Las tareas que salen (no las fijas) llevan el código de la release delante del título.
       const changed = tasks
         .filter((t) => !t.evergreen)
-        .map((t) => [t.id, titleWithReleaseCode(t.title, codes.get(t.id)!)] as const)
-        .filter(([id, title]) => title !== byId.get(id)!.title);
+        .map((t) => [t.id, titleWithReleaseCode(titleOf(t), codes.get(t.id)!)] as const)
+        .filter(([id, title]) => title !== titleNow.get(id));
       if (changed.length) {
         await tx.$executeRaw`
           UPDATE "Task" AS t SET "title" = m."title", "updatedAt" = ${new Date()}
@@ -290,14 +316,21 @@ export async function deleteReleaseAttachments(releaseId: string) {
   });
 }
 
-/** Aviso si el uso del proyecto, sumando las copias que se van a guardar (como mucho, el tamaño de los originales), supera su cuota. */
+/**
+ * Aviso si el uso del proyecto, sumando las copias que se van a guardar (como mucho, el tamaño de los originales), supera
+ * su cuota. `usedMb` es ese uso con las copias (antes salía sin ellas: «supera su cuota (0.6 de 1 MB)»).
+ */
 async function releaseStorageWarning(projectId: string, job: PendingJob | null): Promise<{ usedMb: number; limitMb: number } | null> {
   try {
     const limits = await getQuotaLimits(projectId);
     if (limits.project === null) return null;
     const copies = job ? (await db.taskAttachment.aggregate({ _sum: { size: true }, where: { taskId: { in: job.items.map((i) => i.taskId) } } }))._sum.size ?? 0 : 0;
-    const q = checkQuota(await storageUsage(projectId, db, { total: false }), copies, { project: limits.project, total: null });
-    return q ? { usedMb: q.usedMb, limitMb: q.limitMb } : null;
+    const usage = await storageUsage(projectId, db, { total: false });
+    const q = checkQuota(usage, copies, { project: limits.project, total: null });
+    if (!q) return null;
+    // Con un decimal; si al redondear no pasara de la cuota (1,04 MB de 1 MB → «1 de 1 MB»), una décima más.
+    const used = roundMb(usage.project + copies);
+    return { usedMb: used > q.limitMb ? used : Math.round((q.limitMb + 0.1) * 10) / 10, limitMb: q.limitMb };
   } catch {
     return null;
   }

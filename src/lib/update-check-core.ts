@@ -2,7 +2,10 @@
 
 export const UPDATE_CHECK_URL = "https://api.github.com/repos/pla87/pizarro/releases/latest";
 export const UPDATE_RELEASES_URL = "https://github.com/pla87/pizarro/releases";
-export const UPDATE_DOCS_URL = "https://github.com/pla87/pizarro/blob/main/docs/INSTALL.md#5-actualizar";
+/** «Cómo actualizar»: la sección de la guía de instalación de la web (docs/web/instalar.md, {#actualizar} y {#update}). */
+const UPDATE_DOCS_URL = "https://getpizarro.com/instalar/#actualizar";
+const UPDATE_DOCS_URL_EN = "https://getpizarro.com/en/install/#update";
+export const updateDocsUrl = (locale: string): string => (locale === "en" ? UPDATE_DOCS_URL_EN : UPDATE_DOCS_URL);
 /** Como mucho una consulta a GitHub cada 12 horas. */
 export const UPDATE_CHECK_INTERVAL_MS = 12 * 3600_000;
 /** Tras un fallo (sin red, límite de GitHub…) se reintenta antes, pero no en cada petición. */

@@ -124,8 +124,8 @@ export const cuentas: Record<string, string> = {
   "No se pudo enviar el email de confirmación. Inténtalo más tarde.": "The confirmation email could not be sent. Try again later.",
   "Ese ya es tu email.": "That is already your email.",
   "Esta es tu sesión actual: usa «Cerrar sesión».": "This is your current session: use “Log out”.",
-  "Usuario creado, pero no se pudo enviar la invitación. Usa «Forzar cambio de contraseña» para reenviarla.":
-    "User created, but the invitation could not be sent. Use “Force password change” to resend it.",
+  "Usuario creado, pero no se pudo enviar la invitación. Revisa el envío de emails y pulsa «Reenviar invitación» en su fila.":
+    "User created, but the invitation could not be sent. Check email sending and click “Resend invitation” on their row.",
   "Para cambiar tu propia contraseña usa «Mi perfil».": "To change your own password use “My profile”.",
   "Se ha forzado el cambio, pero no se pudo enviar el email con el enlace.": "The change was forced, but the email with the link could not be sent.",
 
@@ -301,4 +301,21 @@ export const cuentas: Record<string, string> = {
   "Pide a un administrador que te genere un enlace para elegir una contraseña nueva (Administración → Usuarios → Forzar cambio de contraseña). Te lo pasará por otro canal; sirve una sola vez y caduca en 30 minutos.": "Ask an administrator to generate a link for you to choose a new password (Administration → Users → Force password change). They will pass it to you through another channel; it works only once and expires in 30 minutes.",
   "Si eres quien administra el servidor: la sección «Altas, bajas y contraseñas» del manual explica cómo recuperar el acceso, o configura el envío de emails (SMTP).": "If you run the server: the \"Altas, bajas y contraseñas\" (adding, removing users and passwords) section of the manual explains how to regain access, or configure email sending (SMTP).",
   "No hay email ni inicio de sesión con Google configurados: quien olvide su contraseña no puede recuperarla por su cuenta y tendrá que pedirte que le fuerces el cambio de contraseña.": "Neither email nor Google sign-in is configured: anyone who forgets their password cannot recover it on their own and will have to ask you to force a password change.",
+
+  // Códigos de recuperación: contador con 1
+  "1 código de recuperación sin usar": "1 unused recovery code",
+  // Invitación completada: la cuenta es nueva, no hay sesiones que cerrar.
+  "Contraseña guardada. Ya puedes iniciar sesión con tu email y la contraseña que acabas de elegir.": "Password saved. You can now sign in with your email and the password you just chose.",
+
+  // Administración → Usuarios: invitación pendiente, reenviarla e idioma al dar de alta
+  "Invitación pendiente": "Invitation pending",
+  "Aún no ha entrado ni ha elegido su contraseña": "Has not signed in or chosen a password yet",
+  "Reenviar invitación": "Resend invitation",
+  "Reenviar invitación a {name}": "Resend invitation to {name}",
+  "Invitación reenviada a {email}: el enlace anterior ya no vale": "Invitation resent to {email}: the previous link no longer works",
+  "El de su interfaz y el de la invitación. Podrá cambiarlo en «Mi perfil».": "Used for their interface and the invitation. They can change it in “My profile”.",
+  "El de su interfaz. Podrá cambiarlo en «Mi perfil».": "Used for their interface. They can change it in “My profile”.",
+  "La cuenta está desactivada: actívala antes de reenviar la invitación.": "The account is deactivated: activate it before resending the invitation.",
+  "Esta persona ya ha entrado alguna vez: usa «Forzar cambio de contraseña».": "This person has already signed in: use “Force password change”.",
+  "No se pudo enviar la invitación. Revisa el envío de emails en Administración → Ajustes.": "The invitation could not be sent. Check email sending in Administration → Settings.",
 };

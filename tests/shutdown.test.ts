@@ -173,3 +173,35 @@ describe("stopListening con un servidor HTTP de verdad", () => {
     await hanging;
   });
 });
+
+describe("apagado sin servidor HTTP encontrado", () => {
+  function deps(closed: number) {
+    const logs: { level?: string; action: string }[] = [];
+    const d: ShutdownDeps = {
+      flushLogs: async () => {}, logEvent: (e) => void logs.push(e), closeStreams: () => 0, exit: () => {}, graceMs: 20, flushMs: 20,
+      stopListening: async () => ({ closed, drained: async () => 0 }),
+    };
+    return { d, logs };
+  }
+  async function run(nodeEnv: string, closed: number) {
+    resetShutdownForTests();
+    const prev = process.env.NODE_ENV;
+    (process.env as Record<string, string>).NODE_ENV = nodeEnv;
+    try {
+      const x = deps(closed);
+      await runShutdown("SIGTERM", x.d);
+      return x.logs.filter((l) => l.action === "system.shutdown.no_listener");
+    } finally {
+      (process.env as Record<string, string | undefined>).NODE_ENV = prev;
+      resetShutdownForTests();
+    }
+  }
+
+  test("en producción deja un aviso en el registro; con el servidor encontrado o fuera de producción, no", async () => {
+    const warned = await run("production", 0);
+    assert.equal(warned.length, 1);
+    assert.equal(warned[0]!.level, "warn");
+    assert.equal((await run("production", 1)).length, 0);
+    assert.equal((await run("test", 0)).length, 0);
+  });
+});

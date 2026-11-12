@@ -14,7 +14,7 @@ const stores = (g.__pzRateStores ??= {
  * Prefijos de las claves de bloqueo de seguridad (guardadas en su propio mapa). Las de una IP terminan en ella, así que
  * cualquier clave que empiece por uno de estos prefijos cuenta.
  */
-export const SECURITY_KEY_PREFIXES = ["login:", "reset:", "reset-submit:", "confirm:", "2fa:", "setup:", "glogin:", "password:", "email-change:", "force-password:"] as const;
+const SECURITY_KEY_PREFIXES = ["login:", "reset:", "reset-submit:", "confirm:", "2fa:", "setup:", "glogin:", "password:", "email-change:", "force-password:"] as const;
 
 const storeFor = (key: string): Store => (SECURITY_KEY_PREFIXES.some((p) => key.startsWith(p)) ? stores.security : stores.general);
 
@@ -76,6 +76,15 @@ export function rateLimit(key: string, limit: number, windowMs: number, cost = 1
 
 export function resetRateLimit(key: string): void {
   storeFor(key).map.delete(key);
+}
+
+/** Devuelve `cost` usos reservados de `key` que al final no cuentan (p. ej. un intento que no se llegó a comprobar). */
+export function releaseRateLimit(key: string, cost = 1): void {
+  const store = storeFor(key);
+  const bucket = store.map.get(key);
+  if (!bucket) return;
+  bucket.count -= cost;
+  if (bucket.count <= 0) store.map.delete(key);
 }
 
 /**

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
 import { COMMENT_LIMIT_MAX, COMMENT_LIMIT_MIN, getMaxCommentsPerTask, setMaxCommentsPerTask } from "@/lib/app-settings";
+import { saveInstanceSettings } from "@/lib/instance";
 import { requireAdmin } from "@/lib/session";
 
 const commentLimit = z
@@ -23,5 +24,17 @@ export async function saveMaxCommentsPerTask(value: number) {
     describeAction("Cambió el máximo de comentarios por tarea de {from} a {to}", { from: prev, to: next });
     revalidatePath("/admin/settings");
     return { value: next };
+  });
+}
+
+/** Administración → Ajustes → Instalación: nombre de la organización, idioma por defecto y zona horaria. */
+export async function saveInstallationSettings(input: { orgName: string; locale: string; timeZone: string }) {
+  return runAction({ name: "settings.saveInstallationSettings", args: [input] }, async () => {
+    await requireAdmin();
+    const { before, after } = await saveInstanceSettings(input);
+    describeAction("Cambió los ajustes de la instalación", { before, after });
+    // Nombre en los títulos, idioma de las pantallas sin sesión y zona de las fechas: cambia lo ya pintado.
+    revalidatePath("/", "layout");
+    return after;
   });
 }

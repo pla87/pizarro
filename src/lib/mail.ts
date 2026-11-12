@@ -7,7 +7,7 @@ import nodemailer from "nodemailer";
 import { logEvent } from "./log";
 import { loadMailConfig, peekMailConfig, savedMailEnabled } from "./mail-config";
 import type { MailConfig } from "./mail-settings-core";
-import { maskEmailsIn } from "./mask-email";
+import { logMailError, maskEmailsIn } from "./mask-email";
 import { trackInFlight } from "./shutdown";
 
 // Envío de emails: SMTP con nodemailer. La configuración sale de las variables SMTP_* del servidor o, si no hay, de lo
@@ -43,7 +43,7 @@ export function appUrl(): string {
   return (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
 }
 
-export const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+export { escapeHtml } from "./html-escape";
 
 let transport: { t: ReturnType<typeof nodemailer.createTransport>; signature: string } | null = null;
 /** Transporte de nodemailer; se rehace cuando cambia la configuración (al guardar los ajustes o cambiar las variables). */
@@ -120,7 +120,7 @@ export function sendMailInBackground(label: string, send: () => Promise<void>): 
       await send();
       logEvent({ category: "auth", action: "auth.emailSent", message: `Email enviado: ${label}` });
     } catch (err) {
-      console.error("[mail]", label, maskEmailsIn(String(err)));
+      logMailError(`[mail] ${label}`, err);
       logEvent({ level: "error", category: "auth", action: "auth.emailFailed", message: `Fallo al enviar el email (${label}): ${maskEmailsIn((err as Error).message)}` });
     }
   };

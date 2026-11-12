@@ -42,7 +42,6 @@ export const mensajeria: Record<string, string> = {
   "Configuración de WhatsApp guardada.": "WhatsApp settings saved.",
   "Avisos por WhatsApp activados.": "WhatsApp notices turned on.",
   "Avisos por WhatsApp desactivados.": "WhatsApp notices turned off.",
-  "WhatsApp de prueba enviado a {to}.": "Test WhatsApp sent to {to}.",
   "Vacío = {value} (variable {name} del servidor)": "Empty = {value} (server variable {name})",
   "WhatsApp (de pago, Cloud API de Meta)": "WhatsApp (paid, Meta Cloud API)",
   "Activo: {n} persona(s) conectada(s) y {p} pendiente(s) de confirmar su número.": "On: {n} person(s) connected and {p} still to confirm their number.",
@@ -67,7 +66,6 @@ export const mensajeria: Record<string, string> = {
   "opcional, p. ej. en": "optional, e.g. en",
   "Lo que guardas aquí manda; los campos vacíos usan las variables WHATSAPP_* del servidor, si las hay. «Idioma en inglés» se usa con quien tiene Pizarro en inglés (añade esa traducción a la misma plantilla en Meta).": "What you save here wins; empty fields use the server's WHATSAPP_* variables, if any. “English language” is used for people who have Pizarro in English (add that translation to the same template in Meta).",
   "Número para la prueba": "Number for the test",
-  "Envía la plantilla con un texto de prueba a ese número (con el número de prueba de Meta, solo a los números verificados).": "Sends the template with a test text to that number (with Meta's test number, only to verified numbers).",
 
   // Mi perfil → Avisos
   "Cuando alguien te menciona con @ en una tarjeta o comentario, siempre te aparece en la campana de avisos. Además puedes recibirlo por email:": "When someone mentions you with @ on a card or comment, it always appears in the notices bell. You can also get it by email:",
@@ -121,4 +119,88 @@ export const mensajeria: Record<string, string> = {
   "El identificador del número de WhatsApp son solo cifras (Phone number ID).": "The WhatsApp phone number ID is digits only (Phone number ID).",
   "El nombre de la plantilla solo admite minúsculas, cifras y guiones bajos.": "The template name only allows lowercase letters, digits and underscores.",
   "El idioma de la plantilla no es válido (por ejemplo es, es_ES o en_US).": "The template language isn't valid (for example es, es_ES or en_US).",
+
+  // Administración → Ajustes → Telegram: guardado o activado, pero el webhook o el sondeo fallaron
+  "Bot @{bot} guardado, pero Telegram ha respondido con un error al prepararlo.": "Bot @{bot} saved, but Telegram replied with an error while setting it up.",
+  "Avisos por Telegram activados, pero Telegram ha respondido con un error al preparar el bot.": "Telegram notices turned on, but Telegram replied with an error while setting up the bot.",
+  "Avisos por Telegram desactivados, pero Telegram ha respondido con un error.": "Telegram notices turned off, but Telegram replied with an error.",
+
+  // Administración → Ajustes → WhatsApp: la primera vez no se activa sola
+  "Configuración de WhatsApp guardada. Pulsa «Activar» para empezar a enviar avisos (de pago).": "WhatsApp settings saved. Press “Enable” to start sending notices (paid).",
+
+  // Mi perfil → Avisos: la prueba falla porque el bot está bloqueado
+  "Telegram no deja enviarte mensajes (has bloqueado el bot o borrado el chat), así que se ha desconectado. Vuelve a conectarlo para recibir avisos.": "Telegram won't let us message you (you blocked the bot or deleted the chat), so it has been disconnected. Connect it again to get notices.",
+
+  // Mensajes del bot de Telegram: la pestaña se llama Mi perfil → Avisos (en inglés, My profile → Notifications)
+  "Hola. Soy el bot de avisos de Pizarro. Para recibir aquí tus avisos, pulsa «Conectar Telegram» en Pizarro, en Mi perfil → Avisos.": "Hi! I'm the Pizarro notices bot. To get your notices here, press “Connect Telegram” in Pizarro, under My profile → Notifications.",
+  "Este enlace ha caducado o ya se ha usado. Vuelve a pulsar «Conectar Telegram» en Pizarro, en Mi perfil → Avisos.": "This link has expired or has already been used. Press “Connect Telegram” again in Pizarro, under My profile → Notifications.",
+  "Soy el bot de avisos de Pizarro: no leo mensajes. Para conectar o desconectar los avisos, ve en Pizarro a Mi perfil → Avisos (o escribe /stop).": "I'm the Pizarro notices bot: I don't read messages. To connect or disconnect notices, go to My profile → Notifications in Pizarro (or type /stop).",
+
+  // Mi perfil → Avisos: se esperaba a «Iniciar» y el administrador cambió el bot (o se pidió otro enlace en otra pestaña)
+  "Este enlace ya no vale: el administrador ha cambiado el bot de Telegram o se ha pedido otro enlace. Vuelve a pulsar «Conectar Telegram».":
+    "This link is no longer valid: the administrator changed the Telegram bot or another link was requested. Press “Connect Telegram” again.",
+
+  // Administración → Ajustes → WhatsApp: idioma en inglés de la plantilla de verificación
+  "Idioma en inglés de la verificación": "English verification language",
+  "«Idioma en inglés de la verificación» se usa con quien tiene Pizarro en inglés (añade esa traducción a la plantilla de verificación en Meta); vacío = el código sale para todos en «Idioma de la verificación».":
+    "“English verification language” is used for people who have Pizarro in English (add that translation to the verification template in Meta); empty = everyone gets the code in “Verification language”.",
+
+  // Código de verificación de WhatsApp: envío y comprobación
+  "No se pudo enviar el código por WhatsApp.": "The code could not be sent by WhatsApp.",
+  "Escribe el código de 6 cifras que te ha llegado por WhatsApp.": "Enter the 6-digit code you received on WhatsApp.",
+  "El código no es correcto. Te queda 1 intento.": "That code is not correct. You have 1 attempt left.",
+  "El código no es correcto. Te quedan {n} intentos.": "That code is not correct. You have {n} attempts left.",
+  "El código no es correcto y ya no quedan intentos. Pide otro con «Enviar otro código».": "That code is not correct and there are no attempts left. Ask for another one with “Send another code”.",
+  "El código ha caducado o ya no vale. Pide otro con «Enviar otro código».": "The code has expired or is no longer valid. Ask for another one with “Send another code”.",
+  "Demasiados intentos con este código. Pide otro con «Enviar otro código».": "Too many attempts with this code. Ask for another one with “Send another code”.",
+  "Tu número de WhatsApp ya está confirmado.": "Your WhatsApp number is already confirmed.",
+  "Confirma primero tu número con el código que te llegó por WhatsApp.": "First confirm your number with the code you received on WhatsApp.",
+  "Has llegado al máximo de mensajes de WhatsApp de prueba por hoy. Vuelve a intentarlo mañana.": "You have reached today's limit of WhatsApp test messages. Try again tomorrow.",
+  "Pidió otro código de WhatsApp para {to}": "Requested another WhatsApp code for {to}",
+
+  // Mi perfil → Avisos → WhatsApp: número y código
+  "Te hemos enviado un código por WhatsApp.": "We have sent you a code on WhatsApp.",
+  "Te hemos enviado otro código por WhatsApp.": "We have sent you another code on WhatsApp.",
+  "Guardar y enviar código": "Save and send code",
+  "Te hemos enviado un código de 6 cifras por WhatsApp a {phone}. Escríbelo aquí para confirmar que el número es tuyo.": "We have sent a 6-digit code by WhatsApp to {phone}. Enter it here to confirm the number is yours.",
+  "El código enviado a {phone} ha caducado o ya no vale. Pide otro.": "The code sent to {phone} has expired or is no longer valid. Ask for another one.",
+  "Código de WhatsApp": "WhatsApp code",
+  "Enviar otro código": "Send another code",
+  "El código caduca a los 15 minutos y admite 5 intentos. Hasta que lo confirmes no se te envían avisos por WhatsApp. Si no llega, revisa el número o pide al administrador que compruebe la configuración.": "The code expires after 15 minutes and allows 5 attempts. Until you confirm it, no notices are sent to you by WhatsApp. If it does not arrive, check the number or ask the administrator to check the setup.",
+  "Este número estaba guardado en tu perfil, pero los avisos por WhatsApp no están activados. Para activarlos, acepta recibirlos y confírmalo con el código que te enviaremos.": "This number was saved in your profile, but WhatsApp notices are not turned on. To turn them on, agree to receive them and confirm it with the code we will send you.",
+  "Número guardado: {phone}. Los avisos por WhatsApp no están activados.": "Saved number: {phone}. WhatsApp notices are not turned on.",
+  "Borrar el número": "Delete the number",
+  "Número borrado.": "Number deleted.",
+
+  // Administración → Ajustes → WhatsApp: plantilla configurada por variables
+  "La plantilla sale de la variable WHATSAPP_TEMPLATE_NAME: se usa el formato antiguo (4 variables) y solo se envían menciones. Si tu plantilla ya es la nueva (3 variables, abajo), escribe su nombre en «Nombre de la plantilla» y guarda.": "The template comes from the WHATSAPP_TEMPLATE_NAME variable: the old format (4 variables) is used and only mentions are sent. If your template is already the new one (3 variables, below), type its name in “Template name” and save.",
+
+  // Plantilla de autenticación de WhatsApp (codigo_pizarro): Administración → Ajustes y su «Probar»
+  "Plantilla de verificación": "Verification template",
+  "Idioma de la verificación": "Verification language",
+  "La plantilla de verificación lleva el código de 6 cifras con el que cada persona conecta su WhatsApp. Meta exige que sea de categoría Autenticación (no vale aviso_pizarro). Vacío = codigo_pizarro, en el mismo idioma que los avisos.":
+    "The verification template carries the 6-digit code each person uses to connect their WhatsApp. Meta requires it to be in the Authentication category (aviso_pizarro will not do). Empty = codigo_pizarro, in the same language as the notices.",
+  "Una plantilla de categoría Autenticación llamada codigo_pizarro, aprobada, con la opción «Copiar código» y el mismo idioma. Su texto lo pone Meta («Tu código de verificación es…»): con ella llega el código para conectar WhatsApp.":
+    "An approved Authentication template named codigo_pizarro, with the “Copy code” option and the same language. Meta sets its text (“… is your verification code”): it carries the code for connecting WhatsApp.",
+  "Envía a ese número las dos plantillas: un aviso de prueba y un código de verificación de muestra (son 2 mensajes de pago; con el número de prueba de Meta, solo a los números verificados).":
+    "Sends both templates to that number: a test notice and a sample verification code (2 paid messages; with Meta's test number, only to verified numbers).",
+  "Enviados 2 WhatsApp de prueba a {to}: un aviso y un código de verificación de muestra (123456).": "2 test WhatsApp messages sent to {to}: a notice and a sample verification code (123456).",
+  "Solo ha salido el aviso de prueba.": "Only the test notice was sent.",
+  "Solo ha salido el código de verificación de prueba.": "Only the test verification code was sent.",
+  "Plantilla de avisos:": "Notice template:",
+  "Plantilla de verificación:": "Verification template:",
+
+  // Meta rechaza la plantilla de verificación (errores 132001, 132000/132012/132018, 132015/132016)
+  "La plantilla de verificación «{name}» ({lang}) no existe en Meta o aún no está aprobada (error {code}). Créala en WhatsApp Manager: categoría Autenticación, opción «Copiar código», con ese nombre e idioma. Hasta entonces nadie puede conectar su WhatsApp.":
+    "The verification template “{name}” ({lang}) does not exist in Meta or is not approved yet (error {code}). Create it in WhatsApp Manager: Authentication category, “Copy code” option, with that name and language. Until then nobody can connect their WhatsApp.",
+  "La plantilla de verificación «{name}» no tiene la forma que espera Pizarro (error {code}): tiene que ser de categoría Autenticación con el botón «Copiar código».":
+    "The verification template “{name}” is not in the form Pizarro expects (error {code}): it must be in the Authentication category with the “Copy code” button.",
+  "Meta ha pausado o desactivado la plantilla de verificación «{name}» (error {code}). Revísala en WhatsApp Manager.":
+    "Meta has paused or disabled the verification template “{name}” (error {code}). Check it in WhatsApp Manager.",
+
+  // Mi perfil → Avisos → WhatsApp: la plantilla de verificación no está lista
+  "Ahora no se pueden enviar códigos por WhatsApp: el administrador de Pizarro tiene que crear (o revisar) en Meta la plantilla de verificación. Avísale y vuelve a intentarlo después.":
+    "Codes cannot be sent by WhatsApp right now: your Pizarro administrator needs to create (or check) the verification template in Meta. Let them know and try again later.",
+  "Todavía no se ha podido enviar el código a {phone}. Cuando el administrador lo arregle, pulsa «Enviar otro código».":
+    "The code could not be sent to {phone} yet. Once the administrator fixes it, press “Send another code”.",
 };

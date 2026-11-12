@@ -11,12 +11,25 @@ interface ProjectChange {
   /** Tarea afectada si la acción tocó solo una (el detalle abierto refresca sus comentarios); null si varias o ninguna. */
   taskId?: string | null;
   at: number;
+  /** Número de orden del cambio en este proceso (crece siempre): ver `liveCursor`. */
+  seq: number;
   /** Id único del cambio: quien lo hizo lo recibe en el resultado de su acción y no se refresca por su propio aviso. */
   cid: string;
 }
 
 type Listener = (change: ProjectChange) => void;
 const channels = (globalThis as unknown as { __pzRealtime?: Map<string, Set<Listener>> }).__pzRealtime ??= new Map();
+
+/**
+ * Último aviso de cada proyecto, para saber al (re)abrir un canal si se perdió alguno mientras estuvo cerrado (la pestaña
+ * oculta cierra el suyo). `boot` cambia al reiniciar el servidor: entonces no se puede saber y se refresca siempre.
+ */
+const live = (globalThis as unknown as { __pzLive?: { boot: string; seq: number; last: Map<string, number> } }).__pzLive ??= { boot: randomUUID().slice(0, 8), seq: 0, last: new Map() };
+
+/** Posición del canal de un proyecto: identificador del proceso y número del último aviso publicado en él (0 si ninguno). */
+export function liveCursor(projectId: string): { boot: string; seq: number } {
+  return { boot: live.boot, seq: live.last.get(projectId) ?? 0 };
+}
 
 export function subscribeProject(projectId: string, listener: Listener): () => void {
   let set = channels.get(projectId);
@@ -29,11 +42,13 @@ export function subscribeProject(projectId: string, listener: Listener): () => v
 }
 
 /** Anuncia un cambio y devuelve su id (aunque no haya nadie escuchando: la acción lo necesita para su resultado). */
-export function publishChange(change: Omit<ProjectChange, "at" | "cid">): string {
+export function publishChange(change: Omit<ProjectChange, "at" | "cid" | "seq">): string {
   const cid = randomUUID();
+  const seq = ++live.seq;
+  live.last.set(change.projectId, seq);
   const set = channels.get(change.projectId);
   if (!set) return cid;
-  const full = { ...change, at: Date.now(), cid };
+  const full = { ...change, at: Date.now(), seq, cid };
   for (const l of set) {
     try {
       l(full);
@@ -51,7 +66,7 @@ export function publishChange(change: Omit<ProjectChange, "at" | "cid">): string
 /** Máximo de canales SSE simultáneos por usuario (varias pestañas/proyectos; frena abusos). */
 export const MAX_STREAMS_PER_USER = 10;
 
-export interface OpenStream {
+interface OpenStream {
   userId: string;
   projectId: string;
   sessionId: string;

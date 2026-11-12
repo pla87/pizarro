@@ -16,7 +16,7 @@ interface ToastItem {
   action?: ToastAction;
 }
 /** Botón del aviso (p. ej. «Deshacer»): al pulsarlo se ejecuta y el aviso se cierra. */
-export interface ToastAction {
+interface ToastAction {
   label: string;
   onClick: () => void;
 }
@@ -39,7 +39,7 @@ export { isSessionExpiredMessage };
  * se guardan los borradores (título, descripción, tarea nueva… ver useDraftAutosave, que guarda en «pagehide») y, al
  * volver a entrar, la tarea se reabre con lo escrito. Nunca se hace sola: solo al pulsar el botón del aviso.
  */
-export function goToLogin(): void {
+function goToLogin(): void {
   const here = `${window.location.pathname}${window.location.search}`;
   // Carga completa (no router.push): así salta «pagehide» y se guardan los borradores antes de salir.
   // eslint-disable-next-line @next/next/no-location-assign-relative-destination

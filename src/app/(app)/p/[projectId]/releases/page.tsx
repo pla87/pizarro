@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Rocket } from "lucide-react";
 import { visibleProjectsWhere } from "@/lib/access";
+import { COLUMN_ROLE_LABEL } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
 import { getT } from "@/i18n/server";
@@ -29,7 +30,8 @@ export default async function ReleasesPage({
   const t = await getT();
   const { projectId } = await params;
   const sp = await searchParams;
-  const q = (Array.isArray(sp.q) ? sp.q[0] : sp.q)?.trim().slice(0, 200) ?? "";
+  // Sin NUL (PostgreSQL no lo admite en un texto: ?q=a%00b daba el error 22021 y la página de error).
+  const q = (Array.isArray(sp.q) ? sp.q[0] : sp.q)?.replaceAll("\u0000", "").trim().slice(0, 200) ?? "";
   const rawLimit = Number(Array.isArray(sp.limit) ? sp.limit[0] : sp.limit);
   const limit = Number.isFinite(rawLimit) && rawLimit >= PAGE_STEP ? Math.min(Math.floor(rawLimit), 500) : PAGE_STEP;
   // Primero el acceso: la búsqueda no debe tocar proyectos ajenos.
@@ -67,6 +69,8 @@ export default async function ReleasesPage({
     },
   });
   if (!project) notFound();
+  // Para el texto sin releases: el nombre real de la columna que las genera (cada proyecto la llama como quiere).
+  const nextColumn = project._count.releases === 0 ? await db.column.findFirst({ where: { projectId, role: "NEXT_RELEASE" }, select: { name: true } }) : null;
   const hasMore = !q && project.releases.length > limit;
   const releases = hasMore ? project.releases.slice(0, limit) : project.releases;
   // Tareas de cada release mostrada, filtrando por sus ids: un `_count` de relación agruparía en cada carga todas las
@@ -83,7 +87,9 @@ export default async function ReleasesPage({
       {project._count.releases === 0 ? (
         <div className="card flex flex-col items-center gap-2 p-10 text-center text-sm text-slate-500">
           <Rocket size={32} className="text-slate-300" />
-          {t("Aún no hay releases. Genera una desde la columna «Siguiente salto a producción» del tablero.")}
+          {nextColumn
+            ? t("Aún no hay releases. Genera una desde la columna «{name}» del tablero.", { name: nextColumn.name })
+            : t("Aún no hay releases. Para generarlas, elige en el menú de una columna del tablero el rol «{role}».", { role: t(COLUMN_ROLE_LABEL.NEXT_RELEASE) })}
         </div>
       ) : (
         <ReleasesList

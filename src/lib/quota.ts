@@ -9,8 +9,17 @@ export const DEFAULT_PROJECT_QUOTA_MB = 10240;
 export const QUOTA_MIN_MB = 1;
 export const QUOTA_MAX_MB = 10_000_000;
 
+/**
+ * Texto de un campo de cuota (MB) válido: entero entre QUOTA_MIN_MB y QUOTA_MAX_MB, los mismos topes que comprueba el
+ * servidor (antes el formulario aceptaba 99999999999999 y el servidor lo rechazaba al guardar). Vacío no es válido.
+ */
+export function quotaMbValid(text: string): boolean {
+  const n = Number(text);
+  return text.trim() !== "" && Number.isInteger(n) && n >= QUOTA_MIN_MB && n <= QUOTA_MAX_MB;
+}
+
 /** Valor positivo de una variable de entorno en MB; vacío, 0 o inválido → null (como si no estuviera definida). */
-export function parseEnvMb(raw: string | undefined): number | null {
+function parseEnvMb(raw: string | undefined): number | null {
   if (raw === undefined || raw.trim() === "") return null;
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? n : null;

@@ -3,6 +3,7 @@ import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import type { Prisma } from "@/generated/prisma/client";
 import { makeT, toLocale, type T } from "@/i18n/core";
+import { LOCK_TRANSFER_CLAIM } from "./advisory-locks";
 import { db } from "./db";
 import { assertDiskRoom, isNoSpaceError, NO_SPACE_MESSAGE, releaseDisk, reserveDisk } from "./disk-space";
 import { AppError } from "./errors";
@@ -34,22 +35,21 @@ export interface TransferProgress {
 /** Máximo de trabajos en cola o en marcha por persona. */
 export const MAX_JOBS_PER_USER = 2;
 /** Cuánto vive el fichero exportado (y el resumen de una importación) tras terminar. */
-export const TRANSFER_TTL_MS = 24 * 60 * 60 * 1000;
+const TRANSFER_TTL_MS = 24 * 60 * 60 * 1000;
 /** Las filas terminadas se borran del todo pasado este tiempo. */
 const ROW_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 /** Un trabajo RUNNING sin escribir nada desde hace esto se da por muerto (el trabajador late cada HEARTBEAT_MS). */
-export const STALE_MS = 40_000;
+const STALE_MS = 40_000;
 const HEARTBEAT_MS = 10_000;
 const SWEEP_EVERY_MS = 20_000;
 /** Veces que una exportación interrumpida por un reinicio se vuelve a poner en cola antes de darla por fallida. */
 const MAX_ATTEMPTS = 2;
-const LOCK_TRANSFER_CLAIM = 741_031_003;
 const INTERRUPTED = "Interrumpido por un reinicio";
 /** Hueco de más que se pide al disco sobre el tamaño del archivo al importar (imágenes recodificadas, temporales…). */
 const IMPORT_FACTOR = 1.5;
 
 /** Trabajos simultáneos por defecto. Cada uno tiene en memoria como mucho el project.json (64 MB) o un adjunto de importación (~100 MB), así que dos caben de sobra. */
-export const DEFAULT_CONCURRENCY = 2;
+const DEFAULT_CONCURRENCY = 2;
 
 /** Trabajos simultáneos en todo el servidor (PROJECT_TRANSFER_CONCURRENCY, 2 por defecto). Se lee cada vez. */
 export function transferConcurrency(raw: string | undefined = process.env.PROJECT_TRANSFER_CONCURRENCY): number {
@@ -101,7 +101,7 @@ export async function createImportJob(userId: string, tempFile: string, bytes: n
 // ---------------------------------------------------------------------------------------------------------------
 // Consulta (con permisos) y forma pública
 
-export interface TransferViewer {
+interface TransferViewer {
   id: string;
   role: "ADMIN" | "MEMBER";
 }
@@ -285,6 +285,29 @@ export async function executeJob(job: JobRow): Promise<void> {
     })
     .catch((err) => { console.error("[transfer] no se pudo anotar el final", err); return null; });
   if (finished?.count && error === null && job.kind === "EXPORT") await dropPreviousExports(job);
+  // Exportación terminada cuya fila ya no existe (se borró el proyecto mientras se exportaba): nadie la descargará.
+  // Solo si la fila ha desaparecido: un trabajador rezagado (la fila sigue, retomada por otro) no toca el archivo del vigente.
+  if (finished && !finished.count && job.kind === "EXPORT" && result && !(await db.projectTransferJob.count({ where: { id: job.id } }).catch(() => 1))) {
+    await rm(path.join(exportsDir(), (result as ExportJobResult).file), { force: true }).catch(() => {});
+  }
+}
+
+/**
+ * Al borrar un proyecto: borra sus exportaciones (filas y archivos, también las que están en cola o en marcha) y las
+ * importaciones que lo crearon, para que no quede en disco un .pizarro.zip de un proyecto que ya no existe ni un
+ * resumen que enlaza a él. Una exportación en marcha termina sin dejar nada (executeJob borra su archivo si la fila
+ * ya no está). Devuelve cuántos trabajos se borraron.
+ */
+export async function discardProjectTransfers(projectId: string): Promise<number> {
+  const jobs = await db.projectTransferJob.findMany({ where: { projectId } });
+  if (!jobs.length) return 0;
+  await db.projectTransferJob.deleteMany({ where: { id: { in: jobs.map((j) => j.id) } } });
+  for (const job of jobs) {
+    if (job.kind !== "EXPORT") continue;
+    // El archivo final siempre es `<id>.pizarro.zip` (runExport); el temporal de un intento en marcha lo borra su trabajador.
+    await rm(path.join(exportsDir(), `${job.id}.pizarro.zip`), { force: true }).catch(() => {});
+  }
+  return jobs.length;
 }
 
 /**
@@ -392,7 +415,7 @@ export async function runNextTransferJob(): Promise<string | null> {
 }
 
 /** Despierta al trabajador (no espera). Se llama al encolar y al terminar cada trabajo; no hace nada hasta que arranca (startTransferWorker). */
-export function kickTransferWorker(): void {
+function kickTransferWorker(): void {
   if (!state.started) return;
   setImmediate(() => void pump());
 }
@@ -457,8 +480,9 @@ export async function recoverInterruptedJobs(now: Date = new Date(), staleMs: nu
 }
 
 /**
- * Mantenimiento: borra los archivos exportados de más de 24 h (la fila pasa a EXPIRED), los restos sin fila en exports/
- * y las filas terminadas hace más de 7 días. Devuelve cuántos archivos se borraron.
+ * Mantenimiento: borra los archivos exportados de más de 24 h (la fila pasa a EXPIRED), los trabajos terminados de
+ * proyectos que ya no existen (con su archivo), los restos sin fila en exports/ y las filas terminadas hace más de 7 días.
+ * Devuelve cuántos archivos se borraron.
  */
 export async function purgeTransferJobs(now: Date = new Date()): Promise<number> {
   let removed = 0;
@@ -470,6 +494,25 @@ export async function purgeTransferJobs(now: Date = new Date()): Promise<number>
       removed++;
     }
     await db.projectTransferJob.updateMany({ where: { id: job.id, status: "DONE" }, data: { status: "EXPIRED" } });
+  }
+  // Huérfanas: trabajos terminados de proyectos que ya no existen (una exportación lista de un proyecto borrado antes de
+  // que el borrado se llevara sus trabajos, o borrado por otra vía). Fuera el archivo y la fila, aunque no hayan caducado.
+  const finishedWithProject = await db.projectTransferJob.findMany({ where: { status: { in: ["DONE", "FAILED", "EXPIRED"] }, projectId: { not: null } }, select: { projectId: true } });
+  const referenced = [...new Set(finishedWithProject.map((j) => j.projectId!))];
+  if (referenced.length) {
+    const existing = new Set((await db.project.findMany({ where: { id: { in: referenced } }, select: { id: true } })).map((p) => p.id));
+    const gone = referenced.filter((id) => !existing.has(id));
+    if (gone.length) {
+      const orphans = await db.projectTransferJob.findMany({ where: { status: { in: ["DONE", "FAILED", "EXPIRED"] }, projectId: { in: gone } } });
+      for (const job of orphans) {
+        const f = exportFileOf(job);
+        if (f) {
+          await rm(f.file, { force: true }).catch(() => {});
+          removed++;
+        }
+      }
+      await db.projectTransferJob.deleteMany({ where: { id: { in: orphans.map((j) => j.id) } } });
+    }
   }
   // Restos: ficheros de exports/ que no pertenecen a ninguna exportación lista y llevan más de 24 h (temporales de un fallo).
   try {

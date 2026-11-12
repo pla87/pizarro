@@ -9,6 +9,7 @@ import { db } from "./db";
 import { isTrustedDevice, revokeTrustedDevices } from "./devices";
 import { AppError } from "./errors";
 import { emailEnabled } from "./mail";
+import { logMailError } from "./mask-email";
 import { rateLimit } from "./rate-limit";
 import { cookieSecure } from "./session-config";
 import {
@@ -23,13 +24,13 @@ import {
 export const CHALLENGE_COOKIE = "pz_2fa";
 export const CHALLENGE_TTL_MS = 10 * 60_000;
 /** Fallos permitidos por cada contraseña correcta, y por persona y hora. */
-export const MAX_ATTEMPTS = 5;
-export const MAX_ATTEMPTS_PER_USER_HOUR = 20;
+const MAX_ATTEMPTS = 5;
+const MAX_ATTEMPTS_PER_USER_HOUR = 20;
 
 const challengeInclude = {
   user: { select: { id: true, name: true, email: true, locale: true, role: true, active: true, mustChangePassword: true, twoFactorMethod: true, totpSecretEnc: true, totpLastStep: true } },
 } satisfies Prisma.LoginChallengeInclude;
-export type Challenge = Prisma.LoginChallengeGetPayload<{ include: typeof challengeInclude }>;
+type Challenge = Prisma.LoginChallengeGetPayload<{ include: typeof challengeInclude }>;
 
 /** ¿Hay que pedir un segundo paso tras la contraseña? VERIFY: ya tiene método; SETUP: administrador sin método. */
 export async function secondStepFor(user: { id: string; role: "ADMIN" | "MEMBER"; twoFactorMethod: "TOTP" | "EMAIL" | null }): Promise<"VERIFY" | "SETUP" | null> {
@@ -43,7 +44,7 @@ function setChallengeCookie(token: string, maxAgeMs: number) {
   );
 }
 
-export async function clearChallengeCookie(): Promise<void> {
+async function clearChallengeCookie(): Promise<void> {
   (await cookies()).delete(CHALLENGE_COOKIE);
 }
 
@@ -84,7 +85,7 @@ export async function sendEmailCode(ch: Pick<Challenge, "id">, user: { name: str
   try {
     await sendTwoFactorCodeMail(user, code);
   } catch (err) {
-    console.error("[2fa] envío del código", err);
+    logMailError("[2fa] envío del código", err);
     throw new AppError("No se pudo enviar el código por email.");
   }
 }

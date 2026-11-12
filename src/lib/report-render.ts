@@ -12,7 +12,7 @@ import type { PdfWorkerRequest, PdfWorkerResponse } from "./report-pdf-worker";
 // render atascado deja de gastar CPU (el siguiente PDF arranca un worker nuevo).
 
 /** Tras este tiempo sin PDF que generar, el worker se apaga y libera su memoria. */
-export const PDF_WORKER_IDLE_MS = 60_000;
+const PDF_WORKER_IDLE_MS = 60_000;
 
 /**
  * Memoria máxima (heap de V8, MB) del worker: sin tope heredaría el del proceso (~700 MB en un contenedor pequeño) y un
@@ -20,7 +20,7 @@ export const PDF_WORKER_IDLE_MS = 60_000;
  * (ERR_WORKER_OUT_OF_MEMORY): ese PDF falla con un error normal y el siguiente arranca otro worker.
  * Ajustable con PDF_WORKER_MAX_MB (64–4096).
  */
-export const PDF_WORKER_MAX_MB = 256;
+const PDF_WORKER_MAX_MB = 256;
 
 export function pdfWorkerMaxMb(env: Partial<NodeJS.ProcessEnv> = process.env): number {
   const n = Number(env.PDF_WORKER_MAX_MB);

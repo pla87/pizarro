@@ -7,7 +7,7 @@ export type GoogleShareMode = (typeof GOOGLE_SHARE_MODES)[number];
 /** Resultado de compartir un archivo recién creado (se guarda en TaskLink.shareStatus). */
 export type ShareStatus = "SHARED" | "PARTIAL" | "NOT_SHARED";
 
-export const isShareMode = (x: unknown): x is GoogleShareMode => (GOOGLE_SHARE_MODES as readonly string[]).includes(x as string);
+const isShareMode = (x: unknown): x is GoogleShareMode => (GOOGLE_SHARE_MODES as readonly string[]).includes(x as string);
 export const isDomainMode = (m: GoogleShareMode) => m === "DOMAIN_WRITE" || m === "DOMAIN_READ";
 
 const ROLES = ["writer", "commenter", "reader"];
@@ -19,7 +19,7 @@ function envRole(role: string | undefined): string | null {
 }
 
 /** Qué se hace al crear un archivo: a quién (dominio, miembros o nadie) y con qué rol de Drive. */
-export type ShareRule = { scope: "domain" | "members" | "none"; role: string };
+type ShareRule = { scope: "domain" | "members" | "none"; role: string };
 
 /**
  * Regla efectiva de un proyecto. Sin modo guardado (proyectos anteriores) se mantiene lo que daba la configuración

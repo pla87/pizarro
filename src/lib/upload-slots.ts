@@ -74,13 +74,13 @@ export const UPLOAD_TOO_SLOW_MESSAGE = "La subida iba demasiado lenta y se ha co
  * (como mucho unas decenas de MB) y de 3 h para la importación de un proyecto (hasta 500 MB o más: a ~190 KB/s, que
  * supera con creces el mínimo, ya tarda unos 45 min). Lo que frena el goteo malicioso es la ventana, no el total.
  */
-export const UPLOAD_MIN_BYTES_PER_SEC = 20 * 1024;
-export const UPLOAD_WINDOW_MS = 30_000;
-export const UPLOAD_BASE_TOTAL_MS = 3 * 60_000;
+const UPLOAD_MIN_BYTES_PER_SEC = 20 * 1024;
+const UPLOAD_WINDOW_MS = 30_000;
+const UPLOAD_BASE_TOTAL_MS = 3 * 60_000;
 export const UPLOAD_MAX_TOTAL_MS = 30 * 60_000;
 export const IMPORT_MAX_TOTAL_MS = 3 * 60 * 60_000;
 
-export type SlowGuardOptions = { minBytesPerSec?: number; windowMs?: number; totalMs?: number };
+type SlowGuardOptions = { minBytesPerSec?: number; windowMs?: number; totalMs?: number };
 
 /** Tiempo máximo total para recibir un cuerpo de `expectedBytes` (`maxMs`: tope; por defecto, el de los adjuntos). */
 export function uploadTotalMs(expectedBytes: number, maxMs = UPLOAD_MAX_TOTAL_MS): number {

@@ -3,7 +3,7 @@
 import { takePrefetchedTaskDetail } from "./taskDetailPrefetch";
 import { Archive, Camera, Check, ChevronDown, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import {
   addSubtask, addSubtasks, archiveTask, deleteAttachment, deleteSubtask, deleteTask, deleteTaskLink, getTaskDetail,
   moveTask, reorderSubtask, restoreTaskSnapshot, updateSubtask, updateTask,
@@ -34,7 +34,11 @@ import { copyText } from "../ui/clipboard";
 import { pasteAsOneLine } from "../ui/textarea-edit";
 import { usePasteFiles } from "../ui/pasteFiles";
 import { isSessionExpiredMessage, useToast } from "../ui/Toast";
+import { isOfflineMessage, loadWhenOnline } from "@/lib/connection";
+import { actionThrowMessage } from "@/lib/stale-action";
+import { textHash, type TextSince } from "@/lib/text-version";
 import { boardClients, useBoard } from "./context";
+import { subtaskDragA11y } from "./drag-a11y";
 import { isTypingTarget, useShortcut } from "./shortcuts";
 import { weekdayName } from "./recurrence-ui";
 import { TaskViewers } from "./TaskViewers";
@@ -54,15 +58,17 @@ import { normalizeLinkUrl } from "@/lib/link-url";
 import { sortByFileName } from "@/lib/attachment-sort";
 import { subtaskBatch, subtaskLines } from "@/lib/subtask-lines";
 import { fieldsError, fieldsFormOf, fieldsPatch, TaskFieldsGroup, type FieldsForm } from "./TaskFieldsGroup";
-import { draftKey, useDraftAutosave, type EditTaskDraft } from "./drafts";
+import { draftKey, readCommentDraft, useDraftAutosave, type EditTaskDraft } from "./drafts";
 import { setUndoTask, UNDONE_EVENT } from "../undo-context";
 import { useIsMobile } from "../ui/useIsMobile";
 import { UndoButton } from "../UndoButton";
 import { subtasksDidNotFit } from "./count-texts";
 
-export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecondBulk, draft }: {
+export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecondBulk, draft, gone }: {
   task: BoardTask;
   onClose: () => void;
+  /** La tarea ya no está en el tablero (otra persona la borró o archivó): el aviso. El diálogo lo muestra y se cierra. */
+  gone?: string;
   side?: "left" | "right" | "center";
   onAddSecond?: () => void;
   onAddSecondBulk?: () => void;
@@ -108,6 +114,19 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // y antes eso guardaba el renombrado aunque luego se eligiera descartar.
   const closeGuard = useRef<"idle" | "confirming" | "discarding">("idle");
   const blurHeld = useCallback(() => closeGuard.current !== "idle", []);
+  // El último guardado del título o del enlace falló (sin conexión, sesión caducada…) y lo escrito sigue en el campo:
+  // cerrar pregunta antes de descartarlo (ver requestClose).
+  const textSaveFailed = useRef(false);
+  // Último guardado en curso del título o del enlace (para esperar su resultado al cerrar).
+  const textSaving = useRef<Promise<boolean> | null>(null);
+  /** Título o enlace escritos que difieren de lo guardado tras un guardado fallido (lee lo último, también tras esperar). */
+  const unsavedAfterFailure = (): boolean => {
+    if (!textSaveFailed.current) return false;
+    const { title: typed, link: typedLink } = textState.current;
+    const saved = board.getTask(task.id) ?? task;
+    const value = typed.trim();
+    return (!!value && value !== saved.title) || normalizeLinkUrl(typedLink) !== (saved.linkUrl ?? "");
+  };
   /**
    * Cerrar con la X, clic fuera, Escape o el botón atrás: si la descripción tiene cambios sin guardar, hay una subtarea a
    * medio escribir o renombrándose, o un comentario en edición con cambios, se pregunta antes de descartarlos; sin cambios
@@ -140,20 +159,38 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       closeGuard.current = ok ? "discarding" : "idle";
       if (!ok) return false;
     }
+    // Título o enlace escritos y sin guardar: al salir del campo se guardan (abajo) y se espera a ver si se guardaron.
+    const textPending = textSaveFailed.current || (!!title.trim() && title.trim() !== task.title) || normalizeLinkUrl(link) !== (task.linkUrl ?? "");
     // Salir del campo con el foco guarda lo que se guarda al salir (blur): sin esto, Escape o el clic fuera lo perdían.
     // Tras «Descartar cambios» el renombrado de una subtarea no se guarda (ver closeGuard).
     const active = document.activeElement;
     if (active instanceof HTMLElement && rootRef.current?.closest("[role=dialog]")?.contains(active)) active.blur();
+    if (textPending && closeGuard.current === "idle") {
+      // Si no se pudo guardar (sin conexión, sesión caducada, otro error), lo escrito sigue en el campo: antes el diálogo se
+      // cerraba igual y se perdía, borrador incluido. Ahora se pregunta.
+      closeGuard.current = "confirming";
+      // El guardado empieza al salir del campo (justo arriba): se espera a su resultado.
+      await new Promise((r) => setTimeout(r, 0));
+      await textSaving.current;
+      const ok = !unsavedAfterFailure() || await confirm({
+        title: t("Cambios sin guardar"),
+        message: t("No se ha podido guardar el título o el enlace. ¿Cerrar la tarea y descartarlo?"),
+        confirmLabel: t("Descartar cambios"),
+        cancelLabel: t("Seguir editando"),
+        danger: true,
+      }).catch(() => false);
+      closeGuard.current = "idle";
+      if (!ok) return false;
+    }
     onClose();
     return true;
   };
 
   // Si el título cambia desde fuera (otra persona, deshacer, recarga tras un conflicto), se muestra el nuevo, pero solo
   // si no se está editando: lo que se esté escribiendo (distinto de lo que se mostraba) no se pisa, como el enlace. Antes
-  // se sustituía siempre y, cuando otra persona guardaba su título, lo escrito aquí se perdía sin aviso. Al guardarlo,
-  // `detail.textVersion` sigue siendo la versión sobre la que se escribió (solo avanza con la actualización en vivo si
-  // no se estaba editando, ver `seenText`), así que el servidor responde con el conflicto y el aviso ofrece
-  // «Copiar tu texto» (ver `save`). Si el guardado falla, la
+  // se sustituía siempre y, cuando otra persona guardaba su título, lo escrito aquí se perdía sin aviso. Al guardarlo, se
+  // envía el título sobre el que se escribió (`titleBase`, que no sigue al de la tarjeta mientras se edita), así que el
+  // servidor responde con el conflicto y el aviso ofrece «Copiar tu texto» (ver `save`). Si el guardado falla, la
   // tarjeta vuelve a lo guardado y el campo, que mostraba lo enviado, pasa al título actual.
   const [shownTitle, setShownTitle] = useState(task.title);
   if (shownTitle !== task.title) {
@@ -162,6 +199,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   }
   // Se incrementa al cambiar la descripción desde fuera del editor para que se remonte con el texto nuevo.
   const [descVersion, setDescVersion] = useState(0);
+  // Se incrementa cuando otra persona (u otra pestaña) cambia la descripción: el editor muestra la nueva sin remontarse
+  // (ver DescriptionEditor, `remote`).
+  const [descRemote, setDescRemote] = useState(0);
   const [link, setLink] = useState(task.linkUrl ?? "");
   // Como el título: si el enlace cambia desde fuera (deshacer, otra persona), se muestra el nuevo. Sin esto el campo
   // seguía con el anterior y «Guardar» lo volvía a escribir, deshaciendo el cambio ajeno.
@@ -209,54 +249,93 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // del navegador) o, si no llegó a cargarse, la del navegador al abrirlo.
   const [openedAtLocal] = useState(() => new Date().toISOString());
   const [cancelling, setCancelling] = useState(false);
+  // Versión del texto contra la que se guarda: la del detalle, adelantada al instante por cada guardado propio (ver `save`).
+  // `ownTextVersion`: la del último guardado de texto de este diálogo («Cancelar» la usa: lo que cambie después, aunque
+  // sea desde otra pestaña, no se pisa).
+  const textVersion = useRef<string | null | undefined>(undefined);
+  const ownTextVersion = useRef<string | null | undefined>(undefined);
+  const textSaves = useRef<Promise<unknown>>(Promise.resolve());
+  useLayoutEffect(() => {
+    textVersion.current = detail?.textVersion;
+  }, [detail?.textVersion]);
 
   // Borrador recuperado: su texto se escribió sobre una versión anterior (la de `base`), y se guarda contra ella.
-  const draftBase = useRef(
-    draft && draft.taskId === task.id && (draft.title !== undefined || draft.description !== undefined) && (typeof draft.base === "string" || draft.base === null) ? draft.base : undefined,
-  );
+  const draftBaseAtOpen = draft && draft.taskId === task.id && (draft.title !== undefined || draft.description !== undefined) && (typeof draft.base === "string" || draft.base === null) ? draft.base : undefined;
+  const draftBase = useRef(draftBaseAtOpen);
+  // Texto sobre el que se escribe (para que el servidor compruebe el conflicto campo a campo, ver text-version.ts): el
+  // título que se mostraba al empezar a escribirlo (sigue al de la tarjeta mientras no se edita) y la descripción cargada
+  // o guardada aquí por última vez. Con un borrador recuperado no se sabe (se escribió sobre una versión anterior): hasta
+  // el primer guardado se envía solo la versión y cualquier cambio posterior del texto es un conflicto, como antes.
+  const titleBase = useRef(task.title);
+  const descBase = useRef<string | null>(null);
+  const knownBase = useRef(draftBaseAtOpen === undefined);
+  // Guardados del título en curso: la tarjeta ya muestra el título enviado (optimista), que no es aún el del servidor.
+  const titleSaves = useRef(0);
   useEffect(() => {
-    let alive = true;
-    (takePrefetchedTaskDetail(task.id) ?? getTaskDetail(task.id)).then((res) => {
-      if (!alive) return;
-      if (res.ok) {
+    if (title === shownTitle && !titleSaves.current) titleBase.current = shownTitle;
+  });
+  const textSince = (): string | null | TextSince => {
+    const version = textVersion.current !== undefined ? textVersion.current : task.textVersion;
+    if (!knownBase.current) return version;
+    return { version, title: textHash(titleBase.current), ...(descBase.current !== null ? { description: textHash(descBase.current) } : {}) };
+  };
+  // Sin red (también la petición adelantada al hacer clic) se repite sola al volver la conexión: antes se quedaba el
+  // esqueleto para siempre, también con la red ya de vuelta.
+  useEffect(() => {
+    let first = true;
+    return loadWhenOnline(
+      () => {
+        const prefetched = first ? takePrefetchedTaskDetail(task.id) : null;
+        first = false;
+        return prefetched ?? getTaskDetail(task.id);
+      },
+      (res) => {
+        if (!res.ok) return toast(res.error, "error");
         initialDetail.current ??= res.data;
         const base = draftBase.current;
         draftBase.current = undefined;
+        // Con un borrador recuperado, lo escrito se apoya en una versión anterior: no se sabe sobre qué título y
+        // descripción, así que se comprueba todo el texto (ver `textSince`) hasta el primer guardado.
+        knownBase.current = base === undefined;
+        descBase.current = res.data.description;
         setDetail(base !== undefined ? { ...res.data, textVersion: base } : res.data);
-      }
-      else toast(res.error, "error");
-    });
-    return () => {
-      alive = false;
-    };
-  }, [task.id, toast]);
+      },
+      (err) => toast(actionThrowMessage(err, t), "error"),
+    );
+  }, [task.id, toast, t]);
 
-  // Título cambiado desde fuera (otra persona, en vivo) sin que aquí se esté editando: el campo ya muestra el nuevo (ver
-  // `shownTitle`), así que la versión del texto avanza con él. Sin esto `detail.textVersion` se quedaba en la de la
-  // apertura y, al editar luego ese título, el servidor respondía con un falso conflicto. Se vuelve a leer el detalle: la
-  // versión solo avanza si es la de la tarjeta y la descripción no cambió (aquí no se actualiza en vivo; si el mismo
-  // guardado ajeno la cambió, al guardar la propia llega el conflicto, como antes). Con el título o la descripción en
-  // edición tampoco avanza: al guardarlos llega el conflicto, como debe.
-  const seenText = useRef({ version: task.textVersion, title: task.title });
-  const textState = useRef({ detail, title, shownTitle, version: task.textVersion });
+  // Texto cambiado desde fuera (otra persona u otra pestaña, en vivo). El título nuevo ya lo muestra el campo si no se
+  // está editando (ver `shownTitle`); la descripción se vuelve a leer y, si cambió y aquí no se está editando, se muestra
+  // la nueva (antes se seguía viendo la anterior). Sin nada en edición, la versión del texto avanza con ella; si se está
+  // editando un campo, se queda en la versión sobre la que se escribe y, al guardarlo, el servidor avisa si otra persona
+  // cambió ese mismo campo (un cambio en el otro campo no es un conflicto, ver `textSince`).
+  const seenText = useRef(task.textVersion);
+  const textState = useRef({ detail, title, shownTitle, version: task.textVersion, link });
   useEffect(() => {
-    textState.current = { detail, title, shownTitle, version: task.textVersion };
+    textState.current = { detail, title, shownTitle, version: task.textVersion, link };
   });
-  const editingText = () => {
-    const { detail: d, title: typed, shownTitle: shown } = textState.current;
+  /** ¿La descripción abierta tiene cambios de la persona? */
+  const editingDescription = () => {
+    const { detail: d } = textState.current;
     const desc = descLive.current;
-    return typed !== shown || (!!d && desc !== null && desc !== d.description && (descDirtyCheck.current?.() ?? true));
+    return !!d && desc !== null && desc !== d.description && (descDirtyCheck.current?.() ?? true);
   };
+  const editingText = () => textState.current.title !== textState.current.shownTitle || editingDescription();
   useEffect(() => {
-    const seen = seenText.current;
-    if (task.textVersion === seen.version) return;
-    seenText.current = { version: task.textVersion, title: task.title };
-    if (task.title === seen.title || !detail || detail.textVersion === task.textVersion || editingText()) return;
+    if (task.textVersion === seenText.current) return;
+    seenText.current = task.textVersion;
+    if (!detail || detail.textVersion === task.textVersion) return;
     let alive = true;
     void getTaskDetail(task.id).catch(() => null).then((res) => {
       const { detail: d, version } = textState.current;
-      if (!alive || !res?.ok || !d || res.data.textVersion !== version || res.data.description !== d.description || editingText()) return;
-      setDetail((cur) => (cur && cur.description === res.data.description ? { ...cur, textVersion: res.data.textVersion } : cur));
+      if (!alive || !res?.ok || !d || res.data.textVersion !== version) return;
+      const fresh = res.data.description;
+      const reloadDesc = fresh !== d.description && !editingDescription();
+      if (reloadDesc) descBase.current = fresh;
+      const advance = !editingText();
+      if (!reloadDesc && !advance) return;
+      setDetail((cur) => (cur ? { ...cur, ...(reloadDesc ? { description: fresh } : {}), ...(advance ? { textVersion: res.data.textVersion } : {}) } : cur));
+      if (reloadDesc) setDescRemote((n) => n + 1);
     });
     return () => {
       alive = false;
@@ -290,6 +369,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     // Sin red la acción lanza: no se recarga (y no queda una promesa rechazada sin atender).
     const res = await getTaskDetail(task.id).catch(() => null);
     if (!res?.ok) return;
+    descBase.current = res.data.description;
+    knownBase.current = true;
     setDetail(res.data);
     setDescVersion((n) => n + 1);
     board.refresh();
@@ -311,6 +392,24 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       window.removeEventListener(UNDONE_EVENT, onUndone);
     };
   }, [task.id]);
+
+  // La tarea ha desaparecido (otra persona la borró o archivó): antes el detalle se esfumaba sin aviso, con lo escrito, y
+  // si luego se deshacía volvía a abrirse solo. Ahora se avisa (quién, si se sabe), se ofrece copiar lo que no estaba
+  // guardado (título, descripción y comentario a medio escribir) y se cierra del todo.
+  useEffect(() => {
+    if (!gone) return;
+    const typed = textState.current.title.trim();
+    const desc = descLive.current;
+    const parts = [
+      typed && typed !== task.title ? mentionsToPlain(typed) : "",
+      desc !== null && desc !== (textState.current.detail?.description ?? "") && (descDirtyCheck.current?.() ?? true) ? desc : "",
+      mentionsToPlain(readCommentDraft(board.currentUserId, task.id)?.text ?? ""),
+    ].filter((x) => x.trim());
+    const text = parts.join("\n\n");
+    toast(gone, "error", text ? { label: t("Copiar tu texto"), onClick: () => void copyText(text).then((ok) => ok && toast(t("Copiado al portapapeles"))) } : undefined);
+    onClose();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo cuando desaparece
+  }, [gone]);
 
   /**
    * Botón Guardar / Alt+S: guarda TODO lo que se esté editando aunque aún no se haya confirmado (título,
@@ -400,7 +499,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           attachmentIds: d0.attachments.map((a) => a.id),
           links: d0.links.map((l) => ({ id: l.id, kind: l.kind, title: l.title, url: l.url, shareStatus: l.shareStatus, shareFailed: l.shareFailed })),
         } : {}),
-      }, d0 ? d0.textVersion : undefined));
+      }, d0 ? (ownTextVersion.current !== undefined ? ownTextVersion.current : d0.textVersion) : undefined));
       if (!res.ok) {
         toast(res.error, "error");
         // Otra persona cambió el texto: se recarga con sus cambios y el diálogo sigue abierto.
@@ -420,28 +519,54 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   };
 
   /** Guardado optimista de campos de la tarjeta. */
-  const save = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>): Promise<boolean> => {
+  const save = (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>): Promise<boolean> => {
+    const done = saveNow(patch, optimistic);
+    if (patch.title !== undefined || patch.linkUrl !== undefined) textSaving.current = done.catch(() => false);
+    return done;
+  };
+  const saveNow = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>): Promise<boolean> => {
     const before = board.getTask(task.id);
     board.patchTask(task.id, optimistic);
-    // Título y descripción: se envía qué versión se estaba editando para no pisar a otra persona.
+    // Título y descripción: se envía qué versión se estaba editando para no pisar a otra persona ni lo guardado desde otra
+    // pestaña o dispositivo. Los de esta pestaña van de uno en uno y cada uno envía la versión que devolvió el anterior:
+    // guardar el título y enseguida la descripción no es un conflicto.
     const editsText = patch.title !== undefined || patch.description !== undefined;
-    const res = await tracked(updateTask(task.id, patch, editsText ? (detail?.textVersion ?? null) : undefined));
+    let res: Awaited<ReturnType<typeof updateTask>>;
+    if (editsText) {
+      if (patch.title !== undefined) titleSaves.current++;
+      const call = textSaves.current.then(() => tracked(updateTask(task.id, patch, textSince())));
+      textSaves.current = call.then((r) => {
+        if (patch.title !== undefined) titleSaves.current--;
+        if (!r.ok) return;
+        textVersion.current = ownTextVersion.current = r.data.textVersion;
+        if (patch.title !== undefined) titleBase.current = r.data.title;
+        if (patch.description !== undefined) descBase.current = patch.description;
+        knownBase.current = true;
+      }, () => {
+        if (patch.title !== undefined) titleSaves.current--;
+      });
+      res = await call;
+    } else res = await tracked(updateTask(task.id, patch, undefined));
     if (!res.ok) {
       if (before) board.upsertTask(before);
-      // Sesión caducada: lo escrito se queda en el campo (y en el borrador local) para guardarlo tras volver a entrar; el
-      // aviso lleva «Iniciar sesión» (ver Toast). Sin esto, el título volvía al guardado y se perdía con el borrador.
+      // Sesión caducada o sin conexión: lo escrito se queda en el campo (y en el borrador local) para guardarlo luego; el
+      // aviso de sesión lleva «Iniciar sesión» (ver Toast). Sin esto, el título volvía al guardado y se perdía con el borrador.
       const expired = isSessionExpiredMessage(res.error, t);
-      if (expired && patch.title !== undefined && before) {
+      const offline = isOfflineMessage(res.error, t);
+      if ((expired || offline) && patch.title !== undefined && before) {
         setShownTitle(before.title);
         setTitle(patch.title);
       }
+      if (patch.title !== undefined || patch.linkUrl !== undefined) textSaveFailed.current = true;
       // El texto que no se pudo guardar (p. ej. otra persona cambió la tarea a la vez y se recarga con lo suyo) no se
       // pierde: el aviso permite copiarlo para volver a aplicarlo.
       const rejected = [patch.title, patch.description].filter((x): x is string => !!x?.trim()).join("\n\n");
-      toast(res.error, "error", rejected && !expired ? { label: t("Copiar tu texto"), onClick: () => void copyText(rejected).then((ok) => ok && toast(t("Copiado al portapapeles"))) } : undefined);
-      if (editsText && !expired) await reload();
+      // Sin conexión ya lo ha avisado board.track, y lo escrito sigue en su campo: no se repite el aviso.
+      if (!offline) toast(res.error, "error", rejected && !expired ? { label: t("Copiar tu texto"), onClick: () => void copyText(rejected).then((ok) => ok && toast(t("Copiado al portapapeles"))) } : undefined);
+      if (editsText && !expired && !offline) await reload();
       return false;
     }
+    if (patch.title !== undefined || patch.linkUrl !== undefined) textSaveFailed.current = false;
     board.upsertTask(res.data);
     if (editsText) setDetail((d) => (d ? { ...d, textVersion: res.data.textVersion } : d));
     return true;
@@ -785,6 +910,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             users={board.users}
             onGoogle={createGoogle}
             initial={detail?.description ?? null}
+            remote={descRemote}
             // El borrador recuperado solo se aplica la primera vez que se carga la tarea.
             draft={detail && !draftUsed && descVersion === 0 ? draft?.description : undefined}
             liveRef={descLive}
@@ -875,7 +1001,10 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               <p className="text-xs text-slate-400">{t("Sin adjuntos.")}</p>
             )}
           </section>
-          <GoogleLinks taskId={task.id} detail={detail} setDetail={setDetail} onCreate={createGoogle} />
+          {/* Sin Google configurado no se pueden crear documentos: la sección solo sale si la tarea ya tiene alguno enlazado. */}
+          {(board.google.enabled || (detail?.links.length ?? 0) > 0) && (
+            <GoogleLinks taskId={task.id} detail={detail} setDetail={setDetail} onCreate={createGoogle} canCreate={board.google.enabled} />
+          )}
           <Comments taskId={task.id} detail={detail} setDetail={setDetail} users={board.users} onGoogle={createGoogle} editDirtyRef={commentEditDirty} />
           <TaskHistory taskId={task.id} />
         </div>
@@ -886,9 +1015,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           <div data-aside-scroll className={cn("md:-mx-2 md:-mt-2 md:min-h-0 md:flex-1 md:px-2 md:pt-2 md:pb-1.5", !flow && "md:overflow-y-auto")}>
           <div className="flex flex-col gap-4 md:gap-2">
           <Field label={t("Columna")}>
-            <select className="input min-w-0 truncate md:py-1" title={board.columns.find((c) => c.id === task.columnId)?.name} value={task.columnId} onChange={(e) => changeColumn(e.target.value)}>
-              {board.columns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            {(id) => (
+              <select id={id} className="input min-w-0 truncate md:py-1" title={board.columns.find((c) => c.id === task.columnId)?.name} value={task.columnId} onChange={(e) => changeColumn(e.target.value)}>
+                {board.columns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            )}
           </Field>
           {board.columns.find((c) => c.id === task.columnId)?.role === "NEXT_RELEASE" && (
             <label className="flex items-center gap-2" title={t("Se queda en la columna de la release al desplegar y se incluye siempre en el texto")}>
@@ -905,38 +1036,44 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             <TypeSelector kinds={board.kinds} value={task.kindId} onChange={changeKind} />
           </Field>
           <Field label={t("Asignada a (opcional)")}>
-            <select
-              className="input min-w-0 truncate md:py-1"
-              title={board.users.find((u) => u.id === task.assigneeId)?.name}
-              value={task.assigneeId ?? ""}
-              onChange={(e) => save({ assigneeId: e.target.value || null }, { assigneeId: e.target.value || null })}
-            >
-              <option value="">{t("Sin asignar")}</option>
-              {board.users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
+            {(id) => (
+              <select
+                id={id}
+                className="input min-w-0 truncate md:py-1"
+                title={board.users.find((u) => u.id === task.assigneeId)?.name}
+                value={task.assigneeId ?? ""}
+                onChange={(e) => save({ assigneeId: e.target.value || null }, { assigneeId: e.target.value || null })}
+              >
+                <option value="">{t("Sin asignar")}</option>
+                {board.users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            )}
           </Field>
           <Field label={t("Fecha límite")}>
-            <div className="flex gap-1">
-              <input
-                type="date"
-                className={cn(
-                  "input md:py-1",
-                  dueStatus(task.dueDate, board.columns.find((c) => c.id === task.columnId)?.isDone ?? false, board.today) === "overdue" &&
-                    "border-red-400 text-red-700 dark:text-red-300",
+            {(id) => (
+              <div className="flex gap-1">
+                <input
+                  id={id}
+                  type="date"
+                  className={cn(
+                    "input md:py-1",
+                    dueStatus(task.dueDate, board.columns.find((c) => c.id === task.columnId)?.isDone ?? false, board.today) === "overdue" &&
+                      "border-red-400 text-red-700 dark:text-red-300",
+                  )}
+                  value={task.dueDate ?? ""}
+                  onChange={(e) => {
+                    // Al teclear el año, Chrome emite 0002, 0020… : solo se guarda una fecha completa y válida.
+                    const v = e.target.value;
+                    if (v === "" || v.slice(0, 4) >= "1900") save({ dueDate: v || null }, { dueDate: v || null });
+                  }}
+                />
+                {task.dueDate && (
+                  <button className="btn-icon h-9 w-9 shrink-0 md:h-7.5 md:w-7.5" onClick={() => save({ dueDate: null }, { dueDate: null })} aria-label={t("Quitar fecha límite")}>
+                    <X size={15} />
+                  </button>
                 )}
-                value={task.dueDate ?? ""}
-                onChange={(e) => {
-                  // Al teclear el año, Chrome emite 0002, 0020… : solo se guarda una fecha completa y válida.
-                  const v = e.target.value;
-                  if (v === "" || v.slice(0, 4) >= "1900") save({ dueDate: v || null }, { dueDate: v || null });
-                }}
-              />
-              {task.dueDate && (
-                <button className="btn-icon h-9 w-9 shrink-0 md:h-7.5 md:w-7.5" onClick={() => save({ dueDate: null }, { dueDate: null })} aria-label={t("Quitar fecha límite")}>
-                  <X size={15} />
-                </button>
-              )}
-            </div>
+              </div>
+            )}
           </Field>
           <TaskFieldsGroup
             enabled={enabledFields}
@@ -947,48 +1084,55 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             clients={boardClients(board.getTasks())}
           />
           <Field label={t("Repetir")}>
-            <div className="flex gap-1">
-              <select className="input min-w-0 md:py-1" value={task.recurrence} onChange={(e) => changeRecurrence(e.target.value as RecurrenceRule)}>
-                <option value="NONE">{t("No se repite")}</option>
-                <option value="DAILY">{t("Cada día")}</option>
-                <option value="WEEKLY">{t("Cada semana")}</option>
-                <option value="MONTHLY">{t("Cada mes")}</option>
-              </select>
-              {task.recurrence === "WEEKLY" && (
-                <select
-                  className="input md:py-1"
-                  value={task.recurrenceDay ?? 1}
-                  onChange={(e) => save({ recurrenceDay: Number(e.target.value) }, { recurrenceDay: Number(e.target.value) })}
-                  aria-label={t("Día de la semana")}
-                >
-                  {[1, 2, 3, 4, 5, 6, 7].map((d) => <option key={d} value={d}>{weekdayName(d, locale)}</option>)}
-                </select>
-              )}
-              {task.recurrence === "MONTHLY" && (
-                <select
-                  className="input md:py-1"
-                  value={task.recurrenceDay ?? 1}
-                  onChange={(e) => save({ recurrenceDay: Number(e.target.value) }, { recurrenceDay: Number(e.target.value) })}
-                  aria-label={t("Día del mes")}
-                >
-                  {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => <option key={d} value={d}>{t("día {n}", { n: d })}</option>)}
-                </select>
-              )}
-            </div>
-            {task.recurrence !== "NONE" && (
-              <p className="mt-1 text-xs text-slate-500">{t("Al terminarla o archivarla se crea la siguiente, sin las subtareas marcadas.")}</p>
+            {(id) => (
+              <>
+                <div className="flex gap-1">
+                  <select id={id} className="input min-w-0 md:py-1" value={task.recurrence} onChange={(e) => changeRecurrence(e.target.value as RecurrenceRule)}>
+                    <option value="NONE">{t("No se repite")}</option>
+                    <option value="DAILY">{t("Cada día")}</option>
+                    <option value="WEEKLY">{t("Cada semana")}</option>
+                    <option value="MONTHLY">{t("Cada mes")}</option>
+                  </select>
+                  {task.recurrence === "WEEKLY" && (
+                    <select
+                      className="input md:py-1"
+                      value={task.recurrenceDay ?? 1}
+                      onChange={(e) => save({ recurrenceDay: Number(e.target.value) }, { recurrenceDay: Number(e.target.value) })}
+                      aria-label={t("Día de la semana")}
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7].map((d) => <option key={d} value={d}>{weekdayName(d, locale)}</option>)}
+                    </select>
+                  )}
+                  {task.recurrence === "MONTHLY" && (
+                    <select
+                      className="input md:py-1"
+                      value={task.recurrenceDay ?? 1}
+                      onChange={(e) => save({ recurrenceDay: Number(e.target.value) }, { recurrenceDay: Number(e.target.value) })}
+                      aria-label={t("Día del mes")}
+                    >
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => <option key={d} value={d}>{t("día {n}", { n: d })}</option>)}
+                    </select>
+                  )}
+                </div>
+                {task.recurrence !== "NONE" && (
+                  <p className="mt-1 text-xs text-slate-500">{t("Al terminarla o archivarla se crea la siguiente, sin las subtareas marcadas.")}</p>
+                )}
+              </>
             )}
           </Field>
           <Field label={t("Entregable")}>
-            <select
-              className="input min-w-0 truncate md:py-1"
-              title={board.deliverables.find((d) => d.id === task.deliverableId)?.name}
-              value={task.deliverableId ?? ""}
-              onChange={(e) => save({ deliverableId: e.target.value || null }, { deliverableId: e.target.value || null })}
-            >
-              <option value="">{t("Sin entregable")}</option>
-              {board.deliverables.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
+            {(id) => (
+              <select
+                id={id}
+                className="input min-w-0 truncate md:py-1"
+                title={board.deliverables.find((d) => d.id === task.deliverableId)?.name}
+                value={task.deliverableId ?? ""}
+                onChange={(e) => save({ deliverableId: e.target.value || null }, { deliverableId: e.target.value || null })}
+              >
+                <option value="">{t("Sin entregable")}</option>
+                {board.deliverables.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            )}
           </Field>
           <Field label={t("Bloqueada por (opcional)")}>
             <BlockerPicker task={task} onChange={(blocker) => save({ blockedById: blocker?.id ?? null }, { blockedBy: blocker })} />
@@ -1031,23 +1175,26 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             </div>
           </Field>
           <Field label={t("Enlace externo")}>
-            <div className="flex gap-1">
-              <input
-                className="input md:py-1"
-                type="url"
-                inputMode="url"
-                placeholder="https://…"
-                value={link}
-                onChange={(e) => setLink(e.target.value)}
-                onBlur={commitLink}
-                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-              />
-              {task.linkUrl && (
-                <a href={task.linkUrl} target="_blank" rel="noopener noreferrer nofollow" className="btn-icon h-9 w-9 shrink-0 md:h-7.5 md:w-7.5" aria-label={t("Abrir enlace")}>
-                  <ExternalLink size={16} />
-                </a>
-              )}
-            </div>
+            {(id) => (
+              <div className="flex gap-1">
+                <input
+                  id={id}
+                  className="input md:py-1"
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://…"
+                  value={link}
+                  onChange={(e) => setLink(e.target.value)}
+                  onBlur={commitLink}
+                  onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                />
+                {task.linkUrl && (
+                  <a href={task.linkUrl} target="_blank" rel="noopener noreferrer nofollow" className="btn-icon h-9 w-9 shrink-0 md:h-7.5 md:w-7.5" aria-label={t("Abrir enlace")}>
+                    <ExternalLink size={16} />
+                  </a>
+                )}
+              </div>
+            )}
           </Field>
           {detail && (
             <p className="text-xs text-slate-500">
@@ -1130,10 +1277,24 @@ function ColorPopover({ value, onChange }: { value: string | null; onChange: (c:
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+/**
+ * Campo lateral del detalle con su etiqueta. Con una función como contenido, la etiqueta es un <label> del control que
+ * recibe el id (un lector de pantalla lo anuncia con su nombre: antes los desplegables no tenían ninguno y «Columna» se
+ * anunciaba con el de la columna elegida); si no, el bloque es un grupo con la etiqueta como nombre.
+ */
+function Field({ label, children }: { label: string; children: React.ReactNode | ((id: string) => React.ReactNode) }) {
+  const id = useId();
+  if (typeof children === "function") {
+    return (
+      <div>
+        <label className="label md:mb-0.5" htmlFor={id}>{label}</label>
+        {children(id)}
+      </div>
+    );
+  }
   return (
-    <div>
-      <div className="label md:mb-0.5">{label}</div>
+    <div role="group" aria-labelledby={`${id}-label`}>
+      <div className="label md:mb-0.5" id={`${id}-label`}>{label}</div>
       {children}
     </div>
   );
@@ -1181,8 +1342,10 @@ export function TypeSelector({ kinds, value, onChange }: { kinds: KindOption[]; 
   );
 }
 
-function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, onDraftChange, liveRef, dirtyRef }: {
+function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onGoogle, onDraftChange, liveRef, dirtyRef }: {
   initial: string | null;
+  /** Cambia cuando `initial` es una descripción nueva guardada desde fuera (otra persona u otra pestaña). */
+  remote?: number;
   /** Texto recuperado de un borrador: el editor empieza editándolo. */
   draft?: string;
   /** Guarda; con `false` (no se guardó) el editor vuelve a abrirse con el texto escrito. */
@@ -1235,6 +1398,17 @@ function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, o
   const touch = () => {
     touched.current = true;
   };
+  // Descripción nueva guardada desde fuera: se muestra, también en el editor abierto si no hay cambios propios (que no se
+  // pisan: al guardarlos, el servidor avisa del conflicto). Sin remontar, para no cerrar el editor ni perder el foco.
+  const appliedRemote = useRef(remote);
+  useEffect(() => {
+    if (remote === appliedRemote.current) return;
+    appliedRemote.current = remote;
+    if (initial === null || (editing && value !== baseline.current)) return;
+    baseline.current = initial;
+    setValue(initial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo cuando llega un cambio de fuera
+  }, [remote]);
   useEffect(() => {
     if (liveRef) liveRef.current = editing ? value : null;
   }, [liveRef, editing, value]);
@@ -1255,6 +1429,24 @@ function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, o
     return () => clearTimeout(timer);
   }, [editing, value]);
   useEffect(() => () => draftCb.current?.(null), []);
+  // Al cerrar el editor (Escape, Cancelar, Guardar) su campo desaparece y el foco se iba a <body>: con el teclado había
+  // que volver a buscar el sitio. Pasa al botón «Editar» de la descripción (no a «Añade una descripción…», que al
+  // recibir el foco con el teclado vuelve a abrir el editor).
+  const section = useRef<HTMLElement>(null);
+  const editButton = useRef<HTMLButtonElement>(null);
+  const refocus = useRef(false);
+  useLayoutEffect(() => {
+    if (editing || !refocus.current) return;
+    refocus.current = false;
+    const active = document.activeElement;
+    // Si la persona ya ha puesto el foco en otro sitio (clic en otro campo), se queda allí.
+    if (active && active !== document.body && !section.current?.contains(active)) return;
+    editButton.current?.focus();
+  }, [editing]);
+  const closeEditor = () => {
+    refocus.current = true;
+    setEditing(false);
+  };
 
   if (initial === null) {
     return <div className="h-24 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />;
@@ -1263,13 +1455,13 @@ function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, o
   const finish = () => {
     // Pasarse del límite no se guarda: se queda editando con el aviso del recuento.
     if (value.length > MAX_DESCRIPTION) return toast(descriptionTooLong(t, locale, MAX_DESCRIPTION), "error");
-    setEditing(false);
+    closeEditor();
     // Si falla y el editor sigue montado (no se recargó la tarea), se reabre con lo escrito para no perderlo.
     if (value !== initial) void onSave(value).then((ok) => !ok && setEditing(true));
   };
   const cancel = () => {
     setValue(initial);
-    setEditing(false);
+    closeEditor();
   };
   // Escape en el editor descarta la edición: con cambios, se pregunta antes (el botón «Cancelar» no pregunta).
   const escapeCancel = async () => {
@@ -1291,13 +1483,13 @@ function DescriptionEditor({ initial, draft, onSave, onClear, users, onGoogle, o
   };
 
   return (
-    <section>
+    <section ref={section}>
       <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">{t("Descripción")}</h3>
         <DescriptionTools value={value} onClear={clear} className="ml-auto" max={MAX_DESCRIPTION} />
         {!editing && (
           // Fuera del orden de Tab (Título → descripción directo): al tabular, la propia zona de la descripción entra en edición.
-          <button className="btn-ghost py-1 text-xs" tabIndex={-1} onClick={() => { setEditing(true); requestAnimationFrame(() => ref.current?.focus()); }}>
+          <button ref={editButton} className="btn-ghost py-1 text-xs" tabIndex={-1} onClick={() => { setEditing(true); requestAnimationFrame(() => ref.current?.focus()); }}>
             {t("Editar")}
           </button>
         )}
@@ -1495,6 +1687,15 @@ function Subtasks({ taskId, detail, setDetail, flushRef, draftRef, blurHeld, onU
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+  // Avisos del lector de pantalla al arrastrar: título y posición de la subtarea (no su id).
+  const dragAccessibility = subtaskDragA11y(
+    t,
+    (id) => list.find((x) => x.id === id)?.title ?? t("Subtareas"),
+    (id) => {
+      const n = list.findIndex((x) => x.id === id);
+      return n < 0 ? null : { n: n + 1, total: list.length };
+    },
+  );
 
   const onDragEnd = async ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return;
@@ -1543,7 +1744,7 @@ function Subtasks({ taskId, detail, setDetail, flushRef, draftRef, blurHeld, onU
           />
         </div>
       </div>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} accessibility={dragAccessibility} onDragEnd={onDragEnd}>
         <SortableContext items={list.map((s) => s.id)} strategy={verticalListSortingStrategy}>
           <ul className="space-y-0.5">
             {list.map((s) => (
@@ -1565,7 +1766,8 @@ function SubtaskRow({ s, editing, blurHeld, onEdit, onRename, onDraft, onToggle,
   s: SubtaskInfo; editing: boolean; blurHeld?: () => boolean; onEdit: () => void; onRename: (title: string) => void; onDraft: (title: string) => void; onToggle: () => void; onRemove: () => void;
 }) {
   const t = useT();
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: s.id });
+  // Rol que lee el lector de pantalla en el asa (dnd-kit dice «sortable»).
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: s.id, attributes: { roleDescription: t("ordenable") } });
   const [draft, setDraft] = useState(s.title);
   // Evita guardar dos veces (Enter y el blur posterior) o guardar tras Escape.
   const settled = useRef(false);
@@ -1665,8 +1867,10 @@ function SubtaskRow({ s, editing, blurHeld, onEdit, onRename, onDraft, onToggle,
   );
 }
 
-function GoogleLinks({ detail, setDetail, onCreate, taskId }: {
+function GoogleLinks({ detail, setDetail, onCreate, taskId, canCreate }: {
   taskId: string;
+  /** Google configurado en el servidor: se pueden crear documentos nuevos. */
+  canCreate: boolean;
   detail: TaskDetail | null;
   setDetail: React.Dispatch<React.SetStateAction<TaskDetail | null>>;
   onCreate: (kind: MentionCommand) => Promise<TaskLinkInfo | null>;
@@ -1680,12 +1884,16 @@ function GoogleLinks({ detail, setDetail, onCreate, taskId }: {
     <section>
       <div className="mb-2 flex items-center gap-1">
         <h3 className="mr-auto min-w-0 text-sm font-semibold">{t("Documentos de Google")}</h3>
-        <button className="btn-ghost shrink-0 whitespace-nowrap px-2 py-1 text-xs" onClick={() => onCreate("GOOGLE_DOC")} disabled={!detail}>
-          <FileText size={15} className="text-sky-600" /> {t("Nuevo Doc")}
-        </button>
-        <button className="btn-ghost shrink-0 whitespace-nowrap px-2 py-1 text-xs" onClick={() => onCreate("GOOGLE_SHEET")} disabled={!detail}>
-          <FileSpreadsheet size={15} className="text-emerald-600" /> {t("Nuevo Sheet")}
-        </button>
+        {canCreate && (
+          <>
+            <button className="btn-ghost shrink-0 whitespace-nowrap px-2 py-1 text-xs" onClick={() => onCreate("GOOGLE_DOC")} disabled={!detail}>
+              <FileText size={15} className="text-sky-600" /> {t("Nuevo Doc")}
+            </button>
+            <button className="btn-ghost shrink-0 whitespace-nowrap px-2 py-1 text-xs" onClick={() => onCreate("GOOGLE_SHEET")} disabled={!detail}>
+              <FileSpreadsheet size={15} className="text-emerald-600" /> {t("Nuevo Sheet")}
+            </button>
+          </>
+        )}
       </div>
       {links.length === 0 ? (
         <p className="truncate text-xs text-slate-400">

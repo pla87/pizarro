@@ -22,7 +22,7 @@ export function releaseNotes(changelog, version) {
     const items = v.changes?.[key] ?? [];
     if (items.length) out.push(`### ${label}`, "", ...items.map((i) => `- ${i}`), "");
   }
-  out.push(`Cómo actualizar: https://github.com/pla87/pizarro/blob/main/docs/INSTALL.md#5-actualizar`, "");
+  out.push(`Cómo actualizar: https://getpizarro.com/instalar/#actualizar`, "");
   return out.join("\n");
 }
 

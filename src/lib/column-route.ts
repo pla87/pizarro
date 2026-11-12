@@ -9,7 +9,7 @@ import { toLocale, type Locale, type T } from "../i18n/core";
 // Comprobaciones comunes de las rutas de descarga de una columna (PDF de la semana, lista, entrega, .ics):
 // sesión, límite de peticiones y acceso al proyecto. Devuelve la respuesta de error o el contexto.
 
-export interface ColumnRouteContext {
+interface ColumnRouteContext {
   user: { id: string; name: string };
   t: T;
   locale: Locale;

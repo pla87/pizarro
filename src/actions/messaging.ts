@@ -10,17 +10,18 @@ import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import { appUrl } from "@/lib/mail";
 import { getMyChannels } from "@/lib/messaging";
-import { clearTelegram, loadMessagingConfig, saveTelegramToken, saveWhatsappSettings as persistWhatsapp, setTelegramEnabled, setWhatsappEnabled } from "@/lib/messaging-config";
+import { clearTelegram, loadMessagingConfig, saveTelegramToken, saveWhatsappSettings as persistWhatsapp, setTelegramEnabled, setWhatsappCodeTemplateError, setWhatsappEnabled } from "@/lib/messaging-config";
 import {
-  classifyFailure, isTelegramToken, isWhatsappToken, maskPhone, normalizeWhatsappCode, safeEqual, scrubSecrets, telegramStartUrl, telegramTestText, validateWhatsappSettings,
-  WHATSAPP_CODE_ATTEMPTS, WHATSAPP_CODE_MINUTES, WHATSAPP_TESTS_PER_DAY, type WhatsappSettingsInput,
+  classifyFailure, isTelegramToken, isWhatsappToken, maskPhone, MessagingApiError, normalizeWhatsappCode, safeEqual, scrubSecrets, telegramStartUrl, telegramTestText, validateWhatsappSettings, whatsappCodeLang,
+  WHATSAPP_CODE_ATTEMPTS, WHATSAPP_CODE_MINUTES, WHATSAPP_SAMPLE_CODE, WHATSAPP_TESTS_PER_DAY, whatsappTemplateProblem, type WhatsappSettingsInput,
 } from "@/lib/messaging-core";
 import { labelledHmac, labelledHmacCandidates } from "@/lib/keyring";
 import { rateLimit, rateLimitReached } from "@/lib/rate-limit";
 import { requireAdmin, requireUser } from "@/lib/session";
 import { createTelegramLinkCode, disconnectTelegramChat, getBot, releaseTelegramBot, sendTelegramMessage, syncTelegram } from "@/lib/telegram";
 import * as v from "@/lib/validation";
-import { sendWhatsappNotice, whatsappLocale } from "@/lib/whatsapp";
+import { sendWhatsappCode, sendWhatsappNotice, whatsappLocale } from "@/lib/whatsapp";
+import { codeTemplateAdminText, codeTemplateUserText } from "@/lib/whatsapp-code-text";
 import { getT } from "@/i18n/server";
 import { makeT, toLocale, type T } from "@/i18n/core";
 
@@ -150,7 +151,11 @@ export async function saveWhatsappSettings(form: WhatsappForm) {
     const enabled = before.whatsappSettings.enabled === null ? before.whatsapp.active : undefined;
     const change = await persistWhatsapp(checked.value, { token, clearToken: Boolean(form.clearToken), enabled });
     const cfg = (await loadMessagingConfig({ fresh: true })).whatsapp;
-    describeAction("Cambió la configuración de WhatsApp", { template: cfg.templateName, lang: cfg.templateLang, langEn: checked.value.templateLangEn || null, complete: cfg.complete, active: cfg.active, authChange: change });
+    describeAction("Cambió la configuración de WhatsApp", {
+      template: cfg.templateName, lang: cfg.templateLang, langEn: checked.value.templateLangEn || null, codeTemplate: cfg.codeTemplateName, codeLang: cfg.codeTemplateLang,
+      codeLangEn: cfg.codeTemplateLangEn || null,
+      complete: cfg.complete, active: cfg.active, authChange: change,
+    });
     revalidatePath("/admin/settings");
     return { complete: cfg.complete, active: cfg.active };
   });
@@ -167,7 +172,10 @@ export async function setWhatsappActive(enabled: boolean) {
   });
 }
 
-/** Envía la plantilla, con un texto de prueba, a un número que indica el administrador (con la configuración guardada). */
+/**
+ * Prueba las dos plantillas con la configuración guardada, al número que indica el administrador: la de avisos (con un
+ * texto de prueba) y la de verificación (con el código de muestra 123456). Si solo falla una, se dice cuál y por qué.
+ */
 export async function testWhatsapp(input: { to: string }) {
   return runAction({ name: "settings.testWhatsapp" }, async () => {
     const admin = await requireAdmin();
@@ -176,9 +184,23 @@ export async function testWhatsapp(input: { to: string }) {
     if (!to) throw new AppError("Escribe el número al que enviar la prueba.");
     const cfg = (await loadMessagingConfig({ fresh: true })).whatsapp;
     if (!cfg.complete) throw new AppError("Faltan datos: el token, el identificador del número y la plantilla.");
-    await sendTest(cfg, to, admin.locale);
-    describeAction("Envió un WhatsApp de prueba a {to}", { to: maskPhone(to) });
-    return { to: maskPhone(to) };
+    // Un error que no es AppError (p. ej. de la base de datos) llega en bruto: sin el token ni el número.
+    const failure = (err: unknown) => (err instanceof AppError ? err.message : scrubSecrets((err as Error)?.message ?? String(err), [cfg.token, to, to.replace(/^\+/, "")]));
+    let noticeError: string | null = null;
+    let codeError: string | null = null;
+    try {
+      await sendTest(cfg, to, admin.locale);
+    } catch (err) {
+      noticeError = failure(err);
+    }
+    try {
+      await sendCodeTemplate(cfg, to, WHATSAPP_SAMPLE_CODE, "admin", admin.locale);
+    } catch (err) {
+      codeError = failure(err);
+    }
+    if (noticeError && codeError) throw new AppError(noticeError === codeError ? noticeError : `${noticeError} ${codeError}`);
+    describeAction("Envió un WhatsApp de prueba a {to}", { to: maskPhone(to) }, { notice: !noticeError, code: !codeError, codeTemplate: cfg.codeTemplateName });
+    return { to: maskPhone(to), noticeError, codeError };
   });
 }
 
@@ -233,15 +255,45 @@ async function reserveWhatsappTest(userId: string, phone: string): Promise<void>
   rateLimit(k.number, WHATSAPP_TESTS_PER_DAY.number, DAY_MS);
 }
 
+const CODE_TEMPLATE_REJECTED = "whatsapp-code-template";
+
+/**
+ * Envía un código con la plantilla de AUTENTICACIÓN (codigo_pizarro). Si Meta rechaza la plantilla (no existe, no está
+ * aprobada, no es de autenticación o está en pausa), lo apunta para que Ajustes y Mi perfil lo expliquen y da un error
+ * claro: al administrador, qué crear en Meta; a la persona, que avise al administrador. Un envío bueno lo olvida.
+ */
+async function sendCodeTemplate(cfg: WhatsappCfg, to: string, code: string, audience: "admin" | "user", locale: string): Promise<void> {
+  // En inglés solo si la verificación tiene ese idioma configurado (ver whatsappCodeLang).
+  const english = toLocale(locale) === "en";
+  try {
+    await sendWhatsappCode(cfg, to, code, english);
+  } catch (err) {
+    const problem = whatsappTemplateProblem(err);
+    if (!problem) throw await apiFailure("No se pudo enviar el código por WhatsApp.", err, [cfg.token, to, to.replace(/^\+/, "")]);
+    // El idioma con que se envió de verdad: si falla el de inglés, Ajustes dice que falta esa traducción.
+    const info = { name: cfg.codeTemplateName, lang: whatsappCodeLang(cfg, english), code: (err as MessagingApiError).code ?? 0 };
+    await setWhatsappCodeTemplateError({ ...info, at: new Date().toISOString() }).catch(() => {});
+    const t = await getT();
+    throw new AppError(audience === "admin" ? codeTemplateAdminText(t, problem, info) : codeTemplateUserText(t), 400, CODE_TEMPLATE_REJECTED);
+  }
+  await setWhatsappCodeTemplateError(null).catch(() => {});
+}
+
 /** Genera un código nuevo (anula el anterior), lo guarda como HMAC con su caducidad y lo envía por WhatsApp. */
 async function issueWhatsappCode(cfg: WhatsappCfg, user: { id: string; locale: string }, phone: string): Promise<void> {
   const code = randomInt(0, 1_000_000).toString().padStart(6, "0");
   const expires = new Date(Date.now() + WHATSAPP_CODE_MINUTES * 60_000);
-  await db.userChannel.update({
-    where: { userId_channel: { userId: user.id, channel: "WHATSAPP" } },
-    data: { verifiedAt: null, verifyCodeHash: labelledHmac("whatsapp-verify", codeHashInput(user.id, phone, code)), verifyExpiresAt: expires, verifyAttempts: 0 },
-  });
-  await sendTemplateText(cfg, phone, user.locale, (t) => t("Tu código de verificación de Pizarro es {code}", { code }), "No se pudo enviar el código por WhatsApp.");
+  const where = { userId_channel: { userId: user.id, channel: "WHATSAPP" as const } };
+  const verifyCodeHash = labelledHmac("whatsapp-verify", codeHashInput(user.id, phone, code));
+  await db.userChannel.update({ where, data: { verifiedAt: null, verifyCodeHash, verifyExpiresAt: expires, verifyAttempts: 0 } });
+  try {
+    await sendCodeTemplate(cfg, phone, code, "user", user.locale);
+  } catch (err) {
+    // Meta rechazó la plantilla: el código no ha salido y Mi perfil no debe decir «te hemos enviado un código». (Tras un
+    // 5xx o un tiempo agotado sí puede haber llegado, así que entonces se conserva.)
+    if (err instanceof AppError && err.code === CODE_TEMPLATE_REJECTED) await db.userChannel.updateMany({ where: { userId: user.id, channel: "WHATSAPP", verifyCodeHash }, data: { verifyCodeHash: null, verifyExpiresAt: null } });
+    throw err;
+  }
 }
 
 // --- Mi perfil → Avisos ---

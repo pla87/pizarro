@@ -4,7 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import type { Locale, T } from "@/i18n/core";
 import { BrandMark } from "@/components/ui/BrandMark";
 import { landingFaq, landingHero, landingIncludes, landingPillars, landingSteps, type PillarKey } from "@/lib/landing-content";
-import { buyHref, buyNote, INSTALL_URL, LICENSE_PRICE_EUR, REPO_URL, SITE_URL } from "@/lib/product";
+import { buyHref, buyNote, installUrl, LICENSE_PRICE_EUR, REPO_URL, SITE_URL } from "@/lib/product";
 
 const PILLAR_ICONS: Record<PillarKey, LucideIcon> = { simple: Sparkles, once: Wallet, data: Lock, small: Users };
 
@@ -92,7 +92,7 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
               ))}
             </ol>
             <p className="mt-5 text-sm">
-              <a href={INSTALL_URL} rel="noopener noreferrer" className="font-medium text-brand-700 underline dark:text-brand-300">{t("Guía de instalación")}</a>
+              <a href={installUrl(locale)} rel="noopener noreferrer" className="font-medium text-brand-700 underline dark:text-brand-300">{t("Guía de instalación")}</a>
             </p>
           </div>
         </section>

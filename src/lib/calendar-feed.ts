@@ -13,7 +13,7 @@ import type { CalendarFeedScope, Prisma } from "@/generated/prisma/client";
 
 // Calendario vivo de una persona: sus tareas con fecha límite y los entregables con fecha de los proyectos que puede ver.
 
-export interface FeedOwner {
+interface FeedOwner {
   id: string;
   name: string;
   role: "ADMIN" | "MEMBER";
@@ -39,6 +39,17 @@ export async function resolveFeedToken(token: string): Promise<{ feedId: string;
     await db.calendarFeed.updateMany({ where: { id: feed.id, tokenHash: feed.tokenHash }, data: { tokenHash: current } }).catch(() => {});
   }
   return { feedId: feed.id, scope: feed.scope, user: feed.user };
+}
+
+/**
+ * Qué incluye por defecto la suscripción de quien aún no tiene una: «Solo las mías» solo si al menos la mitad de las
+ * tareas pendientes de sus proyectos (los del calendario) tienen responsable; si no (uso familiar o personal, donde las
+ * tareas no suelen asignarse, o sin tareas), «Todas»: con «Solo las mías» el calendario saldría vacío.
+ */
+export async function defaultFeedScope(user: CurrentUser): Promise<CalendarFeedScope> {
+  const pending: Prisma.TaskWhereInput = { project: workingProjectsWhere(user), archivedAt: null, column: { isDone: false } };
+  const [total, assigned] = await Promise.all([db.task.count({ where: pending }), db.task.count({ where: { ...pending, assigneeId: { not: null } } })]);
+  return total > 0 && assigned * 2 >= total ? "MINE" : "ALL";
 }
 
 /** .ics con las tareas no archivadas ni terminadas con fecha límite y los entregables con fecha. Los permisos se evalúan aquí, en cada petición. */

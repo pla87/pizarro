@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { describe, test } from "node:test";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
 
@@ -13,7 +13,7 @@ test("release-notes: la versión actual sale con su resumen y sus cambios; una i
   const entry = (JSON.parse(readFileSync("changelog.json", "utf8")) as { versions: { version: string; summary: string }[] }).versions.find((v) => v.version === pkg.version);
   assert.ok(entry);
   assert.ok(ok.stdout.startsWith(entry.summary));
-  assert.match(ok.stdout, /docs\/INSTALL\.md#5-actualizar/);
+  assert.match(ok.stdout, /https:\/\/getpizarro\.com\/instalar\/#actualizar/);
   const missing = spawnSync("node", ["scripts/release-notes.mjs", "0.0.1"], { encoding: "utf8" });
   assert.equal(missing.status, 1);
   assert.equal(spawnSync("node", ["scripts/release-notes.mjs", "latest"], { encoding: "utf8" }).status, 2);
@@ -46,7 +46,7 @@ test("workflows: cada acción fijada a un commit exacto con su versión en el co
   assert.match(dep, /version-update:semver-major/);
 });
 
-test("workflow de release: build oficial y rama stable movida solo por su job, con --force-with-lease", () => {
+test("workflow de release: build oficial y rama stable movida solo por su job, con scripts/move-stable.sh", () => {
   const wf = readFileSync(".github/workflows/release.yml", "utf8");
   assert.match(wf, /OFFICIAL_BUILD=1/);
   assert.match(wf, /RELEASE_VERSION=\$\{\{ env\.VERSION \}\}/);
@@ -54,7 +54,14 @@ test("workflow de release: build oficial y rama stable movida solo por su job, c
   assert.ok(stable.length > 20);
   assert.match(stable, /needs: release/);
   assert.match(stable, /contents: write/);
-  assert.match(stable, /git push --force-with-lease="refs\/heads\/stable:\$current" origin "\$GITHUB_SHA:refs\/heads\/stable"/);
+  const check = stable.indexOf("bash scripts/move-stable.sh check-token");
+  assert.ok(check > 0);
+  assert.ok(check < stable.indexOf('bash scripts/move-stable.sh move "$GITHUB_SHA"'), "el token se comprueba antes de mover");
+  const script = readFileSync("scripts/move-stable.sh", "utf8");
+  assert.match(script, /push --force-with-lease="refs\/heads\/stable:\$current" "\$remote" "\$sha:refs\/heads\/stable"/);
+  const mergeBase = script.indexOf('git merge-base --is-ancestor "$sha" origin/main');
+  assert.ok(mergeBase > 0);
+  assert.ok(mergeBase < script.indexOf("push --force-with-lease"), "la comprobación va antes del push");
   // El Dockerfile declara las variables que la build usa para saberse oficial (Railway solo pasa las declaradas).
   const df = readFileSync("Dockerfile", "utf8");
   for (const a of ["OFFICIAL_BUILD", "RELEASE_VERSION", "RAILWAY_GIT_REPO_OWNER", "RAILWAY_GIT_REPO_NAME", "RAILWAY_GIT_BRANCH", "RAILWAY_GIT_COMMIT_SHA", "GIT_SHA"]) {
@@ -62,47 +69,83 @@ test("workflow de release: build oficial y rama stable movida solo por su job, c
   }
 });
 
-/** El script del paso «Mover stable a la versión publicada» (las líneas bajo «run: |», sin su sangría). */
-function stableScript(): string {
-  const wf = readFileSync(".github/workflows/release.yml", "utf8");
-  const stable = wf.slice(wf.indexOf("\n  stable:"));
-  const lines = stable.slice(stable.indexOf("Mover stable a la versión publicada")).split("\n");
-  const start = lines.findIndex((l) => /^\s+run: \|\s*$/.test(l));
-  const body: string[] = [];
-  for (const l of lines.slice(start + 1)) {
-    if (l.trim() && !l.startsWith("          ")) break;
-    body.push(l.slice(10));
+test("stable: el checkout usa siempre github.token y STABLE_PUSH_TOKEN solo llega a los pasos del script", () => {
+  for (const f of ["release.yml", "stable.yml"]) {
+    const wf = readFileSync(`.github/workflows/${f}`, "utf8");
+    const job = f === "release.yml" ? wf.slice(wf.indexOf("\n  stable:")) : wf;
+    const from = job.indexOf("uses: actions/checkout@");
+    const checkout = job.slice(from, job.indexOf("\n\n", from));
+    assert.match(checkout, /token: \$\{\{ github\.token \}\}/, f);
+    assert.match(checkout, /fetch-depth: 0/, f);
+    assert.doesNotMatch(checkout, /STABLE_PUSH_TOKEN/, f);
+    // El secreto solo aparece como variable de entorno de los pasos que llaman al script.
+    const uses = [...job.matchAll(/secrets\.STABLE_PUSH_TOKEN/g)];
+    assert.ok(uses.length >= 2, f);
+    for (const m of uses) {
+      const line = job.slice(job.lastIndexOf("\n", m.index) + 1, job.indexOf("\n", m.index));
+      assert.match(line, /^\s+STABLE_PUSH_TOKEN: \$\{\{ secrets\.STABLE_PUSH_TOKEN \}\}$/, `${f}: ${line}`);
+    }
   }
-  return body.join("\n");
+  const script = readFileSync("scripts/move-stable.sh", "utf8");
+  // El valor se limpia de espacios y saltos de línea, se enmascara y nunca va en la línea de órdenes ni en una URL.
+  assert.match(script, /tr -d '\[:space:\]'/);
+  assert.match(script, /::add-mask::\$pat/);
+  assert.match(script, /curl [^\n]*-H @-/);
+  assert.match(script, /GIT_CONFIG_KEY_0="http\.\$server\/\.extraheader" GIT_CONFIG_VALUE_0=""/);
+  assert.doesNotMatch(script, /x-access-token:\$\{?(pat|push_token)\}?@/);
+});
+
+test("workflow «Mover stable»: a mano, solo desde main, permisos mínimos y el mismo script con --latest", () => {
+  const wf = readFileSync(".github/workflows/stable.yml", "utf8");
+  assert.match(wf, /^name: Mover stable$/m);
+  assert.match(wf, /^on:\n {2}workflow_dispatch:\n\n/m);
+  assert.doesNotMatch(wf, /^\s+(push|pull_request|schedule):/m);
+  assert.match(wf, /^permissions:\n {2}contents: read$/m);
+  assert.match(wf, /if: github\.ref == 'refs\/heads\/main'/);
+  assert.match(wf, /group: release/);
+  assert.doesNotMatch(wf, /packages: write|workflows: write|actions: write/);
+  assert.ok(wf.indexOf("move-stable.sh check-token") > 0);
+  assert.ok(wf.indexOf("move-stable.sh check-token") < wf.indexOf("move-stable.sh move --latest"));
+  assert.match(wf, /PUBLISHED_TAGS<</);
+  assert.match(wf, /select\(\.draft \| not\) \| select\(\.prerelease \| not\)/);
+});
+
+/** Repositorio de origen local (bare) con un clon de trabajo, para ejecutar scripts/move-stable.sh de verdad. */
+function stableSandbox() {
+  const dir = mkdtempSync(join(tmpdir(), "pz-stable-"));
+  const git = (cwd: string, ...args: string[]) => {
+    const r = spawnSync("git", ["-c", "user.name=Prueba", "-c", "user.email=prueba@example.com", "-c", "init.defaultBranch=main", ...args], { cwd, encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout.trim();
+  };
+  const origin = join(dir, "origin.git");
+  const work = join(dir, "work");
+  git(dir, "init", "--bare", "-q", origin);
+  git(dir, "clone", "-q", origin, work);
+  const commit = (version: string, tag = true) => {
+    writeFileSync(join(work, "package.json"), JSON.stringify({ version }));
+    git(work, "add", "package.json");
+    git(work, "commit", "-q", "-m", `v${version}`);
+    if (tag) git(work, "tag", `v${version}`);
+    return git(work, "rev-parse", "HEAD");
+  };
+  const summary = join(dir, "summary.md");
+  const script = join(process.cwd(), "scripts/move-stable.sh");
+  const run = (args: string[], env: Record<string, string> = {}) =>
+    spawnSync("bash", [script, ...args], {
+      cwd: work,
+      encoding: "utf8",
+      env: { ...process.env, GITHUB_REPOSITORY: "example/pizarro", GITHUB_STEP_SUMMARY: summary, STABLE_REMOTE_URL: origin, STABLE_PUSH_TOKEN: "", GITHUB_TOKEN: "token-de-prueba", PUBLISHED_TAGS: "", ...env },
+    });
+  const stableAt = () => spawnSync("git", ["ls-remote", origin, "refs/heads/stable"], { encoding: "utf8" }).stdout.split("\t")[0];
+  /** La salida sin la línea ::add-mask:: (que Actions no muestra) no contiene el token. */
+  const hidden = (r: { stdout: string; stderr: string }) => assert.doesNotMatch(r.stdout.replace(/^::add-mask::.*$/m, "") + r.stderr, /github_pat_prueba123/);
+  return { dir, origin, work, git, commit, run, stableAt, summary, hidden };
 }
 
-test("workflow de release: stable usa STABLE_PUSH_TOKEN si existe y no se mueve a un commit que no está en main", () => {
-  const wf = readFileSync(".github/workflows/release.yml", "utf8");
-  const stable = wf.slice(wf.indexOf("\n  stable:"));
-  assert.match(stable, /token: \$\{\{ secrets\.STABLE_PUSH_TOKEN \|\| github\.token \}\}/);
-  assert.match(stable, /fetch-depth: 0/);
-  const script = stableScript();
-  assert.ok(script.indexOf('git merge-base --is-ancestor "$GITHUB_SHA" origin/main') > 0);
-  assert.ok(script.indexOf("merge-base") < script.indexOf("git push"), "la comprobación va antes del push");
-
-  // Ensayo con un repositorio local de origen: main con dos versiones y una rama aparte.
-  const dir = mkdtempSync(join(tmpdir(), "pz-stable-"));
+test("move-stable.sh: no se mueve fuera de main, ni hacia atrás, ni a preversiones; avisa si GitHub rechaza el push", () => {
+  const { dir, origin, work, git, commit, run, stableAt, summary, hidden } = stableSandbox();
   try {
-    const git = (cwd: string, ...args: string[]) => {
-      const r = spawnSync("git", ["-c", "user.name=Prueba", "-c", "user.email=prueba@example.com", "-c", "init.defaultBranch=main", ...args], { cwd, encoding: "utf8" });
-      assert.equal(r.status, 0, r.stderr);
-      return r.stdout.trim();
-    };
-    const origin = join(dir, "origin.git");
-    const work = join(dir, "work");
-    git(dir, "init", "--bare", "-q", origin);
-    git(dir, "clone", "-q", origin, work);
-    const commit = (version: string) => {
-      writeFileSync(join(work, "package.json"), JSON.stringify({ version }));
-      git(work, "add", "package.json");
-      git(work, "commit", "-q", "-m", `v${version}`);
-      return git(work, "rev-parse", "HEAD");
-    };
     const v1 = commit("1.0.0");
     git(work, "push", "-q", "origin", "HEAD:main");
     const v2 = commit("1.1.0");
@@ -111,34 +154,172 @@ test("workflow de release: stable usa STABLE_PUSH_TOKEN si existe y no se mueve 
     const side = commit("1.2.0");
     git(work, "push", "-q", "origin", "side");
     git(work, "checkout", "-q", "main");
-    const summary = join(dir, "summary.md");
-    const run = (sha: string, hasToken = "false") =>
-      spawnSync("bash", ["-e", "-c", script], { cwd: work, encoding: "utf8", env: { ...process.env, GITHUB_SHA: sha, GITHUB_STEP_SUMMARY: summary, HAS_STABLE_PUSH_TOKEN: hasToken, GIT_TERMINAL_PROMPT: "0" } });
-    const stableAt = () => spawnSync("git", ["ls-remote", origin, "refs/heads/stable"], { encoding: "utf8" }).stdout.split("\t")[0];
 
-    let r = run(v2);
+    let r = run(["move", v2]);
     assert.equal(r.status, 0, r.stderr);
     assert.equal(stableAt(), v2);
+    r = run(["move", v2]);
+    assert.match(r.stdout, /stable ya está en/);
     // Una etiqueta en un commit fuera de main: stable no se mueve (y el job no falla).
-    r = run(side);
+    r = run(["move", side]);
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /no está en main/);
     assert.equal(stableAt(), v2);
+    // Nunca hacia atrás.
+    r = run(["move", v1]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /stable ya tiene la 1\.1\.0 \(>= 1\.0\.0\)/);
+    assert.equal(stableAt(), v2);
+    // Una preversión no mueve stable.
+    const rc = commit("2.0.0-rc.1", false);
+    git(work, "push", "-q", "origin", "HEAD:main");
+    r = run(["move", rc]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /preversión/);
+    assert.equal(stableAt(), v2);
 
     // GitHub rechaza el push con GITHUB_TOKEN (cambian workflows): el job falla diciendo qué secreto crear.
-    git(work, "checkout", "-q", "main");
-    const v3 = commit("1.3.0");
+    const v3 = commit("2.0.0");
     git(work, "push", "-q", "origin", "HEAD:main");
     const hook = join(origin, "hooks", "pre-receive");
     writeFileSync(hook, "#!/bin/sh\necho \"refusing to allow a GitHub App to create or update workflow \\`.github/workflows/release.yml\\` without \\`workflows\\` permission\" >&2\nexit 1\n");
     chmodSync(hook, 0o755);
-    r = run(v3);
+    r = run(["move", v3]);
     assert.equal(r.status, 1);
-    assert.match(r.stdout, /::error::.*STABLE_PUSH_TOKEN.*Contents y Workflows/);
+    assert.match(r.stdout, /::error::.*GITHUB_TOKEN.*STABLE_PUSH_TOKEN.*Contents y Workflows/);
     assert.match(readFileSync(summary, "utf8"), /STABLE_PUSH_TOKEN/);
     assert.equal(stableAt(), v2);
-    r = run(v3, "true");
+    // Con un PAT sin el permiso Workflows; el valor (con espacios y salto de línea) no aparece en la salida.
+    r = run(["move", v3], { STABLE_PUSH_TOKEN: " github_pat_prueba123 \n" });
+    assert.equal(r.status, 1);
     assert.match(r.stdout, /::error::.*no tiene el permiso Workflows/);
+    assert.match(r.stdout, /Only select repositories → example\/pizarro/);
+    assert.match(r.stdout, /^::add-mask::github_pat_prueba123$/m);
+    hidden(r);
+    // Credenciales rechazadas (token caducado o sin acceso).
+    writeFileSync(hook, "#!/bin/sh\necho 'Permission to example/pizarro.git denied to bot.' >&2\nexit 1\n");
+    r = run(["move", v3], { STABLE_PUSH_TOKEN: "github_pat_prueba123" });
+    assert.equal(r.status, 1);
+    assert.match(r.stdout, /::error::.*rechaza las credenciales de STABLE_PUSH_TOKEN.*Fine-grained tokens/);
+    hidden(r);
+    rmSync(hook);
+    r = run(["move", v3], { STABLE_PUSH_TOKEN: "github_pat_prueba123" });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(stableAt(), v3);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("move-stable.sh --latest: la versión vX.Y.Z más alta publicada que está en main", () => {
+  const { dir, work, git, commit, run, stableAt } = stableSandbox();
+  try {
+    git(work, "commit", "-q", "--allow-empty", "-m", "inicio");
+    git(work, "push", "-q", "origin", "HEAD:main");
+    let r = run(["move", "--latest"]);
+    assert.equal(r.status, 1);
+    assert.match(r.stdout, /::error::No hay ninguna versión publicada en main/);
+
+    const v1 = commit("1.9.0");
+    const v2 = commit("1.10.0");
+    git(work, "push", "-q", "origin", "HEAD:main");
+    git(work, "checkout", "-q", "-b", "side");
+    commit("1.11.0"); // en otra rama: no cuenta
+    git(work, "push", "-q", "origin", "side");
+    git(work, "checkout", "-q", "main");
+    commit("2.0.0-rc.1"); // preversión: no cuenta
+    git(work, "push", "-q", "origin", "HEAD:main");
+    git(work, "push", "-q", "origin", "--tags");
+    git(work, "tag", "-d", "v1.9.0", "v1.10.0", "v1.11.0", "v2.0.0-rc.1"); // las etiquetas se leen del origen
+
+    // Solo las que tienen release publicada (PUBLISHED_TAGS): v1.10.0 no la tiene.
+    r = run(["move", "--latest"], { PUBLISHED_TAGS: "v1.9.0\nv1.11.0\nv2.0.0-rc.1" });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /Última versión publicada en main: v1\.9\.0/);
+    assert.equal(stableAt(), v1);
+    // Sin lista, la más alta de main (orden numérico: 1.10.0 > 1.9.0).
+    r = run(["move", "--latest"]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /v1\.10\.0/);
+    assert.equal(stableAt(), v2);
+    r = run(["move", "--latest"]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /stable ya está en/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("move-stable.sh --latest: si no puede leer las etiquetas del origen, falla sin mover stable (no usa las locales)", () => {
+  const { dir, work, git, commit, run, stableAt, summary } = stableSandbox();
+  try {
+    commit("1.0.0");
+    git(work, "push", "-q", "origin", "HEAD:main", "--tags");
+    // Etiqueta local (en main) que el origen ya no tiene: solo se elegiría si se ignorase el fallo del fetch.
+    commit("1.1.0");
+    git(work, "push", "-q", "origin", "HEAD:main");
+    // git falso: el fetch de las etiquetas falla (red, permisos…); todo lo demás va al git de verdad.
+    const realGit = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+    const bin = join(dir, "bin");
+    mkdirSync(bin);
+    writeFileSync(join(bin, "git"), `#!/bin/sh\ncase "$*" in *refs/tags/v*) echo "fatal: fallo simulado" >&2; exit 128 ;; esac\nexec "${realGit}" "$@"\n`);
+    chmodSync(join(bin, "git"), 0o755);
+    const r = run(["move", "--latest"], { PATH: `${bin}:${process.env.PATH}` });
+    assert.equal(r.status, 1, r.stdout);
+    assert.match(r.stdout, /::error::No se pudieron leer las etiquetas del repositorio/);
+    assert.match(readFileSync(summary, "utf8"), /No se pudieron leer las etiquetas/);
+    assert.equal(stableAt(), "", "stable no se mueve");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("move-stable.sh check-token: sin mostrar el token, distingue caducado, sin acceso y sin permiso de escritura", () => {
+  const { dir, work, git, commit, run, stableAt, hidden } = stableSandbox();
+  try {
+    commit("1.0.0");
+    git(work, "push", "-q", "origin", "HEAD:main");
+    // curl falso: guarda las cabeceras que recibe por la entrada estándar y responde lo que diga FAKE_CURL_CODE.
+    const bin = join(dir, "bin");
+    mkdirSync(bin);
+    const log = join(dir, "curl.log");
+    writeFileSync(join(bin, "curl"), '#!/bin/sh\nout=""\nprev=""\nfor a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\ncat > "$FAKE_CURL_LOG"\nprintf \'%s\' "$FAKE_CURL_BODY" > "$out"\nprintf \'%s\' "$FAKE_CURL_CODE"\n');
+    chmodSync(join(bin, "curl"), 0o755);
+    const check = (code: string, env: Record<string, string> = {}) =>
+      run(["check-token"], { PATH: `${bin}:${process.env.PATH}`, FAKE_CURL_LOG: log, FAKE_CURL_CODE: code, FAKE_CURL_BODY: '{"permissions":{"push":true}}', STABLE_PUSH_TOKEN: " github_pat_prueba123\n", ...env });
+
+    let r = check("200", { STABLE_PUSH_TOKEN: "" });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /No hay STABLE_PUSH_TOKEN/);
+
+    r = check("401");
+    assert.equal(r.status, 1);
+    // El valor llega limpio (sin el espacio ni el salto de línea) y por la entrada estándar, no por la línea de órdenes.
+    assert.equal(readFileSync(log, "utf8"), "Authorization: Bearer github_pat_prueba123\n");
+    assert.match(r.stdout, /::error::STABLE_PUSH_TOKEN no es válido \(GitHub responde 401\)\..*caducado.*pendiente de aprobación/);
+    assert.match(r.stdout, /Fine-grained tokens.*Only select repositories → example\/pizarro.*Contents Read and write y Workflows Read and write.*Settings → Secrets and variables → Actions → STABLE_PUSH_TOKEN.*sin espacios ni saltos de línea/);
+    hidden(r);
+
+    r = check("404");
+    assert.equal(r.status, 1);
+    assert.match(r.stdout, /::error::STABLE_PUSH_TOKEN no tiene acceso a example\/pizarro.*Only select repositories/);
+
+    r = check("200", { FAKE_CURL_BODY: '{"permissions":{"push":false}}' });
+    assert.equal(r.status, 1);
+    assert.match(r.stdout, /::error::El dueño de STABLE_PUSH_TOKEN no puede escribir/);
+
+    // La API responde 200, pero git no deja escribir (aquí, un destino inexistente): falla pidiendo Contents.
+    r = check("200", { STABLE_REMOTE_URL: join(dir, "no-existe.git") });
+    assert.equal(r.status, 1);
+    assert.match(r.stdout, /::error::STABLE_PUSH_TOKEN no puede escribir.*Contents: Read and write/);
+    hidden(r);
+
+    // Todo bien: el push de prueba (--dry-run) no mueve stable.
+    r = check("200");
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /STABLE_PUSH_TOKEN es válido/);
+    hidden(r);
+    assert.equal(stableAt(), "");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -151,4 +332,52 @@ test("compose: usa la imagen publicada por defecto y compose.build.yml permite c
   const b = readFileSync("deploy/compose.build.yml", "utf8");
   assert.match(b, /^\s+build:/m);
   assert.match(b, /dockerfile: Dockerfile/);
+});
+
+describe("workflow de release: versión ya publicada", () => {
+  /** El script del paso que comprueba la versión, ejecutado con un `git` falso (ls-remote devuelve FAKE_LS). */
+  function runCheck(env: Record<string, string>) {
+    const wf = readFileSync(".github/workflows/release.yml", "utf8");
+    const m = /- name: Comprobar que la etiqueta coincide con package\.json\n\s+run: \|\n((?: {10}.*\n|\n)+)/.exec(wf);
+    assert.ok(m, "paso de comprobación");
+    const script = m[1]!.replace(/^ {10}/gm, "");
+    const dir = mkdtempSync(join(tmpdir(), "pz-release-"));
+    const bin = join(dir, "bin");
+    mkdirSync(bin);
+    writeFileSync(join(bin, "git"), `#!/bin/sh\necho "$*" >> "${dir}/git-calls"\n[ -n "$FAKE_FAIL" ] && exit 128\nprintf "%s" "$FAKE_LS"\n`);
+    chmodSync(join(bin, "git"), 0o755);
+    const ghEnv = join(dir, "env");
+    writeFileSync(ghEnv, "");
+    const r = spawnSync("bash", ["-e", "-c", script], { encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, GITHUB_ENV: ghEnv, ...env } });
+    return { status: r.status, stderr: r.stderr, env: readFileSync(ghEnv, "utf8"), gitCalls: existsSync(join(dir, "git-calls")) ? readFileSync(join(dir, "git-calls"), "utf8") : "" };
+  }
+  const version = (JSON.parse(readFileSync("package.json", "utf8")) as { version: string }).version;
+
+  test("a mano con la etiqueta ya en el remoto: para con un error claro antes de publicar", () => {
+    const r = runCheck({ GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_REF_NAME: "main", FAKE_LS: `abc123\trefs/tags/v${version}\n` });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, new RegExp(`La versión ${version.replace(/\./g, "\\.")} ya está publicada`));
+    assert.match(r.stderr, /npm run version:bump/);
+    assert.equal(r.env, "", "no llega a fijar VERSION");
+    assert.match(r.gitCalls, new RegExp(`ls-remote --tags origin refs/tags/v${version.replace(/\./g, "\\.")}`));
+  });
+
+  test("a mano con una versión nueva sigue; si no se puede consultar el remoto, para", () => {
+    const ok = runCheck({ GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_REF_NAME: "main", FAKE_LS: "" });
+    assert.equal(ok.status, 0, ok.stderr);
+    assert.equal(ok.env, `VERSION=${version}\n`);
+    const down = runCheck({ GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_REF_NAME: "main", FAKE_LS: "", FAKE_FAIL: "1" });
+    assert.equal(down.status, 1);
+  });
+
+  test("con etiqueta (push) no consulta el remoto: la etiqueta es la que se publica", () => {
+    const r = runCheck({ GITHUB_EVENT_NAME: "push", GITHUB_REF_NAME: `v${version}`, FAKE_LS: `abc\trefs/tags/v${version}\n` });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.gitCalls, "");
+  });
+
+  test("un solo grupo de concurrencia para la ejecución por etiqueta y la manual", () => {
+    const wf = readFileSync(".github/workflows/release.yml", "utf8");
+    assert.match(wf, /^concurrency:\n {2}group: release\n {2}cancel-in-progress: false$/m);
+  });
 });

@@ -57,7 +57,6 @@ export const proyectos: Record<string, string> = {
   "Además, las tarjetas archivadas, las releases con su contenido y adjuntos, y el historial de cambios de las tarjetas.": "Also archived cards, releases with their content and attachments, and the cards' change history.",
   "Calculando…": "Calculating…",
   "No se pudo calcular el tamaño.": "The size could not be calculated.",
-  "Se exportarán {tasks} tarjetas ({archived} archivadas), {releases} releases y {attachments} adjuntos (unos {size} MB).": "{tasks} cards ({archived} archived), {releases} releases and {attachments} attachments will be exported (about {size} MB).",
   "Exportar": "Export",
   "Importar desde un archivo…": "Import from a file…",
   "Se creará como proyecto privado (solo tú lo verás).": "It will be created as a private project (only you will see it).",
@@ -66,7 +65,6 @@ export const proyectos: Record<string, string> = {
   "Importar": "Import",
   "Error de red al subir el archivo.": "Network error while uploading the file.",
   "Proyecto importado": "Project imported",
-  "«{name}» se ha creado con {tasks} tarjetas ({archived} archivadas), {columns} columnas, {comments} comentarios, {attachments} adjuntos, {releases} releases y {documents} documentos.": "“{name}” was created with {tasks} cards ({archived} archived), {columns} columns, {comments} comments, {attachments} attachments, {releases} releases and {documents} documents.",
   "{n} usuario(s) se han añadido como miembros del proyecto por figurar en el archivo.": "{n} user(s) were added as project members because they appear in the file.",
   "Personas sin emparejar ({n})": "Unmatched people ({n})",
   "No hay un usuario activo con el mismo email (o el proyecto es privado), así que sus tarjetas quedan sin asignar y sus comentarios conservan el nombre original.": "There is no active user with the same email (or the project is private), so their cards are left unassigned and their comments keep the original name.",
@@ -146,4 +144,12 @@ export const proyectos: Record<string, string> = {
   "El archivo de esta exportación ha caducado. Vuelve a exportar el proyecto.": "This export file has expired. Export the project again.",
   "Proyecto en blanco": "Blank project",
   "Columnas por defecto, sin tarjetas.": "Default columns, no cards.",
+
+  // Nuevo proyecto: «Empezar con» (plantillas y ejemplos)
+  "Empezar con": "Start with",
+  "Ejemplos": "Examples",
+  "{description} Con tarjetas de muestra que puedes borrar.": "{description} With sample cards you can delete.",
+  "La estructura de la plantilla (columnas, tipos, etiquetas y campos), sin tarjetas.": "The template's structure (columns, types, labels and fields), no cards.",
+  // Exportar: el tamaño estimado cuenta también los datos, no solo los adjuntos.
+  "Se exportarán {tasks} tarjetas ({archived} archivadas), {releases} releases y {attachments} adjuntos: un archivo de unos {size} MB.": "{tasks} cards ({archived} archived), {releases} releases and {attachments} attachments will be exported: a file of about {size} MB.",
 };

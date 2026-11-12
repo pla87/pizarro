@@ -153,6 +153,16 @@ test("validación del formulario de WhatsApp", () => {
   assert.equal(core.validateWhatsappSettings({ phoneNumberId: "12a45", templateName: "", templateLang: "", templateLangEn: "" }).ok, false);
   assert.equal(core.validateWhatsappSettings({ phoneNumberId: "", templateName: "Aviso Pizarro", templateLang: "", templateLangEn: "" }).ok, false);
   assert.equal(core.validateWhatsappSettings({ phoneNumberId: "", templateName: "", templateLang: "español", templateLangEn: "" }).ok, false);
+  // Plantilla de verificación: mismas reglas; sin ella, vacío (= codigo_pizarro en el idioma de los avisos).
+  const ok = core.validateWhatsappSettings({ phoneNumberId: "", templateName: "", templateLang: "", templateLangEn: "", codeTemplateName: " codigo_pizarro ", codeTemplateLang: "es_ES" });
+  assert.deepEqual(ok.ok && [ok.value.codeTemplateName, ok.value.codeTemplateLang], ["codigo_pizarro", "es_ES"]);
+  const none = core.validateWhatsappSettings({ phoneNumberId: "", templateName: "", templateLang: "", templateLangEn: "" });
+  assert.deepEqual(none.ok && [none.value.codeTemplateName, none.value.codeTemplateLang], ["", ""]);
+  assert.equal(core.validateWhatsappSettings({ phoneNumberId: "", templateName: "", templateLang: "", templateLangEn: "", codeTemplateName: "Código Pizarro" }).ok, false);
+  assert.equal(core.validateWhatsappSettings({ phoneNumberId: "", templateName: "", templateLang: "", templateLangEn: "", codeTemplateLang: "español" }).ok, false);
+  assert.equal(core.validateWhatsappSettings({ phoneNumberId: "", templateName: "", templateLang: "", templateLangEn: "", codeTemplateLangEn: "inglés" }).ok, false);
+  const withEn = core.validateWhatsappSettings({ phoneNumberId: "", templateName: "", templateLang: "", templateLangEn: "", codeTemplateLangEn: " en_US " });
+  assert.equal(withEn.ok && withEn.value.codeTemplateLangEn, "en_US");
   assert.equal(core.isTelegramToken("123456789:AAHfiqksKZ8WmR2zSjiQ7_v4TMAKdiHm9T0"), true);
   assert.equal(core.isTelegramToken("123456789:corto"), false);
 });
@@ -189,6 +199,63 @@ test("asignación: el título va en la cabecera y no se repite debajo (Telegram 
   assert.match(mentionEmail({ ...m, type: "COMMENT", excerpt: "Mira esto" }, makeT("es")).html, /<blockquote[^>]*>Mira esto</);
   const wa = core.whatsappPayload("+34600111222", m, { templateName: "aviso_pizarro", templateLang: "es", templateLangEn: "en", legacy: false }, makeT("es"));
   assert.deepEqual(wa.template.components[0]!.parameters.map((p) => p.text), ["Ana te ha asignado «Pantalla de inicio»", "Web", m.url]);
+});
+
+test("código de verificación: plantilla de AUTENTICACIÓN con el código en el cuerpo y en el botón «Copiar código» (formato de Meta)", () => {
+  const empty = core.parseWhatsappSettings([]);
+  // Por defecto, codigo_pizarro en el idioma de los avisos (venga de Ajustes o de las variables).
+  const def = core.resolveWhatsappConfig({ WHATSAPP_TEMPLATE_LANG: "es_ES" }, empty, "");
+  assert.deepEqual([def.codeTemplateName, def.codeTemplateLang], ["codigo_pizarro", "es_ES"]);
+  assert.equal(core.DEFAULT_WHATSAPP_CODE_TEMPLATE, "codigo_pizarro");
+  const saved = core.parseWhatsappSettings([{ key: core.WHATSAPP_CODE_TEMPLATE_KEY, value: "mi_codigo" }, { key: core.WHATSAPP_CODE_LANG_KEY, value: "es_MX" }, { key: core.WHATSAPP_LANG_KEY, value: "es" }]);
+  const cfg = core.resolveWhatsappConfig({}, saved, "");
+  assert.deepEqual([cfg.codeTemplateName, cfg.codeTemplateLang, cfg.templateName, cfg.templateLang], ["mi_codigo", "es_MX", "aviso_pizarro", "es"]);
+
+  // Cuerpo exacto: https://developers.facebook.com/docs/whatsapp/business-management-api/authentication-templates
+  // (Copy code authentication templates → Sending authentication templates).
+  assert.deepEqual(core.whatsappCodePayload("+34600111222", "012345", def), {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: "34600111222",
+    type: "template",
+    template: {
+      name: "codigo_pizarro",
+      language: { code: "es_ES" },
+      components: [
+        { type: "body", parameters: [{ type: "text", text: "012345" }] },
+        { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: "012345" }] },
+      ],
+    },
+  });
+  // Quien usa Pizarro en inglés: con «Idioma en inglés de la verificación», en ese idioma; sin él, en el de la verificación.
+  assert.equal(core.whatsappCodePayload("+34600111222", "012345", def, true).template.language.code, "es_ES");
+  const en = core.resolveWhatsappConfig({}, core.parseWhatsappSettings([{ key: core.WHATSAPP_CODE_LANG_EN_KEY, value: "en_US" }, { key: core.WHATSAPP_LANG_KEY, value: "es" }]), "");
+  assert.deepEqual([en.codeTemplateLang, en.codeTemplateLangEn], ["es", "en_US"]);
+  assert.equal(core.whatsappCodePayload("+34600111222", "012345", en, true).template.language.code, "en_US");
+  assert.equal(core.whatsappCodePayload("+34600111222", "012345", en).template.language.code, "es");
+  // No se toma el «Idioma en inglés» de los avisos: codigo_pizarro puede no tener esa traducción.
+  const noticeOnly = core.resolveWhatsappConfig({}, core.parseWhatsappSettings([{ key: core.WHATSAPP_LANG_EN_KEY, value: "en" }]), "");
+  assert.equal(core.whatsappCodePayload("+34600111222", "012345", noticeOnly, true).template.language.code, "es");
+  assert.ok((core.WHATSAPP_KEYS as readonly string[]).includes(core.WHATSAPP_CODE_LANG_EN_KEY));
+  // Los avisos no cambian: siguen con aviso_pizarro y solo el cuerpo con sus 3 variables.
+  const notice = core.whatsappPayload("+34600111222", { type: "MENTION", actorName: "Ana", taskTitle: "T", projectName: "Web", excerpt: "", url: "https://pizarro.example.com/p/1" }, def, makeT("es"));
+  assert.equal(notice.template.name, "aviso_pizarro");
+  assert.equal(notice.template.components.length, 1);
+  assert.equal(notice.template.components[0]!.type, "body");
+  assert.equal(notice.template.components[0]!.parameters.length, 3);
+});
+
+test("errores de Meta con la plantilla de verificación: no existe, forma equivocada o en pausa (y nada más)", () => {
+  const meta = (code: number | null, status = 400) => new core.MessagingApiError("WhatsApp", status, null, code);
+  assert.equal(core.whatsappTemplateProblem(meta(132001)), "missing");
+  for (const code of [132000, 132012, 132018]) assert.equal(core.whatsappTemplateProblem(meta(code)), "params");
+  for (const code of [132015, 132016]) assert.equal(core.whatsappTemplateProblem(meta(code)), "paused");
+  for (const err of [meta(131030), meta(190, 401), meta(null, 503), new Error("red")]) assert.equal(core.whatsappTemplateProblem(err), null);
+  // Lo guardado del último rechazo se lee con cuidado (un JSON roto cuenta como nada).
+  const at = "2026-11-12T10:00:00.000Z";
+  const saved = core.parseWhatsappSettings([{ key: core.WHATSAPP_CODE_ERROR_KEY, value: JSON.stringify({ code: 132001, name: "codigo_pizarro", lang: "es", at }) }]);
+  assert.deepEqual(saved.codeTemplateError, { code: 132001, name: "codigo_pizarro", lang: "es", at });
+  assert.equal(core.parseWhatsappSettings([{ key: core.WHATSAPP_CODE_ERROR_KEY, value: "{roto" }]).codeTemplateError, null);
 });
 
 test("Telegram HTML: lo interpolado se escapa siempre; el texto sin formato, entero", () => {
@@ -276,5 +343,7 @@ test("las guías llevan el texto exacto de la plantilla que espera Pizarro", asy
     assert.ok(doc.includes(core.WHATSAPP_TEMPLATE_BODY.es), "cuerpo en español");
     assert.ok(doc.includes(core.WHATSAPP_TEMPLATE_BODY.en), "cuerpo en inglés");
     assert.ok(doc.includes(core.DEFAULT_WHATSAPP_TEMPLATE));
+    assert.ok(doc.includes(`\`${core.DEFAULT_WHATSAPP_CODE_TEMPLATE}\``), "la plantilla de verificación, con su nombre exacto");
+    assert.ok(doc.includes(core.WHATSAPP_PRICING_URL), "enlace a los precios de Meta");
   }
 });

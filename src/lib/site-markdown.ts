@@ -1,22 +1,24 @@
 // Markdown → HTML sencillo y seguro para la web estática getpizarro.com (scripts/build-site.mjs): la licencia
-// (LICENSE.md) y las guías de conexión (docs/guias/*.md y docs/guias/en/*.md). Node lo importa tal cual (sin alias
-// «@/» ni dependencias), igual que site-content.ts.
+// (LICENSE.md), las guías de conexión (docs/guias/*.md y docs/guias/en/*.md) y la guía de instalación
+// (docs/web/instalar.md y docs/web/en/install.md). Node lo importa tal cual (sin alias «@/» ni dependencias), igual
+// que site-content.ts.
 //
-// Admite: encabezados (#…####), párrafos, saltos de línea forzados (dos espacios o «\» al final), listas con viñetas
-// y numeradas (anidadas por sangría), citas (>), bloques de código (```), tablas sencillas (| a | b |), líneas
-// horizontales, **negrita**, *cursiva* o _cursiva_, `código` y enlaces [texto](https://…) o <https://…>.
+// Admite: encabezados (#…####, con un identificador fijo opcional al final: «## Actualizar {#actualizar}»), párrafos,
+// saltos de línea forzados (dos espacios o «\» al final), listas con viñetas y numeradas (anidadas por sangría), citas
+// (>) y avisos al estilo de GitHub («> [!NOTE]», [!TIP], [!IMPORTANT], [!WARNING] o [!CAUTION]), bloques de código
+// (```, con su lenguaje), tablas sencillas (| a | b |), líneas horizontales, **negrita**, *cursiva* o _cursiva_,
+// `código` y enlaces [texto](https://…) o <https://…>.
 // Todo lo demás se escapa: el HTML que haya en el texto se ve como texto (los comentarios <!-- … --> se quitan), las
 // imágenes se quedan en su texto alternativo y un enlace que no sea http(s), un ancla (#…) o lo que acepte `link`
 // se queda en su texto.
 
-export type LinkResolver = (href: string) => string | null;
+// Con la extensión: Node (build-site.mjs) carga este fichero sin empaquetador y no resuelve rutas sin ella.
+import { escapeHtml } from "./html-escape.ts";
+import { slugify } from "./search-accents.ts";
 
-export const escapeHtml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+type LinkResolver = (href: string) => string | null;
 
-/** Identificador de un encabezado: minúsculas, sin acentos, palabras unidas con «-». */
-export const slugify = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-
-/** Enlaces admitidos por defecto: http(s) absolutos y anclas de la misma página. */
+/** Enlaces admitidos por defecto: http(s) absolutos y anclas de la misma página. @public (scripts/build-site.mjs) */
 export function safeHref(href: string): string | null {
   if (/^https?:\/\/[^\s"'<>`]+$/i.test(href)) return href;
   if (/^#[\w-]+$/.test(href)) return href;
@@ -88,34 +90,32 @@ function emphasis(s: string): string {
 
 /** Texto en línea: código, enlaces y énfasis; todo lo demás, escapado. */
 export function inlineMarkdown(s: string, link: LinkResolver = safeHref): string {
-  const links = (part: string) => {
-    let out = "";
-    let last = 0;
-    for (const m of part.matchAll(/(!?)\[([^[\]]+)\]\(([^()\s]+)\)|<(https?:\/\/[^\s<>]+)>/g)) {
-      out += emphasis(part.slice(last, m.index));
-      last = (m.index ?? 0) + m[0].length;
-      const text = m[2] ?? m[4] ?? "";
-      if (m[1]) {
-        out += emphasis(text); // imagen: solo su texto alternativo
-        continue;
-      }
-      const href = link(m[3] ?? m[4] ?? "");
-      out += href ? `<a href="${escapeHtml(href)}"${/^https?:/i.test(href) ? ' rel="noopener"' : ""}>${emphasis(text)}</a>` : emphasis(text);
-    }
-    return out + emphasis(part.slice(last));
-  };
+  // El código va primero, como un marcador (caracteres de uso privado): así «**la rama `stable`**» sigue siendo
+  // negrita y lo de dentro del código no se interpreta.
+  const codes: string[] = [];
+  const src = s.replace(/[]/g, "").replace(/`([^`]+)`/g, (_, c: string) => `${codes.push(c) - 1}`);
+  const MARK = /(\d+)/g;
+  const source = (t: string) => t.replace(MARK, (_, i: string) => `\`${codes[Number(i)] ?? ""}\``);
   let out = "";
   let last = 0;
-  for (const m of s.matchAll(/`([^`]+)`/g)) {
-    out += links(s.slice(last, m.index));
-    out += `<code>${escapeHtml(m[1] ?? "")}</code>`;
+  for (const m of src.matchAll(/(!?)\[([^[\]]+)\]\(([^()\s]+)\)|<(https?:\/\/[^\s<>]+)>/g)) {
+    out += emphasis(src.slice(last, m.index));
     last = (m.index ?? 0) + m[0].length;
+    const text = m[2] ?? source(m[4] ?? "");
+    if (m[1]) {
+      out += emphasis(text); // imagen: solo su texto alternativo
+      continue;
+    }
+    // La dirección, tal como se escribió (con sus «`» si los tenía: entonces ningún resolutor la admite).
+    const href = link(source(m[3] ?? m[4] ?? ""));
+    out += href ? `<a href="${escapeHtml(href)}"${/^https?:/i.test(href) ? ' rel="noopener"' : ""}>${emphasis(text)}</a>` : emphasis(text);
   }
-  return out + links(s.slice(last));
+  out += emphasis(src.slice(last));
+  return out.replace(MARK, (_, i: string) => `<code>${escapeHtml(codes[Number(i)] ?? "")}</code>`);
 }
 
 /** Texto plano de una línea de Markdown (para descripciones y títulos). */
-export const plainText = (s: string) =>
+const plainText = (s: string) =>
   s.replace(/!?\[([^[\]]+)\]\([^)]*\)/g, "$1").replace(/<(https?:\/\/[^>]+)>/g, "$1").replace(/[*_`]/g, "").replace(/\s+/g, " ").trim();
 
 const LIST = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/;
@@ -127,19 +127,47 @@ const blank = (l: string) => !l.trim();
 const indentOf = (l: string) => l.length - l.trimStart().length;
 const startsBlock = (l: string) => FENCE.test(l) || HEADING.test(l) || RULE.test(l) || LIST.test(l) || /^\s*>/.test(l);
 
+/** Tipos de aviso («> [!NOTE]» y compañía, como en GitHub). */
+type CalloutKind = "note" | "tip" | "important" | "warning" | "caution";
+/** Rótulo de cada tipo de aviso; por defecto, en español. */
+const CALLOUT_LABELS: Record<CalloutKind, string> = { note: "Nota", tip: "Consejo", important: "Importante", warning: "Atención", caution: "Cuidado" };
+
+/** Un encabezado del documento (para el índice): nivel, identificador y su HTML. */
+type Heading = { level: number; id: string; html: string };
+
+type MarkdownOptions = {
+  /** Qué enlaces se admiten (y cómo se reescriben). */
+  link?: LinkResolver;
+  /** Si se pasa, se le añaden los encabezados en orden. */
+  headings?: Heading[];
+  /** Rótulos de los avisos (p. ej. en inglés). */
+  callouts?: Partial<Record<CalloutKind, string>>;
+  /**
+   * HTML de un bloque de código; recibe el texto sin escapar y el lenguaje («bash», «text»… o ""). Debe escapar el
+   * texto (escapeHtml). Sin él: <pre><code>…</code></pre>.
+   */
+  code?: (text: string, lang: string) => string;
+};
+
+type Ctx = { link: LinkResolver; ids: Set<string>; headings: Heading[] | null; callouts: Record<CalloutKind, string>; code: ((text: string, lang: string) => string) | null };
+
 /** Markdown → HTML. `link` decide qué enlaces se admiten (y puede reescribirlos). */
-export function markdownToHtml(md: string, { link = safeHref }: { link?: LinkResolver } = {}): string {
-  const ids = new Set<string>();
-  return blocks(md.replace(/\r\n?/g, "\n").replace(/<!--[\s\S]*?-->/g, "").split("\n"), link, ids, 0);
+export function markdownToHtml(md: string, { link = safeHref, headings, callouts, code }: MarkdownOptions = {}): string {
+  const ctx: Ctx = { link, ids: new Set<string>(), headings: headings ?? null, callouts: { ...CALLOUT_LABELS, ...callouts }, code: code ?? null };
+  return blocks(md.replace(/\r\n?/g, "\n").replace(/<!--[\s\S]*?-->/g, "").split("\n"), ctx, 0);
 }
+
+const CALLOUT = /^\s*\[!(note|tip|important|warning|caution)\]\s*$/i;
+const HEADING_ID = /\s*\{#([a-z0-9]+(?:-[a-z0-9]+)*)\}\s*$/;
 
 /**
  * Niveles de citas y listas anidadas que se interpretan; más adentro, las líneas se ven como texto. Sin tope, 5.000
  * «>» seguidos o 2.000 niveles de lista agotaban la pila (y la memoria: cada nivel copia sus líneas).
  */
-export const MAX_NESTING = 20;
+const MAX_NESTING = 20;
 
-function blocks(lines: string[], link: LinkResolver, ids: Set<string>, depth: number): string {
+function blocks(lines: string[], ctx: Ctx, depth: number): string {
+  const { link, ids } = ctx;
   const html: string[] = [];
   let i = 0;
   while (i < lines.length) {
@@ -152,20 +180,28 @@ function blocks(lines: string[], link: LinkResolver, ids: Set<string>, depth: nu
     if (fence) {
       const code: string[] = [];
       const pad = indentOf(line);
+      const lang = (line.trim().slice(3).trim().split(/\s/)[0] ?? "").toLowerCase();
       i++;
       while (i < lines.length && !(lines[i] ?? "").trimStart().startsWith(fence[1] ?? "```")) code.push((lines[i++] ?? "").replace(new RegExp(`^ {0,${pad}}`), ""));
       i++; // cierre
-      html.push(`<pre><code>${escapeHtml(code.join("\n"))}</code></pre>`);
+      const text = code.join("\n");
+      html.push(ctx.code ? ctx.code(text, lang) : `<pre><code>${escapeHtml(text)}</code></pre>`);
       continue;
     }
     const h = HEADING.exec(line);
     if (h) {
       const level = (h[1] ?? "#").length;
-      const text = h[2] ?? "";
-      let id = slugify(plainText(text)) || "seccion";
-      for (let n = 2; ids.has(id); n++) id = `${slugify(plainText(text))}-${n}`;
+      let text = h[2] ?? "";
+      // «{#id}» al final fija el identificador (para enlazar a la sección aunque cambie el título).
+      const fixed = HEADING_ID.exec(text);
+      if (fixed) text = text.slice(0, fixed.index);
+      const base = fixed?.[1] ?? (slugify(plainText(text)) || "seccion");
+      let id = base;
+      for (let n = 2; ids.has(id); n++) id = `${base}-${n}`;
       ids.add(id);
-      html.push(`<h${level} id="${id}">${inlineMarkdown(text, link)}</h${level}>`);
+      const inner = inlineMarkdown(text, link);
+      ctx.headings?.push({ level, id, html: inner });
+      html.push(`<h${level} id="${id}">${inner}</h${level}>`);
       i++;
       continue;
     }
@@ -177,7 +213,12 @@ function blocks(lines: string[], link: LinkResolver, ids: Set<string>, depth: nu
     if (depth < MAX_NESTING && /^\s*>/.test(line)) {
       const quote: string[] = [];
       while (i < lines.length && /^\s*>/.test(lines[i] ?? "")) quote.push((lines[i++] ?? "").replace(/^\s*> ?/, ""));
-      html.push(`<blockquote>${blocks(quote, link, ids, depth + 1)}</blockquote>`);
+      const kind = CALLOUT.exec(quote[0] ?? "")?.[1]?.toLowerCase() as CalloutKind | undefined;
+      if (kind) {
+        html.push(`<div class="callout callout-${kind}" role="note"><p class="callout-title">${escapeHtml(ctx.callouts[kind])}</p>${blocks(quote.slice(1), ctx, depth + 1)}</div>`);
+      } else {
+        html.push(`<blockquote>${blocks(quote, ctx, depth + 1)}</blockquote>`);
+      }
       continue;
     }
     if (line.trimStart().startsWith("|") && TABLE_SEP.test(lines[i + 1] ?? "")) {
@@ -191,7 +232,7 @@ function blocks(lines: string[], link: LinkResolver, ids: Set<string>, depth: nu
       continue;
     }
     if (depth < MAX_NESTING && LIST.test(line)) {
-      i = list(lines, i, link, ids, html, depth);
+      i = list(lines, i, ctx, html, depth);
       continue;
     }
     const para: string[] = [];
@@ -208,7 +249,7 @@ function blocks(lines: string[], link: LinkResolver, ids: Set<string>, depth: nu
 }
 
 /** Una lista (con sus sublistas) desde la línea `start`; devuelve la línea siguiente. */
-function list(lines: string[], start: number, link: LinkResolver, ids: Set<string>, html: string[], depth: number): number {
+function list(lines: string[], start: number, ctx: Ctx, html: string[], depth: number): number {
   const first = LIST.exec(lines[start] ?? "");
   const indent = first?.[1]?.length ?? 0;
   const ordered = /\d/.test(first?.[2] ?? "");
@@ -246,7 +287,7 @@ function list(lines: string[], start: number, link: LinkResolver, ids: Set<strin
     let pad = Infinity;
     for (const l of rest) if (!blank(l)) pad = Math.min(pad, indentOf(l));
     const text = [item[0] ?? "", ...rest.map((l) => (blank(l) ? "" : l.slice(Number.isFinite(pad) ? pad : 0)))].join("\n");
-    let inner = blocks(text.split("\n"), link, ids, depth + 1);
+    let inner = blocks(text.split("\n"), ctx, depth + 1);
     if (!loose) inner = inner.replace(/^<p>([\s\S]*?)<\/p>/, "$1");
     return `<li>${inner}</li>`;
   }).join("");
@@ -255,7 +296,7 @@ function list(lines: string[], start: number, link: LinkResolver, ids: Set<strin
   return i;
 }
 
-export type Guide = { title: string; description: string; order: number; icon: string | null; body: string };
+type Guide = { title: string; description: string; order: number; icon: string | null; body: string };
 
 /**
  * Cabecera y cuerpo de una guía de docs/guias. La cabecera puede ser un front-matter mínimo

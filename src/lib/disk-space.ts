@@ -8,11 +8,11 @@ export const NO_SPACE_MESSAGE = "No hay espacio suficiente en el disco del servi
 
 const MB = 1024 * 1024;
 /** Margen por defecto: 1 GB como mucho (DISK_MIN_FREE_MB lo fija a mano)... */
-export const DISK_MIN_FREE_DEFAULT_MB = 1024;
+const DISK_MIN_FREE_DEFAULT_MB = 1024;
 /** ...pero nunca más del 20 % del volumen (en un disco pequeño un GB fijo bloquearía todo)... */
 const DISK_MIN_FREE_FRACTION = 0.2;
 /** ...ni menos de 100 MB. */
-export const DISK_MIN_FREE_FLOOR_MB = 100;
+const DISK_MIN_FREE_FLOOR_MB = 100;
 
 /**
  * Margen en bytes que debe quedar libre además de lo estimado. Con DISK_MIN_FREE_MB válido manda tal cual; si no,
@@ -38,7 +38,7 @@ export function releaseDisk(id: string): void {
 }
 
 /** Bytes reservados por los trabajos en marcha que escriben en `dir` (menos los del trabajo `exceptId`). */
-export function reservedDiskBytes(dir: string, exceptId?: string): number {
+function reservedDiskBytes(dir: string, exceptId?: string): number {
   let sum = 0;
   for (const [id, r] of reservations) if (r.dir === dir && id !== exceptId) sum += r.bytes;
   return sum;
@@ -61,7 +61,7 @@ export async function diskStats(dir: string): Promise<{ free: number; total: num
 export const isNoSpaceError = (err: unknown): boolean => (err as { code?: string } | null)?.code === "ENOSPC";
 
 /** Mensaje de una subida (adjunto, documento) que no se pudo escribir por falta de espacio en el disco. */
-export const UPLOAD_NO_SPACE_MESSAGE = "El servidor no tiene espacio para guardar el archivo.";
+const UPLOAD_NO_SPACE_MESSAGE = "El servidor no tiene espacio para guardar el archivo.";
 
 /**
  * Error al escribir el fichero de una subida: si es ENOSPC lo anota en el registro del sistema (es un problema del

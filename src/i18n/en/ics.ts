@@ -22,4 +22,9 @@ export const ics: Record<string, string> = {
   "Desactivar": "Turn off",
   "Regenerar o desactivar deja sin efecto el enlace anterior en todos tus calendarios.": "Regenerating or turning off makes the previous link stop working in all your calendars.",
   "Demasiados intentos. Espera un poco.": "Too many attempts. Please wait a moment.",
+
+  // Suscripción: qué incluye cada opción
+  "Las tareas de las que eres responsable y los entregables en los que tienes alguna. Las tareas sin responsable no salen.": "Tasks you are the assignee of and deliverables where you have one. Unassigned tasks are left out.",
+  "Todas las tareas y entregables de los proyectos en los que trabajas, tengan responsable o no.": "All tasks and deliverables in the projects you work on, assigned or not.",
+  "En los dos casos, solo las tareas con fecha límite que no están terminadas.": "Either way, only tasks with a due date that are not done.",
 };

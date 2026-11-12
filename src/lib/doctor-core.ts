@@ -16,7 +16,7 @@ export const DOCUMENTED_ENV_VARS = [
   "DATABASE_URL", "SESSION_SECRET", "TOKEN_SECRET", "TOKEN_SECRET_PREVIOUS", "ENCRYPTION_KEY", "ENCRYPTION_KEY_PREVIOUS",
   "APP_URL", "CANONICAL_REDIRECT", "LANDING_AT_ROOT", "SETUP_TOKEN", "UPLOAD_DIR", "PORT", "NODE_ENV",
   "SEED_ADMIN_EMAIL", "SEED_ADMIN_PASSWORD", "SEED_ADMIN_NAME",
-  "MAX_USERS", "MAX_UPLOAD_MB", "DATABASE_POOL_SIZE", "COOKIE_SECURE", "UPLOAD_QUOTA_MB_PER_PROJECT", "UPLOAD_QUOTA_MB_TOTAL",
+  "MAX_USERS", "MAX_UPLOAD_MB", "DATABASE_POOL_SIZE", "LIVE_REFRESH_JITTER_MS", "BCRYPT_WORKERS", "COOKIE_SECURE", "UPLOAD_QUOTA_MB_PER_PROJECT", "UPLOAD_QUOTA_MB_TOTAL",
   "PROJECT_IMPORT_MAX_MB", "PROJECT_TRANSFER_CONCURRENCY", "PDF_WORKER_MAX_MB", "DISK_MIN_FREE_MB",
   "BACKUP_KEY", "BACKUP_PAUSE", "BACKUP_LOCAL_FILES", "BACKUP_EXTERNAL_DIR",
   "BACKUP_S3_ENDPOINT", "BACKUP_S3_BUCKET", "BACKUP_S3_ACCESS_KEY_ID", "BACKUP_S3_SECRET_ACCESS_KEY", "BACKUP_S3_REGION", "BACKUP_S3_PREFIX",
@@ -29,7 +29,7 @@ export const DOCUMENTED_ENV_VARS = [
 /** Claves que deben tener al menos 32 caracteres: de ellas se dice también si el valor no sirve (sin decir cuál es). */
 const MIN32 = new Set(["SESSION_SECRET", "TOKEN_SECRET", "TOKEN_SECRET_PREVIOUS", "ENCRYPTION_KEY", "ENCRYPTION_KEY_PREVIOUS"]);
 
-export type EnvPresence = "set" | "unset" | "invalid";
+type EnvPresence = "set" | "unset" | "invalid";
 
 /** Nombre → «set» / «unset» (o «invalid» si una clave está definida pero no es válida). Nunca el valor. */
 export function envPresence(env: Env = process.env): Record<string, EnvPresence> {
@@ -88,7 +88,7 @@ export function messagingFlags(env: Env, rows: { key: string; value: string }[],
 }
 
 /** ¿El nombre de la variable sugiere un secreto? (sus valores se buscan y se tachan en todo el informe) */
-export const SECRET_NAME = /SECRET|KEY|PASS|TOKEN|DATABASE_URL|CLIENT_ID|PHONE_NUMBER/i;
+const SECRET_NAME = /SECRET|KEY|PASS|TOKEN|DATABASE_URL|CLIENT_ID|PHONE_NUMBER/i;
 /** Claves de objeto que nunca se copian al informe. */
 const SECRET_FIELD = /pass(word)?|token|secret|authorization|cookie|phone|email|^name$|userName|^ip$/i;
 
@@ -153,7 +153,7 @@ export function scrubDeep(value: unknown, ctx: ScrubContext, depth = 0): unknown
   return null;
 }
 
-export interface MigrationStatus {
+interface MigrationStatus {
   folder: number;
   applied: number;
   /** En la carpeta pero sin aplicar (falta `prisma migrate deploy`). */

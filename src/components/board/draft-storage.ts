@@ -4,7 +4,7 @@
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Borra todos los borradores locales (`pz-draft-*`); las preferencias de filtros del tablero se conservan. */
-export function clearAllDrafts(): void {
+function clearAllDrafts(): void {
   try {
     for (const key of Object.keys(localStorage)) if (key.startsWith("pz-draft-")) localStorage.removeItem(key);
   } catch {

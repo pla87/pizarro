@@ -1,5 +1,7 @@
 # Instalar Pizarro en tu propio servidor
 
+> **¿Buscas la guía paso a paso?** Está en la web, más sencilla y en español e inglés: <https://getpizarro.com/instalar/> (English: <https://getpizarro.com/en/install/>). Este documento es la referencia técnica completa.
+
 Esta guía instala Pizarro en un servidor propio (un VPS, un miniordenador en la oficina…) con **Docker Compose**: tres contenedores, **Caddy** (HTTPS automático), **Pizarro** y **PostgreSQL 16**. Todo vive en la carpeta `deploy/` del repositorio y no cambia nada del despliegue en Railway.
 
 > Pizarro está pensado para **un solo proceso** (una réplica). Las tareas de fondo se turnan con un bloqueo en la base de datos, así que un solapamiento breve durante una actualización no duplica nada, pero no lo escales a varias réplicas.
@@ -233,6 +235,8 @@ Los límites por defecto están pensados para 2 GB: app 1 GB (montón de Node 64
 
 En `.env`: `DOMAIN=":80"` y `APP_URL="http://<ip-del-servidor>"`. Caddy sirve solo HTTP y la cookie de sesión no se marca *Secure*. No lo expongas así a Internet.
 
+Por HTTP sin TLS el navegador habla HTTP/1.1 y abre como mucho 6 conexiones a la vez con el mismo servidor, compartidas por todas las pestañas. Cada tablero a la vista mantiene una abierta para los cambios en vivo; las pestañas ocultas cierran la suya y la vuelven a abrir al mostrarse (si hubo cambios mientras tanto, el tablero se pone al día solo). Aun así, con muchas ventanas de Pizarro a la vista a la vez (no pestañas: ventanas visibles) puede tardar en cargar o guardar. Con HTTPS (un dominio, o un certificado propio en Caddy) el navegador usa HTTP/2, que lleva todo por una sola conexión, y ese límite desaparece: si en tu red se usa mucho Pizarro en varias ventanas, es la opción recomendada.
+
 > **Importante:** la aplicación se fía de la cabecera `X-Real-IP` para saber la IP del cliente (límites de intentos, registro de actividad). Por eso el puerto 3000 de Pizarro nunca debe quedar expuesto directamente: solo a través del Caddy incluido (o de otro proxy que sobrescriba `X-Real-IP`). Si no, cualquiera podría falsear su IP.
 
 ### 3.4 Arquitecturas
@@ -362,6 +366,8 @@ services:
 ```
 
 Añade `BACKUP_EXTERNAL_DIR="/copias-externas"` a `.env` y `docker compose up -d`. Puedes usar a la vez S3 y una carpeta.
+La carpeta tiene que existir: Pizarro no la crea (si falta, la subida queda *Con error*: «La carpeta del destino externo
+no existe»), para no dejar las copias en el disco del sistema cuando el disco externo no está montado.
 
 ### 4.3 Copia manual (opcional)
 
@@ -414,7 +420,7 @@ Instala el código de la etiqueta `v1.37.0` y fija la imagen `ghcr.io/pla87/piza
 
 **Aviso de versión nueva.** Pizarro consulta a GitHub, como mucho cada 12 horas, cuál es la última release publicada. Si es más nueva que la que corre, los administradores ven un aviso discreto en Administración (y un punto junto a «Administración» en el menú) con enlaces a las novedades y a esta sección; se puede ocultar y no vuelve a salir hasta la siguiente versión. Es una petición a `api.github.com` cada 12 horas desde tu servidor: solo pide un dato público (la última versión) y no se envía nada de tu instalación, pero GitHub ve la dirección IP del servidor. Si no quieres esa conexión saliente, desactívalo (abajo). Sin conexión o con el límite de GitHub agotado no pasa nada: simplemente no hay aviso. Para desactivarlo, `UPDATE_CHECK=0` en `deploy/.env` (y `docker compose up -d`) o en las variables de Railway.
 
-**Publicar una versión (mantenedores).** `npm run version:bump -- minor` registra la versión y, tras fusionar en `main`, `npm run release:tag` crea la etiqueta anotada `vX.Y.Z` en el commit actual (se niega si hay cambios sin confirmar o si la etiqueta ya existe) y `git push origin vX.Y.Z` la sube. Eso lanza `.github/workflows/release.yml`: construye la imagen para amd64 y arm64, la publica en GHCR como `X.Y.Z` y `latest`, crea la GitHub Release con el resumen y los cambios de esa versión tomados de `changelog.json` y mueve la rama `stable` a ese commit (solo versiones `X.Y.Z` sin sufijo, de commits que ya están en `main` y nunca hacia atrás; si `stable` está protegida en GitHub, permite que la mueva *GitHub Actions* o el dueño del token de abajo). Si la versión cambia algún fichero de `.github/workflows/`, GitHub no deja moverla con el token de Actions: crea una vez el secreto de Actions `STABLE_PUSH_TOKEN` con un token *fine-grained* solo de este repositorio y los permisos **Contents** y **Workflows** en lectura y escritura (pasos en `docs/HANDOFF.md`, «Cerrar una versión»). Sin él, el job «Rama stable» falla avisando de qué secreto falta, sin afectar a la imagen ni a la release ya publicadas; tras crearlo, relanza ese job. Sin consola: en GitHub, **Actions → Release → Run workflow** (rama `main`) publica la versión de `package.json` y crea la etiqueta a la vez.
+**Publicar una versión (mantenedores).** `npm run version:bump -- minor` registra la versión y, tras fusionar en `main`, `npm run release:tag` crea la etiqueta anotada `vX.Y.Z` en el commit actual (se niega si hay cambios sin confirmar o si la etiqueta ya existe) y `git push origin vX.Y.Z` la sube. Eso lanza `.github/workflows/release.yml`: construye la imagen para amd64 y arm64, la publica en GHCR como `X.Y.Z` y `latest`, crea la GitHub Release con el resumen y los cambios de esa versión tomados de `changelog.json` y mueve la rama `stable` a ese commit (solo versiones `X.Y.Z` sin sufijo, de commits que ya están en `main` y nunca hacia atrás; si `stable` está protegida en GitHub, permite que la mueva *GitHub Actions* o el dueño del token de abajo). Si la versión cambia algún fichero de `.github/workflows/`, GitHub no deja moverla con el token de Actions: crea una vez el secreto de Actions `STABLE_PUSH_TOKEN` con un token *fine-grained* solo de este repositorio y los permisos **Contents** y **Workflows** en lectura y escritura (pasos en `docs/HANDOFF.md`, «Cerrar una versión»). Pega en el secreto solo el valor del token, sin espacios ni saltos de línea. Sin él, el job «Rama stable» falla avisando de qué secreto falta, sin afectar a la imagen ni a la release ya publicadas. Antes de mover nada, el paso «Comprobar STABLE_PUSH_TOKEN» prueba el token (sin mostrarlo) y, si no vale, dice la causa probable: caducado o pendiente de aprobación, sin acceso a este repositorio (*Only select repositories*) o sin **Contents: Read and write**; la falta de **Workflows** se ve al mover («no tiene el permiso Workflows»). Tras arreglar el secreto, **Actions → Mover stable → Run workflow** (rama `main`) mueve `stable` a la última versión publicada sin publicar otra (con las mismas reglas; si ya está ahí, no hace nada). Detalle en `docs/HANDOFF.md`, «Cerrar una versión», puntos 6 a 8. Sin consola: en GitHub, **Actions → Release → Run workflow** (rama `main`) publica la versión de `package.json` y crea la etiqueta a la vez.
 
 ## 6. Restaurar
 
@@ -521,7 +527,7 @@ Notas:
 | Síntoma | Causa probable | Solución |
 |---|---|---|
 | `docker compose up` dice «Define … en .env» | Falta una variable obligatoria | Ejecuta `./install.sh` otra vez (rellena lo que falte sin tocar lo demás) o ponla en `.env`. |
-| No tengo el código de `/setup` | Se imprime en el log al arrancar y caduca a las 24 h | `docker compose restart app` y `docker compose logs app \| grep "introduce el código"`; o define `SETUP_TOKEN` en `.env`. |
+| No tengo el código de `/setup` | Se imprime en el log al arrancar y caduca a las 24 h | `docker compose restart app` y `docker compose logs app \| grep "introduce el código"`; con `npm start`, sale en la terminal (reinicia para uno nuevo); o define `SETUP_TOKEN` en `.env`. |
 | `/setup` da 404 | Ya hay usuarios (la instalación está configurada) o se definió `SEED_ADMIN_*` | Entra en `/login`. Para empezar de cero hay que vaciar la base de datos. |
 | `[start] ERROR: faltan variables de entorno: SESSION_SECRET(>=32)` | Secreto vacío o corto | `./install.sh` (genera los que falten) o `openssl rand -base64 48` y `docker compose up -d`. |
 | El navegador avisa de certificado no válido | El DNS aún no apunta al servidor o los puertos 80/443 están cerrados | Comprueba el registro DNS y el cortafuegos; mira `docker compose logs caddy`. |
@@ -531,4 +537,5 @@ Notas:
 | La app se reinicia sola a menudo | Falta de memoria o un error | `docker compose logs app` y *Administración → Logs*; sube `APP_MEM_LIMIT`/`APP_HEAP_MB` si hay RAM. |
 | Las fechas salen con otra hora | La zona elegida en el asistente o `APP_TIMEZONE` no es la tuya | Define `APP_TIMEZONE` en `.env` y `docker compose up -d` (manda sobre la del asistente). |
 | El login no mantiene la sesión | `APP_URL` con `https://` pero se entra por `http://` | Entra por la URL de `APP_URL`. |
+| En red local por HTTP, con muchas ventanas de Pizarro abiertas, las páginas tardan en cargar o no guardan | Límite de 6 conexiones por servidor de HTTP/1.1 (ver 3.3) | Cierra o minimiza ventanas que no uses, o sirve Pizarro por HTTPS (HTTP/2). |
 | No llegan emails | Email sin configurar o credenciales erróneas | Revisa *Administración → Ajustes → Avisos por email* (o `SMTP_*`) y *Administración → Logs* (`[notify]`). |

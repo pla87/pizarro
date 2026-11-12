@@ -8,7 +8,7 @@ import { EMAIL_CODE_TTL_MS } from "./two-factor-core";
 // Emails de cuentas (enlaces y avisos de seguridad). Cada uno sale en el idioma del destinatario;
 // los enlaces se construyen con APP_URL (ver appUrl en mail.ts) y todo el HTML va escapado.
 
-export interface Recipient {
+interface Recipient {
   name: string;
   email: string;
   locale: string;

@@ -19,6 +19,7 @@ import { buildTemplateApplication, parseStoredTemplate, type TemplateData } from
 import { requireUser } from "@/lib/session";
 import { normalizeTaskFields, TASK_FIELDS } from "@/lib/task-fields";
 import { purgeProject } from "@/lib/project-delete";
+import { sameName } from "@/lib/name-spaces";
 import * as v from "@/lib/validation";
 import { dateToIso, isoToDate } from "@/lib/dates";
 import type { LabelOption } from "@/lib/types";
@@ -220,7 +221,8 @@ export async function deleteProject(projectId: string, confirmName: string) {
   return runAction({ name: "projects.deleteProject", args: [projectId] }, async () => {
     const user = await requireUser();
     const project = await findManageableProject(user, projectId);
-    if (project.name !== confirmName) throw new AppError("El nombre no coincide.");
+    // Se compara sin las diferencias de espacios: un nombre guardado con dos seguidos (o uno duro) se ve con uno.
+    if (typeof confirmName !== "string" || !sameName(project.name, confirmName)) throw new AppError("El nombre no coincide.");
     await purgeProject(projectId);
     revalidatePath("/", "layout");
   });

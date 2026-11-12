@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { handleBoundaryError } from "@/components/clientErrors";
 import { useT } from "@/i18n/client";
 
@@ -8,9 +8,14 @@ import { useT } from "@/i18n/client";
 export function ErrorScreen({ error, reset, className }: { error: Error & { digest?: string }; reset: () => void; className: string }) {
   const t = useT();
   // Todo error que llega aquí queda en Administración → Logs (con su «digest» para cruzarlo con el del servidor).
-  // Si es de una versión anterior (tras un despliegue), se recarga la página en lugar de enseñarlo.
+  // Si es de una versión anterior (tras un despliegue), se recarga la página en lugar de enseñarlo; si es un fragmento que
+  // no llegó por falta de red, se reintenta solo al volver la conexión.
+  const retry = useRef(reset);
   useEffect(() => {
-    handleBoundaryError("error-boundary", error);
+    retry.current = reset;
+  });
+  useEffect(() => {
+    handleBoundaryError("error-boundary", error, () => retry.current());
   }, [error]);
   return (
     <div className={className}>

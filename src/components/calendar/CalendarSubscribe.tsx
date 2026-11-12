@@ -90,14 +90,22 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
 
         <fieldset>
           <legend className="mb-1 font-medium">{t("Qué incluye")}</legend>
-          <label className="flex cursor-pointer items-center gap-2 py-0.5">
-            <input type="radio" name="feed-scope" checked={scope === "MINE"} onChange={() => changeScope("MINE")} className="accent-brand-600" />
-            {t("Solo las tareas asignadas a mí")}
+          {/* Cada opción explica qué entra: con «Solo las mías», las tareas sin responsable (habituales en casa) no salen. */}
+          <label className="flex cursor-pointer items-start gap-2 py-0.5">
+            <input type="radio" name="feed-scope" checked={scope === "MINE"} onChange={() => changeScope("MINE")} aria-describedby="feed-scope-mine" className="mt-1 accent-brand-600" />
+            <span>
+              {t("Solo las tareas asignadas a mí")}
+              <span id="feed-scope-mine" className="block text-xs text-slate-500">{t("Las tareas de las que eres responsable y los entregables en los que tienes alguna. Las tareas sin responsable no salen.")}</span>
+            </span>
           </label>
-          <label className="flex cursor-pointer items-center gap-2 py-0.5">
-            <input type="radio" name="feed-scope" checked={scope === "ALL"} onChange={() => changeScope("ALL")} className="accent-brand-600" />
-            {t("Todas las de mis proyectos")}
+          <label className="flex cursor-pointer items-start gap-2 py-0.5">
+            <input type="radio" name="feed-scope" checked={scope === "ALL"} onChange={() => changeScope("ALL")} aria-describedby="feed-scope-all" className="mt-1 accent-brand-600" />
+            <span>
+              {t("Todas las de mis proyectos")}
+              <span id="feed-scope-all" className="block text-xs text-slate-500">{t("Todas las tareas y entregables de los proyectos en los que trabajas, tengan responsable o no.")}</span>
+            </span>
           </label>
+          <p className="mt-1 text-xs text-slate-500">{t("En los dos casos, solo las tareas con fecha límite que no están terminadas.")}</p>
         </fieldset>
 
         {links ? (

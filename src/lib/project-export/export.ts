@@ -4,11 +4,12 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { crc32 } from "node:zlib";
 import pkg from "../../../package.json";
-import type { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { dateToIso, todayIso } from "../dates";
 import { db } from "../db";
 import { AppError } from "../errors";
 import { appTimeZone } from "../format";
+import { slugify } from "../search-accents";
 import { attachmentPath, documentPath, readReleaseAttachmentFile } from "../uploads";
 import { streamZipSize, type StreamZipEntry } from "../zip-stream";
 import { mapMentions } from "./mentions";
@@ -34,7 +35,7 @@ export interface ProjectExport {
 
 /** Nombre apto para ficheros a partir del nombre del proyecto: minúsculas, sin acentos, con guiones. */
 export function projectSlug(name: string): string {
-  const slug = name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "");
+  const slug = slugify(name).slice(0, 40).replace(/-+$/, "");
   return slug || "proyecto";
 }
 
@@ -430,7 +431,7 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
   return { filename: exportFileName(project.name, now, appTimeZone()), manifest, entries, size, missingFiles };
 }
 
-export interface ExportEstimate {
+interface ExportEstimate {
   tasks: number;
   archivedTasks: number;
   releases: number;
@@ -438,6 +439,60 @@ export interface ExportEstimate {
   /** Adjuntos de tareas, releases y documentos, y su tamaño aproximado (según la base de datos). */
   attachments: number;
   bytes: number;
+  /**
+   * Tamaño aproximado de lo demás (project.json, sin comprimir, y el envoltorio del ZIP): el archivo pesa unos
+   * `bytes + dataBytes`. Sin él, un proyecto sin adjuntos prometía «unos 0,1 MB» y el archivo pesaba 0,6 MB.
+   */
+  dataBytes: number;
+}
+
+/**
+ * Lo que ocupa en project.json cada fila sin contar sus textos (claves, fechas ISO, refs…), medido sobre el formato de
+ * exportación; los textos se suman aparte con su tamaño real en UTF-8. Si el formato crece, la estimación se queda corta:
+ * la prueba «la estimación del tamaño se parece al archivo» de tests/db/project-export.test.ts lo vigila.
+ */
+const ROW_BYTES = {
+  task: 800, comment: 150, subtask: 45, follower: 70, link: 95, label: 8, attachment: 230, event: 115, release: 135,
+  releaseTask: 45, releaseAttachment: 160, document: 250, kind: 260, releaseTemplate: 120, column: 210,
+} as const;
+/** Manifiesto, ajustes del proyecto, listas pequeñas (personas, entregables, etiquetas) y cabeceras del ZIP. */
+const BASE_BYTES = 8 * 1024;
+/** Las comillas, barras y saltos de línea de los textos ocupan el doble al escaparlos en JSON. */
+const JSON_ESCAPE = 1.05;
+
+/** Tamaño aproximado de project.json (y lo fijo del ZIP) con una sola consulta: recuentos y bytes de los textos. */
+async function estimateDataBytes(projectId: string, options: ExportOptions): Promise<number> {
+  const all = options.scope === "all";
+  const n = (sql: Prisma.Sql) => Prisma.sql`(${sql})::bigint`;
+  const [r] = await db.$queryRaw<Record<string, bigint | number | null>[]>(Prisma.sql`
+    WITH t AS (SELECT "id", "title", "description", "client", "linkUrl" FROM "Task" WHERE "projectId" = ${projectId} ${all ? Prisma.empty : Prisma.sql`AND "archivedAt" IS NULL`})
+    SELECT
+      ${n(Prisma.sql`SELECT count(*) FROM t`)} AS "task",
+      ${n(Prisma.sql`SELECT coalesce(sum(octet_length("title") + octet_length("description") + coalesce(octet_length("client"), 0) + coalesce(octet_length("linkUrl"), 0)), 0) FROM t`)} AS "taskText",
+      ${n(Prisma.sql`SELECT count(*) FROM "TaskComment" c JOIN t ON t."id" = c."taskId"`)} AS "comment",
+      ${n(Prisma.sql`SELECT coalesce(sum(octet_length(c."body") + coalesce(octet_length(c."authorName"), 0)), 0) FROM "TaskComment" c JOIN t ON t."id" = c."taskId"`)} AS "commentText",
+      ${n(Prisma.sql`SELECT count(*) FROM "Subtask" s JOIN t ON t."id" = s."taskId"`)} AS "subtask",
+      ${n(Prisma.sql`SELECT coalesce(sum(octet_length(s."title")), 0) FROM "Subtask" s JOIN t ON t."id" = s."taskId"`)} AS "subtaskText",
+      ${n(Prisma.sql`SELECT count(*) FROM "TaskFollower" x JOIN t ON t."id" = x."taskId"`)} AS "follower",
+      ${n(Prisma.sql`SELECT count(*) FROM "TaskLabel" x JOIN t ON t."id" = x."taskId"`)} AS "label",
+      ${n(Prisma.sql`SELECT count(*) FROM "TaskLink" x JOIN t ON t."id" = x."taskId"`)} AS "link",
+      ${n(Prisma.sql`SELECT coalesce(sum(octet_length(x."title") + octet_length(x."url")), 0) FROM "TaskLink" x JOIN t ON t."id" = x."taskId"`)} AS "linkText",
+      ${n(Prisma.sql`SELECT count(*) FROM "TaskKind" WHERE "projectId" = ${projectId}`)} AS "kind",
+      ${n(Prisma.sql`SELECT coalesce(sum(octet_length("name") + octet_length("titleTemplate") + octet_length("descriptionTemplate") + octet_length(array_to_string("subtaskTemplate", ''))), 0) FROM "TaskKind" WHERE "projectId" = ${projectId}`)} AS "kindText",
+      ${n(Prisma.sql`SELECT count(*) FROM "Column" WHERE "projectId" = ${projectId}`)} AS "column",
+      ${n(Prisma.sql`SELECT count(*) FROM "ProjectReleaseTemplate" WHERE "projectId" = ${projectId}`)} AS "releaseTemplate",
+      ${n(Prisma.sql`SELECT coalesce(sum(octet_length("name") + octet_length("content")), 0) FROM "ProjectReleaseTemplate" WHERE "projectId" = ${projectId}`)} AS "releaseTemplateText",
+      ${all ? n(Prisma.sql`SELECT count(*) FROM "TaskEvent" WHERE "projectId" = ${projectId}`) : Prisma.sql`0`} AS "event",
+      ${all ? n(Prisma.sql`SELECT coalesce(sum(octet_length("userName") + octet_length("label")), 0) FROM "TaskEvent" WHERE "projectId" = ${projectId}`) : Prisma.sql`0`} AS "eventText",
+      ${all ? n(Prisma.sql`SELECT count(*) FROM "Release" WHERE "projectId" = ${projectId}`) : Prisma.sql`0`} AS "release",
+      ${all ? n(Prisma.sql`SELECT coalesce(sum(octet_length("title") + octet_length("content")), 0) FROM "Release" WHERE "projectId" = ${projectId}`) : Prisma.sql`0`} AS "releaseText",
+      ${all ? n(Prisma.sql`SELECT count(*) FROM "ReleaseTask" x JOIN "Release" r ON r."id" = x."releaseId" WHERE r."projectId" = ${projectId}`) : Prisma.sql`0`} AS "releaseTask",
+      ${all ? n(Prisma.sql`SELECT coalesce(sum(octet_length(x."title") + octet_length(x."kindName")), 0) FROM "ReleaseTask" x JOIN "Release" r ON r."id" = x."releaseId" WHERE r."projectId" = ${projectId}`) : Prisma.sql`0`} AS "releaseTaskText"
+  `);
+  const v = (k: string) => Number(r?.[k] ?? 0);
+  const rows = (Object.keys(ROW_BYTES) as (keyof typeof ROW_BYTES)[]).reduce((sum, k) => sum + v(k) * ROW_BYTES[k], 0);
+  const text = ["taskText", "commentText", "subtaskText", "linkText", "kindText", "releaseTemplateText", "eventText", "releaseText", "releaseTaskText"].reduce((sum, k) => sum + v(k), 0);
+  return Math.round(BASE_BYTES + rows + text * JSON_ESCAPE);
 }
 
 /** Recuentos baratos (sin leer ficheros) para enseñar en el diálogo de exportar. */
@@ -454,9 +509,13 @@ export async function estimateProjectExport(projectId: string, options: ExportOp
     options.attachments ? db.projectDocument.aggregate({ _sum: { size: true }, _count: true, where: { projectId, deletedAt: null } }) : null,
   ]);
   const parts = [ta, ra, da];
+  const attachments = parts.reduce((n, p) => n + (p?._count ?? 0), 0);
+  // Los adjuntos también ocupan una entrada en project.json (nombre, tipo, huella…) y otra en el ZIP.
+  const attachmentRows = (ta?._count ?? 0) * ROW_BYTES.attachment + (ra?._count ?? 0) * ROW_BYTES.releaseAttachment + (da?._count ?? 0) * ROW_BYTES.document;
   return {
     tasks, archivedTasks, releases, documents: options.attachments ? documents : 0,
-    attachments: parts.reduce((n, p) => n + (p?._count ?? 0), 0),
+    attachments,
     bytes: parts.reduce((n, p) => n + (p?._sum.size ?? 0), 0),
+    dataBytes: (await estimateDataBytes(projectId, options)) + attachmentRows,
   };
 }

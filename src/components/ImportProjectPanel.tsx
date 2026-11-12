@@ -3,17 +3,19 @@
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useT } from "@/i18n/client";
+import { useIntlLocale, useT } from "@/i18n/client";
+import { importSummaryItems } from "@/lib/import-summary";
 import { personLine } from "@/lib/person-line";
 import { announceQueued } from "./transfer/client";
 import { TransferJobs } from "./transfer/TransferJobs";
 import { TransferProgress } from "./transfer/TransferProgress";
 import { useTransferJob } from "./transfer/useTransferJob";
+import { useSafeRefresh } from "@/components/useSafeRefresh";
 
 interface Summary {
   projectId: string;
   name: string;
-  counts: { columns: number; tasks: number; archivedTasks: number; subtasks?: number; labels?: number; comments: number; taskAttachments: number; releases: number; releaseAttachments: number; documents: number };
+  counts: { columns: number; tasks: number; archivedTasks: number; subtasks?: number; labels?: number; comments: number; notes?: number; taskAttachments: number; releases: number; releaseAttachments: number; documents: number };
   /** «trello» o «csv» si viene de otro Kanban; ausente o «pizarro» si es una exportación de Pizarro. */
   source?: "pizarro" | "trello" | "csv";
   unmappedUsers: { name: string; email: string }[];
@@ -28,7 +30,9 @@ interface Summary {
  */
 export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, onBusyChange }: { isPrivate: boolean; privateToggle: React.ReactNode; onBack: () => void; onClose: () => void; onBusyChange?: (busy: boolean) => void }) {
   const t = useT();
+  const locale = useIntlLocale();
   const router = useRouter();
+  const safeRefresh = useSafeRefresh();
   const input = useRef<HTMLInputElement>(null);
   const xhr = useRef<XMLHttpRequest | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -42,7 +46,7 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
     setJobId(null);
     if (done.status === "DONE" && done.result && "counts" in done.result) {
       setSummary(done.result as Summary);
-      router.refresh();
+      safeRefresh();
     } else setError(done.error ?? t("No se pudo importar el proyecto."));
   });
   const busy = progress !== null || processing;
@@ -109,15 +113,14 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
     return (
       <div className="space-y-4" data-testid="import-summary">
         <h3 className="font-semibold">{t("Proyecto importado")}</h3>
-        <p className="text-sm">
-          {foreign
-            ? t("«{name}» se ha creado con {columns} columnas y {tasks} tareas ({archived} archivadas), con {subtasks} subtareas, {labels} etiquetas y {comments} comentarios.", {
-                name: summary.name, columns: c.columns, tasks: c.tasks, archived: c.archivedTasks, subtasks: c.subtasks ?? 0, labels: c.labels ?? 0, comments: c.comments,
-              })
-            : t("«{name}» se ha creado con {tasks} tarjetas ({archived} archivadas), {columns} columnas, {comments} comentarios, {attachments} adjuntos, {releases} releases y {documents} documentos.", {
-                name: summary.name, tasks: c.tasks, archived: c.archivedTasks, columns: c.columns, comments: c.comments, attachments: c.taskAttachments + c.releaseAttachments, releases: c.releases, documents: c.documents,
-              })}
-        </p>
+        <p className="text-sm">{t("«{name}» se ha creado con {items}.", { name: summary.name, items: importSummaryItems(c, foreign, t, locale) })}</p>
+        {(c.notes ?? 0) > 0 && (
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            {c.notes === 1
+              ? t("1 tarjeta lleva un comentario con quién la tenía asignada o la creó en el original, porque esa persona no está aquí.")
+              : t("{n} tarjetas llevan un comentario con quién las tenía asignadas o las creó en el original, porque esas personas no están aquí.", { n: c.notes ?? 0 })}
+          </p>
+        )}
         {summary.addedMembers > 0 && <p className="text-sm text-slate-600 dark:text-slate-300">{foreign ? t("{n} usuario(s) se han añadido como miembros del proyecto por ser responsables de alguna tarea.", { n: summary.addedMembers }) : t("{n} usuario(s) se han añadido como miembros del proyecto por figurar en el archivo.", { n: summary.addedMembers })}</p>}
         {summary.unmappedUsers.length > 0 && (
           <div className="text-sm">

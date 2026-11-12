@@ -5,6 +5,7 @@ import { assign, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeU
 import { addComment, archiveTask, createTask, deleteComment, deleteTask, moveTask, updateTask } from "../../src/actions/tasks";
 import { redoLast, undoLast } from "../../src/actions/undo";
 import { removeProjectMember } from "../../src/actions/projects";
+import { taskUpdateData } from "../../src/lib/undo";
 
 async function setup() {
   const user = await makeUser();
@@ -491,5 +492,12 @@ describe("rehacer", () => {
     await db.task.delete({ where: { id: task.id } });
     expectFail(await redoLast(f.project.id), BLOCKED_REDO);
     assert.equal(await db.task.count({ where: { id: task.id } }), 0);
+  });
+});
+
+describe("entradas guardadas por versiones anteriores", () => {
+  test("taskUpdateData ignora campos desconocidos de entradas antiguas", () => {
+    const data = taskUpdateData({ title: "x", externalUrl: "https://example.com", loQueSea: 1 } as never) as Record<string, unknown>;
+    assert.deepEqual(data, { title: "x" });
   });
 });

@@ -24,7 +24,6 @@ export const almacenamiento: Record<string, string> = {
   "Lo que puede ocupar cada proyecto (adjuntos, copias en releases y documentación). Vacío = 10 GB (10240 MB). Un proyecto puede tener su propia cuota en sus ajustes. Ahora mismo: {value}.": "What each project may use (attachments, release copies and documentation). Empty = 10 GB (10240 MB). A project can have its own quota in its settings. Right now: {value}.",
   "Cuota total del servidor (MB, opcional)": "Total server quota (MB, optional)",
   "Tope de todo lo que suman los proyectos. Vacío = sin tope. Pon un valor algo menor que el tamaño de tu volumen para que los proyectos no lo llenen.": "Cap on the sum of all projects. Empty = no cap. Use a value a bit below your volume size so projects cannot fill it.",
-  "Debe ser un número entero de MB, 1 o más.": "Must be a whole number of MB, 1 or more.",
   "1 fichero": "1 file",
   "Cuota propia de este proyecto.": "This project's own quota.",
   "La cuota general, fijada por el servidor (UPLOAD_QUOTA_MB_PER_PROJECT).": "The general quota, set by the server (UPLOAD_QUOTA_MB_PER_PROJECT).",
@@ -91,4 +90,9 @@ export const almacenamiento: Record<string, string> = {
   "Cambió la cuota de almacenamiento del proyecto a {value}": "Changed the project's storage quota to {value}",
   "Borró definitivamente {n} {what} ({mb} MB liberados)": "Permanently deleted {n} {what} ({mb} MB freed)",
   "Borró definitivamente un fichero del proyecto ({mb} MB liberados)": "Permanently deleted a project file ({mb} MB freed)",
+
+  // Subidas (adjuntos, documentación) que no caben en el disco del servidor
+  "El servidor no tiene espacio para guardar el archivo.": "The server has no space left to save the file.",
+  // Cuotas: el formulario comprueba el mismo máximo que el servidor.
+  "Debe ser un número entero de MB, entre {min} y {max}.": "Must be a whole number of MB, between {min} and {max}.",
 };

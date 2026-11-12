@@ -5,7 +5,7 @@ import { EXPORT_FORMAT_VERSION, type ExportManifest } from "./types";
 
 /** Paso que lleva los datos (JSON sin validar) de la versión N a la N+1. Para la 1 no hay pasos: es el formato actual. */
 type Step = (data: unknown, manifest: ExportManifest) => unknown;
-export const UPGRADE_STEPS: Record<number, Step> = {
+const UPGRADE_STEPS: Record<number, Step> = {
   // 1: (data) => ({ ...(data as object), campoNuevo: [] }),  ← así se añadiría el paso 1→2
 };
 

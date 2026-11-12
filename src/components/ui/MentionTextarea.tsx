@@ -9,6 +9,7 @@ import {
 } from "@/lib/mention-edit";
 import { mentionRegex, mentionToken } from "@/lib/mentions";
 import type { UserOption } from "@/lib/types";
+import { normalizeSearch } from "@/lib/search-accents";
 import { Avatar } from "./Avatar";
 import { cn } from "./cn";
 
@@ -22,8 +23,6 @@ const COMMANDS: { id: MentionCommand; label: string; hint: string; keys: string[
   { id: "GOOGLE_SHEET", label: "Crear Google Sheet", hint: "Hoja de cálculo nueva enlazada a la tarea", keys: ["sheets", "sheet", "hoja", "excel", "google"] },
   { id: "GOOGLE_DOC", label: "Crear Google Doc", hint: "Documento nuevo enlazado a la tarea", keys: ["docs", "doc", "documento", "google"] },
 ];
-
-const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 interface Props extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "onChange"> {
   value: string;
@@ -128,12 +127,12 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
 
   const options = useMemo<Option[]>(() => {
     if (!query) return [];
-    const q = norm(query.text);
+    const q = normalizeSearch(query.text);
     const cmds: Option[] = onCommand
       ? COMMANDS.filter((c) => !q || c.keys.some((k) => k.startsWith(q))).map((c) => ({ kind: "command", id: c.id, label: c.label, hint: c.hint }))
       : [];
     const people: Option[] = users
-      .filter((u) => !q || norm(u.name).split(/\s+/).some((part) => part.startsWith(q)) || norm(u.name).startsWith(q))
+      .filter((u) => !q || normalizeSearch(u.name).split(/\s+/).some((part) => part.startsWith(q)) || normalizeSearch(u.name).startsWith(q))
       .slice(0, 6)
       .map((u) => ({ kind: "user", id: u.id, label: u.name }));
     return [...people, ...cmds];
@@ -190,7 +189,7 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
         <div
           ref={backdrop}
           aria-hidden
-          className={cn(className, "pointer-events-none absolute inset-0 overflow-hidden text-transparent!")}
+          className={cn(className, "pointer-events-none absolute inset-0 overflow-hidden text-transparent!", rest.disabled && "bg-slate-100 dark:bg-slate-800/60")}
           style={{ whiteSpace: "pre-wrap", overflowWrap: "break-word" }}
           data-mention-backdrop=""
         >

@@ -33,4 +33,7 @@ export const wip: Record<string, string> = {
   "Marcó la tarea como bloqueada por «{title}»": "Marked the task as blocked by «{title}»",
   "Quitó el bloqueo de la tarea": "Removed the block from the task",
   "bloqueo": "block",
+
+  // Registro de actividad: límite de 1 tarjeta
+  "Puso un límite de 1 tarjeta a la columna «{name}»": "Set a limit of 1 card on the column “{name}”",
 };

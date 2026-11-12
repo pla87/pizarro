@@ -1,10 +1,10 @@
 // `npm start`: red de seguridad para que el servidor no se quede huérfano si muere el proceso que lo lanzó.
 //
-// npm ejecuta el script con `sh -c "…"` y, al recibir SIGTERM, se la reenvía a ese `sh`; dash (el `sh` de Debian y
-// Ubuntu) muere sin pasarla a node y el servidor seguía escuchando en el puerto, sin dueño. El script de package.json
-// empieza por `exec` (el `sh` se sustituye por node y la señal llega directa), pero eso no cubre que npm muera de golpe
-// (SIGKILL, cierre de la terminal) ni los sistemas sin `sh`. Por eso start-local.mjs vigila además al proceso padre:
-// si cambia (el sistema adopta al huérfano: pasa a ser el 1 o un «subreaper») o ya no existe, lanza el apagado ordenado.
+// npm ejecuta el script con `sh -c "…"` (cmd.exe en Windows) y, al recibir SIGTERM, se la reenvía a ese `sh`; dash (el
+// `sh` de Debian y Ubuntu) muere sin pasarla a node, y el servidor seguía escuchando en el puerto, sin dueño. El script
+// de package.json no puede empezar por `exec` (cmd.exe no lo entiende y `npm start` no arrancaba en Windows), así que
+// start-local.mjs vigila al proceso padre: si cambia (el sistema adopta al huérfano: pasa a ser el 1 o un «subreaper»)
+// o ya no existe, lanza el apagado ordenado. Cubre también que npm muera de golpe (SIGKILL, cierre de la terminal).
 
 /** ¿Sigue vivo el proceso `pid`? La señal 0 solo comprueba que existe (EPERM: existe, pero es de otro usuario). */
 export function processAlive(pid) {

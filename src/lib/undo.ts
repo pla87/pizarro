@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
 import { actionContext } from "./action-context";
+import { columnsLockName } from "./advisory-locks";
 import { forgetAttachments } from "./attachment-cache";
 import { isUniqueColumnRole } from "./constants";
 import { excerpt } from "./mentions";
@@ -22,7 +23,7 @@ import { removeAttachmentFiles, removeReleaseAttachmentFiles } from "./uploads";
 // otra entrada UNDO, así que se puede alternar. Cualquier acción nueva del usuario en el proyecto
 // vacía su pila de rehacer. Cada pila guarda 10 entradas por usuario y proyecto.
 
-export const UNDO_LIMIT = 10;
+const UNDO_LIMIT = 10;
 export const UNDO_MAX_AGE_DAYS = 7;
 
 /** Campos de una tarea que se pueden restaurar (fechas en ISO). */
@@ -299,7 +300,7 @@ export interface OthersActivity {
 }
 
 /** Sin actividad de otras personas. */
-export const NO_OTHERS: OthersActivity = { touched: touchedTask([], ""), complete: true, fields: false, subtasks: false };
+const NO_OTHERS: OthersActivity = { touched: touchedTask([], ""), complete: true, fields: false, subtasks: false };
 
 /**
  * Cuando las entradas pudieron recortarse (entriesMayBeTrimmed), lo que hizo la persona ya no se sabe entero: se da por
@@ -377,37 +378,43 @@ export async function saveUndo(
   return created.id;
 }
 
-/** Ficheros retenidos por las entradas: adjuntos borrados que ya no existen en la base de datos. */
-function retainedAttachmentIds(ops: UndoOp[]): string[] {
-  const ids: string[] = [];
-  for (const op of ops) {
-    if (op.t === "attachment.restore") ids.push(op.row.id);
-    if (op.t === "task.restore") ids.push(...op.snap.attachments.map((a) => a.id));
-  }
-  return ids;
-}
-
 /**
  * De esos adjuntos, los que otra entrada (deshacer o rehacer, de cualquier persona) aún puede devolver: su fichero
- * debe seguir en el disco. Una sola consulta con contención jsonb sobre las operaciones de cada entrada.
+ * debe seguir en el disco. Una sola pasada por UndoEntry: se sacan con jsonb_path_query los ids que retiene cada
+ * entrada (adjuntos borrados que devuelve `attachment.restore` o `task.restore`, como en discardEntries) y se cruzan
+ * con los pedidos. Antes era un EXISTS con `@>` por
+ * cada id, que recorría la tabla entera por adjunto (segundos con miles de entradas, pagados al recortar la pila).
  */
 async function stillRetained(ids: string[]): Promise<Set<string>> {
   if (!ids.length) return new Set();
   const rows = await db.$queryRaw<{ id: string }[]>`
-    SELECT a."id" FROM unnest(${ids}::text[]) AS a("id")
-    WHERE EXISTS (
-      SELECT 1 FROM "UndoEntry" u
-      WHERE u."ops" @> jsonb_build_array(jsonb_build_object('t', 'attachment.restore', 'row', jsonb_build_object('id', a."id")))
-         OR u."ops" @> jsonb_build_array(jsonb_build_object('t', 'task.restore', 'snap', jsonb_build_object('attachments', jsonb_build_array(jsonb_build_object('id', a."id")))))
-    )`;
+    SELECT DISTINCT r."id" FROM "UndoEntry" u
+    CROSS JOIN LATERAL (
+      SELECT jsonb_path_query(u."ops", '$[*] ? (@.t == "attachment.restore").row.id') #>> '{}'
+      UNION ALL
+      SELECT jsonb_path_query(u."ops", '$[*] ? (@.t == "task.restore").snap.attachments[*].id') #>> '{}'
+    ) AS r("id")
+    JOIN unnest(${ids}::text[]) AS a("id") ON a."id" = r."id"`;
   return new Set(rows.map((r) => r.id));
 }
 
-/** Borra entradas y los ficheros que solo ellas retenían (ni un adjunto vivo ni otra entrada los necesitan). */
-export async function discardEntries(entries: { id: string; ops: unknown }[]): Promise<void> {
+/**
+ * Borra entradas y los ficheros que solo ellas retenían (ni un adjunto vivo ni otra entrada los necesitan). Los ficheros
+ * candidatos salen solo de las entradas que este DELETE ha borrado de verdad (RETURNING): si un deshacer en curso ya la
+ * había retirado para aplicarla (applyEntry, en actions/undo.ts), sus ficheros siguen haciendo falta y no se tocan. Pasaba
+ * con la limpieza de las entradas de más de 7 días justo en el límite.
+ */
+export async function discardEntries(entries: { id: string }[]): Promise<void> {
   if (!entries.length) return;
-  const candidates = [...new Set(entries.flatMap((e) => retainedAttachmentIds(e.ops as UndoOp[])))];
-  await db.undoEntry.deleteMany({ where: { id: { in: entries.map((e) => e.id) } } });
+  const rows = await db.$queryRaw<{ id: string | null }[]>`
+    WITH gone AS (DELETE FROM "UndoEntry" WHERE "id" = ANY(${entries.map((e) => e.id)}::text[]) RETURNING "ops")
+    SELECT DISTINCT r."id" FROM gone u
+    CROSS JOIN LATERAL (
+      SELECT jsonb_path_query(u."ops", '$[*] ? (@.t == "attachment.restore").row.id') #>> '{}'
+      UNION ALL
+      SELECT jsonb_path_query(u."ops", '$[*] ? (@.t == "task.restore").snap.attachments[*].id') #>> '{}'
+    ) AS r("id")`;
+  const candidates = rows.map((r) => r.id).filter((id): id is string => !!id);
   if (!candidates.length) return;
   const alive = new Set((await db.taskAttachment.findMany({ where: { id: { in: candidates } }, select: { id: true } })).map((a) => a.id));
   const orphans = candidates.filter((id) => !alive.has(id));
@@ -899,14 +906,20 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           break;
         }
         case "column.remove": {
-          if (await db.task.count({ where: { columnId: op.id, archivedAt: null } })) { miss++; break; }
-          const other = await db.column.findFirst({ where: { projectId, id: { not: op.id } }, orderBy: { position: "asc" }, select: { id: true } });
-          if (!other) { miss++; break; }
-          placed.push(...(await db.task.findMany({ where: { columnId: op.id }, select: { id: true } })).map((r) => r.id));
-          await db.$transaction([
-            db.task.updateMany({ where: { columnId: op.id }, data: { columnId: other.id } }),
-            db.column.deleteMany({ where: { id: op.id, projectId } }),
-          ]);
+          // Con el bloqueo de las columnas del proyecto (el de crear y borrar columnas) y todo comprobado dentro: deshacer
+          // la creación de una columna mientras alguien borra otra no deja el proyecto sin columnas.
+          const moved = await db.$transaction(async (tx) => {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${columnsLockName(projectId)}))`;
+            if (await tx.task.count({ where: { columnId: op.id, archivedAt: null } })) return null;
+            const other = await tx.column.findFirst({ where: { projectId, id: { not: op.id } }, orderBy: { position: "asc" }, select: { id: true } });
+            if (!other) return null;
+            const ids = (await tx.task.findMany({ where: { columnId: op.id }, select: { id: true } })).map((r) => r.id);
+            await tx.task.updateMany({ where: { columnId: op.id }, data: { columnId: other.id } });
+            await tx.column.deleteMany({ where: { id: op.id, projectId } });
+            return ids;
+          });
+          if (!moved) { miss++; break; }
+          placed.push(...moved);
           columnIds.delete(op.id);
           break;
         }

@@ -11,7 +11,7 @@ import { requireAdmin } from "@/lib/session";
 // Administración → Ajustes → «Acceso con Google». Solo administradores. El secreto nunca se registra ni se devuelve.
 // Los args de la acción NO se pasan a runAction (llevarían el secreto al registro).
 
-export interface GoogleSettingsForm extends GoogleSettingsInput {
+interface GoogleSettingsForm extends GoogleSettingsInput {
   /** Secreto de cliente nuevo; vacío o ausente = conservar el guardado. */
   secret?: string;
 }

@@ -1,9 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-
-/** Elementos donde se está escribiendo: los atajos de una tecla no deben dispararse. */
-export const TYPING_SELECTOR = "input, textarea, select, [contenteditable=true], [contenteditable='']";
+import { TYPING_SELECTOR } from "./earlyShortcut";
 
 export function isTypingTarget(target: EventTarget | null): boolean {
   return !!(target as HTMLElement | null)?.closest?.(TYPING_SELECTOR);
@@ -34,7 +32,7 @@ function detectMac(): boolean {
 
 const noopSubscribe = () => () => {};
 /** `true` en Mac; en el servidor y durante la hidratación, `false` (sin desajustes). */
-export function useIsMac(): boolean {
+function useIsMac(): boolean {
   return useSyncExternalStore(noopSubscribe, detectMac, () => false);
 }
 

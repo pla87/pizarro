@@ -40,7 +40,7 @@ export function dictationChunk(before: string, after: string, spoken: string): s
   return text;
 }
 
-export interface DictationEdit {
+interface DictationEdit {
   value: string;
   /** Posición del cursor tras el texto insertado. */
   start: number;

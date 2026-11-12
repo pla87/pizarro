@@ -62,8 +62,8 @@ describe("Cancelar solo deshace lo que hizo esa persona desde que abrió el deta
     await loginAs(a);
     const snap = await snapshotOf(task.id);
 
-    // A edita…
-    expectOk(await updateTask(task.id, { title: "De A" }));
+    // A edita… (el diálogo Cancela con la versión del texto de su último guardado, ver TaskDialog)
+    const own = expectOk(await updateTask(task.id, { title: "De A" })).textVersion;
     expectOk(await updateSubtask(s1!.id, { done: true }));
     // …y B, a la vez, otras cosas de la misma tarea.
     await loginAs(b);
@@ -76,7 +76,7 @@ describe("Cancelar solo deshace lo que hizo esa persona desde que abrió el deta
 
     await loginAs(a);
     const entries = await undoCount(a.id, f.project.id);
-    const res = expectOk(await restoreTaskSnapshot(task.id, snap, null));
+    const res = expectOk(await restoreTaskSnapshot(task.id, snap, own));
     assert.equal(res.changed, true);
     const back = await db.task.findUniqueOrThrow({ where: { id: task.id }, include: { subtasks: true, attachments: true } });
     // Lo de A vuelve a como estaba al abrir…
@@ -149,8 +149,8 @@ describe("Cancelar solo deshace lo que hizo esa persona desde que abrió el deta
     const sub = expectOk(await addSubtask(task.id, "antes"));
     expectOk(await updateTask(task.id, { color: "#ef4444" }));
     const snap = await snapshotOf(task.id);
-    expectOk(await updateTask(task.id, { title: "Después" }));
-    expectOk(await restoreTaskSnapshot(task.id, snap, null));
+    const own = expectOk(await updateTask(task.id, { title: "Después" })).textVersion;
+    expectOk(await restoreTaskSnapshot(task.id, snap, own));
     const t = await db.task.findUniqueOrThrow({ where: { id: task.id }, include: { subtasks: true } });
     assert.deepEqual([t.title, t.color, t.subtasks.map((s) => s.id)], ["T", "#ef4444", [sub.id]]);
   });
@@ -326,6 +326,21 @@ describe("ficheros de adjuntos retenidos por varias entradas de deshacer", () =>
     await db.undoEntry.deleteMany({ where: { userId: a.id, id: { not: third } } });
     await discardEntries([await db.undoEntry.findUniqueOrThrow({ where: { id: third }, select: { id: true, ops: true } })]);
     assert.equal(await exists(attachmentPath(x.id, "file")), false);
+  });
+
+  test("la limpieza no borra el fichero de una entrada que un deshacer en curso ya ha retirado", async () => {
+    const { a, f } = await twoPeople();
+    const task = await makeTask(f);
+    const x = await att(task.id, "y.txt", a.id);
+    await writeFile(attachmentPath(x.id, "file"), "contenido");
+    await loginAs(a);
+    const id = expectOk(await deleteAttachment(x.id)).undo.id!;
+    // La limpieza de entradas viejas la lee (límite de 7 días)…
+    const stale = await db.undoEntry.findUniqueOrThrow({ where: { id }, select: { id: true, ops: true } });
+    // …y entre medias la persona pulsa «Deshacer»: applyEntry retira la entrada antes de devolver el adjunto.
+    await db.undoEntry.deleteMany({ where: { id } });
+    await discardEntries([stale]);
+    assert.ok(await exists(attachmentPath(x.id, "file")), "el deshacer en curso aún lo necesita");
   });
 });
 

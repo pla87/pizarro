@@ -1,9 +1,10 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { Bold, Code, Code2, Heading2, Heading3, IndentDecrease, IndentIncrease, Italic, Link2, List, ListOrdered, Minus, Quote, Strikethrough, Underline } from "lucide-react";
-import { useCallback, useImperativeHandle, useMemo, useRef } from "react";
+import type { Editor } from "@tiptap/core";
+import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useT } from "@/i18n/client";
+import { refreshWhenOnline } from "@/lib/connection";
 import { indentLines, insertLink, insertRule, toggleCodeBlock, toggleLinePrefix, toggleWrap, type EditResult } from "@/lib/markdown-edit";
 import { cn } from "./cn";
 import { DictationButton, insertIntoField } from "./DictationButton";
@@ -12,14 +13,24 @@ import { MentionTextarea, type MentionCommand } from "./MentionTextarea";
 import { applyTextareaEdit } from "./textarea-edit";
 import { tablesOnlyMarkdown } from "@/lib/paste-table";
 
-// El editor con barra (TipTap) pesa: solo se descarga para quien lo usa (el tablero lo precarga en reposo).
-const RichTextEditor = dynamic(() => import("./RichTextEditor").then((m) => m.RichTextEditor), {
-  ssr: false,
-  loading: () => <div className="min-h-40 animate-pulse rounded-lg border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900" />,
-});
 import type { EditorModeValue, UserOption } from "@/lib/types";
 
-export const MARKDOWN_HINT = "**negrita**, *cursiva*, ~~tachado~~, ++subrayado++, # Título, - lista, 1. lista";
+// El editor con barra (TipTap) pesa: solo se descarga para quien lo usa (el tablero lo precarga en reposo).
+type RichEditor = typeof import("./RichTextEditor").RichTextEditor;
+let richEditor: RichEditor | null = null;
+let richEditorLoad: Promise<RichEditor> | null = null;
+function loadRichEditor(): Promise<RichEditor> {
+  richEditorLoad ??= import("./RichTextEditor").then(
+    (m) => (richEditor = m.RichTextEditor),
+    (e: unknown) => {
+      richEditorLoad = null; // sin red: se reintenta la próxima vez
+      throw e;
+    },
+  );
+  return richEditorLoad;
+}
+
+const MARKDOWN_HINT = "**negrita**, *cursiva*, ~~tachado~~, ++subrayado++, # Título, - lista, 1. lista";
 
 interface Props {
   id?: string;
@@ -84,7 +95,7 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
   );
 
   if (mode === "WYSIWYG") {
-    return <RichTextEditor id={id} value={value} onChange={onValueChange} onSubmit={onSubmit} onCancel={onCancel} placeholder={placeholder} autoFocus={autoFocus} users={users} onCommand={onCommand} />;
+    return <WysiwygField fieldRef={inner} id={id} value={value} onValueChange={onValueChange} onSubmit={onSubmit} onCancel={onCancel} placeholder={placeholder} autoFocus={autoFocus} users={users} onCommand={onCommand} />;
   }
   return (
     <>
@@ -162,5 +173,96 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
     </div>
     <p className="mt-1 text-xs text-slate-400">{t(MARKDOWN_HINT)}</p>
     </>
+  );
+}
+
+/**
+ * Editor con barra. Si aún no se ha descargado (red lenta), mientras tanto se escribe en un campo de texto provisional:
+ * antes solo se veía un hueco gris y las primeras teclas se perdían («Hola equipo» quedaba en «equipo»). Cuando el editor
+ * está listo (montado oculto con lo escrito) ocupa su sitio en la misma pasada, con el texto y el foco al final.
+ */
+function WysiwygField({ fieldRef, id, value, onValueChange, users, placeholder, autoFocus, onCommand, onSubmit, onCancel }: Omit<Props, "mode" | "textareaRef" | "textareaClassName"> & {
+  fieldRef: React.MutableRefObject<HTMLTextAreaElement | null>;
+}) {
+  const [Loaded, setLoaded] = useState<RichEditor | null>(() => richEditor);
+  const [provisional, setProvisional] = useState(() => !richEditor);
+  // Si empezó con el campo provisional, la estructura no cambia al quitarlo: el editor ya montado (oculto) es el mismo
+  // que luego se ve (en otro sitio del árbol, React lo volvería a crear y habría un instante sin campo).
+  const [startedProvisional] = useState(provisional);
+  const focusOnSwap = useRef<Editor | null>(null);
+  // Sin red el editor no llega: el campo provisional sigue sirviendo (Markdown) y se vuelve a pedir al volver la red.
+  const [loadTry, setLoadTry] = useState(0);
+  useEffect(() => {
+    if (Loaded) return;
+    let alive = true;
+    loadRichEditor().then(
+      (E) => alive && setLoaded(() => E),
+      () => alive && refreshWhenOnline(() => alive && setLoadTry((n) => n + 1)),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [Loaded, loadTry]);
+  // Al montar con foco, el cursor va al final del texto (como en el editor).
+  useLayoutEffect(() => {
+    const el = fieldRef.current;
+    if (!provisional || !autoFocus || !el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al montar
+  }, []);
+  useLayoutEffect(() => {
+    const ed = focusOnSwap.current;
+    if (provisional || !ed) return;
+    focusOnSwap.current = null;
+    // focus("end") pone el cursor al final, pero el foco lo da en el siguiente fotograma: sin view.focus() la tecla
+    // pulsada en ese instante (ya sin el campo provisional) se perdía.
+    ed.commands.focus("end");
+    ed.view.focus();
+  }, [provisional]);
+  const onReady = (ed: Editor) => {
+    if (!provisional) return;
+    // Si se estaba escribiendo en el campo provisional, el foco pasa al editor (ver el efecto de arriba).
+    if (typeof document !== "undefined" && document.activeElement === fieldRef.current) focusOnSwap.current = ed;
+    setProvisional(false);
+  };
+  const editor = Loaded && (
+    <Loaded id={id} value={value} onChange={onValueChange} onSubmit={onSubmit} onCancel={onCancel} placeholder={placeholder} autoFocus={autoFocus && !provisional} users={users} onCommand={onCommand} onReady={onReady} />
+  );
+  if (!startedProvisional) return editor;
+  return (
+    <div className={provisional ? "relative" : undefined}>
+      {provisional && (
+        <div className={FORMAT_BOX_CLASS} data-provisional-editor>
+          <div className={cn(FORMAT_BAR_CLASS, "h-9")} aria-hidden />
+          <textarea
+            ref={fieldRef}
+            id={id}
+            className="block min-h-32 w-full resize-none border-0 bg-transparent px-3 py-2 text-sm outline-none field-sizing-content focus:ring-0"
+            value={value}
+            onChange={(e) => onValueChange(e.target.value)}
+            placeholder={placeholder}
+            aria-label={placeholder}
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing) return;
+              if (e.key === "Escape" && onCancel) {
+                e.preventDefault();
+                onCancel();
+              }
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && onSubmit) {
+                e.preventDefault();
+                onSubmit();
+              }
+            }}
+          />
+        </div>
+      )}
+      {/* El editor ya descargado se monta oculto e inerte (sin foco ni clics) hasta que existe: ver onReady. */}
+      {editor && (
+        <div className={provisional ? "pointer-events-none absolute inset-x-0 top-0 -z-10 opacity-0" : undefined} inert={provisional}>
+          {editor}
+        </div>
+      )}
+    </div>
   );
 }

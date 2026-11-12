@@ -25,4 +25,8 @@ export const calendar: Record<string, string> = {
   "Arrastra una tarea, un rango o un entregable para cambiar sus fechas; en un rango, arrastra también sus bordes (o Alt+←/→ con él enfocado; Alt+Mayús+←/→ cambia su fin).": "Drag a task, a range or a deliverable to change its dates; for a range, you can also drag its edges (or Alt+←/→ while it is focused; Alt+Shift+←/→ changes its end).",
   "Rango cambiado: {from} → {to}": "Range changed: {from} → {to}",
   "Entregable movido al {date}": "Deliverable moved to {date}",
+
+  // Calendario: contadores con 1
+  "+1 entregable más": "+1 more deliverable",
+  "+1 tarea con rango más": "+1 more ranged task",
 };

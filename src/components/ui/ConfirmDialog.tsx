@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { useT } from "@/i18n/client";
 import { Modal } from "./Modal";
 
-export interface ConfirmOptions {
+interface ConfirmOptions {
   /** Título corto del diálogo («Borrar tarea»). Por defecto, «Confirmar». */
   title?: string;
   message: React.ReactNode;
@@ -72,7 +72,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
 }
 
 /** El diálogo en sí (lo usa el proveedor; también sirve suelto si se necesita controlarlo a mano). */
-export function ConfirmDialog({ title, message, confirmLabel, cancelLabel, danger = false, onResult }: ConfirmOptions & { onResult: (ok: boolean) => void }) {
+function ConfirmDialog({ title, message, confirmLabel, cancelLabel, danger = false, onResult }: ConfirmOptions & { onResult: (ok: boolean) => void }) {
   const t = useT();
   return (
     <Modal

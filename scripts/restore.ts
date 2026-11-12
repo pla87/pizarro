@@ -55,7 +55,7 @@ async function main() {
   if (flags.has("--list")) {
     const stems = await listStems(source.dest);
     if (!stems.length) log(`No hay copias en ${source.dest.label}.`);
-    for (const s of stems) console.log(`${s.stem}  ${Math.round(s.dumpBytes / 1024)} KB  ${s.hasManifest ? "base de datos + ficheros" : "solo base de datos"}`);
+    for (const s of stems) console.log(`${s.stem}  ${Math.round(s.dumpBytes / 1024)} KB  ${s.hasManifest ? "base de datos + ficheros" : s.partial ? "incompleta (se cortó antes del manifiesto)" : "solo base de datos"}`);
     return;
   }
 

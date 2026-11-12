@@ -14,6 +14,7 @@ import { googleWorkspaceDomain } from "../google-config";
 import { appTimeZone } from "../format";
 import { isDomainMode } from "../google-share";
 import { mentionToken } from "../mentions";
+import { clampTitle } from "../title-clamp";
 import { POSITION_STEP } from "../positions";
 import { checkQuota, type QuotaExceeded } from "../quota";
 import { getQuotaLimits } from "../quota-settings";
@@ -35,7 +36,7 @@ export interface ImportUser {
 }
 
 /** Opciones de importación. `t` y `onProgress` los pasa el trabajo en segundo plano (no hay petición de la que sacar el idioma). */
-export interface ImportOptions {
+interface ImportOptions {
   isPrivate: boolean;
   t?: T;
   onProgress?: (p: ImportProgress) => void;
@@ -51,6 +52,8 @@ export interface ImportSummary {
   name: string;
   counts: {
     columns: number; kinds: number; labels: number; deliverables: number; tasks: number; archivedTasks: number; subtasks: number; comments: number;
+    /** Comentarios de nota añadidos a las tarjetas cuyo responsable o autor no se pudo emparejar (no cuentan en `comments`; ausente en resúmenes antiguos). */
+    notes?: number;
     taskAttachments: number; releases: number; releaseAttachments: number; documents: number; events: number;
   };
   /** Personas del archivo que no se pudieron emparejar con un usuario activo (por su email). */
@@ -83,10 +86,13 @@ export function safeFileName(raw: string, fallback = "archivo"): string {
 /** Distancia mínima entre dos posiciones que el archivo trae iguales (conserva su orden relativo). */
 const nextUp = (n: number) => n + Math.max(Math.abs(n) * 2 ** -40, 2 ** -30);
 
-/** Recorta un título al máximo de la aplicación sin dejar a medias una mención @[Nombre](user:id). */
+/**
+ * Recorta un título al máximo de la aplicación como al guardarlo (clampTitle): por caracteres visibles, sin partir un
+ * emoji ni dejar a medias una mención @[Nombre](user:id). Antes cortaba a 210 unidades UTF-16: un título de emojis
+ * compuestos, que cabe, salía recortado y con medio emoji.
+ */
 export function capTitle(title: string, max = MAX_TITLE): string {
-  if (title.length <= max) return title;
-  return title.slice(0, max).replace(/@\[[^\]\n]*(\]\([^)\s]*)?$/, "").trimEnd();
+  return clampTitle(title, max).value;
 }
 
 export async function insertChunks<T>(rows: T[], insert: (chunk: T[]) => Promise<unknown>): Promise<void> {
@@ -332,9 +338,10 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
     let cappedTitles = 0;
     const title = (raw: string) => {
       const mapped = text(raw);
-      if (mapped.length <= MAX_TITLE) return mapped;
+      const c = clampTitle(mapped);
+      if (!c.clipped) return mapped;
       cappedTitles++;
-      return capTitle(mapped);
+      return c.value;
     };
     const taskRows: Prisma.TaskCreateManyInput[] = data.tasks.map((x) => ({
       id: taskIds.get(x.ref)!,
@@ -538,7 +545,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
       counts: {
         columns: data.columns.length, kinds: kindRows.length, labels: data.labels.length, deliverables: data.deliverables.length,
         tasks: data.tasks.length, archivedTasks: data.tasks.filter((x) => x.archivedAt).length,
-        subtasks: data.tasks.reduce((n, x) => n + x.subtasks.length, 0), comments: commentRows.length,
+        subtasks: data.tasks.reduce((n, x) => n + x.subtasks.length, 0), comments: commentRows.length, notes: noteRows.length,
         taskAttachments: attachmentRows.length, releases: releaseRows.length, releaseAttachments: releaseAttachmentRows.length,
         documents: documentRows.length, events: data.events.length,
       },

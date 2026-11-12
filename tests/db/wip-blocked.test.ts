@@ -398,3 +398,18 @@ describe("bloqueos: carrera de ciclos y detección con una sola consulta", () =>
     assert.equal(await blockProblem(extra.id, foreign.id, f.project.id), "missing");
   });
 });
+
+describe("límite de tarjetas: mensajes traducidos", () => {
+  test("el límite de tarjetas fuera de rango da el mensaje traducido", async () => {
+    const user = await makeUser();
+    await db.user.update({ where: { id: user.id }, data: { locale: "EN" } });
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    expectFail(await setColumnWipLimit(f.columns.todo, 0), /^Enter a whole number between 1 and 999, or leave it empty\.$/);
+    expectFail(await setColumnWipLimit(f.columns.todo, 1000), /^Enter a whole number between 1 and 999/);
+    expectFail(await setColumnWipLimit(f.columns.todo, 2.5), /^Enter a whole number of cards\.$/);
+    expectOk(await setColumnWipLimit(f.columns.todo, 5));
+    await db.user.update({ where: { id: user.id }, data: { locale: "ES" } });
+    expectFail(await setColumnWipLimit(f.columns.todo, 0), /^Indica un número entero entre 1 y 999, o déjalo vacío\.$/);
+  });
+});

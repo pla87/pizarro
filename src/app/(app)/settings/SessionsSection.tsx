@@ -8,7 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 
-export interface SessionRow {
+interface SessionRow {
   id: string;
   /** Navegador y sistema ya traducidos («Chrome en Windows»). */
   device: string;

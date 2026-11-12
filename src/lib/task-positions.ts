@@ -61,7 +61,7 @@ export async function lastPositionIn(tx: Tx, columnId: string, exclude?: string)
 }
 
 /** Renumera la columna (1024, 2048…) conservando el orden; deshace también cualquier empate. */
-export async function rebalanceColumn(tx: Tx, columnId: string): Promise<void> {
+async function rebalanceColumn(tx: Tx, columnId: string): Promise<void> {
   // Cambia posiciones de otras tarjetas que el resultado de la acción no incluye.
   needOwnRefresh();
   await tx.$executeRaw`

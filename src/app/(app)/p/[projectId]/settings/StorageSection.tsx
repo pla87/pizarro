@@ -9,7 +9,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatQuotaMb, formatSize } from "@/lib/format-size";
-import type { QuotaSource } from "@/lib/quota";
+import { QUOTA_MAX_MB, QUOTA_MIN_MB, quotaMbValid, type QuotaSource } from "@/lib/quota";
 import { actionThrowResult } from "@/lib/stale-action";
 import type { LargeAttachment, ProjectStorage } from "@/lib/storage-stats";
 
@@ -123,7 +123,8 @@ export function StorageSection({ projectId, isAdmin, initial, initialLargest }: 
   ];
   const kindLabel = { task: t("Tarea"), release: t("Release"), document: t("Documento") } as const;
   const quotaNumber = Number(quotaText);
-  const quotaValid = quotaText.trim() !== "" && Number.isInteger(quotaNumber) && quotaNumber >= 1;
+  // Los mismos topes que el servidor: un número imposible (99999999999999) se marca aquí, no al guardar.
+  const quotaValid = quotaMbValid(quotaText);
   const days = (n: number) => (n === 0 ? t("todas") : t("de más de {n} días", { n }));
 
   return (
@@ -172,12 +173,13 @@ export function StorageSection({ projectId, isAdmin, initial, initialLargest }: 
           <label className="label" htmlFor="p-storage-quota">{t("Cuota de almacenamiento del proyecto (MB)")}</label>
           <div className="flex flex-wrap items-center gap-2">
             <input
-              id="p-storage-quota" className="input w-36" type="number" inputMode="numeric" step={1} min={1}
+              id="p-storage-quota" className="input w-36" type="number" inputMode="numeric" step={1} min={QUOTA_MIN_MB} max={QUOTA_MAX_MB}
               placeholder={t("La general")} value={quotaText} onChange={(e) => setQuotaText(e.target.value)}
             />
             <button className="btn-primary py-1.5" disabled={pending || !quotaValid || quotaNumber === storage.override}>{t("Guardar")}</button>
             <button type="button" className="btn-secondary py-1.5" disabled={pending || storage.override === null} onClick={() => saveQuota(null)}>{t("Usar la general")}</button>
           </div>
+          {quotaText.trim() !== "" && !quotaValid && <p className="text-xs text-red-600" role="alert">{t("Debe ser un número entero de MB, entre {min} y {max}.", { min: QUOTA_MIN_MB, max: QUOTA_MAX_MB.toLocaleString(locale) })}</p>}
           <p className="text-xs text-slate-500">{t("Vacío = la cuota general (Administración → Ajustes → Almacenamiento). Una cuota propia manda sobre la general. Solo los administradores pueden cambiarla.")}</p>
         </form>
       )}

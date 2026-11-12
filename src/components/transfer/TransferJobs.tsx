@@ -41,7 +41,7 @@ function Row({ job }: { job: TransferJobView }) {
       </div>
       {(job.status === "QUEUED" || job.status === "RUNNING") && <TransferProgress job={job} />}
       {job.status === "DONE" && exp && <p className="text-xs text-slate-500">{t("Disponible hasta {date}.", { date: job.expiresAt ? new Date(job.expiresAt).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" }) : "" })}</p>}
-      {job.status === "DONE" && !exp && result && "name" in result && "counts" in result && <p className="text-xs text-slate-500">{t("«{name}» importado ({tasks} tarjetas).", { name: result.name, tasks: result.counts.tasks })}</p>}
+      {job.status === "DONE" && !exp && result && "name" in result && "counts" in result && <p className="text-xs text-slate-500">{result.counts.tasks === 1 ? t("«{name}» importado (1 tarjeta).", { name: result.name }) : t("«{name}» importado ({tasks} tarjetas).", { name: result.name, tasks: result.counts.tasks })}</p>}
       {job.status === "FAILED" && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{job.error ?? t("No se pudo completar.")}</p>}
       {job.status === "EXPIRED" && <p className="text-xs text-slate-500">{t("El archivo ha caducado (24 h). Vuelve a exportar el proyecto.")}</p>}
     </li>

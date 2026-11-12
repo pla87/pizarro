@@ -19,7 +19,7 @@ import * as v from "@/lib/validation";
 type Result = { label: string; remaining: number; skipped: number; redoable: number };
 
 /** Lo que devuelve undoChecked/redoChecked: lo aplicado o, si otra persona cambió lo mismo después, qué preguntar. */
-export type CheckedResult =
+type CheckedResult =
   | { applied: Result; conflict?: undefined }
   | { applied?: undefined; conflict: { entryId: string; title: string; message: string; confirmLabel: string; danger: boolean } };
 
@@ -139,7 +139,7 @@ async function applyEntry(kind: UndoKind, user: { id: string }, pid: string, ent
   // se descarta (para no bloquear la pila) y se avisa. Las acciones propias ya vacían la pila de rehacer.
   // Con `force` la persona ya lo ha confirmado (undoChecked/redoChecked): se aplica igualmente.
   if (entry.fingerprint && current !== entry.fingerprint && !opts.force) {
-    await discardEntries([{ id: entry.id, ops: entry.ops }]);
+    await discardEntries([{ id: entry.id }]);
     throw new AppError(
       undo ? "Otra persona ha cambiado esto después de rehacerlo: no se puede deshacer." : "Otra persona ha cambiado esto después de deshacerlo: no se puede rehacer.",
     );

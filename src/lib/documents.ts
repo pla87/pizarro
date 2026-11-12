@@ -29,7 +29,7 @@ const SELECT = {
 
 type Row = { id: string; name: string; mimeType: string; size: number; kind: DocumentKindName; createdAt: Date; createdBy: { name: string } | null };
 
-export const toDocumentRow = (r: Row): DocumentRow => ({
+const toDocumentRow = (r: Row): DocumentRow => ({
   id: r.id, name: r.name, mimeType: r.mimeType, size: r.size, kind: r.kind, createdAt: r.createdAt.toISOString(), createdByName: r.createdBy?.name ?? null,
 });
 
@@ -53,7 +53,7 @@ export interface TrashedDocumentRow extends DocumentRow {
 }
 
 /** Cuándo se purga un documento enviado a la papelera en `deletedAt`. */
-export const trashPurgeAt = (deletedAt: Date): Date => new Date(deletedAt.getTime() + DOCUMENT_TRASH_DAYS * DAY_MS);
+const trashPurgeAt = (deletedAt: Date): Date => new Date(deletedAt.getTime() + DOCUMENT_TRASH_DAYS * DAY_MS);
 
 /** Días que faltan para la purga (redondeo hacia arriba, mínimo 0). */
 export const trashDaysLeft = (deletedAt: Date, now: Date = new Date()): number =>
@@ -95,7 +95,7 @@ export async function findDocumentForUser(user: CurrentUser, documentId: string)
 /** Por qué no cabe un documento: el máximo de documentos del proyecto o una cuota de almacenamiento. */
 export type DocumentLimitProblem = { reason: "count"; limit: number } | { reason: "quota"; quota: QuotaExceeded };
 
-export type DocumentCreateResult = { ok: true; document: DocumentRow } | ({ ok: false } & DocumentLimitProblem);
+type DocumentCreateResult = { ok: true; document: DocumentRow } | ({ ok: false } & DocumentLimitProblem);
 
 /**
  * ¿Cabe un documento de `size` bytes en el proyecto? null si cabe. Como attachmentLimitProblem: dentro de la transacción

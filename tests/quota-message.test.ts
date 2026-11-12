@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { quotaError } from "../src/lib/quota-message";
+import { QUOTA_MAX_MB, quotaMbValid } from "../src/lib/quota";
 
 // t de prueba: sustituye {var} como el real.
 const t = (key: string, vars?: Record<string, string | number>) => key.replace(/\{(\w+)\}/g, (_, k) => String(vars?.[k] ?? `{${k}}`));
@@ -35,4 +36,9 @@ test("cuota de proyecto: administrador con enlace a los ajustes, otros sin enlac
   const u = quotaError(t, q("project"), { projectId: "p1", isAdmin: false });
   assert.doesNotMatch(u.message, /\/p\/p1/);
   assert.doesNotMatch(u.message, /\{/);
+});
+
+test("campo de cuota: el formulario acepta lo mismo que el servidor (entero de 1 a QUOTA_MAX_MB)", () => {
+  for (const ok of ["1", "10240", String(QUOTA_MAX_MB), " 25 "]) assert.equal(quotaMbValid(ok), true, ok);
+  for (const bad of ["", "  ", "0", "-5", "1.5", "abc", "99999999999999", String(QUOTA_MAX_MB + 1), "1e20"]) assert.equal(quotaMbValid(bad), false, bad);
 });

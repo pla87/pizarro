@@ -57,8 +57,19 @@ expliquen las opciones con su coste y beneficio y una recomendación.
 - Copian el `.env` y apuntan `DATABASE_URL` a una base propia (`pz_<agente>`), puerto propio. Si PostgreSQL no
   arranca: `pg_ctlcluster 16 main start`. Solo borran las bases que crearon.
 - i18n: el texto en español es la clave (`t("...")`); cada texto nuevo necesita su entrada en `src/i18n/en/*.ts`.
-  `npm run i18n:check` debe pasar.
-- Migraciones nuevas: carpeta `prisma/migrations/<timestamp>_<nombre>` con un timestamp posterior al último.
+  `npm run i18n:check` debe pasar. **Diccionarios por tema**: cada texto va al fichero de su tema (`mensajeria.ts`,
+  `detalle.ts`, `web.ts`, `licencia.ts`, `releases.ts`…) o, si no hay ninguno que encaje, a uno nuevo con el nombre del
+  tema, registrado en `src/i18n/en/index.ts`; nunca a uno con el nombre de la ronda o de la tarea (`bh48a.ts`,
+  `rev2.ts`). Para no chocar entre agentes basta con añadir al final del objeto, bajo un comentario propio. Sin claves
+  repetidas entre ficheros (`npm run i18n:unused` las cuenta).
+- Migraciones nuevas: carpeta `prisma/migrations/<timestamp>_<nombre>` con un timestamp posterior al último. Las ya
+  publicadas no se editan nunca (cambia su checksum y `prisma migrate deploy` falla en las instalaciones que la aplicaron).
+- Migraciones: **expandir y luego contraer**. No se borra ni se renombra una columna (o tabla, o valor de un enum) en
+  la misma versión que deja de usarla: primero sale la versión que ya no la lee ni la escribe (con una migración que
+  solo añade, si hace falta) y la columna se quita en una migración de la versión siguiente. Durante un despliegue la
+  versión anterior sigue sirviendo sobre la base ya migrada, y si el despliegue falla después de migrar, Railway la
+  mantiene activa: si la migración quitó algo que esa versión usa, falla. Igual para cambiar un tipo o volver
+  obligatoria una columna: columna nueva, copiar los datos, usarla, y quitar la vieja una versión después.
 - No tocan `changelog.json`, `CHANGELOG.md`, la versión de `package.json`, `docs/MANUAL.md` ni `MANUAL.pdf`: los
   actualiza la sesión principal al cerrar la versión. Terminan su informe con lo que debería decir el manual.
 - Commits con el mensaje terminado en la línea de coautoría que haya fijado el propietario. Nada de enlaces de
@@ -79,12 +90,12 @@ npm run test:db          # con base de datos (crea y borra pizarro_test_*)
 npx next build --webpack && node scripts/postbuild.mjs && npm run build:boot
 ```
 
-Pruebas en navegador (ver `e2e/README.md`): la suite QA (`e2e/qa/run-all.mjs`, ~378 comprobaciones), la del
-tablero (`e2e/board-e2e.mjs`, unas 340) y la de pegado (`e2e/paste-e2e.mjs`, ~72: imágenes y tablas pegadas; misma
-base `pz_qa` y servidor que la del tablero). Si cambias el rol o la etiqueta de un elemento que la suite usa,
-actualiza el script correspondiente. Las suites declaran la instalación de uso personal en `prepareUsers`
-(`e2e/qa/lib.mjs`) para que no salga el recordatorio de licencia. Chromium: `CHROME` o, si no, el más reciente de
-`/opt/pw-browsers`.
+Pruebas en navegador: las suites QA, tablero, pegado y las de las cazas de bugs 48a, 48b y 48c. Cómo se lanzan, en qué
+orden y cuántas comprobaciones tiene cada una: `e2e/README.md` (las cifras solo se apuntan allí). Si cambias el rol o la
+etiqueta de un elemento que una suite usa, actualiza el script correspondiente. Para esperar al canal en vivo del
+tablero, `L.liveOpen(page)` (la raíz del tablero lleva `data-live="open"`), no una pausa fija. Las suites declaran la
+instalación de uso personal en `prepareUsers` (`e2e/qa/lib.mjs`) para que no salga el recordatorio de licencia.
+Chromium: `CHROME` o, si no, el más reciente de `/opt/pw-browsers`.
 
 Guardas que conviene conocer:
 
@@ -94,7 +105,26 @@ Guardas que conviene conocer:
   «Textos guardados por versiones anteriores».
 - `tests/db/undo-perf.test.ts` (dentro de `npm run test:db`): guarda de rendimiento del deshacer. Mide las
   consultas y los bytes leídos al deshacer y rehacer «Mover a…» de cientos de tarjetas; si falla, algo ha vuelto a
-  leer las descripciones completas o a hacer consultas entrada a entrada.
+  leer las descripciones completas o a hacer consultas entrada a entrada. También mide recortar la pila con 500
+  adjuntos huérfanos y 4.000 entradas guardadas (una sola pasada por `UndoEntry` en `stillRetained`, `src/lib/undo.ts`).
+- Código sin uso (solo informa, no está en las dependencias): `npx --yes knip@5`. La configuración está en `knip.json`
+  (entradas que Next no declara: pruebas, `e2e/`, `scripts/`, `public/sw.js`, el worker de los PDF…). No hay ficheros
+  ni dependencias sin uso. Aún marca unos 60 `export` que solo usa su propio módulo, casi todos de las copias de
+  seguridad (`backup-*.ts`) y de la mensajería (`messaging-core.ts`, `telegram*.ts`), y unos pocos alias o re-exports
+  que se usan a través de otro módulo: quitar el `export` de los primeros está pendiente. Un `export` nuevo que nadie
+  importa no debe sumarse a esa lista (quítale el `export`). Lo que `scripts/build-site.mjs` carga con `import()` de una
+  ruta knip no lo ve: márcalo con `@public` en su comentario. Antes de quitar un `export`, busca el nombre en `src`,
+  `tests`, `scripts` y `e2e`. Los nombres de las pruebas van por tema (`tests/db/comment-notices.test.ts`, no
+  `review-fixes-…`): una prueba nueva va al fichero del tema que prueba.
+- Guardas de tiempo en las pruebas: con `assertFast`/`bestTime` de `tests/timing.ts` (la mejor de tres medidas, o una
+  cota proporcional a una medida de referencia), nunca una sola medida contra un tope fijo; deben pasar con la CPU
+  cargada. Las esperas a otra transacción, con `waitForLockWaiter()` (`tests/db/helpers.ts`), no con pausas. `npm test`
+  corta cada prueba a los 120 s (`--test-timeout`); un intervalo o un temporizador que siga vivo al terminar deja el
+  proceso colgado, así que se paran en un `finally`. No uses `--test-force-exit` en `npm test`: con la CPU cargada se
+  pierden pruebas en silencio (se vio 891 → 862, sin ningún fallo).
+- Lo que llega al navegador no debe importar `zod` (unos 85 KB): las constantes y tipos que usa un componente de cliente
+  van en un módulo `*-core.ts` sin zod (`changelog-core.ts`, `project-templates-core.ts`); los tipos derivados de un
+  esquema se importan con `import type`.
 - Apagado ordenado (`src/lib/shutdown.ts`): al recibir la señal, `/api/health` responde `503` (`shutting_down`),
   se cierran los canales en vivo y se espera hasta 5 s a las peticiones en curso (subidas incluidas) y a los
   emails. Una ruta nueva de larga duración debe contar como petición en curso; lo que no termine queda en
@@ -104,9 +134,38 @@ Guardas que conviene conocer:
   `scripts/local-paths.mjs`, probada en `tests/local-paths.test.ts`) y después carga `.next/standalone/server.js`.
   Sin eso, una ruta relativa acababa dentro de `.next/standalone/` y cada compilación la borraba. `postbuild.mjs`
   quita del standalone las subidas, las copias y los `.env` que Next copiaba allí. El contenedor no usa este script
-  (`scripts/start.sh`). El script `start` empieza por `exec` (sin él, el `sh -c` de npm moría con el SIGTERM sin
-  pasarlo y el servidor quedaba huérfano escuchando) y, por si npm muere de golpe, `scripts/parent-watch.mjs` lanza el
-  apagado ordenado cuando desaparece el proceso padre (solo si lo arrancó npm). Pruebas: `tests/start-signals.test.ts`.
+  (`scripts/start.sh`). El script `start` no lleva `exec` (cmd.exe no lo entiende y en Windows `npm start` no
+  arrancaba): al parar npm, el `sh -c` de npm muere con el SIGTERM sin pasarlo a node, y `scripts/parent-watch.mjs`
+  detecta que ha desaparecido el proceso padre (también si npm muere de golpe) y lanza el apagado ordenado en ~1 s
+  (solo si lo arrancó npm). Pruebas: `tests/start-signals.test.ts` (arranca `npm start` de verdad con un servidor de
+  prueba, lo para con SIGTERM al pid de npm y comprueba que no queda huérfano).
+  Antes de cargar `server.js`, `start-local.mjs` importa `dist/boot.mjs` y espera a `runBoot()`: las mismas tareas de
+  arranque que el contenedor (`system.boot`, historial de versiones, seed, código de `/setup` en la terminal y
+  plantillas de serie), en el mismo proceso y sin abrir otro servidor. Sin `dist/boot.mjs` o si fallan, no arranca.
+  `boot.ts` solo se ejecuta por sí mismo cuando se lanza directamente (`node dist/boot.mjs`); al terminar desconecta su cliente
+  de Prisma y lo quita de `globalThis` para que el servidor no herede uno cerrado. `start.sh` y `start-local.mjs` fijan
+  `PIZARRO_LAUNCHER` (`docker` / `npm`) para que el paso 1 de `/setup` diga dónde mirar el código
+  (`setupCodeSource`, `src/lib/setup-core.ts`; Railway se detecta por sus variables). Recorrido completo desde cero:
+  `e2e/install-e2e.mjs`.
+- Idioma en el cliente (`src/i18n/client.tsx`): `I18nProvider` pinta siempre el mismo `I18nContext.Provider` y solo
+  cambia `value`; el diccionario de inglés llega con `use()` (y `next/dynamic` solo para la precarga en el HTML). No
+  vuelvas a envolver los hijos en un componente distinto según el idioma: React desmontaba la página entera al cambiar
+  (el asistente volvía al paso 1). El layout raíz no se repinta en la navegación de cliente: un enlace de una pantalla
+  sin sesión que puede ir en otro idioma (`/reset`, `/confirm`, `/login/verify`, `/setup` → `/login`) es un `<a href>`
+  con recarga completa, no un `Link`.
+- Aviso de pg «DeprecationWarning: Calling client.query() when the client is already executing a query»: pg 8.23 lo
+  da cuando un mismo `pg.Client` recibe una tercera consulta con otras dos en curso (en pg 9 será un error). Buscado con
+  `NODE_OPTIONS=--trace-deprecation` y con `e2e/warn-hook.mjs` (anota cada aviso de Node con su pila en `WARN_LOG`) en:
+  `npm start` y `node dist/boot.mjs` sobre una base vacía y sobre una ya instalada, `prisma migrate deploy` con y sin
+  migraciones pendientes, la primera pasada de las tareas de fondo (copia cifrada con `BACKUP_KEY` incluida), el asistente
+  completo y las suites QA, tablero e instalación. No sale en ningún caso: ni la app ni Prisma (`@prisma/adapter-pg` usa
+  el pool, y en las transacciones interactivas no hay `Promise.all` sobre `tx`; `PgSql` de las copias encadena sus
+  consultas). El que se veía venía del arnés de las pruebas (`L.q` en paralelo en `e2e/qa/lib.mjs`, ya en fila desde la
+  caza de bugs anterior). `e2e/install-e2e.mjs` arranca el servidor con `warn-hook.mjs` y falla si vuelve a aparecer.
+  Para localizarlo en otro proceso: `WARN_LOG=/ruta/avisos.log NODE_OPTIONS="--import file://$PWD/e2e/warn-hook.mjs"`.
+  Ojo con código nuevo que use un `pg.Client` propio (`pg-connect.ts`): sus consultas, en fila.
+  Excepción hallada después: Prisma 7 sí provoca este aviso con relaciones anidadas dentro de `$transaction` (p. ej.
+  `buildProjectExport`). No subas `pg` a la 9 sin revisarlo antes: allí será un error.
 
 Antes de cada fusión en `main`, comprueba que no se cuela ningún dato personal del propietario en el diff ni en el
 PDF del manual (busca su nombre, email y dominios; pídeselos si no los sabes) y que los mensajes de commit no
@@ -139,16 +198,36 @@ llevan enlaces de sesión ni nombres de modelos.
    or update workflow … without `workflows` permission»; el bloque `permissions:` no tiene un permiso `workflows`).
    Para esas versiones el job usa el secreto `STABLE_PUSH_TOKEN` si existe (si no, `GITHUB_TOKEN`). Crearlo:
    1. GitHub → *Settings* (de tu cuenta) → *Developer settings* → *Personal access tokens* → *Fine-grained tokens* →
-      *Generate new token*. Propietario: el del repositorio; *Repository access*: **Only select repositories** → solo
-      este repositorio; caducidad: la que admita la organización (apunta cuándo renovarlo).
+      *Generate new token*. *Resource owner*: el dueño del repositorio (`pla87`); *Repository access*: **Only select
+      repositories** → `pla87/pizarro`; caducidad: la que admita la organización (apunta cuándo renovarlo).
    2. *Repository permissions*: **Contents: Read and write** y **Workflows: Read and write** (nada más; *Metadata:
       Read* se añade solo).
-   3. En el repositorio: *Settings → Secrets and variables → Actions → New repository secret*, nombre
-      `STABLE_PUSH_TOKEN`, valor el token.
-   Si falta (o le falta el permiso) y la versión cambia los workflows, el job «Rama stable» termina en rojo con un
-   mensaje que dice qué secreto crear; la imagen y la release ya están publicadas y no se tocan. Tras crear el
-   secreto, *Re-run failed jobs* en esa ejecución mueve `stable`. Si `stable` está protegida, la regla debe permitir
-   el push del propietario del token (o de GitHub Actions si no hay token).
+   3. En el repositorio: *Settings → Secrets and variables → Actions → New repository secret* (o editar el que
+      exista), nombre `STABLE_PUSH_TOKEN`, valor solo el token, sin espacios ni saltos de línea.
+   Toda la lógica está en `scripts/move-stable.sh`, que usan el job «Rama stable» y el workflow «Mover stable». El
+   checkout y las lecturas usan siempre `GITHUB_TOKEN`; el token solo se usa para el `git push` (en una cabecera, sin
+   aparecer en el log), limpio de espacios y saltos de línea. Si falta (o le falta el permiso) y la versión cambia
+   los workflows, el job termina en rojo con un mensaje que dice qué secreto crear; la imagen y la release ya están
+   publicadas y no se tocan. Si `stable` está protegida, la regla debe permitir el push del propietario del token
+   (o de GitHub Actions si no hay token).
+7. **Comprobar el token.** El paso «Comprobar STABLE_PUSH_TOKEN» (en los dos workflows, antes de mover nada) pregunta
+   a la API de GitHub con el token y hace un `git push --dry-run` (no cambia nada) para ver si puede escribir. Si
+   falla, el error dice la causa probable:
+   - *no es válido (401)*: caducado, revocado, pendiente de aprobación o el valor del secreto no es el token;
+   - *no tiene acceso (403/404)*: el token no incluye `pla87/pizarro` (*Only select repositories*) o su *Resource
+     owner* no es el dueño del repositorio;
+   - *no puede escribir*: falta **Contents: Read and write** (o la cuenta del token no puede escribir en el repo).
+   El permiso **Workflows** solo se puede comprobar al mover de verdad: si falta, el paso siguiente falla con «no
+   tiene el permiso Workflows». Para revisar el token a mano: *Settings → Developer settings → Fine-grained tokens*,
+   abrir el token y mirar *Expiration*, *Repository access* y *Permissions* (o *Regenerate token* y volver a guardar
+   el secreto). En el pasado, un token mal creado hacía fallar el `actions/checkout` con «could not read Username
+   for 'https://github.com': terminal prompts disabled»; ya no se usa en el checkout.
+8. **Mover `stable` sin publicar otra versión.** Tras arreglar el secreto: **Actions → Mover stable → Run workflow**
+   (rama `main`; `.github/workflows/stable.yml`). Mueve `stable` a la última versión publicada: la etiqueta `vX.Y.Z`
+   más alta con GitHub Release publicada (ni borrador ni preversión) cuyo commit está en `main`, con las mismas reglas
+   (nunca hacia atrás, `--force-with-lease`); si `stable` ya está ahí, no hace nada. También vale *Re-run failed
+   jobs* en la ejecución de Release, pero esa repetición usa el workflow de la versión publicada (no recoge arreglos
+   posteriores del workflow).
 
 ### Actualizaciones de dependencias (Dependabot)
 
@@ -235,7 +314,10 @@ Cómo se revisa cada PR:
   - WhatsApp: plantilla de utilidad `aviso_pizarro` (3 variables); la antigua `mencion_pizarro` (4 variables) solo
     envía menciones. Guardar la configuración no activa el envío (hay que pulsar *Activar*). Un fallo que Meta pudo
     haber enviado (5xx, corte, tiempo agotado) no se reintenta, para no cobrar dos veces. Cada número se confirma con
-    un código de 6 cifras (15 min, 5 intentos; 5 mensajes al día por persona y 3 por número).
+    un código de 6 cifras (15 min, 5 intentos; 5 mensajes al día por persona y 3 por número), que va en la plantilla
+    de autenticación `codigo_pizarro` (Meta lo exige para códigos de un solo uso; ajustes `whatsapp.codeTemplate*` en
+    `AppState`, con traducción inglesa opcional). *Probar* envía las dos plantillas. Si Meta rechaza la de verificación,
+    Ajustes lo marca en rojo y nadie puede conectar un número nuevo hasta crearla (guía de WhatsApp, paso 6).
   - Pruebas: `tests/messaging.test.ts`, `tests/db/messaging.test.ts` y `tests/db/messaging-migration.test.ts`.
 - Entorno de la nube: `npm ci` instala solo el binario SWC musl; para `next build` hace falta
   `@next/swc-linux-x64-gnu` (misma versión que `next`) extraído en `node_modules/@next/`. La suite QA necesita

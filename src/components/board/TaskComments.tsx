@@ -1,9 +1,10 @@
 "use client";
 
 import { ChevronUp, Loader2, Pencil, Reply, Send, X } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { addComment, deleteComment, editComment, getOlderComments, getRecentComments } from "@/actions/tasks";
 import { useIntlLocale, useT } from "@/i18n/client";
+import { isOffline, subscribeConnection } from "@/lib/connection";
 import { formatDate } from "@/lib/format";
 import { mentionsToPlain } from "@/lib/mentions";
 import type { CommentInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
@@ -16,6 +17,7 @@ import { useBoard } from "./context";
 import { purgeExpiredCommentDrafts, readCommentDraft, saveCommentDraft, type CommentDraft } from "./drafts";
 import { REMOTE_CHANGE_EVENT, touchesComments, type RemoteChange } from "./remoteChange";
 import { actionThrowResult } from "@/lib/stale-action";
+import { isBefore, mergeComments, refreshCursor, type CommentCursor } from "./comment-list";
 
 /** Igual que en el servidor (tasks.ts): el texto guardado, con las menciones completas. */
 const MAX_COMMENT = 10_000;
@@ -24,9 +26,6 @@ const LIVE_DELAY_MS = 250;
 
 type ReplyTarget = NonNullable<CommentDraft["replyTo"]>;
 const replyTargetOf = (c: CommentInfo): ReplyTarget => ({ id: c.id, authorName: c.authorName, body: c.body });
-
-/** ¿`c` va antes que `ref` en el orden de los comentarios (fecha y, a igual fecha, id)? */
-const isBefore = (c: CommentInfo, ref: CommentInfo) => c.createdAt < ref.createdAt || (c.createdAt === ref.createdAt && c.id < ref.id);
 
 // Una vez por carga de la página: fuera los borradores de comentario caducados de cualquier tarea.
 let purged = false;
@@ -47,6 +46,7 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
   const toast = useToast();
   const confirm = useConfirm();
   const me = board.currentUserId;
+  const offline = useSyncExternalStore(subscribeConnection, isOffline, () => false);
   // Borrador local (por usuario y tarea): lo escrito y no enviado vuelve al abrir otra vez la tarea.
   const [initialDraft] = useState(() => {
     if (!purged) {
@@ -108,43 +108,54 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
   }, [detail]);
   // Cuenta los cambios propios en curso o recién hechos: un refresco que empezó antes no pisa lo que ya se ve.
   const localChanges = useRef(0);
+  // Comentarios propios enviados que aún no han llegado en una lista del servidor (no sirven de cursor, ver refreshCursor).
+  const unlisted = useRef(new Set<string>());
+  // Pide un refresco (lo usa también «Enviar», con el cursor de antes de enviar).
+  const requestRefresh = useRef<(delay: number, from?: CommentCursor | null) => void>(() => {});
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let alive = true;
-    const refresh = async () => {
+    const refresh = async (cursor?: CommentCursor | null) => {
       const d = detailRef.current;
       if (!d) return;
-      const first = d.comments[0];
+      const from = cursor !== undefined ? cursor : refreshCursor(d.comments, unlisted.current);
       const stamp = localChanges.current;
-      const res = await getRecentComments(taskId, first ? { createdAt: first.createdAt, id: first.id } : null).catch(() => null);
+      const res = await getRecentComments(taskId, from).catch(() => null);
       if (!alive || !res?.ok) return;
       if (stamp !== localChanges.current) {
         // Mientras tanto se cambió algo aquí: se vuelve a pedir con lo de ahora.
+        clearTimeout(timer);
         timer = setTimeout(refresh, LIVE_DELAY_MS);
         return;
       }
+      // Lo enviado aquí antes de pedir ya está en la lista (o lo borró otra persona): desde ahora vale como cursor.
+      unlisted.current.clear();
       setDetail((cur) => {
         if (!cur) return cur;
-        // Lo anterior al refresco que se haya cargado con «Ver anteriores» mientras tanto se conserva.
-        const kept = first ? cur.comments.filter((c) => isBefore(c, first)) : [];
+        // Lo anterior al cursor (cargado con «Ver anteriores» mientras tanto) se conserva; desde él manda el servidor.
+        const kept = from ? cur.comments.filter((c) => isBefore(c, from)) : [];
         return {
           ...cur,
-          comments: [...kept, ...res.data.comments],
+          comments: mergeComments(kept, res.data.comments),
           commentCount: res.data.commentCount,
           olderComments: kept.length ? cur.olderComments : res.data.olderComments,
         };
       });
       board.patchTask(taskId, () => ({ commentCount: res.data.commentCount }));
     };
+    requestRefresh.current = (delay, from) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => void refresh(from), delay);
+    };
     const onChange = (e: Event) => {
       if (!touchesComments((e as CustomEvent<RemoteChange>).detail, taskId)) return;
-      clearTimeout(timer);
-      timer = setTimeout(refresh, LIVE_DELAY_MS);
+      requestRefresh.current(LIVE_DELAY_MS);
     };
     window.addEventListener(REMOTE_CHANGE_EVENT, onChange);
     return () => {
       alive = false;
       clearTimeout(timer);
+      requestRefresh.current = () => {};
       window.removeEventListener(REMOTE_CHANGE_EVENT, onChange);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -166,11 +177,8 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
     const res = await board.track(getOlderComments(taskId, { createdAt: first.createdAt, id: first.id })).catch((e) => actionThrowResult(e, t));
     setLoadingOlder(false);
     if (!res.ok) return toast(res.error, "error");
-    setDetail((d) => {
-      if (!d) return d;
-      const have = new Set(d.comments.map((c) => c.id));
-      return { ...d, comments: [...res.data.comments.filter((c) => !have.has(c.id)), ...d.comments], olderComments: res.data.olderComments };
-    });
+    // Los que ya se tienen (p. ej. llegados en vivo) conservan su versión.
+    setDetail((d) => (d ? { ...d, comments: mergeComments(res.data.comments, d.comments), olderComments: res.data.olderComments } : d));
   };
 
   const send = async () => {
@@ -178,6 +186,9 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
     if (!body || sending) return;
     if (body.length > MAX_COMMENT) return toast(t("El comentario es demasiado largo."), "error");
     setSending(true);
+    // Desde dónde estaba al día antes de enviar: al terminar se recarga desde ahí, así llegan también los comentarios
+    // que otras personas enviaron a la vez (anteriores al nuestro) aunque su aviso en vivo se cruce con el envío.
+    const from = detailRef.current ? refreshCursor(detailRef.current.comments, unlisted.current) : null;
     const res = await local(board.track(addComment(taskId, body, replyTo?.id ?? null)).catch((e) => actionThrowResult(e, t)));
     setSending(false);
     // Si falla, el texto (y su borrador) se quedan para reintentar.
@@ -185,8 +196,11 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
     persist({ text: "", replyTo: null });
     setTextState("");
     setReplyToState(null);
-    setDetail((d) => (d ? { ...d, comments: [...d.comments.filter((c) => c.id !== res.data.id), res.data], commentCount: d.commentCount + 1 } : d));
+    unlisted.current.add(res.data.id);
+    // En su sitio por fecha (no al final): puede haber comentarios de otras personas posteriores que ya llegaron.
+    setDetail((d) => (d ? { ...d, comments: mergeComments(d.comments, [res.data]), commentCount: d.commentCount + 1 } : d));
     board.patchTask(taskId, (t) => ({ commentCount: t.commentCount + 1 }));
+    requestRefresh.current(0, from);
   };
 
   const remove = async (c: CommentInfo) => {
@@ -336,7 +350,8 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
           onValueChange={setText}
           users={users}
           disabled={!detail}
-          placeholder={t("Comenta… (@persona, @docs, @sheets)")}
+          // Sin el detalle (sin red al abrir la tarea) no se puede comentar: el campo lo dice en vez de parecer activo.
+          placeholder={!detail && offline ? t("Sin conexión") : t("Comenta… (@persona, @docs, @sheets)")}
           onCommand={async (kind) => {
             const link = await onGoogle(kind);
             if (link) setText((v) => `${v.trimEnd()} [${link.title.replace(/[\[\]]/g, "")}](${link.url}) `.trimStart());

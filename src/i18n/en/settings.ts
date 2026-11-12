@@ -37,7 +37,6 @@ export const settings: Record<string, string> = {
   "Google no devolvió un acceso permanente. Vuelve a conectar.": "Google did not return permanent access. Please reconnect.",
   "Google no confirmó la identidad de la cuenta. Vuelve a intentarlo.": "Google did not confirm the account's identity. Please try again.",
   "Histórico de despliegues de «{name}» con el texto final editado.": "Deployment history of “{name}” with the final edited text.",
-  "Aún no hay releases. Genera una desde la columna «Siguiente salto a producción» del tablero.": "There are no releases yet. Generate one from the “Siguiente salto a producción” column on the board.",
   "Buscar en título y contenido…": "Search in title and content…",
   "Buscar releases": "Search releases",
   "{n} resultados": "{n} results",
@@ -237,4 +236,9 @@ export const settings: Record<string, string> = {
   "Idioma del dictado": "Dictation language",
   "El de la interfaz": "Same as the interface",
   "Chrome y Edge envían el audio al servicio de voz de su fabricante para reconocerlo; Pizarro no lo recibe ni lo guarda. Sin este botón también puedes dictar en cualquier campo con el micrófono del teclado (Gboard en Android, el dictado del teclado de iOS), Win+H en Windows o el dictado de macOS.": "Chrome and Edge send the audio to their maker's speech service to recognise it; Pizarro never receives or stores it. Without this button you can also dictate in any field with your keyboard's microphone (Gboard on Android, iOS keyboard dictation), Win+H on Windows or macOS dictation.",
+
+  // Ajustes del proyecto → Informe semanal: a quién puede ir (report-recipient.ts)
+  "Hora de la app ({tz}). Vale la dirección de un miembro del proyecto, la de un administrador o una externa. El informe se genera con tus permisos, así que deja de enviarse si pierdes el acceso al proyecto.": "App time ({tz}). The address can be a project member's, an administrator's or an external one. The report is generated with your permissions, so it stops being sent if you lose access to the project.",
+  "Hora de la app ({tz}). Vale la dirección de un miembro del proyecto o la de un administrador (una dirección externa solo puede ponerla un administrador). El informe se genera con tus permisos, así que deja de enviarse si pierdes el acceso al proyecto.": "App time ({tz}). The address must be a project member's or an administrator's (only an administrator can set an external address). The report is generated with your permissions, so it stops being sent if you lose access to the project.",
+  "Hora de la app ({tz}). El proyecto es privado: solo vale la dirección de uno de sus miembros. El informe se genera con tus permisos, así que deja de enviarse si pierdes el acceso al proyecto.": "App time ({tz}). The project is private: the address must be one of its members'. The report is generated with your permissions, so it stops being sent if you lose access to the project.",
 };

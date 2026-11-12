@@ -34,7 +34,7 @@ export const COLUMN_ROLE_LABEL: Record<ColumnRoleValue, string> = {
   BUDGET: "Presupuesto (suma el coste)",
 };
 
-export const DEFAULT_COLUMNS: { name: string; nameEn: string; role: ColumnRoleValue; isDone: boolean }[] = [
+const DEFAULT_COLUMNS: { name: string; nameEn: string; role: ColumnRoleValue; isDone: boolean }[] = [
   { name: "Backlog", nameEn: "Backlog", role: "NONE", isDone: false },
   { name: "En progreso", nameEn: "In progress", role: "NONE", isDone: false },
   { name: "Siguiente salto a producción", nameEn: "Next release", role: "NEXT_RELEASE", isDone: false },
@@ -57,7 +57,7 @@ export const PALETTE = [
 const WHITE_COLOR = "#ffffff";
 export const isWhite = (c: string | null | undefined) => c?.toLowerCase() === WHITE_COLOR;
 /** ¿Color tan claro (blanco o casi) que sobre un fondo claro no se distingue? */
-export function isVeryLight(c: string | null | undefined) {
+function isVeryLight(c: string | null | undefined) {
   const m = /^#([0-9a-f]{6})$/i.exec(c ?? "");
   if (!m) return false;
   const n = parseInt(m[1]!, 16);
@@ -76,7 +76,13 @@ export const COLOR_NAME: Record<string, string> = {
   "#0ea5e9": "Celeste", "#6366f1": "Índigo", "#1e3a8a": "Azul marino", "#a855f7": "Violeta", "#ec4899": "Rosa",
 };
 
+/** Máximo del título de una tarea en caracteres visibles (grafemas: un emoji de familia o una bandera cuentan como uno). */
 export const MAX_TITLE = 210;
+/**
+ * Tope duro del título en unidades UTF-16 del texto visible: protege el tamaño guardado aunque cada «carácter» sea un emoji
+ * compuesto de muchas unidades. Holgado: 210 emojis normales (2 unidades) caben de sobra.
+ */
+export const MAX_TITLE_UNITS = MAX_TITLE * 4;
 /** Subtareas por tarea como máximo. */
 export const MAX_SUBTASKS = 100;
 export const MAX_DESCRIPTION = 20_000;

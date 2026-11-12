@@ -7,6 +7,7 @@ import { normalizeTaskFields } from "./task-fields";
 import { db } from "./db";
 import { AppError } from "./errors";
 import { mentionsToPlain } from "./mentions";
+import { slugify } from "./search-accents";
 import { buildReport, RECENT_DONE_DAYS } from "./report";
 import type { PdfJob } from "./report-pdf";
 import { renderInWorker } from "./report-render";
@@ -17,7 +18,7 @@ import { buildWeekPlan, type WeekPlanGroupBy } from "./week-plan";
 // Genera el informe PDF de un proyecto. Lo usan la descarga (API) y el envío semanal por email;
 // quien llama comprueba antes que la persona puede ver el proyecto.
 
-export interface ProjectReportPdf {
+interface ProjectReportPdf {
   project: { id: string; name: string };
   pdf: Uint8Array;
   today: string;
@@ -34,8 +35,8 @@ export interface ProjectReportPdf {
 // lo pidió recibe un error claro.
 let reportQueue: Promise<unknown> = Promise.resolve();
 
-export const PDF_RENDER_TIMEOUT_MS = 90_000;
-export const PDF_TIMEOUT_MESSAGE = "El PDF tardó demasiado; inténtalo de nuevo";
+const PDF_RENDER_TIMEOUT_MS = 90_000;
+const PDF_TIMEOUT_MESSAGE = "El PDF tardó demasiado; inténtalo de nuevo";
 
 /** Error de un render que superó el tiempo máximo (504 para las rutas). */
 export class PdfTimeoutError extends AppError {
@@ -82,7 +83,7 @@ export function queuedRender<T>(render: (signal: AbortSignal) => Promise<T>, tim
 }
 
 /** Genera un PDF en el worker, en la cola y con tiempo máximo. */
-export const renderPdf = (job: PdfJob): Promise<Uint8Array> => queuedRender((signal) => renderInWorker(job, signal));
+const renderPdf = (job: PdfJob): Promise<Uint8Array> => queuedRender((signal) => renderInWorker(job, signal));
 
 /**
  * Añade a cada release su número de tareas con un groupBy filtrado por sus ids (un `_count` de relación agruparía todas
@@ -181,11 +182,11 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
   }, t);
 
   const pdf = await renderPdf({ kind: "report", locale: opts.locale, input: report });
-  const slug = project.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || t("proyecto");
+  const slug = slugify(project.name) || t("proyecto");
   return { project: { id: project.id, name: project.name }, pdf, today, filename: `${t("informe")}-${slug}-${today}.pdf`, taskCount: tasks.length };
 }
 
-const slugOf = (name: string, fallback: string) => name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || fallback;
+const slugOf = (name: string, fallback: string) => slugify(name) || fallback;
 
 /** PDF de la lista consolidada de una columna CHECKLIST (por tarjeta o por tipo de tarea). */
 export function generateChecklistPdf(

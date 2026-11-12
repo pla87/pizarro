@@ -97,7 +97,7 @@ export async function sendDueDigests(now: Date = new Date()): Promise<number> {
 }
 
 /** Correo del informe semanal: el PDF va adjunto. */
-export function reportMail(opts: { projectName: string; url: string }, t: T) {
+function reportMail(opts: { projectName: string; url: string }, t: T) {
   const subject = t("Informe semanal de «{project}»", { project: opts.projectName });
   const intro = t("Adjuntamos el informe PDF de estado del proyecto «{project}».", { project: opts.projectName });
   const note = t("Recibes este correo porque alguien configuró el informe semanal en los ajustes del proyecto.");

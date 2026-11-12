@@ -9,6 +9,7 @@ import {
 } from "../src/lib/document-kind";
 import { cleanOrphanFiles, parseUploadName } from "../src/lib/orphan-files";
 import { documentPath } from "../src/lib/uploads";
+import { documentFailuresMessage } from "../src/components/docs/uploadDocuments";
 
 test("detectDocumentKind: por extensión, sin distinguir mayúsculas", () => {
   assert.equal(detectDocumentKind("notas.txt", "text/plain"), "TEXT");
@@ -62,8 +63,15 @@ test("looksLikePdf / looksLikeText: casos límite", () => {
 
 test("sanitizeDocumentName: quita rutas, caracteres raros y puntos iniciales", () => {
   assert.equal(sanitizeDocumentName("informe final.pdf"), "informe final.pdf");
-  assert.equal(sanitizeDocumentName("../../etc/passwd"), "passwd");
+  // De una ruta absoluta (navegadores antiguos: «C:\fakepath\…») solo queda el nombre.
   assert.equal(sanitizeDocumentName("C:\\Users\\x\\nota.txt"), "nota.txt");
+  assert.equal(sanitizeDocumentName("C:\\fakepath\\informe.pdf"), "informe.pdf");
+  assert.equal(sanitizeDocumentName("/home/x/nota.md"), "nota.md");
+  // Un nombre normal con «\» o «/» no pierde lo anterior: pasan a «_», como en los adjuntos.
+  assert.equal(sanitizeDocumentName("Informe 1\\2 final.pdf"), "Informe 1_2 final.pdf");
+  assert.equal(sanitizeDocumentName("Ventas Q1/Q2.xlsx"), "Ventas Q1_Q2.xlsx");
+  assert.equal(sanitizeDocumentName("../../etc/passwd"), "etc_passwd");
+  assert.equal(sanitizeDocumentName("../nuevo<x>.md"), "nuevo_x_.md");
   assert.equal(sanitizeDocumentName("a<b>c|d?.txt"), "a_b_c_d_.txt");
   assert.equal(sanitizeDocumentName(".hidden"), "hidden");
   assert.equal(sanitizeDocumentName("  ...  "), "documento");
@@ -116,4 +124,23 @@ test("huérfanos: documents/ se limpia por separado y no se mezcla con los adjun
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("varios documentos sin subir: cuáles y por qué, agrupados por motivo", () => {
+  const t = (key: string, vars?: Record<string, string | number>) => key.replace(/\{(\w+)\}/g, (_, k) => String(vars?.[k] ?? `{${k}}`));
+  const quota = "Cuota de almacenamiento del proyecto superada (1,2 de 1 MB).";
+  assert.equal(documentFailuresMessage(t, [], 2), null);
+  // Un solo archivo en la tanda: solo su motivo (sin repetir el nombre que ya sale en «Subiendo «x»…»).
+  assert.equal(documentFailuresMessage(t, [{ name: "a.pdf", error: quota }], 1), quota);
+  assert.equal(
+    documentFailuresMessage(t, [{ name: "a.pdf", error: quota }, { name: "b.pdf", error: quota }], 2),
+    `2 archivos no se han subido a Documentación: «a.pdf», «b.pdf»: ${quota}`,
+  );
+  assert.equal(
+    documentFailuresMessage(t, [{ name: "a.pdf", error: quota }, { name: "vacio.txt", error: "El archivo está vacío." }], 3),
+    `2 archivos no se han subido a Documentación: «a.pdf»: ${quota} · «vacio.txt»: El archivo está vacío.`,
+  );
+  assert.equal(documentFailuresMessage(t, [{ name: "b.pdf", error: quota }], 2), `1 archivo no se ha subido a Documentación: «b.pdf»: ${quota}`);
+  const many = Array.from({ length: 8 }, (_, i) => ({ name: `f${i}.pdf`, error: quota }));
+  assert.match(documentFailuresMessage(t, many, 8)!, /^8 archivos .*«f4\.pdf» … \+3: Cuota/);
 });

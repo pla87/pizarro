@@ -10,7 +10,7 @@ const BATCH = 200;
 
 export type CleanupKind = "archivedTasks" | "documentsTrash" | "oldReleases";
 
-export interface CleanupResult {
+interface CleanupResult {
   count: number;
   bytes: number;
 }
@@ -66,7 +66,7 @@ export async function invalidateUndoReferencing(projectId: string, ids: Iterable
   return doomed.length;
 }
 
-export interface DeletedTaskAttachments extends CleanupResult {
+interface DeletedTaskAttachments extends CleanupResult {
   ids: string[];
   taskIds: string[];
 }

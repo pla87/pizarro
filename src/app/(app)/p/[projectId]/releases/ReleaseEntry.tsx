@@ -2,7 +2,6 @@
 
 import { appTimeZone } from "@/lib/format";
 import { ChevronDown, ClipboardCopy, Download, FileArchive, Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useCallback, useContext, useEffect, useState } from "react";
 import { deleteRelease, deleteReleaseAttachments } from "@/actions/releases";
 import { copyText, downloadText } from "@/components/ui/clipboard";
@@ -14,6 +13,7 @@ import { isoDate, releaseFileName, releaseZipName } from "@/lib/release";
 import { ProjectsContext } from "@/components/ProjectMenu";
 import { useIntlLocale, useLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
+import { useSafeRefresh } from "@/components/useSafeRefresh";
 
 interface Props {
   release: { id: string; number: number; title: string; content: string; deployedAt: string; author: string | null; taskCount: number; attachments: string[] };
@@ -26,14 +26,14 @@ export function ReleaseEntry({ release }: Props) {
   const [open, setOpen] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
-  const router = useRouter();
+  const safeRefresh = useSafeRefresh();
   // Nombre del proyecto para el ZIP (el mismo que da el diálogo de generar la release).
   const { projects, currentId } = useContext(ProjectsContext);
   const projectName = projects.find((p) => p.id === currentId)?.name ?? null;
   const [busy, setBusy] = useState(false);
   const [attachments, setAttachments] = useState(release.attachments);
   // Las copias de los adjuntos se guardan unos segundos después del despliegue: al refrescar la página
-  // (router.refresh) llegan más y se muestran sin tener que volver a montar la entrada.
+  // (el refresco de la página) llegan más y se muestran sin tener que volver a montar la entrada.
   const [seen, setSeen] = useState(release.attachments.join("\n"));
   if (release.attachments.join("\n") !== seen) {
     setSeen(release.attachments.join("\n"));
@@ -111,7 +111,7 @@ export function ReleaseEntry({ release }: Props) {
     if (!res.ok) return toast(res.error, "error");
     setRemoved(true);
     toast(t("Release borrada"));
-    router.refresh();
+    safeRefresh();
   };
 
   const removeAttachments = async () => {
@@ -122,7 +122,7 @@ export function ReleaseEntry({ release }: Props) {
     if (!res.ok) return toast(res.error, "error");
     setAttachments([]);
     toast(t("Adjuntos borrados"));
-    router.refresh();
+    safeRefresh();
   };
 
   if (removed) return null;
@@ -131,8 +131,10 @@ export function ReleaseEntry({ release }: Props) {
       <button className="flex w-full items-center gap-3 px-4 py-3 text-left" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-medium">
-            <span className="mr-1.5 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">R{release.number}</span>
-            {release.title}
+            {/* El espacio va en el mismo nodo de texto que el título: separa el número en el nombre accesible del botón
+                («R3 Release…», no «R3Release…»); Chrome no cuenta un nodo de texto que solo tiene un espacio. */}
+            <span className="mr-1 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">R{release.number}</span>
+            {` ${release.title}`}
           </h2>
           <p className="text-xs text-slate-500">
             {formatDate(date, "dateTime", locale)}
@@ -148,10 +150,10 @@ export function ReleaseEntry({ release }: Props) {
             <button className="btn-secondary py-1.5" onClick={async () => toast(await copyText(release.content) ? t("Copiado al portapapeles") : t("No se pudo copiar"))}>
               <ClipboardCopy size={15} /> {t("Copiar")}
             </button>
-            <button className="btn-secondary py-1.5" onClick={() => downloadText(release.content, releaseFileName(date, "md", appTimeZone()), "text/markdown")}>
+            <button className="btn-secondary py-1.5" onClick={() => downloadText(release.content, releaseFileName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, "md"), "text/markdown")}>
               <Download size={15} /> .md
             </button>
-            <button className="btn-secondary py-1.5" onClick={() => downloadText(release.content, releaseFileName(date, "txt", appTimeZone()), "text/plain")}>
+            <button className="btn-secondary py-1.5" onClick={() => downloadText(release.content, releaseFileName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, "txt"), "text/plain")}>
               <Download size={15} /> .txt
             </button>
             <button className="btn-secondary py-1.5 text-red-600 dark:text-red-400 sm:ml-auto" disabled={busy} onClick={remove}>

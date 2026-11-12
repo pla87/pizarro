@@ -17,7 +17,7 @@ export const kind = (name: string, color: string, titleTemplate: string, descrip
 /** Tipos generales de software que las plantillas ajenas al software no usan. */
 export const GENERALES_SOFTWARE = ["Funcionalidad", "Corrección"];
 
-export interface BuiltinTemplate {
+interface BuiltinTemplate {
   /** Identificador estable: no cambia aunque se renombre la plantilla. */
   key: string;
   data: TemplateInput;

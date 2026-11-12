@@ -4,7 +4,7 @@ import { labelledHmac, labelledHmacCandidates } from "./keyring";
 // Parte pura del enlace de suscripción al calendario (.ics vivo): token, hash, ventana de fechas y direcciones.
 
 /** Bytes aleatorios del token (256 bits); en la dirección son 43 caracteres base64url. */
-export const FEED_TOKEN_BYTES = 32;
+const FEED_TOKEN_BYTES = 32;
 export const FEED_TOKEN_LENGTH = Math.ceil((FEED_TOKEN_BYTES * 8) / 6);
 /** Ventana de fechas del calendario: desde hace tantos días hasta tantos días vista. */
 export const FEED_PAST_DAYS = 60;

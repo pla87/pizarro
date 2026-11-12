@@ -4,7 +4,7 @@ import type { Editor } from "@tiptap/core";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { Markdown } from "@tiptap/markdown";
 import { AtSign, Bold, Check, Code, Code2, FileSpreadsheet, FileText, Heading2, Heading3, IndentDecrease, IndentIncrease, Italic, Link2, List, ListOrdered, Minus, Pilcrow, Quote, Strikethrough, Underline, Unlink, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/i18n/client";
 import { ListDeleteFix } from "@/lib/editor-keys";
@@ -17,6 +17,7 @@ import { markdownFromPaste } from "@/lib/markdown-paste";
 import { htmlHasText } from "@/lib/clipboard-files";
 import { replaceHtmlTables } from "@/lib/paste-table";
 import type { UserOption } from "@/lib/types";
+import { normalizeSearch } from "@/lib/search-accents";
 import { Avatar } from "./Avatar";
 import { cn } from "./cn";
 import { DictationButton, insertIntoEditor } from "./DictationButton";
@@ -33,8 +34,6 @@ const COMMANDS: { id: MentionCommand; label: string; hint: string; keys: string[
   { id: "GOOGLE_SHEET", label: "Crear Google Sheet", hint: "Hoja de cálculo nueva enlazada a la tarea", keys: ["sheets", "sheet", "hoja", "excel", "google"] },
   { id: "GOOGLE_DOC", label: "Crear Google Doc", hint: "Documento nuevo enlazado a la tarea", keys: ["docs", "doc", "documento", "google"] },
 ];
-
-const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 interface Popup {
   items: Option[];
@@ -56,6 +55,8 @@ interface Props {
   users?: UserOption[];
   /** Si se indica, @docs y @sheets aparecen como comandos. Debe abrir la pestaña de forma síncrona. */
   onCommand?: (command: MentionCommand) => void;
+  /** El editor ya existe (con `immediatelyRender: false` se crea tras montar): ver el campo provisional de DescriptionField. */
+  onReady?: (editor: Editor) => void;
 }
 
 /** Sangra (1) o desangra (-1) el elemento de lista o de tareas bajo el cursor; fuera de una lista no hace nada. */
@@ -66,12 +67,12 @@ function indent(editor: Editor, direction: 1 | -1) {
 }
 
 /** Editor con barra de formato (TipTap). Lee y guarda siempre Markdown. */
-export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeholder, autoFocus, className, users, onCommand }: Props) {
+export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeholder, autoFocus, className, users, onCommand, onReady }: Props) {
   const t = useT();
   // Callbacks siempre actuales sin recrear el editor.
-  const handlers = useRef({ onChange, onSubmit, onCancel });
+  const handlers = useRef({ onChange, onSubmit, onCancel, onReady });
   useEffect(() => {
-    handlers.current = { onChange, onSubmit, onCancel };
+    handlers.current = { onChange, onSubmit, onCancel, onReady };
   });
   // Último Markdown emitido: si `value` cambia desde fuera (p. ej. una plantilla), se recarga.
   const lastEmitted = useRef(value);
@@ -103,13 +104,13 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
           char: "@",
           allowedPrefixes: [" ", "("],
           items: ({ query }): Option[] => {
-            const q = norm(query);
+            const q = normalizeSearch(query);
             const { users: list = [], onCommand: cmd } = mentionData.current;
             const cmds: Option[] = cmd
               ? COMMANDS.filter((c) => !q || c.keys.some((k) => k.startsWith(q))).map((c) => ({ kind: "command", id: c.id, label: c.label, hint: c.hint }))
               : [];
             const people: Option[] = list
-              .filter((u) => !q || norm(u.name).split(/\s+/).some((part) => part.startsWith(q)) || norm(u.name).startsWith(q))
+              .filter((u) => !q || normalizeSearch(u.name).split(/\s+/).some((part) => part.startsWith(q)) || normalizeSearch(u.name).startsWith(q))
               .slice(0, 6)
               .map((u) => ({ kind: "user", id: u.id, label: u.name }));
             return [...people, ...cmds];
@@ -237,10 +238,13 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
 
   useEffect(() => {
     editorRef.current = editor;
+    if (editor) handlers.current.onReady?.(editor);
     return editor ? registerDragEditor(editor) : undefined;
   }, [editor]);
 
-  useEffect(() => {
+  // Antes de pintar: quien cambia `value` y enfoca el editor en la misma pasada (el campo provisional) ya lo encuentra
+  // con el texto nuevo, y el cursor al final no se mueve después.
+  useLayoutEffect(() => {
     if (editor && value !== lastEmitted.current) {
       lastEmitted.current = value;
       editor.commands.setContent(value, { contentType: "markdown", emitUpdate: false });

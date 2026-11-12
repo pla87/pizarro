@@ -1,9 +1,10 @@
 import "server-only";
 import { db } from "./db";
 import { appUrl } from "./mail";
-import { loadMessagingConfig } from "./messaging-config";
-import { DEFAULT_CHANNEL_PREFS, DEFAULT_WHATSAPP_TEMPLATE, telegramMode, WHATSAPP_CODE_ATTEMPTS, WHATSAPP_PRICING_URL, WHATSAPP_TEMPLATE_BODY, type ChannelPrefs, type Source } from "./messaging-core";
+import { loadMessagingConfig, type MessagingConfig } from "./messaging-config";
+import { DEFAULT_CHANNEL_PREFS, DEFAULT_WHATSAPP_CODE_TEMPLATE, DEFAULT_WHATSAPP_TEMPLATE, telegramMode, WHATSAPP_CODE_ATTEMPTS, WHATSAPP_PRICING_URL, WHATSAPP_TEMPLATE_BODY, type ChannelPrefs, type Source } from "./messaging-core";
 import { telegramStatus, webhookInfo } from "./telegram";
+import { codeTemplateProblem, type CodeTemplateProblem } from "./whatsapp-code-text";
 
 // Lo que ven las pantallas de Telegram y WhatsApp: Administración → Ajustes («Telegram y WhatsApp») y Mi perfil → Avisos.
 // Nunca llevan un token: como mucho, sus 4 últimos caracteres.
@@ -35,7 +36,14 @@ export interface MessagingAdminView {
     /** Valores de las variables WHATSAPP_* (sin el token): se usan en los campos vacíos. */
     env: { token: boolean; phoneNumberId: string; templateName: string; templateLang: string };
     sources: Record<"token" | "phoneNumberId" | "templateName" | "templateLang", Source>;
-    effective: { phoneNumberId: string; templateName: string; templateLang: string };
+    effective: { phoneNumberId: string; templateName: string; templateLang: string; codeTemplateName: string; codeTemplateLang: string };
+    /** Plantilla de verificación (autenticación) y sus idiomas tal como se guardaron (vacío = por defecto). */
+    codeTemplateName: string;
+    codeTemplateLang: string;
+    codeTemplateLangEn: string;
+    defaultCodeTemplate: string;
+    /** Meta rechazó la plantilla de verificación la última vez que se envió un código (se olvida al enviar uno bien o al guardar). */
+    codeTemplateError: { problem: CodeTemplateProblem; code: number; name: string; lang: string; at: string } | null;
     enabled: boolean;
     complete: boolean;
     active: boolean;
@@ -49,6 +57,11 @@ export interface MessagingAdminView {
     defaultTemplate: string;
     pricingUrl: string;
   };
+}
+
+function codeError(e: MessagingConfig["whatsappSettings"]["codeTemplateError"]): MessagingAdminView["whatsapp"]["codeTemplateError"] {
+  const problem = codeTemplateProblem(e?.code);
+  return e && problem ? { problem, ...e } : null;
 }
 
 export async function getMessagingAdminView(): Promise<MessagingAdminView> {
@@ -89,7 +102,12 @@ export async function getMessagingAdminView(): Promise<MessagingAdminView> {
       tokenLast4: ws.tokenLast4,
       env: { token: Boolean(env.WHATSAPP_TOKEN?.trim()), phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID?.trim() ?? "", templateName: env.WHATSAPP_TEMPLATE_NAME?.trim() ?? "", templateLang: env.WHATSAPP_TEMPLATE_LANG?.trim() ?? "" },
       sources: w.sources,
-      effective: { phoneNumberId: w.phoneNumberId, templateName: w.templateName, templateLang: w.templateLang },
+      effective: { phoneNumberId: w.phoneNumberId, templateName: w.templateName, templateLang: w.templateLang, codeTemplateName: w.codeTemplateName, codeTemplateLang: w.codeTemplateLang },
+      codeTemplateName: ws.codeTemplateName,
+      codeTemplateLang: ws.codeTemplateLang,
+      codeTemplateLangEn: ws.codeTemplateLangEn,
+      defaultCodeTemplate: DEFAULT_WHATSAPP_CODE_TEMPLATE,
+      codeTemplateError: codeError(ws.codeTemplateError),
       enabled: w.enabled,
       complete: w.complete,
       active: w.active,
@@ -120,6 +138,8 @@ export interface MyChannelsView {
     codePending: boolean;
     prefs: ChannelPrefs;
     mentionsOnly: boolean;
+    /** Meta rechazó la plantilla de verificación: ahora no se pueden enviar códigos (el administrador tiene que crearla). */
+    codeBlocked: boolean;
   } | null;
   /** Dirección de la app (para el texto de ayuda). */
   appUrl: string;
@@ -154,6 +174,7 @@ export async function getMyChannels(userId: string): Promise<MyChannelsView> {
           codePending: Boolean(wa?.verifyCodeHash && wa.verifyExpiresAt && wa.verifyExpiresAt.getTime() > Date.now() && wa.verifyAttempts < WHATSAPP_CODE_ATTEMPTS),
           prefs: wa ? prefsOf(wa) : { ...DEFAULT_CHANNEL_PREFS },
           mentionsOnly: cfg.whatsapp.legacy,
+          codeBlocked: Boolean(codeError(cfg.whatsappSettings.codeTemplateError)),
         }
       : null,
   };

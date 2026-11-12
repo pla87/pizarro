@@ -1,17 +1,10 @@
 // Formato de changelog.json y su sincronización con la tabla AppVersionLog.
 import "./zod-config";
 import { z } from "zod";
-
-export const CHANGE_CATEGORIES = [
-  { key: "nuevas", label: "Nuevas funcionalidades" },
-  { key: "mejoras", label: "Mejoras" },
-  { key: "correcciones", label: "Correcciones" },
-  { key: "tecnicos", label: "Cambios técnicos / DB" },
-] as const;
+import type { Changes } from "./changelog-core";
 
 const list = z.array(z.string()).default([]);
-export const changesSchema = z.object({ nuevas: list, mejoras: list, correcciones: list, tecnicos: list });
-export type Changes = z.infer<typeof changesSchema>;
+const changesSchema = z.object({ nuevas: list, mejoras: list, correcciones: list, tecnicos: list }) satisfies z.ZodType<Changes, unknown>;
 
 export const changelogSchema = z.object({
   versions: z.array(

@@ -17,6 +17,8 @@ import { cn } from "@/components/ui/cn";
 import { Popover } from "@/components/ui/Popover";
 import { CalendarSubscribe } from "./CalendarSubscribe";
 import { useToast } from "@/components/ui/Toast";
+import { useSafeRefresh } from "@/components/useSafeRefresh";
+import { initialsOf } from "@/lib/graphemes";
 
 export interface CalendarTask {
   id: string;
@@ -133,14 +135,8 @@ const STATUS_BAR: Record<DeliverableStatus, string> = {
   "Sin tareas": "bg-slate-500/20",
 };
 
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => [...w][0])
-    .join("")
-    .toUpperCase();
+/** Iniciales del proyecto: las dos primeras palabras con letras o números, sin puntuación («Trello «raro» 🎉» → «TR»). */
+const initials = (name: string) => initialsOf(name, "firstTwo");
 
 /** Casilla de las opciones del filtro de proyectos. */
 function CheckBox({ on }: { on: boolean }) {
@@ -161,6 +157,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
   const t = useT();
   const locale = useIntlLocale();
   const router = useRouter();
+  const safeRefresh = useSafeRefresh();
   const toast = useToast();
   const [navigating, startNav] = useTransition();
   // Fechas cambiadas aquí y aún no reflejadas en los datos del servidor (cambio optimista).
@@ -302,9 +299,9 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
       }
       setLast({ kind: "task", taskId: task.id, projectId: task.projectId, from });
       toast(next.start && next.start !== next.due ? t("Rango cambiado: {from} → {to}", { from: formatDay(next.start, today, locale), to: formatDay(next.due, today, locale) }) : t("Fecha límite cambiada al {date}", { date: formatDay(next.due, today, locale) }));
-      router.refresh();
+      safeRefresh();
     },
-    [overrides, toast, t, today, locale, router],
+    [overrides, toast, t, today, locale, safeRefresh],
   );
   // Un chip (sin rango) se mueve entero: el inicio, si lo tiene, acompaña a la fecha límite.
   const moveTask = useCallback(
@@ -328,9 +325,9 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
       }
       setLast({ kind: "deliverable", id: d.id, from });
       toast(t("Entregable movido al {date}", { date: formatDay(to, today, locale) }));
-      router.refresh();
+      safeRefresh();
     },
-    [delOverrides, toast, t, today, locale, router],
+    [delOverrides, toast, t, today, locale, safeRefresh],
   );
 
   const undo = useCallback(async () => {
@@ -343,7 +340,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
         setDelOverrides((o) => ({ ...o, [last.id]: last.from }));
         setLast(null);
         toast(t("Deshecho: {label}", { label: t("Entregable movido al {date}", { date: formatDay(last.from, today, locale) }) }), "undo");
-        router.refresh();
+        safeRefresh();
         return;
       }
       const res = await undoLast(last.projectId, last.taskId);
@@ -351,11 +348,11 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
       setOverrides((o) => ({ ...o, [last.taskId]: last.from }));
       setLast(null);
       toast(t("Deshecho: {label}", { label: res.data.label }), "undo");
-      router.refresh();
+      safeRefresh();
     } finally {
       setUndoing(false);
     }
-  }, [last, undoing, toast, t, router, today, locale]);
+  }, [last, undoing, toast, t, safeRefresh, today, locale]);
 
   // Ctrl/⌘+Z deshace el último cambio de fecha hecho desde el calendario.
   useEffect(() => {

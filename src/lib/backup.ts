@@ -1,16 +1,19 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { backupFileName, fileSha256, parseBackupFileName, diagnoseBackupKey, parseBackupKey, verifyBackupFile, type BackupManifest } from "./backup-core";
-import { dumpDatabase } from "./backup-db";
-import { checkShrink, DirDestination, externalDestinations, localFilesEnabled, listObjectKeys, listStems, manifestKey, pruneDestination, readManifest, syncBackup, type BackupDestination, type DestinationId } from "./backup-dest";
+import { LOCK_BACKUP } from "./advisory-locks";
+import { backupFileName, fileSha256, diagnoseBackupKey, parseBackupKey, verifyBackupFile, type BackupManifest } from "./backup-core";
+import { listForeignKeys, lastMigration } from "./backup-db";
+import { checkShrink, DirDestination, dumpKey, externalDestinations, localFilesEnabled, listObjectKeys, listStems, manifestKey, pruneDestination, readManifest, stemDate, syncBackup, type BackupDestination, type DestinationId } from "./backup-dest";
 import { buildManifest, decodeManifest, encodeManifest, fileNameKey, hashFiles, loadHashIndex, saveHashIndex, scanFiles, type FullManifest } from "./backup-files";
-import { withDatabase } from "./backup-pg";
+import { dumpDatabaseOwnConnection, withDatabase } from "./backup-pg";
 import { checkObjects, findMigrationsDir, restoreDatabaseFromDump } from "./backup-restore";
 import { db } from "./db";
+import { withAdvisoryLock } from "./jobs";
 import { logEvent } from "./log";
+import { invalidateMemo, memo } from "./memo";
 import { backupsDir, uploadDir } from "./upload-dir";
 
 // Copias de seguridad automáticas: cada día, la base de datos (volcado cifrado) y los ficheros de UPLOAD_DIR
@@ -49,6 +52,8 @@ export interface RestoreTestRun extends BackupRun {
   /** Objetos del almacén comprobados (presentes) y descifrados de muestra. */
   objectsChecked?: number;
   objectsSampled?: number;
+  /** Solo «verify»: referencias entre filas comprobadas (cada una apunta a una fila que está en la copia). */
+  referencesChecked?: number;
 }
 
 export interface ExternalRun {
@@ -141,36 +146,44 @@ function updateStatus(fn: (s: BackupStatus) => BackupStatus): Promise<void> {
     const tmp = `${file}.${process.pid}.tmp`;
     await writeFile(tmp, JSON.stringify(next, null, 2));
     await rename(tmp, file);
+    invalidateMemo(BACKUP_MEMO);
   });
   statusChain.p = run.catch(() => {});
   return run;
 }
 
-/** Copias existentes, la más reciente primero. */
+/**
+ * Memoria en proceso (lib/memo.ts) de lo que piden las páginas de administración: la lista de copias y el aviso de copia
+ * atrasada (backup-alert.ts). Se invalida con cada copia nueva o podada y con cada cambio de status.json.
+ */
+const BACKUP_MEMO = "backup:";
+export const BACKUP_ALERT_MEMO = `${BACKUP_MEMO}alert`;
+const BACKUP_LIST_MEMO = `${BACKUP_MEMO}list`;
+
+/**
+ * Copias existentes, la más reciente primero (lectura directa de la carpeta). Sin las copias cortadas entre el volcado y
+ * el manifiesto (ver StemInfo en backup-dest.ts): ni se ofrecen para descargar ni cuentan como la última copia.
+ */
 export async function listBackups(): Promise<BackupFileInfo[]> {
-  let names: string[];
-  try {
-    names = await readdir(backupsDir());
-  } catch {
-    return [];
-  }
-  const out: BackupFileInfo[] = [];
-  for (const name of names) {
-    const at = parseBackupFileName(name);
-    if (!at) continue;
-    try {
-      out.push({ name, bytes: (await stat(path.join(backupsDir(), name))).size, at: at.toISOString() });
-    } catch {
-      // Borrada entre medias.
-    }
-  }
-  return out.sort((a, b) => b.at.localeCompare(a.at));
+  const stems = await listStems(localDestination()).catch(() => []);
+  return stems.filter((s) => !s.partial).map((s) => ({ name: dumpKey(s.stem), bytes: s.dumpBytes, at: (stemDate(s.stem) ?? new Date(0)).toISOString() }));
+}
+
+/** Igual, con un minuto de memoria (Administración → Copias de seguridad); las tareas y las descargas leen la carpeta. */
+export function listBackupsCached(): Promise<BackupFileInfo[]> {
+  return memo(BACKUP_LIST_MEMO, listBackups);
 }
 
 /** Ruta absoluta de la copia más reciente (para la descarga), o null. */
 export async function latestBackupPath(): Promise<{ file: string; name: string; bytes: number } | null> {
   const [latest] = await listBackups();
   return latest ? { file: path.join(backupsDir(), latest.name), name: latest.name, bytes: latest.bytes } : null;
+}
+
+function requireDatabaseUrl(): string {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL no está definida.");
+  return url;
 }
 
 // Evita que una copia manual, la programada y la subida externa se pisen.
@@ -199,33 +212,64 @@ async function collectFiles(key: Buffer) {
   return entries;
 }
 
-/** Crea una copia ahora (base de datos + ficheros, en el destino local). Nunca lanza (queda en status.json y en los logs). */
+const BUSY = "Ya hay una copia en curso.";
+
+/**
+ * Crea una copia ahora (base de datos + ficheros, en el destino local). Nunca lanza (queda en status.json y en los
+ * logs). Una sola a la vez en todo el servidor: además del cerrojo en memoria, el bloqueo LOCK_BACKUP de Postgres (lo
+ * comparte la subida al destino externo), para que la copia programada y el botón de otro proceso no se pisen.
+ */
 export async function createBackup(): Promise<BackupRun> {
   const key = backupKey();
-  const started = Date.now();
   if (!key) return { at: new Date().toISOString(), ok: false, error: "BACKUP_KEY no está configurada." };
-  if (lock.busy) return { at: new Date().toISOString(), ok: false, error: "Ya hay una copia en curso." };
+  if (lock.busy) return { at: new Date().toISOString(), ok: false, error: BUSY };
   lock.busy = true;
+  try {
+    const res = await withAdvisoryLock(LOCK_BACKUP, () => createBackupLocked(key));
+    return res.ran ? res.value : { at: new Date().toISOString(), ok: false, error: BUSY };
+  } catch (err) {
+    // Sin conexión para el bloqueo: la base de datos no contesta, así que la copia tampoco se habría podido hacer.
+    const run: BackupRun = { at: new Date().toISOString(), ok: false, error: message(err) };
+    logEvent({ level: "error", category: "system", action: "backup.failed", message: `Falló la copia de seguridad: ${run.error}` });
+    await updateStatus((s) => ({ ...s, lastBackup: run })).catch((e) => console.error("[backup] no se pudo guardar el estado", e));
+    return run;
+  } finally {
+    lock.busy = false;
+  }
+}
+
+async function createBackupLocked(key: Buffer): Promise<BackupRun> {
+  const started = Date.now();
   let run: BackupRun;
   let file: string | null = null;
+  let dumpTmp: string | null = null;
   try {
     await mkdir(backupsDir(), { recursive: true, mode: 0o700 });
     const name = backupFileName(new Date());
     const stem = name.replace(/\.pzbak$/, "");
     file = path.join(backupsDir(), name);
-    const { manifest: dbManifest, bytes } = await dumpDatabase(db, file, key);
-    const dumpSha = await fileSha256(file);
-    // Resumen en claro junto al fichero (solo cuentas, migración y hashes; sin datos).
-    await writeFile(`${file}.json`, JSON.stringify({ ...dbManifest, file: name, bytes, fileSha256: dumpSha }, null, 2));
+    // El volcado se escribe como temporal (no cuenta como copia) y solo pasa a llamarse .pzbak justo antes de escribir
+    // el manifiesto: si el proceso se para entre medias, no queda una «copia» sin manifiesto que parezca la última.
+    // Un temporal abandonado se borra pasadas 24 h (cleanTemp). En una conexión propia, cerrada siempre al terminar.
+    const tmpPath = `${file}.${process.pid}.dump.tmp`;
+    dumpTmp = tmpPath;
+    const { manifest: dbManifest, bytes } = await dumpDatabaseOwnConnection(requireDatabaseUrl(), tmpPath, key);
+    const dumpSha = await fileSha256(tmpPath);
 
     // Ficheros: manifiesto con todos y, en el almacén local, solo los que aún no estaban.
     const files = await collectFiles(key);
-    const manifest = buildManifest({ stem, dbFile: name, dbBytes: bytes, dbSha256: dumpSha, db: dbManifest, files });
-    const manifestBytes = await encodeManifest(manifest, key);
     const local = localDestination();
-    const dumpPath = file;
-    const sync = await syncBackup(local, manifest, manifestBytes, { size: bytes, open: () => createReadStream(dumpPath) }, { key, uploadRoot: uploadDir() });
-    const pruned = await pruneDestination(local, key, { extraKeys: (s) => [`${s}.pzbak.json`] });
+    const manifest = buildManifest({ stem, dbFile: name, dbBytes: bytes, dbSha256: dumpSha, db: dbManifest, files, localFiles: local.files });
+    const manifestBytes = await encodeManifest(manifest, key);
+    const finalPath = file;
+    const sync = await syncBackup(local, manifest, manifestBytes, { size: bytes, open: () => createReadStream(tmpPath), place: () => rename(tmpPath, finalPath) }, { key, uploadRoot: uploadDir() });
+    // Resumen en claro junto al fichero (solo cuentas, migración y hashes; sin datos).
+    await writeFile(`${file}.json`, JSON.stringify({ ...dbManifest, file: name, bytes, fileSha256: dumpSha }, null, 2));
+    // La copia ya está completa: si la retención falla, se avisa, pero la copia vale.
+    const pruned = await pruneDestination(local, key, { extraKeys: (s) => [`${s}.pzbak.json`] }).catch((err) => {
+      logEvent({ level: "warn", category: "system", action: "backup.pruneFailed", message: `No se aplicó la retención de las copias locales: ${message(err)}` });
+      return { removedBackups: 0, removedObjects: 0, gcSkipped: null, removedTemp: 0 };
+    });
     if (pruned.gcSkipped) logEvent({ level: "warn", category: "system", action: "backup.gcSkipped", message: `No se limpió el almacén de ficheros local: ${pruned.gcSkipped}` });
     run = {
       at: new Date().toISOString(), ok: true, file: name, bytes, rows: dbManifest.totalRows, tables: dbManifest.tables.length,
@@ -241,10 +285,12 @@ export async function createBackup(): Promise<BackupRun> {
   } catch (err) {
     run = { at: new Date().toISOString(), ok: false, error: message(err), durationMs: Date.now() - started };
     // Un volcado a medias (o sin su manifiesto) no sirve: se borra para no llenar el disco con un reintento por hora.
-    if (file) await Promise.all([rm(file, { force: true }), rm(`${file}.json`, { force: true })]).catch(() => {});
+    const doomed = [dumpTmp, file, file && `${file}.json`, file && path.join(backupsDir(), manifestKey(path.basename(file).replace(/\.pzbak$/, "")))];
+    await Promise.all(doomed.filter((f): f is string => !!f).map((f) => rm(f, { force: true }))).catch(() => {});
     logEvent({ level: "error", category: "system", action: "backup.failed", message: `Falló la copia de seguridad: ${run.error}`, durationMs: run.durationMs });
   } finally {
-    lock.busy = false;
+    // Copia nueva (y las viejas podadas): la lista y el aviso de las páginas de administración se vuelven a leer.
+    invalidateMemo(BACKUP_MEMO);
   }
   await updateStatus((s) => ({ ...s, lastBackup: run })).catch((err) => console.error("[backup] no se pudo guardar el estado", err));
   return run;
@@ -260,25 +306,39 @@ async function latestLocalManifest(key: Buffer): Promise<{ manifest: FullManifes
 }
 
 /** Mensaje del bloqueo por copia mucho menor que la del destino (ver checkShrink). */
-function shrinkMessage(p: { what: "rows" | "files"; local: number; remote: number; stem: string }, stem: string): string {
-  const what = p.what === "rows" ? "filas en la base de datos" : "ficheros";
+function shrinkMessage(p: { what: "core" | "rows" | "files"; local: number; remote: number; stem: string }, stem: string): string {
+  const what = p.what === "core" ? "personas, proyectos y tareas" : p.what === "rows" ? "filas en la base de datos" : "ficheros";
   return `No se sube la copia ${stem}: tiene ${p.local} ${what} y la última del destino (${p.stem}) tiene ${p.remote}. ¿Se ha perdido la base de datos o el volumen? Para no sustituir una copia buena por una casi vacía, no se sube ni se aplica la retención. Restaura la copia buena (node dist/restore.mjs con su nombre; --list las muestra) o, si la reducción es intencionada, pulsa «Copiar ahora a destino externo».`;
 }
 
 /**
  * Sube la última copia local a cada destino externo que aún no la tenga (o a todos con `force`), reanudando lo
  * que quedara a medias, y aplica allí la misma retención. Sin `force`, no sube a un destino cuya última copia es
- * mucho mayor (ver checkShrink): es un fallo. Devuelve un resultado por destino; nunca lanza.
+ * mucho mayor (ver checkShrink): es un fallo. Devuelve un resultado por destino; nunca lanza. Con el mismo bloqueo
+ * entre procesos que createBackup (LOCK_BACKUP): si otro proceso está copiando o subiendo, no hace nada.
  */
 export async function syncExternal(opts: { force?: boolean } = {}): Promise<ExternalRun[]> {
   const key = backupKey();
   const { destinations, errors } = externalDestinations();
-  const at = () => new Date().toISOString();
   if (!key || (destinations.length === 0 && errors.length === 0)) return [];
   if (errors.length) logEvent({ level: "error", category: "system", action: "backup.externalConfig", message: `Destino externo de copias mal configurado: ${errors.join(" ")}` });
   if (destinations.length === 0) return [];
   if (lock.busy || lock.external) return [];
   lock.external = true;
+  try {
+    const res = await withAdvisoryLock(LOCK_BACKUP, () => syncExternalLocked(key, destinations, opts));
+    if (!res.ran) console.info("[backup] destino externo: otro proceso está copiando; se omite esta pasada");
+    return res.ran ? res.value : [];
+  } catch (err) {
+    logEvent({ level: "error", category: "system", action: "backup.externalFailed", message: `Falló la copia a destino externo: ${message(err)}` });
+    return [{ at: new Date().toISOString(), ok: false, label: "externo", error: message(err) }];
+  } finally {
+    lock.external = false;
+  }
+}
+
+async function syncExternalLocked(key: Buffer, destinations: BackupDestination[], opts: { force?: boolean }): Promise<ExternalRun[]> {
+  const at = () => new Date().toISOString();
   const runs: ExternalRun[] = [];
   try {
     const latest = await latestLocalManifest(key);
@@ -330,8 +390,6 @@ export async function syncExternal(opts: { force?: boolean } = {}): Promise<Exte
   } catch (err) {
     logEvent({ level: "error", category: "system", action: "backup.externalFailed", message: `Falló la copia a destino externo: ${message(err)}` });
     runs.push({ at: at(), ok: false, label: "externo", error: message(err) });
-  } finally {
-    lock.external = false;
   }
   return runs;
 }
@@ -412,11 +470,18 @@ export async function runRestoreTest(): Promise<RestoreTestRun> {
       let dbManifest: BackupManifest;
       let mode: RestoreTestRun["mode"];
       let limit: RestoreTestRun["limit"];
+      let referencesChecked: number | undefined;
       if (migrationsDir && (await canCreateDatabase())) {
         dbManifest = await restoreIntoTemporaryDatabase(latest.file, key, migrationsDir);
         mode = "database";
       } else {
-        dbManifest = (await verifyBackupFile(latest.file, key)).manifest;
+        // Sin base temporal: además de descifrar y contar, comprueba lo que comprobaría PostgreSQL al cargarla, que
+        // cada referencia entre filas (claves foráneas del esquema actual) apunta a una fila que está en la copia.
+        // Solo si la copia es de la misma migración que la base (mismo esquema).
+        const sameSchema = manifest !== null && manifest.migration === (await lastMigration(db));
+        const verified = await verifyBackupFile(latest.file, key, { references: sameSchema ? await listForeignKeys(db) : undefined });
+        dbManifest = verified.manifest;
+        referencesChecked = verified.referencesChecked;
         mode = "verify";
         limit = migrationsDir ? "createdb" : "migrations";
       }
@@ -434,7 +499,7 @@ export async function runRestoreTest(): Promise<RestoreTestRun> {
         objectsChecked += check.objects;
         objectsSampled += check.sampled;
       }
-      run = { at, ok: true, file: latest.name, bytes: latest.bytes, rows: dbManifest.totalRows, tables: dbManifest.tables.length, files: manifest?.fileCount, filesBytes: manifest?.fileBytes, mode, limit, objectsChecked, objectsSampled, durationMs: Date.now() - started };
+      run = { at, ok: true, file: latest.name, bytes: latest.bytes, rows: dbManifest.totalRows, tables: dbManifest.tables.length, files: manifest?.fileCount, filesBytes: manifest?.fileBytes, mode, limit, objectsChecked, objectsSampled, referencesChecked, durationMs: Date.now() - started };
     } catch (err) {
       run = { at, ok: false, file: latest.name, error: message(err), durationMs: Date.now() - started };
     }
@@ -447,7 +512,7 @@ export async function runRestoreTest(): Promise<RestoreTestRun> {
       ? `Prueba de restauración correcta${run.mode === "database" ? " (restaurada en una base temporal)" : ""}: ${run.file} (${run.rows} filas en ${run.tables} tablas, ${run.objectsChecked ?? 0} ficheros comprobados)`
       : `Prueba de restauración fallida: ${run.error}`,
     durationMs: run.durationMs,
-    details: { file: run.file ?? null, ok: run.ok, rows: run.rows ?? null, mode: run.mode ?? null, objectsChecked: run.objectsChecked ?? null },
+    details: { file: run.file ?? null, ok: run.ok, rows: run.rows ?? null, mode: run.mode ?? null, objectsChecked: run.objectsChecked ?? null, referencesChecked: run.referencesChecked ?? null },
   });
   const r = run;
   await updateStatus((s) => ({ ...s, lastRestoreTest: r })).catch((err) => console.error("[backup] no se pudo guardar el estado", err));

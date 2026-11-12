@@ -2,9 +2,10 @@
 
 import { Loader2 } from "lucide-react";
 import { useActionState, useMemo, useState, useTransition } from "react";
-import { cancelSecondStep, resendLoginCode, verifyLoginCode, type VerifyState } from "@/actions/two-factor";
+import { resendLoginCode, verifyLoginCode, type VerifyState } from "@/actions/two-factor";
 import { reloadForNewVersion } from "@/components/VersionWatcher";
 import { useT } from "@/i18n/client";
+import { BackToLogin } from "./BackToLogin";
 import { guardFormAction } from "@/lib/guard-action";
 
 export function VerifyForm({ method, emailSent }: { method: "TOTP" | "EMAIL"; emailSent: boolean }) {
@@ -52,9 +53,7 @@ export function VerifyForm({ method, emailSent }: { method: "TOTP" | "EMAIL"; em
             {t("Reenviar código")}
           </button>
         ) : <span />}
-        <form action={cancelSecondStep}>
-          <button className="text-slate-500 hover:underline">{t("Volver")}</button>
-        </form>
+        <BackToLogin />
       </div>
     </div>
   );

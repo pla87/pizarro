@@ -37,6 +37,7 @@ import { subtaskLines } from "@/lib/subtask-lines";
 import { documentDownloadName, type DocumentKindName } from "@/lib/document-kind";
 import { draftKey, useDraftAutosave, type NewTaskDraft } from "./drafts";
 import { actionThrowResult } from "@/lib/stale-action";
+import { loadWhenOnline } from "@/lib/connection";
 import { subtasksDidNotFit } from "./count-texts";
 
 interface Props {
@@ -65,6 +66,11 @@ interface Props {
 
 /** Subtareas que admite «Nueva tarea» al crear (el servidor rechaza más). */
 const MAX_NEW_SUBTASKS = 50;
+
+/** Subtarea de la lista, con una clave local estable (al quitar una, React no reutiliza la fila de otra). */
+type SubtaskItem = { key: string; text: string };
+let subtaskSeq = 0;
+const subtaskItem = (text: string): SubtaskItem => ({ key: `s${++subtaskSeq}`, text });
 
 function captureTitle(t: T, locale: string): string {
   return t("Captura") + " " + new Date().toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
@@ -111,7 +117,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const [deliverableId, setDeliverableId] = useState(foreignInit ? "" : (d?.deliverableId ?? ""));
   const [description, setDescription] = useState(d?.description ?? initialDescription ?? "");
   const [files, setFiles] = useState<File[]>(() => sortByFileName(initialPlan.accepted, (f) => f.name, locale));
-  const [subtasks, setSubtasks] = useState<string[]>(d?.subtasks ?? []);
+  const [subtaskItems, setSubtaskItems] = useState<SubtaskItem[]>(() => (d?.subtasks ?? []).map(subtaskItem));
+  const subtasks = useMemo(() => subtaskItems.map((s) => s.text), [subtaskItems]);
   const [subtaskDraft, setSubtaskDraft] = useState(d?.subtaskDraft ?? "");
   const [evergreen, setEvergreen] = useState(foreignInit ? false : (d?.evergreen ?? !!initialEvergreen));
   // Campos opcionales del proyecto elegido (el borrador guarda los activados).
@@ -150,9 +157,9 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   // Borrador de otro proyecto: se cargan sus opciones y se comprueba que el tipo, la columna, etc. sigan existiendo.
   useEffect(() => {
     if (!foreignInit || !d) return;
-    let live = true;
-    void getProjectFormData(initialProject).then((res) => {
-      if (!live || wantedProject.current !== initialProject) return;
+    // Sin red se pide al volver la conexión (antes el fallo se ignoraba y el formulario se quedaba cargando).
+    return loadWhenOnline(() => getProjectFormData(initialProject), (res) => {
+      if (wantedProject.current !== initialProject) return;
       if (!res.ok) {
         wantedProject.current = board.project.id;
         setProjectId(board.project.id);
@@ -161,10 +168,12 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       formCache.current.set(initialProject, res.data);
       setOther(res.data);
       applyForm(res.data, d);
-    }).catch(() => undefined);
-    return () => {
-      live = false;
-    };
+    }, () => {
+      if (wantedProject.current !== initialProject) return;
+      wantedProject.current = board.project.id;
+      setProjectId(board.project.id);
+      applyForm(boardForm, d);
+    });
     // Solo al abrir con un borrador de otro proyecto.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -216,6 +225,17 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     onClose();
     return true;
   };
+  // La columna elegida ya no existe (otra persona la borró con el diálogo abierto): el selector mostraba otra, pero se
+  // seguía enviando la borrada y crear fallaba siempre. Se pasa a una que exista (la de partida o la primera) y se avisa.
+  const [lostColumn, setLostColumn] = useState<{ name: string } | null>(null);
+  if (!loading && columnId && form.columns.length && !form.columns.some((c) => c.id === columnId)) {
+    const next = (form.project.id === board.project.id ? form.columns.find((c) => c.id === initialColumnId) : undefined) ?? form.columns[0]!;
+    setColumnId(next.id);
+    setLostColumn({ name: next.name });
+  }
+  useEffect(() => {
+    if (lostColumn) toast(t("La columna elegida ya no existe. La tarea se creará en «{name}».", { name: lostColumn.name }), "error");
+  }, [lostColumn, toast, t]);
   const isReleaseColumn = form.columns.find((c) => c.id === columnId)?.role === "NEXT_RELEASE";
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<BatchProgress | null>(null);
@@ -277,14 +297,14 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     e.preventDefault();
     const room = Math.max(0, MAX_NEW_SUBTASKS - subtasks.length);
     const added = lines.slice(0, room);
-    if (added.length) setSubtasks((l) => [...l, ...added].slice(0, MAX_NEW_SUBTASKS));
+    if (added.length) setSubtaskItems((l) => [...l, ...added.map(subtaskItem)].slice(0, MAX_NEW_SUBTASKS));
     if (added.length < lines.length) toast(subtasksDidNotFit(t, added.length, lines.length - added.length, MAX_NEW_SUBTASKS), "error");
   };
 
   const addSubtaskDraft = () => {
     const text = subtaskDraft.trim();
     if (!text) return;
-    setSubtasks((l) => (l.length >= MAX_NEW_SUBTASKS ? l : [...l, text.slice(0, 200)]));
+    setSubtaskItems((l) => (l.length >= MAX_NEW_SUBTASKS ? l : [...l, subtaskItem(text.slice(0, 200))]));
     setSubtaskDraft("");
   };
 
@@ -333,7 +353,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       board.upsertTask(task);
     }
     if (failed) toast(failed, "error");
-    if (sent.clipped || titleClipped) toast(t("Título recortado a {max} caracteres", { max: titleClipped ?? MAX_TITLE }));
+    if (sent.clipped || titleClipped) toast(t("Título recortado a {max} caracteres", { max: titleClipped ?? sent.limit ?? MAX_TITLE }));
     if (elsewhere) toast(t("Tarea creada en «{project}»", { project: form.project.name }), "success", { label: t("Ir al proyecto"), onClick: () => router.push(`/p/${projectId}`) });
     else if (!failed) toast(t("Tarea creada"));
     onClose();
@@ -409,7 +429,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
               setDescription(preset.description);
             }
             // Subtareas predefinidas del tipo: se añaden a las que haya, sin repetir.
-            if (kind?.subtaskTemplate.length) setSubtasks((l) => mergeSubtasks(l, kind.subtaskTemplate));
+            // mergeSubtasks conserva las que hay al principio y añade detrás: solo las nuevas llevan clave nueva.
+            if (kind?.subtaskTemplate.length) setSubtaskItems((l) => [...l, ...mergeSubtasks(l.map((x) => x.text), kind.subtaskTemplate).slice(l.length).map(subtaskItem)]);
           }} />
         </div>
         <div>
@@ -423,10 +444,10 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
           <label className="label" htmlFor={`${uid}-subtask`}>{t("Subtareas (opcional)")}</label>
           {subtasks.length > 0 && (
             <ul className="mb-1.5 space-y-0.5">
-              {subtasks.map((s, i) => (
-                <li key={i} className="flex items-center gap-2 rounded-md bg-slate-50 py-0.5 pr-0.5 pl-2 text-sm dark:bg-slate-800/50">
-                  <span className="min-w-0 flex-1 break-words">{s}</span>
-                  <button type="button" className="btn-icon h-6 w-6 shrink-0" onClick={() => setSubtasks((l) => l.filter((_, j) => j !== i))} aria-label={t("Quitar la subtarea «{name}»", { name: s })}>
+              {subtaskItems.map((s) => (
+                <li key={s.key} className="flex items-center gap-2 rounded-md bg-slate-50 py-0.5 pr-0.5 pl-2 text-sm dark:bg-slate-800/50">
+                  <span className="min-w-0 flex-1 break-words">{s.text}</span>
+                  <button type="button" className="btn-icon h-6 w-6 shrink-0" onClick={() => setSubtaskItems((l) => l.filter((x) => x.key !== s.key))} aria-label={t("Quitar la subtarea «{name}»", { name: s.text })}>
                     <X size={14} />
                   </button>
                 </li>

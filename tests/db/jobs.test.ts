@@ -1,5 +1,6 @@
 // Tareas de fondo: bloqueo de Postgres (un proceso a la vez) y última ejecución persistente en JobRun.
 import assert from "node:assert/strict";
+import { createServer, type Socket } from "node:net";
 import { describe, test } from "node:test";
 import { db } from "./helpers";
 import { runJob, withAdvisoryLock, listJobRuns } from "../../src/lib/jobs";
@@ -26,6 +27,31 @@ describe("bloqueo del mantenimiento", () => {
     release();
     assert.deepEqual(await first, { ran: true, value: "primero" });
     assert.deepEqual(await withAdvisoryLock(KEY, async () => 2), { ran: true, value: 2 });
+  });
+
+  test("si la base no contesta, falla al cumplirse el tope para conectar (no se queda esperando) y no ejecuta la tarea", async () => {
+    const open = new Set<Socket>();
+    const server = createServer((sock) => {
+      open.add(sock);
+      sock.resume();
+      sock.on("close", () => open.delete(sock));
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const { port } = server.address() as { port: number };
+    let ran = false;
+    try {
+      const started = Date.now();
+      await assert.rejects(withAdvisoryLock(KEY, async () => (ran = true), { url: `postgresql://postgres:x@127.0.0.1:${port}/nada`, connectTimeoutMs: 200 }), /timeout|terminated/i);
+      assert.ok(Date.now() - started < 5_000);
+      assert.equal(ran, false);
+      await new Promise((r) => setTimeout(r, 100));
+      assert.equal(open.size, 0, "la conexión fallida se cierra");
+    } finally {
+      for (const s of open) s.destroy();
+      await new Promise((r) => server.close(() => r(undefined)));
+    }
+    // La siguiente pasada, con la base de verdad, entra.
+    assert.deepEqual(await withAdvisoryLock(KEY, async () => "ok"), { ran: true, value: "ok" });
   });
 
   test("si la tarea falla, el error sale y el bloqueo queda libre", async () => {
@@ -76,5 +102,37 @@ describe("JobRun", () => {
     const runs = await listJobRuns();
     const ok = runs.find((r) => r.name === "test-ok");
     assert.ok(ok && typeof ok.lastStartedAt === "string" && ok.lastOk === true);
+  });
+});
+
+describe("correo programado", () => {
+  test("va con su propio bloqueo: sale aunque la pasada de mantenimiento (copias) siga en marcha", async () => {
+    const { LOCK_MAINTENANCE } = await import("../../src/lib/advisory-locks");
+    const { MAIL_JOBS, MAINTENANCE_JOBS, SCHEDULED_JOBS, runMail } = await import("../../src/lib/maintenance");
+    const mail: string[] = MAIL_JOBS.map((j) => j.name);
+    assert.deepEqual(mail, ["periodicMail", "waitingReminders"]);
+    assert.ok(!MAINTENANCE_JOBS.some((j) => mail.includes(j.name)), "el correo ya no espera detrás de las copias");
+    assert.ok(["backup", "backupExternal", "restoreTest"].every((n) => MAINTENANCE_JOBS.some((j) => j.name === n)));
+    assert.deepEqual(SCHEDULED_JOBS.slice(0, 2).map((j) => j.name), mail, "en Administración, el correo primero");
+    await db.jobRun.deleteMany({ where: { name: { in: mail } } });
+    // Una copia larga tiene el bloqueo del mantenimiento (otro proceso, o este mismo en otra conexión).
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    let entered!: () => void;
+    const inside = new Promise<void>((r) => (entered = r));
+    const backup = withAdvisoryLock(LOCK_MAINTENANCE, async () => {
+      entered();
+      await held;
+    });
+    await inside;
+    try {
+      await runMail();
+      const rows = await db.jobRun.findMany({ where: { name: { in: mail } } });
+      assert.equal(rows.length, 2, "el correo se ejecutó sin esperar a la copia");
+      assert.ok(rows.every((r) => r.lastOk === true && r.lastFinishedAt));
+    } finally {
+      release();
+      await backup;
+    }
   });
 });

@@ -1,9 +1,9 @@
 // Despliegue de releases: tareas que ya no están y despliegues simultáneos, contra PostgreSQL real.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { afterDone, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { deployRelease } from "../../src/actions/releases";
-import { undoLast } from "../../src/actions/undo";
+import { redoLast, undoLast } from "../../src/actions/undo";
 
 async function setup() {
   const user = await makeUser();
@@ -48,6 +48,30 @@ describe("deployRelease", () => {
     // Con lo que hay ahora (texto generado de nuevo) sí se despliega.
     const fresh = [{ taskId: a.id, columnId: f.columns.todo }, { taskId: b.id, columnId: f.columns.doing }];
     expectOk(await deployRelease({ ...input, columns: fresh }));
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: b.id } })).columnId, prod.id);
+  });
+
+  test("rechaza el despliegue si otra persona renombró alguna tarea desde que se generó el texto (título viejo en las notas)", async () => {
+    const { f, prod } = await setup();
+    const a = await makeTask(f, { title: "A", columnId: f.columns.done });
+    const b = await makeTask(f, { title: "B", columnId: f.columns.done });
+    const columns = [{ taskId: a.id, columnId: f.columns.done }, { taskId: b.id, columnId: f.columns.done }];
+    const titles = [{ taskId: a.id, title: "A" }, { taskId: b.id, title: "B" }];
+    // Al generar se llamaba «B»; luego otra persona la renombra.
+    await db.task.update({ where: { id: b.id }, data: { title: "B renombrada" } });
+    const input = { projectId: f.project.id, title: "R", content: "- A\n- B", destination: "IN_PRODUCTION" as const, taskIds: [a.id, b.id], columns };
+    expectFail(await deployRelease({ ...input, titles }), /Una de las tareas ha cambiado de título mientras tanto: vuelve a generar la release/);
+    assert.equal(await db.release.count({ where: { projectId: f.project.id } }), 0);
+    await db.task.update({ where: { id: a.id }, data: { title: "A renombrada" } });
+    expectFail(await deployRelease({ ...input, titles }), /2 de las tareas han cambiado de título/);
+    // Nada sale a producción ni se renombra.
+    const rows = await db.task.findMany({ where: { id: { in: [a.id, b.id] } }, orderBy: { title: "asc" } });
+    assert.deepEqual(rows.map((r) => [r.title, r.columnId]), [["A renombrada", f.columns.done], ["B renombrada", f.columns.done]]);
+    // Con el texto generado de nuevo (títulos de ahora) sí se despliega, y el histórico lleva esos títulos.
+    const fresh = [{ taskId: a.id, title: "A renombrada" }, { taskId: b.id, title: "B renombrada" }];
+    const res = expectOk(await deployRelease({ ...input, titles: fresh }));
+    const kept = await db.releaseTask.findMany({ where: { releaseId: res.releaseId }, orderBy: { title: "asc" } });
+    assert.deepEqual(kept.map((k) => k.title), ["A renombrada", "B renombrada"]);
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: b.id } })).columnId, prod.id);
   });
 
@@ -99,5 +123,30 @@ describe("deployRelease", () => {
     now = await titles();
     assert.deepEqual(now, { [a.id]: "Uno", [b.id]: "R1F9: Dos", [fija.id]: "Fija" });
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: a.id } })).columnId, f.columns.done);
+  });
+});
+
+describe("deshacer un despliegue", () => {
+  test("deshacer un despliegue de release no deja entrada de rehacer", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await db.column.create({ data: { projectId: f.project.id, name: "En producción", position: 4000, role: "IN_PRODUCTION" } });
+    await loginAs(user);
+    const a = await makeTask(f, { columnId: f.columns.done, position: 1000 });
+    expectOk(await deployRelease({ projectId: f.project.id, title: "R", content: "x", destination: "IN_PRODUCTION", taskIds: [a.id] }));
+    expectOk(await undoLast(f.project.id));
+    expectFail(await redoLast(f.project.id), /nada que rehacer/i);
+  });
+
+  test("aviso de cuota: el uso que da ya suma las copias de los adjuntos (antes «supera su cuota (0,6 de 1 MB)»)", async () => {
+    const { f } = await setup();
+    await db.project.update({ where: { id: f.project.id }, data: { storageQuotaMb: 1 } });
+    const a = await makeTask(f, { columnId: f.columns.done });
+    // 0,6 MB de adjuntos: con su copia en la release, 1,2 MB de una cuota de 1 MB (el fichero no existe: la copia falla, da igual).
+    await db.taskAttachment.create({ data: { taskId: a.id, originalName: "grande.pdf", isImage: false, mimeType: "application/pdf", size: Math.round(0.6 * 1024 * 1024) } });
+    const res = expectOk(await deployRelease({ projectId: f.project.id, title: "R", content: "x", destination: "IN_PRODUCTION", taskIds: [a.id], attachments: [{ taskId: a.id, code: "F1" }] }));
+    await afterDone();
+    assert.deepEqual(res.storageWarning, { usedMb: 1.2, limitMb: 1 });
+    assert.ok(res.storageWarning!.usedMb > res.storageWarning!.limitMb);
   });
 });

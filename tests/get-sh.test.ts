@@ -253,3 +253,40 @@ test("install.sh: --version fija la imagen, --unpin la suelta, --build usa compo
   const bad = spawnSync("sh", [join(dir, "install.sh"), "--version", "1.x"], { encoding: "utf8", env, stdio: ["ignore", "pipe", "pipe"] });
   assert.equal(bad.status, 2);
 });
+
+// Modo red local: la dirección va tal cual a APP_URL (http://…), así que se valida como el dominio.
+test("install.sh --local: valida la dirección (nombre, IPv4 o [IPv6], con :puerto) y rechaza comillas y espacios", () => {
+  const dir = join(root, "inst-local", "deploy");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, ".env.example"), 'DOMAIN="pizarro.example.com"\nAPP_URL="https://pizarro.example.com"\nPOSTGRES_PASSWORD=""\nSESSION_SECRET=""\nBACKUP_KEY=""\n');
+  writeFileSync(join(dir, "compose.yml"), "name: pizarro\n");
+  writeFileSync(join(dir, "install.sh"), readFileSync(join(process.cwd(), "deploy", "install.sh"), "utf8"));
+  // Sin terminal se usa la primera dirección de `hostname -I` (aquí, un hostname falso que devuelve FAKE_IP).
+  const hbin = join(root, "hostname-bin");
+  mkdirSync(hbin, { recursive: true });
+  writeFileSync(join(hbin, "hostname"), '#!/bin/sh\nprintf "%s\\n" "$FAKE_IP"\n');
+  chmodSync(join(hbin, "hostname"), 0o755);
+  const go = (ip: string) => {
+    rmSync(join(dir, ".env"), { force: true });
+    const r = spawnSync("sh", [join(dir, "install.sh"), "--local", "--no-start"], { encoding: "utf8", env: mkEnv(`${hbin}:${bin}:${process.env.PATH}`, { FAKE_IP: ip }), stdio: ["ignore", "pipe", "pipe"] });
+    const env = existsSync(join(dir, ".env")) ? readFileSync(join(dir, ".env"), "utf8") : "";
+    return { status: r.status, stderr: r.stderr, env, url: /^APP_URL="(.*)"$/m.exec(env)?.[1] ?? null };
+  };
+  for (const [ip, url] of [
+    ["192.168.1.10", "http://192.168.1.10"],
+    ["servidor.local:8080", "http://servidor.local:8080"],
+    ["fd00::1", "http://[fd00::1]"],
+    ["[fd00::1]:8080", "http://[fd00::1]:8080"],
+    ["HTTP://Servidor.Local/ruta", "http://servidor.local"],
+  ] as const) {
+    const r = go(ip);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.url, url);
+  }
+  for (const bad of ['srv"x', "srv'x", "srv;x", "srv:0", "srv:99999", "srv:", "-srv", "a..b", "[zz::1]"]) {
+    const r = go(bad);
+    assert.equal(r.status, 1, `${bad} debía rechazarse`);
+    assert.match(r.stderr, /no es válida/);
+    assert.doesNotMatch(r.env, /^APP_URL="http:/m, `${bad}: no se escribe`);
+  }
+});

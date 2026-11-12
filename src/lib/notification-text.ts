@@ -34,7 +34,7 @@ export function dueChangeText(excerpt: string, t: T, locale: string): string {
 }
 
 /** El aviso de espera guarda solo los días que lleva la tarea esperando. */
-export function waitingText(excerpt: string, t: T): string {
+function waitingText(excerpt: string, t: T): string {
   const n = Number.parseInt(excerpt, 10);
   return Number.isFinite(n) ? t("Lleva {n} d en espera", { n }) : "";
 }

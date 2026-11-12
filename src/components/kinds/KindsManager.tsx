@@ -1,7 +1,6 @@
 "use client";
 
 import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2, X } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { createKind, deleteKind, moveKind, updateKind } from "@/actions/kinds";
@@ -16,6 +15,7 @@ import type { EditorModeValue } from "@/lib/types";
 import { MAX_DESCRIPTION, PALETTE } from "@/lib/constants";
 import { markdownToPlain } from "@/lib/ics";
 import { describeKindAutomation, MAX_KIND_SUBTASKS, parseSubtaskLines } from "@/lib/kinds-special";
+import { useSafeRefresh } from "@/components/useSafeRefresh";
 
 export interface KindRow {
   id: string;
@@ -59,7 +59,7 @@ interface Props {
 export function KindsManager({ kinds, projectId, otherKinds = [], embedded = false, editorMode = "MARKDOWN" }: Props) {
   const t = useT();
   const locale = useIntlLocale();
-  const router = useRouter();
+  const safeRefresh = useSafeRefresh();
   const toast = useToast();
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState<string | "new" | null>(null);
@@ -76,7 +76,7 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
       if (!res.ok) return toast(res.error ?? t("Error"), "error");
       toast(ok);
       after?.();
-      router.refresh();
+      safeRefresh();
     });
 
   return (

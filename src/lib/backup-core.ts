@@ -144,8 +144,20 @@ export async function* decryptChunks(source: AsyncIterable<Buffer | Uint8Array |
   }
   if (!decipher || tail.length < TAG_LEN) throw new Error("Fichero de copia demasiado corto.");
   decipher.setAuthTag(tail);
-  const last = decipher.final();
+  const last = finalOrExplain(decipher);
   if (last.length) yield last;
+}
+
+/** Lo que se dice cuando la etiqueta GCM no cuadra, en vez del «Unsupported state or unable to authenticate data» de Node. */
+const UNAUTHENTICATED_MESSAGE =
+  "No se puede descifrar: el fichero está incompleto o dañado (p. ej. una copia que se cortó a medias o una descarga interrumpida) o se hizo con otra BACKUP_KEY.";
+
+function finalOrExplain(decipher: DecipherGCM): Buffer {
+  try {
+    return decipher.final();
+  } catch {
+    throw new Error(UNAUTHENTICATED_MESSAGE);
+  }
 }
 
 /** Descifra un fichero .pzbak. Lanza al terminar si la etiqueta GCM no cuadra (clave incorrecta o fichero alterado). */
@@ -171,7 +183,7 @@ export async function* decryptFile(file: string, key: Buffer): AsyncGenerator<Bu
       if (out.length) yield out;
     }
   }
-  const last = decipher.final();
+  const last = finalOrExplain(decipher);
   if (last.length) yield last;
 }
 
@@ -282,18 +294,21 @@ export function splitDataLine(line: string): { table: string; row: string } | nu
   return { table: JSON.parse(m[1]!) as string, row: line.slice(m[0].length, -1) };
 }
 
-export interface VerifiedBackup {
+interface VerifiedBackup {
   manifest: BackupManifest;
   counts: Map<string, number>;
+  /** Referencias entre filas comprobadas (solo con `references`). */
+  referencesChecked: number;
 }
 
 /**
  * Descifra y recorre toda la copia: autenticación GCM, sha256 de los datos, que cada línea sea JSON
  * válido y que las cuentas por tabla coincidan con el manifiesto. Lanza con un mensaje claro si algo falla.
  */
-export async function verifyBackupFile(file: string, key: Buffer): Promise<VerifiedBackup> {
+export async function verifyBackupFile(file: string, key: Buffer, opts: { references?: ReferenceDef[] } = {}): Promise<VerifiedBackup> {
   const hash = createHash("sha256");
   const counts = new Map<string, number>();
+  const refs = opts.references?.length ? new ReferenceCheck(opts.references) : null;
   let manifest: BackupManifest | null = null;
   for await (const line of readLines(file, key)) {
     if (manifest) throw new Error("Hay datos después del manifiesto.");
@@ -303,7 +318,8 @@ export async function verifyBackupFile(file: string, key: Buffer): Promise<Verif
     }
     const parts = splitDataLine(line);
     if (!parts) throw new Error("Línea de datos con formato inválido.");
-    JSON.parse(parts.row);
+    const row = JSON.parse(parts.row) as unknown;
+    refs?.row(parts.table, row);
     hash.update(`${line}\n`);
     counts.set(parts.table, (counts.get(parts.table) ?? 0) + 1);
   }
@@ -318,7 +334,82 @@ export async function verifyBackupFile(file: string, key: Buffer): Promise<Verif
   }
   for (const name of counts.keys()) if (!manifest.tables.some((t) => t.name === name)) throw new Error(`Tabla ${name} no figura en el manifiesto.`);
   if (total !== manifest.totalRows) throw new Error("El total de filas no coincide con el manifiesto.");
-  return { manifest, counts };
+  const dangling = refs?.missing(new Set(counts.keys()));
+  if (dangling) throw new Error(`La copia no se podría restaurar: ${dangling.rows} valores de ${dangling.child} (${dangling.columns}) apuntan a filas de ${dangling.parent} que no están en la copia.`);
+  return { manifest, counts, referencesChecked: refs?.checked ?? 0 };
+}
+
+/** Clave foránea que comprobar en una copia (de listForeignKeys, en backup-db.ts). */
+export interface ReferenceDef {
+  child: string;
+  columns: string[];
+  parent: string;
+  refColumns: string[];
+}
+
+/**
+ * Comprueba, en una pasada por la copia, lo mismo que comprobará PostgreSQL al restaurarla: que cada referencia (valor
+ * no nulo de una clave foránea) apunta a una fila que está en la copia, vaya antes o después. Guarda las claves de las
+ * filas a las que se apunta y, de las referencias, solo las que aún no tienen su fila (en un volcado normal, pocas).
+ */
+class ReferenceCheck {
+  /** Por tabla, las claves foráneas que salen de ella. */
+  private readonly outgoing = new Map<string, { def: ReferenceDef; target: string }[]>();
+  /** Por tabla, las listas de columnas a las que se apunta. */
+  private readonly incoming = new Map<string, string[][]>();
+  /** Claves vistas, por «tabla(columnas)». */
+  private readonly seen = new Map<string, Set<string>>();
+  /** Referencias aún sin su fila, por «tabla(columnas)», con la clave foránea de la que vienen. */
+  private readonly pending = new Map<string, Map<string, ReferenceDef>>();
+  checked = 0;
+
+  constructor(defs: ReferenceDef[]) {
+    for (const def of defs) {
+      const target = `${def.parent}(${def.refColumns.join(",")})`;
+      this.outgoing.set(def.child, [...(this.outgoing.get(def.child) ?? []), { def, target }]);
+      const cols = this.incoming.get(def.parent) ?? [];
+      if (!cols.some((c) => c.join(",") === def.refColumns.join(","))) cols.push(def.refColumns);
+      this.incoming.set(def.parent, cols);
+      this.seen.set(target, new Set());
+    }
+  }
+
+  private static keyOf(row: Record<string, unknown>, cols: string[]): string | null {
+    const values = cols.map((c) => row[c]);
+    if (values.some((v) => v === null || v === undefined)) return null;
+    return values.length === 1 ? String(values[0]) : JSON.stringify(values);
+  }
+
+  row(table: string, raw: unknown): void {
+    if (!raw || typeof raw !== "object") return;
+    const row = raw as Record<string, unknown>;
+    for (const cols of this.incoming.get(table) ?? []) {
+      const k = ReferenceCheck.keyOf(row, cols);
+      if (k === null) continue;
+      const target = `${table}(${cols.join(",")})`;
+      this.seen.get(target)!.add(k);
+      this.pending.get(target)?.delete(k);
+    }
+    for (const { def, target } of this.outgoing.get(table) ?? []) {
+      const k = ReferenceCheck.keyOf(row, def.columns);
+      if (k === null) continue;
+      this.checked++;
+      if (this.seen.get(target)!.has(k)) continue;
+      let p = this.pending.get(target);
+      if (!p) this.pending.set(target, (p = new Map()));
+      if (!p.has(k)) p.set(k, def);
+    }
+  }
+
+  /** La primera clave foránea con referencias sin su fila (solo entre tablas que están en la copia), o null. */
+  missing(tables: Set<string>): { child: string; columns: string; parent: string; rows: number } | null {
+    for (const p of this.pending.values()) {
+      const byDef = new Map<ReferenceDef, number>();
+      for (const def of p.values()) if (tables.has(def.child) && tables.has(def.parent)) byDef.set(def, (byDef.get(def) ?? 0) + 1);
+      for (const [def, rows] of byDef) return { child: def.child, columns: def.columns.join(", "), parent: def.parent, rows };
+    }
+    return null;
+  }
 }
 
 // --- Orden de tablas por claves foráneas ---------------------------------------------------

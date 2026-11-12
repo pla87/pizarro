@@ -9,7 +9,7 @@ import { parseStoredTemplate, sortTemplates, type TemplateData, type TemplateDto
 type Row = Parameters<typeof parseStoredTemplate>[0] & { builtinKey: string | null };
 
 /** Fila de la base de datos → plantilla de la interfaz, marcando las de serie que ya no coinciden con la canónica. */
-export function toTemplateDto(row: Row): TemplateDto {
+function toTemplateDto(row: Row): TemplateDto {
   const dto = parseStoredTemplate(row);
   if (!row.builtinKey) return { ...dto, builtinKey: null };
   return { ...dto, builtinKey: row.builtinKey, builtinModified: isBuiltinModified(dto, row.builtinKey) };

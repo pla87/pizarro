@@ -62,3 +62,50 @@ test("las columnas ocultas (ancho 0) se ignoran", () => {
   args.droppableRects.set("col:b", rect(0, 0, 0, 0));
   assert.notEqual(boardCollisionDetection(args)[0]?.id, "col:b");
 });
+
+test("tablero grande: solo se repasan las tarjetas de la columna bajo el puntero", () => {
+  // Cinco columnas de 60 tarjetas; cada tarjeta dice su lista (SortableContext con el id de su columna).
+  const rects = new Map<string, ReturnType<typeof rect>>();
+  const containers: unknown[] = [];
+  const add = (id: string, r: ReturnType<typeof rect>, containerId?: string) => {
+    rects.set(id, r);
+    containers.push({ id, key: id, data: { current: containerId ? { sortable: { containerId, index: 0 } } : undefined }, disabled: false, node: { current: null }, rect: { current: r } });
+  };
+  for (let c = 0; c < 5; c++) {
+    add(`col:${c}`, rect(c * 110, 0, 100, 6000));
+    for (let i = 0; i < 60; i++) add(`t${c}-${i}`, rect(c * 110 + 5, i * 100, 90, 90), `col:${c}`);
+  }
+  // Una tarjeta de otra columna que se solapa con el puntero (p. ej. a medio animar) no cuenta.
+  rects.set("t4-1", rect(225, 1000, 90, 90));
+  const sizes: number[] = [];
+  const spy: CollisionDetection = (args) => {
+    sizes.push(args.droppableContainers.length);
+    return pointerWithin(args);
+  };
+  const detect = createBoardCollisionDetection({ closestCorners, pointerWithin: spy });
+  const args = {
+    active: { id: "x", data: { current: undefined }, rect: { current: { initial: null, translated: null } } },
+    collisionRect: rect(225, 1000, 80, 40),
+    droppableRects: rects,
+    droppableContainers: containers,
+    pointerCoordinates: { x: 260, y: 1020 },
+  } as unknown as Args;
+  assert.deepEqual(detect(args).map((c) => c.id), ["t2-10"]);
+  // Antes se repasaban los 305 droppables en cada movimiento del ratón; ahora, 5 columnas y 60 tarjetas.
+  assert.deepEqual(sizes, [5, 60]);
+});
+
+test("en el hueco entre dos tarjetas manda la más cercana (no la columna); por encima o por debajo, la columna", () => {
+  const card = (id: string, r: ReturnType<typeof rect>) => ({ id, key: id, data: { current: { sortable: { containerId: "col:a", index: 0 } } }, disabled: false, node: { current: null }, rect: { current: r } });
+  const base = scenario({ x: 50, y: 0 });
+  base.droppableRects.set("t0", rect(5, 100, 90, 60));
+  base.droppableRects.set("t1", rect(5, 170, 90, 60));
+  base.droppableContainers.splice(0, base.droppableContainers.length, ...base.droppableContainers.filter((c) => c.id !== "t1"));
+  base.droppableContainers.push(card("t0", rect(5, 100, 90, 60)) as never, card("t1", rect(5, 170, 90, 60)) as never);
+  const at = (y: number) => boardCollisionDetection({ ...base, pointerCoordinates: { x: 50, y } })[0]?.id;
+  assert.equal(at(163), "t0"); // hueco t0–t1, más cerca de t0
+  assert.equal(at(168), "t1"); // hueco t0–t1, más cerca de t1
+  assert.equal(at(120), "t0"); // sobre la tarjeta
+  assert.equal(at(500), "col:a"); // bajo la última tarjeta
+  assert.equal(at(50), "col:a"); // encima de la primera
+});

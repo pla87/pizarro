@@ -5,6 +5,7 @@ import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, ma
 import { setTaskFields } from "../../src/actions/projects";
 import { createTask, createTasks, duplicateTask, restoreTaskSnapshot, updateTask } from "../../src/actions/tasks";
 import { redoLast, undoLast } from "../../src/actions/undo";
+import { projectClients } from "../../src/lib/board";
 
 /** Proyecto con todos los campos activados y una persona administradora que lo gestiona. */
 async function setup(fields: string[] = ["cost", "hours", "priority", "client", "startDate"]) {
@@ -182,5 +183,17 @@ describe("historial y deshacer", () => {
     }));
     assert.equal(res.changed, true);
     assert.deepEqual([res.task.cost, res.task.priority, res.task.client], ["10.00", "BAJA", null]);
+  });
+});
+
+describe("clientes del proyecto", () => {
+  test("projectClients devuelve los clientes distintos en orden", async () => {
+    const f = await makeProject({ members: [] });
+    for (const client of ["Zeta", "Alfa", "Alfa", "Beta"]) {
+      const t = await makeTask(f);
+      await db.task.update({ where: { id: t.id }, data: { client } });
+    }
+    await makeTask(f);
+    assert.deepEqual(await projectClients(f.project.id), ["Alfa", "Beta", "Zeta"]);
   });
 });

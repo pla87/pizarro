@@ -11,6 +11,7 @@ import type { ChannelPrefs } from "@/lib/messaging-core";
 import type { MyChannelsView } from "@/lib/messaging";
 import { actionThrowResult } from "@/lib/stale-action";
 import { telegramWaitState } from "@/lib/telegram-wait";
+import { codeTemplateUserText } from "@/lib/whatsapp-code-text";
 
 type Channel = "TELEGRAM" | "WHATSAPP";
 
@@ -130,7 +131,12 @@ function WhatsappBlock({ view, refresh }: { view: NonNullable<MyChannelsView["wh
   const save = () =>
     start(async () => {
       const res = await saveMyWhatsapp({ phone, consent }).catch((e) => actionThrowResult(e, t));
-      if (!res.ok) return toast(res.error, "error");
+      if (!res.ok) {
+        // Puede que el número sí se haya guardado y fallara el envío del código: se muestra cómo ha quedado.
+        const v = await refresh();
+        if (v?.whatsapp?.phone && v.whatsapp.consented && !v.whatsapp.verified) setEditing(false);
+        return toast(res.error, "error");
+      }
       await refresh();
       setEditing(false);
       setConsent(false);
@@ -175,6 +181,9 @@ function WhatsappBlock({ view, refresh }: { view: NonNullable<MyChannelsView["wh
       {!view.available && (
         <p className="text-xs text-amber-600">{t("El administrador ha desactivado los avisos por WhatsApp: ahora no te llegarán.")}</p>
       )}
+      {view.available && view.codeBlocked && !view.verified && (
+        <p role="status" className="text-xs text-amber-600" data-testid="wa-code-blocked">{codeTemplateUserText(t)}</p>
+      )}
       {editing && view.available ? (
         <form
           className="space-y-3"
@@ -213,7 +222,9 @@ function WhatsappBlock({ view, refresh }: { view: NonNullable<MyChannelsView["wh
           <p>
             {view.codePending
               ? t("Te hemos enviado un código de 6 cifras por WhatsApp a {phone}. Escríbelo aquí para confirmar que el número es tuyo.", { phone: view.phone })
-              : t("El código enviado a {phone} ha caducado o ya no vale. Pide otro.", { phone: view.phone })}
+              : view.codeBlocked
+                ? t("Todavía no se ha podido enviar el código a {phone}. Cuando el administrador lo arregle, pulsa «Enviar otro código».", { phone: view.phone })
+                : t("El código enviado a {phone} ha caducado o ya no vale. Pide otro.", { phone: view.phone })}
           </p>
           {view.codePending && (
             <div className="max-w-[10rem]">

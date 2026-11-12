@@ -40,9 +40,14 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
     ? { host: GMAIL_PRESET.host, port: GMAIL_PRESET.port, secure: GMAIL_PRESET.secure, user: form.user, fromName: form.fromName, fromAddress: form.user.trim() }
     : { host: form.host, port: Number(form.port), secure: form.secure, user: form.user, fromName: form.fromName, fromAddress: form.fromAddress };
 
+  // En la opción de Gmail el servidor, el puerto y la conexión los pone la opción, no quien edita: no cuentan como cambio
+  // (sin nada guardado, saved.host está vacío y el botón de la prueba quedaba desactivado sin haber tocado nada).
+  const serverChanged = gmail ? false : effective.host !== saved.host || effective.port !== saved.port || effective.secure !== saved.secure;
   const dirty =
-    mode !== saved.mode || effective.host !== saved.host || effective.port !== saved.port || effective.secure !== saved.secure || effective.user !== saved.user ||
+    mode !== saved.mode || serverChanged || effective.user !== saved.user ||
     effective.fromName !== saved.fromName || effective.fromAddress !== saved.fromAddress || password !== "" || clearPassword;
+  // Por qué no se puede enviar la prueba (se muestra junto al botón desactivado).
+  const testBlocked = dirty ? t("Guarda los cambios antes de enviar la prueba.") : !saved.host && !outbox ? t("Guarda antes una configuración de email para poder enviar la prueba.") : null;
 
   // Con la contraseña guardada, cambiar de servidor, puerto o usuario obliga a escribirla de nuevo (si no, iría al nuevo destino).
   const targetChanged = saved.hasPassword && saved.host !== "" && (effective.host !== saved.host.trim() || effective.port !== saved.port || effective.user.trim() !== saved.user);
@@ -234,9 +239,8 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
         {saved.host !== "" && (
           <button className="btn-secondary py-1.5" onClick={() => save(true)} disabled={pending}>{t("Desactivar el envío de emails")}</button>
         )}
-        {dirty && saved.host !== "" && <span className="text-xs text-slate-500">{t("Guarda los cambios antes de enviar la prueba.")}</span>}
       </div>
-      <TestRow testing={testing} onTest={test} error={testError} disabled={dirty || (!saved.host && !outbox)} t={t} />
+      <TestRow testing={testing} onTest={test} error={testError} blocked={testBlocked} t={t} />
     </section>
   );
 }
@@ -256,14 +260,17 @@ function ModeCard({ checked, onSelect, title, text }: { checked: boolean; onSele
   );
 }
 
-function TestRow({ testing, onTest, error, disabled, t }: { testing: boolean; onTest: () => void; error: string | null; disabled?: boolean; t: ReturnType<typeof useT> }) {
+/** `blocked`: por qué no se puede enviar ahora (el botón queda desactivado y se explica al lado). */
+function TestRow({ testing, onTest, error, blocked, t }: { testing: boolean; onTest: () => void; error: string | null; blocked?: string | null; t: ReturnType<typeof useT> }) {
   return (
     <div className="space-y-2 border-t border-slate-200 pt-3 dark:border-slate-700">
       <div className="flex flex-wrap items-center gap-2">
-        <button className="btn-secondary py-1.5" onClick={onTest} disabled={testing || disabled}>
+        <button className="btn-secondary py-1.5" onClick={onTest} disabled={testing || !!blocked} aria-describedby={blocked ? "mail-test-blocked" : undefined}>
           {testing && <Loader2 size={15} className="animate-spin" />} {t("Enviar email de prueba")}
         </button>
-        <span className="text-xs text-slate-500">{t("Se envía a tu propio email con la configuración guardada.")}</span>
+        {blocked
+          ? <span id="mail-test-blocked" className="text-xs text-amber-700 dark:text-amber-300">{blocked}</span>
+          : <span className="text-xs text-slate-500">{t("Se envía a tu propio email con la configuración guardada.")}</span>}
       </div>
       {error && <p role="alert" className="break-words rounded-md bg-red-50 p-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
     </div>

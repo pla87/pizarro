@@ -8,8 +8,8 @@ import { runAction } from "@/lib/action";
 import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjectAccess, assertTaskAccess, loadTaskWithAccess, visibleProjectsWhere } from "@/lib/access";
 import { appTimeZone, attachmentTotals, listKinds, loadBoardTask, loadBoardTasksByIds, projectClients, projectUsers } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
-import { MAX_SUBTASKS, MAX_TITLE } from "@/lib/constants";
-import { clampTitle } from "@/lib/title-clamp";
+import { MAX_SUBTASKS, MAX_TITLE, MAX_TITLE_UNITS } from "@/lib/constants";
+import { clampTitle, graphemeCount } from "@/lib/title-clamp";
 import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { assertCanBlock, blockProblem, lockBlocking } from "@/lib/blocking";
 import { addUndo, captureTasks, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchEverything, touchedTask, type OthersActivity, type TaskField, type UndoOp } from "@/lib/undo";
@@ -38,6 +38,7 @@ import { localizeGeneralKinds } from "@/lib/kinds-localize";
 import { normalizeTaskFields } from "@/lib/task-fields";
 import { assertFieldsEnabled, assertStartBeforeDue, enabledTaskFields, fieldData, fieldKeyOf, onlyChangedFields, patchedFieldKeys, pickTaskFields, taskFieldSchema, taskFieldShape } from "@/lib/task-field-input";
 import { effectiveFileMaxMb } from "@/lib/upload-size";
+import { textConflicts, type TextSince } from "@/lib/text-version";
 import type { ArchivedTask, BoardTask, CommentInfo, ProjectFormData, SubtaskInfo, TaskDetail, TaskLinkInfo } from "@/lib/types";
 import { getLocale, getT } from "@/i18n/server";
 
@@ -106,9 +107,10 @@ const COMMENTS_MORE_PAGE = 100;
 /** Campos que cambian al archivar o recuperar una tarea. */
 const ARCHIVE_FIELDS: TaskField[] = ["archivedAt", "archivedFromColumnId", "columnId", "position", "evergreen", "evergreenEvery"];
 
-/** Máximo al que se recortó el título que llegó demasiado largo (para el aviso del cliente); undefined si cupo. */
+/** Caracteres a los que se recortó el título que llegó demasiado largo (para el aviso del cliente; menos de 210 si mandó el tope de unidades); undefined si cupo. */
 function clipOf(raw: unknown): number | undefined {
-  return typeof raw === "string" && clampTitle(raw.trim()).clipped ? MAX_TITLE : undefined;
+  const c = typeof raw === "string" ? clampTitle(raw.trim()) : null;
+  return c?.clipped ? (c.limit ?? MAX_TITLE) : undefined;
 }
 
 /** Tarea del tablero con el aviso de título recortado, solo si se recortó (el cliente lo muestra y no lo guarda). */
@@ -341,7 +343,8 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
     });
     const t = await getT();
     const suffix = ` ${t("(copia)")}`;
-    const title = src.title.length + suffix.length > MAX_TITLE ? `${src.title.slice(0, MAX_TITLE - suffix.length).trimEnd()}${suffix}` : `${src.title}${suffix}`;
+    // Si no cabe, se recorta el original (caracteres visibles, sin partir emojis ni menciones) y se conserva «(copia)».
+    const title = `${clampTitle(src.title, MAX_TITLE - graphemeCount(suffix), MAX_TITLE_UNITS - suffix.length).value}${suffix}`;
     const columnId = dest?.columnId ?? src.columnId;
     const copy = await db.$transaction(async (tx) => {
       await assertTaskCapacity(tx, projectId);
@@ -443,22 +446,55 @@ async function recordUpdateEvents(
   skipTaskEvents();
 }
 
-/** 409 si otra persona ha cambiado el título o la descripción después de `since` (cuándo se cargó lo que se edita). */
-async function assertNoTextConflict(row: { contentUpdatedAt: Date | null; contentUpdatedById: string | null }, userId: string, since: string | null | undefined, client: Prisma.TransactionClient = db) {
-  const base = since ? new Date(since).getTime() : 0;
-  if (!row.contentUpdatedAt || row.contentUpdatedById === userId || row.contentUpdatedAt.getTime() <= base) return;
-  const who = row.contentUpdatedById ? (await client.user.findUnique({ where: { id: row.contentUpdatedById }, select: { name: true } }))?.name : null;
+/** `since` llega del navegador: una versión (cadena o null) o una versión con las huellas del texto (ver text-version.ts). */
+const sinceSchema = z.union([
+  z.string().max(64),
+  z.null(),
+  z.object({ version: z.string().max(64).nullable(), title: z.string().max(16).optional(), description: z.string().max(16).optional() }).strict(),
+]).optional();
+
+/**
+ * 409 si el texto ha cambiado después de `since` (la versión del texto que se está editando, `textVersion`). Con las
+ * huellas del título y la descripción editados, solo si cambió el mismo campo que se guarda (`patch`): otra persona que
+ * cambia solo la descripción no impide guardar el título (ver textConflicts). Cuenta también un cambio de la misma
+ * persona: desde otra pestaña u otro dispositivo pisaría lo guardado allí sin aviso. Los guardados seguidos de una misma
+ * pestaña no chocan porque cada uno envía la versión (y el texto) que devolvió el anterior (ver `save` en TaskDialog).
+ */
+async function assertNoTextConflict(
+  taskId: string,
+  row: { contentUpdatedAt: Date | null; contentUpdatedById: string | null; title?: string; description?: string },
+  userId: string,
+  since: string | null | TextSince | undefined,
+  patch: { title?: unknown; description?: unknown },
+  client: Prisma.TransactionClient = db,
+) {
+  const fields = textConflicts(row, since ?? null, patch);
+  if (!fields.length) return;
   const t = await getT();
+  // Quién cambió el campo: el último que cambió el texto, salvo que fuera quien guarda (su guardado del otro campo pasó
+  // después del cambio ajeno); entonces, el último que cambió ese campo según el historial.
+  let whoId = row.contentUpdatedById;
+  if (whoId === userId && since !== null && typeof since === "object") {
+    const labels = fields.map((f) => (f === "title" ? '{"k":"Cambió el título de ' : '{"k":"Editó la descripción"'));
+    const last = await client.taskEvent.findFirst({ where: { taskId, OR: labels.map((l) => ({ label: { startsWith: l } })) }, orderBy: { createdAt: "desc" }, select: { userId: true } });
+    if (last?.userId) whoId = last.userId;
+  }
+  if (whoId === userId) {
+    throw new AppError(t("Has cambiado el texto de esta tarea en otra pestaña u otro dispositivo mientras la editabas aquí. Se ha recargado con ese texto: vuelve a aplicar tus cambios."), 409);
+  }
+  const who = whoId ? (await client.user.findUnique({ where: { id: whoId }, select: { name: true } }))?.name : null;
   throw new AppError(who ? t("{who} ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos.", { who }) : t("Otra persona ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos."), 409);
 }
 
 /**
- * `since`: cuándo se cargó el título/descripción que se está editando. Si otra persona los ha
- * cambiado después, no se pisa su texto: se avisa para recargar.
+ * `since`: versión del título/descripción que se está editando (`textVersion`), con las huellas del texto editado si se
+ * conocen (ver text-version.ts). Si después ha cambiado el campo que se guarda (otra persona, u otra pestaña o
+ * dispositivo de la misma), no se pisa: se avisa para recargar.
  */
-export async function updateTask(taskId: string, patch: z.input<typeof updateSchema> & z.input<typeof taskFieldSchema>, since?: string | null) {
+export async function updateTask(taskId: string, patch: z.input<typeof updateSchema> & z.input<typeof taskFieldSchema>, since?: string | null | TextSince) {
   return runAction({ name: "tasks.updateTask", args: [taskId, patch, since] }, async () => {
     const user = await requireUser();
+    since = sinceSchema.parse(since);
     const data = updateSchema.parse(patch);
     const optionalIn = taskFieldSchema.parse(patch);
     // Una sola lectura de la tarea (con el permiso) para todo lo que sigue: archivada, conflicto de edición,
@@ -474,7 +510,7 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
     const editsText = data.title !== undefined || data.description !== undefined;
     const checkConflict = editsText && since !== undefined;
     // Comprobación rápida (sin candado); la definitiva se repite dentro de la transacción con la fila bloqueada.
-    if (checkConflict) await assertNoTextConflict(task, user.id, since);
+    if (checkConflict) await assertNoTextConflict(id, task, user.id, since, data);
     // Las comprobaciones van a la vez; si fallan varias, gana la primera en el orden de siempre.
     const checks = await Promise.allSettled([
       data.assigneeId ? assertAssignable(projectId, data.assigneeId) : null,
@@ -531,8 +567,8 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
       // la de fuera, pero aquí el segundo ya ve el texto del primero y recibe el 409.
       let added: string[] = [];
       if (data.description !== undefined || checkConflict) {
-        const [before] = await tx.$queryRaw<{ description: string; contentUpdatedAt: Date | null; contentUpdatedById: string | null }[]>`SELECT "description", "contentUpdatedAt", "contentUpdatedById" FROM "Task" WHERE "id" = ${taskId} FOR UPDATE`;
-        if (checkConflict && before) await assertNoTextConflict(before, user.id, since, tx);
+        const [before] = await tx.$queryRaw<{ title: string; description: string; contentUpdatedAt: Date | null; contentUpdatedById: string | null }[]>`SELECT "title", "description", "contentUpdatedAt", "contentUpdatedById" FROM "Task" WHERE "id" = ${taskId} FOR UPDATE`;
+        if (checkConflict && before) await assertNoTextConflict(id, before, user.id, since, data, tx);
         if (data.description !== undefined) {
           const old = new Set(extractMentionIds(before?.description ?? ""));
           added = extractMentionIds(data.description).filter((id) => !old.has(id));
@@ -1215,13 +1251,8 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
     }
     const editsText = fields.title !== undefined || fields.description !== undefined;
     if (editsText && since !== undefined) {
-      // Misma regla que updateTask: no se pisa el texto que otra persona cambió mientras se editaba.
-      const base = since ? new Date(since).getTime() : 0;
-      if (task.contentUpdatedAt && task.contentUpdatedById !== user.id && task.contentUpdatedAt.getTime() > base) {
-        const who = task.contentUpdatedById ? (await db.user.findUnique({ where: { id: task.contentUpdatedById }, select: { name: true } }))?.name : null;
-        const t = await getT();
-        throw new AppError(who ? t("{who} ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos.", { who }) : t("Otra persona ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos."), 409);
-      }
+      // Misma regla que updateTask: no se pisa el texto cambiado (por otra persona o desde otra pestaña) mientras se editaba.
+      await assertNoTextConflict(id, task, user.id, since, fields);
     }
     const fieldKeys = Object.keys(fields) as TaskField[];
     if (editsText) Object.assign(fields, { contentUpdatedAt: new Date(), contentUpdatedById: user.id });

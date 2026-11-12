@@ -9,7 +9,6 @@ export const documentacion: Record<string, string> = {
   "Subiendo «{name}» a Documentación…": "Uploading “{name}” to Documentation…",
   "Subiendo {n} archivos a Documentación…": "Uploading {n} files to Documentation…",
   "Abrir Documentación": "Open Documentation",
-  "{n} sin subir: {error}": "{n} not uploaded: {error}",
   "Suelta los archivos para subirlos": "Drop the files to upload them",
   "Archivos de «{name}» para consultar sin salir de la app: {count} de {max} · máximo {mb} MB por archivo.":
     "Files of “{name}” to read without leaving the app: {count} of {max} · up to {mb} MB per file.",
@@ -52,4 +51,7 @@ export const documentacion: Record<string, string> = {
   "Envió el documento «{name}» a la papelera": "Moved the document “{name}” to the trash",
   "Restauró el documento «{name}» de la papelera": "Restored the document “{name}” from the trash",
   "Borró definitivamente el documento «{name}»": "Permanently deleted the document “{name}”",
+  // Subir varios documentos: cuáles no se han subido y por qué.
+  "1 archivo no se ha subido a Documentación: {list}": "1 file was not uploaded to Documentation: {list}",
+  "{n} archivos no se han subido a Documentación: {list}": "{n} files were not uploaded to Documentation: {list}",
 };

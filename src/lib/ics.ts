@@ -146,13 +146,15 @@ export function markdownToPlain(md: string): string {
   const code: string[] = [];
   const keep = (body: string) => `\uE001${code.push(body) - 1}\uE002`;
   const marked = mentionsToPlain(md.replace(PRIVATE, ""))
-    .replace(/```[^\n]*\n([\s\S]*?)```/g, (_m, body: string) => keep(body))
+    .replace(/```[^\n`]*\n([\s\S]*?)```/g, (_m, body: string) => keep(body))
     .replace(/`([^`]+)`/g, (_m, body: string) => keep(body))
     .replace(ESCAPED, (_m, c: string) => String.fromCharCode(0xe100 + c.charCodeAt(0)));
   // El subrayado (++texto++) pasa a ser un enlace interno y se queda solo el texto.
   const prose = underlineToLink(marked)
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\[([^\]]+)\]\(([^)\s]+)[^)]*\)/g, (_m, text: string, href: string) => (text === href || href === UNDERLINE_HREF ? text : `${text} (${href})`))
+    // Sin retroceso catastrófico: la URL no admite «(» ni espacios, y el título opcional («"…"») empieza por espacio; antes,
+    // «[a](» repetido hacía la expresión cúbica y una sola descripción preparada congelaba el servidor al generar un .ics.
+    .replace(/\[([^\]\n]{1,500})\]\(([^()\s]{1,2000})(?:\s[^()\n]{0,500})?\)/g, (_m, text: string, href: string) => (text === href || href === UNDERLINE_HREF ? text : `${text} (${href})`))
     .replace(HTML_TAG, "")
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/^\s*>\s?/gm, "");

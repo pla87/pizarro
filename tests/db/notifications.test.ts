@@ -2,12 +2,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
-import { addComment, createTask, updateTask } from "../../src/actions/tasks";
+import { addComment, createTask, createTasks, updateTask } from "../../src/actions/tasks";
 import { mentionToken } from "../../src/lib/mentions";
-import { deliver } from "../../src/lib/notify";
+import { deliver, mentionEmail } from "../../src/lib/notify";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { notificationBody } from "../../src/lib/notification-text";
+import { makeT } from "../../src/i18n/core";
 
 const mention = (u: { id: string; name: string }) => mentionToken(u.name, u.id);
 const recipients = async (taskId: string) => (await db.notification.findMany({ where: { taskId }, select: { userId: true, type: true } })).sort((a, b) => a.userId.localeCompare(b.userId));
@@ -114,5 +116,40 @@ describe("envío externo de avisos", () => {
     assert.equal(sent.find((n) => n.userId === removed.id)?.emailSentAt, null);
     assert.equal((await readdir(dir)).filter((n) => n.endsWith(".json")).length, 1);
     await rm(dir, { recursive: true, force: true });
+  });
+});
+
+describe("avisos de asignación en lote", () => {
+  test("createTasks avisa una sola vez al responsable", async () => {
+    const actor = await makeUser();
+    const assignee = await makeUser();
+    const f = await makeProject({ members: [actor, assignee] });
+    await loginAs(actor);
+    const made = expectOk(await createTasks({ projectId: f.project.id, columnId: f.columns.todo, assigneeId: assignee.id, tasks: [{ title: "Uno", kindId: f.kindId }, { title: "Dos", kindId: f.kindId }] }));
+    const notes = await db.notification.findMany({ where: { userId: assignee.id, type: "ASSIGNED" } });
+    assert.equal(notes.length, 1);
+    assert.equal(notes[0]!.taskId, made[0]!.id);
+    // Se guarda solo el número; «2 tareas» se pone al mostrarlo, en el idioma de quien lo lee.
+    assert.equal(notificationBody("ASSIGNED", notes[0]!.excerpt, makeT("es"), "es-ES"), "2 tareas");
+  });
+
+  test("el aviso de asignación de un lote se muestra y se envía en el idioma de quien lo recibe", async () => {
+    const actor = await makeUser();
+    const assignee = await makeUser();
+    await db.user.update({ where: { id: assignee.id }, data: { locale: "EN" } });
+    const f = await makeProject({ members: [actor, assignee] });
+    await loginAs(actor);
+    expectOk(await createTasks({ projectId: f.project.id, columnId: f.columns.todo, assigneeId: assignee.id, tasks: ["a", "b", "c"].map((title) => ({ title, kindId: f.kindId })) }));
+    const n = await db.notification.findFirstOrThrow({ where: { userId: assignee.id, type: "ASSIGNED" } });
+    const en = makeT("en");
+    assert.equal(notificationBody("ASSIGNED", n.excerpt, en, "en-GB"), "3 tasks");
+    assert.equal(notificationBody("ASSIGNED", n.excerpt, makeT("es"), "es-ES"), "3 tareas");
+    const mail = mentionEmail({ type: "ASSIGNED", actorName: "X", taskTitle: "a", projectName: "P", excerpt: n.excerpt, url: "https://example.com" }, en);
+    assert.match(mail.text, /3 tasks/);
+    assert.doesNotMatch(mail.text + mail.html, /tareas/);
+    // Una sola tarea: el extracto sigue siendo su título.
+    expectOk(await createTasks({ projectId: f.project.id, columnId: f.columns.todo, assigneeId: assignee.id, tasks: [{ title: "Sola", kindId: f.kindId }] }));
+    const one = await db.notification.findFirstOrThrow({ where: { userId: assignee.id, type: "ASSIGNED", excerpt: { not: n.excerpt } } });
+    assert.equal(notificationBody("ASSIGNED", one.excerpt, en, "en-GB"), "Sola");
   });
 });

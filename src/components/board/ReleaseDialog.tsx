@@ -19,6 +19,8 @@ import { useBoard } from "./context";
 import { MentionText } from "../ui/MentionText";
 import { mentionsToPlain } from "@/lib/mentions";
 import { actionThrowResult } from "@/lib/stale-action";
+import { mbNumber } from "@/lib/quota-message";
+import { isNetworkError, loadWhenOnline, reportOffline } from "@/lib/connection";
 
 interface DeployResult {
   moved: { id: string; columnId: string; position: number }[];
@@ -71,11 +73,11 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   const dueHint = (n: number) => (n === 0 ? t("ahora") : n === 1 ? t("en la siguiente") : t("dentro de {n}", { n }));
   const [generatedNumber, setGeneratedNumber] = useState<number | null>(null);
   /**
-   * Tareas del texto generado y la columna en la que estaban: se despliegan esas (no la selección viva, de la que
-   * desaparece una tarea que otra persona archiva o borra) y el servidor rechaza el despliegue si alguna ha cambiado
-   * de columna entretanto.
+   * Tareas del texto generado con la columna en la que estaban y su título: se despliegan esas (no la selección viva, de
+   * la que desaparece una tarea que otra persona archiva o borra) y el servidor rechaza el despliegue si alguna ha
+   * cambiado de columna o de título entretanto.
    */
-  const [generatedTasks, setGeneratedTasks] = useState<{ taskId: string; columnId: string }[]>([]);
+  const [generatedTasks, setGeneratedTasks] = useState<{ taskId: string; columnId: string; title: string }[]>([]);
   const selectedTasks = useMemo(() => tasks.filter((t) => chosen.has(t.id)), [tasks, chosen]);
   const [headerId, setHeaderId] = useState(templates.headers[0]?.id ?? "");
   const [footerId, setFooterId] = useState(templates.footers[0]?.id ?? "");
@@ -131,7 +133,8 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   useEffect(() => {
     // Mismo día que usa el servidor (zona horaria de la app) para contar las releases.
     const day = board.today;
-    countReleasesOn({ projectId: board.project.id, dayIso: day }).then((res) => {
+    // Sin red se pide al volver la conexión (antes el fallo quedaba sin atender y el título no llevaba el ordinal).
+    return loadWhenOnline(() => countReleasesOn({ projectId: board.project.id, dayIso: day }), (res) => {
       if (!res.ok) return;
       setReleaseNumber(res.data.nextNumber);
       // Tareas fijas con cadencia: solo vienen marcadas si a esta release le toca (se pueden marcar a mano).
@@ -140,14 +143,16 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
         if (notDue.length) setChosen((prev) => new Set([...prev].filter((id) => !notDue.includes(id))));
       }
       if (!titleEdited.current) setTitle(defaultReleaseTitle(day, board.project.name, res.data.today));
-    });
+    }, () => {});
   }, [board.project.id, board.project.name, board.today, initialTasks]);
 
   const generate = async () => {
     // Descripción y adjuntos no viajan con el tablero: se piden al generar.
     setLoadingDetails(true);
-    const res = await getReleaseTaskDetails({ projectId: board.project.id, taskIds: selectedTasks.map((t) => t.id) });
+    const res = await getReleaseTaskDetails({ projectId: board.project.id, taskIds: selectedTasks.map((t) => t.id) }).catch((e: unknown) => (isNetworkError(e) ? (reportOffline(), null) : actionThrowResult(e, t)));
     setLoadingDetails(false);
+    // Sin red: el aviso fijo de «Sin conexión» lo explica; «Generar» sigue disponible para volver a probar.
+    if (!res) return;
     if (!res.ok) return toast(res.error, "error");
     const details = new Map(res.data.map((d) => [d.id, d]));
     const releaseTasks = selectedTasks.map((t) => ({
@@ -158,7 +163,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
       description: details.get(t.id)?.description ?? "",
       attachments: details.get(t.id)?.attachments ?? [],
     }));
-    setGeneratedTasks(selectedTasks.map((x) => ({ taskId: x.id, columnId: x.columnId })));
+    setGeneratedTasks(selectedTasks.map((x) => ({ taskId: x.id, columnId: x.columnId, title: x.title })));
     const codes = computeReleaseCodes(board.kinds, releaseTasks, releaseNumber);
     setZipItems(
       releaseTasks.filter((t) => t.attachments.length).map((t) => ({ taskId: t.id, code: codes.get(t.id)!, count: t.attachments.length })),
@@ -244,7 +249,8 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
         title,
         content,
         taskIds: generatedTasks.map((x) => x.taskId),
-        columns: generatedTasks,
+        columns: generatedTasks.map(({ taskId, columnId }) => ({ taskId, columnId })),
+        titles: generatedTasks.map(({ taskId, title }) => ({ taskId, title })),
         destination,
         attachments: zipItems.map(({ taskId, code }) => ({ taskId, code })),
         number: generatedNumber ?? undefined,
@@ -254,7 +260,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
     if (!res.ok) return toast(res.error, "error");
     toast(t("Release registrada como desplegada"));
     if (res.data.storageWarning) {
-      toast(t("Con los adjuntos de esta release el proyecto supera su cuota de almacenamiento ({used} de {limit} MB). Libera espacio, por ejemplo borrando adjuntos de releases antiguas: {link}", { used: res.data.storageWarning.usedMb, limit: res.data.storageWarning.limitMb, link: `/p/${board.project.id}/settings?tab=adjuntos` }), "error");
+      toast(t("Con los adjuntos de esta release el proyecto supera su cuota de almacenamiento ({used} de {limit} MB). Libera espacio, por ejemplo borrando adjuntos de releases antiguas: {link}", { used: mbNumber(res.data.storageWarning.usedMb, uiLocale), limit: mbNumber(res.data.storageWarning.limitMb, uiLocale), link: `/p/${board.project.id}/settings?tab=adjuntos` }), "error");
     }
     onDeployed(res.data);
   };
@@ -288,10 +294,10 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
             <button className="btn-secondary" onClick={copy}>
               {copied ? <Check size={15} /> : <ClipboardCopy size={15} />} {t("Copiar todo")}
             </button>
-            <button className="btn-secondary" onClick={() => downloadText(content, releaseFileName(now, "md", appTimeZone()), "text/markdown")}>
+            <button className="btn-secondary" onClick={() => downloadText(content, releaseFileName({ day: isoDate(now, appTimeZone()), number: generatedNumber, project: board.project.name }, "md"), "text/markdown")}>
               <Download size={15} /> .md
             </button>
-            <button className="btn-secondary" onClick={() => downloadText(content, releaseFileName(now, "txt", appTimeZone()), "text/plain")}>
+            <button className="btn-secondary" onClick={() => downloadText(content, releaseFileName({ day: isoDate(now, appTimeZone()), number: generatedNumber, project: board.project.name }, "txt"), "text/plain")}>
               <FileText size={15} /> .txt
             </button>
             {attachmentTotal > 0 && (
@@ -392,7 +398,8 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
           </div>
           <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
             <legend className="sr-only">{t("Al marcar como desplegado")}</legend>
-            <span className="text-xs font-medium text-slate-500">{t("Al marcar como desplegado:")}</span>
+            {/* El rótulo visible repite el del grupo (legend): oculto para el lector de pantalla, que ya lo anuncia. */}
+            <span className="text-xs font-medium text-slate-500" aria-hidden>{t("Al marcar como desplegado:")}</span>
             <label className="flex items-center gap-1.5">
               <input type="radio" name="dest" checked={destination === "IN_PRODUCTION"} onChange={() => setDestination("IN_PRODUCTION")} disabled={!inProduction} />
               {inProduction ? t("Mover a «{name}»", { name: inProduction.name }) : t("Mover a En producción (no hay columna con ese rol)")}

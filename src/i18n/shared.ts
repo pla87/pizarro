@@ -6,10 +6,10 @@
 export type Locale = "es" | "en";
 export type Vars = Record<string, string | number>;
 export type T = (text: string, vars?: Vars) => string;
-export type Dictionary = Record<string, string>;
+type Dictionary = Record<string, string>;
 
 /** Sustituye las variables {nombre} del texto. */
-export function interpolate(text: string, vars?: Vars): string {
+function interpolate(text: string, vars?: Vars): string {
   return vars ? text.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : text;
 }
 

@@ -151,4 +151,10 @@ export const common: Record<string, string> = {
   "No se encontró ningún micrófono": "No microphone was found",
   "No se pudo conectar con el servicio de dictado": "Could not reach the dictation service",
   "No se pudo dictar ({error})": "Dictation failed ({error})",
+
+  // Manifiesto de la app instalable (descripción)
+  "Kanban ligero y generador de release notes.": "Lightweight Kanban and release notes generator.",
+
+  // Contador de avisos con 1
+  "1 aviso sin leer": "1 unread notification",
 };

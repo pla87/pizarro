@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { MessagingAdminView } from "@/lib/messaging";
 import { actionThrowResult } from "@/lib/stale-action";
+import { codeTemplateAdminText } from "@/lib/whatsapp-code-text";
 
 /**
  * «Telegram y WhatsApp»: el administrador activa los avisos por mensajería. Va en Ajustes, junto al email y Google (las
@@ -192,7 +193,10 @@ function WhatsappAdmin({ view }: { view: MessagingAdminView["whatsapp"] }) {
   const toast = useToast();
   const router = useRouter();
   const [pending, start] = useTransition();
-  const initial = { phoneNumberId: view.phoneNumberId, templateName: view.templateName, templateLang: view.templateLang, templateLangEn: view.templateLangEn };
+  const initial = {
+    phoneNumberId: view.phoneNumberId, templateName: view.templateName, templateLang: view.templateLang, templateLangEn: view.templateLangEn,
+    codeTemplateName: view.codeTemplateName, codeTemplateLang: view.codeTemplateLang, codeTemplateLangEn: view.codeTemplateLangEn,
+  };
   const [form, setForm] = useState(initial);
   const [saved, setSaved] = useState(initial);
   const [token, setToken] = useState("");
@@ -213,7 +217,7 @@ function WhatsappAdmin({ view }: { view: MessagingAdminView["whatsapp"] }) {
     run(async () => {
       const res = await saveWhatsappSettings({ ...form, token, clearToken }).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return setError(res.error);
-      setSaved({ phoneNumberId: form.phoneNumberId.trim(), templateName: form.templateName.trim(), templateLang: form.templateLang.trim(), templateLangEn: form.templateLangEn.trim() });
+      setSaved(Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v.trim()])) as typeof form);
       setToken("");
       setClearToken(false);
       setReplacing(false);
@@ -230,7 +234,15 @@ function WhatsappAdmin({ view }: { view: MessagingAdminView["whatsapp"] }) {
     run(async () => {
       const res = await testWhatsapp({ to }).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return setError(res.error);
-      toast(t("WhatsApp de prueba enviado a {to}.", { to: res.data.to }), "success");
+      const { noticeError, codeError } = res.data;
+      if (noticeError || codeError) {
+        // Una de las dos ha salido: se dice cuál y por qué falla la otra.
+        setError([
+          noticeError && `${t("Plantilla de avisos:")} ${noticeError}`,
+          codeError && `${t("Plantilla de verificación:")} ${codeError}`,
+        ].filter(Boolean).join(" "));
+        toast(noticeError ? t("Solo ha salido el código de verificación de prueba.") : t("Solo ha salido el aviso de prueba."), "error");
+      } else toast(t("Enviados 2 WhatsApp de prueba a {to}: un aviso y un código de verificación de muestra (123456).", { to: res.data.to }), "success");
     });
 
   const envHint = (name: string, value: string) => (value ? t("Vacío = {value} (variable {name} del servidor)", { value, name }) : "");
@@ -267,7 +279,13 @@ function WhatsappAdmin({ view }: { view: MessagingAdminView["whatsapp"] }) {
           <TemplateBox label={t("Español (es)")} value={view.templateBody.es} />
           <TemplateBox label={t("Inglés (en), opcional")} value={view.templateBody.en} />
         </div>
+        <ol start={5} className="mt-2 list-decimal space-y-1 pl-5">
+          <li>{t("Una plantilla de categoría Autenticación llamada codigo_pizarro, aprobada, con la opción «Copiar código» y el mismo idioma. Su texto lo pone Meta («Tu código de verificación es…»): con ella llega el código para conectar WhatsApp.")}</li>
+        </ol>
       </details>
+      {view.codeTemplateError && !error && (
+        <ErrorBox>{codeTemplateAdminText(t, view.codeTemplateError.problem, view.codeTemplateError)}</ErrorBox>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="block text-sm">
@@ -306,7 +324,23 @@ function WhatsappAdmin({ view }: { view: MessagingAdminView["whatsapp"] }) {
             <input className="input mt-1 w-full" value={form.templateLangEn} onChange={(e) => set("templateLangEn", e.target.value)} maxLength={10} placeholder={t("opcional, p. ej. en")} />
           </label>
         </div>
+        <label className="block text-sm">
+          <span className="font-medium">{t("Plantilla de verificación")}</span>
+          <input className="input mt-1 w-full" value={form.codeTemplateName} onChange={(e) => set("codeTemplateName", e.target.value)} maxLength={512} placeholder={view.defaultCodeTemplate} />
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block text-sm">
+            <span className="font-medium">{t("Idioma de la verificación")}</span>
+            <input className="input mt-1 w-full" value={form.codeTemplateLang} onChange={(e) => set("codeTemplateLang", e.target.value)} maxLength={10} placeholder={form.templateLang.trim() || view.effective.templateLang || "es"} />
+          </label>
+          <label className="block text-sm">
+            <span className="font-medium">{t("Idioma en inglés de la verificación")}</span>
+            <input className="input mt-1 w-full" value={form.codeTemplateLangEn} onChange={(e) => set("codeTemplateLangEn", e.target.value)} maxLength={10} placeholder={t("opcional, p. ej. en")} />
+          </label>
+        </div>
       </div>
+      <p className="text-xs text-slate-500">{t("La plantilla de verificación lleva el código de 6 cifras con el que cada persona conecta su WhatsApp. Meta exige que sea de categoría Autenticación (no vale aviso_pizarro). Vacío = codigo_pizarro, en el mismo idioma que los avisos.")}</p>
+      <p className="text-xs text-slate-500">{t("«Idioma en inglés de la verificación» se usa con quien tiene Pizarro en inglés (añade esa traducción a la plantilla de verificación en Meta); vacío = el código sale para todos en «Idioma de la verificación».")}</p>
       <p className="text-xs text-slate-500">{t("Lo que guardas aquí manda; los campos vacíos usan las variables WHATSAPP_* del servidor, si las hay. «Idioma en inglés» se usa con quien tiene Pizarro en inglés (añade esa traducción a la misma plantilla en Meta).")}</p>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -324,7 +358,7 @@ function WhatsappAdmin({ view }: { view: MessagingAdminView["whatsapp"] }) {
           <button className="btn-secondary py-1.5" onClick={test} disabled={pending || dirty || !view.complete || !to.trim()}>
             {pending && <Loader2 size={15} className="animate-spin" />} {t("Probar")}
           </button>
-          <span className="text-xs text-slate-500">{dirty ? t("Guarda los cambios antes de enviar la prueba.") : t("Envía la plantilla con un texto de prueba a ese número (con el número de prueba de Meta, solo a los números verificados).")}</span>
+          <span className="text-xs text-slate-500">{dirty ? t("Guarda los cambios antes de enviar la prueba.") : t("Envía a ese número las dos plantillas: un aviso de prueba y un código de verificación de muestra (son 2 mensajes de pago; con el número de prueba de Meta, solo a los números verificados).")}</span>
         </div>
       </div>
       {error && <ErrorBox>{error}</ErrorBox>}

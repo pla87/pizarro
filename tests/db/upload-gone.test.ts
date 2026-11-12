@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
 import type { Prisma } from "../../src/generated/prisma/client";
-import { db, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { db, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter } from "./helpers";
 import { POST as attachRoute } from "../../src/app/api/tasks/[taskId]/attachments/route";
 import { POST as documentsRoute } from "../../src/app/api/projects/[projectId]/documents/route";
 import { createAttachmentWithinLimit } from "../../src/lib/attachment-limit";
@@ -17,7 +17,6 @@ import { flushLogs } from "../../src/lib/log";
 import { resetRateLimit } from "../../src/lib/rate-limit";
 
 const ORIGIN = "http://localhost";
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Ejecuta `fn` en una transacción que queda abierta (borrado en curso) hasta llamar a `commit`. */
 async function pendingTx(fn: (tx: Prisma.TransactionClient) => Promise<unknown>) {
@@ -84,7 +83,7 @@ describe("subida a una tarea borrada durante la subida", () => {
     const { task } = await setup();
     const del = await pendingTx((tx) => tx.task.delete({ where: { id: task.id } }));
     const create = createAttachmentWithinLimit(attData(task.id), sel);
-    await sleep(300); // el alta espera al borrado
+    await waitForLockWaiter(); // el alta espera al borrado
     await del.commit();
     await assert.rejects(create, isGone("task_gone"));
     assert.equal(await db.taskAttachment.count({ where: { taskId: task.id } }), 0);
@@ -116,9 +115,8 @@ describe("subida a una tarea borrada durante la subida", () => {
     const req = await streamedUpload(`${ORIGIN}/api/tasks/${task.id}/attachments`, "datos.bin");
     const pending = attachRoute(req, { params: Promise.resolve({ taskId: task.id }) });
     // El fichero se escribe antes del alta; el alta espera a que termine el borrado.
-    for (let i = 0; i < 100 && !(await filesIn(dir)).length; i++) await sleep(30);
+    await waitForLockWaiter();
     assert.equal((await filesIn(dir)).length, 1, "el fichero llegó a escribirse");
-    await sleep(100);
     await del.commit();
     const res = await pending;
     const body = await res.json();
@@ -134,7 +132,7 @@ describe("documento subido a un proyecto que se borra durante la subida", () => 
     const { m, f } = await setup();
     const del = await pendingTx((tx) => tx.project.delete({ where: { id: f.project.id } }));
     const create = createDocumentWithinLimit({ projectId: f.project.id, name: "notas.txt", mimeType: "text/plain", size: 10, kind: "TEXT", createdById: m.id });
-    await sleep(300);
+    await waitForLockWaiter();
     await del.commit();
     await assert.rejects(create, isGone("project_gone"));
   });
@@ -144,9 +142,9 @@ describe("documento subido a un proyecto que se borra durante la subida", () => 
     const del = await pendingTx((tx) => tx.project.delete({ where: { id: f.project.id } }));
     const req = await streamedUpload(`${ORIGIN}/api/projects/${f.project.id}/documents`, "notas.txt");
     const pending = documentsRoute(req, { params: Promise.resolve({ projectId: f.project.id }) });
-    for (let i = 0; i < 100 && !(await filesIn(dir)).length; i++) await sleep(30);
+    // Cuando el alta ya espera al borrado, el fichero está escrito (se escribe antes).
+    await waitForLockWaiter();
     assert.equal((await filesIn(dir)).length, 1, "el fichero llegó a escribirse");
-    await sleep(100);
     await del.commit();
     const res = await pending;
     const body = await res.json();

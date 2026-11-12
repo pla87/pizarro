@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { handleBoundaryError } from "@/components/clientErrors";
 import type { Locale } from "@/i18n/shared";
 
@@ -16,8 +16,12 @@ const EN: Record<string, string> = {
 
 /** Error en el propio layout raíz: se registra y se ofrece recargar. */
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  const retry = useRef(reset);
   useEffect(() => {
-    handleBoundaryError("global-error", error);
+    retry.current = reset;
+  });
+  useEffect(() => {
+    handleBoundaryError("global-error", error, () => retry.current());
   }, [error]);
   // Sin proveedor (el layout raíz ha fallado): el idioma se deduce del navegador.
   const locale = useSyncExternalStore<Locale>(

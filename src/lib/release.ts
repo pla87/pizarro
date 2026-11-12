@@ -4,7 +4,8 @@
 import { isoInZone } from "./dates";
 import { decodeEntities } from "./markdown-entities";
 import { mentionsToPlain } from "./mentions";
-import { MAX_TITLE } from "./constants";
+import { MAX_TITLE, MAX_TITLE_UNITS } from "./constants";
+import { clampTitle } from "./title-clamp";
 import { partSuffix } from "./zip-plan";
 import { esT, type T } from "@/i18n/shared";
 
@@ -121,13 +122,9 @@ export function computeReleaseCodes(
  */
 export function titleWithReleaseCode(title: string, code: string, max = MAX_TITLE): string {
   const prefix = `${code}: `;
-  let rest = title;
-  const room = Math.max(0, max - prefix.length);
-  if (rest.length > room) {
-    // Sin dejar a medias una mención @[Nombre](user:ID) ni un par suplente partido.
-    rest = rest.slice(0, room).replace(/@\[[^\]]*(\]\([^)]*)?$/, "").replace(/[\uD800-\uDBFF]$/, "").trimEnd();
-  }
-  return (prefix + rest).slice(0, max);
+  if (prefix.length >= max) return prefix.slice(0, max);
+  // Mismo recorte que al guardar (caracteres visibles): sin dejar a medias una mención @[Nombre](user:ID) ni un emoji.
+  return prefix + clampTitle(title, max - prefix.length, MAX_TITLE_UNITS - prefix.length).value;
 }
 
 /**
@@ -199,7 +196,7 @@ function buildSections(input: Pick<ReleaseInput, "kinds" | "tasks" | "releaseNum
  * `&lt;`, `&gt;` o `&amp;` (como las descripciones, que también se decodifican): en el texto plano de la release salen
  * los caracteres reales.
  */
-export function releaseTemplateText(raw: string): string {
+function releaseTemplateText(raw: string): string {
   return decodeEntities(raw).trim();
 }
 
@@ -309,8 +306,13 @@ export function isoDate(date = new Date(), timeZone?: string): string {
   return `${y}-${m}-${d}`;
 }
 
-export function releaseFileName(date: Date, ext: "md" | "txt", timeZone?: string): string {
-  return `release-${isoDate(date, timeZone)}.${ext}`;
+/**
+ * Nombre del .md o .txt de una release, con las mismas piezas que el ZIP de sus adjuntos:
+ * `release-2026-11-11-R12-Proyecto.md`. Sin número (aún no se sabe) o sin proyecto, se omiten.
+ */
+export function releaseFileName(opts: { day: string; number?: number | null; project?: string | null }, ext: "md" | "txt"): string {
+  const project = fileNamePart(opts.project ?? "", 60);
+  return `${["release", opts.day, opts.number ? `R${opts.number}` : "", project].filter(Boolean).join("-")}.${ext}`;
 }
 
 /** Siguiente cadencia de una tarea fija (cada cuántas releases entra: 1 = todas, 2 = las pares, 3 = múltiplos de 3) al pulsar el interruptor: 1 → 2 → 3 → 1. */

@@ -1,6 +1,7 @@
 // Asistente de primer arranque (/setup): estado, código de un solo uso y creación de la instalación.
 // Sin "server-only" ni imports de Next: lo usa también scripts/boot.ts (empaquetado con esbuild).
 import type { PrismaClient } from "@/generated/prisma/client";
+import { LOCK_SETUP } from "./advisory-locks";
 import { AppError } from "./errors";
 import { INSTANCE_LOCALE_KEY, INSTANCE_ORG_KEY, INSTANCE_TZ_KEY, invalidateInstance } from "./instance";
 import { hashPassword, passwordSchema } from "./password";
@@ -8,8 +9,6 @@ import { createInitialAdmin, seed } from "./seed";
 import { generateSetupCode, hashSetupCode, parseSetupEmail, parseStoredCode, setupPending, validTimeZone, verifySetupCode, type StoredSetupCode } from "./setup-core";
 
 export const SETUP_CODE_KEY = "setup.code";
-/** Clave del bloqueo consultivo de Postgres que serializa la finalización del asistente. */
-const SETUP_LOCK = 727_274_001;
 
 let doneForever = false;
 
@@ -27,7 +26,7 @@ export function resetSetupCache(): void {
 }
 
 /** Código de un solo uso nuevo en AppState (sustituye al anterior). Devuelve el código en claro para mostrarlo en el log. */
-export async function issueSetupCode(db: Pick<PrismaClient, "appState">, now: number = Date.now()): Promise<{ code: string; stored: StoredSetupCode }> {
+async function issueSetupCode(db: Pick<PrismaClient, "appState">, now: number = Date.now()): Promise<{ code: string; stored: StoredSetupCode }> {
   const code = generateSetupCode();
   const stored = hashSetupCode(code, now);
   const value = JSON.stringify(stored);
@@ -71,7 +70,7 @@ export interface SetupInput {
 }
 
 /** Valida los datos del asistente; lanza AppError con el primer problema. */
-export function validateSetupInput(i: Omit<SetupInput, "code">): { orgName: string; adminName: string; adminEmail: string } {
+function validateSetupInput(i: Omit<SetupInput, "code">): { orgName: string; adminName: string; adminEmail: string } {
   const orgName = i.orgName.trim();
   if (!orgName || orgName.length > 80) throw new AppError("Escribe el nombre de la organización (hasta 80 caracteres).");
   if (i.locale !== "es" && i.locale !== "en") throw new AppError("Idioma no válido.");
@@ -96,7 +95,7 @@ export async function completeSetup(db: PrismaClient, input: SetupInput, env: Re
   const { orgName, adminName, adminEmail } = validateSetupInput(input);
   const passwordHash = await hashPassword(input.adminPassword);
   const admin = await db.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${SETUP_LOCK})`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LOCK_SETUP})`;
     if ((await tx.user.count()) > 0) throw new AppError("La instalación ya está configurada.", 404);
     const set = (key: string, value: string) => tx.appState.upsert({ where: { key }, create: { key, value }, update: { value } });
     await set(INSTANCE_ORG_KEY, orgName);
@@ -109,6 +108,6 @@ export async function completeSetup(db: PrismaClient, input: SetupInput, env: Re
   doneForever = true;
   invalidateInstance();
   // Proyecto de ejemplo como con el seed por variables (ya hay administrador). Si falla, la instalación sigue siendo válida.
-  await seed(db, () => {}).catch((err) => console.error("[setup] No se pudo crear el proyecto de ejemplo:", err));
+  await seed(db, () => {}, input.locale).catch((err) => console.error("[setup] No se pudo crear el proyecto de ejemplo:", err));
   return { adminId: admin.id };
 }

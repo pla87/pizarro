@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 import { useT } from "@/i18n/client";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
-export interface BeginData {
+interface BeginData {
   method: "TOTP" | "EMAIL";
   secret?: string;
   uri?: string;
@@ -25,13 +25,15 @@ interface Props {
   /** Impide elegir método (por ejemplo, mientras falta la contraseña en «Mi perfil»). */
   disabled?: boolean;
   onCancel?: () => void;
+  /** «Atrás» desde el paso del código (vuelve a elegir método). */
+  onBack?: () => void;
 }
 
 /** Secreto en grupos de 4 para copiarlo a mano sin equivocarse. */
 const grouped = (s: string) => s.replace(/(.{4})/g, "$1 ").trim();
 
 /** Pasos comunes de activación: elegir método, enseñar el secreto o pedir el código por email, y confirmar el primer código. */
-export function TwoFactorEnroll({ emailAvailable, begin, confirm, onCodes, disabled, onCancel }: Props) {
+export function TwoFactorEnroll({ emailAvailable, begin, confirm, onCodes, disabled, onCancel, onBack }: Props) {
   const t = useT();
   const [pending, start] = useTransition();
   const [info, setInfo] = useState<BeginData | null>(null);
@@ -127,7 +129,7 @@ export function TwoFactorEnroll({ emailAvailable, begin, confirm, onCodes, disab
           {pending && <Loader2 size={16} className="animate-spin" />}
           {t("Activar")}
         </button>
-        <button type="button" className="btn-ghost" onClick={() => (setInfo(null), onCancel?.())}>{t("Atrás")}</button>
+        <button type="button" className="btn-ghost" onClick={() => (setInfo(null), onBack?.(), onCancel?.())}>{t("Atrás")}</button>
       </div>
     </form>
   );

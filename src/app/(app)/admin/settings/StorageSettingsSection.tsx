@@ -8,6 +8,7 @@ import { cn } from "@/components/ui/cn";
 import { useToast } from "@/components/ui/Toast";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatQuotaMb, formatSize } from "@/lib/format-size";
+import { QUOTA_MAX_MB, QUOTA_MIN_MB, quotaMbValid } from "@/lib/quota";
 import { actionThrowResult } from "@/lib/stale-action";
 import type { StorageAdminView } from "@/lib/storage-stats";
 
@@ -26,8 +27,9 @@ export function StorageSettingsSection({ view }: { view: StorageAdminView }) {
 
   const projectNum = Number(projectText);
   const totalNum = Number(totalText);
-  const projectValid = projectUnlimited || projectText.trim() === "" || (Number.isInteger(projectNum) && projectNum >= 1);
-  const totalValid = totalText.trim() === "" || (Number.isInteger(totalNum) && totalNum >= 1);
+  // Los mismos topes que el servidor (QUOTA_MIN_MB…QUOTA_MAX_MB): antes se aceptaba 99999999999999 y fallaba al guardar.
+  const projectValid = projectUnlimited || projectText.trim() === "" || quotaMbValid(projectText);
+  const totalValid = totalText.trim() === "" || quotaMbValid(totalText);
 
   const save = () =>
     start(async () => {
@@ -117,7 +119,7 @@ export function StorageSettingsSection({ view }: { view: StorageAdminView }) {
             <>
               <div className="flex flex-wrap items-center gap-3">
                 <input
-                  id="quota-project" className="input w-36" type="number" inputMode="numeric" min={1} step={1} placeholder="10240"
+                  id="quota-project" className="input w-36" type="number" inputMode="numeric" min={QUOTA_MIN_MB} max={QUOTA_MAX_MB} step={1} placeholder="10240"
                   disabled={projectUnlimited} value={projectText} onChange={(e) => setProjectText(e.target.value)}
                 />
                 <label className="flex items-center gap-1.5 text-sm">
@@ -137,7 +139,7 @@ export function StorageSettingsSection({ view }: { view: StorageAdminView }) {
             </>
           ) : (
             <>
-              <input id="quota-total" className="input w-36" type="number" inputMode="numeric" min={1} step={1} placeholder={t("Sin límite")} value={totalText} onChange={(e) => setTotalText(e.target.value)} />
+              <input id="quota-total" className="input w-36" type="number" inputMode="numeric" min={QUOTA_MIN_MB} max={QUOTA_MAX_MB} step={1} placeholder={t("Sin límite")} value={totalText} onChange={(e) => setTotalText(e.target.value)} />
               <p className="text-xs text-slate-500">{t("Tope de todo lo que suman los proyectos. Vacío = sin tope. Pon un valor algo menor que el tamaño de tu volumen para que los proyectos no lo llenen.")}</p>
             </>
           )}
@@ -147,7 +149,7 @@ export function StorageSettingsSection({ view }: { view: StorageAdminView }) {
             <button className="btn-primary py-1.5" onClick={save} disabled={pending || !projectValid || !totalValid}>
               {pending && <Loader2 size={15} className="animate-spin" />} {t("Guardar")}
             </button>
-            {(!projectValid || !totalValid) && <span className="text-xs text-red-600">{t("Debe ser un número entero de MB, 1 o más.")}</span>}
+            {(!projectValid || !totalValid) && <span className="text-xs text-red-600" role="alert">{t("Debe ser un número entero de MB, entre {min} y {max}.", { min: QUOTA_MIN_MB, max: QUOTA_MAX_MB.toLocaleString(locale) })}</span>}
           </div>
         )}
       </div>
