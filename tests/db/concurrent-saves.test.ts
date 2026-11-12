@@ -8,6 +8,7 @@ import { createSession } from "../../src/lib/session";
 import { updateTask } from "../../src/actions/tasks";
 import { deployRelease } from "../../src/actions/releases";
 import { setGeneralKindEnabled } from "../../src/actions/project-kinds";
+import { textHash } from "../../src/lib/text-version";
 
 /**
  * Ejecuta `fn` como una petición de `user` con su propia cookie (no la del «jar» global), para que dos personas
@@ -114,6 +115,104 @@ describe("updateTask: conflicto de texto dentro de la transacción", () => {
     ]);
     assert.equal(results.filter((r) => r.ok).length, 1, JSON.stringify(results.map((r) => r.ok || r.error)));
     expectFail(results.find((r) => !r.ok)!, /otra pestaña u otro dispositivo/);
+  });
+});
+
+describe("updateTask: conflicto de texto campo a campo", () => {
+  // Como TaskDialog: la versión del texto que se está editando y las huellas del título y la descripción de esa versión.
+  const makeTextTask = async (f: Awaited<ReturnType<typeof makeProject>>, description: string) => {
+    const t = await makeTask(f, { title: "T" });
+    return db.task.update({ where: { id: t.id }, data: { description } });
+  };
+  const sinceOf = (row: { contentUpdatedAt: Date | null; title: string; description: string }) => ({
+    version: row.contentUpdatedAt?.toISOString() ?? null,
+    title: textHash(row.title),
+    description: textHash(row.description),
+  });
+
+  test("otra persona cambió solo la descripción: el título se guarda; la descripción sí choca", async () => {
+    const a = await makeUser({ name: "Ana" });
+    const b = await makeUser({ name: "Bea" });
+    const f = await makeProject({ members: [a, b] });
+    const task = await makeTextTask(f, "<p>D</p>");
+    const opened = sinceOf(await db.task.findUniqueOrThrow({ where: { id: task.id } }));
+    await new Promise((r) => setTimeout(r, 5));
+    await loginAs(b);
+    expectOk(await updateTask(task.id, { description: "<p>De Bea</p>" }, opened));
+    await loginAs(a);
+    // Antes: 409 y el título escrito se perdía.
+    const saved = expectOk(await updateTask(task.id, { title: "Título de Ana" }, opened));
+    let row = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+    assert.deepEqual([row.title, row.description], ["Título de Ana", "<p>De Bea</p>"]);
+    // Su descripción se escribió sobre la anterior: eso sí es un conflicto (aunque envíe la versión de su último guardado
+    // junto a la huella de la descripción que tenía).
+    expectFail(await updateTask(task.id, { description: "<p>De Ana</p>" }, opened), /Bea ha cambiado el texto de esta tarea/);
+    expectOk(await updateTask(task.id, { title: "Otra vez Ana" }, { ...opened, version: saved.textVersion, title: textHash("Título de Ana") }));
+    row = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+    assert.deepEqual([row.title, row.description], ["Otra vez Ana", "<p>De Bea</p>"]);
+  });
+
+  test("otra persona cambió el título: guardar el título choca y no lo pisa; la descripción se guarda", async () => {
+    const a = await makeUser({ name: "Ana" });
+    const b = await makeUser({ name: "Bea" });
+    const f = await makeProject({ members: [a, b] });
+    const task = await makeTextTask(f, "<p>D</p>");
+    const opened = sinceOf(await db.task.findUniqueOrThrow({ where: { id: task.id } }));
+    await new Promise((r) => setTimeout(r, 5));
+    await loginAs(b);
+    expectOk(await updateTask(task.id, { title: "Título de Bea" }, opened));
+    await loginAs(a);
+    expectFail(await updateTask(task.id, { title: "Título de Ana" }, opened), /Bea ha cambiado el texto de esta tarea/);
+    expectFail(await updateTask(task.id, { title: "Título de Ana", description: "<p>De Ana</p>" }, opened), /Bea ha cambiado/);
+    expectOk(await updateTask(task.id, { description: "<p>De Ana</p>" }, opened));
+    const row = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+    assert.deepEqual([row.title, row.description], ["Título de Bea", "<p>De Ana</p>"]);
+  });
+
+  test("dos pestañas de la misma persona: la descripción guardada en una choca con la de la otra, no con su título", async () => {
+    const a = await makeUser();
+    const f = await makeProject({ members: [a] });
+    const task = await makeTextTask(f, "<p>Inicial</p>");
+    await loginAs(a);
+    const opened = sinceOf(await db.task.findUniqueOrThrow({ where: { id: task.id } }));
+    await new Promise((r) => setTimeout(r, 5));
+    expectOk(await updateTask(task.id, { description: "<p>Desde A</p>" }, opened));
+    expectFail(await updateTask(task.id, { description: "<p>Desde B</p>" }, opened), /otra pestaña u otro dispositivo/);
+    expectOk(await updateTask(task.id, { title: "Título desde B" }, opened));
+    const row = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+    assert.deepEqual([row.title, row.description], ["Título desde B", "<p>Desde A</p>"]);
+  });
+
+  test("dentro de la transacción: un cambio de la descripción que entra a la vez no rechaza el título, sí la descripción", async () => {
+    const a = await makeUser({ name: "Ana" });
+    const b = await makeUser({ name: "Bea" });
+    const f = await makeProject({ members: [a, b] });
+    for (const [patch, ok] of [[{ title: "De Bea" }, true], [{ description: "<p>De Bea</p>" }, false]] as const) {
+      const task = await makeTextTask(f, "<p>D</p>");
+      const opened = sinceOf(task);
+      // Ana «está guardando» su descripción (fila bloqueada); el guardado de Bea pasa la comprobación rápida, espera al
+      // candado y la repite con el texto ya cambiado.
+      let pending: ReturnType<typeof updateTask> | null = null;
+      await db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "Task" WHERE "id" = ${task.id} FOR UPDATE`;
+        pending = asOwnRequest(b, () => updateTask(task.id, patch, opened));
+        await waitForLockWaiter();
+        await tx.task.update({ where: { id: task.id }, data: { description: "<p>De Ana</p>", contentUpdatedAt: new Date(), contentUpdatedById: a.id } });
+      }, { timeout: 10_000 });
+      if (ok) expectOk(await pending!);
+      else expectFail(await pending!, /Ana ha cambiado el texto de esta tarea/);
+      const row = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+      assert.deepEqual([row.title, row.description], [ok ? "De Bea" : "T", "<p>De Ana</p>"]);
+    }
+  });
+
+  test("una versión con forma rara no se acepta", async () => {
+    const a = await makeUser();
+    const f = await makeProject({ members: [a] });
+    const task = await makeTask(f, { title: "T" });
+    await loginAs(a);
+    expectFail(await updateTask(task.id, { title: "x" }, { version: 1, title: "x".repeat(100) } as never));
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).title, "T");
   });
 });
 

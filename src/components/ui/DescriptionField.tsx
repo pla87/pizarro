@@ -4,6 +4,7 @@ import { Bold, Code, Code2, Heading2, Heading3, IndentDecrease, IndentIncrease, 
 import type { Editor } from "@tiptap/core";
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useT } from "@/i18n/client";
+import { refreshWhenOnline } from "@/lib/connection";
 import { indentLines, insertLink, insertRule, toggleCodeBlock, toggleLinePrefix, toggleWrap, type EditResult } from "@/lib/markdown-edit";
 import { cn } from "./cn";
 import { DictationButton, insertIntoField } from "./DictationButton";
@@ -189,17 +190,19 @@ function WysiwygField({ fieldRef, id, value, onValueChange, users, placeholder, 
   // que luego se ve (en otro sitio del árbol, React lo volvería a crear y habría un instante sin campo).
   const [startedProvisional] = useState(provisional);
   const focusOnSwap = useRef<Editor | null>(null);
+  // Sin red el editor no llega: el campo provisional sigue sirviendo (Markdown) y se vuelve a pedir al volver la red.
+  const [loadTry, setLoadTry] = useState(0);
   useEffect(() => {
     if (Loaded) return;
     let alive = true;
     loadRichEditor().then(
       (E) => alive && setLoaded(() => E),
-      () => {}, // sin red: el campo provisional sigue sirviendo (Markdown)
+      () => alive && refreshWhenOnline(() => alive && setLoadTry((n) => n + 1)),
     );
     return () => {
       alive = false;
     };
-  }, [Loaded]);
+  }, [Loaded, loadTry]);
   // Al montar con foco, el cursor va al final del texto (como en el editor).
   useLayoutEffect(() => {
     const el = fieldRef.current;

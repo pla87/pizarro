@@ -3,8 +3,8 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import {
-  isNetworkError, isOffline, isOfflineMessage, OFFLINE_MESSAGE, probeServer, refreshWhenOnline, reportOffline, reportReachable,
-  resetConnectionForTests, safeRefresh, subscribeConnection,
+  importWhenOnline, isNetworkError, isOffline, isOfflineMessage, loadWhenOnline, OFFLINE_MESSAGE, probeServer, refreshWhenOnline, reportOffline,
+  reportReachable, resetConnectionForTests, safeRefresh, subscribeConnection,
 } from "../src/lib/connection";
 import { actionThrowMessage } from "../src/lib/stale-action";
 
@@ -130,5 +130,101 @@ describe("acciones que no llegan al servidor", () => {
     assert.equal(actionThrowMessage(new Error("boom"), (s) => s), "Error inesperado. Inténtalo de nuevo.");
     assert.equal(isOfflineMessage("Offline: not saved", (s) => (s === OFFLINE_MESSAGE ? "Offline: not saved" : s)), true);
     assert.equal(isOfflineMessage("Error inesperado. Inténtalo de nuevo.", (s) => s), false);
+  });
+});
+
+describe("lecturas y código que llegan al volver la red (loadWhenOnline, importWhenOnline)", () => {
+  beforeEach(() => {
+    installBrowser();
+    resetConnectionForTests();
+    health = "ok";
+    online = true;
+    probes = 0;
+  });
+  afterEach(() => resetConnectionForTests());
+  const settle = async () => {
+    for (let i = 0; i < 5; i++) await tick();
+  };
+
+  test("una lectura sin red avisa y se repite sola al volver la conexión", async () => {
+    online = false;
+    let n = 0;
+    const got: string[] = [];
+    loadWhenOnline(async () => {
+      n++;
+      if (!online) throw new TypeError("Failed to fetch");
+      return "detalle";
+    }, (v) => got.push(v));
+    await settle();
+    assert.equal(n, 1);
+    assert.equal(isOffline(), true, "marca «sin conexión»");
+    assert.deepEqual(got, []);
+    online = true;
+    fire("online");
+    await settle();
+    assert.equal(n, 2, "se repite al volver");
+    assert.deepEqual(got, ["detalle"]);
+    assert.equal(isOffline(), false);
+  });
+
+  test("cancelada (componente desmontado), no se repite ni entrega nada", async () => {
+    online = false;
+    let n = 0;
+    const got: string[] = [];
+    const stop = loadWhenOnline(async () => {
+      n++;
+      if (!online) throw new TypeError("Failed to fetch");
+      return "x";
+    }, (v) => got.push(v));
+    await settle();
+    stop();
+    online = true;
+    fire("online");
+    await settle();
+    assert.equal(n, 1);
+    assert.deepEqual(got, []);
+  });
+
+  test("otro fallo (no de red) va a onError sin reintentos", async () => {
+    const errors: unknown[] = [];
+    let n = 0;
+    loadWhenOnline(async () => {
+      n++;
+      throw new Error("boom");
+    }, () => {}, (e) => errors.push(e));
+    await settle();
+    assert.equal(errors.length, 1);
+    assert.equal(isOffline(), false);
+    fire("online");
+    await settle();
+    assert.equal(n, 1);
+  });
+
+  test("un fragmento de código que no llega sin red espera y se carga al volver (no se rechaza)", async () => {
+    online = false;
+    let n = 0;
+    let rejected = false;
+    const loaded = importWhenOnline(async () => {
+      n++;
+      if (!online) throw new Error("Loading chunk 3384 failed.");
+      return { Dialog: "ok" };
+    });
+    loaded.catch(() => (rejected = true));
+    await settle();
+    assert.equal(n, 1);
+    assert.equal(rejected, false);
+    assert.equal(isOffline(), true);
+    online = true;
+    fire("online");
+    assert.deepEqual(await loaded, { Dialog: "ok" });
+    assert.equal(n, 2);
+  });
+
+  test("con el servidor respondiendo, el fragmento que no llega es de otra versión: se rechaza", async () => {
+    const chunkError = new Error("Loading chunk 3384 failed.");
+    await assert.rejects(importWhenOnline(async () => {
+      throw chunkError;
+    }), chunkError);
+    assert.equal(isOffline(), false);
   });
 });

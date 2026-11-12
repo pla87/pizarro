@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { getColumnChecklist } from "@/actions/column-views";
 import { updateSubtask } from "@/actions/tasks";
 import { checklistMarkdown, groupChecklist, type ChecklistGroupBy, type ChecklistItem } from "@/lib/checklist";
+import { loadWhenOnline } from "@/lib/connection";
+import { actionThrowMessage } from "@/lib/stale-action";
 import type { BoardColumn } from "@/lib/types";
 import { useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
@@ -25,17 +27,19 @@ export function ChecklistDialog({ column, onClose }: { column: BoardColumn; onCl
   const [by, setBy] = useState<ChecklistGroupBy>("card");
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let alive = true;
-    void getColumnChecklist(project.id, column.id).then((res) => {
-      if (!alive) return;
-      if (res.ok) setItems(res.data.items);
-      else setError(res.error);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [project.id, column.id]);
+  // Sin red se lee al volver la conexión (antes se quedaba cargando para siempre).
+  useEffect(
+    () =>
+      loadWhenOnline(
+        () => getColumnChecklist(project.id, column.id),
+        (res) => {
+          if (res.ok) setItems(res.data.items);
+          else setError(res.error);
+        },
+        (err) => setError(actionThrowMessage(err, t)),
+      ),
+    [project.id, column.id, t],
+  );
 
   const groups = useMemo(() => groupChecklist(items ?? [], by), [items, by]);
   const done = (items ?? []).filter((i) => i.done).length;

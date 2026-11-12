@@ -27,8 +27,9 @@ export function useReviewGuard(projectId: string, columns: BoardColumn[], getTas
     if (!reviewIds.size) return true;
     const leaving = taskIds.map(getTask).filter((x): x is BoardTask => !!x && reviewIds.has(x.columnId) && x.columnId !== toColumnId && x.subtaskDone < x.subtaskTotal);
     if (!leaving.length) return true;
-    const res = await getPendingSubtasks(projectId, leaving.map((x) => x.id));
-    const detail = res.ok ? new Map(res.data.map((d) => [d.taskId, d])) : new Map<string, { title: string; pending: string[] }>();
+    // Sin red no se sabe cuáles faltan: se avisa con el recuento de la tarjeta.
+    const res = await getPendingSubtasks(projectId, leaving.map((x) => x.id)).catch(() => null);
+    const detail = res?.ok ? new Map(res.data.map((d) => [d.taskId, d])) : new Map<string, { title: string; pending: string[] }>();
     const lines = leaving.map((x) => {
       const pending = detail.get(x.id)?.pending;
       const text = pending?.length ? missingSubtasksText(pending, t) : t("Faltan {n} subtareas", { n: x.subtaskTotal - x.subtaskDone });

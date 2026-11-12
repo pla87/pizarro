@@ -4,13 +4,16 @@ import * as U from "./ui.mjs";
 const { COL } = L;
 
 const desc = async (title) => ((await L.q(`SELECT description FROM "Task" WHERE title=$1`, [title]))[0]?.description ?? "").trim();
-async function editDescription(page, text) {
+async function typeDescription(page, text) {
   const d = U.dialog(page);
   const edit = d.getByRole("button", { name: "Editar" }).first();
   const empty = d.getByRole("button", { name: "Añade una descripción…" });
   if (await empty.count()) await empty.click(); else await edit.click();
   const ed = d.locator("[role=textbox][contenteditable]").first();
   await ed.click(); await page.keyboard.press("Control+A"); await page.keyboard.type(text);
+}
+async function editDescription(page, text) {
+  await typeDescription(page, text);
   await page.keyboard.press("Control+Enter");
 }
 
@@ -24,14 +27,17 @@ export async function run() {
   await U.openTask(a.page, "Compartida");
   await U.openTask(b.page, "Compartida");
 
-  // A guarda primero
+  // B empieza a escribir su descripción; A guarda la suya antes (si B no la estuviera editando, vería la de A al momento
+  // y no habría conflicto).
+  await typeDescription(b.page, "Texto de la Segunda");
   await editDescription(a.page, "Texto de Administrador");
   await L.eqEventually("A guarda su descripción", () => desc("Compartida"), "Texto de Administrador");
   const [r1] = await L.q(`SELECT "contentUpdatedById" AS u FROM "Task" WHERE title='Compartida'`);
   L.check("contentUpdatedById registra a A", !!r1.u);
 
-  // B (que abrió antes) intenta guardar otra descripción
-  await editDescription(b.page, "Texto de la Segunda");
+  // B (que escribía sobre el texto anterior) guarda su descripción
+  await b.page.bringToFront();
+  await b.page.keyboard.press("Control+Enter");
   const msg = b.page.getByText(/ha cambiado el texto de esta tarea mientras la editabas/);
   await msg.first().waitFor({ timeout: 6000 }).catch(() => {});
   L.check("B ve el aviso de conflicto con el nombre de A", (await msg.count()) > 0 && /Administrador ha cambiado el texto de esta tarea mientras la editabas\. Se ha recargado con sus cambios: vuelve a aplicar los tuyos\./.test(await msg.first().innerText()), await msg.first().innerText().catch(() => "sin aviso"));
@@ -44,28 +50,35 @@ export async function run() {
   const warn = (await L.logs(t0, "tasks.updateTask")).find((l) => /ha cambiado el texto/.test(l.message));
   L.eq("el conflicto se registra como warn", warn?.level, "warn");
 
-  // Tras recargar, B ya puede guardar (versión nueva)
+  // A empieza otro cambio; tras recargar, B ya puede guardar (versión nueva)
+  await typeDescription(a.page, "Otro intento de A");
   await editDescription(b.page, "Segunda ya actualizada");
   await L.eqEventually("B guarda tras la recarga", () => desc("Compartida"), "Segunda ya actualizada");
-  // Y ahora A (con su versión anterior) recibe el conflicto con el nombre de B
-  await editDescription(a.page, "Otro intento de A");
+  // Y ahora A (que escribía sobre la versión anterior) recibe el conflicto con el nombre de B
+  await a.page.bringToFront();
+  await a.page.keyboard.press("Control+Enter");
   const msgA = a.page.getByText(/Segunda Persona ha cambiado el texto de esta tarea/);
   await msgA.first().waitFor({ timeout: 6000 }).catch(() => {});
   L.check("A recibe el conflicto con el nombre de B", (await msgA.count()) > 0);
   L.eq("la BD conserva el texto de B", await desc("Compartida"), "Segunda ya actualizada");
   await U.closeDialog(a.page); await U.closeDialog(b.page);
+  // El aviso de A se va solo: lo que se compruebe después en esta pestaña no debe contarlo.
+  await a.page.getByText(/ha cambiado el texto/).first().waitFor({ state: "detached", timeout: 15000 }).catch(() => {});
 
-  // Mismo usuario en dos pestañas: la segunda no pisa lo guardado en la primera (aviso propio); la primera puede volver a
-  // guardar sin conflicto (su versión avanza con cada guardado).
+  // Mismo usuario en dos pestañas: la segunda, que escribía su descripción a la vez, no pisa lo guardado en la primera
+  // (aviso propio); la primera puede volver a guardar sin conflicto (su versión avanza con cada guardado). Si la segunda no
+  // la estuviera editando, vería la de la primera al momento y no habría conflicto.
   const a2 = await a.ctx.newPage();
   const errs2 = []; a2.on("pageerror", (e) => errs2.push(e.message)); a2.on("console", (m) => m.type() === "error" && errs2.push(m.text()));
   await a2.goto(a.page.url()); await U.openTask(a2, "Titulo2"); await U.openTask(a.page, "Titulo2");
+  await typeDescription(a2, "Desde la pestaña 2");
   await editDescription(a.page, "Desde la pestaña 1");
   await L.eqEventually("pestaña 1 guarda", () => desc("Titulo2"), "Desde la pestaña 1");
   await editDescription(a.page, "Desde la pestaña 1 otra vez");
   await L.eqEventually("pestaña 1 vuelve a guardar sin conflicto", () => desc("Titulo2"), "Desde la pestaña 1 otra vez");
   L.eq("pestaña 1: sin aviso de conflicto", await a.page.getByText(/ha cambiado el texto|Has cambiado el texto/).count(), 0);
-  await editDescription(a2, "Desde la pestaña 2");
+  await a2.bringToFront();
+  await U.dialog(a2).locator("[role=textbox][contenteditable]").first().press("Control+Enter");
   const msg2 = a2.getByText(/Has cambiado el texto de esta tarea en otra pestaña u otro dispositivo/);
   await msg2.first().waitFor({ timeout: 6000 }).catch(() => {});
   L.check("mismo usuario: la pestaña 2 recibe el aviso de la otra pestaña", (await msg2.count()) > 0);
@@ -79,9 +92,12 @@ export async function run() {
   const bt = U.dialog(b.page).locator("textarea[aria-label='Título']").first();
   await U.openTask(a.page, "Titulo2");
   const at = U.dialog(a.page).locator("textarea[aria-label='Título']").first();
+  // B empieza a escribir su título (sobre el anterior) y A guarda el suyo antes. Si B no lo estuviera editando, vería el de
+  // A al momento y no habría conflicto.
+  await bt.click(); await b.page.keyboard.press("Control+A"); await b.page.keyboard.type("Titulo B");
   await at.click(); await a.page.keyboard.press("Control+A"); await a.page.keyboard.type("Titulo A"); await a.page.keyboard.press("Enter");
   await L.eqEventually("A renombra", async () => (await L.dbTask("Titulo A")) !== undefined, true);
-  await bt.click(); await b.page.keyboard.press("Control+A"); await b.page.keyboard.type("Titulo B"); await b.page.keyboard.press("Enter");
+  await bt.press("Enter");
   const msgT = b.page.getByText(/Administrador ha cambiado el texto de esta tarea/);
   await msgT.first().waitFor({ timeout: 6000 }).catch(() => {});
   L.check("conflicto también al cambiar el título", (await msgT.count()) > 0);

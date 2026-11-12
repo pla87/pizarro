@@ -1,7 +1,7 @@
 // Caza de bugs 48c: comentarios de tres personas a la vez en el detalle abierto (todos se ven, en orden y sin «Ver
 // anteriores»), el editor de la descripción con red lenta (no se pierden las primeras teclas), dos pestañas de la misma
-// persona que guardan la descripción (la segunda recibe el aviso, no pisa la primera) y una release cuyo texto se generó
-// antes de que otra persona renombrara una tarea. Misma base y servidor que board-e2e.mjs:
+// persona que guardan la descripción (la segunda, que la escribía a la vez, recibe el aviso y no pisa la primera) y una
+// release cuyo texto se generó antes de que otra persona renombrara una tarea. Misma base y servidor que board-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48c-e2e.mjs
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";
@@ -119,14 +119,19 @@ if (only.includes("tabs")) {
   await b.goto(`${L.BASE}/p/${(await L.project()).id}`);
   await L.board(b);
   for (const p of [a, b]) await U.openTask(p, "Dos pestañas");
-  const edit = async (p, text) => {
-    const dlg = U.dialog(p);
-    await dlg.getByRole("button", { name: "Editar", exact: true }).click();
-    const box = dlg.getByPlaceholder("Markdown · @persona · @docs / @sheets");
-    await box.waitFor();
-    await box.fill(text);
-    await box.press("Control+Enter");
+  const box = (p) => U.dialog(p).getByPlaceholder("Markdown · @persona · @docs / @sheets");
+  const type = async (p, text) => {
+    await U.dialog(p).getByRole("button", { name: "Editar", exact: true }).click();
+    await box(p).waitFor();
+    await box(p).fill(text);
   };
+  const edit = async (p, text) => {
+    await type(p, text);
+    await box(p).press("Control+Enter");
+  };
+  // La pestaña B empieza a escribir su descripción antes de que A guarde: es un conflicto de verdad (el mismo campo,
+  // escrito sobre el texto anterior). Si B no la estuviera editando, vería la de A al momento y no habría conflicto.
+  await type(b, "Desde B");
   // Una sola pestaña guarda varias veces seguidas (y el título): sin avisos de conflicto.
   await edit(a, "Desde A uno");
   await L.eqEventually("TABS: A guarda", async () => (await L.dbTask("Dos pestañas"))?.description, "Desde A uno");
@@ -142,8 +147,8 @@ if (only.includes("tabs")) {
   await L.eqEventually("TABS: A vuelve a guardar la descripción y el título justo después", async () => (await L.q(`SELECT title, description FROM "Task" WHERE title LIKE 'Dos pestañas%'`))[0], { title: "Dos pestañas (A)", description: "Desde A dos" });
   L.eq("TABS: A no ha visto ningún aviso de conflicto", await a.getByText(/ha cambiado el texto|Has cambiado el texto/).count(), 0);
   await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
-  // La pestaña B (abierta antes) guarda su descripción: no pisa la de A y avisa.
-  await edit(b, "Desde B");
+  // La pestaña B (abierta antes, con su descripción a medio escribir) la guarda: no pisa la de A y avisa.
+  await box(b).press("Control+Enter");
   await b.getByText(/Has cambiado el texto de esta tarea en otra pestaña u otro dispositivo/).first().waitFor({ timeout: 10000 }).catch(() => {});
   L.check("TABS: B recibe el aviso de la otra pestaña", (await b.getByText(/Has cambiado el texto de esta tarea en otra pestaña u otro dispositivo/).count()) > 0);
   L.eq("TABS: la descripción de A no se pierde", (await L.q(`SELECT description FROM "Task" WHERE title='Dos pestañas (A)'`))[0]?.description, "Desde A dos");
