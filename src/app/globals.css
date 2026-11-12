@@ -307,7 +307,7 @@ body {
   @apply inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100;
 }
 @utility input {
-  @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-focus focus:ring-3 focus:ring-focus/30 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100;
+  @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-focus focus:ring-3 focus:ring-focus/30 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 disabled:placeholder:text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-400 dark:disabled:placeholder:text-slate-400;
 }
 @utility label {
   @apply mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400;

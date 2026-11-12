@@ -1,6 +1,7 @@
 "use client";
 
 import { Archive, ArrowRightLeft, Rocket, Trash2, X } from "lucide-react";
+import { useLayoutEffect, useRef } from "react";
 import { useT } from "@/i18n/client";
 import type { BoardColumn } from "@/lib/types";
 
@@ -20,8 +21,24 @@ interface Props {
 // al final para que la última tarjeta pueda quedar por encima de la barra (ColumnView).
 export function SelectionBar({ count, columns, nextReleaseColumn, onMove, onRelease, onArchive, onDelete, onClear }: Props) {
   const t = useT();
+  // Lo que ocupa (su alto y un hueco de 0,5rem), en `--selection-bar-space` de la raíz: el aviso «Sin conexión»
+  // (ConnectionNotice) se coloca por encima.
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const root = document.documentElement.style;
+    const measure = () => root.setProperty("--selection-bar-space", `${el.offsetHeight + 8}px`);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      root.removeProperty("--selection-bar-space");
+    };
+  }, []);
   return (
-    <div className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-40 mx-auto flex max-w-5xl flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-2xl md:flex-nowrap lg:left-64 dark:border-slate-700 dark:bg-slate-900">
+    <div ref={ref} data-selection-bar className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-40 mx-auto flex max-w-5xl flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-2xl md:flex-nowrap lg:left-64 dark:border-slate-700 dark:bg-slate-900">
       <span className="shrink-0 px-1 text-sm font-semibold whitespace-nowrap max-md:flex-1">{count === 1 ? t("1 seleccionada") : t("{n} seleccionadas", { n: count })}</span>
       <div className="grid w-full grid-cols-2 gap-2 max-md:order-last md:flex md:w-auto md:min-w-0 md:flex-1 md:items-center">
         {nextReleaseColumn && (

@@ -1,9 +1,10 @@
 "use client";
 
 import { ChevronUp, Loader2, Pencil, Reply, Send, X } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { addComment, deleteComment, editComment, getOlderComments, getRecentComments } from "@/actions/tasks";
 import { useIntlLocale, useT } from "@/i18n/client";
+import { isOffline, subscribeConnection } from "@/lib/connection";
 import { formatDate } from "@/lib/format";
 import { mentionsToPlain } from "@/lib/mentions";
 import type { CommentInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
@@ -45,6 +46,7 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
   const toast = useToast();
   const confirm = useConfirm();
   const me = board.currentUserId;
+  const offline = useSyncExternalStore(subscribeConnection, isOffline, () => false);
   // Borrador local (por usuario y tarea): lo escrito y no enviado vuelve al abrir otra vez la tarea.
   const [initialDraft] = useState(() => {
     if (!purged) {
@@ -348,7 +350,8 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
           onValueChange={setText}
           users={users}
           disabled={!detail}
-          placeholder={t("Comenta… (@persona, @docs, @sheets)")}
+          // Sin el detalle (sin red al abrir la tarea) no se puede comentar: el campo lo dice en vez de parecer activo.
+          placeholder={!detail && offline ? t("Sin conexión") : t("Comenta… (@persona, @docs, @sheets)")}
           onCommand={async (kind) => {
             const link = await onGoogle(kind);
             if (link) setText((v) => `${v.trimEnd()} [${link.title.replace(/[\[\]]/g, "")}](${link.url}) `.trimStart());
