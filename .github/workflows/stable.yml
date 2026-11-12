@@ -1,0 +1,65 @@
+# Mover stable (a mano): Actions → Mover stable → Run workflow (rama main).
+# Mueve la rama «stable» a la última versión publicada (la etiqueta vX.Y.Z más alta con GitHub Release publicada cuyo
+# commit está en main) sin publicar otra versión. Sirve cuando el job «Rama stable» del workflow Release falló (por
+# ejemplo, por un STABLE_PUSH_TOKEN caducado o sin permisos) y ya se ha arreglado el secreto.
+# Usa el mismo script que Release (scripts/move-stable.sh) y las mismas reglas: solo X.Y.Z sin sufijo, solo commits
+# de main y nunca hacia atrás. Si stable ya está en esa versión, no hace nada.
+# Las acciones van fijadas a un commit exacto (SHA de 40 caracteres, con su versión en el comentario).
+name: Mover stable
+
+on:
+  workflow_dispatch:
+
+# Lo mínimo por defecto; el job pide lo suyo.
+permissions:
+  contents: read
+
+# El mismo grupo que Release: nunca a la vez que una publicación.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  stable:
+    name: Mover stable a la última versión
+    runs-on: ubuntu-latest
+    # Solo desde main: lanzado desde otra rama no hace nada.
+    if: github.ref == 'refs/heads/main'
+    # contents: write solo hace falta sin STABLE_PUSH_TOKEN (el push se hace entonces con GITHUB_TOKEN).
+    permissions:
+      contents: write
+    steps:
+      # El checkout y las lecturas usan siempre github.token; el PAT solo se usa para el push (scripts/move-stable.sh).
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          token: ${{ github.token }}
+          fetch-depth: 0
+
+      - name: Comprobar STABLE_PUSH_TOKEN
+        env:
+          STABLE_PUSH_TOKEN: ${{ secrets.STABLE_PUSH_TOKEN }}
+        run: bash scripts/move-stable.sh check-token
+
+      - name: Versiones publicadas
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Etiquetas con GitHub Release publicada (ni borradores ni preversiones): una etiqueta cuya release falló no
+          # cuenta.
+          tags="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[] | select(.draft | not) | select(.prerelease | not) | .tag_name')"
+          if [ -z "$tags" ]; then
+            echo "::error::No hay ninguna GitHub Release publicada: stable no se mueve."
+            exit 1
+          fi
+          {
+            echo "PUBLISHED_TAGS<<EOF_TAGS"
+            echo "$tags"
+            echo "EOF_TAGS"
+          } >> "$GITHUB_ENV"
+
+      - name: Mover stable a la última versión publicada
+        env:
+          STABLE_PUSH_TOKEN: ${{ secrets.STABLE_PUSH_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash scripts/move-stable.sh move --latest
