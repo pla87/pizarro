@@ -7,6 +7,7 @@ import { normalizeTaskFields } from "./task-fields";
 import { db } from "./db";
 import { AppError } from "./errors";
 import { mentionsToPlain } from "./mentions";
+import { slugify } from "./search-accents";
 import { buildReport, RECENT_DONE_DAYS } from "./report";
 import type { PdfJob } from "./report-pdf";
 import { renderInWorker } from "./report-render";
@@ -181,11 +182,11 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
   }, t);
 
   const pdf = await renderPdf({ kind: "report", locale: opts.locale, input: report });
-  const slug = project.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || t("proyecto");
+  const slug = slugify(project.name) || t("proyecto");
   return { project: { id: project.id, name: project.name }, pdf, today, filename: `${t("informe")}-${slug}-${today}.pdf`, taskCount: tasks.length };
 }
 
-const slugOf = (name: string, fallback: string) => name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || fallback;
+const slugOf = (name: string, fallback: string) => slugify(name) || fallback;
 
 /** PDF de la lista consolidada de una columna CHECKLIST (por tarjeta o por tipo de tarea). */
 export function generateChecklistPdf(

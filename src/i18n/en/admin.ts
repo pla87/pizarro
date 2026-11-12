@@ -318,4 +318,9 @@ export const admin: Record<string, string> = {
   "Tu dirección ({host}) es un subdominio de un alojamiento compartido: Google suele aceptar la dirección completa como dominio autorizado (abajo). Si la rechaza, o para mostrar tu marca, usa un dominio propio en APP_URL. Dominio a escribir:": "Your address ({host}) is a subdomain of a shared hosting service: Google usually accepts the full address as the authorized domain (below). If it rejects it, or to show your brand, use your own domain in APP_URL. Domain to enter:",
   "Usuario: tu dirección de Gmail. Contraseña: una contraseña de aplicación creada en myaccount.google.com/apppasswords (no vale la normal).": "User: your Gmail address. Password: an app password created at myaccount.google.com/apppasswords (your normal password won't work).",
   "Plantilla de {name}": "{name} template",
+
+  // Copias de seguridad: contadores con 1
+  "1 nuevo": "1 new",
+  "1 fichero nuevo": "1 new file",
+  "1 ya estaba": "1 already there",
 };

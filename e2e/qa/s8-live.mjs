@@ -17,7 +17,7 @@ export async function run() {
   await L.seedTasks(COL.doing, ["X"]);
   const a = await L.session({ viewport: U.WIDE });
   const b = await L.session({ email: L.USER2, viewport: U.WIDE });
-  await L.sleep(1500); // deja que el canal en vivo (SSE) conecte
+  await Promise.all([L.liveOpen(a.page), L.liveOpen(b.page)]); // el canal en vivo (SSE) de los dos, conectado
   const lat = [];
   const expect = async (name, fn) => { const s = await seen(b.page, fn); if (s !== null) lat.push(s); L.check(`${name} (≤ 3 s; tardó ${s === null ? ">8" : s.toFixed(1)} s)`, s !== null && s <= 3); };
 

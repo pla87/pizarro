@@ -11,7 +11,7 @@ const pg = require(process.env.PG_PATH || "pg");
 
 export const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const BASE = process.env.BASE || "http://localhost:3231";
-export const DATABASE_URL = process.env.DATABASE_URL || "postgresql://tablon:tablon@localhost:5432/pz_qa";
+export const DATABASE_URL = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/pz_qa";
 /**
  * Chromium: el de la variable CHROME; si no, el más reciente instalado por Playwright en PLAYWRIGHT_BROWSERS_PATH (o
  * /opt/pw-browsers), carpetas chromium-<revisión>/chrome-linux*\/chrome; si no hay ninguno, undefined y playwright-core
@@ -201,6 +201,10 @@ export async function board(page) {
   await sleep(500); // hidratación de React (los atajos se registran al montar)
 }
 export async function reload(page) { await page.reload(); await board(page); }
+/** Espera a que el canal en vivo (SSE) del tablero esté abierto: la raíz del tablero lleva data-live="open" (Board.tsx). */
+export async function liveOpen(page, timeout = 10000) {
+  await page.locator("[data-live=open]").first().waitFor({ state: "attached", timeout });
+}
 export function assertNoErrors(label, sessions) {
   const all = sessions.flatMap((s) => s.errors);
   check(`${label}: sin errores de consola ni de página`, all.length === 0, all.slice(0, 3).join(" | "));

@@ -1,49 +1,43 @@
-// Diccionario español → inglés, repartido por zonas de la app (cada fichero es un objeto plano).
+// Diccionario español → inglés, repartido por temas (cada fichero es un objeto plano). Un texto nuevo va al fichero de
+// su tema (o a uno nuevo con el nombre del tema), nunca a uno con el nombre de la ronda o de la tarea que lo añade.
+import { accesibilidad } from "./accesibilidad";
 import { acceso } from "./acceso";
 import { admin } from "./admin";
 import { almacenamiento } from "./almacenamiento";
 import { board } from "./board";
-import { colaboracion } from "./colaboracion";
 import { calendar } from "./calendar";
 import { campos } from "./campos";
+import { colaboracion } from "./colaboracion";
+import { comentarios } from "./comentarios";
 import { common } from "./common";
+import { conexion } from "./conexion";
 import { cuentas } from "./cuentas";
+import { detalle } from "./detalle";
 import { documentacion } from "./documentacion";
 import { ics } from "./ics";
 import { importar } from "./importar";
-import { proyectos } from "./proyectos";
-import { server } from "./server";
-import { settings } from "./settings";
+import { instalar } from "./instalar";
 import { landing } from "./landing";
-import { lista } from "./lista";
-import { pegado } from "./pegado";
 import { legal } from "./legal";
 import { licencia } from "./licencia";
-import { licencia2 } from "./licencia2";
-import { setup } from "./setup";
-import { task } from "./task";
-import { wip } from "./wip";
-import { comentarios } from "./comentarios";
-import { plantillas2 } from "./plantillas2";
-import { detalle } from "./detalle";
-import { web2 } from "./web2";
-import { r46ui } from "./r46ui";
-import { r46web } from "./r46web";
-import { soporte } from "./soporte";
-import { web3 } from "./web3";
-import { r47 } from "./r47";
+import { lista } from "./lista";
 import { mensajeria } from "./mensajeria";
-import { bh1a } from "./bh1a";
-import { bh1b } from "./bh1b";
-import { rev2 } from "./rev2";
-import { bh2 } from "./bh2";
-import { bh3 } from "./bh3";
-import { waauth } from "./waauth";
-import { instalar } from "./instalar";
-import { opt48 } from "./opt48";
-import { rev48b } from "./rev48b";
-import { bh48a } from "./bh48a";
-import { bh48c } from "./bh48c";
-import { bh48b } from "./bh48b";
+import { pegado } from "./pegado";
+import { plantillas } from "./plantillas";
+import { proyectos } from "./proyectos";
+import { releases } from "./releases";
+import { server } from "./server";
+import { settings } from "./settings";
+import { setup } from "./setup";
+import { soporte } from "./soporte";
+import { task } from "./task";
+import { web } from "./web";
+import { wip } from "./wip";
 
-export const EN: Record<string, string> = { ...common, ...board, ...task, ...settings, ...admin, ...server, ...cuentas, ...colaboracion, ...proyectos, ...calendar, ...setup, ...documentacion, ...campos, ...legal, ...landing, ...almacenamiento, ...licencia, ...wip, ...importar, ...ics, ...lista, ...acceso, ...plantillas2, ...pegado, ...licencia2, ...comentarios, ...detalle, ...web2, ...r46ui, ...r46web, ...soporte, ...web3, ...r47, ...mensajeria, ...bh1a, ...bh1b, ...rev2, ...bh2, ...bh3, ...waauth, ...instalar, ...opt48, ...rev48b, ...bh48a, ...bh48c, ...bh48b };
+// Ninguna clave se repite entre ficheros (`npm run i18n:unused` lo comprueba), así que el orden no cambia nada.
+export const EN: Record<string, string> = {
+  ...common, ...board, ...task, ...detalle, ...comentarios, ...lista, ...pegado, ...wip, ...calendar, ...releases, ...conexion,
+  ...accesibilidad, ...settings, ...admin, ...server, ...cuentas, ...acceso, ...colaboracion, ...proyectos, ...plantillas,
+  ...setup, ...documentacion, ...campos, ...almacenamiento, ...importar, ...ics, ...mensajeria, ...soporte, ...licencia,
+  ...legal, ...landing, ...web, ...instalar,
+};

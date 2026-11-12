@@ -2,7 +2,7 @@
 // Suite de regresión de las acciones del tablero de Pizarro (moveTask, updateTask, deployRelease y derivadas).
 //
 // Uso:
-//   BASE=http://localhost:3231 DATABASE_URL=postgresql://tablon:tablon@localhost:5432/pz_qa \
+//   BASE=http://localhost:3231 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pz_qa \
 //   APP_DIR=/ruta/al/worktree node run-all.mjs [--no-reset] [--only=1,4,7] [--json=salida.json]
 //
 // Reinicio (por defecto):

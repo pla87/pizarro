@@ -83,6 +83,8 @@ try {
     MAIL_OUTBOX_DIR: "",
     WHATSAPP_TOKEN: "",
     PIZARRO_DB_TESTS: "1",
+    // Algunas pruebas (enlaces absolutos, Origin de las peticiones) necesitan una URL pública aunque no haya .env.
+    APP_URL: process.env.APP_URL || "http://localhost:3000",
   };
   code = await run("npx", ["prisma", "migrate", "deploy"], env, true);
   if (code === 0) {

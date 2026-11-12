@@ -9,6 +9,7 @@ import { dateToIso, todayIso } from "../dates";
 import { db } from "../db";
 import { AppError } from "../errors";
 import { appTimeZone } from "../format";
+import { slugify } from "../search-accents";
 import { attachmentPath, documentPath, readReleaseAttachmentFile } from "../uploads";
 import { streamZipSize, type StreamZipEntry } from "../zip-stream";
 import { mapMentions } from "./mentions";
@@ -34,7 +35,7 @@ export interface ProjectExport {
 
 /** Nombre apto para ficheros a partir del nombre del proyecto: minúsculas, sin acentos, con guiones. */
 export function projectSlug(name: string): string {
-  const slug = name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "");
+  const slug = slugify(name).slice(0, 40).replace(/-+$/, "");
   return slug || "proyecto";
 }
 

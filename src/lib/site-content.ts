@@ -1,7 +1,7 @@
 // Textos propios de la web estática del producto (getpizarro.com, carpeta site/), además de los de la presentación
 // (landing-content.ts). Los usa solo scripts/build-site.mjs, que importa este fichero con Node tal cual: solo
 // `import type`, sin alias «@/». Están en src/ para que `npm run i18n:check` compruebe su traducción al inglés
-// (src/i18n/en/web2.ts, licencia2.ts, r46web.ts, web3.ts e instalar.ts).
+// (src/i18n/en/web.ts, licencia.ts e instalar.ts).
 import type { T } from "../i18n/shared";
 
 /** Icono de cada función de la lista compacta (los dibuja scripts/build-site.mjs). */

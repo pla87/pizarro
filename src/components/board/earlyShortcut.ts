@@ -9,8 +9,12 @@ interface EarlyShortcut {
   off: () => void;
 }
 
+/** Elementos donde se está escribiendo: los atajos de una tecla no deben dispararse. Lo usan el script de antes de hidratar
+ *  y los atajos de React (shortcuts.ts, isTypingTarget), para que los dos decidan igual. */
+export const TYPING_SELECTOR = "input, textarea, select, [contenteditable=true], [contenteditable='']";
+
 /** Script en línea (texto). Ignora lo que se escribe en campos y las pulsaciones con Ctrl/⌘ o repetidas. */
-export const EARLY_SHORTCUT_SCRIPT = `(function(){var w=window;if(w.__pzEarlyShortcut)return;var f=function(e){if(!e.altKey||e.ctrlKey||e.metaKey||e.repeat||e.code!=="KeyN")return;var t=e.target;if(t&&t.closest&&t.closest("input,textarea,select,[contenteditable]"))return;e.preventDefault();s.key=e.shiftKey?"bulk":"new"};var s={key:null,off:function(){document.removeEventListener("keydown",f)}};w.__pzEarlyShortcut=s;document.addEventListener("keydown",f)})()`;
+export const EARLY_SHORTCUT_SCRIPT = `(function(){var w=window;if(w.__pzEarlyShortcut)return;var f=function(e){if(!e.altKey||e.ctrlKey||e.metaKey||e.repeat||e.code!=="KeyN")return;var t=e.target;if(t&&t.closest&&t.closest(${JSON.stringify(TYPING_SELECTOR)}))return;e.preventDefault();s.key=e.shiftKey?"bulk":"new"};var s={key:null,off:function(){document.removeEventListener("keydown",f)}};w.__pzEarlyShortcut=s;document.addEventListener("keydown",f)})()`;
 
 /** Recoge (una sola vez) la pulsación anotada antes de hidratar y retira la escucha provisional. */
 export function takeEarlyShortcut(): EarlyShortcut["key"] {

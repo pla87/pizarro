@@ -120,7 +120,7 @@ function newSlot(file: string): Slot {
  * termina y la operación se repite en el hilo principal. Sin tope, el hueco del semáforo de password.ts quedaba ocupado
  * para siempre y, con dos así, nadie más podía entrar.
  */
-export const BCRYPT_OP_TIMEOUT_MS = 10_000;
+const BCRYPT_OP_TIMEOUT_MS = 10_000;
 
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
 

@@ -294,7 +294,7 @@ export function splitDataLine(line: string): { table: string; row: string } | nu
   return { table: JSON.parse(m[1]!) as string, row: line.slice(m[0].length, -1) };
 }
 
-export interface VerifiedBackup {
+interface VerifiedBackup {
   manifest: BackupManifest;
   counts: Map<string, number>;
   /** Referencias entre filas comprobadas (solo con `references`). */

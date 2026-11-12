@@ -301,4 +301,7 @@ export const cuentas: Record<string, string> = {
   "Pide a un administrador que te genere un enlace para elegir una contraseña nueva (Administración → Usuarios → Forzar cambio de contraseña). Te lo pasará por otro canal; sirve una sola vez y caduca en 30 minutos.": "Ask an administrator to generate a link for you to choose a new password (Administration → Users → Force password change). They will pass it to you through another channel; it works only once and expires in 30 minutes.",
   "Si eres quien administra el servidor: la sección «Altas, bajas y contraseñas» del manual explica cómo recuperar el acceso, o configura el envío de emails (SMTP).": "If you run the server: the \"Altas, bajas y contraseñas\" (adding, removing users and passwords) section of the manual explains how to regain access, or configure email sending (SMTP).",
   "No hay email ni inicio de sesión con Google configurados: quien olvide su contraseña no puede recuperarla por su cuenta y tendrá que pedirte que le fuerces el cambio de contraseña.": "Neither email nor Google sign-in is configured: anyone who forgets their password cannot recover it on their own and will have to ask you to force a password change.",
+
+  // Códigos de recuperación: contador con 1
+  "1 código de recuperación sin usar": "1 unused recovery code",
 };

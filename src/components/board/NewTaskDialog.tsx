@@ -66,6 +66,11 @@ interface Props {
 /** Subtareas que admite «Nueva tarea» al crear (el servidor rechaza más). */
 const MAX_NEW_SUBTASKS = 50;
 
+/** Subtarea de la lista, con una clave local estable (al quitar una, React no reutiliza la fila de otra). */
+type SubtaskItem = { key: string; text: string };
+let subtaskSeq = 0;
+const subtaskItem = (text: string): SubtaskItem => ({ key: `s${++subtaskSeq}`, text });
+
 function captureTitle(t: T, locale: string): string {
   return t("Captura") + " " + new Date().toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
 }
@@ -111,7 +116,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const [deliverableId, setDeliverableId] = useState(foreignInit ? "" : (d?.deliverableId ?? ""));
   const [description, setDescription] = useState(d?.description ?? initialDescription ?? "");
   const [files, setFiles] = useState<File[]>(() => sortByFileName(initialPlan.accepted, (f) => f.name, locale));
-  const [subtasks, setSubtasks] = useState<string[]>(d?.subtasks ?? []);
+  const [subtaskItems, setSubtaskItems] = useState<SubtaskItem[]>(() => (d?.subtasks ?? []).map(subtaskItem));
+  const subtasks = useMemo(() => subtaskItems.map((s) => s.text), [subtaskItems]);
   const [subtaskDraft, setSubtaskDraft] = useState(d?.subtaskDraft ?? "");
   const [evergreen, setEvergreen] = useState(foreignInit ? false : (d?.evergreen ?? !!initialEvergreen));
   // Campos opcionales del proyecto elegido (el borrador guarda los activados).
@@ -288,14 +294,14 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     e.preventDefault();
     const room = Math.max(0, MAX_NEW_SUBTASKS - subtasks.length);
     const added = lines.slice(0, room);
-    if (added.length) setSubtasks((l) => [...l, ...added].slice(0, MAX_NEW_SUBTASKS));
+    if (added.length) setSubtaskItems((l) => [...l, ...added.map(subtaskItem)].slice(0, MAX_NEW_SUBTASKS));
     if (added.length < lines.length) toast(subtasksDidNotFit(t, added.length, lines.length - added.length, MAX_NEW_SUBTASKS), "error");
   };
 
   const addSubtaskDraft = () => {
     const text = subtaskDraft.trim();
     if (!text) return;
-    setSubtasks((l) => (l.length >= MAX_NEW_SUBTASKS ? l : [...l, text.slice(0, 200)]));
+    setSubtaskItems((l) => (l.length >= MAX_NEW_SUBTASKS ? l : [...l, subtaskItem(text.slice(0, 200))]));
     setSubtaskDraft("");
   };
 
@@ -420,7 +426,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
               setDescription(preset.description);
             }
             // Subtareas predefinidas del tipo: se añaden a las que haya, sin repetir.
-            if (kind?.subtaskTemplate.length) setSubtasks((l) => mergeSubtasks(l, kind.subtaskTemplate));
+            // mergeSubtasks conserva las que hay al principio y añade detrás: solo las nuevas llevan clave nueva.
+            if (kind?.subtaskTemplate.length) setSubtaskItems((l) => [...l, ...mergeSubtasks(l.map((x) => x.text), kind.subtaskTemplate).slice(l.length).map(subtaskItem)]);
           }} />
         </div>
         <div>
@@ -434,10 +441,10 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
           <label className="label" htmlFor={`${uid}-subtask`}>{t("Subtareas (opcional)")}</label>
           {subtasks.length > 0 && (
             <ul className="mb-1.5 space-y-0.5">
-              {subtasks.map((s, i) => (
-                <li key={i} className="flex items-center gap-2 rounded-md bg-slate-50 py-0.5 pr-0.5 pl-2 text-sm dark:bg-slate-800/50">
-                  <span className="min-w-0 flex-1 break-words">{s}</span>
-                  <button type="button" className="btn-icon h-6 w-6 shrink-0" onClick={() => setSubtasks((l) => l.filter((_, j) => j !== i))} aria-label={t("Quitar la subtarea «{name}»", { name: s })}>
+              {subtaskItems.map((s) => (
+                <li key={s.key} className="flex items-center gap-2 rounded-md bg-slate-50 py-0.5 pr-0.5 pl-2 text-sm dark:bg-slate-800/50">
+                  <span className="min-w-0 flex-1 break-words">{s.text}</span>
+                  <button type="button" className="btn-icon h-6 w-6 shrink-0" onClick={() => setSubtaskItems((l) => l.filter((x) => x.key !== s.key))} aria-label={t("Quitar la subtarea «{name}»", { name: s.text })}>
                     <X size={14} />
                   </button>
                 </li>

@@ -6,7 +6,7 @@ import bcrypt from "bcryptjs";
 import { isSemaphoreFull, Semaphore, SemaphoreFullError } from "../src/lib/semaphore";
 import { bcryptPoolStats, bcryptWorkersEnabled, closeBcryptWorkers, runBcrypt, type BcryptOp } from "../src/lib/bcrypt-pool";
 import {
-  dummyVerify, hashPassword, isPasswordBusy, PASSWORD_CHECKS_AT_ONCE, PASSWORD_MAX_WAIT_MS, PASSWORD_QUEUE, PasswordBusyError, passwordCheckStats, verifyPassword,
+  dummyVerify, hashPassword, isPasswordBusy, PASSWORD_CHECKS_AT_ONCE, PASSWORD_MAX_WAIT_MS, PASSWORD_BUSY_MESSAGE, PASSWORD_QUEUE, PasswordBusyError, passwordCheckStats, verifyPassword,
 } from "../src/lib/password";
 import { rateLimit, rateLimitReached } from "../src/lib/rate-limit";
 
@@ -121,8 +121,13 @@ describe("contraseñas", () => {
       maxGap = Math.max(maxGap, now - last - 5);
       last = now;
     }, 5);
-    const results = await Promise.all(Array.from({ length: 8 }, () => verifyPassword("una-clave-larga-123", hash)));
-    clearInterval(timer);
+    let results: boolean[];
+    try {
+      results = await Promise.all(Array.from({ length: 8 }, () => verifyPassword("una-clave-larga-123", hash)));
+    } finally {
+      // Siempre, también si falla: un intervalo vivo deja colgado el proceso de pruebas.
+      clearInterval(timer);
+    }
     assert.ok(results.every(Boolean));
     // En el hilo principal, 8 comprobaciones dejaban el servidor parado ~1,5 s; en los hilos, apenas unos ms.
     assert.ok(maxGap < 400, `el bucle de eventos estuvo parado ${maxGap.toFixed(0)} ms`);
@@ -138,21 +143,27 @@ describe("contraseñas", () => {
     const holders = Array.from({ length: PASSWORD_CHECKS_AT_ONCE }, () => sem.run(() => gate));
     let peak = 0;
     const probe = setInterval(() => (peak = Math.max(peak, passwordCheckStats().active)), 2);
-    const pending = Array.from({ length: PASSWORD_QUEUE + 3 }, () => verifyPassword("una-clave-larga-123", hash));
-    const settled = Promise.allSettled(pending);
-    // Las 3 que no caben se rechazan ya, sin esperar a que se libere nada.
-    const early = await Promise.race([Promise.allSettled(pending.slice(PASSWORD_QUEUE)), new Promise((r) => setTimeout(() => r("tarde"), 200))]);
-    assert.notEqual(early, "tarde", "las que no caben se rechazan al momento");
-    release();
-    await Promise.all(holders);
-    const results = await settled;
-    clearInterval(probe);
+    let results: PromiseSettledResult<boolean>[];
+    try {
+      const pending = Array.from({ length: PASSWORD_QUEUE + 3 }, () => verifyPassword("una-clave-larga-123", hash));
+      const settled = Promise.allSettled(pending);
+      // Las 3 que no caben se rechazan ya, sin esperar a que se libere nada.
+      const early = await Promise.race([Promise.allSettled(pending.slice(PASSWORD_QUEUE)), new Promise((r) => setTimeout(() => r("tarde"), 200))]);
+      assert.notEqual(early, "tarde", "las que no caben se rechazan al momento");
+      release();
+      await Promise.all(holders);
+      results = await settled;
+    } finally {
+      // Siempre, también si una comprobación falla: los huecos sin soltar o el intervalo vivo dejarían colgado el proceso.
+      release();
+      clearInterval(probe);
+    }
     const busy = results.filter((r) => r.status === "rejected");
     assert.equal(busy.length, 3);
     for (const r of busy) {
       const err = (r as PromiseRejectedResult).reason;
       assert.ok(err instanceof PasswordBusyError);
-      assert.equal(err.message, "Demasiados intentos a la vez, prueba en unos segundos.");
+      assert.equal(err.message, PASSWORD_BUSY_MESSAGE);
     }
     assert.ok(results.filter((r) => r.status === "fulfilled").every((r) => (r as PromiseFulfilledResult<boolean>).value));
     assert.ok(peak <= PASSWORD_CHECKS_AT_ONCE, `pico de ${peak}`);
@@ -180,11 +191,14 @@ describe("contraseñas", () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));
     const full = Array.from({ length: PASSWORD_CHECKS_AT_ONCE + PASSWORD_QUEUE }, () => sem.run(() => gate));
-    assert.equal(rateLimit(key, 1, 60_000), true);
-    await assert.rejects(verifyPasswordCounted("una-clave-larga-123", hash, key), PasswordBusyError);
-    assert.equal(rateLimitReached(key, 1), false, "el intento sin comprobar no cuenta");
-    release();
-    await Promise.allSettled(full);
+    try {
+      assert.equal(rateLimit(key, 1, 60_000), true);
+      await assert.rejects(verifyPasswordCounted("una-clave-larga-123", hash, key), PasswordBusyError);
+      assert.equal(rateLimitReached(key, 1), false, "el intento sin comprobar no cuenta");
+    } finally {
+      release();
+      await Promise.allSettled(full);
+    }
     assert.equal(rateLimit(key, 1, 60_000), true);
     assert.equal(await verifyPasswordCounted("otra-clave-larga-123", hash, key), false);
     assert.equal(rateLimitReached(key, 1), true, "un intento comprobado sí cuenta");

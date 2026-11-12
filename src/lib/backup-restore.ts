@@ -129,7 +129,7 @@ export async function wipeDatabase(sql: PgSql): Promise<void> {
 
 // --- Origen de la copia --------------------------------------------------------------------------
 
-export interface Source {
+interface Source {
   dest: BackupDestination;
   /** Raíz de la copia o "latest". */
   stem: string;

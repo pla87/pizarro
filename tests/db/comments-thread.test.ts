@@ -247,7 +247,7 @@ describe("borrar un comentario con respuestas", () => {
     expectOk(await deleteComment(r2.id));
     assert.equal(await db.taskComment.count({ where: { taskId: task.id } }), 0);
     expectOk(await undoLast(f.project.id));
-    const back = await db.taskComment.findMany({ where: { taskId: task.id }, orderBy: { createdAt: "asc" } });
+    const back = await db.taskComment.findMany({ where: { taskId: task.id }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
     assert.deepEqual(back.map((c) => [c.body, !!c.deletedAt]), [["", true], ["r2", false]]);
     assert.equal(back[1]!.parentId, parent.id);
   });

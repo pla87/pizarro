@@ -36,29 +36,37 @@ function summarizeTemplate(tpl: Pick<TemplateDto, "columns" | "kinds" | "labels"
   return parts.join(" · ");
 }
 
+/** Clave local estable de cada fila de las listas que se reordenan o se quitan (no se guarda): con el índice como clave,
+ *  al subir, bajar o quitar una fila React reutilizaba los campos de otra (foco, texto a medio escribir del editor). */
+type Keyed<T> = T & { key: string };
+let keySeq = 0;
+const newKey = () => `r${++keySeq}`;
+const withKey = <T,>(item: T): Keyed<T> => ({ ...item, key: newKey() });
+const withoutKeys = <T,>(list: Keyed<T>[]): T[] => list.map(({ key, ...rest }) => rest as T);
+
 type Draft = {
   name: string;
   description: string;
-  columns: { name: string; role: ColumnRoleValue; isDone: boolean; wipLimit?: number | null }[];
-  kinds: { name: string; color: string; titleTemplate: string; descriptionTemplate: string; subtaskTemplate: string[] }[];
+  columns: Keyed<{ name: string; role: ColumnRoleValue; isDone: boolean; wipLimit?: number | null }>[];
+  kinds: Keyed<{ name: string; color: string; titleTemplate: string; descriptionTemplate: string; subtaskTemplate: string[] }>[];
   hiddenGeneralKinds: string[];
   hideAllGeneralKinds: boolean;
-  labels: { name: string; color: (typeof PALETTE)[number] }[];
+  labels: Keyed<{ name: string; color: (typeof PALETTE)[number] }>[];
   taskFields: TaskFieldKey[];
-  releaseTemplates: { kind: "HEADER" | "FOOTER"; name: string; content: string }[];
+  releaseTemplates: Keyed<{ kind: "HEADER" | "FOOTER"; name: string; content: string }>[];
 };
 
-const EMPTY: Draft = {
+const emptyDraft = (): Draft => ({
   name: "",
   description: "",
-  columns: [{ name: "", role: "NONE", isDone: false }],
+  columns: [withKey({ name: "", role: "NONE", isDone: false })],
   kinds: [],
   hiddenGeneralKinds: [],
   hideAllGeneralKinds: false,
   labels: [],
   taskFields: [],
   releaseTemplates: [],
-};
+});
 
 function ColorField({ value, onChange, colors }: { value: string; onChange: (c: string) => void; colors: readonly string[] }) {
   const t = useT();
@@ -111,20 +119,27 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
   const toDraft = (tpl: TemplateInput): Draft => ({
     name: tpl.name,
     description: tpl.description ?? "",
-    columns: tpl.columns,
-    kinds: (tpl.kinds ?? []).map((k) => ({ name: k.name, color: k.color, titleTemplate: k.titleTemplate ?? "", descriptionTemplate: k.descriptionTemplate ?? "", subtaskTemplate: k.subtaskTemplate ?? [] })),
+    columns: tpl.columns.map(withKey),
+    kinds: (tpl.kinds ?? []).map((k) => withKey({ name: k.name, color: k.color, titleTemplate: k.titleTemplate ?? "", descriptionTemplate: k.descriptionTemplate ?? "", subtaskTemplate: k.subtaskTemplate ?? [] })),
     hiddenGeneralKinds: tpl.hiddenGeneralKinds,
     hideAllGeneralKinds: tpl.hideAllGeneralKinds ?? false,
-    labels: tpl.labels,
+    labels: tpl.labels.map(withKey),
     taskFields: normalizeTaskFields(tpl.taskFields ?? []),
-    releaseTemplates: (tpl.releaseTemplates ?? []).map((r) => ({ kind: r.kind, name: r.name, content: r.content ?? "" })),
+    releaseTemplates: (tpl.releaseTemplates ?? []).map((r) => withKey({ kind: r.kind, name: r.name, content: r.content ?? "" })),
   });
 
   const save = () => {
     if (!editing) return;
     start(async () => {
       // Sin líneas vacías ni repetidas en las subtareas predefinidas.
-      const body = { ...editing.draft, kinds: editing.draft.kinds.map((k) => ({ ...k, subtaskTemplate: parseSubtaskLines(k.subtaskTemplate.join("\n")) })) };
+      const d = editing.draft;
+      const body = {
+        ...d,
+        columns: withoutKeys(d.columns),
+        kinds: withoutKeys(d.kinds).map((k) => ({ ...k, subtaskTemplate: parseSubtaskLines(k.subtaskTemplate.join("\n")) })),
+        labels: withoutKeys(d.labels),
+        releaseTemplates: withoutKeys(d.releaseTemplates),
+      };
       const res = await saveTemplate(body, editing.id);
       if (!res.ok) return toast(res.error, "error");
       toast(editing.id ? t("Plantilla actualizada") : t("Plantilla creada"));
@@ -216,7 +231,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
       {templates.length === 0 && <p className="mb-3 text-sm text-slate-500">{t("Aún no hay plantillas.")}</p>}
 
       <div className="flex flex-wrap gap-2">
-        <button className="btn-primary" onClick={() => setEditing({ id: null, draft: EMPTY })}><Plus size={16} /> {t("Nueva plantilla")}</button>
+        <button className="btn-primary" onClick={() => setEditing({ id: null, draft: emptyDraft() })}><Plus size={16} /> {t("Nueva plantilla")}</button>
         <button className="btn-secondary" onClick={() => { setSourceId(projects[0]?.id ?? ""); setPicking(true); }} disabled={projects.length === 0}>
           <Copy size={15} /> {t("Crear desde un proyecto…")}
         </button>
@@ -274,7 +289,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                   const setCol = (p: Partial<typeof c>) => patch({ columns: draft.columns.map((x, j) => (j === i ? { ...x, ...p } : x)) });
                   const taken = (r: ColumnRoleValue) => isUniqueColumnRole(r) && draft.columns.some((x, j) => j !== i && x.role === r);
                   return (
-                    <li key={i} className="flex flex-wrap items-center gap-2">
+                    <li key={c.key} className="flex flex-wrap items-center gap-2">
                       <input className="input min-w-0 flex-1 basis-40" value={c.name} onChange={(e) => setCol({ name: e.target.value })} maxLength={80} placeholder={t("Nombre")} aria-label={t("Nombre de la columna {n}", { n: i + 1 })} />
                       <select className="input w-auto" value={c.role} onChange={(e) => setCol({ role: e.target.value as ColumnRoleValue })} aria-label={t("Rol especial")}>
                         {COLUMN_ROLES.map((r) => <option key={r} value={r} disabled={taken(r)}>{t(ROLE_LABEL[r])}</option>)}
@@ -289,7 +304,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                   );
                 })}
               </ul>
-              <button type="button" className="btn-secondary mt-2" disabled={draft.columns.length >= MAX_TEMPLATE_COLUMNS} onClick={() => patch({ columns: [...draft.columns, { name: "", role: "NONE", isDone: false }] })}>
+              <button type="button" className="btn-secondary mt-2" disabled={draft.columns.length >= MAX_TEMPLATE_COLUMNS} onClick={() => patch({ columns: [...draft.columns, withKey({ name: "", role: "NONE", isDone: false })] })}>
                 <Plus size={15} /> {t("Añadir columna")}
               </button>
             </section>
@@ -300,7 +315,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                 {draft.kinds.map((k, i) => {
                   const setKind = (p: Partial<typeof k>) => patch({ kinds: draft.kinds.map((x, j) => (j === i ? { ...x, ...p } : x)) });
                   return (
-                    <li key={i} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                    <li key={k.key} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                       <div className="flex items-center gap-2">
                         <input className="input min-w-0 flex-1" value={k.name} onChange={(e) => setKind({ name: e.target.value })} maxLength={40} placeholder={t("Nombre")} aria-label={t("Nombre del tipo {n}", { n: i + 1 })} />
                         <button type="button" className="btn-icon" disabled={i === 0} onClick={() => patch({ kinds: move(draft.kinds, i, -1) })} aria-label={t("Subir el tipo {n}", { n: i + 1 })}><ArrowUp size={15} /></button>
@@ -315,7 +330,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                   );
                 })}
               </ul>
-              <button type="button" className="btn-secondary mt-2" disabled={draft.kinds.length >= MAX_TEMPLATE_KINDS} onClick={() => patch({ kinds: [...draft.kinds, { name: "", color: "#6366f1", titleTemplate: "", descriptionTemplate: "", subtaskTemplate: [] }] })}>
+              <button type="button" className="btn-secondary mt-2" disabled={draft.kinds.length >= MAX_TEMPLATE_KINDS} onClick={() => patch({ kinds: [...draft.kinds, withKey({ name: "", color: "#6366f1", titleTemplate: "", descriptionTemplate: "", subtaskTemplate: [] })] })}>
                 <Plus size={15} /> {t("Añadir tipo")}
               </button>
             </section>
@@ -370,7 +385,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                     <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</h4>
                     <ul className="space-y-3">
                       {items.map(({ r, index }, pos) => (
-                        <li key={index} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                        <li key={r.key} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                           <div className="flex items-center gap-2">
                             <input className="input min-w-0 flex-1" value={r.name} onChange={(e) => setRel(index, { name: e.target.value })} maxLength={60} placeholder={t("Nombre")} aria-label={t("Nombre de la plantilla de release {n}", { n: pos + 1 })} />
                             <button type="button" className="btn-icon" disabled={pos === 0} onClick={() => patch({ releaseTemplates: swapWith(draft.releaseTemplates, index, items[pos - 1]!.index) })} aria-label={t("Subir la plantilla de release {n}", { n: pos + 1 })}><ArrowUp size={15} /></button>
@@ -381,7 +396,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                         </li>
                       ))}
                     </ul>
-                    <button type="button" className="btn-secondary mt-2" disabled={items.length >= MAX_RELEASE_TEMPLATES_PER_KIND} onClick={() => patch({ releaseTemplates: [...draft.releaseTemplates, { kind, name: "", content: "" }] })}>
+                    <button type="button" className="btn-secondary mt-2" disabled={items.length >= MAX_RELEASE_TEMPLATES_PER_KIND} onClick={() => patch({ releaseTemplates: [...draft.releaseTemplates, withKey({ kind, name: "", content: "" })] })}>
                       <Plus size={15} /> {kind === "HEADER" ? t("Añadir cabecera") : t("Añadir pie")}
                     </button>
                   </div>
@@ -395,7 +410,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                 {draft.labels.map((l, i) => {
                   const setLabel = (p: Partial<typeof l>) => patch({ labels: draft.labels.map((x, j) => (j === i ? { ...x, ...p } : x)) });
                   return (
-                    <li key={i} className="flex flex-wrap items-center gap-2">
+                    <li key={l.key} className="flex flex-wrap items-center gap-2">
                       <input className="input min-w-0 flex-1 basis-40" value={l.name} onChange={(e) => setLabel({ name: e.target.value })} maxLength={40} placeholder={t("Nombre")} aria-label={t("Nombre de la etiqueta {n}", { n: i + 1 })} />
                       <ColorField value={l.color} onChange={(color) => setLabel({ color: color as typeof l.color })} colors={PALETTE} />
                       <button type="button" className="btn-icon hover:text-red-600" onClick={() => patch({ labels: draft.labels.filter((_, j) => j !== i) })} aria-label={t("Quitar la etiqueta {n}", { n: i + 1 })}><Trash2 size={15} /></button>
@@ -403,7 +418,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                   );
                 })}
               </ul>
-              <button type="button" className="btn-secondary mt-2" disabled={draft.labels.length >= MAX_TEMPLATE_LABELS} onClick={() => patch({ labels: [...draft.labels, { name: "", color: PALETTE[0] }] })}>
+              <button type="button" className="btn-secondary mt-2" disabled={draft.labels.length >= MAX_TEMPLATE_LABELS} onClick={() => patch({ labels: [...draft.labels, withKey({ name: "", color: PALETTE[0] })] })}>
                 <Plus size={15} /> {t("Añadir etiqueta")}
               </button>
             </section>

@@ -566,6 +566,9 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // Vuelve a abrir el canal en vivo cuando el navegador lo da por cerrado (ver el manejador de «error»).
   const [sseEpoch, setSseEpoch] = useState(0);
   const visible = usePageVisible();
+  // Raíz del tablero: lleva data-live="open" mientras el canal en vivo está abierto (las pruebas en navegador lo esperan
+  // en vez de una pausa fija). Se pone a mano, sin estado, para no volver a pintar el tablero en cada reconexión.
+  const rootRef = useRef<HTMLDivElement>(null);
   // Cambios de otras pestañas y personas casi al momento: el servidor avisa (Server-Sent Events) y
   // se refresca (lo de otras personas, tras una espera al azar: drainIncoming). Se agrupan los avisos seguidos; si la
   // conexión cae, EventSource reconecta solo. Con la pestaña oculta el canal se cierra (usePageVisible) y, al volver, se
@@ -578,9 +581,11 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       return;
     }
     let timer: ReturnType<typeof setTimeout> | null = null;
+    const root = rootRef.current;
     const source = new EventSource(`/api/projects/${data.project.id}/events`);
     source.addEventListener("open", () => {
       live.open = true;
+      root?.setAttribute("data-live", "open");
     });
     // EventSource reconecta solo, pero lo ocurrido mientras estuvo cortado no llega por el canal. Si el servidor respondió
     // con un error (p. ej. 503 mientras se apaga en un despliegue), el navegador da el canal por cerrado y no reintenta:
@@ -588,6 +593,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     let retry: ReturnType<typeof setTimeout> | null = null;
     source.addEventListener("error", () => {
       live.open = false;
+      root?.removeAttribute("data-live");
       live.gap = true;
       // Sin canal, el respaldo (al volver a la ventana, cada 2 minutos) vuelve a decidir los refrescos.
       live.paused = false;
@@ -634,6 +640,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       if (retry) clearTimeout(retry);
       source.close();
       live.open = false;
+      root?.removeAttribute("data-live");
       // Lo que llegue mientras está cerrado no se ve: al reabrir decide el saludo del servidor (o, sin él, el respaldo).
       live.gap = true;
     };
@@ -1204,7 +1211,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
 
   return (
     <BoardContext.Provider value={api}>
-      <div className="flex h-full flex-col">
+      <div ref={rootRef} className="flex h-full flex-col">
         {/* Contenedor de consulta: la cabecera se adapta al ancho que le deja la barra lateral, no al de la ventana. */}
         <div className="@container max-lg:hidden">
         {/* Nunca se sale de la pantalla: el nombre se trunca (entero en el tooltip) y, si así le queda poco sitio, los botones
@@ -1312,6 +1319,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
                 style={{ left: newTaskRect.left, top: newTaskRect.top, width: newTaskRect.width, height: newTaskRect.height }}
                 onClick={() => !secondOpen && addSecond()}
                 aria-disabled={secondOpen}
+                // Nombre accesible propio: con el texto visible («Nueva tarea») se confundiría con el botón de la cabecera.
+                aria-label={t("Abrir otra tarea nueva al lado")}
                 title={t("Abrir otra tarea nueva al lado")}
               >
                 {/* Mismo texto que el botón original: corto cuando la cabecera va justa de sitio y solo el icono si no cabe más. */}

@@ -197,6 +197,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
       <div
         ref={panelRef}
         role="dialog"
+        data-testid="modal-panel"
         aria-modal="true"
         // Nombre accesible del diálogo: su título (con la cabecera estándar) o, con una cabecera propia, `ariaLabel`.
         aria-labelledby={!ariaLabel && !header && title ? titleId : undefined}

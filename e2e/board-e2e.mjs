@@ -1033,7 +1033,7 @@ if (only.includes("r44")) {
   // En vivo y al añadir/quitar tarjetas: otra persona pasa tarjetas a «En progreso» con Alt+→ hasta que no caben.
   const a = await L.session({ viewport: { width: 1366, height: 768 } });
   const o = await L.session({ email: L.USER2, viewport: { width: 1366, height: 768 } });
-  await sleep(1500); // canal en vivo
+  await Promise.all([L.liveOpen(a.page), L.liveOpen(o.page)]); // canal en vivo de los dos, conectado
   let moved = 0;
   for (let i = 1; i <= 20 && !(await state(a.page, COL.doing)).hidden; i++) {
     await L.cardLoc(o.page, `B${pad(i)}`).focus();

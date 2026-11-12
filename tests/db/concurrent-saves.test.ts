@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import type { AsyncLocalStorage } from "node:async_hooks";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, loginAs, makeKind, makeProject, makeTask, makeUser } from "./helpers";
+import { db, expectFail, expectOk, loginAs, makeKind, makeProject, makeTask, makeUser, waitForLockWaiter } from "./helpers";
 import { createSession } from "../../src/lib/session";
 import { updateTask } from "../../src/actions/tasks";
 import { deployRelease } from "../../src/actions/releases";
@@ -27,16 +27,6 @@ async function asOwnRequest<T>(user: { id: string }, fn: () => Promise<T>): Prom
     await createSession(user.id);
     return fn();
   });
-}
-
-/** Espera a que alguna conexión de la base quede bloqueada esperando un candado (la acción ya llegó a la transacción). */
-async function waitForLockWaiter(): Promise<void> {
-  for (let i = 0; i < 200; i++) {
-    const [row] = await db.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`;
-    if (row && row.n > 0) return;
-    await new Promise((r) => setTimeout(r, 20));
-  }
-  throw new Error("la acción no llegó a esperar el candado");
 }
 
 describe("updateTask: conflicto de texto dentro de la transacción", () => {

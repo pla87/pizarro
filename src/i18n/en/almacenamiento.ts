@@ -91,4 +91,7 @@ export const almacenamiento: Record<string, string> = {
   "Cambió la cuota de almacenamiento del proyecto a {value}": "Changed the project's storage quota to {value}",
   "Borró definitivamente {n} {what} ({mb} MB liberados)": "Permanently deleted {n} {what} ({mb} MB freed)",
   "Borró definitivamente un fichero del proyecto ({mb} MB liberados)": "Permanently deleted a project file ({mb} MB freed)",
+
+  // Subidas (adjuntos, documentación) que no caben en el disco del servidor
+  "El servidor no tiene espacio para guardar el archivo.": "The server has no space left to save the file.",
 };

@@ -146,4 +146,10 @@ export const proyectos: Record<string, string> = {
   "El archivo de esta exportación ha caducado. Vuelve a exportar el proyecto.": "This export file has expired. Export the project again.",
   "Proyecto en blanco": "Blank project",
   "Columnas por defecto, sin tarjetas.": "Default columns, no cards.",
+
+  // Nuevo proyecto: «Empezar con» (plantillas y ejemplos)
+  "Empezar con": "Start with",
+  "Ejemplos": "Examples",
+  "{description} Con tarjetas de muestra que puedes borrar.": "{description} With sample cards you can delete.",
+  "La estructura de la plantilla (columnas, tipos, etiquetas y campos), sin tarjetas.": "The template's structure (columns, types, labels and fields), no cards.",
 };

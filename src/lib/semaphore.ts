@@ -16,7 +16,7 @@ export function isSemaphoreFull(err: unknown): err is SemaphoreFullError {
   return err instanceof Error && err.name === "SemaphoreFullError";
 }
 
-export interface SemaphoreOptions {
+interface SemaphoreOptions {
   /** Tareas a la vez. */
   max: number;
   /** Tareas que pueden esperar turno (las que lleguen con la cola llena se rechazan al momento). */

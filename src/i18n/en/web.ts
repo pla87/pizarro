@@ -1,6 +1,6 @@
-// Traducciones al inglés de la web del producto getpizarro.com rediseñada (src/lib/site-content.ts, que genera
-// scripts/build-site.mjs). Los textos que ya existían están en licencia2.ts. Clave: texto exacto en español.
-export const web2: Record<string, string> = {
+// Web del producto getpizarro.com (src/lib/site-content.ts, que genera scripts/build-site.mjs) y preguntas de la
+// licencia que comparte con la presentación (src/lib/landing-content.ts). Clave: texto exacto en español.
+export const web: Record<string, string> = {
   // Cabecera
   "Para quién": "Who it's for",
   "Precio": "Pricing",
@@ -120,4 +120,103 @@ export const web2: Record<string, string> = {
   "Manual en PDF": "Manual (PDF)",
   "Novedades de cada versión": "What's new in each version",
   "Pizarro: el tablero Kanban sencillo, en tu propio servidor": "Pizarro: the simple Kanban board, on your own server",
+
+  // Preguntas sobre la licencia (web y presentación)
+  "¿Qué es uso personal?": "What counts as personal use?",
+  "¿Qué pasa si no pago?": "What happens if I don't pay?",
+  "Pizarro funciona exactamente igual: no hay versión de prueba, ni funciones recortadas, ni fecha de caducidad. La licencia se basa en la buena voluntad. Si lo usas para trabajar, comprarla ({price} € + IVA, una sola vez) es lo que permite seguir mejorándolo.": "Pizarro works exactly the same: there is no trial version, no cut-down features and no expiry date. The licence relies on good faith. If you use it for work, buying it (€{price} + VAT, once) is what keeps it improving.",
+  "¿Me lo va a recordar?": "Will it remind me?",
+  "¿Se bloquea algo?": "Is anything ever blocked?",
+  "No. Nada se bloquea nunca y la licencia no se comprueba por internet.": "No. Nothing is ever blocked, and the licence is never checked over the internet.",
+
+  // Web del producto: textos generales, precio y licencia
+  "Pizarro: un tablero Kanban sencillo en tu propio servidor": "Pizarro: a simple Kanban board on your own server",
+  "Pizarro es un tablero Kanban sencillo para equipos pequeños y familias. Pagas una vez y es tuyo; tus datos se quedan en tu servidor. Gratis para uso personal.": "Pizarro is a simple Kanban board for small teams and families. Pay once and it's yours; your data stays on your server. Free for personal use.",
+  "Saltar al contenido": "Skip to content",
+  "Funciones": "Features",
+  "Instalación": "Installation",
+  "Preguntas": "FAQ",
+  "Por hacer": "To do",
+  "Hecho": "Done",
+  "Documentos y archivos de cada proyecto, junto a sus tareas.": "Each project's documents and files, right next to its tasks.",
+  "Imagen Docker": "Docker image",
+  "Railway": "Railway",
+  "Las dos modalidades tienen todas las funciones: solo cambia para qué usas Pizarro.": "Both options include every feature: the only difference is what you use Pizarro for.",
+  "0 €": "€0",
+  "Todas las funciones, sin límite de tiempo": "Every feature, with no time limit",
+  "Actualizaciones gratis": "Free updates",
+  "En tu propio servidor": "On your own server",
+  "Licencia para cualquier otro uso": "Licence for any other use",
+  "Sin suscripción ni cuota por usuario": "No subscription and no per-user fee",
+  "Todas las actualizaciones futuras, gratis": "All future updates, free",
+  "Sin soporte incluido": "No support included",
+  "Comprar licencia": "Buy a licence",
+  "Próximamente": "Coming soon",
+  "Mientras tanto puedes usar Pizarro con normalidad: la licencia se basa en la buena voluntad.": "Meanwhile you can use Pizarro as normal: the licence relies on good faith.",
+  "Pizarro es software de código disponible: puedes leer todo el código. Gratis para uso personal; para cualquier otro uso necesitas licencia.": "Pizarro is source-available software: you can read all of its code. Free for personal use; any other use needs a licence.",
+  "Código en GitHub": "Code on GitHub",
+  "Página no encontrada": "Page not found",
+  "Esta dirección no existe en getpizarro.com.": "This address doesn't exist on getpizarro.com.",
+  "Ir al inicio": "Go to the home page",
+
+  // Presentación y web: precios y preguntas sobre el uso personal y educativo
+  "Gratis para uso personal y educativo": "Free for personal and educational use",
+  "Para ti y tu familia sin fines comerciales, y para la enseñanza: colegios, institutos, universidades y academias.":
+    "For you and your family, non-commercially, and for education: schools, universities and academies.",
+  "Empresas, autónomos y profesionales, asociaciones, administraciones y cualquier otra organización.":
+    "Companies, freelancers and professionals, associations, public bodies and any other organisation.",
+  "Sí, para uso personal y familiar no comercial, y para la enseñanza en colegios, institutos, universidades, academias y otros centros educativos. Cualquier otro uso (empresa, autónomo, asociación, administración…) necesita la licencia.":
+    "Yes, for personal and non-commercial family use, and for teaching in schools, universities, academies and other educational institutions. Any other use (business, freelancer, association, public body…) needs the licence.",
+  "El de una persona en su propio servidor, para fines personales, domésticos o familiares: organizar la casa, tus aficiones o tus proyectos propios sin fines comerciales. Si lo usas en una empresa, como autónomo o profesional, o en cualquier otra organización (también asociaciones, ONG y administraciones), necesitas licencia; la enseñanza es la excepción.":
+    "Use by an individual on their own server, for personal, household or family purposes: organising the home, your hobbies or your own non-commercial projects. If you use it in a company, as a freelancer or professional, or in any other organisation (including associations, NGOs and public bodies), you need a licence; education is the exception.",
+  "Solo a los administradores, con un aviso discreto como mucho una vez al mes, y nunca en la primera semana. Desaparece para siempre al registrar la licencia o al declarar que es uso personal o educativo en Administración → Licencia.":
+    "Only administrators, with a discreet notice at most once a month, and never in the first week. It goes away for good once you register the licence or declare personal or educational use in Administration → Licence.",
+  "¿Y los centros educativos?": "What about schools and universities?",
+  "También es gratis. Colegios, institutos, universidades, centros de formación profesional y academias, públicos o privados, con su profesorado y su alumnado, pueden usarlo sin pagar para dar clase, aprender, investigar y organizar el propio centro. Solo necesita licencia la actividad comercial ajena a la enseñanza.":
+    "It's free for them too. Schools, universities, vocational training centres and academies, public or private, with their teachers and students, can use it at no cost to teach, learn, do research and run the institution itself. Only commercial activity unrelated to teaching needs a licence.",
+
+  // Web: textos revisados (uso educativo, funciones)
+  "Pizarro es un tablero Kanban sencillo para equipos pequeños y familias. Pagas una vez y es tuyo; tus datos se quedan en tu servidor. Gratis para uso personal y educativo.":
+    "Pizarro is a simple Kanban board for small teams and families. Pay once and it's yours; your data stays on your server. Free for personal and educational use.",
+  "Cada tipo de tarea trae sus subtareas y su texto de partida": "Each task type brings its own subtasks and starting text",
+  "Coste, horas, cliente o fecha de inicio, solo si los usas": "Cost, hours, client or start date, only if you use them",
+  "Un aviso cuando una tarea lleva días esperando a alguien": "A reminder when a task has been waiting on someone for days",
+  "Columnas con función": "Columns with a job",
+  "Una columna puede sumar el presupuesto, juntar las subtareas en una lista o sacar el PDF de la semana.":
+    "A column can add up the budget, gather subtasks into one list or print the week's plan as a PDF.",
+  "Pizarro es software de código disponible: puedes leer todo el código. Gratis para uso personal y educativo; para cualquier otro uso necesitas licencia.":
+    "Pizarro is source-available software: you can read all of its code. Free for personal and educational use; any other use needs a licence.",
+  "Licencia de código disponible: gratis para uso personal y educativo, y de pago único por servidor para empresas y profesionales.":
+    "Source-available licence: free for personal and educational use, one-time payment per server for companies and professionals.",
+
+  // Portada sin precio en la entrada
+  "Pizarro es un Kanban que se instala en tu propio servidor: tareas, comentarios y notas de versión, sin suscripción ni cuota por persona.":
+    "Pizarro is a Kanban board you install on your own server: tasks, comments and release notes, with no subscription and no per-person fee.",
+  "Lo tuyo, lo vencido o lo de esta semana, y por etiqueta, tipo o persona.": "Your tasks, overdue ones or this week's, and by label, type or person.",
+
+  // Integraciones
+  "Se conecta con lo que ya usas": "Works with what you already use",
+  "Todo es opcional: lo activa un administrador cuando hace falta.": "All optional: an administrator turns it on when needed.",
+  "Avisos por email": "Email notifications",
+  "Invitaciones, menciones, recordatorios y un resumen diario, con Gmail o el correo de tu empresa.":
+    "Invitations, mentions, reminders and a daily digest, through Gmail or your company's email.",
+  "Telegram y WhatsApp": "Telegram and WhatsApp",
+  "Los avisos, también en el móvil por Telegram o WhatsApp.": "Notifications on your phone too, through Telegram or WhatsApp.",
+  "Entra con tu cuenta de Google, sin otra contraseña que recordar.": "Sign in with your Google account, with no extra password to remember.",
+  "Todas las guías de conexión": "All connection guides",
+
+  // Guías de conexión
+  "Guías": "Guides",
+  "Guías de conexión": "Connection guides",
+  "Paso a paso para conectar Pizarro con Google, Telegram y WhatsApp. Todo es opcional y lo configura un administrador de tu instalación.":
+    "Step by step, how to connect Pizarro with Google, Telegram and WhatsApp. All of it is optional and set up by an administrator of your installation.",
+  "Guías paso a paso para conectar Pizarro con Google (inicio de sesión, Docs y Sheets), Telegram y WhatsApp.":
+    "Step-by-step guides to connect Pizarro with Google (sign-in, Docs and Sheets), Telegram and WhatsApp.",
+  "¿Aún no has instalado Pizarro?": "Haven't installed Pizarro yet?",
+  "Leer la guía": "Read the guide",
+  "Otras guías": "Other guides",
+  "Todas las guías": "All guides",
+
+  // Pie ({site}: la web del autor, enlazada)
+  "Un proyecto de {site}": "A {site} project",
 };

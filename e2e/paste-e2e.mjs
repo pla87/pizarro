@@ -109,7 +109,8 @@ try {
   L.eq("NUEVA: imagen vacía sin recuperación → un solo aviso", await p.getByText("La imagen pegada ha llegado vacía desde el portapapeles", { exact: false }).count(), 1);
   await p.screenshot({ path: path.join(SHOTS, "paste-new-empty.png") });
   await discardNew();
-  await sleep(6500); // que se vaya el aviso
+  // Que se vaya el aviso (dura unos segundos) para que no cuente en las comprobaciones siguientes.
+  await p.getByText("La imagen pegada ha llegado vacía desde el portapapeles", { exact: false }).first().waitFor({ state: "hidden", timeout: 15000 });
 
   // Texto copiado de Word con su «foto»: en la descripción entra el texto (la tabla), sin adjunto.
   await openNew();

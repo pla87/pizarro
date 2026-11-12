@@ -15,12 +15,12 @@ export const SITE_URL = "https://getpizarro.com";
 export const REPO_URL = "https://github.com/pla87/pizarro";
 /**
  * Guía de instalación para usuarios, en la web (la genera scripts/build-site.mjs desde docs/web/instalar.md y
- * docs/web/en/install.md). La referencia técnica completa sigue en docs/INSTALL.md (INSTALL_DOCS_URL).
+ * docs/web/en/install.md). La referencia técnica completa sigue en docs/INSTALL.md, en el repositorio.
  */
 export const INSTALL_URL = `${SITE_URL}/instalar/`;
+/** @public (scripts/build-site.mjs comprueba que coincide con la guía en inglés) */
 export const INSTALL_URL_EN = `${SITE_URL}/en/install/`;
 export const installUrl = (locale: string = "es"): string => (locale === "en" ? INSTALL_URL_EN : INSTALL_URL);
-export const INSTALL_DOCS_URL = `${REPO_URL}/blob/main/docs/INSTALL.md`;
 /** Imagen Docker publicada con cada versión (GitHub Container Registry). */
 export const IMAGE = "ghcr.io/pla87/pizarro";
 /** @public (scripts/build-site.mjs) */

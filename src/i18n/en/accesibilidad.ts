@@ -1,6 +1,6 @@
-// Caza de bugs: nombres accesibles de los botones repetidos en listas (dicen a qué elemento afectan). Clave: texto exacto
-// en español.
-export const bh1b: Record<string, string> = {
+// Nombres accesibles de los botones repetidos en listas (dicen a qué elemento afectan).
+// Clave: texto exacto en español.
+export const accesibilidad: Record<string, string> = {
   "Subir la columna {n}": "Move column {n} up",
   "Bajar la columna {n}": "Move column {n} down",
   "Quitar la columna {n}": "Remove column {n}",

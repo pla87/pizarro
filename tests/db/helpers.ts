@@ -174,3 +174,14 @@ export async function afterDone(): Promise<void> {
   const g = globalThis as unknown as { __pzAfter?: Promise<unknown>[] };
   while (g.__pzAfter?.length) await Promise.all(g.__pzAfter.splice(0));
 }
+
+/** Espera a que alguna conexión de la base quede bloqueada esperando un candado (la acción ya llegó a la transacción y
+ *  espera a otra que sigue abierta). Las pruebas con base van de una en una, así que la que espera es la de la prueba. */
+export async function waitForLockWaiter(): Promise<void> {
+  for (let i = 0; i < 500; i++) {
+    const [row] = await db.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+    if (row && row.n > 0) return;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  throw new Error("la acción no llegó a esperar el candado");
+}

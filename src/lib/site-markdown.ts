@@ -14,11 +14,9 @@
 
 // Con la extensión: Node (build-site.mjs) carga este fichero sin empaquetador y no resuelve rutas sin ella.
 import { escapeHtml } from "./html-escape.ts";
+import { slugify } from "./search-accents.ts";
 
 type LinkResolver = (href: string) => string | null;
-
-/** Identificador de un encabezado: minúsculas, sin acentos, palabras unidas con «-». */
-const slugify = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 /** Enlaces admitidos por defecto: http(s) absolutos y anclas de la misma página. @public (scripts/build-site.mjs) */
 export function safeHref(href: string): string | null {
@@ -130,14 +128,14 @@ const indentOf = (l: string) => l.length - l.trimStart().length;
 const startsBlock = (l: string) => FENCE.test(l) || HEADING.test(l) || RULE.test(l) || LIST.test(l) || /^\s*>/.test(l);
 
 /** Tipos de aviso («> [!NOTE]» y compañía, como en GitHub). */
-export type CalloutKind = "note" | "tip" | "important" | "warning" | "caution";
+type CalloutKind = "note" | "tip" | "important" | "warning" | "caution";
 /** Rótulo de cada tipo de aviso; por defecto, en español. */
-export const CALLOUT_LABELS: Record<CalloutKind, string> = { note: "Nota", tip: "Consejo", important: "Importante", warning: "Atención", caution: "Cuidado" };
+const CALLOUT_LABELS: Record<CalloutKind, string> = { note: "Nota", tip: "Consejo", important: "Importante", warning: "Atención", caution: "Cuidado" };
 
 /** Un encabezado del documento (para el índice): nivel, identificador y su HTML. */
-export type Heading = { level: number; id: string; html: string };
+type Heading = { level: number; id: string; html: string };
 
-export type MarkdownOptions = {
+type MarkdownOptions = {
   /** Qué enlaces se admiten (y cómo se reescriben). */
   link?: LinkResolver;
   /** Si se pasa, se le añaden los encabezados en orden. */

@@ -13,7 +13,7 @@ export interface Client extends RawSql {
   $transaction<R>(fn: (tx: RawSql) => Promise<R>, options?: { maxWait?: number; timeout?: number; isolationLevel?: "RepeatableRead" }): Promise<R>;
 }
 
-export interface ForeignKey {
+interface ForeignKey {
   name: string;
   child: string;
   parent: string;

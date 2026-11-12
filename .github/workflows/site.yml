@@ -19,6 +19,7 @@ on:
       - "src/lib/site-content.ts"
       - "src/lib/site-markdown.ts"
       - "src/lib/html-escape.ts"
+      - "src/lib/search-accents.ts"
       - "docs/guias/**"
       - "docs/web/**"
       - "src/i18n/en/**"

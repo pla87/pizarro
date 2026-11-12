@@ -71,7 +71,7 @@ export function withDatabase(url: string, name: string): string {
 }
 
 /** Tope de duración del volcado (el mismo que tenía la transacción de Prisma). */
-export const DUMP_TIMEOUT_MS = 30 * 60_000;
+const DUMP_TIMEOUT_MS = 30 * 60_000;
 
 /**
  * Volcado de la copia en una conexión propia, fuera del pool de la app: la transacción REPEATABLE READ (todas las

@@ -66,15 +66,16 @@ if (only.includes("keys")) {
   await U.dialog(page).waitFor();
   // Con el foco en el título de la tarea nueva (escribiendo), como Alt+N.
   await page.keyboard.press("Alt+Shift+N");
-  await sleep(800);
-  L.eq("KEYS: abre un segundo diálogo", await page.locator("[role=dialog]").count(), 2);
+  await L.eqEventually("KEYS: abre un segundo diálogo", () => page.locator("[role=dialog]").count(), 2);
   const second = page.locator("[role=dialog]").nth(1);
-  L.check("KEYS: el segundo es «Crear varias tareas»", (await second.innerText().catch(() => "")).includes("Crear varias tareas"));
-  const [a, b] = await page.locator("[role=dialog]").evaluateAll((els) => els.map((e) => (e.querySelector("[class*=rounded]") ?? e).getBoundingClientRect().left));
+  await L.eqEventually("KEYS: el segundo es «Crear varias tareas»", async () => (await second.innerText().catch(() => "")).includes("Crear varias tareas"), true);
+  // Los dos paneles (data-testid="modal-panel" en Modal.tsx), no un hijo cualquiera con esquinas redondeadas.
+  const [a, b] = await page.locator("[data-testid=modal-panel]").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().left));
   L.check("KEYS: «Varias tareas» queda a la derecha de la tarea", b > a, `${a} / ${b}`);
-  // Otra vez: ya hay dos, no se abre un tercero.
+  // Otra vez: ya hay dos, no se abre un tercero. El atajo se atiende al pulsarlo y React pinta en el fotograma siguiente:
+  // tras dos fotogramas un tercer diálogo ya estaría (el código del de «Varias tareas» ya está cargado).
   await page.keyboard.press("Alt+Shift+N");
-  await sleep(500);
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 50)))));
   L.eq("KEYS: con los dos huecos ocupados no se abre otro", await page.locator("[role=dialog]").count(), 2);
   L.assertNoErrors("KEYS", [s]);
   await s.ctx.close();

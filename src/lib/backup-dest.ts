@@ -322,7 +322,7 @@ export const SHRINK_MIN_FILES = 20;
  */
 const SHRINK_CORE_TABLES = ["User", "Project", "Task"] as const;
 
-export interface ShrinkProblem {
+interface ShrinkProblem {
   /** "core": personas, proyectos y tareas; "rows": todas las filas (manifiestos antiguos, sin cuentas por tabla). */
   what: "core" | "rows" | "files";
   local: number;

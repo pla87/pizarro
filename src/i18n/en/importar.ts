@@ -53,4 +53,20 @@ export const importar: Record<string, string> = {
     "{n} older comments were not imported: for each card with more than {max}, the {max} most recent are kept.",
   "{n} etiquetas sobraban (máximo {max} por proyecto) y no se han importado.": "{n} labels were over the limit ({max} per project) and were not imported.",
   "{n} tareas archivadas sobraban (máximo {max}) y no se han importado.": "{n} archived tasks were over the limit ({max}) and were not imported.",
+
+  // Avisos de importación con un solo elemento (antes «1 títulos eran…»)
+  "1 título era más largo de lo permitido y se ha recortado.": "1 title was longer than allowed and has been shortened.",
+  "1 enlace de Google no tenía una dirección válida de Google y no se ha importado.": "1 Google link did not have a valid Google address and was not imported.",
+  "1 tarjeta no tenía título y se ha ignorado.": "1 card had no title and was ignored.",
+  "1 texto era más largo de lo permitido y se ha recortado.": "1 text was longer than allowed and has been shortened.",
+  "1 archivo adjunto subido a Trello no se ha importado (solo se importan los enlaces).": "1 file uploaded to Trello was not imported (only links are imported).",
+  "1 fecha límite no se pudo interpretar y se ha ignorado.": "1 due date could not be understood and was ignored.",
+  "1 etiqueta de tarea sobraba (máximo {max} por tarea) y no se ha importado.": "1 task label was over the limit ({max} per task) and was not imported.",
+  "1 elemento de checklist sobraba (máximo {max} subtareas por tarea) y no se ha importado.": "1 checklist item was over the limit ({max} subtasks per task) and was not imported.",
+  "1 comentario antiguo no se ha importado: de cada tarjeta con más de {max} se guardan los {max} más recientes.": "1 older comment was not imported: for each card with more than {max}, the {max} most recent are kept.",
+  "1 fila no tenía título y se ha ignorado.": "1 row had no title and was ignored.",
+  "1 prioridad no se reconoció y se ha ignorado.": "1 priority was not recognised and was ignored.",
+  "1 subtarea sobraba (máximo {max} por tarea) y no se ha importado.": "1 subtask was over the limit ({max} per task) and was not imported.",
+  "1 etiqueta sobraba (máximo {max} por proyecto) y no se ha importado.": "1 label was over the limit ({max} per project) and was not imported.",
+  "1 tarea archivada sobraba (máximo {max}) y no se ha importado.": "1 archived task was over the limit ({max}) and was not imported.",
 };

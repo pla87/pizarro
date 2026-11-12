@@ -6,6 +6,7 @@ import { db } from "./db";
 import { buildIcs, descriptionToPlain } from "./ics";
 import { localizeGeneralKind } from "./kinds-localize";
 import { mentionsToPlain } from "./mentions";
+import { slugify } from "./search-accents";
 import { appUrl } from "./mail";
 import type { ColumnRoleValue } from "./constants";
 
@@ -64,6 +65,6 @@ export async function buildColumnIcs(projectId: string, columnId: string): Promi
       return date ? [{ uid: `${x.id}@pizarro`, date, endDate: range ? due! : undefined, summary: mentionsToPlain(x.title), description: x.description ? descriptionToPlain(x.description) : undefined, url: `${base}/p/${projectId}?task=${x.id}` }] : [];
     }),
   });
-  const slug = column.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "agenda";
+  const slug = slugify(column.name) || "agenda";
   return { ics, filename: `${slug}.ics`, count: tasks.length };
 }

@@ -14,7 +14,7 @@ import { useLayoutEffect, useRef, useState, type RefObject } from "react";
  * de lo largo que sea el nombre, de cuántas personas haya activas y de si hay filtros. Antes de medir (HTML del
  * servidor, sin JavaScript aún) vale la regla de contenedor de siempre (texto a partir de 1240 px de cabecera).
  */
-export type HeaderFit = "full" | "icons" | "tight";
+type HeaderFit = "full" | "icons" | "tight";
 const LEVELS: HeaderFit[] = ["full", "icons", "tight"];
 
 /** Lo que el nombre debe poder enseñar antes de quitar textos a los botones (o el nombre entero, si es más corto). */

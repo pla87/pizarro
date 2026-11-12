@@ -57,7 +57,11 @@ expliquen las opciones con su coste y beneficio y una recomendación.
 - Copian el `.env` y apuntan `DATABASE_URL` a una base propia (`pz_<agente>`), puerto propio. Si PostgreSQL no
   arranca: `pg_ctlcluster 16 main start`. Solo borran las bases que crearon.
 - i18n: el texto en español es la clave (`t("...")`); cada texto nuevo necesita su entrada en `src/i18n/en/*.ts`.
-  `npm run i18n:check` debe pasar.
+  `npm run i18n:check` debe pasar. **Diccionarios por tema**: cada texto va al fichero de su tema (`mensajeria.ts`,
+  `detalle.ts`, `web.ts`, `licencia.ts`, `releases.ts`…) o, si no hay ninguno que encaje, a uno nuevo con el nombre del
+  tema, registrado en `src/i18n/en/index.ts`; nunca a uno con el nombre de la ronda o de la tarea (`bh48a.ts`,
+  `rev2.ts`). Para no chocar entre agentes basta con añadir al final del objeto, bajo un comentario propio. Sin claves
+  repetidas entre ficheros (`npm run i18n:unused` las cuenta).
 - Migraciones nuevas: carpeta `prisma/migrations/<timestamp>_<nombre>` con un timestamp posterior al último. Las ya
   publicadas no se editan nunca (cambia su checksum y `prisma migrate deploy` falla en las instalaciones que la aplicaron).
 - Migraciones: **expandir y luego contraer**. No se borra ni se renombra una columna (o tabla, o valor de un enum) en
@@ -86,12 +90,12 @@ npm run test:db          # con base de datos (crea y borra pizarro_test_*)
 npx next build --webpack && node scripts/postbuild.mjs && npm run build:boot
 ```
 
-Pruebas en navegador (ver `e2e/README.md`): la suite QA (`e2e/qa/run-all.mjs`, ~378 comprobaciones), la del
-tablero (`e2e/board-e2e.mjs`, unas 340) y la de pegado (`e2e/paste-e2e.mjs`, ~72: imágenes y tablas pegadas; misma
-base `pz_qa` y servidor que la del tablero). Si cambias el rol o la etiqueta de un elemento que la suite usa,
-actualiza el script correspondiente. Las suites declaran la instalación de uso personal en `prepareUsers`
-(`e2e/qa/lib.mjs`) para que no salga el recordatorio de licencia. Chromium: `CHROME` o, si no, el más reciente de
-`/opt/pw-browsers`.
+Pruebas en navegador: las suites QA, tablero, pegado y las de las cazas de bugs 48a, 48b y 48c. Cómo se lanzan, en qué
+orden y cuántas comprobaciones tiene cada una: `e2e/README.md` (las cifras solo se apuntan allí). Si cambias el rol o la
+etiqueta de un elemento que una suite usa, actualiza el script correspondiente. Para esperar al canal en vivo del
+tablero, `L.liveOpen(page)` (la raíz del tablero lleva `data-live="open"`), no una pausa fija. Las suites declaran la
+instalación de uso personal en `prepareUsers` (`e2e/qa/lib.mjs`) para que no salga el recordatorio de licencia.
+Chromium: `CHROME` o, si no, el más reciente de `/opt/pw-browsers`.
 
 Guardas que conviene conocer:
 
@@ -104,11 +108,20 @@ Guardas que conviene conocer:
   leer las descripciones completas o a hacer consultas entrada a entrada. También mide recortar la pila con 500
   adjuntos huérfanos y 4.000 entradas guardadas (una sola pasada por `UndoEntry` en `stillRetained`, `src/lib/undo.ts`).
 - Código sin uso (solo informa, no está en las dependencias): `npx --yes knip@5`. La configuración está en `knip.json`
-  (entradas que Next no declara: pruebas, `e2e/`, `scripts/`, `public/sw.js`, el worker de los PDF…). Lo que aún
-  marca son falsos positivos conocidos: lo que `scripts/build-site.mjs` carga con `import()` de una ruta (márcalo con
-  `@public` en su comentario) y los re-exports usados a través de otro módulo. Antes de quitar un `export`, busca el
-  nombre en `src`, `tests`, `scripts` y `e2e`. Los nombres de las pruebas van por tema (`tests/db/comment-notices.test.ts`,
-  no `review-fixes-…`): una prueba nueva va al fichero del tema que prueba.
+  (entradas que Next no declara: pruebas, `e2e/`, `scripts/`, `public/sw.js`, el worker de los PDF…). No hay ficheros
+  ni dependencias sin uso. Aún marca unos 60 `export` que solo usa su propio módulo, casi todos de las copias de
+  seguridad (`backup-*.ts`) y de la mensajería (`messaging-core.ts`, `telegram*.ts`), y unos pocos alias o re-exports
+  que se usan a través de otro módulo: quitar el `export` de los primeros está pendiente. Un `export` nuevo que nadie
+  importa no debe sumarse a esa lista (quítale el `export`). Lo que `scripts/build-site.mjs` carga con `import()` de una
+  ruta knip no lo ve: márcalo con `@public` en su comentario. Antes de quitar un `export`, busca el nombre en `src`,
+  `tests`, `scripts` y `e2e`. Los nombres de las pruebas van por tema (`tests/db/comment-notices.test.ts`, no
+  `review-fixes-…`): una prueba nueva va al fichero del tema que prueba.
+- Guardas de tiempo en las pruebas: con `assertFast`/`bestTime` de `tests/timing.ts` (la mejor de tres medidas, o una
+  cota proporcional a una medida de referencia), nunca una sola medida contra un tope fijo; deben pasar con la CPU
+  cargada. Las esperas a otra transacción, con `waitForLockWaiter()` (`tests/db/helpers.ts`), no con pausas. `npm test`
+  corta cada prueba a los 120 s (`--test-timeout`); un intervalo o un temporizador que siga vivo al terminar deja el
+  proceso colgado, así que se paran en un `finally`. No uses `--test-force-exit` en `npm test`: con la CPU cargada se
+  pierden pruebas en silencio (se vio 891 → 862, sin ningún fallo).
 - Lo que llega al navegador no debe importar `zod` (unos 85 KB): las constantes y tipos que usa un componente de cliente
   van en un módulo `*-core.ts` sin zod (`changelog-core.ts`, `project-templates-core.ts`); los tipos derivados de un
   esquema se importan con `import type`.

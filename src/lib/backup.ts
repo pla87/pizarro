@@ -156,7 +156,7 @@ function updateStatus(fn: (s: BackupStatus) => BackupStatus): Promise<void> {
  * Memoria en proceso (lib/memo.ts) de lo que piden las páginas de administración: la lista de copias y el aviso de copia
  * atrasada (backup-alert.ts). Se invalida con cada copia nueva o podada y con cada cambio de status.json.
  */
-export const BACKUP_MEMO = "backup:";
+const BACKUP_MEMO = "backup:";
 export const BACKUP_ALERT_MEMO = `${BACKUP_MEMO}alert`;
 const BACKUP_LIST_MEMO = `${BACKUP_MEMO}list`;
 

@@ -8,6 +8,7 @@ import { detectDelimiter, mapHeaders, parseCsv, parseCsvBoard } from "../src/lib
 import { assertBoardLimits, decodeText, foreignMaxBytes, parseForeign, sniffFormat } from "../src/lib/foreign-import/parse";
 import { cleanMarkdown, cleanName, cleanTitle, instantDay, isDoneName, parseDay, stripHtml } from "../src/lib/foreign-import/text";
 import { parseTrello } from "../src/lib/foreign-import/trello";
+import { assertFast } from "./timing";
 
 const t = makeT("es");
 const trelloText = readFileSync(new URL("./fixtures/trello-board.json", import.meta.url), "utf8");
@@ -339,14 +340,9 @@ describe("fechas, saneado y detección de formato", () => {
 });
 
 describe("entradas hostiles y rendimiento", () => {
-  /** Ejecuta `fn` y comprueba que tarda menos de `ms` (cotas muy holgadas: lo cuadrático tardaría decenas de segundos). */
-  function fast<R>(ms: number, fn: () => R): R {
-    const t0 = performance.now();
-    const out = fn();
-    const took = performance.now() - t0;
-    assert.ok(took < ms, `tardó ${Math.round(took)} ms (máximo ${ms})`);
-    return out;
-  }
+  /** Ejecuta `fn` y comprueba que tarda menos de `ms` en la mejor de tres medidas (cotas muy holgadas: lo cuadrático tardaría
+   *  decenas de segundos en todas, y con la máquina cargada una sola medida puede inflarse). */
+  const fast = assertFast;
 
   test("una línea de 80.000 «[» y 80.000 «<!--» se sanean rápido, también sin recortar de antemano", () => {
     fast(1500, () => cleanMarkdown("[".repeat(80_000), 1_000_000));
@@ -360,7 +356,7 @@ describe("entradas hostiles y rendimiento", () => {
     fast(1500, () => cleanName("<!--".repeat(500_000), 40));
     // Con los máximos normales la entrada se recorta antes de sanear y el resultado respeta el tope.
     const clipped = { n: 0 };
-    const md = fast(500, () => cleanMarkdown("[".repeat(500_000), undefined, clipped));
+    const md = fast(500, () => ((clipped.n = 0), cleanMarkdown("[".repeat(500_000), undefined, clipped)));
     assert.equal(md.length, 20_000);
     assert.equal(clipped.n, 1);
   });
@@ -420,9 +416,7 @@ describe("entradas hostiles y rendimiento", () => {
   test("CSV con un millón de filas mínimas: se rechaza enseguida y sin gastar memoria", () => {
     const big = `title\n${"a\n".repeat(1_000_000)}`;
     const before = process.memoryUsage().heapUsed;
-    const t0 = performance.now();
-    assert.throws(() => parseCsvBoard(big, { t }), /demasiadas filas/);
-    assert.ok(performance.now() - t0 < 1000, "tardó demasiado");
+    fast(1000, () => assert.throws(() => parseCsvBoard(big, { t }), /demasiadas filas/));
     assert.ok(process.memoryUsage().heapUsed - before < 100 * 1024 * 1024, "gastó demasiada memoria");
     assert.throws(() => parseCsv(big, undefined, 10), /demasiadas filas/);
     assert.equal(parseCsv("a\nb\nc\n", undefined, 3).length, 3);
