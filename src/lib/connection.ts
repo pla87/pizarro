@@ -150,6 +150,66 @@ export function refreshWhenOnline(refresh: () => void, key: unknown = refresh): 
   pending.set(key, refresh);
 }
 
+/** Olvida un refresco pendiente (p. ej. el componente que lo pidió ya no está). */
+function forgetRefresh(key: unknown): void {
+  pending.delete(key);
+}
+
+/**
+ * Lectura que no debe quedarse sin respuesta si falla la red (el detalle de una tarea, su historial, la lista de un
+ * diálogo): si la petición no llega al servidor, marca «sin conexión» y se repite sola al volver la conexión (las veces
+ * que haga falta). Otro fallo va a `onError`; sin él, se lanza (queda en los logs como cualquier promesa sin atender).
+ * Antes esas lecturas no tenían `.catch`: sin red el diálogo se quedaba cargando para siempre, también al volver la red.
+ * Devuelve la función que la cancela (al desmontar).
+ */
+export function loadWhenOnline<T>(load: () => Promise<T>, onResult: (value: T) => void, onError?: (err: unknown) => void): () => void {
+  let alive = true;
+  const key = {};
+  const attempt = () => {
+    if (!alive) return;
+    load().then(
+      (value) => {
+        if (!alive) return;
+        reportReachable();
+        onResult(value);
+      },
+      (err: unknown) => {
+        if (!alive) return;
+        if (isNetworkError(err)) {
+          reportOffline();
+          refreshWhenOnline(attempt, key);
+        } else if (onError) onError(err);
+        else throw err;
+      },
+    );
+  };
+  attempt();
+  return () => {
+    alive = false;
+    forgetRefresh(key);
+  };
+}
+
+/**
+ * Código que se carga aparte (`import()` de un diálogo). Sin red, o con el servidor caído, no se rechaza: espera y se
+ * vuelve a pedir al volver la conexión. Antes el fallo (ChunkLoadError) llegaba a la pantalla de error, que lo tomaba por
+ * una versión nueva y recargaba la página sin red: la página de error del navegador. Además, `React.lazy` (next/dynamic)
+ * guarda el fallo para siempre. Si el servidor responde y aun así no llega, sí es una versión nueva: se rechaza (la
+ * pantalla de error recarga la página).
+ */
+export function importWhenOnline<T>(load: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const attempt = () => {
+      load().then(resolve, async (err: unknown) => {
+        if (await probeServer()) return reject(err);
+        reportOffline();
+        refreshWhenOnline(attempt);
+      });
+    };
+    attempt();
+  });
+}
+
 /** Una petición acaba de llegar al servidor: si se daba por perdida la conexión, ha vuelto. */
 export function reportReachable(): void {
   if (!offline) return;

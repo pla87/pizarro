@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { getTaskHistory } from "@/actions/tasks";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
+import { loadWhenOnline } from "@/lib/connection";
+import { actionThrowMessage } from "@/lib/stale-action";
 import type { TaskHistoryItem } from "@/lib/task-events";
 import { cn } from "../ui/cn";
 
@@ -16,19 +18,19 @@ export function TaskHistory({ taskId }: { taskId: string }) {
   const [items, setItems] = useState<TaskHistoryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Se vuelve a leer cada vez que se abre (los cambios recientes no estarían en una copia vieja).
+  // Se vuelve a leer cada vez que se abre (los cambios recientes no estarían en una copia vieja). Sin red se lee al
+  // volver la conexión (antes se quedaba en «Cargando…» para siempre).
   useEffect(() => {
     if (!open) return;
-    let alive = true;
-    getTaskHistory(taskId).then((res) => {
-      if (!alive) return;
-      setError(res.ok ? null : res.error);
-      if (res.ok) setItems(res.data);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [open, taskId]);
+    return loadWhenOnline(
+      () => getTaskHistory(taskId),
+      (res) => {
+        setError(res.ok ? null : res.error);
+        if (res.ok) setItems(res.data);
+      },
+      (err) => setError(actionThrowMessage(err, t)),
+    );
+  }, [open, taskId, t]);
 
   return (
     <section>

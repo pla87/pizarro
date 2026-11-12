@@ -3,7 +3,7 @@
 import { prefetchTaskDetail } from "./taskDetailPrefetch";
 import { advanceCursor, announceOnArrival, announceRemoteChange, DEFAULT_LIVE_REFRESH_JITTER_MS, foreignRefreshDelay, missedWhileClosed, removalOf, settleIncoming, type IncomingChange, type LiveCursor, type Removal } from "./remoteChange";
 import { actionThrowMessage } from "@/lib/stale-action";
-import { isNetworkError, refreshWhenOnline, reportOffline, reportReachable, safeRefresh } from "@/lib/connection";
+import { importWhenOnline, isNetworkError, refreshWhenOnline, reportOffline, reportReachable, safeRefresh } from "@/lib/connection";
 import { afterModalHistory } from "../ui/useBackToClose";
 import {
   closestCorners, DndContext, type CollisionDetection, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
@@ -76,14 +76,18 @@ function ownSuspense<P extends object>(Dialog: ComponentType<P>): ComponentType<
 }
 
 // Los diálogos (con el editor de texto y el Markdown) no van en el código inicial del tablero:
-// se cargan al abrirlos y se precargan cuando el navegador está libre.
+// se cargan al abrirlos y se precargan cuando el navegador está libre. Si al abrirlos no hay red, esperan a que vuelva
+// (importWhenOnline) en vez de fallar: el fallo llegaba a la pantalla de error, que recargaba la página sin red.
 const loadTaskDialog = () => import("./TaskDialog");
 const loadNewTaskDialog = () => import("./NewTaskDialog");
-const TaskDialog = ownSuspense(dynamic(() => loadTaskDialog().then((m) => m.TaskDialog)));
-const NewTaskDialog = ownSuspense(dynamic(() => loadNewTaskDialog().then((m) => m.NewTaskDialog)));
-const ReleaseDialog = ownSuspense(dynamic(() => import("./ReleaseDialog").then((m) => m.ReleaseDialog)));
-const BulkTaskDialog = ownSuspense(dynamic(() => import("./BulkTaskDialog").then((m) => m.BulkTaskDialog)));
-const ArchivedDialog = ownSuspense(dynamic(() => import("./ArchivedDialog").then((m) => m.ArchivedDialog)));
+const loadReleaseDialog = () => import("./ReleaseDialog");
+const loadBulkTaskDialog = () => import("./BulkTaskDialog");
+const loadArchivedDialog = () => import("./ArchivedDialog");
+const TaskDialog = ownSuspense(dynamic(() => importWhenOnline(loadTaskDialog).then((m) => m.TaskDialog)));
+const NewTaskDialog = ownSuspense(dynamic(() => importWhenOnline(loadNewTaskDialog).then((m) => m.NewTaskDialog)));
+const ReleaseDialog = ownSuspense(dynamic(() => importWhenOnline(loadReleaseDialog).then((m) => m.ReleaseDialog)));
+const BulkTaskDialog = ownSuspense(dynamic(() => importWhenOnline(loadBulkTaskDialog).then((m) => m.BulkTaskDialog)));
+const ArchivedDialog = ownSuspense(dynamic(() => importWhenOnline(loadArchivedDialog).then((m) => m.ArchivedDialog)));
 
 const COLUMN_PREFIX = "col:";
 /** Contenedor virtual del arrastre de una tarea fija (evergreen): origen fuera de las listas ordenables. */
@@ -328,14 +332,15 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const sc = useShortcut();
   const dragHandle = useCoarsePointer();
 
-  // Precarga de los diálogos más usados cuando el navegador queda libre: abrirlos es instantáneo.
+  // Precarga de los diálogos cuando el navegador queda libre: abrirlos es instantáneo, también si luego se va la red. Si
+  // la precarga falla (sin red), no pasa nada: se vuelven a pedir al abrirlos.
   useEffect(() => {
     const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1500));
     const cancel = window.cancelIdleCallback ?? window.clearTimeout;
     const id = idle(() => {
-      void loadTaskDialog();
-      void loadNewTaskDialog();
-      void import("@/components/ui/RichTextEditor");
+      for (const load of [loadTaskDialog, loadNewTaskDialog, loadArchivedDialog, loadReleaseDialog, loadBulkTaskDialog, () => import("@/components/ui/RichTextEditor")]) {
+        load().catch(() => {});
+      }
     });
     return () => cancel(id);
   }, []);

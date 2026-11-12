@@ -39,6 +39,7 @@ import { ToastProvider, useToast } from "./ui/Toast";
 import { useEscapeClose } from "./ui/useEscapeClose";
 import { useFocusTrap } from "./ui/focusTrap";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
+import { loadWhenOnline } from "@/lib/connection";
 
 interface Props {
   user: CurrentUser;
@@ -398,21 +399,12 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   const [importing, setImporting] = useState(false);
   // Con una importación en curso el diálogo no se cierra (Esc, fondo, atrás): la subida sigue y se enseña su resultado.
   const [importBusy, setImportBusy] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    listProjectExamples().then((res) => {
-      if (!cancelled && res.ok) setExamples(res.data);
-    });
-    return () => { cancelled = true; };
-  }, []);
+  // Sin red se piden al volver la conexión (antes el fallo quedaba sin atender).
+  useEffect(() => loadWhenOnline(listProjectExamples, (res) => res.ok && setExamples(res.data), () => {}), []);
   // Las plantillas (solo administradores) se piden al abrir el modal.
   useEffect(() => {
     if (!isAdmin) return;
-    let cancelled = false;
-    listTemplates().then((res) => {
-      if (!cancelled && res.ok) setTemplates(res.data);
-    });
-    return () => { cancelled = true; };
+    return loadWhenOnline(listTemplates, (res) => res.ok && setTemplates(res.data), () => {});
   }, [isAdmin]);
   // Se cierra al llegar al proyecto nuevo, no antes: cerrar retira su entrada del historial
   // y eso cancelaría la navegación en curso.

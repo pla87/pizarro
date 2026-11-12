@@ -20,8 +20,8 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | QA (9 escenarios) | `e2e/qa/run-all.mjs` | 380 | ~5 min |
 | Tablero | `e2e/board-e2e.mjs` | 339 | ~4 min |
 | Pegar | `e2e/paste-e2e.mjs` | 72 | ~1 min |
-| Cabecera y atajos (caza de bugs 48a) | `e2e/bh48a-e2e.mjs` | 41 | ~1 min |
-| Sin conexión y pestañas (caza de bugs 48b) | `e2e/bh48b-e2e.mjs` | 66 | ~1 min |
+| Cabecera y atajos (caza de bugs 48a) | `e2e/bh48a-e2e.mjs` | 42 | ~1 min |
+| Sin conexión y pestañas (caza de bugs 48b) | `e2e/bh48b-e2e.mjs` | 120 | ~3 min |
 | Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/bh48c-e2e.mjs` | 44 | ~1 min |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
@@ -73,8 +73,8 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48a-e2e.mjs
 
 Tres personas comentan a la vez la misma tarea en varias rondas (todas ven todos los comentarios, en orden y sin «Ver
 anteriores»), el editor de la descripción con red lenta (CDP, y el trozo del editor retrasado 6 s: lo tecleado antes y
-durante su llegada no se pierde), dos pestañas de la misma persona guardando la descripción (la segunda recibe el aviso;
-una sola pestaña guardando seguido no) y una release cuyo texto se generó antes de renombrar una tarea. Misma base y
+durante su llegada no se pierde), dos pestañas de la misma persona guardando la descripción (la segunda, que la escribía a
+la vez, recibe el aviso; una sola pestaña guardando seguido no) y una release cuyo texto se generó antes de renombrar una tarea. Misma base y
 servidor:
 
 ```sh
@@ -88,8 +88,13 @@ Sin red y con el servidor caído la página no se cambia por la de error del nav
 «Sin conexión» y «Conexión recuperada»); 8 pestañas por HTTP/1.1 (se simula cuál está delante: las ocultas cierran su
 canal en vivo); la tarea abierta que otra persona borra o archiva (aviso con su nombre, «Copiar tu texto», no se reabre
 al deshacer); cerrar el detalle tras un guardado fallido del título; «Nueva tarea» con la columna borrada; `?task=` al
-cerrar y enlaces a tareas que no están. Misma base y servidor (por HTTP, sin TLS). Es la que más inicios de sesión hace:
-lánzala con el servidor recién arrancado.
+cerrar y enlaces a tareas que no están; sin red, los diálogos cargados aparte (Archivadas, Varias tareas, Generar
+release) esperan a la red sin recargar la página y, ya precargados, se abren sin red; el detalle, su historial y
+Archivadas abiertos sin red se cargan al volver; conflictos del texto campo a campo (otra persona cambia la descripción:
+el título se guarda y el detalle muestra la descripción nueva; el mismo campo sí es un conflicto); el foco tras Escape
+en la descripción y el nombre accesible de los campos del detalle. Partes sueltas con `PART=lazy,detail,…` (ver la
+cabecera del script). Misma base y servidor (por HTTP, sin TLS). Es la que más inicios de sesión hace: lánzala con el
+servidor recién arrancado.
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48b-e2e.mjs

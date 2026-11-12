@@ -11,6 +11,8 @@ import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard } from "./context";
 import { formatDate } from "@/lib/format";
 import { MentionText } from "../ui/MentionText";
+import { isNetworkError, loadWhenOnline, reportOffline } from "@/lib/connection";
+import { actionThrowMessage, actionThrowResult } from "@/lib/stale-action";
 
 /** Tareas archivadas del proyecto: consulta y recuperación. */
 export function ArchivedDialog({ onClose }: { onClose: () => void }) {
@@ -40,22 +42,33 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setNext(null);
     setLoadingMore(false);
+    // Sin red, la búsqueda se repite sola al volver la conexión (antes se quedaba cargando para siempre).
+    let stop: (() => void) | undefined;
     const timer = setTimeout(() => {
-      getArchivedTasks(board.project.id, { query: q }).then((res) => {
-        if (!alive || reqRef.current !== req) return;
-        if (!res.ok) {
-          toast(res.error, "error");
+      stop = loadWhenOnline(
+        () => getArchivedTasks(board.project.id, { query: q }),
+        (res) => {
+          if (!alive || reqRef.current !== req) return;
+          if (!res.ok) {
+            toast(res.error, "error");
+            setItems([]);
+            setNext(null);
+          } else {
+            setItems(res.data.items);
+            setNext(res.data.nextCursor);
+          }
+        },
+        (err) => {
+          if (!alive || reqRef.current !== req) return;
+          toast(actionThrowMessage(err, t), "error");
           setItems([]);
-          setNext(null);
-        } else {
-          setItems(res.data.items);
-          setNext(res.data.nextCursor);
-        }
-      });
+        },
+      );
     }, q ? 250 : 0);
     return () => {
       alive = false;
       clearTimeout(timer);
+      stop?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [board.project.id, q]);
@@ -65,9 +78,11 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
     setLoadingMore(true);
     const asked = q;
     const req = ++reqRef.current;
-    const res = await getArchivedTasks(board.project.id, { query: asked, cursor: next });
+    // Sin red: el aviso fijo de «Sin conexión» lo explica y «Ver más» sigue ahí para volver a probar.
+    const res = await getArchivedTasks(board.project.id, { query: asked, cursor: next }).catch((e: unknown) => (isNetworkError(e) ? (reportOffline(), null) : actionThrowResult(e, t)));
     if (reqRef.current !== req || qRef.current !== asked) return;
     setLoadingMore(false);
+    if (!res) return;
     if (!res.ok) return toast(res.error, "error");
     setItems((prev) => {
       const have = new Set((prev ?? []).map((it) => it.id));

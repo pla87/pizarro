@@ -19,6 +19,7 @@ import { useBoard } from "./context";
 import { MentionText } from "../ui/MentionText";
 import { mentionsToPlain } from "@/lib/mentions";
 import { actionThrowResult } from "@/lib/stale-action";
+import { isNetworkError, loadWhenOnline, reportOffline } from "@/lib/connection";
 
 interface DeployResult {
   moved: { id: string; columnId: string; position: number }[];
@@ -131,7 +132,8 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   useEffect(() => {
     // Mismo día que usa el servidor (zona horaria de la app) para contar las releases.
     const day = board.today;
-    countReleasesOn({ projectId: board.project.id, dayIso: day }).then((res) => {
+    // Sin red se pide al volver la conexión (antes el fallo quedaba sin atender y el título no llevaba el ordinal).
+    return loadWhenOnline(() => countReleasesOn({ projectId: board.project.id, dayIso: day }), (res) => {
       if (!res.ok) return;
       setReleaseNumber(res.data.nextNumber);
       // Tareas fijas con cadencia: solo vienen marcadas si a esta release le toca (se pueden marcar a mano).
@@ -140,14 +142,16 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
         if (notDue.length) setChosen((prev) => new Set([...prev].filter((id) => !notDue.includes(id))));
       }
       if (!titleEdited.current) setTitle(defaultReleaseTitle(day, board.project.name, res.data.today));
-    });
+    }, () => {});
   }, [board.project.id, board.project.name, board.today, initialTasks]);
 
   const generate = async () => {
     // Descripción y adjuntos no viajan con el tablero: se piden al generar.
     setLoadingDetails(true);
-    const res = await getReleaseTaskDetails({ projectId: board.project.id, taskIds: selectedTasks.map((t) => t.id) });
+    const res = await getReleaseTaskDetails({ projectId: board.project.id, taskIds: selectedTasks.map((t) => t.id) }).catch((e: unknown) => (isNetworkError(e) ? (reportOffline(), null) : actionThrowResult(e, t)));
     setLoadingDetails(false);
+    // Sin red: el aviso fijo de «Sin conexión» lo explica; «Generar» sigue disponible para volver a probar.
+    if (!res) return;
     if (!res.ok) return toast(res.error, "error");
     const details = new Map(res.data.map((d) => [d.id, d]));
     const releaseTasks = selectedTasks.map((t) => ({

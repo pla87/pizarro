@@ -37,6 +37,7 @@ import { subtaskLines } from "@/lib/subtask-lines";
 import { documentDownloadName, type DocumentKindName } from "@/lib/document-kind";
 import { draftKey, useDraftAutosave, type NewTaskDraft } from "./drafts";
 import { actionThrowResult } from "@/lib/stale-action";
+import { loadWhenOnline } from "@/lib/connection";
 import { subtasksDidNotFit } from "./count-texts";
 
 interface Props {
@@ -156,9 +157,9 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   // Borrador de otro proyecto: se cargan sus opciones y se comprueba que el tipo, la columna, etc. sigan existiendo.
   useEffect(() => {
     if (!foreignInit || !d) return;
-    let live = true;
-    void getProjectFormData(initialProject).then((res) => {
-      if (!live || wantedProject.current !== initialProject) return;
+    // Sin red se pide al volver la conexión (antes el fallo se ignoraba y el formulario se quedaba cargando).
+    return loadWhenOnline(() => getProjectFormData(initialProject), (res) => {
+      if (wantedProject.current !== initialProject) return;
       if (!res.ok) {
         wantedProject.current = board.project.id;
         setProjectId(board.project.id);
@@ -167,10 +168,12 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       formCache.current.set(initialProject, res.data);
       setOther(res.data);
       applyForm(res.data, d);
-    }).catch(() => undefined);
-    return () => {
-      live = false;
-    };
+    }, () => {
+      if (wantedProject.current !== initialProject) return;
+      wantedProject.current = board.project.id;
+      setProjectId(board.project.id);
+      applyForm(boardForm, d);
+    });
     // Solo al abrir con un borrador de otro proyecto.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

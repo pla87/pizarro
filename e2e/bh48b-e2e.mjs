@@ -2,12 +2,16 @@
 // conserva (aviso «Sin conexión» y «Conexión recuperada»); 8 pestañas por HTTP/1.1 (las ocultas cierran su canal en vivo);
 // tarea abierta que otra persona borra o archiva (aviso con su nombre, «Copiar tu texto», no se reabre al deshacer);
 // cerrar el detalle tras un guardado fallido del título pregunta; «Nueva tarea» con la columna borrada; ?task= se quita al
-// cerrar y un enlace a una tarea que no está avisa. Misma base y servidor que board-e2e.mjs (por HTTP, sin TLS):
+// cerrar y un enlace a una tarea que no está avisa; diálogos cargados aparte (Archivadas, Varias tareas, Generar release)
+// y detalle, historial y archivadas abiertos sin red (esperan a la red, sin recargar la página); conflictos del texto
+// campo a campo (título y descripción por separado); foco tras Escape en la descripción y nombre de los campos del
+// detalle. Partes: PART=off,down,tabs,gone,title,col,url,lazy,detail,field,a11y. Misma base y servidor que
+// board-e2e.mjs (por HTTP, sin TLS):
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48b-e2e.mjs
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";
 const { sleep } = L;
-const only = (process.env.PART || "off,down,tabs,gone,title,col,url").split(",");
+const only = (process.env.PART || "off,down,tabs,gone,title,col,url,lazy,detail,field,a11y").split(",");
 
 await L.q(`DELETE FROM "Column" WHERE id='bh48b_col'`); // de una pasada anterior interrumpida
 await L.prepareUsers();
@@ -308,6 +312,247 @@ if (only.includes("url")) try {
   await s.ctx.close();
 } catch (e) {
   L.check("URL: el escenario termina sin excepción", false, String(e?.message ?? e).slice(0, 300));
+}
+
+// --- Diálogos cargados aparte sin red (Archivadas, Varias tareas, Generar release) -----------------------------------
+// Su código llega en un fragmento aparte. Sin red, el fallo al pedirlo (ChunkLoadError) llegaba a la pantalla de error,
+// que lo tomaba por una versión nueva y recargaba la página sin red: la de error del navegador. Ahora espera a la red y
+// se abre al volver; y en reposo se precargan, así que con el tablero ya abierto se abren también sin red.
+const openers = [
+  ["Archivadas", (pg) => pg.getByRole("button", { name: "Archivadas" }).first().click()],
+  ["Varias tareas", (pg) => pg.getByRole("button", { name: "Varias tareas" }).first().click()],
+  ["Generar Release", (pg) => pg.getByRole("button", { name: "Generar Release" }).first().click()],
+];
+const dialogs = (pg) => pg.locator("[role=dialog]").count().catch(() => 0);
+// Errores de red esperables con la red cortada (los de la consola); un rechazo sin atender (pageerror) sí cuenta.
+const realErrors = (s) => ({ errors: s.errors.filter((e) => !(e.startsWith("console.error") && /ERR_INTERNET_DISCONNECTED|net::|Failed to load resource/i.test(e))) });
+// Cuenta las peticiones de código (/_next/static) en curso y marca cuándo ha corrido la precarga en reposo del tablero.
+const watchPreload = (page) => {
+  const state = { inflight: 0 };
+  const code = (r) => r.url().includes("/_next/static/");
+  page.on("request", (r) => code(r) && state.inflight++);
+  page.on("requestfinished", (r) => code(r) && state.inflight--);
+  page.on("requestfailed", (r) => code(r) && state.inflight--);
+  return state;
+};
+const idleSpy = () => {
+  const ric = window.requestIdleCallback?.bind(window);
+  if (ric) window.requestIdleCallback = (cb, o) => ric((d) => { try { cb(d); } finally { window.__pzIdle = (window.__pzIdle || 0) + 1; } }, o);
+};
+const preloaded = async (page, state) => {
+  await L.waitFor(() => page.evaluate(() => (window.__pzIdle || 0) > 0), { timeout: 15000 });
+  return L.waitFor(() => state.inflight === 0, { timeout: 15000 });
+};
+
+if (only.includes("lazy")) try {
+  L.scenario("lazy: diálogos cargados aparte, sin red");
+  await L.cleanBoard();
+  await L.seedTasks(L.COL.next, ["Para la release"]);
+  // 1) El tablero aún no ha precargado nada (el navegador nunca queda libre): sin red, abrir espera a la red.
+  const s = await L.session({ init: () => { window.requestIdleCallback = () => 0; window.cancelIdleCallback = () => {}; } });
+  const { page, ctx } = s;
+  // Recargas de la página (la pantalla de error recargaba): no debe haber ninguna. Solo cuentan los documentos nuevos (los
+  // cambios de dirección sin recargar, como ?archivadas, no).
+  const navs = [];
+  page.on("domcontentloaded", () => navs.push(page.url()));
+  page.on("framenavigated", (f) => f === page.mainFrame() && !inApp(page) && navs.push(f.url()));
+  let chunkFailed = 0;
+  page.on("requestfailed", (r) => r.url().includes("/_next/static/") && chunkFailed++);
+  for (const [name, open] of openers) {
+    if (navs.length) break;
+    await ctx.setOffline(true);
+    const failedBefore = chunkFailed;
+    await open(page);
+    // Se espera a que falle la petición del fragmento (sin red), no un tiempo fijo.
+    await L.waitFor(() => chunkFailed > failedBefore, { timeout: 8000 });
+    L.check(`LAZY(${name}): sin red, el fragmento no llega`, chunkFailed > failedBefore);
+    await L.waitFor(() => page.locator("[data-connection=offline]").isVisible(), { timeout: 8000 });
+    L.check(`LAZY(${name}): aviso fijo de sin conexión`, await page.locator("[data-connection=offline]").isVisible().catch(() => false));
+    await ctx.setOffline(false);
+    await L.waitFor(async () => (await dialogs(page)) > 0, { timeout: 20000 });
+    L.check(`LAZY(${name}): al volver la red se abre`, (await dialogs(page)) > 0);
+    L.eq(`LAZY(${name}): la página no se ha recargado (ni cambiado por la de error del navegador)`, navs, []);
+    L.check(`LAZY(${name}): ni ha salido «Algo ha fallado»`, !(await page.getByText("Algo ha fallado").count().catch(() => 1)));
+    await page.keyboard.press("Escape").catch(() => {});
+    await L.waitFor(async () => (await dialogs(page)) === 0, { timeout: 5000 });
+  }
+  L.assertNoErrors("LAZY", [realErrors(s)]);
+  await ctx.close();
+  // 2) Con el tablero ya abierto (precarga en reposo hecha), se abren sin red.
+  const s2 = await L.session({ init: idleSpy });
+  const state = watchPreload(s2.page);
+  await L.reload(s2.page);
+  L.check("LAZY: la precarga en reposo termina", await preloaded(s2.page, state));
+  await s2.ctx.setOffline(true);
+  for (const [name, open] of openers) {
+    await open(s2.page);
+    await L.waitFor(async () => (await dialogs(s2.page)) > 0, { timeout: 8000 });
+    L.check(`LAZY(${name}): precargado, se abre sin red`, inApp(s2.page) && (await dialogs(s2.page)) > 0, s2.page.url());
+    await s2.page.keyboard.press("Escape").catch(() => {});
+    await L.waitFor(async () => (await dialogs(s2.page)) === 0, { timeout: 5000 });
+  }
+  await s2.ctx.setOffline(false);
+  L.check("LAZY: sigue en la app", inApp(s2.page), s2.page.url());
+  L.assertNoErrors("LAZY (precargado)", [realErrors(s2)]);
+  await s2.ctx.close();
+} catch (e) {
+  L.check("LAZY: el escenario termina sin excepción", false, String(e?.message ?? e).slice(0, 300));
+}
+
+// --- Tarea abierta sin red: el detalle y el historial se cargan al volver; Archivadas también --------------------------
+if (only.includes("detail")) try {
+  L.scenario("detail: detalle abierto sin red");
+  await L.cleanBoard();
+  const [id] = await L.seedTasks(L.COL.backlog, ["Detalle sin red", "Otra tarea"]);
+  await L.q(`UPDATE "Task" SET description='Descripción que llega al volver' WHERE id=$1`, [id]);
+  const [arch] = await L.seedTasks(L.COL.backlog, ["Archivada sin red"]);
+  await L.q(`UPDATE "Task" SET "archivedAt"=NOW(), "archivedFromColumnId"="columnId" WHERE id=$1`, [arch]);
+  const s = await L.session({ init: idleSpy });
+  const { page, ctx } = s;
+  const state = watchPreload(page);
+  await L.reload(page);
+  await preloaded(page, state);
+  await ctx.setOffline(true);
+  await L.cardLoc(page, "Detalle sin red").click();
+  await U.dialog(page).waitFor();
+  await L.waitFor(() => page.locator("[data-connection=offline]").isVisible(), { timeout: 8000 });
+  L.check("DETAIL: sin red, aviso fijo de sin conexión", await page.locator("[data-connection=offline]").isVisible().catch(() => false));
+  await U.dialog(page).getByRole("button", { name: "Historial" }).click();
+  await ctx.setOffline(false);
+  await L.waitFor(async () => (await U.dialog(page).getByText("Descripción que llega al volver").count()) > 0, { timeout: 20000 });
+  L.check("DETAIL: al volver la red se carga el detalle", (await U.dialog(page).getByText("Descripción que llega al volver").count()) > 0);
+  await L.waitFor(async () => (await U.dialog(page).getByText("Aún no hay cambios registrados.").count()) > 0, { timeout: 10000 });
+  L.check("DETAIL: y el historial (no se queda en «Cargando…»)", (await U.dialog(page).getByText("Aún no hay cambios registrados.").count()) > 0);
+  await U.closeDialog(page);
+  // Archivadas sin red: la lista llega al volver.
+  await ctx.setOffline(true);
+  await page.getByRole("button", { name: "Archivadas" }).first().click();
+  await U.dialog(page).waitFor({ timeout: 8000 });
+  await ctx.setOffline(false);
+  await L.waitFor(async () => (await U.dialog(page).getByText("Archivada sin red").count()) > 0, { timeout: 20000 });
+  L.check("DETAIL: Archivadas abierta sin red carga su lista al volver", (await U.dialog(page).getByText("Archivada sin red").count()) > 0);
+  L.check("DETAIL: sigue en la app", inApp(page), page.url());
+  L.assertNoErrors("DETAIL", [realErrors(s)]);
+  await ctx.close();
+} catch (e) {
+  L.check("DETAIL: el escenario termina sin excepción", false, String(e?.message ?? e).slice(0, 300));
+}
+
+// --- Título y descripción, cada uno con su conflicto ----------------------------------------------------------------
+// Otra persona cambia solo la descripción: guardar el título no es un conflicto (antes se rechazaba y se perdía), y el
+// detalle abierto muestra la descripción nueva. Si cambió el mismo campo que se está editando, sí lo es.
+if (only.includes("field")) try {
+  L.scenario("field: conflictos por campo");
+  await L.cleanBoard();
+  const [fieldId] = await L.seedTasks(L.COL.backlog, ["Campo a campo"]);
+  await L.q(`UPDATE "Task" SET description='Descripción inicial' WHERE id=$1`, [fieldId]);
+  await L.q(`UPDATE "User" SET "editorMode"='MARKDOWN' WHERE email IN ($1,$2)`, [L.ADMIN, L.USER2]);
+  const a = await L.session();
+  const b = await L.session({ email: L.USER2 });
+  for (const x of [a, b]) {
+    await L.liveOpen(x.page);
+    await U.openTask(x.page, "Campo a campo");
+    await U.dialog(x.page).getByText("Descripción inicial").first().waitFor({ timeout: 10000 });
+  }
+  const descBox = (pg) => U.dialog(pg).getByPlaceholder("Markdown · @persona · @docs / @sheets");
+  const openDesc = async (pg, text) => {
+    await U.dialog(pg).getByRole("button", { name: "Editar", exact: true }).click();
+    await descBox(pg).waitFor();
+    await descBox(pg).fill(text);
+  };
+  const saveDesc = (pg) => descBox(pg).press("Control+Enter");
+  const row = async () => (await L.q(`SELECT title, description FROM "Task" WHERE id=$1`, [fieldId]))[0];
+  const conflicts = (pg) => pg.getByText(/ha cambiado el texto de esta tarea/).count();
+  // 1) B cambia la descripción; A, que no la estaba editando, la ve y guarda su título sin conflicto.
+  await openDesc(b.page, "Descripción de B");
+  await saveDesc(b.page);
+  await L.eqEventually("FIELD: B guarda la descripción", async () => (await row()).description, "Descripción de B");
+  await L.waitFor(async () => (await U.dialog(a.page).getByText("Descripción de B").count()) > 0, { timeout: 10000 });
+  L.check("FIELD: A ve la descripción nueva de B sin recargar", (await U.dialog(a.page).getByText("Descripción de B").count()) > 0);
+  await titleField(a.page).fill("Campo a campo (A)");
+  await a.page.keyboard.press("Tab");
+  await L.eqEventually("FIELD: el título de A se guarda (no es un conflicto)", row, { title: "Campo a campo (A)", description: "Descripción de B" });
+  L.eq("FIELD: A no recibe aviso de conflicto", await conflicts(a.page), 0);
+  // 2) A está escribiendo la descripción; B la cambia y guarda. A guarda antes su título: pasa (es otro campo)…
+  await openDesc(a.page, "Borrador de A");
+  await openDesc(b.page, "Descripción de B (2)");
+  await saveDesc(b.page);
+  await L.eqEventually("FIELD: B guarda otra vez la descripción", async () => (await row()).description, "Descripción de B (2)");
+  await titleField(a.page).fill("Campo a campo (A2)");
+  await titleField(a.page).evaluate((el) => el.blur());
+  await L.eqEventually("FIELD: A guarda el título con la descripción en edición", async () => (await row()).title, "Campo a campo (A2)");
+  L.eq("FIELD: sin aviso de conflicto", await conflicts(a.page), 0);
+  // …pero su descripción sí choca con la de B: aviso y no la pisa.
+  await saveDesc(a.page);
+  await L.waitFor(async () => (await conflicts(a.page)) > 0, { timeout: 10000 });
+  L.check("FIELD: guardar la descripción que cambió B avisa del conflicto", (await conflicts(a.page)) > 0);
+  // El último en cambiar el texto fue A (su título), pero la descripción la cambió B: el aviso nombra a B.
+  L.check("FIELD: el aviso dice quién cambió la descripción", (await a.page.getByText(/Segunda Persona ha cambiado el texto de esta tarea/).count()) > 0);
+  L.eq("FIELD: y la descripción de B no se pierde", (await row()).description, "Descripción de B (2)");
+  // 3) A escribe un título y B guarda otro a la vez: conflicto (el mismo campo).
+  // Los dos parten del mismo título (B ya ve el de A).
+  for (const x of [a, b]) await L.waitFor(async () => (await titleField(x.page).inputValue()) === "Campo a campo (A2)", { timeout: 10000 });
+  await titleField(a.page).fill("Título de A");
+  await titleField(b.page).fill("Título de B");
+  await b.page.keyboard.press("Tab");
+  await L.eqEventually("FIELD: B guarda su título", async () => (await row()).title, "Título de B");
+  await L.waitFor(async () => (await L.cardLoc(a.page, "Título de B").count()) > 0, { timeout: 10000 });
+  const before = await conflicts(a.page);
+  await titleField(a.page).evaluate((el) => el.blur());
+  await L.waitFor(async () => (await conflicts(a.page)) > before, { timeout: 10000 });
+  L.check("FIELD: el mismo campo cambiado por otra persona sigue siendo un conflicto", (await conflicts(a.page)) > before);
+  L.eq("FIELD: y el título de B no se pisa", (await row()).title, "Título de B");
+  L.assertNoErrors("FIELD", [a, b]);
+  await L.q(`UPDATE "User" SET "editorMode"='WYSIWYG' WHERE email IN ($1,$2)`, [L.ADMIN, L.USER2]);
+  await a.ctx.close();
+  await b.ctx.close();
+} catch (e) {
+  L.check("FIELD: el escenario termina sin excepción", false, String(e?.message ?? e).slice(0, 300));
+}
+
+// --- Accesibilidad del detalle: foco tras Escape en la descripción y nombre de los campos laterales ---------------------
+if (only.includes("a11y")) try {
+  L.scenario("a11y: foco y nombres del detalle");
+  await L.cleanBoard();
+  await L.seedTasks(L.COL.backlog, ["Sin descripción", "Con descripción"]);
+  await L.q(`UPDATE "Task" SET description='Texto de la descripción' WHERE title='Con descripción'`);
+  const s = await L.session();
+  const { page } = s;
+  const focused = () => page.evaluate(() => {
+    const el = document.activeElement;
+    return { tag: el?.tagName ?? null, text: (el?.textContent ?? "").trim().slice(0, 40), inDialog: !!el?.closest("[role=dialog]") };
+  });
+  for (const [title, enter] of [["Sin descripción", "Añade una descripción…"], ["Con descripción", "Editar"]]) {
+    await U.openTask(page, title);
+    await U.dialog(page).getByRole("button", { name: enter, exact: true }).click();
+    // El editor tiene el foco (no un botón).
+    await L.waitFor(async () => { const f = await focused(); return f.inDialog && f.tag !== "BUTTON"; }, { timeout: 8000 });
+    await page.keyboard.press("Escape");
+    await L.waitFor(async () => (await focused()).tag === "BUTTON", { timeout: 3000 });
+    const f = await focused();
+    L.check(`A11Y(${title}): Escape sin cambios deja el foco en la descripción`, f.inDialog && f.tag === "BUTTON" && ["Editar", "Añade una descripción…"].includes(f.text), JSON.stringify(f));
+    L.eq(`A11Y(${title}): y el detalle sigue abierto`, await page.locator("[role=dialog]").count(), 1);
+    await U.closeDialog(page);
+  }
+  await U.openTask(page, "Con descripción");
+  const snap = await U.dialog(page).ariaSnapshot();
+  const comboLines = snap.split("\n").filter((l) => l.includes("combobox")).join(" | ");
+  for (const name of ["Columna", "Asignada a (opcional)", "Repetir", "Entregable"]) {
+    L.eq(`A11Y: el desplegable «${name}» tiene nombre`, await U.dialog(page).getByRole("combobox", { name, exact: true }).count(), 1);
+  }
+  L.eq("A11Y: la fecha límite tiene nombre", await U.dialog(page).getByLabel("Fecha límite", { exact: true }).count(), 1);
+  L.check("A11Y: «Columna» no se anuncia con el nombre de la columna", !snap.includes(`combobox "${L.COL.backlog}"`), comboLines);
+  // Árbol de accesibilidad de Chromium: ningún desplegable ni campo de texto del detalle sin nombre.
+  const ax = await page.accessibility.snapshot({ root: await U.dialog(page).elementHandle(), interestingOnly: true });
+  const flat = [];
+  const walk = (n) => { if (!n) return; flat.push(n); (n.children ?? []).forEach(walk); };
+  walk(ax);
+  const unnamed = flat.filter((n) => ["combobox", "textbox", "Date"].includes(n.role) && !n.name);
+  L.eq("A11Y: árbol de accesibilidad: ningún desplegable ni campo sin nombre", unnamed.map((n) => `${n.role}:${n.value ?? ""}`), []);
+  L.assertNoErrors("A11Y", [s]);
+  await s.ctx.close();
+} catch (e) {
+  L.check("A11Y: el escenario termina sin excepción", false, String(e?.message ?? e).slice(0, 300));
 }
 
 await L.closeBrowser();

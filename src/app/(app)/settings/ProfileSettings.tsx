@@ -189,7 +189,7 @@ function LanguageSection({ initial }: { initial: "ES" | "EN" }) {
     const previous = locale;
     setLocale(value);
     // El diccionario de inglés se descarga aparte: ya en marcha mientras se guarda, el cambio de idioma es inmediato.
-    if (value === "EN") void preloadEnglish();
+    if (value === "EN") preloadEnglish().catch(() => {}); // sin red se carga al aplicar el idioma
     const res = await updateLocale(value);
     if (!res.ok) {
       setLocale(previous);
