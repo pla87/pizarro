@@ -1,5 +1,7 @@
 # Instalar Pizarro en tu propio servidor
 
+> **¿Buscas la guía paso a paso?** Está en la web, más sencilla y en español e inglés: <https://getpizarro.com/instalar/> (English: <https://getpizarro.com/en/install/>). Este documento es la referencia técnica completa.
+
 Esta guía instala Pizarro en un servidor propio (un VPS, un miniordenador en la oficina…) con **Docker Compose**: tres contenedores, **Caddy** (HTTPS automático), **Pizarro** y **PostgreSQL 16**. Todo vive en la carpeta `deploy/` del repositorio y no cambia nada del despliegue en Railway.
 
 > Pizarro está pensado para **un solo proceso** (una réplica). Las tareas de fondo se turnan con un bloqueo en la base de datos, así que un solapamiento breve durante una actualización no duplica nada, pero no lo escales a varias réplicas.

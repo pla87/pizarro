@@ -1,7 +1,7 @@
 // Textos propios de la web estática del producto (getpizarro.com, carpeta site/), además de los de la presentación
 // (landing-content.ts). Los usa solo scripts/build-site.mjs, que importa este fichero con Node tal cual: solo
 // `import type`, sin alias «@/». Están en src/ para que `npm run i18n:check` compruebe su traducción al inglés
-// (src/i18n/en/web2.ts, licencia2.ts, r46web.ts y web3.ts).
+// (src/i18n/en/web2.ts, licencia2.ts, r46web.ts, web3.ts e instalar.ts).
 import type { T } from "../i18n/shared";
 
 /** Icono de cada función de la lista compacta (los dibuja scripts/build-site.mjs). */
@@ -183,6 +183,17 @@ export function siteText(t: T, _priceEur: number) {
     guideRead: t("Leer la guía"),
     guideOther: t("Otras guías"),
     guideAll: t("Todas las guías"),
+
+    // Guía de instalación (/instalar/, /en/install/; el texto sale de docs/web/instalar.md y docs/web/en/install.md)
+    tocTitle: t("En esta página"),
+    codeTerminal: t("Terminal"),
+    codeVariables: t("Variables"),
+    codeOutput: t("Lo que verás"),
+    calloutNote: t("Nota"),
+    calloutTip: t("Consejo"),
+    calloutImportant: t("Importante"),
+    calloutWarning: t("Atención"),
+    calloutCaution: t("Cuidado"),
 
     // Licencia y 404
     licenseTitle: t("Licencia de Pizarro"),

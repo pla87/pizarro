@@ -13,6 +13,8 @@
 // Plantilla: site/templates/layout.html. Ficheros tal cual: site/static/ (CNAME, robots.txt, style.css, og*.png, img/).
 // Guías de conexión (/guias/, /en/guides/): una página por cada docs/guias/*.md y su docs/guias/en/*.md, con el
 // Markdown convertido por src/lib/site-markdown.ts (sin dependencias; el HTML que traiga el texto se escapa).
+// Guía de instalación (/instalar/, /en/install/): docs/web/instalar.md y docs/web/en/install.md, con índice, avisos y
+// botón «Copiar» en cada comando. Si falta una de las dos, falla. La referencia técnica sigue en docs/INSTALL.md.
 import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, posix } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -53,9 +55,7 @@ const BUY = product.BUY_URL.trim();
 const GET_SH = "curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com";
 const BLOB = `${product.REPO_URL}/blob/main`;
 const LINKS = {
-  guide: product.INSTALL_URL,
   image: product.IMAGE_URL,
-  railway: `${product.INSTALL_URL}#railway`,
   manual: `${BLOB}/docs/MANUAL.md`,
   manualPdf: `${BLOB}/MANUAL.pdf`,
   changelog: `${BLOB}/CHANGELOG.md`,
@@ -93,19 +93,24 @@ const guideOrder = Object.fromEntries(GUIDES.es.map((g) => [g.slug, g.order]));
 for (const locale of ["es", "en"]) GUIDES[locale].sort((a, b) => guideOrder[a.slug] - guideOrder[b.slug] || a.slug.localeCompare(b.slug));
 
 /**
- * Enlaces de una guía: http(s) y anclas tal cual; «otra-guia.md#seccion» a su página; otro fichero del repositorio
- * («../INSTALL.md») a GitHub. Nada más.
+ * Enlaces de una guía o de la guía de instalación: http(s) y anclas tal cual; otra guía («telegram.md#paso»,
+ * «../guias/telegram.md») a su página en el idioma de la que enlaza; la guía de instalación (docs/web/…) a /instalar/
+ * o /en/install/; otro fichero del repositorio («../INSTALL.md#6-restaurar») a GitHub. Nada más.
  */
-const guideLink = (locale, file) => (href) => {
+const WEB_DOCS = ["docs/web/instalar.md", "docs/web/en/install.md"];
+const docLink = (locale, file) => (href) => {
   const ok = safeHref(href);
   if (ok) return ok;
-  const m = /^(?:\.\/)?([a-z0-9-]+)\.md(#[\w-]+)?$/.exec(href);
-  if (m && guideSlugs.includes(m[1])) return `${L[locale].guides}${m[1]}/${m[2] ?? ""}`;
   const [path, hash = ""] = href.split("#");
-  if (!/^[\w./-]+$/.test(path) || /^[a-z]+:/i.test(path) || (hash && !/^[\w-]+$/.test(hash))) return null;
+  // El ancla admite letras con tilde: GitHub las conserva («#8-resolución-de-problemas»).
+  if (!/^[\w./-]+$/.test(path) || /^[a-z]+:/i.test(path) || (hash && !/^[\p{L}\p{N}_-]+$/u.test(hash))) return null;
   const target = posix.normalize(posix.join(posix.dirname(file), path));
   if (target.startsWith("..") || target.startsWith("/") || !existsSync(join(root, target))) return null;
-  return `${BLOB}/${target}${hash ? `#${hash}` : ""}`;
+  const h = hash ? `#${hash}` : "";
+  const g = /^docs\/guias\/(?:en\/)?([a-z0-9-]+)\.md$/.exec(target);
+  if (g && guideSlugs.includes(g[1])) return `${L[locale].guides}${g[1]}/${h}`;
+  if (WEB_DOCS.includes(target)) return `${L[locale].install}${h}`;
+  return `${BLOB}/${target}${h}`;
 };
 const guide = (locale, slug) => {
   const g = GUIDES[locale].find((x) => x.slug === slug);
@@ -115,14 +120,33 @@ const guide = (locale, slug) => {
 
 const L = {
   es: {
-    home: "/", license: "/licencia/", guides: "/guias/", og: "es_ES", ogImage: "og.png", other: "en", otherLabel: "English", otherShort: "EN",
+    home: "/", license: "/licencia/", guides: "/guias/", install: "/instalar/", og: "es_ES", ogImage: "og.png", other: "en", otherLabel: "English", otherShort: "EN",
     ids: { why: "por-que", how: "como-funciona", privacy: "privacidad", features: "funciones", connect: "integraciones", who: "para-quien", pricing: "precio", faq: "preguntas", install: "instalacion" },
   },
   en: {
-    home: "/en/", license: "/en/license/", guides: "/en/guides/", og: "en_GB", ogImage: "og-en.png", other: "es", otherLabel: "Español", otherShort: "ES",
+    home: "/en/", license: "/en/license/", guides: "/en/guides/", install: "/en/install/", og: "en_GB", ogImage: "og-en.png", other: "es", otherLabel: "Español", otherShort: "ES",
     ids: { why: "why", how: "how-it-works", privacy: "privacy", features: "features", connect: "integrations", who: "who", pricing: "pricing", faq: "faq", install: "install" },
   },
 };
+
+// ---------------------------------------------------------------------------------------------------------------
+// Guía de instalación: docs/web/instalar.md (español) y docs/web/en/install.md (inglés), las dos obligatorias. Sus
+// anclas fijas ({#…}) las enlazan la portada, la app (src/lib/product.ts, src/lib/update-check-core.ts) y las notas de
+// cada versión (scripts/release-notes.mjs): si falta una, falla.
+// ---------------------------------------------------------------------------------------------------------------
+const INSTALL_DOC = { es: WEB_DOCS[0], en: WEB_DOCS[1] };
+const INSTALL_ANCHORS = { es: ["railway", "email", "actualizar"], en: ["railway", "email", "update"] };
+const INSTALL = {};
+for (const locale of ["es", "en"]) {
+  const file = INSTALL_DOC[locale];
+  if (!existsSync(join(root, file))) throw new Error(`Falta ${file}: la guía de instalación necesita su versión en español (${INSTALL_DOC.es}) y en inglés (${INSTALL_DOC.en})`);
+  const g = parseGuide(readFileSync(join(root, file), "utf8"));
+  if (!g.title || !g.description) throw new Error(`${file}: falta el título («# Título» o «titulo:») o la descripción («descripcion:»)`);
+  INSTALL[locale] = { ...g, file };
+}
+if (product.INSTALL_URL !== `${SITE}${L.es.install}` || product.INSTALL_URL_EN !== `${SITE}${L.en.install}`) {
+  throw new Error(`INSTALL_URL e INSTALL_URL_EN (src/lib/product.ts) deben ser ${SITE}${L.es.install} y ${SITE}${L.en.install}`);
+}
 
 // ---------------------------------------------------------------------------------------------------------------
 // Imágenes: capturas reales de site/static/img (nombre-idioma-tema-ancho.webp). Se lee su tamaño de la cabecera WebP.
@@ -215,6 +239,10 @@ const arrow = '<span class="arr" aria-hidden="true">→</span>';
 const github = '<svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>';
 const ext = (href, html, cls = "") => `<a href="${esc(href)}"${cls ? ` class="${cls}"` : ""} rel="noopener">${html}</a>`;
 const checks = (items) => `<ul class="checks">${items.map((x) => `<li>${check}<span>${esc(x)}</span></li>`).join("")}</ul>`;
+/** El único JavaScript de la web: los botones «Copiar» (ocultos hasta que el script los muestra). */
+const COPY_SCRIPT = `<script>document.querySelectorAll("[data-copy]").forEach(function(b){b.hidden=false;b.addEventListener("click",function(){var c=document.getElementById(b.dataset.copy),o=b.textContent;if(!navigator.clipboard)return;navigator.clipboard.writeText(c.textContent).then(function(){b.textContent=b.dataset.done;setTimeout(function(){b.textContent=o},1800)})})})</script>`;
+/** Rótulos de los avisos «> [!NOTE]»… en el idioma de la página. */
+const calloutLabels = (s) => ({ note: s.calloutNote, tip: s.calloutTip, important: s.calloutImportant, warning: s.calloutWarning, caution: s.calloutCaution });
 
 // ---------------------------------------------------------------------------------------------------------------
 // Cabecera y pie
@@ -230,7 +258,7 @@ function header(locale, s, { onHome, altPath }) {
 <div class="top-act">
 <a class="lang" href="${otherHref}" hreflang="${l.other}" lang="${l.other}" title="${l.otherLabel}"><span aria-hidden="true">${l.otherShort}</span><span class="sr">${l.otherLabel}</span></a>
 ${ext(product.REPO_URL, `${github}<span class="sr">GitHub</span>`, "icon-link hide-sm")}
-<a class="btn btn-primary btn-sm" href="${onHome ? "" : l.home}#${l.ids.install}">${esc(s.navCta)}</a>
+<a class="btn btn-primary btn-sm" href="${onHome ? `#${l.ids.install}` : l.install}">${esc(s.navCta)}</a>
 <details class="menu"><summary aria-label="${esc(s.menu)}">${icon("menu", 22)}</summary><nav class="menu-list" aria-label="${esc(s.menu)}">${links}${ext(product.REPO_URL, "GitHub")}</nav></details>
 </div>
 </div></header>`;
@@ -247,7 +275,7 @@ function footer(locale, s, { onHome }) {
 <p class="foot-note">${esc(s.footerSource)}</p>
 </div>
 <nav class="foot-col" aria-label="${esc(s.footerProduct)}"><h2>${esc(s.footerProduct)}</h2><ul>${a("how", s.navFeatures)}${a("who", s.navWho)}${a("pricing", s.navPricing)}${a("faq", s.navFaq)}${a("install", s.navInstall)}</ul></nav>
-<nav class="foot-col" aria-label="${esc(s.footerDocs)}"><h2>${esc(s.footerDocs)}</h2><ul>${x(LINKS.guide, s.installGuide)}<li><a href="${l.guides}">${esc(s.footerGuides)}</a></li>${x(LINKS.manual, s.footerManual)}${x(LINKS.manualPdf, s.footerManualPdf)}${x(LINKS.changelog, s.footerChangelog)}</ul></nav>
+<nav class="foot-col" aria-label="${esc(s.footerDocs)}"><h2>${esc(s.footerDocs)}</h2><ul><li><a href="${l.install}">${esc(s.installGuide)}</a></li><li><a href="${l.guides}">${esc(s.footerGuides)}</a></li>${x(LINKS.manual, s.footerManual)}${x(LINKS.manualPdf, s.footerManualPdf)}${x(LINKS.changelog, s.footerChangelog)}</ul></nav>
 <nav class="foot-col" aria-label="${esc(s.footerProject)}"><h2>${esc(s.footerProject)}</h2><ul>${x(product.REPO_URL, s.footerCode)}<li><a href="${l.license}">${esc(s.footerLicense)}</a></li><li><a href="${L[l.other].home}" hreflang="${l.other}" lang="${l.other}">${l.otherLabel}</a></li></ul></nav>
 </div>
 <div class="wrap foot-by"><p>${esc(s.footerBy).replace("{site}", ext(AUTHOR_URL, esc(AUTHOR_SITE)))}</p></div>
@@ -277,7 +305,7 @@ function page(locale, { path, alt, title, description, main, onHome }) {
 // ---------------------------------------------------------------------------------------------------------------
 const guideA = (locale, slug, text) => `<a class="link" href="${L[locale].guides}${guide(locale, slug).slug}/">${esc(text)} ${arrow}</a>`;
 const CONNECT = {
-  email: { icon: "mail", links: (locale, s) => [ext(LINKS.guide, `${esc(s.installGuide)} ${arrow}`, "link")] },
+  email: { icon: "mail", links: (locale, s) => [`<a class="link" href="${L[locale].install}#email">${esc(s.installGuide)} ${arrow}</a>`] },
   messaging: { icon: "send", links: (locale) => [guideA(locale, "telegram", "Telegram"), guideA(locale, "whatsapp", "WhatsApp")] },
   "google-login": { icon: "login", links: (locale, s) => [guideA(locale, "google-login", s.guideRead)] },
   "google-docs": { icon: "google", links: (locale, s) => [guideA(locale, "google-docs", s.guideRead)] },
@@ -458,12 +486,15 @@ ${faq.map((f) => `<details><summary>${esc(f.q)}</summary><p class="muted">${esc(
 <p class="big">${esc(s.installLead)}</p>
 <div class="cmd"><pre tabindex="0"><code id="get-sh">${esc(GET_SH)}</code></pre><button class="copy" type="button" data-copy="get-sh" data-done="${esc(s.copied)}" hidden>${esc(s.copy)}</button></div>
 <ul class="grid g3 install-links">
-${s.installLinks.map((x) => `<li>${ext(LINKS[x.key], `<span class="ico ico-sm">${icon({ guide: "book", image: "box", railway: "train" }[x.key], 20)}</span><span><strong>${esc(x.title)} ${arrow}</strong><span>${esc(x.text)}</span></span>`)}</li>`).join("\n")}
+${s.installLinks.map((x) => {
+  const inner = `<span class="ico ico-sm">${icon({ guide: "book", image: "box", railway: "train" }[x.key], 20)}</span><span><strong>${esc(x.title)} ${arrow}</strong><span>${esc(x.text)}</span></span>`;
+  return `<li>${x.key === "image" ? ext(LINKS.image, inner) : `<a href="${l.install}${x.key === "railway" ? "#railway" : ""}">${inner}</a>`}</li>`;
+}).join("\n")}
 </ul>
 </div>
 </div>
 </section>
-<script>document.querySelectorAll("[data-copy]").forEach(function(b){b.hidden=false;b.addEventListener("click",function(){var c=document.getElementById(b.dataset.copy),o=b.textContent;if(!navigator.clipboard)return;navigator.clipboard.writeText(c.textContent).then(function(){b.textContent=b.dataset.done;setTimeout(function(){b.textContent=o},1800)})})})</script>
+${COPY_SCRIPT}
 `;
   return page(locale, { path: l.home, alt: L[l.other].home, title: s.metaTitle, description: s.metaDescription, main, onHome: true });
 }
@@ -503,7 +534,7 @@ function guidesIndex(locale) {
 <ul class="grid g2 guide-cards">
 ${GUIDES[locale].map((g) => `<li><a class="card guide-card" href="${l.guides}${g.slug}/"><span class="ico">${icon(guideIcon(g), 22)}</span><span><strong>${esc(g.title)}</strong><span class="muted">${esc(g.description)}</span><span class="link">${esc(s.guideRead)} ${arrow}</span></span></a></li>`).join("\n")}
 </ul>
-<p class="center muted after">${esc(s.guidesInstall)} ${ext(LINKS.guide, `${esc(s.installGuide)} ${arrow}`, "link")}</p>
+<p class="center muted after">${esc(s.guidesInstall)} <a class="link" href="${l.install}">${esc(s.installGuide)} ${arrow}</a></p>
 </div>
 </section>
 `;
@@ -531,12 +562,62 @@ function guidePage(locale, g) {
 <h1>${esc(g.title)}</h1>
 <p class="guide-lead">${esc(g.description)}</p>
 <p class="small"><a class="link" href="${alt}" hreflang="${l.other}" lang="${l.other}">${other}</a></p>
-${markdownToHtml(g.body, { link: guideLink(locale, g.file) })}
+${markdownToHtml(g.body, { link: docLink(locale, g.file), callouts: calloutLabels(s) })}
 ${rest.length ? `<nav class="guide-more" aria-labelledby="mas-guias"><h2 id="mas-guias">${esc(s.guideOther)}</h2><ul>${rest.map((x) => `<li><a href="${l.guides}${x.slug}/"><span class="ico ico-sm">${icon(guideIcon(x), 18)}</span><span>${esc(x.title)}</span></a></li>`).join("")}</ul></nav>` : ""}
 <p class="after"><a class="link" href="${l.guides}"><span aria-hidden="true">←</span> ${esc(s.guideAll)}</a></p>
 </article>
 `;
   return page(locale, { path, alt, title: `${g.title} · Pizarro`, description: g.description, main, onHome: false });
+}
+
+/**
+ * Bloque de código de la guía de instalación: una barra con su rótulo y, en los comandos y variables, el botón
+ * «Copiar». «text» es lo que muestra la pantalla: se ve igual, pero sin botón.
+ */
+function codeBlock(s) {
+  let n = 0;
+  return (text, lang) => {
+    const copyable = ["bash", "sh", "shell", "env"].includes(lang);
+    const label = lang === "env" ? s.codeVariables : copyable ? s.codeTerminal : s.codeOutput;
+    const id = `codigo-${++n}`;
+    const button = copyable ? `<button class="copy" type="button" data-copy="${id}" data-done="${esc(s.copied)}" hidden>${esc(s.copy)}</button>` : "";
+    return `<div class="code${copyable ? "" : " code-out"}"><div class="code-bar"><span>${esc(label)}</span>${button}</div><pre tabindex="0"><code id="${id}">${esc(text)}</code></pre></div>`;
+  };
+}
+
+/** Guía de instalación: índice (lateral en escritorio, desplegable en el móvil) y el Markdown de docs/web. */
+function installPage(locale) {
+  const t = makeT(locale);
+  const s = siteText(t, product.LICENSE_PRICE_EUR);
+  const l = L[locale];
+  const doc = INSTALL[locale];
+  const other = locale === "es" ? "Read it in English" : "Léela en español";
+  const headings = [];
+  const body = markdownToHtml(doc.body, { link: docLink(locale, doc.file), headings, callouts: calloutLabels(s), code: codeBlock(s) });
+  const ids = new Set(headings.map((h) => h.id));
+  const lack = INSTALL_ANCHORS[locale].filter((id) => !ids.has(id));
+  if (lack.length) throw new Error(`${doc.file}: faltan las secciones con identificador fijo ${lack.map((id) => `{#${id}}`).join(", ")} (las enlazan la portada y la app)`);
+  const sections = headings.filter((h) => h.level === 2);
+  if (sections.length < 3) throw new Error(`${doc.file}: la guía de instalación necesita sus secciones («## …»)`);
+  const list = `<ol>${sections.map((h) => `<li><a href="#${h.id}">${h.html}</a></li>`).join("")}</ol>`;
+  const main = `
+<div class="wrap doc">
+<p class="crumbs"><a href="${l.home}">Pizarro</a> <span aria-hidden="true">/</span> ${esc(s.navInstall)}</p>
+<div class="doc-grid">
+<aside class="doc-side"><nav class="toc" aria-labelledby="indice-t"><p class="toc-title" id="indice-t">${esc(s.tocTitle)}</p>${list}</nav></aside>
+<article class="prose doc-body">
+<h1>${esc(doc.title)}</h1>
+<p class="guide-lead">${esc(doc.description)}</p>
+<p class="small"><a class="link" href="${L[l.other].install}" hreflang="${l.other}" lang="${l.other}">${other}</a></p>
+<details class="toc-m"><summary>${esc(s.tocTitle)}</summary><nav aria-label="${esc(s.tocTitle)}">${list}</nav></details>
+${body}
+<p class="after"><a class="link" href="${l.guides}">${esc(s.footerGuides)} ${arrow}</a></p>
+</article>
+</div>
+</div>
+${COPY_SCRIPT}
+`;
+  return page(locale, { path: l.install, alt: L[l.other].install, title: `${doc.title} · Pizarro`, description: doc.description, main, onHome: false });
 }
 
 function notFound() {
@@ -572,7 +653,7 @@ function notFound() {
 }
 
 function sitemap() {
-  const pairs = [["/", "/en/"], ["/licencia/", "/en/license/"], [L.es.guides, L.en.guides], ...guideSlugs.map((g) => [`${L.es.guides}${g}/`, `${L.en.guides}${g}/`])];
+  const pairs = [["/", "/en/"], [L.es.install, L.en.install], ["/licencia/", "/en/license/"], [L.es.guides, L.en.guides], ...guideSlugs.map((g) => [`${L.es.guides}${g}/`, `${L.en.guides}${g}/`])];
   const urls = pairs.flatMap(([es, en]) => [es, en].map((loc) => `  <url>
     <loc>${SITE}${loc}</loc>
     <xhtml:link rel="alternate" hreflang="es" href="${SITE}${es}"/>
@@ -600,6 +681,8 @@ write("index.html", home("es"));
 write("en/index.html", home("en"));
 write("licencia/index.html", licensePage("es"));
 write("en/license/index.html", licensePage("en"));
+write(`${L.es.install.slice(1)}index.html`, installPage("es"));
+write(`${L.en.install.slice(1)}index.html`, installPage("en"));
 for (const locale of ["es", "en"]) {
   write(`${L[locale].guides.slice(1)}index.html`, guidesIndex(locale));
   for (const g of GUIDES[locale]) write(`${L[locale].guides.slice(1)}${g.slug}/index.html`, guidePage(locale, g));
