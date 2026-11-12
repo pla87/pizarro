@@ -56,3 +56,21 @@ export function settleIncoming(queue: IncomingChange[], own: Set<string>): { ann
   for (const { cid } of queue) if (cid) own.delete(cid);
   return { announce: foreign.filter((c) => !c.announced).map((c) => c.change), refresh: foreign.length > 0 };
 }
+
+/** Retardo máximo por defecto antes de refrescar el tablero por un cambio de otra persona (LIVE_REFRESH_JITTER_MS). */
+export const DEFAULT_LIVE_REFRESH_JITTER_MS = 2_000;
+/** Tope del retardo configurable: más allá, el tablero dejaría de parecer «en vivo». */
+export const MAX_LIVE_REFRESH_JITTER_MS = 10_000;
+
+/**
+ * Retardo antes de refrescar el tablero por estos avisos (se calcula antes de settleIncoming, que retira los ids propios).
+ * Un cambio de otra persona llega a la vez a todas las pestañas abiertas del proyecto, y todas pedían el tablero entero al
+ * servidor en el mismo instante: cada una espera un tiempo al azar entre 0 y `maxMs`, así las peticiones se reparten. Si
+ * todo es de la propia persona (desde otra pestaña), sin espera: lo acaba de hacer y quiere verlo ya. Los comentarios del
+ * detalle abierto no esperan nunca: se reenvían a la página al llegar (announceOnArrival), sin pasar por aquí.
+ */
+export function foreignRefreshDelay(queue: IncomingChange[], own: Set<string>, maxMs: number, random: () => number = Math.random): number {
+  const fromOthers = queue.some(({ cid, announced }) => announced && (!cid || !own.has(cid)));
+  if (!fromOthers || !(maxMs > 0)) return 0;
+  return Math.floor(Math.min(1, Math.max(0, random())) * Math.min(maxMs, MAX_LIVE_REFRESH_JITTER_MS));
+}

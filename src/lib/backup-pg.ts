@@ -1,8 +1,10 @@
 // Conexión directa con pg (una sola conexión) con la misma interfaz de SQL en bruto que Prisma, para la herramienta
-// de restauración y la prueba mensual: así no hace falta cargar Prisma ni apuntar el cliente de la app a otra base.
+// de restauración, la prueba mensual y el volcado de cada copia: así no hace falta cargar Prisma, ni apuntar el cliente
+// de la app a otra base, ni ocupar una conexión de su pool durante toda la copia.
 
 import pg from "pg";
-import type { Client, RawSql } from "./backup-db";
+import type { BackupManifest } from "./backup-core";
+import { dumpDatabase, type Client, type RawSql } from "./backup-db";
 
 export class PgSql implements Client {
   private inTx = false;
@@ -52,8 +54,8 @@ export class PgSql implements Client {
   }
 }
 
-export async function connectPg(url: string): Promise<PgSql> {
-  const client = new pg.Client({ connectionString: url });
+export async function connectPg(url: string, opts: { applicationName?: string } = {}): Promise<PgSql> {
+  const client = new pg.Client({ connectionString: url, ...(opts.applicationName ? { application_name: opts.applicationName } : {}) });
   // Sin este oyente, un corte de la conexión inactiva sería una excepción no capturada (y con
   // EXIT_ON_UNCAUGHT_EXCEPTION=1, un reinicio de la app); la siguiente consulta ya falla con su error.
   client.on("error", (err) => console.error("[backup-pg] conexión perdida", err.message));
@@ -66,4 +68,38 @@ export function withDatabase(url: string, name: string): string {
   const u = new URL(url);
   u.pathname = `/${encodeURIComponent(name)}`;
   return u.toString();
+}
+
+/** Tope de duración del volcado (el mismo que tenía la transacción de Prisma). */
+export const DUMP_TIMEOUT_MS = 30 * 60_000;
+
+/**
+ * Volcado de la copia en una conexión propia, fuera del pool de la app: la transacción REPEATABLE READ (todas las
+ * tablas del mismo instante) puede durar minutos, y con el cliente de la app ocupaba una de sus conexiones todo ese
+ * tiempo. La conexión se cierra siempre al terminar, falle o no; si el volcado pasa de `timeoutMs`, se corta (la
+ * consulta en curso falla y la copia queda como fallida). `onConnect`: solo para pruebas.
+ */
+export async function dumpDatabaseOwnConnection(
+  url: string,
+  file: string,
+  key: Buffer,
+  { timeoutMs = DUMP_TIMEOUT_MS, onConnect }: { timeoutMs?: number; onConnect?: (sql: PgSql) => void } = {},
+): Promise<{ manifest: BackupManifest; bytes: number }> {
+  const sql = await connectPg(url, { applicationName: "pizarro-backup" });
+  onConnect?.(sql);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    void sql.end().catch(() => {});
+  }, timeoutMs);
+  timer.unref?.();
+  try {
+    return await dumpDatabase(sql, file, key);
+  } catch (err) {
+    if (timedOut) throw new Error(`El volcado de la base de datos pasó de ${Math.round(timeoutMs / 60_000)} min y se ha cortado.`);
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    if (!timedOut) await sql.end().catch(() => {});
+  }
 }

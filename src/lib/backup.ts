@@ -4,13 +4,13 @@ import { createReadStream } from "node:fs";
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { backupFileName, fileSha256, parseBackupFileName, diagnoseBackupKey, parseBackupKey, verifyBackupFile, type BackupManifest } from "./backup-core";
-import { dumpDatabase } from "./backup-db";
 import { checkShrink, DirDestination, externalDestinations, localFilesEnabled, listObjectKeys, listStems, manifestKey, pruneDestination, readManifest, syncBackup, type BackupDestination, type DestinationId } from "./backup-dest";
 import { buildManifest, decodeManifest, encodeManifest, fileNameKey, hashFiles, loadHashIndex, saveHashIndex, scanFiles, type FullManifest } from "./backup-files";
-import { withDatabase } from "./backup-pg";
+import { dumpDatabaseOwnConnection, withDatabase } from "./backup-pg";
 import { checkObjects, findMigrationsDir, restoreDatabaseFromDump } from "./backup-restore";
 import { db } from "./db";
 import { logEvent } from "./log";
+import { invalidateMemo, memo } from "./memo";
 import { backupsDir, uploadDir } from "./upload-dir";
 
 // Copias de seguridad automáticas: cada día, la base de datos (volcado cifrado) y los ficheros de UPLOAD_DIR
@@ -141,12 +141,21 @@ function updateStatus(fn: (s: BackupStatus) => BackupStatus): Promise<void> {
     const tmp = `${file}.${process.pid}.tmp`;
     await writeFile(tmp, JSON.stringify(next, null, 2));
     await rename(tmp, file);
+    invalidateMemo(BACKUP_MEMO);
   });
   statusChain.p = run.catch(() => {});
   return run;
 }
 
-/** Copias existentes, la más reciente primero. */
+/**
+ * Memoria en proceso (lib/memo.ts) de lo que piden las páginas de administración: la lista de copias y el aviso de copia
+ * atrasada (backup-alert.ts). Se invalida con cada copia nueva o podada y con cada cambio de status.json.
+ */
+export const BACKUP_MEMO = "backup:";
+export const BACKUP_ALERT_MEMO = `${BACKUP_MEMO}alert`;
+const BACKUP_LIST_MEMO = `${BACKUP_MEMO}list`;
+
+/** Copias existentes, la más reciente primero (lectura directa de la carpeta; los tamaños, en paralelo). */
 export async function listBackups(): Promise<BackupFileInfo[]> {
   let names: string[];
   try {
@@ -154,23 +163,35 @@ export async function listBackups(): Promise<BackupFileInfo[]> {
   } catch {
     return [];
   }
-  const out: BackupFileInfo[] = [];
-  for (const name of names) {
-    const at = parseBackupFileName(name);
-    if (!at) continue;
-    try {
-      out.push({ name, bytes: (await stat(path.join(backupsDir(), name))).size, at: at.toISOString() });
-    } catch {
-      // Borrada entre medias.
-    }
-  }
-  return out.sort((a, b) => b.at.localeCompare(a.at));
+  const found = await Promise.all(
+    names.map(async (name): Promise<BackupFileInfo | null> => {
+      const at = parseBackupFileName(name);
+      if (!at) return null;
+      try {
+        return { name, bytes: (await stat(path.join(backupsDir(), name))).size, at: at.toISOString() };
+      } catch {
+        return null; // Borrada entre medias.
+      }
+    }),
+  );
+  return found.filter((f): f is BackupFileInfo => f !== null).sort((a, b) => b.at.localeCompare(a.at));
+}
+
+/** Igual, con un minuto de memoria (Administración → Copias de seguridad); las tareas y las descargas leen la carpeta. */
+export function listBackupsCached(): Promise<BackupFileInfo[]> {
+  return memo(BACKUP_LIST_MEMO, listBackups);
 }
 
 /** Ruta absoluta de la copia más reciente (para la descarga), o null. */
 export async function latestBackupPath(): Promise<{ file: string; name: string; bytes: number } | null> {
   const [latest] = await listBackups();
   return latest ? { file: path.join(backupsDir(), latest.name), name: latest.name, bytes: latest.bytes } : null;
+}
+
+function requireDatabaseUrl(): string {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL no está definida.");
+  return url;
 }
 
 // Evita que una copia manual, la programada y la subida externa se pisen.
@@ -213,7 +234,8 @@ export async function createBackup(): Promise<BackupRun> {
     const name = backupFileName(new Date());
     const stem = name.replace(/\.pzbak$/, "");
     file = path.join(backupsDir(), name);
-    const { manifest: dbManifest, bytes } = await dumpDatabase(db, file, key);
+    // En una conexión propia (no del pool de la app), cerrada siempre al terminar.
+    const { manifest: dbManifest, bytes } = await dumpDatabaseOwnConnection(requireDatabaseUrl(), file, key);
     const dumpSha = await fileSha256(file);
     // Resumen en claro junto al fichero (solo cuentas, migración y hashes; sin datos).
     await writeFile(`${file}.json`, JSON.stringify({ ...dbManifest, file: name, bytes, fileSha256: dumpSha }, null, 2));
@@ -245,6 +267,8 @@ export async function createBackup(): Promise<BackupRun> {
     logEvent({ level: "error", category: "system", action: "backup.failed", message: `Falló la copia de seguridad: ${run.error}`, durationMs: run.durationMs });
   } finally {
     lock.busy = false;
+    // Copia nueva (y las viejas podadas): la lista y el aviso de las páginas de administración se vuelven a leer.
+    invalidateMemo(BACKUP_MEMO);
   }
   await updateStatus((s) => ({ ...s, lastBackup: run })).catch((err) => console.error("[backup] no se pudo guardar el estado", err));
   return run;

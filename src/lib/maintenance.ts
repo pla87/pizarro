@@ -188,17 +188,31 @@ export const MAINTENANCE_JOBS = [
   { name: "backupExternal", run: () => backupExternalJob() },
   { name: "backupAlert", run: () => backupAlertJob() },
   { name: "restoreTest", run: () => restoreTestJob() },
+] as const;
+
+/**
+ * Correo programado (resúmenes, informes y recordatorios): ciclo y bloqueo propios, a la misma hora que el mantenimiento
+ * pero sin esperar a que termine. Iban al final de la pasada, detrás de la copia de seguridad, la subida externa y la
+ * prueba de restauración mensual, y un día de copia lenta el resumen diario salía con retraso.
+ */
+export const MAIL_JOBS = [
   { name: "periodicMail", run: () => sendPeriodicMail() },
   { name: "waitingReminders", run: () => waitingRemindersJob() },
 ] as const;
 
+/** Todas las tareas programadas en el orden en que se muestran en Administración → Copias de seguridad. */
+export const SCHEDULED_JOBS: readonly JobDef[] = [...MAIL_JOBS, ...MAINTENANCE_JOBS];
+
+type LockName = "maintenance" | "mail" | "releaseResume";
+
 /** Ejecuta las tareas bajo el bloqueo `key`: si otro proceso ya lo tiene (p. ej. durante un despliegue), no hace nada. Nunca lanza. */
-async function runLocked(key: "maintenance" | "releaseResume", jobs: readonly JobDef[]): Promise<void> {
+async function runLocked(key: LockName, jobs: readonly JobDef[]): Promise<void> {
   // Apagado del servidor en marcha: no se empieza trabajo nuevo.
   if (isShuttingDown()) return;
   try {
-    const { withAdvisoryLock, runJob, LOCK_MAINTENANCE, LOCK_RELEASE_RESUME } = await import("@/lib/jobs");
-    const res = await withAdvisoryLock(key === "maintenance" ? LOCK_MAINTENANCE : LOCK_RELEASE_RESUME, async () => {
+    const { withAdvisoryLock, runJob, LOCK_MAINTENANCE, LOCK_MAIL, LOCK_RELEASE_RESUME } = await import("@/lib/jobs");
+    const lockKey = { maintenance: LOCK_MAINTENANCE, mail: LOCK_MAIL, releaseResume: LOCK_RELEASE_RESUME }[key];
+    const res = await withAdvisoryLock(lockKey, async () => {
       for (const job of jobs) await runJob(job);
     });
     if (!res.ran) console.info(`[maintenance] ${key}: otro proceso la está ejecutando; se omite esta pasada`);
@@ -212,6 +226,11 @@ function runMaintenance(): Promise<void> {
   return runLocked("maintenance", MAINTENANCE_JOBS);
 }
 
+/** Una pasada del correo programado; nunca lanza. */
+export function runMail(): Promise<void> {
+  return runLocked("mail", MAIL_JOBS);
+}
+
 /** Arranca el temporizador una sola vez por proceso: primera pasada al minuto, luego cada hora. */
 export function startMaintenance(): void {
   const g = globalThis as unknown as { __pzMaintenance?: boolean };
@@ -223,8 +242,13 @@ export function startMaintenance(): void {
   void import("@/lib/transfer-jobs").then((m) => m.startTransferWorker()).catch((err) => console.error("[maintenance] transferencias de proyectos", err));
   // Copias de adjuntos de releases que quedaron a medias por un reinicio: se retoman al poco de arrancar (una vez).
   setTimeout(() => void runLocked("releaseResume", [{ name: "releaseResume", run: resumeReleaseCopies }]), RESUME_AFTER_MS).unref?.();
+  // Mantenimiento y correo arrancan a la vez, cada uno con su bloqueo: el correo no espera a las copias.
   setTimeout(() => {
+    void runMail();
     void runMaintenance();
-    setInterval(() => void runMaintenance(), EVERY_MS).unref?.();
+    setInterval(() => {
+      void runMail();
+      void runMaintenance();
+    }, EVERY_MS).unref?.();
   }, FIRST_RUN_MS).unref?.();
 }

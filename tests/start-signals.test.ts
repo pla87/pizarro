@@ -1,10 +1,11 @@
 // `npm start` parado con SIGTERM al proceso de npm: npm reenvía la señal al `sh -c` que ejecuta el script; dash muere sin
-// pasarla a node y el servidor se quedaba huérfano escuchando. El script empieza por `exec` (la señal llega a node) y
-// start-local.mjs vigila además al proceso padre (scripts/parent-watch.mjs) para apagarse si desaparece.
+// pasarla a node. start-local.mjs vigila al proceso padre (scripts/parent-watch.mjs) y se apaga de forma ordenada en
+// cuanto desaparece, así que el servidor no se queda huérfano escuchando. El script no empieza por `exec`: en Windows npm
+// usa cmd.exe, que no lo entiende, y `npm start` no arrancaba.
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -21,27 +22,74 @@ const { watchParent, shutdownAsIfSigterm, processAlive } = (await import(new URL
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const startScript = (JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as { scripts: Record<string, string> }).scripts.start!;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** ¿Sigue en marcha? Un proceso ya terminado que su nuevo padre aún no ha recogido (zombi) no cuenta. */
+const running = (pid: number) => {
+  if (!processAlive(pid)) return false;
+  try {
+    return !/^\d+ \(.*\) Z/.test(readFileSync(`/proc/${pid}/stat`, "utf8"));
+  } catch {
+    return true;
+  }
+};
 
-test("el script start sustituye el sh de npm por node (exec) y sigue arrancando start-local.mjs", () => {
-  assert.match(startScript, /^exec node /);
+test("el script start funciona con cualquier shell (sin `exec`, que cmd.exe no entiende) y arranca start-local.mjs", () => {
+  assert.doesNotMatch(startScript, /\bexec\b/);
+  assert.match(startScript, /^node /);
   assert.match(startScript, /scripts\/start-local\.mjs$/);
+  // Nada de sintaxis de shell POSIX (;, &&, $VAR, comillas simples) que cmd.exe interpretaría de otra forma.
+  assert.doesNotMatch(startScript, /[;&|$'`]/);
 });
 
-test("SIGTERM al sh que lanza npm llega a node (como hace npm al pararlo)", { skip: process.platform === "win32" }, async () => {
+const hasNpm = process.platform !== "win32" && spawnSync("npm", ["--version"], { stdio: "ignore" }).status === 0;
+
+test("`npm start` parado con SIGTERM al pid de npm: el servidor se apaga de forma ordenada en ~1 s y no queda huérfano", { skip: !hasNpm }, async () => {
+  // Copia mínima del proyecto: el script start de package.json, start-local.mjs con sus módulos y un servidor de prueba en
+  // .next/standalone/server.js que anota cuándo arranca y cuándo recibe el apagado ordenado.
   const dir = await mkdtemp(path.join(tmpdir(), "pz-start-"));
-  const fixture = path.join(dir, "server.mjs");
-  await writeFile(fixture, `process.on("SIGTERM", () => { console.log("SIGTERM recibida"); process.exit(0); }); console.log("listo"); setTimeout(() => process.exit(1), 5000);`);
-  // El mismo script de package.json, con un servidor de prueba en vez de start-local.mjs.
-  const child = spawn("sh", ["-c", startScript.replace("scripts/start-local.mjs", JSON.stringify(fixture))], { cwd: root, stdio: ["ignore", "pipe", "inherit"] });
-  let out = "";
-  child.stdout!.on("data", (d) => (out += d));
-  const exited = new Promise<void>((resolve) => child.on("exit", () => resolve()));
-  for (let i = 0; i < 100 && !out.includes("listo"); i++) await sleep(50);
-  assert.match(out, /listo/);
-  child.kill("SIGTERM");
-  await exited;
-  for (let i = 0; i < 40 && !out.includes("SIGTERM recibida"); i++) await sleep(50);
-  assert.match(out, /SIGTERM recibida/, "node no recibió la señal: se quedaría huérfano");
+  try {
+    await mkdir(path.join(dir, "scripts"));
+    await mkdir(path.join(dir, ".next", "standalone"), { recursive: true });
+    for (const f of ["start-local.mjs", "parent-watch.mjs", "local-paths.mjs", "server.env"]) await copyFile(path.join(root, "scripts", f), path.join(dir, "scripts", f));
+    await writeFile(path.join(dir, "package.json"), JSON.stringify({ name: "pz-start-test", private: true, scripts: { start: startScript } }));
+    const log = path.join(dir, "server.log");
+    await writeFile(
+      path.join(dir, ".next", "standalone", "server.js"),
+      [
+        `const fs = require("fs");`,
+        `const log = (m) => fs.appendFileSync(${JSON.stringify(log)}, m + " " + Date.now() + "\\n");`,
+        `process.on("SIGTERM", () => { log("apagado"); setTimeout(() => process.exit(0), 50); });`,
+        `log("listo " + process.pid);`,
+        `setInterval(() => {}, 1000);`,
+      ].join("\n"),
+    );
+    const npm = spawn("npm", ["start", "--silent"], { cwd: dir, stdio: "ignore", env: { ...process.env, npm_config_update_notifier: "false" } });
+    let server = 0;
+    for (let i = 0; i < 200 && !server; i++) {
+      await sleep(50);
+      const m = /listo (\d+)/.exec(await readFile(log, "utf8").catch(() => ""));
+      if (m) server = Number(m[1]);
+    }
+    assert.ok(server > 0, "el servidor de prueba no arrancó");
+    const npmExited = new Promise<void>((r) => npm.on("exit", () => r()));
+    const killedAt = Date.now();
+    npm.kill("SIGTERM");
+    await npmExited;
+    let stoppedAt = 0;
+    for (let i = 0; i < 100 && !stoppedAt; i++) {
+      await sleep(50);
+      const m = /apagado (\d+)/.exec(await readFile(log, "utf8"));
+      if (m) stoppedAt = Number(m[1]);
+    }
+    assert.ok(stoppedAt, "el servidor no recibió el apagado ordenado");
+    assert.ok(stoppedAt - killedAt < 2500, `apagado ${stoppedAt - killedAt} ms después de parar npm`);
+    for (let i = 0; i < 40 && running(server); i++) await sleep(50);
+    if (running(server)) {
+      process.kill(server, "SIGKILL");
+      assert.fail("el servidor quedó huérfano");
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("watchParent avisa una sola vez cuando el padre cambia (adoptado por init) o deja de existir", async () => {

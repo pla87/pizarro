@@ -78,6 +78,15 @@ export function resetRateLimit(key: string): void {
   storeFor(key).map.delete(key);
 }
 
+/** Devuelve `cost` usos reservados de `key` que al final no cuentan (p. ej. un intento que no se llegó a comprobar). */
+export function releaseRateLimit(key: string, cost = 1): void {
+  const store = storeFor(key);
+  const bucket = store.map.get(key);
+  if (!bucket) return;
+  bucket.count -= cost;
+  if (bucket.count <= 0) store.map.delete(key);
+}
+
 /**
  * Claves del límite de inicio de sesión: por IP (todas las peticiones) y por cuenta (solo los fallos, desde cualquier
  * conexión: frena a quien prueba contraseñas desde muchas; a cambio, un tercero puede bloquear la cuenta unos minutos).
