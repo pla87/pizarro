@@ -13,7 +13,7 @@ test("release-notes: la versión actual sale con su resumen y sus cambios; una i
   const entry = (JSON.parse(readFileSync("changelog.json", "utf8")) as { versions: { version: string; summary: string }[] }).versions.find((v) => v.version === pkg.version);
   assert.ok(entry);
   assert.ok(ok.stdout.startsWith(entry.summary));
-  assert.match(ok.stdout, /docs\/INSTALL\.md#5-actualizar/);
+  assert.match(ok.stdout, /https:\/\/getpizarro\.com\/instalar\/#actualizar/);
   const missing = spawnSync("node", ["scripts/release-notes.mjs", "0.0.1"], { encoding: "utf8" });
   assert.equal(missing.status, 1);
   assert.equal(spawnSync("node", ["scripts/release-notes.mjs", "latest"], { encoding: "utf8" }).status, 2);

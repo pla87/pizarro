@@ -8,5 +8,5 @@ contact_links:
     url: https://github.com/pla87/pizarro/blob/main/docs/MANUAL.md
     about: "Cómo funciona todo. / How everything works."
   - name: "Instalación y actualizaciones / Installing and updating"
-    url: https://github.com/pla87/pizarro/blob/main/docs/INSTALL.md
+    url: https://getpizarro.com/instalar/
     about: "Docker Compose, Railway, actualizar y resolución de problemas. / Docker Compose, Railway, updating and troubleshooting."
