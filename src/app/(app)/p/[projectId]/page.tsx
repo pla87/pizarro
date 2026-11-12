@@ -5,6 +5,7 @@ import { visibleProjectsWhere } from "@/lib/access";
 import { appTimeZone, listKinds, loadBoardTasks, projectReleaseTemplates, projectUsers, userTemplates } from "@/lib/board";
 import { dateToIso, todayIso } from "@/lib/dates";
 import { googleEnabled } from "@/lib/google";
+import { liveRefreshJitterMs } from "@/lib/live-refresh";
 import { db } from "@/lib/db";
 import { getCurrentUser, requireUserPage } from "@/lib/session";
 import { normalizeTaskFields } from "@/lib/task-fields";
@@ -67,6 +68,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
     deliverables: deliverables.map((d) => ({ id: d.id, name: d.name, dueDate: dateToIso(d.dueDate) })),
     google: { enabled: googleEnabled(), connected: Boolean(me.googleAccount) },
     today: todayIso(appTimeZone()),
+    liveRefreshJitterMs: liveRefreshJitterMs(),
   };
   const { task } = await searchParams;
   return <Board data={data} initialTaskId={typeof task === "string" ? task : null} />;

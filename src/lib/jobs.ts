@@ -8,6 +8,7 @@ import { db } from "./db";
 /** Claves de los bloqueos consultivos (números arbitrarios, fijos y distintos entre sí). */
 export const LOCK_MAINTENANCE = 741_031_001;
 export const LOCK_RELEASE_RESUME = 741_031_002;
+export const LOCK_MAIL = 741_031_003;
 
 export type LockResult<T> = { ran: true; value: T } | { ran: false };
 

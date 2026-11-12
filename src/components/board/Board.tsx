@@ -1,7 +1,7 @@
 "use client";
 
 import { prefetchTaskDetail } from "./taskDetailPrefetch";
-import { announceOnArrival, announceRemoteChange, settleIncoming, type IncomingChange } from "./remoteChange";
+import { announceOnArrival, announceRemoteChange, DEFAULT_LIVE_REFRESH_JITTER_MS, foreignRefreshDelay, settleIncoming, type IncomingChange } from "./remoteChange";
 import { actionThrowMessage } from "@/lib/stale-action";
 import {
   closestCorners, DndContext, type CollisionDetection, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
@@ -356,7 +356,13 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // estado del canal en vivo (abierto ahora; cortado desde la última sincronización, con avisos que pudieron perderse).
   const lastSyncAt = useRef(0); // se rellena al montar (efecto de datos)
   const channel = useRef({ open: false, gap: false });
+  // Refresco escalonado pendiente por un cambio de otra persona (ver foreignRefreshDelay): cualquier refresco lo cubre.
+  const foreignTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refresh = useCallback(() => {
+    if (foreignTimer.current) {
+      clearTimeout(foreignTimer.current);
+      foreignTimer.current = null;
+    }
     refreshAt.current = performance.now();
     lastSyncAt.current = refreshAt.current;
     // Un refresco pedido con el canal abierto ya recoge todo lo anterior: el corte queda cubierto.
@@ -375,13 +381,28 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // (announceOnArrival) y aquí solo esperan para refrescar el tablero.
   const incoming = useRef<IncomingChange[]>([]);
   const ownChanges = useRef(new Set<string>());
+  const jitterMs = data.liveRefreshJitterMs ?? DEFAULT_LIVE_REFRESH_JITTER_MS;
   const drainIncoming = useCallback(() => {
     if (pending.current > 0 || !incoming.current.length) return;
+    const delay = foreignRefreshDelay(incoming.current, ownChanges.current, jitterMs);
     const { announce, refresh: stale } = settleIncoming(incoming.current, ownChanges.current);
     incoming.current = [];
     for (const change of announce) announceRemoteChange(change);
-    if (stale) refresh();
-  }, [refresh]);
+    if (!stale) return;
+    if (delay <= 0) return refresh();
+    // Cambio de otra persona: todas las pestañas del proyecto lo reciben a la vez; cada una refresca tras una espera al
+    // azar para no pedir todas el tablero en el mismo instante. Los avisos que lleguen mientras tanto van en ese refresco.
+    if (foreignTimer.current) return;
+    foreignTimer.current = setTimeout(() => {
+      foreignTimer.current = null;
+      // Con acciones propias en vuelo, se refresca cuando terminen (flushStale), como cualquier dato que pueda ser anterior.
+      if (pending.current > 0) staleRefresh.current = true;
+      else refresh();
+    }, delay);
+  }, [refresh, jitterMs]);
+  useEffect(() => () => {
+    if (foreignTimer.current) clearTimeout(foreignTimer.current);
+  }, []);
   // Contador de operaciones en curso (evita refrescos intermedios). Sin capturar errores: lo usan las subidas, que informan por excepción.
   const trackRaw = useCallback(async <T,>(p: Promise<T>): Promise<T> => {
     mutationAt.current = performance.now();
@@ -464,7 +485,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // Vuelve a abrir el canal en vivo cuando el navegador lo da por cerrado (ver el manejador de «error»).
   const [sseEpoch, setSseEpoch] = useState(0);
   // Cambios de otras pestañas y personas casi al momento: el servidor avisa (Server-Sent Events) y
-  // se refresca. Se agrupan los avisos seguidos; si la conexión cae, EventSource reconecta solo.
+  // se refresca (lo de otras personas, tras una espera al azar: drainIncoming). Se agrupan los avisos seguidos; si la
+  // conexión cae, EventSource reconecta solo.
   useEffect(() => {
     if (typeof EventSource === "undefined") return;
     let timer: ReturnType<typeof setTimeout> | null = null;

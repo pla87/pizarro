@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build && node scripts/postbuild.mjs && npm run build:boot",
-    "start": "exec node --env-file-if-exists=.env --env-file=scripts/server.env scripts/start-local.mjs",
+    "start": "node --env-file-if-exists=.env --env-file=scripts/server.env scripts/start-local.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "node --conditions=react-server --import tsx --test tests/*.test.ts",

@@ -2,9 +2,10 @@ import "server-only";
 import { cache } from "react";
 import { sendBackupAlertMail } from "./auth-mail";
 import { backupAlertFor, backupAlertMailDue, type BackupAlert } from "./backup-alert-core";
-import { backupDestinationsInfo, backupKeyState, listBackups, readStatus } from "./backup";
+import { BACKUP_ALERT_MEMO, backupDestinationsInfo, backupKeyState, listBackups, readStatus } from "./backup";
 import { db } from "./db";
 import { logEvent } from "./log";
+import { memo } from "./memo";
 import { emailEnabled } from "./mail";
 
 const MAIL_STATE_KEY = "backupAlertMailAt";
@@ -23,8 +24,12 @@ export async function computeBackupAlert(now: number = Date.now()): Promise<Back
   return backupAlertFor({ keyOk, lastOkAt: times.length > 0 ? Math.max(...times) : null, now, external: { configured, lastOkAt: extLast } });
 }
 
-/** Igual, memorizado por petición (el layout y la página de copias lo piden en la misma pasada). */
-export const getBackupAlert = cache(() => computeBackupAlert());
+/**
+ * Igual, memorizado por petición (el layout y la página de copias lo piden en la misma pasada) y en el proceso durante un
+ * minuto: el layout lo pide en cada página de un admin. Cada copia y cada cambio de status.json lo invalidan
+ * (BACKUP_MEMO en backup.ts).
+ */
+export const getBackupAlert = cache(() => memo(BACKUP_ALERT_MEMO, () => computeBackupAlert()));
 
 /**
  * Lo llama el mantenimiento: si hay aviso activo y el email está configurado, avisa a los administradores activos

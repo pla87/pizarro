@@ -4,10 +4,11 @@
 // las copias quedan en la carpeta del proyecto y no dentro de .next/standalone. El contenedor no usa este script
 // (scripts/start.sh ejecuta server.js con UPLOAD_DIR=/app/uploads).
 //
-// package.json lanza este script con `exec node …`: el `sh -c` de npm se sustituye por node y el SIGTERM que npm reenvía
-// llega al servidor (sin exec, dash moría sin pasarla y el servidor seguía escuchando, huérfano). Como red de seguridad
-// (npm muerto de golpe, sistemas sin `sh`), si el proceso padre desaparece se lanza el apagado ordenado igualmente
-// (scripts/parent-watch.mjs). Solo cuando lo lanza npm: arrancado a mano en segundo plano, el padre es la terminal.
+// package.json lanza este script con `node …` (sin `exec`, que solo entienden los shells POSIX: en Windows npm usa
+// cmd.exe). Al parar npm (SIGTERM), npm la reenvía a su `sh -c`, y dash muere sin pasarla a node; por eso este script
+// vigila al proceso padre (scripts/parent-watch.mjs) y, en cuanto desaparece (o el sistema adopta al huérfano), lanza el
+// apagado ordenado: como mucho ~1 s después. Cubre también npm muerto de golpe (SIGKILL, cierre de la terminal) y
+// Windows. Solo cuando lo lanza npm: arrancado a mano en segundo plano, el padre es la terminal.
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";

@@ -1,5 +1,8 @@
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { runBcrypt } from "./bcrypt-pool";
+import { AppError } from "./errors";
+import { isSemaphoreFull, Semaphore } from "./semaphore";
 
 const COST = 11;
 export const MIN_PASSWORD = 10;
@@ -18,17 +21,61 @@ export function passwordSchema(minMessage = "La contraseña debe tener al menos 
     .refine((p) => passwordByteLength(p) <= MAX_PASSWORD_BYTES, "La contraseña es demasiado larga (máximo 72 bytes; las tildes y los emojis ocupan más de uno).");
 }
 
+// Cuántas comprobaciones (y cálculos) de contraseña van a la vez en todo el servidor. bcrypt es caro a propósito (~0,2 s
+// cada una): sin tope, una ráfaga de intentos de acceso ocupaba la CPU y, en el hilo principal, dejaba esperando a todos.
+// Lo que no cabe espera en una cola corta; si está llena o la espera se alarga, se responde «demasiados a la vez».
+export const PASSWORD_CHECKS_AT_ONCE = 2;
+export const PASSWORD_QUEUE = 8;
+export const PASSWORD_MAX_WAIT_MS = 3_000;
+
+/** Respuesta cuando ya hay demasiadas comprobaciones de contraseña en curso (no dice nada de la cuenta). */
+export const PASSWORD_BUSY_MESSAGE = "Demasiados intentos a la vez, prueba en unos segundos.";
+
+export class PasswordBusyError extends AppError {
+  constructor() {
+    super(PASSWORD_BUSY_MESSAGE, 429, "password_busy");
+  }
+}
+
+/** ¿Es el rechazo por demasiadas comprobaciones a la vez? (por código: la clase puede venir de otro paquete de Next). */
+export function isPasswordBusy(err: unknown): boolean {
+  return err instanceof Error && (err as { code?: unknown }).code === "password_busy";
+}
+
+// En globalThis: acciones y rutas pueden empaquetarse por separado y deben compartir el mismo tope.
+const g = globalThis as unknown as { __pzPasswordSem?: Semaphore };
+const slots = (g.__pzPasswordSem ??= new Semaphore({ max: PASSWORD_CHECKS_AT_ONCE, maxQueue: PASSWORD_QUEUE, maxWaitMs: PASSWORD_MAX_WAIT_MS }));
+
+/** Comprobaciones en curso y en espera (pruebas y diagnóstico). */
+export function passwordCheckStats(): { active: number; waiting: number } {
+  return slots.stats;
+}
+
+async function limited<T>(fn: () => Promise<T>, bounded: boolean): Promise<T> {
+  try {
+    return await slots.run(fn, { bounded });
+  } catch (err) {
+    if (isSemaphoreFull(err)) throw new PasswordBusyError();
+    throw err;
+  }
+}
+
+/**
+ * Hash de una contraseña nueva. Comparte el tope con las comprobaciones, pero espera su turno sin límite: solo lo
+ * piden personas ya identificadas (cambio de contraseña, alta de usuarios), no se puede provocar desde fuera.
+ */
 export function hashPassword(plain: string): Promise<string> {
-  return bcrypt.hash(plain, COST);
+  return limited(() => runBcrypt({ op: "hash", plain, cost: COST }, () => bcrypt.hash(plain, COST)), false);
 }
 
+/** ¿Es `plain` la contraseña de `hash`? Lanza PasswordBusyError si ya hay demasiadas comprobaciones en curso. */
 export function verifyPassword(plain: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(plain, hash);
+  return limited(() => runBcrypt({ op: "compare", plain, hash }, () => bcrypt.compare(plain, hash)), true);
 }
 
-// Hash fijo para igualar el tiempo de respuesta cuando el usuario no existe.
-let dummyHash: Promise<string> | null = null;
+// Hash fijo (de un valor sin uso, con el mismo coste) para igualar el tiempo de respuesta cuando el usuario no existe.
+// Precalculado: antes se calculaba en la primera petición, y eso costaba otra operación de bcrypt.
+const DUMMY_HASH = "$2b$11$p6baAcxS8zXOyptLk2Wx.u2ajIIoOYQsqgPN8I4YOjEnBAQesKpfa";
 export function dummyVerify(plain: string): Promise<boolean> {
-  dummyHash ??= bcrypt.hash("tablon-dummy-password", COST);
-  return dummyHash.then((h) => bcrypt.compare(plain, h));
+  return verifyPassword(plain, DUMMY_HASH);
 }

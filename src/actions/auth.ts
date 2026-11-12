@@ -15,8 +15,8 @@ import { logEvent } from "@/lib/log";
 import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { completeLogin } from "@/lib/login";
 import { requestContext } from "@/lib/request-context";
-import { dummyVerify, hashPassword, passwordSchema, verifyPassword } from "@/lib/password";
-import { LOGIN_ACCOUNT_LIMIT, LOGIN_ACCOUNT_LIMIT_TRUSTED, loginRateKeys, rateIp, rateLimit, rateLimitReached, resetRateLimit } from "@/lib/rate-limit";
+import { dummyVerify, hashPassword, isPasswordBusy, passwordSchema, verifyPassword } from "@/lib/password";
+import { LOGIN_ACCOUNT_LIMIT, LOGIN_ACCOUNT_LIMIT_TRUSTED, loginRateKeys, rateIp, rateLimit, rateLimitReached, releaseRateLimit, resetRateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { safeNextPath } from "@/lib/redirect";
 import { createSession, destroySession, getCurrentUser, requirePendingUser } from "@/lib/session";
@@ -86,7 +86,16 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   // Con el acceso de emergencia, un rol sin contraseña no llega a comprobarla (bcrypt de relleno, para que tampoco lo
   // delate el tiempo) y recibe la misma respuesta que un email desconocido o una contraseña incorrecta.
   const googleOnlyRole = !!user && !passwordLoginAllowed(user.role, policy);
-  const valid = user && !googleOnlyRole ? await verifyPassword(password, user.passwordHash) : await dummyVerify(password);
+  let valid: boolean;
+  try {
+    valid = user && !googleOnlyRole ? await verifyPassword(password, user.passwordHash) : await dummyVerify(password);
+  } catch (err) {
+    if (!isPasswordBusy(err)) throw err;
+    // Demasiadas comprobaciones a la vez en el servidor: no se ha llegado a mirar la contraseña, así que el intento
+    // reservado se devuelve (no cuenta como fallo de la cuenta) y la respuesta es la misma exista o no la cuenta.
+    releaseRateLimit(keys.account);
+    return { error: t("Demasiados intentos a la vez, prueba en unos segundos.") };
+  }
   if (!user || googleOnlyRole || !valid || !user.active) {
     const reason = !user ? "unknown_email" : googleOnlyRole ? "google_only" : !valid ? "wrong_password" : "inactive";
     const why = { unknown_email: "email desconocido", google_only: "solo se admite Google", wrong_password: "contraseña incorrecta", inactive: "usuario desactivado" }[reason];

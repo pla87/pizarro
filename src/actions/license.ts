@@ -6,7 +6,7 @@ import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
 import { db } from "@/lib/db";
 import { LICENSE_EMAIL_MAX, LICENSE_HOLDER_MAX, LICENSE_REF_MAX, nudgeSnoozeUntil } from "@/lib/license-core";
-import { clearLicense, getLicense, getPersonalUse, setLicense, setPersonalUse } from "@/lib/license-registry";
+import { clearLicense, getLicense, getPersonalUse, invalidateLicenseNudge, setLicense, setPersonalUse } from "@/lib/license-registry";
 import { requireAdmin } from "@/lib/session";
 
 const input = z.object({
@@ -76,6 +76,7 @@ export async function snoozeLicenseNudge() {
     const me = await requireAdmin();
     const until = nudgeSnoozeUntil(new Date());
     await db.user.update({ where: { id: me.id }, data: { licenseNudgeUntil: until } });
+    invalidateLicenseNudge(me.id);
     describeAction("Vio el recordatorio de licencia (no se repite hasta el {date})", { date: until.toISOString().slice(0, 10) });
     return null;
   });
