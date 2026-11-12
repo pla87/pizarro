@@ -2,6 +2,7 @@ import "./zod-config";
 import { z } from "zod";
 import { clampTitle } from "./title-clamp";
 import { isHttpUrl, normalizeLinkUrl } from "./link-url";
+import { collapseSpaces } from "./name-spaces";
 import { MAX_CLIENT, MAX_COST, MAX_HOURS, TASK_PRIORITIES } from "./task-fields";
 import { FILE_MAX_MAX_MB, FILE_MAX_MIN_MB } from "./upload-size";
 import { COLUMN_ROLES, HEX_COLOR_RE, MAX_DESCRIPTION, MAX_TITLE, PALETTE, RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "./constants";
@@ -28,7 +29,8 @@ export const fileMaxMb = z
   .int("Tamaño no válido.")
   .min(FILE_MAX_MIN_MB, `El mínimo es ${FILE_MAX_MIN_MB} MB.`)
   .max(FILE_MAX_MAX_MB, `El máximo es ${FILE_MAX_MAX_MB} MB.`);
-export const name = z.string().trim().min(1, "El nombre es obligatorio.").max(80, "Máximo 80 caracteres.");
+/** Nombre (proyecto, columna, etiqueta, tipo, persona…): los espacios repetidos o duros se guardan como uno normal. */
+export const name = z.string().overwrite(collapseSpaces).min(1, "El nombre es obligatorio.").max(80, "Máximo 80 caracteres.");
 export const description = z.string().max(MAX_DESCRIPTION, "La descripción es demasiado larga.");
 export const columnRole = z.enum(COLUMN_ROLES);
 export const color = z.enum(PALETTE).nullable();

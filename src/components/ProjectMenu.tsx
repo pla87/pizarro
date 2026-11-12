@@ -62,10 +62,11 @@ export function ProjectMenu({ className, textClassName }: { className?: string; 
         <button
           type="button"
           className="flex max-w-full items-center gap-1 rounded-lg px-1.5 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
-          title={t("Cambiar de proyecto ({keys})", { keys: sc("Alt+P") })}
+          // Nombre completo en el tooltip: con poco sitio se ve truncado con «…».
+          title={`${current.name}\n${t("Cambiar de proyecto ({keys})", { keys: sc("Alt+P") })}`}
           {...props}
         >
-          <span className={cn("truncate font-semibold", textClassName)}>{current.name}</span>
+          <span data-project-name className={cn("truncate font-semibold", textClassName)}>{current.name}</span>
           {current.isPrivate && <PrivateIcon />}
           <ChevronDown size={16} className={cn("shrink-0 text-slate-400 transition-transform", isOpen && "rotate-180")} />
         </button>

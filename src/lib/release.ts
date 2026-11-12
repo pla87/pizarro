@@ -4,7 +4,8 @@
 import { isoInZone } from "./dates";
 import { decodeEntities } from "./markdown-entities";
 import { mentionsToPlain } from "./mentions";
-import { MAX_TITLE } from "./constants";
+import { MAX_TITLE, MAX_TITLE_UNITS } from "./constants";
+import { clampTitle } from "./title-clamp";
 import { partSuffix } from "./zip-plan";
 import { esT, type T } from "@/i18n/shared";
 
@@ -121,13 +122,9 @@ export function computeReleaseCodes(
  */
 export function titleWithReleaseCode(title: string, code: string, max = MAX_TITLE): string {
   const prefix = `${code}: `;
-  let rest = title;
-  const room = Math.max(0, max - prefix.length);
-  if (rest.length > room) {
-    // Sin dejar a medias una mención @[Nombre](user:ID) ni un par suplente partido.
-    rest = rest.slice(0, room).replace(/@\[[^\]]*(\]\([^)]*)?$/, "").replace(/[\uD800-\uDBFF]$/, "").trimEnd();
-  }
-  return (prefix + rest).slice(0, max);
+  if (prefix.length >= max) return prefix.slice(0, max);
+  // Mismo recorte que al guardar (caracteres visibles): sin dejar a medias una mención @[Nombre](user:ID) ni un emoji.
+  return prefix + clampTitle(title, max - prefix.length, MAX_TITLE_UNITS - prefix.length).value;
 }
 
 /**

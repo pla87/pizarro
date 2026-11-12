@@ -1,6 +1,10 @@
 // Recorte de títulos de tarea al máximo permitido (MAX_TITLE) sin tirar el guardado entero.
 // Módulo puro (sin servidor ni DOM): lo usan el cliente (aviso al escribir y al guardar) y el servidor.
-import { MAX_TITLE } from "./constants";
+//
+// El máximo cuenta lo que ve la persona: grafemas (un emoji de familia, una bandera o una letra con tilde combinada son
+// un solo carácter), no unidades UTF-16. Además hay un tope duro en unidades (MAX_TITLE_UNITS) para que el tamaño
+// guardado siga acotado aunque cada carácter sea un emoji compuesto.
+import { MAX_TITLE, MAX_TITLE_UNITS } from "./constants";
 import { mentionRegex, mentionsToPlain } from "./mentions";
 
 interface ClampedTitle {
@@ -8,11 +12,6 @@ interface ClampedTitle {
   value: string;
   /** true si el original superaba el máximo y se ha cortado. */
   clipped: boolean;
-}
-
-/** Longitud que cuenta para el máximo: el texto visible (una mención @[Ana](user:x) cuenta como «@Ana»). */
-export function titleLength(text: string): number {
-  return mentionsToPlain(text).length;
 }
 
 let segmenter: Intl.Segmenter | null | undefined;
@@ -27,33 +26,56 @@ function* graphemes(text: string): Generator<string> {
   else yield* text;
 }
 
+/** Número de grafemas (caracteres que se ven) de un texto. */
+export function graphemeCount(text: string): number {
+  // Solo ASCII imprimible: cada unidad es un carácter (el caso normal, sin segmentar).
+  if (/^[\x20-\x7e]*$/.test(text)) return text.length;
+  let n = 0;
+  for (const _ of graphemes(text)) n++;
+  return n;
+}
+
+/** Longitud que cuenta para el máximo: caracteres visibles (una mención @[Ana](user:x) cuenta como «@Ana»). */
+export function titleLength(text: string): number {
+  return graphemeCount(mentionsToPlain(text));
+}
+
+/** ¿Pasa del máximo? (caracteres visibles o, con emojis muy compuestos, el tope duro de unidades). */
+export function titleTooLong(text: string, max = MAX_TITLE, maxUnits = MAX_TITLE_UNITS): boolean {
+  if (text.length <= max) return false;
+  const plain = mentionsToPlain(text);
+  return plain.length > maxUnits || graphemeCount(plain) > max;
+}
+
 // Último resultado: el servidor recorta el título al validarlo y vuelve a preguntar si se recortó (aviso al cliente).
-let last: { raw: string; max: number; result: ClampedTitle } | null = null;
+let last: { raw: string; max: number; maxUnits: number; result: ClampedTitle } | null = null;
 
 /**
- * Corta el título a `max` caracteres visibles. No parte un emoji ni una mención @[Nombre](user:ID): si la mención
- * no cabe entera, se queda fuera. El corte no deja espacios al final.
+ * Corta el título a `max` caracteres visibles (y `maxUnits` unidades UTF-16 de texto visible). No parte un emoji ni una
+ * mención @[Nombre](user:ID): si la mención no cabe entera, se queda fuera. El corte no deja espacios al final.
  */
-export function clampTitle(raw: string, max = MAX_TITLE): ClampedTitle {
-  // El texto visible nunca es más largo que el original: lo corto no necesita más cálculo.
+export function clampTitle(raw: string, max = MAX_TITLE, maxUnits = MAX_TITLE_UNITS): ClampedTitle {
+  // El texto visible nunca es más largo que el original, y cada carácter ocupa al menos una unidad: lo corto no necesita más.
   if (raw.length <= max) return { value: raw, clipped: false };
-  if (last && last.raw === raw && last.max === max) return last.result;
-  const result = clampLong(raw, max);
-  last = { raw, max, result };
+  if (last && last.raw === raw && last.max === max && last.maxUnits === maxUnits) return last.result;
+  const result = clampLong(raw, max, maxUnits);
+  last = { raw, max, maxUnits, result };
   return result;
 }
 
-function clampLong(raw: string, max: number): ClampedTitle {
-  if (titleLength(raw) <= max) return { value: raw, clipped: false };
-  let used = 0;
+function clampLong(raw: string, max: number, maxUnits: number): ClampedTitle {
+  let used = 0; // caracteres visibles
+  let units = 0; // unidades UTF-16 visibles
   let out = "";
   let last = 0;
-  // Se recorre el texto alternando trozos sueltos y menciones (que se conservan tal cual o se descartan enteras).
+  // Se recorre el texto alternando trozos sueltos y menciones (que se conservan tal cual o se descartan enteras). El
+  // recorrido se para al llenar el máximo: un texto enorme no se segmenta entero.
   const take = (text: string): boolean => {
     for (const g of graphemes(text)) {
-      if (used + g.length > max) return false;
+      if (used + 1 > max || units + g.length > maxUnits) return false;
       out += g;
-      used += g.length;
+      used++;
+      units += g.length;
     }
     return true;
   };
@@ -63,15 +85,17 @@ function clampLong(raw: string, max: number): ClampedTitle {
       full = false;
       break;
     }
-    const visible = m[1]!.length + 1;
-    if (used + visible > max) {
+    const visible = `@${m[1]!}`;
+    const visibleCount = graphemeCount(visible);
+    if (used + visibleCount > max || units + visible.length > maxUnits) {
       full = false;
       break;
     }
     out += m[0];
-    used += visible;
+    used += visibleCount;
+    units += visible.length;
     last = m.index + m[0].length;
   }
-  if (full) take(raw.slice(last));
+  if (full && take(raw.slice(last))) return { value: raw, clipped: false };
   return { value: out.trimEnd(), clipped: true };
 }

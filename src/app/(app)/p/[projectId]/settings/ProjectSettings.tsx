@@ -4,6 +4,7 @@ import { CalendarClock, Check, EyeOff, Loader2, Pencil, Plus, Trash2, Users as U
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { sameName } from "@/lib/name-spaces";
 import {
   createDeliverable, createLabel, deleteDeliverable, deleteLabel, addProjectMember, deleteProject, removeProjectMember, setProjectVisibility, setAttachmentLimits, setGoogleShareMode, setTaskFields, updateDeliverable, updateLabel, updateProject,
 } from "@/actions/projects";
@@ -239,7 +240,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
             />
             <button
               className="btn-danger"
-              disabled={pending || confirmName !== project.name}
+              disabled={pending || !sameName(confirmName, project.name)}
               onClick={() => run(() => deleteProject(project.id, confirmName), t("Proyecto borrado"), () => { router.push("/"); router.refresh(); })}
             >
               <Trash2 size={15} /> {t("Borrar proyecto")}

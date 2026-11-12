@@ -4,6 +4,7 @@ import { FileDown, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/i18n/client";
+import { HEADER_LABEL } from "./board/useHeaderFit";
 
 type State = { status: "loading" } | { status: "ready"; url: string; filename: string } | { status: "error"; message: string };
 
@@ -68,8 +69,8 @@ export function ReportButton({ projectId, variant }: { projectId: string; varian
   return (
     <>
       <button type="button" className={CLASSES[variant]} onClick={onClick} aria-label={variant === "header" ? t("Informe PDF") : undefined} title={variant === "header" ? t("Informe PDF") : undefined}>
-        {/* En la cabecera del tablero, con poco ancho solo el icono (el contenedor de consulta es el de la cabecera). */}
-        <FileDown size={variant === "sidebar" ? 17 : 16} /> <span className={variant === "header" ? "hidden @min-[1240px]:inline" : undefined}>{t("Informe PDF")}</span>
+        {/* En la cabecera del tablero, con poco sitio solo el icono (lo decide la cabecera: ver board/useHeaderFit). */}
+        <FileDown size={variant === "sidebar" ? 17 : 16} /> <span className={variant === "header" ? HEADER_LABEL : undefined}>{t("Informe PDF")}</span>
       </button>
       <Modal open={open} onClose={close} title={t("Informe PDF")} size="sm">
         {state.status === "loading" && (
