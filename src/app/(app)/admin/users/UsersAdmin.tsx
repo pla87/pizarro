@@ -1,10 +1,10 @@
 "use client";
 
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { KeyRound, Link2, Link2Off, Pencil, ShieldOff, Trash2, TriangleAlert, UserPlus } from "lucide-react";
+import { KeyRound, Link2, Link2Off, MailPlus, Pencil, ShieldOff, Trash2, TriangleAlert, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { createUser, deleteUser, forcePasswordChange, resetUserTwoFactor, unlinkGoogle, updateUser, allowGoogleRelink } from "@/actions/users";
+import { createUser, deleteUser, forcePasswordChange, resendInvite, resetUserTwoFactor, unlinkGoogle, updateUser, allowGoogleRelink } from "@/actions/users";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -14,6 +14,7 @@ import { copyText } from "@/components/ui/clipboard";
 import { useT } from "@/i18n/client";
 
 type Role = "ADMIN" | "MEMBER";
+type UserLocale = "ES" | "EN";
 interface UserRow {
   id: string;
   name: string;
@@ -25,9 +26,12 @@ interface UserRow {
   googleLinked: boolean;
   googleRelinkBlocked: boolean;
   privateProjects: number;
+  locale: UserLocale;
+  /** Debe elegir contraseña y nunca ha entrado: se le puede reenviar la invitación. */
+  invitePending: boolean;
 }
 
-export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery }: { users: UserRow[]; meId: string; maxUsers: number; emailAvailable: boolean; noRecovery?: boolean }) {
+export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery, defaultLocale = "ES" }: { users: UserRow[]; meId: string; maxUsers: number; emailAvailable: boolean; noRecovery?: boolean; defaultLocale?: UserLocale }) {
   const t = useT();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
@@ -51,6 +55,19 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery }
     if (!res.ok) return toast(res.error, "error");
     toast(t("Google desvinculado: se han cerrado sus sesiones"));
     router.refresh();
+  };
+
+  const [resending, setResending] = useState<string | null>(null);
+  const resend = async (u: UserRow) => {
+    setResending(u.id);
+    try {
+      const res = await resendInvite(u.id);
+      if (!res.ok) return toast(res.error, "error");
+      toast(t("Invitación reenviada a {email}: el enlace anterior ya no vale", { email: u.email }));
+      router.refresh();
+    } finally {
+      setResending(null);
+    }
   };
 
   const allow = async (u: UserRow) => {
@@ -90,10 +107,17 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery }
               {u.role === "ADMIN" ? t("Admin") : t("Miembro")}
             </span>
             {!u.active && <span className="badge bg-slate-100 text-slate-500 ring-slate-400/20">{t("Inactivo")}</span>}
-            {u.mustChangePassword && <span className="badge bg-amber-50 text-amber-700 ring-amber-500/20" title={t("Tiene que elegir una contraseña nueva al entrar")}>{t("Contraseña pendiente")}</span>}
+            {u.invitePending ? (
+              <span className="badge bg-amber-50 text-amber-700 ring-amber-500/20" title={t("Aún no ha entrado ni ha elegido su contraseña")}>{t("Invitación pendiente")}</span>
+            ) : (
+              u.mustChangePassword && <span className="badge bg-amber-50 text-amber-700 ring-amber-500/20" title={t("Tiene que elegir una contraseña nueva al entrar")}>{t("Contraseña pendiente")}</span>
+            )}
             {u.twoFactor && <span className="badge bg-emerald-50 text-emerald-700 ring-emerald-500/20" title={t("Tiene activada la verificación en dos pasos")}>2FA</span>}
             {u.googleLinked && <span className="badge bg-slate-100 text-slate-600 ring-slate-500/20" title={t("Ha entrado con Google")}>Google</span>}
             {u.googleRelinkBlocked && <span className="badge bg-amber-50 text-amber-700 ring-amber-500/20" title={t("Google desvinculado: no se vuelve a enlazar solo")}>{t("Google bloqueado")}</span>}
+            {u.id !== meId && u.invitePending && u.active && emailAvailable && (
+              <button className="btn-icon" onClick={() => void resend(u)} disabled={resending === u.id} aria-label={t("Reenviar invitación a {name}", { name: u.name })} title={t("Reenviar invitación")}><MailPlus size={16} /></button>
+            )}
             <button className="btn-icon" onClick={() => setEditing(u)} aria-label={t("Editar {name}", { name: u.name })}><Pencil size={16} /></button>
             {u.id !== meId && (
               <button className="btn-icon" onClick={() => setResetting(u)} aria-label={t("Forzar cambio de contraseña de {name}", { name: u.name })} title={t("Forzar cambio de contraseña")}><KeyRound size={16} /></button>
@@ -113,7 +137,7 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery }
           </li>
         ))}
       </ul>
-      {creating && <UserForm emailAvailable={emailAvailable} onClose={() => setCreating(false)} />}
+      {creating && <UserForm emailAvailable={emailAvailable} defaultLocale={defaultLocale} onClose={() => setCreating(false)} />}
       {editing && <UserForm user={editing} isMe={editing.id === meId} onClose={() => setEditing(null)} />}
       {resetting && <ForcePasswordChange user={resetting} emailAvailable={emailAvailable} onClose={() => setResetting(null)} />}
       {resetting2fa && <ResetTwoFactor user={resetting2fa} onClose={() => setResetting2fa(null)} />}
@@ -122,7 +146,7 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery }
   );
 }
 
-function UserForm({ user, isMe, emailAvailable, onClose }: { user?: UserRow; isMe?: boolean; emailAvailable?: boolean; onClose: () => void }) {
+function UserForm({ user, isMe, emailAvailable, defaultLocale = "ES", onClose }: { user?: UserRow; isMe?: boolean; emailAvailable?: boolean; defaultLocale?: UserLocale; onClose: () => void }) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
@@ -132,11 +156,12 @@ function UserForm({ user, isMe, emailAvailable, onClose }: { user?: UserRow; isM
   const [role, setRole] = useState<Role>(user?.role ?? "MEMBER");
   const [active, setActive] = useState(user?.active ?? true);
   const [password, setPassword] = useState("");
+  const [locale, setLocale] = useState<UserLocale>(defaultLocale);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     start(async () => {
-      const res = user ? await updateUser(user.id, { name, email, role, active }) : await createUser({ name, email, role, password: emailAvailable ? undefined : password });
+      const res = user ? await updateUser(user.id, { name, email, role, active }) : await createUser({ name, email, role, locale, password: emailAvailable ? undefined : password });
       if (!res.ok) return toast(res.error, "error");
       toast(user ? t("Usuario actualizado") : emailAvailable ? t("Usuario creado: le hemos enviado una invitación por email") : t("Usuario creado"));
       router.refresh();
@@ -179,6 +204,16 @@ function UserForm({ user, isMe, emailAvailable, onClose }: { user?: UserRow; isM
             <option value="ADMIN">{t("Administrador")}</option>
           </select>
         </div>
+        {!user && (
+          <div>
+            <label className="label" htmlFor="u-locale">{t("Idioma")}</label>
+            <select id="u-locale" className="input" value={locale} onChange={(e) => setLocale(e.target.value === "EN" ? "EN" : "ES")}>
+              <option value="ES">Español</option>
+              <option value="EN">English</option>
+            </select>
+            <p className="mt-1 text-xs text-slate-500">{emailAvailable ? t("El de su interfaz y el de la invitación. Podrá cambiarlo en «Mi perfil».") : t("El de su interfaz. Podrá cambiarlo en «Mi perfil».")}</p>
+          </div>
+        )}
         {user && (
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} disabled={isMe} />

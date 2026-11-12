@@ -1,15 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { cancelSecondStep, chooseSetupMethod, confirmSetup, finishSetup } from "@/actions/two-factor";
+import { chooseSetupMethod, confirmSetup, finishSetup } from "@/actions/two-factor";
 import { RecoveryCodes, TwoFactorEnroll } from "@/components/auth/TwoFactorEnroll";
 import { useT } from "@/i18n/client";
+import { BackToLogin } from "./BackToLogin";
 
 /** Administrador sin segundo paso: debe configurarlo antes de entrar. La sesión solo se abre en finishSetup. */
 export function SetupForm({ emailAvailable, confirmed }: { emailAvailable: boolean; confirmed: boolean }) {
   const t = useT();
   const [codes, setCodes] = useState<string[] | null>(null);
   const [saved, setSaved] = useState(false);
+  // Con un método ya elegido, el paso de activación trae su propio «Atrás» (vuelve a elegir método): «Volver» (al acceso)
+  // solo sale mientras se elige, para no mostrar dos botones de volver seguidos.
+  const [enrolling, setEnrolling] = useState(false);
 
   if (codes || confirmed) {
     return (
@@ -30,10 +34,18 @@ export function SetupForm({ emailAvailable, confirmed }: { emailAvailable: boole
       <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
         {t("Los administradores deben activar la verificación en dos pasos antes de entrar.")}
       </p>
-      <TwoFactorEnroll emailAvailable={emailAvailable} begin={(m) => chooseSetupMethod(m)} confirm={(c, e) => confirmSetup(c, e)} onCodes={setCodes} />
-      <form action={cancelSecondStep}>
-        <button className="text-sm text-slate-500 hover:underline">{t("Volver")}</button>
-      </form>
+      <TwoFactorEnroll
+        emailAvailable={emailAvailable}
+        begin={async (m) => {
+          const res = await chooseSetupMethod(m);
+          if (res.ok) setEnrolling(true);
+          return res;
+        }}
+        confirm={(c, e) => confirmSetup(c, e)}
+        onCodes={setCodes}
+        onBack={() => setEnrolling(false)}
+      />
+      {!enrolling && <BackToLogin className="text-sm text-slate-500 hover:underline" />}
     </div>
   );
 }

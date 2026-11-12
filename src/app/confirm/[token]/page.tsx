@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { findUsableToken } from "@/lib/auth-token";
 import { getT } from "@/i18n/server";
@@ -19,7 +18,8 @@ export default async function ConfirmPage({ params }: { params: Promise<{ token:
       <AuthCard title={t("Enlace no válido")}>
         <div className="space-y-4 text-sm">
           <p>{t("El enlace no es válido o ha caducado. Repite el cambio desde tu perfil.")}</p>
-          <Link href="/settings" className="btn-primary w-full">{t("Ir a mi perfil")}</Link>
+          {/* Recarga completa: ver ConfirmForm. */}
+          <a href="/settings" className="btn-primary w-full">{t("Ir a mi perfil")}</a>
         </div>
       </AuthCard>
     );

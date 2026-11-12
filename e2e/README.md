@@ -23,9 +23,10 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Cabecera y atajos (caza de bugs 48a) | `e2e/bh48a-e2e.mjs` | 42 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) | `e2e/bh48b-e2e.mjs` | 120 | ~3 min |
 | Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/bh48c-e2e.mjs` | 44 | ~1 min |
+| Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
-se apuntan). Todas, menos la QA, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en
+se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en
 cualquier orden. Cada una hace varios inicios de sesión: si una falla al entrar (tiempo agotado en el acceso) tras
 otras suites, reinicia el servidor (salta el límite de intentos) y vuelve a lanzarla. La base no se borra al terminar:
 la siguiente pasada de la QA la vacía; bórrala a mano cuando ya no la necesites. Capturas en `SHOTS_DIR` (por defecto
@@ -41,6 +42,21 @@ cd e2e/qa && BASE=http://localhost:3231 DATABASE_URL=$DBURL APP_DIR=$PWD/../.. n
 
 `run-all.mjs` crea (o vacía) la base de `DATABASE_URL` (aquí `pz_qa`), aplica migraciones y arranca su propio servidor
 en el puerto de `BASE`, que para al terminar: no debe haber otro servidor escuchando ahí.
+
+## Instalación desde cero
+
+Base vacía (la borra y la crea: solo nombres `pz_*`, distinta de la de la QA) y su propio `npm start` sin `SEED_ADMIN_*`,
+con el buzón de pruebas, en el puerto de `BASE` (debe estar libre). Comprueba que `npm start` hace las tareas de arranque
+(código de `/setup` en la terminal, `system.boot`, plantillas, historial de versiones), el asistente (cambiar de idioma
+en el paso 2 no lo reinicia; el acceso sale en el idioma elegido), el segundo paso obligatorio del admin con un solo
+«Atrás», *Administración → Ajustes → Instalación*, el email de prueba, invitar en otro idioma y «Reenviar invitación»,
+el idioma al pasar de `/reset` al acceso, cambiar de idioma en «Mi perfil» sin desmontar la página y el detalle de una
+tarea sin Google. Anota los avisos de Node del servidor con `e2e/warn-hook.mjs` y falla si aparece el de pg
+«client is already executing a query».
+
+```sh
+cd e2e && BASE=http://localhost:3232 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pz_install APP_DIR=$PWD/.. node install-e2e.mjs
+```
 
 ## Tablero
 

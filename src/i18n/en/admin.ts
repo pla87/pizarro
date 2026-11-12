@@ -323,4 +323,14 @@ export const admin: Record<string, string> = {
   "1 nuevo": "1 new",
   "1 fichero nuevo": "1 new file",
   "1 ya estaba": "1 already there",
+
+  // Administración → Ajustes → Instalación (lo que eligió el asistente /setup)
+  "Lo que se eligió en el asistente de configuración. El idioma por defecto es el de las pantallas sin sesión (acceso, enlaces de los emails) y el de las personas que invites; cada persona elige el suyo en «Mi perfil».":
+    "What was chosen in the setup wizard. The default language is used on screens without a session (sign-in, email links) and for the people you invite; each person picks their own in “My profile”.",
+  "Idioma por defecto": "Default language",
+  "La zona horaria se usa para los plazos, los avisos y los informes de todos.": "The time zone is used for everyone's due dates, notifications and reports.",
+  "Ajustes de la instalación guardados.": "Installation settings saved.",
+  "Cambió los ajustes de la instalación": "Changed the installation settings",
+  // Avisos por email: por qué no se puede enviar la prueba
+  "Guarda antes una configuración de email para poder enviar la prueba.": "Save an email configuration first to send the test.",
 };

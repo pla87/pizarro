@@ -10,6 +10,7 @@ import {
   normalizeSetupCode,
   parseSetupEmail,
   parseStoredCode,
+  setupCodeSource,
   setupPending,
   validTimeZone,
   verifySetupCode,
@@ -124,5 +125,15 @@ describe("parseSetupEmail (email del administrador y de prueba)", () => {
     for (const bad of ["", "admin", "admin@", "@example.com", "admin@example", null, undefined, 42, `${"a".repeat(195)}@example.com`]) {
       assert.equal(parseSetupEmail(bad), null, String(bad));
     }
+  });
+});
+
+describe("setupCodeSource (dónde ver el código del asistente)", () => {
+  test("Railway manda; si no, lo que fija el arranque (start.sh o start-local.mjs)", () => {
+    assert.equal(setupCodeSource({ RAILWAY_ENVIRONMENT: "production", PIZARRO_LAUNCHER: "docker" }), "railway");
+    assert.equal(setupCodeSource({ RAILWAY_PROJECT_ID: "x" }), "railway");
+    assert.equal(setupCodeSource({ PIZARRO_LAUNCHER: "npm" }), "npm");
+    assert.equal(setupCodeSource({ PIZARRO_LAUNCHER: "docker" }), "docker");
+    assert.equal(setupCodeSource({}), "unknown");
   });
 });

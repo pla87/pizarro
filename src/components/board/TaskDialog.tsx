@@ -1000,7 +1000,10 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               <p className="text-xs text-slate-400">{t("Sin adjuntos.")}</p>
             )}
           </section>
-          <GoogleLinks taskId={task.id} detail={detail} setDetail={setDetail} onCreate={createGoogle} />
+          {/* Sin Google configurado no se pueden crear documentos: la sección solo sale si la tarea ya tiene alguno enlazado. */}
+          {(board.google.enabled || (detail?.links.length ?? 0) > 0) && (
+            <GoogleLinks taskId={task.id} detail={detail} setDetail={setDetail} onCreate={createGoogle} canCreate={board.google.enabled} />
+          )}
           <Comments taskId={task.id} detail={detail} setDetail={setDetail} users={board.users} onGoogle={createGoogle} editDirtyRef={commentEditDirty} />
           <TaskHistory taskId={task.id} />
         </div>
@@ -1853,8 +1856,10 @@ function SubtaskRow({ s, editing, blurHeld, onEdit, onRename, onDraft, onToggle,
   );
 }
 
-function GoogleLinks({ detail, setDetail, onCreate, taskId }: {
+function GoogleLinks({ detail, setDetail, onCreate, taskId, canCreate }: {
   taskId: string;
+  /** Google configurado en el servidor: se pueden crear documentos nuevos. */
+  canCreate: boolean;
   detail: TaskDetail | null;
   setDetail: React.Dispatch<React.SetStateAction<TaskDetail | null>>;
   onCreate: (kind: MentionCommand) => Promise<TaskLinkInfo | null>;
@@ -1868,12 +1873,16 @@ function GoogleLinks({ detail, setDetail, onCreate, taskId }: {
     <section>
       <div className="mb-2 flex items-center gap-1">
         <h3 className="mr-auto min-w-0 text-sm font-semibold">{t("Documentos de Google")}</h3>
-        <button className="btn-ghost shrink-0 whitespace-nowrap px-2 py-1 text-xs" onClick={() => onCreate("GOOGLE_DOC")} disabled={!detail}>
-          <FileText size={15} className="text-sky-600" /> {t("Nuevo Doc")}
-        </button>
-        <button className="btn-ghost shrink-0 whitespace-nowrap px-2 py-1 text-xs" onClick={() => onCreate("GOOGLE_SHEET")} disabled={!detail}>
-          <FileSpreadsheet size={15} className="text-emerald-600" /> {t("Nuevo Sheet")}
-        </button>
+        {canCreate && (
+          <>
+            <button className="btn-ghost shrink-0 whitespace-nowrap px-2 py-1 text-xs" onClick={() => onCreate("GOOGLE_DOC")} disabled={!detail}>
+              <FileText size={15} className="text-sky-600" /> {t("Nuevo Doc")}
+            </button>
+            <button className="btn-ghost shrink-0 whitespace-nowrap px-2 py-1 text-xs" onClick={() => onCreate("GOOGLE_SHEET")} disabled={!detail}>
+              <FileSpreadsheet size={15} className="text-emerald-600" /> {t("Nuevo Sheet")}
+            </button>
+          </>
+        )}
       </div>
       {links.length === 0 ? (
         <p className="truncate text-xs text-slate-400">

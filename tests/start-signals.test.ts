@@ -40,6 +40,46 @@ test("el script start funciona con cualquier shell (sin `exec`, que cmd.exe no e
   assert.doesNotMatch(startScript, /[;&|$'`]/);
 });
 
+/** dist/boot.mjs de prueba: anota cuándo corren las tareas de arranque (o falla, con `fail`). */
+async function fakeBoot(dir: string, log: string, fail = false): Promise<void> {
+  await mkdir(path.join(dir, "dist"), { recursive: true });
+  await writeFile(
+    path.join(dir, "dist", "boot.mjs"),
+    [
+      `import fs from "node:fs";`,
+      `export async function runBoot() {`,
+      fail ? `  throw new Error("base inaccesible");` : `  fs.appendFileSync(${JSON.stringify(log)}, "boot " + process.pid + " " + process.env.NODE_ENV + " " + process.env.PIZARRO_LAUNCHER + " " + Date.now() + "\\n");`,
+      `}`,
+    ].join("\n"),
+  );
+}
+
+test("start-local.mjs: sin dist/boot.mjs, o si fallan las tareas de arranque, no arranca el servidor", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "pz-start-boot-"));
+  try {
+    await mkdir(path.join(dir, "scripts"));
+    await mkdir(path.join(dir, ".next", "standalone"), { recursive: true });
+    for (const f of ["start-local.mjs", "parent-watch.mjs", "local-paths.mjs"]) await copyFile(path.join(root, "scripts", f), path.join(dir, "scripts", f));
+    const log = path.join(dir, "server.log");
+    await writeFile(path.join(dir, ".next", "standalone", "server.js"), `require("fs").appendFileSync(${JSON.stringify(log)}, "listo\\n");`);
+    const run = () => spawnSync(process.execPath, [path.join(dir, "scripts", "start-local.mjs")], { cwd: dir, encoding: "utf8", env: { ...process.env, npm_lifecycle_event: "" } });
+    let r = run();
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /No existe dist\/boot\.mjs/);
+    await fakeBoot(dir, log, true);
+    r = run();
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /Fallaron las tareas de arranque[\s\S]*base inaccesible/);
+    assert.equal(await readFile(log, "utf8").catch(() => ""), "", "el servidor no llegó a cargarse");
+    await fakeBoot(dir, log);
+    r = run();
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(await readFile(log, "utf8"), /^boot \d+ production npm \d+\nlisto\n$/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 const hasNpm = process.platform !== "win32" && spawnSync("npm", ["--version"], { stdio: "ignore" }).status === 0;
 
 test("`npm start` parado con SIGTERM al pid de npm: el servidor se apaga de forma ordenada en ~1 s y no queda huérfano", { skip: !hasNpm }, async () => {
@@ -52,6 +92,7 @@ test("`npm start` parado con SIGTERM al pid de npm: el servidor se apaga de form
     for (const f of ["start-local.mjs", "parent-watch.mjs", "local-paths.mjs", "server.env"]) await copyFile(path.join(root, "scripts", f), path.join(dir, "scripts", f));
     await writeFile(path.join(dir, "package.json"), JSON.stringify({ name: "pz-start-test", private: true, scripts: { start: startScript } }));
     const log = path.join(dir, "server.log");
+    await fakeBoot(dir, log);
     await writeFile(
       path.join(dir, ".next", "standalone", "server.js"),
       [
@@ -70,6 +111,7 @@ test("`npm start` parado con SIGTERM al pid de npm: el servidor se apaga de form
       if (m) server = Number(m[1]);
     }
     assert.ok(server > 0, "el servidor de prueba no arrancó");
+    assert.match(await readFile(log, "utf8"), new RegExp(`^boot ${server} production npm \\d+\\nlisto ${server} `), "las tareas de arranque van antes del servidor, en el mismo proceso");
     const npmExited = new Promise<void>((r) => npm.on("exit", () => r()));
     const killedAt = Date.now();
     npm.kill("SIGTERM");

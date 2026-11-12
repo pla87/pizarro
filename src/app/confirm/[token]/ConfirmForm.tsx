@@ -1,7 +1,6 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import Link from "next/link";
 import { useState, useTransition } from "react";
 import { confirmAccountChange } from "@/actions/auth";
 import { useT } from "@/i18n/client";
@@ -16,7 +15,8 @@ export function ConfirmForm({ token, kind, newEmail }: { token: string; kind: "E
     return (
       <div className="space-y-4 text-sm">
         <p>{kind === "EMAIL" ? t("Email actualizado. Úsalo la próxima vez que inicies sesión.") : t("Contraseña actualizada. Se han cerrado todas las sesiones: inicia sesión con la nueva.")}</p>
-        <Link href={kind === "EMAIL" ? "/settings" : "/login"} className="btn-primary w-full">{kind === "EMAIL" ? t("Ir a mi perfil") : t("Iniciar sesión")}</Link>
+        {/* Recarga completa (no Link): la página siguiente puede ir en otro idioma y el layout raíz no se repinta en la navegación de cliente. */}
+        <a href={kind === "EMAIL" ? "/settings" : "/login"} className="btn-primary w-full">{kind === "EMAIL" ? t("Ir a mi perfil") : t("Iniciar sesión")}</a>
       </div>
     );
   }

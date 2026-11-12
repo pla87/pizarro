@@ -108,6 +108,6 @@ export async function completeSetup(db: PrismaClient, input: SetupInput, env: Re
   doneForever = true;
   invalidateInstance();
   // Proyecto de ejemplo como con el seed por variables (ya hay administrador). Si falla, la instalación sigue siendo válida.
-  await seed(db, () => {}).catch((err) => console.error("[setup] No se pudo crear el proyecto de ejemplo:", err));
+  await seed(db, () => {}, input.locale).catch((err) => console.error("[setup] No se pudo crear el proyecto de ejemplo:", err));
   return { adminId: admin.id };
 }

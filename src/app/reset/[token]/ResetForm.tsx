@@ -1,7 +1,6 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import Link from "next/link";
 import { useState, useTransition } from "react";
 import { resetPassword } from "@/actions/auth";
 import { PasswordInput } from "@/components/ui/PasswordInput";
@@ -20,7 +19,9 @@ export function ResetForm({ token, email, invite = false }: { token: string; ema
     return (
       <div className="space-y-4 text-sm">
         <p>{invite ? t("Contraseña guardada. Ya puedes iniciar sesión con tu email y la contraseña que acabas de elegir.") : t("Contraseña guardada. Por seguridad se han cerrado todas las sesiones: inicia sesión con la nueva.")}</p>
-        <Link href="/login" className="btn-primary w-full">{t("Iniciar sesión")}</Link>
+        {/* Recarga completa (no Link): el layout raíz conserva el idioma de esta página (el del enlace) en la navegación de
+            cliente, y el acceso sale en el de la instalación: con Link la pantalla quedaba en dos idiomas. */}
+        <a href="/login" className="btn-primary w-full">{t("Iniciar sesión")}</a>
       </div>
     );
   }

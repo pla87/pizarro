@@ -44,5 +44,7 @@ node dist/boot.mjs
 echo "[start] Arrancando servidor en el puerto ${PORT:-3000}"
 # Apagado ordenado: Next.js no gestiona SIGTERM/SIGINT; lo hace src/instrumentation.ts (guarda los registros y espera a los emails).
 export NEXT_MANUAL_SIG_HANDLE=1
+# La página /setup dice dónde mirar el código del asistente: en el log del contenedor (o en el de Railway).
+export PIZARRO_LAUNCHER=docker
 # exec: node pasa a ser el proceso principal y recibe las señales de Docker/Railway directamente.
 exec node server.js
