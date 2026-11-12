@@ -3,8 +3,9 @@
 #      como ghcr.io/pla87/pizarro:X.Y.Z y :latest;
 #   2. crea la GitHub Release con las notas de esa versión tomadas de changelog.json;
 #   3. mueve la rama «stable» a ese commit (solo versiones X.Y.Z sin sufijo, de commits que están en main y nunca
-#      hacia atrás; con el secreto opcional STABLE_PUSH_TOKEN si la versión cambia .github/workflows/). Railway y quien
-#      construya desde el código siguen «stable»: así nadie recibe commits sueltos de main, solo versiones publicadas.
+#      hacia atrás; con el secreto opcional STABLE_PUSH_TOKEN si la versión cambia .github/workflows/; lógica en
+#      scripts/move-stable.sh, compartida con .github/workflows/stable.yml). Railway y quien construya desde el código
+#      siguen «stable»: así nadie recibe commits sueltos de main, solo versiones publicadas.
 # La release se crea al final: si la imagen falla, no se anuncia una versión que no se puede instalar.
 # Las acciones van fijadas a un commit exacto (SHA de 40 caracteres, con su versión en el comentario); Dependabot
 # propone las actualizaciones (.github/dependabot.yml, revisión en docs/HANDOFF.md).
@@ -139,61 +140,32 @@ jobs:
     needs: release
     if: github.event_name == 'push' || github.ref == 'refs/heads/main'
     # Lo único que escribe en el repositorio desde aquí: mover refs/heads/stable. Si este job falla, la imagen y la
-    # release ya están publicadas (jobs anteriores) y no se tocan: basta con arreglarlo y relanzar solo este job.
+    # release ya están publicadas (jobs anteriores) y no se tocan: basta con arreglarlo y relanzar solo este job, o
+    # usar Actions → Mover stable → Run workflow (.github/workflows/stable.yml), que mueve stable a la última versión.
     permissions:
       contents: write
     steps:
+      # El checkout y las lecturas usan siempre github.token: un STABLE_PUSH_TOKEN caducado o mal creado no debe romper
+      # el checkout («could not read Username … terminal prompts disabled»). El PAT solo se usa para el push.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          token: ${{ github.token }}
+          # Historia completa: hace falta para comprobar que el commit publicado está en main.
+          fetch-depth: 0
+
       # GITHUB_TOKEN no puede actualizar una rama si entre su commit viejo y el nuevo cambia algo de .github/workflows/
       # (GitHub lo rechaza: «refusing to allow a GitHub App to create or update workflow … without `workflows`
       # permission», y `permissions:` no admite `workflows`). Para esas versiones hace falta el secreto opcional
       # STABLE_PUSH_TOKEN: un token fine-grained solo de este repositorio con Contents y Workflows en lectura y escritura
       # (docs/HANDOFF.md, «Cerrar una versión»). Sin él se usa GITHUB_TOKEN, que basta mientras no cambien los workflows.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          token: ${{ secrets.STABLE_PUSH_TOKEN || github.token }}
-          # Historia completa: hace falta para comprobar que el commit publicado está en main.
-          fetch-depth: 0
+      # Este paso comprueba el token (sin mostrarlo) y, si no vale, dice por qué y cómo crearlo bien.
+      - name: Comprobar STABLE_PUSH_TOKEN
+        env:
+          STABLE_PUSH_TOKEN: ${{ secrets.STABLE_PUSH_TOKEN }}
+        run: bash scripts/move-stable.sh check-token
 
       - name: Mover stable a la versión publicada
         env:
-          HAS_STABLE_PUSH_TOKEN: ${{ secrets.STABLE_PUSH_TOKEN != '' }}
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          case "$version" in
-            *[!0-9.]*) echo "$version es una preversión: stable no se mueve."; exit 0 ;;
-          esac
-          # Solo commits que ya están en main: una etiqueta puesta en otra rama (o en un commit suelto) no llega a stable.
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::warning::$GITHUB_SHA no está en main: stable no se mueve (la release y la imagen ya están publicadas)."
-            exit 0
-          fi
-          # Commit actual de stable (vacío si aún no existe).
-          current="$(git ls-remote origin refs/heads/stable | cut -f1)"
-          if [ "$current" = "$GITHUB_SHA" ]; then echo "stable ya está en $GITHUB_SHA."; exit 0; fi
-          if [ -n "$current" ]; then
-            git cat-file -e "$current^{commit}" 2>/dev/null || git fetch --no-tags origin "$current"
-            prev="$(git show "$current:package.json" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).version))")"
-            # Nunca hacia atrás: publicar una corrección de una versión antigua no debe bajar a nadie de versión.
-            newer="$(node -e "const p=v=>v.split('.').map(Number);const [a,b]=[p(process.argv[1]),p(process.argv[2])];let c=0;for(let i=0;i<3&&!c;i++)c=a[i]-b[i];console.log(c>0?1:0)" "$version" "$prev")"
-            if [ "$newer" != 1 ]; then echo "stable ya tiene la $prev (>= $version): no se mueve."; exit 0; fi
-          fi
-          # --force-with-lease con el commit leído arriba: si otro proceso la movió entretanto, falla en vez de pisarla.
-          # Con «current» vacío exige que la rama no exista todavía.
-          if ! git push --force-with-lease="refs/heads/stable:$current" origin "$GITHUB_SHA:refs/heads/stable" 2> push.err; then
-            cat push.err >&2
-            if grep -qi "workflow" push.err; then
-              if [ "$HAS_STABLE_PUSH_TOKEN" = "true" ]; then
-                msg="GitHub rechaza mover stable porque cambian ficheros de .github/workflows/ y el secreto STABLE_PUSH_TOKEN no tiene el permiso Workflows (lectura y escritura) en este repositorio."
-              else
-                msg="GitHub rechaza mover stable con GITHUB_TOKEN porque esta versión cambia ficheros de .github/workflows/. Crea el secreto STABLE_PUSH_TOKEN (token fine-grained solo de este repositorio con Contents y Workflows en lectura y escritura; pasos en docs/HANDOFF.md) y relanza este job."
-              fi
-              echo "::error::$msg La imagen y la release de v$version ya están publicadas: solo falta stable."
-              echo "### stable no se ha movido" >> "$GITHUB_STEP_SUMMARY"
-              echo "$msg" >> "$GITHUB_STEP_SUMMARY"
-            else
-              echo "::error::No se pudo mover stable (ver el error de git arriba). La imagen y la release de v$version ya están publicadas."
-            fi
-            exit 1
-          fi
-          echo "stable → $GITHUB_SHA (v$version)."
+          STABLE_PUSH_TOKEN: ${{ secrets.STABLE_PUSH_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash scripts/move-stable.sh move "$GITHUB_SHA"

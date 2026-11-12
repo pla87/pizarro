@@ -139,16 +139,36 @@ llevan enlaces de sesión ni nombres de modelos.
    or update workflow … without `workflows` permission»; el bloque `permissions:` no tiene un permiso `workflows`).
    Para esas versiones el job usa el secreto `STABLE_PUSH_TOKEN` si existe (si no, `GITHUB_TOKEN`). Crearlo:
    1. GitHub → *Settings* (de tu cuenta) → *Developer settings* → *Personal access tokens* → *Fine-grained tokens* →
-      *Generate new token*. Propietario: el del repositorio; *Repository access*: **Only select repositories** → solo
-      este repositorio; caducidad: la que admita la organización (apunta cuándo renovarlo).
+      *Generate new token*. *Resource owner*: el dueño del repositorio (`pla87`); *Repository access*: **Only select
+      repositories** → `pla87/pizarro`; caducidad: la que admita la organización (apunta cuándo renovarlo).
    2. *Repository permissions*: **Contents: Read and write** y **Workflows: Read and write** (nada más; *Metadata:
       Read* se añade solo).
-   3. En el repositorio: *Settings → Secrets and variables → Actions → New repository secret*, nombre
-      `STABLE_PUSH_TOKEN`, valor el token.
-   Si falta (o le falta el permiso) y la versión cambia los workflows, el job «Rama stable» termina en rojo con un
-   mensaje que dice qué secreto crear; la imagen y la release ya están publicadas y no se tocan. Tras crear el
-   secreto, *Re-run failed jobs* en esa ejecución mueve `stable`. Si `stable` está protegida, la regla debe permitir
-   el push del propietario del token (o de GitHub Actions si no hay token).
+   3. En el repositorio: *Settings → Secrets and variables → Actions → New repository secret* (o editar el que
+      exista), nombre `STABLE_PUSH_TOKEN`, valor solo el token, sin espacios ni saltos de línea.
+   Toda la lógica está en `scripts/move-stable.sh`, que usan el job «Rama stable» y el workflow «Mover stable». El
+   checkout y las lecturas usan siempre `GITHUB_TOKEN`; el token solo se usa para el `git push` (en una cabecera, sin
+   aparecer en el log), limpio de espacios y saltos de línea. Si falta (o le falta el permiso) y la versión cambia
+   los workflows, el job termina en rojo con un mensaje que dice qué secreto crear; la imagen y la release ya están
+   publicadas y no se tocan. Si `stable` está protegida, la regla debe permitir el push del propietario del token
+   (o de GitHub Actions si no hay token).
+7. **Comprobar el token.** El paso «Comprobar STABLE_PUSH_TOKEN» (en los dos workflows, antes de mover nada) pregunta
+   a la API de GitHub con el token y hace un `git push --dry-run` (no cambia nada) para ver si puede escribir. Si
+   falla, el error dice la causa probable:
+   - *no es válido (401)*: caducado, revocado, pendiente de aprobación o el valor del secreto no es el token;
+   - *no tiene acceso (403/404)*: el token no incluye `pla87/pizarro` (*Only select repositories*) o su *Resource
+     owner* no es el dueño del repositorio;
+   - *no puede escribir*: falta **Contents: Read and write** (o la cuenta del token no puede escribir en el repo).
+   El permiso **Workflows** solo se puede comprobar al mover de verdad: si falta, el paso siguiente falla con «no
+   tiene el permiso Workflows». Para revisar el token a mano: *Settings → Developer settings → Fine-grained tokens*,
+   abrir el token y mirar *Expiration*, *Repository access* y *Permissions* (o *Regenerate token* y volver a guardar
+   el secreto). En el pasado, un token mal creado hacía fallar el `actions/checkout` con «could not read Username
+   for 'https://github.com': terminal prompts disabled»; ya no se usa en el checkout.
+8. **Mover `stable` sin publicar otra versión.** Tras arreglar el secreto: **Actions → Mover stable → Run workflow**
+   (rama `main`; `.github/workflows/stable.yml`). Mueve `stable` a la última versión publicada: la etiqueta `vX.Y.Z`
+   más alta con GitHub Release publicada (ni borrador ni preversión) cuyo commit está en `main`, con las mismas reglas
+   (nunca hacia atrás, `--force-with-lease`); si `stable` ya está ahí, no hace nada. También vale *Re-run failed
+   jobs* en la ejecución de Release, pero esa repetición usa el workflow de la versión publicada (no recoge arreglos
+   posteriores del workflow).
 
 ### Actualizaciones de dependencias (Dependabot)
 

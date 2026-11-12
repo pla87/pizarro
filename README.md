@@ -179,7 +179,7 @@ Las integraciones son **opcionales**: si faltan sus variables, la app funciona i
 1. Mira qué versión tienes (*Historial de versiones* en la app) y cuál es la última publicada ([Releases](https://github.com/pla87/pizarro/releases)). Si la tuya es **más nueva** que la última publicada (desplegaste commits de `main` posteriores), espera a que se publique la siguiente versión antes de cambiar: volver atrás puede no entender una base de datos ya migrada.
 2. Haz una copia de seguridad (*Administración → Copias de seguridad*).
 3. En el servicio de Pizarro: **Settings → Source → Branch** → `stable`. Railway despliega el commit de la última versión publicada; a partir de ahí, solo cuando se publique otra.
-4. Comprueba en *Historial de versiones* que la versión es la esperada. Si `stable` no aparece en la lista, es que aún no se ha publicado ninguna versión con este flujo: sigue en `main` (o en la etiqueta de la última versión) hasta entonces.
+4. Comprueba en *Historial de versiones* que la versión es la esperada. Si `stable` no aparece en la lista, es que aún no se ha publicado ninguna versión con este flujo: sigue en `main` (o en la etiqueta de la última versión) hasta entonces. Si `stable` existe pero se ha quedado en una versión anterior a la última publicada (el job «Rama stable» de *Release* falló), un mantenedor la pone al día con **Actions → Mover stable → Run workflow** (rama `main`), sin publicar otra versión (ver `docs/HANDOFF.md`, «Cerrar una versión»).
 
 ### 3. Variables de entorno
 
