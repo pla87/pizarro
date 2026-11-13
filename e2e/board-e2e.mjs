@@ -607,7 +607,8 @@ if (only.includes("com")) {
   await box().click();
   await p.keyboard.press("Control+Enter");
   await L.eqEventually("COM: se guarda en el formato de siempre", bodyOf, "Hola @[Cuarta Persona](user:qacom4) revisa esto");
-  L.eq("COM: enviar vacía la caja y borra el borrador", [await box().inputValue(), await draft()], ["", null]);
+  // La BD guarda antes de que la respuesta llegue al navegador: la caja se vacía un instante después.
+  await L.eqEventually("COM: enviar vacía la caja y borra el borrador", async () => [await box().inputValue(), await draft()], ["", null]);
   await L.eqEventually("COM: la mención avisa", () => mentionsOf("qacom4"), 1);
   // Retroceso al final de una mención la borra entera; borrar dentro la deja como texto, sin id.
   await box().click();

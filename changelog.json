@@ -1,6 +1,41 @@
 {
   "versions": [
     {
+      "version": "1.51.1",
+      "date": "2026-11-13",
+      "releasedAt": "2026-11-13T10:36:33+01:00",
+      "summary": "Dependencias al día: Next 16.4.5, editor 3.32.3 y librería de emails con su corrección de seguridad",
+      "changes": {
+        "nuevas": [],
+        "mejoras": [],
+        "correcciones": [
+          "La librería de envío de emails se actualiza a una versión que corrige cómo interpreta direcciones raras (avisos de seguridad de nodemailer).",
+          "Al abrir un diálogo (por ejemplo, Nueva tarea), si entras muy rápido en otro campo el foco ya no salta de vuelta al título."
+        ],
+        "tecnicos": [
+          "Next 16.4.5, editor TipTap 3.32.3, nodemailer 10.3.1, marked 18.1.3, lucide-react 1.69.0, Tailwind 4.3.4 y @types/qrcode 1.5.6 (todas publicadas hace al menos 7 días).",
+          "fast-uri 3.1.9 (dependencia de la herramienta de Prisma) con sus avisos corregidos; sin vulnerabilidades en las dependencias de producción.",
+          "Prueba del tablero más estable: espera a que la caja de comentario se vacíe tras guardar."
+        ]
+      },
+      "en": {
+        "summary": "Dependencies up to date: Next 16.4.5, editor 3.32.3 and the email library with its security fix",
+        "changes": {
+          "nuevas": [],
+          "mejoras": [],
+          "correcciones": [
+            "The email library is updated to a version that fixes how it parses unusual addresses (nodemailer security advisories).",
+            "When a dialog opens (for example, New task), moving quickly into another field no longer makes the focus jump back to the title."
+          ],
+          "tecnicos": [
+            "Next 16.4.5, TipTap editor 3.32.3, nodemailer 10.3.1, marked 18.1.3, lucide-react 1.69.0, Tailwind 4.3.4 and @types/qrcode 1.5.6 (all published at least 7 days ago).",
+            "fast-uri 3.1.9 (Prisma CLI dependency) with its advisories fixed; no vulnerabilities in production dependencies.",
+            "More stable board test: it waits for the comment box to clear after saving."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.51.0",
       "date": "2026-11-12",
       "releasedAt": "2026-11-12T23:24:48+01:00",

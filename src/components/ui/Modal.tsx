@@ -149,12 +149,17 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
     };
     document.addEventListener("keydown", onKey);
     if (scrollLocks++ === 0) lockBodyScroll();
-    // Enfoca el primer campo, o el panel.
-    requestAnimationFrame(() => {
-      const first = panelRef.current?.querySelector<HTMLElement>("[data-autofocus]");
-      (first ?? panelRef.current)?.focus();
+    // Enfoca el primer campo, o el panel; si antes del siguiente fotograma el usuario ya ha entrado en otro campo del
+    // diálogo (clic o atajo rápido), no le roba el foco.
+    const raf = requestAnimationFrame(() => {
+      const panel = panelRef.current;
+      const active = document.activeElement;
+      if (panel && active && active !== panel && panel.contains(active)) return;
+      const first = panel?.querySelector<HTMLElement>("[data-autofocus]");
+      (first ?? panel)?.focus();
     });
     return () => {
+      cancelAnimationFrame(raf);
       document.removeEventListener("keydown", onKey);
       modalStack.splice(modalStack.indexOf(entry), 1);
       if (--scrollLocks === 0) unlockBodyScroll();
