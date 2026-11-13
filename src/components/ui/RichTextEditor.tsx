@@ -57,6 +57,11 @@ interface Props {
   onCommand?: (command: MentionCommand) => void;
   /** El editor ya existe (con `immediatelyRender: false` se crea tras montar): ver el campo provisional de DescriptionField. */
   onReady?: (editor: Editor) => void;
+  /**
+   * Textos largos (la release): con él, cada cambio solo avisa (sin escribir el Markdown del documento entero en cada
+   * tecla) y quien lo usa lo lee del editor cuando lo necesita (onReady). `onChange` no se llama.
+   */
+  onEdit?: (editor: Editor) => void;
 }
 
 /** Sangra (1) o desangra (-1) el elemento de lista o de tareas bajo el cursor; fuera de una lista no hace nada. */
@@ -67,12 +72,12 @@ function indent(editor: Editor, direction: 1 | -1) {
 }
 
 /** Editor con barra de formato (TipTap). Lee y guarda siempre Markdown. */
-export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeholder, autoFocus, className, users, onCommand, onReady }: Props) {
+export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeholder, autoFocus, className, users, onCommand, onReady, onEdit }: Props) {
   const t = useT();
   // Callbacks siempre actuales sin recrear el editor.
-  const handlers = useRef({ onChange, onSubmit, onCancel, onReady });
+  const handlers = useRef({ onChange, onSubmit, onCancel, onReady, onEdit });
   useEffect(() => {
-    handlers.current = { onChange, onSubmit, onCancel, onReady };
+    handlers.current = { onChange, onSubmit, onCancel, onReady, onEdit };
   });
   // Último Markdown emitido: si `value` cambia desde fuera (p. ej. una plantilla), se recarga.
   const lastEmitted = useRef(value);
@@ -230,6 +235,7 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
       },
     },
     onUpdate: ({ editor: ed }) => {
+      if (handlers.current.onEdit) return handlers.current.onEdit(ed);
       const md = normalizeEditorMarkdown(ed.getMarkdown());
       lastEmitted.current = md;
       handlers.current.onChange(md);

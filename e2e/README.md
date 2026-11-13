@@ -23,6 +23,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Cabecera y atajos (caza de bugs 48a) | `e2e/bh48a-e2e.mjs` | 42 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) | `e2e/bh48b-e2e.mjs` | 120 | ~3 min |
 | Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/bh48c-e2e.mjs` | 44 | ~1 min |
+| Copias con adjuntos y release con barra de formato | `e2e/r49-copy-e2e.mjs` | 87 | ~2 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
@@ -97,6 +98,21 @@ servidor:
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48c-e2e.mjs   # PART=comments,desc,tabs,rel
 ```
 
+
+## Copias con adjuntos y release con barra de formato
+
+Duplicar una tarea con una imagen y un archivo (botón del detalle, Ctrl al soltar en otra columna, Alt+Mayús+D y en el
+móvil a 390 px): la copia tiene sus propios adjuntos (ids nuevos, mismo contenido y miniatura), el documento de Google
+enlazado y las subtareas sin marcar; borrar el adjunto de la original no toca el de la copia; deshacer y rehacer la
+copia; con la cuota del proyecto justa se copian los que caben y se avisa del resto. Release con la preferencia «Con
+barra de formato»: editor con barra sin Editar / Vista previa; sin tocar nada, Copiar todo, .md y .txt dan lo mismo que
+con Markdown; al editar solo cambia lo editado; cambiar el pie o quitar la cabecera con el texto ya editado; negrita de
+la barra; desplegar guarda lo editado; release de 300 tareas (tiempo de carga, por tecla frente a un campo de texto y
+Copiar todo) y el móvil a 390 px. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-copy-e2e.mjs   # PART=dup,drag,keys,quota,mdup,rel,big,mrel
+```
 
 ## Sin conexión, pestañas y tareas que desaparecen (caza de bugs 48b)
 
