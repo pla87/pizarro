@@ -19,38 +19,55 @@ let lastPlace: string | null = null;
  * KeyboardSensor no llega a arrancar: ni en las tarjetas ni en las tareas fijas, cuyo onKeyDown sustituye al suyo).
  * `where(id)` dice dónde está un elemento: el nombre de la columna (de una tarjeta o de la propia columna) o `null`.
  */
-export function boardDragA11y(t: T, titleOf: (id: string) => string, where: (id: string) => { column: string } | { evergreen: string } | null): Accessibility {
-  const place = (id: string) => {
+export function boardDragA11y(
+  t: T,
+  titleOf: (id: string) => string,
+  where: (id: string) => { column: string } | { evergreen: string } | null,
+  /** Cuántas tarjetas se arrastran (más de una: la selección entera; ver groupDrag.ts). */
+  countOf: (id: string) => number = () => 1,
+): Accessibility {
+  const place = (id: string, group: boolean) => {
     const at = where(id);
     if (!at) return null;
-    return "evergreen" in at ? t("las tareas fijas de {column}", { column: at.evergreen }) : t("la columna {column}", { column: at.column });
+    // Una selección soltada sobre el panel de fijas va a esa columna como tareas normales (Board.tsx).
+    if ("evergreen" in at) return group ? t("la columna {column}", { column: at.evergreen }) : t("las tareas fijas de {column}", { column: at.evergreen });
+    return t("la columna {column}", { column: at.column });
   };
   const announcements: Announcements = {
     onDragStart: ({ active }) => {
       const title = titleOf(String(active.id));
-      lastPlace = place(String(active.id));
+      const n = countOf(String(active.id));
+      lastPlace = place(String(active.id), n > 1);
+      if (n > 1) return lastPlace ? t("Has cogido {n} tarjetas («{title}» y {more} más), en {place}.", { n, title, more: n - 1, place: lastPlace }) : t("Has cogido {n} tarjetas («{title}» y {more} más).", { n, title, more: n - 1 });
       return lastPlace ? t("Has cogido «{title}», en {place}.", { title, place: lastPlace }) : t("Has cogido «{title}».", { title });
     },
     onDragOver: ({ active, over }) => {
       const title = titleOf(String(active.id));
-      const at = over ? place(String(over.id)) : null;
+      const n = countOf(String(active.id));
+      const at = over ? place(String(over.id), n > 1) : null;
       if (at === lastPlace) return undefined;
       lastPlace = at;
+      if (n > 1) return at ? t("Las {n} tarjetas están sobre {place}.", { n, place: at }) : t("Las {n} tarjetas ya no están sobre ninguna columna.", { n });
       return at ? t("«{title}» está sobre {place}.", { title, place: at }) : t("«{title}» ya no está sobre ninguna columna.", { title });
     },
     onDragEnd: ({ active, over }) => {
       const title = titleOf(String(active.id));
-      const at = over ? place(String(over.id)) : null;
+      const n = countOf(String(active.id));
+      const at = over ? place(String(over.id), n > 1) : null;
+      if (n > 1) return at ? t("Has soltado {n} tarjetas en {place}.", { n, place: at }) : t("Has soltado {n} tarjetas fuera de las columnas: no se mueven.", { n });
       return at ? t("Has soltado «{title}» en {place}.", { title, place: at }) : t("Has soltado «{title}» fuera de las columnas: no se mueve.", { title });
     },
-    onDragCancel: ({ active }) => t("Arrastre cancelado: «{title}» vuelve a su sitio.", { title: titleOf(String(active.id)) }),
+    onDragCancel: ({ active }) => {
+      const n = countOf(String(active.id));
+      return n > 1 ? t("Arrastre cancelado: las {n} tarjetas vuelven a su sitio.", { n }) : t("Arrastre cancelado: «{title}» vuelve a su sitio.", { title: titleOf(String(active.id)) });
+    },
   };
   return {
     announcements,
     screenReaderInstructions: {
-      draggable: t(
+      draggable: `${t(
         "Para mover una tarjeta con el teclado, pon el foco en ella: Alt+flecha izquierda o derecha la pasa a la columna anterior o siguiente, y Alt+flecha arriba o abajo la sube o la baja en su columna. Una tarea fija de la release se saca del panel desde su detalle (Columna o Fija en la release).",
-      ),
+      )} ${t("Con varias tarjetas seleccionadas, Alt+flechas sobre una de ellas las mueve todas juntas, y al arrastrar una de ellas se arrastran todas.")}`,
     },
   };
 }

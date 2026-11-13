@@ -35,6 +35,7 @@ import { privados } from "./privados";
 import { proyectos } from "./proyectos";
 import { releases } from "./releases";
 import { repeticion } from "./repeticion";
+import { seleccion } from "./seleccion";
 import { server } from "./server";
 import { settings } from "./settings";
 import { setup } from "./setup";
@@ -49,6 +50,5 @@ export const EN: Record<string, string> = {
   ...common, ...board, ...task, ...detalle, ...comentarios, ...lista, ...pegado, ...wip, ...calendar, ...releases, ...conexion,
   ...accesibilidad, ...settings, ...admin, ...server, ...cuentas, ...acceso, ...colaboracion, ...proyectos, ...plantillas,
   ...setup, ...documentacion, ...campos, ...almacenamiento, ...importar, ...ics, ...mensajeria, ...soporte, ...licencia,
-  ...legal, ...landing, ...web, ...instalar, ...baja, ...datos, ...copia, ...repeticion, ...carga, ...textos,
-  ...aplicarPlantilla, ...privados, ...formatos, ...curso,
+  ...legal, ...landing, ...web, ...instalar, ...baja, ...datos, ...copia, ...repeticion, ...carga, ...textos, ...aplicarPlantilla, ...privados, ...formatos, ...curso, ...seleccion,
 };

@@ -2,7 +2,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { needOwnRefresh } from "./action-context";
 import { db } from "./db";
-import { needsRebalance, positionBetween, POSITION_STEP } from "./positions";
+import { blockNeedsRebalance, needsRebalance, positionBetween, POSITION_STEP, spreadPositions } from "./positions";
 
 type Client = Pick<Prisma.TransactionClient, "$executeRaw">;
 type Tx = Prisma.TransactionClient;
@@ -110,6 +110,51 @@ export async function placeInColumn(
     }
     // Tras renumerar siempre hay hueco (múltiplos de POSITION_STEP): como mucho una vuelta más.
     if (!needsRebalance(lo, hi) || rebalanced) return { position: positionBetween(lo, hi), rebalanced, stale: false };
+    await rebalanceColumn(tx, columnId);
+    rebalanced = true;
+  }
+}
+
+/**
+ * Como placeInColumn, para un bloque de `count` tareas seguidas (arrastrar una selección): posiciones en orden entre las
+ * vecinas `prevId` y `nextId`, sin coincidir con ninguna otra tarea de la columna. `exclude`: las tareas que se mueven
+ * (las que ya estaban en la columna no cuentan como vecinas ni ocupan hueco). Las mismas reglas que placeInColumn: si el
+ * cliente no ve alguna tarea entre las vecinas, el bloque va justo detrás de `prevId`; una vecina que ya no está en la
+ * columna, o ninguna, lo deja al final; sin hueco, se renumera la columna. Llamar con la columna bloqueada.
+ */
+export async function placeBlockInColumn(
+  tx: Tx,
+  columnId: string,
+  prevId: string | null,
+  nextId: string | null,
+  exclude: readonly string[],
+  count: number,
+): Promise<{ positions: number[]; rebalanced: boolean; stale: boolean }> {
+  const moving = new Set(exclude);
+  if (prevId && moving.has(prevId)) prevId = null;
+  if (nextId && moving.has(nextId)) nextId = null;
+  const others = { notIn: [...moving] };
+  let rebalanced = false;
+  for (;;) {
+    const ids = [prevId, nextId].filter((x): x is string => !!x);
+    const rows = ids.length ? await tx.task.findMany({ where: { id: { in: ids }, columnId }, select: { id: true, position: true } }) : [];
+    const prev = prevId ? rows.find((r) => r.id === prevId)?.position : null;
+    const next = nextId ? rows.find((r) => r.id === nextId)?.position : null;
+    const stale = prev === undefined || next === undefined;
+    if (stale || (prev == null && next == null)) {
+      const last = await tx.task.findFirst({ where: { columnId, id: others }, orderBy: { position: "desc" }, select: { position: true } });
+      return { positions: spreadPositions(last?.position ?? null, null, count), rebalanced, stale };
+    }
+    let lo: number | null;
+    let hi: number | null;
+    if (prev != null) {
+      lo = prev;
+      hi = (await tx.task.findFirst({ where: { columnId, id: { notIn: [prevId!, ...moving] }, position: { gte: prev } }, orderBy: { position: "asc" }, select: { position: true } }))?.position ?? null;
+    } else {
+      hi = next!;
+      lo = (await tx.task.findFirst({ where: { columnId, id: { notIn: [nextId!, ...moving] }, position: { lte: next! } }, orderBy: { position: "desc" }, select: { position: true } }))?.position ?? null;
+    }
+    if (!blockNeedsRebalance(lo, hi, count) || rebalanced) return { positions: spreadPositions(lo, hi, count), rebalanced, stale: false };
     await rebalanceColumn(tx, columnId);
     rebalanced = true;
   }

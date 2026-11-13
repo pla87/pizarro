@@ -33,6 +33,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/r49-textos-e2e.mjs` | 29 | ~1 min |
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/r50-plantilla-e2e.mjs` | 39 | ~1 min |
 | Plantilla «Curso o máster» y «Publicar programa (PDF)» | `e2e/r50-curso-e2e.mjs` | 57 | ~40 s |
+| Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/r50-seleccion-e2e.mjs` | 76 | ~1 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
@@ -105,6 +106,20 @@ de un borrador, el día de «Repetir» sigue a la fecha límite si no se eligió
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh49-e2e.mjs   # PART=dupimg,cal,drafts,reldel,repdraft
+```
+
+## Arrastrar una selección
+
+Con varias tarjetas seleccionadas, arrastrar una de ellas lleva todas: el montón con la insignia del número, las demás
+atenuadas en su sitio, el hueco de destino «N tarjetas irán aquí» y los avisos del lector de pantalla («Has cogido 3
+tarjetas…», «Has soltado 3 tarjetas en…»). Al soltar van seguidas y en orden de tablero, con un solo paso de deshacer, y
+la selección se mantiene. Escape cancela; una sin seleccionar se mueve sola; Ctrl al soltar copia solo la cogida;
+dentro de su columna y entre dos tarjetas de otra; Alt+flechas sobre una seleccionada mueve todas; la otra persona lo ve
+por el canal en vivo; la columna de revisión pide confirmación; con el dedo (asa, 390 px) y en modo oscuro. Misma base y
+servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r50-seleccion-e2e.mjs   # PART=drag,cancel,single,copy,same,keys,live,review,touch,dark
 ```
 
 ## Formularios sin red, IP del cliente y páginas legales (ronda 49)

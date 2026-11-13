@@ -16,7 +16,7 @@ import { addUndo, captureTasks, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SE
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
-import { lastPositionIn, lockColumns, lockTaskRows, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
+import { lastPositionIn, lockColumns, lockTaskRows, placeBlockInColumn, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertTaskCapacity, assertTaskCreateRate } from "@/lib/caps";
 import { getMaxCommentsPerTask } from "@/lib/app-settings";
@@ -707,11 +707,17 @@ export async function moveTask(taskId: string, columnId: string, prevId: string 
   });
 }
 
-/** Mueve varias tarjetas al final de una columna, conservando su orden relativo. */
-export async function moveTasks(taskIds: string[], columnId: string) {
-  return runAction({ name: "tasks.moveTasks", args: [taskIds, columnId] }, async () => {
+/**
+ * Mueve varias tarjetas al final de una columna, conservando su orden relativo («Mover a…» de la barra de selección).
+ * Con `at` (arrastrar una selección, o Alt+flechas sobre ella) las deja seguidas entre esas dos vecinas de la columna
+ * destino, en el orden del tablero (columna y posición), también las que ya estaban en ella; las mismas reglas que
+ * moveTask si las vecinas ya no están (al final). Un solo paso de deshacer en los dos casos.
+ */
+export async function moveTasks(taskIds: string[], columnId: string, at?: { prevId: string | null; nextId: string | null } | null) {
+  return runAction({ name: "tasks.moveTasks", args: [taskIds, columnId, at] }, async () => {
     const user = await requireUser();
     const ids = z.array(v.id).min(1).max(500).parse(taskIds);
+    const place = at == null ? null : z.object({ prevId: v.id.nullable(), nextId: v.id.nullable() }).parse(at);
     const column = await db.column.findFirst({
       where: { id: v.id.parse(columnId), project: visibleProjectsWhere(user) },
       select: { id: true, projectId: true, name: true, isDone: true },
@@ -723,14 +729,29 @@ export async function moveTasks(taskIds: string[], columnId: string) {
       orderBy: [{ column: { position: "asc" } }, ...TASK_ORDER],
       select: { id: true, columnId: true, column: { select: { isDone: true } } },
     });
-    const toMove = tasks.filter((t) => t.columnId !== column.id);
+    // En bloque entre dos vecinas también se recolocan las que ya estaban en la columna.
+    const toMove = place ? tasks : tasks.filter((t) => t.columnId !== column.id);
     const undo = await captureTasks(toMove.map((t) => t.id), ["columnId", "position", "evergreen", "evergreenEvery"]);
     const moved = await db.$transaction(async (tx) => {
       await lockColumns(tx, [column.id]);
       // Columna → tareas (en orden de id), como moveTask y el despliegue de una release.
       await lockTaskRows(tx, toMove.map((t) => t.id));
-      let pos = (await lastPositionIn(tx, column.id)) ?? 0;
-      const list = toMove.map((t) => ({ id: t.id, position: (pos += POSITION_STEP) }));
+      let list: { id: string; position: number }[];
+      if (place) {
+        const ids = toMove.map((t) => t.id);
+        const placed = await placeBlockInColumn(tx, column.id, place.prevId, place.nextId, ids, ids.length);
+        // Renumerada la columna destino: el deshacer de las que ya estaban en ella usa su posición renumerada (si no,
+        // volverían a un orden que ya no casa con el de sus vecinas), como moveTask.
+        if (placed.rebalanced) {
+          const here = toMove.filter((t) => t.columnId === column.id).map((t) => t.id);
+          const now = new Map((await tx.task.findMany({ where: { id: { in: here } }, select: { id: true, position: true } })).map((r) => [r.id, r.position]));
+          for (const op of undo) if (op.t === "task.set" && now.has(op.id)) op.data = { ...op.data, position: now.get(op.id)! };
+        }
+        list = ids.map((id, i) => ({ id, position: placed.positions[i]! }));
+      } else {
+        let pos = (await lastPositionIn(tx, column.id)) ?? 0;
+        list = toMove.map((t) => ({ id: t.id, position: (pos += POSITION_STEP) }));
+      }
       await setTaskColumnPositions(list, column.id, { clearEvergreen: true, client: tx });
       return list;
     });
@@ -742,7 +763,8 @@ export async function moveTasks(taskIds: string[], columnId: string) {
     describeAction("Movió {count} a «{col}»", { count: tasksN(moved.length), col: colName }, { taskIds: moved.map((m) => m.id) });
     const code = column.isDone ? "done" : "move";
     skipTaskEvents();
-    for (const m of moved) recordTaskEvent(m.id, code, { k: "Movió la tarea a «{to}»", p: { to: colName } });
+    // Historial: solo las que cambian de columna (reordenar dentro de la misma no cuenta, como en moveTask).
+    for (const t of toMove) if (t.columnId !== column.id) recordTaskEvent(t.id, code, { k: "Movió la tarea a «{to}»", p: { to: colName } });
     return { columnId: column.id, moved, spawned };
   });
 }
