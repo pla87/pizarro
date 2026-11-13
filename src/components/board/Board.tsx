@@ -17,7 +17,7 @@ import { Suspense, useCallback, useDeferredValue, useEffect, useLayoutEffect, us
 import { createPortal } from "react-dom";
 import { archiveTasks, deleteTasks, duplicateTask, makeEvergreen, moveTask, moveTasks } from "@/actions/tasks";
 import { createBoardCollisionDetection } from "@/lib/collision";
-import { compareTaskOrder, insertBefore, moveOnto, neighboursOf, positionBetween } from "@/lib/positions";
+import { compareTaskOrder, insertBefore, moveOnto, neighboursOf, positionBetween, spreadPositions } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardTask, LabelOption } from "@/lib/types";
 import { TASK_PRIORITIES } from "@/lib/task-fields";
 import { FilterMenu } from "./FilterMenu";
@@ -39,6 +39,8 @@ import { EVERGREEN_DROPPABLE_PREFIX } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
 import { useCardActions } from "./cardActions";
 import { draggingCard } from "./nearCards";
+import { placeBlock, sameOrder, selectionGroup, type BlockPlacement } from "./groupDrag";
+import { focusCard } from "./shortcuts";
 import { useReviewGuard } from "./reviewGuard";
 import { activeFilterCount, EMPTY_FILTERS, filtersKey, parseStoredFilters, sanitizeFilters, searchTerms, taskMatchesFilters, taskSearchText, type BoardFilters, type SearchNames } from "./filters";
 import { Presence } from "./Presence";
@@ -189,6 +191,8 @@ const MEASURING = { droppable: { strategy: MeasuringStrategy.Always } };
 const POINTER_OPTIONS = { activationConstraint: { distance: 6 } };
 const KEYBOARD_OPTIONS = { coordinateGetter: sortableKeyboardCoordinates };
 const DROP_ANIMATION = { duration: 150, easing: "ease-out" };
+/** Cartas de detrás del montón al arrastrar una selección (el mismo aspecto que una tarjeta vacía, en claro y en oscuro). */
+const STACK_CARD = "pointer-events-none absolute inset-0 rounded-lg border border-slate-300 bg-white shadow-md dark:border-slate-600 dark:bg-slate-800";
 
 /**
  * Conserva el mismo array de ids en las columnas cuyo contenido no cambió: dnd-kit rehace su contexto (y redibuja
@@ -367,6 +371,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const [dragItems, setDragItems] = useState<Items | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const dragOrigin = useRef<{ columnId: string; index: number } | null>(null);
+  // Arrastre de una selección (groupDrag.ts): ids que se mueven juntos (null = solo la cogida) y cuántos son, para el
+  // montón del overlay. `dragCount` es lo que dicen los avisos del lector de pantalla (llegan después de los manejadores,
+  // también el de soltar, cuando el arrastre ya se ha limpiado): solo cambia al empezar y, con Ctrl, al soltar una copia.
+  const dragGroup = useRef<string[] | null>(null);
+  const [groupSize, setGroupSize] = useState(0);
+  const dragCount = useRef(1);
   // Si el tablero se desmonta a medio arrastre, las tarjetas no deben quedar esperando a que termine (nearCards.ts).
   useEffect(() => () => draggingCard.set(null), []);
   // Al soltar una tarjeta en otra columna no se anima el overlay (se decide en onDragEnd, en el mismo render que lo retira).
@@ -811,7 +821,63 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     requestAnimationFrame(whenClosed);
   }, [getTask]);
   const confirmLeaveReview = useReviewGuard(data.project.id, sortedColumns, getTask);
-  const cardActions = useCardActions({ currentUserId: data.currentUserId, getTask, sortedColumns, baseItems, patchTask, upsertTask, track, toast, t, confirmLeaveReview });
+
+  // Deshace un cambio masivo fallido tocando solo esas tareas (por id): no pisa lo que haya llegado mientras tanto
+  // (refrescos por SSE, ediciones desde un diálogo). Las que ya no estén se vuelven a añadir.
+  const restoreTasks = (before: Map<string, BoardTask>) =>
+    setTasks((prev) => {
+      const seen = new Set<string>();
+      const next = prev.map((t) => {
+        const old = before.get(t.id);
+        if (!old) return t;
+        seen.add(t.id);
+        return old;
+      });
+      for (const [id, old] of before) if (!seen.has(id)) next.push(old);
+      return next;
+    });
+
+  /**
+   * Mueve una selección en bloque (soltarla arrastrada, o Alt+flechas sobre una de ellas; ver groupDrag.ts): todas seguidas
+   * en `placement`, en el orden del tablero, con una sola acción (moveTasks con vecinas) y un solo paso de deshacer. La
+   * selección se mantiene: se ve dónde han quedado y se pueden volver a mover (Alt+flechas seguidas, otro arrastre).
+   */
+  const moveBlock = async (group: string[], columnId: string, placement: BlockPlacement, focusId?: string) => {
+    if (sameOrder(baseItems[columnId] ?? NO_IDS, placement.list)) return;
+    if (!(await confirmLeaveReview(group, columnId))) {
+      if (focusId) focusCard(focusId);
+      return;
+    }
+    const byId = tasksById(stores.tasks.get());
+    const before = new Map(group.flatMap((id) => (byId.get(id) ? [[id, byId.get(id)!] as const] : [])));
+    const pos = (id: string | null) => (id ? byId.get(id)?.position : null);
+    const positions = spreadPositions(pos(placement.prevId), pos(placement.nextId), group.length);
+    const slot = new Map(group.map((id, i) => [id, positions[i]!]));
+    const now = new Date().toISOString();
+    setTasks((prev) => prev.map((x) => {
+      const position = slot.get(x.id);
+      if (position === undefined) return x;
+      return { ...x, columnId, position, evergreen: false, evergreenEvery: 1, columnEnteredAt: x.columnId === columnId ? x.columnEnteredAt : now };
+    }));
+    if (focusId) focusCard(focusId);
+    const res = await track(moveTasks(group, columnId, { prevId: placement.prevId, nextId: placement.nextId }));
+    if (!res.ok) {
+      restoreTasks(before);
+      if (focusId) focusCard(focusId);
+      return toast(res.error, "error");
+    }
+    const server = new Map(res.data.moved.map((m) => [m.id, m.position]));
+    setTasks((prev) => prev.map((x) => (server.has(x.id) ? { ...x, columnId, position: server.get(x.id)! } : x)));
+    // Las que el servidor no ha movido (archivadas o borradas mientras tanto) vuelven a como estaban; el refresco las quita.
+    const skipped = new Map([...before].filter(([id]) => !server.has(id)));
+    if (skipped.size) restoreTasks(skipped);
+    res.data.spawned.forEach(upsertTask);
+    const name = sortedColumns.find((c) => c.id === columnId)?.name ?? "";
+    const n = res.data.moved.length;
+    toast(t("{moved} a «{name}»", { moved: n === 1 ? t("1 tarjeta movida") : t("{n} tarjetas movidas", { n }), name }));
+  };
+
+  const cardActions = useCardActions({ currentUserId: data.currentUserId, getTask, sortedColumns, baseItems, patchTask, upsertTask, track, toast, t, confirmLeaveReview, getSelected: stores.selection.get, moveBlock });
 
   // El contexto solo cambia si cambia su contenido: los datos del servidor llegan como objetos nuevos en cada
   // refresco aunque sean iguales, y sin esto todas las tarjetas se redibujarían cada vez.
@@ -901,21 +967,6 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   );
 
   // --- Movimiento masivo ------------------------------------------------------
-  // Deshace un cambio masivo fallido tocando solo esas tareas (por id): no pisa lo que haya llegado mientras tanto
-  // (refrescos por SSE, ediciones desde un diálogo). Las que ya no estén se vuelven a añadir.
-  const restoreTasks = (before: Map<string, BoardTask>) =>
-    setTasks((prev) => {
-      const seen = new Set<string>();
-      const next = prev.map((t) => {
-        const old = before.get(t.id);
-        if (!old) return t;
-        seen.add(t.id);
-        return old;
-      });
-      for (const [id, old] of before) if (!seen.has(id)) next.push(old);
-      return next;
-    });
-
   const moveSelected = async (columnId: string) => {
     const selected = stores.selection.get();
     const ids = [...selected];
@@ -1079,6 +1130,11 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     // La tarjeta arrastrada sigue apuntada a dnd-kit aunque cambie de columna; las demás no se desapuntan hasta soltar.
     draggingCard.set(id);
     const col = findContainer(baseItems, id);
+    // Una tarjeta seleccionada con otras se lleva toda la selección; una sin seleccionar (o una fija), solo ella.
+    const group = col ? selectionGroup(stores.selection.get(), id, sortedColumns.map((c) => c.id), baseItems) : null;
+    dragGroup.current = group;
+    dragCount.current = group?.length ?? 1;
+    setGroupSize(group?.length ?? 0);
     if (!col) {
       // Tarea fija: no está en ninguna lista; se arrastra desde un contenedor virtual.
       if (!taskById.get(id)?.evergreen) return;
@@ -1118,6 +1174,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
 
   const cancelDrag = () => {
     draggingCard.set(null);
+    dragGroup.current = null;
+    setGroupSize(0);
     setDragItems(null);
     setActiveId(null);
     dragOrigin.current = null;
@@ -1153,9 +1211,13 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const origin = dragOrigin.current;
     const current = dragItems;
     const copy = mouseDrag.current && duplicateRef.current;
+    // Ctrl al soltar una selección: se copia solo la tarjeta cogida (duplicar es siempre de una en una).
+    const group = copy ? null : dragGroup.current;
+    if (copy) dragCount.current = 1;
     // La animación de soltado lleva el overlay al nodo original de la tarjeta; al cambiar de columna ese nodo se
-    // desmonta y dnd-kit mide su hueco de ORIGEN: la tarjeta parecería volver atrás antes de aparecer en destino.
-    if (origin && current && findContainer(current, String(active.id)) !== origin.columnId) setSkipDropAnimation(true);
+    // desmonta y dnd-kit mide su hueco de ORIGEN: la tarjeta parecería volver atrás antes de aparecer en destino. Con una
+    // selección tampoco: las demás aparecen en destino de golpe y el montón no tiene adónde volver.
+    if (group || (origin && current && findContainer(current, String(active.id)) !== origin.columnId)) setSkipDropAnimation(true);
     cancelDrag();
     if (!over || !current || !origin) return;
     const id = String(active.id);
@@ -1163,9 +1225,15 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (overId.startsWith(EVERGREEN_DROPPABLE_PREFIX)) {
       // Soltar una tarea fija en su propio panel no hace nada.
       if (origin.columnId === EVERGREEN_ORIGIN) return;
+      const evergreenColumn = overId.slice(EVERGREEN_DROPPABLE_PREFIX.length);
       // Copia sobre el panel de fijas: al final de esa columna, como tarea normal.
-      if (copy) return dropCopy(id, overId.slice(EVERGREEN_DROPPABLE_PREFIX.length), null, null);
-      return dropOnEvergreen(id, overId.slice(EVERGREEN_DROPPABLE_PREFIX.length));
+      if (copy) return dropCopy(id, evergreenColumn, null, null);
+      // Una selección, igual: al final de esa columna como tareas normales (las fijas se hacen de una en una).
+      if (group) {
+        const rest = (current[evergreenColumn] ?? []).filter((x) => !group.includes(x));
+        return moveBlock(group, evergreenColumn, { list: [...rest, ...group], prevId: rest.at(-1) ?? null, nextId: null });
+      }
+      return dropOnEvergreen(id, evergreenColumn);
     }
     const col = findContainer(current, id);
     if (!col || col === EVERGREEN_ORIGIN) return;
@@ -1179,6 +1247,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       const at = neighboursOf(list, id);
       return dropCopy(id, col, at.prevId, at.nextId);
     }
+    // Una selección: todas seguidas en el hueco de la cogida (si ya estaban así, moveBlock no hace nada).
+    if (group) return moveBlock(group, col, placeBlock(list, id, group));
     if (col === origin.columnId && index === origin.index) return;
 
     const { prevId, nextId } = neighboursOf(list, id);
@@ -1245,6 +1315,21 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   });
 
   const activeTask = activeId ? taskById.get(activeId) : null;
+  // Con Ctrl (copia) se suelta una sola tarjeta: el montón y el atenuado de las demás se retiran mientras se mantiene.
+  const stack = groupSize > 1 && !duplicating;
+  // Mientras se arrastra una selección, la raíz lo dice (y cuántas son) y el CSS (globals.css) atenúa las demás
+  // seleccionadas en su sitio y convierte el hueco de destino en «N tarjetas irán aquí». Sin tocar las tarjetas: con
+  // cientos, volver a dibujarlas todas al empezar y al terminar el arrastre se notaría.
+  useLayoutEffect(() => {
+    if (!stack) return;
+    const root = document.documentElement;
+    root.setAttribute("data-group-drag", String(groupSize));
+    root.style.setProperty("--group-drop-label", JSON.stringify(t("{n} tarjetas irán aquí", { n: groupSize })));
+    return () => {
+      root.removeAttribute("data-group-drag");
+      root.style.removeProperty("--group-drop-label");
+    };
+  }, [stack, groupSize, t]);
 
   // --- Tablero con arrastre, memorizado -----------------------------------------
   // DndContext da en cada dibujo un valor de contexto nuevo (la posición del arrastre) y React recorre entonces todas las
@@ -1265,6 +1350,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       onTouchEnd: (e: React.TouchEvent) => latestDnd.current.onSwipeEnd(e),
       titleOf: (id: string) => latestDnd.current.dragTitleOf(id),
       placeOf: (id: string) => latestDnd.current.dragPlaceOf(id),
+      countOf: () => dragCount.current,
     }),
     [],
   );
@@ -1272,7 +1358,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const dragAccessibility = useMemo(
     // boardDragA11y solo guarda las funciones: leen latestDnd al anunciar (en los eventos del arrastre), nunca al dibujar.
     // eslint-disable-next-line react-hooks/refs
-    () => boardDragA11y(t, dndHandlers.titleOf, dndHandlers.placeOf),
+    () => boardDragA11y(t, dndHandlers.titleOf, dndHandlers.placeOf, dndHandlers.countOf),
     [t, dndHandlers],
   );
   const cardCounts = useStableValue(useMemo(
@@ -1316,8 +1402,16 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         {/* Sin animación de soltado con Ctrl/Alt (la copia aparece donde se suelta) ni al cambiar de columna (la tarjeta ya está en destino). */}
         <DragOverlay dropAnimation={duplicating || skipDropAnimation ? null : DROP_ANIMATION}>
           {activeTask ? (
-            <div className={cn("relative", duplicating && "cursor-copy")}>
+            <div className={cn("relative", duplicating && "cursor-copy")} data-drag-stack={stack || undefined}>
+              {/* Una selección se arrastra como un montón: cartas detrás (dos como mucho) y una insignia con cuántas son. */}
+              {stack && groupSize > 2 && <span aria-hidden className={cn(STACK_CARD, "translate-x-3 translate-y-3 rotate-[7deg]")} />}
+              {stack && <span aria-hidden className={cn(STACK_CARD, "translate-x-1.5 translate-y-1.5 rotate-[4.5deg]")} />}
               <TaskCard task={activeTask} overlay />
+              {stack && (
+                <span data-drag-count aria-hidden className="pointer-events-none absolute -top-2.5 -right-2.5 z-10 flex h-6 min-w-6 items-center justify-center rounded-full bg-brand-600 px-1.5 text-xs font-bold text-on-brand shadow-md ring-2 ring-white dark:ring-slate-900">
+                  {groupSize}
+                </span>
+              )}
               {duplicating && (
                 <span data-duplicate-hint className="pointer-events-none absolute -top-2.5 -right-2 rounded-full bg-brand-600 px-2 py-0.5 text-xs font-semibold text-on-brand shadow-md">
                   + {t("Duplicar")}
@@ -1328,7 +1422,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         </DragOverlay>
       </DndContext>
     ),
-    [sensors, dragAccessibility, dndHandlers, sortedColumns, items, shownEvergreen, cardCounts, activeMobileColumn, duplicating, skipDropAnimation, activeTask, t],
+    [sensors, dragAccessibility, dndHandlers, sortedColumns, items, shownEvergreen, cardCounts, activeMobileColumn, duplicating, skipDropAnimation, activeTask, stack, groupSize, t],
   );
   const headerRowRef = useRef<HTMLDivElement>(null);
   const headerNameRef = useRef<HTMLHeadingElement>(null);

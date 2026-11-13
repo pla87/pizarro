@@ -157,6 +157,10 @@ Guardas que conviene conocer:
   `useDndContext` en las tarjetas ni pases a `DndContext` props nuevas en cada dibujo. El texto del buscador de cada
   tarea se normaliza una vez por versión (`taskSearchText`, `filters.ts`). Medida de referencia (Chromium con la CPU
   ×4, 300 tarjetas en una columna): de 1,8 s a 0,3 s en tareas largas por arrastre.
+  Arrastrar una tarjeta seleccionada con otras (reglas puras en `groupDrag.ts`) no añade nada a dnd-kit: solo se arrastra
+  la cogida; el montón es el overlay, y el atenuado de las demás y el texto del hueco son CSS (`data-group-drag` y
+  `--group-drop-label` en la raíz, `globals.css`), sin volver a dibujar ninguna tarjeta. Al soltar, `moveTasks(ids,
+  columna, { prevId, nextId })` las coloca seguidas (`placeBlockInColumn`, `task-positions.ts`), un solo deshacer.
 - Idioma en el cliente (`src/i18n/client.tsx`): `I18nProvider` pinta siempre el mismo `I18nContext.Provider` y solo
   cambia `value`; el diccionario de inglés llega con `use()` (y `next/dynamic` solo para la precarga en el HTML). No
   vuelvas a envolver los hijos en un componente distinto según el idioma: React desmontaba la página entera al cambiar

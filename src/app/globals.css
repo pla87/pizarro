@@ -407,6 +407,45 @@ body {
   }
 }
 
+/*
+ * Arrastre de una selección (Board.tsx pone data-group-drag y --group-drop-label en la raíz mientras dura): las demás
+ * seleccionadas se quedan atenuadas en su sitio y el hueco de la tarjeta cogida (el envoltorio con data-dragging) pasa a
+ * ser un recuadro discontinuo con «N tarjetas irán aquí». Solo CSS: las tarjetas no se vuelven a dibujar. Ninguna regla
+ * acaba en `*`: el navegador probaría las de ese tipo en cada elemento al recalcular estilos.
+ */
+:root[data-group-drag] [data-task-card][aria-pressed="true"] {
+  opacity: 0.35;
+  filter: saturate(0.5);
+}
+:root[data-group-drag] [data-dragging] {
+  opacity: 1;
+  border-radius: 0.5rem;
+  outline: 2px dashed var(--color-brand-500);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--color-brand-500) 10%, transparent);
+  color: var(--color-brand-700);
+  @variant dark {
+    color: var(--color-brand-300);
+    background: color-mix(in srgb, var(--color-brand-500) 18%, transparent);
+  }
+}
+/* La tarjeta se oculta sin dejar de ocupar su sitio (el hueco mide lo mismo que medía dnd-kit al empezar). */
+:root[data-group-drag] [data-dragging] > [data-task-card] {
+  visibility: hidden;
+}
+:root[data-group-drag] [data-dragging]::after {
+  content: var(--group-drop-label, "");
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.5rem;
+  text-align: center;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
 /* Tarjeta recién creada (móvil): un destello breve para encontrarla tras saltar a su columna. */
 @keyframes card-flash {
   0%,
