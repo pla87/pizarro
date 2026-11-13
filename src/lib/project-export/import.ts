@@ -25,8 +25,11 @@ import {
   processImportedImage, removeAttachmentFiles, removeDocumentFiles, removeReleaseAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveDocumentFile,
   saveRawAttachmentFile, saveReleaseAttachmentFile,
 } from "../uploads";
+import { openImportJournal } from "./import-journal";
+import { remapAttachmentRefs } from "../attachment-refs";
 import { mapMentions } from "./mentions";
 import { openProjectArchive, type ProjectArchive } from "./read";
+import type { ProjectExportData } from "./types";
 
 export interface ImportUser {
   id: string;
@@ -40,6 +43,8 @@ interface ImportOptions {
   isPrivate: boolean;
   t?: T;
   onProgress?: (p: ImportProgress) => void;
+  /** Nombre del registro de la importación en curso (import-journal.ts): el id del trabajo en segundo plano. */
+  journalName?: string;
 }
 export interface ImportProgress {
   phase: "validar" | "archivos" | "base de datos";
@@ -55,6 +60,8 @@ export interface ImportSummary {
     /** Comentarios de nota añadidos a las tarjetas cuyo responsable o autor no se pudo emparejar (no cuentan en `comments`; ausente en resúmenes antiguos). */
     notes?: number;
     taskAttachments: number; releases: number; releaseAttachments: number; documents: number; events: number;
+    /** Documentos de la papelera de Documentación (ausente en resúmenes antiguos y en los de Trello y CSV). */
+    trashedDocuments?: number;
   };
   /** Personas del archivo que no se pudieron emparejar con un usuario activo (por su email). */
   unmappedUsers: { name: string; email: string }[];
@@ -150,7 +157,9 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
   const memberIds = opts.isPrivate
     ? []
     : [...new Set([...userMap.values()].filter((m): m is { id: string; role: "ADMIN" | "MEMBER" } => !!m && m.role !== "ADMIN" && m.id !== user.id).map((m) => m.id))];
-  const text = (s: string) => mapMentions(s, (name, ref) => { const id = uid(ref); return id ? mentionToken(name, id) : `@${name}`; });
+  // Ref de cada adjunto en el archivo → id del importado (se llena al importar los ficheros, antes de escribir los textos).
+  const attachmentIds = new Map<string, string>();
+  const text = (s: string) => remapAttachmentRefs(mapMentions(s, (name, ref) => { const id = uid(ref); return id ? mentionToken(name, id) : `@${name}`; }), attachmentIds);
 
   const projectId = newId();
   const fileMaxMb = clamp(data.project.fileMaxMb, FILE_MAX_MIN_MB, FILE_MAX_MAX_MB);
@@ -162,9 +171,20 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
   // su copia aunque varias apunten al mismo fichero. Comprobación previa aquí; la definitiva se repite dentro de la transacción.
   const realSize = (sha: string) => files.get(sha)!.size;
   const usageBase = await storageUsage("none");
-  const quotaLimits = await getQuotaLimits(null);
-  const refShas = [...data.tasks.flatMap((x) => x.attachments.map((a) => a.file)), ...data.releases.flatMap((r) => r.attachments.map((a) => a.file)), ...data.documents.map((d) => d.file)];
-  const preQuota = checkQuota(usageBase, refShas.map(realSize).filter((n) => n <= fileMaxBytes).reduce((n, s) => n + s, 0), quotaLimits);
+  const trash = data.documentsTrash ?? [];
+  const refShas = [
+    ...data.tasks.flatMap((x) => x.attachments.map((a) => a.file)), ...data.releases.flatMap((r) => r.attachments.map((a) => a.file)),
+    ...data.documents.map((d) => d.file), ...trash.map((d) => d.file),
+  ];
+  const importBytes = refShas.map(realSize).filter((n) => n <= fileMaxBytes).reduce((n, s) => n + s, 0);
+  // Cuota propia del proyecto (si la traía): si sus propios archivos ya no caben en ella, se usa la general, con aviso.
+  let storageQuotaMb = data.project.storageQuotaMb ?? null;
+  if (storageQuotaMb !== null && importBytes > storageQuotaMb * 1024 * 1024) {
+    warnings.push(t("La cuota de almacenamiento propia del proyecto ({mb} MB) es menor que sus archivos: se usa la cuota general.", { mb: storageQuotaMb }));
+    storageQuotaMb = null;
+  }
+  const quotaLimits = await getQuotaLimits(null, db, storageQuotaMb);
+  const preQuota = checkQuota(usageBase, importBytes, quotaLimits);
   if (preQuota) throw quotaError(t, preQuota);
   /** Bytes ya escritos en disco: se aborta en cuanto se pasa la cuota, antes de seguir llenando el disco. */
   let writtenBytes = 0;
@@ -173,8 +193,10 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
     if (q) throw quotaError(t, q);
   };
 
-  // --- Ficheros: se escriben antes (con los ids ya decididos) y, si algo falla, se borran.
+  // --- Ficheros: se escriben antes (con los ids ya decididos) y, si algo falla, se borran. Cada uno se anota antes en el
+  // registro de la importación: si el proceso muere antes de terminar, el arranque los borra (recoverImportJournals).
   const written = { attachments: [] as string[], releaseAttachments: [] as string[], documents: [] as string[] };
+  const journal = await openImportJournal(projectId, opts.journalName);
   const loadFile = async (sha: string): Promise<Buffer> => zip.readAll(files.get(sha)!, MAX_FILE_BYTES);
   const tooBig = (what: string, sha: string) => realSize(sha) > fileMaxBytes && (warnings.push(t("«{name}» supera el tamaño máximo de archivo del proyecto y no se ha importado.", { name: what })), true);
 
@@ -204,19 +226,23 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
             warnings.push(t("«{name}» no es una imagen válida y no se ha importado.", { name }));
             continue;
           }
+          await journal.record("a", id);
           await saveAttachmentFiles(id, image);
           written.attachments.push(id);
           writtenBytes += image.full.length;
           assertRoom(0);
+          if (a.ref) attachmentIds.set(a.ref, id);
           attachmentRows.push({
             id, taskId: taskIds.get(task.ref)!, originalName: name, mimeType: "image/webp", isImage: true, width: image.width, height: image.height,
             size: image.full.length, createdById: uid(a.createdBy), createdAt: date(a.createdAt),
           });
         } else {
+          await journal.record("a", id);
           await saveRawAttachmentFile(id, buf);
           written.attachments.push(id);
           writtenBytes += buf.length;
           assertRoom(0);
+          if (a.ref) attachmentIds.set(a.ref, id);
           attachmentRows.push({
             id, taskId: taskIds.get(task.ref)!, originalName: name, mimeType: sanitizeMime(a.mimeType), isImage: false, width: null, height: null,
             size: buf.length, createdById: uid(a.createdBy), createdAt: date(a.createdAt),
@@ -244,6 +270,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
             continue;
           }
         }
+        await journal.record("r", id);
         await saveReleaseAttachmentFile(id, buf, a.isImage ? "webp" : "bin");
         written.releaseAttachments.push(id);
         writtenBytes += buf.length;
@@ -260,7 +287,8 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
     }
 
     const documentRows: Prisma.ProjectDocumentCreateManyInput[] = [];
-    for (const d of data.documents) {
+    const docs: (ProjectExportData["documents"][number] & { deletedAt?: string; deletedBy?: string | null })[] = [...data.documents, ...trash];
+    for (const d of docs) {
       fileStart();
       if (tooBig(d.name, d.file)) continue;
       assertRoom(realSize(d.file));
@@ -277,6 +305,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
           kind = "OTHER"; // no es una imagen que sharp entienda: queda como descarga
         }
       }
+      await journal.record("d", id);
       await saveDocumentFile(id, stored);
       written.documents.push(id);
       writtenBytes += stored.length;
@@ -284,6 +313,8 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
       documentRows.push({
         id, projectId, name, mimeType: documentMime(kind, sanitizeMime(d.mimeType)), size: stored.length, kind, createdById: uid(d.createdBy),
         createdAt: date(d.createdAt), updatedAt: date(d.updatedAt),
+        // En la papelera: conserva cuándo se borró (se purga a los mismos días que en el origen) y quién.
+        ...(d.deletedAt ? { deletedAt: date(d.deletedAt), deletedById: uid(d.deletedBy ?? null) } : {}),
       });
     }
 
@@ -385,7 +416,10 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
     for (const x of data.tasks) {
       for (const l of x.links) {
         if (!/^https?:\/\/\S+$/i.test(l.url) || !GOOGLE_URL_RE.test(l.url)) { badLinks++; continue; }
-        linkRows.push({ taskId: taskIds.get(x.ref)!, kind: l.kind, title: l.title, url: l.url, createdById: uid(l.createdBy), createdAt: date(l.createdAt) });
+        linkRows.push({
+          taskId: taskIds.get(x.ref)!, kind: l.kind, title: l.title, url: l.url, createdById: uid(l.createdBy), createdAt: date(l.createdAt),
+          externalId: l.externalId ?? null, shareStatus: l.shareStatus ?? null, shareFailed: l.shareFailed ?? 0,
+        });
       }
     }
     if (badLinks) warnings.push(badLinks === 1 ? t("1 enlace de Google no tenía una dirección válida de Google y no se ha importado.") : t("{n} enlaces de Google no tenían una dirección válida de Google y no se han importado.", { n: badLinks }));
@@ -437,6 +471,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
             fileMaxMb,
             googleShareMode: shareMode,
             taskFields: fields,
+            storageQuotaMb,
           },
         });
         // Quien importa: miembro si es privado, o proyecto de trabajo suyo si es de equipo (como al crear uno).
@@ -547,7 +582,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
         tasks: data.tasks.length, archivedTasks: data.tasks.filter((x) => x.archivedAt).length,
         subtasks: data.tasks.reduce((n, x) => n + x.subtasks.length, 0), comments: commentRows.length, notes: noteRows.length,
         taskAttachments: attachmentRows.length, releases: releaseRows.length, releaseAttachments: releaseAttachmentRows.length,
-        documents: documentRows.length, events: data.events.length,
+        documents: documentRows.filter((r) => !r.deletedAt).length, trashedDocuments: documentRows.filter((r) => r.deletedAt).length, events: data.events.length,
       },
       unmappedUsers,
       mappedUsers: data.users.length - unmappedUsers.length,
@@ -558,6 +593,8 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
     // Nada de lo escrito sobrevive a un fallo.
     await Promise.all([removeAttachmentFiles(written.attachments), removeReleaseAttachmentFiles(written.releaseAttachments), removeDocumentFiles(written.documents)]);
     throw err;
+  } finally {
+    await journal.close();
   }
 }
 

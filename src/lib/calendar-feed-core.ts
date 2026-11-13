@@ -12,6 +12,8 @@ export const FEED_FUTURE_DAYS = 365;
 /** Topes de eventos por calendario. */
 export const FEED_MAX_TASKS = 2000;
 export const FEED_MAX_DELIVERABLES = 500;
+/** Tope de tareas recurrentes cuyas apariciones futuras van como serie (una RRULE por tarea). */
+export const FEED_MAX_REPEATS = 500;
 /** Cada cuántos minutos se sugiere a los clientes volver a consultar. */
 export const FEED_REFRESH_MINUTES = 60;
 
@@ -53,3 +55,29 @@ export const snippet = (s: string, max: number) => {
   const chars = Array.from(s);
   return chars.length > max ? `${chars.slice(0, max - 1).join("").trimEnd()}…` : s;
 };
+
+/**
+ * Registro de la suscripción muestreado: los clientes de calendario consultan cada pocos minutos (aunque se les pida
+ * cada hora), y anotar cada consulta llenaba Administración → Logs. Una consulta se anota la primera vez que se ve
+ * una clave (enlace + IP: un enlace usado desde otro sitio sale enseguida), y después como mucho una vez cada
+ * FEED_LOG_EVERY_MS, con cuántas se han callado desde la anterior. Los errores se anotan siempre.
+ */
+export const FEED_LOG_EVERY_MS = 6 * 3_600_000;
+/** Claves recordadas como mucho (se olvidan las más antiguas: como mucho, una línea de más). */
+const FEED_LOG_MAX_KEYS = 5000;
+
+type FeedLogState = Map<string, { at: number; skipped: number }>;
+
+/** ¿Toca anotar esta consulta? Si sí, devuelve cuántas se callaron desde la última anotada; si no, null. */
+export function feedLogDue(state: FeedLogState, key: string, now: number, every = FEED_LOG_EVERY_MS): number | null {
+  const prev = state.get(key);
+  if (prev && now - prev.at < every) {
+    prev.skipped++;
+    return null;
+  }
+  // Al final del Map (orden de inserción): las más antiguas son las primeras en olvidarse.
+  state.delete(key);
+  state.set(key, { at: now, skipped: 0 });
+  if (state.size > FEED_LOG_MAX_KEYS) state.delete(state.keys().next().value!);
+  return prev?.skipped ?? 0;
+}

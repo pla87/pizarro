@@ -23,6 +23,13 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Cabecera y atajos (caza de bugs 48a) | `e2e/bh48a-e2e.mjs` | 42 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) | `e2e/bh48b-e2e.mjs` | 120 | ~3 min |
 | Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/bh48c-e2e.mjs` | 44 | ~1 min |
+| Copia con imagen en la descripción, sin red en calendario, borradores y releases (caza de bugs 49) | `e2e/bh49-e2e.mjs` | 27 | ~1 min |
+| Borrar mi cuenta (escritorio y móvil) | `e2e/r49-account-e2e.mjs` | 35 | ~30 s |
+| Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
+| Copias con adjuntos y release con barra de formato | `e2e/r49-copy-e2e.mjs` | 87 | ~2 min |
+| Tareas que se repiten (calendario, .ics y «Nueva tarea») | `e2e/r49-repeat-e2e.mjs` | 44 | ~1 min |
+| Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/r49-ui-e2e.mjs` | 34 | ~1 min |
+| Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/r49-textos-e2e.mjs` | 29 | ~1 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
@@ -85,6 +92,66 @@ aviso 99+ en móvil, ayuda de atajos y borrar un proyecto con espacios dobles. M
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48a-e2e.mjs
 ```
 
+## Copia con imagen, sin red y «Repetir» en un borrador (caza de bugs 49)
+
+La copia de una tarea (Ctrl al soltar en otra columna) con una imagen en la descripción (`![…](/api/attachments/…)`)
+apunta a su propio adjunto y se sigue viendo tras borrar el de la original; mover una tarea en el calendario sin red
+vuelve a su día con «Sin conexión: no se ha guardado» y con red se guarda; sin red, el interruptor «Borrar los borradores
+al cerrar sesión» de *Mi perfil* vuelve a como estaba y «Borrar release» no se queda ocupado; en *Nueva tarea* recuperada
+de un borrador, el día de «Repetir» sigue a la fecha límite si no se eligió a mano. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh49-e2e.mjs   # PART=dupimg,cal,drafts,reldel,repdraft
+```
+
+## Formularios sin red, IP del cliente y páginas legales (ronda 49)
+
+Crear un usuario en *Administración → Usuarios* y guardar *Mi perfil* sin red (`context.setOffline`): sale «Sin conexión:
+no se ha guardado» y el aviso fijo, nunca «Algo ha fallado», y lo escrito sigue en el formulario; al volver la red se
+guarda. Deshacer «Enviar a la papelera» de un documento sin red. Con el servidor sin `TRUST_PROXY` (`npm start` o `next
+start`), unas cabeceras `X-Real-IP` / `X-Forwarded-For` inventadas no llegan a la sesión ni al registro. Privacidad,
+condiciones y licencia llegan pintadas sin JavaScript. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-infra-e2e.mjs   # PART=admin,profile,docs,ip,legal
+```
+
+## Tareas que se repiten
+
+«Repetir» en *Nueva tarea* (junto a la fecha límite; el día sigue a la fecha mientras no se elija a mano; se guarda al
+crear), las apariciones futuras previstas en el calendario (tenues, con borde discontinuo e icono de repetir, abren la
+tarea original; ninguna hoy ni antes, ni de una tarea repetida sin fecha límite; un mes dos años después), la serie con
+`RRULE` en la suscripción `.ics` y en el `.ics` de una columna Agenda, y lo mismo a 390 px. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-repeat-e2e.mjs   # PART=new,cal,ics,mobile
+```
+
+## Carga de proyecto y «Adjuntos y límites» (ronda 49)
+
+El indicador de carga de las páginas de proyecto (respuestas lentas simuladas: el contorno del logo aparece pasados
+~200 ms, la región viva dice «Cargando…», ocupa el hueco de la página sin mover la barra lateral, y con movimiento
+reducido queda quieto y tenue) y los botones de limpieza de *Ajustes del proyecto → Adjuntos y límites*: desactivados y
+con la tarjeta atenuada sin nada que borrar (también según el filtro de antigüedad), activos con ficheros, y la nota «i».
+Crea y borra su propio proyecto privado. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-ui-e2e.mjs   # PART=load,storage
+```
+
+## Textos breves, notas «i» y botones sin efecto (ronda 49)
+
+Fuera de *Ajustes del proyecto*: en *Administración → Usuarios* la descripción es de una línea y el «por qué» sale en la
+nota «i» (se abre al pulsar y se cierra con Escape); una nota dentro de un diálogo (borrar un usuario) se cierra con Escape
+sin cerrar el diálogo. Botones desactivados cuando no harían nada: «Limpiar» en *Logs* sin filtros, «Guardar» las cuotas
+de *Ajustes → Almacenamiento*, «Guardar» el nombre y «Guardar avisos» de *Mi perfil* sin cambios, «Cambiar contraseña» sin
+rellenar, «Partir del texto por defecto» con ese texto ya puesto y «Todas»/«Ninguna» al generar una release. La nota cabe
+a 390 px. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-textos-e2e.mjs   # PART=admin,profile,release
+```
+
 ## Comentarios a la vez, red lenta, dos pestañas y release renombrada (caza de bugs 48c)
 
 Tres personas comentan a la vez la misma tarea en varias rondas (todas ven todos los comentarios, en orden y sin «Ver
@@ -97,6 +164,33 @@ servidor:
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48c-e2e.mjs   # PART=comments,desc,tabs,rel
 ```
 
+
+## Borrar mi cuenta
+
+*Mi perfil → Cuenta → Borrar mi cuenta*: el único administrador ve el botón desactivado y el motivo; el diálogo pide
+contraseña, la palabra BORRAR y, con un proyecto privado propio, marcar «Entendido»; con la contraseña incorrecta no se
+borra; al borrar se va al acceso con el aviso, se cierran sus dos sesiones y lo que creó queda como «Usuario eliminado».
+En móvil (390 px) activa la verificación en dos pasos desde el perfil y borra con el código de la app (el diálogo cabe en
+la pantalla). Crea sus propias personas (`r49_*`). Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-account-e2e.mjs   # PART=block,desk,mobile
+```
+
+## Copias con adjuntos y release con barra de formato
+
+Duplicar una tarea con una imagen y un archivo (botón del detalle, Ctrl al soltar en otra columna, Alt+Mayús+D y en el
+móvil a 390 px): la copia tiene sus propios adjuntos (ids nuevos, mismo contenido y miniatura), el documento de Google
+enlazado y las subtareas sin marcar; borrar el adjunto de la original no toca el de la copia; deshacer y rehacer la
+copia; con la cuota del proyecto justa se copian los que caben y se avisa del resto. Release con la preferencia «Con
+barra de formato»: editor con barra sin Editar / Vista previa; sin tocar nada, Copiar todo, .md y .txt dan lo mismo que
+con Markdown; al editar solo cambia lo editado; cambiar el pie o quitar la cabecera con el texto ya editado; negrita de
+la barra; desplegar guarda lo editado; release de 300 tareas (tiempo de carga, por tecla frente a un campo de texto y
+Copiar todo) y el móvil a 390 px. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-copy-e2e.mjs   # PART=dup,drag,keys,quota,mdup,rel,big,mrel
+```
 
 ## Sin conexión, pestañas y tareas que desaparecen (caza de bugs 48b)
 

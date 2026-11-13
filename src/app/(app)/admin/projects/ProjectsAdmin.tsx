@@ -3,11 +3,13 @@
 import { X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { addProjectMember, removeProjectMember, setAdminProjectPick } from "@/actions/projects";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
+import { useActionTransition } from "@/components/useActionTransition";
 
 interface AdminUser {
   id: string;
@@ -30,8 +32,9 @@ export function ProjectsAdmin({ projects, users }: { projects: Row[]; users: Adm
   const byId = new Map(users.map((u) => [u.id, u]));
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-500">
-        {t("Proyectos de equipo y las personas asignadas. Quien no es administrador solo ve los proyectos a los que está asignado; los administradores ven todos y eligen en cuáles trabajan (en su perfil, o aquí pulsando su nombre). Los proyectos privados no aparecen aquí.")}
+      <p className="flex items-center gap-1 text-sm text-slate-500">
+        {t("Proyectos de equipo y quién está asignado. Los privados no salen aquí.")}
+        <InfoTip topic={t("Proyectos")}>{t("Los miembros solo ven los proyectos a los que están asignados. Los administradores ven todos y eligen en cuáles trabajan pulsando su nombre (o en su perfil).")}</InfoTip>
       </p>
       {projects.length === 0 && <p className="card p-5 text-sm text-slate-500">{t("No hay proyectos de equipo.")}</p>}
       <ul className="space-y-3">
@@ -48,7 +51,7 @@ function ProjectCard({ project, users, byId }: { project: Row; users: AdminUser[
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [candidate, setCandidate] = useState("");
   const assigned = new Set(project.memberIds);
   // Los administradores no se asignan: ven todos los proyectos de equipo.
@@ -111,8 +114,8 @@ function ProjectCard({ project, users, byId }: { project: Row; users: AdminUser[
         {members.length === 0 && admins.length === 0 && <li className="text-sm text-slate-500">{t("Nadie asignado.")}</li>}
       </ul>
       <div className="mt-3 flex gap-2">
-        <select className="input min-w-0 flex-1" aria-label={t("Asignar usuario")} value={candidate} onChange={(e) => setCandidate(e.target.value)}>
-          <option value="">{t("Asignar usuario…")}</option>
+        <select className="input min-w-0 flex-1" aria-label={t("Asignar usuario")} value={candidate} onChange={(e) => setCandidate(e.target.value)} disabled={candidates.length === 0}>
+          <option value="">{candidates.length === 0 ? t("No queda nadie por asignar") : t("Asignar usuario…")}</option>
           {candidates.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
         <button

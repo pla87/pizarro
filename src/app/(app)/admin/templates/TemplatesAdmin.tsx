@@ -2,13 +2,14 @@
 
 import { ArrowDown, ArrowUp, Check, Copy, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { deleteTemplate, resetTemplate, restoreDefaultTemplates, saveTemplate, templateFromProject } from "@/actions/templates";
 import { TaskFieldToggles } from "@/components/TaskFieldToggles";
 import { cn } from "@/components/ui/cn";
 import { ColorPicker } from "@/components/ui/ColorPicker";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { DescriptionField } from "@/components/ui/DescriptionField";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
@@ -19,6 +20,7 @@ import { parseSubtaskLines } from "@/lib/kinds-special";
 import { normalizeTaskFields, type TaskFieldKey } from "@/lib/task-fields";
 import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS } from "@/lib/project-templates-core";
 import type { TemplateDto, TemplateInput } from "@/lib/project-templates";
+import { useActionTransition } from "@/components/useActionTransition";
 
 const KIND_COLORS = [...PALETTE, "#84cc16", "#06b6d4", "#d946ef", "#78716c"];
 const ROLE_LABEL: Record<ColumnRoleValue, string> = { NONE: "Ninguno", NEXT_RELEASE: "Siguiente salto", IN_PRODUCTION: "En producción", WAITING: "Esperando", WEEKLY_PLAN: "Planificación semanal", CHECKLIST: "Lista consolidada", REVIEW: "Revisión con requisitos", AGENDA: "Agenda", ROUTINES: "Rutinas", DELIVERY: "Entrega al cliente", BUDGET: "Presupuesto" };
@@ -107,7 +109,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [editing, setEditing] = useState<{ id: string | null; draft: Draft } | null>(null);
   const [deleting, setDeleting] = useState<TemplateDto | null>(null);
   const [picking, setPicking] = useState(false);
@@ -197,8 +199,9 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
     <div>
       <div className="mb-4">
         <h2 className="text-lg font-semibold">{t("Plantillas de proyecto")}</h2>
-        <p className="text-sm text-slate-500">
-          {t("Columnas, tipos de tarea y etiquetas con los que arranca un proyecto nuevo. Se eligen al crear el proyecto.")}
+        <p className="flex items-center gap-1 text-sm text-slate-500">
+          {t("Con qué columnas, tipos y etiquetas arranca un proyecto nuevo.")}
+          <InfoTip topic={t("Plantillas de proyecto")}>{t("Se elige una al crear el proyecto. Cambiar una plantilla no afecta a los proyectos ya creados.")}</InfoTip>
         </p>
       </div>
 
@@ -232,7 +235,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
 
       <div className="flex flex-wrap gap-2">
         <button className="btn-primary" onClick={() => setEditing({ id: null, draft: emptyDraft() })}><Plus size={16} /> {t("Nueva plantilla")}</button>
-        <button className="btn-secondary" onClick={() => { setSourceId(projects[0]?.id ?? ""); setPicking(true); }} disabled={projects.length === 0}>
+        <button className="btn-secondary" onClick={() => { setSourceId(projects[0]?.id ?? ""); setPicking(true); }} disabled={projects.length === 0} title={projects.length === 0 ? t("No hay proyectos.") : undefined}>
           <Copy size={15} /> {t("Crear desde un proyecto…")}
         </button>
         {missingBuiltins > 0 && (
@@ -337,7 +340,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
 
             <section>
               <h3 className="mb-1 text-sm font-semibold">{t("Tipos generales que no se usarán")}</h3>
-              <p className="mb-2 text-xs text-slate-500">{t("Marca los generales que el proyecto ocultará. Si no hay tipos propios siempre quedará al menos uno visible.")}</p>
+              <p className="mb-2 text-xs text-slate-500">{t("Si no hay tipos propios, siempre queda al menos uno visible.")}</p>
               <label className="mb-2 flex items-center gap-1.5 text-sm font-medium">
                 <input type="checkbox" checked={draft.hideAllGeneralKinds} onChange={(e) => patch({ hideAllGeneralKinds: e.target.checked })} />
                 {t("Ocultar todos los tipos generales")}
@@ -365,7 +368,6 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
 
             <section>
               <h3 className="mb-1 text-sm font-semibold">{t("Campos opcionales de las tareas")}</h3>
-              <p className="mb-1 text-xs text-slate-500">{t("Los proyectos creados con esta plantilla tendrán activados estos campos.")}</p>
               <TaskFieldToggles
                 value={draft.columns.some((c) => c.role === "BUDGET") ? normalizeTaskFields([...draft.taskFields, "cost"]) : draft.taskFields}
                 onChange={(taskFields) => patch({ taskFields })}
@@ -375,7 +377,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
 
             <section>
               <h3 className="mb-1 text-sm font-semibold">{t("Plantillas de release notes")}</h3>
-              <p className="mb-2 text-xs text-slate-500">{t("Cabeceras y pies de release que se copiarán al proyecto nuevo. Admiten Markdown.")}</p>
+              <p className="mb-2 text-xs text-slate-500">{t("Cabeceras y pies; admiten Markdown.")}</p>
               {(["HEADER", "FOOTER"] as const).map((kind) => {
                 const items = draft.releaseTemplates.map((r, index) => ({ r, index })).filter((x) => x.r.kind === kind);
                 const setRel = (index: number, p: Partial<Draft["releaseTemplates"][number]>) => patch({ releaseTemplates: draft.releaseTemplates.map((x, j) => (j === index ? { ...x, ...p } : x)) });

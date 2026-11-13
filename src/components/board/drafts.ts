@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { FieldsForm } from "@/lib/fields-form";
+import type { RecurrenceRule } from "@/lib/recurrence-date";
 import { clearDraft, writeDraft } from "./draft-storage";
 
 // Almacenamiento (sin React, compartido con los borradores de comentarios): ver draft-storage.ts.
@@ -29,6 +30,11 @@ export interface NewTaskDraft {
   projectId?: string;
   /** Campos opcionales activados (coste, horas, prioridad, cliente, inicio). */
   fields?: FieldsForm;
+  /** Repetir: regla y día (semana 1-7 o mes 1-31); el servidor los deja coherentes al crear. */
+  recurrence?: RecurrenceRule;
+  recurrenceDay?: number | null;
+  /** El día se eligió a mano (si no, al recuperar el borrador sigue a la fecha límite, como antes de cerrarlo). */
+  recurrenceDayPicked?: boolean;
 }
 
 export interface EditTaskDraft {

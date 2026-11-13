@@ -1,8 +1,9 @@
 "use client";
 
 import { Copy, Download, Loader2, Mail, Smartphone } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useT } from "@/i18n/client";
+import { useActionTransition } from "@/components/useActionTransition";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 interface BeginData {
@@ -35,11 +36,11 @@ const grouped = (s: string) => s.replace(/(.{4})/g, "$1 ").trim();
 /** Pasos comunes de activación: elegir método, enseñar el secreto o pedir el código por email, y confirmar el primer código. */
 export function TwoFactorEnroll({ emailAvailable, begin, confirm, onCodes, disabled, onCancel, onBack }: Props) {
   const t = useT();
-  const [pending, start] = useTransition();
   const [info, setInfo] = useState<BeginData | null>(null);
   const [code, setCode] = useState("");
   const [emailCode, setEmailCode] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useActionTransition(setError);
   const [sent, setSent] = useState(false);
 
   const choose = (method: "TOTP" | "EMAIL") =>

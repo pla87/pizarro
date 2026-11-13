@@ -1,6 +1,6 @@
 {
   "name": "pizarro",
-  "version": "1.51.1",
+  "version": "1.52.0",
   "private": true,
   "license": "SEE LICENSE IN LICENSE.md",
   "type": "module",
@@ -80,5 +80,10 @@
     "tailwindcss": "4.3.4",
     "tsx": "4.23.15",
     "typescript": "5.9.3"
+  },
+  "overrides": {
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "11.0.5"
+    }
   }
 }

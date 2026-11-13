@@ -25,7 +25,8 @@ export interface BackupDestination {
   /** Tamaño, o null si no existe. */
   head(key: string): Promise<number | null>;
   delete(key: string): Promise<void>;
-  list(prefix: string): AsyncIterable<{ key: string; size: number }>;
+  /** Con `sizes: false`, una carpeta no mira el tamaño de cada fichero (size 0): basta con los nombres. */
+  list(prefix: string, opts?: { sizes?: boolean }): AsyncIterable<{ key: string; size: number }>;
 }
 
 // --- Carpeta ------------------------------------------------------------------------------------
@@ -128,8 +129,9 @@ export class DirDestination implements BackupDestination {
     return removed;
   }
 
-  async *list(prefix: string): AsyncGenerator<{ key: string; size: number }> {
+  async *list(prefix: string, opts: { sizes?: boolean } = {}): AsyncGenerator<{ key: string; size: number }> {
     // Solo dos formas de prefijo: "" (la raíz, sin entrar en carpetas) y "files/" (recursivo).
+    const sizes = opts.sizes !== false;
     const walk = async function* (dir: string, rel: string, deep: boolean): AsyncGenerator<{ key: string; size: number }> {
       let entries;
       try {
@@ -143,6 +145,10 @@ export class DirDestination implements BackupDestination {
         if (e.isDirectory()) {
           if (deep) yield* walk(abs, `${rel}${e.name}/`, true);
         } else if (e.isFile()) {
+          if (!sizes) {
+            yield { key: `${rel}${e.name}`, size: 0 };
+            continue;
+          }
           try {
             yield { key: `${rel}${e.name}`, size: (await stat(abs)).size };
           } catch {
@@ -235,10 +241,13 @@ export interface StemInfo {
   partial: boolean;
 }
 
-/** Raíces de las copias de un destino (las que tienen volcado), la más reciente primero. */
-export async function listStems(dest: BackupDestination): Promise<StemInfo[]> {
+/**
+ * Raíces de las copias de un destino (las que tienen volcado), la más reciente primero. Con `sizes: false`, sin mirar el
+ * tamaño de cada fichero (dumpBytes 0): para saber cuál es la última o cuántas hay basta con los nombres.
+ */
+export async function listStems(dest: BackupDestination, opts: { sizes?: boolean } = {}): Promise<StemInfo[]> {
   const byStem = new Map<string, { stem: string; hasManifest: boolean; dumpBytes: number; hasDump: boolean }>();
-  for await (const { key, size } of dest.list("")) {
+  for await (const { key, size } of dest.list("", opts)) {
     const stem = backupStem(key);
     if (!stem) continue;
     const row = byStem.get(stem) ?? { stem, hasManifest: false, dumpBytes: 0, hasDump: false };
@@ -376,6 +385,51 @@ export async function checkShrink(dest: BackupDestination, manifest: FullManifes
   return { problem: problem && { ...problem, stem: latest.stem } };
 }
 
+// --- Última copia buena (retención local) -----------------------------------------------------
+
+/** Lo que dice cuánto contenido tiene una copia (de su manifiesto); se guarda en status.json para no descifrarlo cada vez. */
+export interface CopySummary {
+  stem: string;
+  rows: number;
+  fileCount: number;
+  /** Personas + proyectos + tareas (null: manifiesto sin cuentas por tabla). */
+  core: number | null;
+}
+
+export const copySummary = (m: FullManifest): CopySummary => ({ stem: m.stem, rows: m.db.rows, fileCount: m.fileCount, core: coreRows(m.db) });
+
+/** La copia más reciente es mucho menor que la última buena: qué se redujo y cuánto. */
+export interface CopyShrink extends ShrinkProblem {
+  /** Copia sospechosa (la más reciente) y la última buena con la que se compara. */
+  stem: string;
+  goodStem: string;
+}
+
+/**
+ * Última copia «buena» de un destino: recorriendo las copias de la más antigua a la más reciente, cada una es buena si no
+ * es mucho menor que la última buena anterior (el mismo criterio que la subida al destino externo, backupShrink: menos de
+ * la mitad de personas, proyectos y tareas, o de ficheros, con mínimos para las instalaciones pequeñas). Las copias
+ * anteriores a `accepted` (una reducción que el administrador confirmó como intencionada) no cuentan: desde ella se
+ * vuelve a empezar. Devuelve la última buena y, si la más reciente no lo es, en qué se redujo.
+ *
+ * Tras perder la base de datos o el volumen, las copias nuevas (casi vacías) nunca son buenas, así que la buena sigue
+ * siendo la de antes de la pérdida aunque la retención de 14 días ya la hubiera borrado.
+ */
+export function lastGoodCopy(copies: CopySummary[], accepted?: string | null): { good: string | null; shrink: CopyShrink | null } {
+  const ordered = [...copies].filter((c) => !accepted || c.stem >= accepted).sort((a, b) => a.stem.localeCompare(b.stem));
+  let good: CopySummary | null = null;
+  let shrink: CopyShrink | null = null;
+  for (const c of ordered) {
+    const problem = good ? backupShrink(c, good) : null;
+    if (problem && good) shrink = { ...problem, stem: c.stem, goodStem: good.stem };
+    else {
+      good = c;
+      shrink = null;
+    }
+  }
+  return { good: good?.stem ?? null, shrink };
+}
+
 export interface SyncResult {
   /** Ficheros del manifiesto que ya no existían al subirlos (borrados después de la copia). */
   missing?: number;
@@ -449,19 +503,23 @@ export interface PruneResult {
  * cortadas (volcado sin manifiesto, ver StemInfo) no cuentan para la retención y se borran pasadas 24 h. En una
  * carpeta, además, borra los temporales de escrituras interrumpidas de más de 24 h.
  *
+ * `protect`: raíces que se conservan aunque la retención las borraría (la última copia buena del destino local).
+ *
  * En un destino que ya no guarda ficheros (el local al configurar un destino externo, sin BACKUP_LOCAL_FILES=1), solo
  * las copias hechas cuando sí los guardaba retienen objetos: así el almacén antiguo se vacía a medida que la retención
  * borra esas copias, y no de golpe antes de que el destino externo tenga ninguna copia buena.
  */
-export async function pruneDestination(dest: BackupDestination, key: Buffer, opts: { daily?: number; monthly?: number; recent?: number; extraKeys?: (stem: string) => string[]; now?: number } = {}): Promise<PruneResult> {
+export async function pruneDestination(dest: BackupDestination, key: Buffer, opts: { daily?: number; monthly?: number; recent?: number; extraKeys?: (stem: string) => string[]; now?: number; protect?: string[] } = {}): Promise<PruneResult> {
   const removedTemp = dest instanceof DirDestination ? await dest.cleanTemp(TEMP_MAX_AGE_MS, opts.now) : undefined;
   const result = await pruneBackups(dest, key, { ...opts, now: opts.now ?? Date.now() });
   return removedTemp === undefined ? result : { ...result, removedTemp };
 }
 
-async function pruneBackups(dest: BackupDestination, key: Buffer, opts: { daily?: number; monthly?: number; recent?: number; extraKeys?: (stem: string) => string[]; now: number }): Promise<PruneResult> {
+async function pruneBackups(dest: BackupDestination, key: Buffer, opts: { daily?: number; monthly?: number; recent?: number; extraKeys?: (stem: string) => string[]; now: number; protect?: string[] }): Promise<PruneResult> {
   const stems = await listStems(dest);
   const keep = selectBackupsToKeep(stems.filter((s) => !s.partial).map((s) => dumpKey(s.stem)), opts.daily, opts.monthly, opts.recent);
+  // Copias que se conservan siempre (la última buena, ver lastGoodCopy), con sus ficheros.
+  for (const stem of opts.protect ?? []) if (stems.some((s) => s.stem === stem && !s.partial)) keep.add(dumpKey(stem));
   let removedBackups = 0;
   for (const s of stems) {
     if (s.partial ? opts.now - (stemDate(s.stem)?.getTime() ?? 0) < TEMP_MAX_AGE_MS : keep.has(dumpKey(s.stem))) continue;

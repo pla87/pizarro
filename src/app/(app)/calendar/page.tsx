@@ -8,8 +8,9 @@ import { mentionsToPlain } from "@/lib/mentions";
 import { requireUserPage } from "@/lib/session";
 import { getLocale, getT } from "@/i18n/server";
 import { localizeGeneralKind } from "@/lib/kinds-localize";
+import { projectOccurrences } from "@/lib/recurrence-series";
 import type { Prisma } from "@/generated/prisma/client";
-import { CalendarView, type CalendarDeliverable, type CalendarTask } from "@/components/calendar/CalendarView";
+import { CalendarView, type CalendarDeliverable, type CalendarRepeat, type CalendarTask } from "@/components/calendar/CalendarView";
 
 export async function generateMetadata() {
   const t = await getT();
@@ -23,6 +24,9 @@ const one = (v: string | string[] | undefined) => ((Array.isArray(v) ? v[0] : v)
 /** Tope de tareas por mes: un tablero normal queda muy por debajo; evita enviar páginas enormes. */
 const MAX_TASKS = 1000;
 const MAX_DELIVERABLES = 200;
+/** Tareas recurrentes de las que se prevén apariciones, y tope de apariciones previstas que se pintan por mes. */
+const MAX_REPEAT_SOURCES = 300;
+const MAX_REPEATS = 500;
 /** Proyectos que se aceptan en `?project=`. */
 const MAX_PROJECT_FILTER = 50;
 
@@ -120,10 +124,42 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     },
   });
 
+  // Apariciones futuras previstas de las tareas que se repiten y aún no han dado la siguiente (las terminadas ya la dieron o
+  // no la darán; las archivadas tampoco). Solo con fecha límite: sin ella la fecha de la siguiente depende de cuándo se termine.
+  // Solo se prevén días posteriores a hoy y a la fecha límite, dentro de la cuadrícula visible.
+  const repeatRows = await db.task.findMany({
+    where: { AND: [{ project: projectWhere, archivedAt: null, column: { isDone: false }, recurrence: { not: "NONE" }, recurrenceNext: { is: null }, dueDate: { not: null, lt: range.lte } }, personWhere] },
+    take: MAX_REPEAT_SOURCES,
+    orderBy: [{ dueDate: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      title: true,
+      dueDate: true,
+      recurrence: true,
+      recurrenceDay: true,
+      project: { select: { id: true, name: true } },
+      kind: { select: { id: true, name: true, color: true } },
+    },
+  });
+  const locale = await getLocale();
+  const repeatFrom = addDaysIso(today, 1) > grid.start ? addDaysIso(today, 1) : grid.start;
+  const repeats: CalendarRepeat[] = [];
+  let repeatsCut = repeatRows.length >= MAX_REPEAT_SOURCES;
+  for (const r of repeatRows) {
+    const room = MAX_REPEATS - repeats.length;
+    const days = projectOccurrences(r.recurrence, r.recurrenceDay, dateToIso(r.dueDate), today, repeatFrom, grid.end, room + 1);
+    if (days.length > room) repeatsCut = true;
+    const title = mentionsToPlain(r.title);
+    const kind = { name: localizeGeneralKind(r.kind, locale).name, color: r.kind.color };
+    for (const due of days.slice(0, room)) {
+      repeats.push({ key: `${r.id}:${due}`, taskId: r.id, title, due, projectId: r.project.id, projectName: r.project.name, kind, recurrence: r.recurrence, recurrenceDay: r.recurrenceDay });
+    }
+    if (repeats.length >= MAX_REPEATS) break;
+  }
+
   const feedRow = await db.calendarFeed.findUnique({ where: { userId: user.id }, select: { scope: true } });
   // Sin suscripción, la opción marcada depende de si en sus proyectos las tareas suelen tener responsable.
   const feedScope = feedRow?.scope ?? (await defaultFeedScope(user));
-  const locale = await getLocale();
   const tasks: CalendarTask[] = rows.map((r) => ({
     id: r.id,
     title: mentionsToPlain(r.title),
@@ -152,13 +188,14 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       today={today}
       weeks={grid.weeks}
       tasks={tasks}
+      repeats={repeats}
       deliverables={deliverables}
       projects={options}
       people={people}
       meId={user.id}
       filters={{ project: projectIds, person: personIds, hideDone }}
       feed={{ active: !!feedRow, scope: feedScope }}
-      truncated={rows.length >= MAX_TASKS || deliverableRows.length >= MAX_DELIVERABLES}
+      truncated={rows.length >= MAX_TASKS || deliverableRows.length >= MAX_DELIVERABLES || repeatsCut}
     />
   );
 }

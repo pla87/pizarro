@@ -10,7 +10,7 @@ export const mensajeria: Record<string, string> = {
 
   // Administración → Ajustes
   "3. Avisos por Telegram y WhatsApp": "3. Telegram and WhatsApp notices",
-  "Los avisos de Pizarro también en el móvil. Tú activas cada canal aquí; luego cada persona lo conecta en Mi perfil → Avisos y elige qué avisos recibe (por defecto, menciones y asignaciones). Telegram es gratis; WhatsApp lo cobra Meta por mensaje.": "Pizarro notices on the phone too. You turn on each channel here; then each person connects it in My profile → Notifications and chooses which notices to get (by default, mentions and assignments). Telegram is free; Meta charges for WhatsApp per message.",
+  "Los avisos también en el móvil. Telegram es gratis; WhatsApp lo cobra Meta por mensaje.": "Notifications on your phone too. Telegram is free; Meta charges for each WhatsApp message.",
   "Bot @{bot} guardado y activado.": "Bot @{bot} saved and turned on.",
   "Has cambiado de bot: cada persona tiene que volver a conectar Telegram.": "You changed bots: everyone has to connect Telegram again.",
   "Avisos por Telegram activados.": "Telegram notices turned on.",
@@ -21,7 +21,7 @@ export const mensajeria: Record<string, string> = {
   "Bot de Telegram quitado.": "Telegram bot removed.",
   "Telegram avisa a Pizarro al instante en {url}.": "Telegram notifies Pizarro instantly at {url}.",
   "Falta APP_URL en el servidor: Pizarro preguntará a Telegram cada pocos segundos. Los enlaces de los avisos necesitan APP_URL.": "APP_URL is missing on the server: Pizarro will ask Telegram every few seconds. The links in notices need APP_URL.",
-  "APP_URL no es una dirección https pública en un puerto que Telegram admita (443, 80, 88 u 8443), así que Pizarro pregunta a Telegram cada pocos segundos. Funciona igual y no hace falta abrir puertos; con https se usará el webhook solo.": "APP_URL isn't a public https address on a port Telegram accepts (443, 80, 88 or 8443), so Pizarro asks Telegram every few seconds. It works the same and no ports need opening; with https the webhook will be used automatically.",
+  "Pizarro pregunta a Telegram cada pocos segundos; funciona igual.": "Pizarro asks Telegram every few seconds; it works the same.",
   "Telegram (gratis)": "Telegram (free)",
   "Activo: bot @{bot}. {n} persona(s) conectada(s).": "On: bot @{bot}. {n} person(s) connected.",
   "Desactivado: el bot @{bot} está guardado, pero no se envían avisos.": "Off: bot @{bot} is saved, but no notices are sent.",
@@ -64,11 +64,11 @@ export const mensajeria: Record<string, string> = {
   "Idioma": "Language",
   "Idioma en inglés": "English language",
   "opcional, p. ej. en": "optional, e.g. en",
-  "Lo que guardas aquí manda; los campos vacíos usan las variables WHATSAPP_* del servidor, si las hay. «Idioma en inglés» se usa con quien tiene Pizarro en inglés (añade esa traducción a la misma plantilla en Meta).": "What you save here wins; empty fields use the server's WHATSAPP_* variables, if any. “English language” is used for people who have Pizarro in English (add that translation to the same template in Meta).",
+  "Lo que guardas aquí manda; los campos vacíos usan las variables WHATSAPP_* del servidor, si las hay.": "What you save here takes precedence; empty fields use the server's WHATSAPP_* variables, if any.",
   "Número para la prueba": "Number for the test",
 
   // Mi perfil → Avisos
-  "Cuando alguien te menciona con @ en una tarjeta o comentario, siempre te aparece en la campana de avisos. Además puedes recibirlo por email:": "When someone mentions you with @ on a card or comment, it always appears in the notices bell. You can also get it by email:",
+  "Siempre salen en la campana de avisos; además, puedes recibirlas por email:": "They always show in the notification bell; you can also get them by email:",
   "Avisos en el móvil: Telegram y WhatsApp": "Notices on your phone: Telegram and WhatsApp",
   "Recibe tus avisos en el móvil. En cada canal eliges qué avisos quieres; por defecto, solo menciones y asignaciones.": "Get your notices on your phone. For each channel you choose which notices you want; by default, only mentions and assignments.",
   "Telegram conectado.": "Telegram connected.",
@@ -142,8 +142,7 @@ export const mensajeria: Record<string, string> = {
 
   // Administración → Ajustes → WhatsApp: idioma en inglés de la plantilla de verificación
   "Idioma en inglés de la verificación": "English verification language",
-  "«Idioma en inglés de la verificación» se usa con quien tiene Pizarro en inglés (añade esa traducción a la plantilla de verificación en Meta); vacío = el código sale para todos en «Idioma de la verificación».":
-    "“English verification language” is used for people who have Pizarro in English (add that translation to the verification template in Meta); empty = everyone gets the code in “Verification language”.",
+  "Los idiomas en inglés se usan con quien tiene Pizarro en inglés (añade esa traducción a la plantilla en Meta). Vacíos, todos reciben el idioma principal.": "The English languages are used for people who have Pizarro in English (add that translation to the template in Meta). If empty, everyone gets the main language.",
 
   // Código de verificación de WhatsApp: envío y comprobación
   "No se pudo enviar el código por WhatsApp.": "The code could not be sent by WhatsApp.",
@@ -166,8 +165,8 @@ export const mensajeria: Record<string, string> = {
   "El código enviado a {phone} ha caducado o ya no vale. Pide otro.": "The code sent to {phone} has expired or is no longer valid. Ask for another one.",
   "Código de WhatsApp": "WhatsApp code",
   "Enviar otro código": "Send another code",
-  "El código caduca a los 15 minutos y admite 5 intentos. Hasta que lo confirmes no se te envían avisos por WhatsApp. Si no llega, revisa el número o pide al administrador que compruebe la configuración.": "The code expires after 15 minutes and allows 5 attempts. Until you confirm it, no notices are sent to you by WhatsApp. If it does not arrive, check the number or ask the administrator to check the setup.",
-  "Este número estaba guardado en tu perfil, pero los avisos por WhatsApp no están activados. Para activarlos, acepta recibirlos y confírmalo con el código que te enviaremos.": "This number was saved in your profile, but WhatsApp notices are not turned on. To turn them on, agree to receive them and confirm it with the code we will send you.",
+  "Caduca a los 15 minutos. Si no llega, revisa el número.": "It expires after 15 minutes. If it doesn't arrive, check the number.",
+  "Los avisos por WhatsApp no están activados en este número: acepta recibirlos y confírmalo con el código que te enviaremos.": "WhatsApp notifications aren't on for this number: agree to receive them and confirm with the code we'll send you.",
   "Número guardado: {phone}. Los avisos por WhatsApp no están activados.": "Saved number: {phone}. WhatsApp notices are not turned on.",
   "Borrar el número": "Delete the number",
   "Número borrado.": "Number deleted.",
@@ -178,12 +177,10 @@ export const mensajeria: Record<string, string> = {
   // Plantilla de autenticación de WhatsApp (codigo_pizarro): Administración → Ajustes y su «Probar»
   "Plantilla de verificación": "Verification template",
   "Idioma de la verificación": "Verification language",
-  "La plantilla de verificación lleva el código de 6 cifras con el que cada persona conecta su WhatsApp. Meta exige que sea de categoría Autenticación (no vale aviso_pizarro). Vacío = codigo_pizarro, en el mismo idioma que los avisos.":
-    "The verification template carries the 6-digit code each person uses to connect their WhatsApp. Meta requires it to be in the Authentication category (aviso_pizarro will not do). Empty = codigo_pizarro, in the same language as the notices.",
+  "Lleva el código de 6 cifras con el que cada persona conecta su WhatsApp; Meta exige la categoría Autenticación (no vale aviso_pizarro). Vacía = codigo_pizarro, en el idioma de los avisos.": "It carries the 6-digit code each person uses to connect WhatsApp; Meta requires the Authentication category (aviso_pizarro won't do). Empty = codigo_pizarro, in the notification language.",
   "Una plantilla de categoría Autenticación llamada codigo_pizarro, aprobada, con la opción «Copiar código» y el mismo idioma. Su texto lo pone Meta («Tu código de verificación es…»): con ella llega el código para conectar WhatsApp.":
     "An approved Authentication template named codigo_pizarro, with the “Copy code” option and the same language. Meta sets its text (“… is your verification code”): it carries the code for connecting WhatsApp.",
-  "Envía a ese número las dos plantillas: un aviso de prueba y un código de verificación de muestra (son 2 mensajes de pago; con el número de prueba de Meta, solo a los números verificados).":
-    "Sends both templates to that number: a test notice and a sample verification code (2 paid messages; with Meta's test number, only to verified numbers).",
+  "Envía 2 mensajes de pago: un aviso de prueba y un código de muestra.": "Sends 2 paid messages: a test notification and a sample code.",
   "Enviados 2 WhatsApp de prueba a {to}: un aviso y un código de verificación de muestra (123456).": "2 test WhatsApp messages sent to {to}: a notice and a sample verification code (123456).",
   "Solo ha salido el aviso de prueba.": "Only the test notice was sent.",
   "Solo ha salido el código de verificación de prueba.": "Only the test verification code was sent.",

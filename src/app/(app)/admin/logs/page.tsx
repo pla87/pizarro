@@ -7,6 +7,7 @@ import { isMaskedLog, LOG_RANGES, logQuery, logWhere, memberPrivateProjectIds, p
 import { addDays, dayInZone } from "@/lib/log-range";
 import { requireAdminPage } from "@/lib/session";
 import { cn } from "@/components/ui/cn";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { intlLocale } from "@/i18n/core";
 import { getLocale, getT } from "@/i18n/server";
 
@@ -74,13 +75,14 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const counts = Object.fromEntries(levelCounts.map((c) => [c.level, c._count._all]));
   const days = logRetentionDays();
   const today = dayInZone(new Date(), tz);
+  const filtered = filters.range !== "24h" || !!filters.level || !!filters.category || !!filters.userId || !!filters.q || filters.reads;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-slate-600 dark:text-slate-300">
           {days === 1 ? t("Se conserva 1 día de actividad.") : t("Se conservan {days} días de actividad.", { days })}
-          {!filters.reads && " " + t("Se muestran solo los cambios: marca «Incluir consultas» para ver también páginas vistas, tareas abiertas y descargas.")}
+          {!filters.reads && <>{" "}{t("Se muestran solo los cambios.")} <InfoTip topic={t("Incluir consultas")}>{t("Marca «Incluir consultas» para ver también páginas vistas, tareas abiertas y descargas.")}</InfoTip></>}
         </p>
         <form method="get" action="/api/admin/logs" className="flex flex-wrap items-end gap-2">
           {/* Mismos filtros que la lista; el periodo lo sustituye el intervalo de fechas. */}
@@ -167,9 +169,16 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           <button type="submit" className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-on-brand hover:bg-brand-700">
             {t("Filtrar")}
           </button>
-          <Link href="/admin/logs" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700">
-            {t("Limpiar")}
-          </Link>
+          {/* Sin filtros aplicados, «Limpiar» no haría nada: se muestra atenuado y no es un enlace. */}
+          {filtered ? (
+            <Link href="/admin/logs" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700">
+              {t("Limpiar")}
+            </Link>
+          ) : (
+            <span role="link" aria-disabled="true" title={t("No hay filtros aplicados")} className="cursor-not-allowed rounded-lg border border-slate-300 px-3 py-1.5 text-sm opacity-50 dark:border-slate-700">
+              {t("Limpiar")}
+            </span>
+          )}
         </div>
       </form>
 

@@ -9,7 +9,8 @@ import path from "node:path";
 import { after, before, describe, test } from "node:test";
 import "./helpers";
 
-const { backupPaused, createBackup, dailyBackupJob, externalBackupJob, listBackups, readStatus, syncExternal } = await import("../../src/lib/backup");
+const { acceptBackupShrink, backupPaused, createBackup, dailyBackupJob, externalBackupJob, listBackups, readStatus, syncExternal } = await import("../../src/lib/backup");
+const { computeBackupAlert } = await import("../../src/lib/backup-alert");
 const { DirDestination, listObjectKeys, listStems, readManifest } = await import("../../src/lib/backup-dest");
 
 const dirs: string[] = [];
@@ -81,5 +82,59 @@ describe("copia casi vacía tras perder los datos", () => {
     assert.deepEqual((await listStems(dest)).map((s) => s.stem), [emptyStem, goodStem]);
     assert.deepEqual(await listObjectKeys(dest), goodObjects, "los objetos de la copia buena siguen");
     assert.equal((await readManifest(dest, goodStem, key)).fileCount, 30);
+  });
+});
+
+describe("copias locales sin destino externo: las copias vacías no desplazan la buena", () => {
+  test("la retención conserva la última buena, avisa al administrador y, al confirmar la reducción, vuelve a la normal", async () => {
+    delete process.env.BACKUP_EXTERNAL_DIR;
+    process.env.UPLOAD_DIR = await tmp();
+    for (let i = 0; i < 30; i++) await writeFile(path.join(process.env.UPLOAD_DIR, `b${i}.bin`), randomBytes(150));
+    const good = await createBackup();
+    assert.equal(good.ok, true, good.error);
+    const goodStem = good.file!.replace(/\.pzbak$/, "");
+    const local = new DirDestination("local", path.join(process.env.UPLOAD_DIR, "backups"), true);
+    const goodObjects = await listObjectKeys(local);
+    assert.equal(goodObjects.size, 30);
+    assert.equal((await readStatus()).shrink, undefined);
+    assert.equal((await computeBackupAlert()).active, false);
+
+    // Se pierden los ficheros (la carpeta de copias sigue): cuatro copias seguidas casi vacías. Sin la protección, la
+    // retención (14 diarias, 6 mensuales y las 3 más recientes; todas del mismo día) ya habría borrado la buena.
+    for (let i = 0; i < 30; i++) await rm(path.join(process.env.UPLOAD_DIR, `b${i}.bin`));
+    const empties: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      await nextSecond();
+      const r = await createBackup();
+      assert.equal(r.ok, true, r.error);
+      assert.equal(r.files, 0);
+      empties.push(r.file!.replace(/\.pzbak$/, ""));
+    }
+    const stems = (await listStems(local)).map((s) => s.stem);
+    assert.ok(stems.includes(goodStem), "la copia buena sigue");
+    assert.deepEqual(stems.filter((s) => s !== goodStem), empties.slice(-3).reverse(), "de las vacías, solo las 3 más recientes");
+    assert.deepEqual(await listObjectKeys(local), goodObjects, "con todos sus ficheros");
+    assert.equal((await readManifest(local, goodStem, key)).fileCount, 30);
+
+    // Aviso al administrador (en el menú, la página y por email), con lo que se redujo y la copia buena.
+    const status = await readStatus();
+    assert.equal(status.shrink?.goodStem, goodStem);
+    assert.equal(status.shrink?.stem, empties.at(-1));
+    assert.deepEqual([status.shrink?.what, status.shrink?.local, status.shrink?.remote], ["files", 0, 30]);
+    const alert = await computeBackupAlert();
+    assert.deepEqual([alert.active, alert.reason, alert.shrink?.goodStem], [true, "shrunk", goodStem]);
+    assert.ok(alert.shrink?.goodAt, "con la fecha de la copia buena");
+    assert.ok(Object.keys(status.copies ?? {}).includes(goodStem), "el resumen de cada copia queda en status.json");
+
+    // Reducción intencionada: se confirma, el aviso desaparece y la buena vuelve a la retención normal.
+    assert.equal(await acceptBackupShrink(), empties.at(-1));
+    assert.equal(await acceptBackupShrink(), null, "sin aviso no hay nada que confirmar");
+    assert.equal((await computeBackupAlert()).active, false);
+    await nextSecond();
+    const next = await createBackup();
+    assert.equal(next.ok, true, next.error);
+    assert.equal((await readStatus()).shrink, undefined, "comparada desde la reducción aceptada, la nueva es buena");
+    assert.ok(!(await listStems(local)).some((s) => s.stem === goodStem), "la antigua ya no se conserva siempre");
+    assert.equal((await listObjectKeys(local)).size, 0, "y sus ficheros se borran con ella");
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowDown, ArrowUp, Check, Eye, Pencil, Plus, Trash2, X } from "lucide-react";
-import { Fragment, useEffect, useRef, useState, useTransition } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { cn } from "@/components/ui/cn";
 import { DescriptionField } from "@/components/ui/DescriptionField";
 import { Markdown } from "@/components/ui/Markdown";
@@ -9,6 +9,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { EditorModeValue, TemplateOption } from "@/lib/types";
+import { useActionTransition } from "@/components/useActionTransition";
 
 const NO_USERS: never[] = [];
 
@@ -40,7 +41,7 @@ export function ReleaseTemplateList({ kind, title, initial, placeholder, actions
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const [form, setForm] = useState({ name: "", content: "" });
   const [preview, setPreview] = useState(false);
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [owner] = useState(() => ({}));
   const rootRef = useRef<HTMLDivElement>(null);
   // Lo que había al abrir: si cambia, abrir otra edición pregunta antes de descartarlo.

@@ -1,15 +1,16 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { confirmAccountChange } from "@/actions/auth";
 import { useT } from "@/i18n/client";
+import { useActionTransition } from "@/components/useActionTransition";
 
 export function ConfirmForm({ token, kind, newEmail }: { token: string; kind: "EMAIL" | "PASSWORD"; newEmail: string | null }) {
   const t = useT();
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition(setError);
 
   if (done) {
     return (

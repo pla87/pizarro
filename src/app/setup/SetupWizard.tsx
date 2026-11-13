@@ -1,13 +1,15 @@
 "use client";
 
 import { CheckCircle2, Loader2 } from "lucide-react";
-import { startTransition, useState, useTransition } from "react";
+import { startTransition, useState } from "react";
 import { completeSetupAction, sendSetupTestEmail, verifySetupCodeAction } from "@/actions/setup";
 import { BrandMark } from "@/components/ui/BrandMark";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { I18nProvider, preloadEnglish, useT } from "@/i18n/client";
 import type { Locale } from "@/i18n/core";
 import type { SetupCodeSource } from "@/lib/setup-core";
+import { useActionTransition } from "@/components/useActionTransition";
 
 interface Props {
   zones: string[];
@@ -41,13 +43,13 @@ export function SetupWizard(props: Props) {
 function codeHint(source: SetupCodeSource, t: ReturnType<typeof useT>): string {
   switch (source) {
     case "docker":
-      return t("Para asegurarnos de que eres quien instala el servidor, escribe el código de configuración que te dio el instalador o que aparece en el log del contenedor (docker compose logs app).");
+      return t("Escribe el código de configuración que te dio el instalador o que aparece en el log del contenedor (docker compose logs app).");
     case "npm":
-      return t("Para asegurarnos de que eres quien instala el servidor, escribe el código de configuración que aparece en la terminal donde ejecutaste npm start.");
+      return t("Escribe el código de configuración que aparece en la terminal donde ejecutaste npm start.");
     case "railway":
-      return t("Para asegurarnos de que eres quien instala el servidor, escribe el código de configuración que aparece en los logs de Railway (servicio de la app → Deployments → View logs).");
+      return t("Escribe el código de configuración que aparece en los logs de Railway (servicio de la app → Deployments → View logs).");
     default:
-      return t("Para asegurarnos de que eres quien instala el servidor, escribe el código de configuración que aparece en el log del servidor: con Docker, docker compose logs app; con npm start, la terminal; en Railway, los logs del despliegue.");
+      return t("Escribe el código de configuración que aparece en el log del servidor: con Docker, docker compose logs app; con npm start, la terminal; en Railway, los logs del despliegue.");
   }
 }
 
@@ -62,7 +64,7 @@ function Wizard({ zones, defaultZone, zoneLocked, smtp, codeSource, lang, setLan
   const [adminPassword, setAdminPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition(setError);
 
   const go = (n: number) => {
     setError(null);
@@ -195,7 +197,8 @@ function Wizard({ zones, defaultZone, zoneLocked, smtp, codeSource, lang, setLan
                 </>
               ) : (
                 <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
-                  {t("El envío de emails (SMTP) no está configurado. Sin él no hay invitaciones por email ni «¿Olvidaste tu contraseña?». Podrás configurarlo después de entrar, en Administración → Ajustes → Avisos por email, o con las variables SMTP_* del servidor (docs/INSTALL.md).")}
+                  {t("El envío de emails no está configurado: sin él no hay invitaciones por email ni «¿Olvidaste tu contraseña?». Podrás configurarlo después en Administración → Ajustes.")}{" "}
+                  <InfoTip topic={t("Avisos por email")}>{t("También con las variables SMTP_* del servidor (docs/INSTALL.md).")}</InfoTip>
                 </p>
               )}
               {infoBox}

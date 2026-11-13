@@ -10,6 +10,38 @@ function containerOf(container: { data: { current?: unknown } }): string | null 
   return id == null ? null : String(id);
 }
 
+type RectMap = Parameters<CollisionDetection>[0]["droppableRects"];
+type Rect = NonNullable<ReturnType<RectMap["get"]>>;
+type Id = Parameters<RectMap["get"]>[0];
+
+/**
+ * Las medidas de dnd-kit recalculan su posición con el scroll de sus contenedores en CADA lectura de top, left, bottom o
+ * right (leen scrollTop/scrollLeft del DOM, y si hay cambios pendientes el navegador recoloca la página para
+ * responder). Durante una detección el scroll no cambia: cada medida se lee una vez (top y left; el resto sale del ancho y
+ * el alto) y se reutiliza, también entre los algoritmos (columnas, tarjetas, la más cercana y las esquinas).
+ */
+class RectSnapshot extends Map<Id, Rect> {
+  readonly #source: RectMap;
+  constructor(source: RectMap) {
+    super();
+    this.#source = source;
+  }
+  override get(id: Id): Rect | undefined {
+    let r = super.get(id);
+    if (!r) {
+      const live = this.#source.get(id);
+      if (!live) return undefined;
+      const { width, height, top, left } = live;
+      r = { width, height, top, left, bottom: top + height, right: left + width };
+      super.set(id, r);
+    }
+    return r;
+  }
+  override has(id: Id): boolean {
+    return this.#source.has(id);
+  }
+}
+
 /**
  * Detección de colisiones del tablero. Solo cuentan los droppables visibles (en móvil las columnas
  * ocultas miden 0×0). Si hay puntero, manda lo que tiene debajo: una tarjeta si está sobre una, y si no,
@@ -23,9 +55,11 @@ function containerOf(container: { data: { current?: unknown } }): string | null 
 export const createBoardCollisionDetection = (algos: {
   closestCorners: CollisionDetection;
   pointerWithin: CollisionDetection;
-}): CollisionDetection => (args) => {
+}): CollisionDetection => (input) => {
   const { closestCorners, pointerWithin } = algos;
-  const visibleContainers = args.droppableContainers.filter((c) => (args.droppableRects.get(c.id)?.width ?? 0) > 0);
+  const args = { ...input, droppableRects: new RectSnapshot(input.droppableRects) };
+  // El ancho no depende del scroll: se lee de la medida original, sin fijar la posición de todas.
+  const visibleContainers = args.droppableContainers.filter((c) => (input.droppableRects.get(c.id)?.width ?? 0) > 0);
   const visible = { ...args, droppableContainers: visibleContainers };
   if (args.pointerCoordinates) {
     const columns = visibleContainers.filter((c) => String(c.id).startsWith(COLUMN_DROPPABLE_PREFIX));

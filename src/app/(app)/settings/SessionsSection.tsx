@@ -2,11 +2,11 @@
 
 import { MonitorSmartphone } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
 import { revokeOtherSessions, revokeSession } from "@/actions/profile";
 import { useToast } from "@/components/ui/Toast";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
+import { useActionTransition } from "@/components/useActionTransition";
 
 interface SessionRow {
   id: string;
@@ -24,7 +24,7 @@ export function SessionsSection({ sessions }: { sessions: SessionRow[] }) {
   const locale = useIntlLocale();
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const others = sessions.filter((s) => !s.current).length;
 
   const run = (fn: () => ReturnType<typeof revokeSession>, ok: string) =>

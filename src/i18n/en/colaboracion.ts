@@ -9,12 +9,12 @@ export const colaboracion: Record<string, string> = {
   "Marcar como leído": "Mark as read",
   "Aquí aparecerán las menciones, asignaciones, cambios de fecha y comentarios que te afecten.": "Mentions, assignments, due date changes and comments that concern you will show up here.",
   "Otros avisos y resumen diario": "Other notifications and daily digest",
-  "Las asignaciones, los cambios de fecha de tus tareas y los comentarios de las tareas que sigues siempre te aparecen en la campana de avisos. Además puedes recibirlos por email:": "Assignments, due date changes on your tasks and comments on the tasks you follow always show up in the notification bell. You can also get them by email:",
+  "Asignaciones, cambios de fecha y comentarios de lo que sigues salen siempre en la campana; además, por email:": "Assignments, due date changes and comments on what you follow always show in the bell; also by email:",
   "Email cuando me asignan una tarea": "Email when a task is assigned to me",
   "Email cuando cambia la fecha límite de una tarea mía": "Email when the due date of one of my tasks changes",
   "Email con los comentarios y respuestas en tareas que sigo": "Email with comments and replies on tasks I follow",
   "Resumen diario por email": "Daily summary by email",
-  "Lo ocurrido en las últimas 24 horas en tus proyectos y lo que te toca hoy. Si no hay novedades, no se envía.": "What happened in your projects in the last 24 hours and what is due today. Nothing is sent if there is no news.",
+  "Lo ocurrido en 24 horas en tus proyectos y lo que te toca hoy. Sin novedades, no se envía.": "What happened in your projects in the last 24 hours and what is due today. Not sent if there is nothing new.",
   "Enviar a las": "Send at",
   // Seguimiento, historial y respuestas
   "Seguir": "Follow",
@@ -59,7 +59,7 @@ export const colaboracion: Record<string, string> = {
   "Puedes desactivar este resumen en «Mi perfil» de Pizarro.": "You can turn this summary off in “My profile” in Pizarro.",
   // Informe semanal
   "Informe semanal por email": "Weekly report by email",
-  "Envía el informe PDF de estado del proyecto a un correo cada semana, el día y la hora que elijas.": "Sends the project status PDF report to an email address every week, on the day and at the time you choose.",
+  "El informe PDF del proyecto, cada semana a un correo.": "The project's PDF report, emailed every week.",
   "Informe semanal guardado": "Weekly report saved",
   "Enviar el informe cada semana": "Send the report every week",
   "Destinatario": "Recipient",

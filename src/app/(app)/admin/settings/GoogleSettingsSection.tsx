@@ -4,6 +4,7 @@ import { KeyRound, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { saveGoogleSettings } from "@/actions/google-settings";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { GoogleSettingsView } from "@/lib/google-config";
@@ -49,7 +50,7 @@ export function GoogleSettingsSection({ view }: { view: GoogleSettingsView }) {
     </p>
   ) : (
     <p className="rounded-md bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/50 dark:text-slate-300">
-      {view.appUrlMissing ? t("Inactivo: falta la variable APP_URL del servidor (la dirección pública de Pizarro).") : t("Inactivo: no aparece «Iniciar sesión con Google» hasta que guardes el ID y el secreto de cliente.")}
+      {view.appUrlMissing ? t("Inactivo: falta la variable APP_URL del servidor (la dirección pública de Pizarro).") : t("Inactivo: falta guardar el ID y el secreto de cliente.")}
     </p>
   );
 
@@ -57,16 +58,19 @@ export function GoogleSettingsSection({ view }: { view: GoogleSettingsView }) {
     <section id="acceso-google" className="card space-y-4 p-5">
       <div>
         <h2 className="flex items-center gap-1.5 text-base font-semibold"><KeyRound size={16} /> {t("2. Acceso con Google")}</h2>
-        <p className="mt-0.5 text-xs text-slate-500">
-          {t("Permite «Iniciar sesión con Google» a quien ya tiene cuenta en Pizarro con ese email, y crear Docs y Sheets desde las tarjetas. No envía emails (sección 1).")}
+        <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
+          {t("Entrar con Google y crear Docs y Sheets desde las tarjetas.")}
+          <InfoTip topic={t("2. Acceso con Google")}>{t("Solo entra quien ya tiene cuenta en Pizarro con ese email. No envía emails (eso es la sección 1).")}</InfoTip>
         </p>
       </div>
       {status}
 
       <div className="space-y-2" data-testid="google-public-url">
-        <h3 className="text-sm font-semibold">{t("Dirección pública de Pizarro")}</h3>
+        <h3 className="flex items-center gap-1 text-sm font-semibold">
+          {t("Dirección pública de Pizarro")}
+          <InfoTip topic={t("Dirección pública de Pizarro")}>{t("Es el APP_URL del servidor; de él salen todas las direcciones que pide Google (ver el «Paso 0» de la guía).")}</InfoTip>
+        </h3>
         {view.appUrl ? <code className="block break-all rounded-md bg-slate-100 px-2 py-1 text-sm dark:bg-slate-800" data-testid="google-app-url">{view.appUrl}</code> : <p className="text-xs text-amber-600">{t("Define APP_URL en el servidor (por ejemplo https://pizarro.tuempresa.com) para ver las direcciones.")}</p>}
-        <p className="text-xs text-slate-500">{t("Es el APP_URL del servidor; de él salen todas las direcciones que pide Google (ver el «Paso 0» de la guía).")}</p>
         {view.mismatch && (
           <div role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200" data-testid="google-url-mismatch">
             {view.mismatch.kind === "own" ? (
@@ -133,21 +137,24 @@ export function GoogleSettingsSection({ view }: { view: GoogleSettingsView }) {
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm">
-          <span className="font-medium">{t("Dominio de Workspace permitido (opcional)")}</span>
+        <div className="block text-sm">
+          <div className="flex items-center gap-1">
+            <label htmlFor="google-domain" className="font-medium">{t("Dominio de Workspace permitido (opcional)")}</label>
+            <InfoTip topic={t("Dominio de Workspace permitido (opcional)")}>{t("Con dominio, solo entran cuentas de ese dominio y se pueden compartir Docs y Sheets con todo él.")}</InfoTip>
+          </div>
           {view.envDomain ? (
             <span className="mt-1 block text-xs text-slate-500">{t("Configurado en el servidor (GOOGLE_WORKSPACE_DOMAIN).")}</span>
           ) : (
-            <input className="input mt-1 w-full" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="empresa.com" autoComplete="off" maxLength={253} />
+            <input id="google-domain" className="input mt-1 w-full" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="empresa.com" autoComplete="off" maxLength={253} />
           )}
-          <span className="mt-1 block text-xs text-slate-500">{t("Vacío = cualquier cuenta de Google. Con dominio, solo entran cuentas de ese dominio y se pueden compartir Docs y Sheets con todo él.")}</span>
-        </label>
+          <span className="mt-1 block text-xs text-slate-500">{t("Vacío = cualquier cuenta de Google.")}</span>
+        </div>
       </div>
 
       <label className="block text-sm sm:max-w-md">
         <span className="font-medium">{t("Email de contacto público (opcional)")}</span>
         <input className="input mt-1 w-full" type="email" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="privacidad@empresa.com" autoComplete="off" maxLength={200} />
-        <span className="mt-1 block text-xs text-slate-500">{t("Se muestra en /privacy y /terms (las pide Google). Vacío = «el administrador de esta instalación».")}</span>
+        <span className="mt-1 block text-xs text-slate-500">{t("Sale en /privacy y /terms. Vacío = «el administrador de esta instalación».")}</span>
       </label>
 
       <div className="flex flex-wrap items-center gap-2">

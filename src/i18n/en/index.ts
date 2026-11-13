@@ -4,13 +4,17 @@ import { accesibilidad } from "./accesibilidad";
 import { acceso } from "./acceso";
 import { admin } from "./admin";
 import { almacenamiento } from "./almacenamiento";
+import { baja } from "./baja";
 import { board } from "./board";
 import { calendar } from "./calendar";
 import { campos } from "./campos";
+import { carga } from "./carga";
 import { colaboracion } from "./colaboracion";
 import { comentarios } from "./comentarios";
 import { common } from "./common";
 import { conexion } from "./conexion";
+import { copia } from "./copia";
+import { datos } from "./datos";
 import { cuentas } from "./cuentas";
 import { detalle } from "./detalle";
 import { documentacion } from "./documentacion";
@@ -26,11 +30,13 @@ import { pegado } from "./pegado";
 import { plantillas } from "./plantillas";
 import { proyectos } from "./proyectos";
 import { releases } from "./releases";
+import { repeticion } from "./repeticion";
 import { server } from "./server";
 import { settings } from "./settings";
 import { setup } from "./setup";
 import { soporte } from "./soporte";
 import { task } from "./task";
+import { textos } from "./textos";
 import { web } from "./web";
 import { wip } from "./wip";
 
@@ -39,5 +45,5 @@ export const EN: Record<string, string> = {
   ...common, ...board, ...task, ...detalle, ...comentarios, ...lista, ...pegado, ...wip, ...calendar, ...releases, ...conexion,
   ...accesibilidad, ...settings, ...admin, ...server, ...cuentas, ...acceso, ...colaboracion, ...proyectos, ...plantillas,
   ...setup, ...documentacion, ...campos, ...almacenamiento, ...importar, ...ics, ...mensajeria, ...soporte, ...licencia,
-  ...legal, ...landing, ...web, ...instalar,
+  ...legal, ...landing, ...web, ...instalar, ...baja, ...datos, ...copia, ...repeticion, ...carga, ...textos,
 };

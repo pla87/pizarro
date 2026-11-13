@@ -19,6 +19,7 @@ import type { EditorModeValue } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 import { normalizeSearch } from "@/lib/search-accents";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
+import { actionThrowResult } from "@/lib/stale-action";
 
 interface Props {
   projectId: string;
@@ -130,7 +131,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
     setBusyId(d.id);
     let res: Awaited<ReturnType<typeof deleteDocument>>;
     try {
-      res = await deleteDocument(d.id);
+      res = await deleteDocument(d.id).catch((e: unknown) => actionThrowResult(e, t));
     } finally {
       setBusyId(null);
     }
@@ -139,7 +140,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
     toast(t("Documento enviado a la papelera"), "undo", {
       label: t("Deshacer"),
       onClick: () => {
-        void restoreDocument(d.id).then((r) => {
+        void restoreDocument(d.id).catch((e: unknown) => actionThrowResult(e, t)).then((r) => {
           if (!r.ok) return toast(r.error, "error");
           toast(t("Documento restaurado"));
           safeRefresh();
@@ -151,7 +152,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
 
   async function restore(d: DocumentRow) {
     setBusyId(d.id);
-    const res = await restoreDocument(d.id);
+    const res = await restoreDocument(d.id).catch((e: unknown) => actionThrowResult(e, t));
     setBusyId(null);
     if (!res.ok) return toast(res.error, "error");
     setOpenId(null);
@@ -168,7 +169,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
     });
     if (!ok) return;
     setBusyId(d.id);
-    const res = await deleteDocumentForever(d.id);
+    const res = await deleteDocumentForever(d.id).catch((e: unknown) => actionThrowResult(e, t));
     setBusyId(null);
     if (!res.ok) return toast(res.error, "error");
     setOpenId(null);
@@ -205,7 +206,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
         />
       </div>
       <p className="mb-4 text-sm text-slate-500">
-        {t("Archivos de «{name}» para consultar sin salir de la app: {count} de {max} · máximo {mb} MB por archivo.", { name: projectName, count: documents.length, max: maxCount, mb: fileMaxMb })}
+        {t("Archivos de «{name}»: {count} de {max} · máximo {mb} MB por archivo.", { name: projectName, count: documents.length, max: maxCount, mb: fileMaxMb })}
       </p>
 
       {dragging && (
@@ -240,7 +241,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
       {showTrash ? (
         <section aria-label={t("Papelera")} data-testid="docs-trash">
           <p className="mb-3 text-sm text-slate-500">
-            {t("Los documentos borrados se conservan {days} días y después se eliminan para siempre. Mientras tanto siguen contando en el espacio del proyecto.", { days: DOCUMENT_TRASH_DAYS })}
+            {t("A los {days} días se eliminan para siempre; hasta entonces ocupan espacio del proyecto.", { days: DOCUMENT_TRASH_DAYS })}
           </p>
           {trashed.length === 0 ? (
             <p className="card p-6 text-center text-sm text-slate-500">{t("La papelera está vacía.")}</p>
@@ -282,7 +283,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
         <div className="card flex flex-col items-center gap-2 p-10 text-center text-sm text-slate-500">
           <FileText size={32} className="text-slate-300" />
           <p className="max-w-md">
-            {t("Aquí van los archivos de referencia del proyecto: guías y notas en texto o Markdown, PDF de especificaciones o contratos, capturas e imágenes. Arrastra archivos a esta página, pégalos o usa «Subir archivos». Todo el equipo del proyecto los puede ver y descargar.")}
+            {t("Guías, notas, PDF e imágenes de referencia, para todo el equipo del proyecto. Arrastra archivos aquí, pégalos o usa «Subir archivos».")}
           </p>
           <button type="button" className="btn-secondary mt-2" onClick={() => fileInput.current?.click()}>
             <Upload size={16} /> {t("Subir archivos")}
@@ -371,13 +372,13 @@ function DocViewer({ doc, projectId, currentUserId, editorMode, onClose }: { doc
 
   async function remove() {
     setBusy(true);
-    const res = await deleteDocument(doc.id);
+    const res = await deleteDocument(doc.id).catch((e: unknown) => actionThrowResult(e, t));
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
     toast(t("Documento enviado a la papelera"), "undo", {
       label: t("Deshacer"),
       onClick: () => {
-        void restoreDocument(doc.id).then((r) => {
+        void restoreDocument(doc.id).catch((e: unknown) => actionThrowResult(e, t)).then((r) => {
           if (!r.ok) return toast(r.error, "error");
           toast(t("Documento restaurado"));
           safeRefresh();
@@ -392,7 +393,7 @@ function DocViewer({ doc, projectId, currentUserId, editorMode, onClose }: { doc
     const next = draft.trim();
     if (!next || next === name) return setEditing(false);
     setBusy(true);
-    const res = await renameDocument(doc.id, next);
+    const res = await renameDocument(doc.id, next).catch((e: unknown) => actionThrowResult(e, t));
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
     setName(res.data.name);

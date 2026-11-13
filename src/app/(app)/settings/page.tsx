@@ -17,6 +17,8 @@ import { parseProfileTab } from "./profile-tabs";
 import { ProjectPicksSection } from "./ProjectPicksSection";
 import { SessionsSection } from "./SessionsSection";
 import { TwoFactorSection } from "./TwoFactorSection";
+import { DeleteAccountSection } from "./DeleteAccountSection";
+import { deletionBlock, soloPrivateProjectIds } from "@/lib/user-delete";
 
 export async function generateMetadata() {
   const t = await getT();
@@ -128,6 +130,16 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </>
         }
         google={{ enabled: googleEnabled(), email: row.googleAccount?.email ?? null, message: googleMessage }}
+        accountEnd={
+          tab === "cuenta" ? (
+            <DeleteAccountSection
+              block={await deletionBlock(user.id)}
+              privateProjects={(await soloPrivateProjectIds(user.id)).length}
+              twoFactor={row.twoFactorMethod}
+              emailAvailable={emailEnabled()}
+            />
+          ) : null
+        }
       />
     </>
   );

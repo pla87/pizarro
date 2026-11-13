@@ -18,6 +18,8 @@ interface Props {
   /** Solo Google: el formulario es el acceso de emergencia de los administradores y va plegado. */
   emergency: boolean;
   notice: string | null;
+  /** Aviso informativo (no es un error), p. ej. tras borrar la propia cuenta. */
+  info?: string | null;
 }
 
 function GoogleLogo() {
@@ -31,7 +33,7 @@ function GoogleLogo() {
   );
 }
 
-export function LoginForm({ next, google, password, emergency, notice }: Props) {
+export function LoginForm({ next, google, password, emergency, notice, info = null }: Props) {
   const t = useT();
   // guardFormAction: tras un despliegue esta página puede ser de la versión anterior; entonces se recarga en vez de romper.
   const guarded = useMemo(() => guardFormAction(login, t, reloadForNewVersion), [t]);
@@ -63,6 +65,7 @@ export function LoginForm({ next, google, password, emergency, notice }: Props) 
   const googleHref = `/api/auth/google/start${next ? `?next=${encodeURIComponent(next)}` : ""}`;
   return (
     <div className="space-y-4">
+      {info && <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">{info}</p>}
       {notice && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">{notice}</p>}
       {google && (
         // Enlace normal (no fetch): es una redirección completa a Google y de vuelta.

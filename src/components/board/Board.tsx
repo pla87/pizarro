@@ -13,7 +13,7 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { Archive, Plus, Search, Upload, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from "react";
+import { Suspense, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from "react";
 import { createPortal } from "react-dom";
 import { archiveTasks, deleteTasks, duplicateTask, makeEvergreen, moveTask, moveTasks } from "@/actions/tasks";
 import { createBoardCollisionDetection } from "@/lib/collision";
@@ -38,8 +38,9 @@ import { boardDragA11y } from "./drag-a11y";
 import { EVERGREEN_DROPPABLE_PREFIX } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
 import { useCardActions } from "./cardActions";
+import { draggingCard } from "./nearCards";
 import { useReviewGuard } from "./reviewGuard";
-import { activeFilterCount, EMPTY_FILTERS, filtersKey, parseStoredFilters, sanitizeFilters, taskMatchesFilters, type BoardFilters } from "./filters";
+import { activeFilterCount, EMPTY_FILTERS, filtersKey, parseStoredFilters, sanitizeFilters, searchTerms, taskMatchesFilters, taskSearchText, type BoardFilters, type SearchNames } from "./filters";
 import { Presence } from "./Presence";
 import { ListView } from "./ListView";
 import { parseStoredView, parseViewParam, viewStorageKey, type BoardView } from "./listSort";
@@ -56,7 +57,6 @@ import { claimPaste, isTextTarget, pastedFiles, pasteClaimed, recoverEmptyImages
 import { draftKey, readDraft, type EditTaskDraft, type NewTaskDraft } from "./drafts";
 import { mentionsToPlain } from "@/lib/mentions";
 import { shouldRefreshOnFocus } from "@/lib/focus-refresh";
-import { normalizeSearch as normalize } from "@/lib/search-accents";
 import { cardCount } from "./count-texts";
 
 /**
@@ -367,6 +367,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const [dragItems, setDragItems] = useState<Items | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const dragOrigin = useRef<{ columnId: string; index: number } | null>(null);
+  // Si el tablero se desmonta a medio arrastre, las tarjetas no deben quedar esperando a que termine (nearCards.ts).
+  useEffect(() => () => draggingCard.set(null), []);
   // Al soltar una tarjeta en otra columna no se anima el overlay (se decide en onDragEnd, en el mismo render que lo retira).
   const [skipDropAnimation, setSkipDropAnimation] = useState(false);
   // Arrastre con ratón y Ctrl (o Alt/⌥) pulsada al soltar: se suelta una copia y la original se queda.
@@ -681,10 +683,20 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // Diferido: el campo responde al momento y el tablero se vuelve a filtrar sin bloquear (al limpiar el filtro con Escape
   // reaparecen cientos de tarjetas de golpe).
   const filterQuery = useDeferredValue(query);
-  const terms = useMemo(() => normalize(filterQuery).split(/\s+/).filter(Boolean), [filterQuery]);
+  const terms = useMemo(() => searchTerms(filterQuery), [filterQuery]);
   // Campos opcionales: prioridad y cliente filtran (y se buscan) solo si el proyecto los tiene activados.
   const priorityEnabled = data.project.taskFields.includes("priority");
   const clientEnabled = data.project.taskFields.includes("client");
+  // Los datos del servidor llegan como objetos nuevos en cada refresco aunque no cambien: estables, para no invalidar el
+  // contexto (más abajo) ni el texto de búsqueda ya calculado de cada tarea.
+  const users = useStableValue(data.users);
+  const kinds = useStableValue(data.kinds);
+  // Nombres con los que se busca (tipo, responsable, etiquetas): el texto normalizado de cada tarea se calcula una vez por
+  // versión de la tarea y juego de nombres (taskSearchText), no en cada pulsación.
+  const searchNames = useMemo<SearchNames>(
+    () => ({ kindName: new Map(kinds.map((k) => [k.id, k.name])), userName: new Map(users.map((u) => [u.id, u.name])), labelName: new Map(labels.map((l) => [l.id, l.name])), clientEnabled }),
+    [kinds, users, labels, clientEnabled],
+  );
   const clientOptions = useMemo(
     () => (clientEnabled ? [...new Set(tasks.map((x) => x.client).filter((c): c is string => Boolean(c)))].sort((a, b) => a.localeCompare(b)) : []),
     [clientEnabled, tasks],
@@ -692,28 +704,26 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // Filtros rápidos sin lo que ya no existe (etiqueta borrada, persona que dejó el proyecto…).
   const activeFilters = useMemo(
     () => sanitizeFilters(filters, {
-      labels: new Set(labels.map((l) => l.id)), kinds: new Set(data.kinds.map((k) => k.id)), users: new Set(data.users.map((u) => u.id)),
+      labels: new Set(labels.map((l) => l.id)), kinds: new Set(kinds.map((k) => k.id)), users: new Set(users.map((u) => u.id)),
       priorities: new Set(priorityEnabled ? TASK_PRIORITIES : []), clients: new Set(clientOptions),
     }),
-    [filters, labels, data.kinds, data.users, priorityEnabled, clientOptions],
+    [filters, labels, kinds, users, priorityEnabled, clientOptions],
   );
   const filterCount = activeFilterCount(activeFilters);
   const filtering = terms.length > 0 || filterCount > 0;
   const matchingIds = useMemo(() => {
     if (!filtering) return null;
-    const doneColumnIds = new Set(columns.filter((c) => c.isDone).map((c) => c.id));
-    const kindName = new Map(data.kinds.map((k) => [k.id, k.name]));
-    const userName = new Map(data.users.map((u) => [u.id, u.name]));
-    const labelName = new Map(labels.map((l) => [l.id, l.name]));
+    const ctx = { currentUserId: data.currentUserId, today: data.today, doneColumnIds: new Set(columns.filter((c) => c.isDone).map((c) => c.id)) };
     const ids = new Set<string>();
     for (const task of tasks) {
-      const hay = normalize(
-        [mentionsToPlain(task.title), kindName.get(task.kindId), task.assigneeId ? userName.get(task.assigneeId) : "", ...task.labelIds.map((id) => labelName.get(id)), clientEnabled ? task.client : ""].join(" "),
-      );
-      if (terms.every((w) => hay.includes(w)) && taskMatchesFilters(task, activeFilters, { currentUserId: data.currentUserId, today: data.today, doneColumnIds })) ids.add(task.id);
+      if (terms.length) {
+        const text = taskSearchText(task, searchNames);
+        if (!terms.every((w) => text.includes(w))) continue;
+      }
+      if (taskMatchesFilters(task, activeFilters, ctx)) ids.add(task.id);
     }
     return ids;
-  }, [filtering, terms, tasks, data.kinds, data.users, data.currentUserId, data.today, labels, columns, activeFilters, clientEnabled]);
+  }, [filtering, terms, tasks, searchNames, data.currentUserId, data.today, columns, activeFilters]);
   // `dragItems` lleva siempre las listas COMPLETAS (también con filtro): al soltar, los vecinos que se
   // envían al servidor son los reales, de modo que las tarjetas ocultas conservan su orden relativo.
   const items = useStableItems(useMemo(() => {
@@ -734,10 +744,11 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     for (const t of [...tasks].sort(compareTaskOrder)) if (t.evergreen) (map[t.columnId] ??= []).push(t.id);
     return map;
   }, [tasks]);
-  const shownEvergreen = useMemo(
+  // Estables (mismas listas si no cambian): el tablero memorizado (dndBoard) no se vuelve a dibujar en cada pulsación.
+  const shownEvergreen = useStableItems(useMemo(
     () => (matchingIds ? Object.fromEntries(Object.entries(evergreenByColumn).map(([c, ids]) => [c, ids.filter((id) => matchingIds.has(id))])) : evergreenByColumn),
     [evergreenByColumn, matchingIds],
-  );
+  ));
   const taskById = tasksById(tasks);
   const sortedColumns = useMemo(() => [...columns].sort((a, b) => a.position - b.position), [columns]);
   /** Tarjetas no archivadas de la columna (sin filtrar, con las fijas): la cifra que se compara con su límite. */
@@ -805,8 +816,6 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // El contexto solo cambia si cambia su contenido: los datos del servidor llegan como objetos nuevos en cada
   // refresco aunque sean iguales, y sin esto todas las tarjetas se redibujarían cada vez.
   const project = useStableValue(data.project);
-  const users = useStableValue(data.users);
-  const kinds = useStableValue(data.kinds);
   const deliverables = useStableValue(data.deliverables);
   const google = useStableValue(data.google);
   const stableColumns = useStableValue(sortedColumns);
@@ -1040,28 +1049,25 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     useSensor(KeyboardSensor, KEYBOARD_OPTIONS),
   );
   // Avisos del lector de pantalla al arrastrar: título de la tarjeta y nombre de la columna (no el id).
-  const dragAccessibility = boardDragA11y(
-    t,
-    (id) => {
-      const task = taskById.get(id);
-      return task ? mentionsToPlain(task.title) : t("Tarea");
-    },
-    (id) => {
-      const name = (columnId: string | undefined) => columns.find((c) => c.id === columnId)?.name;
-      if (id.startsWith(EVERGREEN_DROPPABLE_PREFIX)) {
-        const column = name(id.slice(EVERGREEN_DROPPABLE_PREFIX.length));
-        return column ? { evergreen: column } : null;
-      }
-      const container = findContainer(dragItems ?? baseItems, id);
-      // Tarea fija aún sin soltar: sigue en el panel de su columna.
-      if (container === EVERGREEN_ORIGIN) {
-        const column = name(taskById.get(id)?.columnId);
-        return column ? { evergreen: column } : null;
-      }
-      const column = name(container);
-      return column ? { column } : null;
-    },
-  );
+  const dragTitleOf = (id: string) => {
+    const task = taskById.get(id);
+    return task ? mentionsToPlain(task.title) : t("Tarea");
+  };
+  const dragPlaceOf = (id: string): { column: string } | { evergreen: string } | null => {
+    const name = (columnId: string | undefined) => columns.find((c) => c.id === columnId)?.name;
+    if (id.startsWith(EVERGREEN_DROPPABLE_PREFIX)) {
+      const column = name(id.slice(EVERGREEN_DROPPABLE_PREFIX.length));
+      return column ? { evergreen: column } : null;
+    }
+    const container = findContainer(dragItems ?? baseItems, id);
+    // Tarea fija aún sin soltar: sigue en el panel de su columna.
+    if (container === EVERGREEN_ORIGIN) {
+      const column = name(taskById.get(id)?.columnId);
+      return column ? { evergreen: column } : null;
+    }
+    const column = name(container);
+    return column ? { column } : null;
+  };
 
   const onDragStart = ({ active, activatorEvent }: DragStartEvent) => {
     const id = String(active.id);
@@ -1070,6 +1076,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     duplicateRef.current = mouseDrag.current && !!(pointer?.ctrlKey || pointer?.altKey);
     setDuplicating(duplicateRef.current);
     setSkipDropAnimation(false);
+    // La tarjeta arrastrada sigue apuntada a dnd-kit aunque cambie de columna; las demás no se desapuntan hasta soltar.
+    draggingCard.set(id);
     const col = findContainer(baseItems, id);
     if (!col) {
       // Tarea fija: no está en ninguna lista; se arrastra desde un contenedor virtual.
@@ -1109,6 +1117,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   };
 
   const cancelDrag = () => {
+    draggingCard.set(null);
     setDragItems(null);
     setActiveId(null);
     dragOrigin.current = null;
@@ -1134,8 +1143,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const dropCopy = async (id: string, columnId: string, prevId: string | null, nextId: string | null) => {
     const res = await track(duplicateTask(id, { columnId, prevId, nextId }));
     if (!res.ok) return toast(res.error, "error");
-    upsertTask(res.data);
+    const { copyNotice, ...copy } = res.data;
+    upsertTask(copy);
     toast(t("Tarea duplicada"), "undo");
+    if (copyNotice) toast(copyNotice, "error");
   };
 
   const onDragEnd = async ({ active, over }: DragEndEvent) => {
@@ -1234,6 +1245,91 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   });
 
   const activeTask = activeId ? taskById.get(activeId) : null;
+
+  // --- Tablero con arrastre, memorizado -----------------------------------------
+  // DndContext da en cada dibujo un valor de contexto nuevo (la posición del arrastre) y React recorre entonces todas las
+  // tarjetas buscando quién lo lee: con miles de tarjetas, cada pulsación en el buscador (o abrir un diálogo) pagaba ese
+  // recorrido. Así solo se vuelve a dibujar cuando cambia lo que muestra (columnas, listas, arrastre). Los manejadores
+  // leen la última versión de lo que necesitan (latestDnd) para no cambiar en cada dibujo.
+  const latestDnd = useRef({ onDragStart, onDragOver, onDragEnd, cancelDrag, onSwipeStart, onSwipeEnd, dragTitleOf, dragPlaceOf });
+  useLayoutEffect(() => {
+    latestDnd.current = { onDragStart, onDragOver, onDragEnd, cancelDrag, onSwipeStart, onSwipeEnd, dragTitleOf, dragPlaceOf };
+  });
+  const dndHandlers = useMemo(
+    () => ({
+      onDragStart: (e: DragStartEvent) => latestDnd.current.onDragStart(e),
+      onDragOver: (e: DragOverEvent) => latestDnd.current.onDragOver(e),
+      onDragEnd: (e: DragEndEvent) => latestDnd.current.onDragEnd(e),
+      onDragCancel: () => latestDnd.current.cancelDrag(),
+      onTouchStart: (e: React.TouchEvent) => latestDnd.current.onSwipeStart(e),
+      onTouchEnd: (e: React.TouchEvent) => latestDnd.current.onSwipeEnd(e),
+      titleOf: (id: string) => latestDnd.current.dragTitleOf(id),
+      placeOf: (id: string) => latestDnd.current.dragPlaceOf(id),
+    }),
+    [],
+  );
+  // Avisos del lector de pantalla al arrastrar: título de la tarjeta y nombre de la columna (no el id).
+  const dragAccessibility = useMemo(
+    // boardDragA11y solo guarda las funciones: leen latestDnd al anunciar (en los eventos del arrastre), nunca al dibujar.
+    // eslint-disable-next-line react-hooks/refs
+    () => boardDragA11y(t, dndHandlers.titleOf, dndHandlers.placeOf),
+    [t, dndHandlers],
+  );
+  const cardCounts = useStableValue(useMemo(
+    () => Object.fromEntries(sortedColumns.map((c) => [c.id, columnCardCount(c.id)])) as Record<string, number>,
+    // columnCardCount solo lee baseItems y evergreenByColumn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sortedColumns, baseItems, evergreenByColumn],
+  ));
+  const dndBoard = useMemo(
+    () => (
+      <DndContext
+        sensors={sensors}
+        collisionDetection={boardCollisionDetection}
+        measuring={MEASURING}
+        accessibility={dragAccessibility}
+        onDragStart={dndHandlers.onDragStart}
+        onDragOver={dndHandlers.onDragOver}
+        onDragEnd={dndHandlers.onDragEnd}
+        onDragCancel={dndHandlers.onDragCancel}
+      >
+        <div
+          className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-3 max-md:no-scrollbar pt-2 pb-2 md:px-4 md:pb-4"
+          onTouchStart={dndHandlers.onTouchStart}
+          onTouchEnd={dndHandlers.onTouchEnd}
+        >
+          {sortedColumns.map((column, i) => (
+            <ColumnView
+              key={column.id}
+              column={column}
+              taskIds={items[column.id] ?? NO_IDS}
+              evergreenIds={shownEvergreen[column.id] ?? NO_IDS}
+              cardCount={cardCounts[column.id] ?? 0}
+              index={i}
+              total={sortedColumns.length}
+              droppableId={COLUMN_PREFIX + column.id}
+              mobileHidden={column.id !== activeMobileColumn}
+            />
+          ))}
+          <NewColumnButton variant="desktop" />
+        </div>
+        {/* Sin animación de soltado con Ctrl/Alt (la copia aparece donde se suelta) ni al cambiar de columna (la tarjeta ya está en destino). */}
+        <DragOverlay dropAnimation={duplicating || skipDropAnimation ? null : DROP_ANIMATION}>
+          {activeTask ? (
+            <div className={cn("relative", duplicating && "cursor-copy")}>
+              <TaskCard task={activeTask} overlay />
+              {duplicating && (
+                <span data-duplicate-hint className="pointer-events-none absolute -top-2.5 -right-2 rounded-full bg-brand-600 px-2 py-0.5 text-xs font-semibold text-on-brand shadow-md">
+                  + {t("Duplicar")}
+                </span>
+              )}
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+    ),
+    [sensors, dragAccessibility, dndHandlers, sortedColumns, items, shownEvergreen, cardCounts, activeMobileColumn, duplicating, skipDropAnimation, activeTask, t],
+  );
   const headerRowRef = useRef<HTMLDivElement>(null);
   const headerNameRef = useRef<HTMLHeadingElement>(null);
   const headerFit = useHeaderFit(headerRowRef, headerNameRef);
@@ -1360,126 +1456,79 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         </div>
         </div>
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={boardCollisionDetection}
-          measuring={MEASURING}
-          accessibility={dragAccessibility}
-          onDragStart={onDragStart}
-          onDragOver={onDragOver}
-          onDragEnd={onDragEnd}
-          onDragCancel={cancelDrag}
-        >
-          {/* Móvil: buscador y filtros siempre a mano (fijos a la izquierda) y pestañas de columnas (con scroll lateral). */}
-          <div className="flex items-center gap-1 border-b border-slate-200 bg-white py-2 pl-3 md:hidden dark:border-slate-800 dark:bg-slate-900">
-            <button
-              type="button"
-              className={cn("btn-icon relative h-8 w-8 shrink-0", query.trim() && "text-brand-600")}
-              onClick={() => setMobileSearch((o) => !o)}
-              aria-label={t("Buscar")}
-              aria-expanded={mobileSearch || filtering}
-            >
-              <Search size={16} />
-              {query.trim() && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-brand-600" aria-hidden />}
-            </button>
-            <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="shrink-0" />
-            <ViewToggle view={view} onChange={changeView} className="ml-0.5" />
-            {view === "board" && (
-            <div data-mobile-tabs className="no-scrollbar ml-0.5 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pr-3">
-              {sortedColumns.map((c) => (
-                <MobileTab
-                  key={c.id}
-                  active={c.id === activeMobileColumn}
-                  onClick={() => showMobileColumn(c.id)}
-                  over={wipExceeded(columnCardCount(c.id), c.wipLimit)}
-                  title={c.wipLimit != null ? (wipExceeded(columnCardCount(c.id), c.wipLimit) ? t("Límite superado: {n} tarjetas de {limit}", { n: columnCardCount(c.id), limit: c.wipLimit }) : t("Límite de tarjetas: {limit}", { limit: c.wipLimit })) : undefined}
-                >
-                  {c.name} <span className={c.wipLimit == null ? "opacity-70" : "font-semibold"}>{c.wipLimit != null ? `${columnCardCount(c.id)} / ${c.wipLimit}` : (items[c.id]?.length ?? 0)}</span>
-                </MobileTab>
-              ))}
-              <NewColumnButton variant="mobile" onCreated={showMobileColumn} />
-            </div>
-            )}
-          </div>
-          {/* Móvil y tableta: buscador y filtros (en móvil, solo al pulsar el icono de la lupa o con un filtro activo). */}
-          <div className={cn("flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-1.5 lg:hidden dark:border-slate-800 dark:bg-slate-900", !(mobileSearch || filtering) && "max-md:hidden")}>
-            <div className="relative min-w-0 flex-1">
-              <Search size={14} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" aria-hidden />
-              <input
-                ref={mobileSearchRef}
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    setQuery("");
-                    e.currentTarget.blur();
-                  }
-                }}
-                autoFocus={mobileSearch && !filtering}
-                placeholder={t("Filtrar tarjetas")}
-                aria-label={t("Filtrar tarjetas")}
-                className="input h-8 w-full [&::-webkit-search-cancel-button]:hidden pr-3 pl-8 text-sm"
-              />
-            </div>
-            {/* En móvil los filtros ya están en la barra de pestañas. */}
-            <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="max-md:hidden" />
-            <ViewToggle view={view} onChange={changeView} className="max-md:hidden" />
-            <span className="shrink-0 text-xs text-slate-500" aria-live="polite">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : cardCount(t, tasks.length)}</span>
-            {(mobileSearch || filtering) && (
-              <button
-                type="button"
-                className="btn-icon h-8 w-8 shrink-0 md:hidden"
-                onClick={() => {
-                  setQuery("");
-                  changeFilters(EMPTY_FILTERS);
-                  setMobileSearch(false);
-                }}
-                aria-label={t("Quitar el filtro")}
-              >
-                <X size={16} />
-              </button>
-            )}
-          </div>
-          {view === "list" ? (
-            <ListView tasks={tasks} matchingIds={matchingIds} filtering={filtering} />
-          ) : (
-          <div
-            className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-3 max-md:no-scrollbar pt-2 pb-2 md:px-4 md:pb-4"
-            onTouchStart={onSwipeStart}
-            onTouchEnd={onSwipeEnd}
+        {/* Móvil: buscador y filtros siempre a mano (fijos a la izquierda) y pestañas de columnas (con scroll lateral). */}
+        <div className="flex items-center gap-1 border-b border-slate-200 bg-white py-2 pl-3 md:hidden dark:border-slate-800 dark:bg-slate-900">
+          <button
+            type="button"
+            className={cn("btn-icon relative h-8 w-8 shrink-0", query.trim() && "text-brand-600")}
+            onClick={() => setMobileSearch((o) => !o)}
+            aria-label={t("Buscar")}
+            aria-expanded={mobileSearch || filtering}
           >
-            {sortedColumns.map((column, i) => (
-              <ColumnView
-                key={column.id}
-                column={column}
-                taskIds={items[column.id] ?? NO_IDS}
-                evergreenIds={shownEvergreen[column.id] ?? NO_IDS}
-                cardCount={columnCardCount(column.id)}
-                index={i}
-                total={sortedColumns.length}
-                droppableId={COLUMN_PREFIX + column.id}
-                mobileHidden={column.id !== activeMobileColumn}
-              />
+            <Search size={16} />
+            {query.trim() && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-brand-600" aria-hidden />}
+          </button>
+          <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="shrink-0" />
+          <ViewToggle view={view} onChange={changeView} className="ml-0.5" />
+          {view === "board" && (
+          <div data-mobile-tabs className="no-scrollbar ml-0.5 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pr-3">
+            {sortedColumns.map((c) => (
+              <MobileTab
+                key={c.id}
+                active={c.id === activeMobileColumn}
+                onClick={() => showMobileColumn(c.id)}
+                over={wipExceeded(columnCardCount(c.id), c.wipLimit)}
+                title={c.wipLimit != null ? (wipExceeded(columnCardCount(c.id), c.wipLimit) ? t("Límite superado: {n} tarjetas de {limit}", { n: columnCardCount(c.id), limit: c.wipLimit }) : t("Límite de tarjetas: {limit}", { limit: c.wipLimit })) : undefined}
+              >
+                {c.name} <span className={c.wipLimit == null ? "opacity-70" : "font-semibold"}>{c.wipLimit != null ? `${columnCardCount(c.id)} / ${c.wipLimit}` : (items[c.id]?.length ?? 0)}</span>
+              </MobileTab>
             ))}
-            <NewColumnButton variant="desktop" />
+            <NewColumnButton variant="mobile" onCreated={showMobileColumn} />
           </div>
           )}
-          {/* Sin animación de soltado con Ctrl/Alt (la copia aparece donde se suelta) ni al cambiar de columna (la tarjeta ya está en destino). */}
-          <DragOverlay dropAnimation={duplicating || skipDropAnimation ? null : DROP_ANIMATION}>
-            {activeTask ? (
-              <div className={cn("relative", duplicating && "cursor-copy")}>
-                <TaskCard task={activeTask} overlay />
-                {duplicating && (
-                  <span data-duplicate-hint className="pointer-events-none absolute -top-2.5 -right-2 rounded-full bg-brand-600 px-2 py-0.5 text-xs font-semibold text-on-brand shadow-md">
-                    + {t("Duplicar")}
-                  </span>
-                )}
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+        </div>
+        {/* Móvil y tableta: buscador y filtros (en móvil, solo al pulsar el icono de la lupa o con un filtro activo). */}
+        <div className={cn("flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-1.5 lg:hidden dark:border-slate-800 dark:bg-slate-900", !(mobileSearch || filtering) && "max-md:hidden")}>
+          <div className="relative min-w-0 flex-1">
+            <Search size={14} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" aria-hidden />
+            <input
+              ref={mobileSearchRef}
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setQuery("");
+                  e.currentTarget.blur();
+                }
+              }}
+              autoFocus={mobileSearch && !filtering}
+              placeholder={t("Filtrar tarjetas")}
+              aria-label={t("Filtrar tarjetas")}
+              className="input h-8 w-full [&::-webkit-search-cancel-button]:hidden pr-3 pl-8 text-sm"
+            />
+          </div>
+          {/* En móvil los filtros ya están en la barra de pestañas. */}
+          <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="max-md:hidden" />
+          <ViewToggle view={view} onChange={changeView} className="max-md:hidden" />
+          <span className="shrink-0 text-xs text-slate-500" aria-live="polite">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : cardCount(t, tasks.length)}</span>
+          {(mobileSearch || filtering) && (
+            <button
+              type="button"
+              className="btn-icon h-8 w-8 shrink-0 md:hidden"
+              onClick={() => {
+                setQuery("");
+                changeFilters(EMPTY_FILTERS);
+                setMobileSearch(false);
+              }}
+              aria-label={t("Quitar el filtro")}
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+        {view === "list" ? <ListView tasks={tasks} matchingIds={matchingIds} filtering={filtering} /> : dndBoard}
 
         <FloatingCreateButtons onBulk={() => setBulk({ columnId: activeMobileColumn })} onNew={() => setNewTask({ columnId: activeMobileColumn })} />
 

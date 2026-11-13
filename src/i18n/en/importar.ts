@@ -1,8 +1,7 @@
 // Traducciones al inglés (importar desde Trello JSON y CSV). Clave: texto exacto en español.
 export const importar: Record<string, string> = {
   // Panel
-  "Crea un proyecto a partir de un .pizarro.zip de Pizarro, un JSON exportado de Trello o un CSV de tareas (Asana, Notion, GitHub Projects, Wekan, Kanboard…). El formato se reconoce solo; las personas se emparejan por email o nombre y el nombre del proyecto sale del archivo.":
-    "Creates a project from a Pizarro .pizarro.zip, a JSON exported from Trello or a CSV of tasks (Asana, Notion, GitHub Projects, Wekan, Kanboard…). The format is detected automatically; people are matched by email or name and the project name comes from the file.",
+  "Desde un .pizarro.zip de Pizarro, un JSON de Trello o un CSV de tareas.": "From a Pizarro .pizarro.zip, a Trello JSON or a tasks CSV.",
   "Archivo (.zip, .json o .csv)": "File (.zip, .json or .csv)",
   "{n} usuario(s) se han añadido como miembros del proyecto por ser responsables de alguna tarea.": "{n} user(s) were added as project members because they are assignees of some task.",
   "Responsables sin emparejar ({n})": "Unmatched assignees ({n})",

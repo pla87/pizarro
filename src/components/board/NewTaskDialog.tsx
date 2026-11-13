@@ -39,6 +39,8 @@ import { draftKey, useDraftAutosave, type NewTaskDraft } from "./drafts";
 import { actionThrowResult } from "@/lib/stale-action";
 import { loadWhenOnline } from "@/lib/connection";
 import { subtasksDidNotFit } from "./count-texts";
+import { RecurrencePicker } from "./RecurrencePicker";
+import { defaultRecurrenceDay, RECURRENCES, type RecurrenceRule } from "@/lib/recurrence-date";
 
 interface Props {
   initialColumnId?: string;
@@ -114,6 +116,16 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const [columnId, setColumnId] = useState(!foreignInit && d && board.columns.some((c) => c.id === d.columnId) ? d.columnId : foreignInit ? "" : (initialColumnId ?? board.columns[0]?.id ?? ""));
   const [assigneeId, setAssigneeId] = useState(foreignInit ? "" : (d?.assigneeId ?? ""));
   const [dueDate, setDueDate] = useState(d?.dueDate ?? "");
+  // Repetir (como en el detalle). Mientras no se elija a mano, el día de la semana o del mes sigue a la fecha límite.
+  const [recurrence, setRecurrence] = useState<RecurrenceRule>(() => (d?.recurrence && RECURRENCES.includes(d.recurrence) ? d.recurrence : "NONE"));
+  const [recurrenceDay, setRecurrenceDay] = useState<number | null>(() => (typeof d?.recurrenceDay === "number" ? d.recurrenceDay : null));
+  // Del borrador se recupera si se eligió a mano: antes se daba por elegido siempre que hubiera día, y tras reabrir el
+  // diálogo el día ya no seguía a la fecha límite (una tarea con fecha en viernes se repetía, por ejemplo, los jueves).
+  const dayPicked = useRef(recurrenceDay !== null && d?.recurrenceDayPicked === true);
+  const changeDue = (v: string) => {
+    setDueDate(v);
+    if (!dayPicked.current && (recurrence === "WEEKLY" || recurrence === "MONTHLY") && v.slice(0, 4) >= "1900") setRecurrenceDay(defaultRecurrenceDay(recurrence, v, board.today));
+  };
   const [deliverableId, setDeliverableId] = useState(foreignInit ? "" : (d?.deliverableId ?? ""));
   const [description, setDescription] = useState(d?.description ?? initialDescription ?? "");
   const [files, setFiles] = useState<File[]>(() => sortByFileName(initialPlan.accepted, (f) => f.name, locale));
@@ -183,7 +195,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       ? undefined
       : !title.trim() && !description.trim() && !subtasks.length && !subtaskDraft.trim()
         ? null
-        : ({ title, kindId, description, columnId, assigneeId, dueDate, deliverableId, evergreen, subtasks, subtaskDraft, projectId, fields: loading ? fieldsForm : fieldsForDraft(fieldsForm, form.project.taskFields) } satisfies NewTaskDraft),
+        : ({ title, kindId, description, columnId, assigneeId, dueDate, deliverableId, evergreen, subtasks, subtaskDraft, projectId, fields: loading ? fieldsForm : fieldsForDraft(fieldsForm, form.project.taskFields), recurrence, recurrenceDay, recurrenceDayPicked: dayPicked.current } satisfies NewTaskDraft),
   );
   // Si el diálogo ya no está montado (cierre del padre, navegación), una subida tardía no cierra ni descarta nada ajeno.
   const alive = useRef(true);
@@ -326,6 +338,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         projectId, columnId, title: sent.value, kindId, description,
         assigneeId: assigneeId || null, dueDate: dueDate || null, deliverableId: deliverableId || null,
         evergreen: isReleaseColumn && evergreen,
+        recurrence, recurrenceDay,
         subtasks: subtaskTitles,
         ...fieldsForCreate(fieldsForm, form.project.taskFields),
       }),
@@ -499,7 +512,26 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
           </div>
           <div className="min-w-0">
             <label className="label truncate" htmlFor={`${uid}-due`}>{t("Fecha límite (opcional)")}</label>
-            <input id={`${uid}-due`} type="date" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            <input id={`${uid}-due`} type="date" className="input" value={dueDate} onChange={(e) => changeDue(e.target.value)} />
+          </div>
+          <div className="col-span-2 min-w-0">
+            <label className="label" htmlFor={`${uid}-repeat`}>{t("Repetir")}</label>
+            {/* Mismas dos columnas que los campos de arriba: la regla y, si es semanal o mensual, el día. */}
+            <RecurrencePicker
+              id={`${uid}-repeat`}
+              rule={recurrence}
+              day={recurrenceDay}
+              onRule={(r) => {
+                setRecurrence(r);
+                dayPicked.current = false;
+                setRecurrenceDay(defaultRecurrenceDay(r, dueDate || null, board.today));
+              }}
+              onDay={(n) => {
+                dayPicked.current = true;
+                setRecurrenceDay(n);
+              }}
+              className="grid grid-cols-2 gap-x-3"
+            />
           </div>
         </div>
         <TaskFieldsGroup

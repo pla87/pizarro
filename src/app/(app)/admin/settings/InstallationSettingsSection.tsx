@@ -3,6 +3,7 @@
 import { Building2, Loader2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { saveInstallationSettings } from "@/actions/settings";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { Locale } from "@/i18n/shared";
@@ -45,8 +46,10 @@ export function InstallationSettingsSection({ view }: { view: InstallationView }
   return (
     <section id="instalacion" className="card space-y-4 p-5">
       <div>
-        <h2 className="flex items-center gap-1.5 text-base font-semibold"><Building2 size={16} /> {t("Instalación")}</h2>
-        <p className="mt-0.5 text-xs text-slate-500">{t("Lo que se eligió en el asistente de configuración. El idioma por defecto es el de las pantallas sin sesión (acceso, enlaces de los emails) y el de las personas que invites; cada persona elige el suyo en «Mi perfil».")}</p>
+        <h2 className="flex items-center gap-1.5 text-base font-semibold">
+          <Building2 size={16} /> {t("Instalación")}
+          <InfoTip topic={t("Instalación")}>{t("El idioma por defecto es el de las pantallas sin sesión y el de quien invites; cada persona elige el suyo en «Mi perfil». La zona horaria vale para los plazos, avisos e informes de todos.")}</InfoTip>
+        </h2>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="block text-sm">
@@ -68,7 +71,6 @@ export function InstallationSettingsSection({ view }: { view: InstallationView }
           {view.zoneLocked && <span className="mt-1 block text-xs text-slate-500">{t("Fijada por la variable APP_TIMEZONE del servidor.")}</span>}
         </label>
       </div>
-      <p className="text-xs text-slate-500">{t("La zona horaria se usa para los plazos, los avisos y los informes de todos.")}</p>
       <div className="flex flex-wrap items-center gap-2">
         <button className="btn-primary py-1.5" onClick={save} disabled={pending || !dirty || !validName}>
           {pending && <Loader2 size={15} className="animate-spin" />} {t("Guardar")}

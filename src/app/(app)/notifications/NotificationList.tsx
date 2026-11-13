@@ -3,7 +3,7 @@
 import { AtSign, Bell, CalendarClock, Check, CheckCheck, Mail, MessageCircle, MessageSquare, Reply, Send, UserPlus, Hourglass } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { markAllNotificationsRead, markNotificationRead } from "@/actions/notifications";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
@@ -11,6 +11,7 @@ import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 import { notificationBody, notificationHeadline, type NotificationKind } from "@/lib/notification-text";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
+import { useActionTransition } from "@/components/useActionTransition";
 
 interface Item {
   id: string;
@@ -40,7 +41,7 @@ export function NotificationList({ items: initial, moreHref }: { items: Item[]; 
   const t = useT();
   const locale = useIntlLocale();
   const [items, setItems] = useState(initial);
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const unread = items.filter((i) => !i.read).length;
 
   // router.refresh() actualiza el contador de la barra lateral y la insignia de la app.

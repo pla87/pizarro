@@ -74,15 +74,20 @@ function undoReferencedTokens(ops: unknown[]): Set<string> {
 
 /**
  * Borra de UPLOAD_DIR los ficheros (adjuntos, miniaturas, copias de releases) que ninguna fila de la BD
- * referencia y que tienen más de 24 h. No toca backups/, enlaces simbólicos ni nombres desconocidos.
+ * referencia y que tienen más de 24 h. No toca backups/, enlaces simbólicos ni nombres desconocidos. Primero borra los
+ * de las importaciones cortadas por un reinicio (import-journal.ts).
  */
 async function purgeOrphanFiles(): Promise<number> {
-  const [{ db }, { logEvent }, { cleanOrphanFiles }, { uploadDir }] = await Promise.all([
+  const [{ db }, { logEvent }, { cleanOrphanFiles }, { uploadDir }, { recoverImportJournals }] = await Promise.all([
     import("@/lib/db"),
     import("@/lib/log"),
     import("@/lib/orphan-files"),
     import("@/lib/upload-dir"),
+    import("@/lib/project-export/import-journal"),
   ]);
+  // Antes, los ficheros de las importaciones que no terminaron: en una importación grande son más de la mitad de los
+  // ficheros y, sin borrarlos aquí, la limpieza se cancelaría por el tope de seguridad.
+  await recoverImportJournals();
   const [attachments, releaseAttachments, documents] = await Promise.all([
     db.taskAttachment.findMany({ select: { id: true } }),
     db.releaseAttachment.findMany({ select: { id: true } }),

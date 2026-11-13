@@ -139,8 +139,11 @@ export function useCardActions(deps: Deps) {
         const { upsertTask, track, toast, t } = ref.current;
         const res = await track(duplicateTask(id));
         if (!res.ok) return toast(res.error, "error");
-        upsertTask(res.data);
+        const { copyNotice, ...copy } = res.data;
+        upsertTask(copy);
         toast(t("Tarea duplicada"), "undo");
+        // Adjuntos que no cupieron (cuota, tope por tarea) o cuyo archivo faltaba: la copia existe, sin ellos.
+        if (copyNotice) toast(copyNotice, "error");
       },
     };
   }, []);

@@ -9,6 +9,11 @@ import { createProject } from "../../src/actions/projects";
 import { defaultFeedScope } from "../../src/lib/calendar-feed";
 import { buildColumnIcs } from "../../src/lib/column-views";
 import { flushLogs } from "../../src/lib/log";
+import { appTimeZone } from "../../src/lib/board";
+import { dateToIso, isoWeekday, todayIso } from "../../src/lib/dates";
+import { firstOccurrence } from "../../src/lib/recurrence-series";
+import { FEED_MAX_REPEATS } from "../../src/lib/calendar-feed-core";
+import { makeT } from "../../src/i18n/core";
 
 let n = 0;
 /** Pide la suscripción como lo haría un cliente de calendario (sin sesión), desde una IP propia de cada llamada. */
@@ -292,6 +297,37 @@ describe("calendario suscrito", () => {
     assert.ok(blocked);
   });
 
+  test("registro muestreado: una línea por enlace e IP cada 6 h; otra IP, un enlace revocado y el exceso de ritmo sí se anotan", async () => {
+    const user = await makeUser();
+    const { token } = await feedFor(user);
+    const since = new Date();
+    const rows = async (action: string) => {
+      await flushLogs();
+      return db.appLog.findMany({ where: { action, createdAt: { gte: since } }, orderBy: { createdAt: "asc" } });
+    };
+    for (let i = 0; i < 5; i++) assert.equal((await fetchFeed(token, "10.6.6.1")).res.status, 200);
+    let ok = (await rows("calendar.feed")).filter((r) => r.userId === user.id);
+    assert.equal(ok.length, 1, "cinco consultas seguidas desde la misma IP: una sola línea");
+    // Desde otra dirección (p. ej. el enlace usado en otro sitio): se anota enseguida.
+    assert.equal((await fetchFeed(token, "10.6.6.2")).res.status, 200);
+    ok = (await rows("calendar.feed")).filter((r) => r.userId === user.id);
+    assert.deepEqual(ok.map((r) => r.ip), ["10.6.6.1", "10.6.6.2"]);
+    assert.ok(!JSON.stringify(ok).includes(token), "el token nunca va al registro");
+    // Enlace regenerado que el calendario sigue pidiendo: se anota (una vez por IP y periodo), sin el token.
+    const fresh = await feedFor(user);
+    for (let i = 0; i < 3; i++) assert.equal((await fetchFeed(token, "10.6.6.3")).res.status, 404);
+    const rejected = (await rows("calendar.feedRejected")).filter((r) => r.ip === "10.6.6.3");
+    assert.equal(rejected.length, 1);
+    assert.ok(!JSON.stringify(rejected).includes(token));
+    // Exceso de ritmo: aviso (uno por hora y enlace e IP, aunque sigan llegando).
+    let status = 200;
+    for (let i = 0; i < 35; i++) status = (await fetchFeed(fresh.token, "10.6.6.4")).res.status;
+    assert.equal(status, 429);
+    const limited = (await rows("calendar.feedRateLimited")).filter((r) => r.ip === "10.6.6.4");
+    assert.equal(limited.length, 1);
+    assert.equal(limited[0]!.level, "warn");
+  });
+
   test("crear sin sesión falla", async () => {
     const { logout } = await import("./helpers");
     logout();
@@ -420,5 +456,122 @@ describe("calendario suscrito", () => {
     assert.deepEqual(rows.map((r) => r.path).sort(), ["/api/calendar/…", "/api/calendar/…", "/api/calendar/…", "/confirm/…", "/p/abc?task=1", "/reset/…"].sort());
     for (const r of rows) assert.ok(!JSON.stringify(r).includes(secret), `filtrado en ${r.path}: ${r.message}`);
     assert.ok(rows.some((r) => r.path === "/p/abc?task=1" && r.message.includes("otro")));
+  });
+});
+
+describe("tareas que se repiten en el calendario suscrito", () => {
+  /** Bloque VEVENT (desplegado) con ese UID, o undefined. */
+  const block = (ics: string, uid: string) => ics.replace(/\r\n /g, "").split("BEGIN:VEVENT").find((b) => b.includes(`UID:${uid}\r\n`));
+  const compact = (iso: string) => iso.replace(/-/g, "");
+
+  test("una serie con RRULE por tarea pendiente con fecha; ni terminadas, ni archivadas, ni sin fecha, ni las que ya dieron la siguiente", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const today = todayIso(appTimeZone());
+    const due = inDays(5);
+    const weekly = await makeTask(f, { title: "Semanal", recurrence: "WEEKLY", dueDate: due });
+    const wd = isoWeekday(dateToIso(due)!);
+    await db.task.update({ where: { id: weekly.id }, data: { recurrenceDay: wd } });
+    const done = await makeTask(f, { title: "Hecha", recurrence: "DAILY", dueDate: inDays(3), columnId: f.columns.done });
+    const archived = await makeTask(f, { title: "Archivada", recurrence: "DAILY", dueDate: inDays(3) });
+    await db.task.update({ where: { id: archived.id }, data: { archivedAt: new Date() } });
+    const undated = await makeTask(f, { title: "Sin fecha", recurrence: "DAILY" });
+    // Vencida hace 200 días (fuera de la ventana del calendario): la tarea no sale, pero su serie sí, desde mañana.
+    const overdue = await makeTask(f, { title: "Vencida", recurrence: "DAILY", dueDate: inDays(-200) });
+    // Una que ya dio su siguiente aparición (aún abierta): la serie sale de la nueva, no de las dos.
+    const old = await makeTask(f, { title: "Anterior", recurrence: "DAILY", dueDate: inDays(1) });
+    const next = await makeTask(f, { title: "Siguiente", recurrence: "DAILY", dueDate: inDays(2) });
+    await db.task.update({ where: { id: next.id }, data: { recurrenceFromId: old.id } });
+    // Mensual el día 30: sin RRULE fiel, un evento por mes.
+    const m30 = await makeTask(f, { title: "Cierre", recurrence: "MONTHLY", dueDate: inDays(4) });
+    await db.task.update({ where: { id: m30.id }, data: { recurrenceDay: 30 } });
+
+    const { token } = await feedFor(user);
+    const { res, text } = await fetchFeed(token);
+    assert.equal(res.status, 200);
+    const serie = block(text, `${weekly.id}-repeat@pizarro`);
+    assert.ok(serie, "serie semanal");
+    const first = firstOccurrence("WEEKLY", wd, dateToIso(due), today)!;
+    assert.ok(serie.includes(`DTSTART;VALUE=DATE:${compact(first)}\r\n`));
+    assert.ok(serie.includes(`RRULE:FREQ=WEEKLY;BYDAY=${["MO", "TU", "WE", "TH", "FR", "SA", "SU"][wd - 1]}\r\n`));
+    assert.ok(serie.includes(`SUMMARY:[${f.project.name}] Semanal\r\n`));
+    assert.ok(serie.includes(`/p/${f.project.id}?task=${weekly.id}`), "abre la tarea original");
+    assert.match(serie, /DESCRIPTION:Repetición prevista \(Cada semana \(.+\)\): se crea al terminar la anterior\./);
+    // La tarea en sí sigue con su propio evento, sin RRULE.
+    assert.ok(!block(text, `${weekly.id}@pizarro`)!.includes("RRULE"));
+
+    for (const id of [done.id, archived.id, undated.id, old.id]) assert.equal(block(text, `${id}-repeat@pizarro`), undefined, id);
+    assert.ok(block(text, `${next.id}-repeat@pizarro`));
+    assert.equal(block(text, `${overdue.id}@pizarro`), undefined);
+    assert.ok(block(text, `${overdue.id}-repeat@pizarro`)!.includes(`DTSTART;VALUE=DATE:${compact(firstOccurrence("DAILY", null, dateToIso(inDays(-200)), today)!)}`));
+
+    const monthly = text.match(new RegExp(`UID:${m30.id}-repeat-\\d{4}-\\d{2}-\\d{2}@pizarro`, "g")) ?? [];
+    assert.ok(monthly.length >= 11 && monthly.length <= 13, `eventos mensuales: ${monthly.length}`);
+    assert.equal(text.split("\r\n").filter((l) => l.startsWith("RRULE:")).length, 3, "semanal, siguiente y vencida");
+  });
+
+  test("«Solo las mías»: solo las series de las tareas asignadas a la persona", async () => {
+    const user = await makeUser();
+    const mate = await makeUser();
+    const f = await makeProject({ members: [user, mate] });
+    const mine = await makeTask(f, { title: "Mía", recurrence: "DAILY", dueDate: inDays(2) });
+    const theirs = await makeTask(f, { title: "Suya", recurrence: "DAILY", dueDate: inDays(2) });
+    await db.task.update({ where: { id: mine.id }, data: { assigneeId: user.id } });
+    await db.task.update({ where: { id: theirs.id }, data: { assigneeId: mate.id } });
+    const { token } = await feedFor(user, "MINE");
+    const { text } = await fetchFeed(token);
+    assert.ok(block(text, `${mine.id}-repeat@pizarro`));
+    assert.equal(block(text, `${theirs.id}-repeat@pizarro`), undefined);
+  });
+
+  test(".ics de la columna Agenda: la serie de cada tarea que se repite (con la nota si se pasa el idioma)", async () => {
+    const f = await makeProject();
+    await db.column.update({ where: { id: f.columns.todo }, data: { role: "AGENDA" } });
+    const t = await makeTask(f, { title: "Riego", recurrence: "MONTHLY", dueDate: inDays(3) });
+    await db.task.update({ where: { id: t.id }, data: { recurrenceDay: 31 } });
+    const col = await buildColumnIcs(f.project.id, f.columns.todo);
+    assert.ok(col);
+    const serie = block(col.ics, `${t.id}-repeat@pizarro`);
+    assert.ok(serie?.includes("RRULE:FREQ=MONTHLY;BYMONTHDAY=-1\r\n"));
+    assert.ok(block(col.ics, `${t.id}@pizarro`));
+    assert.ok(!serie!.includes("Repetición prevista"));
+    const en = await buildColumnIcs(f.project.id, f.columns.todo, { t: makeT("en"), locale: "en" });
+    assert.match(block(en!.ics, `${t.id}-repeat@pizarro`)!, /DESCRIPTION:Upcoming repeat \(Every month \(day 31\)\)/);
+    // En una columna Agenda que cuenta como terminada no hay serie.
+    await db.column.update({ where: { id: f.columns.todo }, data: { isDone: true } });
+    assert.equal(block((await buildColumnIcs(f.project.id, f.columns.todo))!.ics, `${t.id}-repeat@pizarro`), undefined);
+  });
+
+  test(".ics de la columna Agenda: las series no multiplican descripciones largas ni pasan del tope de tareas que se repiten", async () => {
+    const f = await makeProject();
+    await db.column.update({ where: { id: f.columns.todo }, data: { role: "AGENDA" } });
+    // Mensual el día 30 (sin RRULE fiel): un evento por mes, y cada uno repetía la descripción de la tarea (hasta 1.500
+    // caracteres): con 2.000 tareas así, unos 80 MB por petición.
+    const long = Array.from({ length: 400 }, (_, i) => `palabra${i}`).join(" ");
+    const m30 = await makeTask(f, { title: "Cierre", recurrence: "MONTHLY", dueDate: inDays(4) });
+    await db.task.update({ where: { id: m30.id }, data: { recurrenceDay: 30, description: long } });
+    const col = (await buildColumnIcs(f.project.id, f.columns.todo))!;
+    const unfolded = col.ics.replace(/\r\n /g, "");
+    const events = unfolded.split("BEGIN:VEVENT").filter((b) => new RegExp(`UID:${m30.id}-repeat-\\d{4}-\\d{2}-\\d{2}@pizarro`).test(b));
+    assert.ok(events.length >= 11, `eventos mensuales: ${events.length}`);
+    // La tarea conserva su descripción (hasta 1.500 caracteres); las apariciones previstas, un extracto (como la suscripción).
+    assert.ok(block(unfolded, `${m30.id}@pizarro`)!.includes("palabra100 "), "descripción larga en la tarea");
+    for (const e of events) {
+      const desc = /DESCRIPTION:(.*)/.exec(e)?.[1] ?? "";
+      assert.ok(desc.startsWith("palabra0 ") && desc.length <= 320, `descripción de la aparición: ${desc.length}`);
+    }
+
+    // Muchas tareas que se repiten: solo las primeras FEED_MAX_REPEATS llevan serie (como la suscripción).
+    const many = FEED_MAX_REPEATS + 20;
+    await db.task.createMany({
+      data: Array.from({ length: many }, (_, i) => ({
+        projectId: f.project.id, columnId: f.columns.todo, kindId: f.kindId, title: `Diaria ${i}`, position: 10_000 + i, recurrence: "DAILY" as const, dueDate: inDays(10),
+      })),
+    });
+    const big = (await buildColumnIcs(f.project.id, f.columns.todo))!;
+    const series = big.ics.split("\r\n").filter((l) => /^UID:.+-repeat(-\d{4}-\d{2}-\d{2})?@pizarro$/.test(l));
+    const sources = new Set(series.map((l) => l.replace(/-repeat.*$/, "")));
+    assert.equal(sources.size, FEED_MAX_REPEATS);
+    assert.equal(big.count, many + 1);
   });
 });

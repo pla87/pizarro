@@ -2,12 +2,13 @@
 
 import { ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { beginEnrollment, confirmEnrollment, disableTwoFactor, regenerateRecoveryCodes } from "@/actions/two-factor";
 import { RecoveryCodes, TwoFactorEnroll } from "@/components/auth/TwoFactorEnroll";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
+import { useActionTransition } from "@/components/useActionTransition";
 
 interface Props {
   method: "TOTP" | "EMAIL" | null;
@@ -23,7 +24,7 @@ export function TwoFactorSection({ method, admin, emailAvailable, codesLeft }: P
   const t = useT();
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [mode, setMode] = useState<Mode | null>(null);
   const [password, setPassword] = useState("");
   const [codes, setCodes] = useState<string[] | null>(null);

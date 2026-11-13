@@ -2,8 +2,7 @@
 export const campos: Record<string, string> = {
   // Ajustes del proyecto y plantillas
   "Campos opcionales de las tareas": "Optional task fields",
-  "Activa solo los datos que necesita este proyecto. Al desactivar un campo se oculta, pero los datos de las tareas se conservan.": "Turn on only the data this project needs. Turning a field off hides it, but the task data is kept.",
-  "Los proyectos creados con esta plantilla tendrán activados estos campos.": "Projects created from this template will have these fields turned on.",
+  "Desactivar un campo lo oculta; los datos se conservan.": "Turning a field off hides it; the data is kept.",
   "Hay una columna de presupuesto: el coste siempre se activa.": "There is a budget column: cost is always turned on.",
   "No se puede desactivar mientras el proyecto tenga una columna de presupuesto.": "It cannot be turned off while the project has a budget column.",
   "El coste no se puede desactivar mientras el proyecto tenga una columna de presupuesto.": "Cost cannot be turned off while the project has a budget column.",

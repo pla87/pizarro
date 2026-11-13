@@ -3,15 +3,17 @@
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { KeyRound, Link2, Link2Off, MailPlus, Pencil, ShieldOff, Trash2, TriangleAlert, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { createUser, deleteUser, forcePasswordChange, resendInvite, resetUserTwoFactor, unlinkGoogle, updateUser, allowGoogleRelink } from "@/actions/users";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { copyText } from "@/components/ui/clipboard";
 import { useT } from "@/i18n/client";
+import { useActionTransition } from "@/components/useActionTransition";
 
 type Role = "ADMIN" | "MEMBER";
 type UserLocale = "ES" | "EN";
@@ -82,15 +84,18 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery, 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div>
           <h2 className="text-lg font-semibold">{t("Usuarios")}</h2>
-          <p className="text-sm text-slate-500">{t("{n} de {max} usuarios activos. No hay registro público: solo un administrador puede dar de alta usuarios.", { n: activeCount, max: maxUsers })}</p>
+          <p className="flex items-center gap-1 text-sm text-slate-500">
+            {t("{n} de {max} usuarios activos", { n: activeCount, max: maxUsers })}
+            <InfoTip topic={t("Usuarios")}>{t("No hay registro público: solo un administrador da de alta usuarios.")}</InfoTip>
+          </p>
         </div>
-        <button className="btn-primary ml-auto" onClick={() => setCreating(true)} disabled={activeCount >= maxUsers}>
+        <button className="btn-primary ml-auto" onClick={() => setCreating(true)} disabled={activeCount >= maxUsers} title={activeCount >= maxUsers ? t("Ya hay {max} usuarios activos, el máximo", { max: maxUsers }) : undefined}>
           <UserPlus size={16} /> {t("Nuevo usuario")}
         </button>
       </div>
       {noRecovery && (
         <p role="note" className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
-          {t("No hay email ni inicio de sesión con Google configurados: quien olvide su contraseña no puede recuperarla por su cuenta y tendrá que pedirte que le fuerces el cambio de contraseña.")}
+          {t("Sin email ni acceso con Google: quien olvide su contraseña tendrá que pedirte que le fuerces el cambio.")}
         </p>
       )}
       <ul className="card divide-y divide-slate-200 dark:divide-slate-800">
@@ -150,7 +155,7 @@ function UserForm({ user, isMe, emailAvailable, defaultLocale = "ES", onClose }:
   const t = useT();
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [name, setName] = useState(user?.name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [role, setRole] = useState<Role>(user?.role ?? "MEMBER");
@@ -182,7 +187,7 @@ function UserForm({ user, isMe, emailAvailable, defaultLocale = "ES", onClose }:
         </div>
         {!user && emailAvailable && (
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
-            {t("Recibirá un email con un enlace (válido 72 horas) para elegir su propia contraseña. Tú no la llegas a conocer.")}
+            {t("Recibirá un enlace por email (válido 72 horas) para elegir su contraseña.")}
           </p>
         )}
         {!user && !emailAvailable && (
@@ -190,7 +195,7 @@ function UserForm({ user, isMe, emailAvailable, defaultLocale = "ES", onClose }:
             <label className="label" htmlFor="u-pass">{t("Contraseña inicial (mín. 10)")}</label>
             <PasswordInput id="u-pass" className="input" value={password} onChange={(e) => setPassword(e.target.value)} minLength={10} required autoComplete="new-password" />
             <p className="mt-1 text-xs text-slate-500">
-              {t("El envío de emails no está configurado: dale esta clave por otro medio. Al entrar tendrá que elegir una contraseña nueva, así que tú no llegarás a conocer la definitiva.")}
+              {t("Sin email configurado: dásela por otro medio. Al entrar tendrá que cambiarla.")}
             </p>
           </div>
         )}
@@ -233,7 +238,7 @@ function ForcePasswordChange({ user, emailAvailable, onClose }: { user: UserRow;
   const t = useT();
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [link, setLink] = useState<string | null>(null);
   const run = (copyLink: boolean) =>
     start(async () => {
@@ -248,7 +253,7 @@ function ForcePasswordChange({ user, emailAvailable, onClose }: { user: UserRow;
     return (
       <Modal open onClose={onClose} title={t("Enlace para {name}", { name: user.name })} size="sm">
         <div className="space-y-3 text-sm">
-          <p>{t("Su contraseña anterior ya no vale y sus sesiones están cerradas. Con este enlace elegirá una contraseña nueva.")}</p>
+          <p>{t("Con este enlace elegirá una contraseña nueva.")}</p>
           <input className="input font-mono text-xs" value={link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={t("Enlace de restablecimiento")} data-testid="reset-link" />
           <p className="text-amber-700 dark:text-amber-300">{t("Envíaselo por un canal de confianza; caduca en 30 minutos y sirve una sola vez. No volverá a mostrarse.")}</p>
           <div className="flex justify-end gap-2">
@@ -268,13 +273,16 @@ function ForcePasswordChange({ user, emailAvailable, onClose }: { user: UserRow;
           run(false);
         }}
       >
-        <p>{t("Su contraseña actual dejará de valer en el acto (tampoco para quien la conociera), se cerrarán todas sus sesiones y se anularán los enlaces que tuviera pendientes. Tú no escribes ninguna contraseña.")}</p>
+        <p>
+          {t("Su contraseña dejará de valer al momento y se cerrarán sus sesiones.")}{" "}
+          <InfoTip topic={t("Forzar cambio de contraseña")}>{t("También se anulan los enlaces que tuviera pendientes. Tú no escribes ninguna contraseña.")}</InfoTip>
+        </p>
         <p className="text-slate-500">
           {emailAvailable
-            ? t("Le enviaremos un enlace por email (válido 30 minutos) para elegir una nueva; hasta entonces no podrá entrar con contraseña.")
-            : t("El envío de emails no está configurado: se generará un enlace de un solo uso (válido 30 minutos) para que se lo pases tú por un canal de confianza; hasta usarlo no podrá entrar con contraseña.")}
+            ? t("Le llegará un enlace por email (válido 30 minutos) para elegir otra.")
+            : t("Sin email configurado: tendrás un enlace de un solo uso (válido 30 minutos) para pasárselo tú.")}
         </p>
-        {user.googleLinked && <p className="text-slate-500">{t("Tiene Google enlazado: podrá seguir entrando con Google, pero antes de continuar tendrá que elegir una contraseña nueva.")}</p>}
+        {user.googleLinked && <p className="text-slate-500">{t("Podrá seguir entrando con Google, pero antes tendrá que elegir contraseña.")}</p>}
         <div className="flex flex-wrap justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
           {emailAvailable && <button type="button" className="btn-secondary" disabled={pending} onClick={() => run(true)}>{t("Copiar enlace en lugar de enviarlo")}</button>}
@@ -289,7 +297,7 @@ function ResetTwoFactor({ user, onClose }: { user: UserRow; onClose: () => void 
   const t = useT();
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   return (
     <Modal open onClose={onClose} title={t("Restablecer la verificación en dos pasos de {name}", { name: user.name })} size="sm">
       <form
@@ -305,7 +313,7 @@ function ResetTwoFactor({ user, onClose }: { user: UserRow; onClose: () => void 
           });
         }}
       >
-        <p>{t("Se borrarán su método y sus códigos de recuperación. Si es administrador, tendrá que configurar uno nuevo antes de entrar; si es miembro, puede volver a activarlo desde «Mi perfil».")}</p>
+        <p>{t("Se borrarán su método y sus códigos de recuperación.")} {user.role === "ADMIN" ? t("Tendrá que configurar uno nuevo al entrar.") : t("Podrá volver a activarla en «Mi perfil».")}</p>
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
           <button className="btn-primary" disabled={pending}>{t("Restablecer")}</button>
@@ -319,7 +327,7 @@ function DeleteUser({ user, onClose }: { user: UserRow; onClose: () => void }) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [confirmed, setConfirmed] = useState(false);
   const count = user.privateProjects;
   return (
@@ -337,7 +345,10 @@ function DeleteUser({ user, onClose }: { user: UserRow; onClose: () => void }) {
           });
         }}
       >
-        <p>{t("Se borrará su cuenta para siempre. En los proyectos compartidos sus tareas y comentarios se conservan, sin autor, y deja de ser miembro de los proyectos privados con más gente. Si solo quieres quitarle el acceso, desactívalo.")}</p>
+        <p>
+          {t("Se borrará su cuenta para siempre; sus tareas y comentarios se quedan, sin autor. Para quitarle solo el acceso, desactívalo.")}{" "}
+          <InfoTip topic={t("Borrar usuario")}>{t("También deja de ser miembro de los proyectos privados que comparte con otras personas.")}</InfoTip>
+        </p>
         {count > 0 && (
           <div className="space-y-2 rounded-lg border border-red-300 bg-red-50 p-3 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
             <p className="flex gap-2 font-medium">

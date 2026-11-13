@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Flag, Loader2, Undo2, X } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Flag, Loader2, Repeat, Undo2, X } from "lucide-react";
 import Link, { useLinkStatus } from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -14,11 +14,15 @@ import { deliverableStatus, type DeliverableStatus } from "@/lib/report";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { isTypingTarget } from "@/components/board/shortcuts";
 import { cn } from "@/components/ui/cn";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { Popover } from "@/components/ui/Popover";
 import { CalendarSubscribe } from "./CalendarSubscribe";
 import { useToast } from "@/components/ui/Toast";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
 import { initialsOf } from "@/lib/graphemes";
+import type { RecurrenceRule } from "@/lib/recurrence-date";
+import { recurrenceLabel } from "@/components/board/recurrence-ui";
+import { actionThrowResult } from "@/lib/stale-action";
 
 export interface CalendarTask {
   id: string;
@@ -32,6 +36,22 @@ export interface CalendarTask {
   kind: { name: string; color: string };
   /** Está en una columna de terminadas. */
   done: boolean;
+}
+
+/** Aparición futura prevista de una tarea que se repite (aún no existe: nace al terminar la anterior). */
+export interface CalendarRepeat {
+  /** `${taskId}:${due}` (única en el mes). */
+  key: string;
+  /** Tarea de la que sale (la que se abre al pulsarla). */
+  taskId: string;
+  title: string;
+  /** Día previsto (YYYY-MM-DD). */
+  due: string;
+  projectId: string;
+  projectName: string;
+  kind: { name: string; color: string };
+  recurrence: RecurrenceRule;
+  recurrenceDay: number | null;
 }
 
 export interface CalendarDeliverable {
@@ -99,6 +119,8 @@ interface Props {
   today: string;
   weeks: CalendarDay[][];
   tasks: CalendarTask[];
+  /** Apariciones futuras previstas de las tareas que se repiten (solo días posteriores a hoy). */
+  repeats: CalendarRepeat[];
   deliverables: CalendarDeliverable[];
   projects: { id: string; name: string }[];
   people: { id: string; name: string }[];
@@ -153,7 +175,7 @@ function LinkSpinner() {
   return pending ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null;
 }
 
-export function CalendarView({ month, today, weeks, tasks, deliverables, projects, people, meId, filters, truncated, feed }: Props) {
+export function CalendarView({ month, today, weeks, tasks, repeats, deliverables, projects, people, meId, filters, truncated, feed }: Props) {
   const t = useT();
   const locale = useIntlLocale();
   const router = useRouter();
@@ -230,6 +252,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
     [deliverables, today, filters.hideDone, delOverrides, preview],
   );
   const delById = useMemo(() => new Map(dels.map((d) => [d.id, d])), [dels]);
+  const repeatsByDay = useMemo(() => groupByDay(repeats, (r) => r.due), [repeats]);
   const delByDay = useMemo(() => groupByDay(dels, (d) => d.due), [dels]);
 
   const href = useCallback(
@@ -290,7 +313,9 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
       const from = overrides[task.id] ?? { start: task.start, due: task.due };
       if (from.due === next.due && from.start === next.start) return;
       setOverrides((o) => ({ ...o, [task.id]: next }));
-      const res = await updateTask(task.id, { ...(next.start !== from.start ? { startDate: next.start } : {}), dueDate: next.due });
+      // Sin red la acción lanza: vuelve a las fechas anteriores con «Sin conexión: no se ha guardado» (antes el chip se
+      // quedaba en el día nuevo sin haberse guardado y sin ningún aviso).
+      const res = await updateTask(task.id, { ...(next.start !== from.start ? { startDate: next.start } : {}), dueDate: next.due }).catch((e) => actionThrowResult(e, t));
       if (!res.ok) {
         // Vuelve a las fechas anteriores.
         setOverrides((o) => ({ ...o, [task.id]: from }));
@@ -317,7 +342,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
       const from = delOverrides[d.id] ?? d.due;
       if (from === to) return;
       setDelOverrides((o) => ({ ...o, [d.id]: to }));
-      const res = await moveDeliverable(d.id, to);
+      const res = await moveDeliverable(d.id, to).catch((e) => actionThrowResult(e, t));
       if (!res.ok) {
         setDelOverrides((o) => ({ ...o, [d.id]: from }));
         toast(res.error, "error");
@@ -335,7 +360,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
     setUndoing(true);
     try {
       if (last.kind === "deliverable") {
-        const res = await moveDeliverable(last.id, last.from);
+        const res = await moveDeliverable(last.id, last.from).catch((e) => actionThrowResult(e, t));
         if (!res.ok) return toast(res.error, "error");
         setDelOverrides((o) => ({ ...o, [last.id]: last.from }));
         setLast(null);
@@ -343,7 +368,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
         safeRefresh();
         return;
       }
-      const res = await undoLast(last.projectId, last.taskId);
+      const res = await undoLast(last.projectId, last.taskId).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
       setOverrides((o) => ({ ...o, [last.taskId]: last.from }));
       setLast(null);
@@ -524,12 +549,37 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
     </Link>
   );
 
+  // Aparición prevista: sin fondo, con borde discontinuo y el icono de repetir; no se arrastra y abre la tarea de la que sale.
+  const repeatChip = (r: CalendarRepeat, size: "sm" | "md" = "sm") => {
+    const rule = recurrenceLabel(r, t, locale) ?? "";
+    return (
+      <Link
+        key={r.key}
+        href={`/p/${r.projectId}?task=${r.taskId}`}
+        data-repeat={r.taskId}
+        data-repeat-day={r.due}
+        draggable={false}
+        title={`${r.title} · ${t("Repetición prevista")} (${rule})${showProject ? ` · ${r.projectName}` : ""}`}
+        style={kindBadgeStyle(r.kind.color)}
+        className={cn(
+          "kind-badge flex w-full min-w-0 items-center gap-1 rounded border border-dashed bg-transparent! text-left opacity-75 shadow-none! outline-offset-1 [border-color:var(--kind)] hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-3 focus-visible:outline-focus",
+          size === "sm" ? "px-1.5 py-px text-xs leading-5" : "px-2 py-1 text-sm",
+        )}
+      >
+        <Repeat size={size === "sm" ? 11 : 13} className="shrink-0" aria-hidden />
+        {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" aria-label={r.projectName}>{initials(r.projectName)}</span>}
+        <span className="min-w-0 flex-1 truncate">{r.title}</span>
+        <span className="sr-only">{` (${t("Repetición prevista")}: ${rule})`}</span>
+      </Link>
+    );
+  };
+
   const total = items.length;
-  const empty = total === 0 && dels.length === 0;
+  const empty = total === 0 && dels.length === 0 && repeats.length === 0;
   // Móvil: una tarea con rango que termina después del mes se muestra en su día de inicio (o el 1 si empezó antes).
   const monthEnd = `${month}-31`; // cota de cadena: mayor que cualquier día del mes y menor que el 1 del siguiente
   const mobileByDay = groupByDay(items, (x) => (isRange(x.start, x.due) && x.due > monthEnd ? (x.start! < `${month}-01` ? `${month}-01` : x.start!) : x.due));
-  const mobileWeeks = groupWeeks(weeks, (iso) => mobileByDay.has(iso) || delByDay.has(iso));
+  const mobileWeeks = groupWeeks(weeks, (iso) => mobileByDay.has(iso) || delByDay.has(iso) || repeatsByDay.has(iso));
   const mobileEmpty = !empty && mobileWeeks.length === 0;
   const shortDay = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString(locale, { day: "numeric", month: "short", timeZone: "UTC" });
   const weekLabel = (start: string, end: string) => {
@@ -773,8 +823,10 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
                 <div className="grid grid-cols-7">
                   {week.map((day, i) => {
                     const list = chipsByDay.get(day.iso) ?? [];
-                    const shown = list.length > MAX_CHIPS ? list.slice(0, MAX_CHIPS - 1) : list;
-                    const hidden = list.length - shown.length;
+                    // Primero las tareas del día y detrás las apariciones previstas; todas cuentan para «+N más».
+                    const entries = [...list.map((x) => () => chip(x)), ...(repeatsByDay.get(day.iso) ?? []).map((r) => () => repeatChip(r))];
+                    const shown = entries.length > MAX_CHIPS ? entries.slice(0, MAX_CHIPS - 1) : entries;
+                    const hidden = entries.length - shown.length;
                     const isToday = day.iso === today;
                     return (
                       <div
@@ -809,7 +861,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
                           <span className={cn("inline-flex min-w-5 items-center justify-center rounded-full px-1 tabular-nums", isToday && "bg-brand-600 font-semibold text-on-brand")}>{Number(day.iso.slice(8))}</span>
                         </div>
                         <div className="space-y-0.5">
-                          {shown.map(chip)}
+                          {shown.map((render) => render())}
                           {hidden > 0 && (
                             <button
                               type="button"
@@ -835,7 +887,7 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
                                 <X size={14} aria-hidden />
                               </button>
                             </div>
-                            <div className="max-h-64 space-y-0.5 overflow-y-auto">{list.map(chip)}</div>
+                            <div className="max-h-64 space-y-0.5 overflow-y-auto">{entries.map((render) => render())}</div>
                           </div>
                         )}
                       </div>
@@ -846,7 +898,11 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
             );
           })}
         </div>
-        <p className="mt-2 text-xs text-slate-500">{t("Arrastra una tarea, un rango o un entregable para cambiar sus fechas; en un rango, arrastra también sus bordes (o Alt+←/→ con él enfocado; Alt+Mayús+←/→ cambia su fin).")}</p>
+        <p className="mt-2 flex items-center gap-1 text-xs text-slate-500">
+          {t("Arrastra tareas, rangos y entregables para cambiar sus fechas.")}
+          <InfoTip topic={t("Calendario")}>{t("En un rango, arrastra también sus bordes. Con el teclado: Alt+←/→ lo mueve y Alt+Mayús+←/→ cambia su fin.")}</InfoTip>
+        </p>
+        {repeats.length > 0 && <RepeatLegend className="mt-1" />}
         {preview && (
           <div ref={labelRef} className="pointer-events-none fixed left-0 top-0 z-50 rounded bg-slate-900 px-2 py-1 text-xs text-white shadow-lg dark:bg-slate-100 dark:text-slate-900" role="status">
             {preview.start === preview.due || preview.kind === "del" ? shortDay(preview.due) : `${shortDay(preview.start)} → ${shortDay(preview.due)}`}
@@ -897,13 +953,28 @@ export function CalendarView({ month, today, weeks, tasks, deliverables, project
                         </Link>
                       </li>
                     ))}
+                    {(repeatsByDay.get(iso) ?? []).map((r) => (
+                      <li key={r.key}>{repeatChip(r, "md")}</li>
+                    ))}
                   </ul>
                 </div>
               ))}
             </div>
           </section>
         ))}
+        {repeats.length > 0 && !mobileEmpty && <RepeatLegend />}
       </div>
     </div>
+  );
+}
+
+/** Leyenda de las apariciones previstas (solo si hay alguna a la vista). */
+function RepeatLegend({ className }: { className?: string }) {
+  const t = useT();
+  return (
+    <p className={cn("flex items-center gap-1.5 text-xs text-slate-500", className)}>
+      <Repeat size={12} className="shrink-0" aria-hidden />
+      {t("Repeticiones previstas: se crean al terminar la anterior. Púlsalas para abrir la tarea.")}
+    </p>
   );
 }

@@ -6,7 +6,10 @@ import path from "node:path";
 import { LOCK_BACKUP } from "./advisory-locks";
 import { backupFileName, fileSha256, diagnoseBackupKey, parseBackupKey, verifyBackupFile, type BackupManifest } from "./backup-core";
 import { listForeignKeys, lastMigration } from "./backup-db";
-import { checkShrink, DirDestination, dumpKey, externalDestinations, localFilesEnabled, listObjectKeys, listStems, manifestKey, pruneDestination, readManifest, stemDate, syncBackup, type BackupDestination, type DestinationId } from "./backup-dest";
+import {
+  checkShrink, copySummary, DirDestination, dumpKey, externalDestinations, lastGoodCopy, localFilesEnabled, listObjectKeys, listStems, manifestKey, pruneDestination, readManifest, stemDate,
+  syncBackup, type BackupDestination, type CopyShrink, type CopySummary, type DestinationId, type StemInfo,
+} from "./backup-dest";
 import { buildManifest, decodeManifest, encodeManifest, fileNameKey, hashFiles, loadHashIndex, saveHashIndex, scanFiles, type FullManifest } from "./backup-files";
 import { dumpDatabaseOwnConnection, withDatabase } from "./backup-pg";
 import { checkObjects, findMigrationsDir, restoreDatabaseFromDump } from "./backup-restore";
@@ -82,6 +85,12 @@ export interface BackupStatus {
   lastBackup?: BackupRun;
   lastRestoreTest?: RestoreTestRun;
   external?: Partial<Record<DestinationId, ExternalState>>;
+  /** Cuánto contenido tiene cada copia local (de su manifiesto), por raíz: así no hay que descifrarlos en cada copia. */
+  copies?: Record<string, Omit<CopySummary, "stem">>;
+  /** La copia local más reciente es mucho menor que la última buena (ver lastGoodCopy): se avisa al administrador. */
+  shrink?: CopyShrink & { at: string };
+  /** Copia desde la que el administrador confirmó que la reducción era intencionada (las anteriores ya no cuentan). */
+  shrinkAccepted?: string;
 }
 
 export interface BackupFileInfo {
@@ -174,6 +183,21 @@ export function listBackupsCached(): Promise<BackupFileInfo[]> {
   return memo(BACKUP_LIST_MEMO, listBackups);
 }
 
+/**
+ * Copias completas del destino local solo por sus nombres, sin mirar el tamaño de cada fichero: para saber cuál es la
+ * última o cuántas hay (la tarea horaria, el aviso de copia atrasada) no hace falta un stat por fichero.
+ */
+async function localStemsByName(): Promise<StemInfo[]> {
+  const stems = await listStems(localDestination(), { sizes: false }).catch(() => []);
+  return stems.filter((s) => !s.partial);
+}
+
+/** Fecha (ms) de la copia local completa más reciente, o null si no hay ninguna (sin stat de cada copia). */
+export async function latestBackupTime(): Promise<number | null> {
+  const [latest] = await localStemsByName();
+  return latest ? (stemDate(latest.stem)?.getTime() ?? null) : null;
+}
+
 /** Ruta absoluta de la copia más reciente (para la descarga), o null. */
 export async function latestBackupPath(): Promise<{ file: string; name: string; bytes: number } | null> {
   const [latest] = await listBackups();
@@ -240,7 +264,9 @@ export async function createBackup(): Promise<BackupRun> {
 
 async function createBackupLocked(key: Buffer): Promise<BackupRun> {
   const started = Date.now();
+  const prevStatus = await readStatus();
   let run: BackupRun;
+  let health: CopyHealth | null = null;
   let file: string | null = null;
   let dumpTmp: string | null = null;
   try {
@@ -265,10 +291,27 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
     const sync = await syncBackup(local, manifest, manifestBytes, { size: bytes, open: () => createReadStream(tmpPath), place: () => rename(tmpPath, finalPath) }, { key, uploadRoot: uploadDir() });
     // Resumen en claro junto al fichero (solo cuentas, migración y hashes; sin datos).
     await writeFile(`${file}.json`, JSON.stringify({ ...dbManifest, file: name, bytes, fileSha256: dumpSha }, null, 2));
-    // La copia ya está completa: si la retención falla, se avisa, pero la copia vale.
-    const pruned = await pruneDestination(local, key, { extraKeys: (s) => [`${s}.pzbak.json`] }).catch((err) => {
+    // La copia ya está completa. Antes de la retención, la última copia buena (la de antes de perder los datos, si la
+    // nueva es casi vacía): la retención nunca la borra.
+    // Si no se puede saber cuál es (p. ej. un manifiesto ilegible), esta vez no se aplica la retención.
+    const h = await localCopyHealth(local, key, copySummary(manifest), prevStatus).catch((err) => {
+      logEvent({ level: "warn", category: "system", action: "backup.pruneFailed", message: `No se aplicó la retención de las copias locales (no se pudo comprobar cuál es la última copia buena): ${message(err)}` });
+      return null;
+    });
+    health = h;
+    if (h?.shrink) {
+      const sh = h.shrink;
+      logEvent({
+        level: "warn", category: "system", action: "backup.shrunk",
+        message: `La copia ${sh.stem} tiene ${sh.local} ${shrinkWhat(sh.what)} y la última buena (${sh.goodStem}) tiene ${sh.remote}. ¿Se ha perdido la base de datos o el volumen? La retención conserva ${sh.goodStem}.`,
+        details: { ...sh },
+      });
+    }
+    // Si la retención falla, se avisa, pero la copia vale.
+    const noPrune = { removedBackups: 0, removedObjects: 0, gcSkipped: null, removedTemp: 0 };
+    const pruned = !h ? noPrune : await pruneDestination(local, key, { extraKeys: (s) => [`${s}.pzbak.json`], protect: h.good ? [h.good] : [] }).catch((err) => {
       logEvent({ level: "warn", category: "system", action: "backup.pruneFailed", message: `No se aplicó la retención de las copias locales: ${message(err)}` });
-      return { removedBackups: 0, removedObjects: 0, gcSkipped: null, removedTemp: 0 };
+      return noPrune;
     });
     if (pruned.gcSkipped) logEvent({ level: "warn", category: "system", action: "backup.gcSkipped", message: `No se limpió el almacén de ficheros local: ${pruned.gcSkipped}` });
     run = {
@@ -292,8 +335,68 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
     // Copia nueva (y las viejas podadas): la lista y el aviso de las páginas de administración se vuelven a leer.
     invalidateMemo(BACKUP_MEMO);
   }
-  await updateStatus((s) => ({ ...s, lastBackup: run })).catch((err) => console.error("[backup] no se pudo guardar el estado", err));
+  const at = run.at;
+  const known = health ? await keepExisting(health.copies) : null;
+  await updateStatus((s) => ({
+    ...s,
+    lastBackup: run,
+    // Solo con una copia correcta cambia el estado de la reducción (una copia fallida no dice nada nuevo).
+    ...(health && known ? { copies: known, shrink: health.shrink ? { ...health.shrink, at } : undefined } : {}),
+  })).catch((err) => console.error("[backup] no se pudo guardar el estado", err));
   return run;
+}
+
+interface CopyHealth {
+  good: string | null;
+  shrink: CopyShrink | null;
+  /** Resumen de cada copia local con manifiesto (los que faltaban en status.json, leídos de su manifiesto). */
+  copies: Record<string, Omit<CopySummary, "stem">>;
+}
+
+/**
+ * Última copia buena del destino local y si la nueva (`current`) es mucho menor (ver lastGoodCopy). Los resúmenes salen
+ * de status.json; los de las copias que no están allí (hechas con versiones anteriores) se leen una vez de su manifiesto.
+ * Una copia cuyo manifiesto no se puede leer no cuenta.
+ */
+async function localCopyHealth(local: DirDestination, key: Buffer, current: CopySummary, status: BackupStatus): Promise<CopyHealth> {
+  const copies: Record<string, Omit<CopySummary, "stem">> = {};
+  const summaries: CopySummary[] = [];
+  for (const s of await listStems(local, { sizes: false })) {
+    if (s.partial || !s.hasManifest) continue;
+    let sum: CopySummary | null = s.stem === current.stem ? current : status.copies?.[s.stem] ? { stem: s.stem, ...status.copies[s.stem]! } : null;
+    if (!sum) sum = await readManifest(local, s.stem, key).then(copySummary, () => null);
+    if (!sum) continue;
+    const { stem, ...rest } = sum;
+    copies[stem] = rest;
+    summaries.push(sum);
+  }
+  const { good, shrink } = lastGoodCopy(summaries, status.shrinkAccepted);
+  return { good, shrink, copies };
+}
+
+/** Los resúmenes de las copias que siguen existiendo tras la retención. */
+async function keepExisting(copies: Record<string, Omit<CopySummary, "stem">>): Promise<Record<string, Omit<CopySummary, "stem">>> {
+  const left = new Set((await listStems(localDestination(), { sizes: false }).catch(() => [])).map((s) => s.stem));
+  return Object.fromEntries(Object.entries(copies).filter(([stem]) => left.has(stem)));
+}
+
+const shrinkWhat = (what: CopyShrink["what"]) => (what === "core" ? "personas, proyectos y tareas" : what === "rows" ? "filas en la base de datos" : "ficheros");
+
+/**
+ * El administrador confirma que la reducción de la última copia es intencionada (ha borrado datos a propósito): desde esa
+ * copia se vuelve a empezar, la anterior deja de conservarse siempre y el aviso desaparece. Devuelve la copia aceptada, o
+ * null si no había aviso.
+ */
+export async function acceptBackupShrink(by?: { id: string; name: string }): Promise<string | null> {
+  const shrink = (await readStatus()).shrink;
+  if (!shrink) return null;
+  await updateStatus((s) => ({ ...s, shrink: undefined, shrinkAccepted: shrink.stem }));
+  logEvent({
+    level: "warn", category: "system", action: "backup.shrinkAccepted",
+    message: `Reducción de las copias confirmada como intencionada desde ${shrink.stem}: ${shrink.goodStem} ya no se conserva siempre`,
+    userId: by?.id, userName: by?.name, details: { ...shrink },
+  });
+  return shrink.stem;
 }
 
 /** Última copia local completa (con manifiesto): su manifiesto descifrado y sus bytes cifrados. */
@@ -307,7 +410,7 @@ async function latestLocalManifest(key: Buffer): Promise<{ manifest: FullManifes
 
 /** Mensaje del bloqueo por copia mucho menor que la del destino (ver checkShrink). */
 function shrinkMessage(p: { what: "core" | "rows" | "files"; local: number; remote: number; stem: string }, stem: string): string {
-  const what = p.what === "core" ? "personas, proyectos y tareas" : p.what === "rows" ? "filas en la base de datos" : "ficheros";
+  const what = shrinkWhat(p.what);
   return `No se sube la copia ${stem}: tiene ${p.local} ${what} y la última del destino (${p.stem}) tiene ${p.remote}. ¿Se ha perdido la base de datos o el volumen? Para no sustituir una copia buena por una casi vacía, no se sube ni se aplica la retención. Restaura la copia buena (node dist/restore.mjs con su nombre; --list las muestra) o, si la reducción es intencionada, pulsa «Copiar ahora a destino externo».`;
 }
 
@@ -524,8 +627,7 @@ export async function dailyBackupJob(now: number = Date.now()): Promise<void> {
   if (!backupKey() || backupPaused()) return;
   const status = await readStatus();
   const last = status.lastBackup?.ok ? Date.parse(status.lastBackup.at) : 0;
-  const [latestFile] = await listBackups();
-  const lastFile = latestFile ? Date.parse(latestFile.at) : 0;
+  const lastFile = (await latestBackupTime()) ?? 0;
   const failedSince = status.lastBackup?.ok === false && Date.parse(status.lastBackup.at) >= lastFile;
   if (!failedSince && now - Math.max(last, lastFile) < BACKUP_EVERY_MS) return;
   await createBackup();
@@ -541,7 +643,7 @@ export async function externalBackupJob(): Promise<void> {
 
 /** Tarea mensual (se llama cada hora): prueba de restauración si hace más de 30 días de la última (o nunca). */
 export async function monthlyRestoreTestJob(now: number = Date.now()): Promise<void> {
-  if (!backupKey() || backupPaused() || (await listBackups()).length === 0) return;
+  if (!backupKey() || backupPaused() || (await latestBackupTime()) === null) return;
   const status = await readStatus();
   const last = status.lastRestoreTest ? Date.parse(status.lastRestoreTest.at) : 0;
   // Si la última prueba falló se repite al día siguiente en vez de esperar un mes.

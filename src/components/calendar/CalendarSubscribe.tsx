@@ -1,12 +1,13 @@
 "use client";
 
 import { CalendarPlus, Check, Copy, ExternalLink, Loader2, RefreshCw, Trash2 } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { createCalendarFeed, disableCalendarFeed, setCalendarFeedScope } from "@/actions/calendar-feed";
 import { useT } from "@/i18n/client";
 import { cn } from "@/components/ui/cn";
 import { Popover } from "@/components/ui/Popover";
 import { useToast } from "@/components/ui/Toast";
+import { useActionTransition } from "@/components/useActionTransition";
 
 type Scope = "MINE" | "ALL";
 interface Links {
@@ -28,7 +29,7 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
   const [scope, setScope] = useState<Scope>(initialScope);
   const [links, setLinks] = useState<Links | null>(null);
   const [copied, setCopied] = useState(false);
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
 
   const generate = (next: Scope = scope) =>
     start(async () => {
@@ -86,7 +87,7 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
       )}
     >
       <div className="space-y-3 text-sm">
-        <p className="text-slate-600 dark:text-slate-300">{t("Añade tus fechas límite y entregables a Google Calendar, Apple Calendar u Outlook. El calendario se actualiza solo.")}</p>
+        <p className="text-slate-600 dark:text-slate-300">{t("Tus fechas límite y entregables en Google Calendar, Apple Calendar u Outlook, siempre al día.")}</p>
 
         <fieldset>
           <legend className="mb-1 font-medium">{t("Qué incluye")}</legend>
@@ -95,17 +96,17 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
             <input type="radio" name="feed-scope" checked={scope === "MINE"} onChange={() => changeScope("MINE")} aria-describedby="feed-scope-mine" className="mt-1 accent-brand-600" />
             <span>
               {t("Solo las tareas asignadas a mí")}
-              <span id="feed-scope-mine" className="block text-xs text-slate-500">{t("Las tareas de las que eres responsable y los entregables en los que tienes alguna. Las tareas sin responsable no salen.")}</span>
+              <span id="feed-scope-mine" className="block text-xs text-slate-500">{t("Las tuyas y los entregables donde tienes alguna. Las que no tienen responsable no salen.")}</span>
             </span>
           </label>
           <label className="flex cursor-pointer items-start gap-2 py-0.5">
             <input type="radio" name="feed-scope" checked={scope === "ALL"} onChange={() => changeScope("ALL")} aria-describedby="feed-scope-all" className="mt-1 accent-brand-600" />
             <span>
               {t("Todas las de mis proyectos")}
-              <span id="feed-scope-all" className="block text-xs text-slate-500">{t("Todas las tareas y entregables de los proyectos en los que trabajas, tengan responsable o no.")}</span>
+              <span id="feed-scope-all" className="block text-xs text-slate-500">{t("Tareas y entregables, con o sin responsable.")}</span>
             </span>
           </label>
-          <p className="mt-1 text-xs text-slate-500">{t("En los dos casos, solo las tareas con fecha límite que no están terminadas.")}</p>
+          <p className="mt-1 text-xs text-slate-500">{t("Solo tareas con fecha límite y sin terminar.")}</p>
         </fieldset>
 
         {links ? (
@@ -131,7 +132,7 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
             </div>
           </div>
         ) : active ? (
-          <p className="rounded-lg bg-slate-50 px-3 py-2 text-slate-600 dark:bg-slate-800 dark:text-slate-300">{t("Ya tienes una suscripción activa. Por seguridad el enlace no se vuelve a mostrar: genera uno nuevo para verlo (el anterior dejará de funcionar).")}</p>
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-slate-600 dark:bg-slate-800 dark:text-slate-300">{t("Ya tienes una suscripción activa. El enlace no se vuelve a mostrar; si lo necesitas, regenéralo.")}</p>
         ) : null}
 
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
