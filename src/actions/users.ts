@@ -15,7 +15,7 @@ import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { logMailError } from "@/lib/mask-email";
 import { hashPassword, passwordSchema } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
-import { eraseUser, soloPrivateProjectIds } from "@/lib/user-delete";
+import { eraseUser } from "@/lib/user-delete";
 import { ADMINS_LOCK_NAME } from "@/lib/advisory-locks";
 import { requireAdmin } from "@/lib/session";
 import { clearTwoFactor } from "@/lib/two-factor";
@@ -285,29 +285,24 @@ export async function allowGoogleRelink(userId: string) {
 }
 
 /**
- * Borra un usuario. De sus proyectos privados solo se borran (con tareas, releases y adjuntos) aquellos
- * en los que es el único miembro: si tiene alguno hay que confirmarlo expresamente. En los privados
- * con más miembros simplemente deja de serlo. En los proyectos compartidos sus tareas y
- * comentarios se conservan sin autor. El borrado es el mismo que «Borrar mi cuenta» (eraseUser, user-delete.ts).
+ * Borra un usuario. Sus proyectos privados de los que es el único miembro pasan a ser proyectos de equipo, sin miembros
+ * (los ven los administradores), salvo los que se pidan borrar en `deleteProjects` (con tareas, releases y adjuntos). En
+ * los privados con más miembros simplemente deja de serlo. En los proyectos compartidos sus tareas y comentarios se
+ * conservan sin autor. El borrado es el mismo que «Borrar mi cuenta» (eraseUser, user-delete.ts).
  */
-export async function deleteUser(userId: string, confirmPrivate: boolean) {
-  return runAction({ name: "users.deleteUser", args: [userId, confirmPrivate] }, async () => {
+export async function deleteUser(userId: string, deleteProjects: string[] = []) {
+  return runAction({ name: "users.deleteUser", args: [userId, deleteProjects] }, async () => {
     const admin = await requireAdmin();
     const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, name: true } });
     if (!user) throw notFound();
     if (user.id === admin.id) throw new AppError("No puedes borrarte a ti mismo.");
-    const privates = await soloPrivateProjectIds(user.id);
-    if (privates.length > 0 && confirmPrivate !== true) {
-      const t = await getT();
-      const count = privates.length === 1 ? t("1 proyecto privado") : t("{n} proyectos privados", { n: privates.length });
-      throw new AppError(t("{name} es el único miembro de {count}: confirma que se borren.", { name: user.name, count }));
-    }
-    await eraseUser(user.id, privates, { self: false });
-    describeAction(
-      privates.length
-        ? `Borró el usuario «${user.name}» y ${privates.length === 1 ? "su proyecto privado" : `sus ${privates.length} proyectos privados`}`
-        : `Borró el usuario «${user.name}»`,
-    );
+    const ids = z.array(v.id).max(1000).parse(deleteProjects);
+    const { toTeam, deleted } = await eraseUser(user.id, { self: false, deleteProjects: ids, actor: { id: admin.id, name: admin.name } });
+    // Los nombres de los proyectos privados no van al registro: los administradores no los veían.
+    let message = `Borró el usuario «${user.name}»`;
+    if (deleted.length) message += ` y ${deleted.length === 1 ? "su proyecto privado" : `sus ${deleted.length} proyectos privados`}`;
+    if (toTeam.length) message += `; ${toTeam.length === 1 ? "su proyecto privado pasa" : `sus ${toTeam.length} proyectos privados pasan`} a ser de equipo`;
+    describeAction(message);
     revalidatePath("/", "layout");
   });
 }

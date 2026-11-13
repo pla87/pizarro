@@ -10,7 +10,7 @@ const CONNECT_ERROR_LOG_EVERY_MS = 30_000;
 
 /**
  * Pool de pg que anota en el log, con un mensaje claro, cuándo no consigue una conexión (base caída, nombre mal escrito,
- * tope de conexión agotado). El error sigue su camino: la consulta falla como antes, ahora a los 10 s y no nunca.
+ * tope de conexión agotado). El error sigue su camino: la consulta falla como antes, ahora a los 20 s (por defecto) y no nunca.
  */
 class LoggedPool extends pg.Pool {
   private lastConnectErrorAt = -Infinity;

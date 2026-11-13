@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { runAction } from "@/lib/action";
 import { acceptBackupShrink, backupDestinationsInfo, backupKey, createBackup, startExternalCopy } from "@/lib/backup";
 import { issueBackupDownloadToken } from "@/lib/backup-download";
@@ -44,14 +45,18 @@ export async function copyToExternalNow() {
   });
 }
 
+const shrinkSeenSchema = z.object({ stem: z.string().min(1).max(200), goodStem: z.string().min(1).max(200) });
+
 /**
  * «La reducción es correcta»: la última copia es mucho menor que la buena porque se han borrado datos a propósito. Desde
- * ella se vuelve a empezar (la buena deja de conservarse siempre) y el aviso desaparece.
+ * ella se vuelve a empezar (la buena deja de conservarse siempre) y el aviso desaparece. `seen`: la copia reducida y la
+ * buena del aviso que tiene delante el administrador; si entretanto ha llegado otra copia, no se confirma nada y se le
+ * pide que revise el aviso otra vez.
  */
-export async function acceptBackupReduction() {
-  return runAction({ name: "backups.acceptReduction" }, async () => {
+export async function acceptBackupReduction(seen: { stem: string; goodStem: string }) {
+  return runAction({ name: "backups.acceptReduction", args: [seen] }, async () => {
     const admin = await requireAdmin();
-    const stem = await acceptBackupShrink({ id: admin.id, name: admin.name });
+    const stem = await acceptBackupShrink({ id: admin.id, name: admin.name }, shrinkSeenSchema.parse(seen));
     if (!stem) throw new AppError("No hay ninguna reducción pendiente de confirmar.");
     revalidatePath("/admin/backups");
     return { stem };

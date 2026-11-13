@@ -21,6 +21,7 @@ const exists = (file: string) => stat(file).then(() => true, () => false);
 
 afterEach(() => {
   delete process.env.UPLOAD_QUOTA_MB_PER_PROJECT;
+  delete process.env.DISK_MIN_FREE_MB;
   invalidateQuotaSettings();
 });
 
@@ -136,6 +137,25 @@ describe("duplicar una tarea copia sus adjuntos", () => {
     const copy = expectOk(await duplicateTask(task.id));
     assert.deepEqual((await attachmentsOf(copy.id)).map((a) => a.originalName), ["uno.pdf"]);
     assert.match(copy.copyNotice ?? "", /No se ha copiado un adjunto: «dos\.pdf»\. No caben en el máximo de adjuntos por tarea del proyecto \(3 MB\)\./);
+  });
+
+  test("disco del servidor lleno: la copia se crea sin adjuntos, con un aviso claro y sin ficheros a medias", async () => {
+    const { task } = await setup();
+    await attach(task.id, "informe.pdf", 2000);
+    await attach(task.id, "foto.png", 1000, { image: true });
+    const before = await uploadFiles();
+    // Un margen mínimo mayor que cualquier disco: assertDiskRoom lo da por lleno (como una subida o una exportación).
+    process.env.DISK_MIN_FREE_MB = String(1024 * 1024 * 1024);
+    const copy = expectOk(await duplicateTask(task.id));
+    assert.equal((await attachmentsOf(copy.id)).length, 0);
+    assert.match(copy.copyNotice ?? "", /No se han copiado 2 adjuntos: «informe\.pdf», «foto\.png»\. El disco del servidor está casi lleno: avisa a un administrador\./);
+    assert.doesNotMatch(copy.copyNotice ?? "", /ENOSPC|inténtalo de nuevo/);
+    assert.deepEqual(await uploadFiles(), before, "no se ha escrito ningún fichero");
+    // Con espacio, la misma tarea se duplica con todo.
+    delete process.env.DISK_MIN_FREE_MB;
+    const again = expectOk(await duplicateTask(task.id));
+    assert.equal((await attachmentsOf(again.id)).length, 2);
+    assert.equal(again.copyNotice, undefined);
   });
 
   test("si falta el fichero de un adjunto, se copian los demás y se avisa", async () => {

@@ -327,7 +327,7 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
  * entregable, color, enlace, subtareas (sin marcar), documentos de Google enlazados (el mismo documento, no una copia
  * en Drive) y adjuntos (cada uno con su propio fichero: ver attachment-copy.ts; las imágenes de la descripción pasan a
  * apuntar a esas copias); no copia comentarios, historial ni repetición. Los adjuntos que no caben (tope por tarea,
- * cuotas) o cuyo fichero falta se omiten y la respuesta lleva `copyNotice`, el aviso para quien duplica.
+ * cuotas, disco del servidor) o cuyo fichero falta se omiten y la respuesta lleva `copyNotice`, el aviso para quien duplica.
  * Queda justo detrás de la original en su columna o, con `target` (Ctrl/Alt al soltar una tarjeta arrastrada),
  * en esa columna entre las vecinas indicadas, como moveTask. Se deshace de una vez (borra la copia; los ficheros de sus
  * adjuntos se conservan mientras se pueda rehacer y después se borran, como al borrar una tarea).
@@ -423,6 +423,7 @@ async function copyNoticeText(res: AttachmentCopyResult, projectId: string, isAd
   }
   if (why.has("quota") && res.quota) parts.push(quotaError(t, res.quota, { projectId, isAdmin, locale }).message);
   if (why.has("missing")) parts.push(t("El archivo de la tarea original ya no estaba disponible."));
+  if (why.has("disk")) parts.push(isAdmin ? t("El disco del servidor está casi lleno: libera espacio y vuelve a duplicarla.") : t("El disco del servidor está casi lleno: avisa a un administrador."));
   if (why.has("error")) parts.push(t("No se pudieron guardar en el servidor; inténtalo de nuevo más tarde."));
   return parts.join(" ");
 }

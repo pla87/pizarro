@@ -183,7 +183,7 @@ Guardas que conviene conocer:
   rutas, así que `src/lib/peer-ip.ts` (instalado en `instrumentation.ts`) la escribe en la cabecera interna
   `x-pz-peer-ip` de cada petición, sustituyendo la que mande el cliente. `tests/client-ip.test.ts` falla si otro módulo
   lee esas cabeceras. `npm run test:db` fija `TRUST_PROXY=1` (las pruebas ponen la IP con `X-Real-IP`).
-- Pool de PostgreSQL (`src/lib/db.ts`): tope de 10 s para conseguir una conexión (`DATABASE_CONNECT_TIMEOUT_MS`; antes
+- Pool de PostgreSQL (`src/lib/db.ts`): tope de 20 s para conseguir una conexión (`DATABASE_CONNECT_TIMEOUT_MS`; antes
   esperaba sin límite) y `DATABASE_POOL_SIZE` validado (`src/lib/db-pool.ts`: un valor raro avisa y usa 10). El pool
   (`LoggedPool`, subclase de `pg.Pool` que se pasa a `PrismaPg` con `disposeExternalPool`) anota «[db] No se puede
   conectar con PostgreSQL (servidor, base): motivo» como mucho cada 30 s.

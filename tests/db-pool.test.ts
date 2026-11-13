@@ -5,9 +5,9 @@ import { test } from "node:test";
 import pg from "pg";
 import { dbConnectErrorMessage, dbPoolConfig, dbTarget, DEFAULT_CONNECT_TIMEOUT_MS, DEFAULT_POOL_SIZE } from "../src/lib/db-pool";
 
-test("sin variables: 10 conexiones y 10 s de tope para conectar", () => {
+test("sin variables: 10 conexiones y 20 s de tope para conectar", () => {
   assert.deepEqual(dbPoolConfig({}), { max: DEFAULT_POOL_SIZE, connectionTimeoutMillis: DEFAULT_CONNECT_TIMEOUT_MS, warnings: [] });
-  assert.equal(DEFAULT_CONNECT_TIMEOUT_MS, 10_000);
+  assert.equal(DEFAULT_CONNECT_TIMEOUT_MS, 20_000);
   assert.deepEqual(dbPoolConfig({ DATABASE_POOL_SIZE: " ", DATABASE_CONNECT_TIMEOUT_MS: "" }).warnings, []);
 });
 

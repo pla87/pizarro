@@ -9,9 +9,6 @@ export const baja: Record<string, string> = {
   "No se puede deshacer.": "This can't be undone.",
   "Se cierran tus sesiones y se borran tus datos. Tus tareas y comentarios se quedan como «Usuario eliminado».":
     "Your sessions are closed and your data is deleted. Your tasks and comments stay as “Deleted user”.",
-  "Tu proyecto privado se borra con todo lo que tiene.": "Your private project is deleted with everything in it.",
-  "Tus {n} proyectos privados se borran con todo lo que tienen.": "Your {n} private projects are deleted with everything in them.",
-  "Entendido": "Understood",
   "De tu app o un código de recuperación.": "From your app, or a recovery code.",
   "Del email o un código de recuperación.": "From the email, or a recovery code.",
   "Escribe {word} para confirmar": "Type {word} to confirm",
@@ -20,7 +17,6 @@ export const baja: Record<string, string> = {
   // Servidor
   "Debe quedar al menos un administrador activo.": "There must be at least one active admin.",
   "Tu verificación en dos pasos no usa códigos por email.": "Your two-step verification doesn't use email codes.",
-  "Confirma que se borran tus proyectos privados.": "Confirm that your private projects will be deleted.",
   "Escribe el código de verificación.": "Enter the verification code.",
   // Email
   "Tu cuenta de Pizarro se ha borrado": "Your Pizarro account has been deleted",
