@@ -12,6 +12,9 @@ updates:
       time: "06:00"
       timezone: Europe/Madrid
     open-pull-requests-limit: 2
+    # Solo versiones publicadas hace al menos 7 días (da tiempo a que se detecten versiones rotas o comprometidas).
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "ci"
     groups:
@@ -30,6 +33,9 @@ updates:
       timezone: Europe/Madrid
     open-pull-requests-limit: 2
     versioning-strategy: increase
+    # Igual que en la actualización a mano: solo versiones con al menos 7 días. No afecta a las de seguridad.
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "deps"
       prefix-development: "deps-dev"

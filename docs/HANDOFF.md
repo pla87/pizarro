@@ -240,6 +240,11 @@ llevan enlaces de sesión ni nombres de modelos.
 - **npm**, un PR mensual con todas las versiones menores y parches. Las versiones mayores no se proponen (se hacen a
   mano, leyendo sus notas de cambios). Las de seguridad llegan en cuanto hay aviso, en su propio PR (requiere
   *Settings → Code security → Dependabot security updates* activado).
+- En los dos, `cooldown: default-days: 7`: solo se proponen versiones publicadas hace al menos 7 días (las de
+  seguridad no esperan).
+- **`overrides` en `package.json`**: `minimatch` 11 dentro de `@typescript-eslint/typescript-estree` (herramienta de
+  lint, no va en la app) por el aviso GHSA-g3hv-75wg-m249; quitarlo cuando `typescript-eslint` traiga una versión
+  corregida por sí mismo (`npm ls minimatch` y `npm audit`).
 
 Cómo se revisa cada PR:
 
