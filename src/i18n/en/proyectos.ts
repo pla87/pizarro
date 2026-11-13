@@ -1,7 +1,6 @@
 // Traducciones al inglés (asignación de proyectos: pestaña Proyectos de administración, proyectos de trabajo, visibilidad Equipo/Privado). Clave: texto exacto en español.
 export const proyectos: Record<string, string> = {
-  "Proyectos de equipo y las personas asignadas. Quien no es administrador solo ve los proyectos a los que está asignado; los administradores ven todos y eligen en cuáles trabajan (en su perfil, o aquí pulsando su nombre). Los proyectos privados no aparecen aquí.":
-    "Team projects and the people assigned to them. Non-administrators only see the projects they are assigned to; administrators see all of them and choose which ones they work on (in their profile, or here by clicking their name). Private projects are not listed here.",
+  "Proyectos de equipo y quién está asignado. Los privados no salen aquí.": "Team projects and who is assigned. Private ones are not listed here.",
   "No hay proyectos de equipo.": "There are no team projects.",
   "{n} asignado(s)": "{n} assigned",
   "Quitar a {name}": "Remove {name}",
@@ -17,7 +16,7 @@ export const proyectos: Record<string, string> = {
   "Ver proyectos existentes": "Browse existing projects",
   "Hay {n} proyecto(s) de equipo.": "There are {n} team project(s).",
   "Proyectos existentes": "Existing projects",
-  "Todos los proyectos de equipo a los que tienes acceso. Añade a tus proyectos los que quieras ver en selectores, menús y calendario.": "All the team projects you can access. Add the ones you want to see in selectors, menus and the calendar to your projects.",
+  "Añade a tus proyectos los que quieras ver en selectores, menús y calendario.": "Add to your projects the ones you want in pickers, menus and the calendar.",
   "Añadir a mis proyectos": "Add to my projects",
   "En mis proyectos": "In my projects",
   "Quitar de mis proyectos": "Remove from my projects",
@@ -35,7 +34,7 @@ export const proyectos: Record<string, string> = {
   "Usuarios asignados": "Assigned users",
   "Los administradores ven todos los proyectos de equipo; eligen en su perfil en cuáles trabajan.": "Administrators see all team projects; they choose which ones they work on (in their profile, or here by clicking their name).",
   "Proyectos en los que trabajo": "Projects I work on",
-  "Solo estos proyectos salen en tus selectores y menús. Como administrador puedes abrir cualquier proyecto de equipo desde Administración.": "Only these projects appear in your selectors and menus. As an administrator you can open any team project from Administration.",
+  "Solo estos salen en tus selectores y menús.": "Only these appear in your pickers and menus.",
   "Privado, siempre aparece": "Private, always shown",
   "No hay proyectos.": "There are no projects.",
   "Proyectos actualizados": "Projects updated",

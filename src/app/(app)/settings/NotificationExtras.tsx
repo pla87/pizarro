@@ -20,13 +20,16 @@ export function NotificationExtras({ prefs, emailAvailable, timeZone }: Props) {
   const toast = useToast();
   const [pending, start] = useActionTransition();
   const [form, setForm] = useState(prefs);
+  // Lo guardado: sin cambios, «Guardar avisos» no haría nada y queda desactivado.
+  const [saved, setSaved] = useState(prefs);
+  const dirty = (Object.keys(form) as (keyof typeof form)[]).some((k) => form[k] !== saved[k]);
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }));
 
   return (
     <section className="card p-5">
       <h2 className="flex items-center gap-2 font-semibold"><Bell size={17} /> {t("Otros avisos y resumen diario")}</h2>
       <p className="mt-0.5 text-sm text-slate-500">
-        {t("Las asignaciones, los cambios de fecha de tus tareas y los comentarios de las tareas que sigues siempre te aparecen en la campana de avisos. Además puedes recibirlos por email:")}
+        {t("Asignaciones, cambios de fecha y comentarios de lo que sigues salen siempre en la campana; además, por email:")}
       </p>
       <form
         className="mt-4 space-y-3"
@@ -35,6 +38,7 @@ export function NotificationExtras({ prefs, emailAvailable, timeZone }: Props) {
           start(async () => {
             const res = await updateCollabPrefs(form);
             toast(res.ok ? t("Preferencias guardadas") : res.error, res.ok ? "success" : "error");
+            if (res.ok) setSaved(form);
           });
         }}
       >
@@ -55,7 +59,7 @@ export function NotificationExtras({ prefs, emailAvailable, timeZone }: Props) {
             <input type="checkbox" className="mt-0.5" checked={form.dailyDigest} onChange={(e) => set("dailyDigest", e.target.checked)} />
             <span>
               <span className="flex items-center gap-1.5 font-medium"><CalendarDays size={15} /> {t("Resumen diario por email")}</span>
-              <span className="block text-xs text-slate-500">{t("Lo ocurrido en las últimas 24 horas en tus proyectos y lo que te toca hoy. Si no hay novedades, no se envía.")}</span>
+              <span className="block text-xs text-slate-500">{t("Lo ocurrido en 24 horas en tus proyectos y lo que te toca hoy. Sin novedades, no se envía.")}</span>
             </span>
           </label>
           {form.dailyDigest && (
@@ -71,7 +75,7 @@ export function NotificationExtras({ prefs, emailAvailable, timeZone }: Props) {
         {!emailAvailable && (form.notifyAssignedEmail || form.notifyDueEmail || form.notifyCommentEmail || form.dailyDigest) && (
           <p className="text-xs text-slate-500">{t("El envío de emails aún no está configurado en el servidor.")}</p>
         )}
-        <button className="btn-primary" disabled={pending}>{t("Guardar avisos")}</button>
+        <button className="btn-primary" disabled={pending || !dirty}>{t("Guardar avisos")}</button>
       </form>
     </section>
   );

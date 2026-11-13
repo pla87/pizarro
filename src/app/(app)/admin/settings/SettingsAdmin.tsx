@@ -3,6 +3,7 @@
 import { Download, Loader2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { saveMaxCommentsPerTask } from "@/actions/settings";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { MailSettingsView } from "@/lib/mail-config";
@@ -64,14 +65,14 @@ export function SettingsAdmin({ maxComments, mail, google, storage, messaging, i
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-500">{t("Parámetros generales de la aplicación.")}</p>
       <InstallationSettingsSection view={installation} />
       <section className="card space-y-3 p-5">
         <div>
-          <label htmlFor="max-comments" className="text-sm font-semibold">{t("Máximo de comentarios por tarea")}</label>
-          <p className="mt-0.5 text-xs text-slate-500">
-            {t("Una tarea que llega al máximo no admite más comentarios. Entre {min} y {max}; por defecto 500. Los comentarios borrados que conservan respuestas no cuentan. Si lo bajas por debajo de lo que ya tiene una tarea, no se borra nada: solo deja de admitir más.", { min: MIN, max: MAX })}
-          </p>
+          <div className="flex items-center gap-1">
+            <label htmlFor="max-comments" className="text-sm font-semibold">{t("Máximo de comentarios por tarea")}</label>
+            <InfoTip topic={t("Máximo de comentarios por tarea")}>{t("Una tarea que llega al máximo no admite más. No cuentan los comentarios borrados que conservan respuestas, y bajarlo no borra nada.")}</InfoTip>
+          </div>
+          <p className="mt-0.5 text-xs text-slate-500">{t("Entre {min} y {max}; por defecto 500.", { min: MIN, max: MAX })}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -100,20 +101,19 @@ export function SettingsAdmin({ maxComments, mail, google, storage, messaging, i
       <MessagingSettingsSection view={messaging} />
       <section className="card space-y-3 p-5">
         <div>
-          <h2 className="text-sm font-semibold">{t("Diagnóstico para soporte")}</h2>
-          <p className="mt-0.5 text-xs text-slate-500">
-            {t("Un fichero JSON con el estado técnico de la instalación (versión, base de datos, migraciones, disco, tareas, copias, errores de las últimas 24 h por tipo y qué variables están definidas) para enviarlo a quien te ayude. No lleva datos personales, mensajes de los logs ni el valor de ninguna variable o clave.")}
-          </p>
+          <h2 className="flex items-center gap-1 text-sm font-semibold">
+            {t("Diagnóstico para soporte")}
+            <InfoTip topic={t("Diagnóstico para soporte")}>{t("Un JSON con versión, base de datos, migraciones, disco, tareas, copias, errores de las últimas 24 h por tipo y qué variables están definidas. No lleva mensajes de los logs ni el valor de ninguna variable.")}</InfoTip>
+          </h2>
+          <p className="mt-0.5 text-xs text-slate-500">{t("El estado técnico de la instalación, para quien te ayude. Sin datos personales ni claves.")}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button className="btn-secondary w-fit py-1.5" onClick={downloadDoctor} disabled={doctorBusy}>
             {doctorBusy ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} {t("Descargar diagnóstico")}
           </button>
           <TechInfoButton />
+          <InfoTip topic={t("Copiar información técnica")}>{t("Copia unas líneas (versión, commit, Node, base de datos, funciones activas y nombres de las variables, nunca sus valores) para pegarlas al informar de un error.")}</InfoTip>
         </div>
-        <p className="text-xs text-slate-500">
-          {t("«Copiar información técnica» copia unas líneas (versión, commit, Node, base de datos, funciones activas y nombres de las variables definidas, nunca sus valores) para pegarlas al informar de un error.")}
-        </p>
       </section>
     </div>
   );

@@ -16,5 +16,5 @@ export const soporte: Record<string, string> = {
   // Copiar información técnica
   "Copiar información técnica": "Copy technical information",
   "Información técnica copiada. Revísala antes de pegarla en una incidencia.": "Technical information copied. Review it before pasting it into an issue.",
-  "«Copiar información técnica» copia unas líneas (versión, commit, Node, base de datos, funciones activas y nombres de las variables definidas, nunca sus valores) para pegarlas al informar de un error.": "“Copy technical information” copies a few lines (version, commit, Node, database, enabled features and the names of the variables that are set, never their values) to paste when reporting a bug.",
+  "Copia unas líneas (versión, commit, Node, base de datos, funciones activas y nombres de las variables, nunca sus valores) para pegarlas al informar de un error.": "Copies a few lines (version, commit, Node, database, enabled features and variable names, never their values) to paste when reporting a bug.",
 };

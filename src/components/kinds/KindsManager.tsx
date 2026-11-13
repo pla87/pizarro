@@ -8,6 +8,7 @@ import { cn } from "@/components/ui/cn";
 import { ColorPicker } from "@/components/ui/ColorPicker";
 import { DescriptionField } from "@/components/ui/DescriptionField";
 import { DescriptionTools, descriptionTooLong } from "@/components/ui/DescriptionTools";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
@@ -165,7 +166,10 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
               <TypeBadge kind={{ name: form.name || t("Nombre"), color: form.color }} />
             </div>
             <div className="space-y-3 border-t border-slate-200 pt-3 dark:border-slate-800">
-              <h3 className="text-sm font-semibold">{t("Automatización (opcional)")}</h3>
+              <h3 className="flex items-center gap-1 text-sm font-semibold">
+                {t("Automatización (opcional)")}
+                <InfoTip topic={t("Automatización (opcional)")}>{t("Al elegir este tipo en una tarea se rellenan solos el título y el comienzo de la descripción.")}</InfoTip>
+              </h3>
               <div>
                 <label className="label" htmlFor="kind-title-tpl">{t("Título automático")}</label>
                 <input id="kind-title-tpl" className="input" value={form.titleTemplate} onChange={(e) => setForm({ ...form, titleTemplate: e.target.value })} maxLength={200} />
@@ -187,10 +191,9 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
                   placeholder={t("Una por línea")}
                 />
                 <p className="mt-1 text-xs text-slate-500">
-                  {t("Se añaden al elegir este tipo al crear una tarea (máx. {n}, sin repetir las que ya estén).", { n: MAX_KIND_SUBTASKS })}
+                  {t("Se añaden al crear una tarea de este tipo (máx. {n}).", { n: MAX_KIND_SUBTASKS })}
                 </p>
               </div>
-              <p className="text-xs text-slate-500">{t("Al elegir este tipo en una tarea se rellenan solos el título y el comienzo de la descripción.")}</p>
             </div>
           </form>
         </Modal>

@@ -9,14 +9,14 @@ export const ics: Record<string, string> = {
   "No se pudo copiar el enlace": "Could not copy the link",
   "Suscribirse": "Subscribe",
   "Suscribirse al calendario": "Subscribe to the calendar",
-  "Añade tus fechas límite y entregables a Google Calendar, Apple Calendar u Outlook. El calendario se actualiza solo.": "Add your due dates and deliverables to Google Calendar, Apple Calendar or Outlook. The calendar updates by itself.",
+  "Tus fechas límite y entregables en Google Calendar, Apple Calendar u Outlook, siempre al día.": "Your due dates and deliverables in Google Calendar, Apple Calendar or Outlook, always up to date.",
   "Solo las tareas asignadas a mí": "Only tasks assigned to me",
   "Todas las de mis proyectos": "All tasks in my projects",
   "Enlace privado": "Private link",
   "Cualquiera con este enlace ve tus fechas: no lo compartas. Solo se muestra ahora; si lo pierdes, genera uno nuevo.": "Anyone with this link can see your dates: do not share it. It is only shown now; if you lose it, generate a new one.",
   "Abrir en Google Calendar": "Open in Google Calendar",
   "Abrir en Apple Calendar": "Open in Apple Calendar",
-  "Ya tienes una suscripción activa. Por seguridad el enlace no se vuelve a mostrar: genera uno nuevo para verlo (el anterior dejará de funcionar).": "You already have an active subscription. For security the link is not shown again: generate a new one to see it (the old one will stop working).",
+  "Ya tienes una suscripción activa. El enlace no se vuelve a mostrar; si lo necesitas, regenéralo.": "You already have an active subscription. The link isn't shown again; regenerate it if you need it.",
   "Regenerar enlace": "Regenerate link",
   "Generar enlace de suscripción": "Generate subscription link",
   "Desactivar": "Turn off",
@@ -24,7 +24,7 @@ export const ics: Record<string, string> = {
   "Demasiados intentos. Espera un poco.": "Too many attempts. Please wait a moment.",
 
   // Suscripción: qué incluye cada opción
-  "Las tareas de las que eres responsable y los entregables en los que tienes alguna. Las tareas sin responsable no salen.": "Tasks you are the assignee of and deliverables where you have one. Unassigned tasks are left out.",
-  "Todas las tareas y entregables de los proyectos en los que trabajas, tengan responsable o no.": "All tasks and deliverables in the projects you work on, assigned or not.",
-  "En los dos casos, solo las tareas con fecha límite que no están terminadas.": "Either way, only tasks with a due date that are not done.",
+  "Las tuyas y los entregables donde tienes alguna. Las que no tienen responsable no salen.": "Yours, and the deliverables where you have one. Tasks without an assignee are left out.",
+  "Tareas y entregables, con o sin responsable.": "Tasks and deliverables, with or without an assignee.",
+  "Solo tareas con fecha límite y sin terminar.": "Only tasks with a due date that aren't done.",
 };

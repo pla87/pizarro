@@ -4,6 +4,7 @@ import { Check, Copy, Loader2, MessageCircle, Send, Smartphone } from "lucide-re
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { removeTelegramBot, saveTelegramBot, saveWhatsappSettings, setTelegramActive, setWhatsappActive, testTelegram, testWhatsapp } from "@/actions/messaging";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { MessagingAdminView } from "@/lib/messaging";
@@ -21,8 +22,9 @@ export function MessagingSettingsSection({ view }: { view: MessagingAdminView })
     <section id="mensajeria" className="card space-y-5 p-5">
       <div>
         <h2 className="flex items-center gap-1.5 text-base font-semibold"><Smartphone size={16} /> {t("3. Avisos por Telegram y WhatsApp")}</h2>
-        <p className="mt-0.5 text-xs text-slate-500">
-          {t("Los avisos de Pizarro también en el móvil. Tú activas cada canal aquí; luego cada persona lo conecta en Mi perfil → Avisos y elige qué avisos recibe (por defecto, menciones y asignaciones). Telegram es gratis; WhatsApp lo cobra Meta por mensaje.")}
+        <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
+          {t("Los avisos también en el móvil. Telegram es gratis; WhatsApp lo cobra Meta por mensaje.")}
+          <InfoTip topic={t("3. Avisos por Telegram y WhatsApp")}>{t("Tú activas cada canal aquí; luego cada persona lo conecta en Mi perfil → Avisos y elige qué avisos recibe (por defecto, menciones y asignaciones).")}</InfoTip>
         </p>
       </div>
       <TelegramAdmin view={view.telegram} />
@@ -129,7 +131,11 @@ function TelegramAdmin({ view }: { view: MessagingAdminView["telegram"] }) {
       ? t("Telegram avisa a Pizarro al instante en {url}.", { url: view.webhookUrl ?? "" })
       : view.modeReason === "no-app-url"
         ? t("Falta APP_URL en el servidor: Pizarro preguntará a Telegram cada pocos segundos. Los enlaces de los avisos necesitan APP_URL.")
-        : t("APP_URL no es una dirección https pública en un puerto que Telegram admita (443, 80, 88 u 8443), así que Pizarro pregunta a Telegram cada pocos segundos. Funciona igual y no hace falta abrir puertos; con https se usará el webhook solo.");
+        : t("Pizarro pregunta a Telegram cada pocos segundos; funciona igual.");
+  // Por qué no hay webhook: va en una nota «i» (la línea de estado se queda corta).
+  const modeTip = view.mode !== "webhook" && view.modeReason !== "no-app-url"
+    ? t("APP_URL no es una dirección https pública en un puerto que Telegram admita (443, 80, 88 u 8443). No hace falta abrir puertos; con https se usará el webhook solo.")
+    : null;
 
   return (
     <div className="space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800" data-testid="telegram-admin">
@@ -137,6 +143,7 @@ function TelegramAdmin({ view }: { view: MessagingAdminView["telegram"] }) {
       {view.active ? (
         <Status active>
           {t("Activo: bot @{bot}. {n} persona(s) conectada(s).", { bot: view.botUsername, n: view.connected })} {modeText}
+          {modeTip && <>{" "}<InfoTip topic={t("Telegram (gratis)")}>{modeTip}</InfoTip></>}
         </Status>
       ) : (
         <Status active={false}>{view.hasToken ? t("Desactivado: el bot @{bot} está guardado, pero no se envían avisos.", { bot: view.botUsername }) : t("Inactivo: crea un bot y pega aquí su token.")}</Status>
@@ -154,7 +161,10 @@ function TelegramAdmin({ view }: { view: MessagingAdminView["telegram"] }) {
       </details>
 
       <div className="block text-sm sm:max-w-md">
-        <label htmlFor="tg-token" className="font-medium">{t("Token del bot")}</label>
+        <div className="flex items-center gap-1">
+          <label htmlFor="tg-token" className="font-medium">{t("Token del bot")}</label>
+          <InfoTip topic={t("Token del bot")}>{t("El token se guarda cifrado y no se vuelve a mostrar.")}</InfoTip>
+        </div>
         {view.hasToken && !replacing ? (
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <span className="rounded-md bg-slate-100 px-2 py-1 text-xs dark:bg-slate-800">{view.tokenLast4 ? t("configurado (…{last4})", { last4: view.tokenLast4 }) : t("configurado")}</span>
@@ -183,7 +193,6 @@ function TelegramAdmin({ view }: { view: MessagingAdminView["telegram"] }) {
         )}
       </div>
       {error && <ErrorBox>{error}</ErrorBox>}
-      <p className="text-xs text-slate-500">{t("El token se guarda cifrado y no se vuelve a mostrar.")}</p>
     </div>
   );
 }
@@ -289,7 +298,10 @@ function WhatsappAdmin({ view }: { view: MessagingAdminView["whatsapp"] }) {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="block text-sm">
-          <label htmlFor="wa-token" className="font-medium">{t("Token de acceso")}</label>
+          <div className="flex items-center gap-1">
+            <label htmlFor="wa-token" className="font-medium">{t("Token de acceso")}</label>
+            <InfoTip topic={t("Token de acceso")}>{t("El token se guarda cifrado y no se vuelve a mostrar.")}</InfoTip>
+          </div>
           {view.hasSavedToken && !replacing && !clearToken ? (
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <span className="rounded-md bg-slate-100 px-2 py-1 text-xs dark:bg-slate-800">{view.tokenLast4 ? t("configurado (…{last4})", { last4: view.tokenLast4 }) : t("configurado")}</span>
@@ -339,9 +351,11 @@ function WhatsappAdmin({ view }: { view: MessagingAdminView["whatsapp"] }) {
           </label>
         </div>
       </div>
-      <p className="text-xs text-slate-500">{t("La plantilla de verificación lleva el código de 6 cifras con el que cada persona conecta su WhatsApp. Meta exige que sea de categoría Autenticación (no vale aviso_pizarro). Vacío = codigo_pizarro, en el mismo idioma que los avisos.")}</p>
-      <p className="text-xs text-slate-500">{t("«Idioma en inglés de la verificación» se usa con quien tiene Pizarro en inglés (añade esa traducción a la plantilla de verificación en Meta); vacío = el código sale para todos en «Idioma de la verificación».")}</p>
-      <p className="text-xs text-slate-500">{t("Lo que guardas aquí manda; los campos vacíos usan las variables WHATSAPP_* del servidor, si las hay. «Idioma en inglés» se usa con quien tiene Pizarro en inglés (añade esa traducción a la misma plantilla en Meta).")}</p>
+      <p className="flex flex-wrap items-center gap-1 text-xs text-slate-500">
+        {t("Lo que guardas aquí manda; los campos vacíos usan las variables WHATSAPP_* del servidor, si las hay.")}
+        <InfoTip topic={t("Plantilla de verificación")}>{t("Lleva el código de 6 cifras con el que cada persona conecta su WhatsApp; Meta exige la categoría Autenticación (no vale aviso_pizarro). Vacía = codigo_pizarro, en el idioma de los avisos.")}</InfoTip>
+        <InfoTip topic={t("Idioma en inglés")}>{t("Los idiomas en inglés se usan con quien tiene Pizarro en inglés (añade esa traducción a la plantilla en Meta). Vacíos, todos reciben el idioma principal.")}</InfoTip>
+      </p>
 
       <div className="flex flex-wrap items-center gap-2">
         <button className="btn-primary py-1.5" onClick={save} disabled={pending || !dirty}>
@@ -358,11 +372,13 @@ function WhatsappAdmin({ view }: { view: MessagingAdminView["whatsapp"] }) {
           <button className="btn-secondary py-1.5" onClick={test} disabled={pending || dirty || !view.complete || !to.trim()}>
             {pending && <Loader2 size={15} className="animate-spin" />} {t("Probar")}
           </button>
-          <span className="text-xs text-slate-500">{dirty ? t("Guarda los cambios antes de enviar la prueba.") : t("Envía a ese número las dos plantillas: un aviso de prueba y un código de verificación de muestra (son 2 mensajes de pago; con el número de prueba de Meta, solo a los números verificados).")}</span>
+          <span className="flex items-center gap-1 text-xs text-slate-500">
+            {dirty ? t("Guarda los cambios antes de enviar la prueba.") : t("Envía 2 mensajes de pago: un aviso de prueba y un código de muestra.")}
+            {!dirty && <InfoTip topic={t("Probar")}>{t("Con el número de prueba de Meta, solo llegan a los números verificados.")}</InfoTip>}
+          </span>
         </div>
       </div>
       {error && <ErrorBox>{error}</ErrorBox>}
-      <p className="text-xs text-slate-500">{t("El token se guarda cifrado y no se vuelve a mostrar.")}</p>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { requestEmailChange } from "@/actions/profile";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
@@ -19,7 +20,8 @@ export function EmailChangeSection({ email }: { email: string }) {
     <section className="card p-5">
       <h2 className="font-semibold">{t("Cambiar email")}</h2>
       <p className="mt-0.5 text-sm text-slate-500">
-        {t("Tu email actual es {email}. Enviaremos un enlace de confirmación a la dirección nueva (caduca en 30 minutos) y un aviso a la actual; el cambio solo se hace al confirmarlo.", { email })}
+        {t("Tu email actual es {email}. El cambio se hace al confirmar el enlace que enviaremos a la dirección nueva.", { email })}{" "}
+        <InfoTip topic={t("Cambiar email")}>{t("El enlace caduca en 30 minutos. A la dirección actual le llega un aviso del cambio.")}</InfoTip>
       </p>
       <form
         className="mt-4 space-y-3"
@@ -45,7 +47,7 @@ export function EmailChangeSection({ email }: { email: string }) {
             <PasswordInput id="em-pass" className="input" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           </div>
         </div>
-        <button className="btn-primary" disabled={pending}>{t("Enviar confirmación")}</button>
+        <button className="btn-primary" disabled={pending || !newEmail.trim() || !password}>{t("Enviar confirmación")}</button>
       </form>
     </section>
   );

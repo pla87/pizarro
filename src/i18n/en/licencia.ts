@@ -43,7 +43,7 @@ export const licencia: Record<string, string> = {
   "Quitar la declaración": "Remove the declaration",
   "Registrar licencia": "Register licence",
   "Guardar cambios": "Save changes",
-  "Tras comprarla, anota aquí el titular y, si quieres, el número de la factura o del recibo. La fecha se pone sola. Se guarda en esta instalación y queda anotado en el registro de actividad.": "After buying it, enter the holder here and, if you like, the invoice or receipt number. The date is filled in automatically. It is stored in this installation and recorded in the activity log.",
+  "Tras comprarla, anota el titular y, si quieres, la factura o el recibo.": "After buying it, note the holder and, if you like, the invoice or receipt.",
   "Titular (empresa o nombre)": "Holder (company or name)",
   "Nº de factura o recibo (opcional)": "Invoice or receipt number (optional)",
   "Más sobre la licencia en getpizarro.com": "More about the licence at getpizarro.com",

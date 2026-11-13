@@ -4,6 +4,7 @@ import { CloudUpload, Download, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { acceptBackupReduction, copyToExternalNow, createBackupNow, requestBackupDownload } from "@/actions/backups";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { Modal } from "@/components/ui/Modal";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/components/ui/Toast";
@@ -174,8 +175,9 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">{t("Copias de seguridad")}</h2>
-        <p className="text-sm text-slate-500">
-          {t("Cada día se copian la base de datos y los ficheros (adjuntos, miniaturas, documentos), comprimidos y cifrados (AES-256), en la carpeta backups del volumen y, si está configurado, en un destino externo. Los ficheros se guardan una sola vez y cada copia solo añade los nuevos. Se conservan las últimas 14 diarias y 6 mensuales.")}
+        <p className="flex items-center gap-1 text-sm text-slate-500">
+          {t("Cada día, la base de datos y los ficheros, cifrados. Se conservan 14 diarias y 6 mensuales.")}
+          <InfoTip topic={t("Copias de seguridad")}>{t("Comprimidas y cifradas (AES-256) en la carpeta backups del volumen y, si está configurado, en un destino externo. Los ficheros se guardan una sola vez: cada copia solo añade los nuevos.")}</InfoTip>
         </p>
       </div>
 
@@ -243,14 +245,17 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
       <section className="card space-y-2 p-4">
         <h3 className="text-sm font-semibold">{t("Última copia")}</h3>
         {run(status.lastBackup, "backup")}
-        <div className="flex flex-wrap gap-2 pt-1">
+        <div className="flex flex-wrap items-center gap-2 pt-1">
           <button className="btn-primary" onClick={create} disabled={!enabled || pending}>
             {pending ? t("Creando…") : t("Crear copia ahora")}
           </button>
           {files.length > 0 && (
-            <button type="button" className="btn-secondary" onClick={() => setDlOpen(true)}>
-              <Download size={16} /> {t("Descargar")}
-            </button>
+            <>
+              <button type="button" className="btn-secondary" onClick={() => setDlOpen(true)}>
+                <Download size={16} /> {t("Descargar")}
+              </button>
+              <InfoTip topic={t("Descargar")}>{t("Baja solo la base de datos, cifrada: se abre con la BACKUP_KEY. Para restaurar una copia completa se usa node dist/restore.mjs (pasos en docs/INSTALL.md).")}</InfoTip>
+            </>
           )}
         </div>
         <p className="text-xs text-slate-500">
@@ -258,11 +263,13 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
             ? t("Destino local: {dir}, con los ficheros.", { dir: destinations.local.label })
             : t("Destino local: {dir}, solo la base de datos (BACKUP_LOCAL_FILES=0: los ficheros van solo al destino externo).", { dir: destinations.local.label })}
         </p>
-        <p className="text-xs text-slate-500">{t("«Descargar» baja solo la base de datos, cifrada: se abre con la BACKUP_KEY. Para restaurar una copia completa (base de datos y ficheros) se usa node dist/restore.mjs; los pasos están en docs/INSTALL.md.")}</p>
       </section>
 
       <section className="card space-y-2 p-4">
-        <h3 className="text-sm font-semibold">{t("Destino externo")}</h3>
+        <h3 className="flex items-center gap-1 text-sm font-semibold">
+          {t("Destino externo")}
+          <InfoTip topic={t("Destino externo")}>{t("Tras cada copia diaria se sube a cada destino lo que aún no tenga (si se corta, sigue a la hora siguiente). Se avisa si la última subida correcta tiene más de 48 horas.")}</InfoTip>
+        </h3>
         {destinations.errors.map((e) => (
           <p key={e} role="alert" className="break-words text-sm text-red-600 dark:text-red-400">{e}</p>
         ))}
@@ -289,11 +296,13 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
             </button>
           </div>
         )}
-        <p className="text-xs text-slate-500">{t("Tras cada copia diaria se sube a cada destino lo que aún no tenga (si se corta, se reanuda en la siguiente hora). Se avisa si la última subida correcta tiene más de 48 horas.")}</p>
       </section>
 
       <section className="card space-y-2 p-4">
-        <h3 className="text-sm font-semibold">{t("Última prueba de restauración")}</h3>
+        <h3 className="flex items-center gap-1 text-sm font-semibold">
+          {t("Última prueba de restauración")}
+          <InfoTip topic={t("Última prueba de restauración")}>{t("Cada mes se restaura la última copia en una base de datos temporal (o, si no se puede crear, se descifra y se comprueba entera) y se comprueba que cada destino tiene todos sus ficheros.")}</InfoTip>
+        </h3>
         {run(status.lastRestoreTest, "test")}
         {status.lastRestoreTest?.ok && (
           <p className="text-xs text-slate-500">
@@ -305,7 +314,6 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
             {status.lastRestoreTest.objectsChecked !== undefined && ` ${t("Ficheros comprobados en los destinos: {n} (descifrados de muestra: {m}).", { n: status.lastRestoreTest.objectsChecked, m: status.lastRestoreTest.objectsSampled ?? 0 })}`}
           </p>
         )}
-        <p className="text-xs text-slate-500">{t("Cada mes se restaura la última copia en una base de datos temporal (si el usuario de la base de datos no puede crearla, se descifra y se comprueba entera) y se comprueba que cada destino tiene todos sus ficheros.")}</p>
       </section>
 
       {files.length > 0 && (
@@ -323,8 +331,10 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
       )}
 
       <section className="card p-4">
-        <h3 className="text-sm font-semibold">{t("Tareas de mantenimiento")}</h3>
-        <p className="mb-2 text-xs text-slate-500">{t("Se ejecutan cada hora en un solo proceso a la vez. Última ejecución de cada una:")}</p>
+        <h3 className="mb-2 flex items-center gap-1 text-sm font-semibold">
+          {t("Tareas de mantenimiento")}
+          <InfoTip topic={t("Tareas de mantenimiento")}>{t("Se ejecutan cada hora, en un solo proceso a la vez. Aquí sale la última ejecución de cada una.")}</InfoTip>
+        </h3>
         {jobs.length === 0 ? (
           <p className="text-sm text-slate-500">{t("Aún no se ha ejecutado ninguna (la primera pasada es un minuto después de arrancar).")}</p>
         ) : (

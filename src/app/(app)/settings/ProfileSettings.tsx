@@ -9,6 +9,7 @@ import {
   updateAccent, updateEditorMode, updateProfileName, updateReleaseTemplate, updateTheme, updateLocale,
 } from "@/actions/profile";
 import { cn } from "@/components/ui/cn";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { preloadEnglish, useT } from "@/i18n/client";
 import { ReleaseTemplateList } from "@/components/ReleaseTemplateList";
@@ -66,6 +67,8 @@ export function ProfileSettings(props: Props) {
   const toast = useToast();
   const [pending, start] = useActionTransition();
   const [name, setName] = useState(props.name);
+  // Sin cambios, «Guardar» no haría nada: queda desactivado.
+  const [savedName, setSavedName] = useState(props.name);
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [repeat, setRepeat] = useState("");
@@ -90,8 +93,9 @@ export function ProfileSettings(props: Props) {
       {props.tab === "plantillas" && (
         <section className="card p-5">
           <h2 className="font-semibold">{t("Plantillas de release notes")}</h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            {t("Puedes tener varias cabeceras y varios pies. Al generar una release eliges cuáles usar y se insertan en el texto. Admiten Markdown.")}
+          <p className="mt-0.5 flex items-center gap-1 text-sm text-slate-500">
+            {t("Se insertan en el texto al generar una release; admiten Markdown.")}
+            <InfoTip topic={t("Plantillas de release notes")}>{t("Puedes tener varias cabeceras y varios pies; en cada release eliges cuáles usar.")}</InfoTip>
           </p>
           <ReleaseTemplateList editorMode={props.editorMode} actions={USER_TEMPLATE_ACTIONS} kind="HEADER" title={t("Cabeceras")} initial={props.templates.headers} placeholder={t("Ej.: instrucciones de contexto para una IA.\n\n> Resume estos cambios para el equipo de negocio.")} />
           <ReleaseTemplateList editorMode={props.editorMode} actions={USER_TEMPLATE_ACTIONS} kind="FOOTER" title={t("Pies")} initial={props.templates.footers} placeholder={t("Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción")} />
@@ -116,7 +120,10 @@ export function ProfileSettings(props: Props) {
               start(async () => {
                 const res = await updateProfileName(name);
                 toast(res.ok ? t("Perfil actualizado") : res.error, res.ok ? "success" : "error");
-                if (res.ok) router.refresh();
+                if (res.ok) {
+                  setSavedName(name.trim());
+                  router.refresh();
+                }
               });
             }}
           >
@@ -128,7 +135,7 @@ export function ProfileSettings(props: Props) {
               <label className="label" htmlFor="pf-name">{t("Nombre visible")}</label>
               <input id="pf-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required />
             </div>
-            <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
+            <button className="btn-primary" disabled={pending || name.trim() === savedName}>{t("Guardar")}</button>
           </form>
         </section>
 
@@ -170,7 +177,7 @@ export function ProfileSettings(props: Props) {
                 <PasswordInput id="pw-repeat" className="input" autoComplete="new-password" minLength={10} value={repeat} onChange={(e) => setRepeat(e.target.value)} required />
               </div>
             </div>
-            <button className="btn-primary" disabled={pending}>{t("Cambiar contraseña")}</button>
+            <button className="btn-primary" disabled={pending || !current || !next || !repeat}>{t("Cambiar contraseña")}</button>
           </form>
         </section>
 
@@ -270,7 +277,7 @@ function GoogleSection({ google }: { google: Props["google"] }) {
       <h2 className="flex items-center gap-2 font-semibold"><Link2 size={17} /> {t("Google Docs y Sheets")}</h2>
       <p className="mt-0.5 text-sm text-slate-500">
         {t("Conecta tu cuenta para crear documentos y hojas de cálculo desde las tarjetas con")} <code>@docs</code> {t("y")} <code>@sheets</code>.
-        {t("Pizarro solo puede acceder a los archivos que crea él mismo (permiso")} <code>drive.file</code>).
+        {" "}<InfoTip topic={t("Google Docs y Sheets")}>{t("Pizarro solo puede acceder a los archivos que crea él mismo (permiso")} <code>drive.file</code>).</InfoTip>
       </p>
       {google.message && (
         <p className={cn("mt-3 rounded-lg px-3 py-2 text-sm", google.message.ok ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300")}>
@@ -311,10 +318,11 @@ function NotificationSection({ prefs }: { prefs: Props["notifications"] }) {
   const toast = useToast();
   const [pending, start] = useActionTransition();
   const [notifyEmail, setNotifyEmail] = useState(prefs.notifyEmail);
+  const [saved, setSaved] = useState(prefs.notifyEmail);
   return (
     <section className="card p-5">
       <h2 className="flex items-center gap-2 font-semibold"><Bell size={17} /> {t("Avisos de menciones")}</h2>
-      <p className="mt-0.5 text-sm text-slate-500">{t("Cuando alguien te menciona con @ en una tarjeta o comentario, siempre te aparece en la campana de avisos. Además puedes recibirlo por email:")}</p>
+      <p className="mt-0.5 text-sm text-slate-500">{t("Siempre salen en la campana de avisos; además, puedes recibirlas por email:")}</p>
       <form
         className="mt-4 space-y-3"
         onSubmit={(e) => {
@@ -322,6 +330,7 @@ function NotificationSection({ prefs }: { prefs: Props["notifications"] }) {
           start(async () => {
             const res = await updateNotificationPrefs({ notifyEmail });
             toast(res.ok ? t("Preferencias guardadas") : res.error, res.ok ? "success" : "error");
+            if (res.ok) setSaved(notifyEmail);
           });
         }}
       >
@@ -332,7 +341,7 @@ function NotificationSection({ prefs }: { prefs: Props["notifications"] }) {
             {!prefs.emailAvailable && <span className="block text-xs text-slate-500">{t("El envío de emails aún no está configurado en el servidor.")}</span>}
           </span>
         </label>
-        <button className="btn-primary" disabled={pending}>{t("Guardar avisos")}</button>
+        <button className="btn-primary" disabled={pending || notifyEmail === saved}>{t("Guardar avisos")}</button>
       </form>
     </section>
   );
@@ -415,7 +424,7 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
         ))}
       </div>
       <h3 className="mt-6 text-sm font-semibold">{t("Tema de color")}</h3>
-      <p className="mt-0.5 text-sm text-slate-500">{t("Colores de toda la app: fondos, bordes, botones, enlaces y selecciones, en modo claro y oscuro.")}</p>
+      <p className="mt-0.5 text-sm text-slate-500">{t("Colores de toda la app, en modo claro y oscuro.")}</p>
       <div role="radiogroup" aria-label={t("Tema de color")} className="mt-3 flex flex-wrap gap-4">
         {ACCENTS.map(({ value, label, swatch }) => (
           <button

@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { saveLegalIdentity, saveLegalPage } from "@/actions/legal";
 import { Markdown } from "@/components/ui/Markdown";
 import { DescriptionField } from "@/components/ui/DescriptionField";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/components/ui/cn";
 import { useT } from "@/i18n/client";
@@ -39,10 +40,11 @@ export function LegalAdmin({ settings, editorMode }: { settings: LegalSettings; 
   return (
     <div className="space-y-4">
       <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-100" role="note" data-testid="legal-template-note">
-        {t("Los textos por defecto son plantillas orientadas al RGPD (España/UE). Complétalos con los datos de tu organización (proveedores, plazos) y haz que los revise un profesional jurídico antes de darlos por buenos.")}
+        {t("Los textos por defecto son plantillas para el RGPD (España/UE): complétalos con los datos de tu organización y haz que los revise un profesional jurídico.")}
       </p>
-      <p className="text-sm text-slate-500">
-        {t("Los textos de las páginas públicas /privacy y /terms (las que pide Google y enlaza la pantalla de acceso). Si no escribes nada se usa el texto genérico.")}
+      <p className="flex items-center gap-1 text-sm text-slate-500">
+        {t("Las páginas públicas /privacy y /terms. Vacías, se usa el texto genérico.")}
+        <InfoTip topic={t("Textos legales")}>{t("Son las que pide Google y las que enlaza la pantalla de acceso.")}</InfoTip>
       </p>
 
       <section className="card space-y-3 p-5">
@@ -51,12 +53,12 @@ export function LegalAdmin({ settings, editorMode }: { settings: LegalSettings; 
           <label className="block text-sm">
             <span className="font-medium">{t("Nombre del responsable")}</span>
             <input className="input mt-1 w-full" value={responsible} onChange={(e) => setResponsible(e.target.value)} maxLength={LEGAL_RESPONSIBLE_MAX} placeholder={t("Empresa Ejemplo, S.L.")} autoComplete="off" />
-            <span className="mt-1 block text-xs text-slate-500">{t("Empresa o persona que opera esta instalación. Sustituye a {responsable} en los textos.")}</span>
+            <span className="mt-1 block text-xs text-slate-500">{t("Quien opera esta instalación. Sustituye a {responsable}.")}</span>
           </label>
           <label className="block text-sm">
             <span className="font-medium">{t("Email de contacto público (opcional)")}</span>
             <input className="input mt-1 w-full" type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={200} placeholder="privacidad@example.com" autoComplete="off" />
-            <span className="mt-1 block text-xs text-slate-500">{t("Sustituye a {email} en los textos. Es el mismo que aparece en Ajustes → Acceso con Google.")}</span>
+            <span className="mt-1 block text-xs text-slate-500">{t("Sustituye a {email}. Es el de Ajustes → Acceso con Google.")}</span>
           </label>
         </div>
         <p className="text-xs text-slate-500">{t("Sin valor, ambos se muestran como «el administrador de esta instalación».")}</p>
@@ -122,7 +124,7 @@ function LegalEditor({ kind, title, href, settings, editorMode, responsible, ema
       <p className="text-xs text-slate-500">
         {lang === "es"
           ? t("Vacío = se usa el texto genérico en español. Puedes usar {responsable} y {email}.")
-          : t("Opcional. Vacío = si hay texto propio en español se muestra ese; si no, el texto genérico en inglés. Puedes usar {responsable} y {email}.")}
+          : t("Vacío = el texto propio en español o, si no hay, el genérico en inglés. Puedes usar {responsable} y {email}.")}
       </p>
       {preview ? (
         <div className="rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-800" data-testid={`legal-preview-${kind}`}>
@@ -145,7 +147,7 @@ function LegalEditor({ kind, title, href, settings, editorMode, responsible, ema
           {pending && <Loader2 size={15} className="animate-spin" />} {t("Guardar")}
         </button>
         <button className="btn-secondary py-1.5" onClick={() => setPreview((p) => !p)}>{preview ? t("Volver a editar") : t("Vista previa")}</button>
-        <button className="btn-secondary py-1.5" onClick={() => set(lang, defaultLegalMarkdown(kind, lang))} disabled={preview}>{t("Partir del texto por defecto")}</button>
+        <button className="btn-secondary py-1.5" onClick={() => set(lang, defaultLegalMarkdown(kind, lang))} disabled={preview || text[lang] === defaultLegalMarkdown(kind, lang)}>{t("Partir del texto por defecto")}</button>
         <button className="btn-secondary py-1.5" onClick={() => set(lang, "")} disabled={!text[lang]}>{t("Restaurar texto por defecto")}</button>
         <span className="text-xs text-slate-400">{text[lang].length} / {LEGAL_MAX}</span>
       </div>

@@ -11,5 +11,5 @@ export const comentarios: Record<string, string> = {
   "Esta tarea ya tiene el máximo de 1 comentario.": "This task already has the maximum of 1 comment.",
 
   // Borradores de comentarios al cerrar sesión
-  "Los borradores de comentarios se borran siempre al cerrar sesión.": "Comment drafts are always deleted when you sign out.",
+  "Útil en un ordenador compartido. Los borradores de comentarios se borran siempre al cerrar sesión.": "Useful on a shared computer. Comment drafts are always deleted when you sign out.",
 };

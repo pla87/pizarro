@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { removeLicense, saveLicense, setPersonalUseDeclared } from "@/actions/license";
 import { licenseResolved, personalUseConfirm } from "@/components/LicenseNudge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { LICENSE_EMAIL_MAX, LICENSE_HOLDER_MAX, LICENSE_REF_MAX, type LicenseStatus } from "@/lib/license-core";
@@ -82,7 +83,10 @@ export function LicenseAdmin({ status: initial, buyHref }: { status: LicenseStat
   return (
     <div className="space-y-4">
       <section className="card space-y-2 p-5" aria-live="polite" data-testid="license-status" data-status={status.kind}>
-        <h2 className="text-sm font-semibold">{t("Estado")}</h2>
+        <h2 className="flex items-center gap-1 text-sm font-semibold">
+          {t("Estado")}
+          <InfoTip topic={t("Licencia")}>{t("Este registro es solo informativo: Pizarro funciona igual con o sin él, sin comprobaciones ni llamadas a internet.")}</InfoTip>
+        </h2>
         {status.kind === "licensed" && (
           <>
             <p className="text-sm font-medium" data-testid="license-registered">{t("Licencia registrada a nombre de {holder}", { holder: status.license.holder })}</p>
@@ -119,7 +123,6 @@ export function LicenseAdmin({ status: initial, buyHref }: { status: LicenseStat
             <button type="button" className="btn-secondary" onClick={remove} disabled={pending} data-testid="license-remove">{t("Quitar registro")}</button>
           )}
         </div>
-        <p className="text-xs text-slate-500">{t("Este registro es solo informativo: Pizarro funciona igual con o sin él, sin comprobaciones ni llamadas a internet.")}</p>
       </section>
 
       <section className="card space-y-2 p-5">
@@ -151,7 +154,10 @@ export function LicenseAdmin({ status: initial, buyHref }: { status: LicenseStat
 
       <section className="card space-y-3 p-5">
         <h2 className="text-sm font-semibold">{t("Registrar licencia")}</h2>
-        <p className="text-sm text-slate-500">{t("Tras comprarla, anota aquí el titular y, si quieres, el número de la factura o del recibo. La fecha se pone sola. Se guarda en esta instalación y queda anotado en el registro de actividad.")}</p>
+        <p className="flex items-center gap-1 text-sm text-slate-500">
+          {t("Tras comprarla, anota el titular y, si quieres, la factura o el recibo.")}
+          <InfoTip topic={t("Registrar licencia")}>{t("La fecha se pone sola. Se guarda en esta instalación y queda en el registro de actividad.")}</InfoTip>
+        </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm">
             <span className="font-medium">{t("Titular (empresa o nombre)")}</span>

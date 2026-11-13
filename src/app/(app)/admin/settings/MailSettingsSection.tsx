@@ -4,6 +4,7 @@ import { Loader2, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { saveMailSettings, sendMailTest } from "@/actions/mail-settings";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import { detectMailPreset, GMAIL_PRESET, MAIL_PRESETS, type MailMode, type MailSettings } from "@/lib/mail-settings-core";
@@ -106,7 +107,10 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
   const header = (
     <div>
       <h2 className="flex items-center gap-1.5 text-base font-semibold"><Mail size={16} /> {t("1. Avisos por email")}</h2>
-      <p className="mt-0.5 text-xs text-slate-500">{t("Avisos, enlaces de acceso e informes por email. Es independiente de «Acceso con Google» (sección 2).")}</p>
+      <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
+        {t("Avisos, enlaces de acceso e informes.")}
+        <InfoTip topic={t("1. Avisos por email")}>{t("Es independiente de «Acceso con Google» (sección 2).")}</InfoTip>
+      </p>
     </div>
   );
 
@@ -128,7 +132,10 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
 
   const passwordField = (
     <div className="block text-sm">
-      <label htmlFor="mail-pass" className="font-medium">{gmail ? t("Contraseña de aplicación") : t("Contraseña")}</label>
+      <div className="flex items-center gap-1">
+        <label htmlFor="mail-pass" className="font-medium">{gmail ? t("Contraseña de aplicación") : t("Contraseña")}</label>
+        <InfoTip topic={gmail ? t("Contraseña de aplicación") : t("Contraseña")}>{t("La contraseña se guarda cifrada y no se vuelve a mostrar.")}</InfoTip>
+      </div>
       {saved.hasPassword && !replacing && !clearPassword && !targetChanged ? (
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <span className="rounded-md bg-slate-100 px-2 py-1 text-xs dark:bg-slate-800">{t("guardada")}</span>
@@ -158,7 +165,6 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
     <section id="avisos-email" className="card space-y-4 p-5">
       {header}
       {outbox && <p className="text-xs text-amber-600">{t("El buzón de pruebas (MAIL_OUTBOX_DIR) está activo: los emails se guardan en disco en vez de enviarse.")}</p>}
-      <p className="text-xs text-slate-500">{t("La contraseña se guarda cifrada y no se vuelve a mostrar.")}</p>
 
       <div role="radiogroup" aria-label={t("Cómo se envían los emails")} className="grid gap-3 sm:grid-cols-2">
         <ModeCard checked={gmail} onSelect={() => chooseMode("gmail")} title={t("Gmail de un administrador (uso familiar)")}
@@ -170,7 +176,7 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
       {gmail ? (
         <div className="space-y-3">
           <p className="rounded-md bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/50 dark:text-slate-300">
-            {t("Usuario: tu dirección de Gmail. Contraseña: una contraseña de aplicación creada en myaccount.google.com/apppasswords (no vale la normal).")}
+            {t("Necesitas una contraseña de aplicación de Google: no vale la normal.")}
           </p>
           <details className="text-xs text-slate-600 dark:text-slate-300">
             <summary className="cursor-pointer font-medium">{t("Cómo crear la contraseña de aplicación")}</summary>
@@ -270,7 +276,7 @@ function TestRow({ testing, onTest, error, blocked, t }: { testing: boolean; onT
         </button>
         {blocked
           ? <span id="mail-test-blocked" className="text-xs text-amber-700 dark:text-amber-300">{blocked}</span>
-          : <span className="text-xs text-slate-500">{t("Se envía a tu propio email con la configuración guardada.")}</span>}
+          : <span className="text-xs text-slate-500">{t("A tu email, con la configuración guardada.")}</span>}
       </div>
       {error && <p role="alert" className="break-words rounded-md bg-red-50 p-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
     </div>

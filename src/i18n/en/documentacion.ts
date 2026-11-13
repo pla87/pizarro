@@ -10,10 +10,8 @@ export const documentacion: Record<string, string> = {
   "Subiendo {n} archivos a Documentación…": "Uploading {n} files to Documentation…",
   "Abrir Documentación": "Open Documentation",
   "Suelta los archivos para subirlos": "Drop the files to upload them",
-  "Archivos de «{name}» para consultar sin salir de la app: {count} de {max} · máximo {mb} MB por archivo.":
-    "Files of “{name}” to read without leaving the app: {count} of {max} · up to {mb} MB per file.",
-  "Aquí van los archivos de referencia del proyecto: guías y notas en texto o Markdown, PDF de especificaciones o contratos, capturas e imágenes. Arrastra archivos a esta página, pégalos o usa «Subir archivos». Todo el equipo del proyecto los puede ver y descargar.":
-    "This is where the project's reference files go: guides and notes in text or Markdown, PDF specifications or contracts, screenshots and images. Drag files onto this page, paste them or use “Upload files”. Everyone on the project can view and download them.",
+  "Archivos de «{name}»: {count} de {max} · máximo {mb} MB por archivo.": "Files of “{name}”: {count} of {max} · max. {mb} MB per file.",
+  "Guías, notas, PDF e imágenes de referencia, para todo el equipo del proyecto. Arrastra archivos aquí, pégalos o usa «Subir archivos».": "Guides, notes, PDFs and reference images, for the whole project team. Drag files here, paste them or use “Upload files”.",
   "Buscar por nombre…": "Search by name…",
   "Buscar documentos": "Search documents",
   "Ningún documento coincide con «{query}».": "No document matches “{query}”.",
@@ -34,8 +32,7 @@ export const documentacion: Record<string, string> = {
   "Papelera ({n})": "Trash ({n})",
   "Papelera": "Trash",
   "Volver a la documentación": "Back to documentation",
-  "Los documentos borrados se conservan {days} días y después se eliminan para siempre. Mientras tanto siguen contando en el espacio del proyecto.":
-    "Deleted documents are kept for {days} days and then removed for good. Until then they still count towards the project's storage.",
+  "A los {days} días se eliminan para siempre; hasta entonces ocupan espacio del proyecto.": "They are deleted forever after {days} days; until then they use project space.",
   "La papelera está vacía.": "The trash is empty.",
   "Borrado por {name} el {date}": "Deleted by {name} on {date}",
   "se elimina hoy": "removed today",

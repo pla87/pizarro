@@ -3,6 +3,7 @@
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { importSummaryItems } from "@/lib/import-summary";
 import { personLine } from "@/lib/person-line";
@@ -154,7 +155,8 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
   return (
     <form onSubmit={submit} className="space-y-4">
       <p className="text-sm text-slate-600 dark:text-slate-300">
-        {t("Crea un proyecto a partir de un .pizarro.zip de Pizarro, un JSON exportado de Trello o un CSV de tareas (Asana, Notion, GitHub Projects, Wekan, Kanboard…). El formato se reconoce solo; las personas se emparejan por email o nombre y el nombre del proyecto sale del archivo.")}
+        {t("Desde un .pizarro.zip de Pizarro, un JSON de Trello o un CSV de tareas.")}{" "}
+        <InfoTip topic={t("Importar desde un archivo…")}>{t("CSV de Asana, Notion, GitHub Projects, Wekan, Kanboard… El formato se reconoce solo; las personas se emparejan por email o nombre y el nombre del proyecto sale del archivo.")}</InfoTip>
       </p>
       <div>
         <label className="label" htmlFor="import-file">{t("Archivo (.zip, .json o .csv)")}</label>
