@@ -10,6 +10,7 @@
 import { z } from "zod";
 import { COLUMN_ROLES, HEX_COLOR_RE, MAX_DESCRIPTION, MAX_RELEASE_CONTENT, MAX_TEMPLATE, MAX_TITLE_UNITS } from "../constants";
 import { GOOGLE_SHARE_MODES } from "../google-share";
+import { QUOTA_MAX_MB, QUOTA_MIN_MB } from "../quota";
 import { TASK_FIELDS, TASK_PRIORITIES } from "../task-fields";
 
 export const EXPORT_FORMAT = "pizarro-project";
@@ -165,7 +166,13 @@ const taskSchema = z.object({
   followers: z.array(z.object({ user: ref, muted: z.boolean(), createdAt: iso.optional() })).max(LIMITS.users),
   comments: z.array(commentSchema).max(LIMITS.perTask * 5),
   attachments: z.array(attachmentSchema).max(LIMITS.perTask),
-  links: z.array(z.object({ kind: z.enum(["GOOGLE_DOC", "GOOGLE_SHEET"]), title: text(300), url: text(2000), createdBy: person, createdAt: iso })).max(LIMITS.perTask),
+  links: z.array(z.object({
+    kind: z.enum(["GOOGLE_DOC", "GOOGLE_SHEET"]), title: text(300), url: text(2000), createdBy: person, createdAt: iso,
+    /** Id del archivo en Google Drive y resultado de compartirlo al crearlo. Opcionales: los archivos anteriores no los traen. */
+    externalId: text(200).nullable().optional(),
+    shareStatus: z.enum(["SHARED", "PARTIAL", "NOT_SHARED"]).nullable().optional(),
+    shareFailed: z.number().int().min(0).max(LIMITS.users).optional(),
+  })).max(LIMITS.perTask),
 });
 
 const releaseSchema = z.object({
@@ -191,6 +198,11 @@ const documentSchema = z.object({
   file: sha,
 });
 
+/** Documento en la papelera de Documentación: cuándo y quién lo borró (se purga a los DOCUMENT_TRASH_DAYS días de borrarlo). */
+const trashedDocumentSchema = documentSchema.extend({ deletedAt: iso, deletedBy: person });
+/** Como mucho tantos documentos de la papelera (los borrados más recientes). */
+export const TRASH_EXPORT_MAX = 1000;
+
 const eventSchema = z.object({
   taskRef: ref,
   user: person,
@@ -212,6 +224,8 @@ export const projectDataSchema = z.object({
     taskAttachMaxMb: z.number().int().min(1).max(5000),
     fileMaxMb: z.number().int().min(1).max(1000),
     googleShareMode: z.enum(GOOGLE_SHARE_MODES).nullable(),
+    /** Cuota de almacenamiento propia (MB); null = la general. Opcional: los archivos anteriores no la traen. */
+    storageQuotaMb: z.number().int().min(QUOTA_MIN_MB).max(QUOTA_MAX_MB).nullable().optional(),
   }),
   /** Informe semanal: sin destinatario (al importar lo recibe quien importa). */
   reportSchedule: z.object({ enabled: z.boolean(), weekday: z.number().int().min(1).max(7), hour: z.number().int().min(0).max(23) }).nullable(),
@@ -225,12 +239,17 @@ export const projectDataSchema = z.object({
   tasks: z.array(taskSchema).max(LIMITS.tasks),
   releases: z.array(releaseSchema).max(LIMITS.releases),
   documents: z.array(documentSchema).max(1000),
+  /**
+   * Papelera de Documentación (solo con adjuntos). Lista aparte y opcional: los archivos anteriores no la traen, y una
+   * versión anterior de Pizarro que importe uno nuevo la ignora (no resucita los documentos borrados).
+   */
+  documentsTrash: z.array(trashedDocumentSchema).max(TRASH_EXPORT_MAX).optional(),
   events: z.array(eventSchema).max(LIMITS.events),
 });
 
 export type ProjectExportData = z.infer<typeof projectDataSchema>;
 
-export const COUNT_KEYS = ["columns", "kinds", "labels", "deliverables", "tasks", "archivedTasks", "subtasks", "comments", "taskAttachments", "releases", "releaseAttachments", "documents", "events", "files"] as const;
+export const COUNT_KEYS = ["columns", "kinds", "labels", "deliverables", "tasks", "archivedTasks", "subtasks", "comments", "taskAttachments", "releases", "releaseAttachments", "documents", "trashedDocuments", "events", "files"] as const;
 export type ExportCounts = Record<(typeof COUNT_KEYS)[number], number>;
 
 export const manifestSchema = z.object({

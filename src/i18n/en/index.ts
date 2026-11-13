@@ -11,6 +11,7 @@ import { colaboracion } from "./colaboracion";
 import { comentarios } from "./comentarios";
 import { common } from "./common";
 import { conexion } from "./conexion";
+import { datos } from "./datos";
 import { cuentas } from "./cuentas";
 import { detalle } from "./detalle";
 import { documentacion } from "./documentacion";
@@ -39,5 +40,5 @@ export const EN: Record<string, string> = {
   ...common, ...board, ...task, ...detalle, ...comentarios, ...lista, ...pegado, ...wip, ...calendar, ...releases, ...conexion,
   ...accesibilidad, ...settings, ...admin, ...server, ...cuentas, ...acceso, ...colaboracion, ...proyectos, ...plantillas,
   ...setup, ...documentacion, ...campos, ...almacenamiento, ...importar, ...ics, ...mensajeria, ...soporte, ...licencia,
-  ...legal, ...landing, ...web, ...instalar,
+  ...legal, ...landing, ...web, ...instalar, ...datos,
 };

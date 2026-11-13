@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 import { backupStem, decryptChunks, encryptChunks, writeBackupFile, type TableBatch } from "../src/lib/backup-core";
-import { backupShrink, checkShrink, coreRows, DirDestination, listObjectKeys, listStems, pruneDestination, readManifest, S3Destination, syncBackup, type BackupDestination } from "../src/lib/backup-dest";
+import { backupShrink, checkShrink, coreRows, DirDestination, lastGoodCopy, listObjectKeys, listStems, pruneDestination, readManifest, S3Destination, syncBackup, type BackupDestination } from "../src/lib/backup-dest";
 import {
   buildManifest,
   decodeManifest,
@@ -241,6 +241,36 @@ test("copia mucho menor que la del destino: se detecta con mínimos (filas y fic
   const other = await checkShrink(dest, bad.manifest, randomBytes(32));
   assert.equal(other.problem, null);
   assert.match(other.unreadable ?? "", new RegExp(good.manifest.stem));
+});
+
+test("última copia buena: una copia mucho menor que la última buena no la sustituye; aceptar la reducción vuelve a empezar", () => {
+  const c = (day: number, core: number | null, fileCount: number, rows = 100_000) => ({ stem: `pizarro-backup-202611${String(day).padStart(2, "0")}T031500Z`, rows, fileCount, core });
+  assert.deepEqual(lastGoodCopy([]), { good: null, shrink: null });
+  // Crece o se mantiene: la más reciente es la buena.
+  assert.deepEqual(lastGoodCopy([c(1, 100, 30), c(2, 120, 31), c(3, 60, 30)]), { good: c(3, 60, 30).stem, shrink: null });
+  // Se vacía la base de datos: las copias vacías nunca son buenas, aunque haya muchas (desordenadas a propósito).
+  const lost = [c(5, 3, 30), c(1, 100, 30), c(6, 3, 30), c(2, 110, 30), c(4, 3, 30)];
+  assert.deepEqual(lastGoodCopy(lost), { good: c(2, 0, 0).stem, shrink: { what: "core", local: 3, remote: 110, stem: c(6, 0, 0).stem, goodStem: c(2, 0, 0).stem } });
+  // Se pierden los ficheros (la base de datos sigue).
+  assert.deepEqual(lastGoodCopy([c(1, 100, 30), c(2, 100, 0)]).shrink, { what: "files", local: 0, remote: 30, stem: c(2, 0, 0).stem, goodStem: c(1, 0, 0).stem });
+  // Manifiestos sin cuentas por tabla: total de filas.
+  assert.equal(lastGoodCopy([c(1, null, 0, 5000), c(2, null, 0, 40)]).shrink?.what, "rows");
+  // Se recupera (restaurada): vuelve a ser buena y el aviso desaparece.
+  assert.deepEqual(lastGoodCopy([...lost, c(7, 105, 30)]), { good: c(7, 0, 0).stem, shrink: null });
+  // Instalación pequeña: por debajo de los mínimos no se compara.
+  assert.deepEqual(lastGoodCopy([c(1, 40, 10), c(2, 1, 0)]), { good: c(2, 0, 0).stem, shrink: null });
+  // Reducción confirmada desde el día 4: las anteriores no cuentan y la de ese día es la referencia.
+  assert.deepEqual(lastGoodCopy(lost, c(4, 0, 0).stem), { good: c(6, 0, 0).stem, shrink: null });
+});
+
+test("lista de copias solo por nombre: sin el tamaño de cada fichero", async () => {
+  const dir = await tmp();
+  await writeFile(path.join(dir, "pizarro-backup-20261101T031500Z.pzbak"), randomBytes(50));
+  await writeFile(path.join(dir, "pizarro-backup-20261101T031500Z.pzman"), randomBytes(10));
+  await writeFile(path.join(dir, "pizarro-backup-20261102T031500Z.pzbak"), randomBytes(70));
+  const dest = new DirDestination("local", dir, true);
+  assert.deepEqual((await listStems(dest)).map((s) => [s.stem.slice(15, 23), s.dumpBytes, s.partial]), [["20261102", 70, true], ["20261101", 50, false]]);
+  assert.deepEqual((await listStems(dest, { sizes: false })).map((s) => [s.stem.slice(15, 23), s.dumpBytes, s.partial]), [["20261102", 0, true], ["20261101", 0, false]]);
 });
 
 test("retención en carpetas: borra los temporales abandonados de más de 24 h (raíz y files/), no los recientes", async () => {

@@ -2,7 +2,8 @@ import "server-only";
 import { cache } from "react";
 import { sendBackupAlertMail } from "./auth-mail";
 import { backupAlertFor, backupAlertMailDue, type BackupAlert } from "./backup-alert-core";
-import { BACKUP_ALERT_MEMO, backupDestinationsInfo, backupKeyState, listBackups, readStatus } from "./backup";
+import { BACKUP_ALERT_MEMO, backupDestinationsInfo, backupKeyState, latestBackupTime, readStatus } from "./backup";
+import { stemDate } from "./backup-dest";
 import { db } from "./db";
 import { logEvent } from "./log";
 import { memo } from "./memo";
@@ -11,18 +12,23 @@ import { logMailError } from "./mask-email";
 
 const MAIL_STATE_KEY = "backupAlertMailAt";
 
-/** Estado actual del aviso de copia atrasada (lee status.json y la carpeta de copias; barato). */
+/**
+ * Estado actual del aviso de copias (lee status.json y los nombres de la carpeta de copias, sin un stat por copia; barato).
+ */
 export async function computeBackupAlert(now: number = Date.now()): Promise<BackupAlert> {
   const keyOk = backupKeyState() === "ok";
   if (!keyOk) return backupAlertFor({ keyOk, lastOkAt: null, now });
-  const [status, [latest]] = await Promise.all([readStatus(), listBackups()]);
-  const times = [status.lastBackup?.ok ? Date.parse(status.lastBackup.at) : NaN, latest ? Date.parse(latest.at) : NaN].filter(Number.isFinite);
+  const [status, latest] = await Promise.all([readStatus(), latestBackupTime()]);
+  const times = [status.lastBackup?.ok ? Date.parse(status.lastBackup.at) : NaN, latest ?? NaN].filter(Number.isFinite);
   // Destino externo: cuenta el que lleve más tiempo sin una subida correcta (una configuración incompleta cuenta como «nunca»).
   const ext = backupDestinationsInfo();
   const configured = ext.external.length > 0 || ext.errors.length > 0;
   const extTimes = ext.external.map((d) => Date.parse(status.external?.[d.id]?.lastOkAt ?? ""));
   const extLast = !configured || ext.errors.length > 0 || extTimes.some((t) => !Number.isFinite(t)) ? null : Math.min(...extTimes);
-  return backupAlertFor({ keyOk, lastOkAt: times.length > 0 ? Math.max(...times) : null, now, external: { configured, lastOkAt: extLast } });
+  const sh = status.shrink;
+  const day = (stem: string) => stemDate(stem)?.toISOString() ?? null;
+  const shrink = sh ? { what: sh.what, local: sh.local, remote: sh.remote, stem: sh.stem, goodStem: sh.goodStem, at: day(sh.stem), goodAt: day(sh.goodStem) } : null;
+  return backupAlertFor({ keyOk, lastOkAt: times.length > 0 ? Math.max(...times) : null, now, external: { configured, lastOkAt: extLast }, shrink });
 }
 
 /**
@@ -59,7 +65,7 @@ export async function notifyBackupAlertIfDue(now: number = Date.now()): Promise<
   let sent = 0;
   for (const a of admins) {
     try {
-      await sendBackupAlertMail(a, { lastAt: alert.lastAt, external: alert.reason === "externalNone" || alert.reason === "externalStale" });
+      await sendBackupAlertMail(a, { lastAt: alert.lastAt, external: alert.reason === "externalNone" || alert.reason === "externalStale", shrink: alert.shrink });
       sent++;
     } catch (err) {
       logMailError("[backup-alert] email", err);
@@ -67,7 +73,7 @@ export async function notifyBackupAlertIfDue(now: number = Date.now()): Promise<
   }
   logEvent({
     level: "warn", category: "system", action: "backup.alertMailed",
-    message: `Aviso de copia de seguridad atrasada enviado a ${sent} administrador(es)`, details: { sent, admins: admins.length, lastAt: alert.lastAt, reason: alert.reason },
+    message: alert.reason === "shrunk" ? `Aviso de copia de seguridad mucho menor que la anterior enviado a ${sent} administrador(es)` : `Aviso de copia de seguridad atrasada enviado a ${sent} administrador(es)`, details: { sent, admins: admins.length, lastAt: alert.lastAt, reason: alert.reason },
   });
   return sent;
 }

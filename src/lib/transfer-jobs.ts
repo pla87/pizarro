@@ -13,6 +13,7 @@ import { ArchiveError } from "./project-export/errors";
 import { importForeignFile } from "./foreign-import/create";
 import type { ImportFormat } from "./foreign-import/parse";
 import { importProjectFile, type ImportSummary } from "./project-export/import";
+import { recoverImportJournals } from "./project-export/import-journal";
 import { isShuttingDown } from "./shutdown";
 import type { ExportOptions } from "./project-export/types";
 import { writeProjectExport } from "./project-export/write";
@@ -396,7 +397,7 @@ async function runImport(job: JobRow, user: { id: string; name: string; email: s
   reserveDisk(job.id, uploadDir(), importBytes);
   const summary = opts.format === "trello" || opts.format === "csv"
     ? await importForeignFile(opts.tempFile, opts.format, user, { isPrivate: !!opts.isPrivate, t, fileName: opts.name, onProgress: (p) => progress.set(p) })
-    : await importProjectFile(opts.tempFile, user, { isPrivate: !!opts.isPrivate, t, onProgress: (p) => progress.set(p) });
+    : await importProjectFile(opts.tempFile, user, { isPrivate: !!opts.isPrivate, t, onProgress: (p) => progress.set(p), journalName: job.id });
   logEvent({
     category: "api", action: "projects.import",
     message: `Proyecto «${summary.name}» importado desde ${summary.source === "trello" ? "un JSON de Trello" : summary.source === "csv" ? "un CSV" : "un archivo"} (${summary.counts.tasks} tareas, ${Math.round((opts.bytes ?? 0) / 1024)} KB)`,
@@ -545,7 +546,8 @@ export function stopTransferWorkerForTests(): void {
 export function startTransferWorker(): void {
   if (state.started) return;
   state.started = true;
-  const sweep = () => isShuttingDown() ? undefined : void recoverInterruptedJobs().then(() => pump()).catch((err) => console.error("[transfer] barrido", err));
+  // Además, los ficheros de una importación que murió con su proceso (import-journal.ts).
+  const sweep = () => isShuttingDown() ? undefined : void recoverInterruptedJobs().then(() => recoverImportJournals()).then(() => pump()).catch((err) => console.error("[transfer] barrido", err));
   setTimeout(() => {
     sweep();
     setInterval(sweep, SWEEP_EVERY_MS).unref?.();

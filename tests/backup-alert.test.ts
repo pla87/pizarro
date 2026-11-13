@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BACKUP_STALE_MS, backupAlertFor, backupAlertMailDue } from "../src/lib/backup-alert-core";
+import { BACKUP_STALE_MS, backupAlertFor, backupAlertMailDue, shrinkText } from "../src/lib/backup-alert-core";
 
 const now = Date.parse("2026-10-30T12:00:00Z");
 const h = (n: number) => n * 3600_000;
@@ -36,4 +36,18 @@ test("email de aviso: como mucho cada 24 h", () => {
   assert.equal(backupAlertMailDue(now - h(23), now), false);
   assert.equal(backupAlertMailDue(now - h(24), now), true);
   assert.equal(backupAlertMailDue(Number.NaN, now), true);
+});
+
+test("aviso de copia mucho menor que la última buena: después de «atrasada» y antes que la externa", () => {
+  const shrink = { what: "core" as const, local: 3, remote: 400, stem: "pizarro-backup-20261030T031500Z", goodStem: "pizarro-backup-20261020T031500Z", at: null, goodAt: null };
+  const recent = now - h(2);
+  assert.deepEqual(backupAlertFor({ keyOk: true, lastOkAt: recent, now, shrink }), { active: true, reason: "shrunk", lastAt: new Date(recent).toISOString(), shrink });
+  assert.equal(backupAlertFor({ keyOk: true, lastOkAt: recent, now, shrink: null }).active, false);
+  assert.equal(backupAlertFor({ keyOk: true, lastOkAt: now - h(60), now, shrink }).reason, "stale");
+  assert.equal(backupAlertFor({ keyOk: true, lastOkAt: recent, now, shrink, external: { configured: true, lastOkAt: null } }).reason, "shrunk");
+  assert.equal(backupAlertFor({ keyOk: false, lastOkAt: recent, now, shrink }).active, false);
+  // Texto: según lo que se redujo, con las fechas si las hay.
+  const t = (s: string, v?: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k: string) => String(v?.[k]));
+  assert.equal(shrinkText(shrink, t, (iso) => iso), `La copia del ${shrink.stem} tiene 3 personas, proyectos y tareas, y la última copia buena, del ${shrink.goodStem}, tenía 400.`);
+  assert.match(shrinkText({ ...shrink, what: "files", at: "2026-10-30T03:15:00.000Z", goodAt: "2026-10-20T03:15:00.000Z" }, t, (iso) => iso.slice(0, 10)), /^La copia del 2026-10-30 tiene 3 ficheros, y la última copia buena, del 2026-10-20, tenía 400\.$/);
 });

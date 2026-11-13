@@ -26,10 +26,14 @@ export const dynamic = "force-dynamic";
 
 const STALE_MS = 24 * 60 * 60 * 1000;
 
-/** Borra temporales de importaciones que murieron a medias (más de un día). */
+/**
+ * Borra temporales de importaciones que murieron a medias (más de un día). Solo los *.tmp: los registros de las
+ * importaciones en curso (*.import-journal) los revisa recoverImportJournals, que sabe qué ficheros borrar con ellos.
+ */
 async function sweepStale(dir: string): Promise<void> {
   try {
     for (const name of await readdir(dir)) {
+      if (!name.endsWith(".tmp")) continue;
       const file = path.join(dir, name);
       if (Date.now() - (await stat(file)).mtimeMs > STALE_MS) await rm(file, { force: true });
     }

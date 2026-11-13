@@ -17,8 +17,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const [projects, unread, backupAlert, updateAvailable, licenseNudge] = await Promise.all([
     listVisibleProjects(user),
     db.notification.count({ where: { userId: user.id, readAt: null, task: { project: visibleProjectsWhere(user) } } }),
-    // Punto de aviso en «Administración» si la copia de seguridad está atrasada (solo se consulta a los admins).
-    isAdmin ? getBackupAlert().then((a) => a?.active === true, () => false) : false,
+    // Punto de aviso en «Administración» si la copia de seguridad está atrasada o es mucho menor que la última buena
+    // (solo se consulta a los admins).
+    isAdmin ? getBackupAlert().then((a) => (a?.active ? (a.reason === "shrunk" ? ("shrunk" as const) : true) : false), () => false) : false,
     // Punto discreto si hay una versión nueva sin descartar (consulta cacheada 12 h; nunca falla).
     isAdmin ? getUpdateNotice().then((n) => n !== null) : false,
     // Recordatorio de licencia (solo admins, como mucho una vez al mes; nunca falla): a dónde lleva «Comprar».

@@ -14,7 +14,7 @@ import { attachmentPath, documentPath, readReleaseAttachmentFile } from "../uplo
 import { streamZipSize, type StreamZipEntry } from "../zip-stream";
 import { mapMentions } from "./mentions";
 import {
-  EXPORT_EXTENSION, EXPORT_FORMAT, EXPORT_FORMAT_VERSION, projectDataSchema,
+  EXPORT_EXTENSION, EXPORT_FORMAT, EXPORT_FORMAT_VERSION, projectDataSchema, TRASH_EXPORT_MAX,
   type ExportCounts, type ExportManifest, type ExportOptions, type ProjectExportData,
 } from "./types";
 
@@ -121,7 +121,7 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
   const project = await db.project.findUnique({
     where: { id: projectId },
     select: {
-      name: true, description: true, isPrivate: true, taskFields: true, releaseZipMaxMb: true, taskAttachMaxMb: true, fileMaxMb: true, googleShareMode: true,
+      name: true, description: true, isPrivate: true, taskFields: true, releaseZipMaxMb: true, taskAttachMaxMb: true, fileMaxMb: true, googleShareMode: true, storageQuotaMb: true,
       reportSchedule: { select: { enabled: true, weekday: true, hour: true } },
       releaseTemplates: { orderBy: [{ kind: "asc" }, { position: "asc" }, { createdAt: "asc" }, { id: "asc" }], select: { kind: true, name: true, content: true, position: true, createdAt: true } },
       columns: { orderBy: [{ position: "asc" }, { id: "asc" }], select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true } },
@@ -266,7 +266,10 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
           deletedAt: isoOrNull(c.deletedAt),
         })),
         attachments,
-        links: t.links.map((l) => ({ kind: l.kind, title: l.title, url: l.url, createdBy: users.ref(l.createdById), createdAt: iso(l.createdAt) })),
+        links: t.links.map((l) => ({
+          kind: l.kind, title: l.title, url: l.url, createdBy: users.ref(l.createdById), createdAt: iso(l.createdAt),
+          externalId: l.externalId, shareStatus: (l.shareStatus as "SHARED" | "PARTIAL" | "NOT_SHARED" | null) ?? null, shareFailed: l.shareFailed,
+        })),
       });
     }
   }
@@ -307,18 +310,25 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
     }
   }
 
-  // Documentación (sin la papelera). Sin ficheros no tiene sentido: solo con adjuntos.
+  // Documentación y su papelera (con quién y cuándo borró cada documento). Sin ficheros no tiene sentido: solo con adjuntos.
   const documents: ProjectExportData["documents"] = [];
+  const documentsTrash: NonNullable<ProjectExportData["documentsTrash"]> = [];
   if (options.attachments) {
-    const rows = await db.projectDocument.findMany({ where: { projectId, deletedAt: null }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
-    for (const d of rows) {
+    const live = await db.projectDocument.findMany({ where: { projectId, deletedAt: null }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+    // De la papelera, los borrados más recientes (los antiguos se purgan solos), en orden de creación como los demás.
+    const trashed = (await db.projectDocument.findMany({ where: { projectId, deletedAt: { not: null } }, orderBy: [{ deletedAt: "desc" }, { id: "asc" }], take: TRASH_EXPORT_MAX }))
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+    let docSeq = 0;
+    for (const d of [...live, ...trashed]) {
       const file = documentPath(d.id);
       const info = await addFile(files, diskStream(file), async () => (await stat(file)).isFile(), onFile);
       if (!info) {
         missingFiles++;
         continue;
       }
-      documents.push({ ref: `x${documents.length + 1}`, name: d.name, mimeType: d.mimeType, size: info.size, kind: d.kind, createdBy: users.ref(d.createdById), createdAt: iso(d.createdAt), updatedAt: iso(d.updatedAt), file: info.sha });
+      const row = { ref: `x${++docSeq}`, name: d.name, mimeType: d.mimeType, size: info.size, kind: d.kind, createdBy: users.ref(d.createdById), createdAt: iso(d.createdAt), updatedAt: iso(d.updatedAt), file: info.sha };
+      if (d.deletedAt) documentsTrash.push({ ...row, deletedAt: iso(d.deletedAt), deletedBy: users.ref(d.deletedById) });
+      else documents.push(row);
     }
   }
 
@@ -370,6 +380,7 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
       taskAttachMaxMb: project.taskAttachMaxMb,
       fileMaxMb: project.fileMaxMb,
       googleShareMode: (project.googleShareMode as ProjectExportData["project"]["googleShareMode"]) ?? null,
+      storageQuotaMb: project.storageQuotaMb,
     },
     reportSchedule: project.reportSchedule,
     releaseTemplates: project.releaseTemplates.map((r) => ({ kind: r.kind, name: r.name, content: r.content, position: r.position, createdAt: iso(r.createdAt) })),
@@ -390,6 +401,7 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
     tasks,
     releases,
     documents,
+    documentsTrash,
     events,
   };
   // Lo que se escribe tiene que cumplir el esquema que exige el importador.
@@ -402,7 +414,7 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
     columns: data.columns.length, kinds: data.kinds.length, labels: data.labels.length, deliverables: data.deliverables.length,
     tasks: tasks.length, archivedTasks: tasks.filter((t) => t.archivedAt).length, subtasks: subtaskCount, comments: commentCount,
     taskAttachments: tasks.reduce((n, t) => n + t.attachments.length, 0), releases: releases.length, releaseAttachments: releaseAttachmentCount,
-    documents: documents.length, events: events.length, files: files.size,
+    documents: documents.length, trashedDocuments: documentsTrash.length, events: events.length, files: files.size,
   };
   const checksums: Record<string, string> = { "project.json": createHash("sha256").update(projectJson).digest("hex") };
   for (const f of [...files.values()].sort((a, b) => a.sha.localeCompare(b.sha))) checksums[`files/${f.sha}`] = f.sha;
@@ -503,10 +515,11 @@ export async function estimateProjectExport(projectId: string, options: ExportOp
     db.task.count({ where: taskWhere }),
     all ? db.task.count({ where: { projectId, archivedAt: { not: null } } }) : 0,
     all ? db.release.count({ where: { projectId } }) : 0,
-    db.projectDocument.count({ where: { projectId, deletedAt: null } }),
+    db.projectDocument.count({ where: { projectId } }),
     options.attachments ? db.taskAttachment.aggregate({ _sum: { size: true }, _count: true, where: { task: taskWhere } }) : null,
     options.attachments && all ? db.releaseAttachment.aggregate({ _sum: { size: true }, _count: true, where: { release: { projectId } } }) : null,
-    options.attachments ? db.projectDocument.aggregate({ _sum: { size: true }, _count: true, where: { projectId, deletedAt: null } }) : null,
+    // Con la papelera, que también va en el archivo.
+    options.attachments ? db.projectDocument.aggregate({ _sum: { size: true }, _count: true, where: { projectId } }) : null,
   ]);
   const parts = [ta, ra, da];
   const attachments = parts.reduce((n, p) => n + (p?._count ?? 0), 0);

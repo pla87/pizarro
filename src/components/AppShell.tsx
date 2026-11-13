@@ -49,8 +49,8 @@ interface Props {
   unread: number;
   /** Último proyecto visitado (cookie ya validada contra los visibles): se mantiene seleccionado fuera de /p/…. */
   lastProjectId?: string | null;
-  /** Copia de seguridad atrasada: punto de aviso junto a «Administración» (solo admins). */
-  backupAlert?: boolean;
+  /** Copia de seguridad atrasada ("shrunk": mucho menor que la última buena): punto de aviso junto a «Administración» (solo admins). */
+  backupAlert?: boolean | "shrunk";
   /** Versión nueva de Pizarro sin descartar: punto de aviso junto a «Administración» (solo admins). */
   updateAvailable?: boolean;
   /** Recordatorio de licencia para este administrador: destino de «Comprar» (null: no se muestra). */
@@ -242,7 +242,7 @@ function DocsNavLink({ projectId, active }: { projectId: string; active: boolean
 
 function Sidebar({ user, projects, current, version, pathname, unread, backupAlert, updateAvailable }: {
   unread: number;
-  backupAlert: boolean;
+  backupAlert: boolean | "shrunk";
   updateAvailable: boolean;
   user: CurrentUser;
   projects: { id: string; name: string; isPrivate?: boolean }[];
@@ -286,7 +286,13 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
         <NavLink href="/settings" icon={Settings} active={pathname === "/settings"}>{t("Mi perfil")}</NavLink>
         {isAdmin && <NavLink href="/admin/users" icon={Shield} active={pathname.startsWith("/admin")}>
           <span className="flex-1">{t("Administración")}</span>
-          {backupAlert && <span className="h-2 w-2 rounded-full bg-amber-500" role="img" aria-label={t("Copia de seguridad atrasada")} title={t("Copia de seguridad atrasada")} />}
+          {backupAlert && (
+            <span
+              className="h-2 w-2 rounded-full bg-amber-500" role="img"
+              aria-label={backupAlert === "shrunk" ? t("La última copia es mucho menor que la anterior") : t("Copia de seguridad atrasada")}
+              title={backupAlert === "shrunk" ? t("La última copia es mucho menor que la anterior") : t("Copia de seguridad atrasada")}
+            />
+          )}
           {updateAvailable && <span className="h-2 w-2 rounded-full bg-sky-500" role="img" aria-label={t("Hay una versión nueva de Pizarro")} title={t("Hay una versión nueva de Pizarro")} />}
         </NavLink>}
         <NavLink href="/changelog" icon={History} active={pathname === "/changelog"}>{t("Historial de versiones")}</NavLink>

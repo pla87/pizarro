@@ -3,14 +3,14 @@
 import { CloudUpload, Download, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { copyToExternalNow, createBackupNow, requestBackupDownload } from "@/actions/backups";
+import { acceptBackupReduction, copyToExternalNow, createBackupNow, requestBackupDownload } from "@/actions/backups";
 import { Modal } from "@/components/ui/Modal";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/components/ui/Toast";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 import { formatSize } from "@/lib/format-size";
-import type { BackupAlert } from "@/lib/backup-alert-core";
+import { shrinkText, type BackupAlert } from "@/lib/backup-alert-core";
 import type { BackupFileInfo, BackupRun, BackupStatus, ExternalRun, RestoreTestRun } from "@/lib/backup";
 import type { BackupKeyDiagnosis } from "@/lib/backup-core";
 import type { DestinationId } from "@/lib/backup-dest";
@@ -106,6 +106,17 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
       router.refresh();
     });
 
+  // «La reducción es correcta»: pide una segunda pulsación (la copia buena deja de conservarse siempre).
+  const [confirmShrink, setConfirmShrink] = useState(false);
+  const acceptShrink = () =>
+    start(async () => {
+      const res = await acceptBackupReduction();
+      if (res.ok) toast(t("Reducción confirmada. La copia anterior se borrará cuando le toque por la retención."));
+      else toast(res.error, "error");
+      setConfirmShrink(false);
+      router.refresh();
+    });
+
   const create = () =>
     start(async () => {
       const res = await createBackupNow();
@@ -167,7 +178,29 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
         </p>
       </div>
 
-      {alert.active && (
+      {alert.active && alert.reason === "shrunk" && alert.shrink ? (
+        <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+          <ShieldAlert size={18} className="mt-0.5 shrink-0" />
+          <div className="min-w-0 space-y-1">
+            <p className="font-semibold">{t("La última copia es mucho menor que la anterior")}</p>
+            <p>{shrinkText(alert.shrink, t, (iso) => formatDate(iso, "dateTime", locale))}</p>
+            <p>
+              {t("¿Se ha perdido la base de datos o el volumen? La retención conserva la última copia buena ({stem}) aunque ya le tocara borrarla. Para recuperarla, sigue los pasos de restauración de docs/INSTALL.md con ese nombre.", { stem: alert.shrink.goodStem })}
+            </p>
+            <p>{t("Si has borrado datos a propósito, confírmalo: el aviso desaparece y la copia anterior se borrará cuando le toque.")}</p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              {confirmShrink ? (
+                <>
+                  <button type="button" className="btn-primary" onClick={acceptShrink} disabled={pending}>{t("Sí, la reducción es correcta")}</button>
+                  <button type="button" className="btn-secondary" onClick={() => setConfirmShrink(false)} disabled={pending}>{t("Cancelar")}</button>
+                </>
+              ) : (
+                <button type="button" className="btn-secondary" onClick={() => setConfirmShrink(true)}>{t("La reducción es correcta")}</button>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : alert.active && (
         <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
           <ShieldAlert size={18} className="mt-0.5 shrink-0" />
           <div>
