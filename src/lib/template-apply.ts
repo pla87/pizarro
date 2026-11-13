@@ -259,6 +259,9 @@ async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, temp
     let pos = (await lastPositionIn(tx, target)) ?? 0;
     const moves = rows.map((r) => ({ id: r.id, position: (pos += POSITION_STEP) }));
     await setTaskColumnPositions(moves, target, { client: tx });
+    // Las archivadas recuerdan de qué columna salieron (adónde vuelven al recuperarlas y qué dice «Archivadas»): la que
+    // se quita ya no existe, así que pasan a ser de la columna a la que se ha unido (si no, volverían a la primera).
+    await tx.task.updateMany({ where: { id: { in: rows.map((r) => r.id) }, archivedAt: { not: null }, archivedFromColumnId: { in: c.absorb } }, data: { archivedFromColumnId: target } });
     for (const r of rows) tasks.get(r.id)!.tc = target;
     movedTasks += c.incoming;
   }
@@ -417,10 +420,13 @@ export async function undoTemplateChange(projectId: string, now = new Date()): P
       if (upd.length) {
         await lockColumns(tx, [...new Set(upd.flatMap((u) => (u.col ? [u.col] : [])))]);
         await lockTaskRows(tx, upd.map((u) => u.id));
+        // Una archivada que el cambio pasó a otra columna recordaba esa como origen (executeReplace): vuelve a recordar la
+        // suya. En el SET, t."columnId" es el valor de antes de esta orden.
         await tx.$executeRaw`
           UPDATE "Task" AS t SET
             "columnId" = COALESCE(m."col", t."columnId"), "position" = COALESCE(m."pos", t."position"),
             "kindId" = COALESCE(m."kind", t."kindId"), "evergreen" = COALESCE(m."ev", t."evergreen"),
+            "archivedFromColumnId" = CASE WHEN m."col" IS NOT NULL AND t."archivedFromColumnId" = t."columnId" THEN m."col" ELSE t."archivedFromColumnId" END,
             "evergreenEvery" = COALESCE(m."eve", t."evergreenEvery"), "updatedAt" = ${now}
           FROM unnest(${upd.map((u) => u.id)}::text[], ${upd.map((u) => u.col)}::text[], ${upd.map((u) => u.pos)}::float8[],
                       ${upd.map((u) => u.kind)}::text[], ${upd.map((u) => u.ev)}::boolean[], ${upd.map((u) => u.eve)}::int4[])

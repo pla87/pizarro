@@ -25,6 +25,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/bh48c-e2e.mjs` | 44 | ~1 min |
 | Copia con imagen en la descripción, sin red en calendario, borradores y releases (caza de bugs 49) | `e2e/bh49-e2e.mjs` | 27 | ~1 min |
 | Índice de un HTML en Documentación y baja con Google sin email (caza de bugs 50b) | `e2e/bh50b-e2e.mjs` | 39 | ~30 s |
+| Aplicar plantilla: paso 2 y archivadas de columnas unidas (caza de bugs 50a) | `e2e/bh50a-e2e.mjs` | 22 | ~20 s |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/r49-account-e2e.mjs` | 61 | ~1 min |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
 | Copias con adjuntos y release con barra de formato | `e2e/r49-copy-e2e.mjs` | 87 | ~2 min |
@@ -123,6 +124,15 @@ y lo abre. Misma base; servidor con Google configurado (valores de prueba, no ll
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh50b-e2e.mjs   # PART=anchor,googleonly
+## Aplicar plantilla: paso 2 y archivadas de columnas unidas (caza de bugs 50a)
+
+En el paso 2 de «Cambiar a esta plantilla», un tipo general sin tareas que la plantilla oculta dice «Ocultar (la
+plantilla no lo usa)» y uno oculto con tareas, «Conservar (volverá a verse)», igual que el resumen del paso 3 (en español
+y en inglés, a 390 px y en modo oscuro); y una tarea archivada de una columna que el cambio une a otra sale en
+«Archivadas» como de esa columna y vuelve a ella al recuperarla. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh50a-e2e.mjs   # PART=paso2,en,archivada
 ```
 
 ## Arrastrar una selección
