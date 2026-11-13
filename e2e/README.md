@@ -24,6 +24,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Sin conexión y pestañas (caza de bugs 48b) | `e2e/bh48b-e2e.mjs` | 120 | ~3 min |
 | Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/bh48c-e2e.mjs` | 44 | ~1 min |
 | Copia con imagen en la descripción, sin red en calendario, borradores y releases (caza de bugs 49) | `e2e/bh49-e2e.mjs` | 27 | ~1 min |
+| Índice de un HTML en Documentación y baja con Google sin email (caza de bugs 50b) | `e2e/bh50b-e2e.mjs` | 39 | ~30 s |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/r49-account-e2e.mjs` | 61 | ~1 min |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
 | Copias con adjuntos y release con barra de formato | `e2e/r49-copy-e2e.mjs` | 87 | ~2 min |
@@ -106,6 +107,22 @@ de un borrador, el día de «Repetir» sigue a la fecha límite si no se eligió
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh49-e2e.mjs   # PART=dupimg,cal,drafts,reldel,repdraft
+```
+
+## Índice de un HTML y baja con Google sin email (caza de bugs 50b)
+
+Un documento HTML de *Documentación* con índice: «Ir al tema 2» (`#tema-2`), «#» y un enlace interno dentro de un SVG
+se desplazan dentro del marco aislado, que sigue en el documento (antes cargaba en el marco la página de la app y quedaba
+un error), y lo que se pinta no lleva `ping`. *Borrar mi cuenta* de quien entra con Google en un servidor sin envío de
+emails: «Entro con Google y no conozco mi contraseña» explica solo «Confírmalo volviendo a entrar con Google.» (sin
+hablar de un código por email ni pedirlo), en español y en inglés a 390 px en modo oscuro; el enlace lleva a Google con la
+marca de la baja (sin seguir la redirección); la vuelta de Google se simula en la base, como en test:db; se borra la
+cuenta y su proyecto privado pasa a ser de equipo, y un administrador lo ve en *Proyectos* y *Administración → Proyectos*
+y lo abre. Misma base; servidor con Google configurado (valores de prueba, no llama a Google) y **sin** email:
+`GOOGLE_CLIENT_ID=r50 GOOGLE_CLIENT_SECRET=r50`, sin `MAIL_OUTBOX_DIR` ni SMTP.
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh50b-e2e.mjs   # PART=anchor,googleonly
 ```
 
 ## Arrastrar una selección

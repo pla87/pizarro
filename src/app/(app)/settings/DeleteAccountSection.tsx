@@ -183,9 +183,16 @@ function DeleteAccountDialog({ privateProjects, twoFactor, emailAvailable, passw
               </p>
             ) : alternatives.includes("totp") ? (
               codeField(t("De tu app o un código de recuperación."), false)
-            ) : (
+            ) : alternatives.length > 0 && (
               <>
-                <p>{t("Confírmalo con un código por email o volviendo a entrar con Google.")}</p>
+                {/* Solo las formas que tiene este servidor: sin envío de emails no hay código por email, y sin Google, no se vuelve a entrar con él. */}
+                <p>
+                  {alternatives.includes("email") && alternatives.includes("google")
+                    ? t("Confírmalo con un código por email o volviendo a entrar con Google.")
+                    : alternatives.includes("email")
+                      ? t("Confírmalo con un código por email.")
+                      : t("Confírmalo volviendo a entrar con Google.")}
+                </p>
                 {alternatives.includes("email") && codeField(t("Pulsa «Enviar código» y escribe el que te llegue al email."), true)}
                 {alternatives.includes("google") && (
                   // Navegación completa: Google vuelve a «Mi perfil → Cuenta» con este diálogo abierto.
