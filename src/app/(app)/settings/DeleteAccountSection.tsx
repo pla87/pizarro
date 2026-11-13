@@ -1,7 +1,8 @@
 "use client";
 
 import { Info, TriangleAlert, UserX } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useActionTransition } from "@/components/useActionTransition";
 import { deleteMyAccount, sendAccountDeleteCode } from "@/actions/profile";
 import { clearDraftsOnLogout } from "@/components/board/drafts";
 import { Modal } from "@/components/ui/Modal";
@@ -48,7 +49,7 @@ export function DeleteAccountSection({ block, privateProjects, twoFactor, emailA
 function DeleteAccountDialog({ privateProjects, twoFactor, emailAvailable, onClose }: Omit<Props, "block"> & { onClose: () => void }) {
   const t = useT();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [word, setWord] = useState("");
