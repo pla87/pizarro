@@ -351,7 +351,7 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
           users={users}
           disabled={!detail}
           // Sin el detalle (sin red al abrir la tarea) no se puede comentar: el campo lo dice en vez de parecer activo.
-          placeholder={!detail && offline ? t("Sin conexión") : t("Comenta… (@persona, @docs, @sheets)")}
+          placeholder={!detail && offline ? t("Sin conexión") : t("Comenta… (@persona, @docs, @sheets, @slides)")}
           onCommand={async (kind) => {
             const link = await onGoogle(kind);
             if (link) setText((v) => `${v.trimEnd()} [${link.title.replace(/[\[\]]/g, "")}](${link.url}) `.trimStart());

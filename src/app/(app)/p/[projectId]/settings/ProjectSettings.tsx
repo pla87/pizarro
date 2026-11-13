@@ -198,7 +198,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
       )}
 
       {canManage && google.enabled && (
-        <Section title="Documentos de Google" description="Con quién se comparten los Docs y Sheets creados desde las tareas." tip={t("Si el documento no se puede compartir, se crea igualmente y se avisa en la tarea de que solo lo ve quien lo crea.")}>
+        <Section title="Documentos de Google" description="Con quién se comparten los Docs, Sheets y Slides creados desde las tareas." tip={t("Si el documento no se puede compartir, se crea igualmente y se avisa en la tarea de que solo lo ve quien lo crea.")}>
           <form
             className="space-y-2"
             onSubmit={(e) => {

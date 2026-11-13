@@ -59,7 +59,7 @@ export function GoogleSettingsSection({ view }: { view: GoogleSettingsView }) {
       <div>
         <h2 className="flex items-center gap-1.5 text-base font-semibold"><KeyRound size={16} /> {t("2. Acceso con Google")}</h2>
         <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
-          {t("Entrar con Google y crear Docs y Sheets desde las tarjetas.")}
+          {t("Entrar con Google y crear Docs, Sheets y Slides desde las tarjetas.")}
           <InfoTip topic={t("2. Acceso con Google")}>{t("Solo entra quien ya tiene cuenta en Pizarro con ese email. No envía emails (eso es la sección 1).")}</InfoTip>
         </p>
       </div>

@@ -454,7 +454,7 @@ if (only.includes("field")) try {
     await U.openTask(x.page, "Campo a campo");
     await U.dialog(x.page).getByText("Descripción inicial").first().waitFor({ timeout: 10000 });
   }
-  const descBox = (pg) => U.dialog(pg).getByPlaceholder("Markdown · @persona · @docs / @sheets");
+  const descBox = (pg) => U.dialog(pg).getByPlaceholder("Markdown · @persona · @docs / @sheets / @slides");
   const openDesc = async (pg, text) => {
     await U.dialog(pg).getByRole("button", { name: "Editar", exact: true }).click();
     await descBox(pg).waitFor();

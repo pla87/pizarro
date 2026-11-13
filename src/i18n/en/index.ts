@@ -18,6 +18,7 @@ import { datos } from "./datos";
 import { cuentas } from "./cuentas";
 import { detalle } from "./detalle";
 import { documentacion } from "./documentacion";
+import { formatos } from "./formatos";
 import { ics } from "./ics";
 import { importar } from "./importar";
 import { instalar } from "./instalar";
@@ -46,4 +47,5 @@ export const EN: Record<string, string> = {
   ...accesibilidad, ...settings, ...admin, ...server, ...cuentas, ...acceso, ...colaboracion, ...proyectos, ...plantillas,
   ...setup, ...documentacion, ...campos, ...almacenamiento, ...importar, ...ics, ...mensajeria, ...soporte, ...licencia,
   ...legal, ...landing, ...web, ...instalar, ...baja, ...datos, ...copia, ...repeticion, ...carga, ...textos,
+  ...formatos,
 };

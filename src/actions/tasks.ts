@@ -25,7 +25,8 @@ import * as v from "@/lib/validation";
 import { dateToIso, isoToDate, todayIso } from "@/lib/dates";
 import { normalizeRecurrence, RECURRENCES } from "@/lib/recurrence-date";
 import { spawnRecurrences } from "@/lib/recurrence";
-import { createDriveFile, type GoogleFileKind } from "@/lib/google";
+import { createDriveFile } from "@/lib/google";
+import { GOOGLE_FILE_KINDS, type GoogleFileKind } from "@/lib/google-files";
 import { shareRule } from "@/lib/google-share";
 import { excerpt as makeExcerpt, extractMentionIds, mentionsToPlain } from "@/lib/mentions";
 import { ACCENTED, foldedContains, UNACCENTED } from "@/lib/search-accents";
@@ -1183,7 +1184,7 @@ const snapshotSchema = z.object({
   // Solo si el detalle estaba cargado al abrir el diálogo; si faltan, no se tocan.
   subtasks: z.array(z.object({ id: v.id, title: v.title, done: z.boolean(), position: z.number().finite() })).max(MAX_SUBTASKS).optional(),
   attachmentIds: z.array(v.id).max(1000).optional(),
-  links: z.array(z.object({ id: v.id, kind: z.enum(["GOOGLE_DOC", "GOOGLE_SHEET"]), title: z.string().max(300), url: z.string().max(2000), shareStatus: z.string().max(20).nullish(), shareFailed: z.number().int().min(0).optional() })).max(100).optional(),
+  links: z.array(z.object({ id: v.id, kind: z.enum(GOOGLE_FILE_KINDS), title: z.string().max(300), url: z.string().max(2000), shareStatus: z.string().max(20).nullish(), shareFailed: z.number().int().min(0).optional() })).max(100).optional(),
   /** Cuándo se abrió el detalle (hora del servidor: TaskDetail.loadedAt). Solo se deshace lo hecho desde entonces. */
   openedAt: z.iso.datetime(),
 });
@@ -1678,7 +1679,7 @@ export async function deleteComment(commentId: string) {
 
 const linkSelect = { id: true, kind: true, title: true, url: true, shareStatus: true, shareFailed: true } as const;
 
-/** Crea un Google Doc o Sheet en el Drive del usuario y lo enlaza a la tarea. */
+/** Crea un Google Doc, Sheet o Slides en el Drive del usuario y lo enlaza a la tarea. */
 export async function createGoogleFile(taskId: string, kind: GoogleFileKind, title: string) {
   return runAction({ name: "tasks.createGoogleFile", args: [taskId, kind, title] }, async (): Promise<TaskLinkInfo> => {
     const user = await requireUser();
@@ -1686,7 +1687,7 @@ export async function createGoogleFile(taskId: string, kind: GoogleFileKind, tit
     assertNotArchivedRow(task);
     const { projectId } = task;
     if (!rateLimit(`google-file:${user.id}`, 20, 60_000)) throw new AppError("Demasiados documentos creados seguidos. Espera un minuto.");
-    const fileKind = z.enum(["GOOGLE_DOC", "GOOGLE_SHEET"]).parse(kind);
+    const fileKind = z.enum(GOOGLE_FILE_KINDS).parse(kind);
     const name = v.title.parse(title);
     // Con quién se comparte lo decide el proyecto (googleShareMode); en uno privado nunca es con el dominio.
     const project = await db.project.findUnique({

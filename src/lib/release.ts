@@ -2,7 +2,7 @@
 // y en los tests.
 
 import { isoInZone } from "./dates";
-import { decodeEntities } from "./markdown-entities";
+import { blankEmptyParagraphs, decodeEntities } from "./markdown-entities";
 import { mentionsToPlain } from "./mentions";
 import { MAX_TITLE, MAX_TITLE_UNITS } from "./constants";
 import { clampTitle } from "./title-clamp";
@@ -194,10 +194,11 @@ function buildSections(input: Pick<ReleaseInput, "kinds" | "tasks" | "releaseNum
 /**
  * Texto de una plantilla de cabecera o pie tal como entra en la release. El editor con barra las guardaba con
  * `&lt;`, `&gt;` o `&amp;` (como las descripciones, que también se decodifican): en el texto plano de la release salen
- * los caracteres reales.
+ * los caracteres reales. Lo mismo con los párrafos vacíos (`&nbsp;`).
  */
 function releaseTemplateText(raw: string): string {
-  return decodeEntities(raw).trim();
+  // Sus párrafos vacíos («&nbsp;»), como una línea en blanco: decodificados, eran una línea con un espacio.
+  return decodeEntities(blankEmptyParagraphs(raw)).trim();
 }
 
 /**

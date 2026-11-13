@@ -148,4 +148,34 @@ describe("createGoogleFile según el modo del proyecto", () => {
     expectOk(await createGoogleFile(task.id, "GOOGLE_DOC", "Doc"));
     assert.deepEqual(permissions.map((p) => p.type), ["user"]);
   });
+
+  test("Google Slides: se crea una presentación (mismo permiso y flujo que Docs y Sheets) y se comparte igual", async () => {
+    const creator = await makeUser();
+    await connectGoogle(creator.id);
+    const f = await makeProject({ members: [creator] });
+    const task = await makeTask(f);
+    const permissions = mockDrive();
+    const created: Record<string, string>[] = [];
+    const drive = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith("https://www.googleapis.com/drive/v3/files?")) {
+        created.push(JSON.parse(String(init?.body)));
+        return Response.json({ id: "pres1", name: "Clase 1", webViewLink: "https://docs.google.com/presentation/d/pres1/edit" });
+      }
+      return drive(input, init);
+    }) as typeof fetch;
+    await loginAs(creator);
+    const link = expectOk(await createGoogleFile(task.id, "GOOGLE_SLIDES", "Clase 1"));
+    assert.deepEqual(created, [{ name: "Clase 1", mimeType: "application/vnd.google-apps.presentation" }]);
+    assert.deepEqual(permissions, [{ type: "domain", domain: "empresa.test", role: "writer" }]);
+    assert.equal(link.kind, "GOOGLE_SLIDES");
+    assert.equal(link.url, "https://docs.google.com/presentation/d/pres1/edit");
+    assert.equal(link.shareStatus, "SHARED");
+    const stored = await db.taskLink.findUniqueOrThrow({ where: { id: link.id } });
+    assert.equal(stored.kind, "GOOGLE_SLIDES");
+    assert.equal(stored.externalId, "pres1");
+    // Un tipo desconocido se rechaza.
+    expectFail(await createGoogleFile(task.id, "GOOGLE_FORM" as never, "Formulario"));
+  });
 });

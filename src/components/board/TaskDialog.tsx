@@ -1,7 +1,7 @@
 "use client";
 
 import { takePrefetchedTaskDetail } from "./taskDetailPrefetch";
-import { Archive, Camera, Check, ChevronDown, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
+import { Archive, Camera, Check, ChevronDown, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileCode, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Presentation, Trash2, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import {
@@ -22,6 +22,7 @@ import { ColorPicker } from "../ui/ColorPicker";
 import { cn } from "../ui/cn";
 import { DescriptionField } from "../ui/DescriptionField";
 import { DescriptionTools, descriptionTooLong } from "../ui/DescriptionTools";
+import { GoogleFileIcon } from "../ui/googleFiles";
 import { MAX_DESCRIPTION } from "@/lib/constants";
 import { Markdown } from "../ui/Markdown";
 import type { MentionCommand } from "../ui/MentionTextarea";
@@ -776,7 +777,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  /** @docs / @sheets: crea el archivo, lo abre en otra pestaña y lo enlaza. Debe llamarse dentro de un clic o tecla. */
+  /** @docs / @sheets / @slides: crea el archivo, lo abre en otra pestaña y lo enlaza. Debe llamarse dentro de un clic o tecla. */
   const createGoogle = async (kind: MentionCommand): Promise<TaskLinkInfo | null> => {
     if (!board.google.enabled) {
       toast(t("La integración con Google no está configurada en el servidor."), "error");
@@ -795,7 +796,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     board.patchTask(task.id, (t) => ({ linkCount: t.linkCount + 1 }));
     const warning = shareWarning(res.link, t);
     if (warning) toast(warning, "error");
-    else toast(kind === "GOOGLE_SHEET" ? t("Hoja de cálculo creada") : t("Documento creado"));
+    else toast(kind === "GOOGLE_SHEET" ? t("Hoja de cálculo creada") : kind === "GOOGLE_SLIDES" ? t("Presentación creada") : t("Documento creado"));
     return res.link;
   };
 
@@ -1488,9 +1489,9 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
             onCommand={async (kind) => {
               touch();
               const link = await onGoogle(kind);
-              if (link) setValue((v) => `${v.trimEnd()}\n\n${kind === "GOOGLE_SHEET" ? t("Hoja") : t("Documento")}: [${link.title.replace(/[\[\]]/g, "")}](${link.url})\n`);
+              if (link) setValue((v) => `${v.trimEnd()}\n\n${kind === "GOOGLE_SHEET" ? t("Hoja") : kind === "GOOGLE_SLIDES" ? t("Presentación") : t("Documento")}: [${link.title.replace(/[\[\]]/g, "")}](${link.url})\n`);
             }}
-            placeholder={t("Markdown · @persona · @docs / @sheets")}
+            placeholder={t("Markdown · @persona · @docs / @sheets / @slides")}
             onCancel={() => void escapeCancel()}
             onSubmit={finish}
           />
@@ -1862,7 +1863,8 @@ function GoogleLinks({ detail, setDetail, onCreate, taskId, canCreate }: {
   const links = detail?.links ?? [];
   return (
     <section>
-      <div className="mb-2 flex items-center gap-1">
+      {/* Con tres botones, en el móvil pasan a la línea siguiente (antes el título se partía en tres líneas). */}
+      <div className="mb-2 flex flex-wrap items-center gap-1">
         <h3 className="mr-auto min-w-0 text-sm font-semibold">{t("Documentos de Google")}</h3>
         {canCreate && (
           <>
@@ -1872,18 +1874,21 @@ function GoogleLinks({ detail, setDetail, onCreate, taskId, canCreate }: {
             <button className="btn-ghost shrink-0 whitespace-nowrap px-2 py-1 text-xs" onClick={() => onCreate("GOOGLE_SHEET")} disabled={!detail}>
               <FileSpreadsheet size={15} className="text-emerald-600" /> {t("Nuevo Sheet")}
             </button>
+            <button className="btn-ghost shrink-0 whitespace-nowrap px-2 py-1 text-xs" onClick={() => onCreate("GOOGLE_SLIDES")} disabled={!detail}>
+              <GoogleFileIcon kind="GOOGLE_SLIDES" size={15} /> {t("Nuevo Slides")}
+            </button>
           </>
         )}
       </div>
       {links.length === 0 ? (
         <p className="truncate text-xs text-slate-400">
-          {t("Sin documentos · escribe")} <code>@docs</code> {t("o")} <code>@sheets</code>
+          {t("Sin documentos · escribe")} <code>@docs</code>, <code>@sheets</code> {t("o")} <code>@slides</code>
         </p>
       ) : (
         <ul className="space-y-1">
           {links.map((l) => (
             <li key={l.id} className="group flex items-center gap-2 rounded-md px-1 py-1 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-              {l.kind === "GOOGLE_SHEET" ? <FileSpreadsheet size={17} className="text-emerald-600" /> : <FileText size={17} className="text-sky-600" />}
+              <GoogleFileIcon kind={l.kind} size={17} className="shrink-0" />
               <a href={l.url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate text-sm font-medium hover:text-brand-600">
                 {l.title}
               </a>
@@ -1922,6 +1927,8 @@ function fileIcon(a: { mimeType: string; originalName: string }) {
   if (mime.startsWith("video/")) return FileVideo;
   if (/zip|tar|gzip|rar|7z/.test(mime) || ["zip", "rar", "7z", "gz", "tar"].includes(ext)) return FileArchive;
   if (/spreadsheet|excel|csv/.test(mime) || ["xls", "xlsx", "ods", "csv"].includes(ext)) return FileSpreadsheet;
+  if (/presentation|powerpoint/.test(mime) || ["ppt", "pptx", "odp", "key"].includes(ext)) return Presentation;
+  if (mime === "text/html" || ["html", "htm"].includes(ext)) return FileCode;
   if (mime === "application/pdf" || mime.startsWith("text/") || /word|document|rtf/.test(mime) || ["pdf", "doc", "docx", "txt", "odt", "rtf", "md"].includes(ext)) return FileText;
   return FileIcon;
 }

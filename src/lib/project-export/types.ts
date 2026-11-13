@@ -9,6 +9,7 @@
 // Las personas se guardan como {nombre, email}; al importar se emparejan por email con usuarios activos.
 import { z } from "zod";
 import { COLUMN_ROLES, HEX_COLOR_RE, MAX_DESCRIPTION, MAX_RELEASE_CONTENT, MAX_TEMPLATE, MAX_TITLE_UNITS } from "../constants";
+import { GOOGLE_FILE_KINDS } from "../google-files";
 import { GOOGLE_SHARE_MODES } from "../google-share";
 import { QUOTA_MAX_MB, QUOTA_MIN_MB } from "../quota";
 import { TASK_FIELDS, TASK_PRIORITIES } from "../task-fields";
@@ -173,7 +174,7 @@ const taskSchema = z.object({
   comments: z.array(commentSchema).max(LIMITS.perTask * 5),
   attachments: z.array(attachmentSchema).max(LIMITS.perTask),
   links: z.array(z.object({
-    kind: z.enum(["GOOGLE_DOC", "GOOGLE_SHEET"]), title: text(300), url: text(2000), createdBy: person, createdAt: iso,
+    kind: z.enum(GOOGLE_FILE_KINDS), title: text(300), url: text(2000), createdBy: person, createdAt: iso,
     /** Id del archivo en Google Drive y resultado de compartirlo al crearlo. Opcionales: los archivos anteriores no los traen. */
     externalId: text(200).nullable().optional(),
     shareStatus: z.enum(["SHARED", "PARTIAL", "NOT_SHARED"]).nullable().optional(),
@@ -197,7 +198,7 @@ const documentSchema = z.object({
   name: text(300),
   mimeType: text(200),
   size: int().min(0),
-  kind: z.enum(["TEXT", "MARKDOWN", "PDF", "IMAGE", "OTHER"]),
+  kind: z.enum(["TEXT", "MARKDOWN", "PDF", "IMAGE", "HTML", "OTHER"]),
   createdBy: person,
   createdAt: iso,
   updatedAt: iso,

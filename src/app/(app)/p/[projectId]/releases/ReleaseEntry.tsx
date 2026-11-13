@@ -9,6 +9,7 @@ import { cn } from "@/components/ui/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Markdown } from "@/components/ui/Markdown";
 import { useToast } from "@/components/ui/Toast";
+import { blankEmptyParagraphs } from "@/lib/markdown-entities";
 import { isoDate, releaseFileName, releaseZipName } from "@/lib/release";
 import { ProjectsContext } from "@/components/ProjectMenu";
 import { useIntlLocale, useLocale, useT } from "@/i18n/client";
@@ -31,6 +32,9 @@ export function ReleaseEntry({ release }: Props) {
   // Nombre del proyecto para el ZIP (el mismo que da el diálogo de generar la release).
   const { projects, currentId } = useContext(ProjectsContext);
   const projectName = projects.find((p) => p.id === currentId)?.name ?? null;
+  // Lo que se copia y se descarga: las releases guardadas con el editor con barra en versiones anteriores pueden traer párrafos
+  // vacíos como «&nbsp;» (salen como una línea en blanco; el resto, idéntico).
+  const text = blankEmptyParagraphs(release.content);
   const [busy, setBusy] = useState(false);
   const [attachments, setAttachments] = useState(release.attachments);
   // Las copias de los adjuntos se guardan unos segundos después del despliegue: al refrescar la página
@@ -149,13 +153,13 @@ export function ReleaseEntry({ release }: Props) {
       {open && (
         <div className="border-t border-slate-200 px-4 py-3 dark:border-slate-800">
           <div className="mb-3 flex flex-wrap gap-2">
-            <button className="btn-secondary py-1.5" onClick={async () => toast(await copyText(release.content) ? t("Copiado al portapapeles") : t("No se pudo copiar"))}>
+            <button className="btn-secondary py-1.5" onClick={async () => toast(await copyText(text) ? t("Copiado al portapapeles") : t("No se pudo copiar"))}>
               <ClipboardCopy size={15} /> {t("Copiar")}
             </button>
-            <button className="btn-secondary py-1.5" onClick={() => downloadText(release.content, releaseFileName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, "md"), "text/markdown")}>
+            <button className="btn-secondary py-1.5" onClick={() => downloadText(text, releaseFileName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, "md"), "text/markdown")}>
               <Download size={15} /> .md
             </button>
-            <button className="btn-secondary py-1.5" onClick={() => downloadText(release.content, releaseFileName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, "txt"), "text/plain")}>
+            <button className="btn-secondary py-1.5" onClick={() => downloadText(text, releaseFileName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, "txt"), "text/plain")}>
               <Download size={15} /> .txt
             </button>
             <button className="btn-secondary py-1.5 text-red-600 dark:text-red-400 sm:ml-auto" disabled={busy} onClick={remove}>

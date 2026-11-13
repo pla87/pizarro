@@ -3,7 +3,7 @@
 // vuelta con sus mismas extensiones, como al cargar el texto y guardarlo).
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { editorMarkdown } from "../src/lib/editor-markdown";
+import { editorMarkdown, releaseFromEditor } from "../src/lib/editor-markdown";
 import { keepUntouchedMarkdown } from "../src/lib/markdown-keep";
 import { buildReleaseMarkdown, swapTemplateBlock } from "../src/lib/release";
 import { bestTime } from "./timing";
@@ -104,4 +104,33 @@ test("rendimiento: release de 400 tareas con un cambio, en un tiempo proporciona
   assert.ok(ms < Math.max(reference * 3, 50), `${Math.round(ms)} ms frente a ${Math.round(reference)} ms de leer la release entera`);
   const out = keepUntouchedMarkdown(big, edited, editorMarkdown);
   assert.equal(out.replace("Tarea número 200 (editada)\nDescripción 200.\n", "Tarea número 200\n  Descripción 200.\n\n"), big, "solo cambia la tarea editada");
+});
+
+// R50: un párrafo vacío en el editor con barra (Intro dos veces) salía como «&nbsp;» en Copiar todo, el .md y el .txt.
+test("párrafos vacíos añadidos con el editor con barra: una línea en blanco, sin «&nbsp;»; lo demás, exacto", () => {
+  // Se simula el editor con «&nbsp;» en el Markdown cargado: TipTap lo lee como párrafo vacío y lo vuelve a escribir así.
+  const empties = (n: number) => Array.from({ length: n }, () => "&nbsp;").join("\n\n");
+  for (const n of [1, 2, 3]) {
+    // Tras un párrafo intacto (la cabecera) y antes del pie.
+    const raw = editorAfter(base, "Hola **equipo**, esto es <importante> & más.", `Hola **equipo**, esto es <importante> & más.\n\n${empties(n)}`);
+    assert.equal(releaseFromEditor(base, raw), base, `${n} párrafo(s) vacío(s) tras un bloque intacto: el texto de partida`);
+    // Con texto nuevo en medio: una línea en blanco entre los bloques.
+    const raw2 = editorAfter(base, "_Gracias_ — el equipo", `Nota final\n\n${empties(n)}\n\n_Gracias_ — el equipo`);
+    const out = releaseFromEditor(base, raw2);
+    assert.doesNotMatch(out, /&nbsp;|\n{3,}/, `${n}: sin «&nbsp;» ni líneas en blanco repetidas`);
+    assert.equal(out, base.replace("_Gracias_ — el equipo", "Nota final\n\n_Gracias_ — el equipo"), `${n}: solo cambia lo editado`);
+  }
+  // Un párrafo vacío al principio o al final no deja líneas en blanco sueltas.
+  const edges = releaseFromEditor(base, editorAfter(base, "# Novedades", `${empties(2)}\n\n# Novedades`) + "\n\n&nbsp;\n\n&nbsp;");
+  assert.equal(edges, base);
+  // Sin tocar nada, el texto exacto (también con la nueva lectura).
+  assert.equal(releaseFromEditor(base, editorAfter(base)), base);
+});
+
+test("un párrafo vacío dentro de una tarea editada (lista) tampoco deja «&nbsp;»", () => {
+  const raw = editorAfter(base, "- **R3F2** · Exportar a CSV\n  Con **todas** las columnas.", "- **R3F2** · Exportar a CSV\n\n  &nbsp;\n\n  &nbsp;\n\n  Con **todas** las columnas.");
+  const out = releaseFromEditor(base, raw);
+  assert.doesNotMatch(out, /&nbsp;/);
+  assert.doesNotMatch(out, /\n[ \t]*\n[ \t]*\n/);
+  assert.match(out, /Exportar a CSV\n\n {2}Con \*\*todas\*\* las columnas\./);
 });

@@ -5,15 +5,21 @@ import { useEffect, useRef, useState } from "react";
 import { useIntlLocale, useT } from "@/i18n/client";
 import type { T } from "@/i18n/core";
 import { MAX_DESCRIPTION } from "@/lib/constants";
+import { blankEmptyParagraphs } from "@/lib/markdown-entities";
 import { cn } from "./cn";
 import { copyText } from "./clipboard";
 
-/** Copia la descripción con formato (text/html) y como Markdown (text/plain); sin ClipboardItem, solo el Markdown. */
-async function copyDescription(markdown: string): Promise<boolean> {
+/**
+ * Copia la descripción con formato (text/html) y como Markdown (text/plain); sin ClipboardItem, solo el Markdown. En el
+ * Markdown, los párrafos vacíos del editor con barra («&nbsp;») van como una línea en blanco: pegado en un chat o un email
+ * de texto se veía «&nbsp;».
+ */
+async function copyDescription(stored: string): Promise<boolean> {
+  const markdown = blankEmptyParagraphs(stored);
   try {
     if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
       const { markdownToHtml } = await import("@/lib/markdown-html");
-      const html = markdownToHtml(markdown, location.origin);
+      const html = markdownToHtml(stored, location.origin);
       await navigator.clipboard.write([
         new ClipboardItem({
           "text/html": new Blob([html], { type: "text/html" }),
