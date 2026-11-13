@@ -183,3 +183,11 @@ describe("PDF del programa", () => {
     assert.ok(pdfRuns(pdf).join("").includes("Aún no hay sesiones en esta columna."));
   });
 });
+
+test("título de la sesión: quita el comienzo automático de su tipo, salvo que lo deje vacío", async () => {
+  const { sessionTitle } = await import("../src/lib/course-program");
+  assert.equal(sessionTitle("Sesión: Fundamentos", "Sesión: "), "Fundamentos");
+  assert.equal(sessionTitle("Sesión: ", "Sesión: "), "Sesión: ");
+  assert.equal(sessionTitle("Repaso", "Sesión: "), "Repaso");
+  assert.equal(sessionTitle("Session: Intro", ""), "Session: Intro");
+});

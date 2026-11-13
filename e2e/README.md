@@ -124,6 +124,8 @@ y lo abre. Misma base; servidor con Google configurado (valores de prueba, no ll
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh50b-e2e.mjs   # PART=anchor,googleonly
+```
+
 ## Aplicar plantilla: paso 2 y archivadas de columnas unidas (caza de bugs 50a)
 
 En el paso 2 de «Cambiar a esta plantilla», un tipo general sin tareas que la plantilla oculta dice «Ocultar (la

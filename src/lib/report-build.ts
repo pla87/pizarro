@@ -275,11 +275,11 @@ export function generateProgramPdf(
       where: { projectId, columnId, archivedAt: null },
       orderBy: [{ position: "asc" }, { id: "asc" }],
       take: 2000,
-      select: { title: true, description: true, dueDate: true, startDate: true, assignee: { select: { name: true } } },
+      select: { title: true, description: true, dueDate: true, startDate: true, assignee: { select: { name: true } }, kind: { select: { titleTemplate: true } } },
     });
     const today = todayIso(appTimeZone());
     const sessions = buildProgramSessions(
-      tasks.map((x) => ({ title: x.title, description: x.description, startDate: dateToIso(x.startDate), dueDate: dateToIso(x.dueDate), assignee: x.assignee?.name ?? null })),
+      tasks.map((x) => ({ title: x.title, titlePrefix: x.kind?.titleTemplate ?? "", description: x.description, startDate: dateToIso(x.startDate), dueDate: dateToIso(x.dueDate), assignee: x.assignee?.name ?? null })),
       { locale: intlLocale(opts.locale), t, withAssignee: opts.withAssignee, useStartDate: normalizeTaskFields(column.project.taskFields).includes("startDate") },
     );
     const pdf = await renderPdf({ kind: "program", locale: opts.locale, input: { project: column.project.name, today, withAssignee: opts.withAssignee, sessions } });

@@ -29,6 +29,8 @@ export interface ProgramPdfInput {
 
 interface SessionSource {
   title: string;
+  /** Comienzo automático del título de su tipo (TaskKind.titleTemplate), que el PDF quita. */
+  titlePrefix?: string | null;
   description: string;
   startDate: string | null;
   dueDate: string | null;
@@ -64,11 +66,22 @@ export function programBlocks(input: ProgramPdfInput): ProgramPdfDocument {
   return { ...input, sessions: input.sessions.map(({ description, ...rest }) => ({ ...rest, blocks: markdownToPdfBlocks(description) })) };
 }
 
+/**
+ * Título de la sesión sin el comienzo automático de su tipo («Sesión: Fundamentos» → «Fundamentos»), porque el PDF ya
+ * la numera («Sesión 1»). Si quitarlo lo dejara vacío, se deja el título tal cual.
+ */
+export function sessionTitle(title: string, prefix?: string | null): string {
+  const p = (prefix ?? "").trim();
+  if (!p || !title.startsWith(p)) return title;
+  const rest = title.slice(p.length).trim();
+  return rest || title;
+}
+
 /** Sesiones del programa en el orden recibido (el de la columna), numeradas desde 1. Sin analizar el Markdown (programBlocks). */
 export function buildProgramSessions(tasks: SessionSource[], opts: { locale: string; t: T; withAssignee: boolean; useStartDate: boolean }): ProgramSession[] {
   return tasks.map((task, i) => ({
     n: i + 1,
-    title: mentionsToPlain(task.title, false),
+    title: mentionsToPlain(sessionTitle(task.title, task.titlePrefix), false),
     date: programDateLabel(opts.useStartDate ? task.startDate : null, task.dueDate, opts.locale, opts.t),
     assignee: opts.withAssignee ? task.assignee : null,
     description: task.description ?? "",

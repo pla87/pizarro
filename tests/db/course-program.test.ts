@@ -107,7 +107,7 @@ describe("Publicar programa (PDF)", () => {
     assert.equal(res.headers.get("Content-Type"), "application/pdf");
     assert.match(res.headers.get("Content-Disposition") ?? "", /^inline; filename="programa-master-/);
     const pdf = await text(res);
-    const order = ["Sesión 1: Sesión: Presentación", "Sesión 2: Sesión: Taller", "Sesión 3: Sesión: Cierre"].map((s) => pdf.indexOf(s));
+    const order = ["Sesión 1: Presentación", "Sesión 2: Taller", "Sesión 3: Cierre"].map((s) => pdf.indexOf(s));
     assert.ok(order.every((i) => i >= 0) && order[0]! < order[1]! && order[1]! < order[2]!, pdf.slice(0, 500));
     assert.ok(pdf.includes("martes, 12 de enero de 2027"));
     assert.ok(pdf.includes("18 de enero de 2027 – 22 de enero de 2027"));

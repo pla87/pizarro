@@ -30,4 +30,6 @@ export const privados: Record<string, string> = {
   // Duplicar una tarea con adjuntos sin espacio en el disco
   "El disco del servidor está casi lleno: libera espacio y vuelve a duplicarla.": "The server's disk is almost full: free up space and duplicate it again.",
   "El disco del servidor está casi lleno: avisa a un administrador.": "The server's disk is almost full: tell an admin.",
+  "Confírmalo con un código por email.": "Confirm it with an email code.",
+  "Confírmalo volviendo a entrar con Google.": "Confirm it by signing in with Google again.",
 };

@@ -93,4 +93,7 @@ export const aplicarPlantilla: Record<string, string> = {
   "Añadió lo que faltaba de la plantilla «{name}»": "Added what was missing from the template “{name}”",
   "Cambió el proyecto a la plantilla «{name}»": "Switched the project to the template “{name}”",
   "Deshizo el cambio a la plantilla «{name}»": "Undid the switch to the template “{name}”",
+  // «Cambiar a esta plantilla», paso 2: qué pasa con un tipo general que se conserva (lo mismo que dice el resumen).
+  "Ocultar (la plantilla no lo usa)": "Hide (the template doesn't use it)",
+  "Conservar (volverá a verse)": "Keep (it will be shown again)",
 };

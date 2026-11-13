@@ -139,7 +139,7 @@ try {
     await page.screenshot({ path: `${SHOTS}/r50-programa-dialogo.png` });
     const { text, filename, bytes } = await publishAndDownload("programa.pdf");
     L.check("PDF: se descarga un PDF con nombre «programa-…»", /^programa-master-r50-\d{4}-\d{2}-\d{2}\.pdf$/.test(filename) && bytes > 1000, filename);
-    for (const s of ["PROGRAMA DEL CURSO", PROJECT, "3 sesiones", "Sesión 1: Sesión: Presentación R50", "martes, 12 de enero de 2027", `Responsable: ${adm.name}`, "Objetivos:", "Sesión 2: Sesión: Fundamentos R50", "martes, 19 de enero de 2027", "Sesión 3: Sesión: Taller R50", "25 de enero de 2027 – 27 de enero de 2027", "Plan del taller", "Caso práctico", "Entrega final", "Trae el portátil."]) {
+    for (const s of ["PROGRAMA DEL CURSO", PROJECT, "3 sesiones", "Sesión 1: Presentación R50", "martes, 12 de enero de 2027", `Responsable: ${adm.name}`, "Objetivos:", "Sesión 2: Fundamentos R50", "martes, 19 de enero de 2027", "Sesión 3: Taller R50", "25 de enero de 2027 – 27 de enero de 2027", "Plan del taller", "Caso práctico", "Entrega final", "Trae el portátil."]) {
       L.check(`PDF: el texto incluye «${s}»`, text.includes(s), text.slice(0, 300));
     }
     L.check("PDF: las sesiones salen en el orden de la columna", text.indexOf("Sesión 1:") < text.indexOf("Sesión 2:") && text.indexOf("Sesión 2:") < text.indexOf("Sesión 3:"));
@@ -178,7 +178,7 @@ try {
       await dlg().getByLabel(/^Also save to Documentation as/).uncheck();
       const { text, filename } = await publishAndDownload("programme.pdf", true);
       L.check("EN: nombre del archivo en inglés", /^programme-master-r50-/.test(filename), filename);
-      for (const s of ["COURSE PROGRAMME", "3 sessions", "Session 1: Sesión: Presentación R50", "Tuesday, 12 January 2027", "25 January 2027 – 27 January 2027"]) {
+      for (const s of ["COURSE PROGRAMME", "3 sessions", "Session 1: Presentación R50", "Tuesday, 12 January 2027", "25 January 2027 – 27 January 2027"]) {
         L.check(`EN: el texto incluye «${s}»`, text.includes(s), text.slice(0, 300));
       }
       L.check("EN: sin responsable si no se pide", !text.includes(adm.name) || !text.includes("Assignee:"));
