@@ -139,6 +139,8 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
           className={cn(
             // pt y -mt: margen interior para que el anillo de foco de la primera tarjeta no lo recorte el scroll.
             "-mt-1.5 flex min-h-20 flex-1 flex-col gap-2 overflow-y-auto rounded-b-xl px-2 pt-1.5 transition-colors group-data-[more-below]/column:rounded-b-none",
+            // Sin anclaje del scroll mientras se arrastra una tarjeta (ver nearCards.ts).
+            "[[data-card-drag]_&]:[overflow-anchor:none]",
             // Hueco fijo al final (con el de la zona de archivos) para que la última tarjeta pueda quedar por encima
             // de la barra de selección y, sin ella, de los botones flotantes. Es el mismo haya o no selección: la barra
             // flota encima sin cambiar el alto ni el contenido de la columna, y el scroll no salta al aparecer.

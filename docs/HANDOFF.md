@@ -147,6 +147,16 @@ Guardas que conviene conocer:
   `PIZARRO_LAUNCHER` (`docker` / `npm`) para que el paso 1 de `/setup` diga dónde mirar el código
   (`setupCodeSource`, `src/lib/setup-core.ts`; Railway se detecta por sus variables). Recorrido completo desde cero:
   `e2e/install-e2e.mjs`.
+- Tablero con cientos o miles de tarjetas (`Board.tsx`, `TaskCard.tsx`, `nearCards.ts`): solo las tarjetas a la vista
+  de su columna o a menos de 300 px llevan `useSortable` (`SortableBinding`, que no pinta nada y pone transform,
+  transición y `data-dragging` en el nodo); las demás se pintan igual pero no se apuntan a dnd-kit y llevan
+  `content-visibility: auto`. Al pulsar una aún no apuntada se apunta en el acto (`flushSync`). El desplazamiento va en
+  `translate()` 2D y solo si no es cero (`translate3d` en todas creaba una capa por tarjeta). `DndContext` y las columnas
+  van en un `useMemo` (`dndBoard`) con manejadores estables: cada dibujo de `DndContext` hace que React recorra todas
+  las tarjetas, así que no debe volver a dibujarse al escribir en el buscador ni al abrir un diálogo. No leas
+  `useDndContext` en las tarjetas ni pases a `DndContext` props nuevas en cada dibujo. El texto del buscador de cada
+  tarea se normaliza una vez por versión (`taskSearchText`, `filters.ts`). Medida de referencia (Chromium con la CPU
+  ×4, 300 tarjetas en una columna): de 1,8 s a 0,3 s en tareas largas por arrastre.
 - Idioma en el cliente (`src/i18n/client.tsx`): `I18nProvider` pinta siempre el mismo `I18nContext.Provider` y solo
   cambia `value`; el diccionario de inglés llega con `use()` (y `next/dynamic` solo para la precarga en el HTML). No
   vuelvas a envolver los hijos en un componente distinto según el idioma: React desmontaba la página entera al cambiar

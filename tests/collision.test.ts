@@ -109,3 +109,28 @@ test("en el hueco entre dos tarjetas manda la más cercana (no la columna); por 
   assert.equal(at(500), "col:a"); // bajo la última tarjeta
   assert.equal(at(50), "col:a"); // encima de la primera
 });
+
+test("cada medida se lee una vez por detección y solo las de la columna bajo el puntero", () => {
+  // Como las de dnd-kit: top/left/bottom/right son getters que consultan el scroll en cada lectura.
+  const reads = new Map<string, number>();
+  const live = (id: string, r: ReturnType<typeof rect>) => {
+    const out = { width: r.width, height: r.height } as Record<string, number>;
+    for (const k of ["top", "left", "bottom", "right"] as const) {
+      Object.defineProperty(out, k, { enumerable: true, get: () => (reads.set(id, (reads.get(id) ?? 0) + 1), r[k]) });
+    }
+    return out;
+  };
+  const base = scenario({ x: 50, y: 330 });
+  const card = (id: string, column = "col:a") => ({ id, key: id, data: { current: { sortable: { containerId: column, index: 0 } } }, disabled: false, node: { current: null }, rect: { current: null } });
+  for (let i = 0; i < 20; i++) base.droppableRects.set(`a${i}`, rect(5, 400 + i * 70, 90, 60));
+  base.droppableContainers.push(...Array.from({ length: 20 }, (_, i) => card(`a${i}`) as never));
+  base.droppableRects.set("c0", rect(225, 400, 90, 60));
+  base.droppableContainers.push(card("c0", "col:c") as never);
+  const droppableRects = new Map([...base.droppableRects].map(([id, r]) => [id, live(String(id), r as ReturnType<typeof rect>)]));
+  const hit = boardCollisionDetection({ ...base, droppableRects } as unknown as Args);
+  assert.equal(hit[0]?.id, "t1");
+  // Dos lecturas (top y left) como mucho por medida; las tarjetas de otras columnas (c0) ni se leen.
+  assert.ok(reads.size > 0);
+  for (const [id, n] of reads) assert.ok(n <= 2, `${id}: ${n} lecturas`);
+  assert.equal(reads.get("c0"), undefined);
+});

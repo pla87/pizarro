@@ -1,5 +1,7 @@
-// Filtros rápidos del tablero (además del texto): lógica pura, sin React.
+// Filtros rápidos del tablero y texto del buscador: lógica pura, sin React.
 import { weekBoundsIso } from "@/lib/dates";
+import { mentionsToPlain } from "@/lib/mentions";
+import { normalizeSearch } from "@/lib/search-accents";
 import type { BoardTask } from "@/lib/types";
 
 /** Valor de `assigneeId` para «solo las que no tienen responsable». */
@@ -92,4 +94,36 @@ export function taskMatchesFilters(task: BoardTask, f: BoardFilters, ctx: Filter
   if (f.clients.length && !(task.client && f.clients.includes(task.client))) return false;
   if (f.assigneeId === NO_ASSIGNEE ? task.assigneeId !== null : f.assigneeId !== "" && task.assigneeId !== f.assigneeId) return false;
   return true;
+}
+
+/** Nombres con los que también se encuentra una tarea (tipo, responsable, etiquetas) y si cuenta su cliente. */
+export interface SearchNames {
+  kindName: ReadonlyMap<string, string>;
+  userName: ReadonlyMap<string, string>;
+  labelName: ReadonlyMap<string, string>;
+  clientEnabled: boolean;
+}
+
+// Texto ya normalizado de cada tarea, por juego de nombres y por versión de la tarea. Las tareas son inmutables (un cambio
+// crea otro objeto, y mergeTasks conserva el de las que no cambian), así que el objeto hace de id + versión: al escribir
+// en el buscador no se vuelve a normalizar nada y, cuando cambia una tarea, solo se recalcula la suya. Con otros nombres
+// (etiqueta renombrada, persona nueva…) se empieza un juego nuevo; los anteriores los libera el recolector.
+const searchTexts = new WeakMap<SearchNames, WeakMap<BoardTask, string>>();
+
+/** Lo que busca el buscador del tablero en una tarea (título, tipo, responsable, etiquetas y cliente), en minúsculas y sin tildes. */
+export function taskSearchText(task: BoardTask, names: SearchNames): string {
+  let byTask = searchTexts.get(names);
+  if (!byTask) searchTexts.set(names, (byTask = new WeakMap()));
+  let text = byTask.get(task);
+  if (text === undefined) {
+    const parts = [mentionsToPlain(task.title), names.kindName.get(task.kindId), task.assigneeId ? names.userName.get(task.assigneeId) : "", ...task.labelIds.map((id) => names.labelName.get(id)), names.clientEnabled ? task.client : ""];
+    text = normalizeSearch(parts.join(" "));
+    byTask.set(task, text);
+  }
+  return text;
+}
+
+/** Palabras de lo buscado, normalizadas igual que el texto de las tareas (deben aparecer todas). */
+export function searchTerms(query: string): string[] {
+  return normalizeSearch(query).split(/\s+/).filter(Boolean);
 }
