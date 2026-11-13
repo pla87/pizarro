@@ -6,8 +6,8 @@ import { buildTemplateApplication } from "../src/lib/project-templates";
 
 const LOCALES: ExampleLocale[] = ["es", "en"];
 
-test("hay los cuatro ejemplos previstos, con claves únicas", () => {
-  assert.deepEqual([...EXAMPLE_KEYS].sort(), ["empresa-clientes", "equipo-software", "eventos", "familia-casa"]);
+test("hay los cinco ejemplos previstos, con claves únicas", () => {
+  assert.deepEqual([...EXAMPLE_KEYS].sort(), ["curso-master", "empresa-clientes", "equipo-software", "eventos", "familia-casa"]);
   assert.equal(new Set(EXAMPLE_KEYS).size, EXAMPLE_KEYS.length);
 });
 
@@ -39,7 +39,7 @@ test("las dos versiones tienen la misma estructura", () => {
     assert.equal(en.tasks.length, es.tasks.length, `${ex.key}: tarjetas`);
     es.tasks.forEach((t, i) => {
       const e = en.tasks[i]!;
-      const shape = (x: typeof t) => [x.column, !!x.kind, x.generalKind, (x.labels ?? []).length, (x.subtasks ?? []).length, x.dueInDays, x.deliverable, x.recurrence, x.recurrenceDay, x.priority, x.cost, x.estimatedHours, !!x.client];
+      const shape = (x: typeof t) => [x.column, !!x.kind, x.generalKind, (x.labels ?? []).length, (x.subtasks ?? []).length, x.dueInDays, x.startInDays, x.deliverable, x.recurrence, x.recurrenceDay, x.priority, x.cost, x.estimatedHours, !!x.client];
       assert.deepEqual(shape(e), shape(t), `${ex.key}: tarjeta ${i + 1}`);
     });
   }

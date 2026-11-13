@@ -6,7 +6,8 @@
 // dos versiones (es y en); `tests/project-examples.test.ts` comprueba que sean válidas y que coincidan.
 //
 // Todas las tarjetas de muestra llevan la etiqueta EXAMPLE_LABEL para poder encontrarlas y borrarlas juntas.
-import { col, kind } from "./builtin-templates";
+import { builtinByKey, col, kind } from "./builtin-templates";
+import { BUILTIN_TEMPLATES_EN } from "./builtin-templates-en";
 import { MAX_DESCRIPTION, MAX_TITLE } from "./constants";
 import { templateInputSchema, type TemplateData, type TemplateInput } from "./project-templates";
 import type { TaskFieldKey } from "./task-fields";
@@ -31,6 +32,8 @@ interface ExampleTask {
   subtasks?: string[];
   /** Fecha límite: días desde hoy. */
   dueInDays?: number;
+  /** Fecha de inicio: días desde hoy (solo si la plantilla activa el campo «Fecha de inicio»). */
+  startInDays?: number;
   /** Posición (desde 0) en `deliverables`. */
   deliverable?: number;
   recurrence?: "DAILY" | "WEEKLY" | "MONTHLY";
@@ -395,6 +398,105 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
       ],
     },
   },
+
+  // --- Preparación de un curso -----------------------------------------------------------------------------
+  // La misma estructura que la plantilla de serie «Curso o máster», con sesiones de muestra en «Programa». Con otro
+  // nombre: en «Nuevo proyecto» un ejemplo y una plantilla no deben llamarse igual.
+  {
+    key: "curso-master",
+    es: {
+      name: "Preparación de un curso",
+      description: "Preparar un curso con un agente de IA: una tarjeta por sesión en «Programa» (que se publica en PDF), materiales, ejercicios, exámenes y seguimiento de alumnos.",
+      template: { ...builtinByKey("curso-master")!.data, description: "" },
+      tasks: [
+        {
+          title: "Bienvenida: así se usa este tablero",
+          description:
+            WELCOME_ES +
+            "\n\nEn **Programa** cada tarjeta es una sesión del curso, con su fecha. «Publicar programa (PDF)» genera el programa con las sesiones en ese orden y guarda una copia en Documentación.\n\n" +
+            "Al elegir un tipo (Preparar material, Preparar ejercicio, Preparar examen…) la descripción se rellena con un encargo para un agente de IA: objetivo, contenido, formato de entrega, duración, criterios y notas para el agente.",
+          column: 0,
+          kind: "Preparar material",
+        },
+        {
+          title: "Sesión: Presentación del curso",
+          description: "**Objetivos:** conocer el curso, el calendario y la forma de evaluación.\n\n**Contenidos:**\n\n- Presentación de profesores y alumnos\n- Programa y calendario\n- Criterios de evaluación\n\n**Actividades:** ronda de presentaciones.\n\n**Lecturas y materiales:** guía del curso.",
+          column: 4, kind: "Sesión", labels: ["Módulo 1"], dueInDays: 14,
+        },
+        {
+          title: "Sesión: Fundamentos",
+          description: "**Objetivos:** dominar los conceptos básicos del módulo 1.\n\n**Contenidos:**\n\n- Conceptos clave\n- Ejemplos resueltos\n\n**Actividades:** ejercicio en parejas.",
+          column: 4, kind: "Sesión", labels: ["Módulo 1"], dueInDays: 21,
+        },
+        {
+          title: "Sesión: Taller práctico",
+          description: "**Objetivos:** aplicar lo aprendido en un caso real.\n\n**Actividades:** taller de tres días con entrega final.",
+          column: 4, kind: "Sesión", labels: ["Módulo 2"], startInDays: 26, dueInDays: 28,
+        },
+        {
+          title: "Material: Diapositivas de fundamentos",
+          description: "**Objetivo:** diapositivas para la sesión «Fundamentos».\n\n**Contenido:**\n\n- Conceptos clave con un ejemplo cada uno\n\n**Formato de entrega:** Google Slides\n\n**Duración o extensión:** unas 20 diapositivas\n\n**Notas para el agente:** lenguaje sencillo; una idea por diapositiva.",
+          column: 1, kind: "Preparar material", labels: ["Módulo 1", "Para el agente"], dueInDays: 18, subtasks: ["Encargar el borrador al agente", "Revisar y corregir", "Publicar para los alumnos"],
+        },
+        {
+          title: "Examen: Parcial del módulo 1",
+          description: "La etiqueta «Revisión de coordinación» indica que otro profesor o la coordinación debe dar el visto bueno.",
+          column: 3, kind: "Preparar examen", labels: ["Módulo 1", "Revisión de coordinación"], dueInDays: 35, subtasks: ["Preparar las preguntas", "Preparar la plantilla de corrección"],
+        },
+        {
+          title: "Perfil: alumno A",
+          description: "Revisar el perfil de un alumno es una tarea del profesor. Usa una referencia en vez de datos personales si el proyecto lo comparte más gente.",
+          column: 5, kind: "Revisar perfil de alumno",
+        },
+      ],
+    },
+    en: {
+      name: "Course preparation",
+      description: "Prepare a course with an AI agent: one card per session in “Programme” (published as a PDF), materials, exercises, exams and student follow-up.",
+      template: { ...BUILTIN_TEMPLATES_EN["curso-master"]!, description: "" },
+      tasks: [
+        {
+          title: "Welcome: how this board works",
+          description:
+            WELCOME_EN +
+            "\n\nIn **Programme** each card is a session of the course, with its date. “Publish programme (PDF)” generates the programme with the sessions in that order and saves a copy in Documentation.\n\n" +
+            "When you choose a type (Prepare material, Prepare exercise, Prepare exam…) the description is filled in with a brief for an AI agent: objective, content, delivery format, duration, criteria and notes for the agent.",
+          column: 0,
+          kind: "Prepare material",
+        },
+        {
+          title: "Session: Course introduction",
+          description: "**Objectives:** get to know the course, the calendar and how it is assessed.\n\n**Topics:**\n\n- Teachers and students introduce themselves\n- Programme and calendar\n- Assessment criteria\n\n**Activities:** round of introductions.\n\n**Readings and materials:** course guide.",
+          column: 4, kind: "Session", labels: ["Module 1"], dueInDays: 14,
+        },
+        {
+          title: "Session: Fundamentals",
+          description: "**Objectives:** master the basic concepts of module 1.\n\n**Topics:**\n\n- Key concepts\n- Worked examples\n\n**Activities:** pair exercise.",
+          column: 4, kind: "Session", labels: ["Module 1"], dueInDays: 21,
+        },
+        {
+          title: "Session: Hands-on workshop",
+          description: "**Objectives:** apply what was learned to a real case.\n\n**Activities:** three-day workshop ending in a final submission.",
+          column: 4, kind: "Session", labels: ["Module 2"], startInDays: 26, dueInDays: 28,
+        },
+        {
+          title: "Material: Fundamentals slides",
+          description: "**Objective:** slides for the “Fundamentals” session.\n\n**Content:**\n\n- Key concepts, each one with an example\n\n**Delivery format:** Google Slides\n\n**Length or duration:** about 20 slides\n\n**Notes for the agent:** plain language; one idea per slide.",
+          column: 1, kind: "Prepare material", labels: ["Module 1", "For the agent"], dueInDays: 18, subtasks: ["Ask the agent for a draft", "Review and correct it", "Publish it to students"],
+        },
+        {
+          title: "Exam: Module 1 mid-term",
+          description: "The “Coordination review” label means another teacher or the coordinators must approve it.",
+          column: 3, kind: "Prepare exam", labels: ["Module 1", "Coordination review"], dueInDays: 35, subtasks: ["Prepare the questions", "Prepare the marking scheme"],
+        },
+        {
+          title: "Profile: student A",
+          description: "Reviewing a student's profile is a task for the teacher. Use a reference instead of personal data if more people share the project.",
+          column: 5, kind: "Review student profile",
+        },
+      ],
+    },
+  },
 ];
 
 export const EXAMPLE_KEYS = PROJECT_EXAMPLES.map((e) => e.key);
@@ -431,7 +533,7 @@ export function listExamples(locale: ExampleLocale): { key: string; name: string
   return PROJECT_EXAMPLES.map((e) => ({ key: e.key, name: e[locale].name, description: e[locale].description }));
 }
 
-const FIELD_OF_TASK: Record<string, TaskFieldKey> = { priority: "priority", cost: "cost", estimatedHours: "hours", client: "client" };
+const FIELD_OF_TASK: Record<string, TaskFieldKey> = { priority: "priority", cost: "cost", estimatedHours: "hours", client: "client", startInDays: "startDate" };
 
 /** Errores de coherencia de un ejemplo (vacío = válido): lo usan las pruebas y evita que una errata llegue a producción. */
 export function validateExample(content: ProjectExampleContent): string[] {
@@ -459,6 +561,7 @@ export function validateExample(content: ProjectExampleContent): string[] {
       if ((task as unknown as Record<string, unknown>)[prop] !== undefined && !tpl.taskFields.includes(field)) errors.push(`${at}: usa «${prop}» pero la plantilla no activa el campo «${field}»`);
     }
     if (task.recurrenceDay !== undefined && !task.recurrence) errors.push(`${at}: día de repetición sin repetición`);
+    if (task.startInDays !== undefined && task.dueInDays !== undefined && task.startInDays > task.dueInDays) errors.push(`${at}: la fecha de inicio es posterior a la fecha límite`);
   });
   if (deliverables.some((d) => !d.name.trim() || d.name.length > 120)) errors.push("entregable con nombre vacío o demasiado largo");
   return errors;

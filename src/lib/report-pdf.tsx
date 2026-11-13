@@ -1,9 +1,11 @@
 // Documentos PDF (@react-pdf/renderer). Este módulo solo se carga en el worker de PDF (report-pdf-worker.ts): el
 // proceso web importa de aquí únicamente tipos, así @react-pdf/renderer no entra en el servidor de Next.
-import { Document, Font, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Font, Link, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { intlLocale, makeT, type Locale, type T } from "@/i18n/core";
 import { formatDay } from "./dates";
 import type { ChecklistGroup, ChecklistGroupBy } from "./checklist";
+import type { ProgramPdfInput } from "./course-program";
+import type { PdfBlock, PdfRun } from "./pdf-markdown";
 import type { WeekPlanGroupBy, WeekPlanSection, WeekPlanTask } from "./week-plan";
 import { RECENT_DONE_DAYS, UPCOMING_DAYS, type DeliverableStatus, type Report, type ReportFieldRow, type ReportTask } from "./report";
 import { formatEuro, formatHours, PRIORITY_LABEL } from "./task-fields";
@@ -473,12 +475,120 @@ function renderDeliveryPdf(input: DeliveryPdfInput, t: T = makeT("es"), locale =
   return renderToBuffer(<DeliveryDocument r={input} t={t} locale={locale} />);
 }
 
+// --- Markdown de las descripciones (bloques de pdf-markdown.ts) ---------------------------------------------------------
+
+function runFont(r: PdfRun): string {
+  if (r.code) return r.b ? "Courier-Bold" : "Courier";
+  if (r.b && r.i) return "Helvetica-BoldOblique";
+  if (r.b) return "Helvetica-Bold";
+  if (r.i) return "Helvetica-Oblique";
+  return "Helvetica";
+}
+
+function Runs({ runs }: { runs: PdfRun[] }) {
+  return (
+    <>
+      {runs.map((r, i) => {
+        const deco = [r.u || r.href ? "underline" : "", r.s ? "line-through" : ""].filter(Boolean).join(" ") || undefined;
+        const style = { fontFamily: runFont(r), textDecoration: deco as "underline" | undefined, color: r.href ? C.brand : r.code ? "#be185d" : undefined };
+        return r.href ? <Link key={i} src={r.href} style={style}>{r.text}</Link> : <Text key={i} style={style}>{r.text}</Text>;
+      })}
+    </>
+  );
+}
+
+const HEADING_SIZE = [11.5, 10.5, 10, 9.5, 9, 9];
+
+/** Bloques de Markdown. `tight`: dentro de un elemento de lista, el primero sin margen superior (va junto a su viñeta). */
+function MarkdownBlocks({ blocks, tight = false }: { blocks: PdfBlock[]; tight?: boolean }) {
+  return (
+    <>
+      {blocks.map((b, i) => {
+        const top = tight && i === 0 ? 0 : 3;
+        switch (b.t) {
+          case "p": return <Text key={i} style={{ marginTop: top }}><Runs runs={b.runs} /></Text>;
+          case "h": return <Text key={i} style={{ marginTop: 6, fontSize: HEADING_SIZE[b.level - 1], fontFamily: "Helvetica-Bold", color: "#312e81" }} minPresenceAhead={20}><Runs runs={b.runs} /></Text>;
+          case "code": return <Text key={i} style={{ marginTop: 3, padding: 5, fontFamily: "Courier", fontSize: 8, backgroundColor: C.soft, borderWidth: 1, borderColor: C.line, borderRadius: 3 }}>{b.text}</Text>;
+          case "hr": return <View key={i} style={{ marginVertical: 5, borderBottomWidth: 1, borderBottomColor: C.line }} />;
+          case "quote": return <View key={i} style={{ marginTop: 3, paddingLeft: 7, borderLeftWidth: 2, borderLeftColor: C.line, color: C.muted }}><MarkdownBlocks blocks={b.blocks} /></View>;
+          case "list": return (
+            <View key={i} style={{ marginTop: top }}>
+              {b.items.map((item, j) => (
+                <View key={j} style={{ flexDirection: "row", marginTop: j === 0 ? 0 : 2 }}>
+                  <Text style={{ width: b.ordered || item.checked !== null ? 18 : 10, color: item.checked ? C.green : C.muted, fontFamily: item.checked !== null ? "Helvetica-Bold" : "Helvetica" }}>
+                    {item.checked !== null ? (item.checked ? "[x]" : "[ ]") : b.ordered ? `${b.start + j}.` : "•"}
+                  </Text>
+                  <View style={{ flex: 1 }}><MarkdownBlocks blocks={item.blocks} tight /></View>
+                </View>
+              ))}
+            </View>
+          );
+          case "table": return (
+            <View key={i} style={{ ...s.table, marginTop: 4 }}>
+              {[b.header, ...b.rows].map((row, j, all) => (
+                <View key={j} style={j === all.length - 1 ? s.trLast : s.tr} wrap={false}>
+                  {row.map((cell, k) => (
+                    <Text key={k} style={[s.td, { flex: 1 }, j === 0 ? s.th : {}]}><Runs runs={cell} /></Text>
+                  ))}
+                </View>
+              ))}
+            </View>
+          );
+          default: return null;
+        }
+      })}
+    </>
+  );
+}
+
+// --- Programa del curso (columna PROGRAM) -------------------------------------------------------------------------------
+
+function ProgramDocument({ r, t, locale }: { r: ProgramPdfInput; t: T; locale: string }) {
+  const count = r.sessions.length === 1 ? t("1 sesión") : t("{n} sesiones", { n: r.sessions.length });
+  return (
+    <Document title={`${t("Programa")} · ${r.project}`} author="Pizarro" creator="Pizarro" producer="Pizarro">
+      <Page size="A4" style={s.page}>
+        <View style={s.header}>
+          <Text style={s.eyebrow}>{t("Programa del curso")}</Text>
+          <Text style={s.title}>{r.project}</Text>
+          <Text style={s.meta}>{count} · {t("Publicado el {date}", { date: formatDay(r.today, undefined, locale) })}</Text>
+        </View>
+        {r.sessions.length === 0 && <Text style={s.small}>{t("Aún no hay sesiones en esta columna.")}</Text>}
+        {r.sessions.map((x) => (
+          <View key={x.n} style={{ flexDirection: "row", gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.line }}>
+            <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: C.brandSoft, alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10.5, color: C.brand }}>{x.n}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <View wrap={false} minPresenceAhead={30}>
+                <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 11.5, lineHeight: 1.25 }}>{t("Sesión {n}", { n: x.n })}: {x.title}</Text>
+                <Text style={{ fontSize: 8.5, color: x.date ? C.brand : C.faint, marginTop: 2, fontFamily: "Helvetica-Bold" }}>{x.date ?? t("Fecha por determinar")}</Text>
+                {r.withAssignee && x.assignee ? <Text style={{ ...s.small, marginTop: 1 }}>{t("Responsable")}: {x.assignee}</Text> : null}
+              </View>
+              <MarkdownBlocks blocks={x.blocks} />
+            </View>
+          </View>
+        ))}
+        <View style={s.footer} fixed>
+          <Text>{r.project}</Text>
+          <Text render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
+        </View>
+      </Page>
+    </Document>
+  );
+}
+
+function renderProgramPdf(input: ProgramPdfInput, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
+  return renderToBuffer(<ProgramDocument r={input} t={t} locale={locale} />);
+}
+
 /** Trabajo para el worker de PDF: datos ya preparados (serializables) y el idioma de quien lo pide. */
 export type PdfJob =
   | { kind: "report"; locale: Locale; input: Report }
   | { kind: "weekPlan"; locale: Locale; input: WeekPlanPdfInput }
   | { kind: "checklist"; locale: Locale; input: ChecklistPdfInput }
-  | { kind: "delivery"; locale: Locale; input: DeliveryPdfInput };
+  | { kind: "delivery"; locale: Locale; input: DeliveryPdfInput }
+  | { kind: "program"; locale: Locale; input: ProgramPdfInput };
 
 /** Pinta el PDF de un trabajo (en el worker). Los textos de los datos se adaptan antes a la fuente (ver pdf-text.ts). */
 export function renderPdfJob(raw: PdfJob): Promise<Buffer> {
@@ -490,6 +600,7 @@ export function renderPdfJob(raw: PdfJob): Promise<Buffer> {
     case "weekPlan": return renderWeekPlanPdf(job.input, t, locale);
     case "checklist": return renderChecklistPdf(job.input, t, locale);
     case "delivery": return renderDeliveryPdf(job.input, t, locale);
+    case "program": return renderProgramPdf(job.input, t, locale);
     default: throw new Error(`Tipo de PDF desconocido: ${(job as { kind: unknown }).kind}`);
   }
 }

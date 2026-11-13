@@ -49,6 +49,7 @@ const contentOf = (data: TemplateData) => ({
   hiddenGeneralKinds: data.hiddenGeneralKinds,
   hideAllGeneralKinds: data.hideAllGeneralKinds,
   labels: data.labels,
+  taskFields: data.taskFields,
   releaseTemplates: data.releaseTemplates,
 });
 

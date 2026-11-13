@@ -3,9 +3,9 @@
 import { memo, useEffect, useRef, useState, type RefObject } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { AlertTriangle, ArrowLeft, ArrowRight, CalendarDays, Check, CheckCircle2, FileDown, Gauge, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Tag, Trash2, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, CalendarDays, CalendarRange, Check, CheckCircle2, ClipboardCheck, FileDown, Flag, Gauge, GraduationCap, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Send, Tag, Trash2, Wallet, type LucideIcon } from "lucide-react";
 import { deleteColumn, moveColumn, renameColumn, setColumnDone, setColumnRole, setColumnRoutineTarget, setColumnWaitingDays, setColumnWipLimit } from "@/actions/columns";
-import { COLUMN_ROLE_LABEL, COLUMN_ROLES, DEFAULT_WAITING_DAYS, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
+import { COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, COLUMN_ROLES, DEFAULT_WAITING_DAYS, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
 import type { BoardColumn } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { parseWipInput, WIP_MAX, WIP_MIN, wipExceeded } from "@/lib/wip";
@@ -18,6 +18,7 @@ import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
 import { Modal } from "../ui/Modal";
 import { BudgetSummaryDialog } from "./BudgetSummaryDialog";
 import { ChecklistDialog } from "./ChecklistDialog";
+import { ProgramDialog } from "./ProgramDialog";
 import { useBoard, useSelectedCount, useTasks } from "./context";
 import { useShortcut } from "./shortcuts";
 import { EvergreenPanel } from "./EvergreenPanel";
@@ -39,6 +40,12 @@ interface Props {
 
 const NO_IDS: string[] = [];
 
+/** Icono de cada rol en el selector del menú de la columna (la explicación sale al pasar por encima: COLUMN_ROLE_HINT). */
+const ROLE_ICON: Record<ColumnRoleValue, LucideIcon> = {
+  NONE: Minus, NEXT_RELEASE: Rocket, IN_PRODUCTION: Flag, WAITING: Hourglass, WEEKLY_PLAN: CalendarRange, CHECKLIST: ListChecks,
+  REVIEW: ClipboardCheck, AGENDA: CalendarDays, ROUTINES: Repeat, DELIVERY: Send, BUDGET: Wallet, PROGRAM: GraduationCap,
+};
+
 /**
  * Columna del tablero. Memorizada: al arrastrar una tarjeta de una columna a otra el tablero se redibuja, pero solo
  * cambian las listas de origen y destino (Board conserva el mismo array en las demás), así que el resto no se repinta.
@@ -51,6 +58,7 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
   const allSelected = taskIds.length > 0 && selectedHere === taskIds.length;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
   const isNextRelease = column.role === "NEXT_RELEASE";
+  const [programOpen, setProgramOpen] = useState(false);
   // Límite orientativo: solo avisa al pasarlo (con las tarjetas justas no), nunca impide mover ni crear.
   const wipOver = wipExceeded(cardCount, column.wipLimit);
   // Archivos soltados en el hueco bajo las tarjetas: nueva tarea en esta columna.
@@ -129,6 +137,14 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
           >
             <Rocket size={15} /> {t("Generar Release")}
           </button>
+        </div>
+      )}
+      {column.role === "PROGRAM" && (
+        <div className="px-2 pb-1.5">
+          <button className="btn-secondary w-full py-1" onClick={() => setProgramOpen(true)} title={t(COLUMN_ROLE_HINT.PROGRAM)}>
+            <GraduationCap size={15} /> {t("Publicar programa (PDF)")}
+          </button>
+          {programOpen && <ProgramDialog column={column} onClose={() => setProgramOpen(false)} />}
         </div>
       )}
       {/* La lista lleva el id de la columna: la detección de colisiones (lib/collision.ts) solo repasa las tarjetas de la columna bajo el puntero. */}
@@ -249,7 +265,7 @@ function BudgetTotal({ columnId }: { columnId: string }) {
 
 function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; index: number; total: number; empty: boolean }) {
   const { setColumns, track, refresh, project, columns } = useBoard();
-  const [dialog, setDialog] = useState<"checklist" | "routine" | null>(null);
+  const [dialog, setDialog] = useState<"checklist" | "routine" | "program" | null>(null);
   const toast = useToast();
   const confirm = useConfirm();
   const prompt = usePrompt();
@@ -396,7 +412,9 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
           role="menuitemradio"
           aria-checked={column.role === r}
           onClick={() => setRole(r)}
-          className={cn("py-1.5 pl-7 text-xs", column.role === r && "font-semibold text-brand-600 dark:text-brand-300")}
+          icon={ROLE_ICON[r]}
+          title={t(COLUMN_ROLE_HINT[r])}
+          className={cn("py-1.5 pl-4 text-xs", column.role === r && "font-semibold text-brand-600 dark:text-brand-300")}
         >
           {column.role === r ? "● " : ""}{t(COLUMN_ROLE_LABEL[r])}
         </MenuItem>
@@ -419,6 +437,7 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
       )}
       {column.role === "DELIVERY" && <MenuItem icon={FileDown} onClick={() => window.open(columnUrl("delivery"), "_blank", "noopener")}>{t("Resumen para el cliente (PDF)")}</MenuItem>}
       {column.role === "BUDGET" && <MenuItem icon={Wallet} onClick={() => setSummaryOpen(true)}>{t("Resumen de presupuesto")}</MenuItem>}
+      {column.role === "PROGRAM" && <MenuItem icon={GraduationCap} onClick={() => setDialog("program")}>{t("Publicar programa (PDF)")}</MenuItem>}
       <MenuSeparator />
       <MenuItem icon={Gauge} onClick={editWipLimit}>
         {column.wipLimit != null ? t("Límite de tarjetas: {limit}…", { limit: column.wipLimit }) : t("Límite de tarjetas…")}
@@ -434,6 +453,7 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
     {summaryOpen && <BudgetSummaryDialog column={column} onClose={() => setSummaryOpen(false)} />}
     {dialog === "checklist" && <ChecklistDialog column={column} onClose={() => setDialog(null)} />}
     {dialog === "routine" && <RoutineTargetDialog column={column} onClose={() => setDialog(null)} />}
+    {dialog === "program" && <ProgramDialog column={column} onClose={() => setDialog(null)} />}
     </>
   );
 }
