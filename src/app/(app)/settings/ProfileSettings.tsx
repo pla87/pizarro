@@ -274,10 +274,10 @@ function GoogleSection({ google }: { google: Props["google"] }) {
   const [pending, start] = useActionTransition();
   return (
     <section id="google" className="card scroll-mt-4 p-5">
-      <h2 className="flex items-center gap-2 font-semibold"><Link2 size={17} /> {t("Google Docs y Sheets")}</h2>
+      <h2 className="flex items-center gap-2 font-semibold"><Link2 size={17} /> {t("Google Docs, Sheets y Slides")}</h2>
       <p className="mt-0.5 text-sm text-slate-500">
-        {t("Conecta tu cuenta para crear documentos y hojas de cálculo desde las tarjetas con")} <code>@docs</code> {t("y")} <code>@sheets</code>.
-        {" "}<InfoTip topic={t("Google Docs y Sheets")}>{t("Pizarro solo puede acceder a los archivos que crea él mismo (permiso")} <code>drive.file</code>).</InfoTip>
+        {t("Conecta tu cuenta para crear documentos, hojas de cálculo y presentaciones desde las tarjetas con")} <code>@docs</code>, <code>@sheets</code> {t("y")} <code>@slides</code>.
+        {" "}<InfoTip topic={t("Google Docs, Sheets y Slides")}>{t("Pizarro solo puede acceder a los archivos que crea él mismo (permiso")} <code>drive.file</code>).</InfoTip>
       </p>
       {google.message && (
         <p className={cn("mt-3 rounded-lg px-3 py-2 text-sm", google.message.ok ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300")}>

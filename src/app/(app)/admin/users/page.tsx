@@ -21,15 +21,16 @@ export default async function UsersPage() {
       _count: { select: { sessions: true, knownDevices: true } },
     },
   });
-  // De los proyectos privados solo se muestra cuántos tiene cada usuario como único miembro (se borrarían con él).
-  const privates = await db.project.findMany({ where: { isPrivate: true }, select: { members: { select: { userId: true } } } });
-  const sole = new Map<string, number>();
-  for (const p of privates) if (p.members.length === 1) sole.set(p.members[0]!.userId, (sole.get(p.members[0]!.userId) ?? 0) + 1);
+  // De los proyectos privados en los que cada usuario es el único miembro solo se pasan los ids (los administradores no
+  // ven sus nombres): al borrarlo pasan a ser de equipo, o se borran con él si se marca la casilla.
+  const privates = await db.project.findMany({ where: { isPrivate: true }, select: { id: true, members: { select: { userId: true } } } });
+  const sole = new Map<string, string[]>();
+  for (const p of privates) if (p.members.length === 1) sole.set(p.members[0]!.userId, [...(sole.get(p.members[0]!.userId) ?? []), p.id]);
   const rows = users.map(({ twoFactorMethod, googleSub, _count, ...u }) => ({
     ...u,
     twoFactor: twoFactorMethod !== null,
     googleLinked: googleSub !== null,
-    privateProjects: sole.get(u.id) ?? 0,
+    privateProjects: sole.get(u.id) ?? [],
     // Invitación pendiente: debe elegir contraseña y nunca ha entrado (cada acceso deja una sesión y un dispositivo conocido).
     invitePending: u.mustChangePassword && googleSub === null && _count.sessions === 0 && _count.knownDevices === 0,
   }));

@@ -157,6 +157,10 @@ Guardas que conviene conocer:
   `useDndContext` en las tarjetas ni pases a `DndContext` props nuevas en cada dibujo. El texto del buscador de cada
   tarea se normaliza una vez por versión (`taskSearchText`, `filters.ts`). Medida de referencia (Chromium con la CPU
   ×4, 300 tarjetas en una columna): de 1,8 s a 0,3 s en tareas largas por arrastre.
+  Arrastrar una tarjeta seleccionada con otras (reglas puras en `groupDrag.ts`) no añade nada a dnd-kit: solo se arrastra
+  la cogida; el montón es el overlay, y el atenuado de las demás y el texto del hueco son CSS (`data-group-drag` y
+  `--group-drop-label` en la raíz, `globals.css`), sin volver a dibujar ninguna tarjeta. Al soltar, `moveTasks(ids,
+  columna, { prevId, nextId })` las coloca seguidas (`placeBlockInColumn`, `task-positions.ts`), un solo deshacer.
 - Idioma en el cliente (`src/i18n/client.tsx`): `I18nProvider` pinta siempre el mismo `I18nContext.Provider` y solo
   cambia `value`; el diccionario de inglés llega con `use()` (y `next/dynamic` solo para la precarga en el HTML). No
   vuelvas a envolver los hijos en un componente distinto según el idioma: React desmontaba la página entera al cambiar
@@ -183,7 +187,7 @@ Guardas que conviene conocer:
   rutas, así que `src/lib/peer-ip.ts` (instalado en `instrumentation.ts`) la escribe en la cabecera interna
   `x-pz-peer-ip` de cada petición, sustituyendo la que mande el cliente. `tests/client-ip.test.ts` falla si otro módulo
   lee esas cabeceras. `npm run test:db` fija `TRUST_PROXY=1` (las pruebas ponen la IP con `X-Real-IP`).
-- Pool de PostgreSQL (`src/lib/db.ts`): tope de 10 s para conseguir una conexión (`DATABASE_CONNECT_TIMEOUT_MS`; antes
+- Pool de PostgreSQL (`src/lib/db.ts`): tope de 20 s para conseguir una conexión (`DATABASE_CONNECT_TIMEOUT_MS`; antes
   esperaba sin límite) y `DATABASE_POOL_SIZE` validado (`src/lib/db-pool.ts`: un valor raro avisa y usa 10). El pool
   (`LoggedPool`, subclase de `pg.Pool` que se pasa a `PrismaPg` con `disposeExternalPool`) anota «[db] No se puede
   conectar con PostgreSQL (servidor, base): motivo» como mucho cada 30 s.
@@ -310,7 +314,7 @@ Cómo se revisa cada PR:
   siempre contra una base de pruebas con datos de demostración) cuando cambie el aspecto de la app. Puesta en
   marcha (Pages, DNS, HTTPS, verificación del dominio): `docs/VENTA.md` §8.
 - Hecho: guías de conexión en la web (`/guias/`, `/en/guides/`): una página por cada `docs/guias/<nombre>.md` con su
-  `docs/guias/en/<nombre>.md` (Google, Google Docs y Sheets, Telegram, WhatsApp). La cabecera del fichero (`titulo`,
+  `docs/guias/en/<nombre>.md` (Google, Google Docs, Sheets y Slides, Telegram, WhatsApp). La cabecera del fichero (`titulo`,
   `descripcion`, `orden`, `icono`) da la tarjeta del índice; `build-site.mjs` las añade solas al índice y al sitemap
   y falla si falta la versión en inglés, el título o la descripción. El workflow «Web» también se lanza al cambiar
   `docs/guias/`. La portada enlaza a cada guía desde «Se conecta con lo que ya usas». El pie lleva una línea de

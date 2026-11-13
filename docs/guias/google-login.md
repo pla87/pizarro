@@ -7,7 +7,7 @@ icono: login
 
 # Iniciar sesión con Google
 
-Con esta conexión, la pantalla de acceso de Pizarro muestra el botón **Iniciar sesión con Google**. Entra quien ya tiene cuenta en Pizarro con ese mismo email: no abre el registro a nadie más. El cliente de Google que crees aquí sirve también para [Google Docs y Sheets](google-docs.md).
+Con esta conexión, la pantalla de acceso de Pizarro muestra el botón **Iniciar sesión con Google**. Entra quien ya tiene cuenta en Pizarro con ese mismo email: no abre el registro a nadie más. El cliente de Google que crees aquí sirve también para [Google Docs, Sheets y Slides](google-docs.md).
 
 Necesitas:
 
@@ -43,7 +43,7 @@ En Pizarro, **Administración → Ajustes → Acceso con Google** muestra arriba
 
 ## 5. Data Access: los permisos
 
-Pulsa **Add or remove scopes**, marca `openid`, `email` y `profile` (son los básicos) y guarda. Si también vas a crear Docs y Sheets, añade el permiso de Drive que explica [su guía](google-docs.md).
+Pulsa **Add or remove scopes**, marca `openid`, `email` y `profile` (son los básicos) y guarda. Si también vas a crear Docs, Sheets y Slides, añade el permiso de Drive que explica [su guía](google-docs.md).
 
 ## 6. Crea el cliente OAuth
 
@@ -55,7 +55,7 @@ Pulsa **Add or remove scopes**, marca `openid`, `email` y `profile` (son los bá
    https://pizarro.example.com/api/auth/google/callback
    ```
 
-   Si vas a usar Docs y Sheets, añade en el mismo cliente también `APP_URL` + `/api/google/callback`.
+   Si vas a usar Docs, Sheets y Slides, añade en el mismo cliente también `APP_URL` + `/api/google/callback`.
 4. Pulsa **Create** y copia el **Client ID** y el **Client secret**. El secreto completo solo se ve en ese momento; si lo pierdes, crea otro.
 
 ## 7. Pégalo en Pizarro

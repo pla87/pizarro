@@ -138,7 +138,9 @@ export async function checkCode(ch: Challenge, input: string): Promise<"ok" | "w
     const recovery = normalizeRecoveryCode(code);
     if (recovery) ok = await consumeRecoveryCode(ch.userId, recovery);
     else if (ch.user.twoFactorMethod === "TOTP") ok = await verifyTotpFor(ch.user.totpSecretEnc, code, ch.userId, ch.user.totpLastStep);
-    else if (ch.user.twoFactorMethod === "EMAIL") ok = await verifyEmailCode(ch, code.replace(/\s/g, ""));
+    // Sin verificación en dos pasos, la baja de quien entra con Google se confirma con un código por email (solo existe
+    // si lo pidió con sendAccountDeleteCode, que comprueba que puede usarlo).
+    else if (ch.user.twoFactorMethod === "EMAIL" || ch.kind === "ACCOUNT_DELETE") ok = await verifyEmailCode(ch, code.replace(/\s/g, ""));
   } else if (ch.method === "TOTP") {
     ok = await verifyTotpFor(ch.pendingSecretEnc, code, null, null);
   } else if (ch.method === "EMAIL") {
@@ -168,6 +170,22 @@ export async function accountDeleteChallenge(userId: string): Promise<Challenge>
     data: { userId, kind: "ACCOUNT_DELETE", tokenHash: hashAuthToken(newToken()), expiresAt: new Date(Date.now() + CHALLENGE_TTL_MS) },
     include: challengeInclude,
   });
+}
+
+/**
+ * «Volver a entrar con Google» para borrar la cuenta: la vuelta de Google (con la misma cuenta de Google enlazada) deja
+ * el desafío de la baja confirmado, para esta sesión y durante 10 minutos (en `next` va el id de la sesión; `via`,
+ * "google"). deleteMyAccount lo comprueba con accountDeleteGoogleConfirmed.
+ */
+export async function confirmAccountDeleteWithGoogle(userId: string, sessionId: string): Promise<void> {
+  const ch = await accountDeleteChallenge(userId);
+  await db.loginChallenge.update({ where: { id: ch.id }, data: { via: "google", confirmed: true, next: sessionId, expiresAt: new Date(Date.now() + CHALLENGE_TTL_MS) } });
+}
+
+/** ¿Ha vuelto a entrar con Google, desde esta sesión, en los últimos 10 minutos para borrar su cuenta? */
+export async function accountDeleteGoogleConfirmed(userId: string, sessionId: string | null): Promise<boolean> {
+  if (!sessionId) return false;
+  return (await db.loginChallenge.count({ where: { userId, kind: "ACCOUNT_DELETE", via: "google", confirmed: true, next: sessionId, expiresAt: { gt: new Date() } } })) > 0;
 }
 
 /**

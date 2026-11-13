@@ -9,6 +9,7 @@ import type { BoardColumn, BoardTask } from "@/lib/types";
 import type { T } from "@/i18n/core";
 import type { useToast } from "../ui/Toast";
 import { focusCard } from "./shortcuts";
+import { keyboardBlock, selectionGroup, type BlockMove, type BlockPlacement } from "./groupDrag";
 
 type Toast = ReturnType<typeof useToast>;
 
@@ -25,6 +26,10 @@ interface Deps {
   t: T;
   /** Avisa si salen de una columna de revisión con subtareas sin marcar; `false` = cancelado. */
   confirmLeaveReview: (taskIds: string[], toColumnId: string) => Promise<boolean>;
+  /** Selección actual (lectura puntual). */
+  getSelected: () => ReadonlySet<string>;
+  /** Mueve el grupo en bloque (Board.tsx, lo mismo que soltar una selección arrastrada); `focusId`: la tarjeta con el foco. */
+  moveBlock: (group: string[], columnId: string, placement: BlockPlacement, focusId?: string) => Promise<void>;
 }
 
 /**
@@ -57,6 +62,20 @@ export function useCardActions(deps: Deps) {
       return true;
     };
 
+    /**
+     * Alt+flechas sobre una tarjeta seleccionada con otras: se mueve toda la selección, junta (groupDrag.ts). `true` si lo
+     * ha hecho (o no había adónde ir); `false` si la tarjeta no forma parte de una selección de varias.
+     */
+    const moveGroup = async (id: string, move: BlockMove): Promise<boolean> => {
+      const { getSelected, sortedColumns, baseItems, moveBlock } = ref.current;
+      const columnOrder = sortedColumns.map((c) => c.id);
+      const group = selectionGroup(getSelected(), id, columnOrder, baseItems);
+      if (!group) return false;
+      const placement = keyboardBlock(baseItems, columnOrder, group, id, move);
+      if (placement) await moveBlock(group, placement.columnId, placement, id);
+      return true;
+    };
+
     return {
       /** Cadencia de una tarea fija (1 = todas, 2 = cada dos, 3 = cada tres releases). */
       setEvergreenEvery: async (id: string, every: number) => {
@@ -72,6 +91,7 @@ export function useCardActions(deps: Deps) {
       },
 
       moveToAdjacentColumn: async (id: string, dir: -1 | 1) => {
+        if (await moveGroup(id, dir < 0 ? "left" : "right")) return;
         const { getTask, sortedColumns, baseItems, patchTask, upsertTask, track, toast, t } = ref.current;
         const task = getTask(id);
         if (!task) return;
@@ -95,6 +115,7 @@ export function useCardActions(deps: Deps) {
       },
 
       moveWithinColumn: async (id: string, dir: -1 | 1) => {
+        if (await moveGroup(id, dir < 0 ? "up" : "down")) return;
         const { getTask, baseItems, patchTask, upsertTask, track, toast } = ref.current;
         const task = getTask(id);
         if (!task) return;

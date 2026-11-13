@@ -13,6 +13,8 @@ import { flushLogs } from "../../src/lib/log";
 import { purgeProject } from "../../src/lib/project-delete";
 import { attachmentPath } from "../../src/lib/uploads";
 import { GET } from "../../src/app/api/attachments/[attachmentId]/route";
+import { POST as attachRoute } from "../../src/app/api/tasks/[taskId]/attachments/route";
+import { resetRateLimit } from "../../src/lib/rate-limit";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-att-serve-"));
 
@@ -176,5 +178,39 @@ describe("/api/attachments: caché y acceso", () => {
     // logEvent escribe en segundo plano
     await flushLogs();
     assert.equal(await db.appLog.count({ where: { action: "attachments.download", projectId: f.project.id } }), 2);
+  });
+
+  test("formatos del material de un curso (.md, .pdf, .html, .docx, .pptx): se suben y se descargan; ninguno como página", async () => {
+    const member = await makeUser();
+    const f = await makeProject({ members: [member] });
+    const task = await makeTask(f);
+    await loginAs(member);
+    resetRateLimit(`upload:${member.id}`);
+    const files: [string, string, string, string][] = [
+      // nombre, tipo que declara el navegador, contenido, Content-Type con el que se sirve
+      ["guia.md", "text/markdown", "# Tema 1\n", "application/octet-stream"],
+      ["tema.pdf", "application/pdf", "%PDF-1.4\n%%EOF", "application/pdf"],
+      ["pagina.html", "text/html", "<!doctype html><script>localStorage.setItem('pz','1')</script>", "application/octet-stream"],
+      ["tema.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "PK docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+      ["clase.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation", "PK pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+    ];
+    for (const [name, type, body, served] of files) {
+      const form = new FormData();
+      form.append("file", new File([body], name, { type }));
+      const res = await attachRoute(new Request(`http://localhost/api/tasks/${task.id}/attachments`, { method: "POST", body: form, headers: { origin: "http://localhost", host: "localhost" } }), { params: Promise.resolve({ taskId: task.id }) });
+      assert.equal(res.status, 201, `${name}: ${await res.clone().text()}`);
+      const row = await db.taskAttachment.findFirstOrThrow({ where: { taskId: task.id, originalName: name } });
+      assert.equal(row.isImage, false, name);
+      // Ver o descargar, siempre como adjunto (nunca en línea) y sin que el navegador adivine el tipo.
+      for (const download of [false, true]) {
+        const r = await get(row.id, { download });
+        assert.equal(r.status, 200, name);
+        assert.equal(r.headers.get("content-type"), served, name);
+        assert.match(r.headers.get("content-disposition")!, /^attachment; filename\*=UTF-8''/, name);
+        assert.equal(decodeURIComponent(r.headers.get("content-disposition")!.replace(/^attachment; filename\*=UTF-8''/, "")), name);
+        assert.equal(r.headers.get("x-content-type-options"), "nosniff", name);
+        assert.equal(await r.text(), body, name);
+      }
+    }
   });
 });

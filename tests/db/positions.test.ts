@@ -225,6 +225,78 @@ describe("altas, copias y movimientos en bloque no crean empates", () => {
   });
 });
 
+describe("arrastrar una selección: moveTasks en bloque entre dos vecinas", () => {
+  test("seguidas, en orden de tablero (columna y posición), también las que ya estaban en la columna; un solo deshacer", async () => {
+    const { f } = await setup();
+    const a = await task(f, "A", 1000);
+    const b = await task(f, "B", 2000);
+    const p = await task(f, "P", 1000, f.columns.doing);
+    const c = await task(f, "C", 1500, f.columns.doing);
+    const n = await task(f, "N", 2000, f.columns.doing);
+    const d = await task(f, "D", 3000, f.columns.doing);
+    const undoBefore = await db.undoEntry.count({ where: { projectId: f.project.id } });
+    // Se suelta «D» (con A, B y C seleccionadas) entre P y N: el orden del tablero es A, B (Por hacer) y C, D (En curso).
+    const res = expectOk(await moveTasks([d.id, c.id, b.id, a.id], f.columns.doing, { prevId: p.id, nextId: n.id }));
+    assert.deepEqual(res.moved.map((m) => m.id), [a.id, b.id, c.id, d.id]);
+    assert.deepEqual(await order(f.columns.doing), ["P", "A", "B", "C", "D", "N"]);
+    assert.deepEqual(await order(f.columns.todo), []);
+    await assertNoTies(f.columns.doing);
+    assert.equal(await db.undoEntry.count({ where: { projectId: f.project.id } }), undoBefore + 1);
+    // Historial: solo las que cambian de columna.
+    const events = await db.taskEvent.findMany({ where: { taskId: { in: [a.id, b.id, c.id, d.id] } }, select: { taskId: true } });
+    assert.deepEqual(new Set(events.map((e) => e.taskId)), new Set([a.id, b.id]));
+    expectOk(await undoLast(f.project.id));
+    assert.deepEqual(await order(f.columns.todo), ["A", "B"]);
+    assert.deepEqual(await order(f.columns.doing), ["P", "C", "N", "D"]);
+  });
+
+  test("sin hueco entre las vecinas: renumera la columna, sin empates; deshacer conserva el orden de las de esa columna", async () => {
+    const { f } = await setup();
+    const p = await task(f, "P", 1000, f.columns.doing);
+    const n = await task(f, "N", 1000 + 1e-7, f.columns.doing);
+    const z = await task(f, "Z", 5000, f.columns.doing);
+    const a = await task(f, "A", 1000);
+    expectOk(await moveTasks([a.id, z.id], f.columns.doing, { prevId: p.id, nextId: n.id }));
+    assert.deepEqual(await order(f.columns.doing), ["P", "A", "Z", "N"]);
+    await assertNoTies(f.columns.doing);
+    expectOk(await undoLast(f.project.id));
+    assert.deepEqual(await order(f.columns.doing), ["P", "N", "Z"]);
+    assert.deepEqual(await order(f.columns.todo), ["A"]);
+    await assertNoTies(f.columns.doing);
+  });
+
+  test("vecina que otra persona ha movido: al final; una archivada mientras tanto no se mueve; las fijas dejan de serlo", async () => {
+    const { f } = await setup();
+    const p = await task(f, "P", 1000, f.columns.doing);
+    const n = await task(f, "N", 2000, f.columns.doing);
+    const a = await task(f, "A", 1000);
+    const b = await task(f, "B", 2000);
+    const x = await task(f, "X", 3000);
+    await db.task.update({ where: { id: x.id }, data: { archivedAt: new Date(), archivedFromColumnId: f.columns.todo } });
+    await db.task.update({ where: { id: b.id }, data: { evergreen: true } });
+    await db.task.update({ where: { id: p.id }, data: { columnId: f.columns.done } });
+    const res = expectOk(await moveTasks([a.id, b.id, x.id], f.columns.doing, { prevId: p.id, nextId: n.id }));
+    assert.deepEqual(res.moved.map((m) => m.id), [a.id, b.id]);
+    assert.deepEqual(await order(f.columns.doing), ["N", "A", "B"]);
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: b.id } })).evergreen, false);
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: x.id } })).columnId, f.columns.todo);
+  });
+
+  test("al principio de la columna; hacia la columna de otro proyecto no se mueve ninguna", async () => {
+    const { f, user } = await setup();
+    const n = await task(f, "N", 1000, f.columns.doing);
+    const a = await task(f, "A", 1000);
+    const b = await task(f, "B", 2000);
+    expectOk(await moveTasks([a.id, b.id], f.columns.doing, { prevId: null, nextId: n.id }));
+    assert.deepEqual(await order(f.columns.doing), ["A", "B", "N"]);
+    const other = await makeProject({ members: [user] });
+    const res = await moveTasks([a.id], other.columns.doing, { prevId: null, nextId: null });
+    assert.equal(res.ok, true);
+    assert.equal(expectOk(res).moved.length, 0);
+    assert.deepEqual(await order(f.columns.doing), ["A", "B", "N"]);
+  });
+});
+
 describe("deshacer no crea empates", () => {
   test("deshacer un borrado cuando otra tarjeta ya ocupa su posición: vuelve justo delante", async () => {
     const { f } = await setup();

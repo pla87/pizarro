@@ -4,6 +4,7 @@ import { accesibilidad } from "./accesibilidad";
 import { acceso } from "./acceso";
 import { admin } from "./admin";
 import { almacenamiento } from "./almacenamiento";
+import { aplicarPlantilla } from "./aplicar-plantilla";
 import { baja } from "./baja";
 import { board } from "./board";
 import { calendar } from "./calendar";
@@ -14,10 +15,12 @@ import { comentarios } from "./comentarios";
 import { common } from "./common";
 import { conexion } from "./conexion";
 import { copia } from "./copia";
+import { curso } from "./curso";
 import { datos } from "./datos";
 import { cuentas } from "./cuentas";
 import { detalle } from "./detalle";
 import { documentacion } from "./documentacion";
+import { formatos } from "./formatos";
 import { ics } from "./ics";
 import { importar } from "./importar";
 import { instalar } from "./instalar";
@@ -28,9 +31,11 @@ import { lista } from "./lista";
 import { mensajeria } from "./mensajeria";
 import { pegado } from "./pegado";
 import { plantillas } from "./plantillas";
+import { privados } from "./privados";
 import { proyectos } from "./proyectos";
 import { releases } from "./releases";
 import { repeticion } from "./repeticion";
+import { seleccion } from "./seleccion";
 import { server } from "./server";
 import { settings } from "./settings";
 import { setup } from "./setup";
@@ -45,5 +50,5 @@ export const EN: Record<string, string> = {
   ...common, ...board, ...task, ...detalle, ...comentarios, ...lista, ...pegado, ...wip, ...calendar, ...releases, ...conexion,
   ...accesibilidad, ...settings, ...admin, ...server, ...cuentas, ...acceso, ...colaboracion, ...proyectos, ...plantillas,
   ...setup, ...documentacion, ...campos, ...almacenamiento, ...importar, ...ics, ...mensajeria, ...soporte, ...licencia,
-  ...legal, ...landing, ...web, ...instalar, ...baja, ...datos, ...copia, ...repeticion, ...carga, ...textos,
+  ...legal, ...landing, ...web, ...instalar, ...baja, ...datos, ...copia, ...repeticion, ...carga, ...textos, ...aplicarPlantilla, ...privados, ...formatos, ...curso, ...seleccion,
 };

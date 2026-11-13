@@ -136,9 +136,9 @@ export function GoogleGuide({ view }: { view: GoogleSettingsView }) {
           <p>{t("Pulsa «Add or remove scopes» y marca:")}</p>
           <ul className="list-disc space-y-1 pl-5">
             <li>{t("Entrar con Google: openid, email y profile (básicos).")}</li>
-            <li>{t("Docs y Sheets desde las tarjetas: https://www.googleapis.com/auth/drive.file (solo los archivos que crea o abre Pizarro, no todo tu Drive). Solo si usas esa función.")}</li>
+            <li>{t("Docs, Sheets y Slides desde las tarjetas: https://www.googleapis.com/auth/drive.file (solo los archivos que crea o abre Pizarro, no todo tu Drive). Solo si usas esa función.")}</li>
           </ul>
-          <p>{t("Una app «Externa» en producción puede requerir verificación por el permiso de Drive. Para evitarla, déjala en «Testing» o usa solo el acceso con Google, sin Docs ni Sheets.")}</p>
+          <p>{t("Una app «Externa» en producción puede requerir verificación por el permiso de Drive. Para evitarla, déjala en «Testing» o usa solo el acceso con Google, sin Docs, Sheets ni Slides.")}</p>
           <p>{t("Guarda con «Update» y «Save».")}</p>
         </Step>
 
@@ -151,12 +151,12 @@ export function GoogleGuide({ view }: { view: GoogleSettingsView }) {
           {redirectUris ? (
             <div className="space-y-1.5">
               <CopyRow label={t("Acceso con Google")} value={redirectUris.login} />
-              <CopyRow label={t("Docs y Sheets")} value={redirectUris.docs} />
+              <CopyRow label={t("Docs, Sheets y Slides")} value={redirectUris.docs} />
               {view.mismatch && (
                 <>
                   <p className="pt-1">{t("Si migras de dirección, añade también estas (la actual, {current}):", { current: view.mismatch.current })}</p>
                   <CopyRow label={t("Acceso con Google")} value={view.mismatch.redirectUris.login} />
-                  <CopyRow label={t("Docs y Sheets")} value={view.mismatch.redirectUris.docs} />
+                  <CopyRow label={t("Docs, Sheets y Slides")} value={view.mismatch.redirectUris.docs} />
                 </>
               )}
             </div>

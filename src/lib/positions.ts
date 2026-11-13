@@ -22,6 +22,26 @@ export function needsRebalance(prev?: number | null, next?: number | null): bool
 }
 
 /**
+ * Posiciones para `n` tarjetas seguidas entre dos vecinas (cualquiera puede faltar): repartidas a partes iguales en el
+ * hueco, o de POSITION_STEP en POSITION_STEP detrás de la anterior (o delante de la siguiente). Arrastre de una selección.
+ */
+export function spreadPositions(prev: number | null | undefined, next: number | null | undefined, n: number): number[] {
+  if (prev == null && next == null) return Array.from({ length: n }, (_, i) => (i + 1) * POSITION_STEP);
+  if (next == null) return Array.from({ length: n }, (_, i) => prev! + (i + 1) * POSITION_STEP);
+  if (prev == null) return Array.from({ length: n }, (_, i) => next - (n - i) * POSITION_STEP);
+  const step = (next - prev) / (n + 1);
+  return Array.from({ length: n }, (_, i) => prev + step * (i + 1));
+}
+
+/** Como needsRebalance, para `n` posiciones seguidas: true si entre las dos vecinas no caben `n` distintas y en orden. */
+export function blockNeedsRebalance(prev: number | null | undefined, next: number | null | undefined, n: number): boolean {
+  if (prev == null || next == null) return false;
+  if (!(next - prev >= MIN_GAP * (n + 1))) return true;
+  const all = [prev, ...spreadPositions(prev, next, n), next];
+  return all.some((p, i) => i > 0 && !(p > all[i - 1]!));
+}
+
+/**
  * Orden de las tarjetas: por posición y, si dos coincidieran, por id. Es el mismo criterio que usa el
  * servidor (TASK_ORDER en task-positions.ts): sin desempate, el orden de dos posiciones iguales dependería
  * de cómo devuelva las filas PostgreSQL y podría cambiar tras cualquier refresco.

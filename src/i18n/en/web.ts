@@ -210,8 +210,8 @@ export const web: Record<string, string> = {
   "Guías de conexión": "Connection guides",
   "Paso a paso para conectar Pizarro con Google, Telegram y WhatsApp. Todo es opcional y lo configura un administrador de tu instalación.":
     "Step by step, how to connect Pizarro with Google, Telegram and WhatsApp. All of it is optional and set up by an administrator of your installation.",
-  "Guías paso a paso para conectar Pizarro con Google (inicio de sesión, Docs y Sheets), Telegram y WhatsApp.":
-    "Step-by-step guides to connect Pizarro with Google (sign-in, Docs and Sheets), Telegram and WhatsApp.",
+  "Guías paso a paso para conectar Pizarro con Google (inicio de sesión, Docs, Sheets y Slides), Telegram y WhatsApp.":
+    "Step-by-step guides to connect Pizarro with Google (sign-in, Docs, Sheets and Slides), Telegram and WhatsApp.",
   "¿Aún no has instalado Pizarro?": "Haven't installed Pizarro yet?",
   "Leer la guía": "Read the guide",
   "Otras guías": "Other guides",

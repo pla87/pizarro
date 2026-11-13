@@ -1,0 +1,43 @@
+// Traducciones al inglés (columna «Programa» de un curso, su PDF y las explicaciones de los roles de columna).
+// Clave: texto exacto en español.
+export const curso: Record<string, string> = {
+  // Rol «Programa» y su PDF
+  "Programa del curso (PDF)": "Course programme (PDF)",
+  "Programa": "Programme",
+  "programa": "programme",
+  "Programa del curso": "Course programme",
+  "Publicar programa (PDF)": "Publish programme (PDF)",
+  "1 sesión": "1 session",
+  "{n} sesiones": "{n} sessions",
+  "Sesión {n}": "Session {n}",
+  "Publicado el {date}": "Published on {date}",
+  "Desde el {date}": "From {date}",
+  "Fecha por determinar": "Date to be confirmed",
+  "Aún no hay sesiones en esta columna.": "There are no sessions in this column yet.",
+  "No se pudo guardar en la Documentación.": "Could not save it to Documentation.",
+  // Diálogo «Publicar programa»
+  "Publicar": "Publish",
+  "No se pudo generar el programa.": "Could not generate the programme.",
+  "Sin conexión: no se ha podido generar el programa.": "Offline: the programme could not be generated.",
+  "El programa está listo.": "The programme is ready.",
+  "Guardado en Documentación como «{name}».": "Saved to Documentation as “{name}”.",
+  "No se ha guardado en Documentación: {reason}": "Not saved to Documentation: {reason}",
+  "Un PDF con la sesión de «{name}»: número, fecha, título y descripción.": "A PDF with the session in “{name}”: number, date, title and description.",
+  "Un PDF con las {n} sesiones de «{name}» en su orden: número, fecha, título y descripción.": "A PDF with the {n} sessions in “{name}” in their order: number, date, title and description.",
+  "Incluir el responsable de cada sesión (profesor)": "Include each session's assignee (teacher)",
+  "Guardar también en Documentación como «{name}»": "Also save to Documentation as “{name}”",
+  "Vista previa sin guardar": "Preview without saving",
+  // Explicación de cada rol en el menú de la columna
+  "Columna normal, sin funciones especiales.": "A normal column, with no special features.",
+  "Sus tarjetas forman la siguiente release (botón «Generar Release»).": "Its cards make up the next release (“Generate release” button).",
+  "Las tarjetas de una release publicada pasan aquí.": "Cards from a published release move here.",
+  "Avisa a la persona asignada si una tarjeta lleva demasiados días aquí.": "Reminds the assignee when a card has been here too many days.",
+  "PDF de las tareas de la semana, por día o por persona.": "PDF of the week's tasks, by day or by person.",
+  "Reúne las subtareas de todas sus tarjetas en una sola lista.": "Gathers the subtasks of all its cards into a single list.",
+  "Avisa al sacar una tarjeta con subtareas sin marcar.": "Warns when a card with unticked subtasks is moved out.",
+  "Exporta sus tareas con fecha a un calendario (.ics).": "Exports its dated tasks to a calendar (.ics).",
+  "Tareas que se repiten: elige dónde aparece la siguiente.": "Repeating tasks: choose where the next one appears.",
+  "PDF de resumen para el cliente, sin comentarios ni personas.": "Client summary PDF, with no comments or people.",
+  "Suma el coste de sus tarjetas y activa el campo Coste.": "Adds up the cost of its cards and turns on the Cost field.",
+  "Cada tarjeta es una sesión del curso: publica el programa en PDF.": "Each card is a session of the course: publish the programme as a PDF.",
+};

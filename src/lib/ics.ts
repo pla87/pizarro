@@ -168,7 +168,9 @@ export function markdownToPlain(md: string): string {
     .replace(/~~(.+?)~~/g, "$1")
     .replace(/^\s*[-*+]\s+\[( |x)\]\s+/gim, (_m, c: string) => (c === " " ? "[ ] " : "[x] "))
     .replace(/^\s*[-*+]\s+/gm, "- ")
-    .replace(/\n{3,}/g, "\n\n");
+    // Párrafos vacíos del editor con barra («&nbsp;», o una línea con espacios): con el resto de líneas en blanco, una sola.
+    .replace(/^[ \t]*&nbsp;[ \t]*$/gm, "")
+    .replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, "\n\n");
   return decodeEntities(plain)
     .replace(/[\uE121-\uE17E]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xe100))
     .replace(/\uE001(\d+)\uE002/g, (_m, i: string) => code[Number(i)] ?? "")

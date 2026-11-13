@@ -102,6 +102,9 @@ describe("documentación: subida por la ruta API", () => {
       [new File(["<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>"], "x.svg", { type: "image/svg+xml" }), "OTHER"],
       [new File(["<html><script>alert(1)</script></html>"], "falso.pdf", { type: "application/pdf" }), "OTHER"],
       [new File([new Uint8Array([0, 1, 2, 3])], "bin.txt", { type: "text/plain" }), "OTHER"],
+      [new File(["<!doctype html><h1>Tema</h1><script>localStorage.x=1</script>"], "tema.html", { type: "text/html" }), "HTML"],
+      [new File(["PK\u0003\u0004 docx"], "tema.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }), "OTHER"],
+      [new File(["PK\u0003\u0004 pptx"], "clase.pptx", { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" }), "OTHER"],
     ];
     const ids: Record<string, string> = {};
     for (const [file, kind] of files) {
@@ -134,8 +137,19 @@ describe("documentación: subida por la ruta API", () => {
     const img = await get(ids["img.png"]!);
     assert.equal(img.headers.get("content-type"), "image/webp");
     assert.equal((await db.projectDocument.findUniqueOrThrow({ where: { id: ids["img.png"]! } })).mimeType, "image/webp");
-    // SVG y falsos PDF: nunca inline ni con su tipo (octet-stream, adjunto).
-    for (const n of ["x.svg", "falso.pdf", "bin.txt"]) {
+    // HTML: nunca como HTML. Para verlo, texto plano con la CSP aislada (sin scripts ni red; el visor lo pinta en un marco
+    // sin scripts); descargado, como octet-stream y adjunto.
+    const html = await get(ids["tema.html"]!);
+    assert.equal(html.headers.get("content-type"), "text/plain; charset=utf-8");
+    assert.equal(html.headers.get("x-content-type-options"), "nosniff");
+    assert.match(html.headers.get("content-security-policy")!, /default-src 'none'.*sandbox/);
+    assert.match(await html.text(), /<script>/);
+    const htmlDl = await get(ids["tema.html"]!, "?download=1");
+    assert.equal(htmlDl.headers.get("content-type"), "application/octet-stream");
+    assert.match(htmlDl.headers.get("content-disposition")!, /^attachment; filename\*=UTF-8''tema\.html$/);
+    assert.equal((await db.projectDocument.findUniqueOrThrow({ where: { id: ids["tema.html"]! } })).mimeType, "text/html");
+    // SVG, falsos PDF, Word y PowerPoint: nunca inline ni con su tipo (octet-stream, adjunto).
+    for (const n of ["x.svg", "falso.pdf", "bin.txt", "tema.docx", "clase.pptx"]) {
       const r = await get(ids[n]!);
       assert.equal(r.headers.get("content-type"), "application/octet-stream", n);
       assert.match(r.headers.get("content-disposition")!, /^attachment/, n);

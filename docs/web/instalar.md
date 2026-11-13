@@ -241,7 +241,7 @@ Pulsa *Enviar email de prueba* para comprobarlo.
 Cada conexión tiene su guía paso a paso:
 
 - [Iniciar sesión con Google](../guias/google-login.md): entrar con la cuenta de Google, sin otra contraseña.
-- [Google Docs y Sheets](../guias/google-docs.md): crear un documento desde una tarea.
+- [Google Docs, Sheets y Slides](../guias/google-docs.md): crear un documento, una hoja o una presentación desde una tarea.
 - [Avisos por Telegram](../guias/telegram.md): gratis y listo en cinco minutos.
 - [Avisos por WhatsApp](../guias/whatsapp.md): con la API oficial de Meta, de pago.
 

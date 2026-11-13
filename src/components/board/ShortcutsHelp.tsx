@@ -32,6 +32,7 @@ const GROUPS: { title: string; items: { keys: string; label: string }[] }[] = [
       { keys: "Alt+↑", label: "Subir la tarjeta dentro de su columna" },
       { keys: "Alt+↓", label: "Bajar la tarjeta dentro de su columna" },
       { keys: "Espacio", label: "Seleccionar o deseleccionar la tarjeta" },
+      { keys: "Alt+← → ↑ ↓", label: "Con el foco en una de varias seleccionadas: moverlas todas juntas" },
       { keys: "Alt+D", label: "Fecha límite de la tarjeta" },
       { keys: "F2", label: "Renombrar la tarjeta" },
       { keys: "Alt+Shift+D", label: "Duplicar la tarjeta" },

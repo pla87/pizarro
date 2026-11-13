@@ -2,7 +2,8 @@ import { getSchema } from "@tiptap/core";
 import { MarkdownManager } from "@tiptap/markdown";
 import { formatExtensions } from "./editor-extensions";
 import { MentionChip } from "./editor-mention";
-import { normalizeEditorMarkdown } from "./markdown-entities";
+import { keepUntouchedMarkdown } from "./markdown-keep";
+import { blankEmptyParagraphs, normalizeEditorMarkdown } from "./markdown-entities";
 
 // Cómo escribe el editor con barra (RichTextEditor) un trozo de Markdown: se lee con sus mismas extensiones y se vuelve a
 // escribir, igual que al abrirlo y guardarlo (onUpdate). Sin DOM: lo usa la release para saber qué bloques no se han tocado
@@ -31,4 +32,15 @@ export function editorMarkdown(md: string): string {
   if (cache.size >= CACHE_MAX) cache.clear();
   cache.set(md, out);
   return out;
+}
+
+/**
+ * Texto de la release tras editarla con el editor con barra: `raw` es lo que escribe el editor (getMarkdown) y `base`, el
+ * texto que se cargó en él. Los bloques no tocados conservan su texto exacto (markdown-keep.ts); en lo editado, los
+ * párrafos vacíos («&nbsp;» y las líneas en blanco de más con que TipTap los guarda) quedan en una sola línea en blanco,
+ * como se ven en el editor y como saldrían con el editor Markdown (Copiar todo, .md, .txt y lo que se guarda).
+ */
+export function releaseFromEditor(base: string, raw: string): string {
+  const edited = blankEmptyParagraphs(normalizeEditorMarkdown(raw), { all: true });
+  return keepUntouchedMarkdown(base, edited, (md) => blankEmptyParagraphs(editorMarkdown(md), { all: true }));
 }

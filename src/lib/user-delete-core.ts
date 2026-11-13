@@ -22,3 +22,25 @@ export function deletionBlockFor(user: { role: "ADMIN" | "MEMBER"; active: boole
 export function confirmWordMatches(typed: string, word: string): boolean {
   return typed.trim().toLocaleUpperCase() === word.toLocaleUpperCase();
 }
+
+/**
+ * Otra forma de confirmar la baja para quien quizá no conoce su contraseña: «totp» (el código de su app de
+ * verificación o uno de recuperación), «email» (un código al email de la cuenta) o «google» (volver a entrar con Google).
+ */
+export type DeleteFactor = "totp" | "email" | "google";
+
+/**
+ * Con qué puede confirmar la baja, además de (o en lugar de) la contraseña, quien entra con Google: una cuenta invitada
+ * cuya contraseña provisional (aleatoria) nadie conoce, o cualquiera que nunca la usa. Con la app de verificación (TOTP),
+ * solo su código; si no, el código por email (con el envío configurado) o volver a entrar con Google (con Google
+ * configurado). Quien no tiene Google enlazado y puede entrar con contraseña confirma con ella, como siempre.
+ * `passwordLogin`: su rol puede entrar con contraseña (con «solo Google», AUTH_GOOGLE_ONLY, solo el acceso de emergencia).
+ */
+export function deleteAlternatives(a: { googleLinked: boolean; passwordLogin: boolean; twoFactor: "TOTP" | "EMAIL" | null; emailAvailable: boolean; googleAvailable: boolean }): DeleteFactor[] {
+  if (!a.googleLinked && a.passwordLogin) return [];
+  if (a.twoFactor === "TOTP") return ["totp"];
+  const out: DeleteFactor[] = [];
+  if (a.emailAvailable) out.push("email");
+  if (a.googleLinked && a.googleAvailable) out.push("google");
+  return out;
+}

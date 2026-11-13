@@ -15,6 +15,9 @@ import { ProjectSettings } from "./ProjectSettings";
 import { StorageSection } from "./StorageSection";
 import { parseProjectSettingsTab } from "./project-settings-tabs";
 import { ReportScheduleSection } from "./ReportScheduleSection";
+import { ApplyTemplate } from "./ApplyTemplate";
+import { undoableTemplateChange } from "@/lib/template-apply";
+import { TEMPLATE_UNDO_HOURS } from "@/lib/template-apply-core";
 
 export async function generateMetadata() {
   const t = await getT();
@@ -64,7 +67,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
   // agrupaba TODAS las tareas del servidor en cada carga (Prisma 7 lo hace con un LEFT JOIN a un GROUP BY sin filtro).
   const kindIds = project.kinds.map((k) => k.id);
   const deliverableIds = project.deliverables.map((d) => d.id);
-  const [releaseTemplates, generalKinds, generalUsage, kindUsage, deliverableUsage, users, schedule, editorRow, storageInitial, storageLargest] = await Promise.all([
+  const [releaseTemplates, generalKinds, generalUsage, kindUsage, deliverableUsage, users, schedule, editorRow, storageInitial, storageLargest, templateChange] = await Promise.all([
     tab === "releases" ? projectReleaseTemplates(project.id) : Promise.resolve({ headers: [], footers: [] }),
     listKinds(),
     db.task.groupBy({ by: ["kindId"], where: { projectId: project.id }, _count: { _all: true } }),
@@ -77,6 +80,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
     db.user.findUnique({ where: { id: user.id }, select: { editorMode: true } }),
     showStorage ? projectStorage(project.id) : Promise.resolve(null),
     showStorage ? largestAttachments(project.id, 20) : Promise.resolve(null),
+    tab === "tablero" && canManage ? undoableTemplateChange(project.id) : Promise.resolve(null),
   ]);
   const hidden = new Set(project.hiddenKinds.map((h) => h.kindId));
   const usage = new Map(generalUsage.map((g) => [g.kindId, g._count._all]));
@@ -90,7 +94,21 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
 
   return (
     <ProjectSettings
+      // Aplicar o deshacer una plantilla cambia etiquetas y campos, que el formulario guarda en su estado: se vuelve a montar.
+      key={templateChange ? templateChange.createdAt.toISOString() : "sin-cambio"}
       storageSection={storageSection}
+      applyTemplate={tab === "tablero" && canManage ? (
+        <ApplyTemplate
+          projectId={project.id}
+          lastChange={templateChange ? {
+            templateName: templateChange.templateName,
+            mode: templateChange.mode,
+            createdAt: templateChange.createdAt.toISOString(),
+            until: new Date(templateChange.createdAt.getTime() + TEMPLATE_UNDO_HOURS * 3_600_000).toISOString(),
+            userName: templateChange.userName,
+          } : null}
+        />
+      ) : null}
       isAdmin={isAdmin}
       tab={tab}
       releaseTemplates={releaseTemplates}

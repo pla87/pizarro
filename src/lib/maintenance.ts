@@ -36,10 +36,14 @@ async function purgeNonImageCopies(now: Date = new Date()): Promise<number> {
   return ids.length;
 }
 
-/** Borra las entradas de deshacer de más de 7 días (y los ficheros que solo ellas retenían). */
+/**
+ * Borra las entradas de deshacer de más de 7 días (y los ficheros que solo ellas retenían) y las instantáneas de los
+ * cambios de plantilla que ya no se pueden deshacer.
+ */
 async function purgeOldUndo(now: Date = new Date()): Promise<number> {
-  const { discardUndo, UNDO_MAX_AGE_DAYS } = await import("@/lib/undo");
-  return discardUndo({ createdAt: { lt: new Date(now.getTime() - UNDO_MAX_AGE_DAYS * DAY_MS) } });
+  const [{ discardUndo, UNDO_MAX_AGE_DAYS }, { db }, { TEMPLATE_UNDO_HOURS }] = await Promise.all([import("@/lib/undo"), import("@/lib/db"), import("@/lib/template-apply-core")]);
+  const changes = await db.projectTemplateChange.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - TEMPLATE_UNDO_HOURS * 3_600_000) } } });
+  return changes.count + (await discardUndo({ createdAt: { lt: new Date(now.getTime() - UNDO_MAX_AGE_DAYS * DAY_MS) } }));
 }
 
 /** Borra de la papelera los documentos con más de DOCUMENT_TRASH_DAYS días (filas y ficheros). */

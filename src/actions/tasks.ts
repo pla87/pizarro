@@ -16,7 +16,7 @@ import { addUndo, captureTasks, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SE
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
-import { lastPositionIn, lockColumns, lockTaskRows, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
+import { lastPositionIn, lockColumns, lockTaskRows, placeBlockInColumn, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertTaskCapacity, assertTaskCreateRate } from "@/lib/caps";
 import { getMaxCommentsPerTask } from "@/lib/app-settings";
@@ -25,7 +25,8 @@ import * as v from "@/lib/validation";
 import { dateToIso, isoToDate, todayIso } from "@/lib/dates";
 import { normalizeRecurrence, RECURRENCES } from "@/lib/recurrence-date";
 import { spawnRecurrences } from "@/lib/recurrence";
-import { createDriveFile, type GoogleFileKind } from "@/lib/google";
+import { createDriveFile } from "@/lib/google";
+import { GOOGLE_FILE_KINDS, type GoogleFileKind } from "@/lib/google-files";
 import { shareRule } from "@/lib/google-share";
 import { excerpt as makeExcerpt, extractMentionIds, mentionsToPlain } from "@/lib/mentions";
 import { ACCENTED, foldedContains, UNACCENTED } from "@/lib/search-accents";
@@ -327,7 +328,7 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
  * entregable, color, enlace, subtareas (sin marcar), documentos de Google enlazados (el mismo documento, no una copia
  * en Drive) y adjuntos (cada uno con su propio fichero: ver attachment-copy.ts; las imágenes de la descripción pasan a
  * apuntar a esas copias); no copia comentarios, historial ni repetición. Los adjuntos que no caben (tope por tarea,
- * cuotas) o cuyo fichero falta se omiten y la respuesta lleva `copyNotice`, el aviso para quien duplica.
+ * cuotas, disco del servidor) o cuyo fichero falta se omiten y la respuesta lleva `copyNotice`, el aviso para quien duplica.
  * Queda justo detrás de la original en su columna o, con `target` (Ctrl/Alt al soltar una tarjeta arrastrada),
  * en esa columna entre las vecinas indicadas, como moveTask. Se deshace de una vez (borra la copia; los ficheros de sus
  * adjuntos se conservan mientras se pueda rehacer y después se borran, como al borrar una tarea).
@@ -423,6 +424,7 @@ async function copyNoticeText(res: AttachmentCopyResult, projectId: string, isAd
   }
   if (why.has("quota") && res.quota) parts.push(quotaError(t, res.quota, { projectId, isAdmin, locale }).message);
   if (why.has("missing")) parts.push(t("El archivo de la tarea original ya no estaba disponible."));
+  if (why.has("disk")) parts.push(isAdmin ? t("El disco del servidor está casi lleno: libera espacio y vuelve a duplicarla.") : t("El disco del servidor está casi lleno: avisa a un administrador."));
   if (why.has("error")) parts.push(t("No se pudieron guardar en el servidor; inténtalo de nuevo más tarde."));
   return parts.join(" ");
 }
@@ -705,11 +707,17 @@ export async function moveTask(taskId: string, columnId: string, prevId: string 
   });
 }
 
-/** Mueve varias tarjetas al final de una columna, conservando su orden relativo. */
-export async function moveTasks(taskIds: string[], columnId: string) {
-  return runAction({ name: "tasks.moveTasks", args: [taskIds, columnId] }, async () => {
+/**
+ * Mueve varias tarjetas al final de una columna, conservando su orden relativo («Mover a…» de la barra de selección).
+ * Con `at` (arrastrar una selección, o Alt+flechas sobre ella) las deja seguidas entre esas dos vecinas de la columna
+ * destino, en el orden del tablero (columna y posición), también las que ya estaban en ella; las mismas reglas que
+ * moveTask si las vecinas ya no están (al final). Un solo paso de deshacer en los dos casos.
+ */
+export async function moveTasks(taskIds: string[], columnId: string, at?: { prevId: string | null; nextId: string | null } | null) {
+  return runAction({ name: "tasks.moveTasks", args: [taskIds, columnId, at] }, async () => {
     const user = await requireUser();
     const ids = z.array(v.id).min(1).max(500).parse(taskIds);
+    const place = at == null ? null : z.object({ prevId: v.id.nullable(), nextId: v.id.nullable() }).parse(at);
     const column = await db.column.findFirst({
       where: { id: v.id.parse(columnId), project: visibleProjectsWhere(user) },
       select: { id: true, projectId: true, name: true, isDone: true },
@@ -721,14 +729,29 @@ export async function moveTasks(taskIds: string[], columnId: string) {
       orderBy: [{ column: { position: "asc" } }, ...TASK_ORDER],
       select: { id: true, columnId: true, column: { select: { isDone: true } } },
     });
-    const toMove = tasks.filter((t) => t.columnId !== column.id);
+    // En bloque entre dos vecinas también se recolocan las que ya estaban en la columna.
+    const toMove = place ? tasks : tasks.filter((t) => t.columnId !== column.id);
     const undo = await captureTasks(toMove.map((t) => t.id), ["columnId", "position", "evergreen", "evergreenEvery"]);
     const moved = await db.$transaction(async (tx) => {
       await lockColumns(tx, [column.id]);
       // Columna → tareas (en orden de id), como moveTask y el despliegue de una release.
       await lockTaskRows(tx, toMove.map((t) => t.id));
-      let pos = (await lastPositionIn(tx, column.id)) ?? 0;
-      const list = toMove.map((t) => ({ id: t.id, position: (pos += POSITION_STEP) }));
+      let list: { id: string; position: number }[];
+      if (place) {
+        const ids = toMove.map((t) => t.id);
+        const placed = await placeBlockInColumn(tx, column.id, place.prevId, place.nextId, ids, ids.length);
+        // Renumerada la columna destino: el deshacer de las que ya estaban en ella usa su posición renumerada (si no,
+        // volverían a un orden que ya no casa con el de sus vecinas), como moveTask.
+        if (placed.rebalanced) {
+          const here = toMove.filter((t) => t.columnId === column.id).map((t) => t.id);
+          const now = new Map((await tx.task.findMany({ where: { id: { in: here } }, select: { id: true, position: true } })).map((r) => [r.id, r.position]));
+          for (const op of undo) if (op.t === "task.set" && now.has(op.id)) op.data = { ...op.data, position: now.get(op.id)! };
+        }
+        list = ids.map((id, i) => ({ id, position: placed.positions[i]! }));
+      } else {
+        let pos = (await lastPositionIn(tx, column.id)) ?? 0;
+        list = toMove.map((t) => ({ id: t.id, position: (pos += POSITION_STEP) }));
+      }
       await setTaskColumnPositions(list, column.id, { clearEvergreen: true, client: tx });
       return list;
     });
@@ -740,7 +763,8 @@ export async function moveTasks(taskIds: string[], columnId: string) {
     describeAction("Movió {count} a «{col}»", { count: tasksN(moved.length), col: colName }, { taskIds: moved.map((m) => m.id) });
     const code = column.isDone ? "done" : "move";
     skipTaskEvents();
-    for (const m of moved) recordTaskEvent(m.id, code, { k: "Movió la tarea a «{to}»", p: { to: colName } });
+    // Historial: solo las que cambian de columna (reordenar dentro de la misma no cuenta, como en moveTask).
+    for (const t of toMove) if (t.columnId !== column.id) recordTaskEvent(t.id, code, { k: "Movió la tarea a «{to}»", p: { to: colName } });
     return { columnId: column.id, moved, spawned };
   });
 }
@@ -1183,7 +1207,7 @@ const snapshotSchema = z.object({
   // Solo si el detalle estaba cargado al abrir el diálogo; si faltan, no se tocan.
   subtasks: z.array(z.object({ id: v.id, title: v.title, done: z.boolean(), position: z.number().finite() })).max(MAX_SUBTASKS).optional(),
   attachmentIds: z.array(v.id).max(1000).optional(),
-  links: z.array(z.object({ id: v.id, kind: z.enum(["GOOGLE_DOC", "GOOGLE_SHEET"]), title: z.string().max(300), url: z.string().max(2000), shareStatus: z.string().max(20).nullish(), shareFailed: z.number().int().min(0).optional() })).max(100).optional(),
+  links: z.array(z.object({ id: v.id, kind: z.enum(GOOGLE_FILE_KINDS), title: z.string().max(300), url: z.string().max(2000), shareStatus: z.string().max(20).nullish(), shareFailed: z.number().int().min(0).optional() })).max(100).optional(),
   /** Cuándo se abrió el detalle (hora del servidor: TaskDetail.loadedAt). Solo se deshace lo hecho desde entonces. */
   openedAt: z.iso.datetime(),
 });
@@ -1678,7 +1702,7 @@ export async function deleteComment(commentId: string) {
 
 const linkSelect = { id: true, kind: true, title: true, url: true, shareStatus: true, shareFailed: true } as const;
 
-/** Crea un Google Doc o Sheet en el Drive del usuario y lo enlaza a la tarea. */
+/** Crea un Google Doc, Sheet o Slides en el Drive del usuario y lo enlaza a la tarea. */
 export async function createGoogleFile(taskId: string, kind: GoogleFileKind, title: string) {
   return runAction({ name: "tasks.createGoogleFile", args: [taskId, kind, title] }, async (): Promise<TaskLinkInfo> => {
     const user = await requireUser();
@@ -1686,7 +1710,7 @@ export async function createGoogleFile(taskId: string, kind: GoogleFileKind, tit
     assertNotArchivedRow(task);
     const { projectId } = task;
     if (!rateLimit(`google-file:${user.id}`, 20, 60_000)) throw new AppError("Demasiados documentos creados seguidos. Espera un minuto.");
-    const fileKind = z.enum(["GOOGLE_DOC", "GOOGLE_SHEET"]).parse(kind);
+    const fileKind = z.enum(GOOGLE_FILE_KINDS).parse(kind);
     const name = v.title.parse(title);
     // Con quién se comparte lo decide el proyecto (googleShareMode); en uno privado nunca es con el dominio.
     const project = await db.project.findUnique({

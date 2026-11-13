@@ -10,7 +10,7 @@ const MAX_POOL_SIZE = 500;
  * él, pg esperaba para siempre: con la base caída o un cortafuegos que descarta los paquetes, cada petición se quedaba
  * colgada en vez de dar error.
  */
-export const DEFAULT_CONNECT_TIMEOUT_MS = 10_000;
+export const DEFAULT_CONNECT_TIMEOUT_MS = 20_000;
 const MIN_CONNECT_TIMEOUT_MS = 1000;
 const MAX_CONNECT_TIMEOUT_MS = 300_000;
 

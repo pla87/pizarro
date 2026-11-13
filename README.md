@@ -124,7 +124,7 @@ steps:
 | `MAX_USERS` | No | `10` | Máximo de usuarios activos. |
 | `MAX_UPLOAD_MB` | No | (sin tope) | Tope opcional, para todo el servidor, del tamaño de un adjunto. El tamaño máximo real es el de cada proyecto (ajustes del proyecto, 20 MB por defecto, hasta 100); si defines esta variable, ningún proyecto la supera. Se lee al subir cada archivo: cambiarla no exige recompilar. El proxy admite siempre hasta 100 MB por petición. |
 | `DATABASE_POOL_SIZE` | No | `10` | Conexiones del pool (entero de 1 a 500; un valor que no lo sea se avisa en el log y se usa 10). |
-| `DATABASE_CONNECT_TIMEOUT_MS` | No | `10000` | Tope (ms, de 1000 a 300000) para conseguir una conexión con PostgreSQL. Pasado, la petición falla y el log dice «No se puede conectar con PostgreSQL» con el servidor y el motivo (antes esperaba sin límite). |
+| `DATABASE_CONNECT_TIMEOUT_MS` | No | `20000` | Tope (ms, de 1000 a 300000) para conseguir una conexión con PostgreSQL. Pasado, la petición falla y el log dice «No se puede conectar con PostgreSQL» con el servidor y el motivo (antes esperaba sin límite). |
 | `TRUST_PROXY` | No | `1` / `0` | Si se toma la IP del cliente (límites de intentos, registro, sesiones) de `X-Real-IP` / `X-Forwarded-For`. Solo es seguro con un proxy delante que las sobrescriba. Sin definir: `1` en Docker (`scripts/start.sh`, con el Caddy de `deploy/`) y en Railway; `0` con `npm start` o `node server.js` a mano, que usan la dirección de la conexión. Pon `1` si tienes tu propio proxy delante de `npm start`, y `0` si publicas el contenedor sin proxy. |
 | `LIVE_REFRESH_JITTER_MS` | No | `2000` | Espera máxima (ms, al azar) con la que cada pestaña recarga el tablero tras un cambio de otra persona, para que no lo hagan todas a la vez. `0` lo hace al momento; como mucho `10000`. |
 | `BCRYPT_WORKERS` | No | `0` | Con `0` (o `false`/`off`/`no`) las comprobaciones de contraseña se calculan en el hilo principal en vez de en hilos de trabajo aparte (por defecto, en hilos: no paran el servidor). Solo para diagnosticar. |
@@ -150,7 +150,7 @@ steps:
 | `EXIT_ON_UNCAUGHT_EXCEPTION` | No | (desactivado) | `1`: en producción, una excepción no capturada se anota en *Logs* y la app sale para que la plataforma la reinicie (lo fija `deploy/compose.yml`). Sin él, solo se anota. |
 | `GIT_SHA` | No (solo al compilar) | commit | Commit para el identificador de versión (en Railway se usa `RAILWAY_GIT_COMMIT_SHA`). Sin él, la hora de la compilación. |
 | `LOG_RETENTION_DAYS` | No | `7` | Días que se conservan los logs de *Administración → Logs* (máx. 90). |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Para Google Docs/Sheets | (de Google Cloud) | Cliente OAuth «Aplicación web». Ver [Google Docs y Sheets](#71-google-docs-y-sheets). |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Para Google Docs/Sheets/Slides | (de Google Cloud) | Cliente OAuth «Aplicación web». Ver [Google Docs, Sheets y Slides](#71-google-docs-sheets-y-slides). |
 | `GOOGLE_WORKSPACE_DOMAIN` | Recomendada con Google | `tu-dominio.com` | Solo admite cuentas de ese dominio y comparte cada archivo nuevo con él, para que todo el equipo pueda abrirlo desde la tarjeta. |
 | `GOOGLE_SHARE_ROLE` | No | `writer` | Rol con el que se comparte con el dominio (o, en proyectos privados, con los emails de sus miembros): `writer`, `commenter`, `reader` o `none` (no compartir). Es el valor por defecto: cada proyecto puede elegir otro modo en sus ajustes. |
 | `AUTH_GOOGLE_ONLY` | No | `true` | Solo se entra con Google (necesita `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `APP_URL`; sin ellos no tiene efecto). Ver [Acceso con Google y dos pasos](#74-acceso-con-google-y-verificación-en-dos-pasos). |
@@ -256,10 +256,10 @@ Nota: `railway run` ejecuta el comando en tu máquina con las variables del serv
 
 ### 7. Integraciones opcionales (v1.1)
 
-#### 7.1 Google Docs y Sheets
+#### 7.1 Google Docs, Sheets y Slides
 
 1. Entra en [console.cloud.google.com](https://console.cloud.google.com) con una cuenta de tu Google Workspace y crea un proyecto (por ejemplo, «Pizarro»).
-2. **APIs y servicios → Biblioteca** → busca **Google Drive API** → **Habilitar**. Es la única API necesaria: los Docs y Sheets se crean a través de Drive.
+2. **APIs y servicios → Biblioteca** → busca **Google Drive API** → **Habilitar**. Es la única API necesaria: los Docs, Sheets y Slides se crean a través de Drive.
 3. **Google Auth Platform** (antes «Pantalla de consentimiento de OAuth»):
    - **Branding**: nombre de la app «Pizarro» y email de soporte.
    - **Audience / Público**: tipo **Interno**. Solo podrán conectarse las cuentas de tu Workspace y no hace falta verificación de Google.
@@ -267,7 +267,7 @@ Nota: `railway run` ejecuta el comando en tu máquina con las variables del serv
 4. **Clients / Credenciales → Crear cliente → Aplicación web**:
    - **URI de redirección autorizados**: `https://<tu-dominio>.up.railway.app/api/google/callback`. Debe coincidir exactamente con `APP_URL` + `/api/google/callback`. Si además usarás «Iniciar sesión con Google» ([7.4](#74-acceso-con-google-y-verificación-en-dos-pasos)), añade también `APP_URL` + `/api/auth/google/callback` (las dos URI en el mismo cliente).
 5. Copia el **ID de cliente** y el **secreto** a Railway: `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`, y añade `GOOGLE_WORKSPACE_DOMAIN=tu-dominio.com`. Así, cada archivo creado se comparte automáticamente con tu dominio como editor (`GOOGLE_SHARE_ROLE`), y el resto del equipo puede abrirlo desde la tarjeta. En un proyecto privado el archivo no se comparte con el dominio, solo con los emails de los miembros del proyecto. Sin dominio, solo lo ve quien lo crea hasta que lo comparta a mano.
-6. Redespliega. Cada usuario entra en **Mi perfil → Google Docs y Sheets → Conectar con Google**.
+6. Redespliega. Cada usuario entra en **Mi perfil → Google Docs, Sheets y Slides → Conectar con Google**.
 
 > Los tokens de Google se guardan cifrados con `ENCRYPTION_KEY` (o, si no está definida, con una clave derivada de `SESSION_SECRET`). Si cambias esa clave sin poner la anterior en `ENCRYPTION_KEY_PREVIOUS`, cada usuario tendrá que volver a conectar Google (ver el manual, 4.4).
 

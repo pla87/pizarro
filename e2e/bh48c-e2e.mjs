@@ -119,7 +119,7 @@ if (only.includes("tabs")) {
   await b.goto(`${L.BASE}/p/${(await L.project()).id}`);
   await L.board(b);
   for (const p of [a, b]) await U.openTask(p, "Dos pestañas");
-  const box = (p) => U.dialog(p).getByPlaceholder("Markdown · @persona · @docs / @sheets");
+  const box = (p) => U.dialog(p).getByPlaceholder("Markdown · @persona · @docs / @sheets / @slides");
   const type = async (p, text) => {
     await U.dialog(p).getByRole("button", { name: "Editar", exact: true }).click();
     await box(p).waitFor();

@@ -1127,10 +1127,10 @@ if (only.includes("r46")) {
   try {
     await L.reload(p);
     let nd = await openNewProject(p);
-    await L.eqEventually("R46M1: «Empezar con» es un solo desplegable: en blanco, «Ejemplos» (4) y «Plantillas»", async () => {
+    await L.eqEventually("R46M1: «Empezar con» es un solo desplegable: en blanco, «Ejemplos» (5) y «Plantillas»", async () => {
       const st = await structure(nd);
       return [st[0], st[1], st[2]?.group, (st[2]?.n ?? 0) > 0];
-    }, ["Proyecto en blanco", { group: "Ejemplos", n: 4 }, "Plantillas", true]);
+    }, ["Proyecto en blanco", { group: "Ejemplos", n: 5 }, "Plantillas", true]);
     L.eq("R46M1: sin tarjetas-radio, sin cabeceras en mayúsculas y una sola línea de ayuda", await nd.evaluate((el) => ({
       radios: el.querySelectorAll("input[type=radio]").length,
       upper: [...el.querySelectorAll("*")].filter((x) => getComputedStyle(x).textTransform === "uppercase" && x.textContent.trim()).length,

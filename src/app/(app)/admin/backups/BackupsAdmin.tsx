@@ -110,9 +110,10 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
 
   // «La reducción es correcta»: pide una segunda pulsación (la copia buena deja de conservarse siempre).
   const [confirmShrink, setConfirmShrink] = useState(false);
-  const acceptShrink = () =>
+  // Con la copia del aviso que se ve: si ha llegado otra entretanto, el servidor no confirma y pide revisarlo.
+  const acceptShrink = (seen: { stem: string; goodStem: string }) =>
     start(async () => {
-      const res = await acceptBackupReduction();
+      const res = await acceptBackupReduction(seen);
       if (res.ok) toast(t("Reducción confirmada. La copia anterior se borrará cuando le toque por la retención."));
       else toast(res.error, "error");
       setConfirmShrink(false);
@@ -194,7 +195,7 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
             <div className="flex flex-wrap gap-2 pt-1">
               {confirmShrink ? (
                 <>
-                  <button type="button" className="btn-primary" onClick={acceptShrink} disabled={pending}>{t("Sí, la reducción es correcta")}</button>
+                  <button type="button" className="btn-primary" onClick={() => acceptShrink({ stem: alert.shrink!.stem, goodStem: alert.shrink!.goodStem })} disabled={pending}>{t("Sí, la reducción es correcta")}</button>
                   <button type="button" className="btn-secondary" onClick={() => setConfirmShrink(false)} disabled={pending}>{t("Cancelar")}</button>
                 </>
               ) : (

@@ -52,6 +52,8 @@ interface Props {
   storageSection?: React.ReactNode;
   /** Sección «Informe semanal por email» (la monta la página). */
   reportSchedule?: React.ReactNode;
+  /** «Aplicar plantilla» (pestaña Tablero, quien gestiona el proyecto; la monta la página). */
+  applyTemplate?: React.ReactNode;
   /** Cabeceras y pies de release del proyecto. */
   releaseTemplates: { headers: TemplateOption[]; footers: TemplateOption[] };
   tab: ProjectSettingsTab;
@@ -83,7 +85,7 @@ function Section({ title, description, tip, children, id }: { title: string; des
   );
 }
 
-export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode, google, reportSchedule, storageSection, releaseTemplates, tab }: Props) {
+export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode, google, reportSchedule, storageSection, releaseTemplates, tab, applyTemplate }: Props) {
   const t = useT();
   const uiLocale = useLocale();
   const router = useRouter();
@@ -198,7 +200,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
       )}
 
       {canManage && google.enabled && (
-        <Section title="Documentos de Google" description="Con quién se comparten los Docs y Sheets creados desde las tareas." tip={t("Si el documento no se puede compartir, se crea igualmente y se avisa en la tarea de que solo lo ve quien lo crea.")}>
+        <Section title="Documentos de Google" description="Con quién se comparten los Docs, Sheets y Slides creados desde las tareas." tip={t("Si el documento no se puede compartir, se crea igualmente y se avisa en la tarea de que solo lo ve quien lo crea.")}>
           <form
             className="space-y-2"
             onSubmit={(e) => {
@@ -320,6 +322,17 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
       />
 
       <Section title="Tarjetas archivadas" description="Se consultan y recuperan desde el botón «Archivadas» del tablero." />
+
+      {canManage && applyTemplate && (
+        <Section
+          id="apply-template"
+          title="Aplicar plantilla"
+          description="Añade lo que le falte al proyecto de una plantilla o cámbialo a otra."
+          tip={t("Al cambiar de plantilla, cada columna y cada tipo actual se empareja con uno de la plantilla y sus tareas pasan a él. Nunca se quita nada que tenga tareas, y el cambio se puede deshacer durante un tiempo.")}
+        >
+          {applyTemplate}
+        </Section>
+      )}
 
         </>
       )}

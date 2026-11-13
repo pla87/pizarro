@@ -10,7 +10,7 @@ import { toLocale, type Locale, type T } from "../i18n/core";
 // sesión, límite de peticiones y acceso al proyecto. Devuelve la respuesta de error o el contexto.
 
 interface ColumnRouteContext {
-  user: { id: string; name: string };
+  user: { id: string; name: string; role: string };
   t: T;
   locale: Locale;
   project: { id: string; name: string };

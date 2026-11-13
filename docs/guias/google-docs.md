@@ -1,13 +1,13 @@
 ---
-titulo: Google Docs y Sheets
-descripcion: Crea un documento o una hoja de cálculo desde una tarea y que quede enlazado en ella.
+titulo: Google Docs, Sheets y Slides
+descripcion: Crea un documento, una hoja de cálculo o una presentación desde una tarea y que quede enlazado en ella.
 orden: 2
 icono: google
 ---
 
-# Google Docs y Sheets
+# Google Docs, Sheets y Slides
 
-Con esta conexión, desde cualquier tarea se puede crear un Google Doc o un Google Sheet: se crea en el Drive de quien lo pide, con el título de la tarjeta, se abre en otra pestaña y queda enlazado en la tarea. Usa el mismo cliente de Google que [Iniciar sesión con Google](google-login.md); si ya lo tienes, empieza en el paso 1 y sáltate el 3.
+Con esta conexión, desde cualquier tarea se puede crear un Google Doc, un Google Sheet o una presentación de Google Slides: se crea en el Drive de quien lo pide, con el título de la tarjeta, se abre en otra pestaña y queda enlazado en la tarea. Usa el mismo cliente de Google que [Iniciar sesión con Google](google-login.md); si ya lo tienes, empieza en el paso 1 y sáltate el 3.
 
 Necesitas ser administrador de Pizarro, la dirección pública de tu Pizarro con `https://` (la variable `APP_URL`) y una cuenta de Google.
 
@@ -16,7 +16,7 @@ Necesitas ser administrador de Pizarro, la dirección pública de tu Pizarro con
 1. Entra en <https://console.cloud.google.com> y elige el proyecto de Pizarro (o crea uno, como en el paso 2 de [la otra guía](google-login.md)).
 2. Abre **APIs y servicios → Biblioteca**, busca **Google Drive API** y pulsa **Habilitar**.
 
-Es la única API necesaria: los Docs y Sheets se crean a través de Drive, así que no hace falta activar las de Docs ni Sheets.
+Es la única API necesaria: los Docs, Sheets y Slides se crean a través de Drive, así que no hace falta activar las de Docs, Sheets ni Slides.
 
 ## 2. Añade el permiso de Drive
 
@@ -33,7 +33,7 @@ Solo da acceso a los archivos que crea o abre Pizarro, no al resto del Drive de 
 
 ## 3. Crea el cliente OAuth (si aún no lo tienes)
 
-Sigue los pasos 2 a 6 de [Iniciar sesión con Google](google-login.md). En **Authorized redirect URIs**, la dirección para Docs y Sheets es tu `APP_URL` seguida de `/api/google/callback`, exacta (con `https` y sin barra al final):
+Sigue los pasos 2 a 6 de [Iniciar sesión con Google](google-login.md). En **Authorized redirect URIs**, la dirección para Docs, Sheets y Slides es tu `APP_URL` seguida de `/api/google/callback`, exacta (con `https` y sin barra al final):
 
 ```
 https://pizarro.example.com/api/google/callback
@@ -48,11 +48,11 @@ Si también usas el inicio de sesión con Google, pon las dos direcciones en el 
 
 ## 5. Cada persona conecta su cuenta
 
-Una vez por persona: **Mi perfil → Cuenta → Google Docs y Sheets → Conectar con Google**, y aceptar el permiso de Drive.
+Una vez por persona: **Mi perfil → Cuenta → Google Docs, Sheets y Slides → Conectar con Google**, y aceptar el permiso de Drive.
 
 ## 6. Pruébalo
 
-1. Abre una tarea y pulsa **Nuevo Doc** o **Nuevo Sheet** (en **Documentos de Google**), o escribe `@docs` o `@sheets` en la descripción o en un comentario.
+1. Abre una tarea y pulsa **Nuevo Doc**, **Nuevo Sheet** o **Nuevo Slides** (en **Documentos de Google**), o escribe `@docs`, `@sheets` o `@slides` en la descripción o en un comentario.
 2. El archivo se abre en otra pestaña y queda en **Documentos de Google** de la tarjeta.
 3. Quitar el enlace de la tarjeta no borra el archivo de Drive.
 

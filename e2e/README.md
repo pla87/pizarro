@@ -24,12 +24,18 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Sin conexión y pestañas (caza de bugs 48b) | `e2e/bh48b-e2e.mjs` | 120 | ~3 min |
 | Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/bh48c-e2e.mjs` | 44 | ~1 min |
 | Copia con imagen en la descripción, sin red en calendario, borradores y releases (caza de bugs 49) | `e2e/bh49-e2e.mjs` | 27 | ~1 min |
-| Borrar mi cuenta (escritorio y móvil) | `e2e/r49-account-e2e.mjs` | 35 | ~30 s |
+| Índice de un HTML en Documentación y baja con Google sin email (caza de bugs 50b) | `e2e/bh50b-e2e.mjs` | 39 | ~30 s |
+| Aplicar plantilla: paso 2 y archivadas de columnas unidas (caza de bugs 50a) | `e2e/bh50a-e2e.mjs` | 22 | ~20 s |
+| Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/r49-account-e2e.mjs` | 61 | ~1 min |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
 | Copias con adjuntos y release con barra de formato | `e2e/r49-copy-e2e.mjs` | 87 | ~2 min |
+| Formatos del material: cerrar la release, párrafos vacíos, Google Slides y HTML aislado (ronda 50) | `e2e/r50-formatos-e2e.mjs` | 107 | ~1 min |
 | Tareas que se repiten (calendario, .ics y «Nueva tarea») | `e2e/r49-repeat-e2e.mjs` | 44 | ~1 min |
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/r49-ui-e2e.mjs` | 34 | ~1 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/r49-textos-e2e.mjs` | 29 | ~1 min |
+| Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/r50-plantilla-e2e.mjs` | 39 | ~1 min |
+| Plantilla «Curso o máster» y «Publicar programa (PDF)» | `e2e/r50-curso-e2e.mjs` | 57 | ~40 s |
+| Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/r50-seleccion-e2e.mjs` | 76 | ~1 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
@@ -104,6 +110,47 @@ de un borrador, el día de «Repetir» sigue a la fecha límite si no se eligió
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh49-e2e.mjs   # PART=dupimg,cal,drafts,reldel,repdraft
 ```
 
+## Índice de un HTML y baja con Google sin email (caza de bugs 50b)
+
+Un documento HTML de *Documentación* con índice: «Ir al tema 2» (`#tema-2`), «#» y un enlace interno dentro de un SVG
+se desplazan dentro del marco aislado, que sigue en el documento (antes cargaba en el marco la página de la app y quedaba
+un error), y lo que se pinta no lleva `ping`. *Borrar mi cuenta* de quien entra con Google en un servidor sin envío de
+emails: «Entro con Google y no conozco mi contraseña» explica solo «Confírmalo volviendo a entrar con Google.» (sin
+hablar de un código por email ni pedirlo), en español y en inglés a 390 px en modo oscuro; el enlace lleva a Google con la
+marca de la baja (sin seguir la redirección); la vuelta de Google se simula en la base, como en test:db; se borra la
+cuenta y su proyecto privado pasa a ser de equipo, y un administrador lo ve en *Proyectos* y *Administración → Proyectos*
+y lo abre. Misma base; servidor con Google configurado (valores de prueba, no llama a Google) y **sin** email:
+`GOOGLE_CLIENT_ID=r50 GOOGLE_CLIENT_SECRET=r50`, sin `MAIL_OUTBOX_DIR` ni SMTP.
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh50b-e2e.mjs   # PART=anchor,googleonly
+```
+
+## Aplicar plantilla: paso 2 y archivadas de columnas unidas (caza de bugs 50a)
+
+En el paso 2 de «Cambiar a esta plantilla», un tipo general sin tareas que la plantilla oculta dice «Ocultar (la
+plantilla no lo usa)» y uno oculto con tareas, «Conservar (volverá a verse)», igual que el resumen del paso 3 (en español
+y en inglés, a 390 px y en modo oscuro); y una tarea archivada de una columna que el cambio une a otra sale en
+«Archivadas» como de esa columna y vuelve a ella al recuperarla. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh50a-e2e.mjs   # PART=paso2,en,archivada
+```
+
+## Arrastrar una selección
+
+Con varias tarjetas seleccionadas, arrastrar una de ellas lleva todas: el montón con la insignia del número, las demás
+atenuadas en su sitio, el hueco de destino «N tarjetas irán aquí» y los avisos del lector de pantalla («Has cogido 3
+tarjetas…», «Has soltado 3 tarjetas en…»). Al soltar van seguidas y en orden de tablero, con un solo paso de deshacer, y
+la selección se mantiene. Escape cancela; una sin seleccionar se mueve sola; Ctrl al soltar copia solo la cogida;
+dentro de su columna y entre dos tarjetas de otra; Alt+flechas sobre una seleccionada mueve todas; la otra persona lo ve
+por el canal en vivo; la columna de revisión pide confirmación; con el dedo (asa, 390 px) y en modo oscuro. Misma base y
+servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r50-seleccion-e2e.mjs   # PART=drag,cancel,single,copy,same,keys,live,review,touch,dark
+```
+
 ## Formularios sin red, IP del cliente y páginas legales (ronda 49)
 
 Crear un usuario en *Administración → Usuarios* y guardar *Mi perfil* sin red (`context.setOffline`): sale «Sin conexión:
@@ -152,6 +199,36 @@ a 390 px. Misma base y servidor:
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-textos-e2e.mjs   # PART=admin,profile,release
 ```
 
+## Aplicar plantilla a un proyecto existente (ronda 50)
+
+En un proyecto privado propio (lo crea y lo borra la suite), *Ajustes del proyecto → Tablero → Aplicar plantilla*:
+«Añadir lo que falte» enseña antes qué columnas, tipos y etiquetas se añadirán, no toca lo que hay y «Deshacer el cambio
+de plantilla» lo quita; «Cambiar a esta plantilla» propone el emparejamiento (por nombre y rol; una columna con tareas
+sin pareja se conserva, una vacía se propone quitar; una con tareas no tiene «Quitar»), el resumen cuenta las tareas que
+se mueven y lo que se añade o se quita, al aplicar no se pierde ninguna tarea y otra persona con el tablero abierto ve
+las columnas nuevas sin recargar (y el deshacer, igual); en un proyecto de equipo un miembro sin rol de admin no ve la
+sección; a 390 px el asistente cabe. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r50-plantilla-e2e.mjs   # PART=add,replace,perm,mobile
+```
+
+## Plantilla «Curso o máster» y «Publicar programa (PDF)»
+
+Crea un proyecto con la plantilla desde *Nuevo proyecto* (la sesión se abre como miembro y pasa a admin, como en el
+tablero), comprueba sus columnas (con «Programa», rol *Programa del curso*), tipos y campo *Fecha de inicio*; crea dos
+sesiones con el tipo «Sesión» (título y descripción automáticos, fecha y responsable) y otra de varios días con Markdown;
+publica el programa con el responsable, lo descarga y comprueba su texto con `pdftotext` (orden, fechas, rango, Markdown
+pintado, sin la archivada), la copia «Programa – fecha.pdf» en Documentación y «Abrir Documentación»; la vista previa no
+guarda; el PDF en inglés sin guardar; con la Documentación llena (200 documentos) se descarga igual y avisa; y el rol en el
+menú de la columna con su icono y su explicación (se puede repetir y quitar). Borra su proyecto al terminar. Necesita
+`pdftotext` (poppler-utils). Genera cuatro PDF con la misma persona: el límite es de cinco por minuto, así que entre dos
+pasadas seguidas espera un minuto. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r50-curso-e2e.mjs   # PART=tpl,pdf,en,full,role
+```
+
 ## Comentarios a la vez, red lenta, dos pestañas y release renombrada (caza de bugs 48c)
 
 Tres personas comentan a la vez la misma tarea en varias rondas (todas ven todos los comentarios, en orden y sin «Ver
@@ -168,13 +245,17 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48c-e2e.mjs   # 
 ## Borrar mi cuenta
 
 *Mi perfil → Cuenta → Borrar mi cuenta*: el único administrador ve el botón desactivado y el motivo; el diálogo pide
-contraseña, la palabra BORRAR y, con un proyecto privado propio, marcar «Entendido»; con la contraseña incorrecta no se
-borra; al borrar se va al acceso con el aviso, se cierran sus dos sesiones y lo que creó queda como «Usuario eliminado».
-En móvil (390 px) activa la verificación en dos pasos desde el perfil y borra con el código de la app (el diálogo cabe en
-la pantalla). Crea sus propias personas (`r49_*`). Misma base y servidor:
+contraseña y la palabra BORRAR y avisa, con su lista, de que el proyecto privado propio pasa a ser de equipo (casilla
+«Borrar también…» sin marcar); con la contraseña incorrecta no se borra; al borrar se va al acceso con el aviso, se
+cierran sus dos sesiones, el proyecto queda de equipo y sin miembros (anotado en el registro) y lo que creó queda como
+«Usuario eliminado». En móvil (390 px) activa la verificación en dos pasos desde el perfil y borra con el código de la
+app (el diálogo cabe en la pantalla). Quien entra con Google sin contraseña conocida pulsa «Entro con Google y no conozco
+mi contraseña», confirma solo con el código de su app y borra también sus dos proyectos privados. *Administración →
+Usuarios → Borrar*: el aviso (sin el nombre del proyecto), sin marcar pasa a ser de equipo y marcando se borra. Crea sus
+propias personas (`r49_*`). Misma base y servidor:
 
 ```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-account-e2e.mjs   # PART=block,desk,mobile
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-account-e2e.mjs   # PART=block,desk,mobile,google,admin
 ```
 
 ## Copias con adjuntos y release con barra de formato
@@ -190,6 +271,25 @@ Copiar todo) y el móvil a 390 px. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-copy-e2e.mjs   # PART=dup,drag,keys,quota,mdup,rel,big,mrel
+```
+
+## Formatos del material de un curso (ronda 50)
+
+«Generar release» con el texto del paso 2 cambiado pide confirmación al cerrar con Escape, la X o el clic fuera
+(«Seguir editando» conserva lo escrito; varias pulsaciones no apilan preguntas; «Descartar cambios» cierra), en los dos
+modos del editor; sin cambios, o tras cambiar solo el pie, cierra directo, igual que «Cancelar» en el paso 1. Con la
+barra de formato, los párrafos vacíos salen como una línea en blanco (sin `&nbsp;` ni líneas en blanco repetidas) en
+Copiar todo, .md, .txt y lo guardado al desplegar; lo no tocado, idéntico. El historial copia y descarga sin `&nbsp;`
+una release antigua que lo traía, y «Copiar descripción» tampoco lo deja. Google Slides en la tarjeta (enlace con su
+icono, «Nuevo Slides», aviso sin cuenta conectada, `@slides` y `@google` en los dos editores, móvil a 390 px y «Mi
+perfil»). Documentación y adjuntos con `.md`, `.pdf`, `.html`, `.docx` y `.pptx`: el HTML se ve en un marco aislado
+(sin scripts, origen opaco, sin red ni acceso a la página o al almacenamiento de la app), su dirección lo sirve como
+texto plano y como adjunto al descargarlo; un `.html` con `<script>` (y `onerror`, `javascript:`, `<iframe>`, meta
+refresh) no ejecuta nada en el origen de la app. La parte `slides` necesita el servidor con Google configurado (valores
+de prueba, no llama a Google): arráncalo con `GOOGLE_CLIENT_ID=r50 GOOGLE_CLIENT_SECRET=r50`. Misma base:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r50-formatos-e2e.mjs   # PART=relclose,nbsp,slides,html
 ```
 
 ## Sin conexión, pestañas y tareas que desaparecen (caza de bugs 48b)

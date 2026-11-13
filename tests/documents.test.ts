@@ -22,12 +22,18 @@ test("detectDocumentKind: por extensión, sin distinguir mayúsculas", () => {
   assert.equal(detectDocumentKind("paquete.zip", "application/zip"), "OTHER");
 });
 
-test("detectDocumentKind: el SVG y el HTML nunca son imagen ni texto previsualizable", () => {
+test("detectDocumentKind: el SVG nunca es imagen; el HTML es su propio tipo (vista aislada, nunca como página)", () => {
   assert.equal(detectDocumentKind("logo.svg", "image/svg+xml"), "OTHER");
-  assert.equal(detectDocumentKind("pagina.html", "text/html"), "OTHER");
-  assert.equal(detectDocumentKind("pagina.htm", "text/plain"), "OTHER");
   assert.equal(detectDocumentKind("sin-extension", "image/svg+xml"), "OTHER");
-  assert.equal(detectDocumentKind("sin-extension", "text/html"), "OTHER");
+  assert.equal(detectDocumentKind("pagina.html", "text/html"), "HTML");
+  assert.equal(detectDocumentKind("PAGINA.HTM", "text/plain"), "HTML");
+  assert.equal(detectDocumentKind("sin-extension", "text/html; charset=utf-8"), "HTML");
+  // La extensión manda: un «.svg» o un «.xhtml» declarado como HTML no pasa a serlo.
+  assert.equal(detectDocumentKind("logo.svg", "text/html"), "OTHER");
+  assert.equal(detectDocumentKind("pagina.xhtml", "text/html"), "OTHER");
+  // Formatos del material de un curso: Word y PowerPoint se suben como ficheros para descargar.
+  assert.equal(detectDocumentKind("tema.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"), "OTHER");
+  assert.equal(detectDocumentKind("clase.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"), "OTHER");
 });
 
 test("detectDocumentKind: sin extensión se usa el MIME; con extensión desconocida manda la extensión", () => {
@@ -48,6 +54,9 @@ test("confirmDocumentKind: el contenido manda sobre la extensión", () => {
   // Un binario con extensión .txt (bytes nulos o UTF-8 inválido) no se muestra como texto.
   assert.equal(confirmDocumentKind("TEXT", Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x01])), "OTHER");
   assert.equal(confirmDocumentKind("MARKDOWN", Buffer.from([0xff, 0xfe, 0xfa, 0x41])), "OTHER");
+  // HTML: solo si es texto; un binario con extensión .html queda para descargar.
+  assert.equal(confirmDocumentKind("HTML", Buffer.from("<!doctype html><p>Hola</p><script>alert(1)</script>")), "HTML");
+  assert.equal(confirmDocumentKind("HTML", Buffer.from([0x00, 0x3c, 0x68])), "OTHER");
   assert.equal(confirmDocumentKind("OTHER", pdf), "OTHER");
   assert.equal(confirmDocumentKind("IMAGE", Buffer.from("x")), "IMAGE");
 });
@@ -87,6 +96,7 @@ test("sanitizeDocumentName: quita rutas, caracteres raros y puntos iniciales", (
 test("documentMime / documentDownloadName / isPreviewable", () => {
   assert.equal(documentMime("TEXT", "text/html"), "text/plain");
   assert.equal(documentMime("MARKDOWN", "text/html"), "text/markdown");
+  assert.equal(documentMime("HTML", "application/octet-stream"), "text/html");
   assert.equal(documentMime("PDF", "x/y"), "application/pdf");
   assert.equal(documentMime("IMAGE", "image/png"), "image/webp");
   assert.equal(documentMime("OTHER", "application/zip"), "application/zip");
@@ -94,6 +104,7 @@ test("documentMime / documentDownloadName / isPreviewable", () => {
   assert.equal(documentDownloadName("foto.png", "OTHER"), "foto.png");
   assert.equal(isPreviewable("OTHER"), false);
   assert.equal(isPreviewable("PDF"), true);
+  assert.equal(isPreviewable("HTML"), true);
 });
 
 test("documentPath: por id, dentro de documents/, nunca con el nombre del usuario", () => {
