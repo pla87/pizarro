@@ -243,7 +243,7 @@ Click *Send test email* to check it.
 Each connection has its own step-by-step guide:
 
 - [Sign in with Google](../../guias/en/google-login.md): sign in with a Google account, with no extra password.
-- [Google Docs and Sheets](../../guias/en/google-docs.md): create a document from a task.
+- [Google Docs, Sheets and Slides](../../guias/en/google-docs.md): create a document, a spreadsheet or a presentation from a task.
 - [Notifications on Telegram](../../guias/en/telegram.md): free and ready in five minutes.
 - [Notifications on WhatsApp](../../guias/en/whatsapp.md): with Meta's official API, paid.
 

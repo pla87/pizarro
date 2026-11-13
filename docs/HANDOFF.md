@@ -314,7 +314,7 @@ Cómo se revisa cada PR:
   siempre contra una base de pruebas con datos de demostración) cuando cambie el aspecto de la app. Puesta en
   marcha (Pages, DNS, HTTPS, verificación del dominio): `docs/VENTA.md` §8.
 - Hecho: guías de conexión en la web (`/guias/`, `/en/guides/`): una página por cada `docs/guias/<nombre>.md` con su
-  `docs/guias/en/<nombre>.md` (Google, Google Docs y Sheets, Telegram, WhatsApp). La cabecera del fichero (`titulo`,
+  `docs/guias/en/<nombre>.md` (Google, Google Docs, Sheets y Slides, Telegram, WhatsApp). La cabecera del fichero (`titulo`,
   `descripcion`, `orden`, `icono`) da la tarjeta del índice; `build-site.mjs` las añade solas al índice y al sitemap
   y falla si falta la versión en inglés, el título o la descripción. El workflow «Web» también se lanza al cambiar
   `docs/guias/`. La portada enlaza a cada guía desde «Se conecta con lo que ya usas». El pie lleva una línea de

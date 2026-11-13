@@ -1,11 +1,11 @@
 ---
-titulo: Google Docs y Sheets
+titulo: Google Docs, Sheets y Slides
 descripcion: Crea un documento, una hoja de cálculo o una presentación desde una tarea y que quede enlazado en ella.
 orden: 2
 icono: google
 ---
 
-# Google Docs y Sheets
+# Google Docs, Sheets y Slides
 
 Con esta conexión, desde cualquier tarea se puede crear un Google Doc, un Google Sheet o una presentación de Google Slides: se crea en el Drive de quien lo pide, con el título de la tarjeta, se abre en otra pestaña y queda enlazado en la tarea. Usa el mismo cliente de Google que [Iniciar sesión con Google](google-login.md); si ya lo tienes, empieza en el paso 1 y sáltate el 3.
 

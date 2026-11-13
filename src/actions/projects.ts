@@ -158,7 +158,7 @@ export async function setAttachmentLimits(projectId: string, fileMb: number, tas
 }
 
 /**
- * Con quién se comparten los Docs/Sheets que se crean desde las tareas del proyecto. Los modos de dominio solo
+ * Con quién se comparten los Docs/Sheets/Slides que se crean desde las tareas del proyecto. Los modos de dominio solo
  * existen en proyectos de equipo y con GOOGLE_WORKSPACE_DOMAIN configurado (se comprueba aquí, no solo en la pantalla).
  */
 export async function setGoogleShareMode(projectId: string, mode: string) {

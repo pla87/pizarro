@@ -150,7 +150,7 @@ steps:
 | `EXIT_ON_UNCAUGHT_EXCEPTION` | No | (desactivado) | `1`: en producción, una excepción no capturada se anota en *Logs* y la app sale para que la plataforma la reinicie (lo fija `deploy/compose.yml`). Sin él, solo se anota. |
 | `GIT_SHA` | No (solo al compilar) | commit | Commit para el identificador de versión (en Railway se usa `RAILWAY_GIT_COMMIT_SHA`). Sin él, la hora de la compilación. |
 | `LOG_RETENTION_DAYS` | No | `7` | Días que se conservan los logs de *Administración → Logs* (máx. 90). |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Para Google Docs/Sheets | (de Google Cloud) | Cliente OAuth «Aplicación web». Ver [Google Docs y Sheets](#71-google-docs-y-sheets). |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Para Google Docs/Sheets/Slides | (de Google Cloud) | Cliente OAuth «Aplicación web». Ver [Google Docs, Sheets y Slides](#71-google-docs-sheets-y-slides). |
 | `GOOGLE_WORKSPACE_DOMAIN` | Recomendada con Google | `tu-dominio.com` | Solo admite cuentas de ese dominio y comparte cada archivo nuevo con él, para que todo el equipo pueda abrirlo desde la tarjeta. |
 | `GOOGLE_SHARE_ROLE` | No | `writer` | Rol con el que se comparte con el dominio (o, en proyectos privados, con los emails de sus miembros): `writer`, `commenter`, `reader` o `none` (no compartir). Es el valor por defecto: cada proyecto puede elegir otro modo en sus ajustes. |
 | `AUTH_GOOGLE_ONLY` | No | `true` | Solo se entra con Google (necesita `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `APP_URL`; sin ellos no tiene efecto). Ver [Acceso con Google y dos pasos](#74-acceso-con-google-y-verificación-en-dos-pasos). |
@@ -256,10 +256,10 @@ Nota: `railway run` ejecuta el comando en tu máquina con las variables del serv
 
 ### 7. Integraciones opcionales (v1.1)
 
-#### 7.1 Google Docs y Sheets
+#### 7.1 Google Docs, Sheets y Slides
 
 1. Entra en [console.cloud.google.com](https://console.cloud.google.com) con una cuenta de tu Google Workspace y crea un proyecto (por ejemplo, «Pizarro»).
-2. **APIs y servicios → Biblioteca** → busca **Google Drive API** → **Habilitar**. Es la única API necesaria: los Docs y Sheets se crean a través de Drive.
+2. **APIs y servicios → Biblioteca** → busca **Google Drive API** → **Habilitar**. Es la única API necesaria: los Docs, Sheets y Slides se crean a través de Drive.
 3. **Google Auth Platform** (antes «Pantalla de consentimiento de OAuth»):
    - **Branding**: nombre de la app «Pizarro» y email de soporte.
    - **Audience / Público**: tipo **Interno**. Solo podrán conectarse las cuentas de tu Workspace y no hace falta verificación de Google.
@@ -267,7 +267,7 @@ Nota: `railway run` ejecuta el comando en tu máquina con las variables del serv
 4. **Clients / Credenciales → Crear cliente → Aplicación web**:
    - **URI de redirección autorizados**: `https://<tu-dominio>.up.railway.app/api/google/callback`. Debe coincidir exactamente con `APP_URL` + `/api/google/callback`. Si además usarás «Iniciar sesión con Google» ([7.4](#74-acceso-con-google-y-verificación-en-dos-pasos)), añade también `APP_URL` + `/api/auth/google/callback` (las dos URI en el mismo cliente).
 5. Copia el **ID de cliente** y el **secreto** a Railway: `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`, y añade `GOOGLE_WORKSPACE_DOMAIN=tu-dominio.com`. Así, cada archivo creado se comparte automáticamente con tu dominio como editor (`GOOGLE_SHARE_ROLE`), y el resto del equipo puede abrirlo desde la tarjeta. En un proyecto privado el archivo no se comparte con el dominio, solo con los emails de los miembros del proyecto. Sin dominio, solo lo ve quien lo crea hasta que lo comparta a mano.
-6. Redespliega. Cada usuario entra en **Mi perfil → Google Docs y Sheets → Conectar con Google**.
+6. Redespliega. Cada usuario entra en **Mi perfil → Google Docs, Sheets y Slides → Conectar con Google**.
 
 > Los tokens de Google se guardan cifrados con `ENCRYPTION_KEY` (o, si no está definida, con una clave derivada de `SESSION_SECRET`). Si cambias esa clave sin poner la anterior en `ENCRYPTION_KEY_PREVIOUS`, cada usuario tendrá que volver a conectar Google (ver el manual, 4.4).
 

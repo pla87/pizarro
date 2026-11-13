@@ -264,7 +264,7 @@ export const admin: Record<string, string> = {
   "Direcciones de redirección": "Redirect addresses",
   "Pégalas en Google Cloud al crear el cliente OAuth (en «URI de redirección autorizados»).": "Paste them into Google Cloud when creating the OAuth client (under “Authorized redirect URIs”).",
   "Acceso con Google": "Sign in with Google",
-  "Docs y Sheets": "Docs and Sheets",
+  "Docs, Sheets y Slides": "Docs, Sheets and Slides",
   "Define APP_URL en el servidor (por ejemplo https://pizarro.tuempresa.com) para ver las direcciones.": "Set APP_URL on the server (for example https://pizarro.yourcompany.com) to see the addresses.",
   "ID y secreto de cliente configurados en el servidor (GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET); aquí solo se muestran.": "Client ID and secret are set on the server (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET); shown here read-only.",
   "ID de cliente": "Client ID",

@@ -14,14 +14,14 @@ Tratamos tus datos para:
 - Gestionar tu cuenta de usuario y permitirte acceder al servicio.
 - Gestionar proyectos, tareas, comentarios, archivos y notas de versión, y la colaboración con otras personas de tu equipo.
 - Enviarte avisos por email relacionados con el servicio (asignaciones, menciones, recordatorios, restablecimiento de contraseña, códigos de verificación). No enviamos comunicaciones comerciales.
-- Permitir el inicio de sesión con Google y la creación de documentos de Google Docs y Sheets, si el administrador lo ha activado y tú decides usarlo (opcional).
+- Permitir el inicio de sesión con Google y la creación de documentos de Google Docs, hojas de Google Sheets y presentaciones de Google Slides, si el administrador lo ha activado y tú decides usarlo (opcional).
 - Garantizar la seguridad del servicio (registros técnicos, detección de accesos indebidos) y realizar copias de seguridad.
 
 ## 3. Base jurídica
 
 - La ejecución del servicio que has solicitado o del que formas parte por tu relación con {responsable} (art. 6.1.b RGPD): cuenta, proyectos, tareas y avisos del servicio.
 - El interés legítimo de {responsable} en la seguridad de la información y la continuidad del servicio (art. 6.1.f RGPD): registros de seguridad y copias de seguridad.
-- Tu consentimiento (art. 6.1.a RGPD) para el inicio de sesión con Google y la integración con Google Docs y Sheets; puedes retirarlo en cualquier momento desvinculando tu cuenta de Google, sin que ello afecte a la licitud del tratamiento anterior.
+- Tu consentimiento (art. 6.1.a RGPD) para el inicio de sesión con Google y la integración con Google Docs, Sheets y Slides; puedes retirarlo en cualquier momento desvinculando tu cuenta de Google, sin que ello afecte a la licitud del tratamiento anterior.
 - El cumplimiento de obligaciones legales cuando corresponda (art. 6.1.c RGPD).
 
 ## 4. Datos que tratamos
@@ -40,7 +40,7 @@ No vendemos ni cedemos tus datos a terceros con fines propios. Pueden acceder a 
 - El proveedor de alojamiento (servidor) de esta instalación.
 - El proveedor del servicio de correo electrónico usado para los avisos.
 - El proveedor de almacenamiento de las copias de seguridad, si se usa uno externo.
-- Google, solo si se usa el inicio de sesión con Google o la integración con Docs y Sheets.
+- Google, solo si se usa el inicio de sesión con Google o la integración con Docs, Sheets y Slides.
 
 El responsable debe indicar aquí los proveedores concretos que utiliza. Dentro de tu organización, el resto de miembros de un proyecto ven el contenido y tu nombre en ese proyecto, y los administradores pueden gestionar cuentas y proyectos.
 
@@ -91,14 +91,14 @@ We process your data to:
 - Manage your user account and let you access the service.
 - Manage projects, tasks, comments, files and release notes, and collaboration with others on your team.
 - Send you service-related emails (assignments, mentions, reminders, password reset, verification codes). We send no marketing.
-- Allow sign-in with Google and the creation of Google Docs and Sheets, if the administrator has enabled it and you choose to use it (optional).
+- Allow sign-in with Google and the creation of Google Docs, Google Sheets and Google Slides presentations, if the administrator has enabled it and you choose to use it (optional).
 - Keep the service secure (technical logs, detection of improper access) and make backups.
 
 ## 3. Legal basis
 
 - Performance of the service you requested or are part of through your relationship with {responsable} (Art. 6(1)(b) GDPR): account, projects, tasks and service notices.
 - The legitimate interest of {responsable} in information security and service continuity (Art. 6(1)(f) GDPR): security logs and backups.
-- Your consent (Art. 6(1)(a) GDPR) for sign-in with Google and the Google Docs and Sheets integration; you can withdraw it at any time by unlinking your Google account, without affecting the lawfulness of earlier processing.
+- Your consent (Art. 6(1)(a) GDPR) for sign-in with Google and the Google Docs, Sheets and Slides integration; you can withdraw it at any time by unlinking your Google account, without affecting the lawfulness of earlier processing.
 - Compliance with legal obligations where applicable (Art. 6(1)(c) GDPR).
 
 ## 4. Data we process
@@ -117,7 +117,7 @@ We do not sell or give your data to third parties for their own purposes. The fo
 - The hosting provider (server) of this installation.
 - The email service provider used for notices.
 - The backup storage provider, if an external one is used.
-- Google, only if sign-in with Google or the Docs and Sheets integration is used.
+- Google, only if sign-in with Google or the Docs, Sheets and Slides integration is used.
 
 The controller should name the specific providers it uses here. Within your organisation, other members of a project see the content and your name in that project, and administrators can manage accounts and projects.
 

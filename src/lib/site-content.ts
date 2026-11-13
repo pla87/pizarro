@@ -113,7 +113,7 @@ export function siteText(t: T, _priceEur: number) {
       { key: "email" as SiteConnect, title: t("Avisos por email"), text: t("Invitaciones, menciones, recordatorios y un resumen diario, con Gmail o el correo de tu empresa.") },
       { key: "messaging" as SiteConnect, title: t("Telegram y WhatsApp"), text: t("Los avisos, también en el móvil por Telegram o WhatsApp.") },
       { key: "google-login" as SiteConnect, title: t("Iniciar sesión con Google"), text: t("Entra con tu cuenta de Google, sin otra contraseña que recordar.") },
-      { key: "google-docs" as SiteConnect, title: t("Google Docs y Sheets"), text: t("Crea un documento desde la tarea y queda enlazado en ella.") },
+      { key: "google-docs" as SiteConnect, title: t("Google Docs, Sheets y Slides"), text: t("Crea un documento desde la tarea y queda enlazado en ella.") },
     ],
     connectAll: t("Todas las guías de conexión"),
 
@@ -178,7 +178,7 @@ export function siteText(t: T, _priceEur: number) {
     guidesNav: t("Guías"),
     guidesTitle: t("Guías de conexión"),
     guidesLead: t("Paso a paso para conectar Pizarro con Google, Telegram y WhatsApp. Todo es opcional y lo configura un administrador de tu instalación."),
-    guidesDescription: t("Guías paso a paso para conectar Pizarro con Google (inicio de sesión, Docs y Sheets), Telegram y WhatsApp."),
+    guidesDescription: t("Guías paso a paso para conectar Pizarro con Google (inicio de sesión, Docs, Sheets y Slides), Telegram y WhatsApp."),
     guidesInstall: t("¿Aún no has instalado Pizarro?"),
     guideRead: t("Leer la guía"),
     guideOther: t("Otras guías"),

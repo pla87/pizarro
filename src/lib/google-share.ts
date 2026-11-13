@@ -1,4 +1,4 @@
-// Con quién se comparten los Docs/Sheets creados desde una tarea (por proyecto). Sin dependencias de servidor:
+// Con quién se comparten los Docs/Sheets/Slides creados desde una tarea (por proyecto). Sin dependencias de servidor:
 // lo usan también los ajustes del proyecto y los tests.
 
 export const GOOGLE_SHARE_MODES = ["DOMAIN_WRITE", "DOMAIN_READ", "MEMBERS", "NONE"] as const;

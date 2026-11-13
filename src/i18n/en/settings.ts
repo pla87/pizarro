@@ -87,7 +87,6 @@ export const settings: Record<string, string> = {
   "Escribes los símbolos (**negrita**, - lista, # título). Al guardar se ve formateado.": "You type the symbols (**bold**, - list, # heading). It shows formatted once saved.",
   "Con barra de formato": "With formatting toolbar",
   "Ves el resultado mientras escribes y aplicas negrita, listas o títulos con botones.": "You see the result as you type and apply bold, lists or headings with buttons.",
-  "Google Docs y Sheets": "Google Docs and Sheets",
   "y": "and",
   "Pizarro solo puede acceder a los archivos que crea él mismo (permiso": "Pizarro can only access the files it creates itself (permission",
   "Conectada como": "Connected as",

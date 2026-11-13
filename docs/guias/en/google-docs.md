@@ -1,11 +1,11 @@
 ---
-titulo: Google Docs and Sheets
+titulo: Google Docs, Sheets and Slides
 descripcion: Create a document, a spreadsheet or a presentation from a task and keep it linked to it.
 orden: 2
 icono: google
 ---
 
-# Google Docs and Sheets
+# Google Docs, Sheets and Slides
 
 With this connection, any task can create a Google Doc, a Google Sheet or a Google Slides presentation: it is created in the Drive of whoever asks for it, named after the card, opens in a new tab and stays linked to the task. It uses the same Google client as [Sign in with Google](google-login.md); if you already have it, start at step 1 and skip step 3.
 

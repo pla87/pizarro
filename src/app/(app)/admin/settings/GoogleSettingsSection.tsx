@@ -89,12 +89,12 @@ export function GoogleSettingsSection({ view }: { view: GoogleSettingsView }) {
           <div className="space-y-1.5">
             {view.mismatch && <p className="text-xs font-medium">{t("Con APP_URL (la configurada ahora)")}</p>}
             <CopyRow label={t("Acceso con Google")} value={view.redirectUris.login} />
-            <CopyRow label={t("Docs y Sheets")} value={view.redirectUris.docs} />
+            <CopyRow label={t("Docs, Sheets y Slides")} value={view.redirectUris.docs} />
             {view.mismatch && (
               <>
                 <p className="pt-1 text-xs font-medium">{t("Con la dirección que usas ahora ({current})", { current: view.mismatch.current })}</p>
                 <CopyRow label={t("Acceso con Google")} value={view.mismatch.redirectUris.login} />
-                <CopyRow label={t("Docs y Sheets")} value={view.mismatch.redirectUris.docs} />
+                <CopyRow label={t("Docs, Sheets y Slides")} value={view.mismatch.redirectUris.docs} />
                 <p className="text-xs text-slate-500">{t("Google admite varias a la vez: añade ambas mientras migras y quita las antiguas al terminar.")}</p>
               </>
             )}
@@ -140,7 +140,7 @@ export function GoogleSettingsSection({ view }: { view: GoogleSettingsView }) {
         <div className="block text-sm">
           <div className="flex items-center gap-1">
             <label htmlFor="google-domain" className="font-medium">{t("Dominio de Workspace permitido (opcional)")}</label>
-            <InfoTip topic={t("Dominio de Workspace permitido (opcional)")}>{t("Con dominio, solo entran cuentas de ese dominio y se pueden compartir Docs y Sheets con todo él.")}</InfoTip>
+            <InfoTip topic={t("Dominio de Workspace permitido (opcional)")}>{t("Con dominio, solo entran cuentas de ese dominio y se pueden compartir Docs, Sheets y Slides con todo él.")}</InfoTip>
           </div>
           {view.envDomain ? (
             <span className="mt-1 block text-xs text-slate-500">{t("Configurado en el servidor (GOOGLE_WORKSPACE_DOMAIN).")}</span>
