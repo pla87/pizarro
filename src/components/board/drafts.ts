@@ -33,6 +33,8 @@ export interface NewTaskDraft {
   /** Repetir: regla y día (semana 1-7 o mes 1-31); el servidor los deja coherentes al crear. */
   recurrence?: RecurrenceRule;
   recurrenceDay?: number | null;
+  /** El día se eligió a mano (si no, al recuperar el borrador sigue a la fecha límite, como antes de cerrarlo). */
+  recurrenceDayPicked?: boolean;
 }
 
 export interface EditTaskDraft {

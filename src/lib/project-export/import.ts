@@ -26,6 +26,7 @@ import {
   saveRawAttachmentFile, saveReleaseAttachmentFile,
 } from "../uploads";
 import { openImportJournal } from "./import-journal";
+import { remapAttachmentRefs } from "../attachment-refs";
 import { mapMentions } from "./mentions";
 import { openProjectArchive, type ProjectArchive } from "./read";
 import type { ProjectExportData } from "./types";
@@ -156,7 +157,9 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
   const memberIds = opts.isPrivate
     ? []
     : [...new Set([...userMap.values()].filter((m): m is { id: string; role: "ADMIN" | "MEMBER" } => !!m && m.role !== "ADMIN" && m.id !== user.id).map((m) => m.id))];
-  const text = (s: string) => mapMentions(s, (name, ref) => { const id = uid(ref); return id ? mentionToken(name, id) : `@${name}`; });
+  // Ref de cada adjunto en el archivo → id del importado (se llena al importar los ficheros, antes de escribir los textos).
+  const attachmentIds = new Map<string, string>();
+  const text = (s: string) => remapAttachmentRefs(mapMentions(s, (name, ref) => { const id = uid(ref); return id ? mentionToken(name, id) : `@${name}`; }), attachmentIds);
 
   const projectId = newId();
   const fileMaxMb = clamp(data.project.fileMaxMb, FILE_MAX_MIN_MB, FILE_MAX_MAX_MB);
@@ -228,6 +231,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
           written.attachments.push(id);
           writtenBytes += image.full.length;
           assertRoom(0);
+          if (a.ref) attachmentIds.set(a.ref, id);
           attachmentRows.push({
             id, taskId: taskIds.get(task.ref)!, originalName: name, mimeType: "image/webp", isImage: true, width: image.width, height: image.height,
             size: image.full.length, createdById: uid(a.createdBy), createdAt: date(a.createdAt),
@@ -238,6 +242,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
           written.attachments.push(id);
           writtenBytes += buf.length;
           assertRoom(0);
+          if (a.ref) attachmentIds.set(a.ref, id);
           attachmentRows.push({
             id, taskId: taskIds.get(task.ref)!, originalName: name, mimeType: sanitizeMime(a.mimeType), isImage: false, width: null, height: null,
             size: buf.length, createdById: uid(a.createdBy), createdAt: date(a.createdAt),

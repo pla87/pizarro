@@ -119,7 +119,9 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   // Repetir (como en el detalle). Mientras no se elija a mano, el día de la semana o del mes sigue a la fecha límite.
   const [recurrence, setRecurrence] = useState<RecurrenceRule>(() => (d?.recurrence && RECURRENCES.includes(d.recurrence) ? d.recurrence : "NONE"));
   const [recurrenceDay, setRecurrenceDay] = useState<number | null>(() => (typeof d?.recurrenceDay === "number" ? d.recurrenceDay : null));
-  const dayPicked = useRef(recurrenceDay !== null && !!d);
+  // Del borrador se recupera si se eligió a mano: antes se daba por elegido siempre que hubiera día, y tras reabrir el
+  // diálogo el día ya no seguía a la fecha límite (una tarea con fecha en viernes se repetía, por ejemplo, los jueves).
+  const dayPicked = useRef(recurrenceDay !== null && d?.recurrenceDayPicked === true);
   const changeDue = (v: string) => {
     setDueDate(v);
     if (!dayPicked.current && (recurrence === "WEEKLY" || recurrence === "MONTHLY") && v.slice(0, 4) >= "1900") setRecurrenceDay(defaultRecurrenceDay(recurrence, v, board.today));
@@ -193,7 +195,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       ? undefined
       : !title.trim() && !description.trim() && !subtasks.length && !subtaskDraft.trim()
         ? null
-        : ({ title, kindId, description, columnId, assigneeId, dueDate, deliverableId, evergreen, subtasks, subtaskDraft, projectId, fields: loading ? fieldsForm : fieldsForDraft(fieldsForm, form.project.taskFields), recurrence, recurrenceDay } satisfies NewTaskDraft),
+        : ({ title, kindId, description, columnId, assigneeId, dueDate, deliverableId, evergreen, subtasks, subtaskDraft, projectId, fields: loading ? fieldsForm : fieldsForDraft(fieldsForm, form.project.taskFields), recurrence, recurrenceDay, recurrenceDayPicked: dayPicked.current } satisfies NewTaskDraft),
   );
   // Si el diálogo ya no está montado (cierre del padre, navegación), una subida tardía no cierra ni descarta nada ajeno.
   const alive = useRef(true);

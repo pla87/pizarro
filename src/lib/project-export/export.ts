@@ -12,6 +12,7 @@ import { appTimeZone } from "../format";
 import { slugify } from "../search-accents";
 import { attachmentPath, documentPath, readReleaseAttachmentFile } from "../uploads";
 import { streamZipSize, type StreamZipEntry } from "../zip-stream";
+import { remapAttachmentRefs } from "../attachment-refs";
 import { mapMentions } from "./mentions";
 import {
   EXPORT_EXTENSION, EXPORT_FORMAT, EXPORT_FORMAT_VERSION, projectDataSchema, TRASH_EXPORT_MAX,
@@ -168,6 +169,15 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
     return text;
   };
 
+  // Adjuntos exportados: id → ref (`a1`, `a2`…). Las imágenes de los textos (`/api/attachments/<id>`) se escriben con la
+  // ref al final, como las menciones, y el importador las apunta a los adjuntos importados.
+  const attachmentRefs = new Map<string, string>();
+  const attachmentRef = (id: string) => {
+    const r = `a${attachmentRefs.size + 1}`;
+    attachmentRefs.set(id, r);
+    return r;
+  };
+
   // Tareas.
   const tasks: ProjectExportData["tasks"] = [];
   let commentCount = 0;
@@ -211,7 +221,7 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
           }
           attachments.push({
             originalName: a.originalName, mimeType: a.mimeType, isImage: a.isImage, width: a.width, height: a.height, size: info.size,
-            createdBy: users.ref(a.createdById), createdAt: iso(a.createdAt), file: info.sha,
+            createdBy: users.ref(a.createdById), createdAt: iso(a.createdAt), file: info.sha, ref: attachmentRef(a.id),
           });
         }
       }
@@ -358,7 +368,7 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
   const userRows = await db.user.findMany({ where: { id: { in: [...new Set([...users.entries().map(([id]) => id), ...mentionIds])] } }, select: { id: true, name: true, email: true } });
   const userById = new Map(userRows.map((u) => [u.id, u]));
   // Menciones: la de una persona que existe lleva su ref; la de una que ya no, queda como texto.
-  const fixMentions = (text: string) => mapMentions(text, (name, id) => (userById.has(id) ? `@[${name}](user:${users.ref(id)})` : `@${name}`));
+  const fixMentions = (text: string) => remapAttachmentRefs(mapMentions(text, (name, id) => (userById.has(id) ? `@[${name}](user:${users.ref(id)})` : `@${name}`)), attachmentRefs);
   for (const t of tasks) {
     t.title = fixMentions(t.title);
     t.description = fixMentions(t.description);

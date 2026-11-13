@@ -43,6 +43,7 @@ import type { ArchivedTask, BoardTask, CommentInfo, ProjectFormData, SubtaskInfo
 import { getLocale, getT } from "@/i18n/server";
 import { intlLocale } from "@/i18n/core";
 import { copyTaskAttachments, type AttachmentCopyResult } from "@/lib/attachment-copy";
+import { remapAttachmentRefs } from "@/lib/attachment-refs";
 import { mbNumber, quotaError } from "@/lib/quota-message";
 
 async function assertColumnInProject(columnId: string, projectId: string) {
@@ -324,9 +325,9 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
 /**
  * Duplica una tarea: copia título (con « (copia)»), tipo, descripción, etiquetas, responsable, fecha límite,
  * entregable, color, enlace, subtareas (sin marcar), documentos de Google enlazados (el mismo documento, no una copia
- * en Drive) y adjuntos (cada uno con su propio fichero: ver attachment-copy.ts); no copia comentarios, historial ni
- * repetición. Los adjuntos que no caben (tope por tarea, cuotas) o cuyo fichero falta se omiten y la respuesta lleva
- * `copyNotice`, el aviso para quien duplica.
+ * en Drive) y adjuntos (cada uno con su propio fichero: ver attachment-copy.ts; las imágenes de la descripción pasan a
+ * apuntar a esas copias); no copia comentarios, historial ni repetición. Los adjuntos que no caben (tope por tarea,
+ * cuotas) o cuyo fichero falta se omiten y la respuesta lleva `copyNotice`, el aviso para quien duplica.
  * Queda justo detrás de la original en su columna o, con `target` (Ctrl/Alt al soltar una tarjeta arrastrada),
  * en esa columna entre las vecinas indicadas, como moveTask. Se deshace de una vez (borra la copia; los ficheros de sus
  * adjuntos se conservan mientras se pueda rehacer y después se borran, como al borrar una tarea).
@@ -398,6 +399,10 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
     else describeAction("Duplicó «{title}» en «{col}»", { title: src.title, col: await columnName(columnId) }, { taskId: copy.id });
     // Después de crear la tarea (los ficheros pueden tardar): lo que no se copie se avisa, pero la copia ya existe.
     const copied = await copyTaskAttachments(taskId, copy.id);
+    // Las imágenes de la descripción (`![…](/api/attachments/<id>)`) apuntan a los adjuntos de la original: en la copia,
+    // a sus propias copias. Si no, borrar el adjunto (o la tarea) original dejaba la imagen rota en la copia.
+    const description = remapAttachmentRefs(src.description, copied.ids);
+    if (description !== src.description) await db.task.updateMany({ where: { id: copy.id, description: src.description }, data: { description } });
     const notice = await copyNoticeText(copied, projectId, user.role === "ADMIN");
     const row: BoardTask & { copyNotice?: string } = await loadBoardTask(copy.id);
     return notice ? { ...row, copyNotice: notice } : row;

@@ -7,6 +7,7 @@ import { updateClearDraftsOnLogout } from "@/actions/profile";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
+import { actionThrowResult } from "@/lib/stale-action";
 
 /** «Borrar los borradores al cerrar sesión»: el borrado lo hace el navegador al pulsar «Cerrar sesión» (AppShell). */
 export function DraftsSection({ initial }: { initial: boolean }) {
@@ -16,7 +17,8 @@ export function DraftsSection({ initial }: { initial: boolean }) {
   const [on, setOn] = useState(initial);
   const change = async (value: boolean) => {
     setOn(value);
-    const res = await updateClearDraftsOnLogout(value);
+    // Sin red la acción lanza: el interruptor vuelve a como estaba, con «Sin conexión: no se ha guardado».
+    const res = await updateClearDraftsOnLogout(value).catch((e) => actionThrowResult(e, t));
     if (!res.ok) {
       setOn(!value);
       return toast(res.error, "error");

@@ -172,6 +172,25 @@ describe("duplicar una tarea copia sus adjuntos", () => {
     assert.deepEqual(await uploadFiles(), before, "ni un fichero de más");
   });
 
+  test("las imágenes de la descripción apuntan a los adjuntos de la copia (borrar la original no las rompe)", async () => {
+    const { user, f, task } = await setup();
+    const img = await attach(task.id, "captura.png", 2000, { image: true, tag: 3 });
+    const other = await makeTask(f, { title: "Otra" });
+    const foreign = await attach(other.id, "ajena.png", 1000, { image: true, tag: 4 });
+    const description = `Antes ![captura](/api/attachments/${img}) y [miniatura](/api/attachments/${img}?thumb=1)\n\n![ajena](/api/attachments/${foreign})`;
+    await db.task.update({ where: { id: task.id }, data: { description } });
+
+    const copy = expectOk(await duplicateTask(task.id));
+    const [copied] = await attachmentsOf(copy.id);
+    assert.ok(copied && copied.id !== img);
+    const saved = (await db.task.findUniqueOrThrow({ where: { id: copy.id }, select: { description: true } })).description;
+    assert.equal(saved, `Antes ![captura](/api/attachments/${copied.id}) y [miniatura](/api/attachments/${copied.id}?thumb=1)\n\n![ajena](/api/attachments/${foreign})`);
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id }, select: { description: true } })).description, description, "la original no cambia");
+    expectOk(await deleteTask(task.id));
+    await discardUndo({ userId: user.id, projectId: f.project.id });
+    assert.ok(await exists(attachmentPath(copied.id, "full")), "la imagen de la copia sigue");
+  });
+
   test("sin adjuntos ni enlaces: la copia sale igual que antes, sin aviso", async () => {
     const { task } = await setup();
     const copy = expectOk(await duplicateTask(task.id));
