@@ -59,7 +59,7 @@ export const colaboracion: Record<string, string> = {
   "Puedes desactivar este resumen en «Mi perfil» de Pizarro.": "You can turn this summary off in “My profile” in Pizarro.",
   // Informe semanal
   "Informe semanal por email": "Weekly report by email",
-  "Envía el informe PDF de estado del proyecto a un correo cada semana, el día y la hora que elijas.": "Sends the project status PDF report to an email address every week, on the day and at the time you choose.",
+  "El informe PDF del proyecto, cada semana a un correo.": "The project's PDF report, emailed every week.",
   "Informe semanal guardado": "Weekly report saved",
   "Enviar el informe cada semana": "Send the report every week",
   "Destinatario": "Recipient",

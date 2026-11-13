@@ -1372,7 +1372,7 @@ if (only.includes("r47")) {
     window.__r47 = state;
     const look = () => {
       if (!state.armed) return;
-      const skeleton = document.querySelector("div.w-72.animate-pulse");
+      const skeleton = document.querySelector("[data-project-loading]"); // ProjectLoading.tsx (loading.tsx del proyecto)
       const visible = (sel) => { const el = document.querySelector(sel); return !!el && el.checkVisibility(); };
       const problems = [skeleton && "esqueleto", state.cols && !visible('[aria-label="Backlog"]') && "sin columnas", !visible('button[aria-label="Nueva tarea"]') && "sin cabecera"].filter(Boolean);
       if (problems.length) state.bad.push(problems.join("+"));

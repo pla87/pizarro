@@ -8,6 +8,7 @@ import { baja } from "./baja";
 import { board } from "./board";
 import { calendar } from "./calendar";
 import { campos } from "./campos";
+import { carga } from "./carga";
 import { colaboracion } from "./colaboracion";
 import { comentarios } from "./comentarios";
 import { common } from "./common";
@@ -43,5 +44,5 @@ export const EN: Record<string, string> = {
   ...common, ...board, ...task, ...detalle, ...comentarios, ...lista, ...pegado, ...wip, ...calendar, ...releases, ...conexion,
   ...accesibilidad, ...settings, ...admin, ...server, ...cuentas, ...acceso, ...colaboracion, ...proyectos, ...plantillas,
   ...setup, ...documentacion, ...campos, ...almacenamiento, ...importar, ...ics, ...mensajeria, ...soporte, ...licencia,
-  ...legal, ...landing, ...web, ...instalar, ...baja, ...datos, ...copia, ...repeticion,
+  ...legal, ...landing, ...web, ...instalar, ...baja, ...datos, ...copia, ...repeticion, ...carga,
 };

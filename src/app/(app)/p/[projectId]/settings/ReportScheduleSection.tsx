@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { saveReportSchedule } from "@/actions/report-schedule";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import { useActionTransition } from "@/components/useActionTransition";
@@ -38,7 +39,7 @@ export function ReportScheduleSection({ projectId, initial, emailAvailable, time
   return (
     <section className="card scroll-mt-4 p-5">
       <h2 className="font-semibold">{t("Informe semanal por email")}</h2>
-      <p className="mt-0.5 text-sm text-slate-500">{t("Envía el informe PDF de estado del proyecto a un correo cada semana, el día y la hora que elijas.")}</p>
+      <p className="mt-0.5 text-sm text-slate-500">{t("El informe PDF del proyecto, cada semana a un correo.")}</p>
       <form
         className="mt-4 space-y-3"
         onSubmit={(e) => {
@@ -55,7 +56,17 @@ export function ReportScheduleSection({ projectId, initial, emailAvailable, time
         </label>
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
           <div>
-            <label className="label" htmlFor="rs-recipient">{t("Destinatario")}</label>
+            <div className="mb-1 flex items-center gap-1">
+              <label className="label mb-0" htmlFor="rs-recipient">{t("Destinatario")}</label>
+              <InfoTip topic={t("Destinatario")}>
+                {recipients === "any"
+                  ? t("Vale la dirección de un miembro del proyecto, la de un administrador o una externa.")
+                  : recipients === "team"
+                    ? t("Vale la dirección de un miembro del proyecto o la de un administrador (una externa solo la pone un administrador).")
+                    : t("Proyecto privado: solo vale la dirección de uno de sus miembros.")}{" "}
+                {t("El informe se genera con tus permisos: deja de enviarse si pierdes el acceso al proyecto.")}
+              </InfoTip>
+            </div>
             <input id="rs-recipient" type="email" className="input" value={form.recipient} onChange={(e) => set("recipient", e.target.value)} required maxLength={200} autoComplete="off" />
           </div>
           <div>
@@ -71,13 +82,7 @@ export function ReportScheduleSection({ projectId, initial, emailAvailable, time
             </select>
           </div>
         </div>
-        <p className="text-xs text-slate-500">
-          {recipients === "any"
-            ? t("Hora de la app ({tz}). Vale la dirección de un miembro del proyecto, la de un administrador o una externa. El informe se genera con tus permisos, así que deja de enviarse si pierdes el acceso al proyecto.", { tz: timeZone })
-            : recipients === "team"
-              ? t("Hora de la app ({tz}). Vale la dirección de un miembro del proyecto o la de un administrador (una dirección externa solo puede ponerla un administrador). El informe se genera con tus permisos, así que deja de enviarse si pierdes el acceso al proyecto.", { tz: timeZone })
-              : t("Hora de la app ({tz}). El proyecto es privado: solo vale la dirección de uno de sus miembros. El informe se genera con tus permisos, así que deja de enviarse si pierdes el acceso al proyecto.", { tz: timeZone })}
-        </p>
+        <p className="text-xs text-slate-500">{t("Hora de la app ({tz}).", { tz: timeZone })}</p>
         {!emailAvailable && form.enabled && <p className="text-xs text-amber-700 dark:text-amber-300">{t("El envío de emails aún no está configurado en el servidor.")}</p>}
         <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
       </form>
