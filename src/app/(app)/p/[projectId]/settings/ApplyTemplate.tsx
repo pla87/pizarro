@@ -13,7 +13,7 @@ import { COLUMN_ROLE_LABEL } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
 import {
   listedKinds, planAdd, planIsEmpty, planReplace, resolveTemplateKinds, suggestColumnChoices, suggestKindChoices, summarizePlan, TEMPLATE_UNDO_HOURS, visibleGeneralsAfter,
-  type ApplyMode, type ApplyTemplateShape, type ProjectShape, type TemplateRef,
+  type ApplyMode, type ApplyTemplateShape, type ProjectShape, type ReplacePlan, type TemplateRef,
 } from "@/lib/template-apply-core";
 import { cn } from "@/components/ui/cn";
 import { Modal } from "@/components/ui/Modal";
@@ -213,7 +213,7 @@ function ApplyWizard({ projectId, onClose, onApplied }: { projectId: string; onC
       )}
 
       {step === 2 && preview && plan?.mode === "REPLACE" && (
-        <MatchStep preview={preview} columns={columns} kinds={kinds} setColumns={setColumns} setKinds={setKinds} />
+        <MatchStep preview={preview} plan={plan} columns={columns} kinds={kinds} setColumns={setColumns} setKinds={setKinds} />
       )}
 
       {step === 3 && preview && plan && (
@@ -244,8 +244,9 @@ function ApplyWizard({ projectId, onClose, onApplied }: { projectId: string; onC
 }
 
 /** Paso 2: a qué columna y tipo de la plantilla va cada uno de los actuales. */
-function MatchStep({ preview, columns, kinds, setColumns, setKinds }: {
+function MatchStep({ preview, plan, columns, kinds, setColumns, setKinds }: {
   preview: { template: ApplyTemplateShape; project: ProjectShape };
+  plan: ReplacePlan;
   columns: Record<string, string>;
   kinds: Record<string, string>;
   setColumns: (f: (c: Record<string, string>) => Record<string, string>) => void;
@@ -256,6 +257,13 @@ function MatchStep({ preview, columns, kinds, setColumns, setKinds }: {
   const targets = resolveTemplateKinds(project, template);
   const generals = visibleGeneralsAfter(project, template);
   const n = (count: number) => (count === 1 ? t("1 tarea") : t("{n} tareas", { n: count }));
+  // Qué le pasa a un tipo general que se «conserva»: si la plantilla lo oculta y no tiene tareas, se oculta (y el resumen
+  // lo dice); si estaba oculto y tiene tareas, vuelve a verse. La opción lo dice igual que el resumen. Con otra elección
+  // puesta, se calcula como si se eligiera conservar (el plan depende de las demás elecciones: tareas que le llegan).
+  const keepEffect = (id: string): "hide" | "show" | null => {
+    const p = (kinds[id] ?? "keep") === "keep" ? plan : planReplace(project, template, { columns, kinds: { ...kinds, [id]: "keep" } });
+    return p.hideGenerals.includes(id) ? "hide" : p.showGenerals.includes(id) ? "show" : null;
+  };
   return (
     <div className="space-y-5" data-step="2">
       <section>
@@ -288,6 +296,7 @@ function MatchStep({ preview, columns, kinds, setColumns, setKinds }: {
         <ul className="space-y-2">
           {listedKinds(project).map((k) => {
             const same = targets.findIndex((x) => "existing" in x && x.existing === k.id);
+            const effect = k.general && same < 0 ? keepEffect(k.id) : null;
             return (
               <li key={k.id} className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-center sm:gap-3" data-match-kind={k.label}>
                 <span className="min-w-0 text-sm">
@@ -298,7 +307,7 @@ function MatchStep({ preview, columns, kinds, setColumns, setKinds }: {
                   <span className="text-sm text-slate-600 dark:text-slate-400">{t("Ya está en la plantilla")}</span>
                 ) : (
                   <select className="input" aria-label={t("Destino de «{name}»", { name: k.label })} value={kinds[k.id] ?? "keep"} onChange={(e) => { const value = e.target.value; setKinds((m) => ({ ...m, [k.id]: value })); }}>
-                    <option value="keep">{t("Conservar")}</option>
+                    <option value="keep">{effect === "hide" ? t("Ocultar (la plantilla no lo usa)") : effect === "show" ? t("Conservar (volverá a verse)") : t("Conservar")}</option>
                     {!k.general && k.tasks === 0 && <option value="drop">{t("Quitar (no tiene tareas)")}</option>}
                     {template.kinds.length > 0 && (
                       <optgroup label={t("Pasa al tipo de la plantilla")}>

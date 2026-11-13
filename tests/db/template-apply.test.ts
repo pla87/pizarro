@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { getArchivedTasks, restoreTask } from "../../src/actions/tasks";
 import { applyTemplateChange, listApplicableTemplates, previewTemplateChange, undoTemplateChange } from "../../src/actions/template-apply";
 import { subscribeProject } from "../../src/lib/realtime";
 import { undoTemplateChange as undoInLib } from "../../src/lib/template-apply";
@@ -237,4 +238,26 @@ test("una columna de presupuesto de la plantilla activa el coste; al deshacer vu
   assert.equal(after.tasks.length, 5);
   expectOk(await undoTemplateChange(f.project.id));
   assert.deepEqual((await state(f.project.id)).taskFields, []);
+});
+
+test("una archivada de una columna que se une a otra vuelve a esa al recuperarla; al deshacer, a la suya", async () => {
+  const admin = await makeUser({ role: "ADMIN" });
+  const { f, tasks } = await setup();
+  await db.projectMember.create({ data: { projectId: f.project.id, userId: admin.id } });
+  await loginAs(admin);
+  const ref = { source: "template", id: (await makeTemplate()).id } as const;
+  // «Por hacer» y «En curso» pasan a «Haciendo» (la 2.ª de la plantilla): «En curso», con la archivada D, se une a «Por
+  // hacer» (que pasa a llamarse «Haciendo») y se quita. La primera columna pasa a ser «Por hacer», nueva.
+  expectOk(await applyTemplateChange(f.project.id, ref, "REPLACE", { columns: { [f.columns.todo]: "t:1", [f.columns.doing]: "t:1", [f.columns.done]: "t:3" } }));
+  assert.equal(await db.column.count({ where: { id: f.columns.doing } }), 0);
+  const archived = expectOk(await getArchivedTasks(f.project.id)).items.find((x) => x.id === tasks.d.id)!;
+  assert.equal(archived.columnName, "Haciendo", "«Archivadas» dice de qué columna es (no «columna borrada»)");
+  const back = expectOk(await restoreTask(tasks.d.id));
+  assert.equal(back.columnName, "Haciendo", "vuelve a la columna a la que se unió la suya, no a la primera");
+  assert.equal((await db.task.findUniqueOrThrow({ where: { id: tasks.d.id } })).columnId, f.columns.todo);
+  // Otra vez archivada, se deshace el cambio: vuelve a «En curso» (recreada con su id) y recuerda esa como origen.
+  await db.task.update({ where: { id: tasks.d.id }, data: { archivedAt: new Date(), archivedFromColumnId: f.columns.todo } });
+  expectOk(await undoTemplateChange(f.project.id));
+  const d = await db.task.findUniqueOrThrow({ where: { id: tasks.d.id }, select: { columnId: true, archivedFromColumnId: true } });
+  assert.deepEqual(d, { columnId: f.columns.doing, archivedFromColumnId: f.columns.doing });
 });
