@@ -18,7 +18,12 @@ import { ProjectPicksSection } from "./ProjectPicksSection";
 import { SessionsSection } from "./SessionsSection";
 import { TwoFactorSection } from "./TwoFactorSection";
 import { DeleteAccountSection } from "./DeleteAccountSection";
-import { deletionBlock, soloPrivateProjectIds } from "@/lib/user-delete";
+import { deletionBlock, soloPrivateProjects } from "@/lib/user-delete";
+import { deleteAlternatives } from "@/lib/user-delete-core";
+import { passwordLoginAllowed } from "@/lib/auth-policy";
+import { googlePolicyEnv } from "@/lib/google-config";
+import { parseGoogleReauthResult } from "@/lib/google-reauth";
+import { accountDeleteGoogleConfirmed } from "@/lib/two-factor";
 
 export async function generateMetadata() {
   const t = await getT();
@@ -37,10 +42,10 @@ const GOOGLE_MESSAGES: Record<string, { ok: boolean; text: string }> = {
   identity: { ok: false, text: "Google no confirmó la identidad de la cuenta. Vuelve a intentarlo." },
 };
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ google?: string; tab?: string }> }) {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ google?: string; tab?: string; delete?: string }> }) {
   const user = await requireUserPage();
   const t = await getT();
-  const { google, tab: tabParam } = await searchParams;
+  const { google, tab: tabParam, delete: deleteParam } = await searchParams;
   // El aviso de vuelta de Google se muestra en «Cuenta», donde está esa sección.
   const tab = google ? "cuenta" : parseProfileTab(tabParam);
   const row = await db.user.findUniqueOrThrow({
@@ -62,6 +67,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       dailyDigest: true,
       digestHour: true,
       googleAccount: { select: { email: true } },
+      googleSub: true,
     },
   });
   const codesLeft = row.twoFactorMethod ? await recoveryCodesLeft(user.id) : 0;
@@ -134,9 +140,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           tab === "cuenta" ? (
             <DeleteAccountSection
               block={await deletionBlock(user.id)}
-              privateProjects={(await soloPrivateProjectIds(user.id)).length}
+              privateProjects={await soloPrivateProjects(user.id)}
               twoFactor={row.twoFactorMethod}
               emailAvailable={emailEnabled()}
+              passwordLogin={passwordLoginAllowed(user.role, googlePolicyEnv())}
+              alternatives={deleteAlternatives({ googleLinked: row.googleSub !== null, passwordLogin: passwordLoginAllowed(user.role, googlePolicyEnv()), twoFactor: row.twoFactorMethod, emailAvailable: emailEnabled(), googleAvailable: googleEnabled() })}
+              googleConfirmed={await accountDeleteGoogleConfirmed(user.id, currentId)}
+              reauth={parseGoogleReauthResult(deleteParam)}
             />
           ) : null
         }

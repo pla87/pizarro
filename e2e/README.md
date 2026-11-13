@@ -24,7 +24,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Sin conexión y pestañas (caza de bugs 48b) | `e2e/bh48b-e2e.mjs` | 120 | ~3 min |
 | Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/bh48c-e2e.mjs` | 44 | ~1 min |
 | Copia con imagen en la descripción, sin red en calendario, borradores y releases (caza de bugs 49) | `e2e/bh49-e2e.mjs` | 27 | ~1 min |
-| Borrar mi cuenta (escritorio y móvil) | `e2e/r49-account-e2e.mjs` | 35 | ~30 s |
+| Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/r49-account-e2e.mjs` | 61 | ~1 min |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
 | Copias con adjuntos y release con barra de formato | `e2e/r49-copy-e2e.mjs` | 87 | ~2 min |
 | Tareas que se repiten (calendario, .ics y «Nueva tarea») | `e2e/r49-repeat-e2e.mjs` | 44 | ~1 min |
@@ -168,13 +168,17 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48c-e2e.mjs   # 
 ## Borrar mi cuenta
 
 *Mi perfil → Cuenta → Borrar mi cuenta*: el único administrador ve el botón desactivado y el motivo; el diálogo pide
-contraseña, la palabra BORRAR y, con un proyecto privado propio, marcar «Entendido»; con la contraseña incorrecta no se
-borra; al borrar se va al acceso con el aviso, se cierran sus dos sesiones y lo que creó queda como «Usuario eliminado».
-En móvil (390 px) activa la verificación en dos pasos desde el perfil y borra con el código de la app (el diálogo cabe en
-la pantalla). Crea sus propias personas (`r49_*`). Misma base y servidor:
+contraseña y la palabra BORRAR y avisa, con su lista, de que el proyecto privado propio pasa a ser de equipo (casilla
+«Borrar también…» sin marcar); con la contraseña incorrecta no se borra; al borrar se va al acceso con el aviso, se
+cierran sus dos sesiones, el proyecto queda de equipo y sin miembros (anotado en el registro) y lo que creó queda como
+«Usuario eliminado». En móvil (390 px) activa la verificación en dos pasos desde el perfil y borra con el código de la
+app (el diálogo cabe en la pantalla). Quien entra con Google sin contraseña conocida pulsa «Entro con Google y no conozco
+mi contraseña», confirma solo con el código de su app y borra también sus dos proyectos privados. *Administración →
+Usuarios → Borrar*: el aviso (sin el nombre del proyecto), sin marcar pasa a ser de equipo y marcando se borra. Crea sus
+propias personas (`r49_*`). Misma base y servidor:
 
 ```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-account-e2e.mjs   # PART=block,desk,mobile
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-account-e2e.mjs   # PART=block,desk,mobile,google,admin
 ```
 
 ## Copias con adjuntos y release con barra de formato

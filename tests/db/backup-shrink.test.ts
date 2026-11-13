@@ -7,7 +7,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, test } from "node:test";
-import "./helpers";
+import { db, waitForLockWaiter } from "./helpers";
 
 const { acceptBackupShrink, backupPaused, createBackup, dailyBackupJob, externalBackupJob, listBackups, readStatus, syncExternal } = await import("../../src/lib/backup");
 const { computeBackupAlert } = await import("../../src/lib/backup-alert");
@@ -126,8 +126,13 @@ describe("copias locales sin destino externo: las copias vacías no desplazan la
     assert.ok(alert.shrink?.goodAt, "con la fecha de la copia buena");
     assert.ok(Object.keys(status.copies ?? {}).includes(goodStem), "el resumen de cada copia queda en status.json");
 
+    // La confirmación es de la copia que vio el administrador: si el aviso que tiene delante ya no es el vigente (ha
+    // llegado otra copia), no se confirma nada.
+    await assert.rejects(acceptBackupShrink(undefined, { stem: empties.at(-2)!, goodStem }), /Ha llegado una copia nueva: revisa el aviso otra vez\./);
+    await assert.rejects(acceptBackupShrink(undefined, { stem: empties.at(-1)!, goodStem: empties[0]! }), /Ha llegado una copia nueva/);
+    assert.equal((await readStatus()).shrink?.stem, empties.at(-1), "el aviso sigue");
     // Reducción intencionada: se confirma, el aviso desaparece y la buena vuelve a la retención normal.
-    assert.equal(await acceptBackupShrink(), empties.at(-1));
+    assert.equal(await acceptBackupShrink(undefined, { stem: empties.at(-1)!, goodStem }), empties.at(-1));
     assert.equal(await acceptBackupShrink(), null, "sin aviso no hay nada que confirmar");
     assert.equal((await computeBackupAlert()).active, false);
     await nextSecond();
@@ -136,5 +141,38 @@ describe("copias locales sin destino externo: las copias vacías no desplazan la
     assert.equal((await readStatus()).shrink, undefined, "comparada desde la reducción aceptada, la nueva es buena");
     assert.ok(!(await listStems(local)).some((s) => s.stem === goodStem), "la antigua ya no se conserva siempre");
     assert.equal((await listObjectKeys(local)).size, 0, "y sus ficheros se borran con ella");
+  });
+});
+
+describe("confirmar la reducción mientras se hace una copia", () => {
+  test("al terminar esa copia el aviso no vuelve", async () => {
+    delete process.env.BACKUP_EXTERNAL_DIR;
+    process.env.UPLOAD_DIR = await tmp();
+    for (let i = 0; i < 30; i++) await writeFile(path.join(process.env.UPLOAD_DIR, `c${i}.bin`), randomBytes(150));
+    const good = await createBackup();
+    assert.equal(good.ok, true, good.error);
+    for (let i = 0; i < 30; i++) await rm(path.join(process.env.UPLOAD_DIR, `c${i}.bin`));
+    await nextSecond();
+    const empty = await createBackup();
+    assert.equal(empty.ok, true, empty.error);
+    const shrink = (await readStatus()).shrink;
+    assert.equal(shrink?.stem, empty.file!.replace(/\.pzbak$/, ""));
+
+    // Otra copia en marcha: su volcado se queda esperando a una tabla bloqueada; mientras, el administrador confirma.
+    await nextSecond();
+    let running: Promise<{ ok: boolean; error?: string }> | null = null;
+    await db.$transaction(async (tx) => {
+      await tx.$executeRaw`LOCK TABLE "Label" IN ACCESS EXCLUSIVE MODE`;
+      running = createBackup();
+      await waitForLockWaiter();
+      assert.equal(await acceptBackupShrink(undefined, { stem: shrink!.stem, goodStem: shrink!.goodStem }), shrink!.stem);
+      assert.equal((await readStatus()).shrink, undefined);
+    }, { timeout: 30_000 });
+    const during = await running!;
+    assert.equal(during.ok, true, during.error);
+    const after = await readStatus();
+    assert.equal(after.shrink, undefined, "la copia que estaba en marcha no vuelve a poner el aviso ya confirmado");
+    assert.equal(after.shrinkAccepted, shrink!.stem);
+    assert.equal((await computeBackupAlert()).active, false);
   });
 });

@@ -534,6 +534,7 @@ Notas:
 | La app queda *unhealthy* y `/api/health` dice `low_disk_space` | Disco casi lleno | Libera espacio (`docker system prune` borra imágenes viejas) o amplía el disco. |
 | `/api/health` dice `uploads_not_writable` | El volumen de subidas no se puede escribir | `docker compose restart app` (el arranque corrige el propietario); revisa el disco. |
 | `/api/health` dice `database` | PostgreSQL parado o contraseña distinta | `docker compose ps`; si cambiaste `POSTGRES_PASSWORD` después de la primera instalación, vuelve a la original (la base ya se creó con ella). |
+| El log dice `No se puede conectar con PostgreSQL` | La app no llega a la base de datos (lo dice tras 20 s intentándolo, con el servidor y el motivo) | Comprueba que PostgreSQL está en marcha (`docker compose ps`) y `DATABASE_URL`. Si la base está lejos o tarda en responder, sube el tope con `DATABASE_CONNECT_TIMEOUT_MS` (ms; por defecto 20000). |
 | La app se reinicia sola a menudo | Falta de memoria o un error | `docker compose logs app` y *Administración → Logs*; sube `APP_MEM_LIMIT`/`APP_HEAP_MB` si hay RAM. |
 | Las fechas salen con otra hora | La zona elegida en el asistente o `APP_TIMEZONE` no es la tuya | Define `APP_TIMEZONE` en `.env` y `docker compose up -d` (manda sobre la del asistente). |
 | El login no mantiene la sesión | `APP_URL` con `https://` pero se entra por `http://` | Entra por la URL de `APP_URL`. |

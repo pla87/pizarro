@@ -3,7 +3,7 @@ import { constants } from "node:fs";
 import { copyFile, mkdir, rename, rm } from "node:fs/promises";
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "./db";
-import { isNoSpaceError } from "./disk-space";
+import { assertDiskRoom, isNoSpaceError } from "./disk-space";
 import { logEvent } from "./log";
 import { checkQuota, type QuotaExceeded } from "./quota";
 import { getQuotaLimits } from "./quota-settings";
@@ -23,10 +23,15 @@ import { attachmentPath, newFileId, removeAttachmentFiles } from "./uploads";
 // y total). Se copian en orden mientras quepan; los que no caben se omiten y quien duplica recibe un aviso con cuáles y
 // por qué (la tarea se crea igualmente: lo importante de duplicar es la tarea, y los adjuntos que faltan se pueden subir
 // después o liberar espacio y volver a duplicar).
+//
+// Disco: antes de copiar se comprueba, como en las subidas y las transferencias (assertDiskRoom), que en el volumen de
+// las subidas caben los ficheros con el margen de seguridad. Si no caben, no se copia ninguno y el aviso dice que el
+// disco del servidor está lleno (en vez del ENOSPC del sistema a medio copiar). Si aun así el disco se llena durante la
+// copia, se para ahí con el mismo aviso.
 
 type Client = Prisma.TransactionClient | typeof db;
 
-type CopySkipReason = "task_total" | "quota" | "missing" | "error";
+type CopySkipReason = "task_total" | "quota" | "missing" | "disk" | "error";
 
 interface AttachmentCopySkip {
   name: string;
@@ -100,7 +105,7 @@ async function copyFiles(fromId: string, toId: string, isImage: boolean): Promis
 
 /**
  * Copia los adjuntos de `fromTaskId` en `toTaskId` (recién creada). Nunca lanza: lo que no se puede copiar (cuota,
- * tope de la tarea, fichero ausente, disco lleno) se devuelve en `skipped` y la tarea queda como esté.
+ * tope de la tarea, fichero ausente, disco lleno: «disk») se devuelve en `skipped` y la tarea queda como esté.
  *
  * Mismo orden que una subida: primero los ficheros (con ids nuevos) y después las filas, dentro del candado común de
  * las subidas (`pz:attachment-quota`) y con la comprobación definitiva de topes y cuotas. Si el proceso se corta entre
@@ -133,10 +138,29 @@ export async function copyTaskAttachments(fromTaskId: string, toTaskId: string):
   } catch {
     // Si no se puede crear la carpeta, cada copia fallará abajo con su motivo.
   }
+  // Espacio en disco para lo que cabe en topes y cuotas (las imágenes llevan además su miniatura: un 10 % de holgura).
+  const wanted = sources.reduce((n, a, i) => (early.verdicts[i]!.ok ? n + a.size : n), 0);
+  let diskFull = false;
+  if (wanted > 0) {
+    try {
+      await assertDiskRoom(uploadDir(), Math.ceil(wanted * 1.1));
+    } catch {
+      diskFull = true;
+      logEvent({
+        level: "error", category: "system", action: "attachments.noSpace",
+        message: `Disco lleno: no se han copiado los adjuntos al duplicar la tarea (${Math.round(wanted / 1024)} KB)`,
+        details: { fromTaskId, toTaskId, bytes: wanted },
+      });
+    }
+  }
   for (const [i, src] of sources.entries()) {
     const v = early.verdicts[i]!;
     if (!v.ok) {
       noteVerdict(src, v, early.limitMb);
+      continue;
+    }
+    if (diskFull) {
+      skip(src, "disk");
       continue;
     }
     const id = newFileId();
@@ -145,10 +169,13 @@ export async function copyTaskAttachments(fromTaskId: string, toTaskId: string):
       staged.push({ src, id });
     } catch (err) {
       await removeAttachmentFiles([id]);
-      skip(src, isMissing(err) ? "missing" : "error");
+      const noSpace = isNoSpaceError(err);
+      skip(src, isMissing(err) ? "missing" : noSpace ? "disk" : "error");
+      // Disco lleno a media copia: los siguientes tampoco caben.
+      if (noSpace) diskFull = true;
       if (!isMissing(err)) {
         logEvent({
-          level: "error", category: "system", action: isNoSpaceError(err) ? "attachments.noSpace" : "attachments.copyFailed",
+          level: "error", category: "system", action: noSpace ? "attachments.noSpace" : "attachments.copyFailed",
           message: `No se pudo copiar el adjunto «${src.originalName}» al duplicar la tarea: ${err instanceof Error ? err.message : String(err)}`,
           details: { fromTaskId, toTaskId, attachmentId: src.id, bytes: src.size },
         });

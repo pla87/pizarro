@@ -81,8 +81,6 @@ export const admin: Record<string, string> = {
   "Usuario y proyectos privados borrados": "User and private projects deleted",
   "Usuario borrado": "User deleted",
   "Se borrarán con todas sus tareas, releases y adjuntos, y no se pueden recuperar.": "They will be deleted with all their tasks, releases and attachments, and cannot be recovered.",
-  "Entiendo que se borra su proyecto privado": "I understand their private project will be deleted",
-  "Entiendo que se borran sus proyectos privados": "I understand their private projects will be deleted",
   "Borrar usuario": "Delete user",
   "Ninguno": "None",
   "1 columna": "1 column",

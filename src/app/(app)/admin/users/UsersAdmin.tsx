@@ -27,7 +27,8 @@ interface UserRow {
   twoFactor: boolean;
   googleLinked: boolean;
   googleRelinkBlocked: boolean;
-  privateProjects: number;
+  /** Ids de los proyectos privados de los que es el único miembro (sin nombres: los administradores no los ven). */
+  privateProjects: string[];
   locale: UserLocale;
   /** Debe elegir contraseña y nunca ha entrado: se le puede reenviar la invitación. */
   invitePending: boolean;
@@ -328,8 +329,8 @@ function DeleteUser({ user, onClose }: { user: UserRow; onClose: () => void }) {
   const router = useRouter();
   const toast = useToast();
   const [pending, start] = useActionTransition();
-  const [confirmed, setConfirmed] = useState(false);
-  const count = user.privateProjects;
+  const [deleteProjects, setDeleteProjects] = useState(false);
+  const count = user.privateProjects.length;
   return (
     <Modal open onClose={onClose} title={t("Borrar a {name}", { name: user.name })} size="sm">
       <form
@@ -337,9 +338,9 @@ function DeleteUser({ user, onClose }: { user: UserRow; onClose: () => void }) {
         onSubmit={(e) => {
           e.preventDefault();
           start(async () => {
-            const res = await deleteUser(user.id, count > 0 && confirmed);
+            const res = await deleteUser(user.id, count > 0 && deleteProjects ? user.privateProjects : []);
             if (!res.ok) return toast(res.error, "error");
-            toast(count ? t("Usuario y proyectos privados borrados") : t("Usuario borrado"));
+            toast(count && deleteProjects ? t("Usuario y proyectos privados borrados") : t("Usuario borrado"));
             router.refresh();
             onClose();
           });
@@ -350,20 +351,27 @@ function DeleteUser({ user, onClose }: { user: UserRow; onClose: () => void }) {
           <InfoTip topic={t("Borrar usuario")}>{t("También deja de ser miembro de los proyectos privados que comparte con otras personas.")}</InfoTip>
         </p>
         {count > 0 && (
-          <div className="space-y-2 rounded-lg border border-red-300 bg-red-50 p-3 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
+          <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200" data-testid="delete-user-private">
             <p className="flex gap-2 font-medium">
               <TriangleAlert size={18} className="shrink-0" />
-              {count === 1 ? t("Es el único miembro de 1 proyecto privado.") : t("Es el único miembro de {n} proyectos privados.", { n: count })} {t("Se borrarán con todas sus tareas, releases y adjuntos, y no se pueden recuperar.")}
+              <span>
+                {count === 1 ? t("Es el único miembro de 1 proyecto privado.") : t("Es el único miembro de {n} proyectos privados.", { n: count })}{" "}
+                {deleteProjects
+                  ? t("Se borrarán con todas sus tareas, releases y adjuntos, y no se pueden recuperar.")
+                  : count === 1
+                    ? t("Pasará a ser un proyecto de equipo, sin miembros: lo verán los administradores.")
+                    : t("Pasarán a ser proyectos de equipo, sin miembros: los verán los administradores.")}
+              </span>
             </p>
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
-              {count === 1 ? t("Entiendo que se borra su proyecto privado") : t("Entiendo que se borran sus proyectos privados")}
+              <input type="checkbox" checked={deleteProjects} onChange={(e) => setDeleteProjects(e.target.checked)} />
+              {count === 1 ? t("Borrar también este proyecto") : t("Borrar también estos proyectos")}
             </label>
           </div>
         )}
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
-          <button className="btn-primary bg-red-600 hover:bg-red-700" disabled={pending || (count > 0 && !confirmed)}>{t("Borrar usuario")}</button>
+          <button className="btn-primary bg-red-600 hover:bg-red-700" disabled={pending}>{t("Borrar usuario")}</button>
         </div>
       </form>
     </Modal>

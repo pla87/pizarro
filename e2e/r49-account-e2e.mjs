@@ -1,17 +1,22 @@
 // «Borrar mi cuenta» en Mi perfil → Cuenta: el último administrador no puede (botón desactivado y por qué), el diálogo
-// pide contraseña, palabra de confirmación y, con proyectos privados propios, marcarlo; contraseña incorrecta no borra;
-// al borrar se va al acceso con el aviso, se cierran todas sus sesiones (también la de otro dispositivo) y lo que creó
-// se queda como «Usuario eliminado». En móvil (390 px), con verificación en dos pasos activada desde el propio perfil, el
-// diálogo cabe en la pantalla y pide el código de la app. Misma base y servidor que board-e2e.mjs:
-//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-account-e2e.mjs   # PART=block,desk,mobile
+// pide contraseña y palabra de confirmación y avisa, con su lista, de que sus proyectos privados sin más miembros pasan a
+// ser de equipo (con la casilla para borrarlos también); contraseña incorrecta no borra; al borrar se va al acceso con el
+// aviso, se cierran todas sus sesiones (también la de otro dispositivo) y lo que creó se queda como «Usuario eliminado».
+// En móvil (390 px), con verificación en dos pasos activada desde el propio perfil, el diálogo cabe en la pantalla y pide
+// el código de la app. Quien entra con Google (sin contraseña conocida) confirma con el código de su app y borra también
+// su proyecto privado. Administración → Usuarios → Borrar: la misma regla y la misma casilla. Misma base y servidor que
+// board-e2e.mjs:
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-account-e2e.mjs   # PART=block,desk,mobile,google,admin
 import { createHmac } from "node:crypto";
 import os from "node:os";
 import * as L from "./qa/lib.mjs";
 const { sleep } = L;
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "block,desk,mobile").split(",");
+const only = (process.env.PART || "block,desk,mobile,google,admin").split(",");
 
 await L.prepareUsers();
+// Restos de una pasada interrumpida: los proyectos que pasaron a ser de equipo ya no tienen dueño que los delate.
+await L.q(`DELETE FROM "Project" WHERE id LIKE 'r49\_%'`);
 const p = await L.project();
 const [base] = await L.q(`SELECT * FROM "User" WHERE email=$1`, [L.ADMIN]);
 
@@ -51,6 +56,22 @@ function totp(secretB32, now = Date.now()) {
   return String((h.readUInt32BE(o) & 0x7fffffff) % 1_000_000).padStart(6, "0");
 }
 
+/** Activa la verificación en dos pasos con app desde Mi perfil → Cuenta y devuelve la clave (para calcular los códigos). */
+async function enrollTotp(page) {
+  await page.goto(`${L.BASE}/settings?tab=cuenta`);
+  const tf = page.locator("#two-factor");
+  await tf.waitFor({ timeout: 20000 });
+  await tf.getByRole("button", { name: "Activar" }).click();
+  await page.fill("#tf-pass", L.PASSWORD);
+  await tf.getByRole("button", { name: "App de autenticación" }).click();
+  const secret = (await page.getByTestId("totp-secret").innerText({ timeout: 15000 })).replace(/\s/g, "");
+  await page.fill("#enroll-code", totp(secret));
+  await tf.getByRole("button", { name: "Activar" }).click();
+  await page.getByTestId("recovery-codes").waitFor({ timeout: 15000 });
+  await tf.getByRole("button", { name: "He guardado los códigos" }).click();
+  return secret;
+}
+
 // --- El último administrador: botón desactivado y el motivo ----------------------------------------------------------
 if (only.includes("block")) {
   L.scenario("block: último administrador");
@@ -77,6 +98,7 @@ if (only.includes("block")) {
 // --- Escritorio: contraseña incorrecta, proyecto privado, borrado y sesiones -------------------------------------------
 if (only.includes("desk")) {
   L.scenario("desk: borrar la cuenta en escritorio");
+  const deskStart = await L.dbNow();
   const id = "r49_desk";
   const email = "r49-desk@example.com";
   await person(id, email, "Persona Que Se Va");
@@ -105,13 +127,16 @@ if (only.includes("desk")) {
   await dlg.waitFor();
   const submit = dlg.getByRole("button", { name: "Borrar mi cuenta" });
   L.check("DESK: el foco empieza en la contraseña", await s.page.evaluate(() => document.activeElement?.id === "da-pass"));
-  L.check("DESK: el aviso del proyecto privado está en el diálogo", (await dlg.innerText()).includes("Tu proyecto privado se borra con todo lo que tiene."));
+  const privateBox = dlg.getByTestId("delete-account-private");
+  const privateText = await privateBox.innerText().catch(() => "");
+  L.check("DESK: avisa de que su proyecto privado pasa a ser de equipo y lo verán los administradores", privateText.includes("pasará a ser un proyecto de equipo y lo verán los administradores"), privateText);
+  L.eq("DESK: con la lista de esos proyectos", (await dlg.getByTestId("delete-account-private-list").innerText().catch(() => "")).trim(), "Privado de quien se va");
+  L.check("DESK: la casilla para borrarlo también, sin marcar", !(await dlg.getByLabel("Borrar también este proyecto").isChecked()));
+  L.check("DESK: sin «Entro con Google» (tiene contraseña y no tiene Google)", (await dlg.getByText("Entro con Google y no conozco mi contraseña").count()) === 0);
   L.check("DESK: sin rellenar nada, no se puede borrar", await submit.isDisabled());
   await s.page.fill("#da-pass", "una-clave-que-no-es");
   await s.page.fill("#da-word", "borrar");
-  L.check("DESK: sin marcar lo del proyecto privado, tampoco", await submit.isDisabled());
-  await dlg.getByLabel("Entendido").check();
-  L.check("DESK: con todo, el botón se activa (la palabra sin distinguir mayúsculas)", await submit.isEnabled());
+  L.check("DESK: con contraseña y palabra, el botón se activa (la palabra sin distinguir mayúsculas)", await submit.isEnabled());
   await s.page.screenshot({ path: `${SHOTS}/r49-dialogo-escritorio.png` });
   await submit.click();
   await L.eqEventually("DESK: contraseña incorrecta: aviso claro", async () => (await s.page.locator("body").innerText()).includes("La contraseña actual no es correcta."), true);
@@ -126,7 +151,8 @@ if (only.includes("desk")) {
   await s.page.screenshot({ path: `${SHOTS}/r49-acceso-tras-borrar.png` });
   L.eq("DESK: la cuenta ya no existe", await userCount(id), 0);
   L.eq("DESK: ninguna sesión queda", (await L.q(`SELECT count(*)::int n FROM "Session" WHERE "userId"=$1`, [id]))[0].n, 0);
-  L.eq("DESK: su proyecto privado se ha borrado", (await L.q(`SELECT count(*)::int n FROM "Project" WHERE id='r49_private'`))[0].n, 0);
+  L.eq("DESK: su proyecto privado pasa a ser de equipo, sin miembros", (await L.q(`SELECT "isPrivate", (SELECT count(*)::int FROM "ProjectMember" WHERE "projectId"='r49_private') AS members FROM "Project" WHERE id='r49_private'`))[0], { isPrivate: false, members: 0 });
+  await L.eqEventually("DESK: la conversión queda en el registro de actividad", async () => (await L.q(`SELECT count(*)::int n FROM "AppLog" WHERE action='users.privateProjectToTeam' AND "projectId"='r49_private' AND "createdAt" >= $1`, [deskStart]))[0].n, 1);
   const [t] = await L.q(`SELECT "createdById","assigneeId" FROM "Task" WHERE id=$1`, [task.id]);
   L.eq("DESK: la tarea se queda, sin autor ni responsable", t, { createdById: null, assigneeId: null });
   L.eq("DESK: el comentario se queda, sin autor", (await L.q(`SELECT "authorId" FROM "TaskComment" WHERE id='r49_comment'`))[0]?.authorId, null);
@@ -142,6 +168,7 @@ if (only.includes("desk")) {
   L.assertNoErrors("DESK", [s, viewer]);
   for (const x of [s, other, viewer]) await x.ctx.close();
   await L.q(`DELETE FROM "Task" WHERE id=$1`, [task.id]);
+  await L.q(`DELETE FROM "Project" WHERE id='r49_private'`);
 }
 
 // --- Móvil (390 px): activar la verificación en dos pasos y borrar con el código de la app ----------------------------
@@ -152,17 +179,7 @@ if (only.includes("mobile")) {
   await person(id, email, "Persona Móvil");
   const s = await L.session({ email, viewport: { width: 390, height: 844 }, mobile: true });
   const { page } = s;
-  await page.goto(`${L.BASE}/settings?tab=cuenta`);
-  const tf = page.locator("#two-factor");
-  await tf.waitFor({ timeout: 20000 });
-  await tf.getByRole("button", { name: "Activar" }).click();
-  await page.fill("#tf-pass", L.PASSWORD);
-  await tf.getByRole("button", { name: "App de autenticación" }).click();
-  const secret = (await page.getByTestId("totp-secret").innerText({ timeout: 15000 })).replace(/\s/g, "");
-  await page.fill("#enroll-code", totp(secret));
-  await tf.getByRole("button", { name: "Activar" }).click();
-  await page.getByTestId("recovery-codes").waitFor({ timeout: 15000 });
-  await tf.getByRole("button", { name: "He guardado los códigos" }).click();
+  const secret = await enrollTotp(page);
   await L.eqEventually("MOB: verificación activada", async () => (await L.q(`SELECT "twoFactorMethod" m FROM "User" WHERE id=$1`, [id]))[0]?.m, "TOTP");
 
   const section = await openAccount(page);
@@ -200,6 +217,93 @@ if (only.includes("mobile")) {
   L.eq("MOB: sin códigos de recuperación ni sesiones", (await L.q(`SELECT (SELECT count(*) FROM "RecoveryCode" WHERE "userId"=$1)::int + (SELECT count(*) FROM "Session" WHERE "userId"=$1)::int n`, [id]))[0].n, 0);
   L.assertNoErrors("MOB", [s]);
   await s.ctx.close();
+}
+
+// --- Entra con Google y no conoce su contraseña: confirma con el código de su app y borra también su proyecto privado ---
+if (only.includes("google")) {
+  L.scenario("google: sin contraseña conocida, con el código de la app");
+  const id = "r49_goo";
+  const email = "r49-goo@example.com";
+  await person(id, email, "Persona Con Google");
+  const s = await L.session({ email });
+  const { page } = s;
+  const secret = await enrollTotp(page);
+  await L.eqEventually("GOO: verificación activada", async () => (await L.q(`SELECT "twoFactorMethod" m FROM "User" WHERE id=$1`, [id]))[0]?.m, "TOTP");
+  // Desde ahora entra con Google (cuenta enlazada) y su contraseña es una que nadie conoce.
+  await L.q(`UPDATE "User" SET "googleSub"='r49-goo-sub', "passwordHash"='$2b$12$' || md5(random()::text) WHERE id=$1`, [id]);
+  await L.q(`DELETE FROM "Project" WHERE id IN ('r49_goo_a','r49_goo_b')`);
+  await L.q(`INSERT INTO "Project"(id,name,"isPrivate","privateOwnerId","updatedAt") VALUES ('r49_goo_a','Notas de Google A',true,$1,NOW()),('r49_goo_b','Notas de Google B',true,$1,NOW())`, [id]);
+  await L.q(`INSERT INTO "ProjectMember"("projectId","userId") VALUES ('r49_goo_a',$1),('r49_goo_b',$1)`, [id]);
+  const section = await openAccount(page);
+  await section.getByRole("button", { name: "Borrar mi cuenta" }).click();
+  const dlg = page.getByRole("dialog", { name: "Borrar mi cuenta" });
+  await dlg.waitFor();
+  L.eq("GOO: lista sus dos proyectos privados", (await dlg.getByTestId("delete-account-private-list").innerText()).split("\n").map((x) => x.trim()), ["Notas de Google A", "Notas de Google B"]);
+  L.check("GOO: dice que pasarán a ser de equipo", (await dlg.innerText()).includes("pasarán a ser proyectos de equipo y los verán los administradores"));
+  await dlg.getByText("Entro con Google y no conozco mi contraseña").click();
+  L.check("GOO: ya no pide la contraseña", (await page.locator("#da-pass").count()) === 0);
+  L.check("GOO: pide el código de la app", await page.locator("#da-code").isVisible());
+  L.check("GOO: el foco va al código", await page.evaluate(() => document.activeElement?.id === "da-code"));
+  await dlg.getByLabel("Borrar también estos proyectos").check();
+  L.check("GOO: al marcar la casilla, avisa de que no se pueden recuperar", (await dlg.innerText()).includes("Se borrarán con todas sus tareas, releases y adjuntos, y no se pueden recuperar."));
+  await page.fill("#da-word", "BORRAR");
+  const submit = dlg.getByRole("button", { name: "Borrar mi cuenta" });
+  L.check("GOO: sin código no se puede borrar", await submit.isDisabled());
+  await page.fill("#da-code", "000000" === totp(secret) ? "111111" : "000000");
+  await submit.click();
+  await L.eqEventually("GOO: código incorrecto: aviso", async () => (await page.locator("body").innerText()).includes("Código incorrecto o caducado."), true);
+  L.eq("GOO: con el código incorrecto la cuenta sigue", await userCount(id), 1);
+  await page.fill("#da-code", totp(secret));
+  await page.screenshot({ path: `${SHOTS}/r50-baja-google.png` });
+  await submit.click();
+  await page.waitForURL(/\/login\?info=account_deleted/, { timeout: 20000 });
+  L.eq("GOO: la cuenta ya no existe", await userCount(id), 0);
+  L.eq("GOO: sus dos proyectos privados se han borrado con ella", (await L.q(`SELECT count(*)::int n FROM "Project" WHERE id IN ('r49_goo_a','r49_goo_b')`))[0].n, 0);
+  L.assertNoErrors("GOO", [s]);
+  await s.ctx.close();
+}
+
+// --- Administración → Usuarios → Borrar: la misma regla y la misma casilla -------------------------------------------
+if (only.includes("admin")) {
+  L.scenario("admin: borrar usuarios con proyectos privados");
+  const targets = [["r49_adm_keep", "r49-adm-keep@example.com", "Se Va Y Deja"], ["r49_adm_drop", "r49-adm-drop@example.com", "Se Va Y Borra"]];
+  for (const [id, email, name] of targets) {
+    await person(id, email, name);
+    await L.q(`DELETE FROM "Project" WHERE id=$1`, [`${id}_p`]);
+    await L.q(`INSERT INTO "Project"(id,name,"isPrivate","privateOwnerId","updatedAt") VALUES ($1,$2,true,$3,NOW())`, [`${id}_p`, `Privado de ${name}`, id]);
+    await L.q(`INSERT INTO "ProjectMember"("projectId","userId") VALUES ($1,$2)`, [`${id}_p`, id]);
+  }
+  const s = await L.session({ email: L.USER2 });
+  await L.q(`UPDATE "User" SET role='ADMIN' WHERE id='qa_user_2'`);
+  const { page } = s;
+  const remove = async (name, alsoProjects) => {
+    await page.goto(`${L.BASE}/admin/users`);
+    await page.getByRole("button", { name: `Borrar ${name}` }).click();
+    const dlg = page.getByRole("dialog", { name: `Borrar a ${name}` });
+    await dlg.waitFor();
+    const box = dlg.getByTestId("delete-user-private");
+    const text = await box.innerText();
+    L.check(`ADM ${name}: avisa de que su proyecto privado pasa a ser de equipo`, text.includes("Es el único miembro de 1 proyecto privado.") && text.includes("Pasará a ser un proyecto de equipo, sin miembros: lo verán los administradores."), text);
+    L.check(`ADM ${name}: sin el nombre del proyecto (los administradores no lo ven)`, !text.includes("Privado de"), text);
+    if (alsoProjects) {
+      await dlg.getByLabel("Borrar también este proyecto").check();
+      L.check(`ADM ${name}: al marcar, avisa de que se borra`, (await box.innerText()).includes("Se borrarán con todas sus tareas, releases y adjuntos"));
+      await page.screenshot({ path: `${SHOTS}/r50-admin-borrar.png` });
+    }
+    await dlg.getByRole("button", { name: "Borrar usuario", exact: true }).click();
+    await dlg.waitFor({ state: "hidden", timeout: 15000 });
+  };
+  await remove("Se Va Y Deja", false);
+  L.eq("ADM: la cuenta sin marcar ya no existe", await userCount("r49_adm_keep"), 0);
+  L.eq("ADM: su proyecto pasa a ser de equipo", (await L.q(`SELECT "isPrivate" FROM "Project" WHERE id='r49_adm_keep_p'`))[0]?.isPrivate, false);
+  await page.goto(`${L.BASE}/admin/users`);
+  await remove("Se Va Y Borra", true);
+  L.eq("ADM: la cuenta marcada ya no existe", await userCount("r49_adm_drop"), 0);
+  L.eq("ADM: su proyecto se ha borrado", (await L.q(`SELECT count(*)::int n FROM "Project" WHERE id='r49_adm_drop_p'`))[0].n, 0);
+  L.assertNoErrors("ADM", [s]);
+  await s.ctx.close();
+  await L.q(`UPDATE "User" SET role='MEMBER' WHERE id='qa_user_2'`);
+  await L.q(`DELETE FROM "Project" WHERE id='r49_adm_keep_p'`);
 }
 
 await L.closeBrowser(); await L.closeDb();

@@ -14,6 +14,7 @@ import { buildManifest, decodeManifest, encodeManifest, fileNameKey, hashFiles, 
 import { dumpDatabaseOwnConnection, withDatabase } from "./backup-pg";
 import { checkObjects, findMigrationsDir, restoreDatabaseFromDump } from "./backup-restore";
 import { db } from "./db";
+import { AppError } from "./errors";
 import { withAdvisoryLock } from "./jobs";
 import { logEvent } from "./log";
 import { invalidateMemo, memo } from "./memo";
@@ -147,10 +148,13 @@ export async function readStatus(): Promise<BackupStatus> {
 // Las escrituras del estado se encadenan para que dos actualizaciones seguidas no se pisen.
 const statusChain = (globalThis as unknown as { __pzBackupStatus?: { p: Promise<void> } }).__pzBackupStatus ??= { p: Promise.resolve() };
 
+/** Cambia status.json en fila con las demás escrituras. Si `fn` devuelve el mismo objeto, no se escribe nada. */
 function updateStatus(fn: (s: BackupStatus) => BackupStatus): Promise<void> {
   const run = statusChain.p.then(async () => {
     await mkdir(backupsDir(), { recursive: true });
-    const next = fn(await readStatus());
+    const current = await readStatus();
+    const next = fn(current);
+    if (next === current) return;
     const file = path.join(backupsDir(), STATUS_FILE);
     const tmp = `${file}.${process.pid}.tmp`;
     await writeFile(tmp, JSON.stringify(next, null, 2));
@@ -337,12 +341,16 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
   }
   const at = run.at;
   const known = health ? await keepExisting(health.copies) : null;
-  await updateStatus((s) => ({
-    ...s,
-    lastBackup: run,
+  await updateStatus((s) => {
     // Solo con una copia correcta cambia el estado de la reducción (una copia fallida no dice nada nuevo).
-    ...(health && known ? { copies: known, shrink: health.shrink ? { ...health.shrink, at } : undefined } : {}),
-  })).catch((err) => console.error("[backup] no se pudo guardar el estado", err));
+    if (!health || !known) return { ...s, lastBackup: run };
+    // El estado se vuelve a leer aquí: si un administrador confirmó la reducción mientras se hacía esta copia, el aviso
+    // se calcula de nuevo desde la copia que aceptó (con el de antes, el aviso ya confirmado volvía una vez).
+    const shrink = s.shrinkAccepted === prevStatus.shrinkAccepted
+      ? health.shrink
+      : lastGoodCopy(Object.entries(known).map(([stem, c]) => ({ stem, ...c })), s.shrinkAccepted).shrink;
+    return { ...s, lastBackup: run, copies: known, shrink: shrink ? { ...shrink, at } : undefined };
+  }).catch((err) => console.error("[backup] no se pudo guardar el estado", err));
   return run;
 }
 
@@ -382,15 +390,30 @@ async function keepExisting(copies: Record<string, Omit<CopySummary, "stem">>): 
 
 const shrinkWhat = (what: CopyShrink["what"]) => (what === "core" ? "personas, proyectos y tareas" : what === "rows" ? "filas en la base de datos" : "ficheros");
 
+/** Al confirmar la reducción, el aviso que tenía delante el administrador ya no es el vigente. */
+const SHRINK_CHANGED_MESSAGE = "Ha llegado una copia nueva: revisa el aviso otra vez.";
+
 /**
  * El administrador confirma que la reducción de la última copia es intencionada (ha borrado datos a propósito): desde esa
  * copia se vuelve a empezar, la anterior deja de conservarse siempre y el aviso desaparece. Devuelve la copia aceptada, o
- * null si no había aviso.
+ * null si no había aviso. `seen`: la copia del aviso que vio (raíz de la reducida y de la buena); si entretanto ha llegado
+ * otra, lanza SHRINK_CHANGED_MESSAGE y no confirma nada (se comprueba en la misma escritura del estado, en fila con la
+ * de las copias).
  */
-export async function acceptBackupShrink(by?: { id: string; name: string }): Promise<string | null> {
-  const shrink = (await readStatus()).shrink;
+export async function acceptBackupShrink(by?: { id: string; name: string }, seen?: { stem: string; goodStem: string }): Promise<string | null> {
+  const out: { shrink: NonNullable<BackupStatus["shrink"]> | null; changed: boolean } = { shrink: null, changed: false };
+  await updateStatus((s) => {
+    if (!s.shrink) return s;
+    if (seen && (s.shrink.stem !== seen.stem || s.shrink.goodStem !== seen.goodStem)) {
+      out.changed = true;
+      return s;
+    }
+    out.shrink = s.shrink;
+    return { ...s, shrink: undefined, shrinkAccepted: s.shrink.stem };
+  });
+  if (out.changed) throw new AppError(SHRINK_CHANGED_MESSAGE);
+  const shrink = out.shrink;
   if (!shrink) return null;
-  await updateStatus((s) => ({ ...s, shrink: undefined, shrinkAccepted: shrink.stem }));
   logEvent({
     level: "warn", category: "system", action: "backup.shrinkAccepted",
     message: `Reducción de las copias confirmada como intencionada desde ${shrink.stem}: ${shrink.goodStem} ya no se conserva siempre`,

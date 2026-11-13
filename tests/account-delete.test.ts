@@ -1,7 +1,7 @@
 // Reglas de «Borrar mi cuenta» sin base de datos (la acción completa: tests/db/account-delete.test.ts).
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { confirmWordMatches, DELETE_ACCOUNT_WORD, DELETION_BLOCK_MESSAGES, deletionBlockFor } from "../src/lib/user-delete-core";
+import { confirmWordMatches, DELETE_ACCOUNT_WORD, deleteAlternatives, DELETION_BLOCK_MESSAGES, deletionBlockFor } from "../src/lib/user-delete-core";
 import { makeT } from "../src/i18n/core";
 
 test("la única cuenta de la instalación no se puede borrar, sea admin o no", () => {
@@ -31,4 +31,19 @@ test("la palabra de confirmación: sin distinguir mayúsculas ni espacios de los
   assert.ok(confirmWordMatches("Delete", en));
   assert.ok(!confirmWordMatches("BORRA", es));
   assert.ok(!confirmWordMatches("BORRAR", en));
+});
+
+test("sin contraseña conocida (entra con Google): con la app, su código; sin ella, el email o volver a entrar con Google", () => {
+  const base = { googleLinked: true, passwordLogin: true, twoFactor: null, emailAvailable: true, googleAvailable: true } as const;
+  // Con contraseña y sin Google: solo la contraseña, como siempre.
+  assert.deepEqual(deleteAlternatives({ ...base, googleLinked: false }), []);
+  assert.deepEqual(deleteAlternatives({ ...base, googleLinked: false, twoFactor: "TOTP" }), []);
+  // Entra con Google: con TOTP, solo el código de la app; si no, el email y/o Google.
+  assert.deepEqual(deleteAlternatives({ ...base, twoFactor: "TOTP" }), ["totp"]);
+  assert.deepEqual(deleteAlternatives(base), ["email", "google"]);
+  assert.deepEqual(deleteAlternatives({ ...base, twoFactor: "EMAIL" }), ["email", "google"]);
+  assert.deepEqual(deleteAlternatives({ ...base, emailAvailable: false }), ["google"]);
+  assert.deepEqual(deleteAlternatives({ ...base, googleAvailable: false }), ["email"]);
+  // Con «solo Google» (su rol no entra con contraseña) también, aunque no conste el enlace.
+  assert.deepEqual(deleteAlternatives({ ...base, googleLinked: false, passwordLogin: false }), ["email"]);
 });
