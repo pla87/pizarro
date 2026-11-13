@@ -40,7 +40,7 @@ import { textHash, type TextSince } from "@/lib/text-version";
 import { boardClients, useBoard } from "./context";
 import { subtaskDragA11y } from "./drag-a11y";
 import { isTypingTarget, useShortcut } from "./shortcuts";
-import { weekdayName } from "./recurrence-ui";
+import { RecurrencePicker } from "./RecurrencePicker";
 import { TaskViewers } from "./TaskViewers";
 import { Comments } from "./TaskComments";
 import { FollowToggle } from "./FollowToggle";
@@ -1086,34 +1086,14 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           <Field label={t("Repetir")}>
             {(id) => (
               <>
-                <div className="flex gap-1">
-                  <select id={id} className="input min-w-0 md:py-1" value={task.recurrence} onChange={(e) => changeRecurrence(e.target.value as RecurrenceRule)}>
-                    <option value="NONE">{t("No se repite")}</option>
-                    <option value="DAILY">{t("Cada día")}</option>
-                    <option value="WEEKLY">{t("Cada semana")}</option>
-                    <option value="MONTHLY">{t("Cada mes")}</option>
-                  </select>
-                  {task.recurrence === "WEEKLY" && (
-                    <select
-                      className="input md:py-1"
-                      value={task.recurrenceDay ?? 1}
-                      onChange={(e) => save({ recurrenceDay: Number(e.target.value) }, { recurrenceDay: Number(e.target.value) })}
-                      aria-label={t("Día de la semana")}
-                    >
-                      {[1, 2, 3, 4, 5, 6, 7].map((d) => <option key={d} value={d}>{weekdayName(d, locale)}</option>)}
-                    </select>
-                  )}
-                  {task.recurrence === "MONTHLY" && (
-                    <select
-                      className="input md:py-1"
-                      value={task.recurrenceDay ?? 1}
-                      onChange={(e) => save({ recurrenceDay: Number(e.target.value) }, { recurrenceDay: Number(e.target.value) })}
-                      aria-label={t("Día del mes")}
-                    >
-                      {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => <option key={d} value={d}>{t("día {n}", { n: d })}</option>)}
-                    </select>
-                  )}
-                </div>
+                <RecurrencePicker
+                  id={id}
+                  rule={task.recurrence}
+                  day={task.recurrenceDay}
+                  onRule={changeRecurrence}
+                  onDay={(d) => save({ recurrenceDay: d }, { recurrenceDay: d })}
+                  selectClassName="md:py-1"
+                />
                 {task.recurrence !== "NONE" && (
                   <p className="mt-1 text-xs text-slate-500">{t("Al terminarla o archivarla se crea la siguiente, sin las subtareas marcadas.")}</p>
                 )}

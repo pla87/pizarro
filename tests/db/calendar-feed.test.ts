@@ -9,6 +9,10 @@ import { createProject } from "../../src/actions/projects";
 import { defaultFeedScope } from "../../src/lib/calendar-feed";
 import { buildColumnIcs } from "../../src/lib/column-views";
 import { flushLogs } from "../../src/lib/log";
+import { appTimeZone } from "../../src/lib/board";
+import { dateToIso, isoWeekday, todayIso } from "../../src/lib/dates";
+import { firstOccurrence } from "../../src/lib/recurrence-series";
+import { makeT } from "../../src/i18n/core";
 
 let n = 0;
 /** Pide la suscripción como lo haría un cliente de calendario (sin sesión), desde una IP propia de cada llamada. */
@@ -420,5 +424,89 @@ describe("calendario suscrito", () => {
     assert.deepEqual(rows.map((r) => r.path).sort(), ["/api/calendar/…", "/api/calendar/…", "/api/calendar/…", "/confirm/…", "/p/abc?task=1", "/reset/…"].sort());
     for (const r of rows) assert.ok(!JSON.stringify(r).includes(secret), `filtrado en ${r.path}: ${r.message}`);
     assert.ok(rows.some((r) => r.path === "/p/abc?task=1" && r.message.includes("otro")));
+  });
+});
+
+describe("tareas que se repiten en el calendario suscrito", () => {
+  /** Bloque VEVENT (desplegado) con ese UID, o undefined. */
+  const block = (ics: string, uid: string) => ics.replace(/\r\n /g, "").split("BEGIN:VEVENT").find((b) => b.includes(`UID:${uid}\r\n`));
+  const compact = (iso: string) => iso.replace(/-/g, "");
+
+  test("una serie con RRULE por tarea pendiente con fecha; ni terminadas, ni archivadas, ni sin fecha, ni las que ya dieron la siguiente", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const today = todayIso(appTimeZone());
+    const due = inDays(5);
+    const weekly = await makeTask(f, { title: "Semanal", recurrence: "WEEKLY", dueDate: due });
+    const wd = isoWeekday(dateToIso(due)!);
+    await db.task.update({ where: { id: weekly.id }, data: { recurrenceDay: wd } });
+    const done = await makeTask(f, { title: "Hecha", recurrence: "DAILY", dueDate: inDays(3), columnId: f.columns.done });
+    const archived = await makeTask(f, { title: "Archivada", recurrence: "DAILY", dueDate: inDays(3) });
+    await db.task.update({ where: { id: archived.id }, data: { archivedAt: new Date() } });
+    const undated = await makeTask(f, { title: "Sin fecha", recurrence: "DAILY" });
+    // Vencida hace 200 días (fuera de la ventana del calendario): la tarea no sale, pero su serie sí, desde mañana.
+    const overdue = await makeTask(f, { title: "Vencida", recurrence: "DAILY", dueDate: inDays(-200) });
+    // Una que ya dio su siguiente aparición (aún abierta): la serie sale de la nueva, no de las dos.
+    const old = await makeTask(f, { title: "Anterior", recurrence: "DAILY", dueDate: inDays(1) });
+    const next = await makeTask(f, { title: "Siguiente", recurrence: "DAILY", dueDate: inDays(2) });
+    await db.task.update({ where: { id: next.id }, data: { recurrenceFromId: old.id } });
+    // Mensual el día 30: sin RRULE fiel, un evento por mes.
+    const m30 = await makeTask(f, { title: "Cierre", recurrence: "MONTHLY", dueDate: inDays(4) });
+    await db.task.update({ where: { id: m30.id }, data: { recurrenceDay: 30 } });
+
+    const { token } = await feedFor(user);
+    const { res, text } = await fetchFeed(token);
+    assert.equal(res.status, 200);
+    const serie = block(text, `${weekly.id}-repeat@pizarro`);
+    assert.ok(serie, "serie semanal");
+    const first = firstOccurrence("WEEKLY", wd, dateToIso(due), today)!;
+    assert.ok(serie.includes(`DTSTART;VALUE=DATE:${compact(first)}\r\n`));
+    assert.ok(serie.includes(`RRULE:FREQ=WEEKLY;BYDAY=${["MO", "TU", "WE", "TH", "FR", "SA", "SU"][wd - 1]}\r\n`));
+    assert.ok(serie.includes(`SUMMARY:[${f.project.name}] Semanal\r\n`));
+    assert.ok(serie.includes(`/p/${f.project.id}?task=${weekly.id}`), "abre la tarea original");
+    assert.match(serie, /DESCRIPTION:Repetición prevista \(Cada semana \(.+\)\): se crea al terminar la anterior\./);
+    // La tarea en sí sigue con su propio evento, sin RRULE.
+    assert.ok(!block(text, `${weekly.id}@pizarro`)!.includes("RRULE"));
+
+    for (const id of [done.id, archived.id, undated.id, old.id]) assert.equal(block(text, `${id}-repeat@pizarro`), undefined, id);
+    assert.ok(block(text, `${next.id}-repeat@pizarro`));
+    assert.equal(block(text, `${overdue.id}@pizarro`), undefined);
+    assert.ok(block(text, `${overdue.id}-repeat@pizarro`)!.includes(`DTSTART;VALUE=DATE:${compact(firstOccurrence("DAILY", null, dateToIso(inDays(-200)), today)!)}`));
+
+    const monthly = text.match(new RegExp(`UID:${m30.id}-repeat-\\d{4}-\\d{2}-\\d{2}@pizarro`, "g")) ?? [];
+    assert.ok(monthly.length >= 11 && monthly.length <= 13, `eventos mensuales: ${monthly.length}`);
+    assert.equal(text.split("\r\n").filter((l) => l.startsWith("RRULE:")).length, 3, "semanal, siguiente y vencida");
+  });
+
+  test("«Solo las mías»: solo las series de las tareas asignadas a la persona", async () => {
+    const user = await makeUser();
+    const mate = await makeUser();
+    const f = await makeProject({ members: [user, mate] });
+    const mine = await makeTask(f, { title: "Mía", recurrence: "DAILY", dueDate: inDays(2) });
+    const theirs = await makeTask(f, { title: "Suya", recurrence: "DAILY", dueDate: inDays(2) });
+    await db.task.update({ where: { id: mine.id }, data: { assigneeId: user.id } });
+    await db.task.update({ where: { id: theirs.id }, data: { assigneeId: mate.id } });
+    const { token } = await feedFor(user, "MINE");
+    const { text } = await fetchFeed(token);
+    assert.ok(block(text, `${mine.id}-repeat@pizarro`));
+    assert.equal(block(text, `${theirs.id}-repeat@pizarro`), undefined);
+  });
+
+  test(".ics de la columna Agenda: la serie de cada tarea que se repite (con la nota si se pasa el idioma)", async () => {
+    const f = await makeProject();
+    await db.column.update({ where: { id: f.columns.todo }, data: { role: "AGENDA" } });
+    const t = await makeTask(f, { title: "Riego", recurrence: "MONTHLY", dueDate: inDays(3) });
+    await db.task.update({ where: { id: t.id }, data: { recurrenceDay: 31 } });
+    const col = await buildColumnIcs(f.project.id, f.columns.todo);
+    assert.ok(col);
+    const serie = block(col.ics, `${t.id}-repeat@pizarro`);
+    assert.ok(serie?.includes("RRULE:FREQ=MONTHLY;BYMONTHDAY=-1\r\n"));
+    assert.ok(block(col.ics, `${t.id}@pizarro`));
+    assert.ok(!serie!.includes("Repetición prevista"));
+    const en = await buildColumnIcs(f.project.id, f.columns.todo, { t: makeT("en"), locale: "en" });
+    assert.match(block(en!.ics, `${t.id}-repeat@pizarro`)!, /DESCRIPTION:Upcoming repeat \(Every month \(day 31\)\)/);
+    // En una columna Agenda que cuenta como terminada no hay serie.
+    await db.column.update({ where: { id: f.columns.todo }, data: { isDone: true } });
+    assert.equal(block((await buildColumnIcs(f.project.id, f.columns.todo))!.ics, `${t.id}-repeat@pizarro`), undefined);
   });
 });
