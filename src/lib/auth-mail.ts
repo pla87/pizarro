@@ -188,6 +188,18 @@ export function sendGoogleUnlinkedMail(user: Recipient): Promise<void> {
   }));
 }
 
+/** Aviso tras «Borrar mi cuenta» (la cuenta ya no existe: los datos se leen antes de borrarla). */
+export function sendAccountDeletedMail(user: Recipient): Promise<void> {
+  return send(user, user.locale, (t) => ({
+    subject: t("Tu cuenta de Pizarro se ha borrado"),
+    paragraphs: [
+      t("Hola, {name}:", { name: user.name }),
+      t("Has borrado tu cuenta de Pizarro y se han cerrado todas tus sesiones."),
+      t("Si no has sido tú, avisa a un administrador."),
+    ],
+  }));
+}
+
 /** Aviso a los administradores: la última copia de seguridad correcta tiene más de 48 h (o no existe). */
 export function sendBackupAlertMail(admin: Recipient, info: { lastAt: string | null; external?: boolean }): Promise<void> {
   return send(admin, admin.locale, (t) => ({

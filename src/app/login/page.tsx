@@ -29,14 +29,20 @@ const ERRORS: Record<string, string> = {
   google_failed: "No se pudo iniciar sesión con Google. Inténtalo de nuevo.",
 };
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string }> }) {
+// Avisos que no son errores, también con códigos fijos.
+const INFOS: Record<string, string> = {
+  account_deleted: "Tu cuenta se ha borrado.",
+};
+
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string; info?: string }> }) {
   if (await getCurrentUser()) redirect("/");
   if (await getPendingUser()) redirect("/change-password");
   // Instalación nueva sin usuarios: el acceso no sirve de nada, se configura en el asistente.
   if (await isSetupPending(db)) redirect("/setup");
   const t = await getT();
-  const { next, error } = await searchParams;
+  const { next, error, info } = await searchParams;
   const message = typeof error === "string" ? ERRORS[Object.hasOwn(ERRORS, error) ? error : "google_failed"]! : null;
+  const infoText = typeof info === "string" && Object.hasOwn(INFOS, info) ? t(INFOS[info]!) : null;
   return (
     <AuthCard
       title={t("Iniciar sesión")}
@@ -52,6 +58,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         password={passwordFormVisible(googlePolicyEnv())}
         emergency={googleOnly(googlePolicyEnv())}
         notice={message ? t(message) : null}
+        info={infoText}
       />
     </AuthCard>
   );

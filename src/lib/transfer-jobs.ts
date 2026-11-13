@@ -298,8 +298,17 @@ export async function executeJob(job: JobRow): Promise<void> {
  * resumen que enlaza a él. Una exportación en marcha termina sin dejar nada (executeJob borra su archivo si la fila
  * ya no está). Devuelve cuántos trabajos se borraron.
  */
-export async function discardProjectTransfers(projectId: string): Promise<number> {
-  const jobs = await db.projectTransferJob.findMany({ where: { projectId } });
+export function discardProjectTransfers(projectId: string): Promise<number> {
+  return discardTransfers({ projectId });
+}
+
+/** Al borrar una cuenta: lo mismo con las exportaciones e importaciones que lanzó esa persona. */
+export function discardUserTransfers(userId: string): Promise<number> {
+  return discardTransfers({ userId });
+}
+
+async function discardTransfers(where: { projectId: string } | { userId: string }): Promise<number> {
+  const jobs = await db.projectTransferJob.findMany({ where });
   if (!jobs.length) return 0;
   await db.projectTransferJob.deleteMany({ where: { id: { in: jobs.map((j) => j.id) } } });
   for (const job of jobs) {

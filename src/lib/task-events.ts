@@ -98,7 +98,8 @@ export async function loadTaskHistory(taskId: string, t: T): Promise<TaskHistory
   });
   return rows.map((r) => {
     const label = decodeLabel(r.label);
-    return { id: r.id, text: label ? renderLabel(label, t) : r.label, userName: r.userName, createdAt: r.createdAt.toISOString() };
+    // Sin nombre: la cuenta se borró (eraseUser, user-delete.ts).
+    return { id: r.id, text: label ? renderLabel(label, t) : r.label, userName: r.userName || t("Usuario eliminado"), createdAt: r.createdAt.toISOString() };
   });
 }
 

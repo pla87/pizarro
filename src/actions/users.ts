@@ -15,8 +15,8 @@ import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { logMailError } from "@/lib/mask-email";
 import { hashPassword, passwordSchema } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
-import { purgeProject } from "@/lib/project-delete";
-import { discardUndo } from "@/lib/undo";
+import { eraseUser, soloPrivateProjectIds } from "@/lib/user-delete";
+import { ADMINS_LOCK_NAME } from "@/lib/advisory-locks";
 import { requireAdmin } from "@/lib/session";
 import { clearTwoFactor } from "@/lib/two-factor";
 import * as v from "@/lib/validation";
@@ -158,9 +158,16 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
       }
     }
     const emailChanged = data.email !== user.email;
+    const losesAdmin = user.role === "ADMIN" && user.active && (data.role !== "ADMIN" || !data.active);
     await db.$transaction(async (tx) => {
       // Reactivar ocupa una plaza: se vuelve a contar con el candado de altas (ver assertUserSlot).
       if (reactivating) await assertUserSlot(tx);
+      // Quitar un administrador activo, con el mismo candado que «Borrar mi cuenta» (eraseUser): si quien lo hace
+      // acaba de borrarse a la vez, no se queda la instalación sin ninguno.
+      if (losesAdmin) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ADMINS_LOCK_NAME}))::text`;
+        if ((await tx.user.count({ where: { id: { not: user.id }, role: "ADMIN", active: true } })) === 0) throw new AppError("Debe quedar al menos un administrador activo.");
+      }
       // Con otro email, la cuenta de Google vinculada deja de valer (era la de la dirección anterior).
       await tx.user.update({ where: { id: user.id }, data: emailChanged ? { ...data, googleSub: null } : data });
       // Y los enlaces pendientes enviados a la dirección anterior (invitación, restablecer, confirmar) ya no sirven.
@@ -281,7 +288,7 @@ export async function allowGoogleRelink(userId: string) {
  * Borra un usuario. De sus proyectos privados solo se borran (con tareas, releases y adjuntos) aquellos
  * en los que es el único miembro: si tiene alguno hay que confirmarlo expresamente. En los privados
  * con más miembros simplemente deja de serlo. En los proyectos compartidos sus tareas y
- * comentarios se conservan sin autor.
+ * comentarios se conservan sin autor. El borrado es el mismo que «Borrar mi cuenta» (eraseUser, user-delete.ts).
  */
 export async function deleteUser(userId: string, confirmPrivate: boolean) {
   return runAction({ name: "users.deleteUser", args: [userId, confirmPrivate] }, async () => {
@@ -289,19 +296,13 @@ export async function deleteUser(userId: string, confirmPrivate: boolean) {
     const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, name: true } });
     if (!user) throw notFound();
     if (user.id === admin.id) throw new AppError("No puedes borrarte a ti mismo.");
-    const privates = await db.project.findMany({
-      where: { isPrivate: true, members: { some: { userId: user.id }, none: { userId: { not: user.id } } } },
-      select: { id: true },
-    });
+    const privates = await soloPrivateProjectIds(user.id);
     if (privates.length > 0 && confirmPrivate !== true) {
       const t = await getT();
       const count = privates.length === 1 ? t("1 proyecto privado") : t("{n} proyectos privados", { n: privates.length });
       throw new AppError(t("{name} es el único miembro de {count}: confirma que se borren.", { name: user.name, count }));
     }
-    for (const p of privates) await purgeProject(p.id);
-    await discardUndo({ userId: user.id });
-    await db.user.delete({ where: { id: user.id } });
-    revokeUser(user.id);
+    await eraseUser(user.id, privates, { self: false });
     describeAction(
       privates.length
         ? `Borró el usuario «${user.name}» y ${privates.length === 1 ? "su proyecto privado" : `sus ${privates.length} proyectos privados`}`

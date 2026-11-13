@@ -31,6 +31,12 @@ export function columnsLockName(projectId: string): string {
   return `columns:${projectId}`;
 }
 
+/**
+ * Nombre del bloqueo de los administradores (para `pg_advisory_xact_lock(hashtext(…))`): borrar una cuenta (eraseUser) y
+ * quitar el rol o desactivar a un administrador lo toman, así la instalación nunca se queda sin ninguno activo.
+ */
+export const ADMINS_LOCK_NAME = "pz:admins";
+
 /** Todas, con su nombre (para la prueba de que no se repiten). */
 export const ADVISORY_LOCKS: Readonly<Record<string, number>> = {
   LOCK_SETUP,

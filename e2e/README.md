@@ -23,6 +23,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Cabecera y atajos (caza de bugs 48a) | `e2e/bh48a-e2e.mjs` | 42 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) | `e2e/bh48b-e2e.mjs` | 120 | ~3 min |
 | Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/bh48c-e2e.mjs` | 44 | ~1 min |
+| Borrar mi cuenta (escritorio y móvil) | `e2e/r49-account-e2e.mjs` | 35 | ~30 s |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
@@ -97,6 +98,18 @@ servidor:
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48c-e2e.mjs   # PART=comments,desc,tabs,rel
 ```
 
+
+## Borrar mi cuenta
+
+*Mi perfil → Cuenta → Borrar mi cuenta*: el único administrador ve el botón desactivado y el motivo; el diálogo pide
+contraseña, la palabra BORRAR y, con un proyecto privado propio, marcar «Entendido»; con la contraseña incorrecta no se
+borra; al borrar se va al acceso con el aviso, se cierran sus dos sesiones y lo que creó queda como «Usuario eliminado».
+En móvil (390 px) activa la verificación en dos pasos desde el perfil y borra con el código de la app (el diálogo cabe en
+la pantalla). Crea sus propias personas (`r49_*`). Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-account-e2e.mjs   # PART=block,desk,mobile
+```
 
 ## Sin conexión, pestañas y tareas que desaparecen (caza de bugs 48b)
 
