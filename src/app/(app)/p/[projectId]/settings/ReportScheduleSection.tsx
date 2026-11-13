@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { saveReportSchedule } from "@/actions/report-schedule";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
+import { useActionTransition } from "@/components/useActionTransition";
 
 interface ReportScheduleValue {
   enabled: boolean;
@@ -30,7 +31,7 @@ export function ReportScheduleSection({ projectId, initial, emailAvailable, time
 }) {
   const t = useT();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [form, setForm] = useState(initial);
   const set = <K extends keyof ReportScheduleValue>(key: K, value: ReportScheduleValue[K]) => setForm((f) => ({ ...f, [key]: value }));
 

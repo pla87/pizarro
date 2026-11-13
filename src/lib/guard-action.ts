@@ -1,4 +1,4 @@
-import { NEW_VERSION_EVENT, isStaleActionError } from "./stale-action";
+import { actionThrowMessage, NEW_VERSION_EVENT, isStaleActionError } from "./stale-action";
 
 /**
  * Envuelve la acción de un formulario con useActionState (acceso, verificación en dos pasos). Esas acciones, si lanzan,
@@ -23,7 +23,8 @@ export function guardFormAction<S extends { error?: string }>(
         reload();
         return { ...prev, error: t("Hay una versión nueva de Pizarro. Recarga para seguir.") };
       }
-      return { ...prev, error: t("Error inesperado. Inténtalo de nuevo.") };
+      // Sin red o con el servidor caído, «Sin conexión: no se ha guardado» (como el resto de formularios); si no, el genérico.
+      return { ...prev, error: actionThrowMessage(err, t) };
     }
   };
 }

@@ -292,6 +292,37 @@ describe("calendario suscrito", () => {
     assert.ok(blocked);
   });
 
+  test("registro muestreado: una línea por enlace e IP cada 6 h; otra IP, un enlace revocado y el exceso de ritmo sí se anotan", async () => {
+    const user = await makeUser();
+    const { token } = await feedFor(user);
+    const since = new Date();
+    const rows = async (action: string) => {
+      await flushLogs();
+      return db.appLog.findMany({ where: { action, createdAt: { gte: since } }, orderBy: { createdAt: "asc" } });
+    };
+    for (let i = 0; i < 5; i++) assert.equal((await fetchFeed(token, "10.6.6.1")).res.status, 200);
+    let ok = (await rows("calendar.feed")).filter((r) => r.userId === user.id);
+    assert.equal(ok.length, 1, "cinco consultas seguidas desde la misma IP: una sola línea");
+    // Desde otra dirección (p. ej. el enlace usado en otro sitio): se anota enseguida.
+    assert.equal((await fetchFeed(token, "10.6.6.2")).res.status, 200);
+    ok = (await rows("calendar.feed")).filter((r) => r.userId === user.id);
+    assert.deepEqual(ok.map((r) => r.ip), ["10.6.6.1", "10.6.6.2"]);
+    assert.ok(!JSON.stringify(ok).includes(token), "el token nunca va al registro");
+    // Enlace regenerado que el calendario sigue pidiendo: se anota (una vez por IP y periodo), sin el token.
+    const fresh = await feedFor(user);
+    for (let i = 0; i < 3; i++) assert.equal((await fetchFeed(token, "10.6.6.3")).res.status, 404);
+    const rejected = (await rows("calendar.feedRejected")).filter((r) => r.ip === "10.6.6.3");
+    assert.equal(rejected.length, 1);
+    assert.ok(!JSON.stringify(rejected).includes(token));
+    // Exceso de ritmo: aviso (uno por hora y enlace e IP, aunque sigan llegando).
+    let status = 200;
+    for (let i = 0; i < 35; i++) status = (await fetchFeed(fresh.token, "10.6.6.4")).res.status;
+    assert.equal(status, 429);
+    const limited = (await rows("calendar.feedRateLimited")).filter((r) => r.ip === "10.6.6.4");
+    assert.equal(limited.length, 1);
+    assert.equal(limited[0]!.level, "warn");
+  });
+
   test("crear sin sesión falla", async () => {
     const { logout } = await import("./helpers");
     logout();

@@ -166,6 +166,30 @@ Guardas que conviene conocer:
   Ojo con código nuevo que use un `pg.Client` propio (`pg-connect.ts`): sus consultas, en fila.
   Excepción hallada después: Prisma 7 sí provoca este aviso con relaciones anidadas dentro de `$transaction` (p. ej.
   `buildProjectExport`). No subas `pg` a la 9 sin revisarlo antes: allí será un error.
+- IP del cliente: una sola función, `clientIp` / `clientIpOrNull` (`src/lib/request.ts`, regla pura en
+  `src/lib/client-ip.ts`), para los límites de intentos, el registro y las sesiones. `X-Real-IP` / `X-Forwarded-For` solo
+  cuentan con `TRUST_PROXY` (sin definir: sí en Docker, `PIZARRO_LAUNCHER=docker`, y en Railway; no con `npm start`,
+  `next start` ni `node server.js` a mano). Sin proxy de confianza vale la dirección de la conexión: Next no la da a las
+  rutas, así que `src/lib/peer-ip.ts` (instalado en `instrumentation.ts`) la escribe en la cabecera interna
+  `x-pz-peer-ip` de cada petición, sustituyendo la que mande el cliente. `tests/client-ip.test.ts` falla si otro módulo
+  lee esas cabeceras. `npm run test:db` fija `TRUST_PROXY=1` (las pruebas ponen la IP con `X-Real-IP`).
+- Pool de PostgreSQL (`src/lib/db.ts`): tope de 10 s para conseguir una conexión (`DATABASE_CONNECT_TIMEOUT_MS`; antes
+  esperaba sin límite) y `DATABASE_POOL_SIZE` validado (`src/lib/db-pool.ts`: un valor raro avisa y usa 10). El pool
+  (`LoggedPool`, subclase de `pg.Pool` que se pasa a `PrismaPg` con `disposeExternalPool`) anota «[db] No se puede
+  conectar con PostgreSQL (servidor, base): motivo» como mucho cada 30 s.
+- Migrador de la imagen Docker (`scripts/migrator-deps.mjs`, etapa `migrator` del `Dockerfile`): el `package-lock.json`
+  del migrador sale del del proyecto (solo `prisma` y lo que necesita) y se instala con `npm ci`; después se poda lo que
+  `migrate deploy` no lee (Studio, `prisma dev`/PGlite, compiladores de consultas…; lista `UNUSED`, medida con un gancho
+  de módulos y `strace`). El `Dockerfile` comprueba tras podar que `prisma --version` y `prisma migrate diff` funcionan:
+  si una versión nueva de Prisma necesita algo podado, falla la construcción, no el arranque. 257 → 109 MB sin comprimir.
+- Acciones de servidor dentro de una transición: `useActionTransition()` (`src/components/useActionTransition.ts`) en
+  lugar de `useTransition()`. Si la acción lanza (sin red, servidor caído, versión nueva) muestra «Sin conexión: no se ha
+  guardado» o el aviso que toque (en un aviso emergente o, con `onError`, en el formulario) en vez de la pantalla «Algo ha
+  fallado». Una llamada suelta (`await accion()` fuera de una transición) lleva `.catch((e) => actionThrowResult(e, t))`;
+  `actionThrowMessage` ya activa el aviso fijo de sin conexión. Prueba: `e2e/r49-infra-e2e.mjs`.
+- Calendario suscrito (`/api/calendar/<token>.ics`): el registro está muestreado (`feedLogDue`,
+  `src/lib/calendar-feed-core.ts`): la primera consulta de cada enlace e IP y luego una cada 6 h; los enlaces no válidos,
+  una por IP cada 6 h; el exceso de ritmo, uno por hora; los errores, siempre.
 
 Antes de cada fusión en `main`, comprueba que no se cuela ningún dato personal del propietario en el diff ni en el
 PDF del manual (busca su nombre, email y dominios; pídeselos si no los sabes) y que los mensajes de commit no

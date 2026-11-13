@@ -2,11 +2,12 @@
 
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { logout, setNewPassword } from "@/actions/auth";
 import { clearDraftsOnLogout } from "@/components/board/drafts";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useT } from "@/i18n/client";
+import { useActionTransition } from "@/components/useActionTransition";
 
 export function ChangePasswordForm({ email, googleOnly = false, clearAllDraftsOnLogout = false }: { email: string; googleOnly?: boolean; clearAllDraftsOnLogout?: boolean }) {
   const t = useT();
@@ -14,7 +15,7 @@ export function ChangePasswordForm({ email, googleOnly = false, clearAllDraftsOn
   const [password, setPassword] = useState("");
   const [repeat, setRepeat] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition(setError);
   return (
     <form
       className="space-y-4"

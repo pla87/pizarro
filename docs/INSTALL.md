@@ -237,7 +237,7 @@ En `.env`: `DOMAIN=":80"` y `APP_URL="http://<ip-del-servidor>"`. Caddy sirve so
 
 Por HTTP sin TLS el navegador habla HTTP/1.1 y abre como mucho 6 conexiones a la vez con el mismo servidor, compartidas por todas las pestañas. Cada tablero a la vista mantiene una abierta para los cambios en vivo; las pestañas ocultas cierran la suya y la vuelven a abrir al mostrarse (si hubo cambios mientras tanto, el tablero se pone al día solo). Aun así, con muchas ventanas de Pizarro a la vista a la vez (no pestañas: ventanas visibles) puede tardar en cargar o guardar. Con HTTPS (un dominio, o un certificado propio en Caddy) el navegador usa HTTP/2, que lleva todo por una sola conexión, y ese límite desaparece: si en tu red se usa mucho Pizarro en varias ventanas, es la opción recomendada.
 
-> **Importante:** la aplicación se fía de la cabecera `X-Real-IP` para saber la IP del cliente (límites de intentos, registro de actividad). Por eso el puerto 3000 de Pizarro nunca debe quedar expuesto directamente: solo a través del Caddy incluido (o de otro proxy que sobrescriba `X-Real-IP`). Si no, cualquiera podría falsear su IP.
+> **Importante:** en Docker la aplicación se fía de la cabecera `X-Real-IP` para saber la IP del cliente (límites de intentos, registro de actividad), porque el Caddy incluido la sobrescribe siempre. Por eso el puerto 3000 de Pizarro nunca debe quedar expuesto directamente: solo a través del Caddy incluido (o de otro proxy que sobrescriba `X-Real-IP`). Si aun así lo publicas sin proxy, pon `TRUST_PROXY=0` en `.env`: entonces se usa la dirección de la conexión y nadie puede falsear su IP. Con `npm start` es al revés: por defecto no se fía de esas cabeceras, y si pones tu propio proxy delante, define `TRUST_PROXY=1`.
 
 ### 3.4 Arquitecturas
 

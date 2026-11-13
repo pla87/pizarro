@@ -1,10 +1,11 @@
 "use client";
 
 import { Bell, CalendarDays } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { updateCollabPrefs } from "@/actions/collab-prefs";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
+import { useActionTransition } from "@/components/useActionTransition";
 
 interface Props {
   prefs: { notifyAssignedEmail: boolean; notifyDueEmail: boolean; notifyCommentEmail: boolean; dailyDigest: boolean; digestHour: number };
@@ -17,7 +18,7 @@ interface Props {
 export function NotificationExtras({ prefs, emailAvailable, timeZone }: Props) {
   const t = useT();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [form, setForm] = useState(prefs);
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }));
 

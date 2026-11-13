@@ -1,4 +1,5 @@
 import { parseBackupKey } from "./backup-core";
+import { trustProxy } from "./client-ip";
 import { parseWhatsappSettings, resolveWhatsappConfig, TELEGRAM_ENABLED_KEY, TELEGRAM_TOKEN_KEY, telegramMode } from "./messaging-core";
 
 // Parte pura del diagnóstico para soporte (Administración → Ajustes → «Descargar diagnóstico» y node dist/doctor.mjs):
@@ -16,7 +17,7 @@ export const DOCUMENTED_ENV_VARS = [
   "DATABASE_URL", "SESSION_SECRET", "TOKEN_SECRET", "TOKEN_SECRET_PREVIOUS", "ENCRYPTION_KEY", "ENCRYPTION_KEY_PREVIOUS",
   "APP_URL", "CANONICAL_REDIRECT", "LANDING_AT_ROOT", "SETUP_TOKEN", "UPLOAD_DIR", "PORT", "NODE_ENV",
   "SEED_ADMIN_EMAIL", "SEED_ADMIN_PASSWORD", "SEED_ADMIN_NAME",
-  "MAX_USERS", "MAX_UPLOAD_MB", "DATABASE_POOL_SIZE", "LIVE_REFRESH_JITTER_MS", "BCRYPT_WORKERS", "COOKIE_SECURE", "UPLOAD_QUOTA_MB_PER_PROJECT", "UPLOAD_QUOTA_MB_TOTAL",
+  "MAX_USERS", "MAX_UPLOAD_MB", "DATABASE_POOL_SIZE", "DATABASE_CONNECT_TIMEOUT_MS", "TRUST_PROXY", "LIVE_REFRESH_JITTER_MS", "BCRYPT_WORKERS", "COOKIE_SECURE", "UPLOAD_QUOTA_MB_PER_PROJECT", "UPLOAD_QUOTA_MB_TOTAL",
   "PROJECT_IMPORT_MAX_MB", "PROJECT_TRANSFER_CONCURRENCY", "PDF_WORKER_MAX_MB", "DISK_MIN_FREE_MB",
   "BACKUP_KEY", "BACKUP_PAUSE", "BACKUP_LOCAL_FILES", "BACKUP_EXTERNAL_DIR",
   "BACKUP_S3_ENDPOINT", "BACKUP_S3_BUCKET", "BACKUP_S3_ACCESS_KEY_ID", "BACKUP_S3_SECRET_ACCESS_KEY", "BACKUP_S3_REGION", "BACKUP_S3_PREFIX",
@@ -61,6 +62,8 @@ export function configFlags(env: Env = process.env) {
     separateTokenSecret: Boolean(env.TOKEN_SECRET?.trim()),
     separateEncryptionKey: Boolean(env.ENCRYPTION_KEY?.trim()),
     keyRotationInProgress: Boolean(env.TOKEN_SECRET_PREVIOUS?.trim() || env.ENCRYPTION_KEY_PREVIOUS?.trim()),
+    // ¿Se toma la IP del cliente de X-Real-IP / X-Forwarded-For? (TRUST_PROXY o, sin ella, Docker y Railway)
+    trustProxy: trustProxy(env),
   };
 }
 

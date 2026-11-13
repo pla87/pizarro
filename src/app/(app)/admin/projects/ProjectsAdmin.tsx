@@ -3,11 +3,12 @@
 import { X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { addProjectMember, removeProjectMember, setAdminProjectPick } from "@/actions/projects";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
+import { useActionTransition } from "@/components/useActionTransition";
 
 interface AdminUser {
   id: string;
@@ -48,7 +49,7 @@ function ProjectCard({ project, users, byId }: { project: Row; users: AdminUser[
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [candidate, setCandidate] = useState("");
   const assigned = new Set(project.memberIds);
   // Los administradores no se asignan: ven todos los proyectos de equipo.

@@ -2,11 +2,11 @@
 
 import { Check } from "lucide-react";
 import Link from "next/link";
-import { useTransition } from "react";
 import { setAdminProjectPick } from "@/actions/projects";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
+import { useActionTransition } from "@/components/useActionTransition";
 
 interface Row {
   id: string;
@@ -19,7 +19,7 @@ export function ExistingProjects({ projects, userId }: { projects: Row[]; userId
   const t = useT();
   const safeRefresh = useSafeRefresh();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const toggle = (p: Row) =>
     start(async () => {
       const res = await setAdminProjectPick(p.id, userId, !p.picked);

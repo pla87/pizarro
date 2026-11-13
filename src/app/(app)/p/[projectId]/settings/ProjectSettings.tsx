@@ -3,7 +3,7 @@
 import { CalendarClock, Check, EyeOff, Loader2, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { sameName } from "@/lib/name-spaces";
 import {
   createDeliverable, createLabel, deleteDeliverable, deleteLabel, addProjectMember, deleteProject, removeProjectMember, setProjectVisibility, setAttachmentLimits, setGoogleShareMode, setTaskFields, updateDeliverable, updateLabel, updateProject,
@@ -32,6 +32,7 @@ import { ProjectSettingsTabs } from "./ProjectSettingsTabs";
 import type { ProjectSettingsTab } from "./project-settings-tabs";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
 import { setGeneralKindEnabled } from "@/actions/project-kinds";
+import { useActionTransition } from "@/components/useActionTransition";
 
 interface Props {
   isAdmin: boolean;
@@ -86,7 +87,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description);
   const [zipMb, setZipMb] = useState(String(project.releaseZipMaxMb));
@@ -407,7 +408,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate }: 
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [candidate, setCandidate] = useState("");
   const memberIds = new Set(members.map((m) => m.id));
   const candidates = users.filter((u) => !memberIds.has(u.id));
@@ -568,7 +569,7 @@ function Deliverables({ projectId, initial }: { projectId: string; initial: Deli
   // null: modal cerrado; "": nuevo entregable; id: edición.
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", description: "", dueDate: "" });
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
 
   const open = (d?: DeliverableRow) => {
     setEditing(d?.id ?? "");
@@ -676,7 +677,7 @@ function GeneralKinds({ projectId, generalKinds, projectKinds }: {
   const shown = <K extends { id: string; name: string }>(k: K) => localizeGeneralKind(k, locale);
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [disabling, setDisabling] = useState<(KindOption & { taskCount: number }) | null>(null);
   const [replacement, setReplacement] = useState("");
 

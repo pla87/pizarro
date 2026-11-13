@@ -78,6 +78,8 @@ try {
     SESSION_SECRET: process.env.SESSION_SECRET && process.env.SESSION_SECRET.length >= 32 ? process.env.SESSION_SECRET : "x".repeat(48),
     // La cookie de sesión sin prefijo __Host- ni Secure (no hay HTTPS) y sin correo ni WhatsApp reales.
     COOKIE_SECURE: "false",
+    // Las pruebas llaman a las rutas sin servidor HTTP y fijan la IP con X-Real-IP, como haría el proxy.
+    TRUST_PROXY: "1",
     SMTP_HOST: "",
     SMTP_FROM: "",
     MAIL_OUTBOX_DIR: "",

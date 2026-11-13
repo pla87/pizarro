@@ -36,15 +36,22 @@ RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" npm run build
 # --- 3. Prisma CLI aislado, solo para `migrate deploy` -----------------------------
 FROM base AS migrator
 WORKDIR /app/migrator
-COPY package.json /tmp/app-package.json
-# Instala la misma versión de Prisma que el proyecto y descarga el motor de migraciones
-# durante el build (no en cada arranque).
-RUN PRISMA_VERSION="$(node -p "require('/tmp/app-package.json').devDependencies.prisma")" \
-    && echo '{"name":"tablon-migrator","private":true,"type":"module"}' > package.json \
-    && npm install --no-audit --no-fund --omit=dev "prisma@${PRISMA_VERSION}" \
-    && DATABASE_URL="postgresql://x:x@localhost:5432/x" ./node_modules/.bin/prisma --version
+COPY package.json package-lock.json /tmp/app/
+COPY scripts/migrator-deps.mjs /tmp/app/scripts/
+# Mismas versiones que el proyecto: el package-lock.json del migrador sale del del proyecto (solo prisma y lo que
+# necesita) y `npm ci` lo instala tal cual, con sus hashes; la instalación descarga el motor de migraciones (no en cada
+# arranque). Después se quita lo que `migrate deploy` no usa (Prisma Studio, `prisma dev`, los compiladores de
+# consultas…): unos 150 MB menos sin comprimir. Ver scripts/migrator-deps.mjs.
+RUN node /tmp/app/scripts/migrator-deps.mjs /tmp/app /app/migrator \
+    && npm ci --no-audit --no-fund --omit=dev \
+    && node /tmp/app/scripts/migrator-deps.mjs --prune /app/migrator \
+    && rm -rf /tmp/app /root/.npm
 COPY prisma.config.ts ./
 COPY prisma ./prisma
+# Comprobación de la poda (si una versión nueva de Prisma necesita algo de lo quitado, falla aquí y no al arrancar):
+# `migrate diff` carga la configuración y el esquema y usa el motor de migraciones, como `migrate deploy`.
+RUN DATABASE_URL="postgresql://x:x@localhost:5432/x" ./node_modules/.bin/prisma --version >/dev/null \
+    && DATABASE_URL="postgresql://x:x@localhost:5432/x" ./node_modules/.bin/prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script >/dev/null
 
 # --- 4. Runtime -----------------------------------------------------------------
 FROM base AS runner

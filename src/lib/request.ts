@@ -1,11 +1,19 @@
 import "server-only";
+import { clientIpFrom, PEER_IP_MARK, trustProxy } from "./client-ip";
 
 /**
- * IP del cliente tras el proxy de Railway. Se prefiere X-Real-IP (lo fija el proxy)
- * y, si no, el último salto de X-Forwarded-For (el primero lo puede inventar el cliente).
+ * IP del cliente (o null si no se sabe): la única función que la calcula, para los límites de intentos, el registro de
+ * actividad y las sesiones. Con proxy de confianza (TRUST_PROXY), la que dice el proxy; sin él, la de la conexión.
+ * Ver lib/client-ip.ts.
  */
+export function clientIpOrNull(headers: Headers): string | null {
+  const peerInstalled = Boolean((globalThis as Record<symbol, unknown>)[PEER_IP_MARK]);
+  return clientIpFrom((name) => headers.get(name), { trusted: trustProxy(), peerInstalled });
+}
+
+/** Como clientIpOrNull, con «unknown» si no se sabe (todas las peticiones sin IP comparten límite). */
 export function clientIp(headers: Headers): string {
-  return headers.get("x-real-ip")?.trim() || headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() || "unknown";
+  return clientIpOrNull(headers) ?? "unknown";
 }
 
 /**

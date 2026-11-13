@@ -3,7 +3,7 @@
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { KeyRound, Link2, Link2Off, MailPlus, Pencil, ShieldOff, Trash2, TriangleAlert, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { createUser, deleteUser, forcePasswordChange, resendInvite, resetUserTwoFactor, unlinkGoogle, updateUser, allowGoogleRelink } from "@/actions/users";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
@@ -12,6 +12,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { copyText } from "@/components/ui/clipboard";
 import { useT } from "@/i18n/client";
+import { useActionTransition } from "@/components/useActionTransition";
 
 type Role = "ADMIN" | "MEMBER";
 type UserLocale = "ES" | "EN";
@@ -150,7 +151,7 @@ function UserForm({ user, isMe, emailAvailable, defaultLocale = "ES", onClose }:
   const t = useT();
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [name, setName] = useState(user?.name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [role, setRole] = useState<Role>(user?.role ?? "MEMBER");
@@ -233,7 +234,7 @@ function ForcePasswordChange({ user, emailAvailable, onClose }: { user: UserRow;
   const t = useT();
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [link, setLink] = useState<string | null>(null);
   const run = (copyLink: boolean) =>
     start(async () => {
@@ -289,7 +290,7 @@ function ResetTwoFactor({ user, onClose }: { user: UserRow; onClose: () => void 
   const t = useT();
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   return (
     <Modal open onClose={onClose} title={t("Restablecer la verificación en dos pasos de {name}", { name: user.name })} size="sm">
       <form
@@ -319,7 +320,7 @@ function DeleteUser({ user, onClose }: { user: UserRow; onClose: () => void }) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [confirmed, setConfirmed] = useState(false);
   const count = user.privateProjects;
   return (

@@ -3,7 +3,7 @@
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Bell, Check, Link2, Monitor, Moon, Palette, PenLine, Sun, Languages } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import {
   changePassword, createReleaseTemplate, deleteReleaseTemplate, disconnectGoogle, moveReleaseTemplate, updateCardStyle, updateNotificationPrefs,
   updateAccent, updateEditorMode, updateProfileName, updateReleaseTemplate, updateTheme, updateLocale,
@@ -17,6 +17,7 @@ import { DraftsSection } from "./DraftsSection";
 import { ProfileTabs } from "./ProfileTabs";
 import type { ProfileTab } from "./profile-tabs";
 import type { CardStyleValue, EditorModeValue, TemplateOption } from "@/lib/types";
+import { useActionTransition } from "@/components/useActionTransition";
 
 const USER_TEMPLATE_ACTIONS = { create: createReleaseTemplate, update: updateReleaseTemplate, move: moveReleaseTemplate, remove: deleteReleaseTemplate };
 
@@ -63,7 +64,7 @@ export function ProfileSettings(props: Props) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [name, setName] = useState(props.name);
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -263,7 +264,7 @@ function GoogleSection({ google }: { google: Props["google"] }) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   return (
     <section id="google" className="card scroll-mt-4 p-5">
       <h2 className="flex items-center gap-2 font-semibold"><Link2 size={17} /> {t("Google Docs y Sheets")}</h2>
@@ -308,7 +309,7 @@ function GoogleSection({ google }: { google: Props["google"] }) {
 function NotificationSection({ prefs }: { prefs: Props["notifications"] }) {
   const t = useT();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [notifyEmail, setNotifyEmail] = useState(prefs.notifyEmail);
   return (
     <section className="card p-5">
