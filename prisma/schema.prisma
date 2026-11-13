@@ -112,6 +112,7 @@ model User {
   followedTasks     TaskFollower[]
   channels          UserChannel[]
   telegramLinks     TelegramLinkCode[]
+  templateChanges   ProjectTemplateChange[]
 }
 
 model Session {
@@ -266,6 +267,7 @@ model Project {
   reportSchedule ReportSchedule?
   documents    ProjectDocument[]
   releaseTemplates ProjectReleaseTemplate[]
+  templateChange ProjectTemplateChange?
   privateOwner User?           @relation("PrivateProjects", fields: [privateOwnerId], references: [id], onDelete: SetNull)
 
   @@index([position])
@@ -899,6 +901,23 @@ model ReleaseTemplate {
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, kind, position])
+}
+
+/// Último cambio de plantilla de un proyecto («Aplicar plantilla» en sus ajustes): lo que había antes y lo que creó, para
+/// poder deshacerlo durante un tiempo limitado (ver lib/template-apply.ts). Solo se guarda el último de cada proyecto.
+model ProjectTemplateChange {
+  id           String   @id @default(cuid())
+  projectId    String   @unique
+  userId       String?
+  /// Nombre de la plantilla aplicada, tal como se vio al aplicarla.
+  templateName String
+  /// ADD (añadir lo que falte) o REPLACE (cambiar de plantilla, con emparejamiento de columnas y tipos).
+  mode         String
+  /// Instantánea (JSON, ver TemplateChangeSnapshot en lib/template-apply.ts).
+  snapshot     Json
+  createdAt    DateTime @default(now())
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
 
 /// Cabeceras y pies de release del proyecto: los gestiona quien puede editar sus ajustes y salen en «Generar release» tras los del usuario.

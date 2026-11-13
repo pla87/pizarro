@@ -42,6 +42,8 @@ export const READ_ACTIONS = [
   "storage.previewCleanup",
   "storage.largestAttachments",
   "admin.techInfo",
+  "templateApply.listApplicableTemplates",
+  "templateApply.previewTemplateChange",
 ];
 
 type Params = Record<string, string | string[] | undefined>;
