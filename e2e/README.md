@@ -23,6 +23,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Cabecera y atajos (caza de bugs 48a) | `e2e/bh48a-e2e.mjs` | 42 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) | `e2e/bh48b-e2e.mjs` | 120 | ~3 min |
 | Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/bh48c-e2e.mjs` | 44 | ~1 min |
+| Copia con imagen en la descripción, sin red en calendario, borradores y releases (caza de bugs 49) | `e2e/bh49-e2e.mjs` | 27 | ~1 min |
 | Borrar mi cuenta (escritorio y móvil) | `e2e/r49-account-e2e.mjs` | 35 | ~30 s |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
 | Copias con adjuntos y release con barra de formato | `e2e/r49-copy-e2e.mjs` | 87 | ~2 min |
@@ -90,6 +91,18 @@ aviso 99+ en móvil, ayuda de atajos y borrar un proyecto con espacios dobles. M
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48a-e2e.mjs
 ```
 
+## Copia con imagen, sin red y «Repetir» en un borrador (caza de bugs 49)
+
+La copia de una tarea (Ctrl al soltar en otra columna) con una imagen en la descripción (`![…](/api/attachments/…)`)
+apunta a su propio adjunto y se sigue viendo tras borrar el de la original; mover una tarea en el calendario sin red
+vuelve a su día con «Sin conexión: no se ha guardado» y con red se guarda; sin red, el interruptor «Borrar los borradores
+al cerrar sesión» de *Mi perfil* vuelve a como estaba y «Borrar release» no se queda ocupado; en *Nueva tarea* recuperada
+de un borrador, el día de «Repetir» sigue a la fecha límite si no se eligió a mano. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh49-e2e.mjs   # PART=dupimg,cal,drafts,reldel,repdraft
+```
+
 ## Formularios sin red, IP del cliente y páginas legales (ronda 49)
 
 Crear un usuario en *Administración → Usuarios* y guardar *Mi perfil* sin red (`context.setOffline`): sale «Sin conexión:
@@ -100,6 +113,8 @@ condiciones y licencia llegan pintadas sin JavaScript. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-infra-e2e.mjs   # PART=admin,profile,docs,ip,legal
+```
+
 ## Tareas que se repiten
 
 «Repetir» en *Nueva tarea* (junto a la fecha límite; el día sigue a la fecha mientras no se elija a mano; se guarda al
@@ -109,6 +124,8 @@ tarea original; ninguna hoy ni antes, ni de una tarea repetida sin fecha límite
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-repeat-e2e.mjs   # PART=new,cal,ics,mobile
+```
+
 ## Carga de proyecto y «Adjuntos y límites» (ronda 49)
 
 El indicador de carga de las páginas de proyecto (respuestas lentas simuladas: el contorno del logo aparece pasados
@@ -144,6 +161,8 @@ la pantalla). Crea sus propias personas (`r49_*`). Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-account-e2e.mjs   # PART=block,desk,mobile
+```
+
 ## Copias con adjuntos y release con barra de formato
 
 Duplicar una tarea con una imagen y un archivo (botón del detalle, Ctrl al soltar en otra columna, Alt+Mayús+D y en el

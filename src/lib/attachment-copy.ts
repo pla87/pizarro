@@ -36,6 +36,8 @@ interface AttachmentCopySkip {
 
 export interface AttachmentCopyResult {
   copied: number;
+  /** Id de cada adjunto copiado → id de su copia (para los enlaces a adjuntos de la descripción). */
+  ids: Map<string, string>;
   skipped: AttachmentCopySkip[];
   /** Con algún omitido por cuota: la primera cuota superada (para el mensaje). */
   quota?: QuotaExceeded;
@@ -105,7 +107,7 @@ async function copyFiles(fromId: string, toId: string, isImage: boolean): Promis
  * medias queda como mucho un fichero sin fila, que borra la limpieza de huérfanos.
  */
 export async function copyTaskAttachments(fromTaskId: string, toTaskId: string): Promise<AttachmentCopyResult> {
-  const result: AttachmentCopyResult = { copied: 0, skipped: [] };
+  const result: AttachmentCopyResult = { copied: 0, ids: new Map(), skipped: [] };
   const sources = await db.taskAttachment.findMany({
     where: { taskId: fromTaskId },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -190,6 +192,7 @@ export async function copyTaskAttachments(fromTaskId: string, toTaskId: string):
     for (const s of staged) skip(s.src, "error");
   }
   const kept = new Set(created);
+  for (const s of staged) if (kept.has(s.id)) result.ids.set(s.src.id, s.id);
   const leftovers = staged.filter((s) => !kept.has(s.id)).map((s) => s.id);
   if (leftovers.length) await removeAttachmentFiles(leftovers);
   result.copied = created.length;

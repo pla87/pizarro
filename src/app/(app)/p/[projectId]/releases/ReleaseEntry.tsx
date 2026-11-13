@@ -14,6 +14,7 @@ import { ProjectsContext } from "@/components/ProjectMenu";
 import { useIntlLocale, useLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
+import { actionThrowResult } from "@/lib/stale-action";
 
 interface Props {
   release: { id: string; number: number; title: string; content: string; deployedAt: string; author: string | null; taskCount: number; attachments: string[] };
@@ -106,7 +107,8 @@ export function ReleaseEntry({ release }: Props) {
   const remove = async () => {
     if (!(await confirm({ title: t("Borrar release"), message: t("¿Borrar la release «{title}» del histórico? Se borran también sus adjuntos. Las tareas no cambian.", { title: release.title }), confirmLabel: t("Borrar"), danger: true }))) return;
     setBusy(true);
-    const res = await deleteRelease(release.id);
+    // Sin red la acción lanza: sin el catch el botón se quedaba ocupado para siempre y sin aviso.
+    const res = await deleteRelease(release.id).catch((e) => actionThrowResult(e, t));
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
     setRemoved(true);
@@ -117,7 +119,7 @@ export function ReleaseEntry({ release }: Props) {
   const removeAttachments = async () => {
     if (!(await confirm({ title: t("Borrar adjuntos"), message: attachments.length === 1 ? t("¿Borrar el adjunto de esta release? El texto se conserva.") : t("¿Borrar los {n} adjuntos de esta release? El texto se conserva.", { n: attachments.length }), confirmLabel: t("Borrar"), danger: true }))) return;
     setBusy(true);
-    const res = await deleteReleaseAttachments(release.id);
+    const res = await deleteReleaseAttachments(release.id).catch((e) => actionThrowResult(e, t));
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
     setAttachments([]);

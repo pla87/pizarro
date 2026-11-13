@@ -100,6 +100,12 @@ const attachmentSchema = z.object({
   createdAt: iso,
   /** SHA-256 del fichero en files/<sha>. */
   file: sha,
+  /**
+   * Referencia del adjunto en el archivo: las imágenes de las descripciones y los comentarios van como
+   * `/api/attachments/<ref>` y al importar se apuntan al adjunto importado. Opcional: los archivos anteriores no la traen
+   * (sus enlaces quedan como estaban).
+   */
+  ref: z.string().regex(/^[A-Za-z0-9_-]{1,40}$/).optional(),
 });
 
 const commentSchema = z.object({

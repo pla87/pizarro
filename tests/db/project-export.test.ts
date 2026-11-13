@@ -262,6 +262,30 @@ describe("exportar e importar un proyecto", () => {
     assert.ok(await db.taskEvent.count({ where: { projectId: s.projectId } }));
   });
 
+  test("las imágenes de las descripciones y los comentarios apuntan a los adjuntos importados", async () => {
+    const { admin, projectId, t1 } = await richProject();
+    const img = await db.taskAttachment.findFirstOrThrow({ where: { taskId: t1.id, isImage: true } });
+    await db.task.update({ where: { id: t1.id }, data: { description: `Mira ![captura](/api/attachments/${img.id}) y ![ajena](/api/attachments/cotroproyecto)` } });
+    await db.taskComment.create({ data: { taskId: t1.id, authorId: admin.id, body: `Aquí: ![captura](/api/attachments/${img.id}?thumb=1)` } });
+
+    const built = await buildProjectExport(projectId, { attachments: true, scope: "all" });
+    const data = projectJsonOf(built);
+    assert.ok(!JSON.stringify(data).includes(img.id), "el archivo no lleva ids de la base de datos");
+    const exported = data.tasks.find((x) => x.title === "Tarea completa")!;
+    const ref = exported.attachments.find((a) => a.isImage)!.ref!;
+    assert.equal(exported.description, `Mira ![captura](/api/attachments/${ref}) y ![ajena](/api/attachments/cotroproyecto)`);
+
+    const s = await importProjectFile(await writeExport(built), asImporter(admin), { isPrivate: false });
+    const task = await db.task.findFirstOrThrow({ where: { projectId: s.projectId, title: "Tarea completa" }, include: { attachments: true, comments: true } });
+    const imported = task.attachments.find((a) => a.isImage)!;
+    assert.equal(task.description, `Mira ![captura](/api/attachments/${imported.id}) y ![ajena](/api/attachments/cotroproyecto)`);
+    assert.ok(task.comments.some((c) => c.body === `Aquí: ![captura](/api/attachments/${imported.id}?thumb=1)`));
+
+    // Sin adjuntos en el archivo, el texto queda como estaba.
+    const bare = projectJsonOf(await buildProjectExport(projectId, { attachments: false, scope: "board" }));
+    assert.match(bare.tasks.find((x) => x.title === "Tarea completa")!.description, new RegExp(`/api/attachments/${img.id}\\)`));
+  });
+
   test("el nombre se repite con «(importado)» y el nuevo proyecto privado solo lo ve quien importa", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const other = await makeUser({ role: "ADMIN" });

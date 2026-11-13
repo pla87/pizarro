@@ -21,6 +21,7 @@ import { useSafeRefresh } from "@/components/useSafeRefresh";
 import { initialsOf } from "@/lib/graphemes";
 import type { RecurrenceRule } from "@/lib/recurrence-date";
 import { recurrenceLabel } from "@/components/board/recurrence-ui";
+import { actionThrowResult } from "@/lib/stale-action";
 
 export interface CalendarTask {
   id: string;
@@ -311,7 +312,9 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
       const from = overrides[task.id] ?? { start: task.start, due: task.due };
       if (from.due === next.due && from.start === next.start) return;
       setOverrides((o) => ({ ...o, [task.id]: next }));
-      const res = await updateTask(task.id, { ...(next.start !== from.start ? { startDate: next.start } : {}), dueDate: next.due });
+      // Sin red la acción lanza: vuelve a las fechas anteriores con «Sin conexión: no se ha guardado» (antes el chip se
+      // quedaba en el día nuevo sin haberse guardado y sin ningún aviso).
+      const res = await updateTask(task.id, { ...(next.start !== from.start ? { startDate: next.start } : {}), dueDate: next.due }).catch((e) => actionThrowResult(e, t));
       if (!res.ok) {
         // Vuelve a las fechas anteriores.
         setOverrides((o) => ({ ...o, [task.id]: from }));
@@ -338,7 +341,7 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
       const from = delOverrides[d.id] ?? d.due;
       if (from === to) return;
       setDelOverrides((o) => ({ ...o, [d.id]: to }));
-      const res = await moveDeliverable(d.id, to);
+      const res = await moveDeliverable(d.id, to).catch((e) => actionThrowResult(e, t));
       if (!res.ok) {
         setDelOverrides((o) => ({ ...o, [d.id]: from }));
         toast(res.error, "error");
@@ -356,7 +359,7 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
     setUndoing(true);
     try {
       if (last.kind === "deliverable") {
-        const res = await moveDeliverable(last.id, last.from);
+        const res = await moveDeliverable(last.id, last.from).catch((e) => actionThrowResult(e, t));
         if (!res.ok) return toast(res.error, "error");
         setDelOverrides((o) => ({ ...o, [last.id]: last.from }));
         setLast(null);
@@ -364,7 +367,7 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
         safeRefresh();
         return;
       }
-      const res = await undoLast(last.projectId, last.taskId);
+      const res = await undoLast(last.projectId, last.taskId).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
       setOverrides((o) => ({ ...o, [last.taskId]: last.from }));
       setLast(null);
