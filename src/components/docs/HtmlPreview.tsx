@@ -23,10 +23,21 @@ function htmlPreviewDocument(html: string): string {
   for (const el of Array.from(doc.querySelectorAll("*"))) {
     for (const attr of Array.from(el.attributes)) {
       const name = attr.name.toLowerCase();
-      if (name.startsWith("on") || (URL_ATTRS.includes(name) && /^\s*(?:javascript:|vbscript:|data:text\/html)/i.test(attr.value.replace(/[\u0000-\u001f]/g, "")))) el.removeAttribute(attr.name);
+      // `ping`: al seguir un enlace avisaría a otra dirección (fuera de la CSP del marco).
+      if (name.startsWith("on") || name === "ping" || (URL_ATTRS.includes(name) && /^\s*(?:javascript:|vbscript:|data:text\/html)/i.test(attr.value.replace(/[\u0000-\u001f]/g, "")))) el.removeAttribute(attr.name);
     }
-    if (el.tagName === "A" && el.hasAttribute("href")) {
-      if (el.getAttribute("href")!.startsWith("#")) el.setAttribute("target", "_self");
+    // Enlaces de HTML y de SVG (en SVG el nombre va en minúsculas y la dirección puede ir en xlink:href).
+    if (el.localName === "a" || el.localName === "area") {
+      const attr = el.hasAttribute("href") ? "href" : el.hasAttribute("xlink:href") ? "xlink:href" : null;
+      if (!attr) continue;
+      const href = el.getAttribute(attr)!.trim();
+      if (href.startsWith("#")) {
+        // Internos (índice, notas): en el propio marco. La dirección base de un `srcdoc` es la de la página de la app,
+        // así que «#tema» llevaba al marco la página de la app (que no se deja enmarcar: quedaba un error). Con
+        // «about:srcdoc#tema» solo se desplaza dentro del documento.
+        el.setAttribute(attr, `about:srcdoc${href}`);
+        el.setAttribute("target", "_self");
+      }
       el.setAttribute("rel", "noopener noreferrer");
     }
   }
