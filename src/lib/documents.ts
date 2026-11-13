@@ -2,14 +2,16 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { visibleProjectsWhere } from "./access";
 import { db } from "./db";
-import { DOCUMENT_TRASH_DAYS, DOCUMENTS_MAX_PER_PROJECT, type DocumentKindName } from "./document-kind";
+import { DOCUMENT_TRASH_DAYS, DOCUMENTS_MAX_PER_PROJECT, sanitizeDocumentName, type DocumentKindName } from "./document-kind";
+import { uploadWriteError } from "./disk-space";
+import { effectiveFileMaxMb } from "./upload-size";
 import { AppError, notFound } from "./errors";
 import type { CurrentUser } from "./session";
 import { quotaExceededFor } from "./storage-usage";
 import type { QuotaExceeded } from "./quota";
 import { noteProject } from "./action-context";
 import { logEvent } from "./log";
-import { removeDocumentFiles } from "./uploads";
+import { newFileId, removeDocumentFiles, saveDocumentFile } from "./uploads";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -129,6 +131,44 @@ export async function createDocumentWithinLimit(data: {
     const row = await tx.projectDocument.create({ data, select: SELECT });
     return { ok: true as const, document: toDocumentRow(row) };
   });
+}
+
+/** Por qué no se guardó un documento generado: además de los de una subida, el tamaño máximo por archivo del proyecto. */
+export type GeneratedDocumentProblem = DocumentLimitProblem | { reason: "size"; maxMb: number };
+
+/**
+ * Guarda en la Documentación del proyecto un archivo generado por la app (p. ej. el PDF del programa de un curso), con
+ * los mismos límites que una subida: tamaño máximo por archivo, máximo de documentos y cuotas. Como la subida, escribe
+ * primero el fichero y después la fila (y lo borra si la fila no se da de alta). Quien llama comprueba el acceso.
+ */
+export async function saveGeneratedDocument(data: {
+  projectId: string; name: string; content: Uint8Array; mimeType: string; kind: DocumentKindName; createdById: string;
+}): Promise<{ ok: true; document: DocumentRow } | { ok: false; problem: GeneratedDocumentProblem }> {
+  const project = await db.project.findUnique({ where: { id: data.projectId }, select: { fileMaxMb: true } });
+  if (!project) throw notFound();
+  const maxMb = effectiveFileMaxMb(project.fileMaxMb);
+  if (data.content.length > maxMb * 1024 * 1024) return { ok: false, problem: { reason: "size", maxMb } };
+  const early = await documentLimitProblem(data.projectId, data.content.length);
+  if (early) return { ok: false, problem: early };
+  const id = newFileId();
+  try {
+    await saveDocumentFile(id, Buffer.from(data.content));
+  } catch (err) {
+    await removeDocumentFiles([id]);
+    throw uploadWriteError(err, { action: "documents.noSpace", bytes: data.content.length, details: { projectId: data.projectId } });
+  }
+  const created = await createDocumentWithinLimit({
+    id, projectId: data.projectId, name: sanitizeDocumentName(data.name), mimeType: data.mimeType, size: data.content.length, kind: data.kind, createdById: data.createdById,
+  }).catch(async (err) => {
+    await removeDocumentFiles([id]);
+    throw err;
+  });
+  if (!created.ok) {
+    await removeDocumentFiles([id]);
+    const { ok: _ok, ...problem } = created;
+    return { ok: false, problem };
+  }
+  return { ok: true, document: created.document };
 }
 
 /** Envía a la papelera un documento vivo al que el usuario tiene acceso (el fichero se conserva hasta la purga). */

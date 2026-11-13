@@ -336,6 +336,71 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
       ],
     },
   },
+  {
+    // Preparar un curso con ayuda de un agente (p. ej. Claude Code en la web): la descripción de cada tipo deja escrito
+    // el encargo (objetivo, contenido, formato de entrega, duración, criterios y notas para el agente). La columna
+    // «Programa» (rol PROGRAM) tiene una tarjeta por sesión y publica el programa en PDF. Sin datos de alumnos.
+    key: "curso-master",
+    data: {
+      name: "Curso o máster",
+      description: "Preparar un curso o máster con ayuda de un agente de IA: programa por sesiones publicable en PDF, materiales, ejercicios, exámenes y seguimiento de alumnos.",
+      columns: [
+        col("Ideas"),
+        col("Materiales"),
+        col("Ejercicios"),
+        col("Exámenes"),
+        col("Programa", false, "PROGRAM"),
+        col("Seguimiento de alumnos"),
+        col("Hecho", true),
+      ],
+      kinds: [
+        // La descripción de una sesión sale en el PDF del programa: solo lo que deben leer los alumnos.
+        kind("Sesión", "#6366f1", "Sesión: ", "**Objetivos:**\n\n**Contenidos:**\n\n- \n\n**Actividades:**\n\n**Lecturas y materiales:**\n", ["Preparar la presentación", "Preparar la actividad", "Subir los materiales"]),
+        kind(
+          "Preparar material",
+          "#0ea5e9",
+          "Material: ",
+          "**Objetivo:**\n\n**Contenido:**\n\n- \n\n**Formato de entrega:** Google Slides, Google Docs, Markdown, PDF o HTML\n\n**Duración o extensión:**\n\n**Notas para el agente:**\n",
+          ["Encargar el borrador al agente", "Revisar y corregir", "Publicar para los alumnos"],
+        ),
+        kind(
+          "Preparar ejercicio",
+          "#22c55e",
+          "Ejercicio: ",
+          "**Objetivo:**\n\n**Enunciado o tema:**\n\n**Formato de entrega:** Google Docs, Markdown, PDF o HTML\n\n**Duración estimada:**\n\n**Criterios de corrección:**\n\n**Notas para el agente:** prepara también la solución.\n",
+          ["Redactar el enunciado", "Preparar la solución", "Probar la dificultad"],
+        ),
+        kind(
+          "Preparar examen",
+          "#ef4444",
+          "Examen: ",
+          "**Objetivo (qué se evalúa):**\n\n**Temario:**\n\n- \n\n**Tipo y formato:** test, preguntas cortas o caso práctico; Google Docs o PDF\n\n**Duración:**\n\n**Criterios de evaluación:**\n\n**Notas para el agente:** incluye la plantilla de corrección.\n",
+          ["Preparar las preguntas", "Preparar la plantilla de corrección", "Revisión por otro profesor", "Publicar o imprimir"],
+        ),
+        kind("Revisar perfil de alumno", "#a855f7", "Perfil: ", "**Alumno:** [nombre o referencia]\n\n**Qué revisar:** progreso, entregas y asistencia\n\n**Observaciones:**\n\n**Siguiente paso:**\n", ["Revisar entregas y notas", "Anotar observaciones", "Decidir si necesita tutoría"]),
+        kind(
+          "Corregir",
+          "#f97316",
+          "Corregir: ",
+          "**Qué se corrige:** ejercicio, examen o trabajo\n\n**Criterios:**\n\n**Plazo para devolver las notas:**\n\n**Notas para el agente:** primera pasada con los criterios; la nota final la pone el profesor.\n",
+          ["Corregir", "Revisar los casos dudosos", "Publicar notas y devolución"],
+        ),
+        kind("Tutoría", "#14b8a6", "Tutoría: ", "**Alumno o grupo:** [nombre o referencia]\n\n**Fecha y formato:** presencial o videollamada\n\n**Temas:**\n\n**Acuerdos:**\n", ["Acordar la fecha", "Preparar los temas", "Anotar los acuerdos"]),
+      ],
+      hiddenGeneralKinds: [],
+      hideAllGeneralKinds: true,
+      labels: [
+        { name: "Módulo 1", color: "#0ea5e9" },
+        { name: "Módulo 2", color: "#6366f1" },
+        { name: "Módulo 3", color: "#a855f7" },
+        { name: "Para el agente", color: "#14b8a6" },
+        { name: "Revisión de coordinación", color: "#f97316" },
+        { name: "Urgente", color: "#ef4444" },
+      ],
+      // Fecha de inicio: una sesión puede durar varios días (el programa muestra el rango inicio–fin).
+      taskFields: ["startDate"],
+    },
+  },
 ];
 
 export const BUILTIN_KEYS = BUILTIN_TEMPLATES.map((b) => b.key);
@@ -362,6 +427,8 @@ export function comparable(t: TemplateData): string {
     labels: t.labels.map((l) => [l.name, l.color]),
     // Solo si hay: las plantillas de serie no tienen y su huella guardada no debe cambiar.
     ...(t.releaseTemplates?.length ? { releases: t.releaseTemplates.map((r) => [r.kind, r.name, r.content]) } : {}),
+    // Igual con los campos de tarea: solo «Curso o máster» activa uno (la huella de las demás no cambia).
+    ...(t.taskFields?.length ? { fields: t.taskFields } : {}),
   });
 }
 

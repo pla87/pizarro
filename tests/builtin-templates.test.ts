@@ -4,7 +4,7 @@ import { BUILTIN_KEYS, BUILTIN_TEMPLATES, canonicalTemplate, isBuiltinModified }
 import { buildTemplateApplication, sortTemplates, templateInputSchema } from "../src/lib/project-templates";
 
 test("cada plantilla de serie pasa la misma validación que las de los usuarios", () => {
-  assert.equal(BUILTIN_TEMPLATES.length, 12);
+  assert.equal(BUILTIN_TEMPLATES.length, 13);
   for (const b of BUILTIN_TEMPLATES) {
     const r = templateInputSchema.safeParse(b.data);
     assert.equal(r.success, true, `${b.key}: ${r.success ? "" : r.error.message}`);

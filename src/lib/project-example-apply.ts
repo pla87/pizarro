@@ -60,6 +60,7 @@ export async function createExampleContent(tx: Prisma.TransactionClient, project
         position,
         createdById: userId,
         dueDate: dueDate ? isoToDate(dueDate) : null,
+        startDate: t.startInDays !== undefined ? due(t.startInDays) : null,
         deliverableId: t.deliverable !== undefined ? deliverables[t.deliverable] : undefined,
         priority: t.priority,
         cost: t.cost,

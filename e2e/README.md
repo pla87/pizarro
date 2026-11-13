@@ -32,6 +32,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/r49-ui-e2e.mjs` | 34 | ~1 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/r49-textos-e2e.mjs` | 29 | ~1 min |
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/r50-plantilla-e2e.mjs` | 39 | ~1 min |
+| Plantilla «Curso o máster» y «Publicar programa (PDF)» | `e2e/r50-curso-e2e.mjs` | 57 | ~40 s |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
@@ -166,6 +167,20 @@ sección; a 390 px el asistente cabe. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r50-plantilla-e2e.mjs   # PART=add,replace,perm,mobile
+## Plantilla «Curso o máster» y «Publicar programa (PDF)»
+
+Crea un proyecto con la plantilla desde *Nuevo proyecto* (la sesión se abre como miembro y pasa a admin, como en el
+tablero), comprueba sus columnas (con «Programa», rol *Programa del curso*), tipos y campo *Fecha de inicio*; crea dos
+sesiones con el tipo «Sesión» (título y descripción automáticos, fecha y responsable) y otra de varios días con Markdown;
+publica el programa con el responsable, lo descarga y comprueba su texto con `pdftotext` (orden, fechas, rango, Markdown
+pintado, sin la archivada), la copia «Programa – fecha.pdf» en Documentación y «Abrir Documentación»; la vista previa no
+guarda; el PDF en inglés sin guardar; con la Documentación llena (200 documentos) se descarga igual y avisa; y el rol en el
+menú de la columna con su icono y su explicación (se puede repetir y quitar). Borra su proyecto al terminar. Necesita
+`pdftotext` (poppler-utils). Genera cuatro PDF con la misma persona: el límite es de cinco por minuto, así que entre dos
+pasadas seguidas espera un minuto. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r50-curso-e2e.mjs   # PART=tpl,pdf,en,full,role
 ```
 
 ## Comentarios a la vez, red lenta, dos pestañas y release renombrada (caza de bugs 48c)

@@ -14,6 +14,7 @@ import { renderInWorker } from "./report-render";
 import { groupChecklist, type ChecklistGroupBy } from "./checklist";
 import { loadChecklistItems } from "./column-views";
 import { buildWeekPlan, type WeekPlanGroupBy } from "./week-plan";
+import { buildProgramSessions, programDocumentName } from "./course-program";
 
 // Genera el informe PDF de un proyecto. Lo usan la descarga (API) y el envío semanal por email;
 // quien llama comprueba antes que la persona puede ver el proyecto.
@@ -255,5 +256,38 @@ export function generateWeekPlanPdf(
     );
     const pdf = await renderPdf({ kind: "weekPlan", locale: opts.locale, input: { project: column.project.name, column: column.name, today, generatedBy: opts.generatedBy, groupBy: opts.groupBy, sections } });
     return { pdf, filename: `${t("semana")}-${slugOf(column.name, t("columna"))}-${today}.pdf`, taskCount: tasks.length };
+  })();
+}
+
+/**
+ * PDF «Programa» de una columna PROGRAM: cada tarea no archivada es una sesión, en el orden de la columna, con su número,
+ * su fecha (fecha límite, o rango inicio–fin si el proyecto usa la fecha de inicio), su título, su descripción (Markdown)
+ * y, si se pide, su responsable. `documentName` es el nombre con el que se guarda en la Documentación del proyecto.
+ */
+export function generateProgramPdf(
+  projectId: string, columnId: string, opts: { locale: Locale; withAssignee: boolean },
+): Promise<{ pdf: Uint8Array; filename: string; documentName: string; taskCount: number } | null> {
+  return (async () => {
+    const t = makeT(opts.locale);
+    const column = await db.column.findFirst({ where: { id: columnId, projectId, role: "PROGRAM" }, select: { project: { select: { name: true, taskFields: true } } } });
+    if (!column) return null;
+    const tasks = await db.task.findMany({
+      where: { projectId, columnId, archivedAt: null },
+      orderBy: [{ position: "asc" }, { id: "asc" }],
+      take: 2000,
+      select: { title: true, description: true, dueDate: true, startDate: true, assignee: { select: { name: true } } },
+    });
+    const today = todayIso(appTimeZone());
+    const sessions = buildProgramSessions(
+      tasks.map((x) => ({ title: x.title, description: x.description, startDate: dateToIso(x.startDate), dueDate: dateToIso(x.dueDate), assignee: x.assignee?.name ?? null })),
+      { locale: intlLocale(opts.locale), t, withAssignee: opts.withAssignee, useStartDate: normalizeTaskFields(column.project.taskFields).includes("startDate") },
+    );
+    const pdf = await renderPdf({ kind: "program", locale: opts.locale, input: { project: column.project.name, today, withAssignee: opts.withAssignee, sessions } });
+    return {
+      pdf,
+      filename: `${t("programa")}-${slugOf(column.project.name, t("proyecto"))}-${today}.pdf`,
+      documentName: programDocumentName(t, today),
+      taskCount: tasks.length,
+    };
   })();
 }

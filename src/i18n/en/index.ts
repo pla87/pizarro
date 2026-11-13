@@ -15,6 +15,7 @@ import { comentarios } from "./comentarios";
 import { common } from "./common";
 import { conexion } from "./conexion";
 import { copia } from "./copia";
+import { curso } from "./curso";
 import { datos } from "./datos";
 import { cuentas } from "./cuentas";
 import { detalle } from "./detalle";
@@ -49,5 +50,5 @@ export const EN: Record<string, string> = {
   ...accesibilidad, ...settings, ...admin, ...server, ...cuentas, ...acceso, ...colaboracion, ...proyectos, ...plantillas,
   ...setup, ...documentacion, ...campos, ...almacenamiento, ...importar, ...ics, ...mensajeria, ...soporte, ...licencia,
   ...legal, ...landing, ...web, ...instalar, ...baja, ...datos, ...copia, ...repeticion, ...carga, ...textos,
-  ...aplicarPlantilla, ...privados, ...formatos,
+  ...aplicarPlantilla, ...privados, ...formatos, ...curso,
 };

@@ -54,6 +54,13 @@ describe("proyectos desde un ejemplo", () => {
     const { tasks, deliverables } = await check(ev.id, "eventos", "es");
     assert.ok(deliverables.every((d) => d.dueDate && dateToIso(d.dueDate)! > todayIso(appTimeZone())));
     assert.ok(tasks.some((t) => t.deliverableId) && tasks.some((t) => t.cost !== null));
+    // Curso: sesiones con fecha en la columna «Programa» y una de varios días (fecha de inicio).
+    const course = expectOk(await createProject("Curso", { exampleKey: "curso-master" }));
+    const program = await db.column.findFirstOrThrow({ where: { projectId: course.id, role: "PROGRAM" } });
+    const sessions = await db.task.findMany({ where: { columnId: program.id }, orderBy: { position: "asc" } });
+    assert.equal(sessions.length, 3);
+    assert.ok(sessions.every((t) => t.dueDate));
+    assert.ok(sessions.some((t) => t.startDate && t.dueDate && t.startDate < t.dueDate));
   });
 
   test("una persona en inglés recibe el ejemplo en inglés", async () => {

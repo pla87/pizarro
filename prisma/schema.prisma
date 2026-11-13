@@ -28,6 +28,8 @@ enum ColumnRole {
   ROUTINES
   DELIVERY
   BUDGET
+  /// Programa de un curso: cada tarea es una sesión; «Publicar programa (PDF)».
+  PROGRAM
 }
 
 /// Prioridad opcional de una tarea (campo opcional «prioridad» del proyecto).

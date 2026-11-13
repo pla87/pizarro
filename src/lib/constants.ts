@@ -9,7 +9,7 @@ export function kindBadgeStyle(color: string): CSSProperties {
 
 export const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
 
-export const COLUMN_ROLES = ["NONE", "NEXT_RELEASE", "IN_PRODUCTION", "WAITING", "WEEKLY_PLAN", "CHECKLIST", "REVIEW", "AGENDA", "ROUTINES", "DELIVERY", "BUDGET"] as const;
+export const COLUMN_ROLES = ["NONE", "NEXT_RELEASE", "IN_PRODUCTION", "WAITING", "WEEKLY_PLAN", "CHECKLIST", "REVIEW", "AGENDA", "ROUTINES", "DELIVERY", "BUDGET", "PROGRAM"] as const;
 export type ColumnRoleValue = (typeof COLUMN_ROLES)[number];
 
 /** Roles que solo puede tener una columna por proyecto (el resto de roles pueden repetirse). */
@@ -32,6 +32,23 @@ export const COLUMN_ROLE_LABEL: Record<ColumnRoleValue, string> = {
   ROUTINES: "Rutinas",
   DELIVERY: "Entrega al cliente",
   BUDGET: "Presupuesto (suma el coste)",
+  PROGRAM: "Programa del curso (PDF)",
+};
+
+/** Explicación de una línea de cada rol (se ve al pasar por encima en el menú de la columna). */
+export const COLUMN_ROLE_HINT: Record<ColumnRoleValue, string> = {
+  NONE: "Columna normal, sin funciones especiales.",
+  NEXT_RELEASE: "Sus tarjetas forman la siguiente release (botón «Generar Release»).",
+  IN_PRODUCTION: "Las tarjetas de una release publicada pasan aquí.",
+  WAITING: "Avisa a la persona asignada si una tarjeta lleva demasiados días aquí.",
+  WEEKLY_PLAN: "PDF de las tareas de la semana, por día o por persona.",
+  CHECKLIST: "Reúne las subtareas de todas sus tarjetas en una sola lista.",
+  REVIEW: "Avisa al sacar una tarjeta con subtareas sin marcar.",
+  AGENDA: "Exporta sus tareas con fecha a un calendario (.ics).",
+  ROUTINES: "Tareas que se repiten: elige dónde aparece la siguiente.",
+  DELIVERY: "PDF de resumen para el cliente, sin comentarios ni personas.",
+  BUDGET: "Suma el coste de sus tarjetas y activa el campo Coste.",
+  PROGRAM: "Cada tarjeta es una sesión del curso: publica el programa en PDF.",
 };
 
 const DEFAULT_COLUMNS: { name: string; nameEn: string; role: ColumnRoleValue; isDone: boolean }[] = [
