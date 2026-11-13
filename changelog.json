@@ -1,6 +1,81 @@
 {
   "versions": [
     {
+      "version": "1.53.0",
+      "date": "2026-11-13",
+      "releasedAt": "2026-11-13T20:04:41+01:00",
+      "summary": "Plantilla de curso con programa en PDF, aplicar plantilla a un proyecto, arrastrar la selección entera, Google Slides, HTML en Documentación y baja con Google",
+      "changes": {
+        "nuevas": [
+          "Plantilla «Curso o máster» y proyecto de ejemplo «Preparación de un curso»: columnas para ideas, materiales, ejercicios, exámenes, programa y seguimiento de alumnos, y tipos de tarea con un encargo listo para un agente de IA.",
+          "Columna con el rol «Programa del curso»: cada tarjeta es una sesión y «Publicar programa (PDF)» genera el programa del curso y lo guarda en Documentación.",
+          "«Aplicar plantilla» en Ajustes del proyecto: añadir lo que falte de una plantilla o cambiar a otra emparejando columnas y tipos, sin borrar nada con tareas y con deshacer durante 24 horas.",
+          "Arrastrar una tarjeta seleccionada mueve toda la selección, con un montón numerado, las demás atenuadas y el hueco «N tarjetas irán aquí»; también con Alt+flechas.",
+          "Google Slides junto a Docs y Sheets: «Nuevo Slides» y @slides en las tarjetas.",
+          "Documentación admite páginas HTML, que se ven en un marco aislado sin scripts ni contenido externo."
+        ],
+        "mejoras": [
+          "Borrar tu cuenta si entras con Google y no conoces tu contraseña: con el código de tu app, un código por email o volviendo a entrar con Google.",
+          "Al borrar una cuenta, sus proyectos privados sin más miembros pasan a ser de equipo (los ven los administradores), salvo que marques «Borrar también estos proyectos».",
+          "Cerrar «Generar release» con el texto cambiado pide confirmación.",
+          "«La reducción es correcta» confirma la copia que estás viendo; si ha llegado otra entretanto, avisa.",
+          "Duplicar con adjuntos avisa claramente si el disco del servidor está casi lleno.",
+          "El menú de la columna muestra el icono y una explicación de cada rol."
+        ],
+        "correcciones": [
+          "Los párrafos vacíos del editor con barra ya no salen como &nbsp; en las releases copiadas, .md y .txt.",
+          "Confirmar la reducción mientras se hace una copia ya no hace volver el aviso.",
+          "Al cambiar de plantilla, las tareas archivadas de una columna unida a otra se recuperan en la columna de destino.",
+          "El paso 2 de «Cambiar a esta plantilla» dice si un tipo general se ocultará o volverá a verse, como el resumen.",
+          "Los enlaces internos (#apartado) de un HTML en Documentación desplazan la vista previa en lugar de romperla.",
+          "«Borrar mi cuenta» solo ofrece las formas de confirmar que tiene el servidor y recargar tras volver de Google no reabre el diálogo.",
+          "El PDF del programa no repite el tipo en el título de cada sesión."
+        ],
+        "tecnicos": [
+          "Tiempo máximo de conexión a PostgreSQL por defecto de 20 s (DATABASE_CONNECT_TIMEOUT_MS).",
+          "El Markdown del PDF del programa se procesa en el proceso de PDF, no en el servidor web.",
+          "Limpieza de párrafos vacíos sin tiempo cuadrático con líneas largas de espacios.",
+          "El borrado de cuenta descarta el historial de deshacer y las exportaciones después de comprobar con el candado que se puede borrar."
+        ]
+      },
+      "en": {
+        "summary": "Course template with a PDF programme, apply a template to a project, drag the whole selection, Google Slides, HTML in Documentation and account deletion with Google",
+        "changes": {
+          "nuevas": [
+            "«Course or master's» template and «Course preparation» example project: columns for ideas, materials, exercises, exams, programme and student follow-up, and task types with a brief ready for an AI agent.",
+            "Column role «Course programme»: each card is a session and «Publish programme (PDF)» generates the course programme and saves it in Documentation.",
+            "«Apply template» in Project settings: add what's missing from a template or switch to another by matching columns and types, never deleting anything with tasks and with undo for 24 hours.",
+            "Dragging a selected card moves the whole selection, with a numbered stack, the others dimmed and the «N cards will go here» gap; also with Alt+arrows.",
+            "Google Slides alongside Docs and Sheets: «New Slides» and @slides on cards.",
+            "Documentation accepts HTML pages, shown in an isolated frame without scripts or external content."
+          ],
+          "mejoras": [
+            "Delete your account if you sign in with Google and don't know your password: with your app code, an email code or by signing in with Google again.",
+            "When an account is deleted, its private projects with no other members become team projects (visible to admins), unless you tick «Delete these projects too».",
+            "Closing «Generate release» with changed text asks for confirmation.",
+            "«The reduction is correct» confirms the copy you are looking at; if another one arrived meanwhile, it warns you.",
+            "Duplicating with attachments clearly warns if the server disk is almost full.",
+            "The column menu shows each role's icon and a one-line explanation."
+          ],
+          "correcciones": [
+            "Empty paragraphs from the toolbar editor no longer come out as &nbsp; in copied releases, .md and .txt.",
+            "Confirming the reduction while a backup is running no longer brings the warning back.",
+            "When switching templates, archived tasks from a column merged into another are restored to the target column.",
+            "Step 2 of «Switch to this template» says whether a general type will be hidden or shown again, like the summary.",
+            "Internal links (#section) in an HTML document in Documentation scroll the preview instead of breaking it.",
+            "«Delete my account» only offers the confirmation methods the server has, and reloading after returning from Google no longer reopens the dialog.",
+            "The programme PDF no longer repeats the type in each session title."
+          ],
+          "tecnicos": [
+            "Default PostgreSQL connection timeout of 20 s (DATABASE_CONNECT_TIMEOUT_MS).",
+            "The programme PDF's Markdown is processed in the PDF process, not the web server.",
+            "Empty-paragraph cleanup without quadratic time on long lines of spaces.",
+            "Account deletion discards undo history and exports after checking under the lock that it can be deleted."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.52.0",
       "date": "2026-11-13",
       "releasedAt": "2026-11-13T16:46:46+01:00",

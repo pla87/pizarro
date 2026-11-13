@@ -2,6 +2,45 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.53.0 — 2026-11-13 20:04
+
+Plantilla de curso con programa en PDF, aplicar plantilla a un proyecto, arrastrar la selección entera, Google Slides, HTML en Documentación y baja con Google
+
+### Nuevas funcionalidades
+
+- Plantilla «Curso o máster» y proyecto de ejemplo «Preparación de un curso»: columnas para ideas, materiales, ejercicios, exámenes, programa y seguimiento de alumnos, y tipos de tarea con un encargo listo para un agente de IA.
+- Columna con el rol «Programa del curso»: cada tarjeta es una sesión y «Publicar programa (PDF)» genera el programa del curso y lo guarda en Documentación.
+- «Aplicar plantilla» en Ajustes del proyecto: añadir lo que falte de una plantilla o cambiar a otra emparejando columnas y tipos, sin borrar nada con tareas y con deshacer durante 24 horas.
+- Arrastrar una tarjeta seleccionada mueve toda la selección, con un montón numerado, las demás atenuadas y el hueco «N tarjetas irán aquí»; también con Alt+flechas.
+- Google Slides junto a Docs y Sheets: «Nuevo Slides» y @slides en las tarjetas.
+- Documentación admite páginas HTML, que se ven en un marco aislado sin scripts ni contenido externo.
+
+### Mejoras
+
+- Borrar tu cuenta si entras con Google y no conoces tu contraseña: con el código de tu app, un código por email o volviendo a entrar con Google.
+- Al borrar una cuenta, sus proyectos privados sin más miembros pasan a ser de equipo (los ven los administradores), salvo que marques «Borrar también estos proyectos».
+- Cerrar «Generar release» con el texto cambiado pide confirmación.
+- «La reducción es correcta» confirma la copia que estás viendo; si ha llegado otra entretanto, avisa.
+- Duplicar con adjuntos avisa claramente si el disco del servidor está casi lleno.
+- El menú de la columna muestra el icono y una explicación de cada rol.
+
+### Correcciones
+
+- Los párrafos vacíos del editor con barra ya no salen como &nbsp; en las releases copiadas, .md y .txt.
+- Confirmar la reducción mientras se hace una copia ya no hace volver el aviso.
+- Al cambiar de plantilla, las tareas archivadas de una columna unida a otra se recuperan en la columna de destino.
+- El paso 2 de «Cambiar a esta plantilla» dice si un tipo general se ocultará o volverá a verse, como el resumen.
+- Los enlaces internos (#apartado) de un HTML en Documentación desplazan la vista previa en lugar de romperla.
+- «Borrar mi cuenta» solo ofrece las formas de confirmar que tiene el servidor y recargar tras volver de Google no reabre el diálogo.
+- El PDF del programa no repite el tipo en el título de cada sesión.
+
+### Cambios técnicos / DB
+
+- Tiempo máximo de conexión a PostgreSQL por defecto de 20 s (DATABASE_CONNECT_TIMEOUT_MS).
+- El Markdown del PDF del programa se procesa en el proceso de PDF, no en el servidor web.
+- Limpieza de párrafos vacíos sin tiempo cuadrático con líneas largas de espacios.
+- El borrado de cuenta descarta el historial de deshacer y las exportaciones después de comprobar con el candado que se puede borrar.
+
 ## v1.52.0 — 2026-11-13 16:46
 
 Repeticiones en el calendario, borrar tu cuenta, duplicar con adjuntos, releases con barra de formato, tableros grandes fluidos y textos más breves
