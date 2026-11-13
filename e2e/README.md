@@ -167,6 +167,8 @@ sección; a 390 px el asistente cabe. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r50-plantilla-e2e.mjs   # PART=add,replace,perm,mobile
+```
+
 ## Plantilla «Curso o máster» y «Publicar programa (PDF)»
 
 Crea un proyecto con la plantilla desde *Nuevo proyecto* (la sesión se abre como miembro y pasa a admin, como en el
