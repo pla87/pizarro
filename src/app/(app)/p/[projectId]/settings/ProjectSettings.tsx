@@ -14,6 +14,7 @@ import { localizeGeneralKind, localizeGeneralKinds } from "@/lib/kinds-localize"
 import { TaskFieldToggles } from "@/components/TaskFieldToggles";
 import { ColorPicker } from "@/components/ui/ColorPicker";
 import { cn } from "@/components/ui/cn";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { Modal } from "@/components/ui/Modal";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
@@ -69,13 +70,14 @@ const SHARE_MODE_LABEL: Record<GoogleShareMode, string> = {
   NONE: "No compartir (solo quien lo crea)",
 };
 
-function Section({ title, description, children, id }: { title: string; description?: string; children: React.ReactNode; id?: string }) {
+/** Tarjeta de una sección: título, una línea breve opcional y, si hace falta explicar más, una nota «i» (`tip`). */
+function Section({ title, description, tip, children, id }: { title: string; description?: string; tip?: React.ReactNode; children?: React.ReactNode; id?: string }) {
   const t = useT();
   return (
     <section id={id} className="card scroll-mt-4 p-5">
-      <h2 className="font-semibold">{t(title)}</h2>
+      <h2 className="flex items-center gap-1.5 font-semibold">{t(title)}{tip && <InfoTip topic={t(title)}>{tip}</InfoTip>}</h2>
       {description && <p className="mt-0.5 text-sm text-slate-500">{t(description)}</p>}
-      <div className="mt-4">{children}</div>
+      {children && <div className="mt-4">{children}</div>}
     </section>
   );
 }
@@ -145,13 +147,13 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
       )}
 
       {!isAdmin && isPrivateProject && (
-        <Section title="Visibilidad" description="Proyecto privado: solo lo ven sus miembros, tampoco los administradores. Cualquier miembro puede añadir o quitar miembros.">
+        <Section title="Visibilidad" description="Privado: solo lo ven sus miembros (tampoco los administradores). Cualquiera de ellos añade o quita miembros.">
           <MemberManager projectId={project.id} currentUserId={currentUserId} members={project.members} users={users} isPrivate />
         </Section>
       )}
 
       {isAdmin && (
-        <Section title="Visibilidad" description="Equipo: lo ven los usuarios asignados y todos los administradores. Privado: solo sus miembros.">
+        <Section title="Visibilidad">
           <div className="space-y-2">
             <label className="flex items-start gap-2 text-sm">
               <input type="radio" className="mt-1" checked={visibility === "TEAM"} onChange={() => setVisibility("TEAM")} />
@@ -166,15 +168,17 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
               <EyeOff size={15} className="mt-0.5 shrink-0" />
               <span>
                 {t("Privado: solo sus miembros")}
-                <span className="block text-xs text-slate-500">{t("Solo los miembros lo ven y pueden entrar, tampoco los administradores. Las personas asignadas pasan a ser miembros, y tú también.")}</span>
+                <span className="block text-xs text-slate-500">{t("Tampoco los administradores. Las personas asignadas y tú pasáis a ser miembros.")}</span>
               </span>
             </label>
           </div>
           {visibility === project.visibility && (
             <div className="mt-3">
-              <div className="mb-1 text-xs font-medium text-slate-500">{isPrivateProject ? t("Miembros") : t("Usuarios asignados")}</div>
+              <div className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-500">
+                {isPrivateProject ? t("Miembros") : t("Usuarios asignados")}
+                {!isPrivateProject && <InfoTip topic={t("Usuarios asignados")}>{t("Los administradores ven todos los proyectos de equipo; eligen en su perfil en cuáles trabajan.")}</InfoTip>}
+              </div>
               <MemberManager projectId={project.id} currentUserId={currentUserId} members={project.members} users={isPrivateProject ? users : users.filter((u) => u.role !== "ADMIN")} isPrivate={isPrivateProject} />
-              {!isPrivateProject && <p className="mt-2 text-xs text-slate-500">{t("Los administradores ven todos los proyectos de equipo; eligen en su perfil en cuáles trabajan.")}</p>}
             </div>
           )}
           {visibility !== project.visibility && (
@@ -193,7 +197,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
       )}
 
       {canManage && google.enabled && (
-        <Section title="Documentos de Google" description="Con quién se comparten los Docs y Sheets que se crean desde las tareas de este proyecto.">
+        <Section title="Documentos de Google" description="Con quién se comparten los Docs y Sheets creados desde las tareas." tip={t("Si el documento no se puede compartir, se crea igualmente y se avisa en la tarea de que solo lo ve quien lo crea.")}>
           <form
             className="space-y-2"
             onSubmit={(e) => {
@@ -211,22 +215,21 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
                 </label>
               );
             })}
-            {!google.domain && <p className="text-xs text-slate-500">{t("Las opciones de dominio no están disponibles: falta el dominio de Workspace en Administración → Ajustes → Acceso con Google.")}</p>}
+            {!google.domain && <p className="text-xs text-slate-500">{t("Sin opciones de dominio: falta el dominio de Workspace (Administración → Ajustes → Acceso con Google).")}</p>}
             {isPrivateProject && <p className="text-xs text-slate-500">{t("Un proyecto privado nunca se comparte con todo el dominio.")}</p>}
-            <p className="text-xs text-slate-500">{t("Si el documento no se puede compartir, se crea igualmente y se avisa en la tarea de que solo lo ve quien lo crea.")}</p>
             <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
           </form>
         </Section>
       )}
 
       {canManage && (
-        <Section title="Exportar proyecto" description="Un archivo .pizarro.zip con todo el proyecto, para guardarlo o importarlo en otra instalación.">
+        <Section title="Exportar proyecto" description="Todo el proyecto en un .pizarro.zip, como copia o para otra instalación.">
           <ExportProject projectId={project.id} />
         </Section>
       )}
 
       {canManage && (
-        <Section title="Borrar proyecto" description="Borra el proyecto con todas sus columnas, tarjetas, adjuntos y releases. No se puede deshacer.">
+        <Section title="Borrar proyecto" description="Con sus columnas, tarjetas, adjuntos y releases. No se puede deshacer.">
           <p className="mb-2 text-sm">
             {t("Escribe")} <strong className="break-all font-mono">{project.name}</strong> {t("para confirmar")}
           </p>
@@ -254,7 +257,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
       {tab === "tablero" && (
         <>
       {canManage && (
-        <Section title="Campos opcionales de las tareas" description="Activa solo los datos que necesita este proyecto. Al desactivar un campo se oculta, pero los datos de las tareas se conservan.">
+        <Section title="Campos opcionales de las tareas" description="Desactivar un campo lo oculta; los datos se conservan.">
           <TaskFieldToggles
             value={taskFields}
             onChange={setTaskFieldsDraft}
@@ -283,14 +286,15 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
       <Section
         id="kinds"
         title="Tipos de tarea"
-        description="Elige qué tipos generales usa este proyecto y crea tipos propios. En los selectores y en las releases van primero los generales y después los propios."
+        description="Los generales que usa el proyecto y los propios."
+        tip={t("En los selectores y en las releases van primero los generales y después los propios.")}
       >
         <GeneralKinds projectId={project.id} generalKinds={generalKinds} projectKinds={kinds} />
         <div className="mt-4 mb-2 text-xs font-medium text-slate-500">{t("Tipos propios del proyecto")}</div>
         <KindsManager kinds={kinds} projectId={project.id} otherKinds={localizeGeneralKinds(generalKinds.filter((k) => k.enabled), uiLocale)} embedded editorMode={editorMode} />
       </Section>
 
-      <Section id="labels" title="Etiquetas" description="Etiquetas propias de este proyecto para clasificar tarjetas.">
+      <Section id="labels" title="Etiquetas" description="Para clasificar las tarjetas de este proyecto.">
         <ul className="space-y-1.5">
           {labels.map((l) => (
             <LabelRow
@@ -305,15 +309,16 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
         <NewLabel projectId={project.id} onCreated={(l) => setLabels((ls) => [...ls, l].sort((a, b) => a.name.localeCompare(b.name)))} />
       </Section>
 
-      <Section title="Columnas" description="Las columnas se crean, renombran, reordenan, cambian de rol y borran (si están vacías) desde el menú «⋯» de cada columna en el tablero." >
-        <p className="text-sm text-slate-500">
-          {t("El rol")} <strong>{t("Siguiente salto")}</strong> {t("muestra el botón «Generar Release»; el rol")} <strong>{t("En producción")}</strong> {t("es el destino de las tarjetas al marcar una release como desplegada.")}
-        </p>
-      </Section>
+      <Section
+        title="Columnas"
+        description="Se gestionan desde el menú «⋯» de cada columna en el tablero."
+        tip={<>
+          {t("Ahí se crean, renombran, reordenan, cambian de rol y borran (si están vacías).")}{" "}
+          {t("El rol «Siguiente salto» muestra el botón «Generar Release»; el rol «En producción» es el destino de las tarjetas al marcar una release como desplegada.")}
+        </>}
+      />
 
-      <Section title="Tarjetas archivadas">
-        <p className="text-sm text-slate-500">{t("Las tarjetas archivadas se consultan y recuperan desde el botón «Archivadas» del tablero.")}</p>
-      </Section>
+      <Section title="Tarjetas archivadas" description="Se consultan y recuperan desde el botón «Archivadas» del tablero." />
 
         </>
       )}
@@ -322,7 +327,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
         <>
       {canManage && storageSection}
       {canManage && (
-        <Section title="Tamaños máximos" description="Límites de los adjuntos de las tareas y de los paquetes ZIP al generar o descargar una release.">
+        <Section title="Tamaños máximos">
           <form
             className="space-y-3"
             onSubmit={(e) => {
@@ -344,28 +349,34 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
             }}
           >
             <div>
-              <label className="label" htmlFor="p-file-mb">{t("Tamaño máximo de un adjunto (MB)")}</label>
+              <LimitLabel htmlFor="p-file-mb" label={t("Tamaño máximo de un adjunto (MB)")}>
+                {t("Nunca más que el máximo por tarea ni que el ZIP de una release. Cada archivo se carga entero en la memoria del servidor al subirlo: no lo subas más de lo necesario.")}
+              </LimitLabel>
               <input
                 id="p-file-mb" className="input w-32" type="number" inputMode="numeric" step={1}
                 min={FILE_MAX_MIN_MB} max={FILE_MAX_MAX_MB} value={fileMb} onChange={(e) => setFileMb(e.target.value)} required
               />
-              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto {default}), y nunca más que el máximo de adjuntos de una tarea ni que el paquete ZIP de una release. Cada archivo se carga entero en la memoria del servidor al subirlo: no lo subas más de lo necesario.", { min: FILE_MAX_MIN_MB, max: FILE_MAX_MAX_MB, default: FILE_MAX_DEFAULT_MB })}</p>
+              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto {default}).", { min: FILE_MAX_MIN_MB, max: FILE_MAX_MAX_MB, default: FILE_MAX_DEFAULT_MB })}</p>
             </div>
             <div>
-              <label className="label" htmlFor="p-task-mb">{t("Tamaño máximo de los adjuntos de una tarea (MB)")}</label>
+              <LimitLabel htmlFor="p-task-mb" label={t("Tamaño máximo de los adjuntos de una tarea (MB)")}>
+                {t("Lo que pueden sumar todos los adjuntos de una tarea. Nunca menos que el máximo de un adjunto; puede superar el ZIP de una release, porque los adjuntos de una tarea se reparten en varios paquetes.")}
+              </LimitLabel>
               <input
                 id="p-task-mb" className="input w-32" type="number" inputMode="numeric" step={1}
                 min={RELEASE_ZIP_MIN_MB} max={RELEASE_ZIP_MAX_MB} value={taskMb} onChange={(e) => setTaskMb(e.target.value)} required
               />
-              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto 80), y nunca menos que el máximo de un adjunto. Es lo máximo que pueden sumar todos los adjuntos de una tarea; puede superar el tamaño del paquete ZIP, porque los adjuntos de una tarea se pueden repartir en varios paquetes.", { min: RELEASE_ZIP_MIN_MB, max: RELEASE_ZIP_MAX_MB })}</p>
+              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto {default}).", { min: RELEASE_ZIP_MIN_MB, max: RELEASE_ZIP_MAX_MB, default: 80 })}</p>
             </div>
             <div>
-              <label className="label" htmlFor="p-zip-mb">{t("Tamaño máximo de cada paquete ZIP de una release (MB)")}</label>
+              <LimitLabel htmlFor="p-zip-mb" label={t("Tamaño máximo de cada paquete ZIP de una release (MB)")}>
+                {t("Si los adjuntos de una release lo superan, se descargan en varios ZIP (los de una misma tarea pueden quedar en paquetes distintos). Nunca menos que el máximo de un adjunto. Cada ZIP se arma en la memoria del servidor: súbelo solo si hace falta.")}
+              </LimitLabel>
               <input
                 id="p-zip-mb" className="input w-32" type="number" inputMode="numeric" step={1}
                 min={RELEASE_ZIP_MIN_MB} max={RELEASE_ZIP_MAX_MB} value={zipMb} onChange={(e) => setZipMb(e.target.value)} required
               />
-              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto 80), y nunca menos que el máximo de un adjunto. Si los adjuntos de una release superan este tamaño, se descargan en varios ZIP de hasta ese tamaño (los de una misma tarea pueden quedar en paquetes distintos); cada ZIP se arma en memoria del servidor: súbelo solo si hace falta.", { min: RELEASE_ZIP_MIN_MB, max: RELEASE_ZIP_MAX_MB })}</p>
+              <p className="mt-1 text-xs text-slate-500">{t("Entre {min} y {max} MB (por defecto {default}).", { min: RELEASE_ZIP_MIN_MB, max: RELEASE_ZIP_MAX_MB, default: 80 })}</p>
             </div>
             <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
           </form>
@@ -377,7 +388,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
 
       {tab === "releases" && (
         <>
-        <Section id="plantillas" title="Plantillas de release notes del proyecto" description="Cabeceras y pies compartidos por todo el equipo. En «Generar release» salen después de las plantillas de cada persona, en este orden, bajo «Del proyecto». Admiten Markdown.">
+        <Section id="plantillas" title="Plantillas de release notes del proyecto" description="Cabeceras y pies para todo el equipo. Admiten Markdown." tip={t("En «Generar release» salen bajo «Del proyecto», después de las plantillas de cada persona y en este orden.")}>
           <ReleaseTemplateList editorMode={editorMode} showDefault={false} actions={PROJECT_TEMPLATE_ACTIONS(project.id)} kind="HEADER" title={t("Cabeceras")} initial={releaseTemplates.headers} placeholder={t("Ej.: instrucciones de contexto para una IA.\n\n> Resume estos cambios para el equipo de negocio.")} />
           <ReleaseTemplateList editorMode={editorMode} showDefault={false} actions={PROJECT_TEMPLATE_ACTIONS(project.id)} kind="FOOTER" title={t("Pies")} initial={releaseTemplates.footers} placeholder={t("Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción")} />
         </Section>
@@ -391,6 +402,16 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
 
         </>
       )}
+    </div>
+  );
+}
+
+/** Etiqueta de un campo con su nota «i» al lado (la nota no puede ir dentro del <label>). */
+function LimitLabel({ htmlFor, label, children }: { htmlFor: string; label: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-1 flex items-center gap-1">
+      <label className="label mb-0" htmlFor={htmlFor}>{label}</label>
+      <InfoTip topic={label}>{children}</InfoTip>
     </div>
   );
 }

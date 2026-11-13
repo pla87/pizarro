@@ -23,6 +23,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Cabecera y atajos (caza de bugs 48a) | `e2e/bh48a-e2e.mjs` | 42 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) | `e2e/bh48b-e2e.mjs` | 120 | ~3 min |
 | Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/bh48c-e2e.mjs` | 44 | ~1 min |
+| Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/r49-ui-e2e.mjs` | 34 | ~1 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
@@ -83,6 +84,18 @@ aviso 99+ en móvil, ayuda de atajos y borrar un proyecto con espacios dobles. M
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48a-e2e.mjs
+```
+
+## Carga de proyecto y «Adjuntos y límites» (ronda 49)
+
+El indicador de carga de las páginas de proyecto (respuestas lentas simuladas: el contorno del logo aparece pasados
+~200 ms, la región viva dice «Cargando…», ocupa el hueco de la página sin mover la barra lateral, y con movimiento
+reducido queda quieto y tenue) y los botones de limpieza de *Ajustes del proyecto → Adjuntos y límites*: desactivados y
+con la tarjeta atenuada sin nada que borrar (también según el filtro de antigüedad), activos con ficheros, y la nota «i».
+Crea y borra su propio proyecto privado. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-ui-e2e.mjs   # PART=load,storage
 ```
 
 ## Comentarios a la vez, red lenta, dos pestañas y release renombrada (caza de bugs 48c)

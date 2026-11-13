@@ -2,10 +2,11 @@
 
 import { Archive, FileText, HardDrive, Image as ImageIcon, Loader2, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { deleteStorageItem, previewStorageCleanup, refreshProjectStorage, runStorageCleanup, setProjectStorageQuota } from "@/actions/storage";
 import { cn } from "@/components/ui/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatQuotaMb, formatSize } from "@/lib/format-size";
@@ -28,6 +29,8 @@ export function StorageSection({ projectId, isAdmin, initial, initialLargest }: 
   const [releaseDays, setReleaseDays] = useState(90);
   const [quotaText, setQuotaText] = useState(storage.override === null ? "" : String(storage.override));
   const [busy, setBusy] = useState<string | null>(null);
+  // Ficheros que borraría cada limpieza con el filtro elegido (null = aún no se sabe): sin nada, el botón no haría nada.
+  const [matching, setMatching] = useState<{ oldReleases: number | null; archivedTasks: number | null }>({ oldReleases: null, archivedTasks: null });
 
   const fmt = (n: number) => formatSize(n, locale);
   const files = (n: number) => (n === 1 ? t("1 fichero") : t("{n} ficheros", { n }));
@@ -42,11 +45,29 @@ export function StorageSection({ projectId, isAdmin, initial, initialLargest }: 
     setLargest(res.data.largest);
   };
 
+  // Con la antigüedad elegida: ¿hay algo que borrar? (la misma consulta que el diálogo de confirmación).
+  const releasesTotal = storage.releases.count;
+  const archivedTotal = storage.taskArchived.count;
+  useEffect(() => {
+    let alive = true;
+    const count = async (kind: Kind, days: number, total: number) => {
+      if (total === 0) return 0;
+      const res = await previewStorageCleanup(projectId, kind, days).catch(() => null);
+      return res?.ok ? res.data.count : null;
+    };
+    void Promise.all([count("oldReleases", releaseDays, releasesTotal), count("archivedTasks", archivedDays, archivedTotal)]).then(([oldReleases, archivedTasks]) => {
+      if (alive) setMatching({ oldReleases, archivedTasks });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [projectId, releaseDays, archivedDays, releasesTotal, archivedTotal]);
+
   const sourceText: Record<QuotaSource, string> = {
-    project: t("Cuota propia de este proyecto."),
-    env: t("La cuota general, fijada por el servidor (UPLOAD_QUOTA_MB_PER_PROJECT)."),
-    app: t("La cuota general de la instalación."),
-    default: t("La cuota general por defecto (10 GB)."),
+    project: t("Cuota propia del proyecto"),
+    env: t("Cuota general del servidor"),
+    app: t("Cuota general"),
+    default: t("Cuota general por defecto"),
     none: "",
   };
 
@@ -126,13 +147,17 @@ export function StorageSection({ projectId, isAdmin, initial, initialLargest }: 
   // Los mismos topes que el servidor: un número imposible (99999999999999) se marca aquí, no al guardar.
   const quotaValid = quotaMbValid(quotaText);
   const days = (n: number) => (n === 0 ? t("todas") : t("de más de {n} días", { n }));
+  // Tarjeta atenuada y botón desactivado cuando no hay nada que borrar (con el filtro elegido).
+  const emptyRel = releasesTotal === 0 || matching.oldReleases === 0;
+  const emptyArch = archivedTotal === 0 || matching.archivedTasks === 0;
+  const emptyTrash = storage.documentsTrash.count === 0;
 
   return (
     <section id="almacenamiento" className="card scroll-mt-4 space-y-5 p-5">
-      <div>
-        <h2 className="flex items-center gap-2 font-semibold"><HardDrive size={16} aria-hidden /> {t("Almacenamiento")}</h2>
-        <p className="mt-0.5 text-sm text-slate-500">{t("Lo que ocupan los ficheros del proyecto (adjuntos de tareas, copias de las releases y documentación, papelera incluida) frente a su cuota. Las miniaturas no cuentan.")}</p>
-      </div>
+      <h2 className="flex items-center gap-2 font-semibold">
+        <HardDrive size={16} aria-hidden /> {t("Almacenamiento")}
+        <InfoTip topic={t("Almacenamiento")}>{t("Cuentan los adjuntos de las tareas, las copias de las releases y la documentación, papelera incluida. Las miniaturas no.")}</InfoTip>
+      </h2>
 
       <div>
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -140,7 +165,12 @@ export function StorageSection({ projectId, isAdmin, initial, initialLargest }: 
             {quotaBytes === null ? t("{used} usados · sin límite", { used: fmt(storage.usedBytes) }) : t("{used} de {quota} usados", { used: fmt(storage.usedBytes), quota: formatQuotaMb(storage.quotaMb!, locale) })}
             {pct !== null && <span className={cn("ml-2 text-xs", over ? "text-red-600" : "text-slate-500")}>{pct} %</span>}
           </p>
-          <p className="text-xs text-slate-500">{storage.quotaMb === null ? t("Sin cuota: no hay límite de almacenamiento.") : sourceText[storage.quotaSource]}</p>
+          {storage.quotaMb !== null && (
+            <p className="flex items-center gap-1 text-xs text-slate-500">
+              {sourceText[storage.quotaSource]}
+              {storage.quotaSource === "env" && <InfoTip topic={t("Cuota general del servidor")}>{t("La fija la variable UPLOAD_QUOTA_MB_PER_PROJECT del servidor.")}</InfoTip>}
+            </p>
+          )}
         </div>
         {quotaBytes !== null && (
           <div
@@ -150,7 +180,7 @@ export function StorageSection({ projectId, isAdmin, initial, initialLargest }: 
             <div className={cn("h-full rounded-full transition-[width]", over ? "bg-red-500" : pct! >= 80 ? "bg-amber-500" : "bg-brand-600")} style={{ width: `${Math.max(pct!, storage.usedBytes > 0 ? 1 : 0)}%` }} />
           </div>
         )}
-        {over && <p className="mt-2 text-sm text-red-600" role="status">{t("El proyecto ha llegado a su cuota: no admite más ficheros hasta que liberes espacio o se amplíe.")}</p>}
+        {over && <p className="mt-2 text-sm text-red-600" role="status">{t("Cuota llena: no se admiten más ficheros hasta liberar espacio o ampliarla.")}</p>}
       </div>
 
       <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 text-sm dark:divide-slate-800 dark:border-slate-700">
@@ -170,7 +200,10 @@ export function StorageSection({ projectId, isAdmin, initial, initialLargest }: 
             if (quotaValid) saveQuota(quotaNumber);
           }}
         >
-          <label className="label" htmlFor="p-storage-quota">{t("Cuota de almacenamiento del proyecto (MB)")}</label>
+          <div className="flex items-center gap-1">
+            <label className="label mb-0" htmlFor="p-storage-quota">{t("Cuota de almacenamiento del proyecto (MB)")}</label>
+            <InfoTip topic={t("Cuota de almacenamiento del proyecto (MB)")}>{t("Vacía, se usa la general (Administración → Ajustes → Almacenamiento). Si la pones, manda sobre la general. Solo la cambian los administradores.")}</InfoTip>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <input
               id="p-storage-quota" className="input w-36" type="number" inputMode="numeric" step={1} min={QUOTA_MIN_MB} max={QUOTA_MAX_MB}
@@ -180,27 +213,31 @@ export function StorageSection({ projectId, isAdmin, initial, initialLargest }: 
             <button type="button" className="btn-secondary py-1.5" disabled={pending || storage.override === null} onClick={() => saveQuota(null)}>{t("Usar la general")}</button>
           </div>
           {quotaText.trim() !== "" && !quotaValid && <p className="text-xs text-red-600" role="alert">{t("Debe ser un número entero de MB, entre {min} y {max}.", { min: QUOTA_MIN_MB, max: QUOTA_MAX_MB.toLocaleString(locale) })}</p>}
-          <p className="text-xs text-slate-500">{t("Vacío = la cuota general (Administración → Ajustes → Almacenamiento). Una cuota propia manda sobre la general. Solo los administradores pueden cambiarla.")}</p>
         </form>
       )}
 
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold">{t("Liberar espacio")}</h3>
-        <p className="text-xs text-slate-500">{t("Borran los ficheros del servidor para siempre. Antes de borrar se muestra qué se borrará y cuánto espacio se libera.")}</p>
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+          {t("Liberar espacio")}
+          <InfoTip topic={t("Liberar espacio")}>{t("Borra los ficheros del servidor para siempre. Antes muestra qué se borrará y cuánto espacio se libera.")}</InfoTip>
+        </h3>
 
-        <div className="flex flex-wrap items-end gap-2 rounded-lg border-2 border-brand-500/60 p-3">
+        <div className={cn("flex flex-wrap items-end gap-2 rounded-lg p-3", emptyRel ? "border border-slate-200 opacity-60 dark:border-slate-700" : "border-2 border-brand-500/60")} data-cleanup="oldReleases" data-empty={emptyRel || undefined}>
           <div className="min-w-0 flex-1 basis-60">
-            <p className="flex items-center gap-1.5 text-sm font-medium"><ImageIcon size={14} aria-hidden /> {t("Adjuntos de releases antiguas")}</p>
-            <p className="text-xs text-slate-500">{t("Cada release guarda una copia de los adjuntos de sus tareas, que ocupa espacio además de los originales (suele ser lo que más pesa). Quita esas copias; el texto de la release se conserva.")}</p>
+            <p className="flex items-center gap-1.5 text-sm font-medium">
+              <ImageIcon size={14} aria-hidden /> {t("Adjuntos de releases antiguas")}
+              <InfoTip topic={t("Adjuntos de releases antiguas")}>{t("Cada release guarda una copia de los adjuntos de sus tareas, además de los originales. Suele ser lo que más ocupa.")}</InfoTip>
+            </p>
+            <p className="text-xs text-slate-500">{t("Quita esas copias; el texto de la release se conserva.")}</p>
           </div>
           <label className="text-xs text-slate-500">
             {t("Releases")}
-            <select className="input ml-1 w-auto py-1" value={releaseDays} onChange={(e) => setReleaseDays(Number(e.target.value))} aria-label={t("Antigüedad de las releases")}>
+            <select className="input ml-1 w-auto py-1" disabled={releasesTotal === 0} value={releaseDays} onChange={(e) => setReleaseDays(Number(e.target.value))} aria-label={t("Antigüedad de las releases")}>
               {[7, 15, 30, 90, 180, 365].map((n) => <option key={n} value={n}>{days(n)}</option>)}
             </select>
           </label>
           <button
-            className="btn-secondary py-1.5" disabled={busy !== null}
+            className="btn-secondary py-1.5" disabled={busy !== null || emptyRel}
             onClick={() => cleanup("oldReleases", releaseDays, {
               title: t("Borrar adjuntos de releases antiguas"), confirmLabel: t("Borrar adjuntos"),
               what: t("los adjuntos de las releases de hace más de {n} días", { n: releaseDays }),
@@ -210,19 +247,19 @@ export function StorageSection({ projectId, isAdmin, initial, initialLargest }: 
           </button>
         </div>
 
-        <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+        <div className={cn("flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700", emptyArch && "opacity-60")} data-cleanup="archivedTasks" data-empty={emptyArch || undefined}>
           <div className="min-w-0 flex-1 basis-60">
             <p className="flex items-center gap-1.5 text-sm font-medium"><Archive size={14} aria-hidden /> {t("Adjuntos de tareas archivadas")}</p>
-            <p className="text-xs text-slate-500">{t("Quita los adjuntos pero deja las tareas archivadas con su texto y comentarios.")}</p>
+            <p className="text-xs text-slate-500">{t("Las tareas conservan su texto y comentarios.")}</p>
           </div>
           <label className="text-xs text-slate-500">
             {t("Archivadas")}
-            <select className="input ml-1 w-auto py-1" value={archivedDays} onChange={(e) => setArchivedDays(Number(e.target.value))} aria-label={t("Antigüedad de las tareas archivadas")}>
+            <select className="input ml-1 w-auto py-1" disabled={archivedTotal === 0} value={archivedDays} onChange={(e) => setArchivedDays(Number(e.target.value))} aria-label={t("Antigüedad de las tareas archivadas")}>
               {[0, 7, 15, 30, 90, 365].map((n) => <option key={n} value={n}>{days(n)}</option>)}
             </select>
           </label>
           <button
-            className="btn-secondary py-1.5" disabled={busy !== null}
+            className="btn-secondary py-1.5" disabled={busy !== null || emptyArch}
             onClick={() => cleanup("archivedTasks", archivedDays, {
               title: t("Borrar adjuntos de tareas archivadas"), confirmLabel: t("Borrar adjuntos"),
               what: archivedDays === 0 ? t("los adjuntos de las tareas archivadas") : t("los adjuntos de las tareas archivadas hace más de {n} días", { n: archivedDays }),
@@ -232,13 +269,13 @@ export function StorageSection({ projectId, isAdmin, initial, initialLargest }: 
           </button>
         </div>
 
-        <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+        <div className={cn("flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700", emptyTrash && "opacity-60")} data-cleanup="documentsTrash" data-empty={emptyTrash || undefined}>
           <div className="min-w-0 flex-1 basis-60">
             <p className="flex items-center gap-1.5 text-sm font-medium"><FileText size={14} aria-hidden /> {t("Papelera de documentación")}</p>
-            <p className="text-xs text-slate-500">{t("Los documentos borrados siguen ocupando espacio hasta que se purgan (7 días) o los vacías aquí.")}</p>
+            <p className="text-xs text-slate-500">{t("Ocupa espacio hasta que se vacía sola, a los 7 días.")}</p>
           </div>
           <button
-            className="btn-secondary py-1.5" disabled={busy !== null}
+            className="btn-secondary py-1.5" disabled={busy !== null || emptyTrash}
             onClick={() => cleanup("documentsTrash", 0, { title: t("Vaciar la papelera de documentación"), confirmLabel: t("Vaciar papelera"), what: t("los documentos de la papelera") })}
           >
             {busy === "documentsTrash" ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />} {t("Vaciar la papelera de documentación")}

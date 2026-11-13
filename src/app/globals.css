@@ -427,3 +427,57 @@ body {
     animation-timing-function: steps(2, jump-none);
   }
 }
+
+/*
+ * Carga de una página de proyecto (ProjectLoading.tsx): el contorno del logo se dibuja y se borra en bucle.
+ * Invisible los primeros 200 ms (las cargas rápidas no parpadean). Con movimiento reducido: quieto y tenue.
+ */
+@keyframes project-loader-in {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes project-loader-draw {
+  0% {
+    stroke-dashoffset: 1;
+  }
+  45%,
+  65% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -1;
+  }
+}
+.project-loader {
+  opacity: 0;
+  animation: project-loader-in 250ms ease-out 200ms forwards;
+}
+.project-loader path {
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 1;
+  animation: project-loader-draw 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+.project-loader path:nth-child(2) {
+  animation-delay: 0.12s;
+}
+.project-loader path:nth-child(3) {
+  animation-delay: 0.24s;
+}
+.project-loader path:nth-child(4) {
+  animation-delay: 0.36s;
+}
+@keyframes project-loader-in-still {
+  to {
+    opacity: 0.5;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .project-loader {
+    animation: project-loader-in-still 1ms linear 200ms forwards;
+  }
+  .project-loader path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}

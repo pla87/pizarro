@@ -31,7 +31,6 @@ export const proyectos: Record<string, string> = {
   "Proyectos": "Projects",
   "Equipo": "Team",
   "Los usuarios asignados y todos los administradores.": "Assigned users and all administrators.",
-  "Equipo: lo ven los usuarios asignados y todos los administradores. Privado: solo sus miembros.": "Team: visible to assigned users and all administrators. Private: only its members.",
   "Miembros": "Members",
   "Usuarios asignados": "Assigned users",
   "Los administradores ven todos los proyectos de equipo; eligen en su perfil en cuáles trabajan.": "Administrators see all team projects; they choose which ones they work on (in their profile, or here by clicking their name).",
@@ -43,7 +42,7 @@ export const proyectos: Record<string, string> = {
   "Los administradores ven todos los proyectos de equipo: lo eligen en su perfil.": "Administrators see all team projects: they choose theirs in their profile.",
   // Exportar e importar un proyecto (.pizarro.zip)
   "Exportar proyecto": "Export project",
-  "Un archivo .pizarro.zip con todo el proyecto, para guardarlo o importarlo en otra instalación.": "A .pizarro.zip file with the whole project, to keep it or import it into another installation.",
+  "Todo el proyecto en un .pizarro.zip, como copia o para otra instalación.": "The whole project in a .pizarro.zip, as a backup or for another installation.",
   "Descarga el proyecto entero en un archivo .pizarro.zip. Sirve de copia de seguridad o para llevarlo a otra instalación de Pizarro (Nuevo proyecto → «Importar desde un archivo…»).": "Downloads the whole project as a .pizarro.zip file. Use it as a backup or to move it to another Pizarro installation (New project → “Import from a file…”).",
   "Adjuntos": "Attachments",
   "Con adjuntos": "With attachments",
