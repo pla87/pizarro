@@ -349,8 +349,9 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">{t("Tareas incluidas")}</span>
             <div className="flex gap-1">
-              <button className="btn-ghost py-1 text-xs" onClick={() => { selectionTouched.current = true; setChosen(new Set(tasks.map((t) => t.id))); }}>{t("Todas")}</button>
-              <button className="btn-ghost py-1 text-xs" onClick={() => { selectionTouched.current = true; setChosen(new Set()); }}>{t("Ninguna")}</button>
+              {/* Sin efecto posible (ya están todas o ninguna), el botón queda desactivado. */}
+              <button className="btn-ghost py-1 text-xs" disabled={tasks.every((task) => chosen.has(task.id))} onClick={() => { selectionTouched.current = true; setChosen(new Set(tasks.map((t) => t.id))); }}>{t("Todas")}</button>
+              <button className="btn-ghost py-1 text-xs" disabled={!tasks.some((task) => chosen.has(task.id))} onClick={() => { selectionTouched.current = true; setChosen(new Set()); }}>{t("Ninguna")}</button>
             </div>
           </div>
           <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">

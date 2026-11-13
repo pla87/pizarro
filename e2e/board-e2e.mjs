@@ -1565,7 +1565,7 @@ if (only.includes("acc")) {
   let d = await subscribe();
   L.eq("ACC calendario: sin responsables, «Todas las de mis proyectos» por defecto (antes «Solo las mías»: vacío)", [await all(d).isChecked(), await mine(d).isChecked()], [true, false]);
   const described = async (radio) => c.page.locator(`#${await radio.getAttribute("aria-describedby")}`).innerText();
-  L.check("ACC calendario: cada opción explica qué incluye (y es su descripción)", /sin responsable no salen/.test(await described(mine(d))) && /tengan responsable o no/.test(await described(all(d))));
+  L.check("ACC calendario: cada opción explica qué incluye (y es su descripción)", /no tienen responsable no salen/.test(await described(mine(d))) && /con o sin responsable/.test(await described(all(d))));
   // Con casi todas asignadas (equipo), «Solo las mías».
   await L.q(`UPDATE "Task" SET "assigneeId"=$1`, [me.id]);
   d = await subscribe();

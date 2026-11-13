@@ -3,14 +3,10 @@ export const setup: Record<string, string> = {
   "Paso {n} de {total}": "Step {n} of {total}",
   "Configurar Pizarro": "Set up Pizarro",
   // Paso 1: dónde está el código según cómo se arrancó el servidor (setupCodeSource)
-  "Para asegurarnos de que eres quien instala el servidor, escribe el código de configuración que te dio el instalador o que aparece en el log del contenedor (docker compose logs app).":
-    "To make sure you are the person installing the server, enter the setup code given by the installer or shown in the container log (docker compose logs app).",
-  "Para asegurarnos de que eres quien instala el servidor, escribe el código de configuración que aparece en la terminal donde ejecutaste npm start.":
-    "To make sure you are the person installing the server, enter the setup code shown in the terminal where you ran npm start.",
-  "Para asegurarnos de que eres quien instala el servidor, escribe el código de configuración que aparece en los logs de Railway (servicio de la app → Deployments → View logs).":
-    "To make sure you are the person installing the server, enter the setup code shown in the Railway logs (app service → Deployments → View logs).",
-  "Para asegurarnos de que eres quien instala el servidor, escribe el código de configuración que aparece en el log del servidor: con Docker, docker compose logs app; con npm start, la terminal; en Railway, los logs del despliegue.":
-    "To make sure you are the person installing the server, enter the setup code shown in the server log: with Docker, docker compose logs app; with npm start, the terminal; on Railway, the deployment logs.",
+  "Escribe el código de configuración que te dio el instalador o que aparece en el log del contenedor (docker compose logs app).": "Enter the setup code given by the installer or shown in the container log (docker compose logs app).",
+  "Escribe el código de configuración que aparece en la terminal donde ejecutaste npm start.": "Enter the setup code shown in the terminal where you ran npm start.",
+  "Escribe el código de configuración que aparece en los logs de Railway (servicio de la app → Deployments → View logs).": "Enter the setup code shown in the Railway logs (app service → Deployments → View logs).",
+  "Escribe el código de configuración que aparece en el log del servidor: con Docker, docker compose logs app; con npm start, la terminal; en Railway, los logs del despliegue.": "Enter the setup code shown in the server log: with Docker, docker compose logs app; with npm start, the terminal; on Railway, the deployment logs.",
   "Código de configuración": "Setup code",
   "Tu organización": "Your organisation",
   "Nombre de la organización": "Organisation name",
@@ -26,8 +22,7 @@ export const setup: Record<string, string> = {
     "The server has email sending configured (SMTP). You can check it now with a test email to {email}.",
   "Enviar email de prueba": "Send test email",
   "Email de prueba enviado a {email}. Comprueba tu bandeja de entrada.": "Test email sent to {email}. Check your inbox.",
-  "El envío de emails (SMTP) no está configurado. Sin él no hay invitaciones por email ni «¿Olvidaste tu contraseña?». Podrás configurarlo después de entrar, en Administración → Ajustes → Avisos por email, o con las variables SMTP_* del servidor (docs/INSTALL.md).":
-    "Email sending (SMTP) is not configured. Without it there are no email invitations or “Forgot your password?”. You can set it up after signing in, in Administration → Settings → Email notifications, or with the server's SMTP_* variables (docs/INSTALL.md).",
+  "El envío de emails no está configurado: sin él no hay invitaciones por email ni «¿Olvidaste tu contraseña?». Podrás configurarlo después en Administración → Ajustes.": "Email sending is not set up: without it there are no email invitations or “Forgot your password?”. You can set it up later in Administration → Settings.",
   "Terminar configuración": "Finish setup",
   "Todo listo": "All done",
   "Pizarro está configurado. Entra con tu email y tu contraseña; te pedirá activar la verificación en dos pasos.":

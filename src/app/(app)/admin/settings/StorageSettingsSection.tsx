@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { saveStorageQuotas } from "@/actions/storage";
 import { cn } from "@/components/ui/cn";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatQuotaMb, formatSize } from "@/lib/format-size";
@@ -24,6 +25,9 @@ export function StorageSettingsSection({ view }: { view: StorageAdminView }) {
   const [projectUnlimited, setProjectUnlimited] = useState(initialProject.mode === "unlimited");
   const [projectText, setProjectText] = useState(initialProject.mode === "custom" ? String(initialProject.mb) : "");
   const [totalText, setTotalText] = useState(view.settings.total.mode === "custom" ? String(view.settings.total.mb) : "");
+  // Lo guardado: sin cambios, «Guardar» no haría nada y queda desactivado.
+  const [saved, setSaved] = useState({ projectUnlimited, projectText: projectText.trim(), totalText: totalText.trim() });
+  const dirty = projectUnlimited !== saved.projectUnlimited || (!projectUnlimited && projectText.trim() !== saved.projectText) || totalText.trim() !== saved.totalText;
 
   const projectNum = Number(projectText);
   const totalNum = Number(totalText);
@@ -37,6 +41,7 @@ export function StorageSettingsSection({ view }: { view: StorageAdminView }) {
       const total = totalText.trim() === "" ? { mode: "default" as const } : { mode: "custom" as const, mb: totalNum };
       const res = await saveStorageQuotas({ project, total }).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
+      setSaved({ projectUnlimited, projectText: projectText.trim(), totalText: totalText.trim() });
       toast(t("Ajuste guardado."), "success");
     });
 
@@ -55,14 +60,13 @@ export function StorageSettingsSection({ view }: { view: StorageAdminView }) {
     <section className="card space-y-5 p-5" aria-labelledby="storage-title">
       <div>
         <h2 id="storage-title" className="flex items-center gap-2 text-sm font-semibold"><HardDrive size={16} aria-hidden /> {t("Almacenamiento")}</h2>
-        <p className="mt-0.5 text-xs text-slate-500">{t("Dónde se guardan los ficheros, cuánto ocupan y cuánto puede ocupar cada proyecto.")}</p>
       </div>
 
       <div className="space-y-1 text-sm">
-        <p>
+        <p className="flex flex-wrap items-center gap-1">
           <span className="text-slate-500">{t("Carpeta de ficheros:")}</span> <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-800">{view.uploadDir}</code>
+          <InfoTip topic={t("Carpeta de ficheros:")}>{t("También guarda las copias de seguridad locales y las exportaciones. En Railway es el volumen montado ahí; su tamaño se cambia en Railway (volumen → Settings → Size).")}</InfoTip>
         </p>
-        <p className="text-xs text-slate-500">{t("En Railway es el volumen montado en esa ruta; su tamaño se cambia en Railway (volumen → Settings → Size), no aquí. Las copias de seguridad locales y las exportaciones también se guardan ahí.")}</p>
         {view.disk ? (
           <>
             <p>
@@ -79,7 +83,10 @@ export function StorageSettingsSection({ view }: { view: StorageAdminView }) {
       </div>
 
       <div>
-        <h3 className="text-sm font-semibold">{t("Lo que ocupa Pizarro")}: {fmt(view.trackedBytes)}</h3>
+        <h3 className="flex items-center gap-1 text-sm font-semibold">
+          {t("Lo que ocupa Pizarro")}: {fmt(view.trackedBytes)}
+          <InfoTip topic={t("Lo que ocupa Pizarro")}>{t("Suma de los tamaños registrados, sin las miniaturas: el disco puede marcar algo más.")}</InfoTip>
+        </h3>
         <ul className="mt-2 divide-y divide-slate-100 rounded-lg border border-slate-200 text-sm dark:divide-slate-800 dark:border-slate-700">
           {cats.map((x) => (
             <li key={x.label} className="flex justify-between gap-3 px-3 py-1.5"><span>{x.label}</span><span className="tabular-nums">{fmt(x.bytes)}</span></li>
@@ -87,7 +94,6 @@ export function StorageSettingsSection({ view }: { view: StorageAdminView }) {
           <li className="flex justify-between gap-3 px-3 py-1.5 text-slate-500"><span>{t("Copias de seguridad locales (no cuentan en las cuotas)")}</span><span className="tabular-nums">{fmt(c.backups)}</span></li>
           <li className="flex justify-between gap-3 px-3 py-1.5 text-slate-500"><span>{t("Ficheros de exportación (no cuentan en las cuotas)")}</span><span className="tabular-nums">{fmt(c.exports)}</span></li>
         </ul>
-        <p className="mt-1 text-xs text-slate-500">{t("Suma de los tamaños registrados; las miniaturas de las imágenes no se cuentan, así que el disco puede marcar algo más.")}</p>
       </div>
 
       <div>
@@ -109,7 +115,10 @@ export function StorageSettingsSection({ view }: { view: StorageAdminView }) {
       <div className="space-y-4">
         <h3 className="text-sm font-semibold">{t("Cuotas")}</h3>
         <div className="space-y-1.5">
-          <label htmlFor="quota-project" className="label">{t("Cuota por proyecto (MB)")}</label>
+          <div className="flex items-center gap-1">
+            <label htmlFor="quota-project" className="label mb-0">{t("Cuota por proyecto (MB)")}</label>
+            <InfoTip topic={t("Cuota por proyecto (MB)")}>{t("Cuentan los adjuntos, las copias en releases y la documentación. Cada proyecto puede tener su propia cuota en sus ajustes.")}</InfoTip>
+          </div>
           {view.env.project !== null ? (
             <>
               <p className="text-sm">{formatQuotaMb(view.env.project, locale)} <span className="text-xs text-slate-500">({view.env.project} MB)</span></p>
@@ -126,12 +135,15 @@ export function StorageSettingsSection({ view }: { view: StorageAdminView }) {
                   <input type="checkbox" checked={projectUnlimited} onChange={(e) => setProjectUnlimited(e.target.checked)} /> {t("Sin límite")}
                 </label>
               </div>
-              <p className="text-xs text-slate-500">{t("Lo que puede ocupar cada proyecto (adjuntos, copias en releases y documentación). Vacío = 10 GB (10240 MB). Un proyecto puede tener su propia cuota en sus ajustes. Ahora mismo: {value}.", { value: effectiveProject })}</p>
+              <p className="text-xs text-slate-500">{t("Vacío = 10 GB (10240 MB). Ahora: {value}.", { value: effectiveProject })}</p>
             </>
           )}
         </div>
         <div className="space-y-1.5">
-          <label htmlFor="quota-total" className="label">{t("Cuota total del servidor (MB, opcional)")}</label>
+          <div className="flex items-center gap-1">
+            <label htmlFor="quota-total" className="label mb-0">{t("Cuota total del servidor (MB, opcional)")}</label>
+            <InfoTip topic={t("Cuota total del servidor (MB, opcional)")}>{t("El tope de lo que suman todos los proyectos. Ponlo algo por debajo del tamaño del volumen para que no se llene.")}</InfoTip>
+          </div>
           {view.env.total !== null ? (
             <>
               <p className="text-sm">{formatQuotaMb(view.env.total, locale)} <span className="text-xs text-slate-500">({view.env.total} MB)</span></p>
@@ -140,13 +152,13 @@ export function StorageSettingsSection({ view }: { view: StorageAdminView }) {
           ) : (
             <>
               <input id="quota-total" className="input w-36" type="number" inputMode="numeric" min={QUOTA_MIN_MB} max={QUOTA_MAX_MB} step={1} placeholder={t("Sin límite")} value={totalText} onChange={(e) => setTotalText(e.target.value)} />
-              <p className="text-xs text-slate-500">{t("Tope de todo lo que suman los proyectos. Vacío = sin tope. Pon un valor algo menor que el tamaño de tu volumen para que los proyectos no lo llenen.")}</p>
+              <p className="text-xs text-slate-500">{t("Vacío = sin tope.")}</p>
             </>
           )}
         </div>
         {(view.env.project === null || view.env.total === null) && (
           <div className="flex flex-wrap items-center gap-2">
-            <button className="btn-primary py-1.5" onClick={save} disabled={pending || !projectValid || !totalValid}>
+            <button className="btn-primary py-1.5" onClick={save} disabled={pending || !dirty || !projectValid || !totalValid}>
               {pending && <Loader2 size={15} className="animate-spin" />} {t("Guardar")}
             </button>
             {(!projectValid || !totalValid) && <span className="text-xs text-red-600" role="alert">{t("Debe ser un número entero de MB, entre {min} y {max}.", { min: QUOTA_MIN_MB, max: QUOTA_MAX_MB.toLocaleString(locale) })}</span>}

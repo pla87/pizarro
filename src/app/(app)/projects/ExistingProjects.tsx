@@ -30,7 +30,7 @@ export function ExistingProjects({ projects, userId }: { projects: Row[]; userId
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-4 sm:p-6">
       <h1 className="text-xl font-semibold">{t("Proyectos existentes")}</h1>
-      <p className="text-sm text-slate-500">{t("Todos los proyectos de equipo a los que tienes acceso. Añade a tus proyectos los que quieras ver en selectores, menús y calendario.")}</p>
+      <p className="text-sm text-slate-500">{t("Añade a tus proyectos los que quieras ver en selectores, menús y calendario.")}</p>
       {projects.length === 0 && <p className="card p-5 text-sm text-slate-500">{t("No hay proyectos de equipo.")}</p>}
       <ul className="space-y-2">
         {projects.map((p) => (

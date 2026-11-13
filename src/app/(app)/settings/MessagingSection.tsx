@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
   confirmMyWhatsapp, connectTelegram, disconnectChannel, myChannels, resendMyWhatsappCode, saveChannelPrefs, saveMyWhatsapp, testMyChannel,
 } from "@/actions/messaging";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { ChannelPrefs } from "@/lib/messaging-core";
@@ -193,7 +194,7 @@ function WhatsappBlock({ view, refresh }: { view: NonNullable<MyChannelsView["wh
           }}
         >
           {view.phone && !view.consented && (
-            <p className="text-xs text-slate-500">{t("Este número estaba guardado en tu perfil, pero los avisos por WhatsApp no están activados. Para activarlos, acepta recibirlos y confírmalo con el código que te enviaremos.")}</p>
+            <p className="text-xs text-slate-500">{t("Los avisos por WhatsApp no están activados en este número: acepta recibirlos y confírmalo con el código que te enviaremos.")}</p>
           )}
           <div className="max-w-xs">
             <label className="label" htmlFor="wa-phone">{t("Número de WhatsApp (formato internacional)")}</label>
@@ -251,7 +252,10 @@ function WhatsappBlock({ view, refresh }: { view: NonNullable<MyChannelsView["wh
             <button type="button" className="btn-secondary py-1.5" onClick={resend} disabled={pending || !view.available}>{t("Enviar otro código")}</button>
             <button type="button" className="btn-secondary py-1.5" onClick={() => setEditing(true)} disabled={pending || !view.available}>{t("Cambiar número")}</button>
           </div>
-          <p className="text-xs text-slate-500">{t("El código caduca a los 15 minutos y admite 5 intentos. Hasta que lo confirmes no se te envían avisos por WhatsApp. Si no llega, revisa el número o pide al administrador que compruebe la configuración.")}</p>
+          <p className="flex items-center gap-1 text-xs text-slate-500">
+            {t("Caduca a los 15 minutos. Si no llega, revisa el número.")}
+            <InfoTip topic={t("Código de WhatsApp")}>{t("Admite 5 intentos. Hasta confirmarlo no recibes avisos por WhatsApp; si sigue sin llegar, pide al administrador que revise la configuración.")}</InfoTip>
+          </p>
         </form>
       ) : view.phone && view.verified ? (
         <>

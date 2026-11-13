@@ -4,6 +4,7 @@ import { FileX } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { updateClearDraftsOnLogout } from "@/actions/profile";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 
@@ -25,12 +26,14 @@ export function DraftsSection({ initial }: { initial: boolean }) {
   return (
     <section className="card p-5">
       <h2 className="flex items-center gap-2 font-semibold"><FileX size={17} /> {t("Borradores")}</h2>
-      <p className="mt-0.5 text-sm text-slate-500">{t("Lo que escribes en una tarea sin guardar se conserva en este navegador. Útil en un ordenador compartido: se borra al salir.")}</p>
-      <label className="mt-3 flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={on} onChange={(e) => void change(e.target.checked)} />
-        {t("Borrar los borradores al cerrar sesión")}
-      </label>
-      <p className="mt-1 text-xs text-slate-500">{t("Los borradores de comentarios se borran siempre al cerrar sesión.")}</p>
+      <p className="mt-0.5 text-sm text-slate-500">{t("Lo que escribes en una tarea sin guardar se conserva en este navegador.")}</p>
+      <div className="mt-3 flex items-center gap-1">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={on} onChange={(e) => void change(e.target.checked)} />
+          {t("Borrar los borradores al cerrar sesión")}
+        </label>
+        <InfoTip topic={t("Borradores")}>{t("Útil en un ordenador compartido. Los borradores de comentarios se borran siempre al cerrar sesión.")}</InfoTip>
+      </div>
     </section>
   );
 }

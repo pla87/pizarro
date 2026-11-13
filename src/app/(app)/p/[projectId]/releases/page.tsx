@@ -83,7 +83,7 @@ export default async function ReleasesPage({
   return (
     <div className="mx-auto max-w-4xl p-4 md:p-6">
       <h1 className="mb-1 text-xl font-semibold">{t("Releases")}</h1>
-      <p className="mb-6 text-sm text-slate-500">{t("Histórico de despliegues de «{name}» con el texto final editado.", { name: project.name })}</p>
+      <p className="mb-6 text-sm text-slate-500">{t("Histórico de despliegues de «{name}».", { name: project.name })}</p>
       {project._count.releases === 0 ? (
         <div className="card flex flex-col items-center gap-2 p-10 text-center text-sm text-slate-500">
           <Rocket size={32} className="text-slate-300" />

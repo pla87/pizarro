@@ -14,6 +14,7 @@ import { deliverableStatus, type DeliverableStatus } from "@/lib/report";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { isTypingTarget } from "@/components/board/shortcuts";
 import { cn } from "@/components/ui/cn";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { Popover } from "@/components/ui/Popover";
 import { CalendarSubscribe } from "./CalendarSubscribe";
 import { useToast } from "@/components/ui/Toast";
@@ -894,7 +895,10 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
             );
           })}
         </div>
-        <p className="mt-2 text-xs text-slate-500">{t("Arrastra una tarea, un rango o un entregable para cambiar sus fechas; en un rango, arrastra también sus bordes (o Alt+←/→ con él enfocado; Alt+Mayús+←/→ cambia su fin).")}</p>
+        <p className="mt-2 flex items-center gap-1 text-xs text-slate-500">
+          {t("Arrastra tareas, rangos y entregables para cambiar sus fechas.")}
+          <InfoTip topic={t("Calendario")}>{t("En un rango, arrastra también sus bordes. Con el teclado: Alt+←/→ lo mueve y Alt+Mayús+←/→ cambia su fin.")}</InfoTip>
+        </p>
         {repeats.length > 0 && <RepeatLegend className="mt-1" />}
         {preview && (
           <div ref={labelRef} className="pointer-events-none fixed left-0 top-0 z-50 rounded bg-slate-900 px-2 py-1 text-xs text-white shadow-lg dark:bg-slate-100 dark:text-slate-900" role="status">

@@ -206,7 +206,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
         />
       </div>
       <p className="mb-4 text-sm text-slate-500">
-        {t("Archivos de «{name}» para consultar sin salir de la app: {count} de {max} · máximo {mb} MB por archivo.", { name: projectName, count: documents.length, max: maxCount, mb: fileMaxMb })}
+        {t("Archivos de «{name}»: {count} de {max} · máximo {mb} MB por archivo.", { name: projectName, count: documents.length, max: maxCount, mb: fileMaxMb })}
       </p>
 
       {dragging && (
@@ -241,7 +241,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
       {showTrash ? (
         <section aria-label={t("Papelera")} data-testid="docs-trash">
           <p className="mb-3 text-sm text-slate-500">
-            {t("Los documentos borrados se conservan {days} días y después se eliminan para siempre. Mientras tanto siguen contando en el espacio del proyecto.", { days: DOCUMENT_TRASH_DAYS })}
+            {t("A los {days} días se eliminan para siempre; hasta entonces ocupan espacio del proyecto.", { days: DOCUMENT_TRASH_DAYS })}
           </p>
           {trashed.length === 0 ? (
             <p className="card p-6 text-center text-sm text-slate-500">{t("La papelera está vacía.")}</p>
@@ -283,7 +283,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
         <div className="card flex flex-col items-center gap-2 p-10 text-center text-sm text-slate-500">
           <FileText size={32} className="text-slate-300" />
           <p className="max-w-md">
-            {t("Aquí van los archivos de referencia del proyecto: guías y notas en texto o Markdown, PDF de especificaciones o contratos, capturas e imágenes. Arrastra archivos a esta página, pégalos o usa «Subir archivos». Todo el equipo del proyecto los puede ver y descargar.")}
+            {t("Guías, notas, PDF e imágenes de referencia, para todo el equipo del proyecto. Arrastra archivos aquí, pégalos o usa «Subir archivos».")}
           </p>
           <button type="button" className="btn-secondary mt-2" onClick={() => fileInput.current?.click()}>
             <Upload size={16} /> {t("Subir archivos")}

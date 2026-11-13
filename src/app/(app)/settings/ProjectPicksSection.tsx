@@ -4,6 +4,7 @@ import { Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { setMyProjectPicks } from "@/actions/projects";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import { useActionTransition } from "@/components/useActionTransition";
@@ -25,6 +26,9 @@ export function ProjectPicksSection({ projects }: { projects: PickProject[] }) {
   const toast = useToast();
   const [pending, start] = useActionTransition();
   const [picked, setPicked] = useState(new Set(projects.filter((p) => p.picked).map((p) => p.id)));
+  // Lo guardado: sin cambios, «Guardar» no haría nada y queda desactivado.
+  const [saved, setSaved] = useState(picked);
+  const dirty = picked.size !== saved.size || [...picked].some((id) => !saved.has(id));
   const toggle = (id: string) =>
     setPicked((prev) => {
       const next = new Set(prev);
@@ -36,7 +40,10 @@ export function ProjectPicksSection({ projects }: { projects: PickProject[] }) {
   return (
     <section id="proyectos" className="card scroll-mt-4 p-5">
       <h2 className="font-semibold">{t("Proyectos en los que trabajo")}</h2>
-      <p className="mt-0.5 text-sm text-slate-500">{t("Solo estos proyectos salen en tus selectores y menús. Como administrador puedes abrir cualquier proyecto de equipo desde Administración.")}</p>
+      <p className="mt-0.5 flex items-center gap-1 text-sm text-slate-500">
+        {t("Solo estos salen en tus selectores y menús.")}
+        <InfoTip topic={t("Proyectos en los que trabajo")}>{t("Como administrador puedes abrir cualquier proyecto de equipo desde Administración → Proyectos.")}</InfoTip>
+      </p>
       <ul className="mt-3 max-h-80 divide-y divide-slate-200 overflow-y-auto rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
         {projects.map((p) => (
           <li key={p.id}>
@@ -61,12 +68,15 @@ export function ProjectPicksSection({ projects }: { projects: PickProject[] }) {
       </ul>
       <button
         className="btn-primary mt-4"
-        disabled={pending}
+        disabled={pending || !dirty}
         onClick={() =>
           start(async () => {
             const res = await setMyProjectPicks([...picked]);
             toast(res.ok ? t("Proyectos actualizados") : res.error, res.ok ? "success" : "error");
-            if (res.ok) router.refresh();
+            if (res.ok) {
+              setSaved(picked);
+              router.refresh();
+            }
           })
         }
       >

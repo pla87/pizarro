@@ -40,6 +40,9 @@ const rels = () => L.q(`SELECT id,number,title,content FROM "Release" ORDER BY n
 export async function run() {
   L.scenario("7. Generar y desplegar una release");
   await L.cleanBoard();
+  // Este escenario prueba el paso 2 con el campo de Markdown (Editar / Vista previa); con la preferencia «Con barra de
+  // formato» (la de serie) sale el editor con barra, que prueba r49-copy-e2e.mjs.
+  await L.q(`UPDATE "User" SET "editorMode"='MARKDOWN' WHERE email=$1`, [L.ADMIN]);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pzqa-"));
   const png = path.join(dir, "captura.png"); fs.writeFileSync(png, makePng(320, 200));
   const txt = path.join(dir, "notas.txt"); fs.writeFileSync(txt, "Notas de la release\nlínea 2\n");
@@ -291,5 +294,6 @@ export async function run() {
   L.assertNoErrors("escenario 7", [s]);
   await s.ctx.close();
   fs.rmSync(dir, { recursive: true, force: true });
+  await L.q(`UPDATE "User" SET "editorMode"='WYSIWYG' WHERE email=$1`, [L.ADMIN]);
 }
 await U.runStandalone(import.meta.url, run);

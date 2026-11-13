@@ -6,36 +6,28 @@ export const cuentas: Record<string, string> = {
   "Forzar cambio de contraseña de {name}": "Force password change for {name}",
   "Forzar cambio de contraseña": "Force password change",
   "Usuario creado: le hemos enviado una invitación por email": "User created: we've emailed them an invitation",
-  "Recibirá un email con un enlace (válido 72 horas) para elegir su propia contraseña. Tú no la llegas a conocer.":
-    "They will get an email with a link (valid for 72 hours) to choose their own password. You never get to know it.",
-  "El envío de emails no está configurado: dale esta clave por otro medio. Al entrar tendrá que elegir una contraseña nueva, así que tú no llegarás a conocer la definitiva.":
-    "Email sending isn't configured: give them this password another way. When they sign in they will have to choose a new password, so you will never know the final one.",
+  "Recibirá un enlace por email (válido 72 horas) para elegir su contraseña.": "They will get an email link (valid for 72 hours) to choose their password.",
+  "Sin email configurado: dásela por otro medio. Al entrar tendrá que cambiarla.": "Email is not set up: give it to them another way. They will have to change it when they sign in.",
   "Se avisará por email a la dirección antigua del cambio.": "The old address will be notified of the change by email.",
   "Cambio forzado: su contraseña ya no vale, se han cerrado sus sesiones y le hemos enviado un enlace por email":
     "Change forced: their password no longer works, their sessions were closed and we've emailed them a link",
   "Cambio forzado: su contraseña ya no vale y se han cerrado sus sesiones": "Change forced: their password no longer works and their sessions were closed",
-  "Su contraseña actual dejará de valer en el acto (tampoco para quien la conociera), se cerrarán todas sus sesiones y se anularán los enlaces que tuviera pendientes. Tú no escribes ninguna contraseña.":
-    "Their current password will stop working immediately (for anyone who knew it, too), all their sessions will be closed and any pending links will be cancelled. You don't type any password.",
-  "Le enviaremos un enlace por email (válido 30 minutos) para elegir una nueva; hasta entonces no podrá entrar con contraseña.":
-    "We'll email them a link (valid for 30 minutes) to choose a new one; until then they can't sign in with a password.",
-  "El envío de emails no está configurado: se generará un enlace de un solo uso (válido 30 minutos) para que se lo pases tú por un canal de confianza; hasta usarlo no podrá entrar con contraseña.":
-    "Email sending isn't configured: a one-time link (valid for 30 minutes) will be generated for you to pass on through a trusted channel; until they use it they can't sign in with a password.",
-  "Tiene Google enlazado: podrá seguir entrando con Google, pero antes de continuar tendrá que elegir una contraseña nueva.":
-    "They have Google linked: they can keep signing in with Google, but they will have to choose a new password before continuing.",
+  "Su contraseña dejará de valer al momento y se cerrarán sus sesiones.": "Their password will stop working right away and their sessions will be closed.",
+  "Le llegará un enlace por email (válido 30 minutos) para elegir otra.": "They will get an email link (valid for 30 minutes) to choose another one.",
+  "Sin email configurado: tendrás un enlace de un solo uso (válido 30 minutos) para pasárselo tú.": "Email is not set up: you will get a single-use link (valid for 30 minutes) to pass on to them.",
+  "Podrá seguir entrando con Google, pero antes tendrá que elegir contraseña.": "They can keep signing in with Google, but first they will have to choose a password.",
   "Generar enlace": "Generate link",
   "Copiar enlace": "Copy link",
   "Copiar enlace en lugar de enviarlo": "Copy the link instead of sending it",
   "Enlace copiado": "Link copied",
   "Enlace de restablecimiento": "Reset link",
   "Enlace para {name}": "Link for {name}",
-  "Su contraseña anterior ya no vale y sus sesiones están cerradas. Con este enlace elegirá una contraseña nueva.":
-    "Their previous password no longer works and their sessions are closed. With this link they will choose a new password.",
+  "Con este enlace elegirá una contraseña nueva.": "With this link they will choose a new password.",
   "Envíaselo por un canal de confianza; caduca en 30 minutos y sirve una sola vez. No volverá a mostrarse.": "Send it through a trusted channel; it expires in 30 minutes and works only once. It won't be shown again.",
   "Forzar cambio": "Force change",
   // Perfil
   "Cambiar email": "Change email",
-  "Tu email actual es {email}. Enviaremos un enlace de confirmación a la dirección nueva (caduca en 30 minutos) y un aviso a la actual; el cambio solo se hace al confirmarlo.":
-    "Your current email is {email}. We'll send a confirmation link to the new address (expires in 30 minutes) and a notice to the current one; the change only happens once confirmed.",
+  "Tu email actual es {email}. El cambio se hace al confirmar el enlace que enviaremos a la dirección nueva.": "Your current email is {email}. The change happens when you confirm the link we'll send to the new address.",
   "Te hemos enviado un enlace a la dirección nueva para confirmar el cambio.": "We've sent a link to the new address to confirm the change.",
   "Email nuevo": "New email",
   "Enviar confirmación": "Send confirmation",
@@ -165,8 +157,7 @@ export const cuentas: Record<string, string> = {
     "Reset two-step verification",
   "Verificación en dos pasos restablecida":
     "Two-step verification reset",
-  "Se borrarán su método y sus códigos de recuperación. Si es administrador, tendrá que configurar uno nuevo antes de entrar; si es miembro, puede volver a activarlo desde «Mi perfil».":
-    "Their method and recovery codes will be deleted. If they are an administrator, they will have to set up a new one before signing in; if they are a member, they can enable it again from “My profile”.",
+  "Se borrarán su método y sus códigos de recuperación.": "Their method and recovery codes will be deleted.",
   "Obligatoria para administradores, también al entrar con Google.":
     "Required for administrators, also when signing in with Google.",
   "Añade un segundo código al entrar con contraseña. Al entrar con Google no se pide: Google ya tiene la suya.":
@@ -300,7 +291,7 @@ export const cuentas: Record<string, string> = {
   "Entra con tu cuenta de Google, si tu email está dado de alta.": "Sign in with your Google account, if your email is registered.",
   "Pide a un administrador que te genere un enlace para elegir una contraseña nueva (Administración → Usuarios → Forzar cambio de contraseña). Te lo pasará por otro canal; sirve una sola vez y caduca en 30 minutos.": "Ask an administrator to generate a link for you to choose a new password (Administration → Users → Force password change). They will pass it to you through another channel; it works only once and expires in 30 minutes.",
   "Si eres quien administra el servidor: la sección «Altas, bajas y contraseñas» del manual explica cómo recuperar el acceso, o configura el envío de emails (SMTP).": "If you run the server: the \"Altas, bajas y contraseñas\" (adding, removing users and passwords) section of the manual explains how to regain access, or configure email sending (SMTP).",
-  "No hay email ni inicio de sesión con Google configurados: quien olvide su contraseña no puede recuperarla por su cuenta y tendrá que pedirte que le fuerces el cambio de contraseña.": "Neither email nor Google sign-in is configured: anyone who forgets their password cannot recover it on their own and will have to ask you to force a password change.",
+  "Sin email ni acceso con Google: quien olvide su contraseña tendrá que pedirte que le fuerces el cambio.": "No email or Google sign-in: anyone who forgets their password will have to ask you to force a change.",
 
   // Códigos de recuperación: contador con 1
   "1 código de recuperación sin usar": "1 unused recovery code",
