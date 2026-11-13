@@ -3,7 +3,7 @@ import type { Locale, T } from "../i18n/core";
 import type { ChecklistItem } from "./checklist";
 import { addDaysIso, dateToIso, todayIso } from "./dates";
 import { appTimeZone } from "./board";
-import { FEED_FUTURE_DAYS } from "./calendar-feed-core";
+import { FEED_FUTURE_DAYS, FEED_MAX_REPEATS, snippet } from "./calendar-feed-core";
 import { repeatIcsEvents } from "./recurrence-series";
 import { recurrenceLabel } from "../components/board/recurrence-ui";
 import { db } from "./db";
@@ -64,6 +64,10 @@ export async function buildColumnIcs(projectId: string, columnId: string, i18n?:
   const base = appUrl();
   const today = todayIso(appTimeZone());
   const until = addDaysIso(today, FEED_FUTURE_DAYS);
+  // Series como en la suscripción (calendar-feed.ts): como mucho FEED_MAX_REPEATS tareas (las de fecha más próxima) y con
+  // un extracto de la descripción. Una mensual del día 29 o 30 da un evento por mes, y con la descripción entera en cada
+  // uno, una columna de 2.000 tareas así eran decenas de MB por petición.
+  let seriesLeft = FEED_MAX_REPEATS;
   const ics = buildIcs({
     name: `${column.project.name} · ${column.name}`,
     events: tasks.flatMap((x) => {
@@ -77,9 +81,11 @@ export async function buildColumnIcs(projectId: string, columnId: string, i18n?:
       const description = x.description ? descriptionToPlain(x.description) : undefined;
       const url = `${base}/p/${projectId}?task=${x.id}`;
       const own = { uid: `${x.id}@pizarro`, date, endDate: range ? due! : undefined, summary, description, url };
-      if (x.recurrence === "NONE" || x.recurrenceNext || column.isDone) return [own];
+      if (x.recurrence === "NONE" || x.recurrenceNext || column.isDone || seriesLeft <= 0) return [own];
       const note = i18n ? i18n.t("Repetición prevista ({rule}): se crea al terminar la anterior.", { rule: recurrenceLabel(x, i18n.t, i18n.locale) ?? "" }) : "";
-      const series = repeatIcsEvents({ id: x.id, recurrence: x.recurrence, recurrenceDay: x.recurrenceDay, due }, { summary, description: [note, description].filter(Boolean).join("\n") || undefined, url }, today, until);
+      const brief = description ? snippet(description, 300) : "";
+      const series = repeatIcsEvents({ id: x.id, recurrence: x.recurrence, recurrenceDay: x.recurrenceDay, due }, { summary, description: [note, brief].filter(Boolean).join("\n") || undefined, url }, today, until);
+      if (series.length) seriesLeft--;
       return [own, ...series];
     }),
   });
