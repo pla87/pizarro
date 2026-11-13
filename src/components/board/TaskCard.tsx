@@ -1,7 +1,7 @@
 "use client";
 
+import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { AlignLeft, Loader2, CalendarClock, Check, CheckSquare, ExternalLink, FileText, GripVertical, Hourglass, Image as ImageIcon, Lock, MessageSquare, Paperclip, Repeat } from "lucide-react";
 import { blockerIsDone } from "@/lib/blocked";
 import { mentionsToPlain } from "@/lib/mentions";
@@ -10,7 +10,7 @@ import { DEFAULT_WAITING_DAYS, isWhite, MAX_TITLE } from "@/lib/constants";
 import { formatEuro, PRIORITY_COLOR, PRIORITY_LABEL } from "@/lib/task-fields";
 import { daysBetween, dueStatus, formatDay, isoInZone } from "@/lib/dates";
 import { appTimeZone } from "@/lib/format";
-import { memo, useEffect, useId, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { BoardTask } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { Avatar } from "../ui/Avatar";
@@ -19,6 +19,7 @@ import { cn } from "../ui/cn";
 import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard, useIsSelected, useTask } from "./context";
 import { useCardFileDrop } from "./useCardFileDrop";
+import { useNearCard } from "./nearCards";
 import { DueDatePopover } from "./DueDatePopover";
 import { recurrenceLabel } from "./recurrence-ui";
 import { overTitleLimit, TITLE_INPUT_LIMIT } from "./TitleLimit";
@@ -26,51 +27,138 @@ import { titleLength } from "@/lib/title-clamp";
 import { focusCard, isTypingTarget } from "./shortcuts";
 import { TaskViewerBubbles } from "./TaskViewerBubbles";
 
+type Listeners = NonNullable<DraggableSyntheticListeners>;
+
+/**
+ * Tarjeta del tablero en su lista ordenable. Solo se apunta al arrastre (useSortable, en `SortableBinding`) cuando está a
+ * la vista de su columna o cerca (ver nearCards.ts): con cientos de tarjetas, el arrastre redibujaba y medía todas en
+ * cada cambio. El nodo y su contenido son los mismos se apunte o no (nada se vuelve a montar ni pierde el foco).
+ */
 export const SortableTaskCard = memo(function SortableTaskCard({ id }: { id: string }) {
   const { dragHandle } = useBoard();
   const t = useT();
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
   const task = useTask(id);
+  const [near, nearRef, bindNow] = useNearCard(id);
+  const node = useRef<HTMLDivElement | null>(null);
+  const handle = useRef<HTMLButtonElement | null>(null);
+  // Los manejadores de los sensores (pulsar con el puntero, teclas) los da useSortable; aquí se llaman los últimos. Si la
+  // tarjeta aún no está apuntada (acaba de entrar en la vista), se apunta en el acto y el arrastre empieza igual.
+  const listeners = useRef<Listeners | null>(null);
+  const [relay] = useState<Listeners>(() => {
+    const call = (name: "onPointerDown" | "onKeyDown", e: React.SyntheticEvent) => {
+      if (!listeners.current) bindNow();
+      listeners.current?.[name]?.(e);
+    };
+    return { onPointerDown: (e: React.PointerEvent) => call("onPointerDown", e), onKeyDown: (e: React.KeyboardEvent) => call("onKeyDown", e) };
+  });
+  const setNode = useCallback(
+    (el: HTMLDivElement | null) => {
+      node.current = el;
+      return nearRef(el);
+    },
+    [nearRef],
+  );
   if (!task) return null;
   // En táctil solo arrastra el asa: el resto de la tarjeta deja hacer scroll y abrirla con un toque.
   return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={cn("relative touch-manipulation", isDragging && "opacity-40")}
-      // Sin `attributes`: el contenedor no es enfocable (el Tab va directo a la tarjeta) y el arrastre por teclado
-      // se sustituye por Alt+flechas en la tarjeta. Con ratón arrastra con `listeners`.
-      {...(dragHandle ? {} : listeners)}
-    >
-      <TaskViewerBubbles taskId={id} />
-      <TaskCard
-        task={task}
-        handle={dragHandle ? (
-          <button
-            type="button"
-            ref={setActivatorNodeRef}
-            {...attributes}
-            {...listeners}
-            onClick={(e) => e.stopPropagation()}
-            className="-my-1 -mr-1.5 flex h-8 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-slate-400 active:text-brand-600"
-            aria-label={t("Arrastrar para reordenar")}
-            // Solo para el dedo: con teclado se mueve con Alt+flechas sobre la propia tarjeta (que anuncia esos atajos).
-            // Fuera del Tab y del árbol accesible: un botón dentro de la tarjeta (role=button) no se puede anunciar aparte.
-            tabIndex={-1}
-            aria-hidden
-          >
-            <GripVertical size={16} />
-          </button>
-        ) : null}
-      />
-    </div>
+    <>
+      <div
+        ref={setNode}
+        // `data-dragging`: la tarjeta que se arrastra (su sitio queda atenuado mientras el overlay va con el puntero).
+        className="relative touch-manipulation data-dragging:opacity-40"
+        // Sin `attributes`: el contenedor no es enfocable (el Tab va directo a la tarjeta) y el arrastre por teclado
+        // se sustituye por Alt+flechas en la tarjeta. Con ratón arrastra con los manejadores del sensor.
+        {...(dragHandle ? {} : relay)}
+      >
+        <TaskViewerBubbles taskId={id} />
+        <TaskCard
+          task={task}
+          lazy={!near}
+          handle={dragHandle ? (
+            <button
+              type="button"
+              ref={handle}
+              {...relay}
+              onClick={(e) => e.stopPropagation()}
+              className="-my-1 -mr-1.5 flex h-8 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-slate-400 active:text-brand-600"
+              aria-label={t("Arrastrar para reordenar")}
+              // Solo para el dedo: con teclado se mueve con Alt+flechas sobre la propia tarjeta (que anuncia esos atajos).
+              // Fuera del Tab y del árbol accesible: un botón dentro de la tarjeta (role=button) no se puede anunciar aparte.
+              tabIndex={-1}
+              aria-hidden
+            >
+              <GripVertical size={16} />
+            </button>
+          ) : null}
+        />
+      </div>
+      {/* Detrás del nodo y no dentro: React fija los refs de un elemento después de los efectos de sus hijos, así que dentro,
+          al montarse los dos a la vez (la tarjeta que se arrastra al pasar a otra columna), el nodo aún no estaría. */}
+      {near && <SortableBinding id={id} nodeRef={node} handleRef={handle} listenersRef={listeners} withHandle={dragHandle} />}
+    </>
   );
 });
+
+/**
+ * Apunta la tarjeta al arrastre mientras está montado: useSortable sobre el nodo de la tarjeta. No pinta nada; el
+ * desplazamiento (transform), la transición y el estado «arrastrándose» se ponen directamente en el nodo antes de pintar.
+ * Desplazamiento en 2D y solo si lo hay: `translate3d` en todas las tarjetas de la columna (también con 0, 0) creaba una
+ * capa de composición por tarjeta y repartirlas costaba más que el propio arrastre.
+ */
+function SortableBinding({ id, nodeRef, handleRef, listenersRef, withHandle }: {
+  id: string;
+  nodeRef: RefObject<HTMLDivElement | null>;
+  handleRef: RefObject<HTMLButtonElement | null>;
+  listenersRef: RefObject<Listeners | null>;
+  withHandle: boolean;
+}) {
+  const { listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
+  // Lo último que se puso en el nodo (al montar, nada: así lo deja también el desmontaje).
+  const appliedRef = useRef({ move: "", transition: "", dragging: false });
+  useLayoutEffect(() => {
+    setNodeRef(nodeRef.current);
+    setActivatorNodeRef(withHandle ? handleRef.current : null);
+  }, [setNodeRef, setActivatorNodeRef, nodeRef, handleRef, withHandle]);
+  useLayoutEffect(() => {
+    listenersRef.current = listeners ?? null;
+    const el = nodeRef.current;
+    if (!el) return;
+    const x = Math.round(transform?.x ?? 0);
+    const y = Math.round(transform?.y ?? 0);
+    const move = x || y ? `translate(${x}px, ${y}px)` : "";
+    // Solo si cambia: cada escritura invalida el estilo de la tarjeta, y esto se ejecuta en cada paso del arrastre.
+    const last = appliedRef.current;
+    if (last.move !== move) el.style.transform = last.move = move;
+    if (last.transition !== (transition ?? "")) el.style.transition = last.transition = transition ?? "";
+    if (last.dragging !== isDragging) el.toggleAttribute("data-dragging", (last.dragging = isDragging));
+  });
+  useLayoutEffect(
+    () => () => {
+      listenersRef.current = null;
+      setNodeRef(null);
+      setActivatorNodeRef(null);
+      appliedRef.current = { move: "", transition: "", dragging: false };
+      const el = nodeRef.current;
+      if (!el) return;
+      el.style.transform = "";
+      el.style.transition = "";
+      el.removeAttribute("data-dragging");
+    },
+    [nodeRef, listenersRef, setNodeRef, setActivatorNodeRef, appliedRef],
+  );
+  return null;
+}
 
 /** Atajos de la tarjeta enfocada que se anuncian (aria-keyshortcuts): abrir, seleccionar, renombrar, mover, asignarme, fecha y duplicar. */
 const CARD_SHORTCUTS = "Enter Space F2 Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown Alt+M Alt+D Alt+Shift+D";
 
-export const TaskCard = memo(function TaskCard({ task, overlay = false, handle = null }: { task: BoardTask; overlay?: boolean; handle?: React.ReactNode }) {
+export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = false, handle = null }: {
+  task: BoardTask;
+  overlay?: boolean;
+  /** Lejos de la vista (ni apuntada al arrastre ni cerca): el navegador puede saltarse su contenido mientras no se vea. */
+  lazy?: boolean;
+  handle?: React.ReactNode;
+}) {
   const { project, users, labels, openTask, toggleSelected, columns, today, kindById, cardStyle, assignToMe, moveToAdjacentColumn, moveWithinColumn, setDueDate, renameTask, duplicateTask } = useBoard();
   const locale = useIntlLocale();
   const t = useT();
@@ -181,6 +269,13 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, handle =
       className={cn(
         fileDrop.over && "border-focus ring-2 ring-focus/50",
         "group relative cursor-pointer overflow-hidden rounded-lg border bg-white p-2.5 pl-3 text-left shadow-sm transition-shadow select-none hover:shadow-md dark:bg-slate-900",
+        // Lejos de la vista, el navegador no calcula ni pinta su contenido (sigue en la página: foco, lector de pantalla y
+        // buscar del navegador). Con cientos de tarjetas, cada fotograma del arrastre y cada pulsación del buscador repasaba
+        // todas. El alto de una que aún no se ha visto es aproximado (5 rem) hasta que aparece; después se recuerda el real.
+        // Nunca en las apuntadas al arrastre (las cercanas y la que se arrastra): dnd-kit las mide, y una recién montada
+        // mediría el alto aproximado. En la tarjeta y no en su envoltorio: la contención recorta lo que sobresale, y la
+        // tarjeta ya lo recorta (overflow-hidden); su anillo de foco y su sombra, que van por fuera, no se recortan.
+        lazy && "[contain-intrinsic-size:auto_5rem] [content-visibility:auto]",
         isSelected ? "border-brand-500 ring-2 ring-brand-500/30" : "border-slate-200 dark:border-slate-700/80",
         overlay && "rotate-2 shadow-xl",
         // Blanco: sin tinte posible, se distingue con fondo/borde propios.

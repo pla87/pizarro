@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { activeFilterCount, EMPTY_FILTERS, NO_ASSIGNEE, parseStoredFilters, sanitizeFilters, taskMatchesFilters, type BoardFilters } from "../src/components/board/filters";
+import { activeFilterCount, EMPTY_FILTERS, NO_ASSIGNEE, parseStoredFilters, sanitizeFilters, searchTerms, taskMatchesFilters, taskSearchText, type BoardFilters, type SearchNames } from "../src/components/board/filters";
 import type { BoardTask } from "../src/lib/types";
 
 // 2026-10-22 es jueves: la semana va del 19 al 25.
@@ -75,4 +75,44 @@ test("se descartan etiquetas, tipos y personas que ya no existen", () => {
   assert.deepEqual(clean, f({ labelIds: ["a"] }));
   const same = f({ labelIds: ["a"], assigneeId: NO_ASSIGNEE });
   assert.equal(sanitizeFilters(same, valid), same);
+});
+
+// Buscador del tablero: texto normalizado de cada tarea, calculado una vez por versión de la tarea (objeto) y juego de nombres.
+const names = (over: Partial<SearchNames> = {}): SearchNames => ({
+  kindName: new Map([["k1", "Error crítico"]]), userName: new Map([["u1", "Ángela Núñez"]]), labelName: new Map([["l1", "Diseño"]]), clientEnabled: false, ...over,
+});
+/** Tarea cuyo título cuenta las lecturas: si el texto sale de la caché, no se vuelve a leer ni a normalizar. */
+const counted = (title: string) => {
+  const t = task({});
+  let reads = 0;
+  Object.defineProperty(t, "title", { get: () => (reads++, title), enumerable: true });
+  return { t, reads: () => reads };
+};
+
+test("buscador: título (con menciones), tipo, responsable, etiquetas y cliente, sin tildes ni mayúsculas", () => {
+  const text = taskSearchText(task({ title: "Revisar la CANCIÓN con @[Ana](user:u9)", assigneeId: "u1", labelIds: ["l1", "borrada"], client: "Acme Óptica" }), names());
+  for (const w of ["revisar", "cancion", "@ana", "error", "critico", "angela", "nunez", "diseno"]) assert.ok(text.includes(w), `${w} en «${text}»`);
+  assert.ok(!text.includes("acme"), "el cliente solo cuenta con el campo activado");
+  assert.ok(taskSearchText(task({ title: "x", client: "Acme Óptica" }), names({ clientEnabled: true })).includes("acme optica"));
+  assert.deepEqual(searchTerms("  Canción   ÁNGELA "), ["cancion", "angela"]);
+  assert.deepEqual(searchTerms("   "), []);
+});
+
+test("buscador: cada tarea se normaliza una vez por versión; otra versión u otros nombres, de nuevo", () => {
+  const n = names();
+  const a = counted("Pedido Nº 4");
+  const first = taskSearchText(a.t, n);
+  assert.equal(a.reads(), 1);
+  // Más pulsaciones con los mismos datos: ni se vuelve a leer ni a normalizar.
+  for (let i = 0; i < 5; i++) assert.equal(taskSearchText(a.t, n), first);
+  assert.equal(a.reads(), 1);
+  // Cambia otra tarea (objeto nuevo): solo esa se calcula.
+  const b = counted("Pedido Nº 5");
+  assert.ok(taskSearchText(b.t, n).startsWith("pedido nº 5"));
+  assert.equal(b.reads(), 1);
+  assert.equal(taskSearchText(a.t, n), first);
+  assert.equal(a.reads(), 1);
+  // Otros nombres (p. ej. una etiqueta renombrada): se calcula de nuevo con ellos.
+  taskSearchText(a.t, names({ labelName: new Map([["l1", "Maquetación"]]) }));
+  assert.equal(a.reads(), 2);
 });
