@@ -41,6 +41,9 @@ import { effectiveFileMaxMb } from "@/lib/upload-size";
 import { textConflicts, type TextSince } from "@/lib/text-version";
 import type { ArchivedTask, BoardTask, CommentInfo, ProjectFormData, SubtaskInfo, TaskDetail, TaskLinkInfo } from "@/lib/types";
 import { getLocale, getT } from "@/i18n/server";
+import { intlLocale } from "@/i18n/core";
+import { copyTaskAttachments, type AttachmentCopyResult } from "@/lib/attachment-copy";
+import { mbNumber, quotaError } from "@/lib/quota-message";
 
 async function assertColumnInProject(columnId: string, projectId: string) {
   const ok = await db.column.count({ where: { id: columnId, projectId } });
@@ -315,9 +318,13 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
 
 /**
  * Duplica una tarea: copia título (con « (copia)»), tipo, descripción, etiquetas, responsable, fecha límite,
- * entregable, color, enlace y subtareas (sin marcar); no copia comentarios, adjuntos, historial ni repetición.
+ * entregable, color, enlace, subtareas (sin marcar), documentos de Google enlazados (el mismo documento, no una copia
+ * en Drive) y adjuntos (cada uno con su propio fichero: ver attachment-copy.ts); no copia comentarios, historial ni
+ * repetición. Los adjuntos que no caben (tope por tarea, cuotas) o cuyo fichero falta se omiten y la respuesta lleva
+ * `copyNotice`, el aviso para quien duplica.
  * Queda justo detrás de la original en su columna o, con `target` (Ctrl/Alt al soltar una tarjeta arrastrada),
- * en esa columna entre las vecinas indicadas, como moveTask. Se deshace de una vez (borra la copia).
+ * en esa columna entre las vecinas indicadas, como moveTask. Se deshace de una vez (borra la copia; los ficheros de sus
+ * adjuntos se conservan mientras se pueda rehacer y después se borran, como al borrar una tarea).
  */
 const duplicateTargetSchema = z.object({ columnId: v.id, prevId: v.id.nullable(), nextId: v.id.nullable() }).nullable().default(null);
 
@@ -339,6 +346,7 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
         columnId: true, blockedById: true,
         labels: { select: { labelId: true } },
         subtasks: { orderBy: { position: "asc" }, select: { title: true, position: true } },
+        links: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { kind: true, title: true, url: true, externalId: true, createdById: true, shareStatus: true, shareFailed: true, createdAt: true } },
       },
     });
     const t = await getT();
@@ -374,6 +382,8 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
           createdById: user.id,
           labels: { create: src.labels.map((l) => ({ labelId: l.labelId })) },
           subtasks: { create: src.subtasks.map((s) => ({ title: s.title, position: s.position })) },
+          // El enlace apunta al mismo documento de Drive: quitarlo de una de las dos no lo borra de Drive ni de la otra.
+          links: { create: src.links },
         },
         select: { id: true },
       });
@@ -381,8 +391,30 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
     addUndo({ t: "task.remove", id: copy.id });
     if (columnId === src.columnId) describeAction("Duplicó «{title}»", { title: src.title }, { taskId: copy.id });
     else describeAction("Duplicó «{title}» en «{col}»", { title: src.title, col: await columnName(columnId) }, { taskId: copy.id });
-    return loadBoardTask(copy.id);
+    // Después de crear la tarea (los ficheros pueden tardar): lo que no se copie se avisa, pero la copia ya existe.
+    const copied = await copyTaskAttachments(taskId, copy.id);
+    const notice = await copyNoticeText(copied, projectId, user.role === "ADMIN");
+    const row: BoardTask & { copyNotice?: string } = await loadBoardTask(copy.id);
+    return notice ? { ...row, copyNotice: notice } : row;
   });
+}
+
+/** Aviso de los adjuntos que no se copiaron al duplicar (null si se copiaron todos). */
+async function copyNoticeText(res: AttachmentCopyResult, projectId: string, isAdmin: boolean): Promise<string | null> {
+  if (!res.skipped.length) return null;
+  const t = await getT();
+  const locale = intlLocale(await getLocale());
+  const shown = res.skipped.slice(0, 3).map((s) => `«${s.name}»`).join(", ");
+  const names = res.skipped.length > 3 ? t("{names} y {n} más", { names: shown, n: res.skipped.length - 3 }) : shown;
+  const parts = [res.skipped.length === 1 ? t("No se ha copiado un adjunto: {names}.", { names }) : t("No se han copiado {n} adjuntos: {names}.", { n: res.skipped.length, names })];
+  const why = new Set(res.skipped.map((s) => s.reason));
+  if (why.has("task_total") && res.taskLimitMb != null) {
+    parts.push(t("No caben en el máximo de adjuntos por tarea del proyecto ({limit} MB).", { limit: mbNumber(res.taskLimitMb, locale) }));
+  }
+  if (why.has("quota") && res.quota) parts.push(quotaError(t, res.quota, { projectId, isAdmin, locale }).message);
+  if (why.has("missing")) parts.push(t("El archivo de la tarea original ya no estaba disponible."));
+  if (why.has("error")) parts.push(t("No se pudieron guardar en el servidor; inténtalo de nuevo más tarde."));
+  return parts.join(" ");
 }
 
 const updateSchema = z.object({

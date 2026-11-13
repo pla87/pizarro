@@ -20,7 +20,8 @@ import { MentionText } from "../ui/MentionText";
 import { mentionsToPlain } from "@/lib/mentions";
 import { actionThrowResult } from "@/lib/stale-action";
 import { mbNumber } from "@/lib/quota-message";
-import { isNetworkError, loadWhenOnline, reportOffline } from "@/lib/connection";
+import { importWhenOnline, isNetworkError, loadWhenOnline, reportOffline } from "@/lib/connection";
+import type { ReleaseEditorApi, ReleaseRichEditor as RichEditorComponent } from "./ReleaseRichEditor";
 
 interface DeployResult {
   moved: { id: string; columnId: string; position: number }[];
@@ -59,6 +60,29 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   const [content, setContent] = useState("");
   const [generated, setGenerated] = useState("");
   const [tab, setTab] = useState<"edit" | "preview">("edit");
+  // Con la preferencia «Con barra de formato» el paso 2 usa el mismo editor que las descripciones (sin Editar / Vista
+  // previa). `content` es entonces el Markdown cargado en el editor; lo que la persona escribe se lee del editor al
+  // usarlo (currentText). `richEmpty`: si lo ha dejado vacío (null mientras no lo toque).
+  const rich = board.editorMode === "WYSIWYG";
+  const [RichEditor, setRichEditor] = useState<typeof RichEditorComponent | null>(null);
+  const richApi = useRef<ReleaseEditorApi>(null);
+  const [richEmpty, setRichEmpty] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!rich) return;
+    let alive = true;
+    // Se pide al abrir el diálogo (en el paso 1): al generar ya suele estar. Mientras llega, el campo de texto normal.
+    importWhenOnline(() => import("./ReleaseRichEditor")).then((m) => alive && setRichEditor(() => m.ReleaseRichEditor), () => {});
+    return () => {
+      alive = false;
+    };
+  }, [rich]);
+  /** Markdown actual de la release (lo que se copia, se descarga y se guarda). */
+  const currentText = () => (rich && richApi.current ? richApi.current.read() : content);
+  /** Sustituye el texto entero (generar, cambiar cabecera o pie): el editor lo vuelve a cargar. */
+  const loadText = (text: string) => {
+    setContent(text);
+    setRichEmpty(null);
+  };
   const [copied, setCopied] = useState(false);
   const inProduction = board.columns.find((c) => c.role === "IN_PRODUCTION");
   const [destination, setDestination] = useState<"IN_PRODUCTION" | "ARCHIVE">(inProduction ? "IN_PRODUCTION" : "ARCHIVE");
@@ -94,7 +118,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
     else setFooterId(id);
     if (step === "edit") {
       const swap = (text: string) => swapTemplateBlock(text, templateText(list, prevId), templateText(list, id), which === "header" ? "start" : "end");
-      setContent(swap);
+      loadText(swap(currentText()));
       setGenerated(swap);
     }
   };
@@ -175,7 +199,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
       tasks: releaseTasks,
       releaseNumber,
     }, t);
-    setContent(md);
+    loadText(md);
     setGenerated(md);
     setGeneratedNumber(releaseNumber);
     setTab("edit");
@@ -183,12 +207,12 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   };
 
   const back = async () => {
-    if (content !== generated && !(await confirm({ title: t("Volver a la selección"), message: t("Se perderán los cambios que has hecho en el texto. ¿Continuar?"), confirmLabel: t("Continuar"), danger: true }))) return;
+    if (currentText() !== generated && !(await confirm({ title: t("Volver a la selección"), message: t("Se perderán los cambios que has hecho en el texto. ¿Continuar?"), confirmLabel: t("Continuar"), danger: true }))) return;
     setStep("select");
   };
 
   const copy = async () => {
-    if (await copyText(content)) {
+    if (await copyText(currentText())) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
       toast(t("Copiado al portapapeles"));
@@ -247,7 +271,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
       deployRelease({
         projectId: board.project.id,
         title,
-        content,
+        content: currentText(),
         taskIds: generatedTasks.map((x) => x.taskId),
         columns: generatedTasks.map(({ taskId, columnId }) => ({ taskId, columnId })),
         titles: generatedTasks.map(({ taskId, title }) => ({ taskId, title })),
@@ -294,10 +318,10 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
             <button className="btn-secondary" onClick={copy}>
               {copied ? <Check size={15} /> : <ClipboardCopy size={15} />} {t("Copiar todo")}
             </button>
-            <button className="btn-secondary" onClick={() => downloadText(content, releaseFileName({ day: isoDate(now, appTimeZone()), number: generatedNumber, project: board.project.name }, "md"), "text/markdown")}>
+            <button className="btn-secondary" onClick={() => downloadText(currentText(), releaseFileName({ day: isoDate(now, appTimeZone()), number: generatedNumber, project: board.project.name }, "md"), "text/markdown")}>
               <Download size={15} /> .md
             </button>
-            <button className="btn-secondary" onClick={() => downloadText(content, releaseFileName({ day: isoDate(now, appTimeZone()), number: generatedNumber, project: board.project.name }, "txt"), "text/plain")}>
+            <button className="btn-secondary" onClick={() => downloadText(currentText(), releaseFileName({ day: isoDate(now, appTimeZone()), number: generatedNumber, project: board.project.name }, "txt"), "text/plain")}>
               <FileText size={15} /> .txt
             </button>
             {attachmentTotal > 0 && (
@@ -305,7 +329,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
                 {zipping ? <Loader2 size={15} className="animate-spin" /> : <FileArchive size={15} />} {t("Descargar adjuntos ({n})", { n: attachmentTotal })}
               </button>
             )}
-            <button className="btn-primary" onClick={deploy} disabled={busy || !content.trim() || (destination === "IN_PRODUCTION" && !inProduction)}>
+            <button className="btn-primary" onClick={deploy} disabled={busy || (richEmpty ?? !content.trim()) || (destination === "IN_PRODUCTION" && !inProduction)}>
               {busy ? <Loader2 size={15} className="animate-spin" /> : <Rocket size={15} />} {t("Marcar como desplegado")}
             </button>
           </>
@@ -361,6 +385,24 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
       ) : (
         <div className="flex h-full flex-col gap-3">
           {templatePickers}
+          {rich ? (
+            RichEditor ? (
+              <div data-release-editor="rich" className="flex min-h-0 flex-1 flex-col">
+                <RichEditor value={content} label={t("Contenido de la release")} onEdited={setRichEmpty} apiRef={richApi} />
+              </div>
+            ) : (
+              // Mientras llega el editor con barra (red lenta): el texto se puede ir editando aquí y el editor lo recoge.
+              <textarea
+                className="input min-h-[45vh] flex-1 font-mono text-[13px] leading-relaxed"
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                spellCheck={false}
+                aria-label={t("Contenido de la release")}
+                data-release-editor="provisional"
+              />
+            )
+          ) : (
+          <>
           <div role="tablist" className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 text-sm dark:bg-slate-800">
             {(["edit", "preview"] as const).map((tb) => (
               <button
@@ -396,6 +438,8 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
             </div>
           )}
           </div>
+          </>
+          )}
           <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
             <legend className="sr-only">{t("Al marcar como desplegado")}</legend>
             {/* El rótulo visible repite el del grupo (legend): oculto para el lector de pantalla, que ya lo anuncia. */}

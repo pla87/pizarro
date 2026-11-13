@@ -1134,8 +1134,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const dropCopy = async (id: string, columnId: string, prevId: string | null, nextId: string | null) => {
     const res = await track(duplicateTask(id, { columnId, prevId, nextId }));
     if (!res.ok) return toast(res.error, "error");
-    upsertTask(res.data);
+    const { copyNotice, ...copy } = res.data;
+    upsertTask(copy);
     toast(t("Tarea duplicada"), "undo");
+    if (copyNotice) toast(copyNotice, "error");
   };
 
   const onDragEnd = async ({ active, over }: DragEndEvent) => {
