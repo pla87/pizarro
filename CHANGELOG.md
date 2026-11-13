@@ -2,6 +2,46 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.52.0 — 2026-11-13 16:46
+
+Repeticiones en el calendario, borrar tu cuenta, duplicar con adjuntos, releases con barra de formato, tableros grandes fluidos y textos más breves
+
+### Nuevas funcionalidades
+
+- Las tareas que se repiten muestran sus apariciones futuras en el Calendario (con borde discontinuo) y como serie repetida en el calendario suscrito y en el .ics.
+- «Nueva tarea» tiene el campo «Repetir» (cada día, semana o mes), igual que el detalle.
+- Puedes borrar tu propia cuenta desde «Mi perfil», con contraseña, verificación en dos pasos y la palabra BORRAR; lo que creaste en proyectos compartidos queda como «Usuario eliminado».
+
+### Mejoras
+
+- Duplicar una tarea copia también sus adjuntos y documentos de Google enlazados; cada copia es independiente y cuenta para la cuota.
+- Con «Con barra de formato» en Mi perfil, el texto de las releases se edita con la misma barra que las descripciones, sin «Editar / Vista previa».
+- Al cambiar de proyecto, en lugar de columnas grises se dibuja el contorno del logo (solo si la carga tarda).
+- Tableros con cientos o miles de tarjetas: el buscador y el arrastre van fluidos también en equipos lentos.
+- Textos más breves en Administración, Mi perfil, Calendario, Documentación, importar y la instalación; los detalles pasan a notas «i».
+- Los botones que no harían nada (vaciar una papelera vacía, Guardar sin cambios, Limpiar sin filtros…) aparecen atenuados y desactivados.
+- Las copias de seguridad nunca borran la última copia buena y avisan si la última es mucho menor (con «La reducción es correcta» si fue a propósito).
+- Exportar un proyecto incluye la papelera de Documentación, la cuota propia y los datos de los documentos de Google.
+- Una importación cortada por un reinicio ya no deja ficheros sueltos.
+
+### Correcciones
+
+- Guardar un formulario sin conexión avisa «Sin conexión: no se ha guardado» en lugar de «Algo ha fallado», y conserva lo escrito.
+- El .ics de una columna Agenda limita las series de repetición y su texto, como el calendario suscrito.
+- La copia de una tarea muestra en su descripción las imágenes de sus propios adjuntos copiados, no las de la original.
+- Al exportar e importar un proyecto, las imágenes de descripciones y comentarios se siguen viendo.
+- En el Calendario sin conexión, mover una tarea o un entregable vuelve a su día con el aviso de sin conexión.
+- Sin conexión, «Borrar los borradores al cerrar sesión» y borrar una release o sus adjuntos avisan en lugar de quedarse a medias.
+- En «Nueva tarea» recuperada de un borrador, el día de «Repetir» sigue a la fecha límite.
+
+### Cambios técnicos / DB
+
+- TRUST_PROXY decide si la IP se toma de X-Real-IP / X-Forwarded-For (sí por defecto en Docker y Railway; no con npm start).
+- Conexión a PostgreSQL con tiempo máximo de 10 s (DATABASE_CONNECT_TIMEOUT_MS) y DATABASE_POOL_SIZE validado.
+- Imagen Docker unos 43 MB más pequeña y páginas legales con unos 45 KB menos de JavaScript.
+- El calendario suscrito anota sus consultas como mucho una vez cada 6 horas por dirección.
+- Acciones de GitHub actualizadas, Dependabot con 7 días de espera y minimatch corregido en la herramienta de lint (0 vulnerabilidades).
+
 ## v1.51.1 — 2026-11-13 10:36
 
 Dependencias al día: Next 16.4.5, editor 3.32.3 y librería de emails con su corrección de seguridad

@@ -1,6 +1,83 @@
 {
   "versions": [
     {
+      "version": "1.52.0",
+      "date": "2026-11-13",
+      "releasedAt": "2026-11-13T16:46:46+01:00",
+      "summary": "Repeticiones en el calendario, borrar tu cuenta, duplicar con adjuntos, releases con barra de formato, tableros grandes fluidos y textos más breves",
+      "changes": {
+        "nuevas": [
+          "Las tareas que se repiten muestran sus apariciones futuras en el Calendario (con borde discontinuo) y como serie repetida en el calendario suscrito y en el .ics.",
+          "«Nueva tarea» tiene el campo «Repetir» (cada día, semana o mes), igual que el detalle.",
+          "Puedes borrar tu propia cuenta desde «Mi perfil», con contraseña, verificación en dos pasos y la palabra BORRAR; lo que creaste en proyectos compartidos queda como «Usuario eliminado»."
+        ],
+        "mejoras": [
+          "Duplicar una tarea copia también sus adjuntos y documentos de Google enlazados; cada copia es independiente y cuenta para la cuota.",
+          "Con «Con barra de formato» en Mi perfil, el texto de las releases se edita con la misma barra que las descripciones, sin «Editar / Vista previa».",
+          "Al cambiar de proyecto, en lugar de columnas grises se dibuja el contorno del logo (solo si la carga tarda).",
+          "Tableros con cientos o miles de tarjetas: el buscador y el arrastre van fluidos también en equipos lentos.",
+          "Textos más breves en Administración, Mi perfil, Calendario, Documentación, importar y la instalación; los detalles pasan a notas «i».",
+          "Los botones que no harían nada (vaciar una papelera vacía, Guardar sin cambios, Limpiar sin filtros…) aparecen atenuados y desactivados.",
+          "Las copias de seguridad nunca borran la última copia buena y avisan si la última es mucho menor (con «La reducción es correcta» si fue a propósito).",
+          "Exportar un proyecto incluye la papelera de Documentación, la cuota propia y los datos de los documentos de Google.",
+          "Una importación cortada por un reinicio ya no deja ficheros sueltos."
+        ],
+        "correcciones": [
+          "Guardar un formulario sin conexión avisa «Sin conexión: no se ha guardado» en lugar de «Algo ha fallado», y conserva lo escrito.",
+          "El .ics de una columna Agenda limita las series de repetición y su texto, como el calendario suscrito.",
+          "La copia de una tarea muestra en su descripción las imágenes de sus propios adjuntos copiados, no las de la original.",
+          "Al exportar e importar un proyecto, las imágenes de descripciones y comentarios se siguen viendo.",
+          "En el Calendario sin conexión, mover una tarea o un entregable vuelve a su día con el aviso de sin conexión.",
+          "Sin conexión, «Borrar los borradores al cerrar sesión» y borrar una release o sus adjuntos avisan en lugar de quedarse a medias.",
+          "En «Nueva tarea» recuperada de un borrador, el día de «Repetir» sigue a la fecha límite."
+        ],
+        "tecnicos": [
+          "TRUST_PROXY decide si la IP se toma de X-Real-IP / X-Forwarded-For (sí por defecto en Docker y Railway; no con npm start).",
+          "Conexión a PostgreSQL con tiempo máximo de 10 s (DATABASE_CONNECT_TIMEOUT_MS) y DATABASE_POOL_SIZE validado.",
+          "Imagen Docker unos 43 MB más pequeña y páginas legales con unos 45 KB menos de JavaScript.",
+          "El calendario suscrito anota sus consultas como mucho una vez cada 6 horas por dirección.",
+          "Acciones de GitHub actualizadas, Dependabot con 7 días de espera y minimatch corregido en la herramienta de lint (0 vulnerabilidades)."
+        ]
+      },
+      "en": {
+        "summary": "Repeats in the calendar, delete your account, duplicate with attachments, releases with the formatting toolbar, smooth large boards and shorter texts",
+        "changes": {
+          "nuevas": [
+            "Repeating tasks show their future occurrences in the Calendar (dashed border) and as a recurring series in the subscribed calendar and the .ics.",
+            "«New task» has the «Repeat» field (daily, weekly or monthly), like the detail view.",
+            "You can delete your own account from «My profile», with password, two-step verification and the word DELETE; what you created in shared projects stays as «Deleted user»."
+          ],
+          "mejoras": [
+            "Duplicating a task also copies its attachments and linked Google documents; each copy is independent and counts towards the quota.",
+            "With «With formatting toolbar» in My profile, release text is edited with the same toolbar as descriptions, without «Edit / Preview».",
+            "When switching projects, the logo outline is drawn instead of grey columns (only if loading takes a while).",
+            "Boards with hundreds or thousands of cards: search and drag stay smooth even on slow devices.",
+            "Shorter texts in Administration, My profile, Calendar, Documentation, import and setup; details move to «i» notes.",
+            "Buttons that would do nothing (emptying an empty trash, Save with no changes, Clear with no filters…) appear dimmed and disabled.",
+            "Backups never delete the last good copy and warn if the latest is much smaller (with «The reduction is correct» if it was on purpose).",
+            "Project export includes the Documentation trash, its own quota and Google document data.",
+            "An import cut short by a restart no longer leaves stray files."
+          ],
+          "correcciones": [
+            "Saving a form while offline says «Offline: not saved» instead of «Something went wrong», and keeps what you typed.",
+            "The .ics of an Agenda column limits repeat series and their text, like the subscribed calendar.",
+            "A duplicated task shows the images of its own copied attachments in its description, not the original ones.",
+            "When exporting and importing a project, images in descriptions and comments still show.",
+            "In the Calendar while offline, moving a task or deliverable goes back to its day with the offline notice.",
+            "While offline, «Clear drafts on sign-out» and deleting a release or its attachments now warn instead of getting stuck.",
+            "In a «New task» restored from a draft, the «Repeat» day follows the due date."
+          ],
+          "tecnicos": [
+            "TRUST_PROXY decides whether the IP is taken from X-Real-IP / X-Forwarded-For (yes by default on Docker and Railway; no with npm start).",
+            "PostgreSQL connection with a 10 s limit (DATABASE_CONNECT_TIMEOUT_MS) and validated DATABASE_POOL_SIZE.",
+            "Docker image about 43 MB smaller and legal pages with about 45 KB less JavaScript.",
+            "The subscribed calendar logs its requests at most once every 6 hours per address.",
+            "GitHub Actions updated, Dependabot with a 7-day wait and minimatch fixed in the lint tool (0 vulnerabilities)."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.51.1",
       "date": "2026-11-13",
       "releasedAt": "2026-11-13T10:36:33+01:00",
