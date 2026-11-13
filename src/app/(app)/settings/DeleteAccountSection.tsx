@@ -1,7 +1,7 @@
 "use client";
 
 import { CircleCheck, Info, TriangleAlert, UserX } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useActionTransition } from "@/components/useActionTransition";
 import { deleteMyAccount, sendAccountDeleteCode } from "@/actions/profile";
 import { clearDraftsOnLogout } from "@/components/board/drafts";
@@ -33,6 +33,15 @@ interface Props {
 export function DeleteAccountSection({ block, ...props }: Props) {
   const t = useT();
   const [open, setOpen] = useState(!block && props.reauth !== null);
+  // La vuelta de Google ya ha abierto el diálogo: se quita «?delete=…» de la dirección para que recargar no lo reabra
+  // con un resultado viejo (p. ej. «google_failed»).
+  useEffect(() => {
+    if (props.reauth === null) return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("delete")) return;
+    url.searchParams.delete("delete");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }, [props.reauth]);
   return (
     <section className="card p-5" id="delete-account">
       <h2 className="flex items-center gap-2 font-semibold"><UserX size={18} /> {t("Borrar mi cuenta")}</h2>
