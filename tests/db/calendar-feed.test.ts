@@ -12,6 +12,7 @@ import { flushLogs } from "../../src/lib/log";
 import { appTimeZone } from "../../src/lib/board";
 import { dateToIso, isoWeekday, todayIso } from "../../src/lib/dates";
 import { firstOccurrence } from "../../src/lib/recurrence-series";
+import { FEED_MAX_REPEATS } from "../../src/lib/calendar-feed-core";
 import { makeT } from "../../src/i18n/core";
 
 let n = 0;
@@ -539,5 +540,38 @@ describe("tareas que se repiten en el calendario suscrito", () => {
     // En una columna Agenda que cuenta como terminada no hay serie.
     await db.column.update({ where: { id: f.columns.todo }, data: { isDone: true } });
     assert.equal(block((await buildColumnIcs(f.project.id, f.columns.todo))!.ics, `${t.id}-repeat@pizarro`), undefined);
+  });
+
+  test(".ics de la columna Agenda: las series no multiplican descripciones largas ni pasan del tope de tareas que se repiten", async () => {
+    const f = await makeProject();
+    await db.column.update({ where: { id: f.columns.todo }, data: { role: "AGENDA" } });
+    // Mensual el día 30 (sin RRULE fiel): un evento por mes, y cada uno repetía la descripción de la tarea (hasta 1.500
+    // caracteres): con 2.000 tareas así, unos 80 MB por petición.
+    const long = Array.from({ length: 400 }, (_, i) => `palabra${i}`).join(" ");
+    const m30 = await makeTask(f, { title: "Cierre", recurrence: "MONTHLY", dueDate: inDays(4) });
+    await db.task.update({ where: { id: m30.id }, data: { recurrenceDay: 30, description: long } });
+    const col = (await buildColumnIcs(f.project.id, f.columns.todo))!;
+    const unfolded = col.ics.replace(/\r\n /g, "");
+    const events = unfolded.split("BEGIN:VEVENT").filter((b) => new RegExp(`UID:${m30.id}-repeat-\\d{4}-\\d{2}-\\d{2}@pizarro`).test(b));
+    assert.ok(events.length >= 11, `eventos mensuales: ${events.length}`);
+    // La tarea conserva su descripción (hasta 1.500 caracteres); las apariciones previstas, un extracto (como la suscripción).
+    assert.ok(block(unfolded, `${m30.id}@pizarro`)!.includes("palabra100 "), "descripción larga en la tarea");
+    for (const e of events) {
+      const desc = /DESCRIPTION:(.*)/.exec(e)?.[1] ?? "";
+      assert.ok(desc.startsWith("palabra0 ") && desc.length <= 320, `descripción de la aparición: ${desc.length}`);
+    }
+
+    // Muchas tareas que se repiten: solo las primeras FEED_MAX_REPEATS llevan serie (como la suscripción).
+    const many = FEED_MAX_REPEATS + 20;
+    await db.task.createMany({
+      data: Array.from({ length: many }, (_, i) => ({
+        projectId: f.project.id, columnId: f.columns.todo, kindId: f.kindId, title: `Diaria ${i}`, position: 10_000 + i, recurrence: "DAILY" as const, dueDate: inDays(10),
+      })),
+    });
+    const big = (await buildColumnIcs(f.project.id, f.columns.todo))!;
+    const series = big.ics.split("\r\n").filter((l) => /^UID:.+-repeat(-\d{4}-\d{2}-\d{2})?@pizarro$/.test(l));
+    const sources = new Set(series.map((l) => l.replace(/-repeat.*$/, "")));
+    assert.equal(sources.size, FEED_MAX_REPEATS);
+    assert.equal(big.count, many + 1);
   });
 });
