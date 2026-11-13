@@ -183,6 +183,8 @@ enum LoginChallengeKind {
   SETUP
   /// Alta o cambio de método desde «Mi perfil» (sin cookie; ligado a la sesión).
   ENROLL
+  /// «Borrar mi cuenta» desde «Mi perfil» (sin cookie; ligado a la sesión): código por email, de la app o de recuperación.
+  ACCOUNT_DELETE
 }
 
 /// Códigos de recuperación de un solo uso de la verificación en dos pasos. Solo se guarda su HMAC.

@@ -53,6 +53,8 @@ interface Props {
   tab: ProfileTab;
   /** Pestaña «Cuenta»: cambio de email, verificación en dos pasos y sesiones (secciones del servidor). */
   accountExtra?: React.ReactNode;
+  /** Pestaña «Cuenta», al final (tras Google): «Borrar mi cuenta». */
+  accountEnd?: React.ReactNode;
   /** Pestaña «Preferencias»: proyectos en los que trabaja un administrador. */
   preferencesExtra?: React.ReactNode;
 }
@@ -173,6 +175,7 @@ export function ProfileSettings(props: Props) {
 
         {props.accountExtra}
         <GoogleSection google={props.google} />
+        {props.accountEnd}
         </>
       )}
     </div>

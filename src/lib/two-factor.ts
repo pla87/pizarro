@@ -65,7 +65,8 @@ export async function readChallenge(): Promise<Challenge | null> {
   const token = (await cookies()).get(CHALLENGE_COOKIE)?.value;
   if (!token || token.length > 100) return null;
   const row = await db.loginChallenge.findFirst({ where: { tokenHash: { in: authTokenHashes(token) } }, include: challengeInclude });
-  if (!row || row.kind === "ENROLL" || row.expiresAt.getTime() < Date.now() || !row.user.active) return null;
+  // Solo los del acceso: los de «Mi perfil» (ENROLL, ACCOUNT_DELETE) van ligados a la sesión, nunca a esta cookie.
+  if (!row || (row.kind !== "LOGIN" && row.kind !== "SETUP") || row.expiresAt.getTime() < Date.now() || !row.user.active) return null;
   return row;
 }
 
@@ -132,7 +133,8 @@ export async function checkCode(ch: Challenge, input: string): Promise<"ok" | "w
   }
   const code = input.trim().slice(0, 40);
   let ok = false;
-  if (ch.kind === "LOGIN") {
+  // Acceso y «Borrar mi cuenta»: el método que la persona ya tiene, o un código de recuperación.
+  if (ch.kind === "LOGIN" || ch.kind === "ACCOUNT_DELETE") {
     const recovery = normalizeRecoveryCode(code);
     if (recovery) ok = await consumeRecoveryCode(ch.userId, recovery);
     else if (ch.user.twoFactorMethod === "TOTP") ok = await verifyTotpFor(ch.user.totpSecretEnc, code, ch.userId, ch.user.totpLastStep);
@@ -148,6 +150,24 @@ export async function checkCode(ch: Challenge, input: string): Promise<"ok" | "w
     return "locked";
   }
   return "wrong";
+}
+
+/**
+ * Desafío de «Borrar mi cuenta» de esta persona: el vigente (con sus intentos y su código por email, si lo pidió) o uno
+ * nuevo. Sin cookie: lo encuentra la propia sesión. Sirve para comprobar el código con checkCode (mismos límites que el acceso).
+ */
+export async function accountDeleteChallenge(userId: string): Promise<Challenge> {
+  const live = await db.loginChallenge.findFirst({
+    where: { userId, kind: "ACCOUNT_DELETE", expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: "desc" },
+    include: challengeInclude,
+  });
+  if (live) return live;
+  await db.loginChallenge.deleteMany({ where: { userId, kind: "ACCOUNT_DELETE" } });
+  return db.loginChallenge.create({
+    data: { userId, kind: "ACCOUNT_DELETE", tokenHash: hashAuthToken(newToken()), expiresAt: new Date(Date.now() + CHALLENGE_TTL_MS) },
+    include: challengeInclude,
+  });
 }
 
 /**

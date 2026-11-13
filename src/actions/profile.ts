@@ -7,17 +7,21 @@ import { runAction } from "@/lib/action";
 import { MAX_TEMPLATE } from "@/lib/constants";
 import { AppError, notFound } from "@/lib/errors";
 import { applyNewPassword } from "@/lib/account";
-import { sendEmailChangeMail, sendEmailChangeRequestedMail, sendPasswordChangeMail } from "@/lib/auth-mail";
+import { sendAccountDeletedMail, sendEmailChangeMail, sendEmailChangeRequestedMail, sendPasswordChangeMail } from "@/lib/auth-mail";
 import { issueAuthToken } from "@/lib/auth-token";
-import { appUrl, emailEnabled } from "@/lib/mail";
+import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { logMailError } from "@/lib/mask-email";
 import { hashPassword, passwordSchema, verifyPasswordCounted } from "@/lib/password";
 import { POSITION_STEP } from "@/lib/positions";
-import { createSession, currentSessionId, requireUser } from "@/lib/session";
+import { createSession, currentSessionId, destroySession, requireUser } from "@/lib/session";
 import { disconnectGoogleAccount } from "@/lib/google";
 import { rateLimit } from "@/lib/rate-limit";
 import * as v from "@/lib/validation";
 import { revokeSession as cutSessionStreams } from "@/lib/revoke";
+import { describeAction } from "@/lib/action-context";
+import { accountDeleteChallenge, checkCode, sendEmailCode } from "@/lib/two-factor";
+import { deletionBlock, eraseUser, soloPrivateProjectIds } from "@/lib/user-delete";
+import { DELETION_BLOCK_MESSAGES } from "@/lib/user-delete-core";
 
 export async function updateProfileName(name: string) {
   return runAction({ name: "profile.updateProfileName", args: [name] }, async () => {
@@ -244,5 +248,62 @@ export async function disconnectGoogle() {
   return runAction({ name: "profile.disconnectGoogle", args: [] }, async () => {
     const user = await requireUser();
     await disconnectGoogleAccount(user.id);
+  });
+}
+
+// --- «Borrar mi cuenta» (pestaña «Cuenta») ---
+// Nunca se pasan la contraseña ni el código como args de runAction: los args van al registro de actividad.
+
+/** Envía el código por email para borrar la cuenta (solo si su verificación en dos pasos usa el email). */
+export async function sendAccountDeleteCode() {
+  return runAction({ name: "profile.sendAccountDeleteCode", args: [] }, async () => {
+    const user = await requireUser();
+    const me = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { name: true, email: true, locale: true, twoFactorMethod: true } });
+    if (me.twoFactorMethod !== "EMAIL") throw new AppError("Tu verificación en dos pasos no usa códigos por email.");
+    await sendEmailCode(await accountDeleteChallenge(user.id), me);
+  });
+}
+
+const deleteAccountSchema = z.object({
+  password: z.string().max(200),
+  code: z.string().max(40).optional(),
+  confirmPrivate: z.boolean().optional(),
+});
+
+/**
+ * Borra la cuenta de quien la pide, igual que un administrador desde «Usuarios» (eraseUser): pide la contraseña actual
+ * y, si tiene la verificación en dos pasos, su código (de la app, por email o de recuperación), con los mismos límites
+ * de intentos que el acceso. No se puede borrar la única cuenta ni el último administrador activo. Al terminar cierra
+ * la sesión de este navegador (las demás ya no existen) y avisa por email.
+ */
+export async function deleteMyAccount(input: z.input<typeof deleteAccountSchema>) {
+  return runAction({ name: "profile.deleteMyAccount", args: [] }, async () => {
+    const user = await requireUser();
+    const data = deleteAccountSchema.parse(input);
+    const block = await deletionBlock(user.id);
+    if (block) throw new AppError(DELETION_BLOCK_MESSAGES[block]);
+    const privates = await soloPrivateProjectIds(user.id);
+    if (privates.length > 0 && data.confirmPrivate !== true) throw new AppError("Confirma que se borran tus proyectos privados.");
+    const me = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { name: true, email: true, locale: true, passwordHash: true, twoFactorMethod: true } });
+    const code = (data.code ?? "").trim();
+    if (me.twoFactorMethod && !code) throw new AppError("Escribe el código de verificación.");
+    const rateKey = `account-delete:${user.id}`;
+    if (!rateLimit(rateKey, 5, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
+    // Con el servidor ocupado, el intento no cuenta (verifyPasswordCounted lo devuelve).
+    if (!(await verifyPasswordCounted(data.password, me.passwordHash, rateKey))) throw new AppError("La contraseña actual no es correcta.");
+    if (me.twoFactorMethod) {
+      const result = await checkCode(await accountDeleteChallenge(user.id), code);
+      if (result === "locked") throw new AppError("Demasiados intentos. Empieza de nuevo.");
+      if (result === "wrong") throw new AppError("Código incorrecto o caducado.");
+    }
+    await eraseUser(user.id, privates, { self: true });
+    describeAction(
+      privates.length
+        ? `«${me.name}» borró su cuenta y ${privates.length === 1 ? "su proyecto privado" : `sus ${privates.length} proyectos privados`}`
+        : `«${me.name}» borró su cuenta`,
+    );
+    // Sus sesiones ya no existen: aquí solo queda quitar la cookie de este navegador.
+    await destroySession();
+    if (emailEnabled()) sendMailInBackground("aviso de cuenta borrada", () => sendAccountDeletedMail(me));
   });
 }

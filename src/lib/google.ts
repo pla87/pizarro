@@ -220,19 +220,24 @@ async function shareFile(token: string, fileId: string, target: DriveShareTarget
   return { status: shareStatusOf(bodies.length, failed), failed };
 }
 
-export async function disconnectGoogleAccount(userId: string): Promise<void> {
-  const account = await db.googleAccount.findUnique({ where: { userId }, select: { refreshTokenEnc: true } });
-  if (!account) return;
-  // La revocación es de cortesía: aunque falle (o no se pueda descifrar), la conexión se borra.
+/** Retira en Google el permiso de Drive concedido a Pizarro. De cortesía: si falla (o no se puede descifrar), se ignora. */
+export async function revokeGoogleToken(refreshTokenEnc: string): Promise<void> {
   try {
     await fetch(REVOKE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ token: decryptSecret(account.refreshTokenEnc) }),
+      body: new URLSearchParams({ token: decryptSecret(refreshTokenEnc) }),
       signal: AbortSignal.timeout(10_000),
     });
   } catch {
     // ignorado
   }
+}
+
+export async function disconnectGoogleAccount(userId: string): Promise<void> {
+  const account = await db.googleAccount.findUnique({ where: { userId }, select: { refreshTokenEnc: true } });
+  if (!account) return;
+  // Aunque la revocación falle, la conexión se borra.
+  await revokeGoogleToken(account.refreshTokenEnc);
   await db.googleAccount.deleteMany({ where: { userId } });
 }
