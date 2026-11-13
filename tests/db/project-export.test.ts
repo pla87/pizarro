@@ -322,6 +322,32 @@ describe("exportar e importar: papelera, cuota propia y enlaces de Drive", () =>
     assert.deepEqual([s.counts.documents, s.counts.trashedDocuments], [1, 0]);
   });
 
+  test("material de un curso: enlaces de Google Slides y documentos HTML van y vuelven con su tipo", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [admin] });
+    const task = await makeTask(f);
+    await db.taskLink.create({ data: { taskId: task.id, kind: "GOOGLE_SLIDES", title: "Clase 1", url: "https://docs.google.com/presentation/d/pres1/edit", externalId: "pres1", shareStatus: "SHARED", createdById: admin.id } });
+    const html = Buffer.from("<!doctype html><h1>Tema 1</h1><script>alert(1)</script>");
+    const doc = await db.projectDocument.create({ data: { projectId: f.project.id, name: "tema-1.html", mimeType: "text/html", size: html.length, kind: "HTML", createdById: admin.id } });
+    await saveDocumentFile(doc.id, html);
+    const built = await buildProjectExport(f.project.id, { attachments: true, scope: "board" });
+    const data = projectJsonOf(built);
+    projectDataSchema.parse(data);
+    assert.deepEqual(data.tasks.flatMap((t) => t.links.map((l) => l.kind)), ["GOOGLE_SLIDES"]);
+    assert.deepEqual(data.documents.map((d) => [d.name, d.kind]), [["tema-1.html", "HTML"]]);
+    const s = await importProjectFile(await writeExport(built), asImporter(admin), { isPrivate: true });
+    const p = await db.project.findUniqueOrThrow({ where: { id: s.projectId }, include: { documents: true, tasks: { include: { links: true } } } });
+    assert.deepEqual(p.tasks[0]!.links.map((l) => [l.kind, l.url, l.externalId]), [["GOOGLE_SLIDES", "https://docs.google.com/presentation/d/pres1/edit", "pres1"]]);
+    assert.deepEqual(p.documents.map((d) => [d.name, d.kind, d.mimeType]), [["tema-1.html", "HTML", "text/html"]]);
+    assert.equal((await readFile(documentPath(p.documents[0]!.id))).toString(), html.toString());
+    // Un «HTML» que no es texto se importa como fichero para descargar (como al subirlo).
+    const bin = Buffer.from([0, 1, 2, 3]);
+    const at = "2026-01-02T03:04:05.000Z";
+    const fake = minimal([{ links: [] }], { documents: [{ ref: "x1", name: "raro.html", mimeType: "text/html", size: bin.length, kind: "HTML", createdBy: null, createdAt: at, updatedAt: at, file: sha(bin) }] });
+    const s2 = await importProjectFile(await craft(fake, [bin]), asImporter(admin), { isPrivate: true });
+    assert.deepEqual((await db.projectDocument.findMany({ where: { projectId: s2.projectId } })).map((d) => d.kind), ["OTHER"]);
+  });
+
   test("una cuota propia menor que los archivos del proyecto no impide importarlo: se usa la general, con aviso", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const at = "2026-01-02T03:04:05.000Z";

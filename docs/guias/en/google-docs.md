@@ -1,13 +1,13 @@
 ---
 titulo: Google Docs and Sheets
-descripcion: Create a document or a spreadsheet from a task and keep it linked to it.
+descripcion: Create a document, a spreadsheet or a presentation from a task and keep it linked to it.
 orden: 2
 icono: google
 ---
 
 # Google Docs and Sheets
 
-With this connection, any task can create a Google Doc or a Google Sheet: it is created in the Drive of whoever asks for it, named after the card, opens in a new tab and stays linked to the task. It uses the same Google client as [Sign in with Google](google-login.md); if you already have it, start at step 1 and skip step 3.
+With this connection, any task can create a Google Doc, a Google Sheet or a Google Slides presentation: it is created in the Drive of whoever asks for it, named after the card, opens in a new tab and stays linked to the task. It uses the same Google client as [Sign in with Google](google-login.md); if you already have it, start at step 1 and skip step 3.
 
 You need to be a Pizarro administrator, your Pizarro's public address with `https://` (the `APP_URL` variable) and a Google account.
 
@@ -16,7 +16,7 @@ You need to be a Pizarro administrator, your Pizarro's public address with `http
 1. Go to <https://console.cloud.google.com> and pick Pizarro's project (or create one, as in step 2 of [the other guide](google-login.md)).
 2. Open **APIs & Services → Library**, search for **Google Drive API** and click **Enable**.
 
-It is the only API you need: Docs and Sheets are created through Drive, so there is no need to enable the Docs or Sheets APIs.
+It is the only API you need: Docs, Sheets and Slides are created through Drive, so there is no need to enable the Docs, Sheets or Slides APIs.
 
 ## 2. Add the Drive scope
 
@@ -33,7 +33,7 @@ It only gives access to the files Pizarro creates or opens, not to the rest of e
 
 ## 3. Create the OAuth client (if you don't have it yet)
 
-Follow steps 2 to 6 of [Sign in with Google](google-login.md). Under **Authorized redirect URIs**, the address for Docs and Sheets is your `APP_URL` followed by `/api/google/callback`, exactly (with `https` and no trailing slash):
+Follow steps 2 to 6 of [Sign in with Google](google-login.md). Under **Authorized redirect URIs**, the address for Docs, Sheets and Slides is your `APP_URL` followed by `/api/google/callback`, exactly (with `https` and no trailing slash):
 
 ```
 https://pizarro.example.com/api/google/callback
@@ -48,11 +48,11 @@ If you also use Sign in with Google, put both addresses in the same client. Then
 
 ## 5. Each person connects their account
 
-Once per person: **My profile → Account → Google Docs and Sheets → Connect with Google**, and accept the Drive permission.
+Once per person: **My profile → Account → Google Docs, Sheets and Slides → Connect with Google**, and accept the Drive permission.
 
 ## 6. Try it
 
-1. Open a task and click **New Doc** or **New Sheet** (under **Google documents**), or type `@docs` or `@sheets` in the description or in a comment.
+1. Open a task and click **New Doc**, **New Sheet** or **New Slides** (under **Google documents**), or type `@docs`, `@sheets` or `@slides` in the description or in a comment.
 2. The file opens in a new tab and stays under **Google documents** on the card.
 3. Removing the link from the card does not delete the file from Drive.
 

@@ -6,6 +6,7 @@ import { logEvent } from "./log";
 import { idTokenKeyId, verifiedConnectEmail } from "./google-id-token";
 import { googleKeys } from "./google-login";
 import { googleConfig, googleEnabled, googleWorkspaceDomain } from "./google-config";
+import type { GoogleFileKind } from "./google-files";
 import { shareStatusOf, type ShareStatus } from "./google-share";
 
 // Integración con Google Drive mediante OAuth por usuario.
@@ -25,11 +26,11 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 const DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files";
 
-export const GOOGLE_MIME = {
+export const GOOGLE_MIME: Record<GoogleFileKind, string> = {
   GOOGLE_DOC: "application/vnd.google-apps.document",
   GOOGLE_SHEET: "application/vnd.google-apps.spreadsheet",
-} as const;
-export type GoogleFileKind = keyof typeof GOOGLE_MIME;
+  GOOGLE_SLIDES: "application/vnd.google-apps.presentation",
+};
 
 export { googleEnabled };
 

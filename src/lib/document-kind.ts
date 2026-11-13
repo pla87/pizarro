@@ -1,19 +1,22 @@
 // Documentación del proyecto: tipos de fichero y nombres. Funciones puras (sin dependencias de servidor).
 import { cleanFileName } from "./file-name";
 
-export type DocumentKindName = "TEXT" | "MARKDOWN" | "PDF" | "IMAGE" | "OTHER";
+export type DocumentKindName = "TEXT" | "MARKDOWN" | "PDF" | "IMAGE" | "HTML" | "OTHER";
 
 /** Máximo de documentos por proyecto. */
 export const DOCUMENTS_MAX_PER_PROJECT = 200;
 /** Días que un documento borrado se conserva en la papelera antes de purgarse (fila y fichero). */
 export const DOCUMENT_TRASH_DAYS = 7;
-/** Máximo de bytes de un texto/Markdown que el visor descarga para mostrarlo (más grande: solo descarga). */
+/** Máximo de bytes de un texto/Markdown/HTML que el visor descarga para mostrarlo (más grande: solo descarga). */
 export const DOCUMENT_PREVIEW_MAX_BYTES = 1024 * 1024;
 
 const TEXT_EXT = new Set(["txt", "text", "log", "csv", "tsv", "json", "yml", "yaml", "ini", "cfg", "conf", "toml", "xml", "env"]);
 const MARKDOWN_EXT = new Set(["md", "markdown"]);
 // SVG queda fuera a propósito: puede llevar scripts, así que es un fichero «otro» (solo descarga).
 const IMAGE_EXT = new Set(["png", "jpg", "jpeg", "webp", "gif", "avif"]);
+// HTML: el servidor lo sirve siempre como texto plano (o como descarga); el visor lo pinta en un marco aislado, sin scripts
+// ni red (ver HtmlPreview). Nunca como página del origen de la app.
+const HTML_EXT = new Set(["html", "htm"]);
 
 function extensionOf(name: string): string {
   const m = /\.([a-z0-9]{1,10})$/i.exec(name.trim());
@@ -31,10 +34,12 @@ export function detectDocumentKind(name: string, mime: string | null | undefined
   if (MARKDOWN_EXT.has(ext)) return "MARKDOWN";
   if (IMAGE_EXT.has(ext)) return "IMAGE";
   if (TEXT_EXT.has(ext)) return "TEXT";
+  if (HTML_EXT.has(ext)) return "HTML";
   if (ext) return "OTHER";
   if (m === "application/pdf") return "PDF";
   if (m === "text/markdown" || m === "text/x-markdown") return "MARKDOWN";
   if (m === "text/plain" || m === "text/csv" || m === "application/json") return "TEXT";
+  if (m === "text/html") return "HTML";
   if (/^image\/(png|jpeg|webp|gif|avif)$/.test(m)) return "IMAGE";
   return "OTHER";
 }
@@ -63,12 +68,12 @@ export function looksLikeText(buf: Uint8Array): boolean {
 }
 
 /**
- * Tipo definitivo tras mirar el contenido: un PDF sin cabecera de PDF o un «texto» binario pasan a OTHER
+ * Tipo definitivo tras mirar el contenido: un PDF sin cabecera de PDF o un «texto» (o HTML) binario pasan a OTHER
  * (se sirven como octet-stream, sin vista previa). Las imágenes las confirma sharp en la subida.
  */
 export function confirmDocumentKind(declared: DocumentKindName, content: Uint8Array): DocumentKindName {
   if (declared === "PDF") return looksLikePdf(content) ? "PDF" : "OTHER";
-  if (declared === "TEXT" || declared === "MARKDOWN") return looksLikeText(content) ? declared : "OTHER";
+  if (declared === "TEXT" || declared === "MARKDOWN" || declared === "HTML") return looksLikeText(content) ? declared : "OTHER";
   return declared;
 }
 
@@ -93,6 +98,7 @@ export function documentMime(kind: DocumentKindName, clientMime: string): string
   switch (kind) {
     case "TEXT": return "text/plain";
     case "MARKDOWN": return "text/markdown";
+    case "HTML": return "text/html";
     case "PDF": return "application/pdf";
     case "IMAGE": return "image/webp";
     default: return clientMime;

@@ -1,11 +1,12 @@
 "use client";
 
-import { AlertCircle, ArrowLeft, Download, Eye, File as FileIcon, FileCode, FileImage, FileText, FileType, Loader2, Pencil, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
+import { AlertCircle, ArrowLeft, Code2, Download, Eye, File as FileIcon, FileCode, FileImage, FileText, FileType, Loader2, Pencil, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { deleteDocument, deleteDocumentForever, renameDocument, restoreDocument } from "@/actions/documents";
 import { filesFrom, formatBytes, useFileDrop } from "@/components/board/upload";
 import { uploadDocument, documentUploadName } from "@/components/docs/uploadDocuments";
 import { useDocTaskDialogs } from "@/components/docs/useDocTaskDialogs";
+import { HtmlPreview } from "@/components/docs/HtmlPreview";
 import { ZoomImage } from "@/components/docs/ZoomImage";
 import { Markdown } from "@/components/ui/Markdown";
 import { MODAL_SIZE_REM, Modal } from "@/components/ui/Modal";
@@ -46,6 +47,7 @@ const ICONS: Record<DocumentKindName, { icon: typeof FileIcon; className: string
   MARKDOWN: { icon: FileCode, className: "text-sky-600 bg-sky-50 dark:bg-sky-500/15 dark:text-sky-300" },
   PDF: { icon: FileType, className: "text-red-600 bg-red-50 dark:bg-red-500/15 dark:text-red-300" },
   IMAGE: { icon: FileImage, className: "text-emerald-600 bg-emerald-50 dark:bg-emerald-500/15 dark:text-emerald-300" },
+  HTML: { icon: Code2, className: "text-orange-600 bg-orange-50 dark:bg-orange-500/15 dark:text-orange-300" },
   OTHER: { icon: FileIcon, className: "text-slate-400 bg-slate-100 dark:bg-slate-800 dark:text-slate-400" },
 };
 
@@ -76,7 +78,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
   }, [documents]);
 
   const kindLabel = (k: DocumentKindName) =>
-    k === "TEXT" ? t("Texto") : k === "MARKDOWN" ? "Markdown" : k === "PDF" ? "PDF" : k === "IMAGE" ? t("Imagen") : t("Otro");
+    k === "TEXT" ? t("Texto") : k === "MARKDOWN" ? "Markdown" : k === "PDF" ? "PDF" : k === "IMAGE" ? t("Imagen") : k === "HTML" ? "HTML" : t("Otro");
 
   function uploadFiles(files: File[]) {
     if (!files.length) return;
@@ -355,7 +357,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
   );
 }
 
-/** Visor en un modal: imagen, PDF del visor del navegador, texto plano o Markdown; el resto solo se descarga. */
+/** Visor en un modal: imagen, PDF del visor del navegador, texto plano, Markdown o HTML (aislado); el resto solo se descarga. */
 function DocViewer({ doc, projectId, currentUserId, editorMode, onClose }: { doc: DocumentRow; projectId: string; currentUserId: string; editorMode: EditorModeValue; onClose: () => void }) {
   const t = useT();
   const locale = useIntlLocale();
@@ -454,7 +456,7 @@ function DocViewer({ doc, projectId, currentUserId, editorMode, onClose }: { doc
 
 function DocPreview({ doc, name, src }: { doc: DocumentRow; name: string; src: string }) {
   const t = useT();
-  const textKind = doc.kind === "TEXT" || doc.kind === "MARKDOWN";
+  const textKind = doc.kind === "TEXT" || doc.kind === "MARKDOWN" || doc.kind === "HTML";
   const tooBig = textKind && doc.size > DOCUMENT_PREVIEW_MAX_BYTES;
   const [loaded, setLoaded] = useState<{ id: string; text: string | null } | null>(null);
   useEffect(() => {
@@ -482,6 +484,14 @@ function DocPreview({ doc, name, src }: { doc: DocumentRow; name: string; src: s
   }
   if (!loaded || loaded.id !== doc.id) return <p className="py-10 text-center text-sm text-slate-500"><Loader2 size={18} className="mx-auto animate-spin" /></p>;
   if (loaded.text === null) return <p className="py-10 text-center text-sm text-red-600">{t("No se pudo cargar el archivo.")}</p>;
+  if (doc.kind === "HTML") {
+    return (
+      <div className="space-y-2">
+        <p className="text-xs text-slate-500">{t("Vista previa sin scripts ni contenido externo (imágenes, estilos o fuentes de otros sitios). Descárgalo para verlo completo.")}</p>
+        <HtmlPreview html={loaded.text} title={name} />
+      </div>
+    );
+  }
   return doc.kind === "MARKDOWN" ? (
     <div data-testid="doc-markdown"><Markdown>{loaded.text}</Markdown></div>
   ) : (

@@ -313,7 +313,7 @@ await L.sleep(500); // hidratación
 await card.click();
 await w.page.getByRole("dialog").getByText("Subtasks").first().waitFor({ timeout: 15000 }).catch(() => {});
 await w.page.getByRole("dialog").getByText("Attachments").first().waitFor({ timeout: 15000 });
-L.eq("GOOGLE: sin Google configurado no sale «Google Docs» ni «New Doc»", await w.page.getByRole("dialog").getByRole("button", { name: /New Doc|New Sheet/ }).count(), 0);
+L.eq("GOOGLE: sin Google configurado no sale «Google Docs» ni «New Doc»", await w.page.getByRole("dialog").getByRole("button", { name: /New Doc|New Sheet|New Slides/ }).count(), 0);
 await w.page.screenshot({ path: `${SHOTS}/install-detalle-sin-google.png` });
 });
 L.check("ADMIN: sin errores de consola", w.errors.length === 0, w.errors.join(" | "));

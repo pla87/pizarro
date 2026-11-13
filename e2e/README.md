@@ -27,6 +27,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/r49-account-e2e.mjs` | 61 | ~1 min |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
 | Copias con adjuntos y release con barra de formato | `e2e/r49-copy-e2e.mjs` | 87 | ~2 min |
+| Formatos del material: cerrar la release, párrafos vacíos, Google Slides y HTML aislado (ronda 50) | `e2e/r50-formatos-e2e.mjs` | 107 | ~1 min |
 | Tareas que se repiten (calendario, .ics y «Nueva tarea») | `e2e/r49-repeat-e2e.mjs` | 44 | ~1 min |
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/r49-ui-e2e.mjs` | 34 | ~1 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/r49-textos-e2e.mjs` | 29 | ~1 min |
@@ -209,6 +210,25 @@ Copiar todo) y el móvil a 390 px. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-copy-e2e.mjs   # PART=dup,drag,keys,quota,mdup,rel,big,mrel
+```
+
+## Formatos del material de un curso (ronda 50)
+
+«Generar release» con el texto del paso 2 cambiado pide confirmación al cerrar con Escape, la X o el clic fuera
+(«Seguir editando» conserva lo escrito; varias pulsaciones no apilan preguntas; «Descartar cambios» cierra), en los dos
+modos del editor; sin cambios, o tras cambiar solo el pie, cierra directo, igual que «Cancelar» en el paso 1. Con la
+barra de formato, los párrafos vacíos salen como una línea en blanco (sin `&nbsp;` ni líneas en blanco repetidas) en
+Copiar todo, .md, .txt y lo guardado al desplegar; lo no tocado, idéntico. El historial copia y descarga sin `&nbsp;`
+una release antigua que lo traía, y «Copiar descripción» tampoco lo deja. Google Slides en la tarjeta (enlace con su
+icono, «Nuevo Slides», aviso sin cuenta conectada, `@slides` y `@google` en los dos editores, móvil a 390 px y «Mi
+perfil»). Documentación y adjuntos con `.md`, `.pdf`, `.html`, `.docx` y `.pptx`: el HTML se ve en un marco aislado
+(sin scripts, origen opaco, sin red ni acceso a la página o al almacenamiento de la app), su dirección lo sirve como
+texto plano y como adjunto al descargarlo; un `.html` con `<script>` (y `onerror`, `javascript:`, `<iframe>`, meta
+refresh) no ejecuta nada en el origen de la app. La parte `slides` necesita el servidor con Google configurado (valores
+de prueba, no llama a Google): arráncalo con `GOOGLE_CLIENT_ID=r50 GOOGLE_CLIENT_SECRET=r50`. Misma base:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r50-formatos-e2e.mjs   # PART=relclose,nbsp,slides,html
 ```
 
 ## Sin conexión, pestañas y tareas que desaparecen (caza de bugs 48b)

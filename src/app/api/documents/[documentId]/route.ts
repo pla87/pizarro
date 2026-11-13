@@ -13,8 +13,9 @@ export const runtime = "nodejs";
 
 /**
  * Sirve un documento de la documentación del proyecto solo a quien tiene acceso al proyecto.
- * Nada se sirve nunca como HTML: texto y Markdown van como text/plain (el cliente los pinta), las imágenes ya son
- * WebP recodificado, el PDF se muestra con el visor del navegador y el resto siempre se descarga como octet-stream.
+ * Nada se sirve nunca como HTML: texto, Markdown y HTML van como text/plain (el cliente los pinta; el HTML, en un marco
+ * aislado sin scripts), las imágenes ya son WebP recodificado, el PDF se muestra con el visor del navegador y el resto
+ * siempre se descarga como octet-stream. Descargado, el HTML también va como octet-stream (y como adjunto).
  */
 export async function GET(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
   const t = await getT();
@@ -64,7 +65,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ documentId: str
   if (!download && ifNoneMatchHas(req.headers.get("if-none-match"), etag)) return new Response(null, { status: 304, headers });
 
   const contentType =
-    doc.kind === "TEXT" || doc.kind === "MARKDOWN" ? "text/plain; charset=utf-8"
+    doc.kind === "HTML" ? (download ? "application/octet-stream" : "text/plain; charset=utf-8")
+    : doc.kind === "TEXT" || doc.kind === "MARKDOWN" ? "text/plain; charset=utf-8"
     : doc.kind === "PDF" ? "application/pdf"
     : doc.kind === "IMAGE" ? "image/webp"
     : "application/octet-stream"; // OTHER: siempre descarga, sin fiarse del tipo que declaró quien lo subió

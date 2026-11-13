@@ -1,6 +1,6 @@
 "use client";
 
-import { AtSign, FileSpreadsheet, FileText } from "lucide-react";
+import { AtSign } from "lucide-react";
 import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useT } from "@/i18n/client";
 import {
@@ -8,27 +8,25 @@ import {
   type MentionModel, type MentionSpan,
 } from "@/lib/mention-edit";
 import { mentionRegex, mentionToken } from "@/lib/mentions";
+import type { GoogleFileKind } from "@/lib/google-files";
 import type { UserOption } from "@/lib/types";
 import { normalizeSearch } from "@/lib/search-accents";
 import { Avatar } from "./Avatar";
+import { GOOGLE_COMMANDS as COMMANDS, GoogleFileIcon } from "./googleFiles";
 import { cn } from "./cn";
 
-export type MentionCommand = "GOOGLE_DOC" | "GOOGLE_SHEET";
+export type MentionCommand = GoogleFileKind;
 
 type Option =
   | { kind: "user"; id: string; label: string }
   | { kind: "command"; id: MentionCommand; label: string; hint: string };
 
-const COMMANDS: { id: MentionCommand; label: string; hint: string; keys: string[] }[] = [
-  { id: "GOOGLE_SHEET", label: "Crear Google Sheet", hint: "Hoja de cálculo nueva enlazada a la tarea", keys: ["sheets", "sheet", "hoja", "excel", "google"] },
-  { id: "GOOGLE_DOC", label: "Crear Google Doc", hint: "Documento nuevo enlazado a la tarea", keys: ["docs", "doc", "documento", "google"] },
-];
 
 interface Props extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "onChange"> {
   value: string;
   onValueChange: (value: string) => void;
   users: UserOption[];
-  /** Si se indica, @docs y @sheets aparecen como comandos. Debe abrir la pestaña de forma síncrona. */
+  /** Si se indica, @docs, @sheets y @slides aparecen como comandos. Debe abrir la pestaña de forma síncrona. */
   onCommand?: (command: MentionCommand) => void;
   /** Clases del contenedor (por defecto, un bloque normal). */
   wrapperClassName?: string;
@@ -57,7 +55,7 @@ function execEdit(el: HTMLTextAreaElement, start: number, end: number, insert: s
 
 /**
  * Textarea con autocompletado: «@» sugiere personas (se insertan como @[Nombre](user:ID))
- * y, si hay onCommand, los comandos @docs / @sheets.
+ * y, si hay onCommand, los comandos @docs / @sheets / @slides.
  */
 export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function MentionTextarea(
   { value, onValueChange, users, onCommand, onKeyDown, onBlur, onPaste, onCopy, onCut, onScroll, className, wrapperClassName, pretty = false, ...rest },
@@ -303,10 +301,8 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
               >
                 {o.kind === "user" ? (
                   <Avatar id={o.id} name={o.label} />
-                ) : o.id === "GOOGLE_SHEET" ? (
-                  <FileSpreadsheet size={20} className="text-emerald-600" />
                 ) : (
-                  <FileText size={20} className="text-sky-600" />
+                  <GoogleFileIcon kind={o.id} size={20} />
                 )}
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{o.kind === "command" ? t(o.label) : o.label}</span>

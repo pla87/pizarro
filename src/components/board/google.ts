@@ -2,16 +2,17 @@
 
 import { createGoogleFile } from "@/actions/tasks";
 import { esT, type T } from "@/i18n/shared";
+import type { GoogleFileKind } from "@/lib/google-files";
 import type { TaskLinkInfo } from "@/lib/types";
 
 /**
- * Crea un Google Doc/Sheet y lo abre en una pestaña nueva. La pestaña se abre de forma
+ * Crea un Google Doc, Sheet o Slides y lo abre en una pestaña nueva. La pestaña se abre de forma
  * síncrona (dentro del clic o la tecla) para que el navegador no la bloquee, y se
  * redirige al documento cuando Google responde.
  */
 export async function createAndOpenGoogleFile(
   taskId: string,
-  kind: "GOOGLE_DOC" | "GOOGLE_SHEET",
+  kind: GoogleFileKind,
   title: string,
   t: T = esT,
 ): Promise<{ ok: true; link: TaskLinkInfo } | { ok: false; error: string }> {

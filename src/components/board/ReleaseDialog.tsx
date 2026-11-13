@@ -206,8 +206,35 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
     setStep("edit");
   };
 
+  /** ¿Ha cambiado la persona el texto del paso 2? (cambiar la cabecera o el pie no cuenta: también cambia `generated`). */
+  const textEdited = () => step === "edit" && currentText() !== generated;
+  // Una sola pregunta a la vez (Escape o clics repetidos no las apilan).
+  const askingClose = useRef(false);
+  /**
+   * Cerrar con Escape, «Cancelar», la X, clic fuera o atrás: con el texto del paso 2 cambiado se pregunta antes de
+   * descartarlo (como el detalle de una tarea con cambios sin guardar); sin cambios se cierra directamente. `false` si no
+   * se cerró (el botón atrás del móvil vuelve entonces a poder cerrarlo).
+   */
+  const requestClose = async (): Promise<boolean> => {
+    if (askingClose.current) return false;
+    if (textEdited()) {
+      askingClose.current = true;
+      const ok = await confirm({
+        title: t("Cambios sin guardar"),
+        message: t("Has cambiado el texto de la release. ¿Cerrar y descartar los cambios?"),
+        confirmLabel: t("Descartar cambios"),
+        cancelLabel: t("Seguir editando"),
+        danger: true,
+      }).catch(() => false);
+      askingClose.current = false;
+      if (!ok) return false;
+    }
+    onClose();
+    return true;
+  };
+
   const back = async () => {
-    if (currentText() !== generated && !(await confirm({ title: t("Volver a la selección"), message: t("Se perderán los cambios que has hecho en el texto. ¿Continuar?"), confirmLabel: t("Continuar"), danger: true }))) return;
+    if (textEdited() && !(await confirm({ title: t("Volver a la selección"), message: t("Se perderán los cambios que has hecho en el texto. ¿Continuar?"), confirmLabel: t("Continuar"), danger: true }))) return;
     setStep("select");
   };
 
@@ -292,7 +319,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={requestClose}
       size="xl"
       title={
         <span className="flex items-center gap-2">
@@ -307,7 +334,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
               {t("Cabecera y pie salen de")} <Link className="text-brand-600 dark:text-brand-300 hover:underline" href="/settings?tab=plantillas">{t("tus plantillas")}</Link>
               {projectTemplates.headers.length + projectTemplates.footers.length > 0 && <> {t("y de las")} <Link className="text-brand-600 dark:text-brand-300 hover:underline" href={`/p/${board.project.id}/settings?tab=releases`}>{t("plantillas del proyecto")}</Link></>}.
             </span>
-            <button className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
+            <button className="btn-secondary" onClick={() => void requestClose()}>{t("Cancelar")}</button>
             <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || loadingDetails}>
               {loadingDetails && <Loader2 size={15} className="animate-spin" />} {t("Generar con {n} tarea(s)", { n: selectedTasks.length })}
             </button>
@@ -389,7 +416,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
           {rich ? (
             RichEditor ? (
               <div data-release-editor="rich" className="flex min-h-0 flex-1 flex-col">
-                <RichEditor value={content} label={t("Contenido de la release")} onEdited={setRichEmpty} apiRef={richApi} />
+                <RichEditor value={content} label={t("Contenido de la release")} onEdited={setRichEmpty} onEscape={() => void requestClose()} apiRef={richApi} />
               </div>
             ) : (
               // Mientras llega el editor con barra (red lenta): el texto se puede ir editando aquí y el editor lo recoge.

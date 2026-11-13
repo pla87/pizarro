@@ -261,7 +261,6 @@ export const admin: Record<string, string> = {
   "Inactivo: falta la variable APP_URL del servidor (la dirección pública de Pizarro).": "Inactive: the server's APP_URL variable (Pizarro's public address) is missing.",
   "Inactivo: falta guardar el ID y el secreto de cliente.": "Inactive: the client ID and secret still need to be saved.",
   "2. Acceso con Google": "2. Sign in with Google",
-  "Entrar con Google y crear Docs y Sheets desde las tarjetas.": "Sign in with Google and create Docs and Sheets from cards.",
   "Direcciones de redirección": "Redirect addresses",
   "Pégalas en Google Cloud al crear el cliente OAuth (en «URI de redirección autorizados»).": "Paste them into Google Cloud when creating the OAuth client (under “Authorized redirect URIs”).",
   "Acceso con Google": "Sign in with Google",

@@ -2,9 +2,8 @@
 
 import type { Editor } from "@tiptap/core";
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef } from "react";
-import { editorMarkdown } from "@/lib/editor-markdown";
-import { keepUntouchedMarkdown, markdownUnits } from "@/lib/markdown-keep";
-import { normalizeEditorMarkdown } from "@/lib/markdown-entities";
+import { editorMarkdown, releaseFromEditor } from "@/lib/editor-markdown";
+import { markdownUnits } from "@/lib/markdown-keep";
 import { RichTextEditor } from "../ui/RichTextEditor";
 
 /** Lo que el diálogo de la release necesita del editor: el Markdown actual, leído en el momento. */
@@ -25,11 +24,16 @@ const noop = () => {};
  * (markdown-keep.ts): así Copiar, .md y .txt dan lo mismo que con el editor Markdown y la cabecera y el pie se pueden
  * seguir cambiando.
  */
-export function ReleaseRichEditor({ value, label, onEdited, apiRef }: {
+export function ReleaseRichEditor({ value, label, onEdited, onEscape, apiRef }: {
   value: string;
   label: string;
   /** Tras cada cambio de la persona: si el texto ha quedado vacío. */
   onEdited: (empty: boolean) => void;
+  /**
+   * Escape en el editor: el editor se lo queda (ProseMirror lo usa para seleccionar el bloque) y no llegaba a cerrar el
+   * diálogo; así cierra (o pregunta, con cambios) como en el resto del diálogo.
+   */
+  onEscape: () => void;
   apiRef: React.Ref<ReleaseEditorApi>;
 }) {
   const editor = useRef<Editor | null>(null);
@@ -42,7 +46,7 @@ export function ReleaseRichEditor({ value, label, onEdited, apiRef }: {
     read: () => {
       const ed = editor.current;
       if (!dirty.current || !ed) return value;
-      return keepUntouchedMarkdown(value, normalizeEditorMarkdown(ed.getMarkdown()), editorMarkdown);
+      return releaseFromEditor(value, ed.getMarkdown());
     },
   }), [value]);
   // En ratos libres se prepara cómo escribe el editor cada bloque del texto: la primera lectura tras editar una release
@@ -72,6 +76,7 @@ export function ReleaseRichEditor({ value, label, onEdited, apiRef }: {
         editor.current = ed;
       }}
       placeholder={label}
+      onCancel={onEscape}
       users={NO_USERS}
       className="[&_.ProseMirror]:min-h-[40vh]"
     />

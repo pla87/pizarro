@@ -493,6 +493,8 @@ enum DocumentKind {
   MARKDOWN
   PDF
   IMAGE
+  /// Página HTML: se ve en un marco aislado (sin scripts ni red); el servidor nunca la sirve como HTML.
+  HTML
   OTHER
 }
 
@@ -584,9 +586,10 @@ model Deliverable {
 enum TaskLinkKind {
   GOOGLE_DOC
   GOOGLE_SHEET
+  GOOGLE_SLIDES
 }
 
-/// Documento externo enlazado a una tarjeta (creado con @docs / @sheets).
+/// Documento externo enlazado a una tarjeta (creado con @docs / @sheets / @slides).
 model TaskLink {
   id          String       @id @default(cuid())
   taskId      String

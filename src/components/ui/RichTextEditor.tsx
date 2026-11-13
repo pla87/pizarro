@@ -3,7 +3,7 @@
 import type { Editor } from "@tiptap/core";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { Markdown } from "@tiptap/markdown";
-import { AtSign, Bold, Check, Code, Code2, FileSpreadsheet, FileText, Heading2, Heading3, IndentDecrease, IndentIncrease, Italic, Link2, List, ListOrdered, Minus, Pilcrow, Quote, Strikethrough, Underline, Unlink, X } from "lucide-react";
+import { AtSign, Bold, Check, Code, Code2, Heading2, Heading3, IndentDecrease, IndentIncrease, Italic, Link2, List, ListOrdered, Minus, Pilcrow, Quote, Strikethrough, Underline, Unlink, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/i18n/client";
@@ -19,6 +19,7 @@ import { replaceHtmlTables } from "@/lib/paste-table";
 import type { UserOption } from "@/lib/types";
 import { normalizeSearch } from "@/lib/search-accents";
 import { Avatar } from "./Avatar";
+import { GOOGLE_COMMANDS as COMMANDS, GoogleFileIcon } from "./googleFiles";
 import { cn } from "./cn";
 import { DictationButton, insertIntoEditor } from "./DictationButton";
 import { registerDragEditor } from "./dragMove";
@@ -30,10 +31,6 @@ type Option =
   | { kind: "user"; id: string; label: string }
   | { kind: "command"; id: MentionCommand; label: string; hint: string };
 
-const COMMANDS: { id: MentionCommand; label: string; hint: string; keys: string[] }[] = [
-  { id: "GOOGLE_SHEET", label: "Crear Google Sheet", hint: "Hoja de cálculo nueva enlazada a la tarea", keys: ["sheets", "sheet", "hoja", "excel", "google"] },
-  { id: "GOOGLE_DOC", label: "Crear Google Doc", hint: "Documento nuevo enlazado a la tarea", keys: ["docs", "doc", "documento", "google"] },
-];
 
 interface Popup {
   items: Option[];
@@ -53,7 +50,7 @@ interface Props {
   className?: string;
   /** Personas mencionables con «@». */
   users?: UserOption[];
-  /** Si se indica, @docs y @sheets aparecen como comandos. Debe abrir la pestaña de forma síncrona. */
+  /** Si se indica, @docs, @sheets y @slides aparecen como comandos. Debe abrir la pestaña de forma síncrona. */
   onCommand?: (command: MentionCommand) => void;
   /** El editor ya existe (con `immediatelyRender: false` se crea tras montar): ver el campo provisional de DescriptionField. */
   onReady?: (editor: Editor) => void;
@@ -418,10 +415,8 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
                 >
                   {o.kind === "user" ? (
                     <Avatar id={o.id} name={o.label} />
-                  ) : o.id === "GOOGLE_SHEET" ? (
-                    <FileSpreadsheet size={20} className="text-emerald-600" />
                   ) : (
-                    <FileText size={20} className="text-sky-600" />
+                    <GoogleFileIcon kind={o.id} size={20} />
                   )}
                   <span className="min-w-0">
                     <span className="block truncate font-medium">{o.kind === "command" ? t(o.label) : o.label}</span>

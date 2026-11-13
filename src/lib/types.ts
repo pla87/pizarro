@@ -1,5 +1,6 @@
 // Tipos serializables que viajan del servidor al cliente.
 import type { ColumnRoleValue } from "./constants";
+import type { GoogleFileKind } from "./google-files";
 import type { TaskFieldKey, TaskFieldValues } from "./task-fields";
 
 export interface BoardColumn {
@@ -134,7 +135,7 @@ export interface ProjectFormData {
 
 export interface TaskLinkInfo {
   id: string;
-  kind: "GOOGLE_DOC" | "GOOGLE_SHEET";
+  kind: GoogleFileKind;
   title: string;
   url: string;
   /** Resultado de compartir al crearlo: SHARED, PARTIAL, NOT_SHARED o null (anterior a este registro). */
