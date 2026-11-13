@@ -1,5 +1,7 @@
 // Programa de un curso (columna con rol PROGRAM): cada tarea de la columna es una sesión. Funciones puras para preparar
 // el PDF «Publicar programa»: número, fecha (fecha límite o rango inicio–fin), título, descripción y responsable.
+// El Markdown de las descripciones se convierte en bloques en el worker de PDF (programBlocks, desde report-pdf.tsx), no en
+// el proceso web: con miles de sesiones largas eran segundos de CPU que paraban todas las peticiones.
 import type { T } from "../i18n/core";
 import { isoToDate } from "./dates";
 import { markdownToPdfBlocks, type PdfBlock } from "./pdf-markdown";
@@ -13,7 +15,8 @@ interface ProgramSession {
   date: string | null;
   /** Responsable (profesor), solo si se pidió incluirlo y la sesión lo tiene. */
   assignee: string | null;
-  blocks: PdfBlock[];
+  /** Descripción de la tarea (Markdown, tal cual): la convierte en bloques el worker (programBlocks). */
+  description: string;
 }
 
 export interface ProgramPdfInput {
@@ -53,13 +56,21 @@ export function programDocumentName(t: T, today: string): string {
   return `${t("Programa")} – ${today}.pdf`;
 }
 
-/** Sesiones del programa en el orden recibido (el de la columna), numeradas desde 1. */
+/** Lo que pinta el PDF: cada sesión con sus bloques en lugar del Markdown. */
+export type ProgramPdfDocument = Omit<ProgramPdfInput, "sessions"> & { sessions: (Omit<ProgramSession, "description"> & { blocks: PdfBlock[] })[] };
+
+/** Convierte el Markdown de cada sesión en bloques para el PDF. Se llama en el worker de PDF, nunca en el proceso web. */
+export function programBlocks(input: ProgramPdfInput): ProgramPdfDocument {
+  return { ...input, sessions: input.sessions.map(({ description, ...rest }) => ({ ...rest, blocks: markdownToPdfBlocks(description) })) };
+}
+
+/** Sesiones del programa en el orden recibido (el de la columna), numeradas desde 1. Sin analizar el Markdown (programBlocks). */
 export function buildProgramSessions(tasks: SessionSource[], opts: { locale: string; t: T; withAssignee: boolean; useStartDate: boolean }): ProgramSession[] {
   return tasks.map((task, i) => ({
     n: i + 1,
     title: mentionsToPlain(task.title, false),
     date: programDateLabel(opts.useStartDate ? task.startDate : null, task.dueDate, opts.locale, opts.t),
     assignee: opts.withAssignee ? task.assignee : null,
-    blocks: markdownToPdfBlocks(task.description),
+    description: task.description ?? "",
   }));
 }

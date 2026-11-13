@@ -4,7 +4,7 @@ import { Document, Font, Link, Page, StyleSheet, Text, View, renderToBuffer } fr
 import { intlLocale, makeT, type Locale, type T } from "@/i18n/core";
 import { formatDay } from "./dates";
 import type { ChecklistGroup, ChecklistGroupBy } from "./checklist";
-import type { ProgramPdfInput } from "./course-program";
+import { programBlocks, type ProgramPdfDocument, type ProgramPdfInput } from "./course-program";
 import type { PdfBlock, PdfRun } from "./pdf-markdown";
 import type { WeekPlanGroupBy, WeekPlanSection, WeekPlanTask } from "./week-plan";
 import { RECENT_DONE_DAYS, UPCOMING_DAYS, type DeliverableStatus, type Report, type ReportFieldRow, type ReportTask } from "./report";
@@ -543,7 +543,7 @@ function MarkdownBlocks({ blocks, tight = false }: { blocks: PdfBlock[]; tight?:
 
 // --- Programa del curso (columna PROGRAM) -------------------------------------------------------------------------------
 
-function ProgramDocument({ r, t, locale }: { r: ProgramPdfInput; t: T; locale: string }) {
+function ProgramDocument({ r, t, locale }: { r: ProgramPdfDocument; t: T; locale: string }) {
   const count = r.sessions.length === 1 ? t("1 sesión") : t("{n} sesiones", { n: r.sessions.length });
   return (
     <Document title={`${t("Programa")} · ${r.project}`} author="Pizarro" creator="Pizarro" producer="Pizarro">
@@ -578,7 +578,7 @@ function ProgramDocument({ r, t, locale }: { r: ProgramPdfInput; t: T; locale: s
   );
 }
 
-function renderProgramPdf(input: ProgramPdfInput, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
+function renderProgramPdf(input: ProgramPdfDocument, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
   return renderToBuffer(<ProgramDocument r={input} t={t} locale={locale} />);
 }
 
@@ -592,6 +592,8 @@ export type PdfJob =
 
 /** Pinta el PDF de un trabajo (en el worker). Los textos de los datos se adaptan antes a la fuente (ver pdf-text.ts). */
 export function renderPdfJob(raw: PdfJob): Promise<Buffer> {
+  // El programa llega con el Markdown de cada sesión: aquí (en el worker) se convierte en bloques, antes de adaptar los textos.
+  if (raw.kind === "program") return renderProgramPdf(pdfSafeData(programBlocks(raw.input)), makeT(raw.locale), intlLocale(raw.locale));
   const job = { ...raw, input: pdfSafeData(raw.input) } as PdfJob;
   const t = makeT(job.locale);
   const locale = intlLocale(job.locale);
@@ -600,7 +602,6 @@ export function renderPdfJob(raw: PdfJob): Promise<Buffer> {
     case "weekPlan": return renderWeekPlanPdf(job.input, t, locale);
     case "checklist": return renderChecklistPdf(job.input, t, locale);
     case "delivery": return renderDeliveryPdf(job.input, t, locale);
-    case "program": return renderProgramPdf(job.input, t, locale);
     default: throw new Error(`Tipo de PDF desconocido: ${(job as { kind: unknown }).kind}`);
   }
 }

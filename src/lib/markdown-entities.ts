@@ -34,7 +34,9 @@ export function normalizeEditorMarkdown(raw: string): string {
 }
 
 // Línea «vacía» (opcionalmente dentro de una cita): nada, espacios o el «&nbsp;» con el que TipTap guarda un párrafo vacío.
-const EMPTY_LINE = /^((?:[ \t]*>)*)[ \t]*(&nbsp;| )?[ \t]*$/;
+// El «&nbsp;» y su espacio de detrás van en un mismo grupo opcional: con dos `[ \t]*` seguidos separados solo por algo
+// opcional, una línea de muchos espacios que no termina en blanco costaba un tiempo cuadrático.
+const EMPTY_LINE = /^((?:[ \t]*>)*)[ \t]*(?:(&nbsp;| )[ \t]*)?$/;
 const FENCE = /^(?:[ \t]*>)*[ \t]*(`{3,}|~{3,})/;
 
 /**

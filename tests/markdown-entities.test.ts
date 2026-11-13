@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { blankEmptyParagraphs, decodeEntities, normalizeEditorMarkdown } from "../src/lib/markdown-entities";
 import { markdownToPlain } from "../src/lib/ics";
 import { buildReleaseMarkdown } from "../src/lib/release";
+import { assertFast } from "./timing";
 
 test("el editor guarda los caracteres reales", () => {
   assert.equal(normalizeEditorMarkdown("¿Te vale? -&gt; SI"), "¿Te vale? -> SI");
@@ -78,4 +79,16 @@ test("cabecera o pie de la release guardados con párrafos vacíos: sin «&nbsp;
 
 test("descripción en el .ics: los párrafos vacíos del editor no dejan «&nbsp;» ni líneas en blanco repetidas", () => {
   assert.equal(markdownToPlain("uno\n\n\n\n&nbsp;\n\n&nbsp;\n\ndos `&nbsp;`\n\n> &nbsp;\n\n- a\n\n  \n\n  b"), "uno\n\ndos &nbsp;\n\n- a\n\n  b");
+});
+
+test("párrafos vacíos: una línea larga de espacios que no está en blanco no cuesta tiempo cuadrático", () => {
+  // Release de 200.000 caracteres (MAX_RELEASE_CONTENT) con una línea de espacios y texto al final: con la expresión
+  // anterior eran segundos parado en el navegador de quien la abría (o en el servidor, con las plantillas de la release).
+  const line = " ".repeat(199_000) + "x";
+  const md = `uno\n\n&nbsp;\n\n${line}\n`;
+  assert.equal(assertFast(200, () => blankEmptyParagraphs(md), "200.000 espacios"), `uno\n\n${line}\n`);
+  const quoted = " ".repeat(99_000) + ">" + " ".repeat(99_000) + "x";
+  assert.equal(assertFast(200, () => blankEmptyParagraphs(`&nbsp;\n${quoted}`), "cita con espacios"), quoted);
+  // Lo de siempre sigue igual.
+  assert.equal(blankEmptyParagraphs("a\n\n  &nbsp;  \n\n> \u00a0 \n> b"), "a\n\n>\n> b");
 });
