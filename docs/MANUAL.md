@@ -1,12 +1,12 @@
 ---
 title: "Pizarro · Manual de operaciones"
 subtitle: "Arquitectura, guía de uso y procesos operativos"
-version: "v1.51.0"
+version: "v1.51.1"
 ---
 
 # Pizarro — Manual de operaciones
 
-**Versión de la aplicación:** v1.51.0
+**Versión de la aplicación:** v1.51.1
 
 Este manual describe la arquitectura de Pizarro, cómo se usa en el día a día y los procesos para operarla en producción (Railway). Todos los valores que aparecen (emails, dominios, contraseñas) son **ejemplos ficticios**. No escribas en este documento credenciales ni datos reales.
 

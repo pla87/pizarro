@@ -2,6 +2,21 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.51.1 — 2026-11-13 10:36
+
+Dependencias al día: Next 16.4.5, editor 3.32.3 y librería de emails con su corrección de seguridad
+
+### Correcciones
+
+- La librería de envío de emails se actualiza a una versión que corrige cómo interpreta direcciones raras (avisos de seguridad de nodemailer).
+- Al abrir un diálogo (por ejemplo, Nueva tarea), si entras muy rápido en otro campo el foco ya no salta de vuelta al título.
+
+### Cambios técnicos / DB
+
+- Next 16.4.5, editor TipTap 3.32.3, nodemailer 10.3.1, marked 18.1.3, lucide-react 1.69.0, Tailwind 4.3.4 y @types/qrcode 1.5.6 (todas publicadas hace al menos 7 días).
+- fast-uri 3.1.9 (dependencia de la herramienta de Prisma) con sus avisos corregidos; sin vulnerabilidades en las dependencias de producción.
+- Prueba del tablero más estable: espera a que la caja de comentario se vacíe tras guardar.
+
 ## v1.51.0 — 2026-11-12 23:24
 
 Guía de instalación en getpizarro.com, plantilla de autenticación de WhatsApp, funciona sin conexión, copias que siempre se restauran y cinco vueltas de revisión y caza de bugs
