@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { after, describe, test } from "node:test";
 import { makeT } from "../src/i18n/core";
-import { buildProgramSessions, programDateLabel, programDocumentName } from "../src/lib/course-program";
+import { buildProgramSessions, programBlocks, programDateLabel, programDocumentName } from "../src/lib/course-program";
 import { markdownToPdfBlocks } from "../src/lib/pdf-markdown";
 import { canonicalTemplate } from "../src/lib/builtin-templates";
 import { canonicalTemplateEn } from "../src/lib/builtin-templates-en";
 import { COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, COLUMN_ROLES, isUniqueColumnRole } from "../src/lib/constants";
 import { pdfRuns } from "./pdf-runs";
+import { assertFast } from "./timing";
 
 process.env.SESSION_SECRET ??= "x".repeat(48);
 process.env.DATABASE_URL ??= "postgresql://none:none@localhost:5432/none";
@@ -88,11 +89,25 @@ describe("sesiones del programa", () => {
     const a = buildProgramSessions(tasks, { locale: "es-ES", t: es, withAssignee: true, useStartDate: true });
     assert.deepEqual(a.map((s) => [s.n, s.title, s.assignee]), [[1, "Uno con Ana", "Ana"], [2, "Dos", null]]);
     assert.equal(a[0]!.date, "10 de enero de 2027 – 12 de enero de 2027");
-    assert.deepEqual(a[0]!.blocks, [{ t: "p", runs: [{ text: "Hola", b: true }] }]);
-    assert.deepEqual(a[1]!.blocks, []);
+    // El Markdown va tal cual; los bloques los hace el worker de PDF (programBlocks).
+    assert.deepEqual(a.map((s) => s.description), ["**Hola**", ""]);
+    const doc = programBlocks({ project: "P", today: "2026-11-13", withAssignee: true, sessions: a });
+    assert.deepEqual(doc.sessions[0]!.blocks, [{ t: "p", runs: [{ text: "Hola", b: true }] }]);
+    assert.deepEqual(doc.sessions[1]!.blocks, []);
+    assert.equal(doc.sessions[0]!.title, "Uno con Ana");
     const b = buildProgramSessions(tasks, { locale: "es-ES", t: es, withAssignee: false, useStartDate: false });
     assert.equal(b[0]!.assignee, null);
     assert.equal(b[0]!.date, "martes, 12 de enero de 2027");
+  });
+
+  test("preparar el programa en el proceso web no analiza el Markdown (2000 sesiones de 20.000 caracteres, al momento)", () => {
+    // Antes se convertía aquí cada descripción en bloques: unos 13 s de CPU en el hilo del servidor (y ~190 MB de bloques
+    // que copiar al worker) con una columna de 2000 tarjetas largas, cualquiera con acceso al proyecto.
+    const para = "Texto **negrita** con [enlace](https://example.com).\n\n- uno\n- dos\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n";
+    const description = para.repeat(Math.ceil(20_000 / para.length)).slice(0, 20_000);
+    const tasks = Array.from({ length: 2000 }, (_, i) => ({ title: `Sesión ${i}`, description, startDate: null, dueDate: "2027-01-12", assignee: null }));
+    const out = assertFast(500, () => buildProgramSessions(tasks, { locale: "es-ES", t: es, withAssignee: false, useStartDate: false }), "preparar el programa");
+    assert.equal(out.length, 2000);
   });
 
   test("nombre del documento guardado en Documentación, en cada idioma", () => {
