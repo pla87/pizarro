@@ -1,8 +1,9 @@
 // Exportar e importar un proyecto entero (.pizarro.zip) contra PostgreSQL real: ida y vuelta con todas las funciones,
 // versión y sumas de control, permisos, emparejado de personas, imágenes y límites.
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { createHash, randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, test } from "node:test";
@@ -11,6 +12,8 @@ import sharp from "sharp";
 import { db, loginAs, logout, makeKind, makeProject, makeTask, makeUser } from "./helpers";
 import { buildProjectExport, estimateProjectExport, exportFileName, projectSlug, type ProjectExport } from "../../src/lib/project-export/export";
 import { capTitle, importProjectFile, safeFileName, type ImportUser } from "../../src/lib/project-export/import";
+import { parseImportJournal, recoverImportJournals } from "../../src/lib/project-export/import-journal";
+import { cleanOrphanFiles } from "../../src/lib/orphan-files";
 import { projectDataSchema, type ExportManifest, type ExportOptions, type ProjectExportData } from "../../src/lib/project-export/types";
 import { attachmentPath, documentPath, safeDownloadMime, saveAttachmentFiles, saveDocumentFile, saveRawAttachmentFile, saveReleaseAttachmentFile } from "../../src/lib/uploads";
 import { streamZip, type StreamZipEntry } from "../../src/lib/zip-stream";
@@ -84,7 +87,7 @@ async function richProject() {
   const projectId = f.project.id;
   await db.project.update({
     where: { id: projectId },
-    data: { description: "Descripción del proyecto", taskFields: ["cost", "hours", "priority", "client", "startDate"], fileMaxMb: 10, taskAttachMaxMb: 40, releaseZipMaxMb: 60, googleShareMode: "MEMBERS" },
+    data: { description: "Descripción del proyecto", taskFields: ["cost", "hours", "priority", "client", "startDate"], fileMaxMb: 10, taskAttachMaxMb: 40, releaseZipMaxMb: 60, googleShareMode: "MEMBERS", storageQuotaMb: 500 },
   });
   // Roles de columna: espera con días, siguiente salto, producción, rutinas con destino.
   await db.column.update({ where: { id: f.columns.doing }, data: { role: "WAITING", waitingDays: 5 } });
@@ -110,7 +113,7 @@ async function richProject() {
       labels: { create: [{ labelId: l1.id }, { labelId: l2.id }] },
       subtasks: { create: [{ title: "Sub A", done: true, position: 1000 }, { title: "Sub B", done: false, position: 2000 }] },
       followers: { create: [{ userId: member.id, muted: false }, { userId: admin.id, muted: true }] },
-      links: { create: [{ kind: "GOOGLE_DOC", title: "Doc", url: "https://docs.google.com/document/d/abc", createdById: admin.id }] },
+      links: { create: [{ kind: "GOOGLE_DOC", title: "Doc", url: "https://docs.google.com/document/d/abc", externalId: "abc", shareStatus: "PARTIAL", shareFailed: 2, createdById: admin.id }] },
     },
   });
   const c1 = await db.taskComment.create({ data: { taskId: t1.id, authorId: admin.id, body: `Hola @[${member.name}](user:${member.id})`, createdAt: new Date("2026-10-02T09:00:00Z") } });
@@ -139,10 +142,10 @@ async function richProject() {
   await saveReleaseAttachmentFile(ra.id, await webp(60, 40, "#36c"), "webp");
   const rb = await db.releaseAttachment.create({ data: { releaseId: rel.id, fileName: "F1_notas.txt", size: 1, isImage: false, position: 1 } });
   await saveReleaseAttachmentFile(rb.id, Buffer.from("copia de notas"), "bin");
-  // Documentación: uno vivo y uno en la papelera (no se exporta).
+  // Documentación: uno vivo y uno en la papelera (va aparte, con quién y cuándo lo borró).
   const doc = await db.projectDocument.create({ data: { projectId, name: "guia.md", mimeType: "text/markdown", size: 9, kind: "MARKDOWN", createdById: admin.id } });
   await saveDocumentFile(doc.id, Buffer.from("# Guía\nok"));
-  const trashed = await db.projectDocument.create({ data: { projectId, name: "viejo.txt", mimeType: "text/plain", size: 3, kind: "TEXT", deletedAt: new Date() } });
+  const trashed = await db.projectDocument.create({ data: { projectId, name: "viejo.txt", mimeType: "text/plain", size: 3, kind: "TEXT", deletedAt: new Date("2026-11-05T08:00:00Z"), deletedById: member.id } });
   await saveDocumentFile(trashed.id, Buffer.from("old"));
   return { admin, member, f, projectId, t1, doc };
 }
@@ -167,7 +170,9 @@ describe("exportar e importar un proyecto", () => {
       assert.equal(data.releases.length, options.scope === "all" ? 1 : 0);
       assert.equal(data.events.length, options.scope === "all" ? 2 : 0);
       assert.equal(data.tasks.flatMap((t) => t.attachments).length, options.attachments ? 2 : 0);
-      assert.equal(data.documents.length, options.attachments ? 1 : 0); // la de la papelera no sale
+      assert.equal(data.documents.length, options.attachments ? 1 : 0); // la de la papelera va aparte
+      assert.equal(data.documentsTrash?.length, options.attachments ? 1 : 0);
+      assert.equal(data.project.storageQuotaMb, 500);
       assert.equal(Object.keys(built.manifest.checksums).filter((k) => k.startsWith("files/")).length, built.manifest.counts.files);
       assert.equal(data.users.find((u) => u.email === admin.email)?.name, admin.name);
       // Las menciones salen con la ref de persona, no con el id de la base de datos.
@@ -200,7 +205,7 @@ describe("exportar e importar un proyecto", () => {
         assert.ok((await stat(attachmentPath(a.id, a.isImage ? "full" : "file"))).size > 0);
         if (a.isImage) assert.ok((await stat(attachmentPath(a.id, "thumb"))).size > 0);
       }
-      for (const d of await db.projectDocument.findMany({ where: { projectId: summary.projectId } })) assert.equal((await readFile(documentPath(d.id))).toString(), "# Guía\nok");
+      for (const d of await db.projectDocument.findMany({ where: { projectId: summary.projectId } })) assert.equal((await readFile(documentPath(d.id))).toString(), d.deletedAt ? "old" : "# Guía\nok");
     });
   }
 
@@ -235,6 +240,12 @@ describe("exportar e importar un proyecto", () => {
     assert.equal(t1.labels.length, 2);
     assert.equal(t1.followers.length, 2);
     assert.equal(t1.links.length, 1);
+    assert.deepEqual([t1.links[0]!.externalId, t1.links[0]!.shareStatus, t1.links[0]!.shareFailed], ["abc", "PARTIAL", 2]);
+    assert.equal(p.storageQuotaMb, 500);
+    // La papelera de Documentación: con la fecha y la persona que lo borró (se purga a los mismos días que en el origen).
+    const docs = await db.projectDocument.findMany({ where: { projectId: s.projectId }, orderBy: { createdAt: "asc" } });
+    assert.deepEqual(docs.map((d) => [d.name, d.deletedAt?.toISOString() ?? null, d.deletedById]), [["guia.md", null, null], ["viejo.txt", "2026-11-05T08:00:00.000Z", member.id]]);
+    assert.deepEqual([s.counts.documents, s.counts.trashedDocuments], [1, 1]);
     assert.equal(t1.attachments.length, 2);
     assert.equal(t1.comments.length, 3);
     assert.equal(t1.comments[1]!.parentId, t1.comments[0]!.id);
@@ -266,6 +277,138 @@ describe("exportar e importar un proyecto", () => {
     assert.equal(p.privateOwnerId, admin.id);
     assert.deepEqual(p.members.map((m) => m.userId), [admin.id]);
     void other;
+  });
+});
+
+describe("exportar e importar: papelera, cuota propia y enlaces de Drive", () => {
+  test("una exportación antigua (sin papelera, cuota propia ni id de Drive) se sigue importando", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const at = "2026-01-02T03:04:05.000Z";
+    const docBuf = Buffer.from("# Antiguo\n");
+    // Forma de los archivos anteriores: sin documentsTrash ni storageQuotaMb, y enlaces sin externalId ni shareStatus.
+    const old = minimal([{ links: [{ kind: "GOOGLE_SHEET", title: "Hoja", url: "https://docs.google.com/spreadsheets/d/x", createdBy: null, createdAt: at }] }], {
+      documents: [{ ref: "x1", name: "leeme.md", mimeType: "text/markdown", size: docBuf.length, kind: "MARKDOWN", createdBy: null, createdAt: at, updatedAt: at, file: sha(docBuf) }],
+    });
+    assert.ok(!("storageQuotaMb" in old.project) && !("documentsTrash" in old));
+    const s = await importProjectFile(await craft(old, [docBuf]), asImporter(admin), { isPrivate: true });
+    const p = await db.project.findUniqueOrThrow({ where: { id: s.projectId }, include: { documents: true, tasks: { include: { links: true } } } });
+    assert.equal(p.storageQuotaMb, null);
+    assert.deepEqual(p.documents.map((d) => [d.name, d.deletedAt]), [["leeme.md", null]]);
+    assert.deepEqual(p.tasks[0]!.links.map((l) => [l.title, l.externalId, l.shareStatus, l.shareFailed]), [["Hoja", null, null, 0]]);
+    assert.deepEqual([s.counts.documents, s.counts.trashedDocuments], [1, 0]);
+  });
+
+  test("una cuota propia menor que los archivos del proyecto no impide importarlo: se usa la general, con aviso", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const at = "2026-01-02T03:04:05.000Z";
+    const big = Buffer.alloc(2 * 1024 * 1024, 7);
+    const data = minimal([], {
+      documents: [],
+      documentsTrash: [{ ref: "x1", name: "grande.bin", mimeType: "application/octet-stream", size: big.length, kind: "OTHER", createdBy: null, createdAt: at, updatedAt: at, file: sha(big), deletedAt: at, deletedBy: null }],
+    });
+    data.project.storageQuotaMb = 1;
+    const s = await importProjectFile(await craft(data, [big]), asImporter(admin), { isPrivate: true });
+    assert.ok(s.warnings.some((w) => /cuota de almacenamiento propia del proyecto \(1 MB\)/.test(w)), s.warnings.join(" | "));
+    const p = await db.project.findUniqueOrThrow({ where: { id: s.projectId }, include: { documents: true } });
+    assert.equal(p.storageQuotaMb, null);
+    assert.equal(p.documents.length, 1);
+    assert.ok(p.documents[0]!.deletedAt, "sigue en la papelera");
+    // Con una cuota que sí cabe, se conserva.
+    data.project.storageQuotaMb = 3;
+    const ok = await importProjectFile(await craft(data, [big]), asImporter(admin), { isPrivate: true });
+    assert.equal((await db.project.findUniqueOrThrow({ where: { id: ok.projectId } })).storageQuotaMb, 3);
+    assert.equal(ok.warnings.length, 0);
+  });
+
+  test("referencias de la papelera: un fichero que no está en el archivo se rechaza", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const at = "2026-01-02T03:04:05.000Z";
+    const data = minimal([], { documentsTrash: [{ ref: "x1", name: "a.txt", mimeType: "text/plain", size: 1, kind: "TEXT", createdBy: null, createdAt: at, updatedAt: at, file: "b".repeat(64), deletedAt: at, deletedBy: null }] });
+    await assert.rejects(importProjectFile(await craft(data), asImporter(admin), { isPrivate: true }), /no existe/);
+  });
+});
+
+describe("importación cortada por un reinicio", () => {
+  test("mientras dura, su registro anota cada fichero antes de escribirlo; al terminar desaparece", async () => {
+    const { admin, projectId } = await richProject();
+    const file = await writeExport(await buildProjectExport(projectId, { attachments: true, scope: "all" }));
+    const journal = path.join(process.env.UPLOAD_DIR!, "imports", "trabajo-prueba.import-journal");
+    let during = "";
+    const s = await importProjectFile(file, asImporter(admin), {
+      isPrivate: false, journalName: "trabajo-prueba",
+      onProgress: (p) => {
+        if (p.phase === "base de datos" && !during) during = readFileSync(journal, "utf8");
+      },
+    });
+    const parsed = parseImportJournal(during);
+    assert.equal(parsed.projectId, s.projectId);
+    const attachments = await db.taskAttachment.findMany({ where: { task: { projectId: s.projectId } }, select: { id: true } });
+    const documents = await db.projectDocument.findMany({ where: { projectId: s.projectId }, select: { id: true } });
+    assert.deepEqual(parsed.files.a.slice().sort(), attachments.map((a) => a.id).sort());
+    assert.deepEqual(parsed.files.d.slice().sort(), documents.map((d) => d.id).sort());
+    assert.equal(parsed.files.r.length, 2);
+    await assert.rejects(stat(journal), /ENOENT/);
+  });
+
+  test("al arrancar se borran solo los ficheros de la importación que no terminó, y la limpieza de huérfanos deja de cancelarse", async () => {
+    const prevUpload = process.env.UPLOAD_DIR;
+    process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-pjournal-"));
+    try {
+      const dir = process.env.UPLOAD_DIR;
+      const old = new Date(Date.now() - 2 * 24 * 3600_000);
+      const id = () => `c${randomBytes(12).toString("hex")}`;
+      // Ficheros válidos (con su fila, aquí en el conjunto de ids conocidos que pasa la limpieza).
+      const valid = Array.from({ length: 10 }, id);
+      for (const v of valid) await saveRawAttachmentFile(v, Buffer.from("válido"));
+      // Una importación grande que murió con el proceso: 51 adjuntos (uno, imagen con miniatura), 2 copias de release y 3 documentos.
+      const cut = { a: Array.from({ length: 51 }, id), r: [id(), id()], d: [id(), id(), id()] };
+      for (const a of cut.a.slice(1)) await saveRawAttachmentFile(a, Buffer.from("importado"));
+      await saveAttachmentFiles(cut.a[0]!, { full: await webp(), thumb: await webp(20, 16), width: 100, height: 80 });
+      for (const r of cut.r) await saveReleaseAttachmentFile(r, Buffer.from("rel"), "bin");
+      for (const d of cut.d) await saveDocumentFile(d, Buffer.from("doc"));
+      // Uno de los anotados sí llegó a tener fila: no se toca nunca.
+      const f = await makeProject({ members: [] });
+      const task = await makeTask(f, { title: "Con adjunto" });
+      const withRow = cut.a[50]!;
+      await db.taskAttachment.create({ data: { id: withRow, taskId: task.id, originalName: "x.bin", mimeType: "application/octet-stream", isImage: false, size: 9 } });
+      const fileOf = (a: string) => attachmentPath(a, a === cut.a[0] ? "full" : "file");
+      const all = [
+        ...cut.a.map(fileOf), attachmentPath(cut.a[0]!, "thumb"), ...valid.map((v) => attachmentPath(v, "file")),
+        ...cut.r.map((r) => path.join(dir, "releases", `${r}.bin`)), ...cut.d.map((d) => documentPath(d)),
+      ];
+      for (const p of all) await utimes(p, old, old);
+      const imports = path.join(dir, "imports");
+      await mkdir(imports, { recursive: true });
+      const lines = (p: string, files: { a: string[]; r: string[]; d: string[] }) =>
+        [`p ${p}`, ...files.a.map((x) => `a ${x}`), ...files.r.map((x) => `r ${x}`), ...files.d.map((x) => `d ${x}`), ""].join("\n");
+      await writeFile(path.join(imports, "muerta.import-journal"), lines(id(), cut));
+      // Otra que sí terminó (el proyecto existe) y otra que sigue viva (tocada hace nada): no se tocan sus ficheros.
+      await writeFile(path.join(imports, "terminada.import-journal"), lines(f.project.id, { a: [valid[0]!], r: [], d: [] }));
+      await writeFile(path.join(imports, "viva.import-journal"), lines(id(), { a: [valid[1]!], r: [], d: [] }));
+      for (const n of ["muerta", "terminada"]) await utimes(path.join(imports, `${n}.import-journal`), old, old);
+      // Un temporal de subida en imports/ (lo limpia la ruta de importación, no esto).
+      await writeFile(path.join(imports, "abc.tmp"), "subida");
+
+      const known = { attachments: new Set([...valid, withRow]), releaseAttachments: new Set<string>(), documents: new Set<string>() };
+      const before = await cleanOrphanFiles(dir, known, { dryRun: true });
+      assert.deepEqual([before.aborted, before.abortReason], [true, "fraction"], "con los restos de la importación, la limpieza de huérfanos se cancela");
+
+      assert.equal(await recoverImportJournals(), 50 + 2 + 3, "los anotados sin fila");
+      for (const a of cut.a.slice(0, 50)) await assert.rejects(stat(fileOf(a)), /ENOENT/);
+      await assert.rejects(stat(attachmentPath(cut.a[0]!, "thumb")), /ENOENT/);
+      for (const d of cut.d) await assert.rejects(stat(documentPath(d)), /ENOENT/);
+      for (const r of cut.r) await assert.rejects(stat(path.join(dir, "releases", `${r}.bin`)), /ENOENT/);
+      assert.ok((await stat(attachmentPath(withRow, "file"))).isFile(), "el que tiene fila sigue");
+      for (const v of valid) assert.ok((await stat(attachmentPath(v, "file"))).isFile(), "los válidos siguen");
+      assert.deepEqual((await readdir(imports)).sort(), ["abc.tmp", "viva.import-journal"]);
+
+      const after = await cleanOrphanFiles(dir, known, { dryRun: true });
+      assert.deepEqual([after.aborted, after.orphans], [false, 0]);
+      assert.equal(await recoverImportJournals(), 0, "nada más que hacer");
+    } finally {
+      await rm(process.env.UPLOAD_DIR!, { recursive: true, force: true });
+      process.env.UPLOAD_DIR = prevUpload;
+    }
   });
 });
 
@@ -571,7 +714,8 @@ describe("piezas del exportador", () => {
     assert.equal(exportFileName("Mi Proyecto", new Date("2026-03-04T12:00:00Z"), "UTC"), "pizarro-mi-proyecto-20260304.pizarro.zip");
     const { projectId } = await richProject();
     const all = await estimateProjectExport(projectId, { attachments: true, scope: "all" });
-    assert.deepEqual([all.tasks, all.archivedTasks, all.releases, all.documents, all.attachments], [3, 1, 1, 1, 5]);
+    // Los documentos cuentan también el de la papelera, que va en el archivo.
+    assert.deepEqual([all.tasks, all.archivedTasks, all.releases, all.documents, all.attachments], [3, 1, 1, 2, 6]);
     const board = await estimateProjectExport(projectId, { attachments: false, scope: "board" });
     assert.deepEqual([board.tasks, board.archivedTasks, board.releases, board.attachments, board.bytes], [2, 0, 0, 0, 0]);
   });

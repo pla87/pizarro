@@ -165,7 +165,7 @@ function validateRefs(data: ProjectExportData, fileShas: Set<string>): void {
   dup("una persona", data.users.map((u) => u.ref));
   dup("una release", data.releases.map((r) => r.ref));
   dup("el número de una release", data.releases.map((r) => String(r.number)));
-  dup("un documento", data.documents.map((d) => d.ref));
+  dup("un documento", [...data.documents, ...(data.documentsTrash ?? [])].map((d) => d.ref));
   for (const role of data.columns.map((c) => c.role).filter(isUniqueColumnRole)) {
     if (data.columns.filter((c) => c.role === role).length > 1) throw new ArchiveError("El archivo tiene varias columnas con un rol único.", `project.json: ${role}`);
   }
@@ -198,7 +198,7 @@ function validateRefs(data: ProjectExportData, fileShas: Set<string>): void {
     for (const x of r.tasks) need(tasks, x.taskRef, "una tarea");
     for (const a of r.attachments) need(fileShas, a.file, "un fichero");
   }
-  for (const d of data.documents) need(fileShas, d.file, "un fichero");
+  for (const d of [...data.documents, ...(data.documentsTrash ?? [])]) need(fileShas, d.file, "un fichero");
   for (const e of data.events) need(tasks, e.taskRef, "una tarea");
 }
 

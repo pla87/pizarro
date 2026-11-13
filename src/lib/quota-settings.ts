@@ -55,14 +55,14 @@ export interface EffectiveQuota extends QuotaBytes {
 /**
  * Cuotas vigentes para un proyecto (o las generales con `projectId` null): su cuota propia, la variable de entorno,
  * el ajuste de Administración o 10 GB, y la cuota total del servidor si la hay. Se lee en cada subida (el
- * ajuste, de la memoria).
+ * ajuste, de la memoria). `override`: la cuota propia de un proyecto que aún no existe (al importarlo de un archivo).
  */
-export async function getQuotaLimits(projectId: string | null, client: Client = db): Promise<EffectiveQuota> {
+export async function getQuotaLimits(projectId: string | null, client: Client = db, override: number | null = null): Promise<EffectiveQuota> {
   const [app, row] = await Promise.all([
     getQuotaSettings(),
     projectId ? client.project.findUnique({ where: { id: projectId }, select: { storageQuotaMb: true } }) : Promise.resolve(null),
   ]);
-  const project = resolveProjectQuota({ override: row?.storageQuotaMb ?? null, env: process.env.UPLOAD_QUOTA_MB_PER_PROJECT, app: app.project });
+  const project = resolveProjectQuota({ override: row?.storageQuotaMb ?? override, env: process.env.UPLOAD_QUOTA_MB_PER_PROJECT, app: app.project });
   const total = resolveTotalQuota({ env: process.env.UPLOAD_QUOTA_MB_TOTAL, app: app.total });
   return { project: mbToBytes(project.mb), total: mbToBytes(total.mb), projectMb: project.mb, totalMb: total.mb, projectSource: project.source, totalSource: total.source };
 }

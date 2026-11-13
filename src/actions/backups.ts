@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { runAction } from "@/lib/action";
-import { backupDestinationsInfo, backupKey, createBackup, startExternalCopy } from "@/lib/backup";
+import { acceptBackupShrink, backupDestinationsInfo, backupKey, createBackup, startExternalCopy } from "@/lib/backup";
 import { issueBackupDownloadToken } from "@/lib/backup-download";
 import { db } from "@/lib/db";
 import { getT } from "@/i18n/server";
@@ -41,6 +41,20 @@ export async function copyToExternalNow() {
     if (!startExternalCopy()) throw new AppError("Ya hay una copia en curso.");
     revalidatePath("/admin/backups");
     return { started: true };
+  });
+}
+
+/**
+ * «La reducción es correcta»: la última copia es mucho menor que la buena porque se han borrado datos a propósito. Desde
+ * ella se vuelve a empezar (la buena deja de conservarse siempre) y el aviso desaparece.
+ */
+export async function acceptBackupReduction() {
+  return runAction({ name: "backups.acceptReduction" }, async () => {
+    const admin = await requireAdmin();
+    const stem = await acceptBackupShrink({ id: admin.id, name: admin.name });
+    if (!stem) throw new AppError("No hay ninguna reducción pendiente de confirmar.");
+    revalidatePath("/admin/backups");
+    return { stem };
   });
 }
 

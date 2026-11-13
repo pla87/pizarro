@@ -3,6 +3,7 @@ import { intlLocale, makeT, toLocale, type T } from "../i18n/core";
 import { formatDate } from "./format";
 import { appUrl, escapeHtml, sendMail, type MailMessage } from "./mail";
 import { TOKEN_TTL_MS } from "./auth-token-core";
+import { shrinkText, type BackupShrinkInfo } from "./backup-alert-core";
 import { EMAIL_CODE_TTL_MS } from "./two-factor-core";
 
 // Emails de cuentas (enlaces y avisos de seguridad). Cada uno sale en el idioma del destinatario;
@@ -201,7 +202,21 @@ export function sendAccountDeletedMail(user: Recipient): Promise<void> {
 }
 
 /** Aviso a los administradores: la última copia de seguridad correcta tiene más de 48 h (o no existe). */
-export function sendBackupAlertMail(admin: Recipient, info: { lastAt: string | null; external?: boolean }): Promise<void> {
+export function sendBackupAlertMail(admin: Recipient, info: { lastAt: string | null; external?: boolean; shrink?: BackupShrinkInfo }): Promise<void> {
+  const shrink = info.shrink;
+  if (shrink) {
+    return send(admin, admin.locale, (t) => ({
+      subject: t("Pizarro: la última copia de seguridad es mucho menor que la anterior"),
+      paragraphs: [
+        t("Hola, {name}:", { name: admin.name }),
+        shrinkText(shrink, t, (iso) => formatDate(iso, "dateTime", intlLocale(toLocale(admin.locale)))),
+        t("¿Se ha perdido la base de datos o el volumen? La retención conserva la última copia buena ({stem}) aunque ya le tocara borrarla.", { stem: shrink.goodStem }),
+        t("Si has borrado datos a propósito, confírmalo en Administración → Copias de seguridad con «La reducción es correcta»."),
+      ],
+      button: { label: t("Abrir Copias de seguridad"), url: `${appUrl()}/admin/backups` },
+      note: t("Este aviso se repite como mucho una vez al día mientras el problema continúe."),
+    }));
+  }
   return send(admin, admin.locale, (t) => ({
     subject: info.external ? t("Pizarro: la copia de seguridad externa está atrasada") : t("Pizarro: la copia de seguridad está atrasada"),
     paragraphs: [
