@@ -2,10 +2,11 @@
 
 import { Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { setMyProjectPicks } from "@/actions/projects";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
+import { useActionTransition } from "@/components/useActionTransition";
 
 interface PickProject {
   id: string;
@@ -22,7 +23,7 @@ export function ProjectPicksSection({ projects }: { projects: PickProject[] }) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [picked, setPicked] = useState(new Set(projects.filter((p) => p.picked).map((p) => p.id)));
   const toggle = (id: string) =>
     setPicked((prev) => {

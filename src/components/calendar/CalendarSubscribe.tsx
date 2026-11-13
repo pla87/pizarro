@@ -1,12 +1,13 @@
 "use client";
 
 import { CalendarPlus, Check, Copy, ExternalLink, Loader2, RefreshCw, Trash2 } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { createCalendarFeed, disableCalendarFeed, setCalendarFeedScope } from "@/actions/calendar-feed";
 import { useT } from "@/i18n/client";
 import { cn } from "@/components/ui/cn";
 import { Popover } from "@/components/ui/Popover";
 import { useToast } from "@/components/ui/Toast";
+import { useActionTransition } from "@/components/useActionTransition";
 
 type Scope = "MINE" | "ALL";
 interface Links {
@@ -28,7 +29,7 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
   const [scope, setScope] = useState<Scope>(initialScope);
   const [links, setLinks] = useState<Links | null>(null);
   const [copied, setCopied] = useState(false);
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
 
   const generate = (next: Scope = scope) =>
     start(async () => {

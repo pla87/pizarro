@@ -23,6 +23,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Cabecera y atajos (caza de bugs 48a) | `e2e/bh48a-e2e.mjs` | 42 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) | `e2e/bh48b-e2e.mjs` | 120 | ~3 min |
 | Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/bh48c-e2e.mjs` | 44 | ~1 min |
+| Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
@@ -83,6 +84,18 @@ aviso 99+ en móvil, ayuda de atajos y borrar un proyecto con espacios dobles. M
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48a-e2e.mjs
+```
+
+## Formularios sin red, IP del cliente y páginas legales (ronda 49)
+
+Crear un usuario en *Administración → Usuarios* y guardar *Mi perfil* sin red (`context.setOffline`): sale «Sin conexión:
+no se ha guardado» y el aviso fijo, nunca «Algo ha fallado», y lo escrito sigue en el formulario; al volver la red se
+guarda. Deshacer «Enviar a la papelera» de un documento sin red. Con el servidor sin `TRUST_PROXY` (`npm start` o `next
+start`), unas cabeceras `X-Real-IP` / `X-Forwarded-For` inventadas no llegan a la sesión ni al registro. Privacidad,
+condiciones y licencia llegan pintadas sin JavaScript. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-infra-e2e.mjs   # PART=admin,profile,docs,ip,legal
 ```
 
 ## Comentarios a la vez, red lenta, dos pestañas y release renombrada (caza de bugs 48c)

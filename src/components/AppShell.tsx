@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { logout } from "@/actions/auth";
 import { useT } from "@/i18n/client";
 import { createProject, listProjectExamples } from "@/actions/projects";
@@ -41,6 +41,7 @@ import { useEscapeClose } from "./ui/useEscapeClose";
 import { useFocusTrap } from "./ui/focusTrap";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
 import { loadWhenOnline } from "@/lib/connection";
+import { useActionTransition } from "@/components/useActionTransition";
 
 interface Props {
   user: CurrentUser;
@@ -385,7 +386,7 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   const router = useRouter();
   const toast = useToast();
   const [name, setName] = useState("");
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const pathname = usePathname();
   const [target, setTarget] = useState<string | null>(null);
   // Plantillas de proyecto de la instancia (solo administradores): solo la estructura, sin tarjetas.

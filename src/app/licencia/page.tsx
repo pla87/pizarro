@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { AuthCard } from "@/components/auth/AuthCard";
-import { Markdown } from "@/components/ui/Markdown";
+import { StaticMarkdown } from "@/components/ui/StaticMarkdown";
 import { I18nProvider } from "@/i18n/client";
 import { makeT } from "@/i18n/core";
 import { getLocale } from "@/i18n/server";
@@ -43,7 +43,7 @@ export default async function Page({ searchParams }: { searchParams: Search }) {
     <I18nProvider locale={locale}>
       <AuthCard wide title={t("Licencia de Pizarro")}>
         <div className="space-y-4 text-sm" data-testid="license" lang={locale}>
-          <Markdown>{body}</Markdown>
+          <StaticMarkdown t={t}>{body}</StaticMarkdown>
           <p className="text-xs text-slate-500">
             <a className="underline" href={locale === "en" ? "/licencia?lang=es" : "/licencia?lang=en"}>{t("Ver la licencia en el otro idioma")}</a>
             {" · "}

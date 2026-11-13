@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2, X } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { createKind, deleteKind, moveKind, updateKind } from "@/actions/kinds";
 import { cn } from "@/components/ui/cn";
@@ -16,6 +16,7 @@ import { MAX_DESCRIPTION, PALETTE } from "@/lib/constants";
 import { markdownToPlain } from "@/lib/ics";
 import { describeKindAutomation, MAX_KIND_SUBTASKS, parseSubtaskLines } from "@/lib/kinds-special";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
+import { useActionTransition } from "@/components/useActionTransition";
 
 export interface KindRow {
   id: string;
@@ -61,7 +62,7 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
   const locale = useIntlLocale();
   const safeRefresh = useSafeRefresh();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [deleting, setDeleting] = useState<KindRow | null>(null);

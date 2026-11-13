@@ -1,10 +1,11 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { resetPassword } from "@/actions/auth";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useT } from "@/i18n/client";
+import { useActionTransition } from "@/components/useActionTransition";
 
 /** `invite`: el enlace es una invitación (cuenta nueva, sin sesiones que cerrar), no un «olvidé mi contraseña». */
 export function ResetForm({ token, email, invite = false }: { token: string; email: string; invite?: boolean }) {
@@ -13,7 +14,7 @@ export function ResetForm({ token, email, invite = false }: { token: string; ema
   const [repeat, setRepeat] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition(setError);
 
   if (done) {
     return (

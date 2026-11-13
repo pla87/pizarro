@@ -2,16 +2,17 @@
 
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { requestPasswordReset } from "@/actions/auth";
 import { useT } from "@/i18n/client";
+import { useActionTransition } from "@/components/useActionTransition";
 
 export function ForgotForm() {
   const t = useT();
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition(setError);
 
   if (sent) {
     return (

@@ -24,6 +24,15 @@ export async function onRequestError(
 // Arranque del servidor: registra los errores del proceso y lanza el mantenimiento periódico (solo runtime Node; imports dinámicos para no tocar el bundle edge).
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  // Dirección de la conexión en cada petición (la IP del cliente sin proxy delante; ver lib/client-ip.ts y TRUST_PROXY).
+  try {
+    const { installPeerIpHeader } = await import("@/lib/peer-ip");
+    installPeerIpHeader();
+    const { trustProxy, trustProxyInvalid } = await import("@/lib/client-ip");
+    if (trustProxyInvalid()) console.warn(`[start] TRUST_PROXY no se entiende (usa 1 o 0); se usa el valor por defecto: ${trustProxy() ? "1" : "0"}.`);
+  } catch (err) {
+    console.error("[instrumentation] no se pudo anotar la IP de las conexiones", err);
+  }
   try {
     const { installProcessErrorHandlers } = await import("@/lib/process-errors");
     installProcessErrorHandlers();

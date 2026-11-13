@@ -365,6 +365,23 @@ When the address changes, everyone has to sign in again, and anyone who installe
 must install it again. If you use "Sign in with Google", also add the new addresses in Google Cloud
 ([guide](../../guias/en/google-login.md)).
 
+### Another proxy in front, or no proxy {#proxy}
+
+Pizarro uses the IP of whoever connects to limit sign-in attempts and for the activity log. Behind a proxy (the Caddy
+from the installation, Railway's or one of your own) the connection comes from the proxy, so the real IP is passed on
+by the proxy in the `X-Real-IP` or `X-Forwarded-For` headers. But anyone can write those headers: Pizarro only trusts
+them if there is a proxy in front that overwrites them. The `TRUST_PROXY` variable decides:
+
+- **Not set** (the usual case): with Docker and on Railway it trusts them, because they come with their proxy; started
+  with `npm start`, it doesn't. There's nothing to change.
+- **`TRUST_PROXY=1`** if you start Pizarro with `npm start` behind your own proxy (nginx, Apache, another Caddy…). That
+  proxy must overwrite `X-Real-IP` with the client's IP (in nginx: `proxy_set_header X-Real-IP $remote_addr;`).
+- **`TRUST_PROXY=0`** if you publish the container without the included Caddy, with port 3000 open as is (not
+  recommended).
+
+On your server, the variable goes in `/opt/pizarro/deploy/.env` (apply it with `docker compose up -d`); on Railway, in
+the *Variables* of Pizarro's service.
+
 > [!NOTE]
 > **On the local network, with no domain,** Pizarro works over plain HTTP, unencrypted. That's enough at home or in the
 > office, but don't open it to the Internet like that. Without HTTPS, signing in with Google and installing it as an app
@@ -399,6 +416,11 @@ docker compose logs --tail 80 app
 
 If the disk is almost full or memory is short, the app doesn't start or keeps restarting: free up space
 (`docker system prune` removes old images) or upgrade the server.
+
+If the log says `No se puede conectar con PostgreSQL` ("can't connect to PostgreSQL"), the app can't reach the
+database: it says so after trying for 10 seconds, along with the server and the reason (no answer, connection refused
+or no such name). Check that the database container is running (`docker compose ps`) or, on Railway, the
+`DATABASE_URL` variable.
 
 ### Emails don't arrive
 

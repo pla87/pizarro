@@ -363,6 +363,23 @@ Al cambiar de dirección, todos tienen que volver a iniciar sesión, y quien ins
 instalarla de nuevo. Si usas «Iniciar sesión con Google», añade también las direcciones nuevas en Google Cloud
 ([guía](../guias/google-login.md)).
 
+### Otro proxy delante, o sin proxy {#proxy}
+
+Pizarro usa la IP de quien entra para limitar los intentos de acceso y para el registro de actividad. Detrás de un
+proxy (el Caddy de la instalación, el de Railway o uno tuyo) la conexión llega desde el proxy, así que la IP real la
+cuenta el proxy en las cabeceras `X-Real-IP` o `X-Forwarded-For`. Pero esas cabeceras las puede escribir cualquiera:
+Pizarro solo se fía de ellas si hay un proxy delante que las sobrescriba. Lo decide la variable `TRUST_PROXY`:
+
+- **Sin definir** (lo normal): con Docker y en Railway se fía, porque ya llevan su proxy; arrancado con `npm start`, no.
+  No hace falta tocar nada.
+- **`TRUST_PROXY=1`** si arrancas Pizarro con `npm start` detrás de tu propio proxy (nginx, Apache, otro Caddy…). Ese
+  proxy debe sobrescribir `X-Real-IP` con la IP del cliente (en nginx: `proxy_set_header X-Real-IP $remote_addr;`).
+- **`TRUST_PROXY=0`** si publicas el contenedor sin el Caddy incluido, con el puerto 3000 abierto tal cual (no es lo
+  recomendado).
+
+En tu servidor, la variable va en `/opt/pizarro/deploy/.env` (y se aplica con `docker compose up -d`); en Railway, en
+*Variables* del servicio de Pizarro.
+
 > [!NOTE]
 > **En la red local, sin dominio,** Pizarro funciona por HTTP, sin cifrar. Es suficiente en casa o en la oficina, pero
 > no lo abras así a Internet. Sin HTTPS tampoco funcionan el inicio de sesión con Google ni la instalación como app en
@@ -399,6 +416,10 @@ docker compose logs --tail 80 app
 
 Si el disco está casi lleno o falta memoria, la app no arranca o se reinicia sola: libera espacio
 (`docker system prune` borra imágenes viejas) o amplía el servidor.
+
+Si el log dice `No se puede conectar con PostgreSQL`, la app no llega a la base de datos: lo dice a los 10 segundos de
+intentarlo, junto con el servidor y el motivo (no responde, rechaza la conexión o no existe ese nombre). Comprueba que
+el contenedor de la base de datos está en marcha (`docker compose ps`) o, en Railway, la variable `DATABASE_URL`.
 
 ### No llegan los emails
 

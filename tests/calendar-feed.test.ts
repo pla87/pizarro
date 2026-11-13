@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { feedHttpsUrl, feedWebcalUrl, FEED_TOKEN_LENGTH, googleSubscribeUrl, hashFeedToken, isFeedTokenShape, newFeedToken, safeEqualHex, sequenceOf, snippet, tokenFromFilename } from "../src/lib/calendar-feed-core";
+import { FEED_LOG_EVERY_MS, feedHttpsUrl, feedLogDue, feedWebcalUrl, FEED_TOKEN_LENGTH, googleSubscribeUrl, hashFeedToken, isFeedTokenShape, newFeedToken, safeEqualHex, sequenceOf, snippet, tokenFromFilename } from "../src/lib/calendar-feed-core";
 import { buildIcs, escapeIcsText, foldIcsLine } from "../src/lib/ics";
 
 process.env.SESSION_SECRET ??= "x".repeat(40);
@@ -105,4 +105,27 @@ test("snippet no parte un par sustituto (emoji) al recortar", () => {
   assert.ok(!/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(out), "sin sustitutos sueltos");
   assert.equal(snippet("ab cd ef", 5), "ab c…");
   assert.equal(snippet("ab  cd", 4), "ab…");
+});
+
+test("registro muestreado: la primera consulta de cada clave y después una cada 6 h, con las calladas", () => {
+  const state = new Map<string, { at: number; skipped: number }>();
+  const t0 = 1_000_000;
+  assert.equal(FEED_LOG_EVERY_MS, 6 * 3_600_000);
+  assert.equal(feedLogDue(state, "a", t0), 0);
+  // Un cliente que consulta cada 5 minutos: nada durante 6 horas…
+  let logged = 0;
+  for (let m = 5; m < 360; m += 5) if (feedLogDue(state, "a", t0 + m * 60_000) !== null) logged++;
+  assert.equal(logged, 0);
+  // …y a las 6 h, una línea que cuenta las que se callaron.
+  assert.equal(feedLogDue(state, "a", t0 + FEED_LOG_EVERY_MS), 71);
+  assert.equal(feedLogDue(state, "a", t0 + FEED_LOG_EVERY_MS + 1), null);
+  // Otra clave (otro enlace u otra IP) no espera a la primera.
+  assert.equal(feedLogDue(state, "b", t0 + 1), 0);
+  // Periodo propio (el aviso de exceso de ritmo, cada hora).
+  assert.equal(feedLogDue(state, "c", t0, 3_600_000), 0);
+  assert.equal(feedLogDue(state, "c", t0 + 3_600_000, 3_600_000), 0);
+  // Memoria acotada: con muchas claves se olvidan las más antiguas.
+  for (let i = 0; i < 6000; i++) feedLogDue(state, `k${i}`, t0);
+  assert.ok(state.size <= 5000);
+  assert.ok(!state.has("a"));
 });

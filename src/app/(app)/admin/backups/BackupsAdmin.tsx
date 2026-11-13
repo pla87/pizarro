@@ -2,7 +2,7 @@
 
 import { CloudUpload, Download, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { copyToExternalNow, createBackupNow, requestBackupDownload } from "@/actions/backups";
 import { Modal } from "@/components/ui/Modal";
 import { PasswordInput } from "@/components/ui/PasswordInput";
@@ -15,6 +15,7 @@ import type { BackupFileInfo, BackupRun, BackupStatus, ExternalRun, RestoreTestR
 import type { BackupKeyDiagnosis } from "@/lib/backup-core";
 import type { DestinationId } from "@/lib/backup-dest";
 import type { JobRunInfo } from "@/lib/jobs";
+import { useActionTransition } from "@/components/useActionTransition";
 
 /** Tamaño con la coma decimal del idioma («2,3 MB»). */
 const sizeText = (bytes: number, locale: string): string => formatSize(Math.max(bytes, 1024), locale);
@@ -77,7 +78,7 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
   const locale = useIntlLocale();
   const router = useRouter();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const enabled = keyState === "ok";
   // Descarga protegida: se pide la contraseña (o un código de la app) y solo entonces se pide el fichero con un token de un solo uso.
   const [dlOpen, setDlOpen] = useState(false);

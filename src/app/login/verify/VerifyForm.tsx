@@ -1,20 +1,21 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useActionState, useMemo, useState, useTransition } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { resendLoginCode, verifyLoginCode, type VerifyState } from "@/actions/two-factor";
 import { reloadForNewVersion } from "@/components/VersionWatcher";
 import { useT } from "@/i18n/client";
 import { BackToLogin } from "./BackToLogin";
 import { guardFormAction } from "@/lib/guard-action";
+import { useActionTransition } from "@/components/useActionTransition";
 
 export function VerifyForm({ method, emailSent }: { method: "TOTP" | "EMAIL"; emailSent: boolean }) {
   const t = useT();
   // guardFormAction: tras un despliegue esta página puede ser de la versión anterior; entonces se recarga en vez de romper.
   const guarded = useMemo(() => guardFormAction(verifyLoginCode, t, reloadForNewVersion), [t]);
   const [state, action, pending] = useActionState<VerifyState, FormData>(guarded, {});
-  const [resending, startResend] = useTransition();
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(emailSent ? { ok: true, text: t("Te hemos enviado un código a tu email.") } : null);
+  const [resending, startResend] = useActionTransition((text) => setNote({ ok: false, text }));
 
   return (
     <div className="space-y-4">

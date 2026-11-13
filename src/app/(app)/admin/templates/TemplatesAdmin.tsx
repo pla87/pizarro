@@ -2,7 +2,7 @@
 
 import { ArrowDown, ArrowUp, Check, Copy, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { deleteTemplate, resetTemplate, restoreDefaultTemplates, saveTemplate, templateFromProject } from "@/actions/templates";
 import { TaskFieldToggles } from "@/components/TaskFieldToggles";
 import { cn } from "@/components/ui/cn";
@@ -19,6 +19,7 @@ import { parseSubtaskLines } from "@/lib/kinds-special";
 import { normalizeTaskFields, type TaskFieldKey } from "@/lib/task-fields";
 import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS } from "@/lib/project-templates-core";
 import type { TemplateDto, TemplateInput } from "@/lib/project-templates";
+import { useActionTransition } from "@/components/useActionTransition";
 
 const KIND_COLORS = [...PALETTE, "#84cc16", "#06b6d4", "#d946ef", "#78716c"];
 const ROLE_LABEL: Record<ColumnRoleValue, string> = { NONE: "Ninguno", NEXT_RELEASE: "Siguiente salto", IN_PRODUCTION: "En producción", WAITING: "Esperando", WEEKLY_PLAN: "Planificación semanal", CHECKLIST: "Lista consolidada", REVIEW: "Revisión con requisitos", AGENDA: "Agenda", ROUTINES: "Rutinas", DELIVERY: "Entrega al cliente", BUDGET: "Presupuesto" };
@@ -107,7 +108,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [editing, setEditing] = useState<{ id: string | null; draft: Draft } | null>(null);
   const [deleting, setDeleting] = useState<TemplateDto | null>(null);
   const [picking, setPicking] = useState(false);

@@ -1,13 +1,14 @@
 "use client";
 
 import { CheckCircle2, Loader2 } from "lucide-react";
-import { startTransition, useState, useTransition } from "react";
+import { startTransition, useState } from "react";
 import { completeSetupAction, sendSetupTestEmail, verifySetupCodeAction } from "@/actions/setup";
 import { BrandMark } from "@/components/ui/BrandMark";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { I18nProvider, preloadEnglish, useT } from "@/i18n/client";
 import type { Locale } from "@/i18n/core";
 import type { SetupCodeSource } from "@/lib/setup-core";
+import { useActionTransition } from "@/components/useActionTransition";
 
 interface Props {
   zones: string[];
@@ -62,7 +63,7 @@ function Wizard({ zones, defaultZone, zoneLocked, smtp, codeSource, lang, setLan
   const [adminPassword, setAdminPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition(setError);
 
   const go = (n: number) => {
     setError(null);

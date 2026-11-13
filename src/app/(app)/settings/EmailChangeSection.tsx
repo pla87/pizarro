@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { requestEmailChange } from "@/actions/profile";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
+import { useActionTransition } from "@/components/useActionTransition";
 
 /** Cambio de email: se confirma desde un enlace enviado a la dirección nueva. */
 export function EmailChangeSection({ email }: { email: string }) {
   const t = useT();
   const toast = useToast();
-  const [pending, start] = useTransition();
+  const [pending, start] = useActionTransition();
   const [newEmail, setNewEmail] = useState("");
   const [password, setPassword] = useState("");
 
