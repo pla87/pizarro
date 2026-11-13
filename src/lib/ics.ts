@@ -21,7 +21,12 @@ export interface IcsEvent {
   sequence?: number;
   /** Etiqueta del evento (CATEGORIES). */
   category?: string;
+  /** Regla de repetición (RRULE sin el prefijo, p. ej. `FREQ=WEEKLY;BYDAY=MO`): el evento es la primera de una serie. */
+  rrule?: string;
 }
+
+/** Forma de una RRULE que se acepta: solo partes NOMBRE=valor con mayúsculas, cifras, comas y signo (sin saltos de línea). */
+const RRULE_SHAPE = /^[A-Z]+=[A-Z0-9,+-]+(?:;[A-Z]+=[A-Z0-9,+-]+){0,9}$/;
 
 /** Escapa un valor TEXT: barra, punto y coma, coma y saltos de línea. */
 export function escapeIcsText(text: string): string {
@@ -188,6 +193,8 @@ export function buildIcs(opts: { name: string; events: IcsEvent[]; now?: Date; p
       `DTEND;VALUE=DATE:${compact(addDaysIso(e.endDate && e.endDate > e.date ? e.endDate : e.date, 1))}`,
       `SUMMARY:${escapeIcsText(e.summary)}`,
     );
+    // Una regla con otra forma no se escribe (el evento queda como uno suelto): nunca puede colar otra propiedad.
+    if (e.rrule && e.rrule.length <= 200 && RRULE_SHAPE.test(e.rrule)) lines.push(`RRULE:${e.rrule}`);
     if (e.description) lines.push(`DESCRIPTION:${escapeIcsText(e.description)}`);
     if (e.category) lines.push(`CATEGORIES:${escapeIcsText(e.category)}`);
     if (e.modifiedAt) lines.push(`LAST-MODIFIED:${stampOf(e.modifiedAt)}`);

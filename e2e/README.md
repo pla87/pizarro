@@ -26,6 +26,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Borrar mi cuenta (escritorio y móvil) | `e2e/r49-account-e2e.mjs` | 35 | ~30 s |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
 | Copias con adjuntos y release con barra de formato | `e2e/r49-copy-e2e.mjs` | 87 | ~2 min |
+| Tareas que se repiten (calendario, .ics y «Nueva tarea») | `e2e/r49-repeat-e2e.mjs` | 44 | ~1 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
@@ -98,6 +99,15 @@ condiciones y licencia llegan pintadas sin JavaScript. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-infra-e2e.mjs   # PART=admin,profile,docs,ip,legal
+## Tareas que se repiten
+
+«Repetir» en *Nueva tarea* (junto a la fecha límite; el día sigue a la fecha mientras no se elija a mano; se guarda al
+crear), las apariciones futuras previstas en el calendario (tenues, con borde discontinuo e icono de repetir, abren la
+tarea original; ninguna hoy ni antes, ni de una tarea repetida sin fecha límite; un mes dos años después), la serie con
+`RRULE` en la suscripción `.ics` y en el `.ics` de una columna Agenda, y lo mismo a 390 px. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-repeat-e2e.mjs   # PART=new,cal,ics,mobile
 ```
 
 ## Comentarios a la vez, red lenta, dos pestañas y release renombrada (caza de bugs 48c)

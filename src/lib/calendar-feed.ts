@@ -1,12 +1,14 @@
 import "server-only";
 import { visibleProjectsWhere, workingProjectsWhere } from "./access";
-import { FEED_FUTURE_DAYS, FEED_MAX_DELIVERABLES, FEED_MAX_TASKS, FEED_PAST_DAYS, FEED_REFRESH_MINUTES, feedTokenHashes, isFeedTokenShape, safeEqualHex, sequenceOf, snippet } from "./calendar-feed-core";
+import { FEED_FUTURE_DAYS, FEED_MAX_DELIVERABLES, FEED_MAX_REPEATS, FEED_MAX_TASKS, FEED_PAST_DAYS, FEED_REFRESH_MINUTES, feedTokenHashes, isFeedTokenShape, safeEqualHex, sequenceOf, snippet } from "./calendar-feed-core";
 import { appTimeZone } from "./board";
 import { addDaysIso, dateToIso, isoToDate, todayIso } from "./dates";
 import { db } from "./db";
 import { buildIcs, descriptionToPlain, type IcsEvent } from "./ics";
 import { appUrl } from "./mail";
 import { mentionsToPlain } from "./mentions";
+import { repeatIcsEvents } from "./recurrence-series";
+import { recurrenceLabel } from "../components/board/recurrence-ui";
 import { makeT, toLocale } from "../i18n/core";
 import type { CurrentUser } from "./session";
 import type { CalendarFeedScope, Prisma } from "@/generated/prisma/client";
@@ -52,9 +54,13 @@ export async function defaultFeedScope(user: CurrentUser): Promise<CalendarFeedS
   return total > 0 && assigned * 2 >= total ? "MINE" : "ALL";
 }
 
-/** .ics con las tareas no archivadas ni terminadas con fecha límite y los entregables con fecha. Los permisos se evalúan aquí, en cada petición. */
-export async function buildFeedIcs(user: FeedOwner, scope: CalendarFeedScope, now: Date = new Date()): Promise<{ ics: string; tasks: number; deliverables: number }> {
-  const t = makeT(toLocale(user.locale));
+/**
+ * .ics con las tareas no archivadas ni terminadas con fecha límite y los entregables con fecha. Las tareas que se repiten
+ * llevan además sus apariciones futuras previstas como una serie (RRULE). Los permisos se evalúan aquí, en cada petición.
+ */
+export async function buildFeedIcs(user: FeedOwner, scope: CalendarFeedScope, now: Date = new Date()): Promise<{ ics: string; tasks: number; deliverables: number; repeats: number }> {
+  const locale = toLocale(user.locale);
+  const t = makeT(locale);
   const base = appUrl();
   const today = todayIso(appTimeZone(), now);
   const window = { gte: isoToDate(addDaysIso(today, -FEED_PAST_DAYS)), lte: isoToDate(addDaysIso(today, FEED_FUTURE_DAYS)) };
@@ -63,7 +69,7 @@ export async function buildFeedIcs(user: FeedOwner, scope: CalendarFeedScope, no
   // elegido en su perfil y sus privados). «Solo las mías»: cualquier proyecto que pueda ver, pues la tarea ya es suya.
   const project: Prisma.ProjectWhereInput = mine ? visibleProjectsWhere(user as CurrentUser) : workingProjectsWhere(user as CurrentUser);
 
-  const [tasks, deliverables] = await Promise.all([
+  const [tasks, deliverables, repeating] = await Promise.all([
     db.task.findMany({
       // Sin las terminadas (en columnas que cuentan como hechas), como «Ocultar terminadas» en el Calendario.
       where: { project, archivedAt: null, column: { isDone: false }, dueDate: window, ...(mine ? { assigneeId: user.id } : {}) },
@@ -78,7 +84,22 @@ export async function buildFeedIcs(user: FeedOwner, scope: CalendarFeedScope, no
       take: FEED_MAX_DELIVERABLES,
       select: { id: true, name: true, description: true, dueDate: true, updatedAt: true, project: { select: { id: true, name: true, updatedAt: true } } },
     }),
+    db.task.findMany({
+      // Tareas que se repiten y aún no han dado su siguiente aparición: la serie sale de ellas (la tarea en sí va arriba si
+      // su fecha cae en la ventana; una vencida hace tiempo también da serie). Sin fecha límite no hay previsión.
+      where: { project, archivedAt: null, column: { isDone: false }, recurrence: { not: "NONE" }, recurrenceNext: { is: null }, dueDate: { not: null, lte: window.lte }, ...(mine ? { assigneeId: user.id } : {}) },
+      orderBy: [{ dueDate: "asc" }, { id: "asc" }],
+      take: FEED_MAX_REPEATS,
+      select: { id: true, title: true, description: true, dueDate: true, recurrence: true, recurrenceDay: true, updatedAt: true, project: { select: { id: true, name: true, updatedAt: true } }, column: { select: { name: true } } },
+    }),
   ]);
+  // La descripción en texto plano se calcula una vez por tarea (la tarea y su serie la comparten).
+  const plainOf = new Map<string, string>();
+  const plainFor = (id: string, md: string) => {
+    let s = plainOf.get(id);
+    if (s === undefined) plainOf.set(id, (s = md ? snippet(descriptionToPlain(md), 300) : ""));
+    return s;
+  };
 
   const events: IcsEvent[] = [];
   for (const x of tasks) {
@@ -88,7 +109,7 @@ export async function buildFeedIcs(user: FeedOwner, scope: CalendarFeedScope, no
     const start = x.project.taskFields.includes("startDate") ? dateToIso(x.startDate) : null;
     const isRange = !!start && start < due;
     const modifiedAt = x.updatedAt > x.project.updatedAt ? x.updatedAt : x.project.updatedAt;
-    const plain = x.description ? snippet(descriptionToPlain(x.description), 300) : "";
+    const plain = plainFor(x.id, x.description);
     events.push({
       // Mismo UID que el .ics de la columna Agenda: un solo evento por tarea aunque se importen los dos.
       uid: `${x.id}@pizarro`,
@@ -101,6 +122,21 @@ export async function buildFeedIcs(user: FeedOwner, scope: CalendarFeedScope, no
       sequence: sequenceOf(modifiedAt),
       category: t("Tarea"),
     });
+  }
+  const until = addDaysIso(today, FEED_FUTURE_DAYS);
+  for (const x of repeating) {
+    const modifiedAt = x.updatedAt > x.project.updatedAt ? x.updatedAt : x.project.updatedAt;
+    const rule = recurrenceLabel(x, t, locale) ?? "";
+    events.push(
+      ...repeatIcsEvents({ id: x.id, recurrence: x.recurrence, recurrenceDay: x.recurrenceDay, due: dateToIso(x.dueDate) }, {
+        summary: `[${x.project.name}] ${mentionsToPlain(x.title)}`,
+        description: [t("Repetición prevista ({rule}): se crea al terminar la anterior.", { rule }), t("Proyecto: {name}", { name: x.project.name }), t("Columna: {name}", { name: x.column.name }), plainFor(x.id, x.description)].filter(Boolean).join("\n"),
+        url: `${base}/p/${x.project.id}?task=${x.id}`,
+        modifiedAt,
+        sequence: sequenceOf(modifiedAt),
+        category: t("Tarea"),
+      }, today, until),
+    );
   }
   for (const d of deliverables) {
     const due = dateToIso(d.dueDate);
@@ -119,5 +155,5 @@ export async function buildFeedIcs(user: FeedOwner, scope: CalendarFeedScope, no
   }
   events.sort((a, b) => a.date.localeCompare(b.date) || a.uid.localeCompare(b.uid));
   const name = mine ? t("Pizarro: mis tareas") : t("Pizarro: tareas de mis proyectos");
-  return { ics: buildIcs({ name, events, now, prodId: "-//Pizarro//Suscripcion//ES", refreshMinutes: FEED_REFRESH_MINUTES }), tasks: tasks.length, deliverables: deliverables.length };
+  return { ics: buildIcs({ name, events, now, prodId: "-//Pizarro//Suscripcion//ES", refreshMinutes: FEED_REFRESH_MINUTES }), tasks: tasks.length, deliverables: deliverables.length, repeats: repeating.length };
 }

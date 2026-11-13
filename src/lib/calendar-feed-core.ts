@@ -12,6 +12,8 @@ export const FEED_FUTURE_DAYS = 365;
 /** Topes de eventos por calendario. */
 export const FEED_MAX_TASKS = 2000;
 export const FEED_MAX_DELIVERABLES = 500;
+/** Tope de tareas recurrentes cuyas apariciones futuras van como serie (una RRULE por tarea). */
+export const FEED_MAX_REPEATS = 500;
 /** Cada cuántos minutos se sugiere a los clientes volver a consultar. */
 export const FEED_REFRESH_MINUTES = 60;
 

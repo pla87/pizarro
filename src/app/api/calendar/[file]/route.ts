@@ -69,7 +69,7 @@ async function serveFeed(req: Request, file: string, ip: string, start: number):
     return notFound();
   }
 
-  const { ics, tasks, deliverables } = await buildFeedIcs(feed.user, feed.scope);
+  const { ics, tasks, deliverables, repeats } = await buildFeedIcs(feed.user, feed.scope);
   // Aviso de uso: como mucho una escritura por hora y enlace.
   void db.calendarFeed.updateMany({ where: { id: feed.feedId, OR: [{ lastUsedAt: null }, { lastUsedAt: { lt: new Date(Date.now() - 3_600_000) } }] }, data: { lastUsedAt: new Date() } }).catch(() => undefined);
   // Muestreado: la primera consulta de cada enlace desde cada IP y luego como mucho una cada 6 h (los clientes de
@@ -79,7 +79,7 @@ async function serveFeed(req: Request, file: string, ip: string, start: number):
     logEvent({
       category: "api", action: "calendar.feed", message: `Calendario suscrito consultado (${tasks} tareas, ${deliverables} entregables)`,
       userId: feed.user.id, userName: feed.user.name, path: "/api/calendar/…", ip, durationMs: performance.now() - start,
-      details: { tasks, deliverables, skipped, sampledEveryHours: FEED_LOG_EVERY_MS / 3_600_000 },
+      details: { tasks, deliverables, repeats, skipped, sampledEveryHours: FEED_LOG_EVERY_MS / 3_600_000 },
     });
   }
   // Cada evento lleva como DTSTAMP su último cambio, así que un calendario igual da el mismo ETag (y 304).

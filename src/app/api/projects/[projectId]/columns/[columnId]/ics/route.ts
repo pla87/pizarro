@@ -10,8 +10,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
   const start = performance.now();
   const auth = await authorizeColumnRoute(ctx.params);
   if (auth instanceof Response) return auth;
-  const { user, t, projectId, columnId, project } = auth;
-  const result = await buildColumnIcs(projectId, columnId);
+  const { user, t, locale, projectId, columnId, project } = auth;
+  const result = await buildColumnIcs(projectId, columnId, { t, locale });
   if (!result) return new Response(t("No encontrado"), { status: 404 });
   logEvent({
     category: "api", action: "column.ics", message: `Calendario .ics generado de «${project.name}» (${result.count} tareas)`,

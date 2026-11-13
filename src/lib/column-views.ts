@@ -1,7 +1,11 @@
 import "server-only";
-import type { Locale } from "../i18n/core";
+import type { Locale, T } from "../i18n/core";
 import type { ChecklistItem } from "./checklist";
-import { dateToIso } from "./dates";
+import { addDaysIso, dateToIso, todayIso } from "./dates";
+import { appTimeZone } from "./board";
+import { FEED_FUTURE_DAYS } from "./calendar-feed-core";
+import { repeatIcsEvents } from "./recurrence-series";
+import { recurrenceLabel } from "../components/board/recurrence-ui";
 import { db } from "./db";
 import { buildIcs, descriptionToPlain } from "./ics";
 import { localizeGeneralKind } from "./kinds-localize";
@@ -43,17 +47,23 @@ export async function loadPendingSubtasks(projectId: string, taskIds: string[]):
   return tasks.map((x) => ({ taskId: x.id, title: mentionsToPlain(x.title), pending: x.subtasks.map((s) => mentionsToPlain(s.title)) }));
 }
 
-/** Calendario .ics con las tareas no archivadas de una columna AGENDA que tienen fecha límite. */
-export async function buildColumnIcs(projectId: string, columnId: string): Promise<{ ics: string; filename: string; count: number } | null> {
-  const column = await db.column.findFirst({ where: { id: columnId, projectId, role: "AGENDA" }, select: { name: true, project: { select: { name: true, taskFields: true } } } });
+/**
+ * Calendario .ics con las tareas no archivadas de una columna AGENDA que tienen fecha límite. Las que se repiten (y aún no han
+ * dado la siguiente) llevan además la serie de sus apariciones futuras (RRULE), salvo en una columna que cuenta como terminada.
+ * `i18n` añade a la serie la nota de que es una previsión (las rutas la pasan; sin ella, solo la descripción de la tarea).
+ */
+export async function buildColumnIcs(projectId: string, columnId: string, i18n?: { t: T; locale: Locale }): Promise<{ ics: string; filename: string; count: number } | null> {
+  const column = await db.column.findFirst({ where: { id: columnId, projectId, role: "AGENDA" }, select: { name: true, isDone: true, project: { select: { name: true, taskFields: true } } } });
   if (!column) return null;
   const tasks = await db.task.findMany({
     where: { projectId, columnId, archivedAt: null, dueDate: { not: null } },
     orderBy: [{ dueDate: "asc" }, { position: "asc" }],
     take: 2000,
-    select: { id: true, title: true, description: true, dueDate: true, startDate: true },
+    select: { id: true, title: true, description: true, dueDate: true, startDate: true, recurrence: true, recurrenceDay: true, recurrenceNext: { select: { id: true } } },
   });
   const base = appUrl();
+  const today = todayIso(appTimeZone());
+  const until = addDaysIso(today, FEED_FUTURE_DAYS);
   const ics = buildIcs({
     name: `${column.project.name} · ${column.name}`,
     events: tasks.flatMap((x) => {
@@ -62,7 +72,15 @@ export async function buildColumnIcs(projectId: string, columnId: string): Promi
       const start = column.project.taskFields.includes("startDate") ? dateToIso(x.startDate) : null;
       const range = due && start && start < due;
       const date = range ? start : due;
-      return date ? [{ uid: `${x.id}@pizarro`, date, endDate: range ? due! : undefined, summary: mentionsToPlain(x.title), description: x.description ? descriptionToPlain(x.description) : undefined, url: `${base}/p/${projectId}?task=${x.id}` }] : [];
+      if (!date) return [];
+      const summary = mentionsToPlain(x.title);
+      const description = x.description ? descriptionToPlain(x.description) : undefined;
+      const url = `${base}/p/${projectId}?task=${x.id}`;
+      const own = { uid: `${x.id}@pizarro`, date, endDate: range ? due! : undefined, summary, description, url };
+      if (x.recurrence === "NONE" || x.recurrenceNext || column.isDone) return [own];
+      const note = i18n ? i18n.t("Repetición prevista ({rule}): se crea al terminar la anterior.", { rule: recurrenceLabel(x, i18n.t, i18n.locale) ?? "" }) : "";
+      const series = repeatIcsEvents({ id: x.id, recurrence: x.recurrence, recurrenceDay: x.recurrenceDay, due }, { summary, description: [note, description].filter(Boolean).join("\n") || undefined, url }, today, until);
+      return [own, ...series];
     }),
   });
   const slug = slugify(column.name) || "agenda";

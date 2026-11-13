@@ -134,6 +134,9 @@ const createSchema = z.object({
   dueDate: v.dayIso.default(null),
   deliverableId: v.id.nullable().default(null),
   evergreen: z.boolean().default(false),
+  /** Repetir (como en el detalle): el día se deja coherente con la regla al guardar. */
+  recurrence: z.enum(RECURRENCES).default("NONE"),
+  recurrenceDay: z.number().int().min(1).max(31).nullable().default(null),
   subtasks: z.array(v.title).max(50).default([]),
   ...taskFieldShape,
 });
@@ -156,6 +159,7 @@ export async function createTask(input: z.input<typeof createSchema>) {
     }
     // Solo se admite evergreen en la columna de la release.
     const evergreen = data.evergreen && (await db.column.count({ where: { id: data.columnId, role: "NEXT_RELEASE" } })) > 0;
+    const repeat = normalizeRecurrence(data.recurrence, data.recurrenceDay, data.dueDate, todayIso(appTimeZone()));
     assertTaskCreateRate(user.id);
     const task = await db.$transaction(async (tx) => {
       await assertTaskCapacity(tx, data.projectId);
@@ -175,6 +179,7 @@ export async function createTask(input: z.input<typeof createSchema>) {
           dueDate: data.dueDate ? isoToDate(data.dueDate) : null,
           deliverableId: data.deliverableId,
           evergreen,
+          ...repeat,
           ...fieldData(optional),
           position,
           createdById: user.id,
