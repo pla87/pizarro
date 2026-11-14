@@ -670,8 +670,8 @@ ${urls.join("\n")}
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 cpSync(join(root, "site/static"), out, { recursive: true });
-copyFileSync(join(root, "src/app/icon.svg"), join(out, "icon.svg"));
-copyFileSync(join(root, "src/app/favicon.ico"), join(out, "favicon.ico"));
+copyFileSync(join(root, "public/icon.svg"), join(out, "icon.svg"));
+copyFileSync(join(root, "public/favicon.ico"), join(out, "favicon.ico"));
 copyFileSync(join(root, "public/apple-touch-icon.png"), join(out, "apple-touch-icon.png"));
 const write = (p, content) => {
   mkdirSync(dirname(join(out, p)), { recursive: true });

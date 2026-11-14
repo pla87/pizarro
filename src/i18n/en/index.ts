@@ -4,6 +4,7 @@ import { accesibilidad } from "./accesibilidad";
 import { acceso } from "./acceso";
 import { admin } from "./admin";
 import { almacenamiento } from "./almacenamiento";
+import { apariencia } from "./apariencia";
 import { aplicarPlantilla } from "./aplicar-plantilla";
 import { baja } from "./baja";
 import { board } from "./board";
@@ -50,5 +51,5 @@ export const EN: Record<string, string> = {
   ...common, ...board, ...task, ...detalle, ...comentarios, ...lista, ...pegado, ...wip, ...calendar, ...releases, ...conexion,
   ...accesibilidad, ...settings, ...admin, ...server, ...cuentas, ...acceso, ...colaboracion, ...proyectos, ...plantillas,
   ...setup, ...documentacion, ...campos, ...almacenamiento, ...importar, ...ics, ...mensajeria, ...soporte, ...licencia,
-  ...legal, ...landing, ...web, ...instalar, ...baja, ...datos, ...copia, ...repeticion, ...carga, ...textos, ...aplicarPlantilla, ...privados, ...formatos, ...curso, ...seleccion,
+  ...legal, ...landing, ...web, ...instalar, ...baja, ...datos, ...copia, ...repeticion, ...carga, ...textos, ...aplicarPlantilla, ...privados, ...formatos, ...curso, ...seleccion, ...apariencia,
 };

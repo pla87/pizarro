@@ -31,7 +31,8 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Copias con adjuntos y release con barra de formato | `e2e/r49-copy-e2e.mjs` | 87 | ~2 min |
 | Formatos del material: cerrar la release, párrafos vacíos, Google Slides y HTML aislado (ronda 50) | `e2e/r50-formatos-e2e.mjs` | 107 | ~1 min |
 | Tareas que se repiten (calendario, .ics y «Nueva tarea») | `e2e/r49-repeat-e2e.mjs` | 44 | ~1 min |
-| Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/r49-ui-e2e.mjs` | 34 | ~1 min |
+| Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/r49-ui-e2e.mjs` | 38 | ~1 min |
+| Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/r51-ui-e2e.mjs` | 62 | ~1,5 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/r49-textos-e2e.mjs` | 29 | ~1 min |
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/r50-plantilla-e2e.mjs` | 39 | ~1 min |
 | Plantilla «Curso o máster» y «Publicar programa (PDF)» | `e2e/r50-curso-e2e.mjs` | 57 | ~40 s |
@@ -176,14 +177,35 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-repeat-e2e.mjs
 
 ## Carga de proyecto y «Adjuntos y límites» (ronda 49)
 
-El indicador de carga de las páginas de proyecto (respuestas lentas simuladas: el contorno del logo aparece pasados
-~200 ms, la región viva dice «Cargando…», ocupa el hueco de la página sin mover la barra lateral, y con movimiento
-reducido queda quieto y tenue) y los botones de limpieza de *Ajustes del proyecto → Adjuntos y límites*: desactivados y
+El indicador de carga de las páginas de proyecto (respuestas lentas simuladas: desde la ronda 51, el esqueleto del
+tablero, con cuatro columnas con su cabecera, aparece pasados ~200 ms, la región viva dice «Cargando…», ocupa el hueco de
+la página sin mover la barra lateral, Releases y Documentación tienen el suyo, y con movimiento reducido no brilla) y los botones de limpieza de *Ajustes del proyecto → Adjuntos y límites*: desactivados y
 con la tarjeta atenuada sin nada que borrar (también según el filtro de antigüedad), activos con ficheros, y la nota «i».
 Crea y borra su propio proyecto privado. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-ui-e2e.mjs   # PART=load,storage
+```
+
+## Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51)
+
+- `skeleton`: al ir al tablero con la respuesta lenta, su esqueleto (cuatro columnas con la forma de su cabecera, la
+  cabecera del tablero, brillo; huesos claros en claro y oscuros en oscuro); Releases, Documentación y Ajustes con el
+  suyo; en una carga rápida no llega a verse; en móvil, una sola columna, la barra de pestañas y nada se sale.
+- `icon`: *Administración → Ajustes → Icono de la app*: el color elegido llega al manifiesto (pedido sin sesión), al
+  favicon, al apple-touch-icon y a la pantalla de acceso; los PNG miden lo que dicen y son del color del tema; el nombre
+  bajo el icono es el de la organización. Deja la instalación como estaba.
+- `html`: un HTML con `dns-prefetch`, `preconnect`, `prefetch`, `prerender`, `modulepreload`, `preload`, hoja de estilo e
+  icono (también en mayúsculas, en el cuerpo y dentro de un SVG) se ve sin ningún `<link>` y sin pedir nada a esas
+  direcciones.
+- `backups`: con un `status.json` de prueba, el aviso de reducción dice la hora de las copias con segundos y sus nombres;
+  si llega otra copia (del mismo minuto) antes de confirmar, dice cuál era y cuál es. Necesita el servidor con
+  `BACKUP_KEY` (y `BACKUP_PAUSE=1`); sin ella se salta con una nota. Deja el `status.json` que hubiera.
+
+Crea y borra su propio proyecto privado. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r51-ui-e2e.mjs   # PART=skeleton,icon,html,backups
 ```
 
 ## Textos breves, notas «i» y botones sin efecto (ronda 49)

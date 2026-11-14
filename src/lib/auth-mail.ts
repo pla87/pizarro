@@ -209,7 +209,7 @@ export function sendBackupAlertMail(admin: Recipient, info: { lastAt: string | n
       subject: t("Pizarro: la última copia de seguridad es mucho menor que la anterior"),
       paragraphs: [
         t("Hola, {name}:", { name: admin.name }),
-        shrinkText(shrink, t, (iso) => formatDate(iso, "dateTime", intlLocale(toLocale(admin.locale)))),
+        shrinkText(shrink, t, (iso) => formatDate(iso, "dateTimeSeconds", intlLocale(toLocale(admin.locale)))),
         t("¿Se ha perdido la base de datos o el volumen? La retención conserva la última copia buena ({stem}) aunque ya le tocara borrarla.", { stem: shrink.goodStem }),
         t("Si has borrado datos a propósito, confírmalo en Administración → Copias de seguridad con «La reducción es correcta»."),
       ],

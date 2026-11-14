@@ -411,7 +411,11 @@ export async function acceptBackupShrink(by?: { id: string; name: string }, seen
     out.shrink = s.shrink;
     return { ...s, shrink: undefined, shrinkAccepted: s.shrink.stem };
   });
-  if (out.changed) throw new AppError(SHRINK_CHANGED_MESSAGE);
+  if (out.changed) {
+    // Lo que se ve tras el error debe ser ya el aviso de la copia nueva (sin esperar a que caduque la memoria).
+    invalidateMemo(BACKUP_MEMO);
+    throw new AppError(SHRINK_CHANGED_MESSAGE);
+  }
   const shrink = out.shrink;
   if (!shrink) return null;
   logEvent({
