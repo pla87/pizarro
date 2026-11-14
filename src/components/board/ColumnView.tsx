@@ -3,9 +3,9 @@
 import { memo, useEffect, useRef, useState, type RefObject } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { AlertTriangle, ArrowLeft, ArrowRight, CalendarDays, CalendarRange, Check, CheckCircle2, ClipboardCheck, FileDown, Flag, Gauge, GraduationCap, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Send, Tag, Trash2, Wallet, type LucideIcon } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Bot, CalendarDays, CalendarRange, Check, CheckCircle2, ClipboardCheck, FileDown, Flag, Gauge, GraduationCap, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Send, Tag, Trash2, Users, Wallet, type LucideIcon } from "lucide-react";
 import { deleteColumn, moveColumn, renameColumn, setColumnDone, setColumnRole, setColumnRoutineTarget, setColumnWaitingDays, setColumnWipLimit } from "@/actions/columns";
-import { COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, COLUMN_ROLES, DEFAULT_WAITING_DAYS, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
+import { COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, COLUMN_ROLES, DEFAULT_WAITING_DAYS, hasEvergreenTasks, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
 import type { BoardColumn } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { parseWipInput, WIP_MAX, WIP_MIN, wipExceeded } from "@/lib/wip";
@@ -16,7 +16,9 @@ import { useConfirm } from "../ui/ConfirmDialog";
 import { usePrompt } from "../ui/PromptDialog";
 import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
 import { Modal } from "../ui/Modal";
+import { AiPlanDialog } from "./AiPlanDialog";
 import { BudgetSummaryDialog } from "./BudgetSummaryDialog";
+import { ColumnActionButton, ColumnActionMenu } from "./ColumnActionButton";
 import { ChecklistDialog } from "./ChecklistDialog";
 import { ProgramDialog } from "./ProgramDialog";
 import { useBoard, useSelectedCount, useTasks } from "./context";
@@ -28,7 +30,7 @@ import { useFileZone } from "./useFileZone";
 interface Props {
   column: BoardColumn;
   taskIds: string[];
-  /** Tareas evergreen de la columna (solo la de la release): fuera de la lista ordenable. */
+  /** Tareas evergreen de la columna (la de la release y las de plan para IA): fuera de la lista ordenable. */
   evergreenIds?: string[];
   /** Tarjetas de la columna sin filtrar (para borrar la columna o generar la release con un filtro activo). */
   cardCount: number;
@@ -43,29 +45,41 @@ const NO_IDS: string[] = [];
 /** Icono de cada rol en el selector del menú de la columna (la explicación sale al pasar por encima: COLUMN_ROLE_HINT). */
 const ROLE_ICON: Record<ColumnRoleValue, LucideIcon> = {
   NONE: Minus, NEXT_RELEASE: Rocket, IN_PRODUCTION: Flag, WAITING: Hourglass, WEEKLY_PLAN: CalendarRange, CHECKLIST: ListChecks,
-  REVIEW: ClipboardCheck, AGENDA: CalendarDays, ROUTINES: Repeat, DELIVERY: Send, BUDGET: Wallet, PROGRAM: GraduationCap,
+  REVIEW: ClipboardCheck, AGENDA: CalendarDays, ROUTINES: Repeat, DELIVERY: Send, BUDGET: Wallet, PROGRAM: GraduationCap, AI_PLAN: Bot,
 };
+
+/** Diálogos de una columna: los abre su menú o el botón de acción de su rol (ColumnActionButton). */
+type ColumnDialog = "checklist" | "routine" | "program" | "plan" | "budget";
+
+const columnUrl = (projectId: string, columnId: string, path: string) => `/api/projects/${projectId}/columns/${columnId}/${path}`;
+/** Rol «Planificación semanal»: PDF de la semana, por día o por persona. */
+const weekPdf = (projectId: string, columnId: string, by: "day" | "person") => window.open(columnUrl(projectId, columnId, `week?by=${by}`), "_blank", "noopener");
+const agendaIcs = (projectId: string, columnId: string) => window.location.assign(columnUrl(projectId, columnId, "ics"));
+const deliveryPdf = (projectId: string, columnId: string) => window.open(columnUrl(projectId, columnId, "delivery"), "_blank", "noopener");
 
 /**
  * Columna del tablero. Memorizada: al arrastrar una tarjeta de una columna a otra el tablero se redibuja, pero solo
  * cambian las listas de origen y destino (Board conserva el mismo array en las demás), así que el resto no se repinta.
  */
 export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenIds = NO_IDS, cardCount, index, total, droppableId, mobileHidden }: Props) {
-  const { openNewTask, openRelease, setSelectedMany } = useBoard();
+  const { openNewTask, openRelease, setSelectedMany, project } = useBoard();
   const t = useT();
   const sc = useShortcut();
   const selectedHere = useSelectedCount(taskIds);
   const allSelected = taskIds.length > 0 && selectedHere === taskIds.length;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
   const isNextRelease = column.role === "NEXT_RELEASE";
-  const [programOpen, setProgramOpen] = useState(false);
+  // La release y los planes para IA acaban en su panel de tareas fijas («Siempre en la release» / «… en el plan»).
+  const withFixed = hasEvergreenTasks(column.role);
+  const [dialog, setDialog] = useState<ColumnDialog | null>(null);
+  const action = roleAction(column, project.id, cardCount, setDialog, openRelease, t, sc);
   // Límite orientativo: solo avisa al pasarlo (con las tarjetas justas no), nunca impide mover ni crear.
   const wipOver = wipExceeded(cardCount, column.wipLimit);
   // Archivos soltados en el hueco bajo las tarjetas: nueva tarea en esta columna.
   const fileZone = useFileZone((files) => openNewTask(column.id, false, files));
-  // Esquinas inferiores rectas mientras quedan tarjetas por ver abajo (la de la release acaba siempre en su panel fijo).
+  // Esquinas inferiores rectas mientras quedan tarjetas por ver abajo (las de tareas fijas acaban siempre en su panel).
   const listRef = useRef<HTMLDivElement>(null);
-  useMoreBelow(listRef, !isNextRelease);
+  useMoreBelow(listRef, !withFixed);
 
   return (
     <section
@@ -78,7 +92,8 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
         // Con 1-3 miden lo mismo que con 4: (ancho útil - barra «+» de 2.5 rem - 4 huecos de 0.75 rem) / 4. Es CSS puro, sin estado.
         total >= 4 ? "md:min-w-72 md:flex-1" : "md:w-[calc((100%-5.5rem)/4)] md:min-w-72",
         mobileHidden && "max-md:hidden",
-        isNextRelease && !wipOver && "ring-1 ring-brand-500/30",
+        // Columnas especiales (con botón de acción): el mismo borde suave del color de la app.
+        action != null && !wipOver && "ring-1 ring-brand-500/30",
       )}
       aria-label={column.name}
       data-wip-over={wipOver || undefined}
@@ -124,29 +139,15 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
           <button className="btn-icon h-7 w-7" onClick={() => openNewTask(column.id)} aria-label={t("Añadir tarea en {name}", { name: column.name })}>
             <Plus size={16} />
           </button>
-          <ColumnMenu column={column} index={index} total={total} empty={cardCount === 0} />
+          <ColumnMenu column={column} index={index} total={total} empty={cardCount === 0} openDialog={setDialog} />
         </div>
       </header>
-      {isNextRelease && (
-        <div className="px-2 pb-1.5">
-          <button
-            className="btn-primary w-full py-1.5"
-            onClick={() => openRelease(column.id)}
-            disabled={cardCount === 0}
-            title={cardCount === 0 ? t("No hay tarjetas en esta columna") : `${t("Generar Release")} (${sc("Alt+R")})`}
-          >
-            <Rocket size={15} /> {t("Generar Release")}
-          </button>
-        </div>
-      )}
-      {column.role === "PROGRAM" && (
-        <div className="px-2 pb-1.5">
-          <button className="btn-secondary w-full py-1" onClick={() => setProgramOpen(true)} title={t(COLUMN_ROLE_HINT.PROGRAM)}>
-            <GraduationCap size={15} /> {t("Publicar programa (PDF)")}
-          </button>
-          {programOpen && <ProgramDialog column={column} onClose={() => setProgramOpen(false)} />}
-        </div>
-      )}
+      {action}
+      {dialog === "checklist" && <ChecklistDialog column={column} onClose={() => setDialog(null)} />}
+      {dialog === "routine" && <RoutineTargetDialog column={column} onClose={() => setDialog(null)} />}
+      {dialog === "program" && <ProgramDialog column={column} onClose={() => setDialog(null)} />}
+      {dialog === "budget" && <BudgetSummaryDialog column={column} onClose={() => setDialog(null)} />}
+      {dialog === "plan" && <AiPlanDialog column={column} onClose={() => setDialog(null)} />}
       {/* La lista lleva el id de la columna: la detección de colisiones (lib/collision.ts) solo repasa las tarjetas de la columna bajo el puntero. */}
       <SortableContext id={droppableId} items={taskIds} strategy={verticalListSortingStrategy}>
         <div
@@ -179,7 +180,7 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
           </div>
         </div>
       </SortableContext>
-      {isNextRelease && <EvergreenPanel columnId={column.id} taskIds={evergreenIds} />}
+      {withFixed && <EvergreenPanel columnId={column.id} taskIds={evergreenIds} kind={isNextRelease ? "release" : "plan"} />}
     </section>
   );
 });
@@ -263,14 +264,49 @@ function BudgetTotal({ columnId }: { columnId: string }) {
   );
 }
 
-function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; index: number; total: number; empty: boolean }) {
+/**
+ * Botón de acción del rol de la columna (todas las columnas especiales con el mismo aspecto: ColumnActionButton), o null
+ * si su rol no tiene ninguna. Su acción también está en el menú de la columna.
+ */
+function roleAction(
+  column: BoardColumn, projectId: string, cardCount: number, open: (d: ColumnDialog) => void, openRelease: (columnId: string) => void,
+  t: ReturnType<typeof useT>, sc: ReturnType<typeof useShortcut>,
+): React.ReactNode {
+  const empty = cardCount === 0;
+  const hint = t(COLUMN_ROLE_HINT[column.role]);
+  switch (column.role) {
+    case "NEXT_RELEASE":
+      return <ColumnActionButton icon={Rocket} label={t("Generar Release")} onClick={() => openRelease(column.id)} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : `${t("Generar Release")} (${sc("Alt+R")})`} />;
+    case "AI_PLAN":
+      return <ColumnActionButton icon={Bot} label={t("Generar plan de trabajo")} onClick={() => open("plan")} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : hint} />;
+    case "PROGRAM":
+      return <ColumnActionButton icon={GraduationCap} label={t("Publicar programa (PDF)")} onClick={() => open("program")} title={hint} />;
+    case "WEEKLY_PLAN":
+      return (
+        <ColumnActionMenu icon={CalendarRange} label={t("PDF de la semana")} title={hint} items={[
+          { label: t("PDF de la semana (por día)"), icon: CalendarDays, onClick: () => weekPdf(projectId, column.id, "day") },
+          { label: t("PDF de la semana (por persona)"), icon: Users, onClick: () => weekPdf(projectId, column.id, "person") },
+        ]} />
+      );
+    case "CHECKLIST":
+      return <ColumnActionButton icon={ListChecks} label={t("Ver lista")} onClick={() => open("checklist")} title={hint} />;
+    case "AGENDA":
+      return <ColumnActionButton icon={CalendarDays} label={t("Exportar a calendario (.ics)")} onClick={() => agendaIcs(projectId, column.id)} title={hint} />;
+    case "DELIVERY":
+      return <ColumnActionButton icon={FileDown} label={t("Resumen para el cliente (PDF)")} onClick={() => deliveryPdf(projectId, column.id)} title={hint} />;
+    case "BUDGET":
+      return <ColumnActionButton icon={Wallet} label={t("Resumen de presupuesto")} onClick={() => open("budget")} title={hint} />;
+    default:
+      return null;
+  }
+}
+
+function ColumnMenu({ column, index, total, empty, openDialog: setDialog }: { column: BoardColumn; index: number; total: number; empty: boolean; openDialog: (d: ColumnDialog) => void }) {
   const { setColumns, track, refresh, project, columns } = useBoard();
-  const [dialog, setDialog] = useState<"checklist" | "routine" | "program" | null>(null);
   const toast = useToast();
   const confirm = useConfirm();
   const prompt = usePrompt();
   const t = useT();
-  const [summaryOpen, setSummaryOpen] = useState(false);
 
   // El menú se cierra solo al elegir una opción (ver Menu).
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, optimistic?: () => void) => {
@@ -369,10 +405,6 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
     run(() => setColumnWipLimit(column.id, limit), () => setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, wipLimit: limit } : c))));
   };
 
-  // Rol «Planificación semanal»: PDF de la semana, por día o por persona.
-  const weekPdf = (by: "day" | "person") => window.open(`/api/projects/${project.id}/columns/${column.id}/week?by=${by}`, "_blank", "noopener");
-
-  const columnUrl = (path: string) => `/api/projects/${project.id}/columns/${column.id}/${path}`;
   const routineTarget = columns.find((c) => c.id === column.routineTargetColumnId);
 
   const toggleDone = () =>
@@ -426,18 +458,19 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
       )}
       {column.role === "WEEKLY_PLAN" && (
         <>
-          <MenuItem icon={FileDown} onClick={() => weekPdf("day")}>{t("PDF de la semana (por día)")}</MenuItem>
-          <MenuItem icon={FileDown} onClick={() => weekPdf("person")}>{t("PDF de la semana (por persona)")}</MenuItem>
+          <MenuItem icon={FileDown} onClick={() => weekPdf(project.id, column.id, "day")}>{t("PDF de la semana (por día)")}</MenuItem>
+          <MenuItem icon={FileDown} onClick={() => weekPdf(project.id, column.id, "person")}>{t("PDF de la semana (por persona)")}</MenuItem>
         </>
       )}
       {column.role === "CHECKLIST" && <MenuItem icon={ListChecks} onClick={() => setDialog("checklist")}>{t("Ver lista")}</MenuItem>}
-      {column.role === "AGENDA" && <MenuItem icon={CalendarDays} onClick={() => window.location.assign(columnUrl("ics"))}>{t("Exportar a calendario (.ics)")}</MenuItem>}
+      {column.role === "AGENDA" && <MenuItem icon={CalendarDays} onClick={() => agendaIcs(project.id, column.id)}>{t("Exportar a calendario (.ics)")}</MenuItem>}
       {column.role === "ROUTINES" && (
         <MenuItem icon={Repeat} onClick={() => setDialog("routine")}>{t("Destino de la siguiente aparición: {name}…", { name: routineTarget?.name ?? t("esta columna") })}</MenuItem>
       )}
-      {column.role === "DELIVERY" && <MenuItem icon={FileDown} onClick={() => window.open(columnUrl("delivery"), "_blank", "noopener")}>{t("Resumen para el cliente (PDF)")}</MenuItem>}
-      {column.role === "BUDGET" && <MenuItem icon={Wallet} onClick={() => setSummaryOpen(true)}>{t("Resumen de presupuesto")}</MenuItem>}
+      {column.role === "DELIVERY" && <MenuItem icon={FileDown} onClick={() => deliveryPdf(project.id, column.id)}>{t("Resumen para el cliente (PDF)")}</MenuItem>}
+      {column.role === "BUDGET" && <MenuItem icon={Wallet} onClick={() => setDialog("budget")}>{t("Resumen de presupuesto")}</MenuItem>}
       {column.role === "PROGRAM" && <MenuItem icon={GraduationCap} onClick={() => setDialog("program")}>{t("Publicar programa (PDF)")}</MenuItem>}
+      {column.role === "AI_PLAN" && <MenuItem icon={Bot} onClick={() => setDialog("plan")} disabled={empty}>{t("Generar plan de trabajo")}</MenuItem>}
       <MenuSeparator />
       <MenuItem icon={Gauge} onClick={editWipLimit}>
         {column.wipLimit != null ? t("Límite de tarjetas: {limit}…", { limit: column.wipLimit }) : t("Límite de tarjetas…")}
@@ -450,10 +483,6 @@ function ColumnMenu({ column, index, total, empty }: { column: BoardColumn; inde
         {empty ? t("Borrar columna") : t("Borrar (debe estar vacía)")}
       </MenuItem>
     </Menu>
-    {summaryOpen && <BudgetSummaryDialog column={column} onClose={() => setSummaryOpen(false)} />}
-    {dialog === "checklist" && <ChecklistDialog column={column} onClose={() => setDialog(null)} />}
-    {dialog === "routine" && <RoutineTargetDialog column={column} onClose={() => setDialog(null)} />}
-    {dialog === "program" && <ProgramDialog column={column} onClose={() => setDialog(null)} />}
     </>
   );
 }

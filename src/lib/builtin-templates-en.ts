@@ -292,15 +292,14 @@ export const BUILTIN_TEMPLATES_EN: Record<string, TemplateInput> = {
   },
   "curso-master": {
     name: "Course or master's",
-    description: "Prepare a course or master's programme with help from an AI agent: a session-by-session programme you can publish as a PDF, materials, exercises, exams and student follow-up.",
+    description: "Prepare a course or master's programme with help from an AI agent: a work plan for the agent, a session-by-session programme you can publish as a PDF, materials, exercises and exams, and student follow-up.",
     columns: [
       col("Ideas"),
       col("Materials"),
-      col("Exercises"),
-      col("Exams"),
+      col("Exercises and exams"),
+      col("AI work plan", false, "AI_PLAN"),
       col("Programme", false, "PROGRAM"),
       col("Student follow-up"),
-      col("Done", true),
     ],
     kinds: [
       kind("Session", "#6366f1", "Session: ", "**Objectives:**\n\n**Topics:**\n\n- \n\n**Activities:**\n\n**Readings and materials:**\n", ["Prepare the slides", "Prepare the activity", "Upload the materials"]),

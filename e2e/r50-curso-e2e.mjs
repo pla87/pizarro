@@ -75,9 +75,9 @@ try {
     await page.waitForURL(/\/p\/[^/]+\/settings/, { timeout: 15000 });
     [{ id: projectId }] = await L.q(`SELECT id FROM "Project" WHERE name=$1`, [PROJECT]);
     const cols = await L.q(`SELECT name, role, "isDone", id FROM "Column" WHERE "projectId"=$1 ORDER BY position`, [projectId]);
-    L.eq("TPL: columnas de la plantilla, con «Programa» como columna PROGRAM", cols.map((c) => [c.name, c.role, c.isDone]), [
-      ["Ideas", "NONE", false], ["Materiales", "NONE", false], ["Ejercicios", "NONE", false], ["Exámenes", "NONE", false],
-      ["Programa", "PROGRAM", false], ["Seguimiento de alumnos", "NONE", false], ["Hecho", "NONE", true],
+    L.eq("TPL: columnas de la plantilla, con «Plan de trabajo para IA» (AI_PLAN) y «Programa» (PROGRAM), sin «Hecho»", cols.map((c) => [c.name, c.role, c.isDone]), [
+      ["Ideas", "NONE", false], ["Materiales", "NONE", false], ["Ejercicios y exámenes", "NONE", false],
+      ["Plan de trabajo para IA", "AI_PLAN", false], ["Programa", "PROGRAM", false], ["Seguimiento de alumnos", "NONE", false],
     ]);
     programId = cols.find((c) => c.role === "PROGRAM").id;
     const kinds = await L.q(`SELECT name FROM "TaskKind" WHERE "projectId"=$1 ORDER BY position`, [projectId]);

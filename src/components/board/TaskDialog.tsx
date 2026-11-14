@@ -16,7 +16,7 @@ import { useIntlLocale, useT } from "@/i18n/client";
 import { dueStatus } from "@/lib/dates";
 import { mentionsToPlain } from "@/lib/mentions";
 import { defaultRecurrenceDay, type RecurrenceRule } from "@/lib/recurrence-date";
-import { COLOR_NAME, isWhite, kindBadgeStyle, MAX_SUBTASKS, MAX_TITLE, onColor, swatchBorder } from "@/lib/constants";
+import { COLOR_NAME, hasEvergreenTasks, isWhite, kindBadgeStyle, MAX_SUBTASKS, MAX_TITLE, onColor, swatchBorder } from "@/lib/constants";
 import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
 import { ColorPicker } from "../ui/ColorPicker";
 import { cn } from "../ui/cn";
@@ -1022,15 +1022,18 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               </select>
             )}
           </Field>
-          {board.columns.find((c) => c.id === task.columnId)?.role === "NEXT_RELEASE" && (
-            <label className="flex items-center gap-2" title={t("Se queda en la columna de la release al desplegar y se incluye siempre en el texto")}>
+          {hasEvergreenTasks(board.columns.find((c) => c.id === task.columnId)?.role) && (
+            <label
+              className="flex items-center gap-2"
+              title={board.columns.find((c) => c.id === task.columnId)?.role === "AI_PLAN" ? t("Se queda en la columna al guardar el plan y se incluye siempre en el texto") : t("Se queda en la columna de la release al desplegar y se incluye siempre en el texto")}
+            >
               <input
                 type="checkbox"
                 className="h-4 w-4 accent-brand-600"
                 checked={task.evergreen}
                 onChange={(e) => save({ evergreen: e.target.checked }, e.target.checked ? { evergreen: true } : { evergreen: false, evergreenEvery: 1 })}
               />
-              {t("Fija en la release (evergreen)")}
+              {board.columns.find((c) => c.id === task.columnId)?.role === "AI_PLAN" ? t("Siempre en el plan (fija)") : t("Fija en la release (evergreen)")}
             </label>
           )}
           <Field label={t("Tipo")}>

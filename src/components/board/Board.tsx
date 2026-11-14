@@ -1182,14 +1182,14 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     flushStale();
   };
 
-  /** Soltar una tarjeta en el panel de fijas: pasa a la columna de la release como evergreen. */
+  /** Soltar una tarjeta en el panel de fijas: pasa a esa columna (la de la release o una de plan para IA) como evergreen. */
   const dropOnEvergreen = async (id: string, columnId: string) => {
     const previous = taskById.get(id);
     if (!previous) return;
     if (!(await confirmLeaveReview([id], columnId))) return;
     const position = Math.max(0, ...tasks.filter((t) => t.columnId === columnId).map((t) => t.position)) + 1024;
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, columnId, position, evergreen: true } : t)));
-    const res = await track(makeEvergreen(id));
+    const res = await track(makeEvergreen(id, columnId));
     if (!res.ok) {
       setTasks((prev) => prev.map((t) => (t.id === id ? previous : t)));
       return toast(res.error, "error");

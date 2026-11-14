@@ -30,6 +30,8 @@ enum ColumnRole {
   BUDGET
   /// Programa de un curso: cada tarea es una sesión; «Publicar programa (PDF)».
   PROGRAM
+  /// Plan de trabajo para una IA (p. ej. Claude Code): «Generar plan de trabajo», con tareas fijas como la release. Repetible.
+  AI_PLAN
 }
 
 /// Prioridad opcional de una tarea (campo opcional «prioridad» del proyecto).
@@ -252,6 +254,8 @@ model Project {
   storageQuotaMb  Int?
   /// Campos opcionales de las tareas que el proyecto tiene activados (ver lib/task-fields.ts); los datos se conservan al desactivar.
   taskFields  String[] @default([])
+  /// Último número de versión del plan de trabajo para IA guardado en la Documentación («…_v3.md»); solo crece.
+  aiPlanCount Int      @default(0)
   position    Float    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -892,6 +896,9 @@ enum EditorMode {
 enum TemplateKind {
   HEADER
   FOOTER
+  /// Cabecera y pie del plan de trabajo para IA (columna AI_PLAN): misma tabla que las de release, otro tipo.
+  PLAN_HEADER
+  PLAN_FOOTER
 }
 
 /// Cabeceras y pies de release de cada usuario (puede tener varios de cada).

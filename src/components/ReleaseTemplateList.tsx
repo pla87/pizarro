@@ -9,6 +9,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { EditorModeValue, TemplateOption } from "@/lib/types";
+import type { TemplateKindValue } from "@/lib/constants";
 import { useActionTransition } from "@/components/useActionTransition";
 
 const NO_USERS: never[] = [];
@@ -17,7 +18,7 @@ type Result<T = void> = { ok: true; data: T } | { ok: false; error: string };
 
 /** Qué hace cada botón: las plantillas del usuario y las del proyecto usan la misma lista con acciones distintas. */
 interface ReleaseTemplateActions {
-  create: (kind: "HEADER" | "FOOTER", input: { name: string; content: string }) => Promise<Result<TemplateOption>>;
+  create: (kind: TemplateKindValue, input: { name: string; content: string }) => Promise<Result<TemplateOption>>;
   update: (id: string, input: { name: string; content: string }) => Promise<Result>;
   move: (id: string, direction: -1 | 1) => Promise<Result>;
   remove: (id: string) => Promise<Result>;
@@ -33,7 +34,12 @@ let activeEditor: { owner: object; dirty: () => boolean; name: () => string; clo
  * Lista editable de cabeceras o pies de release (alta, edición con vista previa, orden y borrado). La edición es
  * en línea: la plantilla que se edita se convierte en la caja de edición en su sitio, y la nueva aparece al final.
  */
-export function ReleaseTemplateList({ kind, title, initial, placeholder, actions, showDefault = true, editorMode = "MARKDOWN" }: { editorMode?: EditorModeValue; kind: "HEADER" | "FOOTER"; title: string; initial: TemplateOption[]; placeholder: string; actions: ReleaseTemplateActions; /** Marca la primera como «Por defecto» (solo las del usuario: las del proyecto no se eligen solas). */ showDefault?: boolean }) {
+export function ReleaseTemplateList({ kind, title, initial, placeholder, actions, showDefault = true, editorMode = "MARKDOWN", starter }: {
+  editorMode?: EditorModeValue; kind: TemplateKindValue; title: string; initial: TemplateOption[]; placeholder: string; actions: ReleaseTemplateActions;
+  /** Marca la primera como «Por defecto» (solo las del usuario: las del proyecto no se eligen solas). */ showDefault?: boolean;
+  /** Texto con el que empieza una plantilla nueva (la de serie del plan para IA, para adaptarla) en vez de vacía. */ starter?: { name: string; content: string };
+}) {
+  const isHeader = kind === "HEADER" || kind === "PLAN_HEADER";
   const t = useT();
   const toast = useToast();
   const confirm = useConfirm();
@@ -100,7 +106,7 @@ export function ReleaseTemplateList({ kind, title, initial, placeholder, actions
       if (!ok) return;
     }
     if (current && current.owner !== owner) current.close();
-    const initialForm = tpl ? { name: tpl.name, content: tpl.content } : { name: "", content: "" };
+    const initialForm = tpl ? { name: tpl.name, content: tpl.content } : starter ? { ...starter } : { name: "", content: "" };
     original.current = initialForm;
     formRef.current = initialForm;
     setEditing(tpl ? tpl.id : "new");
@@ -213,12 +219,12 @@ export function ReleaseTemplateList({ kind, title, initial, placeholder, actions
             </li>
           ),
         )}
-        {editing === "new" && editor(kind === "HEADER" ? t("Nueva cabecera") : t("Nuevo pie"))}
+        {editing === "new" && editor(isHeader ? t("Nueva cabecera") : t("Nuevo pie"))}
         {items.length === 0 && editing !== "new" && <li className="px-3 py-2 text-sm text-slate-500">{t("Ninguna todavía.")}</li>}
       </ul>
       {editing !== "new" && (
         <button type="button" className="btn-ghost mt-1 py-1 text-xs" data-tpl-add onClick={() => void open()}>
-          <Plus size={14} /> {kind === "HEADER" ? t("Añadir cabecera") : t("Añadir pie")}
+          <Plus size={14} /> {isHeader ? t("Añadir cabecera") : t("Añadir pie")}
         </button>
       )}
     </div>

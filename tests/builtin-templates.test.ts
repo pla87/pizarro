@@ -17,7 +17,8 @@ test("claves y nombres únicos; textos dentro de los límites de los tipos", () 
   for (const b of BUILTIN_TEMPLATES) {
     const t = canonicalTemplate(b.key)!;
     for (const k of t.kinds) assert.ok(k.descriptionTemplate.length <= 2000, `${b.key}/${k.name}`);
-    assert.ok(t.columns.some((c) => c.isDone), `${b.key} sin columna de terminadas`);
+    // Todas tienen columna de terminadas salvo «Curso o máster» (lo hecho se archiva o se queda en su columna).
+    assert.equal(t.columns.some((c) => c.isDone), b.key !== "curso-master", `${b.key}: columna de terminadas`);
   }
 });
 

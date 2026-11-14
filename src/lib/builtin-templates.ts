@@ -339,19 +339,20 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
   {
     // Preparar un curso con ayuda de un agente (p. ej. Claude Code en la web): la descripción de cada tipo deja escrito
     // el encargo (objetivo, contenido, formato de entrega, duración, criterios y notas para el agente). La columna
-    // «Programa» (rol PROGRAM) tiene una tarjeta por sesión y publica el programa en PDF. Sin datos de alumnos.
+    // «Plan de trabajo para IA» (rol AI_PLAN) reúne los encargos y genera el plan en Markdown para el agente, y
+    // «Programa» (rol PROGRAM) tiene una tarjeta por sesión y publica el programa en PDF. Sin columna de terminadas: lo
+    // hecho se archiva o se queda en su columna. Sin datos de alumnos.
     key: "curso-master",
     data: {
       name: "Curso o máster",
-      description: "Preparar un curso o máster con ayuda de un agente de IA: programa por sesiones publicable en PDF, materiales, ejercicios, exámenes y seguimiento de alumnos.",
+      description: "Preparar un curso o máster con ayuda de un agente de IA: plan de trabajo para el agente, programa por sesiones publicable en PDF, materiales, ejercicios y exámenes, y seguimiento de alumnos.",
       columns: [
         col("Ideas"),
         col("Materiales"),
-        col("Ejercicios"),
-        col("Exámenes"),
+        col("Ejercicios y exámenes"),
+        col("Plan de trabajo para IA", false, "AI_PLAN"),
         col("Programa", false, "PROGRAM"),
         col("Seguimiento de alumnos"),
-        col("Hecho", true),
       ],
       kinds: [
         // La descripción de una sesión sale en el PDF del programa: solo lo que deben leer los alumnos.

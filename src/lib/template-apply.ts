@@ -10,7 +10,7 @@ import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { columnsLockName } from "./advisory-locks";
 import { lockProject } from "./caps";
-import { UNIQUE_COLUMN_ROLES } from "./constants";
+import { EVERGREEN_COLUMN_ROLES, releaseTemplateRows, UNIQUE_COLUMN_ROLES } from "./constants";
 import { db } from "./db";
 import { AppError } from "./errors";
 import { lockKindScope } from "./kind-lock";
@@ -73,7 +73,7 @@ export async function loadProjectShape(client: Client, projectId: string, locale
   const labels = await client.label.findMany({ where: { projectId }, orderBy: { name: "asc" }, select: { id: true, name: true } });
   const labelCounts = await client.$queryRaw<{ labelId: string; n: number }[]>`
     SELECT tl."labelId", count(*)::int AS n FROM "TaskLabel" tl JOIN "Label" l ON l."id" = tl."labelId" WHERE l."projectId" = ${projectId} GROUP BY tl."labelId"`;
-  const releaseTemplates = await client.projectReleaseTemplate.findMany({ where: { projectId }, select: { kind: true, name: true } });
+  const releaseTemplates = releaseTemplateRows(await client.projectReleaseTemplate.findMany({ where: { projectId }, select: { kind: true, name: true } }));
   const byColumn = new Map(columnCounts.map((c) => [c.columnId, c]));
   const byKind = new Map(kindCounts.map((k) => [k.kindId, k.n]));
   const byLabel = new Map(labelCounts.map((l) => [l.labelId, l.n]));
@@ -272,7 +272,7 @@ async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, temp
     await tx.column.deleteMany({ where: { id: { in: remove }, projectId } });
   }
   // Las tareas fijas solo existen en la columna de release: las que se quedan fuera pasan a normales.
-  const stray = await tx.task.findMany({ where: { projectId, evergreen: true, column: { role: { not: "NEXT_RELEASE" } } }, select: taskSelect });
+  const stray = await tx.task.findMany({ where: { projectId, evergreen: true, column: { role: { notIn: [...EVERGREEN_COLUMN_ROLES] } } }, select: taskSelect });
   if (stray.length) {
     note(stray);
     await tx.task.updateMany({ where: { id: { in: stray.map((t) => t.id) } }, data: { evergreen: false, evergreenEvery: 1 } });
@@ -470,7 +470,7 @@ export async function undoTemplateChange(projectId: string, now = new Date()): P
     const budget = await tx.column.count({ where: { projectId, role: "BUDGET" } });
     await tx.project.update({ where: { id: projectId }, data: { taskFields: normalizeTaskFields([...snap.taskFields, ...(budget ? ["cost"] : [])]) } });
     // Las tareas fijas fuera de la columna de release pasan a normales (la marca devuelta solo vale allí).
-    await tx.task.updateMany({ where: { projectId, evergreen: true, column: { role: { not: "NEXT_RELEASE" } } }, data: { evergreen: false, evergreenEvery: 1 } });
+    await tx.task.updateMany({ where: { projectId, evergreen: true, column: { role: { notIn: [...EVERGREEN_COLUMN_ROLES] } } }, data: { evergreen: false, evergreenEvery: 1 } });
 
     await tx.projectTemplateChange.delete({ where: { id: row.id } });
     return { templateName: row.templateName, keptColumns, keptKinds };

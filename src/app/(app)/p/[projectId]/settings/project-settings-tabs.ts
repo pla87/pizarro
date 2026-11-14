@@ -3,7 +3,8 @@ export const PROJECT_SETTINGS_TABS = [
   { id: "general", label: "General", manageOnly: true },
   { id: "tablero", label: "Tablero", manageOnly: false },
   { id: "adjuntos", label: "Adjuntos y límites", manageOnly: true },
-  { id: "releases", label: "Releases", manageOnly: false },
+  // Plantillas de release notes y del plan de trabajo para IA (el id sigue siendo «releases»: enlaces guardados).
+  { id: "releases", label: "Plantillas", manageOnly: false },
   { id: "informes", label: "Informes", manageOnly: false },
 ] as const;
 

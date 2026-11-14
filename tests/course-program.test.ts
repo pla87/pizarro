@@ -123,17 +123,19 @@ describe("sesiones del programa", () => {
 });
 
 describe("plantilla «Curso o máster»", () => {
-  test("columnas con «Programa» (rol PROGRAM), tipos con encargo para el agente, sin releases y con fecha de inicio", () => {
+  test("columnas con «Plan de trabajo para IA» (AI_PLAN) y «Programa» (PROGRAM), sin «Hecho», tipos con encargo para el agente, sin releases y con fecha de inicio", () => {
     for (const t of [canonicalTemplate("curso-master")!, canonicalTemplateEn("curso-master")!]) {
-      assert.ok(t.columns.length >= 6 && t.columns.length <= 7, "entre 6 y 7 columnas");
-      assert.deepEqual(t.columns.filter((c) => c.role !== "NONE").map((c) => c.role), ["PROGRAM"]);
-      assert.equal(t.columns.filter((c) => c.isDone).length, 1);
+      assert.equal(t.columns.length, 6);
+      assert.deepEqual(t.columns.filter((c) => c.role !== "NONE").map((c) => c.role), ["AI_PLAN", "PROGRAM"]);
+      assert.equal(t.columns.filter((c) => c.isDone).length, 0);
       assert.equal(t.kinds.length, 7);
       assert.deepEqual(t.taskFields, ["startDate"]);
       assert.deepEqual(t.releaseTemplates, []);
       assert.equal(t.hideAllGeneralKinds, true);
     }
     const es = canonicalTemplate("curso-master")!;
+    assert.deepEqual(es.columns.map((c) => c.name), ["Ideas", "Materiales", "Ejercicios y exámenes", "Plan de trabajo para IA", "Programa", "Seguimiento de alumnos"]);
+    assert.deepEqual(canonicalTemplateEn("curso-master")!.columns.map((c) => c.name), ["Ideas", "Materials", "Exercises and exams", "AI work plan", "Programme", "Student follow-up"]);
     assert.deepEqual(es.kinds.map((k) => k.name), ["Sesión", "Preparar material", "Preparar ejercicio", "Preparar examen", "Revisar perfil de alumno", "Corregir", "Tutoría"]);
     // Los encargos de preparación llevan formato de entrega y notas para el agente; la sesión (sale en el PDF), no.
     for (const name of ["Preparar material", "Preparar ejercicio", "Preparar examen"]) {

@@ -64,8 +64,8 @@ describe("plantilla «Curso o máster»", () => {
     const p = expectOk(await createProject("Máster de prueba", { templateId: tpl.id }));
     const cols = await db.column.findMany({ where: { projectId: p.id }, orderBy: { position: "asc" } });
     assert.deepEqual(cols.map((c) => [c.name, c.role, c.isDone]), [
-      ["Ideas", "NONE", false], ["Materiales", "NONE", false], ["Ejercicios", "NONE", false], ["Exámenes", "NONE", false],
-      ["Programa", "PROGRAM", false], ["Seguimiento de alumnos", "NONE", false], ["Hecho", "NONE", true],
+      ["Ideas", "NONE", false], ["Materiales", "NONE", false], ["Ejercicios y exámenes", "NONE", false],
+      ["Plan de trabajo para IA", "AI_PLAN", false], ["Programa", "PROGRAM", false], ["Seguimiento de alumnos", "NONE", false],
     ]);
     const kinds = await db.taskKind.findMany({ where: { projectId: p.id }, orderBy: { position: "asc" } });
     assert.deepEqual(kinds.map((k) => k.name), ["Sesión", "Preparar material", "Preparar ejercicio", "Preparar examen", "Revisar perfil de alumno", "Corregir", "Tutoría"]);
@@ -81,6 +81,7 @@ describe("plantilla «Curso o máster»", () => {
     const pe = expectOk(await createProject("Test master", { templateId: en.id }));
     const colsEn = await db.column.findMany({ where: { projectId: pe.id }, orderBy: { position: "asc" } });
     assert.equal(colsEn.find((c) => c.role === "PROGRAM")!.name, "Programme");
+    assert.equal(colsEn.find((c) => c.role === "AI_PLAN")!.name, "AI work plan");
     assert.deepEqual((await db.project.findUniqueOrThrow({ where: { id: pe.id } })).taskFields, ["startDate"]);
   });
 
