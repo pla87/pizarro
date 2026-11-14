@@ -7,6 +7,7 @@ import { getArchivedTasks, restoreTask } from "../../src/actions/tasks";
 import { applyTemplateChange, listApplicableTemplates, previewTemplateChange, undoTemplateChange } from "../../src/actions/template-apply";
 import { subscribeProject } from "../../src/lib/realtime";
 import { undoTemplateChange as undoInLib } from "../../src/lib/template-apply";
+import { planReplace, summarizePlan } from "../../src/lib/template-apply-core";
 import type { TemplateInput } from "../../src/lib/project-templates";
 
 const TEMPLATE: TemplateInput = {
@@ -260,4 +261,59 @@ test("una archivada de una columna que se une a otra vuelve a esa al recuperarla
   expectOk(await undoTemplateChange(f.project.id));
   const d = await db.task.findUniqueOrThrow({ where: { id: tasks.d.id }, select: { columnId: true, archivedFromColumnId: true } });
   assert.deepEqual(d, { columnId: f.columns.doing, archivedFromColumnId: f.columns.doing });
+});
+
+test("añadir lo que falte vuelve a mostrar los tipos generales ocultos que usa la plantilla; deshacer los vuelve a ocultar", async () => {
+  const admin = await makeUser({ role: "ADMIN" });
+  const { f } = await setup();
+  await db.projectMember.create({ data: { projectId: f.project.id, userId: admin.id } });
+  await db.projectHiddenKind.createMany({ data: ["kind_correccion", "kind_respuesta", "kind_funcionalidad"].map((kindId) => ({ projectId: f.project.id, kindId })) });
+  // La plantilla oculta «Funcionalidad» y usa los demás generales.
+  const tpl = await makeTemplate({ ...TEMPLATE, hideAllGeneralKinds: false, hiddenGeneralKinds: ["Funcionalidad"] });
+  const before = await state(f.project.id);
+  await loginAs(admin);
+  const res = expectOk(await applyTemplateChange(f.project.id, { source: "template", id: tpl.id }, "ADD"));
+  assert.equal(res.shownGenerals, 2);
+  assert.deepEqual((await state(f.project.id)).hidden, ["kind_funcionalidad"]);
+  expectOk(await undoTemplateChange(f.project.id));
+  assert.deepEqual(await state(f.project.id), before);
+});
+
+test("cambiar de plantilla: la vista previa trae las tareas fijas y las que pierden la columna de release pasan a normales (el deshacer las devuelve)", async () => {
+  const admin = await makeUser({ role: "ADMIN" });
+  const { f } = await setup();
+  await db.projectMember.create({ data: { projectId: f.project.id, userId: admin.id } });
+  await db.column.update({ where: { id: f.columns.doing }, data: { role: "NEXT_RELEASE" } });
+  const pinned = [await makeTask(f, { title: "Fija 1", columnId: f.columns.doing, position: 5000 }), await makeTask(f, { title: "Fija 2", columnId: f.columns.doing, position: 6000 })];
+  await db.task.updateMany({ where: { id: { in: pinned.map((t) => t.id) } }, data: { evergreen: true, evergreenEvery: 2 } });
+  const tpl = await makeTemplate();
+  const before = await state(f.project.id);
+  await loginAs(admin);
+  const ref = { source: "template", id: tpl.id } as const;
+  const preview = expectOk(await previewTemplateChange(f.project.id, ref));
+  assert.deepEqual(preview.project.evergreen?.map((t) => t.title), ["Fija 1", "Fija 2"]);
+  // «En curso» (la de release) pasa a «Haciendo», sin rol: el resumen lo avisa con sus nombres.
+  const choices = { columns: { [f.columns.todo]: "t:0", [f.columns.doing]: "t:1", [f.columns.done]: "t:3" }, kinds: {} };
+  const plan = planReplace(preview.project, preview.template, choices);
+  const line = summarizePlan(plan, preview.project, preview.template).find((l) => l.text.startsWith("{n} tareas fijas"));
+  assert.deepEqual([line?.n, line?.names], [2, ["Fija 1", "Fija 2"]]);
+  const res = expectOk(await applyTemplateChange(f.project.id, ref, "REPLACE", choices));
+  assert.equal(res.unpinnedTasks, 2);
+  assert.equal(await db.task.count({ where: { id: { in: pinned.map((t) => t.id) }, evergreen: true } }), 0);
+  expectOk(await undoTemplateChange(f.project.id));
+  assert.deepEqual(await state(f.project.id), before);
+});
+
+test("límite: como mucho 5 cambios de plantilla (aplicar o deshacer) por proyecto cada 10 minutos; los avisos no cuentan", async () => {
+  const { owner, f } = await setup();
+  await loginAs(owner);
+  const ref = { source: "example", key: "equipo-software" } as const;
+  // Deshacer sin nada que deshacer es un aviso: no gasta el límite.
+  for (let i = 0; i < 6; i++) expectFail(await undoTemplateChange(f.project.id), /No hay ningún cambio de plantilla/);
+  for (let i = 0; i < 5; i++) {
+    if (i % 2) expectOk(await undoTemplateChange(f.project.id));
+    else expectOk(await applyTemplateChange(f.project.id, ref, "ADD"));
+  }
+  expectFail(await undoTemplateChange(f.project.id), /ya ha cambiado de plantilla 5 veces en los últimos 10 minutos/);
+  expectFail(await applyTemplateChange(f.project.id, ref, "ADD"), /Vuelve a intentarlo dentro de 10 min/);
 });

@@ -5,7 +5,8 @@
 //
 // Dos modos:
 // - ADD («Añadir lo que falte»): añade las columnas, tipos, etiquetas, campos y plantillas de release de la plantilla que
-//   el proyecto no tenga, sin cambiar ni quitar nada.
+//   el proyecto no tenga y vuelve a mostrar los tipos generales que la plantilla usa y el proyecto oculta, sin cambiar
+//   ni quitar nada más.
 // - REPLACE («Cambiar a esta plantilla»): cada columna actual se empareja con una de la plantilla (sus tareas pasan a
 //   ella), se conserva al final o, si está vacía, se quita; lo mismo con los tipos. Nunca se quita nada que tenga tareas.
 //
@@ -43,6 +44,8 @@ export interface ProjectShape {
   labels: { id: string; name: string; tasks: number }[];
   releaseTemplates: { kind: "HEADER" | "FOOTER"; name: string }[];
   taskFields: string[];
+  /** Tareas fijas («Siempre en la release»), archivadas incluidas: solo existen en la columna de release. */
+  evergreen?: { id: string; title: string; columnId: string }[];
 }
 
 export type ApplyMode = "ADD" | "REPLACE";
@@ -139,6 +142,18 @@ export function visibleGeneralsAfter(project: Pick<ProjectShape, "kinds">, templ
   return project.kinds.filter((k) => k.general && !hidden.has(k.id));
 }
 
+/**
+ * Tipos generales que usa la plantilla (ids): los que no oculta y aquellos con los que coincide uno de sus tipos (por
+ * nombre). «Añadir lo que falte» vuelve a mostrar los que el proyecto tenga ocultos.
+ */
+function templateUsedGenerals(project: Pick<ProjectShape, "kinds">, template: Pick<ApplyTemplateShape, "kinds" | "hiddenGeneralKinds" | "hideAllGeneralKinds">): Set<string> {
+  const hidden = new Set(templateHiddenGenerals(project, template));
+  const used = new Set(project.kinds.filter((k) => k.general && !hidden.has(k.id)).map((k) => k.id));
+  const generalIds = new Set(project.kinds.filter((k) => k.general).map((k) => k.id));
+  for (const t of resolveTemplateKinds(project, template)) if ("existing" in t && generalIds.has(t.existing)) used.add(t.existing);
+  return used;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Planes
 
@@ -158,6 +173,8 @@ export interface AddPlan extends CommonPlan {
   mode: "ADD";
   addColumns: { index: number; name: string; role: string; isDone: boolean; wipLimit: number | null }[];
   addKinds: number[];
+  /** Tipos generales que el proyecto oculta y la plantilla usa: vuelven a verse. */
+  showGenerals: string[];
 }
 
 export interface ReplacePlan extends CommonPlan {
@@ -186,6 +203,8 @@ export interface ReplacePlan extends CommonPlan {
   showGenerals: string[];
   /** Etiquetas sin uso que no están en la plantilla. */
   removeLabels: string[];
+  /** Tareas fijas cuya columna final no es la de release: pasan a ser normales. */
+  unpinTasks: string[];
 }
 
 function commonPlan(project: ProjectShape, template: ApplyTemplateShape, removedLabels: number): CommonPlan {
@@ -219,7 +238,8 @@ function commonPlan(project: ProjectShape, template: ApplyTemplateShape, removed
 
 /**
  * «Añadir lo que falte»: columnas de la plantilla sin ninguna actual del mismo nombre (o con su rol, si tiene uno), tipos
- * sin ninguno propio ni general del mismo nombre, etiquetas, plantillas de release y campos. Lo que ya hay no cambia.
+ * sin ninguno propio ni general del mismo nombre, etiquetas, plantillas de release y campos; además, los tipos generales
+ * que la plantilla usa y el proyecto tiene ocultos vuelven a verse. Lo demás no cambia.
  */
 export function planAdd(project: ProjectShape, template: ApplyTemplateShape): AddPlan {
   const names = new Set(project.columns.map((c) => nameKey(c.name)));
@@ -232,11 +252,13 @@ export function planAdd(project: ProjectShape, template: ApplyTemplateShape): Ad
     addColumns.push({ index, name: c.name, role: c.role, isDone: c.isDone, wipLimit: c.wipLimit ?? null });
   });
   const addKinds = resolveTemplateKinds(project, template).flatMap((r, i) => ("create" in r ? [i] : []));
+  const used = templateUsedGenerals(project, template);
+  const showGenerals = project.kinds.filter((k) => k.general && k.hidden && used.has(k.id)).map((k) => k.id);
   const common = commonPlan(project, template, 0);
   if (project.columns.length + addColumns.length > MAX_PROJECT_COLUMNS) common.errors.push({ text: "No caben las columnas de la plantilla: el máximo es {max} por proyecto.", vars: { max: MAX_PROJECT_COLUMNS } });
   const ownKinds = project.kinds.filter((k) => !k.general).length;
   if (ownKinds + addKinds.length > MAX_PROJECT_KINDS) common.errors.push({ text: "No caben los tipos de la plantilla: el máximo es {max} tipos propios por proyecto.", vars: { max: MAX_PROJECT_KINDS } });
-  return { mode: "ADD", addColumns, addKinds, ...common };
+  return { mode: "ADD", addColumns, addKinds, showGenerals, ...common };
 }
 
 /** Índice de `t:<i>` si es válido. */
@@ -285,6 +307,12 @@ export function planReplace(project: ProjectShape, template: ApplyTemplateShape,
       target.incoming += c.active;
     }
   }
+
+  // Tareas fijas: siguen siéndolo solo si su columna acaba con el rol de release.
+  const finalRole = new Map<string, string>();
+  for (const [to, list] of sources) for (const c of list) finalRole.set(c.id, columns[to]!.role);
+  for (const k of kept) finalRole.set(k.id, k.role);
+  const unpinTasks = (project.evergreen ?? []).filter((t) => finalRole.get(t.columnId) !== "NEXT_RELEASE").map((t) => t.id);
 
   // Tipos.
   const kindTargets = resolveTemplateKinds(project, template);
@@ -337,7 +365,7 @@ export function planReplace(project: ProjectShape, template: ApplyTemplateShape,
   }
   if (ownLeft > MAX_PROJECT_KINDS) common.errors.push({ text: "No caben los tipos de la plantilla: el máximo es {max} tipos propios por proyecto.", vars: { max: MAX_PROJECT_KINDS } });
   if (!columns.length) common.errors.push({ text: "La plantilla no tiene columnas." });
-  return { mode: "REPLACE", columns, kept, dropColumns, kindTargets, kindMoves, dropKinds, hideGenerals, showGenerals, removeLabels, ...common };
+  return { mode: "REPLACE", columns, kept, dropColumns, kindTargets, kindMoves, dropKinds, hideGenerals, showGenerals, removeLabels, unpinTasks, ...common };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -362,6 +390,7 @@ export function summarizePlan(plan: AddPlan | ReplacePlan, project: ProjectShape
   if (plan.mode === "ADD") {
     add(plan.addColumns.length, "Se añadirá {n} columna", "Se añadirán {n} columnas", plan.addColumns.map((c) => c.name));
     add(plan.addKinds.length, "Se añadirá {n} tipo de tarea", "Se añadirán {n} tipos de tarea", plan.addKinds.map((i) => template.kinds[i]!.name));
+    add(plan.showGenerals.length, "Volverá a verse {n} tipo general", "Volverán a verse {n} tipos generales", plan.showGenerals.map((id) => kindName.get(id)!));
   } else {
     const created = plan.columns.filter((c) => c.reuse === null);
     const adapted = plan.columns.filter((c) => {
@@ -377,6 +406,8 @@ export function summarizePlan(plan: AddPlan | ReplacePlan, project: ProjectShape
     add(removed.length, "Se quitará {n} columna que se queda vacía", "Se quitarán {n} columnas que se quedan vacías", removed.map((id) => colName.get(id)!));
     add(plan.kept.length, "Se conservará al final {n} columna sin pareja", "Se conservarán al final {n} columnas sin pareja", plan.kept.map((c) => c.name));
     add(plan.kept.filter((c) => c.roleCleared).length, "{n} columna conservada pierde su rol (la plantilla ya lo usa)", "{n} columnas conservadas pierden su rol (la plantilla ya lo usa)", plan.kept.filter((c) => c.roleCleared).map((c) => c.name));
+    const pinned = new Map((project.evergreen ?? []).map((t) => [t.id, t.title]));
+    add(plan.unpinTasks.length, "{n} tarea fija pasará a ser normal (su columna deja de ser la de release)", "{n} tareas fijas pasarán a ser normales (su columna deja de ser la de release)", someNames(plan.unpinTasks.map((id) => pinned.get(id)!)));
     const createdKinds = plan.kindTargets.flatMap((t, i) => ("create" in t ? [template.kinds[i]!.name] : []));
     add(createdKinds.length, "Se añadirá {n} tipo de tarea", "Se añadirán {n} tipos de tarea", createdKinds);
     add(plan.kindMoves.reduce((s, m) => s + m.tasks, 0), "Cambiará de tipo {n} tarea", "Cambiarán de tipo {n} tareas");
@@ -389,6 +420,13 @@ export function summarizePlan(plan: AddPlan | ReplacePlan, project: ProjectShape
   add(plan.addedFields.length, "Se activará {n} campo opcional", "Se activarán {n} campos opcionales");
   add(plan.addReleaseTemplates.length, "Se añadirá {n} plantilla de release", "Se añadirán {n} plantillas de release", plan.addReleaseTemplates.map((r) => r.name));
   return lines;
+}
+
+/** Como mucho SUMMARY_NAMES nombres (cada uno recortado) y «…» si hay más: los títulos de tareas pueden ser muchos y largos. */
+const SUMMARY_NAMES = 10;
+function someNames(names: string[]): string[] {
+  const cut = names.slice(0, SUMMARY_NAMES).map((n) => (n.length > 60 ? `${n.slice(0, 59)}…` : n));
+  return names.length > SUMMARY_NAMES ? [...cut, "…"] : cut;
 }
 
 /** ¿El plan no cambia nada? */

@@ -34,6 +34,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/r49-ui-e2e.mjs` | 34 | ~1 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/r49-textos-e2e.mjs` | 29 | ~1 min |
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/r50-plantilla-e2e.mjs` | 39 | ~1 min |
+| Aplicar plantilla: opción elegida en oscuro, tareas fijas, generales ocultos y límite (ronda 51) | `e2e/r51-plantilla-e2e.mjs` | 26 | ~40 s |
 | Plantilla «Curso o máster» y «Publicar programa (PDF)» | `e2e/r50-curso-e2e.mjs` | 57 | ~40 s |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/r50-seleccion-e2e.mjs` | 76 | ~1 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
@@ -212,6 +213,25 @@ sección; a 390 px el asistente cabe. Misma base y servidor:
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r50-plantilla-e2e.mjs   # PART=add,replace,perm,mobile
 ```
+
+Segunda vuelta: en el paso 1, el nombre de cada plantilla elegida (generales y de la instalación, con «Curso o máster»)
+tiene contraste suficiente (≥ 4,5) sobre su fondo en modo oscuro y en claro, con un control que comprueba que el estilo
+antiguo sí fallaba; las tarjetas de opción elegidas de *Mi perfil → Preferencias* también se leen en oscuro; el resumen
+de «Cambiar a esta plantilla» dice «3 tareas fijas pasarán a ser normales» (con sus títulos) solo si su columna deja de
+ser la de release; «Añadir lo que falte» dice antes y en el resumen que vuelve a mostrar el tipo general oculto que usa la
+plantilla, lo muestra y el deshacer lo vuelve a ocultar; y tras 5 cambios de plantilla en un proyecto en 10 minutos, el
+sexto avisa («Este proyecto ya ha cambiado de plantilla 5 veces…») y no cambia nada. La sesión de administrador se abre
+como miembro y pasa a admin (como en el tablero). Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r51-plantilla-e2e.mjs   # PART=estilo,fijas,generales,limite
+```
+
+Límite de «Aplicar plantilla» (en la memoria del servidor): 5 cambios (aplicar o deshacer) por proyecto cada 10 minutos
+y 20 por persona y hora. Las tres suites de plantillas crean un proyecto con id nuevo en cada escenario, así que se
+pueden repetir seguidas; el administrador gasta unos 8 cambios por pasada de las tres (r50: 4, bh50a: 2, r51: 2; el
+límite de r51 lo gasta la segunda persona). Si tras más de dos pasadas en una hora una falla con «Ya has aplicado o
+deshecho 20 plantillas…», reinicia el servidor.
 
 ## Plantilla «Curso o máster» y «Publicar programa (PDF)»
 

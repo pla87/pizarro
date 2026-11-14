@@ -15,7 +15,6 @@ import {
   listedKinds, planAdd, planIsEmpty, planReplace, resolveTemplateKinds, suggestColumnChoices, suggestKindChoices, summarizePlan, TEMPLATE_UNDO_HOURS, visibleGeneralsAfter,
   type ApplyMode, type ApplyTemplateShape, type ProjectShape, type ReplacePlan, type TemplateRef,
 } from "@/lib/template-apply-core";
-import { cn } from "@/components/ui/cn";
 import { Modal } from "@/components/ui/Modal";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
@@ -180,11 +179,11 @@ function ApplyWizard({ projectId, onClose, onApplied }: { projectId: string; onC
                 <legend className="mb-1.5 text-xs font-medium text-slate-500">{group === "general" ? t("Plantillas generales") : t("Plantillas de la instalación")}</legend>
                 <div className="space-y-1.5">
                   {list.map((x) => (
-                    <label key={refKey(x.ref)} className={cn("flex cursor-pointer items-start gap-2 rounded-md border p-2 text-sm", selected === refKey(x.ref) ? "border-brand-500 bg-brand-50 dark:bg-brand-950/30" : "border-slate-200 dark:border-slate-700")}>
+                    <label key={refKey(x.ref)} className="choice-card flex cursor-pointer items-start gap-2 rounded-md p-2 text-sm" data-template-choice={x.name}>
                       <input type="radio" name="apply-template" className="mt-1" checked={selected === refKey(x.ref)} onChange={() => setSelected(refKey(x.ref))} />
                       <span className="min-w-0">
-                        <span className="font-medium">{x.name}</span>
-                        {x.description && <span className="block text-xs text-slate-500">{x.description}</span>}
+                        <span className="block font-medium break-words" data-template-name>{x.name}</span>
+                        {x.description && <span className="block text-xs text-slate-500 dark:text-slate-400">{x.description}</span>}
                       </span>
                     </label>
                   ))}
@@ -198,7 +197,7 @@ function ApplyWizard({ projectId, onClose, onApplied }: { projectId: string; onC
               <input type="radio" name="apply-mode" className="mt-1" checked={mode === "ADD"} onChange={() => setMode("ADD")} />
               <span>
                 {t("Añadir lo que falte de la plantilla")}
-                <span className="block text-xs text-slate-500">{t("Añade las columnas, tipos, etiquetas, campos y plantillas de release que el proyecto no tenga. No cambia ni quita nada.")}</span>
+                <span className="block text-xs text-slate-500">{t("Añade las columnas, tipos, etiquetas, campos y plantillas de release que el proyecto no tenga, y vuelve a mostrar los tipos generales que usa la plantilla si el proyecto los tiene ocultos. No cambia ni quita nada más.")}</span>
               </span>
             </label>
             <label className="mt-2 flex items-start gap-2 text-sm">

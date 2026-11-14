@@ -74,6 +74,8 @@ export async function loadProjectShape(client: Client, projectId: string, locale
   const labelCounts = await client.$queryRaw<{ labelId: string; n: number }[]>`
     SELECT tl."labelId", count(*)::int AS n FROM "TaskLabel" tl JOIN "Label" l ON l."id" = tl."labelId" WHERE l."projectId" = ${projectId} GROUP BY tl."labelId"`;
   const releaseTemplates = await client.projectReleaseTemplate.findMany({ where: { projectId }, select: { kind: true, name: true } });
+  // Tareas fijas (pocas: solo caben en la columna de release), para que el resumen diga cuáles pasan a normales.
+  const evergreen = await client.task.findMany({ where: { projectId, evergreen: true }, orderBy: [{ position: "asc" }, { id: "asc" }], select: { id: true, title: true, columnId: true } });
   const byColumn = new Map(columnCounts.map((c) => [c.columnId, c]));
   const byKind = new Map(kindCounts.map((k) => [k.kindId, k.n]));
   const byLabel = new Map(labelCounts.map((l) => [l.labelId, l.n]));
@@ -86,6 +88,7 @@ export async function loadProjectShape(client: Client, projectId: string, locale
     labels: labels.map((l) => ({ ...l, tasks: byLabel.get(l.id) ?? 0 })),
     releaseTemplates,
     taskFields: normalizeTaskFields(project.taskFields),
+    evergreen,
   };
 }
 
@@ -120,6 +123,9 @@ interface ApplyResult {
   removedColumns: number;
   addedKinds: number;
   addedLabels: number;
+  /** Tipos generales que vuelven a verse y tareas fijas que pasan a normales. */
+  shownGenerals: number;
+  unpinnedTasks: number;
 }
 
 /**
@@ -193,7 +199,9 @@ async function executeAdd(tx: Tx, projectId: string, plan: AddPlan, template: Ap
     });
     snap.createdKinds = created.map((k) => k.id);
   }
-  return { mode: "ADD", movedTasks: 0, retypedTasks: 0, addedColumns: plan.addColumns.length, removedColumns: 0, addedKinds: plan.addKinds.length };
+  // Los generales que usa la plantilla vuelven a verse (la instantánea guarda los ocultos: el deshacer los vuelve a ocultar).
+  if (plan.showGenerals.length) await tx.projectHiddenKind.deleteMany({ where: { projectId, kindId: { in: plan.showGenerals } } });
+  return { mode: "ADD", movedTasks: 0, retypedTasks: 0, addedColumns: plan.addColumns.length, removedColumns: 0, addedKinds: plan.addKinds.length, shownGenerals: plan.showGenerals.length, unpinnedTasks: 0 };
 }
 
 async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, template: ApplyTemplateShape, shape: ProjectShape, snap: TemplateChangeSnapshot): Promise<Omit<ApplyResult, "addedLabels">> {
@@ -326,6 +334,8 @@ async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, temp
     addedColumns: created.length,
     removedColumns: remove.length,
     addedKinds: newKind.size,
+    shownGenerals: plan.showGenerals.length,
+    unpinnedTasks: stray.length,
   };
 }
 

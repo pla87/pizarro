@@ -218,7 +218,7 @@ function LanguageSection({ initial }: { initial: "ES" | "EN" }) {
             role="radio"
             aria-checked={locale === value}
             onClick={() => choose(value)}
-            className={cn("rounded-lg border-2 px-4 py-2 text-sm font-medium", locale === value ? "border-brand-500" : "border-slate-200 dark:border-slate-700")}
+            className="choice-card rounded-lg px-4 py-2 text-sm font-medium"
           >
             {label}
           </button>
@@ -255,7 +255,7 @@ function EditorModeSection({ initial }: { initial: EditorModeValue }) {
           <button
             key={value}
             onClick={() => choose(value)}
-            className={cn("rounded-xl border-2 p-3 text-left", mode === value ? "border-brand-500" : "border-slate-200 dark:border-slate-700")}
+            className="choice-card rounded-xl p-3 text-left"
             aria-pressed={mode === value}
           >
             <div className="text-sm font-medium">{t(label)}</div>
@@ -416,7 +416,7 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
           <button
             key={value}
             onClick={() => chooseTheme(value)}
-            className={cn("flex items-center gap-2 rounded-xl border-2 p-3 text-left text-sm", theme === value ? "border-brand-500" : "border-slate-200 dark:border-slate-700")}
+            className="choice-card flex items-center gap-2 rounded-xl p-3 text-left text-sm"
             aria-pressed={theme === value}
           >
             <Icon size={16} /> {t(label)}
@@ -459,7 +459,7 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
           <button
             key={value}
             onClick={() => choose(value)}
-            className={cn("rounded-xl border-2 p-3 text-left", style === value ? "border-brand-500" : "border-slate-200 dark:border-slate-700")}
+            className="choice-card rounded-xl p-3 text-left"
             aria-pressed={style === value}
           >
             <div

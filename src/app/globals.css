@@ -318,6 +318,18 @@ body {
 @utility badge {
   @apply inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset;
 }
+/*
+ * Tarjeta de opción (una de varias, como un radio): plantilla, formato de exportación, idioma, tema… Cada sitio pone su
+ * forma (redondeo, relleno). La elegida (el <input type="radio"> marcado dentro, o aria-checked / aria-pressed en un
+ * botón) lleva borde y fondo del color principal con el texto siempre legible: en oscuro, fondo oscuro y texto claro.
+ */
+@utility choice-card {
+  @apply border border-slate-200 text-slate-900 transition-colors hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600;
+  /* Un solo selector (:is): con una lista, Tailwind genera mal las variantes (dark:, hover:) y el fondo oscuro no llegaba. */
+  &:is(:has(> input:checked), [aria-checked="true"], [aria-pressed="true"]) {
+    @apply border-brand-500 bg-brand-50 ring-1 ring-brand-500 hover:border-brand-500 dark:border-brand-500 dark:bg-brand-500/15 dark:hover:border-brand-500;
+  }
+}
 
 /* Markdown renderizado */
 .prose-md {
