@@ -1,6 +1,6 @@
 "use client";
 
-import { AtSign, Bell, CalendarClock, Check, CheckCheck, Mail, MessageCircle, MessageSquare, Reply, Send, UserPlus, Hourglass } from "lucide-react";
+import { AtSign, Bell, CalendarClock, Check, CheckCheck, FolderInput, Mail, MessageCircle, MessageSquare, Reply, Send, UserPlus, Hourglass } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -24,6 +24,8 @@ interface Item {
   viaTelegram?: boolean;
   actor: { id: string; name: string } | null;
   task: { id: string; title: string; projectId: string; projectName: string } | null;
+  /** Aviso de un proyecto (PROJECT_TO_TEAM): lleva al proyecto. */
+  project?: { id: string; name: string } | null;
 }
 
 const ICONS: Record<NotificationKind, typeof AtSign> = {
@@ -33,6 +35,7 @@ const ICONS: Record<NotificationKind, typeof AtSign> = {
   COMMENT: MessageSquare,
   REPLY: Reply,
   WAITING: Hourglass,
+  PROJECT_TO_TEAM: FolderInput,
 };
 
 export function NotificationList({ items: initial, moreHref }: { items: Item[]; moreHref: string | null }) {
@@ -56,6 +59,7 @@ export function NotificationList({ items: initial, moreHref }: { items: Item[]; 
   const open = (item: Item) => {
     if (!item.read) markRead(item);
     if (item.task) router.push(`/p/${item.task.projectId}?task=${item.task.id}`);
+    else if (item.project) router.push(`/p/${item.project.id}`);
   };
 
   return (
@@ -94,14 +98,26 @@ export function NotificationList({ items: initial, moreHref }: { items: Item[]; 
               <li key={n.id} className={cn("flex items-stretch hover:bg-slate-50 dark:hover:bg-slate-800/50", !n.read && "bg-brand-50/50 dark:bg-brand-500/5")}>
                 <button onClick={() => open(n)} className="flex min-w-0 flex-1 gap-3 px-4 py-3 text-left">
                   <span className="relative shrink-0">
-                    {n.actor ? <Avatar id={n.actor.id} name={n.actor.name} size="md" /> : <span className="block h-8 w-8" />}
-                    <span className="absolute -right-1 -bottom-1 flex h-4 w-4 items-center justify-center rounded-full bg-white text-brand-600 ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700" aria-hidden>
-                      <Icon size={10} />
-                    </span>
+                    {n.actor ? (
+                      <Avatar id={n.actor.id} name={n.actor.name} size="md" />
+                    ) : n.project ? (
+                      // Aviso de proyecto (sin autor): el icono del proyecto en lugar del avatar.
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-200" aria-hidden><Icon size={16} /></span>
+                    ) : (
+                      <span className="block h-8 w-8" />
+                    )}
+                    {!n.project && (
+                      <span className="absolute -right-1 -bottom-1 flex h-4 w-4 items-center justify-center rounded-full bg-white text-brand-600 ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700" aria-hidden>
+                        <Icon size={10} />
+                      </span>
+                    )}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm">
-                      {notificationHeadline(n.type, t, { actor: n.actor?.name ?? t("Alguien"), task: n.task ? t("«{title}»", { title: n.task.title }) : t("una tarea borrada") })}
+                      {n.project
+                        // Aviso de proyecto: la cuenta borrada va en el extracto y el proyecto en lugar de la tarea.
+                        ? notificationHeadline(n.type, t, { actor: n.excerpt || t("Usuario eliminado"), task: t("«{title}»", { title: n.project.name }) })
+                        : notificationHeadline(n.type, t, { actor: n.actor?.name ?? t("Alguien"), task: n.task ? t("«{title}»", { title: n.task.title }) : t("una tarea borrada") })}
                       {n.task && <span className="text-slate-500"> · {n.task.projectName}</span>}
                     </p>
                     {body && <p className="mt-0.5 line-clamp-2 text-sm text-slate-600 dark:text-slate-400">{body}</p>}

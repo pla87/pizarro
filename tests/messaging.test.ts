@@ -347,3 +347,24 @@ test("las guías llevan el texto exacto de la plantilla que espera Pizarro", asy
     assert.ok(doc.includes(core.WHATSAPP_PRICING_URL), "enlace a los precios de Meta");
   }
 });
+
+test("aviso de proyecto (pasa a ser de equipo): cabecera con el proyecto y la cuenta borrada, enlace al proyecto, en cada idioma", () => {
+  const m = { type: "PROJECT_TO_TEAM" as const, actorName: "Ana", taskTitle: "Huerto", projectName: "Huerto", excerpt: "Ana", url: "https://pizarro.example.com/p/1" };
+  const tg = core.telegramNoticeText(m, makeT("es"));
+  assert.ok(tg.startsWith("<b>El proyecto «Huerto» de Ana ha pasado a ser de equipo al borrarse su cuenta</b>"), tg);
+  assert.ok(tg.includes('<a href="https://pizarro.example.com/p/1">Abrir el proyecto</a>'));
+  assert.ok(!tg.includes("Abrir la tarea"));
+  const en = core.telegramNoticeText(m, makeT("en"));
+  assert.ok(en.startsWith("<b>Ana's account was deleted: the project “Huerto” is now a team project</b>"), en);
+  assert.ok(en.includes(">Open the project</a>"));
+  const mail = mentionEmail(m, makeT("es"));
+  assert.equal(mail.subject, "El proyecto «Huerto» de Ana ha pasado a ser de equipo al borrarse su cuenta");
+  assert.match(mail.text, /Abrir el proyecto: https:\/\/pizarro\.example\.com\/p\/1/);
+  assert.match(mail.html, /Ahora lo ven los administradores/);
+  // Va con las menciones (por defecto, sí) y por WhatsApp con la plantilla actual, no con la antigua.
+  assert.equal(core.channelWants("PROJECT_TO_TEAM", core.DEFAULT_CHANNEL_PREFS), true);
+  assert.equal(core.channelWants("PROJECT_TO_TEAM", { ...core.DEFAULT_CHANNEL_PREFS, notifyMention: false }), false);
+  const wa = { channel: "WHATSAPP" as const, verifiedAt: new Date(), consentAt: new Date() };
+  assert.equal(core.channelUsable(wa, "PROJECT_TO_TEAM", false), true);
+  assert.equal(core.channelUsable(wa, "PROJECT_TO_TEAM", true), false);
+});

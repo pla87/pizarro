@@ -182,6 +182,9 @@ function DeleteAccountDialog({ privateProjects, twoFactor, emailAvailable, passw
             {reauth === "google_mismatch" && !googleConfirmed && (
               <p role="alert" className="text-red-700 dark:text-red-300">{t("Esa cuenta de Google no es la de tu cuenta de Pizarro.")}</p>
             )}
+            {reauth === "google_stale" && !googleConfirmed && (
+              <p role="alert" className="text-red-700 dark:text-red-300" data-testid="delete-account-google-stale">{t("Google no te ha pedido la contraseña. Para borrar la cuenta tienes que escribir la contraseña de tu cuenta de Google: vuelve a intentarlo.")}</p>
+            )}
             {reauth === "google_failed" && !googleConfirmed && (
               <p role="alert" className="text-red-700 dark:text-red-300">{t("No se pudo confirmar con Google. Vuelve a intentarlo.")}</p>
             )}
@@ -205,7 +208,10 @@ function DeleteAccountDialog({ privateProjects, twoFactor, emailAvailable, passw
                 {alternatives.includes("email") && codeField(t("Pulsa «Enviar código» y escribe el que te llegue al email."), true)}
                 {alternatives.includes("google") && (
                   // Navegación completa: Google vuelve a «Mi perfil → Cuenta» con este diálogo abierto.
-                  <a href={`/api/auth/google/start?purpose=${ACCOUNT_DELETE_PURPOSE}`} className="btn-secondary w-full">{t("Volver a entrar con Google")}</a>
+                  <>
+                    <a href={`/api/auth/google/start?purpose=${ACCOUNT_DELETE_PURPOSE}`} className="btn-secondary w-full">{t("Volver a entrar con Google")}</a>
+                    <p className="text-xs text-slate-500">{t("Google te pedirá la contraseña de tu cuenta de Google aunque ya tengas la sesión abierta.")}</p>
+                  </>
                 )}
               </>
             )}

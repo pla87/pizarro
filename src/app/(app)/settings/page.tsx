@@ -104,6 +104,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         notifications={{
           notifyEmail: row.notifyEmail,
           emailAvailable: emailEnabled(),
+          adminNotices: user.role === "ADMIN",
         }}
         notificationExtras={
           <>

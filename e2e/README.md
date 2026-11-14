@@ -27,6 +27,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Índice de un HTML en Documentación y baja con Google sin email (caza de bugs 50b) | `e2e/bh50b-e2e.mjs` | 39 | ~30 s |
 | Aplicar plantilla: paso 2 y archivadas de columnas unidas (caza de bugs 50a) | `e2e/bh50a-e2e.mjs` | 22 | ~20 s |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/r49-account-e2e.mjs` | 61 | ~1 min |
+| Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51) | `e2e/r51-cuenta-e2e.mjs` | 71 | ~45 s |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
 | Copias con adjuntos y release con barra de formato | `e2e/r49-copy-e2e.mjs` | 87 | ~2 min |
 | Formatos del material: cerrar la release, párrafos vacíos, Google Slides y HTML aislado (ronda 50) | `e2e/r50-formatos-e2e.mjs` | 107 | ~1 min |
@@ -256,6 +257,25 @@ propias personas (`r49_*`). Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-account-e2e.mjs   # PART=block,desk,mobile,google,admin
+```
+
+## Lo que queda al borrar una cuenta (ronda 51)
+
+*Volver a entrar con Google* para borrar la cuenta (en español y en inglés a 390 px): el diálogo avisa de que Google
+pedirá la contraseña; el enlace lleva a Google con `prompt=login` y `max_age=0` (sin seguir la redirección) y la cookie del
+acceso lleva la hora de inicio y la marca de la baja; la vuelta sin contraseña nueva se simula con `?delete=google_stale`
+(la comprobación de `auth_time` con un id_token firmado está en test:db): «Google no te ha pedido la contraseña…», sin
+quedar confirmada. *Iniciar sesión con Google* sigue con `prompt=select_account`. Al borrarse una cuenta con un proyecto
+privado, los dos administradores activos reciben un aviso cada uno (el proyecto borrado con la casilla, ninguno): en la
+campana, en español y en inglés, y al pulsarlo se abre el proyecto con su selector, su navegación y su título; en el
+móvil, el menú del título lo marca «Not in your projects» y lo añade a su lista. Un administrador que abre un proyecto de
+equipo que no está en su lista por enlace (ya en el HTML) o desde *Proyectos existentes* (navegación de la app) lo ve en
+el selector marcado «No está en tus proyectos», con la navegación del proyecto; «Añadir a mis proyectos» lo añade (y
+solo ese); en el calendario deja de mostrarse. Un miembro sin acceso recibe 404 y no lo ve. Crea sus propias personas y
+proyectos (`r51c_*`). Misma base; servidor como el de bh50b (Google con valores de prueba, sin email):
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r51-cuenta-e2e.mjs   # PART=google,notice,outside,member
 ```
 
 ## Copias con adjuntos y release con barra de formato
