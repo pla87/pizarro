@@ -28,10 +28,11 @@ export function ColumnActionButton({ icon: Icon, label, onClick, disabled, title
 }
 
 /** Igual, pero con varias opciones (p. ej. el PDF de la semana por día o por persona): abre un menú con ellas. */
-export function ColumnActionMenu({ icon: Icon, label, title, items }: {
+export function ColumnActionMenu({ icon: Icon, label, title, items, disabled }: {
   icon: LucideIcon;
   label: string;
   title?: string;
+  disabled?: boolean;
   items: { label: string; icon: LucideIcon; onClick: () => void }[];
 }) {
   return (
@@ -42,7 +43,7 @@ export function ColumnActionMenu({ icon: Icon, label, title, items }: {
         className="relative"
         panelClassName="w-full min-w-56 rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900"
         trigger={({ props }) => (
-          <button type="button" className={CLASS} title={title} {...props}>
+          <button type="button" className={CLASS} title={title} {...props} disabled={disabled}>
             <Icon size={15} /> {label} <ChevronDown size={14} className="opacity-80" />
           </button>
         )}

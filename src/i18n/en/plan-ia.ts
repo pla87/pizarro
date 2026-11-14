@@ -67,4 +67,14 @@ export const planIa: Record<string, string> = {
   "Instrucciones de entrega: qué debe contar la IA al terminar.": "Delivery instructions: what the AI should report when it finishes.",
   // Límite de tareas de un plan
   "Un plan de trabajo admite como mucho 500 tareas: quita alguna de la selección.": "A work plan holds at most 500 tasks: remove some from the selection.",
+  // Adjuntos del plan (ZIP «adjuntos/…», rutas en el texto)
+  "{name} en Pizarro": "{name} in Pizarro",
+  "{n} archivo(s) en el ZIP «adjuntos/…» que va con este plan (descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos.":
+    "{n} file(s) in the “adjuntos/…” ZIP that goes with this plan (unzip it next to this file): each task cites the path of its own.",
+  "ZIP «adjuntos/…» con los adjuntos de las tareas del plan: el texto cita sus rutas": "“adjuntos/…” ZIP with the attachments of the plan's tasks: the text cites their paths",
+  "Un plan admite como mucho 200 tareas con adjuntos en el ZIP: el texto solo lleva los enlaces a Pizarro.": "A plan holds at most 200 tasks with attachments in the ZIP: the text only carries the links to Pizarro.",
+  "Los adjuntos no se guardan con el plan: van en el ZIP de «Descargar adjuntos» y el texto cita su ruta y su enlace a Pizarro.": "Attachments are not saved with the plan: they go in the “Download attachments” ZIP and the text cites their path and their Pizarro link.",
+  // Botones de columnas especiales sin tarjetas con lo que necesitan
+  "Ninguna tarjeta tiene fecha límite": "No card has a due date",
+  "Ninguna tarjeta tiene subtareas": "No card has subtasks",
 };

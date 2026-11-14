@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { makeT } from "../src/i18n/core";
 import { EN } from "../src/i18n/en";
-import { AI_PLAN_DEFAULTS, aiPlanDownloadName, aiPlanFileName, buildAiPlanMarkdown, highestPlanVersion, planDescription, type AiPlanInput } from "../src/lib/ai-plan";
+import { AI_PLAN_DEFAULTS, AI_PLAN_ZIP_FOLDER, aiPlanDownloadName, aiPlanFileName, buildAiPlanMarkdown, highestPlanVersion, planAttachmentPaths, planDescription, type AiPlanInput } from "../src/lib/ai-plan";
 import {
   COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, COLUMN_ROLES, EVERGREEN_COLUMN_ROLES, hasEvergreenTasks, isUniqueColumnRole, releaseTemplateRows, TEMPLATE_KINDS,
 } from "../src/lib/constants";
-import { evergreenDue, swapTemplateBlock } from "../src/lib/release";
+import { aiPlanZipName, evergreenDue, swapTemplateBlock } from "../src/lib/release";
 
 const base = (over: Partial<AiPlanInput> = {}): AiPlanInput => ({
   header: AI_PLAN_DEFAULTS.es.header,
@@ -206,5 +206,61 @@ describe("rol «Plan de trabajo para IA»", () => {
       assert.match(d.header, /Claude Code/);
       assert.match(d.footer, /1\. /);
     }
+  });
+});
+
+describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
+  const tasks = [
+    { id: "t1", title: "Arreglar @[Ana](user:u1) el login: ¡Ñandú!", attachments: [{ id: "a1", originalName: "Plano final.png", isImage: true }, { id: "a2", originalName: "plano final.webp", isImage: true }, { id: "a3", originalName: "log.txt", isImage: false }] },
+    { id: "t2", title: "Sin adjuntos", attachments: [] },
+    { id: "t3", title: "???", attachments: [{ id: "a4", originalName: "x.pdf", isImage: false }] },
+  ];
+
+  test("una carpeta por tarea con su número en el plan, sin tildes; imágenes en WebP y nombres repetidos con -2", () => {
+    const { byTask, byAttachment } = planAttachmentPaths(tasks);
+    assert.deepEqual([...byTask.keys()], ["t1", "t3"]);
+    assert.equal(byTask.get("t1")!.folder, "adjuntos/01-arreglar-ana-el-login-nandu");
+    assert.equal(byTask.get("t3")!.folder, "adjuntos/03-tarea");
+    assert.equal(byAttachment.get("a1"), "adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp");
+    assert.equal(byAttachment.get("a2"), "adjuntos/01-arreglar-ana-el-login-nandu/plano_final-2.webp");
+    assert.equal(byAttachment.get("a3"), "adjuntos/01-arreglar-ana-el-login-nandu/log.txt");
+    assert.equal(byAttachment.get("a4"), "adjuntos/03-tarea/x.pdf");
+    for (const { folder } of byTask.values()) assert.ok(AI_PLAN_ZIP_FOLDER.test(folder), folder);
+  });
+
+  test("el texto cita las rutas del ZIP, sustituye las imágenes de la descripción y explica el ZIP; sin ruta, solo enlaces", () => {
+    const { byAttachment } = planAttachmentPaths(tasks);
+    const withPaths = (path: boolean) => buildAiPlanMarkdown({
+      header: AI_PLAN_DEFAULTS.es.header, footer: "", project: { name: "Web" }, date: "2026-11-23", origin: "https://pz.example.com",
+      tasks: [{
+        id: "t1", title: "Arreglar", description: "Mira ![captura](/api/attachments/a1) y ![otra](/api/attachments/zz) y ![c](/api/attachments/a1?thumb=1)",
+        attachments: [{ id: "a1", name: "Plano final.png", url: "https://pz.example.com/api/attachments/a1", path: path ? byAttachment.get("a1") : undefined }],
+      }],
+    });
+    const md = withPaths(true);
+    assert.ok(md.includes("- **Adjuntos:** 1 archivo(s) en el ZIP «adjuntos/…»"));
+    assert.ok(md.includes("  - `adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp` ([Plano final.png en Pizarro](<https://pz.example.com/api/attachments/a1>))"));
+    assert.ok(md.includes("![captura](adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp)"));
+    assert.ok(md.includes("![c](adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp)"));
+    // Una imagen que no es adjunto de ninguna tarea del plan queda con su enlace absoluto.
+    assert.ok(md.includes("![otra](https://pz.example.com/api/attachments/zz)"));
+    assert.ok(md.includes("ZIP «adjuntos/…» que acompaña a este plan"));
+    const plain = withPaths(false);
+    assert.ok(!plain.includes("en el ZIP «adjuntos/…» que va con este plan") && plain.includes("![captura](https://pz.example.com/api/attachments/a1)"));
+    assert.ok(plain.includes("- **Adjuntos:** [Plano final.png](<https://pz.example.com/api/attachments/a1>)"));
+  });
+
+  test("planDescription sin mapa deja los enlaces absolutos como siempre", () => {
+    assert.equal(planDescription("![a](/api/attachments/x1)", "https://pz.example.com"), "![a](https://pz.example.com/api/attachments/x1)");
+    assert.equal(planDescription("![a](/api/attachments/x1)", "https://pz.example.com", new Map([["x1", "adjuntos/01-t/a.webp"]])), "![a](adjuntos/01-t/a.webp)");
+  });
+
+  test("nombre del ZIP", () => {
+    assert.equal(aiPlanZipName({ day: "2026-11-23", version: 3, project: "Mi Web" }), "plan-2026-11-23-v3-Mi_Web-adjuntos.zip");
+    assert.equal(aiPlanZipName({ day: "2026-11-23", version: 3, project: "Mi Web" }, 2, 3, "en"), "plan-2026-11-23-v3-Mi_Web-attachments-2of3.zip");
+  });
+
+  test("la plantilla de serie explica el ZIP «adjuntos/…» en los dos idiomas", () => {
+    assert.ok(AI_PLAN_DEFAULTS.es.header.includes("«adjuntos/…»") && AI_PLAN_DEFAULTS.en.header.includes("adjuntos/…"));
   });
 });

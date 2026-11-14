@@ -345,6 +345,17 @@ describe("exportar e importar: papelera, cuota propia y enlaces de Drive", () =>
     assert.equal((await db.project.findUniqueOrThrow({ where: { id: old.projectId } })).programVersion, 0);
   });
 
+  test("plan de trabajo para IA: el turno de cada columna (planCount) va y vuelve; sin el dato, empieza en 0", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const data = minimal();
+    const plan = { ...data, columns: data.columns.map((c) => ({ ...c, role: "AI_PLAN" as const, planCount: 4 })) };
+    const s = await importProjectFile(await craft(plan), asImporter(admin), { isPrivate: true });
+    assert.equal((await db.column.findFirstOrThrow({ where: { projectId: s.projectId } })).planCount, 4);
+    assert.equal(projectJsonOf(await buildProjectExport(s.projectId, { attachments: false, scope: "all" })).columns[0]!.planCount, 4);
+    const old = await importProjectFile(await craft(minimal()), asImporter(admin), { isPrivate: true });
+    assert.equal((await db.column.findFirstOrThrow({ where: { projectId: old.projectId } })).planCount, 0);
+  });
+
   test("material de un curso: enlaces de Google Slides y documentos HTML van y vuelven con su tipo", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const f = await makeProject({ members: [admin] });

@@ -36,7 +36,7 @@ async function highestSavedVersion(projectId: string): Promise<number> {
 
 /** Columna con rol «Plan de trabajo para IA» del proyecto (si no, error). */
 async function planColumn(projectId: string, columnId: string) {
-  const column = await db.column.findFirst({ where: { id: columnId, projectId, role: "AI_PLAN" }, select: { id: true, name: true } });
+  const column = await db.column.findFirst({ where: { id: columnId, projectId, role: "AI_PLAN" }, select: { id: true, name: true, planCount: true } });
   if (!column) throw new AppError("Esta columna ya no es un plan de trabajo para IA. Recarga el tablero.", 409);
   return column;
 }
@@ -52,7 +52,7 @@ export async function getAiPlanSetup(input: z.input<typeof setupSchema>) {
     const user = await requireUser();
     const data = setupSchema.parse(input);
     await assertProjectAccess(user, data.projectId);
-    await planColumn(data.projectId, data.columnId);
+    const column = await planColumn(data.projectId, data.columnId);
     const [templates, projectTemplates, project, saved] = await Promise.all([
       userPlanTemplates(user.id),
       projectPlanTemplates(data.projectId),
@@ -65,6 +65,8 @@ export async function getAiPlanSetup(input: z.input<typeof setupSchema>) {
       description: project.description,
       today: todayIso(appTimeZone()),
       nextVersion: Math.max(project.aiPlanCount, saved) + 1,
+      // Número de plan de ESTA columna (ritmo de sus tareas fijas): independiente del de las demás columnas de plan.
+      nextColumnPlan: column.planCount + 1,
     };
   });
 }
@@ -85,7 +87,7 @@ export async function getAiPlanTaskDetails(input: z.input<typeof detailsSchema>)
         id: true,
         description: true,
         subtasks: { orderBy: [{ position: "asc" }, { id: "asc" }], select: { title: true, done: true } },
-        attachments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, originalName: true } },
+        attachments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, originalName: true, isImage: true } },
         links: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { title: true, url: true } },
       },
     });
@@ -101,7 +103,8 @@ const saveSchema = z.object({
 /**
  * «Guardar en Documentación»: guarda el plan como «Plan de trabajo – AAAA-MM-DD_vN.md», con N la versión siguiente del
  * proyecto (el contador solo crece, y nunca queda por debajo de la versión más alta ya guardada, también tras importar el
- * proyecto). Mismos límites que una subida (tamaño por archivo, máximo de documentos, cuotas). Si no se guarda, la
+ * proyecto). Cada guardado suma además un plan a la columna (Column.planCount): el ritmo de sus tareas fijas cuenta con él,
+ * no con la versión del proyecto. Solo se guarda el .md, no el ZIP de adjuntos (ya están en las tareas). Mismos límites que una subida (tamaño por archivo, máximo de documentos, cuotas). Si no se guarda, la
  * versión no se gasta.
  */
 export async function saveAiPlan(input: z.input<typeof saveSchema>) {
@@ -116,7 +119,12 @@ export async function saveAiPlan(input: z.input<typeof saveSchema>) {
       UPDATE "Project" SET "aiPlanCount" = GREATEST("aiPlanCount", ${floor}) + 1 WHERE "id" = ${data.projectId} RETURNING "aiPlanCount"`;
     if (!row) throw new AppError("No encontrado o sin acceso.", 404);
     const version = row.aiPlanCount;
-    const release = () => db.$executeRaw`UPDATE "Project" SET "aiPlanCount" = "aiPlanCount" - 1 WHERE "id" = ${data.projectId} AND "aiPlanCount" = ${version}`;
+    // El ritmo de las tareas fijas se cuenta por columna: cada plan guardado suma uno a la suya (y solo a la suya).
+    await db.$executeRaw`UPDATE "Column" SET "planCount" = "planCount" + 1 WHERE "id" = ${column.id}`;
+    const release = async () => {
+      await db.$executeRaw`UPDATE "Project" SET "aiPlanCount" = "aiPlanCount" - 1 WHERE "id" = ${data.projectId} AND "aiPlanCount" = ${version}`;
+      await db.$executeRaw`UPDATE "Column" SET "planCount" = GREATEST("planCount" - 1, 0) WHERE "id" = ${column.id}`;
+    };
     const name = aiPlanFileName(t(PLAN_PREFIX), todayIso(appTimeZone()), version);
     const content = new TextEncoder().encode(data.content.endsWith("\n") ? data.content : `${data.content}\n`);
     const saved = await saveGeneratedDocument({ projectId: data.projectId, name, content, mimeType: "text/markdown", kind: "MARKDOWN", createdById: user.id })

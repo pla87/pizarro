@@ -25,7 +25,7 @@ async function findColumn(columnId: string) {
   const user = await requireUser();
   const column = await db.column.findFirst({
     where: { id: v.id.parse(columnId), project: visibleProjectsWhere(user) },
-    select: { ...columnSelect, projectId: true },
+    select: { ...columnSelect, projectId: true, planCount: true },
   });
   if (!column) throw notFound();
   noteProject(column.projectId);
@@ -219,7 +219,7 @@ export async function deleteColumn(columnId: string) {
     addUndo(
       ...pointing.map((c) => ({ t: "column.set" as const, id: c.id, data: { routineTargetColumnId: column.id } })),
       ...archived.map((t) => ({ t: "task.set" as const, id: t.id, data: { columnId: column.id } })),
-      { t: "column.restore", row: { id: column.id, projectId: column.projectId, name: column.name, position: column.position, role: column.role, isDone: column.isDone, waitingDays: column.waitingDays, routineTargetColumnId: column.routineTargetColumnId, wipLimit: column.wipLimit } },
+      { t: "column.restore", row: { id: column.id, projectId: column.projectId, name: column.name, position: column.position, role: column.role, isDone: column.isDone, waitingDays: column.waitingDays, routineTargetColumnId: column.routineTargetColumnId, wipLimit: column.wipLimit, planCount: column.planCount } },
     );
     await db.$transaction(async (tx) => {
       // Bloqueo de las columnas del proyecto (el de createColumn) y la otra columna, otra vez dentro: borrar a la vez las
