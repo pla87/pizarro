@@ -62,7 +62,8 @@ if (only.includes("enlaces")) {
 <a id="ajeno" href="ajeno.html">De otro proyecto</a>
 <a id="fuera" href="https://example.com/tema2.html">Externo</a>
 <a id="js" href="javascript:alert(1)">js</a>
-<a id="interno" href="#abajo">Abajo</a>${filler}<h2 id="abajo">Abajo del todo</h2></body></html>`;
+<a id="interno" href="#abajo">Abajo</a>
+<div id="dsd"><template shadowrootmode="open"><a id="sombra" href="tema2.html" onclick="x()">En la sombra</a><link rel="preconnect" href="https://example.com"><link rel="dns-prefetch" href="https://example.com"></template></div>${filler}<h2 id="abajo">Abajo del todo</h2></body></html>`;
   const tema2 = `${page_("Tema 2")}<h1>Tema 2 del curso</h1><a id="vuelta" href="tema1.html">Volver al tema 1</a>${filler}<h2 id="apartado-b">Apartado B</h2><p>Texto del apartado B.</p>${filler}</body></html>`;
   await upload(page, p.id, "tema1.html", tema1);
   await upload(page, p.id, "tema2.html", tema2);
@@ -94,6 +95,10 @@ if (only.includes("enlaces")) {
   const srcdoc = await frameEl.getAttribute("srcdoc");
   L.check("ENL: la CSP sin red y sin scripts sigue en el marco", srcdoc.includes(`content="default-src 'none'`) && !/<script|onerror=|javascript:/i.test(srcdoc));
   L.check("ENL: ningún id de otro proyecto aparece en el marco", !srcdoc.includes(ajeno2.id));
+  // Shadow DOM declarativo (<template shadowrootmode>): DOMParser no lo monta (su contenido no pasa por el saneado), pero el
+  // marco sí al leer el srcdoc. Sin quitarlo, sus <link rel=preconnect>, manejadores y enlaces sin resolver llegaban vivos.
+  L.check("ENL: sin shadow DOM declarativo ni lo que llevaba dentro (preconnect, onclick, enlace sin resolver)", !/shadowrootmode|<template|preconnect|dns-prefetch"|onclick|id="sombra"/i.test(srcdoc), srcdoc.slice(0, 600));
+  L.eq("ENL: el marco no monta ninguna raíz de sombra", await frame.locator("#dsd").evaluate((el) => !!el.shadowRoot), false);
 
   // Clic en un enlace desactivado: no se abre nada ni cambia la dirección.
   let popped = false;
