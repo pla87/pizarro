@@ -41,6 +41,7 @@ import { useCardActions } from "./cardActions";
 import { draggingCard } from "./nearCards";
 import { placeBlock, sameOrder, selectionGroup, type BlockPlacement } from "./groupDrag";
 import { focusCard } from "./shortcuts";
+import { createMoveTurns } from "./moveTurns";
 import { useReviewGuard } from "./reviewGuard";
 import { activeFilterCount, EMPTY_FILTERS, filtersKey, parseStoredFilters, sanitizeFilters, searchTerms, taskMatchesFilters, taskSearchText, type BoardFilters, type SearchNames } from "./filters";
 import { Presence } from "./Presence";
@@ -689,6 +690,16 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   }, [refresh]);
 
   const baseItems = useStableItems(useMemo(() => groupItems(columns, tasks), [columns, tasks]));
+  // Las mismas listas, de lo último guardado (el store), como getTask: los atajos de teclado leen las dos a la vez, y una
+  // lista del último dibujo (que les llega en un efecto) podía no tener aún el movimiento anterior si se pulsan dos
+  // seguidos antes de que el tablero se vuelva a dibujar.
+  const columnsNow = useRef(columns);
+  useLayoutEffect(() => {
+    columnsNow.current = columns;
+  });
+  const itemsNow = useCallback(() => groupItems(columnsNow.current, stores.tasks.get()), [stores]);
+  // Turnos de los movimientos (moveTurns.ts): la respuesta de uno no pisa lo que ya ha pintado otro posterior.
+  const [moveTurns] = useState(createMoveTurns);
   // Filtro del buscador: por título, tipo, responsable y etiquetas (todas las palabras deben aparecer).
   // Diferido: el campo responde al momento y el tablero se vuelve a filtrar sin bloquear (al limpiar el filtro con Escape
   // reaparecen cientos de tarjetas de golpe).
@@ -843,13 +854,16 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
    * selección se mantiene: se ve dónde han quedado y se pueden volver a mover (Alt+flechas seguidas, otro arrastre).
    */
   const moveBlock = async (group: string[], columnId: string, placement: BlockPlacement, focusId?: string) => {
-    if (sameOrder(baseItems[columnId] ?? NO_IDS, placement.list)) return;
+    if (sameOrder(itemsNow()[columnId] ?? NO_IDS, placement.list)) return;
     if (!(await confirmLeaveReview(group, columnId))) {
       if (focusId) focusCard(focusId);
       return;
     }
     const byId = tasksById(stores.tasks.get());
     const before = new Map(group.flatMap((id) => (byId.get(id) ? [[id, byId.get(id)!] as const] : [])));
+    const turn = moveTurns.start(group);
+    // Al responder, solo se tocan las que nadie ha vuelto a mover entretanto.
+    const mine = <V,>(entries: Iterable<[string, V]>) => new Map([...entries].filter(([id]) => moveTurns.isLatest(id, turn)));
     const pos = (id: string | null) => (id ? byId.get(id)?.position : null);
     const positions = spreadPositions(pos(placement.prevId), pos(placement.nextId), group.length);
     const slot = new Map(group.map((id, i) => [id, positions[i]!]));
@@ -862,14 +876,15 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (focusId) focusCard(focusId);
     const res = await track(moveTasks(group, columnId, { prevId: placement.prevId, nextId: placement.nextId }));
     if (!res.ok) {
-      restoreTasks(before);
+      restoreTasks(mine(before));
       if (focusId) focusCard(focusId);
       return toast(res.error, "error");
     }
-    const server = new Map(res.data.moved.map((m) => [m.id, m.position]));
+    const moved = new Set(res.data.moved.map((m) => m.id));
+    const server = mine(res.data.moved.map((m) => [m.id, m.position] as [string, number]));
     setTasks((prev) => prev.map((x) => (server.has(x.id) ? { ...x, columnId, position: server.get(x.id)! } : x)));
     // Las que el servidor no ha movido (archivadas o borradas mientras tanto) vuelven a como estaban; el refresco las quita.
-    const skipped = new Map([...before].filter(([id]) => !server.has(id)));
+    const skipped = mine([...before].filter(([id]) => !moved.has(id)));
     if (skipped.size) restoreTasks(skipped);
     res.data.spawned.forEach(upsertTask);
     const name = sortedColumns.find((c) => c.id === columnId)?.name ?? "";
@@ -877,7 +892,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     toast(t("{moved} a «{name}»", { moved: n === 1 ? t("1 tarjeta movida") : t("{n} tarjetas movidas", { n }), name }));
   };
 
-  const cardActions = useCardActions({ currentUserId: data.currentUserId, getTask, sortedColumns, baseItems, patchTask, upsertTask, track, toast, t, confirmLeaveReview, getSelected: stores.selection.get, moveBlock });
+  const cardActions = useCardActions({ currentUserId: data.currentUserId, getTask, sortedColumns, getItems: itemsNow, moveTurns, patchTask, upsertTask, track, toast, t, confirmLeaveReview, getSelected: stores.selection.get, moveBlock });
 
   // El contexto solo cambia si cambia su contenido: los datos del servidor llegan como objetos nuevos en cada
   // refresco aunque sean iguales, y sin esto todas las tarjetas se redibujarían cada vez.
@@ -1257,11 +1272,13 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (col !== origin.columnId && !(await confirmLeaveReview([id], col))) return;
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, columnId: col, position, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() } : t)));
 
+    const turn = moveTurns.start([id]);
     const res = await track(moveTask(id, col, prevId, nextId));
+    const latest = moveTurns.isLatest(id, turn);
     if (!res.ok) {
-      setTasks((prev) => prev.map((t) => (t.id === id ? previous : t)));
+      if (latest) setTasks((prev) => prev.map((t) => (t.id === id ? previous : t)));
       toast(res.error, "error");
-    } else if (res.data.position !== position) {
+    } else if (latest && res.data.position !== position) {
       setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, position: res.data.position } : t)));
     }
     if (res.ok) res.data.spawned.forEach(upsertTask);

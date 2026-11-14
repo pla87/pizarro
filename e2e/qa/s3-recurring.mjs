@@ -45,10 +45,10 @@ export async function run() {
   L.eq("la copia tiene las subtareas sin marcar", [Number(next.subs), Number(next.done)], [2, 0]);
   L.check("la copia va al final de Backlog", Number(next.position) > Number((await L.dbTask("Fija2")).position), `${next.position}`);
   L.eq("orden de Backlog: Fija1, Fija2, copia", (await L.dbOrder(COL.backlog)).length, 3);
-  L.eq("la UI muestra la copia sin recargar", (await U.uiOrder(p, COL.backlog)).filter((t) => t === "Informe semanal").length, 1);
+  // La copia llega al tablero con la respuesta del servidor (después de crearse en la BD).
+  await L.eqEventually("la UI muestra la copia sin recargar", async () => (await U.uiOrder(p, COL.backlog)).filter((t) => t === "Informe semanal").length, 1);
   L.eq("la UI muestra la original en Cerrado", await U.uiOrder(p, COL.closed), ["Informe semanal"]);
-  const ev = (await L.events("Informe semanal")).filter((e) => e.code === "done");
-  L.check("evento «done» registrado para la original", ev.length === 1, JSON.stringify(ev));
+  await L.checkEventually("evento «done» registrado para la original", async () => { const ev = (await L.events("Informe semanal")).filter((e) => e.code === "done"); return [ev.length === 1, ev]; });
   await U.logHas("AppLog del movimiento", t0, "tasks.moveTask", "Movió «Informe semanal» de «Backlog» a «Cerrado»");
 
   // Idempotencia: moverla entre dos terminadas no crea otra
@@ -64,7 +64,7 @@ export async function run() {
   await L.eqEventually("deshacer quita la copia", async () => (await copies("Informe semanal")).length, 1);
   const [o2] = await copies("Informe semanal");
   L.eq("deshacer: la original vuelve a Backlog", o2.col, COL.backlog);
-  L.eq("deshacer: UI Backlog con la original y sin copia", (await U.uiOrder(p, COL.backlog)).filter((t) => t === "Informe semanal").length, 1);
+  await L.eqEventually("deshacer: UI Backlog con la original y sin copia", async () => [(await U.uiOrder(p, COL.backlog)).filter((t) => t === "Informe semanal").length, await U.uiOrder(p, COL.closed)], [1, []]);
   await L.reload(p);
   L.eq("deshacer: tras recargar, una sola tarjeta", (await p.locator("[data-task-card]").filter({ has: p.locator("p", { hasText: /^Informe semanal$/ }) }).count()), 1);
   // Rehacer: vuelve a moverla y a crear la copia

@@ -24,7 +24,7 @@ import { DueDatePopover } from "./DueDatePopover";
 import { recurrenceLabel } from "./recurrence-ui";
 import { overTitleLimit, TITLE_INPUT_LIMIT } from "./TitleLimit";
 import { titleLength } from "@/lib/title-clamp";
-import { focusCard, isTypingTarget } from "./shortcuts";
+import { focusCard, isTypingTarget, takeCardFocus } from "./shortcuts";
 import { TaskViewerBubbles } from "./TaskViewerBubbles";
 
 type Listeners = NonNullable<DraggableSyntheticListeners>;
@@ -212,6 +212,11 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
   const [dueAnchor, setDueAnchor] = useState<HTMLElement | null>(null);
   // Soltar archivos sobre la tarjeta (escritorio) los adjunta a la tarea.
   const fileDrop = useCardFileDrop(task.id, !overlay);
+  // Movida a otra columna con el teclado: se vuelve a montar allí y recoge el foco al montarse (focusCard, shortcuts.ts).
+  const cardRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!overlay) takeCardFocus(task.id, cardRef.current);
+  }, [task.id, overlay]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Enter") {
@@ -255,6 +260,7 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
 
   return (
     <div
+      ref={cardRef}
       role="button"
       tabIndex={0}
       data-task-card={task.id}

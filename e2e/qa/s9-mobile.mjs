@@ -43,7 +43,7 @@ export async function run() {
   const n0 = await U.undoCount("UNDO");
   await p.getByRole("button", { name: "Deshacer la última acción" }).first().tap();
   await L.eqEventually("móvil: deshacer devuelve A a Backlog", () => L.dbOrder(COL.backlog), ["A", "B", "C"]);
-  L.check("móvil: la entrada de deshacer se consumió", (await U.undoCount("UNDO")) < n0);
+  await L.checkEventually("móvil: la entrada de deshacer se consumió", async () => (await U.undoCount("UNDO")) < n0);
 
   // Selección múltiple en móvil
   await L.reload(p);
@@ -51,7 +51,8 @@ export async function run() {
   L.check("móvil: barra «2 seleccionadas»", await p.getByText("2 seleccionadas").isVisible());
   await p.locator("select").filter({ has: p.locator("option", { hasText: "Mover a…" }) }).selectOption({ label: COL.closed });
   await L.eqEventually("móvil: las dos pasan a «Cerrado» en orden", () => L.dbOrder(COL.closed), ["B", "C"]);
-  L.check("móvil: eventos «done»", (await Promise.all(["B", "C"].map(L.events))).every((e) => e.at(-1).code === "done"));
+  // El historial se escribe al final de la acción, después del cambio en la BD (y las consultas, en fila).
+  await L.checkEventually("móvil: eventos «done»", async () => { const last = [(await L.events("B")).at(-1)?.code, (await L.events("C")).at(-1)?.code]; return [last.every((c) => c === "done"), last]; });
   L.eq("móvil: Backlog conserva solo A", await L.dbOrder(COL.backlog), ["A"]);
   await L.sleep(500);
   L.eq("móvil: UI de Backlog", await cards(), ["A"]);
