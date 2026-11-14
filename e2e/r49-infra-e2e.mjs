@@ -89,7 +89,16 @@ if (only.includes("docs")) {
   const s = await L.session();
   const { page, ctx } = s;
   await page.goto(`${L.BASE}/p/${p.id}/docs`);
-  await page.locator('input[type=file]').first().setInputFiles({ name: "r49-nota.txt", mimeType: "text/plain", buffer: Buffer.from("hola") });
+  // El campo de subida solo funciona cuando React ha hidratado la página: con la máquina cargada, un fichero elegido
+  // antes se pierde (una persona no llega a elegirlo tan rápido). Se espera a que acabe de cargar y, si aun así no
+  // llega, se vuelve a elegir (como mucho tres veces).
+  await page.waitForLoadState("networkidle").catch(() => {});
+  const uploaded = async () => (await L.q(`SELECT count(*)::int n FROM "ProjectDocument" WHERE "projectId"=$1 AND name='r49-nota.txt' AND "deletedAt" IS NULL`, [p.id]))[0].n;
+  for (let i = 0; i < 3 && (await uploaded()) === 0; i++) {
+    await page.locator('input[type=file]').first().setInputFiles({ name: "r49-nota.txt", mimeType: "text/plain", buffer: Buffer.from("hola") });
+    const t0 = Date.now();
+    while (Date.now() - t0 < 5000 && (await uploaded()) === 0) await L.sleep(250);
+  }
   await L.eqEventually("DOCS: el documento se sube", async () => (await L.q(`SELECT count(*)::int n FROM "ProjectDocument" WHERE "projectId"=$1 AND name='r49-nota.txt' AND "deletedAt" IS NULL`, [p.id]))[0].n, 1, { timeout: 15000 });
   const trash = page.getByRole("button", { name: "Enviar «r49-nota.txt» a la papelera" });
   await trash.waitFor({ timeout: 10000 });
