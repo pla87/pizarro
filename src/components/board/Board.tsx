@@ -931,6 +931,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       patchTask,
       ...cardActions,
       confirmLeaveReview,
+      moveTurns,
       removeTask: (id) => {
         setTasks((prev) => prev.filter((t) => t.id !== id));
         stores.selection.set((prev) => {
@@ -979,7 +980,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       settle,
       refresh,
     }),
-    [setTasks, revealTask, project, users, data.currentUserId, deliverables, kinds, data.cardStyle, data.editorMode, dragHandle, google, data.today, stableColumns, stableLabels, stores, getTask, track, trackRaw, settle, refresh, patchTask, upsertTask, cardActions, confirmLeaveReview],
+    [setTasks, revealTask, project, users, data.currentUserId, deliverables, kinds, data.cardStyle, data.editorMode, dragHandle, google, data.today, stableColumns, stableLabels, stores, getTask, track, trackRaw, settle, refresh, patchTask, upsertTask, cardActions, confirmLeaveReview, moveTurns],
   );
 
   // --- Movimiento masivo ------------------------------------------------------

@@ -1,11 +1,12 @@
 "use client";
 
 import { Check, Smartphone } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { saveAppIcon } from "@/actions/settings";
 import { cn } from "@/components/ui/cn";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
+import { useRadioGroup } from "@/components/ui/useRadioGroup";
 import { useActionTransition } from "@/components/useActionTransition";
 import { useT } from "@/i18n/client";
 import { APP_ICON_ACCENTS, APP_ICON_LABEL, appIconUrl, appNames, type AppIconAccent } from "@/lib/app-icon-core";
@@ -18,23 +19,29 @@ import { APP_ICON_ACCENTS, APP_ICON_LABEL, appIconUrl, appNames, type AppIconAcc
 export function AppIconSettingsSection({ initial, orgName }: { initial: AppIconAccent; orgName: string }) {
   const t = useT();
   const toast = useToast();
-  const [pending, start] = useActionTransition();
+  const [, start] = useActionTransition();
   const [accent, setAccent] = useState(initial);
   const { shortName } = appNames(orgName);
 
+  // Con las flechas se pasa por varios colores seguidos: cada uno se guarda (Next manda las acciones de una en una, gana el
+  // último) y, si falla, solo el último vuelve al color que había guardado.
+  const saved = useRef(initial);
+  const latest = useRef(0);
   const choose = (value: AppIconAccent) => {
-    if (value === accent || pending) return;
-    const previous = accent;
+    if (value === accent) return;
     setAccent(value);
+    const mine = ++latest.current;
     start(async () => {
       const res = await saveAppIcon(value);
+      if (res.ok) saved.current = value;
       if (!res.ok) {
-        setAccent(previous);
+        if (mine === latest.current) setAccent(saved.current);
         return toast(res.error, "error");
       }
-      toast(t("Color del icono guardado."), "success");
+      if (mine === latest.current) toast(t("Color del icono guardado."), "success");
     });
   };
+  const group = useRadioGroup(APP_ICON_ACCENTS.length, APP_ICON_ACCENTS.indexOf(accent), (i) => choose(APP_ICON_ACCENTS[i]!));
 
   return (
     <section id="icono-app" className="card space-y-4 p-5" data-app-icon-settings>
@@ -49,13 +56,12 @@ export function AppIconSettingsSection({ initial, orgName }: { initial: AppIconA
           {t("Con el nombre de la organización debajo: «{name}».", { name: shortName })}
         </p>
       </div>
-      <div role="radiogroup" aria-label={t("Color del icono de la app")} className="flex flex-wrap gap-3">
-        {APP_ICON_ACCENTS.map((value) => (
+      <div {...group.groupProps} aria-label={t("Color del icono de la app")} className="flex flex-wrap gap-3">
+        {APP_ICON_ACCENTS.map((value, i) => (
           <button
             key={value}
             type="button"
-            role="radio"
-            aria-checked={accent === value}
+            {...group.radioProps(i)}
             onClick={() => choose(value)}
             data-app-icon={value}
             className={cn(

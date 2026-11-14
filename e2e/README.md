@@ -38,6 +38,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Tareas que se repiten (calendario, .ics y «Nueva tarea») | `e2e/r49-repeat-e2e.mjs` | 44 | ~1 min |
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/r49-ui-e2e.mjs` | 38 | ~1 min |
 | Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/r51-ui-e2e.mjs` | 62 | ~1,5 min |
+| Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones, iconos de la raíz y nombre corto (ronda 52) | `e2e/r52-ui-e2e.mjs` | 79 | ~1,5 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/r49-textos-e2e.mjs` | 29 | ~1 min |
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/r50-plantilla-e2e.mjs` | 39 | ~1 min |
 | Aplicar plantilla: opción elegida en oscuro, tareas fijas, generales ocultos y límite (ronda 51) | `e2e/r51-plantilla-e2e.mjs` | 26 | ~40 s |
@@ -274,6 +275,25 @@ Crea y borra su propio proyecto privado. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r51-ui-e2e.mjs   # PART=skeleton,icon,html,backups
+```
+
+## Detalle de tarea al instante, flechas en opciones e iconos de la raíz (ronda 52)
+
+- `optimista`: con las acciones del servidor 3 s más lentas, archivar y borrar desde el detalle cierran el diálogo y quitan
+  la tarjeta al momento (el servidor termina después; Deshacer la devuelve); sin red (`setOffline`) la tarjeta vuelve a su
+  sitio, sale «Sin conexión» y nada se guarda.
+- `columna`: dos cambios de columna seguidos desde el detalle con respuestas lentas: la tarjeta queda en la última (turnos por
+  tarjeta, como Alt+flechas).
+- `flechas`: «Icono de la app» (Administración) y «Tema de color» (Mi perfil): una sola parada de Tab, flechas en las cuatro
+  direcciones (eligen y guardan), vuelta de extremo a extremo, Inicio y Fin; también el selector de idioma.
+- `iconos`: `/favicon.ico`, `/apple-touch-icon.png`, `/icon.png` y `/icon.svg` en el color de la instalación (azul sin
+  ajuste), con caché corta; nombre corto del manifiesto y título de iPhone de 12 caracteres como mucho. La caché de ajustes
+  del servidor dura 30 s, así que esta parte puede tardar unos segundos en cada cambio.
+
+Restaura lo que toca (rol, tema, icono y nombre de la organización). Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r52-ui-e2e.mjs   # PART=optimista,columna,flechas,iconos
 ```
 
 ## Textos breves, notas «i» y botones sin efecto (ronda 49)
