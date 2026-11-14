@@ -1,15 +1,15 @@
 "use client";
 
-import { ArrowLeft, Bot, Check, ClipboardCopy, Download, FileText, FolderInput, Loader2 } from "lucide-react";
+import { ArrowLeft, Bot, Check, ClipboardCopy, Download, FileArchive, FileText, FolderInput, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getAiPlanSetup, getAiPlanTaskDetails, saveAiPlan } from "@/actions/ai-plan";
 import { moveTasks } from "@/actions/tasks";
 import { useLocale, useT } from "@/i18n/client";
-import { AI_PLAN_BUILTIN_ID, AI_PLAN_DEFAULTS, AI_PLAN_MAX_TASKS, aiPlanDownloadName, aiPlanFileName, buildAiPlanMarkdown, type AiPlanTask } from "@/lib/ai-plan";
+import { AI_PLAN_BUILTIN_ID, AI_PLAN_DEFAULTS, AI_PLAN_MAX_TASKS, aiPlanDownloadName, aiPlanFileName, buildAiPlanMarkdown, planAttachmentPaths, type AiPlanTask } from "@/lib/ai-plan";
 import { isNetworkError, loadWhenOnline, reportOffline } from "@/lib/connection";
 import { compareTaskOrder } from "@/lib/positions";
-import { evergreenDue, releasesUntilDue, swapTemplateBlock } from "@/lib/release";
+import { aiPlanZipName, evergreenDue, RELEASE_MAX_ATTACHMENT_TASKS, releasesUntilDue, swapTemplateBlock } from "@/lib/release";
 import { actionThrowResult } from "@/lib/stale-action";
 import { PRIORITY_LABEL } from "@/lib/task-fields";
 import type { BoardColumn, BoardTask, TemplateOption } from "@/lib/types";
@@ -17,6 +17,7 @@ import { copyText, downloadText } from "../ui/clipboard";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
+import { downloadAttachmentsZip } from "./attachments-zip";
 import { useBoard } from "./context";
 import { DraftTextEditor, TaskPickList, TemplatePickers, TemplateSourceNote, useDraftText } from "./DraftText";
 
@@ -28,7 +29,10 @@ interface Setup {
   projectTemplates: Groups;
   description: string;
   today: string;
+  /** Versión del documento (_vN), por proyecto. */
   nextVersion: number;
+  /** Número del plan en ESTA columna: el ritmo de sus tareas fijas (cada dos, cada tres) cuenta con él. */
+  nextColumnPlan: number;
 }
 
 /** Tareas de la columna en el orden del tablero: primero las normales y después las fijas («Siempre en el plan»). */
@@ -74,6 +78,10 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
   const { currentText, loadText, setTab } = draft;
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [zipping, setZipping] = useState(false);
+  /** Tareas con adjuntos del plan generado, con su carpeta en el ZIP (vacío si son demasiadas para ofrecerlo). */
+  const [zipItems, setZipItems] = useState<{ taskId: string; folder: string; count: number }[]>([]);
+  const [zipTooMany, setZipTooMany] = useState(false);
   const [busy, setBusy] = useState(false);
   const targets = useMemo(() => [...board.columns].sort((a, b) => a.position - b.position).filter((c) => c.id !== column.id), [board.columns, column.id]);
   const [moveOn, setMoveOn] = useState(false);
@@ -87,9 +95,9 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
       setHeaderId(res.data.templates.headers[0]?.id ?? res.data.projectTemplates.headers[0]?.id ?? AI_PLAN_BUILTIN_ID);
       setFooterId(res.data.templates.footers[0]?.id ?? res.data.projectTemplates.footers[0]?.id ?? AI_PLAN_BUILTIN_ID);
     }
-    // Tareas fijas con cadencia: solo vienen marcadas si a esta versión del plan le toca (se pueden marcar a mano).
+    // Tareas fijas con cadencia: solo vienen marcadas si al plan que toca guardar en ESTA columna le toca (se pueden marcar a mano).
     if (!selectionTouched.current) {
-      const notDue = tasks.filter((x) => x.evergreen && !evergreenDue(res.data.nextVersion, x.evergreenEvery)).map((x) => x.id);
+      const notDue = tasks.filter((x) => x.evergreen && !evergreenDue(res.data.nextColumnPlan, x.evergreenEvery)).map((x) => x.id);
       if (notDue.length) setChosen((prev) => new Set([...prev].filter((id) => !notDue.includes(id))));
     }
   }, () => {}), [board.project.id, column.id, tasks, toast]);
@@ -116,6 +124,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
   const tooMany = selectedTasks.length > AI_PLAN_MAX_TASKS;
   const today = setup?.today ?? board.today;
   const version = setup?.nextVersion ?? null;
+  const columnPlan = setup?.nextColumnPlan ?? null;
   const docName = (ext: "md" | "txt" = "md") => aiPlanFileName(t("Plan de trabajo"), today, version ?? 1, ext);
   const dueHint = (n: number) => (n === 0 ? t("ahora") : n === 1 ? t("en el siguiente") : t("dentro de {n}", { n }));
 
@@ -131,6 +140,13 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
     const labelName = new Map(board.labels.map((l) => [l.id, l.name]));
     const index = new Map(selectedTasks.map((x, i) => [x.id, i + 1]));
     const fields = board.project.taskFields;
+    // Adjuntos: su ruta dentro del ZIP «adjuntos/NN-titulo/…» (el texto la cita; el servidor recalcula los mismos nombres).
+    const paths = planAttachmentPaths(selectedTasks.map((x) => ({ id: x.id, title: x.title, attachments: details.get(x.id)?.attachments ?? [] })));
+    const withFiles = selectedTasks.filter((x) => paths.byTask.has(x.id));
+    // Como en la release, el ZIP admite 200 tareas con adjuntos; con más no se ofrece y el texto solo lleva los enlaces a Pizarro.
+    const zipOk = withFiles.length <= RELEASE_MAX_ATTACHMENT_TASKS;
+    setZipTooMany(!zipOk);
+    setZipItems(zipOk ? withFiles.map((x) => ({ taskId: x.id, folder: paths.byTask.get(x.id)!.folder, count: paths.byTask.get(x.id)!.files.length })) : []);
     const planTasks: AiPlanTask[] = selectedTasks.map((x) => {
       const d = details.get(x.id);
       return {
@@ -146,7 +162,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
         priority: fields.includes("priority") && x.priority ? t(PRIORITY_LABEL[x.priority]) : null,
         linkUrl: x.linkUrl,
         links: d?.links ?? [],
-        attachments: (d?.attachments ?? []).map((a) => ({ name: a.originalName, url: `${origin}/api/attachments/${a.id}` })),
+        attachments: (d?.attachments ?? []).map((a) => ({ id: a.id, name: a.originalName, url: `${origin}/api/attachments/${a.id}`, path: zipOk ? paths.byAttachment.get(a.id) : undefined })),
         evergreen: x.evergreen,
         blockedBy: x.blockedBy ? { title: x.blockedBy.title, index: index.get(x.blockedBy.id) ?? null } : null,
       };
@@ -171,26 +187,42 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
   const askingClose = useRef(false);
   /** Como en la release: con el texto cambiado se pregunta antes de descartarlo. `false` si no se cerró. */
   const requestClose = async (): Promise<boolean> => {
-    if (askingClose.current) return false;
-    if (textEdited()) {
-      askingClose.current = true;
-      const ok = await confirm({
-        title: t("Cambios sin guardar"),
-        message: t("Has cambiado el texto del plan. ¿Cerrar y descartar los cambios?"),
-        confirmLabel: t("Descartar cambios"),
-        cancelLabel: t("Seguir editando"),
-        danger: true,
-      }).catch(() => false);
-      askingClose.current = false;
-      if (!ok) return false;
-    }
+    if (!(await confirmDiscard())) return false;
     onClose();
     return true;
+  };
+  /** La pregunta de descartar el texto cambiado (cerrar o salir por un enlace): `true` si no hay nada que perder o se acepta. */
+  const confirmDiscard = async (): Promise<boolean> => {
+    if (askingClose.current) return false;
+    if (!textEdited()) return true;
+    askingClose.current = true;
+    const ok = await confirm({
+      title: t("Cambios sin guardar"),
+      message: t("Has cambiado el texto del plan. ¿Cerrar y descartar los cambios?"),
+      confirmLabel: t("Descartar cambios"),
+      cancelLabel: t("Seguir editando"),
+      danger: true,
+    }).catch(() => false);
+    askingClose.current = false;
+    return ok;
   };
 
   const back = async () => {
     if (textEdited() && !(await confirm({ title: t("Volver a la selección"), message: t("Se perderán los cambios que has hecho en el texto. ¿Continuar?"), confirmLabel: t("Continuar"), danger: true }))) return;
     setStep("select");
+  };
+
+  const attachmentTotal = zipItems.reduce((n, i) => n + i.count, 0);
+  const downloadAttachments = async () => {
+    setZipping(true);
+    await downloadAttachmentsZip({
+      projectId: board.project.id,
+      items: zipItems.map(({ taskId, folder }) => ({ taskId, folder })),
+      fileName: (part, total) => aiPlanZipName({ day: today, version, project: board.project.name }, part, total, locale === "en" ? "en" : "es"),
+      t,
+      toast,
+    });
+    setZipping(false);
   };
 
   const copy = async () => {
@@ -266,6 +298,11 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
             <button className="btn-secondary" onClick={() => downloadText(currentText(), aiPlanDownloadName(docName("txt")), "text/plain")}>
               <FileText size={15} /> .txt
             </button>
+            {attachmentTotal > 0 && (
+              <button className="btn-secondary" onClick={downloadAttachments} disabled={zipping} title={t("ZIP «adjuntos/…» con los adjuntos de las tareas del plan: el texto cita sus rutas")}>
+                {zipping ? <Loader2 size={15} className="animate-spin" /> : <FileArchive size={15} />} {t("Descargar adjuntos ({n})", { n: attachmentTotal })}
+              </button>
+            )}
             <button className="btn-primary" onClick={save} disabled={busy || draft.empty()} title={t("Guardar en Documentación como «{name}»", { name: docName() })}>
               {busy ? <Loader2 size={15} className="animate-spin" /> : <FolderInput size={15} />} {t("Guardar en Documentación")}
             </button>
@@ -286,7 +323,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
             onTouch={() => { selectionTouched.current = true; }}
             badge={(task) => task.evergreen && (
               <span className="shrink-0 rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-500/20 dark:text-brand-300" title={t("Siempre en el plan: entra en cada plan y no se mueve al guardar")}>
-                {t("fija")}{task.evergreenEvery === 2 ? ` · ${t("Cada dos")}` : task.evergreenEvery === 3 ? ` · ${t("Cada tres")}` : ""}{version != null && task.evergreenEvery > 1 ? ` · ${dueHint(releasesUntilDue(version, task.evergreenEvery))}` : ""}
+                {t("fija")}{task.evergreenEvery === 2 ? ` · ${t("Cada dos")}` : task.evergreenEvery === 3 ? ` · ${t("Cada tres")}` : ""}{columnPlan != null && task.evergreenEvery > 1 ? ` · ${dueHint(releasesUntilDue(columnPlan, task.evergreenEvery))}` : ""}
               </span>
             )}
           />
@@ -294,6 +331,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
       ) : (
         <div className="flex h-full flex-col gap-3" data-plan-step="edit">
           {pickers}
+          <TemplateSourceNote projectId={board.project.id} projectTab="releases" withProject confirmLeave={() => (textEdited() ? confirmDiscard() : false)} />
           <DraftTextEditor draft={draft} label={t("Texto del plan de trabajo")} idPrefix="plan" dataAttr="data-plan-editor" onEscape={() => void requestClose()} />
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
             <label className="flex items-center gap-1.5">
@@ -305,7 +343,11 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
             </select>
             <span className="text-xs text-slate-500">{t("Las fijas se quedan en la columna.")}</span>
           </div>
-          <p className="text-xs text-slate-500">{t("Se guardará como «{name}».", { name: docName() })}</p>
+          {zipTooMany && <p className="text-xs text-red-600 dark:text-red-400" role="alert">{t("Un plan admite como mucho 200 tareas con adjuntos en el ZIP: el texto solo lleva los enlaces a Pizarro.")}</p>}
+          <p className="text-xs text-slate-500">
+            {t("Se guardará como «{name}».", { name: docName() })}
+            {attachmentTotal > 0 && <> {t("Los adjuntos no se guardan con el plan: van en el ZIP de «Descargar adjuntos» y el texto cita su ruta y su enlace a Pizarro.")}</>}
+          </p>
         </div>
       )}
     </Modal>

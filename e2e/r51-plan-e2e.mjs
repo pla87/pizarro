@@ -58,6 +58,8 @@ async function seed() {
   await L.q(`INSERT INTO "TaskAttachment"(id,"taskId","originalName","mimeType","isImage",size) VALUES ('r51_a1','r51_t1','error.log','text/plain',false,10)`);
   await L.q(`UPDATE "Task" SET "blockedById"='r51_t1' WHERE id='r51_t2'`);
   await L.q(`INSERT INTO "Task"(id,"projectId","columnId",title,"kindId",position,"updatedAt") VALUES ('r51_rel','${PID}','r51_salto','Release r51','kind_funcionalidad',1024,NOW())`);
+  // «PDF de la semana» se desactiva con la columna vacía (ronda 52): una tarjeta para que su menú se abra.
+  await L.q(`INSERT INTO "Task"(id,"projectId","columnId",title,"kindId",position,"updatedAt") VALUES ('r51_sem1','${PID}','r51_sem','Semana r51','kind_funcionalidad',1024,NOW())`);
 }
 
 const planCol = (page, name = "Plan IA") => L.colLoc(page, name);
@@ -165,7 +167,7 @@ if (only.includes("plan")) {
   for (const piece of [
     `# Plan de trabajo – ${NAME}`, "## Instrucciones para la IA", "Claude Code", "## Contexto del proyecto", `- **Proyecto:** [${NAME}](<${L.BASE}/p/${PID}>)`, "- **Columna:** Plan IA",
     "Tienda en línea con Next.js.", "- **Tareas:** 3", "### 1. Arreglar el login r51", "- **Tipo:** Corrección", "- **Prioridad:** Alta", "- **Etiquetas:** Backend",
-    "- **Fecha límite:** 2026-12-31", `- **Tarea en Pizarro:** [abrir](<${L.BASE}/p/${PID}?task=r51_t1>)`, `- **Adjuntos:** [error.log](<${L.BASE}/api/attachments/r51_a1>)`,
+    "- **Fecha límite:** 2026-12-31", `- **Tarea en Pizarro:** [abrir](<${L.BASE}/p/${PID}?task=r51_t1>)`, `- **Adjuntos:**\n  - \`adjuntos/01-arreglar-el-login-r51/error.log\` ([error.log en Pizarro](<${L.BASE}/api/attachments/r51_a1>))`,
     "#### Pasos", "- [x] Reproducir", "- [ ] Corregir y probar", "### 2. Añadir pruebas r51", "- **Depende de:** la tarea 1 («Arreglar el login r51»)",
     "### 3. Revisar estilo r51", "- _Tarea fija: entra en todos los planes._", "## Entrega",
   ]) L.check(`PLAN: el texto incluye «${piece.slice(0, 70)}»`, text.includes(piece), text.slice(0, 200));

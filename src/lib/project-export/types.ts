@@ -70,6 +70,8 @@ const columnSchema = z.object({
   routineTargetRef: ref.nullable(),
   /** Límite orientativo de tarjetas (1-999). Opcional: los archivos anteriores no lo traen. */
   wipLimit: z.number().int().min(1).max(999).nullable().optional(),
+  /** Planes de trabajo guardados desde la columna (ritmo de sus tareas fijas; rol AI_PLAN). Opcional: los archivos anteriores no lo traen. */
+  planCount: z.number().int().min(0).max(1_000_000).optional(),
 });
 
 const kindSchema = z.object({

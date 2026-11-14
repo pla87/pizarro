@@ -5,7 +5,8 @@ import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
-import { attachmentFileNames, isoDate, RELEASE_MAX_ATTACHMENT_TASKS, releaseZipName } from "@/lib/release";
+import { AI_PLAN_ZIP_FOLDER } from "@/lib/ai-plan";
+import { aiPlanZipName, attachmentFileNames, isoDate, plainAttachmentFileNames, RELEASE_MAX_ATTACHMENT_TASKS, releaseZipName } from "@/lib/release";
 import { acquireZipSlot, buildZipPart, planZipEntries, zipBodyStream, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict, type ZipEntry } from "@/lib/release-zip";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
@@ -17,7 +18,15 @@ export const runtime = "nodejs";
 
 const bodySchema = z.object({
   items: z
-    .array(z.object({ taskId: v.id, code: z.string().regex(/^(R\d{1,5})?[A-Z]{1,4}\d{1,4}$/) }))
+    .array(
+      z.object({
+        taskId: v.id,
+        // Release: el código de la tarea (R32F1), que prefija los nombres. Plan de trabajo para IA: la carpeta de la tarea
+        // dentro del ZIP («adjuntos/03-titulo»). Cada elemento lleva uno de los dos.
+        code: z.string().regex(/^(R\d{1,5})?[A-Z]{1,4}\d{1,4}$/).optional(),
+        folder: z.string().regex(AI_PLAN_ZIP_FOLDER).optional(),
+      }).refine((i) => (i.code === undefined) !== (i.folder === undefined)),
+    )
     .min(1)
     .max(RELEASE_MAX_ATTACHMENT_TASKS),
 });
@@ -44,7 +53,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   if (!parsed.success) return new Response(t("Datos no válidos"), { status: 400 });
   const { items } = parsed.data;
   const ids = new Set(items.map((i) => i.taskId));
-  const codes = new Set(items.map((i) => i.code));
+  const codes = new Set(items.map((i) => i.code ?? i.folder));
+  // Todas del mismo tipo: o es el ZIP de una release (códigos) o el de un plan (carpetas).
+  const planZip = items[0]!.folder !== undefined;
+  if (items.some((i) => (i.folder !== undefined) !== planZip)) return new Response(t("Datos no válidos"), { status: 400 });
   if (ids.size !== items.length || codes.size !== items.length) return new Response(t("Datos no válidos"), { status: 400 });
 
   const { projectId } = await ctx.params;
@@ -64,7 +76,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   const entries: ZipEntry[] = [];
   for (const item of items) {
     const attachments = byId.get(item.taskId)!.attachments;
-    const names = attachmentFileNames(item.code, attachments);
+    const names = item.folder !== undefined ? plainAttachmentFileNames(attachments).map((n) => `${item.folder}/${n}`) : attachmentFileNames(item.code!, attachments);
     for (const [i, a] of attachments.entries()) {
       const file = attachmentPath(a.id, a.isImage ? "full" : "file");
       const size = await stat(file).then((st) => st.size, () => null);
@@ -96,7 +108,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
     return new Response(t("No hay adjuntos disponibles"), { status: 404 });
   }
   logEvent({
-    category: "api", action: "release.zipDownload", message: `ZIP de adjuntos de release (paquete ${mode.part}/${packages.length}, ${fileCount} ficheros, ${Math.round(zip.length / 1024)} KB)`,
+    category: "api", action: planZip ? "aiPlan.zipDownload" : "release.zipDownload", message: `ZIP de adjuntos de ${planZip ? "plan de trabajo" : "release"} (paquete ${mode.part}/${packages.length}, ${fileCount} ficheros, ${Math.round(zip.length / 1024)} KB)`,
     userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/release-attachments`, ip: clientIp(req.headers),
     durationMs: performance.now() - start, details: { tasks: items.length, part: mode.part, parts: packages.length, files: fileCount, bytes: zip.length },
   });
@@ -104,7 +116,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
     headers: {
       "Content-Type": "application/zip",
       "Content-Length": String(zip.length),
-      "Content-Disposition": `attachment; filename="${releaseZipName({ day: isoDate(new Date(), appTimeZone()) }, mode.part, packages.length, await getLocale())}"`,
+      "Content-Disposition": `attachment; filename="${(planZip ? aiPlanZipName : releaseZipName)({ day: isoDate(new Date(), appTimeZone()) }, mode.part, packages.length, await getLocale())}"`,
       "Cache-Control": "private, no-store",
       "X-Zip-Parts": String(packages.length),
       "X-Content-Type-Options": "nosniff",

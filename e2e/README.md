@@ -44,6 +44,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Aplicar plantilla: opción elegida en oscuro, tareas fijas, generales ocultos y límite (ronda 51) | `e2e/r51-plantilla-e2e.mjs` | 26 | ~40 s |
 | Plantilla «Curso o máster» y «Publicar programa (PDF)» | `e2e/r50-curso-e2e.mjs` | 57 | ~40 s |
 | Plan de trabajo para IA y botones de las columnas especiales (ronda 51) | `e2e/r51-plan-e2e.mjs` | 147 | ~1 min |
+| Plan de trabajo: ZIP de adjuntos, ritmo por columna, botones con la columna vacía y salir por los enlaces del pie (ronda 52) | `e2e/r52-plan-e2e.mjs` | 79 | ~1 min |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/r50-seleccion-e2e.mjs` | 76 | ~1 min |
 | «Programa del curso»: versiones del PDF y tope de 100 sesiones (ronda 51) | `e2e/r51-programa-e2e.mjs` | 38 | ~1 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
@@ -389,6 +390,22 @@ servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r51-plan-e2e.mjs   # PART=buttons,plan,move,tpl,rich,fixed,role,settings,curso,en
+```
+
+## Plan de trabajo: adjuntos, ritmo por columna, columnas vacías y enlaces del pie (ronda 52)
+
+El paso 2 del plan ofrece «Descargar adjuntos (n)»: un ZIP con los adjuntos de las tareas del plan, en una carpeta por tarea
+(`adjuntos/03-titulo-de-la-tarea/plano.webp`), por la misma ruta, con los mismos topes y permisos que el de la release; el
+texto cita cada adjunto por su ruta en el ZIP (también la imagen pegada en la descripción) y por su enlace a Pizarro, y a
+Documentación solo va el .md. Las tareas fijas «cada dos» o «cada tres» cuentan los planes guardados en su columna (no los
+del proyecto), mientras el `_vN` del documento sigue siendo del proyecto. «Publicar programa», «Exportar a calendario»,
+«Resumen para el cliente», «Ver lista», «Resumen de presupuesto» y «PDF de la semana» se desactivan sin tarjetas (en el botón
+y en el menú de la columna; el .ics, sin fechas límite, y la lista, sin subtareas, también). Con el texto del paso 2 cambiado,
+un enlace del pie («tus plantillas») pide confirmar como cerrar. Necesita que el servidor y el script compartan `UPLOAD_DIR`
+(por defecto `../uploads`, donde escribe los ficheros de los adjuntos). Borra su proyecto al terminar. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r52-plan-e2e.mjs   # PART=zip,ritmo,vacias,salir
 ```
 
 ## Comentarios a la vez, red lenta, dos pestañas y release renombrada (caza de bugs 48c)

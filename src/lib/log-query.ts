@@ -41,6 +41,7 @@ export const READ_ACTIONS = [
   "templates.listTemplates",
   "report.pdf",
   "release.zipDownload",
+  "aiPlan.zipDownload",
   "storage.previewCleanup",
   "storage.largestAttachments",
   "admin.techInfo",

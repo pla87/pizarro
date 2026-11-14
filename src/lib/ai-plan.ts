@@ -4,7 +4,7 @@
 
 import { decodeEntities } from "./markdown-entities";
 import { mentionsToPlain } from "./mentions";
-import { releaseTemplateText } from "./release";
+import { plainAttachmentFileNames, releaseTemplateText } from "./release";
 import { esT, type T } from "@/i18n/shared";
 
 export interface AiPlanTask {
@@ -27,8 +27,11 @@ export interface AiPlanTask {
   linkUrl?: string | null;
   /** Documentos de Google vinculados. */
   links?: { title: string; url: string }[];
-  /** Adjuntos con su enlace de descarga en la app (absoluto). */
-  attachments?: { name: string; url: string }[];
+  /**
+   * Adjuntos con su enlace de descarga en la app (absoluto) y, si el plan va con su ZIP, su ruta dentro de él
+   * (`adjuntos/03-titulo/plano.webp`, ver planAttachmentPaths).
+   */
+  attachments?: { id?: string; name: string; url: string; path?: string }[];
   /** Tarea fija («Siempre en el plan»): entra en todos los planes. */
   evergreen?: boolean;
   /** Tarea que bloquea a esta (si está en el plan, `index` es su número en él, desde 1). */
@@ -48,6 +51,38 @@ export interface AiPlanInput {
   origin?: string | null;
 }
 
+/** Carpeta raíz del ZIP de adjuntos del plan: dentro, una carpeta por tarea («adjuntos/03-titulo-de-la-tarea»). */
+export const AI_PLAN_ZIP_ROOT = "adjuntos";
+/** Forma de la carpeta de una tarea en el ZIP (el servidor solo admite esta). */
+export const AI_PLAN_ZIP_FOLDER = /^adjuntos\/\d{2,4}-[a-z0-9-]{0,40}$/;
+
+/** Parte de un título apta para el nombre de una carpeta: minúsculas, sin tildes, guiones entre palabras. */
+function folderSlug(title: string): string {
+  return mentionsToPlain(title).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "") || "tarea";
+}
+
+/**
+ * Dónde queda cada adjunto de las tareas del plan dentro del ZIP: `adjuntos/03-titulo-de-la-tarea/plano.webp` (03 = el
+ * número de la tarea en el plan, el de «### 3.»; las imágenes van convertidas a WebP, como en el ZIP de la release; si dos
+ * nombres coinciden en la misma tarea, el segundo lleva «-2»). Devuelve la carpeta y las rutas por tarea (solo las que
+ * tienen adjuntos) y la ruta de cada adjunto por su id (las imágenes pegadas en una descripción apuntan a él). El
+ * servidor recalcula los nombres con las mismas funciones (src/app/api/projects/[projectId]/release-attachments/route.ts).
+ */
+export function planAttachmentPaths(tasks: { id: string; title: string; attachments: { id: string; originalName: string; isImage?: boolean }[] }[]) {
+  const width = Math.max(2, String(tasks.length).length);
+  const byTask = new Map<string, { folder: string; files: { id: string; path: string }[] }>();
+  const byAttachment = new Map<string, string>();
+  tasks.forEach((task, i) => {
+    if (!task.attachments.length) return;
+    const folder = `${AI_PLAN_ZIP_ROOT}/${String(i + 1).padStart(width, "0")}-${folderSlug(task.title)}`;
+    const names = plainAttachmentFileNames(task.attachments);
+    const files = task.attachments.map((a, k) => ({ id: a.id, path: `${folder}/${names[k]!}` }));
+    for (const f of files) byAttachment.set(f.id, f.path);
+    byTask.set(task.id, { folder, files });
+  });
+  return { byTask, byAttachment };
+}
+
 /** Plantillas de serie del plan (cuando ni la persona ni el proyecto tienen ninguna): pensadas para Claude Code. */
 export const AI_PLAN_DEFAULTS: Record<"es" | "en", { headerName: string; header: string; footerName: string; footer: string }> = {
   es: {
@@ -64,6 +99,7 @@ export const AI_PLAN_DEFAULTS: Record<"es" | "en", { headerName: string; header:
       "- Añade o actualiza las pruebas de lo que cambies y ejecútalas antes de dar una tarea por terminada.",
       "- No hagas nada irreversible (borrar datos, migraciones destructivas, desplegar o publicar) sin confirmación.",
       "- Los enlaces a Pizarro (tareas y adjuntos) solo se abren con la sesión iniciada: si necesitas alguno y no puedes abrirlo, pídelo.",
+      "- Los adjuntos de las tareas (planos, capturas, documentos) van en el ZIP «adjuntos/…» que acompaña a este plan: descomprímelo junto a este fichero. Cada tarea cita la ruta de los suyos (p. ej. `adjuntos/03-titulo-de-la-tarea/plano.webp`) y las imágenes de las descripciones apuntan a esa misma ruta. Las imágenes van convertidas a WebP.",
     ].join("\n"),
     footerName: "Entrega (de serie)",
     footer: [
@@ -93,6 +129,7 @@ export const AI_PLAN_DEFAULTS: Record<"es" | "en", { headerName: string; header:
       "- Add or update tests for what you change and run them before you consider a task done.",
       "- Do nothing irreversible (deleting data, destructive migrations, deploying or publishing) without confirmation.",
       "- Links to Pizarro (tasks and attachments) only open with a signed-in session: if you need one and cannot open it, ask for it.",
+      "- The tasks' attachments (drawings, screenshots, documents) come in the \"adjuntos/…\" ZIP that goes with this plan: unzip it next to this file. Each task cites the path of its own (e.g. `adjuntos/03-task-title/drawing.webp`) and the images in the descriptions point to that same path. Images are converted to WebP.",
     ].join("\n"),
     footerName: "Delivery (built-in)",
     footer: [
@@ -143,8 +180,10 @@ const NOT_PARAGRAPH = /^(?:\s*$| {4}|\t| {0,3}(?:[-*+](?:\s|$)|\d{1,9}[.)](?:\s|
  * nada; uno sin cerrar se cierra al final (si no, se tragaría el resto del plan: las demás tareas y el pie). Sin líneas
  * en blanco repetidas ni al principio o al final; los saltos de línea forzados (dos espacios al final) se conservan.
  */
-export function planDescription(description: string | null | undefined, origin?: string | null): string {
+export function planDescription(description: string | null | undefined, origin?: string | null, paths?: ReadonlyMap<string, string>): string {
   let text = decodeEntities(mentionsToPlain(description ?? ""));
+  // Una imagen pegada (`/api/attachments/<id>`) que va en el ZIP se cita por su ruta dentro de él; las demás, con enlace absoluto.
+  if (paths?.size) text = text.replace(/(\]\(<?)\/api\/attachments\/([\w-]+)(?:\?[^)\s>]*)?/g, (whole, open: string, id: string) => (paths.has(id) ? `${open}${paths.get(id)}` : whole));
   if (origin) text = text.replace(/(\]\(<?)(\/api\/attachments\/)/g, `$1${origin.replace(/\/+$/, "")}$2`);
   const out: string[] = [];
   /** Apertura del bloque de código en curso («```», «````», «~~~»…). */
@@ -192,7 +231,7 @@ export function planDescription(description: string | null | undefined, origin?:
   return out.join("\n");
 }
 
-function formatTask(task: AiPlanTask, index: number, t: T, origin?: string | null): string {
+function formatTask(task: AiPlanTask, index: number, t: T, origin?: string | null, paths?: ReadonlyMap<string, string>): string {
   const facts: string[] = [];
   const fact = (label: string, value: string) => facts.push(`- **${label}:** ${value}`);
   if (task.kind) fact(t("Tipo"), oneLine(task.kind));
@@ -207,11 +246,16 @@ function formatTask(task: AiPlanTask, index: number, t: T, origin?: string | nul
   if (task.url) fact(t("Tarea en Pizarro"), `[${linkText(t("abrir"))}](${linkTarget(task.url)})`);
   if (task.linkUrl) fact(t("Enlace"), `[${linkText(task.linkUrl)}](${linkTarget(task.linkUrl)})`);
   if (task.links?.length) fact(t("Documentos"), task.links.map((l) => `[${linkText(oneLine(l.title))}](${linkTarget(l.url)})`).join(", "));
-  if (task.attachments?.length) fact(t("Adjuntos"), task.attachments.map((a) => `[${linkText(a.name)}](${linkTarget(a.url)})`).join(", "));
+  if (task.attachments?.length) {
+    if (task.attachments.some((a) => a.path)) {
+      // Con ZIP: la ruta dentro de él y, detrás, el enlace a Pizarro (el original, con su nombre y formato).
+      facts.push(`- **${t("Adjuntos")}:**`, ...task.attachments.map((a) => `  - ${a.path ? `\`${a.path}\` ` : ""}([${linkText(t("{name} en Pizarro", { name: a.name }))}](${linkTarget(a.url)}))`));
+    } else fact(t("Adjuntos"), task.attachments.map((a) => `[${linkText(a.name)}](${linkTarget(a.url)})`).join(", "));
+  }
   if (task.evergreen) facts.push(`- _${t("Tarea fija: entra en todos los planes.")}_`);
   const parts = [`### ${index}. ${oneLine(task.title)}`];
   if (facts.length) parts.push(facts.join("\n"));
-  const description = planDescription(task.description, origin);
+  const description = planDescription(task.description, origin, paths);
   if (description) parts.push(`**${t("Descripción")}:**`, description);
   if (task.subtasks?.length) {
     parts.push(`**${t("Checklist (criterios de aceptación)")}:**`, task.subtasks.map((s) => `- [${s.done ? "x" : " "}] ${oneLine(s.title)}`).join("\n"));
@@ -232,10 +276,13 @@ export function buildAiPlanMarkdown(input: AiPlanInput, t: T = esT): string {
   if (input.column) context.push(`- **${t("Columna")}:** ${oneLine(input.column)}`);
   context.push(`- **${t("Fecha")}:** ${input.date}`);
   context.push(`- **${t("Tareas")}:** ${input.tasks.length}`);
+  const zipped = input.tasks.flatMap((x) => x.attachments ?? []).filter((a) => a.path);
+  if (zipped.length) context.push(`- **${t("Adjuntos")}:** ${t("{n} archivo(s) en el ZIP «adjuntos/…» que va con este plan (descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos.", { n: zipped.length })}`);
   const description = planDescription(input.project.description, input.origin);
   if (description) context.push("", description);
+  const pathById = new Map(zipped.filter((a) => a.id).map((a) => [a.id!, a.path!]));
   const tasks = input.tasks.length
-    ? input.tasks.map((task, i) => formatTask(task, i + 1, t, input.origin))
+    ? input.tasks.map((task, i) => formatTask(task, i + 1, t, input.origin, pathById))
     : [`_${t("Sin tareas seleccionadas.")}_`];
   return [
     `# ${t("Plan de trabajo")} – ${projectName}`,
