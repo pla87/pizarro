@@ -16,6 +16,7 @@ import { isDomainMode } from "../google-share";
 import { mentionToken } from "../mentions";
 import { clampTitle } from "../title-clamp";
 import { POSITION_STEP } from "../positions";
+import { PROGRAM_MAX_SESSIONS, programColumnsOverLimit } from "../program-limit";
 import { checkQuota, type QuotaExceeded } from "../quota";
 import { getQuotaLimits } from "../quota-settings";
 import { quotaError as quotaErrorFor } from "../quota-message";
@@ -139,6 +140,11 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
   const t = opts.t ?? (await getT());
   const warnings: string[] = [];
   const zipTimeZone = manifest.timeZone;
+  // Una columna «Programa del curso» admite como mucho PROGRAM_MAX_SESSIONS sesiones (como al crear o mover tareas).
+  const overLimit = programColumnsOverLimit(data.columns, data.tasks)[0];
+  if (overLimit) {
+    throw new AppError(t("El archivo tiene {n} tareas en la columna «{name}» y una columna «Programa del curso» admite como mucho {max} sesiones. Archiva alguna o quítale ese rol antes de exportarlo.", { n: overLimit.sessions, name: overLimit.column.name, max: PROGRAM_MAX_SESSIONS }));
+  }
 
   // --- Personas: por email contra usuarios activos. En un proyecto privado solo vale quien importa.
   const wantedEmails = [...new Set(data.users.map((u) => u.email.trim().toLowerCase()))];
@@ -472,6 +478,8 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
             googleShareMode: shareMode,
             taskFields: fields,
             storageQuotaMb,
+            // Los programas importados con la Documentación siguen su numeración (el siguiente no repite un «_vN»).
+            programVersion: data.project.programVersion ?? 0,
           },
         });
         // Quien importa: miembro si es privado, o proyecto de trabajo suyo si es de equipo (como al crear uno).

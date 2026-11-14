@@ -8,6 +8,7 @@ import { POSITION_STEP } from "./positions";
 import { lastPositionIn, lockColumns } from "./task-positions";
 import { addUndo } from "./undo";
 import { hasTaskCapacity } from "./caps";
+import { columnRoomProblem } from "./column-capacity";
 import { logEvent } from "./log";
 import type { BoardTask } from "./types";
 
@@ -100,6 +101,8 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
       // Al final de la columna, con la columna bloqueada (sin compartir posición con otra tarea).
       const next = await db.$transaction(async (tx) => {
         await lockColumns(tx, [columnId]);
+        // Columna «Programa del curso» en el tope de sesiones: tampoco nace (igual que con el tope del proyecto).
+        if (await columnRoomProblem(tx, columnId, 1)) return null;
         const last = await lastPositionIn(tx, columnId);
         return tx.task.create({
           data: {
@@ -132,6 +135,14 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
           select: { id: true },
         });
       });
+      if (!next) {
+        logEvent({
+          level: "warn", category: "system", action: "recurrence.skippedColumnLimit",
+          message: `No se creó la siguiente aparición de «${src.title}»: su columna tiene el máximo de sesiones`,
+          details: { taskId: src.id, projectId: src.projectId, columnId },
+        });
+        continue;
+      }
       created.push(next.id);
       addUndo({ t: "task.remove", id: next.id });
     } catch (err) {

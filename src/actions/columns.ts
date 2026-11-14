@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { describeAction, noteProject } from "@/lib/action-context";
 import { columnsLockName } from "@/lib/advisory-locks";
+import { assertFitsProgramRole } from "@/lib/column-capacity";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertProjectAccess, visibleProjectsWhere } from "@/lib/access";
@@ -89,6 +90,9 @@ export async function setColumnRole(columnId: string, role: string) {
     const project = value === "BUDGET" ? await db.project.findUniqueOrThrow({ where: { id: column.projectId }, select: { taskFields: true } }) : null;
     const enablesCost = project !== null && !project.taskFields.includes("cost");
     await db.$transaction(async (tx) => {
+      // «Programa del curso»: como mucho PROGRAM_MAX_SESSIONS sesiones; con más tareas no se le da el rol (con la
+      // columna bloqueada, para que nadie meta tareas a la vez: column-capacity.ts).
+      if (value === "PROGRAM" && column.role !== "PROGRAM") await assertFitsProgramRole(tx, column);
       if (enablesCost) await tx.project.update({ where: { id: column.projectId }, data: { taskFields: normalizeTaskFields([...project!.taskFields, "cost"]) } });
       // Solo NEXT_RELEASE e IN_PRODUCTION son únicos; WAITING, WEEKLY_PLAN y BUDGET se pueden repetir.
       if (isUniqueColumnRole(value)) {

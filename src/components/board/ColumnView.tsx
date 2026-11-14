@@ -9,6 +9,7 @@ import { COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, COLUMN_ROLES, DEFAULT_WAITING_DAYS
 import type { BoardColumn } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { parseWipInput, WIP_MAX, WIP_MIN, wipExceeded } from "@/lib/wip";
+import { columnAtSessionLimit, PROGRAM_MAX_SESSIONS } from "@/lib/program-limit";
 import { budgetSummary, formatEuro } from "@/lib/task-fields";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
@@ -61,6 +62,8 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
   const [programOpen, setProgramOpen] = useState(false);
   // Límite orientativo: solo avisa al pasarlo (con las tarjetas justas no), nunca impide mover ni crear.
   const wipOver = wipExceeded(cardCount, column.wipLimit);
+  // «Programa del curso»: tope de PROGRAM_MAX_SESSIONS sesiones (el servidor lo impone; aquí, el contador y el «+»).
+  const sessionsFull = columnAtSessionLimit(column.role, cardCount);
   // Archivos soltados en el hueco bajo las tarjetas: nueva tarea en esta columna.
   const fileZone = useFileZone((files) => openNewTask(column.id, false, files));
   // Esquinas inferiores rectas mientras quedan tarjetas por ver abajo (la de la release acaba siempre en su panel fijo).
@@ -100,7 +103,18 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
           </button>
         )}
         <h2 className="min-w-0 truncate text-sm font-semibold" title={column.name}>{column.name}</h2>
-        {column.wipLimit == null ? (
+        {column.role === "PROGRAM" ? (
+          <span
+            data-session-badge
+            className={cn(
+              "shrink-0 rounded-full px-1.5 text-xs font-medium",
+              sessionsFull ? "bg-amber-100 font-semibold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300" : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+            )}
+            title={t("Sesiones: {n} de {max} como mucho", { n: cardCount, max: PROGRAM_MAX_SESSIONS })}
+          >
+            {cardCount}/{PROGRAM_MAX_SESSIONS}
+          </span>
+        ) : column.wipLimit == null ? (
           <span className="rounded-full bg-slate-200 px-1.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
             {taskIds.length}
           </span>
@@ -121,7 +135,13 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
         )}
         {column.role === "BUDGET" && <BudgetTotal columnId={column.id} />}
         <div className="ml-auto flex items-center">
-          <button className="btn-icon h-7 w-7" onClick={() => openNewTask(column.id)} aria-label={t("Añadir tarea en {name}", { name: column.name })}>
+          <button
+            className="btn-icon h-7 w-7"
+            onClick={() => openNewTask(column.id)}
+            aria-label={t("Añadir tarea en {name}", { name: column.name })}
+            disabled={sessionsFull}
+            title={sessionsFull ? t("La columna «{name}» admite como mucho {max} sesiones.", { name: column.name, max: PROGRAM_MAX_SESSIONS }) : undefined}
+          >
             <Plus size={16} />
           </button>
           <ColumnMenu column={column} index={index} total={total} empty={cardCount === 0} />

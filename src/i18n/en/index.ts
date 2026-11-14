@@ -32,6 +32,7 @@ import { mensajeria } from "./mensajeria";
 import { pegado } from "./pegado";
 import { plantillas } from "./plantillas";
 import { privados } from "./privados";
+import { programa } from "./programa";
 import { proyectos } from "./proyectos";
 import { releases } from "./releases";
 import { repeticion } from "./repeticion";
@@ -50,5 +51,5 @@ export const EN: Record<string, string> = {
   ...common, ...board, ...task, ...detalle, ...comentarios, ...lista, ...pegado, ...wip, ...calendar, ...releases, ...conexion,
   ...accesibilidad, ...settings, ...admin, ...server, ...cuentas, ...acceso, ...colaboracion, ...proyectos, ...plantillas,
   ...setup, ...documentacion, ...campos, ...almacenamiento, ...importar, ...ics, ...mensajeria, ...soporte, ...licencia,
-  ...legal, ...landing, ...web, ...instalar, ...baja, ...datos, ...copia, ...repeticion, ...carga, ...textos, ...aplicarPlantilla, ...privados, ...formatos, ...curso, ...seleccion,
+  ...legal, ...landing, ...web, ...instalar, ...baja, ...datos, ...copia, ...repeticion, ...carga, ...textos, ...aplicarPlantilla, ...privados, ...formatos, ...curso, ...seleccion, ...programa,
 };

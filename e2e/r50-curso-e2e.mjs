@@ -1,6 +1,6 @@
 // Plantilla «Curso o máster» y columna «Programa» (rol PROGRAM): crear un proyecto con la plantilla desde «Nuevo
 // proyecto», crear sesiones con el tipo «Sesión» (título y descripción automáticos), «Publicar programa (PDF)» con el
-// responsable, descargarlo y comprobar su contenido con pdftotext, la copia «Programa – fecha.pdf» en Documentación,
+// responsable, descargarlo y comprobar su contenido con pdftotext, la copia «Programa – fecha_v1.pdf» en Documentación,
 // el PDF en inglés, el aviso cuando no cabe en Documentación y el rol con su icono y explicación en el menú de la
 // columna. Misma base y servidor que board-e2e.mjs (necesita `pdftotext`, de poppler-utils):
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r50-curso-e2e.mjs      # PART=tpl,pdf,en,full,role
@@ -133,8 +133,9 @@ try {
 
     await openPublish();
     const today = await appToday(page);
-    const docName = `Programa – ${today}.pdf`;
-    L.check("PDF: el diálogo cuenta las sesiones y ofrece guardar en Documentación con su nombre", (await dlg().innerText()).includes("las 3 sesiones de «Programa»") && (await dlg().getByLabel(`Guardar también en Documentación como «${docName}»`).isChecked()));
+    // Cada publicación guardada es una versión nueva: la primera, _v1 (antes de publicar el diálogo dice «_vN»).
+    const docName = `Programa – ${today}_v1.pdf`;
+    L.check("PDF: el diálogo cuenta las sesiones y ofrece guardar en Documentación como versión nueva", (await dlg().innerText()).includes("las 3 sesiones de «Programa»") && (await dlg().getByLabel(`Guardar también en Documentación como una versión nueva («Programa – ${today}_vN.pdf»)`).isChecked()));
     await dlg().getByLabel("Incluir el responsable de cada sesión (profesor)").check();
     await page.screenshot({ path: `${SHOTS}/r50-programa-dialogo.png` });
     const { text, filename, bytes } = await publishAndDownload("programa.pdf");
@@ -146,10 +147,10 @@ try {
     L.check("PDF: la sesión archivada no sale", !text.includes("archivada"));
     L.check("PDF: el Markdown no se ve en bruto", !/\*\*|##/.test(text));
     const saved = await dlg().getByRole("status").innerText();
-    L.check("PDF: el diálogo confirma la copia en Documentación", saved.includes(`Guardado en Documentación como «${docName}»`), saved);
+    L.check("PDF: el diálogo confirma la copia en Documentación y su versión", saved.includes(`Guardado en Documentación como «${docName}» (versión 1 del programa)`), saved);
     await page.screenshot({ path: `${SHOTS}/r50-programa-listo.png` });
     const docs = await L.q(`SELECT id, name, kind, size, "mimeType" FROM "ProjectDocument" WHERE "projectId"=$1 AND "deletedAt" IS NULL`, [projectId]);
-    L.eq("PDF: un documento PDF «Programa – fecha.pdf» del mismo tamaño", docs.map((d) => [d.name, d.kind, d.mimeType, d.size]), [[docName, "PDF", "application/pdf", bytes]]);
+    L.eq("PDF: un documento PDF «Programa – fecha_v1.pdf» del mismo tamaño", docs.map((d) => [d.name, d.kind, d.mimeType, d.size]), [[docName, "PDF", "application/pdf", bytes]]);
     await dlg().getByRole("link", { name: "Abrir Documentación" }).click();
     await page.waitForURL(new RegExp(`/p/${projectId}/docs\\?doc=${docs[0]?.id}`), { timeout: 10000 });
     await L.waitFor(async () => (await page.locator("body").innerText()).includes(docName), { timeout: 10000 });

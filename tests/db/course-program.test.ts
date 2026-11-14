@@ -121,7 +121,7 @@ describe("Publicar programa (PDF)", () => {
     assert.equal(await db.projectDocument.count({ where: { projectId } }), 0);
   });
 
-  test("POST con save=1 lo devuelve para descargar y guarda «Programa – fecha.pdf» en la Documentación", async () => {
+  test("POST con save=1 lo devuelve para descargar y guarda «Programa – fecha_v1.pdf» en la Documentación", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     await loginAs(admin);
     resetRateLimit(`report:${admin.id}`);
@@ -129,8 +129,9 @@ describe("Publicar programa (PDF)", () => {
     const res = await programPost(postReq(projectId, programId), params(projectId, programId));
     assert.equal(res.status, 200);
     assert.match(res.headers.get("Content-Disposition") ?? "", /^attachment;/);
-    const name = `Programa – ${todayIso(appTimeZone())}.pdf`;
+    const name = `Programa – ${todayIso(appTimeZone())}_v1.pdf`;
     assert.equal(decodeURIComponent(res.headers.get("X-Pizarro-Document-Name") ?? ""), name);
+    assert.equal(res.headers.get("X-Pizarro-Document-Version"), "1");
     assert.equal(res.headers.get("X-Pizarro-Document-Error"), null);
     const body = new Uint8Array(await res.arrayBuffer());
     const doc = await db.projectDocument.findUniqueOrThrow({ where: { id: res.headers.get("X-Pizarro-Document-Id")! } });
@@ -141,6 +142,72 @@ describe("Publicar programa (PDF)", () => {
     assert.equal(plain.status, 200);
     assert.equal(plain.headers.get("X-Pizarro-Document-Id"), null);
     assert.equal(await db.projectDocument.count({ where: { projectId } }), 1);
+    assert.equal((await db.project.findUniqueOrThrow({ where: { id: projectId } })).programVersion, 1);
+  });
+
+  test("versiones: cada publicación guardada es un documento nuevo _vN; sigue subiendo aunque se borre uno, no se repite a la vez y no se gasta si no se guarda", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    resetRateLimit(`report:${admin.id}`);
+    const { projectId, programId } = await courseProject(admin);
+    const today = todayIso(appTimeZone());
+    const publish = async () => {
+      resetRateLimit(`report:${admin.id}`);
+      const res = await programPost(postReq(projectId, programId), params(projectId, programId));
+      assert.equal(res.status, 200);
+      await res.arrayBuffer();
+      return { id: res.headers.get("X-Pizarro-Document-Id"), version: res.headers.get("X-Pizarro-Document-Version"), name: decodeURIComponent(res.headers.get("X-Pizarro-Document-Name") ?? "") };
+    };
+    const v1 = await publish();
+    const v2 = await publish();
+    assert.deepEqual([v1.version, v1.name, v2.version, v2.name], ["1", `Programa – ${today}_v1.pdf`, "2", `Programa – ${today}_v2.pdf`]);
+    // No sustituye al anterior: los dos siguen en la Documentación.
+    assert.deepEqual((await db.projectDocument.findMany({ where: { projectId }, orderBy: { name: "asc" } })).map((d) => d.name), [v1.name, v2.name]);
+    // Borrado para siempre el último: la siguiente es la 3, no otra vez la 2.
+    await db.projectDocument.delete({ where: { id: v2.id! } });
+    assert.equal((await publish()).version, "3");
+    // Dos a la vez: números distintos y seguidos.
+    const both = await Promise.all([publish(), publish()]);
+    assert.deepEqual(both.map((b) => Number(b.version)).sort(), [4, 5]);
+    assert.equal(new Set(both.map((b) => b.name)).size, 2);
+    // Si no cabe en la Documentación, se descarga pero no gasta número.
+    const prev = process.env.MAX_UPLOAD_MB;
+    process.env.MAX_UPLOAD_MB = "0.001";
+    try {
+      const failed = await publish();
+      assert.deepEqual([failed.id, failed.version], [null, null]);
+    } finally {
+      if (prev === undefined) delete process.env.MAX_UPLOAD_MB;
+      else process.env.MAX_UPLOAD_MB = prev;
+    }
+    assert.equal((await publish()).version, "6");
+    // La versión es del proyecto: otra columna «Programa» sigue la misma cuenta (sin dos documentos con el mismo nombre).
+    const second = await db.column.findFirstOrThrow({ where: { projectId, name: "Ideas" } });
+    await db.column.update({ where: { id: second.id }, data: { role: "PROGRAM" } });
+    resetRateLimit(`report:${admin.id}`);
+    const other = await programPost(postReq(projectId, second.id), params(projectId, second.id));
+    assert.equal(other.headers.get("X-Pizarro-Document-Version"), "7");
+  });
+
+  test("como mucho 100 sesiones en el PDF: con más (datos antiguos), las primeras 100 y aviso de cuántas faltan", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    resetRateLimit(`report:${admin.id}`);
+    const { projectId, programId } = await courseProject(admin);
+    const session = await db.taskKind.findFirstOrThrow({ where: { projectId, name: "Sesión" } });
+    // 3 de courseProject + 102 = 105 activas.
+    await db.task.createMany({ data: Array.from({ length: 102 }, (_, i) => ({ projectId, columnId: programId, kindId: session.id, title: `Extra ${i + 1}`, position: 10_000 + i })) });
+    const res = await programGet(getReq(projectId, programId), params(projectId, programId));
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("X-Pizarro-Program-Omitted"), "5");
+    const pdf = await text(res);
+    assert.ok(pdf.includes("Sesión 100:") && !pdf.includes("Sesión 101:"), "solo las 100 primeras");
+    assert.ok(pdf.includes("Extra 97") && !pdf.includes("Extra 98"));
+    // Con 100 justas, sin aviso.
+    await db.task.deleteMany({ where: { projectId, columnId: programId, title: { in: ["Extra 98", "Extra 99", "Extra 100", "Extra 101", "Extra 102"] } } });
+    const exact = await programGet(getReq(projectId, programId), params(projectId, programId));
+    assert.equal(exact.headers.get("X-Pizarro-Program-Omitted"), null);
+    await exact.arrayBuffer();
   });
 
   test("si no cabe en la cuota o pasa del tamaño máximo, se descarga igual y dice por qué no se guardó", async () => {

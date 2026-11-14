@@ -53,9 +53,13 @@ export function programDateLabel(start: string | null, due: string | null, local
   return null;
 }
 
-/** Nombre del PDF guardado en la Documentación del proyecto: «Programa – 2026-11-13.pdf». */
-export function programDocumentName(t: T, today: string): string {
-  return `${t("Programa")} – ${today}.pdf`;
+/**
+ * Nombre del PDF guardado en la Documentación del proyecto: «Programa – 2026-11-13_v3.pdf», con la versión del programa
+ * (Project.programVersion, que se reserva al guardar). Cada publicación guardada es un documento nuevo: no sustituye a
+ * las anteriores, y la versión distingue dos del mismo día.
+ */
+export function programDocumentName(t: T, today: string, version: number): string {
+  return `${t("Programa")} – ${today}_v${version}.pdf`;
 }
 
 /** Lo que pinta el PDF: cada sesión con sus bloques en lugar del Markdown. */

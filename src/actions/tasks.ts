@@ -19,6 +19,7 @@ import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions"
 import { lastPositionIn, lockColumns, lockTaskRows, placeBlockInColumn, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertTaskCapacity, assertTaskCreateRate } from "@/lib/caps";
+import { assertColumnRoom } from "@/lib/column-capacity";
 import { getMaxCommentsPerTask } from "@/lib/app-settings";
 import { requireUser } from "@/lib/session";
 import * as v from "@/lib/validation";
@@ -167,6 +168,8 @@ export async function createTask(input: z.input<typeof createSchema>) {
       await assertTaskCapacity(tx, data.projectId);
       // Al final de la columna, con la columna bloqueada: dos altas a la vez no comparten posición.
       await lockColumns(tx, [data.columnId]);
+      // Columna «Programa del curso»: como mucho PROGRAM_MAX_SESSIONS sesiones (column-capacity.ts).
+      await assertColumnRoom(tx, data.columnId, 1);
       const position = positionBetween(await lastPositionIn(tx, data.columnId), null);
       return tx.task.create({
         data: {
@@ -278,6 +281,7 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
       // Todo o nada: si el lote no cabe, no se crea ninguna.
       await assertTaskCapacity(tx, data.projectId, data.tasks.length);
       await lockColumns(tx, [data.columnId]);
+      await assertColumnRoom(tx, data.columnId, data.tasks.length);
       let position = await lastPositionIn(tx, data.columnId);
       const created = await tx.task.createManyAndReturn({
         data: data.tasks.map((t) => {
@@ -364,6 +368,7 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
     const copy = await db.$transaction(async (tx) => {
       await assertTaskCapacity(tx, projectId);
       await lockColumns(tx, [columnId]);
+      await assertColumnRoom(tx, columnId, 1);
       // Sin destino, entre la original y la siguiente de su columna; con destino, donde se soltó (si las
       // posiciones se agotan, se renumera la columna). La original cuenta como una tarea más de la columna.
       const { position } = dest
@@ -683,6 +688,8 @@ export async function moveTask(taskId: string, columnId: string, prevId: string 
     // Sin vecinas (selector «Columna» del detalle, o columna vacía) o con una que ya no está: al final, como la pinta el tablero.
     const { position, undoPosition } = await db.$transaction(async (tx) => {
       await lockColumns(tx, [columnId]);
+      // Solo cuenta si llega de otra columna: reordenar dentro de la misma no suma.
+      await assertColumnRoom(tx, columnId, [taskId]);
       const placed = await placeInColumn(tx, columnId, prevId === taskId ? null : prevId, nextId === taskId ? null : nextId, taskId);
       // Deshacer: la posición ya leída, salvo si se ha renumerado su propia columna (la habrá movido).
       const undoPosition = placed.rebalanced && fromColumnId === columnId
@@ -736,6 +743,8 @@ export async function moveTasks(taskIds: string[], columnId: string, at?: { prev
       await lockColumns(tx, [column.id]);
       // Columna → tareas (en orden de id), como moveTask y el despliegue de una release.
       await lockTaskRows(tx, toMove.map((t) => t.id));
+      // Todo o nada: si no caben todas las que llegan de otras columnas, no se mueve ninguna.
+      await assertColumnRoom(tx, column.id, toMove.map((t) => t.id));
       let list: { id: string; position: number }[];
       if (place) {
         const ids = toMove.map((t) => t.id);
@@ -1483,6 +1492,7 @@ export async function restoreTask(taskId: string) {
       // Al recuperarla vuelve a contar como activa: si el proyecto está en el tope, no cabe.
       await assertTaskCapacity(tx, projectId);
       await lockColumns(tx, [column.id]);
+      await assertColumnRoom(tx, column.id, [taskId]);
       const position = positionBetween(await lastPositionIn(tx, column.id, taskId), null);
       // columnEnteredAt/waitingNotifiedAt a mano: si la columna no cambia, el disparador no actúa.
       await tx.task.update({ where: { id: taskId }, data: { archivedAt: null, archivedFromColumnId: null, columnId: column.id, position, columnEnteredAt: new Date(), waitingNotifiedAt: null } });
