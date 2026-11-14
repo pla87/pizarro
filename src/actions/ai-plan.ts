@@ -4,7 +4,7 @@ import { z } from "zod";
 import { assertProjectAccess } from "@/lib/access";
 import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
-import { aiPlanFileName, highestPlanVersion } from "@/lib/ai-plan";
+import { AI_PLAN_MAX_TASKS, aiPlanFileName, highestPlanVersion } from "@/lib/ai-plan";
 import { projectPlanTemplates, userPlanTemplates } from "@/lib/ai-plan-templates";
 import { MAX_RELEASE_CONTENT } from "@/lib/constants";
 import { todayIso } from "@/lib/dates";
@@ -69,7 +69,8 @@ export async function getAiPlanSetup(input: z.input<typeof setupSchema>) {
   });
 }
 
-const detailsSchema = z.object({ projectId: v.id, taskIds: z.array(v.id).max(500) });
+// Sin mensaje propio, con más de 500 tareas el diálogo mostraba el de zod en inglés («Too big: expected array…»).
+const detailsSchema = z.object({ projectId: v.id, taskIds: z.array(v.id).max(AI_PLAN_MAX_TASKS, "Un plan de trabajo admite como mucho 500 tareas: quita alguna de la selección.") });
 
 /** Descripción, subtareas, adjuntos y documentos vinculados de las tareas del plan (no viajan con el tablero). */
 export async function getAiPlanTaskDetails(input: z.input<typeof detailsSchema>) {

@@ -126,6 +126,37 @@ describe("texto del plan de trabajo para IA", () => {
     assert.equal(fences % 2, 0, "las vallas del plan quedan emparejadas");
     assert.match(md, /sin cerrar\n```\n\n### 2\. Dos/);
   });
+
+  test("planDescription: un bloque de código sin cerrar se cierra (no se traga el resto del plan)", () => {
+    assert.equal(planDescription("```\nsin cerrar\n# hola"), "```\nsin cerrar\n# hola\n```");
+    assert.equal(planDescription("~~~~\nx\n~~~"), "~~~~\nx\n~~~\n~~~~");
+    // Con el plan entero: la tarea siguiente y el pie siguen siendo títulos.
+    const md = buildAiPlanMarkdown(base({ tasks: [{ id: "a", title: "Una", description: "```js\nconst a = 1;" }, { id: "b", title: "Otra" }] }));
+    assert.match(md, /const a = 1;\n```\n\n### 2\. Otra/);
+    assert.ok(md.trimEnd().endsWith("por qué."));
+  });
+
+  test("planDescription: ``` dentro de un bloque de ```` es código (ni lo cierra ni se rebajan sus #)", () => {
+    const d = "````md\n```js\n# dentro\n```\n````\n\n# Fuera";
+    assert.equal(planDescription(d), "````md\n```js\n# dentro\n```\n````\n\n#### Fuera");
+    // Un ``` con información que lleva ` no abre bloque (es código en línea).
+    assert.equal(planDescription("```a `b`\n# c"), "```a `b`\n#### c");
+  });
+
+  test("planDescription: títulos setext, «#» vacío y con sangría también se rebajan", () => {
+    assert.equal(planDescription("Párrafo\ndos\n---\nmás"), "##### Párrafo dos\nmás");
+    assert.equal(planDescription("Título\n==="), "#### Título");
+    assert.equal(planDescription("#\n\n  # sangrado"), "####\n\n#### sangrado");
+    // «---» tras una lista, una tabla o una línea en blanco es una raya, no un título.
+    assert.equal(planDescription("- a\n---"), "- a\n---");
+    assert.equal(planDescription("| a |\n|---|\n| 1 |\n---"), "| a |\n|---|\n| 1 |\n---");
+    assert.equal(planDescription("a\n\n---"), "a\n\n---");
+  });
+
+  test("planDescription: conserva los saltos de línea forzados (dos espacios al final, como los guarda el editor con barra)", () => {
+    assert.equal(planDescription("Calle Mayor 1  \nMadrid"), "Calle Mayor 1  \nMadrid");
+    assert.equal(planDescription("a\n   \n\nb"), "a\n\nb");
+  });
 });
 
 describe("nombres y versiones", () => {

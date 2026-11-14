@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getAiPlanSetup, getAiPlanTaskDetails, saveAiPlan } from "@/actions/ai-plan";
 import { moveTasks } from "@/actions/tasks";
 import { useLocale, useT } from "@/i18n/client";
-import { AI_PLAN_BUILTIN_ID, AI_PLAN_DEFAULTS, aiPlanDownloadName, aiPlanFileName, buildAiPlanMarkdown, type AiPlanTask } from "@/lib/ai-plan";
+import { AI_PLAN_BUILTIN_ID, AI_PLAN_DEFAULTS, AI_PLAN_MAX_TASKS, aiPlanDownloadName, aiPlanFileName, buildAiPlanMarkdown, type AiPlanTask } from "@/lib/ai-plan";
 import { isNetworkError, loadWhenOnline, reportOffline } from "@/lib/connection";
 import { compareTaskOrder } from "@/lib/positions";
 import { evergreenDue, releasesUntilDue, swapTemplateBlock } from "@/lib/release";
@@ -113,6 +113,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
   const pickers = <TemplatePickers own={own} project={project} builtin={builtin} headerId={headerId} footerId={footerId} onChange={chooseTemplate} idPrefix="plan" />;
 
   const selectedTasks = tasks.filter((x) => chosen.has(x.id));
+  const tooMany = selectedTasks.length > AI_PLAN_MAX_TASKS;
   const today = setup?.today ?? board.today;
   const version = setup?.nextVersion ?? null;
   const docName = (ext: "md" | "txt" = "md") => aiPlanFileName(t("Plan de trabajo"), today, version ?? 1, ext);
@@ -234,17 +235,22 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
       onClose={requestClose}
       size="xl"
       title={
-        <span className="flex items-center gap-2">
-          <Bot size={18} className="text-brand-600 dark:text-brand-300" /> {t("Generar plan de trabajo")}
-          <span className="text-xs font-normal text-slate-500">· {step === "select" ? t("Paso 1 de 2: tareas") : t("Paso 2 de 2: revisar y exportar")}</span>
+        // En móvil el paso se recorta con «…»; el icono y el nombre no se encogen (antes el icono desaparecía).
+        <span className="flex min-w-0 items-center gap-2">
+          <Bot size={18} className="shrink-0 text-brand-600 dark:text-brand-300" /> <span className="shrink-0">{t("Generar plan de trabajo")}</span>
+          <span className="min-w-0 truncate text-xs font-normal text-slate-500">· {step === "select" ? t("Paso 1 de 2: tareas") : t("Paso 2 de 2: revisar y exportar")}</span>
         </span>
       }
       footer={
         step === "select" ? (
           <>
-            <TemplateSourceNote projectId={board.project.id} projectTab="releases" withProject />
+            {tooMany ? (
+              <span className="mr-auto text-xs text-red-600 dark:text-red-400" role="alert">{t("Un plan de trabajo admite como mucho 500 tareas: quita alguna de la selección.")}</span>
+            ) : (
+              <TemplateSourceNote projectId={board.project.id} projectTab="releases" withProject />
+            )}
             <button className="btn-secondary" onClick={() => void requestClose()}>{t("Cancelar")}</button>
-            <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || loading}>
+            <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || tooMany || loading}>
               {loading && <Loader2 size={15} className="animate-spin" />} {t("Generar con {n} tarea(s)", { n: selectedTasks.length })}
             </button>
           </>

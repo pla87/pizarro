@@ -110,6 +110,12 @@ export const AI_PLAN_DEFAULTS: Record<"es" | "en", { headerName: string; header:
   },
 };
 
+/**
+ * Tareas que admite un plan (lo que pide el diálogo al servidor de una vez). El mensaje del límite lleva la cifra escrita:
+ * si cambia, cámbialo también allí (src/actions/ai-plan.ts y AiPlanDialog.tsx).
+ */
+export const AI_PLAN_MAX_TASKS = 500;
+
 /** Id de las plantillas de serie en el selector de cabecera y pie (no son filas de la base de datos). */
 export const AI_PLAN_BUILTIN_ID = "builtin";
 
@@ -119,33 +125,67 @@ const linkText = (text: string) => text.replace(/([[\]\\])/g, "\\$1");
 const linkTarget = (url: string) => `<${url.replace(/[<>\s]/g, (c) => encodeURIComponent(c))}>`;
 const oneLine = (text: string) => mentionsToPlain(text).replace(/\s+/g, " ").trim();
 
+/** Apertura de un bloque de código: hasta 3 espacios y 3 o más ``` o ~~~ (con ```, sin más ` en la información). */
+const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+/** Cierre: el mismo carácter, al menos tantos como la apertura y nada más que espacios. */
+const FENCE_CLOSE = /^ {0,3}(`{3,}|~{3,})\s*$/;
+/** Título ATX (hasta 3 espacios delante; «#» solo también es un título, vacío). */
+const ATX_HEADING = /^ {0,3}(#{1,6})(?=\s|$)(.*)$/;
+/** Subrayado de un título setext («Texto» y debajo «===» o «---»). */
+const SETEXT_UNDERLINE = /^ {0,3}(=+|-+)\s*$/;
+/** Línea que no puede ser texto de un título setext: en blanco, lista, cita, tabla, título, bloque de código o con sangría de código. */
+const NOT_PARAGRAPH = /^(?:\s*$| {4}|\t| {0,3}(?:[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$)|>|\||#|`{3}|~{3}|(?:[-*_] *){3,}$))/;
+
 /**
  * Descripción de una tarea tal como entra en el plan: menciones en texto plano, entidades decodificadas (descripciones
- * antiguas con `&gt;`), enlaces a adjuntos absolutos y títulos rebajados tres niveles (bajo el «### n. Tarea» del plan;
- * dentro de los bloques de código no se toca nada). Sin líneas en blanco repetidas ni al principio o al final.
+ * antiguas con `&gt;`), enlaces a adjuntos absolutos y títulos rebajados tres niveles (bajo el «### n. Tarea» del plan),
+ * también los setext («Texto» subrayado con === o ---), que pasan a «####». Dentro de los bloques de código no se toca
+ * nada; uno sin cerrar se cierra al final (si no, se tragaría el resto del plan: las demás tareas y el pie). Sin líneas
+ * en blanco repetidas ni al principio o al final; los saltos de línea forzados (dos espacios al final) se conservan.
  */
 export function planDescription(description: string | null | undefined, origin?: string | null): string {
   let text = decodeEntities(mentionsToPlain(description ?? ""));
   if (origin) text = text.replace(/(\]\(<?)(\/api\/attachments\/)/g, `$1${origin.replace(/\/+$/, "")}$2`);
   const out: string[] = [];
-  // Valla abierta (``` o ~~~, con su longitud). La cierra una del mismo carácter, igual o más larga y sin nada detrás
-  // (CommonMark); si la descripción termina sin cerrarla, se cierra al final: si no, el resto del plan (las tareas
-  // siguientes y el pie) quedaría dentro del bloque de código.
+  /** Apertura del bloque de código en curso («```», «````», «~~~»…). */
   let fence: string | null = null;
+  /** Líneas seguidas de texto normal al final de `out` (las que un subrayado setext convertiría en título). */
+  let paragraph = 0;
   for (const raw of text.split(/\r\n|\r|\n/)) {
-    const line = raw.trimEnd();
-    const marker = /^\s{0,3}(`{3,}|~{3,})(.*)$/.exec(line);
-    if (marker && !fence) fence = marker[1]!;
-    else if (marker && fence && marker[1]![0] === fence[0] && marker[1]!.length >= fence.length && !marker[2]!.trim()) fence = null;
-    else if (!fence) {
-      const heading = /^(#{1,6})(\s.*)$/.exec(line);
-      if (heading) {
-        out.push(`${"#".repeat(Math.min(6, heading[1]!.length + 3))}${heading[2]}`);
-        continue;
-      }
-      if (!line && (out.length === 0 || out.at(-1) === "")) continue;
+    const blank = raw.trim() === "";
+    if (fence) {
+      const close = FENCE_CLOSE.exec(raw)?.[1];
+      if (close && close[0] === fence[0] && close.length >= fence.length) fence = null;
+      out.push(blank ? "" : raw);
+      continue;
     }
-    out.push(line);
+    const open = FENCE_OPEN.exec(raw);
+    if (open && !(open[1]![0] === "`" && open[2]!.includes("`"))) {
+      fence = open[1]!;
+      paragraph = 0;
+      out.push(raw);
+      continue;
+    }
+    if (blank) {
+      paragraph = 0;
+      if (out.length > 0 && out.at(-1) !== "") out.push("");
+      continue;
+    }
+    const setext = paragraph > 0 ? SETEXT_UNDERLINE.exec(raw)?.[1] : undefined;
+    if (setext) {
+      const lines = out.splice(out.length - paragraph, paragraph).map((l) => l.trim());
+      out.push(`${"#".repeat(setext[0] === "=" ? 4 : 5)} ${lines.join(" ")}`);
+      paragraph = 0;
+      continue;
+    }
+    const heading = ATX_HEADING.exec(raw);
+    if (heading) {
+      out.push(`${"#".repeat(Math.min(6, heading[1]!.length + 3))}${heading[2]!.trimEnd()}`);
+      paragraph = 0;
+      continue;
+    }
+    paragraph = NOT_PARAGRAPH.test(raw) ? 0 : paragraph + 1;
+    out.push(raw);
   }
   while (out.at(-1) === "") out.pop();
   if (fence) out.push(fence);

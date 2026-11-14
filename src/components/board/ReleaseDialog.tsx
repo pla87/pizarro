@@ -269,9 +269,10 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
       onClose={requestClose}
       size="xl"
       title={
-        <span className="flex items-center gap-2">
-          <Rocket size={18} className="text-brand-600 dark:text-brand-300" /> {t("Generar release")}
-          <span className="text-xs font-normal text-slate-500">· {step === "select" ? t("Paso 1 de 2: tareas") : t("Paso 2 de 2: revisar y exportar")}</span>
+        // En móvil el paso se recorta con «…»; el icono y el nombre no se encogen (antes el icono desaparecía).
+        <span className="flex min-w-0 items-center gap-2">
+          <Rocket size={18} className="shrink-0 text-brand-600 dark:text-brand-300" /> <span className="shrink-0">{t("Generar release")}</span>
+          <span className="min-w-0 truncate text-xs font-normal text-slate-500">· {step === "select" ? t("Paso 1 de 2: tareas") : t("Paso 2 de 2: revisar y exportar")}</span>
         </span>
       }
       footer={
