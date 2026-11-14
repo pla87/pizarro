@@ -2,6 +2,44 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.54.0 — 2026-11-14 04:01
+
+Plan de trabajo para IA, versiones y tope del programa, icono de la app por instalación, esqueleto de carga del tablero y baja con contraseña de Google
+
+### Nuevas funcionalidades
+
+- Columna «Plan de trabajo para IA»: «Generar plan de trabajo» crea en dos pasos un plan en Markdown para un agente como Claude Code, con tareas fijas «Siempre en el plan», plantillas de cabecera y pie, Copiar, .md/.txt y guardado en Documentación con versión.
+- Icono de la app por instalación (Administración → Ajustes): el color de uno de los temas y el nombre de la organización, para distinguir dos Pizarro en el mismo móvil.
+- Los administradores reciben un aviso cuando un proyecto privado pasa a ser de equipo al borrarse una cuenta.
+
+### Mejoras
+
+- La plantilla «Curso o máster» une Ejercicios y exámenes, quita «Hecho» y trae la columna de plan para IA.
+- El programa del curso se guarda como «Programa – fecha_vN.pdf» sin sustituir el anterior, y una columna Programa admite como mucho 100 sesiones.
+- Todas las columnas especiales tienen el botón de acción con el mismo aspecto que «Generar Release».
+- Al cambiar de proyecto vuelve un esqueleto del tablero con cuatro columnas y su cabecera; Releases, Documentación y Ajustes tienen el suyo.
+- «Volver a entrar con Google» para borrar la cuenta exige escribir la contraseña de Google.
+- Un administrador que abre un proyecto de equipo fuera de su lista ve su menú completo y puede «Añadir a mis proyectos».
+- Aplicar plantilla: avisa de las tareas fijas que pasan a normales, «Añadir lo que falte» vuelve a mostrar los tipos generales que usa la plantilla y hay un límite de cambios.
+- El aviso de copias muestra la hora con segundos y el nombre de cada copia.
+- La pestaña «Releases» de Ajustes del proyecto pasa a llamarse «Plantillas» e incluye las del plan.
+
+### Correcciones
+
+- La opción elegida en Aplicar plantilla (y en otras tarjetas de opción) se lee en modo oscuro.
+- Mover con Alt+flechas varias veces seguidas ya no descoloca la tarjeta.
+- Una release o un plan con más de 500 tareas avisa claramente en lugar de dar un error en inglés.
+- En el móvil, el «+» flotante respeta el tope del Programa y ya no tapa el panel de tareas fijas.
+- Una tarea fija se puede arrastrar del panel de una columna al de otra.
+- Un bloque de código sin cerrar en una descripción ya no rompe el plan de trabajo.
+- Los documentos HTML de Documentación pierden también sus <link> (precargas y dns-prefetch).
+
+### Cambios técnicos / DB
+
+- Publicar el programa ya no bloquea las subidas del resto de proyectos.
+- El límite de Aplicar plantilla no se puede saltar con cambios que fallan al final.
+- QA más estable con la máquina cargada (QA_CPU_THROTTLE para probar con la CPU frenada).
+
 ## v1.53.0 — 2026-11-13 20:04
 
 Plantilla de curso con programa en PDF, aplicar plantilla a un proyecto, arrastrar la selección entera, Google Slides, HTML en Documentación y baja con Google
