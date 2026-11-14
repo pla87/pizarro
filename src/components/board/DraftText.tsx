@@ -6,12 +6,14 @@
 // persona, las del proyecto y, en el plan, las de serie.
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Eye, Pencil } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n/client";
 import { importWhenOnline } from "@/lib/connection";
 import type { BoardTask, EditorModeValue, TemplateOption } from "@/lib/types";
 import { cn } from "../ui/cn";
+import { afterModalHistory } from "../ui/useBackToClose";
 import { Markdown } from "../ui/Markdown";
 import { MentionText } from "../ui/MentionText";
 import { TypeBadge } from "../ui/TypeBadge";
@@ -167,13 +169,30 @@ export function TemplatePickers({ own, project, builtin, headerId, footerId, onC
   );
 }
 
-/** «Cabecera y pie salen de tus plantillas y de las plantillas del proyecto.», con los enlaces a cada sitio. */
-export function TemplateSourceNote({ projectId, projectTab, withProject }: { projectId: string; projectTab: string; withProject: boolean }) {
+/**
+ * «Cabecera y pie salen de tus plantillas y de las plantillas del proyecto.», con los enlaces a cada sitio. `confirmLeave`:
+ * si hay algo que perder (el texto del paso 2 cambiado), devuelve la pregunta de descartarlo; un clic normal en un enlace
+ * (que navega fuera del diálogo) solo sigue si se responde que sí. `false` = nada que perder. Un clic con Ctrl, Mayús o
+ * el botón central (nueva pestaña o ventana) no sale de la página y no pregunta.
+ */
+export function TemplateSourceNote({ projectId, projectTab, withProject, confirmLeave }: { projectId: string; projectTab: string; withProject: boolean; confirmLeave?: () => false | Promise<boolean> }) {
   const t = useT();
+  const router = useRouter();
+  const guard = (href: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!confirmLeave || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const ask = confirmLeave();
+    if (ask === false) return;
+    e.preventDefault();
+    // El diálogo de confirmación, al cerrarse, retira su entrada del historial con un «atrás» silencioso: se navega cuando
+    // ya la ha retirado (si no, el router tomaría ese «atrás» como el de la navegación y la anularía).
+    void ask.then((ok) => { if (ok) setTimeout(() => afterModalHistory(() => router.push(href)), 0); });
+  };
+  const own = "/settings?tab=plantillas";
+  const proj = `/p/${projectId}/settings?tab=${projectTab}`;
   return (
-    <span className="mr-auto text-xs text-slate-500">
-      {t("Cabecera y pie salen de")} <Link className="text-brand-600 dark:text-brand-300 hover:underline" href="/settings?tab=plantillas">{t("tus plantillas")}</Link>
-      {withProject && <> {t("y de las")} <Link className="text-brand-600 dark:text-brand-300 hover:underline" href={`/p/${projectId}/settings?tab=${projectTab}`}>{t("plantillas del proyecto")}</Link></>}.
+    <span className="mr-auto text-xs text-slate-500" data-template-source>
+      {t("Cabecera y pie salen de")} <Link className="text-brand-600 dark:text-brand-300 hover:underline" href={own} onClick={guard(own)}>{t("tus plantillas")}</Link>
+      {withProject && <> {t("y de las")} <Link className="text-brand-600 dark:text-brand-300 hover:underline" href={proj} onClick={guard(proj)}>{t("plantillas del proyecto")}</Link></>}.
     </span>
   );
 }

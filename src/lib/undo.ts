@@ -70,7 +70,7 @@ type AttachmentRow = {
   width: number | null; height: number | null; size: number; createdById: string | null; createdAt: string;
 };
 type LinkRow = { id: string; taskId: string; kind: string; title: string; url: string; externalId: string | null; createdById: string | null; shareStatus?: string | null; shareFailed?: number; createdAt: string };
-type ColumnRow = { id: string; projectId: string; name: string; position: number; role: string; isDone: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null; wipLimit?: number | null };
+type ColumnRow = { id: string; projectId: string; name: string; position: number; role: string; isDone: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null; wipLimit?: number | null; planCount?: number };
 
 /** Todo lo necesario para recrear una tarea borrada con sus hijos. */
 export interface TaskSnapshot {
@@ -533,7 +533,7 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
       }
       case "column.remove": {
         const c = once(`column:${op.id}`) && (await db.column.findFirst({ where: { id: op.id, projectId } }));
-        if (c) push({ t: "column.restore", row: { id: c.id, projectId: c.projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays, routineTargetColumnId: c.routineTargetColumnId, wipLimit: c.wipLimit } });
+        if (c) push({ t: "column.restore", row: { id: c.id, projectId: c.projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays, routineTargetColumnId: c.routineTargetColumnId, wipLimit: c.wipLimit, planCount: c.planCount } });
         break;
       }
       case "column.restore":

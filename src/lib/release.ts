@@ -144,11 +144,25 @@ export function titleWithReleaseCode(title: string, code: string, max = MAX_TITL
  * se guardan convertidas a WebP; el resto conserva su extensión), saneados y con `-2`, `-3`… si se repiten. Mismo orden que la entrada.
  */
 export function attachmentFileNames(code: string, attachments: ReleaseAttachmentInput[]): string[] {
+  return namedAttachmentFiles(code ? `${code}_` : "", attachments);
+}
+
+/**
+ * Lo mismo sin código delante (`${nombre}.webp`): los adjuntos del ZIP de un plan de trabajo para IA van en una carpeta
+ * por tarea (`adjuntos/03-titulo/…`), así que el nombre no necesita el código.
+ */
+export function plainAttachmentFileNames(attachments: ReleaseAttachmentInput[]): string[] {
+  return namedAttachmentFiles("", attachments);
+}
+
+function namedAttachmentFiles(prefix: string, attachments: ReleaseAttachmentInput[]): string[] {
   const taken = new Set<string>();
   return attachments.map((a) => {
     const isImage = a.isImage ?? true;
     const base = a.originalName.replace(/\.[^.]+$/, "");
-    const clean = `${code}_${base}`.replace(/\s+/g, "_").replace(/[^\p{L}\p{N}._-]/gu, "_");
+    const cleaned = `${prefix}${base}`.replace(/\s+/g, "_").replace(/[^\p{L}\p{N}._-]/gu, "_");
+    // «.» o «..» (o solo puntos) serían rutas especiales dentro del ZIP («adjuntos/03-x/..»): se sustituyen.
+    const clean = cleaned && !/^\.+$/.test(cleaned) ? cleaned : "adjunto";
     // Extensión original (saneada) para los no imagen; .webp para las imágenes.
     const ext = isImage ? "webp" : (/\.([^.]+)$/.exec(a.originalName)?.[1] ?? "").replace(/[^\p{L}\p{N}]/gu, "").slice(0, 12);
     const suffix = ext ? `.${ext}` : "";
@@ -307,6 +321,16 @@ function fileNamePart(text: string, max: number): string {
 export function releaseZipName(opts: { day: string; number?: number | null; project?: string | null }, part = 1, total = 1, locale: "es" | "en" = "es"): string {
   const project = fileNamePart(opts.project ?? "", 60);
   const pieces = ["release", opts.day, opts.number ? `R${opts.number}` : "", project].filter(Boolean);
+  return `${pieces.join("-")}-${locale === "en" ? "attachments" : "adjuntos"}${partSuffix(part, total, locale)}.zip`;
+}
+
+/**
+ * Nombre del ZIP de adjuntos de un plan de trabajo para IA: `plan-2026-11-23-v3-Proyecto-adjuntos.zip` (fecha, versión del
+ * documento y proyecto; con «-1de3»… si va en varios paquetes). En inglés `…-attachments.zip` y «-1of3».
+ */
+export function aiPlanZipName(opts: { day: string; version?: number | null; project?: string | null }, part = 1, total = 1, locale: "es" | "en" = "es"): string {
+  const project = fileNamePart(opts.project ?? "", 60);
+  const pieces = ["plan", opts.day, opts.version ? `v${opts.version}` : "", project].filter(Boolean);
   return `${pieces.join("-")}-${locale === "en" ? "attachments" : "adjuntos"}${partSuffix(part, total, locale)}.zip`;
 }
 

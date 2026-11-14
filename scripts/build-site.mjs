@@ -15,7 +15,7 @@
 // Markdown convertido por src/lib/site-markdown.ts (sin dependencias; el HTML que traiga el texto se escapa).
 // Guía de instalación (/instalar/, /en/install/): docs/web/instalar.md y docs/web/en/install.md, con índice, avisos y
 // botón «Copiar» en cada comando. Si falta una de las dos, falla. La referencia técnica sigue en docs/INSTALL.md.
-import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, posix } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -670,9 +670,6 @@ ${urls.join("\n")}
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 cpSync(join(root, "site/static"), out, { recursive: true });
-copyFileSync(join(root, "public/icon.svg"), join(out, "icon.svg"));
-copyFileSync(join(root, "public/favicon.ico"), join(out, "favicon.ico"));
-copyFileSync(join(root, "public/apple-touch-icon.png"), join(out, "apple-touch-icon.png"));
 const write = (p, content) => {
   mkdirSync(dirname(join(out, p)), { recursive: true });
   writeFileSync(join(out, p), content);

@@ -166,3 +166,50 @@ describe("generar y guardar el plan", () => {
     assert.equal(saved.name, `Work plan – ${todayIso(appTimeZone())}_v3.md`);
   });
 });
+
+describe("ritmo de las tareas fijas del plan: por columna", () => {
+  test("guardar un plan en una columna no adelanta a las demás; el _vN sigue siendo del proyecto", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    expectOk(await setColumnRole(f.columns.todo, "AI_PLAN"));
+    expectOk(await setColumnRole(f.columns.doing, "AI_PLAN"));
+    const setup = async (columnId: string) => expectOk(await getAiPlanSetup({ projectId: f.project.id, columnId }));
+    assert.deepEqual([(await setup(f.columns.todo)).nextColumnPlan, (await setup(f.columns.doing)).nextColumnPlan], [1, 1]);
+
+    expectOk(await saveAiPlan({ projectId: f.project.id, columnId: f.columns.todo, content: "Uno" }));
+    expectOk(await saveAiPlan({ projectId: f.project.id, columnId: f.columns.todo, content: "Dos" }));
+    // La otra columna sigue en su primer plan, pero el documento va por la versión 3 del proyecto.
+    const other = await setup(f.columns.doing);
+    assert.equal(other.nextColumnPlan, 1);
+    assert.equal(other.nextVersion, 3);
+    assert.equal((await setup(f.columns.todo)).nextColumnPlan, 3);
+    const saved = expectOk(await saveAiPlan({ projectId: f.project.id, columnId: f.columns.doing, content: "Tres" }));
+    assert.equal(saved.version, 3);
+    assert.deepEqual((await db.column.findMany({ where: { projectId: f.project.id, role: "AI_PLAN" }, orderBy: { position: "asc" }, select: { planCount: true } })).map((c) => c.planCount), [2, 1]);
+
+    // Un guardado que falla (Documentación llena) no gasta ni la versión ni el turno de la columna.
+    const fill = await db.projectDocument.count({ where: { projectId: f.project.id, deletedAt: null } });
+    const { DOCUMENTS_MAX_PER_PROJECT } = await import("../../src/lib/document-kind");
+    await db.projectDocument.createMany({
+      data: Array.from({ length: DOCUMENTS_MAX_PER_PROJECT - fill }, (_, i) => ({ projectId: f.project.id, name: `r${i}.txt`, mimeType: "text/plain", size: 1, kind: "TEXT" as const })),
+    });
+    expectFail(await saveAiPlan({ projectId: f.project.id, columnId: f.columns.doing, content: "Cuatro" }), /máximo de/);
+    assert.equal((await setup(f.columns.doing)).nextColumnPlan, 2);
+  });
+
+  test("borrar una columna de plan y deshacerlo devuelve su contador", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    expectOk(await setColumnRole(f.columns.doing, "AI_PLAN"));
+    expectOk(await saveAiPlan({ projectId: f.project.id, columnId: f.columns.doing, content: "Uno" }));
+    expectOk(await saveAiPlan({ projectId: f.project.id, columnId: f.columns.doing, content: "Dos" }));
+    const { deleteColumn } = await import("../../src/actions/columns");
+    expectOk(await deleteColumn(f.columns.doing));
+    assert.equal(await db.column.count({ where: { id: f.columns.doing } }), 0);
+    expectOk(await undoLast(f.project.id));
+    assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.doing } })).planCount, 2);
+  });
+});
+

@@ -59,7 +59,7 @@ import { normalizeLinkUrl } from "@/lib/link-url";
 import { sortByFileName } from "@/lib/attachment-sort";
 import { subtaskBatch, subtaskLines } from "@/lib/subtask-lines";
 import { fieldsError, fieldsFormOf, fieldsPatch, TaskFieldsGroup, type FieldsForm } from "./TaskFieldsGroup";
-import { draftKey, readCommentDraft, useDraftAutosave, type EditTaskDraft } from "./drafts";
+import { draftKey, readCommentDraft, readDraft, useDraftAutosave, type EditTaskDraft } from "./drafts";
 import { setUndoTask, UNDONE_EVENT } from "../undo-context";
 import { useIsMobile } from "../ui/useIsMobile";
 import { UndoButton } from "../UndoButton";
@@ -103,6 +103,13 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const onClose = () => {
     discardDraft();
     close();
+  };
+  /**
+   * Tras archivar o borrar (el diálogo ya se cerró al pulsar): el borrador se quita solo si sigue siendo el de esta tarea.
+   * Con la red lenta, entretanto se puede haber abierto otra y su borrador ocupa ya el mismo sitio.
+   */
+  const discardOwnDraft = () => {
+    if (readDraft<EditTaskDraft>(draftKey("edit", board.currentUserId, board.project.id))?.taskId === task.id) discardDraft();
   };
   // Subtarea nueva a medio escribir (la comunica la lista de subtareas): cerrar con ella pide confirmación.
   const subtaskDraftPending = useRef<(() => boolean) | null>(null);
@@ -579,12 +586,15 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     const before = board.getTask(task.id)!;
     const last = Math.max(0, ...board.getTasks().filter((t) => t.columnId === columnId).map((t) => t.position));
     board.patchTask(task.id, { columnId, position: last + 1024, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() });
+    // Turnos por tarjeta (como Alt+flechas y el arrastre): la respuesta solo se aplica si nadie ha vuelto a mover la tarjeta.
+    const turn = board.moveTurns.start([task.id]);
     const res = await tracked(moveTask(task.id, columnId, null, null));
+    const latest = board.moveTurns.isLatest(task.id, turn);
     if (!res.ok) {
-      board.upsertTask(before);
+      if (latest) board.upsertTask(before);
       return toast(res.error, "error");
     }
-    board.patchTask(task.id, { position: res.data.position });
+    if (latest) board.patchTask(task.id, { position: res.data.position });
     res.data.spawned.forEach(board.upsertTask);
   };
 
@@ -661,19 +671,34 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
 
   const remove = async () => {
     if (!(await confirm({ title: t("Borrar tarea"), message: t("¿Borrar definitivamente esta tarea y sus adjuntos?"), confirmLabel: t("Borrar"), danger: true }))) return;
-    const res = await board.track(deleteTask(task.id));
-    if (!res.ok) return toast(res.error, "error");
+    // Optimista: el diálogo se cierra y la tarjeta desaparece al momento; si el servidor falla (o no hay red) vuelve a su sitio.
+    const before = board.getTask(task.id);
     board.removeTask(task.id);
-    onClose();
+    close();
+    const res = await board.track(deleteTask(task.id));
+    if (!res.ok) {
+      if (before) board.upsertTask(before);
+      // Sin conexión ya lo ha avisado board.track.
+      if (!isOfflineMessage(res.error, t)) toast(res.error, "error");
+      return;
+    }
+    discardOwnDraft();
     toast(t("Tarea borrada"));
   };
 
   const archive = async () => {
-    const res = await board.track(archiveTask(task.id));
-    if (!res.ok) return toast(res.error, "error");
+    // Optimista (como borrar): se cierra y desaparece al momento; si falla, la tarjeta vuelve y sale el aviso.
+    const before = board.getTask(task.id);
     board.removeTask(task.id);
+    close();
+    const res = await board.track(archiveTask(task.id));
+    if (!res.ok) {
+      if (before) board.upsertTask(before);
+      if (!isOfflineMessage(res.error, t)) toast(res.error, "error");
+      return;
+    }
     res.data.spawned.forEach(board.upsertTask);
-    onClose();
+    discardOwnDraft();
     toast(t("Tarea archivada"));
   };
 

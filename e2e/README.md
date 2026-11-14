@@ -21,14 +21,17 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Tablero | `e2e/board-e2e.mjs` | 360 | ~4 min |
 | Pegar | `e2e/paste-e2e.mjs` | 72 | ~1 min |
 | Cabecera y atajos (caza de bugs 48a) | `e2e/bh48a-e2e.mjs` | 42 | ~1 min |
-| Sin conexión y pestañas (caza de bugs 48b) | `e2e/bh48b-e2e.mjs` | 120 | ~3 min |
+| Sin conexión y pestañas (caza de bugs 48b) | `e2e/bh48b-e2e.mjs` | 121 | ~3 min |
 | Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/bh48c-e2e.mjs` | 44 | ~1 min |
 | Copia con imagen en la descripción, sin red en calendario, borradores y releases (caza de bugs 49) | `e2e/bh49-e2e.mjs` | 27 | ~1 min |
 | Índice de un HTML en Documentación y baja con Google sin email (caza de bugs 50b) | `e2e/bh50b-e2e.mjs` | 39 | ~30 s |
 | Mover con el teclado varias veces seguidas (caza de bugs 51b) | `e2e/bh51b-e2e.mjs` | 34 | ~20 s |
 | Aplicar plantilla: paso 2 y archivadas de columnas unidas (caza de bugs 50a) | `e2e/bh50a-e2e.mjs` | 22 | ~20 s |
+| Enlaces entre HTML de la misma Documentación (ida, vuelta, #apartado, inexistente, otro proyecto) y HTML/texto/Markdown en Latin-1, Windows-1252 y UTF-16 (ronda 52) | `e2e/r52-html-e2e.mjs` | ~50 | ~1 min |
 | Plan de trabajo para IA: Markdown con descripciones raras, fijas entre paneles, título a 390 px y más de 500 tareas (caza de bugs 51a) | `e2e/bh51a-e2e.mjs` | 27 | ~40 s |
 | Release de más de 500 tareas (o 200 con adjuntos), «+» flotante con el programa lleno y panel de fijas en el móvil (caza de bugs 51c) | `e2e/bh51c-e2e.mjs` | 55 | ~35 s |
+| Enlaces de un HTML a sí mismo y nombres arreglados, binarios con BOM de UTF-16 y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/bh52-e2e.mjs` | 37 | ~30 s |
+| Reintentar el ZIP del plan, aviso de `?doc=` a un documento que ya no está, botones de columna con aria-disabled y opciones de correo accesibles (caza de bugs 52, segunda tanda) | `e2e/bh52b-e2e.mjs` | 36 | ~40 s |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/r49-account-e2e.mjs` | 61 | ~1 min |
 | Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51) | `e2e/r51-cuenta-e2e.mjs` | 71 | ~45 s |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
@@ -37,11 +40,13 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Tareas que se repiten (calendario, .ics y «Nueva tarea») | `e2e/r49-repeat-e2e.mjs` | 44 | ~1 min |
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/r49-ui-e2e.mjs` | 38 | ~1 min |
 | Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/r51-ui-e2e.mjs` | 62 | ~1,5 min |
+| Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones, iconos de la raíz y nombre corto (ronda 52) | `e2e/r52-ui-e2e.mjs` | 79 | ~1,5 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/r49-textos-e2e.mjs` | 29 | ~1 min |
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/r50-plantilla-e2e.mjs` | 39 | ~1 min |
 | Aplicar plantilla: opción elegida en oscuro, tareas fijas, generales ocultos y límite (ronda 51) | `e2e/r51-plantilla-e2e.mjs` | 26 | ~40 s |
 | Plantilla «Curso o máster» y «Publicar programa (PDF)» | `e2e/r50-curso-e2e.mjs` | 57 | ~40 s |
 | Plan de trabajo para IA y botones de las columnas especiales (ronda 51) | `e2e/r51-plan-e2e.mjs` | 147 | ~1 min |
+| Plan de trabajo: ZIP de adjuntos, ritmo por columna, botones con la columna vacía y salir por los enlaces del pie (ronda 52) | `e2e/r52-plan-e2e.mjs` | 79 | ~1 min |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/r50-seleccion-e2e.mjs` | 76 | ~1 min |
 | «Programa del curso»: versiones del PDF y tope de 100 sesiones (ronda 51) | `e2e/r51-programa-e2e.mjs` | 38 | ~1 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
@@ -178,6 +183,19 @@ más de 500 tareas marcadas «Generar» se desactiva con su motivo. Misma base y
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh51a-e2e.mjs   # PART=markdown,fijas,titulo,limite
 ```
 
+## Enlaces entre HTML y codificaciones en Documentación (ronda 52)
+
+Dos HTML de la misma Documentación enlazados entre sí (`./Tema2.HTML#apartado`, `tema%20tres.html`): el enlace abre el otro
+documento en el visor de la app (pestaña nueva, el marco sigue sin permisos) y lleva al apartado; la vuelta funciona igual;
+un enlace a un fichero que no está, o que solo existe en otro proyecto (aunque se llame igual), queda desactivado con su
+title y no abre nada; un documento en la papelera no se enlaza. Y ficheros HTML, texto y Markdown en Latin-1, Windows-1252
+(con o sin `<meta charset>`), UTF-16 LE/BE y UTF-8 con BOM que se ven con tildes y ñ, con la descarga tal cual. Misma base
+y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r52-html-e2e.mjs   # PART=enlaces,codificacion
+```
+
 ## Release grande, «+» flotante con el programa lleno y panel de fijas en el móvil (caza de bugs 51c)
 
 Con más de 500 tareas marcadas, «Generar release» se desactiva con su motivo, también en inglés (antes salía el error de
@@ -190,6 +208,34 @@ hasta abajo y en tableta las columnas miden lo mismo. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh51c-e2e.mjs   # PART=release,adjuntos,flotante,panel
+```
+
+## Enlaces de un HTML a sí mismo, binarios con BOM y borrador sin red (caza de bugs 52)
+
+En un HTML de Documentación, un enlace al propio documento por su nombre («indice.html#abajo» dentro de indice.html, o
+«./INDICE.HTML») se desplaza dentro del marco (antes abría una pestaña nueva con el mismo documento en cada clic); un enlace
+sin ruta («», «?v=2#abajo») es el propio documento y no sale desactivado; «a%20%20b.html» encuentra «a b.html» (los espacios
+seguidos se juntan al subir) y un nombre con tildes descompuestas (NFD, el de macOS) encuentra el suyo. Un binario que
+empieza por FF FE o FE FF (el BOM de UTF-16) se sube como fichero para descargar y no como texto, el UTF-16 de verdad se
+sigue viendo y un HTML con `<meta charset="unicode">` sin BOM se ve con sus tildes. Y archivar o borrar desde el detalle
+sin red con la descripción a medio escribir: la tarjeta vuelve y, al abrirla otra vez, lo escrito sigue ahí y se puede
+guardar (antes se perdía). Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh52-e2e.mjs   # PART=enlaces,binario,borrador
+```
+
+## Arreglos pequeños de la caza 52 (segunda tanda)
+
+«Reintentar» tras un ZIP de adjuntos cambiado a mitad de descarga vuelve a poner «Descargar adjuntos» desactivado y con el
+indicador de carga. Un enlace `?doc=` a un documento de la papelera avisa «Ese documento está en la papelera» y uno
+inexistente (o de otro proyecto, sin revelar nada) «Ese documento ya no está en la Documentación». Los botones de las
+columnas especiales sin tarjetas (y sus opciones de menú) usan `aria-disabled` y, al tocarlos, muestran su motivo como
+aviso. Cada opción de «Cómo se envían los emails» se nombra por su título (`aria-labelledby`) y su descripción va en
+`aria-describedby`. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3276 DATABASE_URL=$DBURL node bh52b-e2e.mjs   # PART=zip,doc,columnas,mail
 ```
 
 ## Arrastrar una selección
@@ -260,6 +306,25 @@ Crea y borra su propio proyecto privado. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r51-ui-e2e.mjs   # PART=skeleton,icon,html,backups
+```
+
+## Detalle de tarea al instante, flechas en opciones e iconos de la raíz (ronda 52)
+
+- `optimista`: con las acciones del servidor 3 s más lentas, archivar y borrar desde el detalle cierran el diálogo y quitan
+  la tarjeta al momento (el servidor termina después; Deshacer la devuelve); sin red (`setOffline`) la tarjeta vuelve a su
+  sitio, sale «Sin conexión» y nada se guarda.
+- `columna`: dos cambios de columna seguidos desde el detalle con respuestas lentas: la tarjeta queda en la última (turnos por
+  tarjeta, como Alt+flechas).
+- `flechas`: «Icono de la app» (Administración) y «Tema de color» (Mi perfil): una sola parada de Tab, flechas en las cuatro
+  direcciones (eligen y guardan), vuelta de extremo a extremo, Inicio y Fin; también el selector de idioma.
+- `iconos`: `/favicon.ico`, `/apple-touch-icon.png`, `/icon.png` y `/icon.svg` en el color de la instalación (azul sin
+  ajuste), con caché corta; nombre corto del manifiesto y título de iPhone de 12 caracteres como mucho. La caché de ajustes
+  del servidor dura 30 s, así que esta parte puede tardar unos segundos en cada cambio.
+
+Restaura lo que toca (rol, tema, icono y nombre de la organización). Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r52-ui-e2e.mjs   # PART=optimista,columna,flechas,iconos
 ```
 
 ## Textos breves, notas «i» y botones sin efecto (ronda 49)
@@ -355,6 +420,22 @@ servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r51-plan-e2e.mjs   # PART=buttons,plan,move,tpl,rich,fixed,role,settings,curso,en
+```
+
+## Plan de trabajo: adjuntos, ritmo por columna, columnas vacías y enlaces del pie (ronda 52)
+
+El paso 2 del plan ofrece «Descargar adjuntos (n)»: un ZIP con los adjuntos de las tareas del plan, en una carpeta por tarea
+(`adjuntos/03-titulo-de-la-tarea/plano.webp`), por la misma ruta, con los mismos topes y permisos que el de la release; el
+texto cita cada adjunto por su ruta en el ZIP (también la imagen pegada en la descripción) y por su enlace a Pizarro, y a
+Documentación solo va el .md. Las tareas fijas «cada dos» o «cada tres» cuentan los planes guardados en su columna (no los
+del proyecto), mientras el `_vN` del documento sigue siendo del proyecto. «Publicar programa», «Exportar a calendario»,
+«Resumen para el cliente», «Ver lista», «Resumen de presupuesto» y «PDF de la semana» se desactivan sin tarjetas (en el botón
+y en el menú de la columna; el .ics, sin fechas límite, y la lista, sin subtareas, también). Con el texto del paso 2 cambiado,
+un enlace del pie («tus plantillas») pide confirmar como cerrar. Necesita que el servidor y el script compartan `UPLOAD_DIR`
+(por defecto `../uploads`, donde escribe los ficheros de los adjuntos). Borra su proyecto al terminar. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r52-plan-e2e.mjs   # PART=zip,ritmo,vacias,salir
 ```
 
 ## Comentarios a la vez, red lenta, dos pestañas y release renombrada (caza de bugs 48c)

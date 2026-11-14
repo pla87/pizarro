@@ -324,6 +324,8 @@ model Column {
   routineSources Column[] @relation("RoutineTarget")
   /// Límite orientativo de tarjetas no archivadas (1-999, null = sin límite). Solo avisa: nunca bloquea mover ni crear.
   wipLimit  Int?
+  /// Solo rol AI_PLAN: planes de trabajo guardados desde esta columna. Marca el ritmo («cada dos», «cada tres») de sus tareas fijas; el número de versión del documento (_vN) sigue siendo por proyecto (Project.aiPlanCount).
+  planCount Int        @default(0)
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tasks     Task[]
 

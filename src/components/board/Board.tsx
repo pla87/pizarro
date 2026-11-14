@@ -931,6 +931,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       patchTask,
       ...cardActions,
       confirmLeaveReview,
+      moveTurns,
       removeTask: (id) => {
         setTasks((prev) => prev.filter((t) => t.id !== id));
         stores.selection.set((prev) => {
@@ -943,6 +944,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       setColumns,
       openTask: (id) => {
         prefetchTaskDetail(id);
+        // Un borrador guardado de ESTA tarea (archivar o borrar desde el detalle lo cierra al momento; si falla, sin red,
+        // lo escrito y sin guardar queda en el borrador): se recupera al volver a abrirla, como al recargar la página.
+        const edit = readDraft<EditTaskDraft>(draftKey("edit", data.currentUserId, project.id));
+        setEditDraft(edit && edit.taskId === id && (edit.title !== undefined || edit.description !== undefined) ? edit : null);
         setOpenTaskId(id);
       },
       openNewTask: (columnId, evergreen, files) => setNewTask({ columnId, evergreen, files }),
@@ -979,7 +984,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       settle,
       refresh,
     }),
-    [setTasks, revealTask, project, users, data.currentUserId, deliverables, kinds, data.cardStyle, data.editorMode, dragHandle, google, data.today, stableColumns, stableLabels, stores, getTask, track, trackRaw, settle, refresh, patchTask, upsertTask, cardActions, confirmLeaveReview],
+    [setTasks, revealTask, project, users, data.currentUserId, deliverables, kinds, data.cardStyle, data.editorMode, dragHandle, google, data.today, stableColumns, stableLabels, stores, getTask, track, trackRaw, settle, refresh, patchTask, upsertTask, cardActions, confirmLeaveReview, moveTurns],
   );
 
   // --- Movimiento masivo ------------------------------------------------------

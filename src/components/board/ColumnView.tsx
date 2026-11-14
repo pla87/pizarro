@@ -163,7 +163,7 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
           >
             <Plus size={16} />
           </button>
-          <ColumnMenu column={column} index={index} total={total} empty={cardCount === 0} openDialog={setDialog} />
+          <ColumnMenu column={column} index={index} total={total} empty={cardCount === 0} cardCount={cardCount} openDialog={setDialog} />
         </div>
       </header>
       {action}
@@ -289,6 +289,39 @@ function BudgetTotal({ columnId }: { columnId: string }) {
 }
 
 /**
+ * «Ver lista» (rol Lista de comprobación) y «Exportar a calendario (.ics)» (rol Agenda) se apoyan en datos de las tarjetas,
+ * no solo en que las haya: la lista muestra las subtareas (sin ninguna queda vacía) y el .ics solo lleva las tareas con
+ * fecha límite (sin ninguna, un calendario sin eventos). Se desactivan también en ese caso, con su motivo. Devuelve el motivo
+ * por el que la acción no se puede usar, o null si se puede.
+ */
+function useGate(column: BoardColumn, cardCount: number): string | null {
+  const t = useT();
+  const tasks = useTasks();
+  if (cardCount === 0) return t("No hay tarjetas en esta columna");
+  const mine = tasks.filter((x) => x.columnId === column.id);
+  if (column.role === "AGENDA" && !mine.some((x) => x.dueDate)) return t("Ninguna tarjeta tiene fecha límite");
+  if (column.role === "CHECKLIST" && !mine.some((x) => x.subtaskTotal > 0)) return t("Ninguna tarjeta tiene subtareas");
+  return null;
+}
+
+function GatedActionButton({ column, cardCount, icon, label, onClick }: { column: BoardColumn; cardCount: number; icon: LucideIcon; label: string; onClick: () => void }) {
+  const t = useT();
+  const reason = useGate(column, cardCount);
+  return <ColumnActionButton icon={icon} label={label} onClick={onClick} disabled={reason != null} title={reason ?? t(COLUMN_ROLE_HINT[column.role])} />;
+}
+
+function GatedMenuItem({ column, cardCount, icon, onClick, children }: { column: BoardColumn; cardCount: number; icon: LucideIcon; onClick: () => void; children: React.ReactNode }) {
+  const reason = useGate(column, cardCount);
+  return <ReasonMenuItem icon={icon} onClick={onClick} reason={reason}>{children}</ReasonMenuItem>;
+}
+
+/** Opción de menú que, sin poder usarse, sigue tocable (aria-disabled) y muestra su motivo como aviso (el title no se ve en el móvil). */
+function ReasonMenuItem({ reason, onClick, ...rest }: { reason: string | null; icon: LucideIcon; onClick: () => void; children: React.ReactNode }) {
+  const toast = useToast();
+  return <MenuItem {...rest} onClick={reason ? () => toast(reason, "error") : onClick} aria-disabled={reason ? true : undefined} title={reason ?? undefined} />;
+}
+
+/**
  * Botón de acción del rol de la columna (todas las columnas especiales con el mismo aspecto: ColumnActionButton), o null
  * si su rol no tiene ninguna. Su acción también está en el menú de la columna.
  */
@@ -304,28 +337,28 @@ function roleAction(
     case "AI_PLAN":
       return <ColumnActionButton icon={Bot} label={t("Generar plan de trabajo")} onClick={() => open("plan")} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : hint} />;
     case "PROGRAM":
-      return <ColumnActionButton icon={GraduationCap} label={t("Publicar programa (PDF)")} onClick={() => open("program")} title={hint} />;
+      return <ColumnActionButton icon={GraduationCap} label={t("Publicar programa (PDF)")} onClick={() => open("program")} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : hint} />;
     case "WEEKLY_PLAN":
       return (
-        <ColumnActionMenu icon={CalendarRange} label={t("PDF de la semana")} title={hint} items={[
+        <ColumnActionMenu icon={CalendarRange} label={t("PDF de la semana")} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : hint} items={[
           { label: t("PDF de la semana (por día)"), icon: CalendarDays, onClick: () => weekPdf(projectId, column.id, "day") },
           { label: t("PDF de la semana (por persona)"), icon: Users, onClick: () => weekPdf(projectId, column.id, "person") },
         ]} />
       );
     case "CHECKLIST":
-      return <ColumnActionButton icon={ListChecks} label={t("Ver lista")} onClick={() => open("checklist")} title={hint} />;
+      return <GatedActionButton column={column} cardCount={cardCount} icon={ListChecks} label={t("Ver lista")} onClick={() => open("checklist")} />;
     case "AGENDA":
-      return <ColumnActionButton icon={CalendarDays} label={t("Exportar a calendario (.ics)")} onClick={() => agendaIcs(projectId, column.id)} title={hint} />;
+      return <GatedActionButton column={column} cardCount={cardCount} icon={CalendarDays} label={t("Exportar a calendario (.ics)")} onClick={() => agendaIcs(projectId, column.id)} />;
     case "DELIVERY":
-      return <ColumnActionButton icon={FileDown} label={t("Resumen para el cliente (PDF)")} onClick={() => deliveryPdf(projectId, column.id)} title={hint} />;
+      return <ColumnActionButton icon={FileDown} label={t("Resumen para el cliente (PDF)")} onClick={() => deliveryPdf(projectId, column.id)} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : hint} />;
     case "BUDGET":
-      return <ColumnActionButton icon={Wallet} label={t("Resumen de presupuesto")} onClick={() => open("budget")} title={hint} />;
+      return <ColumnActionButton icon={Wallet} label={t("Resumen de presupuesto")} onClick={() => open("budget")} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : hint} />;
     default:
       return null;
   }
 }
 
-function ColumnMenu({ column, index, total, empty, openDialog: setDialog }: { column: BoardColumn; index: number; total: number; empty: boolean; openDialog: (d: ColumnDialog) => void }) {
+function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDialog }: { column: BoardColumn; index: number; total: number; empty: boolean; cardCount: number; openDialog: (d: ColumnDialog) => void }) {
   const { setColumns, track, refresh, project, columns } = useBoard();
   const toast = useToast();
   const confirm = useConfirm();
@@ -482,19 +515,19 @@ function ColumnMenu({ column, index, total, empty, openDialog: setDialog }: { co
       )}
       {column.role === "WEEKLY_PLAN" && (
         <>
-          <MenuItem icon={FileDown} onClick={() => weekPdf(project.id, column.id, "day")}>{t("PDF de la semana (por día)")}</MenuItem>
-          <MenuItem icon={FileDown} onClick={() => weekPdf(project.id, column.id, "person")}>{t("PDF de la semana (por persona)")}</MenuItem>
+          <ReasonMenuItem icon={FileDown} onClick={() => weekPdf(project.id, column.id, "day")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("PDF de la semana (por día)")}</ReasonMenuItem>
+          <ReasonMenuItem icon={FileDown} onClick={() => weekPdf(project.id, column.id, "person")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("PDF de la semana (por persona)")}</ReasonMenuItem>
         </>
       )}
-      {column.role === "CHECKLIST" && <MenuItem icon={ListChecks} onClick={() => setDialog("checklist")}>{t("Ver lista")}</MenuItem>}
-      {column.role === "AGENDA" && <MenuItem icon={CalendarDays} onClick={() => agendaIcs(project.id, column.id)}>{t("Exportar a calendario (.ics)")}</MenuItem>}
+      {column.role === "CHECKLIST" && <GatedMenuItem column={column} cardCount={cardCount} icon={ListChecks} onClick={() => setDialog("checklist")}>{t("Ver lista")}</GatedMenuItem>}
+      {column.role === "AGENDA" && <GatedMenuItem column={column} cardCount={cardCount} icon={CalendarDays} onClick={() => agendaIcs(project.id, column.id)}>{t("Exportar a calendario (.ics)")}</GatedMenuItem>}
       {column.role === "ROUTINES" && (
         <MenuItem icon={Repeat} onClick={() => setDialog("routine")}>{t("Destino de la siguiente aparición: {name}…", { name: routineTarget?.name ?? t("esta columna") })}</MenuItem>
       )}
-      {column.role === "DELIVERY" && <MenuItem icon={FileDown} onClick={() => deliveryPdf(project.id, column.id)}>{t("Resumen para el cliente (PDF)")}</MenuItem>}
-      {column.role === "BUDGET" && <MenuItem icon={Wallet} onClick={() => setDialog("budget")}>{t("Resumen de presupuesto")}</MenuItem>}
-      {column.role === "PROGRAM" && <MenuItem icon={GraduationCap} onClick={() => setDialog("program")}>{t("Publicar programa (PDF)")}</MenuItem>}
-      {column.role === "AI_PLAN" && <MenuItem icon={Bot} onClick={() => setDialog("plan")} disabled={empty}>{t("Generar plan de trabajo")}</MenuItem>}
+      {column.role === "DELIVERY" && <ReasonMenuItem icon={FileDown} onClick={() => deliveryPdf(project.id, column.id)} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("Resumen para el cliente (PDF)")}</ReasonMenuItem>}
+      {column.role === "BUDGET" && <ReasonMenuItem icon={Wallet} onClick={() => setDialog("budget")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("Resumen de presupuesto")}</ReasonMenuItem>}
+      {column.role === "PROGRAM" && <ReasonMenuItem icon={GraduationCap} onClick={() => setDialog("program")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("Publicar programa (PDF)")}</ReasonMenuItem>}
+      {column.role === "AI_PLAN" && <ReasonMenuItem icon={Bot} onClick={() => setDialog("plan")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("Generar plan de trabajo")}</ReasonMenuItem>}
       <MenuSeparator />
       <MenuItem icon={Gauge} onClick={editWipLimit}>
         {column.wipLimit != null ? t("Límite de tarjetas: {limit}…", { limit: column.wipLimit }) : t("Límite de tarjetas…")}

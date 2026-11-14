@@ -2,10 +2,11 @@
 
 import { Loader2, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { saveMailSettings, sendMailTest } from "@/actions/mail-settings";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
+import { useRadioGroup } from "@/components/ui/useRadioGroup";
 import { useT } from "@/i18n/client";
 import { detectMailPreset, GMAIL_PRESET, MAIL_PRESETS, type MailMode, type MailSettings } from "@/lib/mail-settings-core";
 import { actionThrowResult } from "@/lib/stale-action";
@@ -90,6 +91,7 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
     // Al pasar a «empresa» no se arrastra el servidor de Gmail: se deja elegir el proveedor.
     if (m === "company" && form.host === GMAIL_PRESET.host) setForm((f) => ({ ...f, host: "", fromAddress: "" }));
   };
+  const modeGroup = useRadioGroup(2, gmail ? 0 : 1, (i) => chooseMode(i === 0 ? "gmail" : "company"));
 
   const preset = detectMailPreset(form.host, Number(form.port));
   const choosePreset = (id: string) => {
@@ -166,10 +168,10 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
       {header}
       {outbox && <p className="text-xs text-amber-600">{t("El buzón de pruebas (MAIL_OUTBOX_DIR) está activo: los emails se guardan en disco en vez de enviarse.")}</p>}
 
-      <div role="radiogroup" aria-label={t("Cómo se envían los emails")} className="grid gap-3 sm:grid-cols-2">
-        <ModeCard checked={gmail} onSelect={() => chooseMode("gmail")} title={t("Gmail de un administrador (uso familiar)")}
+      <div {...modeGroup.groupProps} aria-label={t("Cómo se envían los emails")} className="grid gap-3 sm:grid-cols-2">
+        <ModeCard radio={modeGroup.radioProps(0)} onSelect={() => chooseMode("gmail")} title={t("Gmail de un administrador (uso familiar)")}
           text={t("Gratis y sencillo, para equipos pequeños. Google limita los envíos diarios.")} />
-        <ModeCard checked={!gmail} onSelect={() => chooseMode("company")} title={t("Servicio de correo de la empresa")}
+        <ModeCard radio={modeGroup.radioProps(1)} onSelect={() => chooseMode("company")} title={t("Servicio de correo de la empresa")}
           text={t("Servidor SMTP profesional (Workspace, Brevo, SendGrid, SES…): más envíos y mejor entrega.")} />
       </div>
 
@@ -251,17 +253,20 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
   );
 }
 
-function ModeCard({ checked, onSelect, title, text }: { checked: boolean; onSelect: () => void; title: string; text: string }) {
+function ModeCard({ radio, onSelect, title, text }: { radio: ReturnType<ReturnType<typeof useRadioGroup>["radioProps"]>; onSelect: () => void; title: string; text: string }) {
+  // Nombre accesible = el título; la descripción va aparte (aria-describedby), no dentro del nombre.
+  const id = useId();
   return (
     <button
       type="button"
-      role="radio"
-      aria-checked={checked}
+      {...radio}
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-text`}
       onClick={onSelect}
       className="choice-card rounded-lg bg-white p-3 text-left dark:bg-transparent"
     >
-      <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</span>
-      <span className="mt-1 block text-xs text-slate-600 dark:text-slate-300">{text}</span>
+      <span id={`${id}-title`} className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</span>
+      <span id={`${id}-text`} className="mt-1 block text-xs text-slate-600 dark:text-slate-300">{text}</span>
     </button>
   );
 }

@@ -50,21 +50,96 @@ export function looksLikePdf(buf: Uint8Array): boolean {
   return head.includes("%PDF-");
 }
 
-/** ¿Es texto UTF-8 válido y sin bytes nulos? (un binario con extensión .txt no se muestra como texto). */
+/** BOM de UTF-16 (LE: FF FE, BE: FE FF), UTF-8 (EF BB BF) o ninguno. */
+function bomOf(buf: Uint8Array): "utf-16le" | "utf-16be" | "utf-8" | null {
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return "utf-16le";
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) return "utf-16be";
+  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) return "utf-8";
+  return null;
+}
+
+function validUtf8(b: Uint8Array): boolean {
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(b);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Texto sin caracteres de control raros (salvo tabulador, saltos de línea y de página). */
+function plainText(s: string): boolean {
+  return !/[\u0000-\u0008\u000b\u000e-\u001f\u007f]/.test(s);
+}
+
+/**
+ * ¿Es texto? Vale UTF-8 válido, UTF-16 con BOM (los bytes nulos son normales ahí) y, si no es UTF-8, el texto de una sola
+ * codificación de 8 bits (Latin-1 / Windows-1252): sin bytes nulos y con muy pocos controles (un binario con extensión
+ * .txt no lo pasa).
+ */
 export function looksLikeText(buf: Uint8Array): boolean {
   const sample = buf.subarray(0, 64 * 1024);
-  if (sample.includes(0)) return false;
-  const valid = (b: Uint8Array) => {
+  const bom = bomOf(sample);
+  if (bom === "utf-16le" || bom === "utf-16be") {
+    // La muestra se corta en un par de bytes (y, si el fichero sigue, sin dejar medio par sustituto al final). Debe ser
+    // UTF-16 válido (un binario que empieza por FF FE casi nunca lo es: tiene sustitutos sueltos) y sin controles.
+    let end = sample.length - (sample.length % 2);
+    if (buf.length > end && end >= 2) {
+      const last = bom === "utf-16le" ? sample[end - 2]! | (sample[end - 1]! << 8) : (sample[end - 2]! << 8) | sample[end - 1]!;
+      if (last >= 0xd800 && last <= 0xdbff) end -= 2;
+    }
+    let text: string;
     try {
-      new TextDecoder("utf-8", { fatal: true }).decode(b);
-      return true;
+      text = new TextDecoder(bom, { fatal: true }).decode(sample.subarray(0, end));
     } catch {
       return false;
     }
-  };
-  if (valid(sample)) return true;
+    // Y, como en Windows-1252, casi sin caracteres de uso privado ni «no caracteres» (en un binario abundan).
+    const odd = text.match(/[\ue000-\uf8ff\ufdd0-\ufdef\ufffe\uffff]/g)?.length ?? 0;
+    return plainText(text) && odd * 100 <= text.length;
+  }
+  if (sample.includes(0)) return false;
+  if (validUtf8(sample)) return true;
   // Un carácter UTF-8 cortado justo en el límite de la muestra no es un fallo.
-  return buf.length > sample.length && valid(sample.subarray(0, sample.length - 3));
+  if (buf.length > sample.length && validUtf8(sample.subarray(0, sample.length - 3))) return true;
+  // Windows-1252: los controles (y los 5 bytes sin asignar: 81, 8D, 8F, 90, 9D) no pueden pasar del 1 %.
+  let odd = 0;
+  for (const b of sample) {
+    if ((b < 0x20 && b !== 9 && b !== 10 && b !== 12 && b !== 13) || b === 0x7f || b === 0x81 || b === 0x8d || b === 0x8f || b === 0x90 || b === 0x9d) odd++;
+  }
+  return odd * 100 <= sample.length;
+}
+
+/** Codificación declarada en `<meta charset>` o `<meta http-equiv="content-type">` en el primer KB (o null). */
+function declaredCharset(buf: Uint8Array): string | null {
+  const head = new TextDecoder("windows-1252").decode(buf.subarray(0, 1024));
+  const m = /<meta\s[^>]*?charset\s*=\s*["']?\s*([a-z0-9_.:-]+)/i.exec(head);
+  return m ? m[1]!.toLowerCase() : null;
+}
+
+/**
+ * Texto de un documento de Documentación para mostrarlo (el fichero guardado no se toca; la descarga lo entrega tal cual).
+ * Orden: BOM (UTF-8, UTF-16 LE/BE); en HTML, la codificación declarada en los primeros bytes (menos UTF-16, que sin BOM no
+ * puede ser, y las que el navegador no conoce); UTF-8 si es válido; y si no, Windows-1252 (que incluye Latin-1). Nunca
+ * lanza. El saneado del HTML se aplica después, sobre el texto ya decodificado.
+ */
+export function decodeDocumentText(buf: Uint8Array, kind: DocumentKindName = "TEXT"): string {
+  const bom = bomOf(buf);
+  if (bom) return new TextDecoder(bom).decode(buf).replace(/^﻿/, "");
+  if (kind === "HTML") {
+    const label = declaredCharset(buf);
+    if (label) {
+      try {
+        // Se mira la codificación a la que lleva la etiqueta, no su nombre: «unicode», «ucs-2» o «csunicode» son UTF-16
+        // (que sin BOM no puede ser: el navegador lo toma como UTF-8) y «unicode-1-1-utf-8» es UTF-8 (lo decide el paso
+        // siguiente, que cae a Windows-1252 si no es válido).
+        const dec = new TextDecoder(label);
+        if (dec.encoding !== "replacement" && dec.encoding !== "utf-8" && !dec.encoding.startsWith("utf-16")) return dec.decode(buf);
+      } catch { /* etiqueta desconocida: se sigue */ }
+    }
+  }
+  if (validUtf8(buf)) return new TextDecoder("utf-8").decode(buf);
+  return new TextDecoder("windows-1252").decode(buf);
 }
 
 /**

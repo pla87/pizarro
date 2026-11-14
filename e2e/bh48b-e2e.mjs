@@ -76,7 +76,10 @@ if (only.includes("down")) try {
   await page.keyboard.press("Alt+A"); // archivar: también falla
   await sleep(2500);
   L.check("DOWN: la página no se cambia por la de error del navegador", inApp(page), page.url());
-  L.eq("DOWN: el título escrito sigue en el campo", await titleValue(page), "Escrito con el servidor caído");
+  // Archivar desde el detalle es optimista (v1.55): el diálogo se cierra, el archivado falla y la tarjeta vuelve; al abrirla
+  // otra vez se recupera lo escrito sin guardar (borrador).
+  await L.waitFor(async () => (await L.cardLoc(page, "Caído 1").count()) > 0, { timeout: 10000 }).catch(() => {});
+  L.check("DOWN: la tarjeta vuelve al tablero", (await L.cardLoc(page, "Caído 1").count()) > 0);
   L.check("DOWN: aviso «Sin conexión: no se ha guardado» (no «Error inesperado»)", await hasNotice(page, "Sin conexión: no se ha guardado") && !(await hasNotice(page, "Error inesperado")));
   L.check("DOWN: aviso fijo de sin conexión", await page.locator("[data-connection=offline]").isVisible().catch(() => false));
   L.eq("DOWN: la tarea no se ha archivado", (await L.dbTask("Caído 1"))?.archivedAt ?? null, null);
@@ -84,6 +87,9 @@ if (only.includes("down")) try {
   await ctx.unroute("**/*");
   await L.waitFor(async () => (await page.locator("[data-connection=restored]").count()) > 0, { timeout: 40000 }).catch(() => {});
   L.check("DOWN: «Conexión recuperada»", await page.locator("[data-connection=restored]").count() > 0);
+  if (!(await page.locator("[role=dialog]").count())) await U.openTask(page, "Caído 1");
+  await L.waitFor(async () => (await titleValue(page)) === "Escrito con el servidor caído", { timeout: 8000 }).catch(() => {});
+  L.eq("DOWN: el título escrito se recupera al abrirla otra vez", await titleValue(page), "Escrito con el servidor caído");
   await titleField(page).click();
   await page.keyboard.press("End");
   await page.keyboard.press("Tab");

@@ -31,7 +31,7 @@ import type { ColumnRole } from "@/generated/prisma/client";
 type Tx = Prisma.TransactionClient;
 type Client = Tx | typeof db;
 
-interface ColumnSnap { id: string; name: string; position: number; role: string; isDone: boolean; waitingDays: number | null; routineTargetColumnId: string | null; wipLimit: number | null }
+interface ColumnSnap { id: string; name: string; position: number; role: string; isDone: boolean; waitingDays: number | null; routineTargetColumnId: string | null; wipLimit: number | null; planCount?: number }
 interface KindSnap { id: string; name: string; color: string; position: number; titleTemplate: string; descriptionTemplate: string; subtaskTemplate: string[]; createdAt: string }
 /** Tarea que el cambio tocó: lo que tenía (columna, posición, tipo, fija) y adónde fue (null = no cambió eso). */
 interface TaskSnap { id: string; c: string; p: number; k: string; e: boolean; ee: number; tc: string | null; tk: string | null }
@@ -96,7 +96,7 @@ export async function loadProjectShape(client: Client, projectId: string, locale
 
 /** Instantánea de lo que hay ahora (antes de tocar nada). */
 async function takeSnapshot(tx: Tx, projectId: string): Promise<TemplateChangeSnapshot> {
-  const columns = await tx.column.findMany({ where: { projectId }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true } });
+  const columns = await tx.column.findMany({ where: { projectId }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, planCount: true } });
   const kinds = await tx.taskKind.findMany({ where: { projectId }, select: { id: true, name: true, color: true, position: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true, createdAt: true } });
   const hidden = await tx.projectHiddenKind.findMany({ where: { projectId }, select: { kindId: true } });
   const labels = await tx.label.findMany({ where: { projectId }, select: { id: true, name: true, color: true } });
@@ -395,7 +395,7 @@ export async function undoTemplateChange(projectId: string, now = new Date()): P
     const present = new Set(before.map((c) => c.id));
     const missingCols = snap.columns.filter((c) => !present.has(c.id));
     if (missingCols.length) {
-      await tx.column.createMany({ data: missingCols.map((c) => ({ id: c.id, projectId, name: c.name, position: c.position, role: "NONE" as const, isDone: c.isDone, waitingDays: c.waitingDays, wipLimit: c.wipLimit })) });
+      await tx.column.createMany({ data: missingCols.map((c) => ({ id: c.id, projectId, name: c.name, position: c.position, role: "NONE" as const, isDone: c.isDone, waitingDays: c.waitingDays, wipLimit: c.wipLimit, planCount: c.planCount })) });
     }
     // Las de antes, como estaban (nombre, orden, rol, límites), antes de devolverles sus tareas: así los disparadores de la
     // base de datos ven ya su rol. Las creadas por el cambio no tienen ya ningún rol único (se apartaron arriba).
@@ -404,7 +404,7 @@ export async function undoTemplateChange(projectId: string, now = new Date()): P
       await tx.column.update({
         where: { id: c.id },
         data: {
-          name: c.name, position: c.position, role: c.role as ColumnRole, isDone: c.isDone, wipLimit: c.wipLimit, waitingDays: c.waitingDays,
+          name: c.name, position: c.position, role: c.role as ColumnRole, isDone: c.isDone, wipLimit: c.wipLimit, planCount: c.planCount, waitingDays: c.waitingDays,
           routineTargetColumnId: c.routineTargetColumnId && allIds.has(c.routineTargetColumnId) ? c.routineTargetColumnId : null,
         },
       });

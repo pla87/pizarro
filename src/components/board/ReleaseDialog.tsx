@@ -16,6 +16,7 @@ import { mentionsToPlain } from "@/lib/mentions";
 import { actionThrowResult } from "@/lib/stale-action";
 import { mbNumber } from "@/lib/quota-message";
 import { isNetworkError, loadWhenOnline, reportOffline } from "@/lib/connection";
+import { downloadAttachmentsZip } from "./attachments-zip";
 import { DraftTextEditor, TaskPickList, TemplatePickers, TemplateSourceNote, useDraftText } from "./DraftText";
 
 interface DeployResult {
@@ -166,21 +167,24 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
    * se cerró (el botón atrás del móvil vuelve entonces a poder cerrarlo).
    */
   const requestClose = async (): Promise<boolean> => {
-    if (askingClose.current) return false;
-    if (textEdited()) {
-      askingClose.current = true;
-      const ok = await confirm({
-        title: t("Cambios sin guardar"),
-        message: t("Has cambiado el texto de la release. ¿Cerrar y descartar los cambios?"),
-        confirmLabel: t("Descartar cambios"),
-        cancelLabel: t("Seguir editando"),
-        danger: true,
-      }).catch(() => false);
-      askingClose.current = false;
-      if (!ok) return false;
-    }
+    if (!(await confirmDiscard())) return false;
     onClose();
     return true;
+  };
+  /** La pregunta de descartar el texto cambiado (cerrar o salir por un enlace): `true` si no hay nada que perder o se acepta. */
+  const confirmDiscard = async (): Promise<boolean> => {
+    if (askingClose.current) return false;
+    if (!textEdited()) return true;
+    askingClose.current = true;
+    const ok = await confirm({
+      title: t("Cambios sin guardar"),
+      message: t("Has cambiado el texto de la release. ¿Cerrar y descartar los cambios?"),
+      confirmLabel: t("Descartar cambios"),
+      cancelLabel: t("Seguir editando"),
+      danger: true,
+    }).catch(() => false);
+    askingClose.current = false;
+    return ok;
   };
 
   const back = async () => {
@@ -200,43 +204,14 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   const tooManyAttachments = zipItems.length > RELEASE_MAX_ATTACHMENT_TASKS;
 
   const downloadAttachments = async () => {
-    let changed: string | null = null;
-    setZipping(true);
-    try {
-      const url = `/api/projects/${board.project.id}/release-attachments`;
-      const body = JSON.stringify({ items: zipItems.map(({ taskId, code }) => ({ taskId, code })) });
-      const post = (query: string) => fetch(`${url}${query}`, { method: "POST", headers: { "Content-Type": "application/json" }, body });
-      // Primero el plan (cuántos paquetes caben en el tope del proyecto) y luego cada paquete, uno tras otro.
-      const planRes = await post("?plan=1");
-      if (!planRes.ok) throw new Error(planRes.status === 429 ? await planRes.text() : "");
-      const plan = (await planRes.json()) as { parts: { oversize: boolean }[]; maxMb: number; v?: string };
-      const total = plan.parts.length;
-      for (let part = 1; part <= total; part++) {
-        // Con el token del plan: si los adjuntos cambian a mitad, el servidor responde 409 en vez de mezclar repartos.
-        const res = await post(`?part=${part}${plan.v ? `&v=${plan.v}` : ""}`);
-        if (res.status === 409) {
-          changed = await res.text();
-          throw new Error(changed);
-        }
-        if (!res.ok) throw new Error(res.status === 429 ? await res.text() : "");
-        const href = URL.createObjectURL(await res.blob());
-        const a = document.createElement("a");
-        a.href = href;
-        a.download = releaseZipName({ day: isoDate(now, appTimeZone()), number: generatedNumber, project: board.project.name }, part, total, uiLocale);
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(href), 1000);
-        // Pausa corta para que el navegador no agrupe ni descarte las descargas seguidas.
-        if (part < total) await new Promise((r) => setTimeout(r, 400));
-      }
-      if (total > 1) toast(t("Adjuntos descargados en {n} paquetes de hasta {mb} MB", { n: total, mb: plan.maxMb }));
-      if (plan.parts.some((p) => p.oversize)) toast(t("Algún archivo supera por sí solo los {mb} MB y va en su propio paquete.", { mb: plan.maxMb }), "error");
-    } catch (e) {
-      const message = e instanceof Error && e.message ? e.message : t("No se pudieron descargar los adjuntos");
-      // Adjuntos cambiados durante la descarga: se ofrece volver a empezar (nuevo plan y todos los paquetes).
-      toast(message, "error", changed ? { label: t("Reintentar"), onClick: () => void downloadAttachments() } : undefined);
-    } finally {
-      setZipping(false);
-    }
+    await downloadAttachmentsZip({
+      setBusy: setZipping,
+      projectId: board.project.id,
+      items: zipItems.map(({ taskId, code }) => ({ taskId, code })),
+      fileName: (part, total) => releaseZipName({ day: isoDate(now, appTimeZone()), number: generatedNumber, project: board.project.name }, part, total, uiLocale),
+      t,
+      toast,
+    });
   };
 
   const deploy = async () => {
@@ -339,6 +314,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
       ) : (
         <div className="flex h-full flex-col gap-3">
           {templatePickers}
+          <TemplateSourceNote projectId={board.project.id} projectTab="releases" withProject={projectTemplates.headers.length + projectTemplates.footers.length > 0} confirmLeave={() => (textEdited() ? confirmDiscard() : false)} />
           <DraftTextEditor draft={draft} label={t("Contenido de la release")} idPrefix="release" dataAttr="data-release-editor" onEscape={() => void requestClose()} />
           <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
             <legend className="sr-only">{t("Al marcar como desplegado")}</legend>
