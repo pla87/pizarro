@@ -26,6 +26,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Copia con imagen en la descripción, sin red en calendario, borradores y releases (caza de bugs 49) | `e2e/bh49-e2e.mjs` | 27 | ~1 min |
 | Índice de un HTML en Documentación y baja con Google sin email (caza de bugs 50b) | `e2e/bh50b-e2e.mjs` | 39 | ~30 s |
 | Aplicar plantilla: paso 2 y archivadas de columnas unidas (caza de bugs 50a) | `e2e/bh50a-e2e.mjs` | 22 | ~20 s |
+| Plan de trabajo para IA: Markdown con descripciones raras, fijas entre paneles, título a 390 px y más de 500 tareas (caza de bugs 51a) | `e2e/bh51a-e2e.mjs` | 27 | ~40 s |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/r49-account-e2e.mjs` | 61 | ~1 min |
 | Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51) | `e2e/r51-cuenta-e2e.mjs` | 71 | ~45 s |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
@@ -140,6 +141,19 @@ y en inglés, a 390 px y en modo oscuro); y una tarea archivada de una columna q
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh50a-e2e.mjs   # PART=paso2,en,archivada
+```
+
+## Plan de trabajo para IA: Markdown, fijas entre paneles, título y límite (caza de bugs 51a)
+
+El plan generado con descripciones raras: un bloque de código sin cerrar se cierra tras su última línea (antes se tragaba
+las tareas siguientes y el pie), ``` dentro de un bloque de ```` queda tal cual, un título setext («Notas» subrayado con
+---) pasa a ##### y se conservan los saltos de línea forzados y las tablas; una tarea fija arrastrada del panel «Siempre
+en el plan» de una columna al de otra (o desde «Siempre en la release») pasa allí como fija y se deshace con Ctrl+Z; a
+390 px el título de «Generar plan de trabajo» y de «Generar release» conserva el icono y recorta el paso con «…»; y con
+más de 500 tareas marcadas «Generar» se desactiva con su motivo. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh51a-e2e.mjs   # PART=markdown,fijas,titulo,limite
 ```
 
 ## Arrastrar una selección

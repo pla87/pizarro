@@ -65,4 +65,6 @@ export const planIa: Record<string, string> = {
   "Entrega": "Delivery",
   "Instrucciones generales para la IA: cómo trabajar, qué comprobar, qué no hacer.": "General instructions for the AI: how to work, what to check, what not to do.",
   "Instrucciones de entrega: qué debe contar la IA al terminar.": "Delivery instructions: what the AI should report when it finishes.",
+  // Límite de tareas de un plan
+  "Un plan de trabajo admite como mucho 500 tareas: quita alguna de la selección.": "A work plan holds at most 500 tasks: remove some from the selection.",
 };

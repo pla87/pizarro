@@ -1223,9 +1223,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const id = String(active.id);
     const overId = String(over.id);
     if (overId.startsWith(EVERGREEN_DROPPABLE_PREFIX)) {
-      // Soltar una tarea fija en su propio panel no hace nada.
-      if (origin.columnId === EVERGREEN_ORIGIN) return;
       const evergreenColumn = overId.slice(EVERGREEN_DROPPABLE_PREFIX.length);
+      // Soltar una tarea fija en su propio panel no hace nada; en el de otra columna (otro plan para IA, o la release)
+      // pasa allí como fija (abajo, dropOnEvergreen). Antes se ignoraba aunque el lector de pantalla anunciaba el cambio.
+      if (origin.columnId === EVERGREEN_ORIGIN && taskById.get(id)?.columnId === evergreenColumn) return;
       // Copia sobre el panel de fijas: al final de esa columna, como tarea normal.
       if (copy) return dropCopy(id, evergreenColumn, null, null);
       // Una selección, igual: al final de esa columna como tareas normales (las fijas se hacen de una en una).
