@@ -6,6 +6,7 @@ import { markdownToPdfBlocks } from "../src/lib/pdf-markdown";
 import { canonicalTemplate } from "../src/lib/builtin-templates";
 import { canonicalTemplateEn } from "../src/lib/builtin-templates-en";
 import { COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, COLUMN_ROLES, isUniqueColumnRole } from "../src/lib/constants";
+import { columnAtSessionLimit, PROGRAM_MAX_SESSIONS, programColumnsOverLimit } from "../src/lib/program-limit";
 import { pdfRuns } from "./pdf-runs";
 import { assertFast } from "./timing";
 
@@ -110,9 +111,22 @@ describe("sesiones del programa", () => {
     assert.equal(out.length, 2000);
   });
 
-  test("nombre del documento guardado en Documentación, en cada idioma", () => {
-    assert.equal(programDocumentName(es, "2026-11-13"), "Programa – 2026-11-13.pdf");
-    assert.equal(programDocumentName(en, "2026-11-13"), "Programme – 2026-11-13.pdf");
+  test("nombre del documento guardado en Documentación, con la versión, en cada idioma", () => {
+    assert.equal(programDocumentName(es, "2026-11-13", 1), "Programa – 2026-11-13_v1.pdf");
+    assert.equal(programDocumentName(en, "2026-11-13", 12), "Programme – 2026-11-13_v12.pdf");
+  });
+
+  test("tope de sesiones de una columna «Programa»: solo PROGRAM, contando las no archivadas", () => {
+    assert.equal(PROGRAM_MAX_SESSIONS, 100);
+    assert.equal(columnAtSessionLimit("PROGRAM", 99), false);
+    assert.equal(columnAtSessionLimit("PROGRAM", 100), true);
+    assert.equal(columnAtSessionLimit("PROGRAM", 130), true);
+    assert.equal(columnAtSessionLimit("NONE", 500), false);
+    const columns = [{ ref: "a", role: "PROGRAM", name: "A" }, { ref: "b", role: "NONE", name: "B" }, { ref: "c", role: "PROGRAM", name: "C" }];
+    const tasks = (ref: string, n: number, archived = false) => Array.from({ length: n }, () => ({ columnRef: ref, archivedAt: archived ? "2026-01-01T00:00:00.000Z" : null }));
+    // 100 activas y 40 archivadas: cabe. 101 activas: no. Otro rol: sin tope.
+    assert.deepEqual(programColumnsOverLimit(columns, [...tasks("a", 100), ...tasks("a", 40, true), ...tasks("b", 300)]), []);
+    assert.deepEqual(programColumnsOverLimit(columns, [...tasks("a", 101), ...tasks("c", 150)]).map((x) => [x.column.ref, x.sessions]), [["a", 101], ["c", 150]]);
   });
 
   test("rol PROGRAM: repetible, con nombre y explicación", () => {
@@ -123,17 +137,19 @@ describe("sesiones del programa", () => {
 });
 
 describe("plantilla «Curso o máster»", () => {
-  test("columnas con «Programa» (rol PROGRAM), tipos con encargo para el agente, sin releases y con fecha de inicio", () => {
+  test("columnas con «Plan de trabajo para IA» (AI_PLAN) y «Programa» (PROGRAM), sin «Hecho», tipos con encargo para el agente, sin releases y con fecha de inicio", () => {
     for (const t of [canonicalTemplate("curso-master")!, canonicalTemplateEn("curso-master")!]) {
-      assert.ok(t.columns.length >= 6 && t.columns.length <= 7, "entre 6 y 7 columnas");
-      assert.deepEqual(t.columns.filter((c) => c.role !== "NONE").map((c) => c.role), ["PROGRAM"]);
-      assert.equal(t.columns.filter((c) => c.isDone).length, 1);
+      assert.equal(t.columns.length, 6);
+      assert.deepEqual(t.columns.filter((c) => c.role !== "NONE").map((c) => c.role), ["AI_PLAN", "PROGRAM"]);
+      assert.equal(t.columns.filter((c) => c.isDone).length, 0);
       assert.equal(t.kinds.length, 7);
       assert.deepEqual(t.taskFields, ["startDate"]);
       assert.deepEqual(t.releaseTemplates, []);
       assert.equal(t.hideAllGeneralKinds, true);
     }
     const es = canonicalTemplate("curso-master")!;
+    assert.deepEqual(es.columns.map((c) => c.name), ["Ideas", "Materiales", "Ejercicios y exámenes", "Plan de trabajo para IA", "Programa", "Seguimiento de alumnos"]);
+    assert.deepEqual(canonicalTemplateEn("curso-master")!.columns.map((c) => c.name), ["Ideas", "Materials", "Exercises and exams", "AI work plan", "Programme", "Student follow-up"]);
     assert.deepEqual(es.kinds.map((k) => k.name), ["Sesión", "Preparar material", "Preparar ejercicio", "Preparar examen", "Revisar perfil de alumno", "Corregir", "Tutoría"]);
     // Los encargos de preparación llevan formato de entrega y notas para el agente; la sesión (sale en el PDF), no.
     for (const name of ["Preparar material", "Preparar ejercicio", "Preparar examen"]) {

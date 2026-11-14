@@ -19,12 +19,13 @@ import { Modal } from "@/components/ui/Modal";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { TypeBadge } from "@/components/ui/TypeBadge";
-import { isWhite, onColor, PALETTE, RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "@/lib/constants";
+import { isWhite, onColor, PALETTE, RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB, type TemplateKindValue } from "@/lib/constants";
 import { GOOGLE_SHARE_MODES, isDomainMode, type GoogleShareMode } from "@/lib/google-share";
 import type { TaskFieldKey } from "@/lib/task-fields";
 import { FILE_MAX_DEFAULT_MB, FILE_MAX_MAX_MB, FILE_MAX_MIN_MB } from "@/lib/upload-size";
 import type { EditorModeValue, KindOption, LabelOption, TemplateOption } from "@/lib/types";
 import { ReleaseTemplateList } from "@/components/ReleaseTemplateList";
+import { PlanTemplateLists } from "@/components/PlanTemplateLists";
 import {
   createProjectReleaseTemplate, deleteProjectReleaseTemplate, moveProjectReleaseTemplate, updateProjectReleaseTemplate,
 } from "@/actions/project-release-templates";
@@ -56,11 +57,13 @@ interface Props {
   applyTemplate?: React.ReactNode;
   /** Cabeceras y pies de release del proyecto. */
   releaseTemplates: { headers: TemplateOption[]; footers: TemplateOption[] };
+  /** Cabeceras y pies del plan de trabajo para IA del proyecto. */
+  planTemplates: { headers: TemplateOption[]; footers: TemplateOption[] };
   tab: ProjectSettingsTab;
 }
 
 const PROJECT_TEMPLATE_ACTIONS = (projectId: string) => ({
-  create: (kind: "HEADER" | "FOOTER", input: { name: string; content: string }) => createProjectReleaseTemplate(projectId, kind, input),
+  create: (kind: TemplateKindValue, input: { name: string; content: string }) => createProjectReleaseTemplate(projectId, kind, input),
   update: updateProjectReleaseTemplate,
   move: moveProjectReleaseTemplate,
   remove: deleteProjectReleaseTemplate,
@@ -85,7 +88,7 @@ function Section({ title, description, tip, children, id }: { title: string; des
   );
 }
 
-export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode, google, reportSchedule, storageSection, releaseTemplates, tab, applyTemplate }: Props) {
+export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode, google, reportSchedule, storageSection, releaseTemplates, planTemplates, tab, applyTemplate }: Props) {
   const t = useT();
   const uiLocale = useLocale();
   const router = useRouter();
@@ -405,6 +408,9 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
         <Section id="plantillas" title="Plantillas de release notes del proyecto" description="Cabeceras y pies para todo el equipo. Admiten Markdown." tip={t("En «Generar release» salen bajo «Del proyecto», después de las plantillas de cada persona y en este orden.")}>
           <ReleaseTemplateList editorMode={editorMode} showDefault={false} actions={PROJECT_TEMPLATE_ACTIONS(project.id)} kind="HEADER" title={t("Cabeceras")} initial={releaseTemplates.headers} placeholder={t("Ej.: instrucciones de contexto para una IA.\n\n> Resume estos cambios para el equipo de negocio.")} />
           <ReleaseTemplateList editorMode={editorMode} showDefault={false} actions={PROJECT_TEMPLATE_ACTIONS(project.id)} kind="FOOTER" title={t("Pies")} initial={releaseTemplates.footers} placeholder={t("Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción")} />
+        </Section>
+        <Section id="plan" title="Plantillas del plan de trabajo para IA del proyecto" description="Contexto e instrucciones para la IA comunes a todo el equipo (repositorio, cómo probar, convenciones). Admiten Markdown." tip={t("En «Generar plan de trabajo» salen bajo «Del proyecto», después de las de cada persona. Si nadie tiene ninguna, el plan usa las de serie, pensadas para Claude Code.")}>
+          <PlanTemplateLists editorMode={editorMode} showDefault={false} actions={PROJECT_TEMPLATE_ACTIONS(project.id)} initial={planTemplates} />
         </Section>
 
         </>

@@ -25,7 +25,6 @@ export const curso: Record<string, string> = {
   "Un PDF con la sesión de «{name}»: número, fecha, título y descripción.": "A PDF with the session in “{name}”: number, date, title and description.",
   "Un PDF con las {n} sesiones de «{name}» en su orden: número, fecha, título y descripción.": "A PDF with the {n} sessions in “{name}” in their order: number, date, title and description.",
   "Incluir el responsable de cada sesión (profesor)": "Include each session's assignee (teacher)",
-  "Guardar también en Documentación como «{name}»": "Also save to Documentation as “{name}”",
   "Vista previa sin guardar": "Preview without saving",
   // Explicación de cada rol en el menú de la columna
   "Columna normal, sin funciones especiales.": "A normal column, with no special features.",

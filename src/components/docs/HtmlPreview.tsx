@@ -13,13 +13,16 @@ const URL_ATTRS = ["href", "src", "action", "formaction", "xlink:href"];
 
 /**
  * HTML de un documento de Documentación listo para el `srcdoc` del marco aislado. Se lee con DOMParser (que no ejecuta
- * nada) y se quitan scripts, marcos, objetos, `<base>`, `<meta http-equiv>` y manejadores `on…`, aunque el marco ya no
- * permite scripts: así no depende de una sola barrera. Se añade la CSP del documento y `<base target="_blank">` para que
+ * nada) y se quitan scripts, marcos, objetos, `<base>`, `<meta http-equiv>`, todos los `<link>` y los manejadores `on…`,
+ * aunque el marco ya no permite scripts: así no depende de una sola barrera. Se añade la CSP del documento y `<base target="_blank">` para que
  * los enlaces se abran en otra pestaña (sin acceso a esta: `noopener noreferrer`); los enlaces internos (#…), en el marco.
  */
 function htmlPreviewDocument(html: string): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
-  doc.querySelectorAll("script, iframe, frame, frameset, object, embed, applet, portal, base, meta[http-equiv], link[rel~='import' i]").forEach((n) => n.remove());
+  // Todos los <link>: las hojas de estilo externas ya las bloquea la CSP, pero dns-prefetch, preconnect, prefetch,
+  // prerender o modulepreload pueden tocar la red (o resolver un nombre) antes de que se aplique o fuera de ella y avisar a
+  // un tercero de que alguien lo ha abierto. Ninguno hace falta para ver el documento.
+  doc.querySelectorAll("script, iframe, frame, frameset, object, embed, applet, portal, base, meta[http-equiv], link").forEach((n) => n.remove());
   for (const el of Array.from(doc.querySelectorAll("*"))) {
     for (const attr of Array.from(el.attributes)) {
       const name = attr.name.toLowerCase();
@@ -44,12 +47,16 @@ function htmlPreviewDocument(html: string): string {
   const csp = doc.createElement("meta");
   csp.setAttribute("http-equiv", "Content-Security-Policy");
   csp.setAttribute("content", FRAME_CSP);
+  // Sin resolver de antemano los nombres de los enlaces del documento.
+  const dnsPrefetch = doc.createElement("meta");
+  dnsPrefetch.setAttribute("http-equiv", "x-dns-prefetch-control");
+  dnsPrefetch.setAttribute("content", "off");
   const referrer = doc.createElement("meta");
   referrer.setAttribute("name", "referrer");
   referrer.setAttribute("content", "no-referrer");
   const base = doc.createElement("base");
   base.setAttribute("target", "_blank");
-  doc.head.prepend(csp, referrer, base);
+  doc.head.prepend(csp, dnsPrefetch, referrer, base);
   return `<!doctype html>\n${doc.documentElement.outerHTML}`;
 }
 

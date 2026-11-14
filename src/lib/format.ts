@@ -21,7 +21,7 @@ export function resolveTimeZone(envTz: string | undefined, stored: string | unde
   return envTz || stored || DEFAULT_TIME_ZONE;
 }
 
-type Style = "date" | "dateShort" | "dateLong" | "dateTime" | "dateTimeShort" | "time" | "timeHm" | "dateNumeric";
+type Style = "date" | "dateShort" | "dateLong" | "dateTime" | "dateTimeSeconds" | "dateTimeShort" | "time" | "timeHm" | "dateNumeric";
 
 const OPTIONS: Record<Style, Intl.DateTimeFormatOptions> = {
   date: { dateStyle: "medium" },
@@ -30,6 +30,8 @@ const OPTIONS: Record<Style, Intl.DateTimeFormatOptions> = {
   dateNumeric: { day: "2-digit", month: "2-digit", year: "numeric" },
   dateLong: { dateStyle: "long" },
   dateTime: { dateStyle: "medium", timeStyle: "short" },
+  /** Con segundos (13 nov 2026, 14:05:09): para distinguir copias de seguridad hechas en el mismo minuto. */
+  dateTimeSeconds: { dateStyle: "medium", timeStyle: "medium" },
   dateTimeShort: { dateStyle: "short", timeStyle: "short" },
   time: { timeStyle: "short" },
   /** Hora con ceros (08:14), en 24 horas. */

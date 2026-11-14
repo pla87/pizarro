@@ -1,27 +1,22 @@
 "use client";
 
 import { appTimeZone } from "@/lib/format";
-import { ArrowLeft, Check, ClipboardCopy, Download, Eye, FileArchive, FileText, Loader2, Pencil, Rocket } from "lucide-react";
-import Link from "next/link";
+import { ArrowLeft, Check, ClipboardCopy, Download, FileArchive, FileText, Loader2, Rocket } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { countReleasesOn, deployRelease, getReleaseTaskDetails } from "@/actions/releases";
-import { buildReleaseMarkdown, computeReleaseCodes, defaultReleaseTitle, evergreenDue, isoDate, releaseFileName, releasesUntilDue, releaseZipName, swapTemplateBlock } from "@/lib/release";
+import { buildReleaseMarkdown, computeReleaseCodes, defaultReleaseTitle, evergreenDue, isoDate, RELEASE_MAX_ATTACHMENT_TASKS, RELEASE_MAX_TASKS, releaseFileName, releasesUntilDue, releaseZipName, swapTemplateBlock } from "@/lib/release";
 import type { BoardTask, TemplateOption } from "@/lib/types";
 import { useLocale, useT } from "@/i18n/client";
 import { copyText, downloadText } from "../ui/clipboard";
 import { useConfirm } from "../ui/ConfirmDialog";
-import { cn } from "../ui/cn";
-import { Markdown } from "../ui/Markdown";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
-import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard } from "./context";
-import { MentionText } from "../ui/MentionText";
 import { mentionsToPlain } from "@/lib/mentions";
 import { actionThrowResult } from "@/lib/stale-action";
 import { mbNumber } from "@/lib/quota-message";
-import { importWhenOnline, isNetworkError, loadWhenOnline, reportOffline } from "@/lib/connection";
-import type { ReleaseEditorApi, ReleaseRichEditor as RichEditorComponent } from "./ReleaseRichEditor";
+import { isNetworkError, loadWhenOnline, reportOffline } from "@/lib/connection";
+import { DraftTextEditor, TaskPickList, TemplatePickers, TemplateSourceNote, useDraftText } from "./DraftText";
 
 interface DeployResult {
   moved: { id: string; columnId: string; position: number }[];
@@ -57,32 +52,10 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   const [title, setTitle] = useState(() => defaultReleaseTitle(board.today, board.project.name));
   /** Si el usuario ya tocó el título, no se sustituye por el ordinal del día. */
   const titleEdited = useRef(false);
-  const [content, setContent] = useState("");
   const [generated, setGenerated] = useState("");
-  const [tab, setTab] = useState<"edit" | "preview">("edit");
-  // Con la preferencia «Con barra de formato» el paso 2 usa el mismo editor que las descripciones (sin Editar / Vista
-  // previa). `content` es entonces el Markdown cargado en el editor; lo que la persona escribe se lee del editor al
-  // usarlo (currentText). `richEmpty`: si lo ha dejado vacío (null mientras no lo toque).
-  const rich = board.editorMode === "WYSIWYG";
-  const [RichEditor, setRichEditor] = useState<typeof RichEditorComponent | null>(null);
-  const richApi = useRef<ReleaseEditorApi>(null);
-  const [richEmpty, setRichEmpty] = useState<boolean | null>(null);
-  useEffect(() => {
-    if (!rich) return;
-    let alive = true;
-    // Se pide al abrir el diálogo (en el paso 1): al generar ya suele estar. Mientras llega, el campo de texto normal.
-    importWhenOnline(() => import("./ReleaseRichEditor")).then((m) => alive && setRichEditor(() => m.ReleaseRichEditor), () => {});
-    return () => {
-      alive = false;
-    };
-  }, [rich]);
-  /** Markdown actual de la release (lo que se copia, se descarga y se guarda). */
-  const currentText = () => (rich && richApi.current ? richApi.current.read() : content);
-  /** Sustituye el texto entero (generar, cambiar cabecera o pie): el editor lo vuelve a cargar. */
-  const loadText = (text: string) => {
-    setContent(text);
-    setRichEmpty(null);
-  };
+  // Texto del paso 2, con el editor de la preferencia de Mi perfil (barra de formato o Markdown): ver DraftText.tsx.
+  const draft = useDraftText(board.editorMode);
+  const { currentText, loadText, setTab } = draft;
   const [copied, setCopied] = useState(false);
   const inProduction = board.columns.find((c) => c.role === "IN_PRODUCTION");
   const [destination, setDestination] = useState<"IN_PRODUCTION" | "ARCHIVE">(inProduction ? "IN_PRODUCTION" : "ARCHIVE");
@@ -103,6 +76,9 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
    */
   const [generatedTasks, setGeneratedTasks] = useState<{ taskId: string; columnId: string; title: string }[]>([]);
   const selectedTasks = useMemo(() => tasks.filter((t) => chosen.has(t.id)), [tasks, chosen]);
+  // Topes de la release (los mismos que el servidor): con más, «Generar» o «Marcar como desplegado» se desactivan con su
+  // motivo (antes llegaba el error de zod en inglés).
+  const tooMany = selectedTasks.length > RELEASE_MAX_TASKS;
   const [headerId, setHeaderId] = useState(templates.headers[0]?.id ?? "");
   const [footerId, setFooterId] = useState(templates.footers[0]?.id ?? "");
   /** Del usuario primero y luego los del proyecto: así se buscan por id. */
@@ -124,33 +100,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   };
 
   const templatePickers = (
-    <div className="grid gap-2 sm:grid-cols-2">
-      {(["header", "footer"] as const).map((which) => {
-        const own = which === "header" ? templates.headers : templates.footers;
-        const proj = which === "header" ? projectTemplates.headers : projectTemplates.footers;
-        return (
-          <div key={which}>
-            <label className="label" htmlFor={`rel-${which}`}>{which === "header" ? t("Cabecera") : t("Pie")}</label>
-            <select
-              id={`rel-${which}`}
-              className="input"
-              value={which === "header" ? headerId : footerId}
-              onChange={(e) => chooseTemplate(which, e.target.value)}
-            >
-              <option value="">{t("Ninguna")}</option>
-              {proj.length === 0 ? (
-                own.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)
-              ) : (
-                <>
-                  {own.length > 0 && <optgroup label={t("Tuyas")}>{own.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>}
-                  <optgroup label={t("Del proyecto")}>{proj.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>
-                </>
-              )}
-            </select>
-          </div>
-        );
-      })}
-    </div>
+    <TemplatePickers own={templates} project={projectTemplates} headerId={headerId} footerId={footerId} onChange={chooseTemplate} idPrefix="rel" />
   );
 
   // Varias releases el mismo día: el título por defecto lleva el ordinal «(2)», «(3)»…
@@ -247,6 +197,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   };
 
   const attachmentTotal = zipItems.reduce((n, i) => n + i.count, 0);
+  const tooManyAttachments = zipItems.length > RELEASE_MAX_ATTACHMENT_TASKS;
 
   const downloadAttachments = async () => {
     let changed: string | null = null;
@@ -322,20 +273,22 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
       onClose={requestClose}
       size="xl"
       title={
-        <span className="flex items-center gap-2">
-          <Rocket size={18} className="text-brand-600 dark:text-brand-300" /> {t("Generar release")}
-          <span className="text-xs font-normal text-slate-500">· {step === "select" ? t("Paso 1 de 2: tareas") : t("Paso 2 de 2: revisar y exportar")}</span>
+        // En móvil el paso se recorta con «…»; el icono y el nombre no se encogen (antes el icono desaparecía).
+        <span className="flex min-w-0 items-center gap-2">
+          <Rocket size={18} className="shrink-0 text-brand-600 dark:text-brand-300" /> <span className="shrink-0">{t("Generar release")}</span>
+          <span className="min-w-0 truncate text-xs font-normal text-slate-500">· {step === "select" ? t("Paso 1 de 2: tareas") : t("Paso 2 de 2: revisar y exportar")}</span>
         </span>
       }
       footer={
         step === "select" ? (
           <>
-            <span className="mr-auto text-xs text-slate-500">
-              {t("Cabecera y pie salen de")} <Link className="text-brand-600 dark:text-brand-300 hover:underline" href="/settings?tab=plantillas">{t("tus plantillas")}</Link>
-              {projectTemplates.headers.length + projectTemplates.footers.length > 0 && <> {t("y de las")} <Link className="text-brand-600 dark:text-brand-300 hover:underline" href={`/p/${board.project.id}/settings?tab=releases`}>{t("plantillas del proyecto")}</Link></>}.
-            </span>
+            {tooMany ? (
+              <span className="mr-auto text-xs text-red-600 dark:text-red-400" role="alert">{t("Una release admite como mucho 500 tareas: quita alguna de la selección.")}</span>
+            ) : (
+              <TemplateSourceNote projectId={board.project.id} projectTab="releases" withProject={projectTemplates.headers.length + projectTemplates.footers.length > 0} />
+            )}
             <button className="btn-secondary" onClick={() => void requestClose()}>{t("Cancelar")}</button>
-            <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || loadingDetails}>
+            <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || tooMany || loadingDetails}>
               {loadingDetails && <Loader2 size={15} className="animate-spin" />} {t("Generar con {n} tarea(s)", { n: selectedTasks.length })}
             </button>
           </>
@@ -352,11 +305,11 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
               <FileText size={15} /> .txt
             </button>
             {attachmentTotal > 0 && (
-              <button className="btn-secondary" onClick={downloadAttachments} disabled={zipping}>
+              <button className="btn-secondary" onClick={downloadAttachments} disabled={zipping || tooManyAttachments}>
                 {zipping ? <Loader2 size={15} className="animate-spin" /> : <FileArchive size={15} />} {t("Descargar adjuntos ({n})", { n: attachmentTotal })}
               </button>
             )}
-            <button className="btn-primary" onClick={deploy} disabled={busy || (richEmpty ?? !content.trim()) || (destination === "IN_PRODUCTION" && !inProduction)}>
+            <button className="btn-primary" onClick={deploy} disabled={busy || draft.empty() || tooManyAttachments || (destination === "IN_PRODUCTION" && !inProduction)}>
               {busy ? <Loader2 size={15} className="animate-spin" /> : <Rocket size={15} />} {t("Marcar como desplegado")}
             </button>
           </>
@@ -373,101 +326,20 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
               }} maxLength={200} />
           </div>
           {templatePickers}
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">{t("Tareas incluidas")}</span>
-            <div className="flex gap-1">
-              {/* Sin efecto posible (ya están todas o ninguna), el botón queda desactivado. */}
-              <button className="btn-ghost py-1 text-xs" disabled={tasks.every((task) => chosen.has(task.id))} onClick={() => { selectionTouched.current = true; setChosen(new Set(tasks.map((t) => t.id))); }}>{t("Todas")}</button>
-              <button className="btn-ghost py-1 text-xs" disabled={!tasks.some((task) => chosen.has(task.id))} onClick={() => { selectionTouched.current = true; setChosen(new Set()); }}>{t("Ninguna")}</button>
-            </div>
-          </div>
-          <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-            {tasks.map((task) => (
-              <li key={task.id}>
-                <label className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-brand-600"
-                    checked={chosen.has(task.id)}
-                    onChange={() => {
-                      selectionTouched.current = true;
-                      setChosen((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(task.id)) next.delete(task.id);
-                        else next.add(task.id);
-                        return next;
-                      });
-                    }}
-                  />
-                  <TypeBadge kind={board.kindById.get(task.kindId)} />
-                  <span className="min-w-0 flex-1 truncate text-sm"><MentionText text={task.title} /></span>
-                  {task.evergreen && (
-                    <span className="shrink-0 rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-500/20 dark:text-brand-300" title={t("Tarea fija en la release: se queda en su columna al desplegar")}>{t("fija")}{task.evergreenEvery === 2 ? ` · ${t("Cada dos")}` : task.evergreenEvery === 3 ? ` · ${t("Cada tres")}` : ""}{releaseNumber != null && task.evergreenEvery > 1 ? ` · ${dueHint(releasesUntilDue(releaseNumber, task.evergreenEvery))}` : ""}</span>
-                  )}
-                </label>
-              </li>
-            ))}
-            {tasks.length === 0 && <li className="px-3 py-4 text-sm text-slate-500">{t("No hay tareas.")}</li>}
-          </ul>
+          <TaskPickList
+            tasks={tasks}
+            chosen={chosen}
+            setChosen={setChosen}
+            onTouch={() => { selectionTouched.current = true; }}
+            badge={(task) => task.evergreen && (
+              <span className="shrink-0 rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium text-brand-700 dark:bg-brand-500/20 dark:text-brand-300" title={t("Tarea fija en la release: se queda en su columna al desplegar")}>{t("fija")}{task.evergreenEvery === 2 ? ` · ${t("Cada dos")}` : task.evergreenEvery === 3 ? ` · ${t("Cada tres")}` : ""}{releaseNumber != null && task.evergreenEvery > 1 ? ` · ${dueHint(releasesUntilDue(releaseNumber, task.evergreenEvery))}` : ""}</span>
+            )}
+          />
         </div>
       ) : (
         <div className="flex h-full flex-col gap-3">
           {templatePickers}
-          {rich ? (
-            RichEditor ? (
-              <div data-release-editor="rich" className="flex min-h-0 flex-1 flex-col">
-                <RichEditor value={content} label={t("Contenido de la release")} onEdited={setRichEmpty} onEscape={() => void requestClose()} apiRef={richApi} />
-              </div>
-            ) : (
-              // Mientras llega el editor con barra (red lenta): el texto se puede ir editando aquí y el editor lo recoge.
-              <textarea
-                className="input min-h-[45vh] flex-1 font-mono text-[13px] leading-relaxed"
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                spellCheck={false}
-                aria-label={t("Contenido de la release")}
-                data-release-editor="provisional"
-              />
-            )
-          ) : (
-          <>
-          <div role="tablist" className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 text-sm dark:bg-slate-800">
-            {(["edit", "preview"] as const).map((tb) => (
-              <button
-                key={tb}
-                type="button"
-                role="tab"
-                id={`release-tab-${tb}`}
-                aria-selected={tab === tb}
-                aria-controls="release-tabpanel"
-                onClick={() => setTab(tb)}
-                className={cn(
-                  "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 font-medium",
-                  tab === tb ? "bg-white shadow-sm dark:bg-slate-900" : "text-slate-500",
-                )}
-              >
-                {tb === "edit" ? <><Pencil size={14} /> {t("Editar")}</> : <><Eye size={14} /> {t("Vista previa")}</>}
-              </button>
-            ))}
-          </div>
-          <div role="tabpanel" id="release-tabpanel" aria-labelledby={`release-tab-${tab}`} className="flex min-h-0 flex-1 flex-col">
-          {tab === "edit" ? (
-            <textarea
-              className="input min-h-[45vh] flex-1 font-mono text-[13px] leading-relaxed"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              spellCheck={false}
-              aria-label={t("Contenido de la release")}
-              data-autofocus
-            />
-          ) : (
-            <div className="min-h-[45vh] rounded-lg border border-slate-200 p-4 dark:border-slate-800">
-              <Markdown>{content}</Markdown>
-            </div>
-          )}
-          </div>
-          </>
-          )}
+          <DraftTextEditor draft={draft} label={t("Contenido de la release")} idPrefix="release" dataAttr="data-release-editor" onEscape={() => void requestClose()} />
           <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
             <legend className="sr-only">{t("Al marcar como desplegado")}</legend>
             {/* El rótulo visible repite el del grupo (legend): oculto para el lector de pantalla, que ya lo anuncia. */}
@@ -481,6 +353,9 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
               {t("Archivar tarjetas")}
             </label>
           </fieldset>
+          {tooManyAttachments && (
+            <p className="text-xs text-red-600 dark:text-red-400" role="alert">{t("Una release admite como mucho 200 tareas con adjuntos: quita alguna de la selección.")}</p>
+          )}
         </div>
       )}
     </Modal>

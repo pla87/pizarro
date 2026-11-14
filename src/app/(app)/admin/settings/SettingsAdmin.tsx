@@ -17,13 +17,15 @@ import type { GoogleSettingsView } from "@/lib/google-config";
 import type { MessagingAdminView } from "@/lib/messaging";
 import { MessagingSettingsSection } from "./MessagingSettingsSection";
 import { InstallationSettingsSection, type InstallationView } from "./InstallationSettingsSection";
+import { AppIconSettingsSection } from "./AppIconSettingsSection";
+import type { AppIconAccent } from "@/lib/app-icon-core";
 
 // Mismos márgenes que el servidor (src/lib/app-settings.ts, que no se puede importar desde el cliente).
 const MIN = 1;
 const MAX = 1000;
 
 /** «Ajustes»: parámetros generales de la aplicación. */
-export function SettingsAdmin({ maxComments, mail, google, storage, messaging, installation }: { maxComments: number; mail: MailSettingsView; google: GoogleSettingsView; storage: StorageAdminView; messaging: MessagingAdminView; installation: InstallationView }) {
+export function SettingsAdmin({ maxComments, mail, google, storage, messaging, installation, appIcon }: { maxComments: number; mail: MailSettingsView; google: GoogleSettingsView; storage: StorageAdminView; messaging: MessagingAdminView; installation: InstallationView; appIcon: AppIconAccent }) {
   const t = useT();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -66,6 +68,7 @@ export function SettingsAdmin({ maxComments, mail, google, storage, messaging, i
   return (
     <div className="space-y-4">
       <InstallationSettingsSection view={installation} />
+      <AppIconSettingsSection initial={appIcon} orgName={installation.orgName} />
       <section className="card space-y-3 p-5">
         <div>
           <div className="flex items-center gap-1">

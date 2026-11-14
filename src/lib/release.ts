@@ -9,6 +9,18 @@ import { clampTitle } from "./title-clamp";
 import { partSuffix } from "./zip-plan";
 import { esT, type T } from "@/i18n/shared";
 
+/**
+ * Tareas que admite una release (las que el diálogo pide al servidor y despliega de una vez). Como en el plan de trabajo
+ * para IA (AI_PLAN_MAX_TASKS), el mensaje del límite lleva la cifra escrita: si cambia, cámbialo también allí
+ * (src/actions/releases.ts y ReleaseDialog.tsx).
+ */
+export const RELEASE_MAX_TASKS = 500;
+/**
+ * Tareas con adjuntos que admite una release (las que llevan código F1, C2… y cuyos adjuntos se copian al histórico). Su
+ * mensaje también lleva la cifra escrita (src/actions/releases.ts y ReleaseDialog.tsx).
+ */
+export const RELEASE_MAX_ATTACHMENT_TASKS = 200;
+
 interface ReleaseKind {
   id: string;
   /** Nombre que se muestra (el de serie, traducido al idioma de quien genera la release). */
@@ -196,7 +208,7 @@ function buildSections(input: Pick<ReleaseInput, "kinds" | "tasks" | "releaseNum
  * `&lt;`, `&gt;` o `&amp;` (como las descripciones, que también se decodifican): en el texto plano de la release salen
  * los caracteres reales. Lo mismo con los párrafos vacíos (`&nbsp;`).
  */
-function releaseTemplateText(raw: string): string {
+export function releaseTemplateText(raw: string): string {
   // Sus párrafos vacíos («&nbsp;»), como una línea en blanco: decodificados, eran una línea con un espacio.
   return decodeEntities(blankEmptyParagraphs(raw)).trim();
 }

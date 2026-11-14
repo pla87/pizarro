@@ -1,5 +1,5 @@
-import { ProjectLoading } from "@/components/ui/ProjectLoading";
+import { ReleasesSkeleton } from "@/components/ui/ProjectLoading";
 
 export default function Loading() {
-  return <ProjectLoading />;
+  return <ReleasesSkeleton />;
 }

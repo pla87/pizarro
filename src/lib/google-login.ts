@@ -28,10 +28,13 @@ export async function googleKeys(kid: string | null): Promise<Jwk[]> {
   return jwksCache.keys;
 }
 
-type GoogleIdentity = { sub: string; email: string; name: string | null };
+type GoogleIdentity = { sub: string; email: string; name: string | null; authTime?: number | null };
 type GoogleLoginFailure = ClaimsFailure | "exchange" | "signature";
 
-/** Cambia el código por tokens (con el verificador PKCE) y valida el id_token: firma, iss, aud, exp, nonce, email_verified y dominio. */
+/**
+ * Cambia el código por tokens (con el verificador PKCE) y valida el id_token: firma, iss, aud, exp, nonce, email_verified y
+ * dominio. La identidad lleva `authTime` (claim `auth_time`, o null si Google no la envía).
+ */
 export async function exchangeAndVerify(code: string, verifier: string, nonce: string): Promise<{ ok: true; identity: GoogleIdentity } | { ok: false; reason: GoogleLoginFailure }> {
   const res = await fetch(TOKEN_URL, {
     method: "POST",

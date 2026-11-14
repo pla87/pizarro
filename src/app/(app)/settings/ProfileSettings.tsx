@@ -13,6 +13,7 @@ import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { preloadEnglish, useT } from "@/i18n/client";
 import { ReleaseTemplateList } from "@/components/ReleaseTemplateList";
+import { PlanTemplateLists } from "@/components/PlanTemplateLists";
 import { DictationSection } from "./DictationSection";
 import { DraftsSection } from "./DraftsSection";
 import { ProfileTabs } from "./ProfileTabs";
@@ -39,6 +40,8 @@ interface Props {
   name: string;
   email: string;
   templates: { headers: TemplateOption[]; footers: TemplateOption[] };
+  /** Cabeceras y pies del plan de trabajo para IA. */
+  planTemplates: { headers: TemplateOption[]; footers: TemplateOption[] };
   cardStyle: CardStyleValue;
   editorMode: EditorModeValue;
   clearDraftsOnLogout: boolean;
@@ -48,6 +51,8 @@ interface Props {
   notifications: {
     notifyEmail: boolean;
     emailAvailable: boolean;
+    /** Administrador: con las menciones salen también los avisos de administración. */
+    adminNotices?: boolean;
   };
   google: { enabled: boolean; email: string | null; message: { ok: boolean; text: string } | null };
   /** Bloque extra bajo «Avisos» (Telegram y WhatsApp, avisos por email de más tipos y resumen diario). */
@@ -99,6 +104,17 @@ export function ProfileSettings(props: Props) {
           </p>
           <ReleaseTemplateList editorMode={props.editorMode} actions={USER_TEMPLATE_ACTIONS} kind="HEADER" title={t("Cabeceras")} initial={props.templates.headers} placeholder={t("Ej.: instrucciones de contexto para una IA.\n\n> Resume estos cambios para el equipo de negocio.")} />
           <ReleaseTemplateList editorMode={props.editorMode} actions={USER_TEMPLATE_ACTIONS} kind="FOOTER" title={t("Pies")} initial={props.templates.footers} placeholder={t("Ej.: checklist de validación.\n\n- [ ] Migraciones aplicadas\n- [ ] Prueba en producción")} />
+        </section>
+      )}
+
+      {props.tab === "plantillas" && (
+        <section className="card p-5" id="plan">
+          <h2 className="font-semibold">{t("Plantillas del plan de trabajo para IA")}</h2>
+          <p className="mt-0.5 flex items-center gap-1 text-sm text-slate-500">
+            {t("Instrucciones para la IA al principio y al final del plan que genera una columna «Plan de trabajo para IA»; admiten Markdown.")}
+            <InfoTip topic={t("Plantillas del plan de trabajo para IA")}>{t("Sin ninguna propia ni del proyecto, el plan usa las de serie, pensadas para Claude Code. Una nueva empieza con ese texto para que lo adaptes.")}</InfoTip>
+          </p>
+          <PlanTemplateLists editorMode={props.editorMode} actions={USER_TEMPLATE_ACTIONS} initial={props.planTemplates} />
         </section>
       )}
 
@@ -218,7 +234,7 @@ function LanguageSection({ initial }: { initial: "ES" | "EN" }) {
             role="radio"
             aria-checked={locale === value}
             onClick={() => choose(value)}
-            className={cn("rounded-lg border-2 px-4 py-2 text-sm font-medium", locale === value ? "border-brand-500" : "border-slate-200 dark:border-slate-700")}
+            className="choice-card rounded-lg px-4 py-2 text-sm font-medium"
           >
             {label}
           </button>
@@ -255,7 +271,7 @@ function EditorModeSection({ initial }: { initial: EditorModeValue }) {
           <button
             key={value}
             onClick={() => choose(value)}
-            className={cn("rounded-xl border-2 p-3 text-left", mode === value ? "border-brand-500" : "border-slate-200 dark:border-slate-700")}
+            className="choice-card rounded-xl p-3 text-left"
             aria-pressed={mode === value}
           >
             <div className="text-sm font-medium">{t(label)}</div>
@@ -323,6 +339,9 @@ function NotificationSection({ prefs }: { prefs: Props["notifications"] }) {
     <section className="card p-5">
       <h2 className="flex items-center gap-2 font-semibold"><Bell size={17} /> {t("Avisos de menciones")}</h2>
       <p className="mt-0.5 text-sm text-slate-500">{t("Siempre salen en la campana de avisos; además, puedes recibirlas por email:")}</p>
+      {prefs.adminNotices && (
+        <p className="mt-1 text-sm text-slate-500">{t("Como administrador, con las menciones te llegan también los avisos de proyectos privados que pasan a ser de equipo al borrarse una cuenta (por email y por Telegram o WhatsApp).")}</p>
+      )}
       <form
         className="mt-4 space-y-3"
         onSubmit={(e) => {
@@ -416,7 +435,7 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
           <button
             key={value}
             onClick={() => chooseTheme(value)}
-            className={cn("flex items-center gap-2 rounded-xl border-2 p-3 text-left text-sm", theme === value ? "border-brand-500" : "border-slate-200 dark:border-slate-700")}
+            className="choice-card flex items-center gap-2 rounded-xl p-3 text-left text-sm"
             aria-pressed={theme === value}
           >
             <Icon size={16} /> {t(label)}
@@ -459,7 +478,7 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
           <button
             key={value}
             onClick={() => choose(value)}
-            className={cn("rounded-xl border-2 p-3 text-left", style === value ? "border-brand-500" : "border-slate-200 dark:border-slate-700")}
+            className="choice-card rounded-xl p-3 text-left"
             aria-pressed={style === value}
           >
             <div

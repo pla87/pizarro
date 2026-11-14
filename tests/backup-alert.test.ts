@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BACKUP_STALE_MS, backupAlertFor, backupAlertMailDue, shrinkText } from "../src/lib/backup-alert-core";
+import { formatDate } from "../src/lib/format";
 
 const now = Date.parse("2026-10-30T12:00:00Z");
 const h = (n: number) => n * 3600_000;
@@ -50,4 +51,15 @@ test("aviso de copia mucho menor que la última buena: después de «atrasada» 
   const t = (s: string, v?: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k: string) => String(v?.[k]));
   assert.equal(shrinkText(shrink, t, (iso) => iso), `La copia del ${shrink.stem} tiene 3 personas, proyectos y tareas, y la última copia buena, del ${shrink.goodStem}, tenía 400.`);
   assert.match(shrinkText({ ...shrink, what: "files", at: "2026-10-30T03:15:00.000Z", goodAt: "2026-10-20T03:15:00.000Z" }, t, (iso) => iso.slice(0, 10)), /^La copia del 2026-10-30 tiene 3 ficheros, y la última copia buena, del 2026-10-20, tenía 400\.$/);
+});
+
+test("aviso de reducción: la hora de las copias lleva segundos (dos copias del mismo minuto se distinguen)", () => {
+  const t = (s: string, v?: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k: string) => String(v?.[k]));
+  const shrink = { what: "core" as const, local: 3, remote: 400, stem: "pizarro-backup-20261030T031542Z", goodStem: "pizarro-backup-20261030T031507Z", at: "2026-10-30T03:15:42.000Z", goodAt: "2026-10-30T03:15:07.000Z" };
+  for (const locale of ["es-ES", "en-GB", "en-US"]) {
+    const text = shrinkText(shrink, t, (iso) => formatDate(iso, "dateTimeSeconds", locale));
+    assert.match(text, /:15:42\b.*:15:07\b/, `${locale}: ${text}`);
+  }
+  // Las demás fechas siguen sin segundos.
+  assert.doesNotMatch(formatDate("2026-10-30T03:15:42.000Z", "dateTime", "es-ES"), /:42/);
 });

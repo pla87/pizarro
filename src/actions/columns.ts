@@ -3,11 +3,12 @@
 import { z } from "zod";
 import { describeAction, noteProject } from "@/lib/action-context";
 import { columnsLockName } from "@/lib/advisory-locks";
+import { assertFitsProgramRole } from "@/lib/column-capacity";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertProjectAccess, visibleProjectsWhere } from "@/lib/access";
 import { AppError, notFound } from "@/lib/errors";
-import { DEFAULT_WAITING_DAYS, isUniqueColumnRole, MAX_WAITING_DAYS } from "@/lib/constants";
+import { DEFAULT_WAITING_DAYS, EVERGREEN_COLUMN_ROLES, hasEvergreenTasks, isUniqueColumnRole, MAX_WAITING_DAYS } from "@/lib/constants";
 import { POSITION_STEP } from "@/lib/positions";
 import { lastPositionIn, lockColumns, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { requireUser } from "@/lib/session";
@@ -75,7 +76,15 @@ export async function setColumnRole(columnId: string, role: string) {
     const [holders, fixed] = await Promise.all([
       isUniqueColumnRole(value) ? db.column.findMany({ where: { projectId: column.projectId, role: value, id: { not: columnId } }, select: { id: true } }) : [],
       db.task.findMany({
-        where: { projectId: column.projectId, evergreen: true, ...(value === "NEXT_RELEASE" ? { columnId: { not: columnId } } : { columnId }) },
+        // Pierden la marca las de esta columna si su rol nuevo no tiene fijas y, con un rol único (la release), las de la
+        // columna que lo tenía y lo pierde. Las de otras columnas de plan para IA se conservan.
+        where: {
+          projectId: column.projectId, evergreen: true,
+          OR: [
+            ...(hasEvergreenTasks(value) ? [] : [{ columnId }]),
+            ...(isUniqueColumnRole(value) && hasEvergreenTasks(value) ? [{ columnId: { not: columnId }, column: { role: value } }] : []),
+          ],
+        },
         select: { id: true },
       }),
     ]);
@@ -89,6 +98,9 @@ export async function setColumnRole(columnId: string, role: string) {
     const project = value === "BUDGET" ? await db.project.findUniqueOrThrow({ where: { id: column.projectId }, select: { taskFields: true } }) : null;
     const enablesCost = project !== null && !project.taskFields.includes("cost");
     await db.$transaction(async (tx) => {
+      // «Programa del curso»: como mucho PROGRAM_MAX_SESSIONS sesiones; con más tareas no se le da el rol (con la
+      // columna bloqueada, para que nadie meta tareas a la vez: column-capacity.ts).
+      if (value === "PROGRAM" && column.role !== "PROGRAM") await assertFitsProgramRole(tx, column);
       if (enablesCost) await tx.project.update({ where: { id: column.projectId }, data: { taskFields: normalizeTaskFields([...project!.taskFields, "cost"]) } });
       // Solo NEXT_RELEASE e IN_PRODUCTION son únicos; WAITING, WEEKLY_PLAN y BUDGET se pueden repetir.
       if (isUniqueColumnRole(value)) {
@@ -97,9 +109,8 @@ export async function setColumnRole(columnId: string, role: string) {
       await tx.column.update({ where: { id: columnId }, data: { role: value, ...(clearWaiting ? { waitingDays: null } : {}), ...(clearRoutine ? { routineTargetColumnId: null } : {}) } });
       // Una columna que pasa a «Esperando» cuenta la espera desde ahora: sin esto, las tareas antiguas recibirían de golpe un aviso cada una.
       if (value === "WAITING" && column.role !== "WAITING") await tx.task.updateMany({ where: { columnId, archivedAt: null }, data: { columnEnteredAt: new Date(), waitingNotifiedAt: null } });
-      // Las tareas fijas solo existen en la columna de release: si deja de serlo, pasan a ser normales.
-      if (value !== "NEXT_RELEASE") await tx.task.updateMany({ where: { columnId, evergreen: true }, data: { evergreen: false, evergreenEvery: 1 } });
-      else await tx.task.updateMany({ where: { projectId: column.projectId, evergreen: true, columnId: { not: columnId } }, data: { evergreen: false, evergreenEvery: 1 } });
+      // Las tareas fijas solo existen en la columna de release y en las de plan para IA: las que quedan fuera pasan a normales.
+      await tx.task.updateMany({ where: { projectId: column.projectId, evergreen: true, column: { role: { notIn: [...EVERGREEN_COLUMN_ROLES] } } }, data: { evergreen: false, evergreenEvery: 1 } });
     });
     return { costEnabled: enablesCost };
   });

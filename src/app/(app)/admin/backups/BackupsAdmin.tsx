@@ -110,15 +110,25 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
 
   // «La reducción es correcta»: pide una segunda pulsación (la copia buena deja de conservarse siempre).
   const [confirmShrink, setConfirmShrink] = useState(false);
+  // Copia del aviso que se estaba viendo cuando el servidor no confirmó: si tras recargar el aviso es de otra («Ha llegado
+  // una copia nueva…»), se dice cuál era y cuál es ahora, con la hora en segundos (dos copias pueden ser del mismo minuto).
+  const [seenShrink, setSeenShrink] = useState<{ stem: string; at: string | null } | null>(null);
   // Con la copia del aviso que se ve: si ha llegado otra entretanto, el servidor no confirma y pide revisarlo.
-  const acceptShrink = (seen: { stem: string; goodStem: string }) =>
+  const acceptShrink = (seen: { stem: string; goodStem: string; at: string | null }) =>
     start(async () => {
-      const res = await acceptBackupReduction(seen);
-      if (res.ok) toast(t("Reducción confirmada. La copia anterior se borrará cuando le toque por la retención."));
-      else toast(res.error, "error");
+      const res = await acceptBackupReduction({ stem: seen.stem, goodStem: seen.goodStem });
+      if (res.ok) {
+        toast(t("Reducción confirmada. La copia anterior se borrará cuando le toque por la retención."));
+        setSeenShrink(null);
+      } else {
+        toast(res.error, "error");
+        setSeenShrink({ stem: seen.stem, at: seen.at });
+      }
       setConfirmShrink(false);
       router.refresh();
     });
+  /** Fecha y hora con segundos de una copia (de su nombre); sin fecha, el nombre. */
+  const copyTime = (iso: string | null, stem: string) => (iso ? formatDate(iso, "dateTimeSeconds", locale) : stem);
 
   const create = () =>
     start(async () => {
@@ -187,7 +197,18 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
           <ShieldAlert size={18} className="mt-0.5 shrink-0" />
           <div className="min-w-0 space-y-1">
             <p className="font-semibold">{t("La última copia es mucho menor que la anterior")}</p>
-            <p>{shrinkText(alert.shrink, t, (iso) => formatDate(iso, "dateTime", locale))}</p>
+            {seenShrink && seenShrink.stem !== alert.shrink.stem && (
+              <p data-shrink-replaced className="rounded-md bg-amber-100 px-2 py-1 font-medium dark:bg-amber-500/20">
+                {t("Ha llegado una copia nueva: el aviso es ahora de la copia del {date}; el que estabas viendo era de la del {previous}.", {
+                  date: copyTime(alert.shrink.at, alert.shrink.stem),
+                  previous: copyTime(seenShrink.at, seenShrink.stem),
+                })}
+              </p>
+            )}
+            <p data-shrink-text>{shrinkText(alert.shrink, t, (iso) => formatDate(iso, "dateTimeSeconds", locale))}</p>
+            <p data-shrink-stems className="text-xs break-all opacity-80">
+              {t("Copia nueva: {stem} · Última copia buena: {goodStem}", { stem: alert.shrink.stem, goodStem: alert.shrink.goodStem })}
+            </p>
             <p>
               {t("¿Se ha perdido la base de datos o el volumen? La retención conserva la última copia buena ({stem}) aunque ya le tocara borrarla. Para recuperarla, sigue los pasos de restauración de docs/INSTALL.md con ese nombre.", { stem: alert.shrink.goodStem })}
             </p>
@@ -195,7 +216,7 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
             <div className="flex flex-wrap gap-2 pt-1">
               {confirmShrink ? (
                 <>
-                  <button type="button" className="btn-primary" onClick={() => acceptShrink({ stem: alert.shrink!.stem, goodStem: alert.shrink!.goodStem })} disabled={pending}>{t("Sí, la reducción es correcta")}</button>
+                  <button type="button" className="btn-primary" onClick={() => acceptShrink({ stem: alert.shrink!.stem, goodStem: alert.shrink!.goodStem, at: alert.shrink!.at })} disabled={pending}>{t("Sí, la reducción es correcta")}</button>
                   <button type="button" className="btn-secondary" onClick={() => setConfirmShrink(false)} disabled={pending}>{t("Cancelar")}</button>
                 </>
               ) : (

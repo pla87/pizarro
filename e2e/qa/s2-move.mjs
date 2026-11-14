@@ -19,10 +19,10 @@ export async function run() {
   await L.eqEventually("diálogo: A cambia a «En progreso» (BD)", async () => (await L.dbTask("A")).columnName, COL.doing);
   L.eq("diálogo: Backlog en BD", await L.dbOrder(COL.backlog), ["B", "C", "D"]);
   L.check("diálogo: X e Y no se mueven de columna", (await L.dbOrder(COL.doing)).includes("X") && (await L.dbOrder(COL.doing)).includes("Y") && (await L.dbOrder(COL.doing)).length === 3);
-  const ev = await L.events("A");
-  L.check("diálogo: evento «move» «Movió la tarea de «Backlog» a «En progreso»»", ev.length === 1 && ev[0].code === "move" && JSON.parse(ev[0].label).p.from === COL.backlog && JSON.parse(ev[0].label).p.to === COL.doing, JSON.stringify(ev));
+  // El historial se escribe al final de la acción, después del cambio en la BD.
+  await L.checkEventually("diálogo: evento «move» «Movió la tarea de «Backlog» a «En progreso»»", async () => { const ev = await L.events("A"); return [ev.length === 1 && ev[0].code === "move" && JSON.parse(ev[0].label).p.from === COL.backlog && JSON.parse(ev[0].label).p.to === COL.doing, ev]; });
   await U.logHas("diálogo: AppLog «Movió «A» de «Backlog» a «En progreso»»", t0, "tasks.moveTask", "Movió «A» de «Backlog» a «En progreso»");
-  L.check("diálogo: el select refleja la columna nueva", (await U.dialog(p).locator("select").first().inputValue()) === (await L.dbTask("A")).columnId);
+  await L.checkEventually("diálogo: el select refleja la columna nueva", async () => (await U.dialog(p).locator("select").first().inputValue()) === (await L.dbTask("A")).columnId);
   // Corregido en v1.20.1: sin vecinas, el servidor la deja al final (como la pinta el tablero).
   L.eq("diálogo: A queda al final de «En progreso» (BD)", await L.dbOrder(COL.doing), ["X", "Y", "A"]);
   await U.closeDialog(p);
@@ -38,7 +38,7 @@ export async function run() {
   await U.openTask(p, "D");
   await U.dialog(p).locator("select").first().selectOption({ label: COL.closed });
   await L.eqEventually("diálogo a columna terminada: BD", async () => (await L.dbTask("D")).columnName, COL.closed);
-  L.check("diálogo a columna terminada: evento «done»", (await L.events("D")).some((e) => e.code === "done"), JSON.stringify(await L.events("D")));
+  await L.checkEventually("diálogo a columna terminada: evento «done»", async () => { const ev = await L.events("D"); return [ev.some((e) => e.code === "done"), ev]; });
   await U.closeDialog(p);
   await U.undoKey(p, "Control+z");
   await L.eqEventually("diálogo a terminada: deshacer", () => L.dbOrder(COL.closed), []);
@@ -50,15 +50,19 @@ export async function run() {
   await L.eqEventually("Alt+→: B pasa al final de «En progreso»", () => L.dbOrder(COL.doing), ["X", "Y", "B"]);
   L.eq("Alt+→: UI", await U.uiOrder(p, COL.doing), ["X", "Y", "B"]);
   L.eq("Alt+→: Backlog", await L.dbOrder(COL.backlog), ["A", "C", "D"]);
-  L.check("Alt+→: evento «move»", (await L.events("B")).some((e) => e.code === "move" && JSON.parse(e.label).p.to === COL.doing));
-  L.eq("Alt+→: el foco sigue en la tarjeta movida", await p.evaluate(() => document.activeElement?.getAttribute("data-task-card") !== null && document.activeElement?.textContent?.includes("B")), true);
+  await L.checkEventually("Alt+→: evento «move»", async () => (await L.events("B")).some((e) => e.code === "move" && JSON.parse(e.label).p.to === COL.doing));
+  // Tras moverla de columna, la tarjeta se vuelve a montar y recupera el foco (al montarse o, si no, a los dos fotogramas).
+  const focusedB = () => p.evaluate(() => !!document.activeElement?.hasAttribute("data-task-card") && !!document.activeElement.textContent?.includes("B"));
+  await L.checkEventually("Alt+→: el foco sigue en la tarjeta movida", focusedB);
   await p.keyboard.press("Alt+ArrowRight");
   await L.eqEventually("Alt+→ otra vez: B pasa a «Siguiente salto»", () => L.dbOrder(COL.next), ["B"]);
+  await L.checkEventually("Alt+→ otra vez: el foco sigue en B", focusedB);
   await p.keyboard.press("Alt+ArrowLeft");
   await L.eqEventually("Alt+←: B vuelve a «En progreso» (al final)", () => L.dbOrder(COL.doing), ["X", "Y", "B"]);
+  await L.checkEventually("Alt+←: el foco sigue en B", focusedB);
   await p.keyboard.press("Alt+ArrowUp");
   await L.eqEventually("Alt+↑: B sube una posición", () => L.dbOrder(COL.doing), ["X", "B", "Y"]);
-  L.eq("Alt+↑: UI", await U.uiOrder(p, COL.doing), ["X", "B", "Y"]);
+  await L.eqEventually("Alt+↑: UI", () => U.uiOrder(p, COL.doing), ["X", "B", "Y"]);
   await p.keyboard.press("Alt+ArrowUp");
   await L.eqEventually("Alt+↑ otra vez: B primera", () => L.dbOrder(COL.doing), ["B", "X", "Y"]);
   await p.keyboard.press("Alt+ArrowUp"); await L.sleep(500);
@@ -89,15 +93,17 @@ export async function run() {
   L.check("selección: la barra indica «3 seleccionadas»", await bar.isVisible());
   await p.getByRole("button", { name: /Mover a Siguiente salto/ }).click();
   await L.eqEventually("selección → Siguiente salto: BD", () => L.dbOrder(COL.next), ["B", "C", "X"]);
-  L.eq("selección: UI Siguiente salto (orden de columna y posición)", await U.uiOrder(p, COL.next), ["B", "C", "X"]);
+  await L.eqEventually("selección: UI Siguiente salto (orden de columna y posición)", () => U.uiOrder(p, COL.next), ["B", "C", "X"]);
   L.eq("selección: orígenes en BD", [await L.dbOrder(COL.backlog), await L.dbOrder(COL.doing)], [["A", "D"], ["Y"]]);
-  L.check("selección: la barra desaparece", !(await bar.isVisible().catch(() => false)));
-  L.check("selección: toast «3 tarjetas movidas»", await p.getByText("3 tarjetas movidas a «Siguiente salto a producción»").isVisible().catch(() => false));
-  const evs = (await Promise.all(["B", "C", "X"].map(L.events))).map((e) => e.slice(-1));
-  L.check("selección: último evento «move» de cada tarea con «Movió la tarea a «…»»", evs.every((e) => e.length === 1 && e[0].code === "move" && JSON.parse(e[0].label).k === "Movió la tarea a «{to}»" && JSON.parse(e[0].label).p.to === COL.next), JSON.stringify(evs));
+  await L.checkEventually("selección: la barra desaparece", async () => !(await bar.isVisible().catch(() => false)));
+  L.check("selección: toast «3 tarjetas movidas»", await p.getByText("3 tarjetas movidas a «Siguiente salto a producción»").waitFor({ timeout: 8000 }).then(() => true, () => false));
+  await L.checkEventually("selección: último evento «move» de cada tarea con «Movió la tarea a «…»»", async () => {
+    const evs = [];
+    for (const title of ["B", "C", "X"]) evs.push((await L.events(title)).slice(-1));
+    return [evs.every((e) => e.length === 1 && e[0].code === "move" && JSON.parse(e[0].label).k === "Movió la tarea a «{to}»" && JSON.parse(e[0].label).p.to === COL.next), evs];
+  });
   await U.logHas("selección: AppLog tasks.moveTasks", t0, "tasks.moveTasks", /^Movió 3 .* a «Siguiente salto a producción»$/);
-  const undo = await L.undoEntries("UNDO");
-  L.check("selección: una sola entrada de deshacer para las tres", undo.filter((u) => /Movió \{count\}/.test(u.label) && JSON.parse(u.label).p.count.p.n === 3).length === 1, JSON.stringify(undo.map((u) => u.label)));
+  await L.checkEventually("selección: una sola entrada de deshacer para las tres", async () => { const undo = await L.undoEntries("UNDO"); return [undo.filter((u) => /Movió \{count\}/.test(u.label) && JSON.parse(u.label).p.count.p.n === 3).length === 1, undo.map((u) => u.label)]; });
   const posNext = await Promise.all(["B", "C", "X"].map(pos));
   L.check("selección: posiciones crecientes B<C<X", posNext[0] < posNext[1] && posNext[1] < posNext[2], JSON.stringify(posNext));
   await U.undoKey(p, "Control+z");
@@ -114,8 +120,12 @@ export async function run() {
   await p.locator("select").filter({ has: p.locator("option", { hasText: "Mover a…" }) }).selectOption({ label: COL.closed });
   await L.eqEventually("Mover a…: las 4 llegan a «Cerrado» en orden", () => L.dbOrder(COL.closed), ["A", "B", "C", "D"]);
   L.eq("Mover a…: Backlog vacío", await L.dbOrder(COL.backlog), []);
-  L.check("Mover a… columna terminada: eventos «done»", (await Promise.all(["A", "B", "C", "D"].map(L.events))).every((e) => e.at(-1).code === "done"));
-  L.eq("Mover a…: UI", await U.uiOrder(p, COL.closed), ["A", "B", "C", "D"]);
+  await L.checkEventually("Mover a… columna terminada: eventos «done»", async () => {
+    const last = [];
+    for (const title of ["A", "B", "C", "D"]) last.push((await L.events(title)).at(-1)?.code ?? null);
+    return [last.every((c) => c === "done"), last];
+  });
+  await L.eqEventually("Mover a…: UI", () => U.uiOrder(p, COL.closed), ["A", "B", "C", "D"]);
   await U.undoKey(p, "Control+z");
   await L.eqEventually("Mover a…: deshacer", () => L.dbOrder(COL.backlog), ["A", "B", "C", "D"]);
 

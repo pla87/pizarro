@@ -15,6 +15,8 @@ import { groupChecklist, type ChecklistGroupBy } from "./checklist";
 import { loadChecklistItems } from "./column-views";
 import { buildWeekPlan, type WeekPlanGroupBy } from "./week-plan";
 import { buildProgramSessions, programDocumentName } from "./course-program";
+import { PROGRAM_MAX_SESSIONS } from "./program-limit";
+import type { Prisma } from "@/generated/prisma/client";
 
 // Genera el informe PDF de un proyecto. Lo usan la descarga (API) y el envío semanal por email;
 // quien llama comprueba antes que la persona puede ver el proyecto.
@@ -262,21 +264,25 @@ export function generateWeekPlanPdf(
 /**
  * PDF «Programa» de una columna PROGRAM: cada tarea no archivada es una sesión, en el orden de la columna, con su número,
  * su fecha (fecha límite, o rango inicio–fin si el proyecto usa la fecha de inicio), su título, su descripción (Markdown)
- * y, si se pide, su responsable. `documentName` es el nombre con el que se guarda en la Documentación del proyecto.
+ * y, si se pide, su responsable. Como mucho PROGRAM_MAX_SESSIONS sesiones (las primeras): una columna con más (datos de
+ * antes del límite, o devueltas con deshacer) da `omitted` > 0 para avisar. `documentName(versión)` es el nombre con el que
+ * se guarda en la Documentación del proyecto.
  */
 export function generateProgramPdf(
   projectId: string, columnId: string, opts: { locale: Locale; withAssignee: boolean },
-): Promise<{ pdf: Uint8Array; filename: string; documentName: string; taskCount: number } | null> {
+): Promise<{ pdf: Uint8Array; filename: string; documentName: (version: number) => string; taskCount: number; omitted: number } | null> {
   return (async () => {
     const t = makeT(opts.locale);
     const column = await db.column.findFirst({ where: { id: columnId, projectId, role: "PROGRAM" }, select: { project: { select: { name: true, taskFields: true } } } });
     if (!column) return null;
+    const where = { projectId, columnId, archivedAt: null };
     const tasks = await db.task.findMany({
-      where: { projectId, columnId, archivedAt: null },
+      where,
       orderBy: [{ position: "asc" }, { id: "asc" }],
-      take: 2000,
+      take: PROGRAM_MAX_SESSIONS,
       select: { title: true, description: true, dueDate: true, startDate: true, assignee: { select: { name: true } }, kind: { select: { titleTemplate: true } } },
     });
+    const omitted = tasks.length < PROGRAM_MAX_SESSIONS ? 0 : (await db.task.count({ where })) - tasks.length;
     const today = todayIso(appTimeZone());
     const sessions = buildProgramSessions(
       tasks.map((x) => ({ title: x.title, titlePrefix: x.kind?.titleTemplate ?? "", description: x.description, startDate: dateToIso(x.startDate), dueDate: dateToIso(x.dueDate), assignee: x.assignee?.name ?? null })),
@@ -286,8 +292,22 @@ export function generateProgramPdf(
     return {
       pdf,
       filename: `${t("programa")}-${slugOf(column.project.name, t("proyecto"))}-${today}.pdf`,
-      documentName: programDocumentName(t, today),
+      documentName: (version: number) => programDocumentName(t, today, version),
       taskCount: tasks.length,
+      omitted,
     };
   })();
+}
+
+/**
+ * Reserva la versión siguiente del programa del curso del proyecto (Project.programVersion + 1) dentro de la transacción
+ * que da de alta su documento: si el alta no se confirma, no se gasta. Una sola sentencia (UPDATE … RETURNING): dos
+ * publicaciones a la vez nunca reciben el mismo número, y como no depende de los documentos que haya, sigue subiendo
+ * aunque se borre alguno. Sin tocar updatedAt del proyecto (publicar no cambia el proyecto).
+ */
+export async function nextProgramVersion(tx: Prisma.TransactionClient, projectId: string): Promise<number> {
+  const rows = await tx.$queryRaw<{ programVersion: number }[]>`
+    UPDATE "Project" SET "programVersion" = "programVersion" + 1 WHERE "id" = ${projectId} RETURNING "programVersion"`;
+  if (!rows[0]) throw new AppError("El proyecto ya no existe.", 404, "project_gone");
+  return rows[0].programVersion;
 }

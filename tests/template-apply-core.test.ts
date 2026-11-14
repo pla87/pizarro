@@ -228,3 +228,59 @@ test("REPLACE: si varias columnas van a la misma, se reutiliza la que ya se llam
   assert.deepEqual(plan.columns[0]!.absorb, ["a"]);
   assert.equal(plan.columns[0]!.incoming, 3);
 });
+
+test("REPLACE: el resumen dice qué tareas fijas pasan a normales (su columna pierde el rol de release)", () => {
+  const p = project({
+    columns: [
+      { id: "rel", name: "Para publicar", role: "NEXT_RELEASE", isDone: false, wipLimit: null, active: 4, archived: 0 },
+      { id: "hecho", name: "Hecho", role: "NONE", isDone: true, wipLimit: null, active: 1, archived: 0 },
+    ],
+    evergreen: [
+      { id: "e1", title: "Revisar dependencias", columnId: "rel" },
+      { id: "e2", title: "Actualizar el changelog", columnId: "rel" },
+      { id: "e3", title: "Probar en móvil", columnId: "rel" },
+    ],
+  });
+  // La plantilla no tiene columna de release: «Para publicar» se empareja o se conserva, pero sin ese rol no hay fijas.
+  const sinRelease = template({ columns: [{ name: "Por hacer", role: "NONE", isDone: false }, { name: "Hecho", role: "NONE", isDone: true }] });
+  const plan = planReplace(p, sinRelease, { columns: { rel: "t:0" } });
+  assert.deepEqual(plan.unpinTasks, ["e1", "e2", "e3"]);
+  const line = summarizePlan(plan, p, sinRelease).find((l) => l.text.startsWith("{n} tareas fijas pasarán a ser normales"));
+  assert.equal(line?.n, 3);
+  assert.deepEqual(line?.names, ["Revisar dependencias", "Actualizar el changelog", "Probar en móvil"]);
+  // Conservada al final sin pareja, mantiene su rol (la plantilla no lo usa): siguen fijas.
+  assert.deepEqual(planReplace(p, sinRelease, { columns: { rel: "keep" } }).unpinTasks, []);
+  // La plantilla tiene release y se empareja con ella: siguen fijas y el resumen no dice nada.
+  const conRelease = template({ columns: [{ name: "Siguiente release", role: "NEXT_RELEASE", isDone: false }, { name: "Hecho", role: "NONE", isDone: true }] });
+  const keep = planReplace(p, conRelease);
+  assert.deepEqual(keep.unpinTasks, []);
+  assert.ok(!summarizePlan(keep, p, conRelease).some((l) => l.text.includes("fija")));
+  // Conservada al final cuando la plantilla ya usa el rol: lo pierde y sus fijas pasan a normales.
+  assert.deepEqual(planReplace(p, conRelease, { columns: { rel: "keep" } }).unpinTasks, ["e1", "e2", "e3"]);
+  // Muchas: como mucho 10 nombres y «…».
+  const many = project({ ...p, evergreen: Array.from({ length: 12 }, (_, i) => ({ id: `m${i}`, title: `Fija ${i}`, columnId: "rel" })) });
+  const names = summarizePlan(planReplace(many, sinRelease, { columns: { rel: "t:0" } }), many, sinRelease).find((l) => l.text.includes("fijas"))!.names!;
+  assert.equal(names.length, 11);
+  assert.equal(names.at(-1), "…");
+});
+
+test("ADD: vuelven a verse los tipos generales ocultos que usa la plantilla (y el resumen lo dice)", () => {
+  const hidden = (ids: string[]) => GENERALS.map((k) => ({ ...k, hidden: ids.includes(k.id) }));
+  // Plantilla que usa los generales (no oculta ninguno): vuelven los dos ocultos.
+  const p = project({ kinds: hidden(["kind_correccion", "kind_respuesta"]) });
+  const usaTodos = template({ columns: [{ name: "Hecho", role: "NONE", isDone: true }] });
+  const plan = planAdd(p, usaTodos);
+  assert.deepEqual(plan.showGenerals, ["kind_correccion", "kind_respuesta"]);
+  const line = summarizePlan(plan, p, usaTodos).find((l) => l.text === "Volverán a verse {n} tipos generales");
+  assert.deepEqual(line?.names, ["Corrección", "Respuesta"]);
+  assert.equal(planIsEmpty(plan, p, usaTodos), false);
+  // Plantilla que oculta «Corrección»: solo vuelve «Respuesta».
+  assert.deepEqual(planAdd(p, template({ hiddenGeneralKinds: ["corrección"] })).showGenerals, ["kind_respuesta"]);
+  // Plantilla que los oculta todos pero tiene un tipo que se llama como uno general: ese sí vuelve (y no se crea otro).
+  const conTipo = template({ hideAllGeneralKinds: true, kinds: [{ name: "Respuesta", color: "#000000", titleTemplate: "", descriptionTemplate: "", subtaskTemplate: [] }] });
+  const plan2 = planAdd(p, conTipo);
+  assert.deepEqual(plan2.showGenerals, ["kind_respuesta"]);
+  assert.deepEqual(plan2.addKinds, []);
+  // Si ninguno está oculto, no hay nada que mostrar.
+  assert.deepEqual(planAdd(project(), usaTodos).showGenerals, []);
+});

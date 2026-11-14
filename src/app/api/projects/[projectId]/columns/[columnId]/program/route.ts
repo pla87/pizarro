@@ -1,6 +1,6 @@
 import { authorizeColumnRoute } from "@/lib/column-route";
 import { saveGeneratedDocument, type GeneratedDocumentProblem } from "@/lib/documents";
-import { generateProgramPdf, isPdfQueueError } from "@/lib/report-build";
+import { generateProgramPdf, isPdfQueueError, nextProgramVersion } from "@/lib/report-build";
 import { AppError } from "@/lib/errors";
 import { logEvent } from "@/lib/log";
 import { publishChange } from "@/lib/realtime";
@@ -23,7 +23,9 @@ function problemMessage(problem: GeneratedDocumentProblem, t: T, ctx: { projectI
 /**
  * «Publicar programa (PDF)» de una columna con rol «Programa»: GET lo muestra (`?assignee=1` incluye el responsable de
  * cada sesión); POST lo devuelve para descargar y, con `?save=1`, guarda además una copia en la Documentación del
- * proyecto («Programa – fecha.pdf») si cabe. El resultado del guardado va en las cabeceras `X-Pizarro-Document-*`.
+ * proyecto («Programa – fecha_vN.pdf», con la versión siguiente del programa del proyecto) si cabe. El resultado del
+ * guardado va en las cabeceras `X-Pizarro-Document-*` (`-Version`: N). Como mucho PROGRAM_MAX_SESSIONS sesiones: si la
+ * columna tiene más, `X-Pizarro-Program-Omitted` dice cuántas se han quedado fuera.
  */
 async function handle(req: Request, params: Params, method: "GET" | "POST") {
   const start = performance.now();
@@ -41,7 +43,7 @@ async function handle(req: Request, params: Params, method: "GET" | "POST") {
   logEvent({
     category: "api", action: "report.pdf", message: `Programa PDF generado de «${project.name}» (${Math.round(report.pdf.length / 1024)} KB)`,
     userId: user.id, userName: user.name, projectId, path, ip: clientIp(req.headers), durationMs: performance.now() - start,
-    details: { tasks: report.taskCount, bytes: report.pdf.length, withAssignee },
+    details: { tasks: report.taskCount, bytes: report.pdf.length, withAssignee, ...(report.omitted ? { omitted: report.omitted } : {}) },
   });
   const headers: Record<string, string> = {
     "Content-Type": "application/pdf",
@@ -49,17 +51,22 @@ async function handle(req: Request, params: Params, method: "GET" | "POST") {
     "Cache-Control": "private, no-store",
     "X-Content-Type-Options": "nosniff",
   };
+  if (report.omitted) headers["X-Pizarro-Program-Omitted"] = String(report.omitted);
   if (save) {
     // El acceso al proyecto ya lo comprobó authorizeColumnRoute (las mismas reglas que para subir documentos).
-    const saved = await saveGeneratedDocument({ projectId, name: report.documentName, content: report.pdf, mimeType: "application/pdf", kind: "PDF", createdById: user.id })
+    // La versión se reserva al dar de alta el documento (en su transacción): si no cabe, no se gasta ningún número.
+    let version = 0;
+    const name = async (tx: Parameters<typeof nextProgramVersion>[0]) => report.documentName((version = await nextProgramVersion(tx, projectId)));
+    const saved = await saveGeneratedDocument({ projectId, name, content: report.pdf, mimeType: "application/pdf", kind: "PDF", createdById: user.id })
       .catch((err) => ({ ok: false as const, error: err instanceof AppError ? t(err.message) : t("No se pudo guardar en la Documentación.") }));
     if (saved.ok) {
       headers["X-Pizarro-Document-Id"] = saved.document.id;
       headers["X-Pizarro-Document-Name"] = encodeURIComponent(saved.document.name);
+      headers["X-Pizarro-Document-Version"] = String(version);
       logEvent({
         category: "api", action: "documents.upload", message: `Documento «${saved.document.name}» guardado desde «Publicar programa» (${Math.round(report.pdf.length / 1024)} KB)`,
         userId: user.id, userName: user.name, projectId, path, ip: clientIp(req.headers),
-        details: { projectId, documentId: saved.document.id, storedBytes: report.pdf.length, kind: "PDF", source: "program" },
+        details: { projectId, documentId: saved.document.id, storedBytes: report.pdf.length, kind: "PDF", source: "program", version },
       });
       publishChange({ projectId, userId: user.id, action: "documents.upload" });
     } else {

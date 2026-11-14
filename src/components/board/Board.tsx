@@ -34,6 +34,7 @@ import { BoardContext, useSelectionSize, type BoardApi } from "./context";
 import { createBoardStores, createStore, mergeTasks, tasksById, useStableValue } from "./stores";
 import { ColumnView } from "./ColumnView";
 import { wipExceeded } from "@/lib/wip";
+import { columnAtSessionLimit, PROGRAM_MAX_SESSIONS } from "@/lib/program-limit";
 import { boardDragA11y } from "./drag-a11y";
 import { EVERGREEN_DROPPABLE_PREFIX } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
@@ -41,6 +42,7 @@ import { useCardActions } from "./cardActions";
 import { draggingCard } from "./nearCards";
 import { placeBlock, sameOrder, selectionGroup, type BlockPlacement } from "./groupDrag";
 import { focusCard } from "./shortcuts";
+import { createMoveTurns } from "./moveTurns";
 import { useReviewGuard } from "./reviewGuard";
 import { activeFilterCount, EMPTY_FILTERS, filtersKey, parseStoredFilters, sanitizeFilters, searchTerms, taskMatchesFilters, taskSearchText, type BoardFilters, type SearchNames } from "./filters";
 import { Presence } from "./Presence";
@@ -689,6 +691,16 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   }, [refresh]);
 
   const baseItems = useStableItems(useMemo(() => groupItems(columns, tasks), [columns, tasks]));
+  // Las mismas listas, de lo último guardado (el store), como getTask: los atajos de teclado leen las dos a la vez, y una
+  // lista del último dibujo (que les llega en un efecto) podía no tener aún el movimiento anterior si se pulsan dos
+  // seguidos antes de que el tablero se vuelva a dibujar.
+  const columnsNow = useRef(columns);
+  useLayoutEffect(() => {
+    columnsNow.current = columns;
+  });
+  const itemsNow = useCallback(() => groupItems(columnsNow.current, stores.tasks.get()), [stores]);
+  // Turnos de los movimientos (moveTurns.ts): la respuesta de uno no pisa lo que ya ha pintado otro posterior.
+  const [moveTurns] = useState(createMoveTurns);
   // Filtro del buscador: por título, tipo, responsable y etiquetas (todas las palabras deben aparecer).
   // Diferido: el campo responde al momento y el tablero se vuelve a filtrar sin bloquear (al limpiar el filtro con Escape
   // reaparecen cientos de tarjetas de golpe).
@@ -748,7 +760,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const sel = stores.selection.get();
     if (sel.size && [...sel].some((id) => !matchingIds.has(id))) stores.selection.set(new Set([...sel].filter((id) => matchingIds.has(id))));
   }, [matchingIds, stores]);
-  // Tareas evergreen por columna: fuera de la lista ordenable, se muestran en el pie de la columna de la release.
+  // Tareas evergreen por columna: fuera de la lista ordenable, se muestran en el pie de su columna (la de la release o una de plan para IA).
   const evergreenByColumn = useMemo(() => {
     const map: Record<string, string[]> = {};
     for (const t of [...tasks].sort(compareTaskOrder)) if (t.evergreen) (map[t.columnId] ??= []).push(t.id);
@@ -843,13 +855,16 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
    * selección se mantiene: se ve dónde han quedado y se pueden volver a mover (Alt+flechas seguidas, otro arrastre).
    */
   const moveBlock = async (group: string[], columnId: string, placement: BlockPlacement, focusId?: string) => {
-    if (sameOrder(baseItems[columnId] ?? NO_IDS, placement.list)) return;
+    if (sameOrder(itemsNow()[columnId] ?? NO_IDS, placement.list)) return;
     if (!(await confirmLeaveReview(group, columnId))) {
       if (focusId) focusCard(focusId);
       return;
     }
     const byId = tasksById(stores.tasks.get());
     const before = new Map(group.flatMap((id) => (byId.get(id) ? [[id, byId.get(id)!] as const] : [])));
+    const turn = moveTurns.start(group);
+    // Al responder, solo se tocan las que nadie ha vuelto a mover entretanto.
+    const mine = <V,>(entries: Iterable<[string, V]>) => new Map([...entries].filter(([id]) => moveTurns.isLatest(id, turn)));
     const pos = (id: string | null) => (id ? byId.get(id)?.position : null);
     const positions = spreadPositions(pos(placement.prevId), pos(placement.nextId), group.length);
     const slot = new Map(group.map((id, i) => [id, positions[i]!]));
@@ -862,14 +877,15 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (focusId) focusCard(focusId);
     const res = await track(moveTasks(group, columnId, { prevId: placement.prevId, nextId: placement.nextId }));
     if (!res.ok) {
-      restoreTasks(before);
+      restoreTasks(mine(before));
       if (focusId) focusCard(focusId);
       return toast(res.error, "error");
     }
-    const server = new Map(res.data.moved.map((m) => [m.id, m.position]));
+    const moved = new Set(res.data.moved.map((m) => m.id));
+    const server = mine(res.data.moved.map((m) => [m.id, m.position] as [string, number]));
     setTasks((prev) => prev.map((x) => (server.has(x.id) ? { ...x, columnId, position: server.get(x.id)! } : x)));
     // Las que el servidor no ha movido (archivadas o borradas mientras tanto) vuelven a como estaban; el refresco las quita.
-    const skipped = new Map([...before].filter(([id]) => !server.has(id)));
+    const skipped = mine([...before].filter(([id]) => !moved.has(id)));
     if (skipped.size) restoreTasks(skipped);
     res.data.spawned.forEach(upsertTask);
     const name = sortedColumns.find((c) => c.id === columnId)?.name ?? "";
@@ -877,7 +893,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     toast(t("{moved} a «{name}»", { moved: n === 1 ? t("1 tarjeta movida") : t("{n} tarjetas movidas", { n }), name }));
   };
 
-  const cardActions = useCardActions({ currentUserId: data.currentUserId, getTask, sortedColumns, baseItems, patchTask, upsertTask, track, toast, t, confirmLeaveReview, getSelected: stores.selection.get, moveBlock });
+  const cardActions = useCardActions({ currentUserId: data.currentUserId, getTask, sortedColumns, getItems: itemsNow, moveTurns, patchTask, upsertTask, track, toast, t, confirmLeaveReview, getSelected: stores.selection.get, moveBlock });
 
   // El contexto solo cambia si cambia su contenido: los datos del servidor llegan como objetos nuevos en cada
   // refresco aunque sean iguales, y sin esto todas las tarjetas se redibujarían cada vez.
@@ -1182,14 +1198,14 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     flushStale();
   };
 
-  /** Soltar una tarjeta en el panel de fijas: pasa a la columna de la release como evergreen. */
+  /** Soltar una tarjeta en el panel de fijas: pasa a esa columna (la de la release o una de plan para IA) como evergreen. */
   const dropOnEvergreen = async (id: string, columnId: string) => {
     const previous = taskById.get(id);
     if (!previous) return;
     if (!(await confirmLeaveReview([id], columnId))) return;
     const position = Math.max(0, ...tasks.filter((t) => t.columnId === columnId).map((t) => t.position)) + 1024;
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, columnId, position, evergreen: true } : t)));
-    const res = await track(makeEvergreen(id));
+    const res = await track(makeEvergreen(id, columnId));
     if (!res.ok) {
       setTasks((prev) => prev.map((t) => (t.id === id ? previous : t)));
       return toast(res.error, "error");
@@ -1223,9 +1239,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const id = String(active.id);
     const overId = String(over.id);
     if (overId.startsWith(EVERGREEN_DROPPABLE_PREFIX)) {
-      // Soltar una tarea fija en su propio panel no hace nada.
-      if (origin.columnId === EVERGREEN_ORIGIN) return;
       const evergreenColumn = overId.slice(EVERGREEN_DROPPABLE_PREFIX.length);
+      // Soltar una tarea fija en su propio panel no hace nada; en el de otra columna (otro plan para IA, o la release)
+      // pasa allí como fija (abajo, dropOnEvergreen). Antes se ignoraba aunque el lector de pantalla anunciaba el cambio.
+      if (origin.columnId === EVERGREEN_ORIGIN && taskById.get(id)?.columnId === evergreenColumn) return;
       // Copia sobre el panel de fijas: al final de esa columna, como tarea normal.
       if (copy) return dropCopy(id, evergreenColumn, null, null);
       // Una selección, igual: al final de esa columna como tareas normales (las fijas se hacen de una en una).
@@ -1257,11 +1274,13 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (col !== origin.columnId && !(await confirmLeaveReview([id], col))) return;
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, columnId: col, position, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() } : t)));
 
+    const turn = moveTurns.start([id]);
     const res = await track(moveTask(id, col, prevId, nextId));
+    const latest = moveTurns.isLatest(id, turn);
     if (!res.ok) {
-      setTasks((prev) => prev.map((t) => (t.id === id ? previous : t)));
+      if (latest) setTasks((prev) => prev.map((t) => (t.id === id ? previous : t)));
       toast(res.error, "error");
-    } else if (res.data.position !== position) {
+    } else if (latest && res.data.position !== position) {
       setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, position: res.data.position } : t)));
     }
     if (res.ok) res.data.spawned.forEach(upsertTask);
@@ -1367,6 +1386,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sortedColumns, baseItems, evergreenByColumn],
   ));
+  // «+» flotante: crea en la columna que se ve en el móvil; si es un «Programa del curso» con el tope de sesiones, no abre
+  // «Nueva tarea» (como el «+» de su cabecera, desactivado) y dice por qué.
+  const mobileTarget = sortedColumns.find((c) => c.id === activeMobileColumn);
+  const mobileColumnFull = mobileTarget && columnAtSessionLimit(mobileTarget.role, cardCounts[mobileTarget.id] ?? 0)
+    ? t("La columna «{name}» admite como mucho {max} sesiones.", { name: mobileTarget.name, max: PROGRAM_MAX_SESSIONS })
+    : null;
   const dndBoard = useMemo(
     () => (
       <DndContext
@@ -1624,7 +1649,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         </div>
         {view === "list" ? <ListView tasks={tasks} matchingIds={matchingIds} filtering={filtering} /> : dndBoard}
 
-        <FloatingCreateButtons onBulk={() => setBulk({ columnId: activeMobileColumn })} onNew={() => setNewTask({ columnId: activeMobileColumn })} />
+        <FloatingCreateButtons
+          onBulk={() => setBulk({ columnId: activeMobileColumn })}
+          onNew={() => setNewTask({ columnId: activeMobileColumn })}
+          fullReason={mobileColumnFull}
+          onFull={(reason) => toast(reason, "error")}
+        />
 
         <SelectionBarHost
           columns={sortedColumns}
@@ -1712,8 +1742,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
 /**
  * Botones flotantes de crear (móvil y tableta). Mientras hay selección se retiran: la barra de selección ocupa el pie
  * de la pantalla con sus acciones y así ni la tapan ni quedan tapados (vuelven al limpiar la selección).
+ * `fullReason`: la columna en la que crearía el «+» (la que se ve en el móvil) no admite más tareas («Programa del curso»
+ * con el tope de sesiones). El «+» se ve desactivado, como el de la cabecera de la columna, pero sigue respondiendo al
+ * toque: en vez de abrir «Nueva tarea» (que el servidor rechazaría al crear) dice por qué (`onFull`). «Crear varias
+ * tareas» sigue disponible: su diálogo deja elegir otra columna.
  */
-function FloatingCreateButtons({ onBulk, onNew }: { onBulk: () => void; onNew: () => void }) {
+function FloatingCreateButtons({ onBulk, onNew, fullReason, onFull }: { onBulk: () => void; onNew: () => void; fullReason: string | null; onFull: (reason: string) => void }) {
   const t = useT();
   const selecting = useSelectionSize() > 0;
   if (selecting) return null;
@@ -1727,9 +1761,18 @@ function FloatingCreateButtons({ onBulk, onNew }: { onBulk: () => void; onNew: (
         <PlusStack size={22} />
       </button>
       <button
-        onClick={onNew}
-        className="fixed right-5 bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] z-30 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-on-brand shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95 lg:hidden"
+        onClick={() => (fullReason ? onFull(fullReason) : onNew())}
+        className={cn(
+          "fixed right-5 bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] z-30 flex h-14 w-14 items-center justify-center rounded-full shadow-lg lg:hidden",
+          // Desactivado: gris y opaco (con transparencia se verían las tarjetas a través).
+          fullReason
+            ? "cursor-not-allowed bg-slate-300 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
+            : "bg-brand-600 text-on-brand shadow-brand-600/30 hover:bg-brand-700 active:scale-95",
+        )}
         aria-label={t("Nueva tarea o captura")}
+        aria-disabled={fullReason ? true : undefined}
+        title={fullReason ?? undefined}
+        data-column-full={fullReason ? true : undefined}
       >
         <Plus size={26} />
       </button>

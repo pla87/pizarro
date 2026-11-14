@@ -78,6 +78,37 @@ describe("plantillas de proyecto de serie", () => {
     expectOk(await resetTemplate(eventos.id));
     assert.equal((await db.builtinTemplateSeeded.findUniqueOrThrow({ where: { key: "eventos" } })).appliedHash, templateFingerprint(canonicalTemplate("eventos")!));
   });
+  test("«Curso o máster» de la v1.53 sin tocar pasa sola a la nueva (Ejercicios y exámenes, Plan de trabajo para IA, sin Hecho)", async () => {
+    await db.projectTemplate.deleteMany();
+    await db.builtinTemplateSeeded.deleteMany();
+    await seedBuiltinTemplates(db);
+    const canon = canonicalTemplate("curso-master")!;
+    // Lo que sembró la v1.53.0: otras columnas y otra descripción; el resto, igual.
+    const v153 = {
+      ...canon,
+      description: "Preparar un curso o máster con ayuda de un agente de IA: programa por sesiones publicable en PDF, materiales, ejercicios, exámenes y seguimiento de alumnos.",
+      columns: [
+        { name: "Ideas", role: "NONE" as const, isDone: false }, { name: "Materiales", role: "NONE" as const, isDone: false },
+        { name: "Ejercicios", role: "NONE" as const, isDone: false }, { name: "Exámenes", role: "NONE" as const, isDone: false },
+        { name: "Programa", role: "PROGRAM" as const, isDone: false }, { name: "Seguimiento de alumnos", role: "NONE" as const, isDone: false },
+        { name: "Hecho", role: "NONE" as const, isDone: true },
+      ],
+    };
+    await db.projectTemplate.update({ where: { builtinKey: "curso-master" }, data: { description: v153.description, columns: v153.columns } });
+    await db.builtinTemplateSeeded.update({ where: { key: "curso-master" }, data: { appliedHash: templateFingerprint(v153) } });
+    assert.deepEqual(await upgradeBuiltinTemplates(db), ["curso-master"]);
+    const row = await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "curso-master" } });
+    assert.deepEqual((row.columns as { name: string; role: string; isDone: boolean }[]).map((c) => [c.name, c.role, c.isDone]), [
+      ["Ideas", "NONE", false], ["Materiales", "NONE", false], ["Ejercicios y exámenes", "NONE", false],
+      ["Plan de trabajo para IA", "AI_PLAN", false], ["Programa", "PROGRAM", false], ["Seguimiento de alumnos", "NONE", false],
+    ]);
+    // Modificada por el administrador (otro nombre): se respeta.
+    await db.projectTemplate.update({ where: { builtinKey: "curso-master" }, data: { name: "Mi máster", columns: v153.columns } });
+    await db.builtinTemplateSeeded.update({ where: { key: "curso-master" }, data: { appliedHash: templateFingerprint(v153) } });
+    assert.deepEqual(await upgradeBuiltinTemplates(db), []);
+    assert.equal((await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "curso-master" } })).name, "Mi máster");
+  });
+
   test("usuario en inglés: plantillas de serie sin tocar en inglés, en el listado y al crear el proyecto; modificadas, tal cual", async () => {
     await db.projectTemplate.deleteMany();
     await db.builtinTemplateSeeded.deleteMany();

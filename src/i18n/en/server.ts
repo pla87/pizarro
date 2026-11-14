@@ -84,7 +84,6 @@ export const server: Record<string, string> = {
   "Etiqueta no válida.": "Invalid label.",
   "{who} ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos.": "{who} changed the text of this task while you were editing it. It has been reloaded with their changes: apply yours again.",
   "Otra persona ha cambiado el texto de esta tarea mientras la editabas. Se ha recargado con sus cambios: vuelve a aplicar los tuyos.": "Someone else changed the text of this task while you were editing it. It has been reloaded with their changes: apply yours again.",
-  "Solo las tareas de la columna de la release pueden ser fijas.": "Only tasks in the release column can be pinned.",
   "El proyecto no tiene columna de release.": "The project has no release column.",
   "Las tareas son de proyectos distintos.": "The tasks belong to different projects.",
   "La subtarea no existe.": "The subtask doesn't exist.",

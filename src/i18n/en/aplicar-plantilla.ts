@@ -23,8 +23,8 @@ export const aplicarPlantilla: Record<string, string> = {
   "Plantillas de la instalación": "Templates of this installation",
   "Qué hacer": "What to do",
   "Añadir lo que falte de la plantilla": "Add what is missing from the template",
-  "Añade las columnas, tipos, etiquetas, campos y plantillas de release que el proyecto no tenga. No cambia ni quita nada.":
-    "Adds the columns, types, labels, fields and release templates the project doesn't have. It doesn't change or remove anything.",
+  "Añade las columnas, tipos, etiquetas, campos y plantillas de release que el proyecto no tenga, y vuelve a mostrar los tipos generales que usa la plantilla si el proyecto los tiene ocultos. No cambia ni quita nada más.":
+    "Adds the columns, types, labels, fields and release templates the project doesn't have, and shows again the general types the template uses if the project hides them. It doesn't change or remove anything else.",
   "Cambiar a esta plantilla": "Switch to this template",
   "Empareja las columnas y los tipos actuales con los de la plantilla y lleva allí sus tareas. Nunca se quita nada que tenga tareas.":
     "Matches the current columns and types with the template's and moves their tasks there. Nothing that has tasks is ever removed.",
@@ -96,4 +96,15 @@ export const aplicarPlantilla: Record<string, string> = {
   // «Cambiar a esta plantilla», paso 2: qué pasa con un tipo general que se conserva (lo mismo que dice el resumen).
   "Ocultar (la plantilla no lo usa)": "Hide (the template doesn't use it)",
   "Conservar (volverá a verse)": "Keep (it will be shown again)",
+
+  // Resumen: tareas fijas que dejan de serlo al cambiar de plantilla.
+  "{n} tarea fija pasará a ser normal (su columna deja de admitir tareas fijas)": "{n} pinned task will become a normal task (its column no longer takes pinned tasks)",
+  "{n} tareas fijas pasarán a ser normales (su columna deja de admitir tareas fijas)": "{n} pinned tasks will become normal tasks (their column no longer takes pinned tasks)",
+  // Límites de aplicar y deshacer plantilla (lib/template-apply-rate.ts).
+  "Este proyecto ya ha cambiado de plantilla {n} veces en los últimos {w} minutos. Vuelve a intentarlo dentro de {min} min.":
+    "This project has already changed template {n} times in the last {w} minutes. Try again in {min} min.",
+  "Ya has aplicado o deshecho {n} plantillas en la última hora. Vuelve a intentarlo dentro de {min} min.":
+    "You have already applied or undone {n} templates in the last hour. Try again in {min} min.",
+  "Demasiadas vistas previas de plantillas seguidas. Vuelve a intentarlo dentro de {min} min.":
+    "Too many template previews in a row. Try again in {min} min.",
 };

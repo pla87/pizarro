@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { afterDone, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
-import { deployRelease } from "../../src/actions/releases";
+import { deployRelease, getReleaseTaskDetails } from "../../src/actions/releases";
+import { RELEASE_MAX_ATTACHMENT_TASKS, RELEASE_MAX_TASKS } from "../../src/lib/release";
 import { redoLast, undoLast } from "../../src/actions/undo";
 
 async function setup() {
@@ -148,5 +149,38 @@ describe("deshacer un despliegue", () => {
     await afterDone();
     assert.deepEqual(res.storageWarning, { usedMb: 1.2, limitMb: 1 });
     assert.ok(res.storageWarning!.usedMb > res.storageWarning!.limitMb);
+  });
+});
+
+describe("topes de la release", () => {
+  // Sin mensaje propio, con más de 500 tareas (o 200 con adjuntos) llegaba el error de zod en inglés («Too big: expected
+  // array to have <=500 items»). Ahora, el del diálogo (RELEASE_MAX_TASKS / RELEASE_MAX_ATTACHMENT_TASKS), traducido.
+  test("más de 500 tareas o de 200 con adjuntos: mensaje propio en el idioma de quien despliega, y no se crea nada", async () => {
+    const user = await makeUser();
+    const english = await makeUser();
+    await db.user.update({ where: { id: english.id }, data: { locale: "EN" } });
+    const f = await makeProject({ members: [user, english] });
+    await db.column.create({ data: { projectId: f.project.id, name: "En producción", position: 4000, role: "IN_PRODUCTION" } });
+    await loginAs(user);
+    assert.equal(RELEASE_MAX_TASKS, 500);
+    assert.equal(RELEASE_MAX_ATTACHMENT_TASKS, 200);
+    const ids = Array.from({ length: RELEASE_MAX_TASKS + 1 }, (_, i) => `rel_tope_${i}`);
+    const one = await makeTask(f, { columnId: f.columns.done });
+    const input = { projectId: f.project.id, title: "R", content: "Cambios", destination: "IN_PRODUCTION" as const };
+    const es = /^Una release admite como mucho 500 tareas: quita alguna de la selección\.$/;
+    expectFail(await getReleaseTaskDetails({ projectId: f.project.id, taskIds: ids }), es);
+    expectFail(await deployRelease({ ...input, taskIds: ids }), es);
+    expectFail(await deployRelease({ ...input, taskIds: [one.id], columns: ids.map((taskId) => ({ taskId, columnId: f.columns.done })) }), es);
+    expectFail(await deployRelease({ ...input, taskIds: [one.id], titles: ids.map((taskId) => ({ taskId, title: "T" })) }), es);
+    const attachments = ids.slice(0, RELEASE_MAX_ATTACHMENT_TASKS + 1).map((taskId, i) => ({ taskId, code: `F${i + 1}` }));
+    expectFail(await deployRelease({ ...input, taskIds: [one.id], attachments }), /^Una release admite como mucho 200 tareas con adjuntos: quita alguna de la selección\.$/);
+    assert.equal(await db.release.count({ where: { projectId: f.project.id } }), 0);
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: one.id } })).columnId, f.columns.done);
+    // Con 500 justas, la lectura pasa (las que no existen no salen).
+    assert.deepEqual(expectOk(await getReleaseTaskDetails({ projectId: f.project.id, taskIds: [...ids.slice(0, RELEASE_MAX_TASKS - 1), one.id] })).map((d) => d.id), [one.id]);
+    // En inglés, traducido (nada de «Too big»).
+    await loginAs(english);
+    expectFail(await getReleaseTaskDetails({ projectId: f.project.id, taskIds: ids }), /^A release holds at most 500 tasks: remove some from the selection\.$/);
+    expectFail(await deployRelease({ ...input, taskIds: [one.id], attachments }), /^A release holds at most 200 tasks with attachments: remove some from the selection\.$/);
   });
 });

@@ -8,7 +8,7 @@ import { runAction } from "@/lib/action";
 import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjectAccess, assertTaskAccess, loadTaskWithAccess, visibleProjectsWhere } from "@/lib/access";
 import { appTimeZone, attachmentTotals, listKinds, loadBoardTask, loadBoardTasksByIds, projectClients, projectUsers } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
-import { MAX_SUBTASKS, MAX_TITLE, MAX_TITLE_UNITS } from "@/lib/constants";
+import { EVERGREEN_COLUMN_ROLES, MAX_SUBTASKS, MAX_TITLE, MAX_TITLE_UNITS } from "@/lib/constants";
 import { clampTitle, graphemeCount } from "@/lib/title-clamp";
 import { describeAction, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { assertCanBlock, blockProblem, lockBlocking } from "@/lib/blocking";
@@ -19,6 +19,7 @@ import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions"
 import { lastPositionIn, lockColumns, lockTaskRows, placeBlockInColumn, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertTaskCapacity, assertTaskCreateRate } from "@/lib/caps";
+import { assertColumnRoom } from "@/lib/column-capacity";
 import { getMaxCommentsPerTask } from "@/lib/app-settings";
 import { requireUser } from "@/lib/session";
 import * as v from "@/lib/validation";
@@ -159,14 +160,16 @@ export async function createTask(input: z.input<typeof createSchema>) {
       await assertFieldsEnabled(enabled, optional);
       assertStartBeforeDue(enabled, data.startDate, data.dueDate);
     }
-    // Solo se admite evergreen en la columna de la release.
-    const evergreen = data.evergreen && (await db.column.count({ where: { id: data.columnId, role: "NEXT_RELEASE" } })) > 0;
+    // Solo se admite evergreen en la columna de la release o en una de plan de trabajo para IA.
+    const evergreen = data.evergreen && (await db.column.count({ where: { id: data.columnId, role: { in: [...EVERGREEN_COLUMN_ROLES] } } })) > 0;
     const repeat = normalizeRecurrence(data.recurrence, data.recurrenceDay, data.dueDate, todayIso(appTimeZone()));
     assertTaskCreateRate(user.id);
     const task = await db.$transaction(async (tx) => {
       await assertTaskCapacity(tx, data.projectId);
       // Al final de la columna, con la columna bloqueada: dos altas a la vez no comparten posición.
       await lockColumns(tx, [data.columnId]);
+      // Columna «Programa del curso»: como mucho PROGRAM_MAX_SESSIONS sesiones (column-capacity.ts).
+      await assertColumnRoom(tx, data.columnId, 1);
       const position = positionBetween(await lastPositionIn(tx, data.columnId), null);
       return tx.task.create({
         data: {
@@ -278,6 +281,7 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
       // Todo o nada: si el lote no cabe, no se crea ninguna.
       await assertTaskCapacity(tx, data.projectId, data.tasks.length);
       await lockColumns(tx, [data.columnId]);
+      await assertColumnRoom(tx, data.columnId, data.tasks.length);
       let position = await lastPositionIn(tx, data.columnId);
       const created = await tx.task.createManyAndReturn({
         data: data.tasks.map((t) => {
@@ -364,6 +368,7 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
     const copy = await db.$transaction(async (tx) => {
       await assertTaskCapacity(tx, projectId);
       await lockColumns(tx, [columnId]);
+      await assertColumnRoom(tx, columnId, 1);
       // Sin destino, entre la original y la siguiente de su columna; con destino, donde se soltó (si las
       // posiciones se agotan, se renumera la columna). La original cuenta como una tarea más de la columna.
       const { position } = dest
@@ -562,9 +567,9 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
       assertDeliverableInProject(data.deliverableId, projectId),
       assertKindsInProject([data.kindId], projectId),
       data.blockedById ? assertCanBlock(id, data.blockedById, projectId) : null,
-      // Evergreen solo tiene sentido en la columna de la release.
-      data.evergreen ? db.column.count({ where: { id: task.columnId, role: "NEXT_RELEASE" } }).then((ok) => {
-        if (!ok) throw new AppError("Solo las tareas de la columna de la release pueden ser fijas.");
+      // Evergreen solo tiene sentido en la columna de la release o en una de plan de trabajo para IA.
+      data.evergreen ? db.column.count({ where: { id: task.columnId, role: { in: [...EVERGREEN_COLUMN_ROLES] } } }).then((ok) => {
+        if (!ok) throw new AppError("Solo pueden ser fijas las tareas de la columna de la release o de un plan de trabajo para IA.");
       }) : null,
     ]);
     for (const c of checks) if (c.status === "rejected") throw c.reason;
@@ -683,6 +688,8 @@ export async function moveTask(taskId: string, columnId: string, prevId: string 
     // Sin vecinas (selector «Columna» del detalle, o columna vacía) o con una que ya no está: al final, como la pinta el tablero.
     const { position, undoPosition } = await db.$transaction(async (tx) => {
       await lockColumns(tx, [columnId]);
+      // Solo cuenta si llega de otra columna: reordenar dentro de la misma no suma.
+      await assertColumnRoom(tx, columnId, [taskId]);
       const placed = await placeInColumn(tx, columnId, prevId === taskId ? null : prevId, nextId === taskId ? null : nextId, taskId);
       // Deshacer: la posición ya leída, salvo si se ha renumerado su propia columna (la habrá movido).
       const undoPosition = placed.rebalanced && fromColumnId === columnId
@@ -736,6 +743,8 @@ export async function moveTasks(taskIds: string[], columnId: string, at?: { prev
       await lockColumns(tx, [column.id]);
       // Columna → tareas (en orden de id), como moveTask y el despliegue de una release.
       await lockTaskRows(tx, toMove.map((t) => t.id));
+      // Todo o nada: si no caben todas las que llegan de otras columnas, no se mueve ninguna.
+      await assertColumnRoom(tx, column.id, toMove.map((t) => t.id));
       let list: { id: string; position: number }[];
       if (place) {
         const ids = toMove.map((t) => t.id);
@@ -769,17 +778,24 @@ export async function moveTasks(taskIds: string[], columnId: string, at?: { prev
   });
 }
 
-/** Convierte una tarea en fija (evergreen): la lleva al final de la columna de la release del proyecto. */
-export async function makeEvergreen(taskId: string) {
-  return runAction({ name: "tasks.makeEvergreen", args: [taskId] }, async () => {
+/**
+ * Convierte una tarea en fija (evergreen): la lleva al final de `columnId` (una columna del proyecto con tareas fijas: la
+ * de la release o una de plan de trabajo para IA) o, sin ella, al de la columna de la release del proyecto.
+ */
+export async function makeEvergreen(taskId: string, columnId?: string) {
+  return runAction({ name: "tasks.makeEvergreen", args: [taskId, columnId] }, async () => {
     const user = await requireUser();
     const task = await loadTaskWithAccess(user, v.id.parse(taskId), { archivedAt: true });
     assertNotArchivedRow(task);
     const { projectId } = task;
+    const target = columnId === undefined ? undefined : v.id.parse(columnId);
     addUndo(...(await captureTasks([taskId], ["columnId", "position", "evergreen"])));
     const result = await db.$transaction(async (tx) => {
-      const column = await tx.column.findFirst({ where: { projectId, role: "NEXT_RELEASE" }, select: { id: true } });
-      if (!column) throw new AppError("El proyecto no tiene columna de release.");
+      const column = await tx.column.findFirst({
+        where: target ? { id: target, projectId, role: { in: [...EVERGREEN_COLUMN_ROLES] } } : { projectId, role: "NEXT_RELEASE" },
+        select: { id: true, role: true },
+      });
+      if (!column) throw new AppError(target ? "Solo pueden ser fijas las tareas de la columna de la release o de un plan de trabajo para IA." : "El proyecto no tiene columna de release.");
       await lockColumns(tx, [column.id]);
       const position = positionBetween(await lastPositionIn(tx, column.id, taskId), null);
       const task = await tx.task.update({
@@ -787,9 +803,9 @@ export async function makeEvergreen(taskId: string) {
         data: { columnId: column.id, position, evergreen: true },
         select: { title: true },
       });
-      return { columnId: column.id, position, title: task.title };
+      return { columnId: column.id, position, title: task.title, plan: column.role === "AI_PLAN" };
     });
-    describeAction("Marcó «{title}» como fija en la release", { title: result.title }, { taskId, columnId: result.columnId });
+    describeAction(result.plan ? "Marcó «{title}» como fija en el plan" : "Marcó «{title}» como fija en la release", { title: result.title }, { taskId, columnId: result.columnId });
     return { columnId: result.columnId, position: result.position };
   });
 }
@@ -1305,10 +1321,10 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
       // La posición viene del navegador: si ya la ocupa otra tarjeta, se desempata al terminar (resolvePositionTies).
       fields.position = snap.position;
     }
-    // La tarea fija solo existe en la columna de la release: si la columna en la que queda no lo es, no se restaura la
+    // La tarea fija solo existe en la columna de la release (o de un plan para IA): si la columna en la que queda no lo es, no se restaura la
     // marca, y si la tenía (p. ej. otra persona la fijó después de que la llevaras allí) la pierde, como al moverla.
     const finalColumn = (fields.columnId as string | undefined) ?? task.columnId;
-    if (((fields.evergreen as boolean | undefined) ?? task.evergreen) && !(await db.column.count({ where: { id: finalColumn, role: "NEXT_RELEASE" } }))) {
+    if (((fields.evergreen as boolean | undefined) ?? task.evergreen) && !(await db.column.count({ where: { id: finalColumn, role: { in: [...EVERGREEN_COLUMN_ROLES] } } }))) {
       if (task.evergreen) Object.assign(fields, { evergreen: false, evergreenEvery: 1 });
       else {
         delete fields.evergreen;
@@ -1483,6 +1499,7 @@ export async function restoreTask(taskId: string) {
       // Al recuperarla vuelve a contar como activa: si el proyecto está en el tope, no cabe.
       await assertTaskCapacity(tx, projectId);
       await lockColumns(tx, [column.id]);
+      await assertColumnRoom(tx, column.id, [taskId]);
       const position = positionBetween(await lastPositionIn(tx, column.id, taskId), null);
       // columnEnteredAt/waitingNotifiedAt a mano: si la columna no cambia, el disparador no actúa.
       await tx.task.update({ where: { id: taskId }, data: { archivedAt: null, archivedFromColumnId: null, columnId: column.id, position, columnEnteredAt: new Date(), waitingNotifiedAt: null } });

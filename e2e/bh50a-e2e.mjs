@@ -11,7 +11,11 @@ const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
 const only = (process.env.PART || "paso2,en,archivada").split(",");
 
 await L.prepareUsers();
-const PID = "bh50a_project";
+// El límite de cambios de plantilla (5 por proyecto cada 10 minutos) cuenta en la memoria del servidor por id de
+// proyecto: cada escenario usa un proyecto con un id nuevo, para poder repetir la suite seguida sin gastarlo.
+const PID_PREFIX = "bh50a_project";
+let PID = PID_PREFIX;
+let seeds = 0;
 const NAME = "Zeta bh50a";
 const [adm] = await L.q(`SELECT id FROM "User" WHERE email=$1`, [L.ADMIN]);
 
@@ -20,7 +24,8 @@ const [adm] = await L.q(`SELECT id FROM "User" WHERE email=$1`, [L.ADMIN]);
  * sin tareas y «Respuesta» oculta con una tarea.
  */
 async function seed() {
-  await L.q(`DELETE FROM "Project" WHERE id=$1`, [PID]);
+  await L.q(`DELETE FROM "Project" WHERE id LIKE $1`, [`${PID_PREFIX}%`]);
+  PID = `${PID_PREFIX}_${Date.now().toString(36)}_${++seeds}`;
   const users = await L.q(`SELECT id FROM "User" WHERE email IN ($1,$2)`, [L.ADMIN, L.USER2]);
   await L.q(`INSERT INTO "Project"(id,name,"isPrivate","privateOwnerId",position,"updatedAt") VALUES ($1,$2,true,$3,999997,NOW())`, [PID, NAME, adm.id]);
   for (const u of users) await L.q(`INSERT INTO "ProjectMember"("projectId","userId") VALUES ($1,$2)`, [PID, u.id]);
@@ -148,7 +153,8 @@ if (only.includes("archivada")) {
   await row.getByRole("button", { name: "Recuperar" }).click();
   await L.waitFor(async () => (await L.q(`SELECT "archivedAt" FROM "Task" WHERE id='bh50a_arch'`))[0].archivedAt === null, { timeout: 10000 });
   L.eq("ARCH: al recuperarla vuelve a «Materiales» (no a «Ideas», la primera)", (await L.q(`SELECT c.name FROM "Task" t JOIN "Column" c ON c.id=t."columnId" WHERE t.id='bh50a_arch'`))[0].name, "Materiales");
-  L.check("ARCH: el aviso dice «Materiales»", await page.getByText("Tarea recuperada en «Materiales»").first().isVisible().catch(() => false));
+  // El aviso sale cuando llega la respuesta, que puede ser un poco después de que la base ya lo tenga: se espera.
+  L.check("ARCH: el aviso dice «Materiales»", await page.getByText("Tarea recuperada en «Materiales»").first().waitFor({ timeout: 5000 }).then(() => true, () => false));
   L.assertNoErrors("ARCH", [s]);
   await s.ctx.close();
 }

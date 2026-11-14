@@ -17,7 +17,8 @@ test("cada ejemplo es válido en español y en inglés (columnas, tipos, etiquet
       assert.deepEqual(validateExample(ex[locale]), [], `${ex.key}/${locale}`);
       const resolved = resolveExample(ex.key, locale)!;
       assert.ok(resolved.template.columns.every((c) => (COLUMN_ROLES as readonly string[]).includes(c.role)));
-      assert.ok(resolved.template.columns.some((c) => c.isDone), `${ex.key}/${locale}: sin columna terminada`);
+      // Como su plantilla de serie, el del curso no tiene columna de terminadas.
+      assert.equal(resolved.template.columns.some((c) => c.isDone), ex.key !== "curso-master", `${ex.key}/${locale}: columna terminada`);
       // Aplicable como cualquier plantilla (columnas, tipos y etiquetas con posiciones).
       const app = buildTemplateApplication(resolved.template, [{ id: "g1", name: "Funcionalidad" }, { id: "g2", name: "Corrección" }, { id: "g3", name: "Respuesta" }], locale);
       assert.equal(app.columns.length, resolved.template.columns.length);

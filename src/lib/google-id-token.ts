@@ -19,8 +19,12 @@ export function newPkce(): { verifier: string; challenge: string } {
 
 export const randomToken = (): string => b64(randomBytes(24));
 
-/** Solo `openid email profile`: Drive es una conexión aparte y opcional. */
-export function buildLoginAuthUrl(opts: { clientId: string; redirectUri: string; state: string; nonce: string; challenge: string; domain?: string | null }): string {
+/**
+ * Solo `openid email profile`: Drive es una conexión aparte y opcional. Con `reauth` (confirmar que se borra la cuenta)
+ * Google debe volver a pedir la contraseña aunque haya una sesión abierta: `prompt=login` y `max_age=0`, y el id_token
+ * trae `auth_time`, que la vuelta comprueba (reauthFreshness, google-reauth.ts).
+ */
+export function buildLoginAuthUrl(opts: { clientId: string; redirectUri: string; state: string; nonce: string; challenge: string; domain?: string | null; reauth?: boolean }): string {
   const params = new URLSearchParams({
     client_id: opts.clientId,
     redirect_uri: opts.redirectUri,
@@ -30,8 +34,10 @@ export function buildLoginAuthUrl(opts: { clientId: string; redirectUri: string;
     nonce: opts.nonce,
     code_challenge: opts.challenge,
     code_challenge_method: "S256",
-    prompt: "select_account",
+    prompt: opts.reauth ? "login" : "select_account",
   });
+  // Con max_age, el id_token debe traer auth_time (OpenID Connect Core, 3.1.2.1).
+  if (opts.reauth) params.set("max_age", "0");
   // Solo orienta al selector de cuentas; la validación real es la del campo `hd` del id_token.
   if (opts.domain) params.set("hd", opts.domain);
   return `${GOOGLE_AUTH_URL}?${params}`;
@@ -78,7 +84,7 @@ export function idTokenKeyId(idToken: string): string | null {
 export type ClaimsFailure = "format" | "issuer" | "audience" | "expired" | "nonce" | "email_unverified" | "domain";
 
 type ClaimsResult =
-  | { ok: true; sub: string; email: string; name: string | null }
+  | { ok: true; sub: string; email: string; name: string | null; authTime: number | null }
   | { ok: false; reason: ClaimsFailure };
 
 /**
@@ -91,7 +97,7 @@ export function validateIdTokenClaims(
   opts: { clientId: string; nonce: string | null; domain?: string | null; now?: number },
 ): ClaimsResult {
   const nowSec = Math.floor((opts.now ?? Date.now()) / 1000);
-  const { iss, aud, azp, exp, iat, sub, email, name, nonce, hd } = claims;
+  const { iss, aud, azp, exp, iat, sub, email, name, nonce, hd, auth_time } = claims;
   if (typeof sub !== "string" || !sub || sub.length > 255 || typeof email !== "string" || !email.includes("@")) return { ok: false, reason: "format" };
   if (typeof iss !== "string" || !GOOGLE_ISSUERS.includes(iss)) return { ok: false, reason: "issuer" };
   const audiences = Array.isArray(aud) ? aud : [aud];
@@ -107,7 +113,11 @@ export function validateIdTokenClaims(
     const emailDomain = email.slice(email.lastIndexOf("@") + 1).toLowerCase();
     if (typeof hd !== "string" || hd.toLowerCase() !== domain || emailDomain !== domain) return { ok: false, reason: "domain" };
   }
-  return { ok: true, sub, email: email.trim().toLowerCase(), name: typeof name === "string" && name ? name : null };
+  return {
+    ok: true, sub, email: email.trim().toLowerCase(), name: typeof name === "string" && name ? name : null,
+    // Cuándo escribió la persona su contraseña en Google (solo lo usa la confirmación de la baja).
+    authTime: typeof auth_time === "number" && Number.isFinite(auth_time) ? auth_time : null,
+  };
 }
 
 /**

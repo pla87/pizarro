@@ -570,7 +570,8 @@ async function ensureCostField(projectId: string): Promise<void> {
 }
 
 /**
- * Una tarea fija solo existe en la columna de la release del proyecto. Lo que devuelve una entrada (la marca de una
+ * Una tarea fija solo existe en la columna de la release del proyecto o en una de plan de trabajo para IA
+ * (EVERGREEN_COLUMN_ROLES). Lo que devuelve una entrada (la marca de una
  * tarea, el rol de una columna, una tarea borrada) puede dejar alguna fuera de ella si entretanto cambió otra cosa:
  * esas pasan a normales (una lectura y, solo si hay alguna, un UPDATE con sus filas bloqueadas en orden de id).
  */
@@ -579,7 +580,7 @@ async function clearStrayEvergreen(projectId: string): Promise<void> {
   const stray = await db.$queryRaw<{ id: string }[]>`
     SELECT t."id" FROM "Task" AS t
     WHERE t."projectId" = ${projectId} AND t."evergreen"
-      AND NOT EXISTS (SELECT 1 FROM "Column" AS c WHERE c."id" = t."columnId" AND c."role" = 'NEXT_RELEASE')`;
+      AND NOT EXISTS (SELECT 1 FROM "Column" AS c WHERE c."id" = t."columnId" AND c."role" IN ('NEXT_RELEASE', 'AI_PLAN'))`;
   if (!stray.length) return;
   const ids = stray.map((r) => r.id);
   await db.$transaction(async (tx) => {
@@ -589,7 +590,7 @@ async function clearStrayEvergreen(projectId: string): Promise<void> {
     await tx.$executeRaw`
       UPDATE "Task" AS t SET "evergreen" = false, "evergreenEvery" = 1, "updatedAt" = ${new Date()}
       WHERE t."id" = ANY(${ids}::text[]) AND t."projectId" = ${projectId} AND t."evergreen"
-        AND NOT EXISTS (SELECT 1 FROM "Column" AS c WHERE c."id" = t."columnId" AND c."role" = 'NEXT_RELEASE')`;
+        AND NOT EXISTS (SELECT 1 FROM "Column" AS c WHERE c."id" = t."columnId" AND c."role" IN ('NEXT_RELEASE', 'AI_PLAN'))`;
   });
 }
 

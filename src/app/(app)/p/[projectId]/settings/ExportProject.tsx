@@ -103,11 +103,11 @@ export function ExportProject({ projectId }: { projectId: string }) {
   };
 
   const choice = (name: string, value: string, current: string, set: (v: never) => void, label: string, hint: string) => (
-    <label className={`flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm ${current === value ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10" : "border-slate-200 dark:border-slate-700"}`}>
+    <label className="choice-card flex cursor-pointer items-start gap-2 rounded-lg p-3 text-sm">
       <input type="radio" name={name} value={value} checked={current === value} onChange={() => set(value as never)} className="mt-0.5" />
       <span>
         <span className="block font-medium">{label}</span>
-        <span className="block text-xs text-slate-500">{hint}</span>
+        <span className="block text-xs text-slate-500 dark:text-slate-400">{hint}</span>
       </span>
     </label>
   );

@@ -5,6 +5,7 @@ import { db } from "./db";
 import { AppError, notFound } from "./errors";
 import { revokeGoogleToken } from "./google";
 import { logEvent } from "./log";
+import { notifyProjectsToTeam } from "./notify";
 import { purgeProject } from "./project-delete";
 import { revokeProject, revokeUser } from "./revoke";
 import { discardUserTransfers } from "./transfer-jobs";
@@ -58,7 +59,8 @@ interface EraseResult {
  * miembros (los ven los administradores, como un proyecto de equipo cuyo único miembro se ha ido); queda anotado en el
  * registro de actividad. Los que vengan en `deleteProjects` (los que se le enseñaron a quien confirma) se borran después,
  * con todo lo que tienen, si siguen privados y sin miembros; si el borrado falla, pasan también a ser de equipo. Los
- * privados con más miembros siguen privados, sin la persona. `self`: lo pide la propia persona (el mensaje va en primera
+ * privados con más miembros siguen privados, sin la persona. Los que pasan a ser de equipo se avisan a los demás
+ * administradores activos (notifyProjectsToTeam). `self`: lo pide la propia persona (el mensaje va en primera
  * persona). `actor`: quién lo hace, para el registro.
  */
 export async function eraseUser(userId: string, opts: { self: boolean; deleteProjects?: readonly string[]; actor?: { id: string; name: string } }): Promise<EraseResult> {
@@ -107,6 +109,14 @@ export async function eraseUser(userId: string, opts: { self: boolean; deletePro
       category: "action", action: "users.privateProjectToTeam",
       message: `El proyecto privado «${p.name}» pasa a ser de equipo al borrarse la cuenta de «${userName}», su único miembro: ahora lo ven los administradores`,
       userId: opts.actor?.id ?? null, userName: opts.actor?.name ?? null, projectId: p.id, details: { deletedUserId: userId },
+    });
+  }
+  // Aviso en la campana (y por email o mensajería, si lo quieren) a los demás administradores activos, uno por proyecto.
+  // Los borrados con la casilla no avisan. La cuenta ya está borrada: un fallo aquí solo se registra.
+  if (result.toTeam.length) {
+    await notifyProjectsToTeam(result.toTeam, userName, opts.self ? null : opts.actor?.id ?? null).catch((err) => {
+      console.error("[users] no se pudo avisar a los administradores", err);
+      logEvent({ level: "error", category: "notify", action: "notify.projectToTeamFailed", message: "No se pudo avisar a los administradores de los proyectos que pasan a ser de equipo", details: { error: err instanceof Error ? err.message : String(err), projects: result.toTeam.map((p) => p.id) } });
     });
   }
   return result;

@@ -5,7 +5,7 @@ import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
-import { attachmentFileNames, isoDate, releaseZipName } from "@/lib/release";
+import { attachmentFileNames, isoDate, RELEASE_MAX_ATTACHMENT_TASKS, releaseZipName } from "@/lib/release";
 import { acquireZipSlot, buildZipPart, planZipEntries, zipBodyStream, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict, type ZipEntry } from "@/lib/release-zip";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
@@ -19,7 +19,7 @@ const bodySchema = z.object({
   items: z
     .array(z.object({ taskId: v.id, code: z.string().regex(/^(R\d{1,5})?[A-Z]{1,4}\d{1,4}$/) }))
     .min(1)
-    .max(200),
+    .max(RELEASE_MAX_ATTACHMENT_TASKS),
 });
 
 /**

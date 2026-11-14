@@ -18,7 +18,8 @@ export const runtime = "nodejs";
 /**
  * Inicia «Iniciar sesión con Google»: OpenID Connect con código de autorización + PKCE + state + nonce.
  * Con `?purpose=account-delete`, quien ya tiene sesión vuelve a entrar con Google para confirmar que borra su cuenta
- * (la vuelta no abre sesión: marca la confirmación y regresa a «Mi perfil → Cuenta»).
+ * (la vuelta no abre sesión: marca la confirmación y regresa a «Mi perfil → Cuenta»). En ese caso Google debe volver a
+ * pedir la contraseña (`prompt=login`, `max_age=0`) y la cookie guarda cuándo empezó, para comprobar `auth_time` a la vuelta.
  */
 export async function GET(req: Request) {
   const ip = clientIp(req.headers);
@@ -35,7 +36,8 @@ export async function GET(req: Request) {
   const pkce = newPkce();
   const next = safeNextPath(params.get("next") ?? "");
   const parts = [state, nonce, pkce.verifier, Buffer.from(next).toString("base64url")];
-  if (reauth) parts.push(ACCOUNT_DELETE_PURPOSE);
+  // Baja: «….<inicio en segundos>.account-delete» (la marca, siempre al final).
+  if (reauth) parts.push(String(Math.floor(Date.now() / 1000)), ACCOUNT_DELETE_PURPOSE);
   (await cookies()).set(GOOGLE_LOGIN_COOKIE, parts.join("."), {
     httpOnly: true,
     secure: cookieSecure(),
@@ -52,5 +54,6 @@ export async function GET(req: Request) {
     nonce,
     challenge: pkce.challenge,
     domain: googleWorkspaceDomain(),
+    reauth,
   }));
 }

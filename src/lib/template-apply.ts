@@ -10,7 +10,9 @@ import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { columnsLockName } from "./advisory-locks";
 import { lockProject } from "./caps";
-import { UNIQUE_COLUMN_ROLES } from "./constants";
+import { assertProgramColumnsFit } from "./column-capacity";
+import { markTemplateChangeSpent } from "./template-apply-rate";
+import { EVERGREEN_COLUMN_ROLES, releaseTemplateRows, UNIQUE_COLUMN_ROLES } from "./constants";
 import { db } from "./db";
 import { AppError } from "./errors";
 import { lockKindScope } from "./kind-lock";
@@ -73,7 +75,9 @@ export async function loadProjectShape(client: Client, projectId: string, locale
   const labels = await client.label.findMany({ where: { projectId }, orderBy: { name: "asc" }, select: { id: true, name: true } });
   const labelCounts = await client.$queryRaw<{ labelId: string; n: number }[]>`
     SELECT tl."labelId", count(*)::int AS n FROM "TaskLabel" tl JOIN "Label" l ON l."id" = tl."labelId" WHERE l."projectId" = ${projectId} GROUP BY tl."labelId"`;
-  const releaseTemplates = await client.projectReleaseTemplate.findMany({ where: { projectId }, select: { kind: true, name: true } });
+  const releaseTemplates = releaseTemplateRows(await client.projectReleaseTemplate.findMany({ where: { projectId }, select: { kind: true, name: true } }));
+  // Tareas fijas (pocas: solo caben en las columnas de release y de plan), para que el resumen diga cuáles pasan a normales.
+  const evergreen = await client.task.findMany({ where: { projectId, evergreen: true }, orderBy: [{ position: "asc" }, { id: "asc" }], select: { id: true, title: true, columnId: true } });
   const byColumn = new Map(columnCounts.map((c) => [c.columnId, c]));
   const byKind = new Map(kindCounts.map((k) => [k.kindId, k.n]));
   const byLabel = new Map(labelCounts.map((l) => [l.labelId, l.n]));
@@ -86,6 +90,7 @@ export async function loadProjectShape(client: Client, projectId: string, locale
     labels: labels.map((l) => ({ ...l, tasks: byLabel.get(l.id) ?? 0 })),
     releaseTemplates,
     taskFields: normalizeTaskFields(project.taskFields),
+    evergreen,
   };
 }
 
@@ -120,6 +125,9 @@ interface ApplyResult {
   removedColumns: number;
   addedKinds: number;
   addedLabels: number;
+  /** Tipos generales que vuelven a verse y tareas fijas que pasan a normales. */
+  shownGenerals: number;
+  unpinnedTasks: number;
 }
 
 /**
@@ -138,12 +146,19 @@ export async function applyTemplateToProject(opts: {
       const e = plan.errors[0]!;
       throw new AppError((await getT())(e.text, e.vars));
     }
-    const snap = await takeSnapshot(tx, projectId);
-    const result = plan.mode === "ADD" ? await executeAdd(tx, projectId, plan, template, snap) : await executeReplace(tx, projectId, plan, template, shape, snap);
-    await addCommon(tx, projectId, plan, snap);
-    const data = { userId: opts.userId, templateName: opts.templateName.slice(0, 200), mode, snapshot: snap as unknown as Prisma.InputJsonValue, createdAt: new Date() };
-    await tx.projectTemplateChange.upsert({ where: { projectId }, create: { projectId, ...data }, update: data });
-    return { ...result, addedLabels: plan.addLabels.length };
+    // Desde aquí el cambio ya se ejecuta: un error (aunque sea un aviso) gasta la reserva del límite (template-apply-rate.ts).
+    try {
+      const snap = await takeSnapshot(tx, projectId);
+      const result = plan.mode === "ADD" ? await executeAdd(tx, projectId, plan, template, snap) : await executeReplace(tx, projectId, plan, template, shape, snap);
+      await addCommon(tx, projectId, plan, snap);
+      // Ninguna columna «Programa del curso» por encima del tope de sesiones (por el rol nuevo o por las tareas unidas).
+      await assertProgramColumnsFit(tx, projectId, shape.columns);
+      const data = { userId: opts.userId, templateName: opts.templateName.slice(0, 200), mode, snapshot: snap as unknown as Prisma.InputJsonValue, createdAt: new Date() };
+      await tx.projectTemplateChange.upsert({ where: { projectId }, create: { projectId, ...data }, update: data });
+      return { ...result, addedLabels: plan.addLabels.length };
+    } catch (err) {
+      throw markTemplateChangeSpent(err);
+    }
   }, { timeout: 120_000, maxWait: 15_000 });
 }
 
@@ -193,7 +208,9 @@ async function executeAdd(tx: Tx, projectId: string, plan: AddPlan, template: Ap
     });
     snap.createdKinds = created.map((k) => k.id);
   }
-  return { mode: "ADD", movedTasks: 0, retypedTasks: 0, addedColumns: plan.addColumns.length, removedColumns: 0, addedKinds: plan.addKinds.length };
+  // Los generales que usa la plantilla vuelven a verse (la instantánea guarda los ocultos: el deshacer los vuelve a ocultar).
+  if (plan.showGenerals.length) await tx.projectHiddenKind.deleteMany({ where: { projectId, kindId: { in: plan.showGenerals } } });
+  return { mode: "ADD", movedTasks: 0, retypedTasks: 0, addedColumns: plan.addColumns.length, removedColumns: 0, addedKinds: plan.addKinds.length, shownGenerals: plan.showGenerals.length, unpinnedTasks: 0 };
 }
 
 async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, template: ApplyTemplateShape, shape: ProjectShape, snap: TemplateChangeSnapshot): Promise<Omit<ApplyResult, "addedLabels">> {
@@ -271,8 +288,9 @@ async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, temp
     if (await tx.task.count({ where: { columnId: { in: remove } } })) throw new AppError("Los datos han cambiado mientras tanto. Recarga e inténtalo de nuevo.");
     await tx.column.deleteMany({ where: { id: { in: remove }, projectId } });
   }
-  // Las tareas fijas solo existen en la columna de release: las que se quedan fuera pasan a normales.
-  const stray = await tx.task.findMany({ where: { projectId, evergreen: true, column: { role: { not: "NEXT_RELEASE" } } }, select: taskSelect });
+  // Las tareas fijas solo existen en la columna de release y en las de plan de trabajo para IA (EVERGREEN_COLUMN_ROLES):
+  // las que se quedan en otra columna pasan a normales.
+  const stray = await tx.task.findMany({ where: { projectId, evergreen: true, column: { role: { notIn: [...EVERGREEN_COLUMN_ROLES] } } }, select: taskSelect });
   if (stray.length) {
     note(stray);
     await tx.task.updateMany({ where: { id: { in: stray.map((t) => t.id) } }, data: { evergreen: false, evergreenEvery: 1 } });
@@ -326,6 +344,8 @@ async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, temp
     addedColumns: created.length,
     removedColumns: remove.length,
     addedKinds: newKind.size,
+    shownGenerals: plan.showGenerals.length,
+    unpinnedTasks: stray.length,
   };
 }
 
@@ -469,8 +489,8 @@ export async function undoTemplateChange(projectId: string, now = new Date()): P
     await ensureUsableKind(tx, projectId);
     const budget = await tx.column.count({ where: { projectId, role: "BUDGET" } });
     await tx.project.update({ where: { id: projectId }, data: { taskFields: normalizeTaskFields([...snap.taskFields, ...(budget ? ["cost"] : [])]) } });
-    // Las tareas fijas fuera de la columna de release pasan a normales (la marca devuelta solo vale allí).
-    await tx.task.updateMany({ where: { projectId, evergreen: true, column: { role: { not: "NEXT_RELEASE" } } }, data: { evergreen: false, evergreenEvery: 1 } });
+    // Las tareas fijas fuera de la columna de release o de las de plan para IA pasan a normales (la marca devuelta solo vale allí).
+    await tx.task.updateMany({ where: { projectId, evergreen: true, column: { role: { notIn: [...EVERGREEN_COLUMN_ROLES] } } }, data: { evergreen: false, evergreenEvery: 1 } });
 
     await tx.projectTemplateChange.delete({ where: { id: row.id } });
     return { templateName: row.templateName, keptColumns, keptKinds };

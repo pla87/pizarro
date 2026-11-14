@@ -16,9 +16,10 @@ import { parseStoredTemplate, templateInputSchema, type TemplateData } from "@/l
 import { requireUser } from "@/lib/session";
 import { listTemplatesSorted } from "@/lib/template-store";
 import { applyTemplateToProject, loadProjectShape, undoTemplateChange as undoChange } from "@/lib/template-apply";
+import { releaseTemplateChange, reserveTemplateChange, reserveTemplatePreview, shouldReleaseTemplateChange } from "@/lib/template-apply-rate";
 import type { ApplyTemplateShape, ProjectShape, TemplateRef } from "@/lib/template-apply-core";
 import * as v from "@/lib/validation";
-import { getLocale } from "@/i18n/server";
+import { getLocale, getT } from "@/i18n/server";
 
 /** Plantilla que se puede elegir en el asistente. */
 export interface ApplicableTemplate {
@@ -27,6 +28,27 @@ export interface ApplicableTemplate {
   description: string;
   /** general: de serie para cualquiera (las de los ejemplos, sin sus tarjetas); installation: Administración → Tipos y plantillas. */
   group: "general" | "installation";
+}
+
+/** Límite de cambios de plantilla (lib/template-apply-rate.ts): el aviso, ya traducido, con el código 429. */
+async function throwRate(notice: { text: string; vars: Record<string, number> }): Promise<never> {
+  throw new AppError((await getT())(notice.text, notice.vars), 429);
+}
+
+/**
+ * Hace un cambio de plantilla (aplicar o deshacer) dentro del límite. Si no llega a hacerse por un aviso (no cabe, no hay
+ * nada que deshacer…), la reserva se devuelve: solo cuentan los cambios hechos, los fallos inesperados y los avisos de
+ * un cambio que ya se había ejecutado en la transacción (markTemplateChangeSpent).
+ */
+async function withinChangeLimit<T>(userId: string, projectId: string, fn: () => Promise<T>): Promise<T> {
+  const notice = reserveTemplateChange(userId, projectId);
+  if (notice) await throwRate(notice);
+  try {
+    return await fn();
+  } catch (e) {
+    if (shouldReleaseTemplateChange(e, e instanceof AppError)) releaseTemplateChange(userId, projectId);
+    throw e;
+  }
 }
 
 const refSchema = z.discriminatedUnion("source", [
@@ -85,6 +107,8 @@ export async function previewTemplateChange(projectId: string, ref: TemplateRef)
   return runAction({ name: "templateApply.previewTemplateChange", args: [projectId, ref] }, async (): Promise<{ template: ApplyTemplateShape; project: ProjectShape }> => {
     const user = await requireUser();
     const project = await findManageableProject(user, projectId);
+    const notice = reserveTemplatePreview(user.id);
+    if (notice) await throwRate(notice);
     const locale = await getLocale();
     const template = shapeOf(await resolveRef(ref, user.role === "ADMIN", locale));
     return { template, project: await loadProjectShape(db, project.id, locale) };
@@ -107,10 +131,10 @@ export async function applyTemplateChange(projectId: string, ref: TemplateRef, m
     const locale = await getLocale();
     const parsedMode = z.enum(["ADD", "REPLACE"]).parse(mode);
     const data = await resolveRef(ref, user.role === "ADMIN", locale);
-    const result = await applyTemplateToProject({
-      projectId: project.id, userId: user.id, locale, templateName: data.name, template: shapeOf(data), mode: parsedMode,
-      choices: parsedMode === "REPLACE" ? choicesSchema.parse(choices ?? {}) : undefined,
-    });
+    const parsedChoices = parsedMode === "REPLACE" ? choicesSchema.parse(choices ?? {}) : undefined;
+    const result = await withinChangeLimit(user.id, project.id, () => applyTemplateToProject({
+      projectId: project.id, userId: user.id, locale, templateName: data.name, template: shapeOf(data), mode: parsedMode, choices: parsedChoices,
+    }));
     if (parsedMode === "ADD") describeAction("Añadió lo que faltaba de la plantilla «{name}»", { name: data.name }, { result });
     else describeAction("Cambió el proyecto a la plantilla «{name}»", { name: data.name }, { result });
     revalidatePath(`/p/${project.id}`, "layout");
@@ -123,7 +147,7 @@ export async function undoTemplateChange(projectId: string) {
   return runAction({ name: "templateApply.undoTemplateChange", args: [projectId] }, async () => {
     const user = await requireUser();
     const project = await findManageableProject(user, projectId);
-    const result = await undoChange(project.id);
+    const result = await withinChangeLimit(user.id, project.id, () => undoChange(project.id));
     describeAction("Deshizo el cambio a la plantilla «{name}»", { name: result.templateName }, { result });
     revalidatePath(`/p/${project.id}`, "layout");
     return result;

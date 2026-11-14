@@ -111,16 +111,25 @@ export async function documentLimitProblem(projectId: string, size: number, clie
   return quota ? { reason: "quota", quota } : null;
 }
 
+/** Nombre de un documento que se decide dentro de la transacción del alta (p. ej. con un número de versión que se reserva ahí). */
+type DocumentNameFor = (tx: Prisma.TransactionClient) => Promise<string>;
+
 /**
  * Da de alta el documento solo si no se supera el máximo de documentos del proyecto ni sus cuotas de almacenamiento
  * (las de adjuntos: la documentación cuenta en la misma suma). Cuenta y alta van en una transacción con el candado
- * común de las subidas, así que subidas simultáneas no pueden pasarse juntas.
+ * común de las subidas, así que subidas simultáneas no pueden pasarse juntas. `nameFor`: el nombre se calcula ya dentro de
+ * esa transacción, después de comprobar los límites (si no cabe, no se llama: no se gasta, p. ej., un número de versión).
  */
 export async function createDocumentWithinLimit(data: {
   /** Id elegido antes (newFileId): el fichero se escribe antes que la fila. */
   id?: string; projectId: string; name: string; mimeType: string; size: number; kind: DocumentKindName; createdById: string;
-}): Promise<DocumentCreateResult> {
+}, nameFor?: DocumentNameFor): Promise<DocumentCreateResult> {
   return db.$transaction(async (tx) => {
+    // `nameFor` suele escribir en la fila del proyecto (la versión: UPDATE "Project"): se bloquea ANTES del candado común
+    // de las subidas. Si no, esperando a otra transacción larga del proyecto (p. ej. «Aplicar plantilla») se tendría ese
+    // candado y no podría subir nada nadie, en ningún proyecto, hasta que terminara. Las subidas solo toman la fila con
+    // FOR KEY SHARE (compatible con este bloqueo), así que el orden fila → candado no se cruza con ninguna.
+    if (nameFor) await tx.$queryRaw`SELECT 1 FROM "Project" WHERE id = ${data.projectId} FOR NO KEY UPDATE`;
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:attachment-quota'))::text`;
     // Proyecto borrado durante la subida: 404 en vez del fallo de clave ajena (P2003) al dar de alta la fila (ver
     // createAttachmentWithinLimit). Quien llama borra el fichero ya escrito.
@@ -128,7 +137,8 @@ export async function createDocumentWithinLimit(data: {
     if (!alive.length) throw new AppError("El proyecto ya no existe.", 404, "project_gone");
     const problem = await documentLimitProblem(data.projectId, data.size, tx);
     if (problem) return { ok: false as const, ...problem };
-    const row = await tx.projectDocument.create({ data, select: SELECT });
+    const name = nameFor ? sanitizeDocumentName(await nameFor(tx)) : data.name;
+    const row = await tx.projectDocument.create({ data: { ...data, name }, select: SELECT });
     return { ok: true as const, document: toDocumentRow(row) };
   });
 }
@@ -140,9 +150,11 @@ export type GeneratedDocumentProblem = DocumentLimitProblem | { reason: "size"; 
  * Guarda en la Documentación del proyecto un archivo generado por la app (p. ej. el PDF del programa de un curso), con
  * los mismos límites que una subida: tamaño máximo por archivo, máximo de documentos y cuotas. Como la subida, escribe
  * primero el fichero y después la fila (y lo borra si la fila no se da de alta). Quien llama comprueba el acceso.
+ * `name` puede ser una función: se llama dentro de la transacción del alta, solo si el documento cabe (ver
+ * createDocumentWithinLimit); así un número de versión que se reserve en ella no se gasta si no se guarda.
  */
 export async function saveGeneratedDocument(data: {
-  projectId: string; name: string; content: Uint8Array; mimeType: string; kind: DocumentKindName; createdById: string;
+  projectId: string; name: string | DocumentNameFor; content: Uint8Array; mimeType: string; kind: DocumentKindName; createdById: string;
 }): Promise<{ ok: true; document: DocumentRow } | { ok: false; problem: GeneratedDocumentProblem }> {
   const project = await db.project.findUnique({ where: { id: data.projectId }, select: { fileMaxMb: true } });
   if (!project) throw notFound();
@@ -157,9 +169,10 @@ export async function saveGeneratedDocument(data: {
     await removeDocumentFiles([id]);
     throw uploadWriteError(err, { action: "documents.noSpace", bytes: data.content.length, details: { projectId: data.projectId } });
   }
+  const fixedName = typeof data.name === "string" ? sanitizeDocumentName(data.name) : "";
   const created = await createDocumentWithinLimit({
-    id, projectId: data.projectId, name: sanitizeDocumentName(data.name), mimeType: data.mimeType, size: data.content.length, kind: data.kind, createdById: data.createdById,
-  }).catch(async (err) => {
+    id, projectId: data.projectId, name: fixedName, mimeType: data.mimeType, size: data.content.length, kind: data.kind, createdById: data.createdById,
+  }, typeof data.name === "function" ? data.name : undefined).catch(async (err) => {
     await removeDocumentFiles([id]);
     throw err;
   });

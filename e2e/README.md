@@ -17,7 +17,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 
 | Suite | Script | Comprobaciones | Tiempo |
 |---|---|---|---|
-| QA (9 escenarios) | `e2e/qa/run-all.mjs` | 386 | ~5 min |
+| QA (9 escenarios) | `e2e/qa/run-all.mjs` | 388 | ~5 min |
 | Tablero | `e2e/board-e2e.mjs` | 360 | ~4 min |
 | Pegar | `e2e/paste-e2e.mjs` | 72 | ~1 min |
 | Cabecera y atajos (caza de bugs 48a) | `e2e/bh48a-e2e.mjs` | 42 | ~1 min |
@@ -25,17 +25,25 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/bh48c-e2e.mjs` | 44 | ~1 min |
 | Copia con imagen en la descripción, sin red en calendario, borradores y releases (caza de bugs 49) | `e2e/bh49-e2e.mjs` | 27 | ~1 min |
 | Índice de un HTML en Documentación y baja con Google sin email (caza de bugs 50b) | `e2e/bh50b-e2e.mjs` | 39 | ~30 s |
+| Mover con el teclado varias veces seguidas (caza de bugs 51b) | `e2e/bh51b-e2e.mjs` | 34 | ~20 s |
 | Aplicar plantilla: paso 2 y archivadas de columnas unidas (caza de bugs 50a) | `e2e/bh50a-e2e.mjs` | 22 | ~20 s |
+| Plan de trabajo para IA: Markdown con descripciones raras, fijas entre paneles, título a 390 px y más de 500 tareas (caza de bugs 51a) | `e2e/bh51a-e2e.mjs` | 27 | ~40 s |
+| Release de más de 500 tareas (o 200 con adjuntos), «+» flotante con el programa lleno y panel de fijas en el móvil (caza de bugs 51c) | `e2e/bh51c-e2e.mjs` | 55 | ~35 s |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/r49-account-e2e.mjs` | 61 | ~1 min |
+| Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51) | `e2e/r51-cuenta-e2e.mjs` | 71 | ~45 s |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
 | Copias con adjuntos y release con barra de formato | `e2e/r49-copy-e2e.mjs` | 87 | ~2 min |
 | Formatos del material: cerrar la release, párrafos vacíos, Google Slides y HTML aislado (ronda 50) | `e2e/r50-formatos-e2e.mjs` | 107 | ~1 min |
 | Tareas que se repiten (calendario, .ics y «Nueva tarea») | `e2e/r49-repeat-e2e.mjs` | 44 | ~1 min |
-| Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/r49-ui-e2e.mjs` | 34 | ~1 min |
+| Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/r49-ui-e2e.mjs` | 38 | ~1 min |
+| Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/r51-ui-e2e.mjs` | 62 | ~1,5 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/r49-textos-e2e.mjs` | 29 | ~1 min |
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/r50-plantilla-e2e.mjs` | 39 | ~1 min |
+| Aplicar plantilla: opción elegida en oscuro, tareas fijas, generales ocultos y límite (ronda 51) | `e2e/r51-plantilla-e2e.mjs` | 26 | ~40 s |
 | Plantilla «Curso o máster» y «Publicar programa (PDF)» | `e2e/r50-curso-e2e.mjs` | 57 | ~40 s |
+| Plan de trabajo para IA y botones de las columnas especiales (ronda 51) | `e2e/r51-plan-e2e.mjs` | 147 | ~1 min |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/r50-seleccion-e2e.mjs` | 76 | ~1 min |
+| «Programa del curso»: versiones del PDF y tope de 100 sesiones (ronda 51) | `e2e/r51-programa-e2e.mjs` | 38 | ~1 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
@@ -55,6 +63,15 @@ cd e2e/qa && BASE=http://localhost:3231 DATABASE_URL=$DBURL APP_DIR=$PWD/../.. n
 
 `run-all.mjs` crea (o vacía) la base de `DATABASE_URL` (aquí `pz_qa`), aplica migraciones y arranca su propio servidor
 en el puerto de `BASE`, que para al terminar: no debe haber otro servidor escuchando ahí.
+
+Con la máquina cargada: `QA_CPU_THROTTLE=4` (o 6) frena la CPU de las páginas que abren las suites
+(`Emulation.setCPUThrottlingRate` de CDP; vale para todas las que usan `L.session`). Así salen las comprobaciones que no
+esperan al estado que miran. Reglas de las suites: lo que la app pinta al responder el servidor (el tablero tras deshacer,
+el diálogo que se cierra al archivar, la copia de un duplicado) y lo que escribe al final de la acción (el historial de la
+tarea, `TaskEvent`) se comprueban con `L.eqEventually` / `L.checkEventually`, no justo después de ver el cambio en la BD;
+lo optimista (arrastrar, Alt+flechas) puede comprobarse al momento. Recargar y navegar con `L.reload` / `L.goto`: si la
+respuesta de una acción llega justo al empezar la recarga, Chromium la cancela (`net::ERR_ABORTED; maybe frame was
+detached?`) y se repite.
 
 ## Instalación desde cero
 
@@ -126,6 +143,17 @@ y lo abre. Misma base; servidor con Google configurado (valores de prueba, no ll
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh50b-e2e.mjs   # PART=anchor,googleonly
 ```
 
+## Mover con el teclado varias veces seguidas (caza de bugs 51b)
+
+En un tablero con 250 tarjetas: dos Alt+↑ seguidos suben la tarjeta dos puestos, y con las acciones del servidor medio
+segundo más lentas (red lenta, `page.route`), Alt+→ y Alt+← seguidos la dejan al final de su columna y ahí sigue cuando
+llega la respuesta del primero (antes esa respuesta le ponía la posición de la otra columna y el Alt+↑ siguiente la subía
+dos puestos o no hacía nada); el foco sigue en la tarjeta. Tres rondas (`ROUNDS`). Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh51b-e2e.mjs   # PART=atajos · QA_CPU_THROTTLE=4
+```
+
 ## Aplicar plantilla: paso 2 y archivadas de columnas unidas (caza de bugs 50a)
 
 En el paso 2 de «Cambiar a esta plantilla», un tipo general sin tareas que la plantilla oculta dice «Ocultar (la
@@ -135,6 +163,33 @@ y en inglés, a 390 px y en modo oscuro); y una tarea archivada de una columna q
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh50a-e2e.mjs   # PART=paso2,en,archivada
+```
+
+## Plan de trabajo para IA: Markdown, fijas entre paneles, título y límite (caza de bugs 51a)
+
+El plan generado con descripciones raras: un bloque de código sin cerrar se cierra tras su última línea (antes se tragaba
+las tareas siguientes y el pie), ``` dentro de un bloque de ```` queda tal cual, un título setext («Notas» subrayado con
+---) pasa a ##### y se conservan los saltos de línea forzados y las tablas; una tarea fija arrastrada del panel «Siempre
+en el plan» de una columna al de otra (o desde «Siempre en la release») pasa allí como fija y se deshace con Ctrl+Z; a
+390 px el título de «Generar plan de trabajo» y de «Generar release» conserva el icono y recorta el paso con «…»; y con
+más de 500 tareas marcadas «Generar» se desactiva con su motivo. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh51a-e2e.mjs   # PART=markdown,fijas,titulo,limite
+```
+
+## Release grande, «+» flotante con el programa lleno y panel de fijas en el móvil (caza de bugs 51c)
+
+Con más de 500 tareas marcadas, «Generar release» se desactiva con su motivo, también en inglés (antes salía el error de
+zod en inglés, «Too big: expected array…»); con más de 200 tareas con adjuntos lo hacen «Marcar como desplegado» y
+«Descargar adjuntos», y al quitar una se puede seguir. En el móvil, con la columna «Programa del curso» a 100 sesiones el
+«+» flotante se ve desactivado, como el de la cabecera, y al tocarlo dice por qué sin abrir «Nueva tarea»; en otra columna
+o al bajar de 100 vuelve a abrirla. Y el «+» flotante y «Crear varias tareas» ya no tapan la barra «Siempre en la release»
+/ «Siempre en el plan» ni las filas del panel abierto (a 390 y 360 px), mientras que una columna sin panel sigue llegando
+hasta abajo y en tableta las columnas miden lo mismo. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh51c-e2e.mjs   # PART=release,adjuntos,flotante,panel
 ```
 
 ## Arrastrar una selección
@@ -176,14 +231,35 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-repeat-e2e.mjs
 
 ## Carga de proyecto y «Adjuntos y límites» (ronda 49)
 
-El indicador de carga de las páginas de proyecto (respuestas lentas simuladas: el contorno del logo aparece pasados
-~200 ms, la región viva dice «Cargando…», ocupa el hueco de la página sin mover la barra lateral, y con movimiento
-reducido queda quieto y tenue) y los botones de limpieza de *Ajustes del proyecto → Adjuntos y límites*: desactivados y
+El indicador de carga de las páginas de proyecto (respuestas lentas simuladas: desde la ronda 51, el esqueleto del
+tablero, con cuatro columnas con su cabecera, aparece pasados ~200 ms, la región viva dice «Cargando…», ocupa el hueco de
+la página sin mover la barra lateral, Releases y Documentación tienen el suyo, y con movimiento reducido no brilla) y los botones de limpieza de *Ajustes del proyecto → Adjuntos y límites*: desactivados y
 con la tarjeta atenuada sin nada que borrar (también según el filtro de antigüedad), activos con ficheros, y la nota «i».
 Crea y borra su propio proyecto privado. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-ui-e2e.mjs   # PART=load,storage
+```
+
+## Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51)
+
+- `skeleton`: al ir al tablero con la respuesta lenta, su esqueleto (cuatro columnas con la forma de su cabecera, la
+  cabecera del tablero, brillo; huesos claros en claro y oscuros en oscuro); Releases, Documentación y Ajustes con el
+  suyo; en una carga rápida no llega a verse; en móvil, una sola columna, la barra de pestañas y nada se sale.
+- `icon`: *Administración → Ajustes → Icono de la app*: el color elegido llega al manifiesto (pedido sin sesión), al
+  favicon, al apple-touch-icon y a la pantalla de acceso; los PNG miden lo que dicen y son del color del tema; el nombre
+  bajo el icono es el de la organización. Deja la instalación como estaba.
+- `html`: un HTML con `dns-prefetch`, `preconnect`, `prefetch`, `prerender`, `modulepreload`, `preload`, hoja de estilo e
+  icono (también en mayúsculas, en el cuerpo y dentro de un SVG) se ve sin ningún `<link>` y sin pedir nada a esas
+  direcciones.
+- `backups`: con un `status.json` de prueba, el aviso de reducción dice la hora de las copias con segundos y sus nombres;
+  si llega otra copia (del mismo minuto) antes de confirmar, dice cuál era y cuál es. Necesita el servidor con
+  `BACKUP_KEY` (y `BACKUP_PAUSE=1`); sin ella se salta con una nota. Deja el `status.json` que hubiera.
+
+Crea y borra su propio proyecto privado. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r51-ui-e2e.mjs   # PART=skeleton,icon,html,backups
 ```
 
 ## Textos breves, notas «i» y botones sin efecto (ronda 49)
@@ -213,13 +289,32 @@ sección; a 390 px el asistente cabe. Misma base y servidor:
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r50-plantilla-e2e.mjs   # PART=add,replace,perm,mobile
 ```
 
+Segunda vuelta: en el paso 1, el nombre de cada plantilla elegida (generales y de la instalación, con «Curso o máster»)
+tiene contraste suficiente (≥ 4,5) sobre su fondo en modo oscuro y en claro, con un control que comprueba que el estilo
+antiguo sí fallaba; las tarjetas de opción elegidas de *Mi perfil → Preferencias* también se leen en oscuro; el resumen
+de «Cambiar a esta plantilla» dice «3 tareas fijas pasarán a ser normales» (con sus títulos) solo si su columna deja de
+ser la de release; «Añadir lo que falte» dice antes y en el resumen que vuelve a mostrar el tipo general oculto que usa la
+plantilla, lo muestra y el deshacer lo vuelve a ocultar; y tras 5 cambios de plantilla en un proyecto en 10 minutos, el
+sexto avisa («Este proyecto ya ha cambiado de plantilla 5 veces…») y no cambia nada. La sesión de administrador se abre
+como miembro y pasa a admin (como en el tablero). Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r51-plantilla-e2e.mjs   # PART=estilo,fijas,generales,limite
+```
+
+Límite de «Aplicar plantilla» (en la memoria del servidor): 5 cambios (aplicar o deshacer) por proyecto cada 10 minutos
+y 20 por persona y hora. Las tres suites de plantillas crean un proyecto con id nuevo en cada escenario, así que se
+pueden repetir seguidas; el administrador gasta unos 8 cambios por pasada de las tres (r50: 4, bh50a: 2, r51: 2; el
+límite de r51 lo gasta la segunda persona). Si tras más de dos pasadas en una hora una falla con «Ya has aplicado o
+deshecho 20 plantillas…», reinicia el servidor.
+
 ## Plantilla «Curso o máster» y «Publicar programa (PDF)»
 
 Crea un proyecto con la plantilla desde *Nuevo proyecto* (la sesión se abre como miembro y pasa a admin, como en el
 tablero), comprueba sus columnas (con «Programa», rol *Programa del curso*), tipos y campo *Fecha de inicio*; crea dos
 sesiones con el tipo «Sesión» (título y descripción automáticos, fecha y responsable) y otra de varios días con Markdown;
 publica el programa con el responsable, lo descarga y comprueba su texto con `pdftotext` (orden, fechas, rango, Markdown
-pintado, sin la archivada), la copia «Programa – fecha.pdf» en Documentación y «Abrir Documentación»; la vista previa no
+pintado, sin la archivada), la copia «Programa – fecha_v1.pdf» (versión 1) en Documentación y «Abrir Documentación»; la vista previa no
 guarda; el PDF en inglés sin guardar; con la Documentación llena (200 documentos) se descarga igual y avisa; y el rol en el
 menú de la columna con su icono y su explicación (se puede repetir y quitar). Borra su proyecto al terminar. Necesita
 `pdftotext` (poppler-utils). Genera cuatro PDF con la misma persona: el límite es de cinco por minuto, así que entre dos
@@ -227,6 +322,39 @@ pasadas seguidas espera un minuto. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r50-curso-e2e.mjs   # PART=tpl,pdf,en,full,role
+```
+
+## «Programa del curso»: versiones del PDF y tope de 100 sesiones (ronda 51)
+
+Versiones: cada «Publicar» con la casilla de Documentación marcada guarda «Programa – fecha_vN.pdf» como documento nuevo
+(no sustituye al anterior); el diálogo dice «(versión N del programa)»; borrada para siempre la 2, la siguiente es la 3;
+sin guardar no gasta número. Tope: el contador de la columna dice «99/100»; se crea la 100 con «+», que queda desactivado
+con su motivo; arrastrar una tarjeta de otra columna y «Mover a…» a la columna llena avisan («La columna «Programa» admite
+como mucho 100 sesiones.») y no mueven nada; con 103 por datos antiguos, el diálogo avisa antes y después de publicar y la
+vista previa lleva `X-Pizarro-Program-Omitted: 3`; el rol no se da a una columna con 101 tarjetas; y los textos en inglés a
+390 px. Crea y borra su propio proyecto privado. Genera cuatro PDF con el admin y tres con la segunda persona (límite: cinco
+por minuto y persona): después de `r50-curso-e2e.mjs` (cuatro con el admin), espera un minuto. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r51-programa-e2e.mjs   # PART=version,limite,pdf,rol,en
+```
+
+## Plan de trabajo para IA y botones de las columnas especiales (ronda 51)
+
+Un proyecto propio con una columna de cada rol especial: todas muestran su botón de acción (*Generar Release*, *Generar
+plan de trabajo*, *Publicar programa (PDF)*, *PDF de la semana*, *Ver lista*…) con el mismo aspecto en claro, en oscuro y
+en el móvil. En la columna «Plan de trabajo para IA»: el panel «Siempre en el plan», el diálogo en dos pasos (las fijas
+con su cadencia, cabecera y pie de serie para Claude Code), el texto generado (contexto, tareas en orden con tipo,
+prioridad, etiquetas, fechas, dependencia, subtareas, enlaces y adjuntos), *Copiar todo*, `.md` y `.txt` con su nombre,
+quitar el pie, cerrar con cambios, *Guardar en Documentación* («Plan de trabajo – fecha_v1.md», con el texto editado y
+*Abrir Documentación*), la versión siguiente moviendo las tareas a otra columna (las fijas no), las plantillas de la
+persona y del proyecto, el editor con barra, añadir y quitar fijas, el rol en el menú (se repite y, al quitarlo, sus fijas
+pasan a normales), las plantillas en *Mi perfil* y en los ajustes del proyecto, el ejemplo «Preparación de un curso» y
+todo en inglés a 390 px en modo oscuro (versión siguiente a una importada). Borra su proyecto al terminar. Misma base y
+servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r51-plan-e2e.mjs   # PART=buttons,plan,move,tpl,rich,fixed,role,settings,curso,en
 ```
 
 ## Comentarios a la vez, red lenta, dos pestañas y release renombrada (caza de bugs 48c)
@@ -256,6 +384,25 @@ propias personas (`r49_*`). Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-account-e2e.mjs   # PART=block,desk,mobile,google,admin
+```
+
+## Lo que queda al borrar una cuenta (ronda 51)
+
+*Volver a entrar con Google* para borrar la cuenta (en español y en inglés a 390 px): el diálogo avisa de que Google
+pedirá la contraseña; el enlace lleva a Google con `prompt=login` y `max_age=0` (sin seguir la redirección) y la cookie del
+acceso lleva la hora de inicio y la marca de la baja; la vuelta sin contraseña nueva se simula con `?delete=google_stale`
+(la comprobación de `auth_time` con un id_token firmado está en test:db): «Google no te ha pedido la contraseña…», sin
+quedar confirmada. *Iniciar sesión con Google* sigue con `prompt=select_account`. Al borrarse una cuenta con un proyecto
+privado, los dos administradores activos reciben un aviso cada uno (el proyecto borrado con la casilla, ninguno): en la
+campana, en español y en inglés, y al pulsarlo se abre el proyecto con su selector, su navegación y su título; en el
+móvil, el menú del título lo marca «Not in your projects» y lo añade a su lista. Un administrador que abre un proyecto de
+equipo que no está en su lista por enlace (ya en el HTML) o desde *Proyectos existentes* (navegación de la app) lo ve en
+el selector marcado «No está en tus proyectos», con la navegación del proyecto; «Añadir a mis proyectos» lo añade (y
+solo ese); en el calendario deja de mostrarse. Un miembro sin acceso recibe 404 y no lo ve. Crea sus propias personas y
+proyectos (`r51c_*`). Misma base; servidor como el de bh50b (Google con valores de prueba, sin email):
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r51-cuenta-e2e.mjs   # PART=google,notice,outside,member
 ```
 
 ## Copias con adjuntos y release con barra de formato

@@ -1,5 +1,6 @@
 import { visibleProjectsWhere } from "@/lib/access";
 import { userTemplates } from "@/lib/board";
+import { userPlanTemplates } from "@/lib/ai-plan-templates";
 import { db } from "@/lib/db";
 import { googleEnabled } from "@/lib/google";
 import { appTimeZone } from "@/lib/board";
@@ -95,6 +96,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         name={row.name}
         email={row.email}
         templates={await userTemplates(user.id)}
+        planTemplates={await userPlanTemplates(user.id)}
         cardStyle={row.cardStyle}
         editorMode={row.editorMode}
         clearDraftsOnLogout={row.clearDraftsOnLogout}
@@ -104,6 +106,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         notifications={{
           notifyEmail: row.notifyEmail,
           emailAvailable: emailEnabled(),
+          adminNotices: user.role === "ADMIN",
         }}
         notificationExtras={
           <>

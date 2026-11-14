@@ -7,18 +7,29 @@ import { I18nProvider } from "@/i18n/client";
 import { getLocale } from "@/i18n/server";
 import { appTimeZone } from "@/lib/format";
 import { getInstanceSettings } from "@/lib/instance";
+import { getAppIcon } from "@/lib/app-icon";
+import { appIconUrl, appNames } from "@/lib/app-icon-core";
 
 export async function generateMetadata(): Promise<Metadata> {
   // Nombre de la organización elegido en el asistente de primer arranque (si no, solo «Pizarro»).
-  const { orgName } = await getInstanceSettings();
-  const name = orgName ? `${orgName} · Pizarro` : "Pizarro";
+  const [{ orgName }, appIcon] = await Promise.all([getInstanceSettings(), getAppIcon()]);
+  const { name, shortName } = appNames(orgName);
   return {
     title: { default: name, template: `%s · ${name}` },
     description: "Kanban ligero y generador de release notes para equipos pequeños.",
     robots: { index: false, follow: false },
-    applicationName: "Pizarro",
-    appleWebApp: { capable: true, title: "Pizarro", statusBarStyle: "default" },
-    icons: { apple: "/apple-touch-icon.png" },
+    applicationName: name,
+    // iPhone: «Añadir a pantalla de inicio» copia este nombre y el apple-touch-icon (no lee el manifiesto).
+    appleWebApp: { capable: true, title: shortName, statusBarStyle: "default" },
+    // Pestaña, pantalla de inicio e iPhone con el color del icono de la instalación (Administración → Ajustes). La
+    // dirección cambia con el color (lleva el tema y la revisión del dibujo), así que ninguna caché enseña el anterior.
+    icons: {
+      icon: [
+        { url: appIconUrl(appIcon, "icon.svg"), type: "image/svg+xml" },
+        { url: appIconUrl(appIcon, "icon-32.png"), sizes: "32x32", type: "image/png" },
+      ],
+      apple: [{ url: appIconUrl(appIcon, "apple-touch-icon.png"), sizes: "180x180" }],
+    },
   };
 }
 

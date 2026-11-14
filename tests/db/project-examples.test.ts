@@ -61,6 +61,12 @@ describe("proyectos desde un ejemplo", () => {
     assert.equal(sessions.length, 3);
     assert.ok(sessions.every((t) => t.dueDate));
     assert.ok(sessions.some((t) => t.startDate && t.dueDate && t.startDate < t.dueDate));
+    // …y encargos para el agente en «Plan de trabajo para IA», uno de ellos fijo («Siempre en el plan»).
+    const plan = await db.column.findFirstOrThrow({ where: { projectId: course.id, role: "AI_PLAN" } });
+    const planTasks = await db.task.findMany({ where: { columnId: plan.id }, orderBy: { position: "asc" } });
+    assert.deepEqual(planTasks.map((t) => t.evergreen), [false, true]);
+    // En las demás columnas ninguna es fija.
+    assert.equal(await db.task.count({ where: { projectId: course.id, evergreen: true, columnId: { not: plan.id } } }), 0);
   });
 
   test("una persona en inglés recibe el ejemplo en inglés", async () => {

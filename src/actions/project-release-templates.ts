@@ -6,7 +6,7 @@ import { assertProjectAccess } from "@/lib/access";
 import { runAction } from "@/lib/action";
 import { noteProject } from "@/lib/action-context";
 import { lockProject } from "@/lib/caps";
-import { MAX_RELEASE_TEMPLATES_PER_KIND, MAX_TEMPLATE } from "@/lib/constants";
+import { MAX_RELEASE_TEMPLATES_PER_KIND, MAX_TEMPLATE, TEMPLATE_KINDS, type TemplateKindValue } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { AppError, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
@@ -19,13 +19,13 @@ const templateSchema = z.object({
 });
 
 /**
- * Cabeceras y pies de release del proyecto. Los gestiona cualquiera con acceso al proyecto (miembros y administradores
+ * Cabeceras y pies de release del proyecto (y, con PLAN_HEADER y PLAN_FOOTER, los del plan de trabajo para IA). Los gestiona cualquiera con acceso al proyecto (miembros y administradores
  * que lo ven); «Generar release» los ofrece tras las plantillas del usuario.
  */
-export async function createProjectReleaseTemplate(projectId: string, kind: "HEADER" | "FOOTER", input: { name: string; content: string }) {
+export async function createProjectReleaseTemplate(projectId: string, kind: TemplateKindValue, input: { name: string; content: string }) {
   return runAction({ name: "projectReleaseTemplates.create", args: [projectId, kind, input] }, async () => {
     const user = await requireUser();
-    const k = z.enum(["HEADER", "FOOTER"]).parse(kind);
+    const k = z.enum(TEMPLATE_KINDS).parse(kind);
     const data = templateSchema.parse(input);
     const pid = v.id.parse(projectId);
     await assertProjectAccess(user, pid);

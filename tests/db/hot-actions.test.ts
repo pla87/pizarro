@@ -290,7 +290,7 @@ describe("updateTask", () => {
   test("errores: archivada, evergreen fuera de la release, sin acceso", async () => {
     const { f } = await setup();
     const a = await makeTask(f);
-    expectFail(await updateTask(a.id, { evergreen: true }), /Solo las tareas de la columna de la release/);
+    expectFail(await updateTask(a.id, { evergreen: true }), /Solo pueden ser fijas las tareas de la columna de la release/);
     await db.task.update({ where: { id: a.id }, data: { archivedAt: new Date() } });
     expectFail(await updateTask(a.id, { title: "x" }), /La tarea está archivada/);
     const other = await makeProject({ members: [] });

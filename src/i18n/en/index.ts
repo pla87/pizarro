@@ -4,6 +4,7 @@ import { accesibilidad } from "./accesibilidad";
 import { acceso } from "./acceso";
 import { admin } from "./admin";
 import { almacenamiento } from "./almacenamiento";
+import { apariencia } from "./apariencia";
 import { aplicarPlantilla } from "./aplicar-plantilla";
 import { baja } from "./baja";
 import { board } from "./board";
@@ -21,6 +22,7 @@ import { cuentas } from "./cuentas";
 import { detalle } from "./detalle";
 import { documentacion } from "./documentacion";
 import { formatos } from "./formatos";
+import { herencia } from "./herencia";
 import { ics } from "./ics";
 import { importar } from "./importar";
 import { instalar } from "./instalar";
@@ -30,8 +32,10 @@ import { licencia } from "./licencia";
 import { lista } from "./lista";
 import { mensajeria } from "./mensajeria";
 import { pegado } from "./pegado";
+import { planIa } from "./plan-ia";
 import { plantillas } from "./plantillas";
 import { privados } from "./privados";
+import { programa } from "./programa";
 import { proyectos } from "./proyectos";
 import { releases } from "./releases";
 import { repeticion } from "./repeticion";
@@ -50,5 +54,5 @@ export const EN: Record<string, string> = {
   ...common, ...board, ...task, ...detalle, ...comentarios, ...lista, ...pegado, ...wip, ...calendar, ...releases, ...conexion,
   ...accesibilidad, ...settings, ...admin, ...server, ...cuentas, ...acceso, ...colaboracion, ...proyectos, ...plantillas,
   ...setup, ...documentacion, ...campos, ...almacenamiento, ...importar, ...ics, ...mensajeria, ...soporte, ...licencia,
-  ...legal, ...landing, ...web, ...instalar, ...baja, ...datos, ...copia, ...repeticion, ...carga, ...textos, ...aplicarPlantilla, ...privados, ...formatos, ...curso, ...seleccion,
+  ...legal, ...landing, ...web, ...instalar, ...baja, ...datos, ...copia, ...repeticion, ...carga, ...textos, ...aplicarPlantilla, ...privados, ...formatos, ...curso, ...seleccion, ...programa, ...herencia, ...apariencia, ...planIa,
 };

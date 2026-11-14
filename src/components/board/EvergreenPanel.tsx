@@ -14,27 +14,32 @@ import { MentionText } from "../ui/MentionText";
 import { mentionsToPlain } from "@/lib/mentions";
 import { nextEvergreenEvery } from "@/lib/release";
 
-/** Prefijo del id del droppable del panel (el resto es el id de la columna de la release). */
+/** Prefijo del id del droppable del panel (el resto es el id de su columna: la de la release o una de plan para IA). */
 export const EVERGREEN_DROPPABLE_PREFIX = "evergreen:";
 /** Tiempo con una tarjeta encima de la barra plegada antes de que se abra sola. */
 const SPRING_OPEN_MS = 300;
 /** Tiempo con un archivo del escritorio encima de la barra plegada antes de que se abra sola (para soltarlo en una tarea). */
 const FILE_SPRING_OPEN_MS = 1000;
 
-/** Clave de localStorage del estado plegado/desplegado, por proyecto. */
-const storageKey = (projectId: string) => `pizarro:evergreen-open:${projectId}`;
+/**
+ * Clave de localStorage del estado plegado/desplegado: por proyecto la de la release (solo hay una) y por columna las de
+ * los planes para IA (puede haber varias).
+ */
+const storageKey = (projectId: string, columnId?: string) => `pizarro:evergreen-open:${projectId}${columnId ? `:${columnId}` : ""}`;
 
 const listeners = new Set<() => void>();
 /** Respaldo en memoria si localStorage no está disponible. */
 const memory = new Map<string, boolean>();
 
 /**
- * Panel al pie de la columna de la release con las tareas «siempre en la release» (evergreen).
- * Plegado es una barra con el contador; desplegado crece hacia arriba mostrando tarjetas compactas.
+ * Panel al pie de la columna de la release con las tareas «siempre en la release» (evergreen), o de una columna de plan
+ * de trabajo para IA con las «siempre en el plan» (`kind="plan"`). Plegado es una barra con el contador; desplegado crece
+ * hacia arriba mostrando tarjetas compactas.
  */
-export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskIds: string[] }) {
+export function EvergreenPanel({ columnId, taskIds, kind = "release" }: { columnId: string; taskIds: string[]; kind?: "release" | "plan" }) {
   const { project, openNewTask } = useBoard();
   const t = useT();
+  const key = storageKey(project.id, kind === "plan" ? columnId : undefined);
   // Estado en localStorage leído como store externo (en servidor, plegado).
   const stored = useSyncExternalStore(
     (cb) => {
@@ -47,9 +52,9 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
     },
     () => {
       try {
-        return localStorage.getItem(storageKey(project.id)) === "1";
+        return localStorage.getItem(key) === "1";
       } catch {
-        return memory.get(project.id) ?? false;
+        return memory.get(key) ?? false;
       }
     },
     () => false,
@@ -122,9 +127,9 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
 
   const toggle = () => {
     const next = !stored;
-    memory.set(project.id, next);
+    memory.set(key, next);
     try {
-      localStorage.setItem(storageKey(project.id), next ? "1" : "0");
+      localStorage.setItem(key, next ? "1" : "0");
     } catch {
       /* sin almacenamiento: solo dura la sesión */
     }
@@ -142,7 +147,7 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
     >
       {open && (
         <div id={`evergreen-${columnId}`} className="-mb-1.5 max-h-56 space-y-1.5 overflow-y-auto px-2 pt-2 pb-1.5 max-lg:pr-16">
-          {taskIds.map((id) => <EvergreenCard key={id} id={id} />)}
+          {taskIds.map((id) => <EvergreenCard key={id} id={id} plan={kind === "plan"} />)}
           {/* Único hueco que acepta archivos (tarea fija nueva): el de debajo de las filas; entre filas no hace nada. */}
           <div
             data-file-zone
@@ -166,9 +171,11 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
         aria-controls={`evergreen-${columnId}`}
         // Plegado, la cabecera es el único destino de archivos del panel.
         {...(open ? {} : { "data-file-zone": true })}
-        className={cn("flex w-full items-center gap-1.5 rounded-b-xl px-3 py-2 max-lg:pr-20 text-xs font-medium text-slate-600 hover:bg-slate-200/60 dark:text-slate-300 dark:hover:bg-slate-800/60", !open && fileZone.over && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10")}
+        // Móvil: la barra queda por encima del «+» flotante (margen de la columna en ColumnView) y a la altura de «Crear varias
+        // tareas», así que deja libres los 4 rem de la derecha para que ese botón no la tape. Tableta: el texto deja sitio (pr-20).
+        className={cn("flex items-center gap-1.5 rounded-b-xl px-3 py-2 max-md:w-[calc(100%-4rem)] max-md:rounded-br-md md:w-full md:max-lg:pr-20 text-xs font-medium text-slate-600 hover:bg-slate-200/60 dark:text-slate-300 dark:hover:bg-slate-800/60", !open && fileZone.over && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10")}
       >
-        <span>{t("Siempre en la release")}</span>
+        <span>{kind === "plan" ? t("Siempre en el plan") : t("Siempre en la release")}</span>
         <span className="rounded-full bg-slate-200 px-1.5 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">{taskIds.length}</span>
         <ChevronUp size={14} className={cn("lg:ml-auto transition-transform", open && "rotate-180")} />
       </button>
@@ -177,7 +184,7 @@ export function EvergreenPanel({ columnId, taskIds }: { columnId: string; taskId
 }
 
 /** Tarjeta compacta del panel: se puede arrastrar a cualquier columna (deja de ser fija al soltarla). */
-function EvergreenCard({ id }: { id: string }) {
+function EvergreenCard({ id, plan }: { id: string; plan: boolean }) {
   const { kindById, openTask, dragHandle, setEvergreenEvery } = useBoard();
   const t = useT();
   // Rol que lee el lector de pantalla (dnd-kit dice «draggable»).
@@ -188,8 +195,10 @@ function EvergreenCard({ id }: { id: string }) {
   if (!task) return null;
   // En táctil solo arrastra el asa (igual que las tarjetas normales).
   const every = task.evergreenEvery;
-  const everyLabel = every === 2 ? t("Cada dos") : every === 3 ? t("Cada tres") : t("En todas");
-  const everyHint = every === 2 ? t("Incluir cada dos releases") : every === 3 ? t("Incluir cada tres releases") : t("Incluir en todas las releases");
+  const everyLabel = every === 2 ? t("Cada dos") : every === 3 ? t("Cada tres") : plan ? t("En todos") : t("En todas");
+  const everyHint = plan
+    ? (every === 2 ? t("Incluir cada dos planes") : every === 3 ? t("Incluir cada tres planes") : t("Incluir en todos los planes"))
+    : (every === 2 ? t("Incluir cada dos releases") : every === 3 ? t("Incluir cada tres releases") : t("Incluir en todas las releases"));
   // div con rol de botón (y no <button>) porque lleva dentro el interruptor de cadencia.
   return (
     <div

@@ -1,5 +1,6 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
+import { hasEvergreenTasks } from "./constants";
 import { addDaysIso, isoToDate, todayIso } from "./dates";
 import { appTimeZone } from "./format";
 import { POSITION_STEP } from "./positions";
@@ -67,6 +68,8 @@ export async function createExampleContent(tx: Prisma.TransactionClient, project
         estimatedHours: t.estimatedHours,
         client: t.client,
         ...(repeat ?? {}),
+        // Fija («Siempre en la release / en el plan») solo en una columna que las admite.
+        evergreen: Boolean(t.evergreen && hasEvergreenTasks(column.role)),
         labels: { create: [...new Set(labelIds)].map((labelId) => ({ labelId })) },
         subtasks: { create: (t.subtasks ?? []).map((title, i) => ({ title, position: (i + 1) * POSITION_STEP })) },
       },

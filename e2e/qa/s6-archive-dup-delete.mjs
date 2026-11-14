@@ -29,17 +29,19 @@ export async function run() {
   await U.openTask(p, "T2");
   await U.dialog(p).getByRole("button", { name: "Archivar", exact: true }).click();
   await L.eqEventually("archivar: archivedAt y columna de origen en BD", async () => { const t = (await full("T2"))[0]; return t.archived && t.col === COL.doing && !!t.from; }, true);
-  L.check("archivar: el diálogo se cierra", (await p.locator("[role=dialog]").count()) === 0);
-  L.eq("archivar: sale del tablero (UI)", await U.uiOrder(p, COL.doing), ["T1", "T3", "T4"]);
+  // Archivar desde el diálogo no es optimista: el diálogo se cierra y la tarjeta sale al responder el servidor, que
+  // responde después de guardar en la BD.
+  await L.checkEventually("archivar: el diálogo se cierra", async () => (await p.locator("[role=dialog]").count()) === 0);
+  await L.eqEventually("archivar: sale del tablero (UI)", () => U.uiOrder(p, COL.doing), ["T1", "T3", "T4"]);
   L.eq("archivar: sale de la lista activa (BD)", await L.dbOrder(COL.doing), ["T1", "T3", "T4"]);
-  L.check("archivar: evento «archive»", (await L.events("T2")).some((e) => e.code === "archive"), JSON.stringify(await L.events("T2")));
+  await L.checkEventually("archivar: evento «archive»", async () => { const ev = await L.events("T2"); return [ev.some((e) => e.code === "archive"), ev]; });
   await U.logHas("archivar: AppLog", t0, "tasks.archiveTask", "Archivó «T2»");
   // deshacer
   await U.undoKey(p, "Control+z");
   await L.eqEventually("deshacer archivar: vuelve activa", async () => (await full("T2"))[0].archived, false);
   L.eq("deshacer archivar: misma columna y posición", [(await full("T2"))[0].col, Number((await full("T2"))[0].position)], [COL.doing, pos2]);
   L.eq("deshacer archivar: orden", await L.dbOrder(COL.doing), ["T1", "T2", "T3", "T4"]);
-  L.eq("deshacer archivar: UI", await U.uiOrder(p, COL.doing), ["T1", "T2", "T3", "T4"]);
+  await L.eqEventually("deshacer archivar: UI", () => U.uiOrder(p, COL.doing), ["T1", "T2", "T3", "T4"]);
   await U.undoKey(p, "Alt+Shift+z", "REDO");
   await L.eqEventually("rehacer archivar: archivada otra vez", async () => (await full("T2"))[0].archived, true);
 
@@ -54,10 +56,10 @@ export async function run() {
   L.eq("recuperar: vuelve a su columna", rec.col, COL.doing);
   L.check("recuperar: va al final de la columna", Number(rec.position) > Number((await full("T4"))[0].position), String(rec.position));
   L.check("recuperar: archivedFromColumnId limpiado", rec.from === null);
-  L.check("recuperar: evento «restore»", (await L.events("T2")).some((e) => e.code === "restore"), JSON.stringify(await L.events("T2")));
+  await L.checkEventually("recuperar: evento «restore»", async () => { const ev = await L.events("T2"); return [ev.some((e) => e.code === "restore"), ev]; });
   await U.logHas("recuperar: AppLog", t0, "tasks.restoreTask", /^Recuperó «T2» en «En progreso»$/);
   await U.closeDialog(p);
-  L.eq("recuperar: UI (al final)", await U.uiOrder(p, COL.doing), ["T1", "T3", "T4", "T2"]);
+  await L.eqEventually("recuperar: UI (al final)", () => U.uiOrder(p, COL.doing), ["T1", "T3", "T4", "T2"]);
   await U.undoKey(p, "Control+z");
   await L.eqEventually("deshacer recuperar: vuelve a estar archivada", async () => (await full("T2"))[0].archived, true);
   await U.undoKey(p, "Control+z"); // deshace el archivado rehecho -> activa en su sitio
@@ -75,7 +77,7 @@ export async function run() {
   L.eq("duplicar: la original no cambia (subtareas)", orig.subs, "Sub uno:true,Sub dos:false");
   await U.logHas("duplicar: AppLog", t0, "tasks.duplicateTask", "Duplicó «T2»");
   await U.closeDialog(p);
-  L.eq("duplicar: UI en la posición siguiente", (await U.uiOrder(p, COL.doing)).slice(0, 4), ["T1", "T2", "T2 (copia)", "T3"]);
+  await L.eqEventually("duplicar: UI en la posición siguiente", async () => (await U.uiOrder(p, COL.doing)).slice(0, 4), ["T1", "T2", "T2 (copia)", "T3"]);
   await U.undoKey(p, "Control+z");
   await L.eqEventually("deshacer duplicar: la copia desaparece", () => count("T2 (copia)"), 0);
   await U.undoKey(p, "Alt+Shift+z", "REDO");
@@ -86,7 +88,8 @@ export async function run() {
   await L.cardLoc(p, "T3").focus();
   await p.keyboard.press("Alt+Shift+D");
   await L.eqEventually("Alt+Mayús+D duplica la tarjeta enfocada", () => count("T3 (copia)"), 1);
-  L.eq("Alt+Mayús+D: UI", (await U.uiOrder(p, COL.doing)).slice(2, 4), ["T3", "T3 (copia)"]);
+  // La copia llega al tablero con la respuesta del servidor (después de crearse en la BD).
+  await L.eqEventually("Alt+Mayús+D: UI", async () => (await U.uiOrder(p, COL.doing)).slice(2, 4), ["T3", "T3 (copia)"]);
   await U.undoKey(p, "Control+z");
   await L.eqEventually("deshacer el duplicado por atajo", () => count("T3 (copia)"), 0);
 
@@ -113,7 +116,7 @@ export async function run() {
     [back.description, back.kindId, back.assigneeId, back.due, back.deliverableId, back.color, back.labels, back.subs, back.col],
     [before.description, before.kindId, before.assigneeId, before.due, before.deliverableId, before.color, before.labels, before.subs, before.col]);
   L.eq("deshacer borrar: posición original", Number(back.position), Number(before.position));
-  L.eq("deshacer borrar: UI vuelve a su sitio", await U.uiOrder(p, COL.doing), ["T1", "T2", "T3", "T4"]);
+  await L.eqEventually("deshacer borrar: UI vuelve a su sitio", () => U.uiOrder(p, COL.doing), ["T1", "T2", "T3", "T4"]);
   await U.undoKey(p, "Alt+Shift+z", "REDO");
   await L.eqEventually("rehacer borrar: borrada otra vez", () => count("T2"), 0);
   await U.undoKey(p, "Control+z");
@@ -124,14 +127,14 @@ export async function run() {
   for (const t of ["T1", "T3"]) await L.cardLoc(p, t).locator("button[aria-label='Seleccionar']").click();
   await p.getByRole("button", { name: "Archivar", exact: true }).last().click();
   await L.eqEventually("archivar varias: ambas archivadas", async () => (await full("T1"))[0].archived && (await full("T3"))[0].archived, true);
-  L.eq("archivar varias: UI", await U.uiOrder(p, COL.doing), ["T2", "T4"]);
+  await L.eqEventually("archivar varias: UI", () => U.uiOrder(p, COL.doing), ["T2", "T4"]);
   await U.undoKey(p, "Control+z");
   await L.eqEventually("deshacer archivar varias: ambas activas en su sitio", () => L.dbOrder(COL.doing), ["T1", "T2", "T3", "T4"]);
   for (const t of ["T2", "T4"]) await L.cardLoc(p, t).locator("button[aria-label='Seleccionar']").click();
   await p.getByRole("button", { name: "Borrar", exact: true }).last().click();
   await p.locator("[role=dialog]").last().getByRole("button", { name: "Borrar", exact: true }).click();
   await L.eqEventually("borrar varias: ambas borradas", async () => (await count("T2")) + (await count("T4")), 0);
-  L.eq("borrar varias: UI", await U.uiOrder(p, COL.doing), ["T1", "T3"]);
+  await L.eqEventually("borrar varias: UI", () => U.uiOrder(p, COL.doing), ["T1", "T3"]);
   await U.undoKey(p, "Control+z");
   await L.eqEventually("deshacer borrar varias: vuelven las dos", () => L.dbOrder(COL.doing), ["T1", "T2", "T3", "T4"]);
 

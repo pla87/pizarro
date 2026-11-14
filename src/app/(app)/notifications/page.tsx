@@ -1,4 +1,4 @@
-import { visibleProjectsWhere } from "@/lib/access";
+import { visibleNotificationsWhere } from "@/lib/notification-access";
 import { db } from "@/lib/db";
 import { mentionsToPlain } from "@/lib/mentions";
 import { requireUserPage } from "@/lib/session";
@@ -18,8 +18,8 @@ export default async function NotificationsPage({ searchParams }: { searchParams
   const rawLimit = Number(Array.isArray(sp.limit) ? sp.limit[0] : sp.limit);
   const limit = Number.isFinite(rawLimit) && rawLimit >= PAGE_STEP ? Math.min(Math.floor(rawLimit), 5000) : PAGE_STEP;
   const rows = await db.notification.findMany({
-    // Solo avisos de tareas que el usuario sigue pudiendo ver.
-    where: { userId: user.id, task: { project: visibleProjectsWhere(user) } },
+    // Solo avisos de tareas (o de proyectos) que el usuario sigue pudiendo ver.
+    where: visibleNotificationsWhere(user),
     orderBy: { createdAt: "desc" },
     take: limit + 1,
     select: {
@@ -33,6 +33,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
       telegramSentAt: true,
       actor: { select: { id: true, name: true } },
       task: { select: { id: true, title: true, project: { select: { id: true, name: true } } } },
+      project: { select: { id: true, name: true } },
     },
   });
   const hasMore = rows.length > limit;
@@ -52,6 +53,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
         viaTelegram: Boolean(n.telegramSentAt),
         actor: n.actor,
         task: n.task ? { id: n.task.id, title: mentionsToPlain(n.task.title), projectId: n.task.project.id, projectName: n.task.project.name } : null,
+        project: !n.task && n.project ? { id: n.project.id, name: n.project.name } : null,
       }))}
     />
   );

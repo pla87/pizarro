@@ -25,7 +25,7 @@ import { DictationButton, insertIntoField } from "../ui/DictationButton";
 import { pasteAsOneLine } from "../ui/textarea-edit";
 import { usePasteFiles } from "../ui/pasteFiles";
 import { applyKindTemplate, mergeSubtasks } from "@/lib/kinds-special";
-import { MAX_DESCRIPTION, MAX_TITLE } from "@/lib/constants";
+import { hasEvergreenTasks, MAX_DESCRIPTION, MAX_TITLE } from "@/lib/constants";
 import { TypeSelector } from "./TaskDialog";
 import type { T } from "@/i18n/core";
 import { AttachLimitHint } from "./AttachLimitHint";
@@ -248,7 +248,9 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   useEffect(() => {
     if (lostColumn) toast(t("La columna elegida ya no existe. La tarea se creará en «{name}».", { name: lostColumn.name }), "error");
   }, [lostColumn, toast, t]);
-  const isReleaseColumn = form.columns.find((c) => c.id === columnId)?.role === "NEXT_RELEASE";
+  // La release y los planes de trabajo para IA tienen tareas fijas («Siempre en la release» / «Siempre en el plan»).
+  const columnRole = form.columns.find((c) => c.id === columnId)?.role;
+  const isReleaseColumn = hasEvergreenTasks(columnRole);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<BatchProgress | null>(null);
   const [lightbox, setLightbox] = useState<number | null>(null);
@@ -545,7 +547,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         {isReleaseColumn && (
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={evergreen} onChange={(e) => setEvergreen(e.target.checked)} />
-            {t("Fija en la release (evergreen)")}
+            {columnRole === "AI_PLAN" ? t("Siempre en el plan (fija)") : t("Fija en la release (evergreen)")}
           </label>
         )}
         <div>

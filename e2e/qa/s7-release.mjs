@@ -110,7 +110,7 @@ export async function run() {
   L.eq("release: contenido guardado igual al editado", rel.content, content);
   const rts = await L.q(`SELECT title,"kindName" FROM "ReleaseTask" WHERE "releaseId"=$1 ORDER BY title`, [rel.id]);
   L.eq("release: tareas con su tipo", rts.map((r) => `${r.title}:${r.kindName}`), ["Alpha:Funcionalidad", "Beta:Corrección", "Fija:Funcionalidad", "Gamma:Funcionalidad"]);
-  L.eqEventually("tablero: las tres pasan a «En producción» tras la Previa", () => L.dbOrder(COL.prod), PROD_AFTER);
+  await L.eqEventually("tablero: las tres pasan a «En producción» tras la Previa", () => L.dbOrder(COL.prod), PROD_AFTER);
   await L.eqEventually("tablero (BD): En producción en orden", () => L.dbOrder(COL.prod), PROD_AFTER);
   L.eq("tablero (BD): la fija se queda en «Siguiente salto»", await L.dbOrder(COL.next), ["Fija"]);
   L.eq("tablero (BD): Backlog intacto", await L.dbOrder(COL.backlog), ["Suelta"]);
@@ -128,7 +128,7 @@ export async function run() {
 
   // --- página de releases ---
   const proj = await L.project();
-  await p.goto(`${L.BASE}/p/${proj.id}/releases`);
+  await L.goto(p, `${L.BASE}/p/${proj.id}/releases`);
   await p.getByText("Release QA uno").first().waitFor({ timeout: 15000 });
   const bodyText = await p.locator("main").innerText();
   L.check("Releases: muestra título, número y «4 tareas» y «2 adjuntos»", /Release QA uno/.test(bodyText) && /4 tareas/.test(bodyText) && /2 adjuntos/.test(bodyText) && /\bR1(?!\d)/.test(bodyText), bodyText.slice(0, 300));
@@ -149,10 +149,9 @@ export async function run() {
   const z = await p.evaluate(async (h) => { const r = await fetch(h); const b = new Uint8Array(await r.arrayBuffer()); return { status: r.status, len: b.length, pk: b[0] === 0x50 && b[1] === 0x4b, ct: r.headers.get("content-type") }; }, href);
   L.eq("ZIP del histórico: 200, application/zip, PK", [z.status, z.ct, z.pk], [200, "application/zip", true]);
   L.check("ZIP del histórico: no vacío", z.len > 100, String(z.len));
-  await L.reload(p).catch(() => {});
 
   // --- deshacer el despliegue ---
-  await p.goto(`${L.BASE}/p/${proj.id}`); await L.reload(p);
+  await L.goto(p, `${L.BASE}/p/${proj.id}`); await L.reload(p);
   await U.undoKey(p, "Control+z");
   await L.eqEventually("deshacer despliegue: la release desaparece", async () => (await rels()).length, 0);
   L.eq("deshacer despliegue: las tareas vuelven a «Siguiente salto» en su orden", await L.dbOrder(COL.next), ["Alpha", "Beta", "Gamma", "Fija"]);
@@ -164,15 +163,15 @@ export async function run() {
 
   // --- histórico vacío: nombra la columna real que genera releases (antes, fijo «Siguiente salto a producción») ---
   await L.q(`UPDATE "Column" SET name='Próximo salto QA' WHERE "projectId"=$1 AND role='NEXT_RELEASE'`, [proj.id]);
-  await p.goto(`${L.BASE}/p/${proj.id}/releases`);
+  await L.goto(p, `${L.BASE}/p/${proj.id}/releases`);
   await p.getByText(/^Aún no hay releases/).waitFor({ timeout: 15000 });
   L.eq("Releases vacía: nombra la columna con el rol «Siguiente salto», con su nombre actual", (await p.getByText(/^Aún no hay releases/).innerText()).trim(), "Aún no hay releases. Genera una desde la columna «Próximo salto QA» del tablero.");
   await L.q(`UPDATE "Column" SET role='NONE' WHERE "projectId"=$1 AND name='Próximo salto QA'`, [proj.id]);
-  await p.goto(`${L.BASE}/p/${proj.id}/releases`);
+  await L.goto(p, `${L.BASE}/p/${proj.id}/releases`);
   await p.getByText(/^Aún no hay releases/).waitFor({ timeout: 15000 });
   L.eq("Releases vacía sin esa columna: explica qué rol ponerle a una", (await p.getByText(/^Aún no hay releases/).innerText()).trim(), "Aún no hay releases. Para generarlas, elige en el menú de una columna del tablero el rol «Siguiente salto (genera releases)».");
   await L.q(`UPDATE "Column" SET name=$2, role='NEXT_RELEASE' WHERE "projectId"=$1 AND name='Próximo salto QA'`, [proj.id, COL.next]);
-  await p.goto(`${L.BASE}/p/${proj.id}`);
+  await L.goto(p, `${L.BASE}/p/${proj.id}`);
   await L.board(p);
 
   // --- segunda release con selección y destino «archivar» ---

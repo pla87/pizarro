@@ -6,6 +6,7 @@ import { FileDown, FolderOpen, Loader2 } from "lucide-react";
 import { useT } from "@/i18n/client";
 import { todayIso } from "@/lib/dates";
 import { appTimeZone } from "@/lib/format";
+import { PROGRAM_MAX_SESSIONS } from "@/lib/program-limit";
 import type { BoardColumn } from "@/lib/types";
 import { Modal } from "../ui/Modal";
 import { useBoard, useTasks } from "./context";
@@ -14,7 +15,7 @@ type State =
   | { status: "form" }
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; url: string; filename: string; savedId: string | null; savedName: string | null; saveError: string | null };
+  | { status: "ready"; url: string; filename: string; savedId: string | null; savedName: string | null; version: number | null; omitted: number; saveError: string | null };
 
 const header = (res: Response, name: string) => {
   const raw = res.headers.get(name);
@@ -29,7 +30,8 @@ const header = (res: Response, name: string) => {
 /**
  * «Publicar programa (PDF)» de una columna con rol «Programa»: cada tarjeta es una sesión. Genera el PDF (número, fecha,
  * título, descripción y, si se marca, responsable), lo ofrece para descargar o abrir y, si se marca, guarda una copia en
- * la Documentación del proyecto. La descarga es un enlace (no una descarga automática) para que funcione también en el
+ * la Documentación del proyecto como una versión nueva («Programa – fecha_vN.pdf»; no sustituye a las anteriores) y dice
+ * qué versión es. Como mucho PROGRAM_MAX_SESSIONS sesiones: con más, avisa antes y después. La descarga es un enlace (no una descarga automática) para que funcione también en el
  * móvil y en la app instalada, como el informe PDF.
  */
 export function ProgramDialog({ column, onClose }: { column: BoardColumn; onClose: () => void }) {
@@ -41,7 +43,8 @@ export function ProgramDialog({ column, onClose }: { column: BoardColumn; onClos
   const [state, setState] = useState<State>({ status: "form" });
   const urlRef = useRef<string | null>(null);
   const endpoint = (assignee: boolean) => `/api/projects/${project.id}/columns/${column.id}/program?assignee=${assignee ? 1 : 0}`;
-  const docName = `${t("Programa")} – ${todayIso(appTimeZone())}.pdf`;
+  // La versión (N) la da el servidor al guardar: antes de publicar no se sabe (otra persona puede publicar a la vez).
+  const docName = `${t("Programa")} – ${todayIso(appTimeZone())}_vN.pdf`;
 
   useEffect(() => () => {
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
@@ -59,7 +62,9 @@ export function ProgramDialog({ column, onClose }: { column: BoardColumn; onClos
       const filename = /filename="?([^";]+)"?/i.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? docName;
       const url = URL.createObjectURL(blob);
       urlRef.current = url;
-      setState({ status: "ready", url, filename, savedId: header(res, "X-Pizarro-Document-Id"), savedName: header(res, "X-Pizarro-Document-Name"), saveError: header(res, "X-Pizarro-Document-Error") });
+      const version = Number(res.headers.get("X-Pizarro-Document-Version")) || null;
+      const omitted = Number(res.headers.get("X-Pizarro-Program-Omitted")) || 0;
+      setState({ status: "ready", url, filename, savedId: header(res, "X-Pizarro-Document-Id"), savedName: header(res, "X-Pizarro-Document-Name"), version, omitted, saveError: header(res, "X-Pizarro-Document-Error") });
     } catch (err) {
       setState({ status: "error", message: err instanceof TypeError ? t("Sin conexión: no se ha podido generar el programa.") : err instanceof Error ? err.message : t("No se pudo generar el programa.") });
     }
@@ -89,9 +94,16 @@ export function ProgramDialog({ column, onClose }: { column: BoardColumn; onClos
             </a>
             <button type="button" className="btn-secondary" onClick={() => window.open(state.url, "_blank")}>{t("Abrir")}</button>
           </div>
+          {state.omitted > 0 && (
+            <p className="text-amber-700 dark:text-amber-300" role="alert" data-program-omitted>
+              {t("El PDF incluye solo las {max} primeras sesiones: {n} se han quedado fuera.", { max: PROGRAM_MAX_SESSIONS, n: state.omitted })}
+            </p>
+          )}
           {state.savedId && (
-            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-emerald-700 dark:text-emerald-300" role="status">
-              {t("Guardado en Documentación como «{name}».", { name: state.savedName ?? docName })}
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-emerald-700 dark:text-emerald-300" role="status" data-program-version={state.version ?? undefined}>
+              {state.version
+                ? t("Guardado en Documentación como «{name}» (versión {n} del programa).", { name: state.savedName ?? docName, n: state.version })
+                : t("Guardado en Documentación como «{name}».", { name: state.savedName ?? docName })}
               <Link className="inline-flex items-center gap-1 font-medium underline" href={`/p/${project.id}/docs?doc=${state.savedId}`}>
                 <FolderOpen size={14} /> {t("Abrir Documentación")}
               </Link>
@@ -114,8 +126,13 @@ export function ProgramDialog({ column, onClose }: { column: BoardColumn; onClos
           </label>
           <label className="flex items-start gap-2">
             <input type="checkbox" className="mt-0.5" checked={save} onChange={(e) => setSave(e.target.checked)} disabled={busy} />
-            <span>{t("Guardar también en Documentación como «{name}»", { name: docName })}</span>
+            <span>{t("Guardar también en Documentación como una versión nueva («{name}»)", { name: docName })}</span>
           </label>
+          {sessions > PROGRAM_MAX_SESSIONS && (
+            <p className="text-amber-700 dark:text-amber-300" role="alert" data-program-over>
+              {t("La columna tiene {n} sesiones y el programa admite como mucho {max}: el PDF incluirá solo las {max} primeras.", { n: sessions, max: PROGRAM_MAX_SESSIONS })}
+            </p>
+          )}
           <p>
             <a className="text-brand-600 underline dark:text-brand-300" href={endpoint(withAssignee)} target="_blank" rel="noopener">{t("Vista previa sin guardar")}</a>
           </p>

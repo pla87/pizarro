@@ -10,12 +10,17 @@ const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
 const only = (process.env.PART || "add,replace,perm,mobile").split(",");
 
 await L.prepareUsers();
-const PID = "r50_tpl_project";
+// El límite de cambios de plantilla (5 por proyecto cada 10 minutos) cuenta en la memoria del servidor por id de
+// proyecto: cada escenario usa un proyecto con un id nuevo, para poder repetir la suite seguida sin gastarlo.
+const PID_PREFIX = "r50_tpl_project";
+let PID = PID_PREFIX;
+let seeds = 0;
 const NAME = "Zeta plantilla r50";
 
 /** Proyecto privado de las dos personas de prueba: columnas, un tipo propio, etiquetas y tareas (una archivada). */
 async function seed() {
-  await L.q(`DELETE FROM "Project" WHERE id=$1`, [PID]);
+  await L.q(`DELETE FROM "Project" WHERE id LIKE $1`, [`${PID_PREFIX}%`]);
+  PID = `${PID_PREFIX}_${Date.now().toString(36)}_${++seeds}`;
   const users = await L.q(`SELECT id FROM "User" WHERE email IN ($1,$2)`, [L.ADMIN, L.USER2]);
   await L.q(`INSERT INTO "Project"(id,name,"isPrivate","privateOwnerId",position,"updatedAt") VALUES ($1,$2,true,$3,999999,NOW())`, [PID, NAME, users[0].id]);
   for (const u of users) await L.q(`INSERT INTO "ProjectMember"("projectId","userId") VALUES ($1,$2)`, [PID, u.id]);
@@ -201,7 +206,7 @@ if (only.includes("mobile")) {
 }
 
 // El proyecto de la suite no se queda en la base (las demás suites usan el primero).
-await L.q(`DELETE FROM "Project" WHERE id=$1`, [PID]);
+await L.q(`DELETE FROM "Project" WHERE id LIKE $1`, [`${PID_PREFIX}%`]);
 await L.closeBrowser(); await L.closeDb();
 const failed = L.results.filter((r) => !r.pass);
 console.log(`\n${L.results.length - failed.length}/${L.results.length} OK`);
