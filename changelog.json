@@ -1,6 +1,73 @@
 {
   "versions": [
     {
+      "version": "1.55.0",
+      "date": "2026-11-14",
+      "releasedAt": "2026-11-14T20:28:12+01:00",
+      "summary": "Adjuntos en el plan de trabajo para IA, HTML enlazados y en Latin-1 o UTF-16, archivar y borrar al instante, botones de columnas vacías y flechas en los grupos de opciones",
+      "changes": {
+        "nuevas": [
+          "Plan de trabajo para IA: «Descargar adjuntos» baja un ZIP con una carpeta por tarea (adjuntos/03-titulo/…) y el texto del plan cita cada adjunto por su ruta en el ZIP, también las imágenes pegadas en las descripciones.",
+          "Documentación: un enlace de una página HTML a otra de la misma Documentación (tema2.html, tema2.html#apartado) la abre en el visor; si no existe, el enlace queda apagado."
+        ],
+        "mejoras": [
+          "Las páginas HTML, textos y Markdown en Latin-1, Windows-1252 o UTF-16 se ven con sus tildes en la vista previa.",
+          "Archivar o borrar desde el detalle de una tarea cierra la ventana y quita la tarjeta al instante; si falla, vuelve a su sitio y se recupera lo escrito.",
+          "Las tareas fijas de cada columna de plan llevan su propio ritmo («cada dos», «cada tres»).",
+          "Los botones de las columnas especiales se apagan sin tarjetas; al tocarlos dicen por qué.",
+          "Salir por un enlace del pie de la release o del plan con el texto cambiado pide confirmación.",
+          "Los grupos de opciones (icono de la app, tema, idioma, emails, agrupar) se recorren con las flechas.",
+          "/favicon.ico, /apple-touch-icon.png e /icon.png usan el color del icono de la instalación, y el nombre corto bajo el icono se acorta.",
+          "Un enlace a un documento que está en la papelera o ya no existe avisa."
+        ],
+        "correcciones": [
+          "La vista previa de un HTML ya no deja pasar contenido dentro de <template> (shadow DOM declarativo).",
+          "Un HTML con charset=unicode (Word) sin BOM ya no se ve como caracteres chinos, y un binario que empieza como UTF-16 ya no se toma por texto.",
+          "Un enlace de un HTML a sí mismo se desplaza dentro de la vista previa en lugar de abrir otra pestaña.",
+          "Cambiar la columna desde el detalle dos veces seguidas ya no descoloca la tarjeta.",
+          "«Reintentar» al descargar adjuntos vuelve a mostrar el indicador.",
+          "Un adjunto llamado «.» o «..» ya no da una ruta especial dentro del ZIP."
+        ],
+        "tecnicos": [
+          "Column.planCount para el ritmo de las fijas por columna.",
+          "Las rutas fijas de iconos se generan con el color elegido y caché corta.",
+          "El icono de la app guarda unos segundos el fallo de la base de datos para no reintentar en cada petición."
+        ]
+      },
+      "en": {
+        "summary": "Attachments in the AI work plan, linked HTML and Latin-1 or UTF-16 files, instant archive and delete, empty-column buttons and arrow keys in option groups",
+        "changes": {
+          "nuevas": [
+            "AI work plan: «Download attachments» downloads a ZIP with one folder per task (adjuntos/03-title/…) and the plan text refers to each attachment by its path in the ZIP, including images pasted into descriptions.",
+            "Documentation: a link from one HTML page to another in the same Documentation (tema2.html, tema2.html#section) opens it in the viewer; if it doesn't exist, the link is greyed out."
+          ],
+          "mejoras": [
+            "HTML pages, text and Markdown files in Latin-1, Windows-1252 or UTF-16 show their accents correctly in the preview.",
+            "Archiving or deleting from a task's detail closes the window and removes the card instantly; if it fails, it comes back and what you typed is recovered.",
+            "Pinned tasks in each plan column keep their own rhythm («every two», «every three»).",
+            "Special columns' buttons are greyed out with no cards; tapping them explains why.",
+            "Leaving through a footer link of the release or plan dialog with changed text asks for confirmation.",
+            "Option groups (app icon, theme, language, emails, grouping) can be browsed with the arrow keys.",
+            "/favicon.ico, /apple-touch-icon.png and /icon.png use the installation's icon colour, and the short name under the icon is shortened.",
+            "A link to a document that is in the trash or no longer exists shows a notice."
+          ],
+          "correcciones": [
+            "An HTML preview no longer lets through content inside <template> (declarative shadow DOM).",
+            "An HTML with charset=unicode (Word) and no BOM no longer shows as Chinese characters, and a binary that starts like UTF-16 is no longer taken as text.",
+            "A link from an HTML page to itself scrolls within the preview instead of opening another tab.",
+            "Changing the column from the detail twice in a row no longer misplaces the card.",
+            "«Retry» when downloading attachments shows the indicator again.",
+            "An attachment named «.» or «..» no longer produces a special path inside the ZIP."
+          ],
+          "tecnicos": [
+            "Column.planCount for the per-column rhythm of pinned tasks.",
+            "Fixed icon paths are generated with the chosen colour and a short cache.",
+            "The app icon caches a database failure for a few seconds instead of retrying on every request."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.54.0",
       "date": "2026-11-14",
       "releasedAt": "2026-11-14T04:01:48+01:00",

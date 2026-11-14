@@ -2,6 +2,41 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.55.0 — 2026-11-14 20:28
+
+Adjuntos en el plan de trabajo para IA, HTML enlazados y en Latin-1 o UTF-16, archivar y borrar al instante, botones de columnas vacías y flechas en los grupos de opciones
+
+### Nuevas funcionalidades
+
+- Plan de trabajo para IA: «Descargar adjuntos» baja un ZIP con una carpeta por tarea (adjuntos/03-titulo/…) y el texto del plan cita cada adjunto por su ruta en el ZIP, también las imágenes pegadas en las descripciones.
+- Documentación: un enlace de una página HTML a otra de la misma Documentación (tema2.html, tema2.html#apartado) la abre en el visor; si no existe, el enlace queda apagado.
+
+### Mejoras
+
+- Las páginas HTML, textos y Markdown en Latin-1, Windows-1252 o UTF-16 se ven con sus tildes en la vista previa.
+- Archivar o borrar desde el detalle de una tarea cierra la ventana y quita la tarjeta al instante; si falla, vuelve a su sitio y se recupera lo escrito.
+- Las tareas fijas de cada columna de plan llevan su propio ritmo («cada dos», «cada tres»).
+- Los botones de las columnas especiales se apagan sin tarjetas; al tocarlos dicen por qué.
+- Salir por un enlace del pie de la release o del plan con el texto cambiado pide confirmación.
+- Los grupos de opciones (icono de la app, tema, idioma, emails, agrupar) se recorren con las flechas.
+- /favicon.ico, /apple-touch-icon.png e /icon.png usan el color del icono de la instalación, y el nombre corto bajo el icono se acorta.
+- Un enlace a un documento que está en la papelera o ya no existe avisa.
+
+### Correcciones
+
+- La vista previa de un HTML ya no deja pasar contenido dentro de <template> (shadow DOM declarativo).
+- Un HTML con charset=unicode (Word) sin BOM ya no se ve como caracteres chinos, y un binario que empieza como UTF-16 ya no se toma por texto.
+- Un enlace de un HTML a sí mismo se desplaza dentro de la vista previa en lugar de abrir otra pestaña.
+- Cambiar la columna desde el detalle dos veces seguidas ya no descoloca la tarjeta.
+- «Reintentar» al descargar adjuntos vuelve a mostrar el indicador.
+- Un adjunto llamado «.» o «..» ya no da una ruta especial dentro del ZIP.
+
+### Cambios técnicos / DB
+
+- Column.planCount para el ritmo de las fijas por columna.
+- Las rutas fijas de iconos se generan con el color elegido y caché corta.
+- El icono de la app guarda unos segundos el fallo de la base de datos para no reintentar en cada petición.
+
 ## v1.54.0 — 2026-11-14 04:01
 
 Plan de trabajo para IA, versiones y tope del programa, icono de la app por instalación, esqueleto de carga del tablero y baja con contraseña de Google
