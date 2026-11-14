@@ -128,11 +128,15 @@ export function planDescription(description: string | null | undefined, origin?:
   let text = decodeEntities(mentionsToPlain(description ?? ""));
   if (origin) text = text.replace(/(\]\(<?)(\/api\/attachments\/)/g, `$1${origin.replace(/\/+$/, "")}$2`);
   const out: string[] = [];
+  // Valla abierta (``` o ~~~, con su longitud). La cierra una del mismo carácter, igual o más larga y sin nada detrás
+  // (CommonMark); si la descripción termina sin cerrarla, se cierra al final: si no, el resto del plan (las tareas
+  // siguientes y el pie) quedaría dentro del bloque de código.
   let fence: string | null = null;
   for (const raw of text.split(/\r\n|\r|\n/)) {
     const line = raw.trimEnd();
-    const marker = /^\s{0,3}(`{3,}|~{3,})/.exec(line)?.[1];
-    if (marker && (!fence || marker.startsWith(fence))) fence = fence ? null : marker.slice(0, 3);
+    const marker = /^\s{0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (marker && !fence) fence = marker[1]!;
+    else if (marker && fence && marker[1]![0] === fence[0] && marker[1]!.length >= fence.length && !marker[2]!.trim()) fence = null;
     else if (!fence) {
       const heading = /^(#{1,6})(\s.*)$/.exec(line);
       if (heading) {
@@ -144,6 +148,7 @@ export function planDescription(description: string | null | undefined, origin?:
     out.push(line);
   }
   while (out.at(-1) === "") out.pop();
+  if (fence) out.push(fence);
   return out.join("\n");
 }
 

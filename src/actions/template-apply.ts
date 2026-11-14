@@ -16,7 +16,7 @@ import { parseStoredTemplate, templateInputSchema, type TemplateData } from "@/l
 import { requireUser } from "@/lib/session";
 import { listTemplatesSorted } from "@/lib/template-store";
 import { applyTemplateToProject, loadProjectShape, undoTemplateChange as undoChange } from "@/lib/template-apply";
-import { releaseTemplateChange, reserveTemplateChange, reserveTemplatePreview } from "@/lib/template-apply-rate";
+import { releaseTemplateChange, reserveTemplateChange, reserveTemplatePreview, shouldReleaseTemplateChange } from "@/lib/template-apply-rate";
 import type { ApplyTemplateShape, ProjectShape, TemplateRef } from "@/lib/template-apply-core";
 import * as v from "@/lib/validation";
 import { getLocale, getT } from "@/i18n/server";
@@ -37,7 +37,8 @@ async function throwRate(notice: { text: string; vars: Record<string, number> })
 
 /**
  * Hace un cambio de plantilla (aplicar o deshacer) dentro del límite. Si no llega a hacerse por un aviso (no cabe, no hay
- * nada que deshacer…), la reserva se devuelve: solo cuentan los cambios hechos o los fallos inesperados.
+ * nada que deshacer…), la reserva se devuelve: solo cuentan los cambios hechos, los fallos inesperados y los avisos de
+ * un cambio que ya se había ejecutado en la transacción (markTemplateChangeSpent).
  */
 async function withinChangeLimit<T>(userId: string, projectId: string, fn: () => Promise<T>): Promise<T> {
   const notice = reserveTemplateChange(userId, projectId);
@@ -45,7 +46,7 @@ async function withinChangeLimit<T>(userId: string, projectId: string, fn: () =>
   try {
     return await fn();
   } catch (e) {
-    if (e instanceof AppError) releaseTemplateChange(userId, projectId);
+    if (shouldReleaseTemplateChange(e, e instanceof AppError)) releaseTemplateChange(userId, projectId);
     throw e;
   }
 }

@@ -114,6 +114,18 @@ describe("texto del plan de trabajo para IA", () => {
     assert.equal(planDescription("###### seis"), "###### seis");
     assert.equal(planDescription(null), "");
   });
+
+  test("planDescription: un bloque de código sin cerrar se cierra al final (no se traga las tareas siguientes ni el pie)", () => {
+    assert.equal(planDescription("Ejemplo:\n```ts\nconst a = 1;"), "Ejemplo:\n```ts\nconst a = 1;\n```");
+    assert.equal(planDescription("````\n```\n## dentro\n"), "````\n```\n## dentro\n````");
+    // Una valla más corta o con texto detrás no cierra la que está abierta; una igual o más larga, sí.
+    assert.equal(planDescription("````\n```js\n````\n## fuera"), "````\n```js\n````\n##### fuera");
+    assert.equal(planDescription("~~~\n```\n~~~~\n# fuera"), "~~~\n```\n~~~~\n#### fuera");
+    const md = buildAiPlanMarkdown({ ...base(), tasks: [{ id: "a", title: "Uno", description: "```\nsin cerrar" }, { id: "b", title: "Dos" }] });
+    const fences = md.split("\n").filter((l) => l.startsWith("```")).length;
+    assert.equal(fences % 2, 0, "las vallas del plan quedan emparejadas");
+    assert.match(md, /sin cerrar\n```\n\n### 2\. Dos/);
+  });
 });
 
 describe("nombres y versiones", () => {

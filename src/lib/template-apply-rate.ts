@@ -49,6 +49,23 @@ export function releaseTemplateChange(userId: string, projectId: string): void {
   releaseRateLimit(k.user);
 }
 
+// Errores de un cambio que ya se había ejecutado dentro de su transacción cuando falló (y se deshizo entero): p. ej. una
+// columna «Programa del curso» que queda por encima del tope al final, o datos cambiados entre medias. Ese trabajo (con
+// el tablero bloqueado) ya se ha hecho, así que su reserva no se devuelve aunque el error sea un aviso: si se devolviera,
+// repetir un cambio que siempre falla al final esquivaría el límite y bloquearía el proyecto una y otra vez.
+const spent = new WeakSet<object>();
+
+/** Marca el error de un cambio que ya llegó a ejecutarse: su reserva se queda gastada (ver shouldReleaseTemplateChange). */
+export function markTemplateChangeSpent<E>(err: E): E {
+  if (err && typeof err === "object") spent.add(err);
+  return err;
+}
+
+/** ¿Se devuelve la reserva tras este error? Solo con un aviso (`isNotice`) anterior al cambio, no con uno marcado. */
+export function shouldReleaseTemplateChange(err: unknown, isNotice: boolean): boolean {
+  return isNotice && !(err && typeof err === "object" && spent.has(err));
+}
+
 /** Cuenta una vista previa; devuelve el aviso si ya no quedan. */
 export function reserveTemplatePreview(userId: string): RateNotice | null {
   const key = `template-preview:${userId}`;

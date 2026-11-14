@@ -82,10 +82,11 @@ describe("subida a una tarea borrada durante la subida", () => {
   test("alta definitiva mientras se borra la tarea (borrado aún sin confirmar): 404, no el fallo de clave ajena", async () => {
     const { task } = await setup();
     const del = await pendingTx((tx) => tx.task.delete({ where: { id: task.id } }));
-    const create = createAttachmentWithinLimit(attData(task.id), sel);
+    // El rechazo se espera desde ya: puede llegar antes de que termine `commit()` (si no, sale como rechazo sin atender).
+    const create = assert.rejects(createAttachmentWithinLimit(attData(task.id), sel), isGone("task_gone"));
     await waitForLockWaiter(); // el alta espera al borrado
     await del.commit();
-    await assert.rejects(create, isGone("task_gone"));
+    await create;
     assert.equal(await db.taskAttachment.count({ where: { taskId: task.id } }), 0);
   });
 
@@ -131,10 +132,10 @@ describe("documento subido a un proyecto que se borra durante la subida", () => 
   test("alta definitiva mientras se borra el proyecto: 404, no el fallo de clave ajena", async () => {
     const { m, f } = await setup();
     const del = await pendingTx((tx) => tx.project.delete({ where: { id: f.project.id } }));
-    const create = createDocumentWithinLimit({ projectId: f.project.id, name: "notas.txt", mimeType: "text/plain", size: 10, kind: "TEXT", createdById: m.id });
+    const create = assert.rejects(createDocumentWithinLimit({ projectId: f.project.id, name: "notas.txt", mimeType: "text/plain", size: 10, kind: "TEXT", createdById: m.id }), isGone("project_gone"));
     await waitForLockWaiter();
     await del.commit();
-    await assert.rejects(create, isGone("project_gone"));
+    await create;
   });
 
   test("borrado con el fichero ya escrito: 404 «El proyecto ya no existe.» y se borra el fichero", async () => {
