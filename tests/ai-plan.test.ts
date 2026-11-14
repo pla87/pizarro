@@ -248,6 +248,9 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
     const plain = withPaths(false);
     assert.ok(!plain.includes("en el ZIP «adjuntos/…» que va con este plan") && plain.includes("![captura](https://pz.example.com/api/attachments/a1)"));
     assert.ok(plain.includes("- **Adjuntos:** [Plano final.png](<https://pz.example.com/api/attachments/a1>)"));
+    // Sin ZIP (más de 200 tareas con adjuntos): el contexto aclara que van solo como enlaces, pese a la cabecera de serie.
+    assert.ok(plain.includes("- **Adjuntos:** Este plan no lleva ZIP de adjuntos: van solo como enlaces a Pizarro"));
+    assert.ok(!md.includes("no lleva ZIP"));
   });
 
   test("planDescription sin mapa deja los enlaces absolutos como siempre", () => {

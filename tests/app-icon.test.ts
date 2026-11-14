@@ -86,6 +86,9 @@ test("nombre corto bajo el icono: cabe en 12 caracteres (entero, primera palabra
   assert.equal(shortAppName("Acme Corporation Internacional"), "Acme");
   assert.equal(shortAppName("Construcciones Hermanos García"), "Construccio…");
   assert.equal(Array.from(shortAppName("Construcciones Hermanos García")).length, 12);
+  assert.equal(shortAppName("La Casa de Todos los Vecinos"), "La Casa de…");
+  assert.equal(shortAppName("🏠 Casa de Todos los Vecinos"), "🏠 Casa de T…");
+  assert.equal(shortAppName("Casa de Todos los Vecinos"), "Casa");
   assert.equal(shortAppName("  Mi   Casa  "), "Mi Casa");
   assert.deepEqual(appNames("Fundación Ejemplo de Ayuda"), { name: "Fundación Ejemplo de Ayuda · Pizarro", shortName: "Fundación" });
   assert.equal(webManifest("es", { orgName: "Acme Corporation Internacional" }).short_name, "Acme");

@@ -33,6 +33,8 @@ interface Props {
   editorMode: EditorModeValue;
   /** Documento que se abre al entrar (enlace `?doc=`). */
   initialOpenId?: string | null;
+  /** El enlace `?doc=` apunta a un documento de la papelera o que no existe en este proyecto. */
+  linkNotice?: "trashed" | "gone" | null;
 }
 
 interface UploadItem {
@@ -53,7 +55,7 @@ const ICONS: Record<DocumentKindName, { icon: typeof FileIcon; className: string
 
 let nextKey = 1;
 
-export function DocsManager({ projectId, projectName, documents, trashed, fileMaxMb, maxCount, currentUserId, editorMode, initialOpenId = null }: Props) {
+export function DocsManager({ projectId, projectName, documents, trashed, fileMaxMb, maxCount, currentUserId, editorMode, initialOpenId = null, linkNotice = null }: Props) {
   const t = useT();
   const locale = useIntlLocale();
   const safeRefresh = useSafeRefresh();
@@ -68,6 +70,13 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
   // Cola de subida en serie: cada archivo es una petición y el servidor aplica sus límites a cada una.
   const queue = useRef<Promise<void>>(Promise.resolve());
   const searchInput = useRef<HTMLInputElement>(null);
+  // Enlace «?doc=» a un documento que ya no está (o está en la papelera): se avisa una vez en vez de abrir la lista sin más.
+  const noticed = useRef(false);
+  useEffect(() => {
+    if (!linkNotice || noticed.current) return;
+    noticed.current = true;
+    toast(linkNotice === "trashed" ? t("Ese documento está en la papelera") : t("Ese documento ya no está en la Documentación"), "error");
+  }, [linkNotice, toast, t]);
   const pendingFocus = useRef<{ gone: string; next: string | null } | null>(null);
   useEffect(() => {
     const p = pendingFocus.current;

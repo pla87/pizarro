@@ -91,11 +91,11 @@ export function appNames(orgName: string): { name: string; shortName: string } {
 /** Largo máximo del nombre bajo el icono: el móvil lo corta (o lo escribe en dos líneas) a partir de unos 12 caracteres. */
 export const SHORT_NAME_MAX = 12;
 
-/** Nombre corto: el entero si cabe; si no, la primera palabra si cabe; si no, un recorte con «…» (sin pasar del máximo). */
+/** Nombre corto: el entero si cabe; si no, la primera palabra si cabe y tiene 4 o más letras o cifras (no «La» ni un emoji); si no, un recorte con «…» (sin pasar del máximo). */
 export function shortAppName(orgName: string, max: number = SHORT_NAME_MAX): string {
   const org = orgName.trim().replace(/\s+/g, " ");
   if (Array.from(org).length <= max) return org;
   const first = org.split(" ")[0] ?? "";
-  if (Array.from(first).length <= max) return first;
-  return `${Array.from(first).slice(0, max - 1).join("")}…`;
+  if (Array.from(first).length <= max && (first.match(/[\p{L}\p{N}]/gu) ?? []).length >= 4) return first;
+  return `${Array.from(org).slice(0, max - 1).join("").trimEnd()}…`;
 }

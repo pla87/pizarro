@@ -51,4 +51,7 @@ export const documentacion: Record<string, string> = {
   // Subir varios documentos: cuáles no se han subido y por qué.
   "1 archivo no se ha subido a Documentación: {list}": "1 file was not uploaded to Documentation: {list}",
   "{n} archivos no se han subido a Documentación: {list}": "{n} files were not uploaded to Documentation: {list}",
+  // Enlace «?doc=» a un documento que ya no está
+  "Ese documento está en la papelera": "That document is in the trash",
+  "Ese documento ya no está en la Documentación": "That document is no longer in Documentation",
 };

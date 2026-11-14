@@ -14,9 +14,12 @@ export async function downloadAttachmentsZip(opts: {
   fileName: (part: number, total: number) => string;
   t: T;
   toast: Toast;
+  /** Estado «descargando» del botón: lo activa y lo apaga esta función, también en el reintento. */
+  setBusy?: (busy: boolean) => void;
 }): Promise<void> {
-  const { projectId, items, fileName, t, toast } = opts;
+  const { projectId, items, fileName, t, toast, setBusy } = opts;
   let changed: string | null = null;
+  setBusy?.(true);
   try {
     const url = `/api/projects/${projectId}/release-attachments`;
     const body = JSON.stringify({ items });
@@ -47,5 +50,7 @@ export async function downloadAttachmentsZip(opts: {
     const message = e instanceof Error && e.message ? e.message : t("No se pudieron descargar los adjuntos");
     // Adjuntos cambiados durante la descarga: se ofrece volver a empezar (nuevo plan y todos los paquetes).
     toast(message, "error", changed ? { label: t("Reintentar"), onClick: () => void downloadAttachmentsZip(opts) } : undefined);
+  } finally {
+    setBusy?.(false);
   }
 }

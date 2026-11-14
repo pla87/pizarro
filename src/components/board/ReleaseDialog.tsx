@@ -204,15 +204,14 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   const tooManyAttachments = zipItems.length > RELEASE_MAX_ATTACHMENT_TASKS;
 
   const downloadAttachments = async () => {
-    setZipping(true);
     await downloadAttachmentsZip({
+      setBusy: setZipping,
       projectId: board.project.id,
       items: zipItems.map(({ taskId, code }) => ({ taskId, code })),
       fileName: (part, total) => releaseZipName({ day: isoDate(now, appTimeZone()), number: generatedNumber, project: board.project.name }, part, total, uiLocale),
       t,
       toast,
     });
-    setZipping(false);
   };
 
   const deploy = async () => {

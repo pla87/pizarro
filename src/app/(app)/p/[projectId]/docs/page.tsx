@@ -39,6 +39,8 @@ export default async function ProjectDocsPage({ params, searchParams }: { params
       currentUserId={user.id}
       editorMode={me.editorMode}
       initialOpenId={typeof doc === "string" && documents.some((d) => d.id === doc) ? doc : null}
+      // Solo se mira en los documentos de ESTE proyecto: un id de otro proyecto es «ya no está», sin más pistas.
+      linkNotice={typeof doc === "string" && doc && !documents.some((d) => d.id === doc) ? (trashed.some((d) => d.id === doc) ? "trashed" : "gone") : null}
     />
   );
 }

@@ -2,7 +2,7 @@
 
 import { Loader2, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { saveMailSettings, sendMailTest } from "@/actions/mail-settings";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
@@ -254,15 +254,19 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
 }
 
 function ModeCard({ radio, onSelect, title, text }: { radio: ReturnType<ReturnType<typeof useRadioGroup>["radioProps"]>; onSelect: () => void; title: string; text: string }) {
+  // Nombre accesible = el título; la descripción va aparte (aria-describedby), no dentro del nombre.
+  const id = useId();
   return (
     <button
       type="button"
       {...radio}
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-text`}
       onClick={onSelect}
       className="choice-card rounded-lg bg-white p-3 text-left dark:bg-transparent"
     >
-      <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</span>
-      <span className="mt-1 block text-xs text-slate-600 dark:text-slate-300">{text}</span>
+      <span id={`${id}-title`} className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</span>
+      <span id={`${id}-text`} className="mt-1 block text-xs text-slate-600 dark:text-slate-300">{text}</span>
     </button>
   );
 }

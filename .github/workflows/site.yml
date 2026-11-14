@@ -23,8 +23,6 @@ on:
       - "docs/guias/**"
       - "docs/web/**"
       - "src/i18n/en/**"
-      - "src/app/icon.svg"
-      - "src/app/favicon.ico"
       - ".github/workflows/site.yml"
   workflow_dispatch:
 

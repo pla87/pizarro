@@ -31,6 +31,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Plan de trabajo para IA: Markdown con descripciones raras, fijas entre paneles, título a 390 px y más de 500 tareas (caza de bugs 51a) | `e2e/bh51a-e2e.mjs` | 27 | ~40 s |
 | Release de más de 500 tareas (o 200 con adjuntos), «+» flotante con el programa lleno y panel de fijas en el móvil (caza de bugs 51c) | `e2e/bh51c-e2e.mjs` | 55 | ~35 s |
 | Enlaces de un HTML a sí mismo y nombres arreglados, binarios con BOM de UTF-16 y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/bh52-e2e.mjs` | 37 | ~30 s |
+| Reintentar el ZIP del plan, aviso de `?doc=` a un documento que ya no está, botones de columna con aria-disabled y opciones de correo accesibles (caza de bugs 52, segunda tanda) | `e2e/bh52b-e2e.mjs` | 36 | ~40 s |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/r49-account-e2e.mjs` | 61 | ~1 min |
 | Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51) | `e2e/r51-cuenta-e2e.mjs` | 71 | ~45 s |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
@@ -222,6 +223,19 @@ guardar (antes se perdía). Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh52-e2e.mjs   # PART=enlaces,binario,borrador
+```
+
+## Arreglos pequeños de la caza 52 (segunda tanda)
+
+«Reintentar» tras un ZIP de adjuntos cambiado a mitad de descarga vuelve a poner «Descargar adjuntos» desactivado y con el
+indicador de carga. Un enlace `?doc=` a un documento de la papelera avisa «Ese documento está en la papelera» y uno
+inexistente (o de otro proyecto, sin revelar nada) «Ese documento ya no está en la Documentación». Los botones de las
+columnas especiales sin tarjetas (y sus opciones de menú) usan `aria-disabled` y, al tocarlos, muestran su motivo como
+aviso. Cada opción de «Cómo se envían los emails» se nombra por su título (`aria-labelledby`) y su descripción va en
+`aria-describedby`. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3276 DATABASE_URL=$DBURL node bh52b-e2e.mjs   # PART=zip,doc,columnas,mail
 ```
 
 ## Arrastrar una selección

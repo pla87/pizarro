@@ -214,15 +214,14 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
 
   const attachmentTotal = zipItems.reduce((n, i) => n + i.count, 0);
   const downloadAttachments = async () => {
-    setZipping(true);
     await downloadAttachmentsZip({
+      setBusy: setZipping,
       projectId: board.project.id,
       items: zipItems.map(({ taskId, folder }) => ({ taskId, folder })),
       fileName: (part, total) => aiPlanZipName({ day: today, version, project: board.project.name }, part, total, locale === "en" ? "en" : "es"),
       t,
       toast,
     });
-    setZipping(false);
   };
 
   const copy = async () => {

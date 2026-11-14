@@ -5,7 +5,7 @@ import { after, describe, test } from "node:test";
 import { flushLogs } from "../../src/lib/log";
 import { db, expectFail, expectOk, FORBIDDEN, loginAs, logout, makeUser } from "./helpers";
 import { saveAppIcon, saveInstallationSettings } from "../../src/actions/settings";
-import { APP_ICON_KEY, getAppIcon } from "../../src/lib/app-icon";
+import { APP_ICON_KEY, FAILURE_TTL_MS, getAppIcon } from "../../src/lib/app-icon";
 import { getLocale } from "../../src/i18n/server";
 import { getInstanceSettings, invalidateInstance } from "../../src/lib/instance";
 import { appTimeZone } from "../../src/lib/format";
@@ -94,6 +94,25 @@ describe("ajustes de la instalación", () => {
     // Un valor guardado que ya no existe (o estropeado) vuelve al azul.
     await db.appState.update({ where: { key: APP_ICON_KEY }, data: { value: "morado" } });
     assert.equal(await getAppIcon(Date.now() + 60_000), "blue"); // pasada la memoria de 30 s
+  });
+
+  test("color del icono de la app: si la consulta falla, el azul se guarda unos segundos y no se reintenta en cada petición", async () => {
+    await cleanup();
+    const real = db.appState.findUnique;
+    let calls = 0;
+    const patched = db.appState as unknown as { findUnique: unknown };
+    patched.findUnique = () => { calls++; throw new Error("sin base de datos"); };
+    try {
+      const t0 = Date.now() + 10 * 60_000; // fuera de la memoria que dejaron las pruebas anteriores
+      assert.equal(await getAppIcon(t0), "blue");
+      assert.equal(await getAppIcon(t0 + 2_000), "blue");
+      assert.equal(calls, 1);
+      assert.equal(await getAppIcon(t0 + FAILURE_TTL_MS + 1), "blue"); // pasados unos segundos, vuelve a intentarlo
+      assert.equal(calls, 2);
+    } finally {
+      patched.findUnique = real;
+    }
+    assert.equal(await getAppIcon(Date.now() + 20 * 60_000), "blue");
   });
 
   test("color del icono de la app: solo administradores", async () => {

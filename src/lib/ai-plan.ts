@@ -268,6 +268,10 @@ function formatTask(task: AiPlanTask, index: number, t: T, origin?: string | nul
  * de la columna) y pie (instrucciones de entrega). `t`: idioma de quien lo genera; sin él, en español.
  */
 export function buildAiPlanMarkdown(input: AiPlanInput, t: T = esT): string {
+  const zipped = input.tasks.flatMap((x) => x.attachments ?? []).filter((a) => a.path);
+  // Con adjuntos pero sin ZIP (más de 200 tareas con adjuntos) la cabecera de serie sigue hablando de un ZIP: no se toca (así
+  // se puede cambiar de plantilla en el texto ya editado, swapTemplateBlock) y la línea del contexto lo desmiente.
+  const linksOnly = !zipped.length && input.tasks.some((x) => x.attachments?.length);
   const header = releaseTemplateText(input.header);
   const footer = releaseTemplateText(input.footer);
   const context = [`## ${t("Contexto del proyecto")}`, ""];
@@ -276,7 +280,7 @@ export function buildAiPlanMarkdown(input: AiPlanInput, t: T = esT): string {
   if (input.column) context.push(`- **${t("Columna")}:** ${oneLine(input.column)}`);
   context.push(`- **${t("Fecha")}:** ${input.date}`);
   context.push(`- **${t("Tareas")}:** ${input.tasks.length}`);
-  const zipped = input.tasks.flatMap((x) => x.attachments ?? []).filter((a) => a.path);
+  if (linksOnly) context.push(`- **${t("Adjuntos")}:** ${t("Este plan no lleva ZIP de adjuntos: van solo como enlaces a Pizarro (cada tarea cita los suyos), aunque las instrucciones hablen de un ZIP.")}`);
   if (zipped.length) context.push(`- **${t("Adjuntos")}:** ${t("{n} archivo(s) en el ZIP «adjuntos/…» que va con este plan (descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos.", { n: zipped.length })}`);
   const description = planDescription(input.project.description, input.origin);
   if (description) context.push("", description);

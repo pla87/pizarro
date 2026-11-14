@@ -71,6 +71,7 @@ export const planIa: Record<string, string> = {
   "{name} en Pizarro": "{name} in Pizarro",
   "{n} archivo(s) en el ZIP «adjuntos/…» que va con este plan (descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos.":
     "{n} file(s) in the “adjuntos/…” ZIP that goes with this plan (unzip it next to this file): each task cites the path of its own.",
+  "Este plan no lleva ZIP de adjuntos: van solo como enlaces a Pizarro (cada tarea cita los suyos), aunque las instrucciones hablen de un ZIP.": "This plan has no attachments ZIP: they come only as links to Pizarro (each task cites its own), even if the instructions mention a ZIP.",
   "ZIP «adjuntos/…» con los adjuntos de las tareas del plan: el texto cita sus rutas": "“adjuntos/…” ZIP with the attachments of the plan's tasks: the text cites their paths",
   "Un plan admite como mucho 200 tareas con adjuntos en el ZIP: el texto solo lleva los enlaces a Pizarro.": "A plan holds at most 200 tasks with attachments in the ZIP: the text only carries the links to Pizarro.",
   "Los adjuntos no se guardan con el plan: van en el ZIP de «Descargar adjuntos» y el texto cita su ruta y su enlace a Pizarro.": "Attachments are not saved with the plan: they go in the “Download attachments” ZIP and the text cites their path and their Pizarro link.",

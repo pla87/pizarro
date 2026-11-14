@@ -32,7 +32,7 @@ export function MenuItem({ icon: Icon, danger, role = "menuitem", className, chi
       role={role}
       tabIndex={-1}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-slate-800 dark:focus-visible:bg-slate-800",
+        "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none disabled:opacity-40 disabled:hover:bg-transparent aria-disabled:cursor-not-allowed aria-disabled:opacity-40 aria-disabled:hover:bg-transparent dark:hover:bg-slate-800 dark:focus-visible:bg-slate-800",
         danger && "text-red-600",
         className,
       )}

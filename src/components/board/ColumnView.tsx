@@ -312,7 +312,13 @@ function GatedActionButton({ column, cardCount, icon, label, onClick }: { column
 
 function GatedMenuItem({ column, cardCount, icon, onClick, children }: { column: BoardColumn; cardCount: number; icon: LucideIcon; onClick: () => void; children: React.ReactNode }) {
   const reason = useGate(column, cardCount);
-  return <MenuItem icon={icon} onClick={onClick} disabled={reason != null} title={reason ?? undefined}>{children}</MenuItem>;
+  return <ReasonMenuItem icon={icon} onClick={onClick} reason={reason}>{children}</ReasonMenuItem>;
+}
+
+/** Opción de menú que, sin poder usarse, sigue tocable (aria-disabled) y muestra su motivo como aviso (el title no se ve en el móvil). */
+function ReasonMenuItem({ reason, onClick, ...rest }: { reason: string | null; icon: LucideIcon; onClick: () => void; children: React.ReactNode }) {
+  const toast = useToast();
+  return <MenuItem {...rest} onClick={reason ? () => toast(reason, "error") : onClick} aria-disabled={reason ? true : undefined} title={reason ?? undefined} />;
 }
 
 /**
@@ -509,8 +515,8 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
       )}
       {column.role === "WEEKLY_PLAN" && (
         <>
-          <MenuItem icon={FileDown} onClick={() => weekPdf(project.id, column.id, "day")} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : undefined}>{t("PDF de la semana (por día)")}</MenuItem>
-          <MenuItem icon={FileDown} onClick={() => weekPdf(project.id, column.id, "person")} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : undefined}>{t("PDF de la semana (por persona)")}</MenuItem>
+          <ReasonMenuItem icon={FileDown} onClick={() => weekPdf(project.id, column.id, "day")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("PDF de la semana (por día)")}</ReasonMenuItem>
+          <ReasonMenuItem icon={FileDown} onClick={() => weekPdf(project.id, column.id, "person")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("PDF de la semana (por persona)")}</ReasonMenuItem>
         </>
       )}
       {column.role === "CHECKLIST" && <GatedMenuItem column={column} cardCount={cardCount} icon={ListChecks} onClick={() => setDialog("checklist")}>{t("Ver lista")}</GatedMenuItem>}
@@ -518,10 +524,10 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
       {column.role === "ROUTINES" && (
         <MenuItem icon={Repeat} onClick={() => setDialog("routine")}>{t("Destino de la siguiente aparición: {name}…", { name: routineTarget?.name ?? t("esta columna") })}</MenuItem>
       )}
-      {column.role === "DELIVERY" && <MenuItem icon={FileDown} onClick={() => deliveryPdf(project.id, column.id)} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : undefined}>{t("Resumen para el cliente (PDF)")}</MenuItem>}
-      {column.role === "BUDGET" && <MenuItem icon={Wallet} onClick={() => setDialog("budget")} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : undefined}>{t("Resumen de presupuesto")}</MenuItem>}
-      {column.role === "PROGRAM" && <MenuItem icon={GraduationCap} onClick={() => setDialog("program")} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : undefined}>{t("Publicar programa (PDF)")}</MenuItem>}
-      {column.role === "AI_PLAN" && <MenuItem icon={Bot} onClick={() => setDialog("plan")} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : undefined}>{t("Generar plan de trabajo")}</MenuItem>}
+      {column.role === "DELIVERY" && <ReasonMenuItem icon={FileDown} onClick={() => deliveryPdf(project.id, column.id)} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("Resumen para el cliente (PDF)")}</ReasonMenuItem>}
+      {column.role === "BUDGET" && <ReasonMenuItem icon={Wallet} onClick={() => setDialog("budget")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("Resumen de presupuesto")}</ReasonMenuItem>}
+      {column.role === "PROGRAM" && <ReasonMenuItem icon={GraduationCap} onClick={() => setDialog("program")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("Publicar programa (PDF)")}</ReasonMenuItem>}
+      {column.role === "AI_PLAN" && <ReasonMenuItem icon={Bot} onClick={() => setDialog("plan")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("Generar plan de trabajo")}</ReasonMenuItem>}
       <MenuSeparator />
       <MenuItem icon={Gauge} onClick={editWipLimit}>
         {column.wipLimit != null ? t("Límite de tarjetas: {limit}…", { limit: column.wipLimit }) : t("Límite de tarjetas…")}
