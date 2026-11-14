@@ -6,12 +6,14 @@ import { mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, test } from "node:test";
-import { db, expectOk, loginAs, logout, makeProject, makeUser } from "./helpers";
+import { db, expectOk, loginAs, logout, makeProject, makeUser, waitForLockWaiter } from "./helpers";
 import { pdfRuns } from "../pdf-runs";
 import { createProject } from "../../src/actions/projects";
 import { setColumnRole } from "../../src/actions/columns";
 import { listTemplates } from "../../src/actions/templates";
-import { createDocumentWithinLimit } from "../../src/lib/documents";
+import { createDocumentWithinLimit, saveGeneratedDocument } from "../../src/lib/documents";
+import { lockProject } from "../../src/lib/caps";
+import { nextProgramVersion } from "../../src/lib/report-build";
 import { todayIso } from "../../src/lib/dates";
 import { appTimeZone } from "../../src/lib/format";
 import { resetRateLimit } from "../../src/lib/rate-limit";
@@ -239,6 +241,38 @@ describe("Publicar programa (PDF)", () => {
     } finally {
       if (prevMax === undefined) delete process.env.MAX_UPLOAD_MB;
       else process.env.MAX_UPLOAD_MB = prevMax;
+    }
+  });
+
+  test("guardar con versión espera a la fila del proyecto sin tener el candado común de las subidas: las de otros proyectos siguen", async () => {
+    const user = await makeUser();
+    const a = await makeProject({ members: [user] });
+    const b = await makeProject({ members: [user] });
+    // Otra transacción larga tiene la fila del proyecto A (como «Aplicar plantilla», hasta 2 minutos).
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    const holder = db.$transaction(async (tx) => {
+      await lockProject(tx, a.project.id);
+      await held;
+    }, { timeout: 30_000 });
+    try {
+      await new Promise((r) => setTimeout(r, 50));
+      const saving = saveGeneratedDocument({
+        projectId: a.project.id, name: async (tx) => `Programa_v${await nextProgramVersion(tx, a.project.id)}.pdf`,
+        content: new Uint8Array([1, 2, 3]), mimeType: "application/pdf", kind: "PDF", createdById: user.id,
+      });
+      await waitForLockWaiter();
+      // Una subida a otro proyecto no espera a que termine la transacción del proyecto A.
+      const other = createDocumentWithinLimit({ projectId: b.project.id, name: "otro.txt", mimeType: "text/plain", size: 3, kind: "OTHER", createdById: user.id });
+      const first = await Promise.race([other.then(() => "upload"), new Promise((r) => setTimeout(() => r("timeout"), 3000))]);
+      release();
+      assert.equal(first, "upload");
+      const saved = await saving;
+      assert.equal(saved.ok && saved.document.name, "Programa_v1.pdf");
+      assert.equal((await other).ok, true);
+    } finally {
+      release();
+      await holder;
     }
   });
 

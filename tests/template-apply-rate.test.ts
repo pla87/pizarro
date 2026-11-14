@@ -1,7 +1,7 @@
 // Límites de «Aplicar plantilla»: por proyecto, por persona y de la vista previa (lib/template-apply-rate.ts).
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
-import { releaseTemplateChange, reserveTemplateChange, reserveTemplatePreview, TEMPLATE_CHANGE_LIMITS } from "../src/lib/template-apply-rate";
+import { markTemplateChangeSpent, releaseTemplateChange, reserveTemplateChange, reserveTemplatePreview, shouldReleaseTemplateChange, TEMPLATE_CHANGE_LIMITS } from "../src/lib/template-apply-rate";
 
 test("los valores de los límites son los acordados", () => {
   assert.deepEqual(TEMPLATE_CHANGE_LIMITS, {
@@ -56,6 +56,17 @@ test("un cambio que no llega a hacerse devuelve su reserva", () => {
   } finally {
     mock.timers.reset();
   }
+});
+
+test("solo se devuelve la reserva de un aviso anterior al cambio: no la de uno que ya se ejecutó ni la de un fallo inesperado", () => {
+  const before = new Error("No hay ningún cambio de plantilla que deshacer.");
+  assert.equal(shouldReleaseTemplateChange(before, true), true);
+  assert.equal(shouldReleaseTemplateChange(new Error("timeout"), false), false);
+  // El cambio ya se había hecho en la transacción cuando falló (p. ej. el tope de la columna «Programa»): queda gastada.
+  const late = markTemplateChangeSpent(new Error("La columna «Por hacer» tiene 101 tareas…"));
+  assert.equal(shouldReleaseTemplateChange(late, true), false);
+  assert.equal(markTemplateChangeSpent("texto"), "texto");
+  assert.equal(shouldReleaseTemplateChange("texto", true), true);
 });
 
 test("la vista previa tiene su propio límite, más alto (60 cada 10 minutos)", () => {

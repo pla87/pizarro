@@ -8,7 +8,7 @@ import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, typ
 import { archiveTask, createTask, createTasks, duplicateTask, moveTask, moveTasks, restoreTask } from "../../src/actions/tasks";
 import { setColumnRole } from "../../src/actions/columns";
 import { undoLast } from "../../src/actions/undo";
-import { applyTemplateChange } from "../../src/actions/template-apply";
+import { applyTemplateChange, undoTemplateChange } from "../../src/actions/template-apply";
 import { resetRateLimit } from "../../src/lib/rate-limit";
 import { PROGRAM_MAX_SESSIONS } from "../../src/lib/program-limit";
 
@@ -200,5 +200,27 @@ describe("tope de 100 sesiones en una columna «Programa del curso»", () => {
     await db.task.update({ where: { id: one.id }, data: { archivedAt: new Date(), archivedFromColumnId: f.columns.todo } });
     expectOk(await applyTemplateChange(f.project.id, { source: "template", id: tpl.id }, "REPLACE"));
     assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } })).role, "PROGRAM");
+  });
+
+  test("aplicar plantilla: un cambio que falla al final por el tope gasta el límite de cambios (no se puede repetir sin fin)", async () => {
+    const owner = await makeUser();
+    const f = await makeProject({ visibility: "PRIVATE", owner });
+    await fill(f, f.columns.todo, 101);
+    const tpl = await db.projectTemplate.create({
+      data: {
+        name: `Curso ${Math.random().toString(36).slice(2, 7)}`, description: "", position: 1, kinds: [], hiddenGeneralKinds: [], labels: [], taskFields: [], releaseTemplates: [],
+        columns: [{ name: "Por hacer", role: "PROGRAM", isDone: false }, { name: "En curso", role: "NONE", isDone: false }, { name: "Hecho", role: "NONE", isDone: true }],
+      },
+    });
+    const admin = await makeUser({ role: "ADMIN" });
+    await db.projectMember.create({ data: { projectId: f.project.id, userId: admin.id } });
+    await loginAs(admin);
+    // Cada intento ejecuta el cambio entero (con el tablero bloqueado) y lo deshace al final: cuenta como un cambio.
+    for (let i = 0; i < 5; i++) expectFail(await applyTemplateChange(f.project.id, { source: "template", id: tpl.id }, "REPLACE"), /admite como mucho 100 sesiones/);
+    expectFail(await applyTemplateChange(f.project.id, { source: "template", id: tpl.id }, "REPLACE"), /Este proyecto ya ha cambiado de plantilla 5 veces/);
+    // Un aviso de antes de empezar (no hay nada que deshacer) sí devuelve su reserva.
+    resetRateLimit(`template-change:project:${f.project.id}`);
+    resetRateLimit(`template-change:user:${admin.id}`);
+    for (let i = 0; i < 7; i++) expectFail(await undoTemplateChange(f.project.id), /No hay ningún cambio de plantilla que deshacer/);
   });
 });

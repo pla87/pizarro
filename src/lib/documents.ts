@@ -125,6 +125,11 @@ export async function createDocumentWithinLimit(data: {
   id?: string; projectId: string; name: string; mimeType: string; size: number; kind: DocumentKindName; createdById: string;
 }, nameFor?: DocumentNameFor): Promise<DocumentCreateResult> {
   return db.$transaction(async (tx) => {
+    // `nameFor` suele escribir en la fila del proyecto (la versión: UPDATE "Project"): se bloquea ANTES del candado común
+    // de las subidas. Si no, esperando a otra transacción larga del proyecto (p. ej. «Aplicar plantilla») se tendría ese
+    // candado y no podría subir nada nadie, en ningún proyecto, hasta que terminara. Las subidas solo toman la fila con
+    // FOR KEY SHARE (compatible con este bloqueo), así que el orden fila → candado no se cruza con ninguna.
+    if (nameFor) await tx.$queryRaw`SELECT 1 FROM "Project" WHERE id = ${data.projectId} FOR NO KEY UPDATE`;
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:attachment-quota'))::text`;
     // Proyecto borrado durante la subida: 404 en vez del fallo de clave ajena (P2003) al dar de alta la fila (ver
     // createAttachmentWithinLimit). Quien llama borra el fichero ya escrito.
