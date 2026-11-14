@@ -8,7 +8,7 @@
 // Las referencias («ref») son ids propios del archivo, asignados en orden: nunca son ids de la base de datos.
 // Las personas se guardan como {nombre, email}; al importar se emparejan por email con usuarios activos.
 import { z } from "zod";
-import { COLUMN_ROLES, HEX_COLOR_RE, MAX_DESCRIPTION, MAX_RELEASE_CONTENT, MAX_TEMPLATE, MAX_TITLE_UNITS } from "../constants";
+import { COLUMN_ROLES, HEX_COLOR_RE, MAX_DESCRIPTION, MAX_RELEASE_CONTENT, MAX_TEMPLATE, MAX_TITLE_UNITS, TEMPLATE_KINDS } from "../constants";
 import { GOOGLE_FILE_KINDS } from "../google-files";
 import { GOOGLE_SHARE_MODES } from "../google-share";
 import { QUOTA_MAX_MB, QUOTA_MIN_MB } from "../quota";
@@ -238,7 +238,7 @@ export const projectDataSchema = z.object({
   }),
   /** Informe semanal: sin destinatario (al importar lo recibe quien importa). */
   reportSchedule: z.object({ enabled: z.boolean(), weekday: z.number().int().min(1).max(7), hour: z.number().int().min(0).max(23) }).nullable(),
-  releaseTemplates: z.array(z.object({ kind: z.enum(["HEADER", "FOOTER"]), name: text(200), content: text(MAX_TEMPLATE), position: z.number().finite(), createdAt: iso.optional() })).max(100),
+  releaseTemplates: z.array(z.object({ kind: z.enum(TEMPLATE_KINDS), name: text(200), content: text(MAX_TEMPLATE), position: z.number().finite(), createdAt: iso.optional() })).max(100),
   columns: z.array(columnSchema).min(1).max(200),
   kinds: z.array(kindSchema).max(500),
   /** Nombres de los tipos generales que el proyecto no usa. */

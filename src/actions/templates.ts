@@ -111,7 +111,7 @@ export async function templateFromProject(projectId: string) {
       labels: project.labels.map((l) => ({ name: l.name, color: (palette.includes(l.color) ? l.color : PALETTE[0]) as (typeof PALETTE)[number] })),
       taskFields: normalizeTaskFields(project.taskFields),
       // Máximo 20 de cada tipo (el tope de la plantilla, igual que el del proyecto).
-      releaseTemplates: (["HEADER", "FOOTER"] as const).flatMap((kind) => project.releaseTemplates.filter((r) => r.kind === kind).slice(0, MAX_RELEASE_TEMPLATES_PER_KIND)),
+      releaseTemplates: (["HEADER", "FOOTER"] as const).flatMap((kind) => project.releaseTemplates.filter((r) => r.kind === kind).slice(0, MAX_RELEASE_TEMPLATES_PER_KIND).map((r) => ({ ...r, kind }))),
     };
   });
 }

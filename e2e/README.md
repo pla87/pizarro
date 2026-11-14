@@ -38,6 +38,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/r50-plantilla-e2e.mjs` | 39 | ~1 min |
 | Aplicar plantilla: opción elegida en oscuro, tareas fijas, generales ocultos y límite (ronda 51) | `e2e/r51-plantilla-e2e.mjs` | 26 | ~40 s |
 | Plantilla «Curso o máster» y «Publicar programa (PDF)» | `e2e/r50-curso-e2e.mjs` | 57 | ~40 s |
+| Plan de trabajo para IA y botones de las columnas especiales (ronda 51) | `e2e/r51-plan-e2e.mjs` | 147 | ~1 min |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/r50-seleccion-e2e.mjs` | 76 | ~1 min |
 | «Programa del curso»: versiones del PDF y tope de 100 sesiones (ronda 51) | `e2e/r51-programa-e2e.mjs` | 38 | ~1 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
@@ -286,6 +287,24 @@ por minuto y persona): después de `r50-curso-e2e.mjs` (cuatro con el admin), es
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r51-programa-e2e.mjs   # PART=version,limite,pdf,rol,en
+```
+
+## Plan de trabajo para IA y botones de las columnas especiales (ronda 51)
+
+Un proyecto propio con una columna de cada rol especial: todas muestran su botón de acción (*Generar Release*, *Generar
+plan de trabajo*, *Publicar programa (PDF)*, *PDF de la semana*, *Ver lista*…) con el mismo aspecto en claro, en oscuro y
+en el móvil. En la columna «Plan de trabajo para IA»: el panel «Siempre en el plan», el diálogo en dos pasos (las fijas
+con su cadencia, cabecera y pie de serie para Claude Code), el texto generado (contexto, tareas en orden con tipo,
+prioridad, etiquetas, fechas, dependencia, subtareas, enlaces y adjuntos), *Copiar todo*, `.md` y `.txt` con su nombre,
+quitar el pie, cerrar con cambios, *Guardar en Documentación* («Plan de trabajo – fecha_v1.md», con el texto editado y
+*Abrir Documentación*), la versión siguiente moviendo las tareas a otra columna (las fijas no), las plantillas de la
+persona y del proyecto, el editor con barra, añadir y quitar fijas, el rol en el menú (se repite y, al quitarlo, sus fijas
+pasan a normales), las plantillas en *Mi perfil* y en los ajustes del proyecto, el ejemplo «Preparación de un curso» y
+todo en inglés a 390 px en modo oscuro (versión siguiente a una importada). Borra su proyecto al terminar. Misma base y
+servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r51-plan-e2e.mjs   # PART=buttons,plan,move,tpl,rich,fixed,role,settings,curso,en
 ```
 
 ## Comentarios a la vez, red lenta, dos pestañas y release renombrada (caza de bugs 48c)

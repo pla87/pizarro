@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { visibleProjectsWhere } from "@/lib/access";
 import { appTimeZone, listKinds, projectReleaseTemplates } from "@/lib/board";
+import { projectPlanTemplates } from "@/lib/ai-plan-templates";
 import { dateToIso } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
@@ -67,8 +68,9 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
   // agrupaba TODAS las tareas del servidor en cada carga (Prisma 7 lo hace con un LEFT JOIN a un GROUP BY sin filtro).
   const kindIds = project.kinds.map((k) => k.id);
   const deliverableIds = project.deliverables.map((d) => d.id);
-  const [releaseTemplates, generalKinds, generalUsage, kindUsage, deliverableUsage, users, schedule, editorRow, storageInitial, storageLargest, templateChange] = await Promise.all([
+  const [releaseTemplates, planTemplates, generalKinds, generalUsage, kindUsage, deliverableUsage, users, schedule, editorRow, storageInitial, storageLargest, templateChange] = await Promise.all([
     tab === "releases" ? projectReleaseTemplates(project.id) : Promise.resolve({ headers: [], footers: [] }),
+    tab === "releases" ? projectPlanTemplates(project.id) : Promise.resolve({ headers: [], footers: [] }),
     listKinds(),
     db.task.groupBy({ by: ["kindId"], where: { projectId: project.id }, _count: { _all: true } }),
     kindIds.length ? db.task.groupBy({ by: ["kindId"], where: { kindId: { in: kindIds } }, _count: { _all: true } }) : Promise.resolve([]),
@@ -112,6 +114,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
       isAdmin={isAdmin}
       tab={tab}
       releaseTemplates={releaseTemplates}
+      planTemplates={planTemplates}
       currentUserId={user.id}
       project={{
         id: project.id,

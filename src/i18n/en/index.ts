@@ -32,6 +32,7 @@ import { licencia } from "./licencia";
 import { lista } from "./lista";
 import { mensajeria } from "./mensajeria";
 import { pegado } from "./pegado";
+import { planIa } from "./plan-ia";
 import { plantillas } from "./plantillas";
 import { privados } from "./privados";
 import { programa } from "./programa";
@@ -53,5 +54,5 @@ export const EN: Record<string, string> = {
   ...common, ...board, ...task, ...detalle, ...comentarios, ...lista, ...pegado, ...wip, ...calendar, ...releases, ...conexion,
   ...accesibilidad, ...settings, ...admin, ...server, ...cuentas, ...acceso, ...colaboracion, ...proyectos, ...plantillas,
   ...setup, ...documentacion, ...campos, ...almacenamiento, ...importar, ...ics, ...mensajeria, ...soporte, ...licencia,
-  ...legal, ...landing, ...web, ...instalar, ...baja, ...datos, ...copia, ...repeticion, ...carga, ...textos, ...aplicarPlantilla, ...privados, ...formatos, ...curso, ...seleccion, ...programa, ...herencia, ...apariencia,
+  ...legal, ...landing, ...web, ...instalar, ...baja, ...datos, ...copia, ...repeticion, ...carga, ...textos, ...aplicarPlantilla, ...privados, ...formatos, ...curso, ...seleccion, ...programa, ...herencia, ...apariencia, ...planIa,
 };

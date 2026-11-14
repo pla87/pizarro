@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
-import { MAX_TEMPLATE } from "@/lib/constants";
+import { MAX_TEMPLATE, PLAN_TEMPLATE_KINDS, RELEASE_TEMPLATE_KINDS, TEMPLATE_KINDS, type TemplateKindValue } from "@/lib/constants";
 import { AppError, notFound } from "@/lib/errors";
 import { applyNewPassword } from "@/lib/account";
 import { sendAccountDeletedMail, sendEmailChangeMail, sendEmailChangeRequestedMail, sendPasswordChangeMail } from "@/lib/auth-mail";
@@ -37,16 +37,20 @@ const templateSchema = z.object({
   content: z.string().max(MAX_TEMPLATE, "La plantilla es demasiado larga."),
 });
 
-/** Plantillas de cabecera y pie de release: cada usuario puede tener varias de cada tipo. */
-export async function createReleaseTemplate(kind: "HEADER" | "FOOTER", input: { name: string; content: string }) {
+/**
+ * Plantillas de cabecera y pie de release (HEADER, FOOTER) o del plan de trabajo para IA (PLAN_HEADER, PLAN_FOOTER): cada
+ * usuario puede tener varias de cada tipo, hasta 40 de releases y otras 40 de planes.
+ */
+export async function createReleaseTemplate(kind: TemplateKindValue, input: { name: string; content: string }) {
   return runAction({ name: "profile.createReleaseTemplate", args: [kind, input] }, async () => {
     const user = await requireUser();
-    const k = z.enum(["HEADER", "FOOTER"]).parse(kind);
+    const k = z.enum(TEMPLATE_KINDS).parse(kind);
     const data = templateSchema.parse(input);
+    const group: readonly TemplateKindValue[] = (PLAN_TEMPLATE_KINDS as readonly string[]).includes(k) ? PLAN_TEMPLATE_KINDS : RELEASE_TEMPLATE_KINDS;
     // Recuento y alta con un candado por persona: dos altas a la vez no pasan del máximo.
     return db.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`pz:release-templates:${user.id}`}))::text`;
-      if ((await tx.releaseTemplate.count({ where: { userId: user.id } })) >= 40) throw new AppError("Máximo 40 plantillas.");
+      if ((await tx.releaseTemplate.count({ where: { userId: user.id, kind: { in: [...group] } } })) >= 40) throw new AppError("Máximo 40 plantillas.");
       const last = await tx.releaseTemplate.findFirst({ where: { userId: user.id, kind: k }, orderBy: { position: "desc" }, select: { position: true } });
       return tx.releaseTemplate.create({
         data: { userId: user.id, kind: k, ...data, position: (last?.position ?? 0) + POSITION_STEP },

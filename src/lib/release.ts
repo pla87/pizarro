@@ -196,7 +196,7 @@ function buildSections(input: Pick<ReleaseInput, "kinds" | "tasks" | "releaseNum
  * `&lt;`, `&gt;` o `&amp;` (como las descripciones, que también se decodifican): en el texto plano de la release salen
  * los caracteres reales. Lo mismo con los párrafos vacíos (`&nbsp;`).
  */
-function releaseTemplateText(raw: string): string {
+export function releaseTemplateText(raw: string): string {
   // Sus párrafos vacíos («&nbsp;»), como una línea en blanco: decodificados, eran una línea con un espacio.
   return decodeEntities(blankEmptyParagraphs(raw)).trim();
 }

@@ -39,6 +39,8 @@ interface ExampleTask {
   recurrence?: "DAILY" | "WEEKLY" | "MONTHLY";
   /** Semanal: 1 = lunes … 7 = domingo. Mensual: día del mes. */
   recurrenceDay?: number;
+  /** Tarea fija («Siempre en la release» o «Siempre en el plan»): solo en una columna con ese rol. */
+  evergreen?: boolean;
   /** Campos opcionales: solo si la plantilla los activa. */
   priority?: "BAJA" | "MEDIA" | "ALTA" | "URGENTE";
   cost?: number;
@@ -406,7 +408,7 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
     key: "curso-master",
     es: {
       name: "Preparación de un curso",
-      description: "Preparar un curso con un agente de IA: una tarjeta por sesión en «Programa» (que se publica en PDF), materiales, ejercicios, exámenes y seguimiento de alumnos.",
+      description: "Preparar un curso con un agente de IA: los encargos para el agente en «Plan de trabajo para IA», una tarjeta por sesión en «Programa» (que se publica en PDF), materiales, ejercicios y exámenes, y seguimiento de alumnos.",
       template: { ...builtinByKey("curso-master")!.data, description: "" },
       tasks: [
         {
@@ -414,7 +416,8 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
           description:
             WELCOME_ES +
             "\n\nEn **Programa** cada tarjeta es una sesión del curso, con su fecha. «Publicar programa (PDF)» genera el programa con las sesiones en ese orden y guarda una copia en Documentación.\n\n" +
-            "Al elegir un tipo (Preparar material, Preparar ejercicio, Preparar examen…) la descripción se rellena con un encargo para un agente de IA: objetivo, contenido, formato de entrega, duración, criterios y notas para el agente.",
+            "Al elegir un tipo (Preparar material, Preparar ejercicio, Preparar examen…) la descripción se rellena con un encargo para un agente de IA: objetivo, contenido, formato de entrega, duración, criterios y notas para el agente.\n\n" +
+            "Lleva a **Plan de trabajo para IA** los encargos que quieras darle al agente y pulsa «Generar plan de trabajo»: sale un texto en Markdown con las instrucciones y cada tarea, listo para copiarlo en Claude Code o guardarlo en Documentación. Las de «Siempre en el plan» entran en todos.",
           column: 0,
           kind: "Preparar material",
         },
@@ -441,7 +444,17 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
         {
           title: "Examen: Parcial del módulo 1",
           description: "La etiqueta «Revisión de coordinación» indica que otro profesor o la coordinación debe dar el visto bueno.",
-          column: 3, kind: "Preparar examen", labels: ["Módulo 1", "Revisión de coordinación"], dueInDays: 35, subtasks: ["Preparar las preguntas", "Preparar la plantilla de corrección"],
+          column: 2, kind: "Preparar examen", labels: ["Módulo 1", "Revisión de coordinación"], dueInDays: 35, subtasks: ["Preparar las preguntas", "Preparar la plantilla de corrección"],
+        },
+        {
+          title: "Ejercicio: Casos prácticos del módulo 1",
+          description: "**Objetivo:** practicar los conceptos clave del módulo 1.\n\n**Enunciado o tema:** tres casos cortos, de menos a más difícil.\n\n**Formato de entrega:** Markdown\n\n**Duración estimada:** 45 minutos\n\n**Criterios de corrección:** se aplica el concepto correcto y se justifica la respuesta.\n\n**Notas para el agente:** prepara también la solución.",
+          column: 3, kind: "Preparar ejercicio", labels: ["Módulo 1", "Para el agente"], dueInDays: 20, subtasks: ["Redactar el enunciado", "Preparar la solución", "Probar la dificultad"],
+        },
+        {
+          title: "Material: Revisar el estilo de lo entregado",
+          description: "Tarea fija del plan: entra en todos los planes de trabajo.\n\n**Objetivo:** que todo lo que prepare el agente siga el mismo estilo.\n\n**Notas para el agente:** lenguaje claro, sin erratas, títulos homogéneos y la misma plantilla en todos los documentos.",
+          column: 3, kind: "Preparar material", labels: ["Para el agente"], evergreen: true,
         },
         {
           title: "Perfil: alumno A",
@@ -452,7 +465,7 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
     },
     en: {
       name: "Course preparation",
-      description: "Prepare a course with an AI agent: one card per session in “Programme” (published as a PDF), materials, exercises, exams and student follow-up.",
+      description: "Prepare a course with an AI agent: the briefs for the agent in “AI work plan”, one card per session in “Programme” (published as a PDF), materials, exercises and exams, and student follow-up.",
       template: { ...BUILTIN_TEMPLATES_EN["curso-master"]!, description: "" },
       tasks: [
         {
@@ -460,7 +473,8 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
           description:
             WELCOME_EN +
             "\n\nIn **Programme** each card is a session of the course, with its date. “Publish programme (PDF)” generates the programme with the sessions in that order and saves a copy in Documentation.\n\n" +
-            "When you choose a type (Prepare material, Prepare exercise, Prepare exam…) the description is filled in with a brief for an AI agent: objective, content, delivery format, duration, criteria and notes for the agent.",
+            "When you choose a type (Prepare material, Prepare exercise, Prepare exam…) the description is filled in with a brief for an AI agent: objective, content, delivery format, duration, criteria and notes for the agent.\n\n" +
+            "Move the briefs you want to give the agent to **AI work plan** and click “Generate work plan”: you get a Markdown text with the instructions and every task, ready to paste into Claude Code or save in Documentation. Those under “Always in the plan” go into every plan.",
           column: 0,
           kind: "Prepare material",
         },
@@ -487,7 +501,17 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
         {
           title: "Exam: Module 1 mid-term",
           description: "The “Coordination review” label means another teacher or the coordinators must approve it.",
-          column: 3, kind: "Prepare exam", labels: ["Module 1", "Coordination review"], dueInDays: 35, subtasks: ["Prepare the questions", "Prepare the marking scheme"],
+          column: 2, kind: "Prepare exam", labels: ["Module 1", "Coordination review"], dueInDays: 35, subtasks: ["Prepare the questions", "Prepare the marking scheme"],
+        },
+        {
+          title: "Exercise: Module 1 case studies",
+          description: "**Objective:** practise the key concepts of module 1.\n\n**Task or topic:** three short cases, from easier to harder.\n\n**Delivery format:** Markdown\n\n**Estimated time:** 45 minutes\n\n**Marking criteria:** the right concept is applied and the answer is justified.\n\n**Notes for the agent:** also prepare the solution.",
+          column: 3, kind: "Prepare exercise", labels: ["Module 1", "For the agent"], dueInDays: 20, subtasks: ["Write the task", "Prepare the solution", "Check the difficulty"],
+        },
+        {
+          title: "Material: Review the style of the deliverables",
+          description: "A fixed task of the plan: it goes into every work plan.\n\n**Objective:** everything the agent prepares follows the same style.\n\n**Notes for the agent:** plain language, no typos, consistent headings and the same template in every document.",
+          column: 3, kind: "Prepare material", labels: ["For the agent"], evergreen: true,
         },
         {
           title: "Profile: student A",

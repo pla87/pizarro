@@ -9,12 +9,29 @@ export function kindBadgeStyle(color: string): CSSProperties {
 
 export const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
 
-export const COLUMN_ROLES = ["NONE", "NEXT_RELEASE", "IN_PRODUCTION", "WAITING", "WEEKLY_PLAN", "CHECKLIST", "REVIEW", "AGENDA", "ROUTINES", "DELIVERY", "BUDGET", "PROGRAM"] as const;
+export const COLUMN_ROLES = ["NONE", "NEXT_RELEASE", "IN_PRODUCTION", "WAITING", "WEEKLY_PLAN", "CHECKLIST", "REVIEW", "AGENDA", "ROUTINES", "DELIVERY", "BUDGET", "PROGRAM", "AI_PLAN"] as const;
 export type ColumnRoleValue = (typeof COLUMN_ROLES)[number];
 
 /** Roles que solo puede tener una columna por proyecto (el resto de roles pueden repetirse). */
 export const UNIQUE_COLUMN_ROLES: readonly ColumnRoleValue[] = ["NEXT_RELEASE", "IN_PRODUCTION"];
 export const isUniqueColumnRole = (role: string): boolean => (UNIQUE_COLUMN_ROLES as readonly string[]).includes(role);
+
+/**
+ * Roles cuyas columnas tienen tareas fijas (evergreen: «Siempre en la release» / «Siempre en el plan»): no se mueven al
+ * generar y entran siempre. Fuera de una columna con uno de estos roles una tarea no puede ser fija.
+ */
+export const EVERGREEN_COLUMN_ROLES = ["NEXT_RELEASE", "AI_PLAN"] as const satisfies readonly ColumnRoleValue[];
+export const hasEvergreenTasks = (role: string | null | undefined): boolean => (EVERGREEN_COLUMN_ROLES as readonly string[]).includes(role ?? "");
+
+/** Tipos de plantilla de cabecera y pie: los de las releases y los del plan de trabajo para IA (misma tabla). */
+export const RELEASE_TEMPLATE_KINDS = ["HEADER", "FOOTER"] as const;
+export const PLAN_TEMPLATE_KINDS = ["PLAN_HEADER", "PLAN_FOOTER"] as const;
+export const TEMPLATE_KINDS = [...RELEASE_TEMPLATE_KINDS, ...PLAN_TEMPLATE_KINDS] as const;
+export type TemplateKindValue = (typeof TEMPLATE_KINDS)[number];
+/** Solo las plantillas de release (las del plan no cuentan en «Generar release», en las plantillas de proyecto ni al aplicarlas). */
+export function releaseTemplateRows<R extends { kind: string }>(rows: R[]): (R & { kind: (typeof RELEASE_TEMPLATE_KINDS)[number] })[] {
+  return rows.filter((r): r is R & { kind: (typeof RELEASE_TEMPLATE_KINDS)[number] } => r.kind === "HEADER" || r.kind === "FOOTER");
+}
 
 /** Días por defecto de una columna de espera antes de recordar a la persona asignada. */
 export const DEFAULT_WAITING_DAYS = 3;
@@ -33,6 +50,7 @@ export const COLUMN_ROLE_LABEL: Record<ColumnRoleValue, string> = {
   DELIVERY: "Entrega al cliente",
   BUDGET: "Presupuesto (suma el coste)",
   PROGRAM: "Programa del curso (PDF)",
+  AI_PLAN: "Plan de trabajo para IA",
 };
 
 /** Explicación de una línea de cada rol (se ve al pasar por encima en el menú de la columna). */
@@ -49,6 +67,7 @@ export const COLUMN_ROLE_HINT: Record<ColumnRoleValue, string> = {
   DELIVERY: "PDF de resumen para el cliente, sin comentarios ni personas.",
   BUDGET: "Suma el coste de sus tarjetas y activa el campo Coste.",
   PROGRAM: "Cada tarjeta es una sesión del curso: publica el programa en PDF.",
+  AI_PLAN: "Sus tarjetas forman un plan de trabajo en Markdown para una IA (botón «Generar plan de trabajo»).",
 };
 
 const DEFAULT_COLUMNS: { name: string; nameEn: string; role: ColumnRoleValue; isDone: boolean }[] = [

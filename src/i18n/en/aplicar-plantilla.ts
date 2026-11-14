@@ -98,8 +98,8 @@ export const aplicarPlantilla: Record<string, string> = {
   "Conservar (volverá a verse)": "Keep (it will be shown again)",
 
   // Resumen: tareas fijas que dejan de serlo al cambiar de plantilla.
-  "{n} tarea fija pasará a ser normal (su columna deja de ser la de release)": "{n} pinned task will become a normal task (its column stops being the release column)",
-  "{n} tareas fijas pasarán a ser normales (su columna deja de ser la de release)": "{n} pinned tasks will become normal tasks (their column stops being the release column)",
+  "{n} tarea fija pasará a ser normal (su columna deja de admitir tareas fijas)": "{n} pinned task will become a normal task (its column no longer takes pinned tasks)",
+  "{n} tareas fijas pasarán a ser normales (su columna deja de admitir tareas fijas)": "{n} pinned tasks will become normal tasks (their column no longer takes pinned tasks)",
   // Límites de aplicar y deshacer plantilla (lib/template-apply-rate.ts).
   "Este proyecto ya ha cambiado de plantilla {n} veces en los últimos {w} minutos. Vuelve a intentarlo dentro de {min} min.":
     "This project has already changed template {n} times in the last {w} minutes. Try again in {min} min.",

@@ -12,7 +12,7 @@
 //
 // Nada depende de una lista fija de roles: los roles se comparan tal cual y solo `isUniqueColumnRole` dice cuáles no
 // pueden repetirse, así que una plantilla con un rol nuevo funciona sin tocar este módulo.
-import { isUniqueColumnRole, MAX_LABELS_PER_PROJECT, MAX_RELEASE_TEMPLATES_PER_KIND } from "./constants";
+import { hasEvergreenTasks, isUniqueColumnRole, MAX_LABELS_PER_PROJECT, MAX_RELEASE_TEMPLATES_PER_KIND } from "./constants";
 import { normalizeTaskFields, type TaskFieldKey } from "./task-fields";
 
 /** Máximo de columnas y de tipos propios de un proyecto (los mismos topes que crear columnas y tipos a mano). */
@@ -312,7 +312,7 @@ export function planReplace(project: ProjectShape, template: ApplyTemplateShape,
   const finalRole = new Map<string, string>();
   for (const [to, list] of sources) for (const c of list) finalRole.set(c.id, columns[to]!.role);
   for (const k of kept) finalRole.set(k.id, k.role);
-  const unpinTasks = (project.evergreen ?? []).filter((t) => finalRole.get(t.columnId) !== "NEXT_RELEASE").map((t) => t.id);
+  const unpinTasks = (project.evergreen ?? []).filter((t) => !hasEvergreenTasks(finalRole.get(t.columnId))).map((t) => t.id);
 
   // Tipos.
   const kindTargets = resolveTemplateKinds(project, template);
@@ -407,7 +407,7 @@ export function summarizePlan(plan: AddPlan | ReplacePlan, project: ProjectShape
     add(plan.kept.length, "Se conservará al final {n} columna sin pareja", "Se conservarán al final {n} columnas sin pareja", plan.kept.map((c) => c.name));
     add(plan.kept.filter((c) => c.roleCleared).length, "{n} columna conservada pierde su rol (la plantilla ya lo usa)", "{n} columnas conservadas pierden su rol (la plantilla ya lo usa)", plan.kept.filter((c) => c.roleCleared).map((c) => c.name));
     const pinned = new Map((project.evergreen ?? []).map((t) => [t.id, t.title]));
-    add(plan.unpinTasks.length, "{n} tarea fija pasará a ser normal (su columna deja de ser la de release)", "{n} tareas fijas pasarán a ser normales (su columna deja de ser la de release)", someNames(plan.unpinTasks.map((id) => pinned.get(id)!)));
+    add(plan.unpinTasks.length, "{n} tarea fija pasará a ser normal (su columna deja de admitir tareas fijas)", "{n} tareas fijas pasarán a ser normales (su columna deja de admitir tareas fijas)", someNames(plan.unpinTasks.map((id) => pinned.get(id)!)));
     const createdKinds = plan.kindTargets.flatMap((t, i) => ("create" in t ? [template.kinds[i]!.name] : []));
     add(createdKinds.length, "Se añadirá {n} tipo de tarea", "Se añadirán {n} tipos de tarea", createdKinds);
     add(plan.kindMoves.reduce((s, m) => s + m.tasks, 0), "Cambiará de tipo {n} tarea", "Cambiarán de tipo {n} tareas");
