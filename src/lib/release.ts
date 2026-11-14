@@ -160,7 +160,9 @@ function namedAttachmentFiles(prefix: string, attachments: ReleaseAttachmentInpu
   return attachments.map((a) => {
     const isImage = a.isImage ?? true;
     const base = a.originalName.replace(/\.[^.]+$/, "");
-    const clean = `${prefix}${base}`.replace(/\s+/g, "_").replace(/[^\p{L}\p{N}._-]/gu, "_") || "adjunto";
+    const cleaned = `${prefix}${base}`.replace(/\s+/g, "_").replace(/[^\p{L}\p{N}._-]/gu, "_");
+    // «.» o «..» (o solo puntos) serían rutas especiales dentro del ZIP («adjuntos/03-x/..»): se sustituyen.
+    const clean = cleaned && !/^\.+$/.test(cleaned) ? cleaned : "adjunto";
     // Extensión original (saneada) para los no imagen; .webp para las imágenes.
     const ext = isImage ? "webp" : (/\.([^.]+)$/.exec(a.originalName)?.[1] ?? "").replace(/[^\p{L}\p{N}]/gu, "").slice(0, 12);
     const suffix = ext ? `.${ext}` : "";

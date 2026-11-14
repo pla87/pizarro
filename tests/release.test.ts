@@ -274,3 +274,14 @@ test("releasesUntilDue: releases que faltan para que toque una tarea fija", () =
   // Coherente con evergreenDue.
   for (const every of [1, 2, 3]) for (let n = 1; n <= 9; n++) assert.equal(releasesUntilDue(n, every) === 0, evergreenDue(n, every));
 });
+
+test("nombres de adjuntos en el ZIP: «.» y «..» no quedan como rutas especiales", async () => {
+  const { plainAttachmentFileNames } = await import("../src/lib/release");
+  const names = plainAttachmentFileNames([
+    { originalName: "..", isImage: false },
+    { originalName: ".", isImage: false },
+    { originalName: "...", isImage: false },
+  ] as never);
+  for (const n of names) assert.ok(!/^\.+$/.test(n) && !n.includes("/"), n);
+  assert.equal(names[0], "adjunto");
+});
