@@ -5,8 +5,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import {
-  confirmDocumentKind, detectDocumentKind, documentDownloadName, documentMime, isPreviewable, looksLikePdf, looksLikeText, sanitizeDocumentName,
+  confirmDocumentKind, decodeDocumentText, detectDocumentKind, documentDownloadName, documentMime, isPreviewable, looksLikePdf, looksLikeText, sanitizeDocumentName,
 } from "../src/lib/document-kind";
+import { classifyHtmlLink } from "../src/lib/html-doc-links";
 import { cleanOrphanFiles, parseUploadName } from "../src/lib/orphan-files";
 import { documentPath } from "../src/lib/uploads";
 import { documentFailuresMessage } from "../src/components/docs/uploadDocuments";
@@ -53,7 +54,7 @@ test("confirmDocumentKind: el contenido manda sobre la extensión", () => {
   assert.equal(confirmDocumentKind("MARKDOWN", Buffer.from("# Título")), "MARKDOWN");
   // Un binario con extensión .txt (bytes nulos o UTF-8 inválido) no se muestra como texto.
   assert.equal(confirmDocumentKind("TEXT", Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x01])), "OTHER");
-  assert.equal(confirmDocumentKind("MARKDOWN", Buffer.from([0xff, 0xfe, 0xfa, 0x41])), "OTHER");
+  assert.equal(confirmDocumentKind("MARKDOWN", Buffer.from([0x01, 0x02, 0xfa, 0x41, 0x05, 0x06])), "OTHER");
   // HTML: solo si es texto; un binario con extensión .html queda para descargar.
   assert.equal(confirmDocumentKind("HTML", Buffer.from("<!doctype html><p>Hola</p><script>alert(1)</script>")), "HTML");
   assert.equal(confirmDocumentKind("HTML", Buffer.from([0x00, 0x3c, 0x68])), "OTHER");
@@ -154,4 +155,60 @@ test("varios documentos sin subir: cuáles y por qué, agrupados por motivo", ()
   assert.equal(documentFailuresMessage(t, [{ name: "b.pdf", error: quota }], 2), `1 archivo no se ha subido a Documentación: «b.pdf»: ${quota}`);
   const many = Array.from({ length: 8 }, (_, i) => ({ name: `f${i}.pdf`, error: quota }));
   assert.match(documentFailuresMessage(t, many, 8)!, /^8 archivos .*«f4\.pdf» … \+3: Cuota/);
+});
+
+test("looksLikeText: Latin-1/Windows-1252 y UTF-16 con BOM son texto; un binario sin nulos tampoco", () => {
+  assert.equal(confirmDocumentKind("HTML", Buffer.from("<p>Camión, niño, año</p>", "latin1")), "HTML");
+  assert.equal(confirmDocumentKind("TEXT", Buffer.from("Precio: 5\x80 \x93cita\x94", "latin1")), "TEXT");
+  assert.equal(confirmDocumentKind("HTML", Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("<p>Camión</p>", "utf16le")])), "HTML");
+  assert.equal(confirmDocumentKind("HTML", Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from("<p>Camión</p>", "utf16le").swap16()])), "HTML");
+  // UTF-16 con BOM pero lleno de controles: binario.
+  assert.equal(confirmDocumentKind("TEXT", Buffer.from([0xff, 0xfe, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00])), "OTHER");
+  // Sin nulos pero con muchos controles (no es texto).
+  assert.equal(confirmDocumentKind("TEXT", Buffer.from(Array.from({ length: 200 }, (_, i) => (i % 3 === 0 ? 0x01 : 0xe9)))), "OTHER");
+  assert.equal(confirmDocumentKind("TEXT", Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x01])), "OTHER");
+});
+
+test("decodeDocumentText: BOM, charset declarado, UTF-8 y Windows-1252", () => {
+  const utf16le = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("<p>Camión ñandú</p>", "utf16le")]);
+  assert.equal(decodeDocumentText(utf16le, "HTML"), "<p>Camión ñandú</p>");
+  assert.equal(decodeDocumentText(Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from("Año", "utf16le").swap16()]), "TEXT"), "Año");
+  assert.equal(decodeDocumentText(Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from("Año")]), "TEXT"), "Año");
+  assert.equal(decodeDocumentText(Buffer.from("Año ✓ ñ"), "TEXT"), "Año ✓ ñ");
+  // Sin declaración y no UTF-8: Windows-1252 (con comillas y euro).
+  assert.equal(decodeDocumentText(Buffer.from("Año \x80 \x93x\x94", "latin1"), "TEXT"), "Año € \u201cx\u201d");
+  assert.equal(decodeDocumentText(Buffer.from("Año \x80", "latin1"), "MARKDOWN"), "Año €");
+  // Declarado en el HTML (meta charset y http-equiv), con o sin comillas y en mayúsculas.
+  assert.equal(decodeDocumentText(Buffer.from('<meta charset="ISO-8859-1"><p>ñ\xe9</p>', "latin1"), "HTML"), '<meta charset="ISO-8859-1"><p>ñé</p>');
+  assert.equal(decodeDocumentText(Buffer.from('<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=windows-1252"><p>\x93a\x94</p>', "latin1"), "HTML").endsWith("<p>\u201ca\u201d</p>"), true);
+  assert.equal(decodeDocumentText(Buffer.from("<meta charset=iso-8859-15><p>\xa4</p>", "latin1"), "HTML").endsWith("<p>€</p>"), true);
+  // Declarado UTF-8 pero el contenido no lo es: no se rompe, cae a Windows-1252.
+  assert.equal(decodeDocumentText(Buffer.from('<meta charset="utf-8"><p>ñ</p>', "latin1"), "HTML").endsWith("<p>ñ</p>"), true);
+  // UTF-16 declarado sin BOM, y codificaciones «replacement» o desconocidas: se ignoran (nunca lanza).
+  assert.equal(decodeDocumentText(Buffer.from('<meta charset="utf-16"><p>ñ</p>', "latin1"), "HTML").endsWith("<p>ñ</p>"), true);
+  assert.equal(decodeDocumentText(Buffer.from('<meta charset="iso-2022-kr"><p>ñ</p>', "latin1"), "HTML").endsWith("<p>ñ</p>"), true);
+  assert.equal(decodeDocumentText(Buffer.from('<meta charset="inventada"><p>ñ</p>', "latin1"), "HTML").endsWith("<p>ñ</p>"), true);
+  // En texto y Markdown no se mira el meta.
+  assert.equal(decodeDocumentText(Buffer.from("<meta charset=shift_jis>ñ", "latin1"), "TEXT"), "<meta charset=shift_jis>ñ");
+  assert.equal(decodeDocumentText(new Uint8Array(0), "HTML"), "");
+});
+
+test("classifyHtmlLink: enlaces entre documentos de la misma Documentación", () => {
+  const docs = [{ id: "d2", name: "Tema 2.html" }, { id: "d1", name: "tema1.html" }, { id: "d3", name: "TEMA1.HTML" }];
+  assert.deepEqual(classifyHtmlLink("#apartado", docs), { type: "internal" });
+  assert.deepEqual(classifyHtmlLink("https://example.com/tema1.html", docs), { type: "external" });
+  assert.deepEqual(classifyHtmlLink("//example.com/x.html", docs), { type: "external" });
+  assert.deepEqual(classifyHtmlLink("mailto:a@example.com", docs), { type: "external" });
+  assert.deepEqual(classifyHtmlLink("tema1.html", docs), { type: "document", id: "d1", hash: "" });
+  assert.deepEqual(classifyHtmlLink("./tema1.html", docs), { type: "document", id: "d1", hash: "" });
+  assert.deepEqual(classifyHtmlLink("../otra/Tema1.HTML?x=1", docs), { type: "document", id: "d1", hash: "" });
+  assert.deepEqual(classifyHtmlLink("Tema%202.html#Secci%C3%B3n 3", docs), { type: "document", id: "d2", hash: "#Secci%C3%B3n%203" });
+  assert.deepEqual(classifyHtmlLink("tema 2.html#a", docs), { type: "document", id: "d2", hash: "#a" });
+  assert.deepEqual(classifyHtmlLink("tema1.html#", docs), { type: "document", id: "d1", hash: "" });
+  assert.deepEqual(classifyHtmlLink("tema9.html", docs), { type: "missing" });
+  assert.deepEqual(classifyHtmlLink("", docs), { type: "missing" });
+  assert.deepEqual(classifyHtmlLink("carpeta/", docs), { type: "missing" });
+  assert.deepEqual(classifyHtmlLink("tema1.html%", docs), { type: "missing" });
+  // Sin documentos en el proyecto (o solo de otro): nada se resuelve.
+  assert.deepEqual(classifyHtmlLink("tema1.html", []), { type: "missing" });
 });

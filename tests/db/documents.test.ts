@@ -103,6 +103,10 @@ describe("documentación: subida por la ruta API", () => {
       [new File(["<html><script>alert(1)</script></html>"], "falso.pdf", { type: "application/pdf" }), "OTHER"],
       [new File([new Uint8Array([0, 1, 2, 3])], "bin.txt", { type: "text/plain" }), "OTHER"],
       [new File(["<!doctype html><h1>Tema</h1><script>localStorage.x=1</script>"], "tema.html", { type: "text/html" }), "HTML"],
+      // Latin-1, Windows-1252 y UTF-16 con BOM: HTML y texto (se decodifican al verlos; se guardan tal cual).
+      [new File([new Uint8Array(Buffer.from("<p>Camión, niño</p>", "latin1"))], "latin1.html", { type: "text/html" }), "HTML"],
+      [new File([new Uint8Array(Buffer.from("Año \x80 \x93x\x94", "latin1"))], "win.txt", { type: "text/plain" }), "TEXT"],
+      [new File([new Uint8Array(Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("<p>Camión</p>", "utf16le")]))], "utf16.html", { type: "text/html" }), "HTML"],
       [new File(["PK\u0003\u0004 docx"], "tema.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }), "OTHER"],
       [new File(["PK\u0003\u0004 pptx"], "clase.pptx", { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" }), "OTHER"],
     ];

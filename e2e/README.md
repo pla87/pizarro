@@ -27,6 +27,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Índice de un HTML en Documentación y baja con Google sin email (caza de bugs 50b) | `e2e/bh50b-e2e.mjs` | 39 | ~30 s |
 | Mover con el teclado varias veces seguidas (caza de bugs 51b) | `e2e/bh51b-e2e.mjs` | 34 | ~20 s |
 | Aplicar plantilla: paso 2 y archivadas de columnas unidas (caza de bugs 50a) | `e2e/bh50a-e2e.mjs` | 22 | ~20 s |
+| Enlaces entre HTML de la misma Documentación (ida, vuelta, #apartado, inexistente, otro proyecto) y HTML/texto/Markdown en Latin-1, Windows-1252 y UTF-16 (ronda 52) | `e2e/r52-html-e2e.mjs` | ~50 | ~1 min |
 | Plan de trabajo para IA: Markdown con descripciones raras, fijas entre paneles, título a 390 px y más de 500 tareas (caza de bugs 51a) | `e2e/bh51a-e2e.mjs` | 27 | ~40 s |
 | Release de más de 500 tareas (o 200 con adjuntos), «+» flotante con el programa lleno y panel de fijas en el móvil (caza de bugs 51c) | `e2e/bh51c-e2e.mjs` | 55 | ~35 s |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/r49-account-e2e.mjs` | 61 | ~1 min |
@@ -176,6 +177,19 @@ más de 500 tareas marcadas «Generar» se desactiva con su motivo. Misma base y
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh51a-e2e.mjs   # PART=markdown,fijas,titulo,limite
+```
+
+## Enlaces entre HTML y codificaciones en Documentación (ronda 52)
+
+Dos HTML de la misma Documentación enlazados entre sí (`./Tema2.HTML#apartado`, `tema%20tres.html`): el enlace abre el otro
+documento en el visor de la app (pestaña nueva, el marco sigue sin permisos) y lleva al apartado; la vuelta funciona igual;
+un enlace a un fichero que no está, o que solo existe en otro proyecto (aunque se llame igual), queda desactivado con su
+title y no abre nada; un documento en la papelera no se enlaza. Y ficheros HTML, texto y Markdown en Latin-1, Windows-1252
+(con o sin `<meta charset>`), UTF-16 LE/BE y UTF-8 con BOM que se ven con tildes y ñ, con la descarga tal cual. Misma base
+y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r52-html-e2e.mjs   # PART=enlaces,codificacion
 ```
 
 ## Release grande, «+» flotante con el programa lleno y panel de fijas en el móvil (caza de bugs 51c)

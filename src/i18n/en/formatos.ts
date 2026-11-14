@@ -17,4 +17,6 @@ export const formatos: Record<string, string> = {
   "Vista previa sin scripts ni contenido externo (imágenes, estilos o fuentes de otros sitios). Descárgalo para verlo completo.": "Preview without scripts or external content (images, styles or fonts from other sites). Download it to see it in full.",
   // Release
   "Has cambiado el texto de la release. ¿Cerrar y descartar los cambios?": "You have changed the release text. Close and discard the changes?",
+  // Enlaces entre HTML de la Documentación
+  "Enlace a otro archivo que no está en la Documentación": "Link to another file that is not in the Documentation",
 };

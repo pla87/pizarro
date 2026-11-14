@@ -14,7 +14,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { MessageWithLinks, useToast } from "@/components/ui/Toast";
 import { cn } from "@/components/ui/cn";
 import { useIntlLocale, useT } from "@/i18n/client";
-import { DOCUMENT_PREVIEW_MAX_BYTES, DOCUMENT_TRASH_DAYS, isPreviewable, type DocumentKindName } from "@/lib/document-kind";
+import { DOCUMENT_PREVIEW_MAX_BYTES, DOCUMENT_TRASH_DAYS, decodeDocumentText, isPreviewable, type DocumentKindName } from "@/lib/document-kind";
 import type { DocumentRow, TrashedDocumentRow } from "@/lib/documents";
 import type { EditorModeValue } from "@/lib/types";
 import { formatDate } from "@/lib/format";
@@ -349,7 +349,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
         </>
       )}
 
-      {open && !showTrash && <DocViewer key={open.id} doc={open} projectId={projectId} currentUserId={currentUserId} editorMode={editorMode} onClose={() => setOpenId(null)} />}
+      {open && !showTrash && <DocViewer key={open.id} doc={open} docs={documents} fromLink={open.id === initialOpenId} projectId={projectId} currentUserId={currentUserId} editorMode={editorMode} onClose={() => setOpenId(null)} />}
       {openTrashed && showTrash && (
         <TrashViewer key={openTrashed.id} doc={openTrashed} busy={busyId === openTrashed.id} onClose={() => setOpenId(null)} onRestore={() => void restore(openTrashed)} />
       )}
@@ -358,7 +358,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
 }
 
 /** Visor en un modal: imagen, PDF del visor del navegador, texto plano, Markdown o HTML (aislado); el resto solo se descarga. */
-function DocViewer({ doc, projectId, currentUserId, editorMode, onClose }: { doc: DocumentRow; projectId: string; currentUserId: string; editorMode: EditorModeValue; onClose: () => void }) {
+function DocViewer({ doc, docs, fromLink, projectId, currentUserId, editorMode, onClose }: { doc: DocumentRow; docs: DocumentRow[]; fromLink: boolean; projectId: string; currentUserId: string; editorMode: EditorModeValue; onClose: () => void }) {
   const t = useT();
   const locale = useIntlLocale();
   const safeRefresh = useSafeRefresh();
@@ -447,14 +447,14 @@ function DocViewer({ doc, projectId, currentUserId, editorMode, onClose }: { doc
         </div>
       }
     >
-      <DocPreview doc={doc} name={name} src={src} />
+      <DocPreview doc={doc} name={name} src={src} projectId={projectId} docs={docs} fromLink={fromLink} />
     </Modal>
     {second.dialogs}
     </>
   );
 }
 
-function DocPreview({ doc, name, src }: { doc: DocumentRow; name: string; src: string }) {
+function DocPreview({ doc, name, src, projectId, docs, fromLink }: { doc: DocumentRow; name: string; src: string; projectId: string; docs: DocumentRow[]; fromLink?: boolean }) {
   const t = useT();
   const textKind = doc.kind === "TEXT" || doc.kind === "MARKDOWN" || doc.kind === "HTML";
   const tooBig = textKind && doc.size > DOCUMENT_PREVIEW_MAX_BYTES;
@@ -463,11 +463,12 @@ function DocPreview({ doc, name, src }: { doc: DocumentRow; name: string; src: s
     if (!textKind || tooBig) return;
     let cancelled = false;
     fetch(src)
-      .then((r) => (r.ok ? r.text() : null))
+      // Los bytes se decodifican aquí (UTF-8, UTF-16 con BOM, charset declarado o Windows-1252); el saneado va después.
+      .then(async (r) => (r.ok ? decodeDocumentText(new Uint8Array(await r.arrayBuffer()), doc.kind) : null))
       .catch(() => null)
       .then((text) => { if (!cancelled) setLoaded({ id: doc.id, text }); });
     return () => { cancelled = true; };
-  }, [doc.id, src, textKind, tooBig]);
+  }, [doc.id, doc.kind, src, textKind, tooBig]);
 
   if (!isPreviewable(doc.kind) || tooBig) {
     return (
@@ -488,7 +489,7 @@ function DocPreview({ doc, name, src }: { doc: DocumentRow; name: string; src: s
     return (
       <div className="space-y-2">
         <p className="text-xs text-slate-500">{t("Vista previa sin scripts ni contenido externo (imágenes, estilos o fuentes de otros sitios). Descárgalo para verlo completo.")}</p>
-        <HtmlPreview html={loaded.text} title={name} />
+        <HtmlPreview html={loaded.text} title={name} projectId={projectId} docs={docs} fromLink={fromLink} />
       </div>
     );
   }
@@ -526,7 +527,7 @@ function TrashViewer({ doc, busy, onClose, onRestore }: { doc: TrashedDocumentRo
         </div>
       }
     >
-      <DocPreview doc={doc} name={doc.name} src={src} />
+      <DocPreview doc={doc} name={doc.name} src={src} projectId="" docs={[]} />
     </Modal>
   );
 }
