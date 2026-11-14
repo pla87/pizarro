@@ -188,6 +188,13 @@ test("decodeDocumentText: BOM, charset declarado, UTF-8 y Windows-1252", () => {
   assert.equal(decodeDocumentText(Buffer.from('<meta charset="utf-16"><p>ñ</p>', "latin1"), "HTML").endsWith("<p>ñ</p>"), true);
   assert.equal(decodeDocumentText(Buffer.from('<meta charset="iso-2022-kr"><p>ñ</p>', "latin1"), "HTML").endsWith("<p>ñ</p>"), true);
   assert.equal(decodeDocumentText(Buffer.from('<meta charset="inventada"><p>ñ</p>', "latin1"), "HTML").endsWith("<p>ñ</p>"), true);
+  // Alias de UTF-16 («unicode», «ucs-2», «csunicode», «unicodefffe»: así escribía Word el HTML «Unicode») sin BOM: como el
+  // navegador, se tratan como UTF-8 (si no, un fichero ASCII salía entero en caracteres chinos). Y los alias de UTF-8
+  // («unicode-1-1-utf-8») no impiden caer a Windows-1252 si el contenido no es UTF-8.
+  for (const label of ["unicode", "ucs-2", "csunicode", "unicodefffe", "iso-10646-ucs-2"]) {
+    assert.equal(decodeDocumentText(Buffer.from(`<meta http-equiv=Content-Type content="text/html; charset=${label}"><p>Año ✓</p>`), "HTML").endsWith("<p>Año ✓</p>"), true, label);
+  }
+  assert.equal(decodeDocumentText(Buffer.from('<meta charset="unicode-1-1-utf-8"><p>ñ</p>', "latin1"), "HTML").endsWith("<p>ñ</p>"), true);
   // En texto y Markdown no se mira el meta.
   assert.equal(decodeDocumentText(Buffer.from("<meta charset=shift_jis>ñ", "latin1"), "TEXT"), "<meta charset=shift_jis>ñ");
   assert.equal(decodeDocumentText(new Uint8Array(0), "HTML"), "");

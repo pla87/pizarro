@@ -115,10 +115,13 @@ export function decodeDocumentText(buf: Uint8Array, kind: DocumentKindName = "TE
   if (bom) return new TextDecoder(bom).decode(buf).replace(/^﻿/, "");
   if (kind === "HTML") {
     const label = declaredCharset(buf);
-    if (label && !label.startsWith("utf-16") && label !== "utf-8" && label !== "utf8") {
+    if (label) {
       try {
+        // Se mira la codificación a la que lleva la etiqueta, no su nombre: «unicode», «ucs-2» o «csunicode» son UTF-16
+        // (que sin BOM no puede ser: el navegador lo toma como UTF-8) y «unicode-1-1-utf-8» es UTF-8 (lo decide el paso
+        // siguiente, que cae a Windows-1252 si no es válido).
         const dec = new TextDecoder(label);
-        if (dec.encoding !== "replacement") return dec.decode(buf);
+        if (dec.encoding !== "replacement" && dec.encoding !== "utf-8" && !dec.encoding.startsWith("utf-16")) return dec.decode(buf);
       } catch { /* etiqueta desconocida: se sigue */ }
     }
   }
