@@ -3,8 +3,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import sharp from "sharp";
-import { APP_ICON_ACCENTS, APP_ICON_FILES, APP_ICON_REV, appIconColor, appIconSvg, appIconUrl, appNames, parseAppIcon } from "../src/lib/app-icon-core";
+import { APP_ICON_ACCENTS, APP_ICON_FILES, APP_ICON_REV, appIconColor, appIconSvg, appIconUrl, appNames, parseAppIcon, shortAppName } from "../src/lib/app-icon-core";
 import { webManifest } from "../src/lib/web-manifest";
+import { rootIconResponse } from "../src/lib/app-icon-render";
 import { GET } from "../src/app/app-icon/[accent]/[file]/route";
 
 const get = (accent: string, file: string) => GET(new Request(`http://localhost/app-icon/${accent}/${file}`), { params: Promise.resolve({ accent, file }) });
@@ -77,6 +78,37 @@ test("ruta: tema o fichero desconocidos, 404 (nada de rutas arbitrarias)", async
 test("nombre bajo el icono: el de la organización; sin ella, Pizarro", () => {
   assert.deepEqual(appNames("  Acme  "), { name: "Acme · Pizarro", shortName: "Acme" });
   assert.deepEqual(appNames(""), { name: "Pizarro", shortName: "Pizarro" });
+});
+
+test("nombre corto bajo el icono: cabe en 12 caracteres (entero, primera palabra o recorte con «…»)", () => {
+  assert.equal(shortAppName("Casa"), "Casa");
+  assert.equal(shortAppName("Doce letras!"), "Doce letras!");
+  assert.equal(shortAppName("Acme Corporation Internacional"), "Acme");
+  assert.equal(shortAppName("Construcciones Hermanos García"), "Construccio…");
+  assert.equal(Array.from(shortAppName("Construcciones Hermanos García")).length, 12);
+  assert.equal(shortAppName("  Mi   Casa  "), "Mi Casa");
+  assert.deepEqual(appNames("Fundación Ejemplo de Ayuda"), { name: "Fundación Ejemplo de Ayuda · Pizarro", shortName: "Fundación" });
+  assert.equal(webManifest("es", { orgName: "Acme Corporation Internacional" }).short_name, "Acme");
+});
+
+test("iconos de la raíz: del color elegido, con caché corta (no inmutables) y .ico válido", async () => {
+  const svg = await rootIconResponse("forest", "icon.svg");
+  assert.match(await svg.text(), /fill="#1f6b42"/);
+  for (const res of [svg, await rootIconResponse("mustard", "apple-touch-icon.png"), await rootIconResponse("eva", "icon-32.png", true)]) {
+    const cc = res.headers.get("cache-control") ?? "";
+    assert.doesNotMatch(cc, /immutable/);
+    assert.match(cc, /max-age=300/);
+  }
+  const apple = await rootIconResponse("mono", "apple-touch-icon.png");
+  assert.equal((await pixel(Buffer.from(await apple.arrayBuffer()), 0, 0)).color, "#111111");
+  const ico = await rootIconResponse("eva", "icon-32.png", true);
+  assert.equal(ico.headers.get("content-type"), "image/x-icon");
+  const bytes = Buffer.from(await ico.arrayBuffer());
+  assert.deepEqual([bytes.readUInt16LE(0), bytes.readUInt16LE(2), bytes.readUInt16LE(4), bytes[6], bytes[7]], [0, 1, 1, 32, 32]);
+  const png = bytes.subarray(bytes.readUInt32LE(18));
+  assert.equal(png.length, bytes.readUInt32LE(14));
+  assert.equal((await pixel(Buffer.from(png), 16, 16 + 4)).color.length, 7);
+  assert.equal((await pixel(Buffer.from(png), 3, 16)).color, "#6848a0");
 });
 
 test("manifiesto: iconos, color y nombre de la instalación", () => {

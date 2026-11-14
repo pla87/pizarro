@@ -2,6 +2,7 @@
 
 import { Copy, FileDown } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useRadioGroup } from "@/components/ui/useRadioGroup";
 import { getColumnChecklist } from "@/actions/column-views";
 import { updateSubtask } from "@/actions/tasks";
 import { checklistMarkdown, groupChecklist, type ChecklistGroupBy, type ChecklistItem } from "@/lib/checklist";
@@ -65,6 +66,7 @@ export function ChecklistDialog({ column, onClose }: { column: BoardColumn; onCl
   const pdf = () => window.open(`/api/projects/${project.id}/columns/${column.id}/checklist?by=${by}`, "_blank", "noopener");
 
   const modes: [ChecklistGroupBy, string][] = [["card", t("Por tarjeta")], ["kind", t("Por tipo de tarea")]];
+  const group = useRadioGroup(modes.length, modes.findIndex(([v]) => v === by), (i) => setBy(modes[i]![0]));
 
   return (
     <Modal
@@ -80,13 +82,12 @@ export function ChecklistDialog({ column, onClose }: { column: BoardColumn; onCl
         </div>
       }
     >
-      <div role="radiogroup" aria-label={t("Agrupar")} className="mb-3 inline-flex rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
-        {modes.map(([value, label]) => (
+      <div {...group.groupProps} aria-label={t("Agrupar")} className="mb-3 inline-flex rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
+        {modes.map(([value, label], i) => (
           <button
             key={value}
             type="button"
-            role="radio"
-            aria-checked={by === value}
+            {...group.radioProps(i)}
             onClick={() => setBy(value)}
             className={cn("min-h-9 rounded-md px-3 text-sm", by === value ? "bg-white font-medium shadow-sm dark:bg-slate-700" : "text-slate-600 dark:text-slate-400")}
           >

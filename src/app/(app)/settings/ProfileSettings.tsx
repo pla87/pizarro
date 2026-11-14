@@ -11,6 +11,7 @@ import {
 import { cn } from "@/components/ui/cn";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
+import { useRadioGroup } from "@/components/ui/useRadioGroup";
 import { preloadEnglish, useT } from "@/i18n/client";
 import { ReleaseTemplateList } from "@/components/ReleaseTemplateList";
 import { PlanTemplateLists } from "@/components/PlanTemplateLists";
@@ -207,6 +208,8 @@ export function ProfileSettings(props: Props) {
 }
 
 /** Idioma: los nombres de cada opción van en su propio idioma. */
+const LOCALE_OPTIONS = [["ES", "Español"], ["EN", "English"]] as const;
+
 function LanguageSection({ initial }: { initial: "ES" | "EN" }) {
   const router = useRouter();
   const toast = useToast();
@@ -224,15 +227,16 @@ function LanguageSection({ initial }: { initial: "ES" | "EN" }) {
     }
     router.refresh();
   };
+  const group = useRadioGroup(LOCALE_OPTIONS.length, LOCALE_OPTIONS.findIndex(([v]) => v === locale), (i) => choose(LOCALE_OPTIONS[i]![0]));
   return (
     <section className="card p-5">
       <h2 className="flex items-center gap-2 font-semibold"><Languages size={17} /> Idioma · Language</h2>
-      <div className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Idioma · Language">
-        {([["ES", "Español"], ["EN", "English"]] as const).map(([value, label]) => (
+      <div className="mt-3 flex flex-wrap gap-2" {...group.groupProps} aria-label="Idioma · Language">
+        {LOCALE_OPTIONS.map(([value, label], i) => (
           <button
             key={value}
-            role="radio"
-            aria-checked={locale === value}
+            type="button"
+            {...group.radioProps(i)}
             onClick={() => choose(value)}
             className="choice-card rounded-lg px-4 py-2 text-sm font-medium"
           >
@@ -420,6 +424,7 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
     }
     router.refresh();
   };
+  const accentGroup = useRadioGroup(ACCENTS.length, ACCENTS.findIndex((a) => a.value === accent), (i) => chooseAccent(ACCENTS[i]!.value));
   const sample = "#6366f1";
   return (
     <section className="card p-5">
@@ -444,13 +449,12 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
       </div>
       <h3 className="mt-6 text-sm font-semibold">{t("Tema de color")}</h3>
       <p className="mt-0.5 text-sm text-slate-500">{t("Colores de toda la app, en modo claro y oscuro.")}</p>
-      <div role="radiogroup" aria-label={t("Tema de color")} className="mt-3 flex flex-wrap gap-4">
-        {ACCENTS.map(({ value, label, swatch }) => (
+      <div {...accentGroup.groupProps} aria-label={t("Tema de color")} className="mt-3 flex flex-wrap gap-4">
+        {ACCENTS.map(({ value, label, swatch }, i) => (
           <button
             key={value}
             type="button"
-            role="radio"
-            aria-checked={accent === value}
+            {...accentGroup.radioProps(i)}
             onClick={() => chooseAccent(value)}
             className="group flex w-20 flex-col items-center gap-1.5 text-center text-xs focus-visible:outline-none"
           >

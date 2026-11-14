@@ -4,6 +4,7 @@ import { createContext, useContext, useSyncExternalStore } from "react";
 import type { BoardColumn, BoardData, BoardTask, CardStyleValue, DeliverableOption, EditorModeValue, KindOption, LabelOption, UserOption } from "@/lib/types";
 
 import { countSelected, tasksById, type BoardStores } from "./stores";
+import type { MoveTurns } from "./moveTurns";
 
 /**
  * Contexto estable del tablero: datos casi estáticos y funciones. NO cambia al seleccionar ni al editar una tarea,
@@ -34,6 +35,8 @@ export interface BoardApi {
   /** Admite un parche o una función (para actualizaciones concurrentes sin perder cambios). */
   patchTask: (id: string, patch: Partial<BoardTask> | ((task: BoardTask) => Partial<BoardTask>)) => void;
   removeTask: (id: string) => void;
+  /** Turnos de los movimientos de tarjetas (moveTurns.ts): también el cambio de columna desde el detalle pasa por ellos. */
+  moveTurns: MoveTurns;
   setColumns: React.Dispatch<React.SetStateAction<BoardColumn[]>>;
   openTask: (id: string) => void;
   /** `evergreen`: crear la tarea como fija en la columna (la de la release o una de plan para IA). */
