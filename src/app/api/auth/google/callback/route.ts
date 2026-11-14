@@ -9,7 +9,7 @@ import { completeLogin } from "@/lib/login";
 import { logEvent } from "@/lib/log";
 import { appUrl } from "@/lib/mail";
 import { rateIp, rateLimit } from "@/lib/rate-limit";
-import { ACCOUNT_DELETE_PURPOSE, accountDeleteReturn } from "@/lib/google-reauth";
+import { ACCOUNT_DELETE_PURPOSE, accountDeleteReturn, reauthFreshness } from "@/lib/google-reauth";
 import { safeNextPath } from "@/lib/redirect";
 import { currentSessionId, getCurrentUser } from "@/lib/session";
 import { confirmAccountDeleteWithGoogle, secondStepFor, sendEmailCode, startChallenge } from "@/lib/two-factor";
@@ -31,9 +31,11 @@ export async function GET(req: Request) {
   const raw = store.get(GOOGLE_LOGIN_COOKIE)?.value ?? "";
   // Un solo uso, pase lo que pase (con su misma ruta: un delete en «/» no la borraría).
   store.set(GOOGLE_LOGIN_COOKIE, "", { path: "/api/auth/google", maxAge: 0, httpOnly: true, secure: cookieSecure() });
-  const [state, nonce, verifier, nextB64, purpose] = raw.split(".");
-  // Volver a entrar con Google para borrar la cuenta: los fallos regresan a «Borrar mi cuenta», no al acceso.
-  const reauth = purpose === ACCOUNT_DELETE_PURPOSE;
+  const [state, nonce, verifier, nextB64, ...rest] = raw.split(".");
+  // Volver a entrar con Google para borrar la cuenta («….<inicio>.account-delete»): los fallos regresan a «Borrar mi
+  // cuenta», no al acceso.
+  const reauth = rest.at(-1) === ACCOUNT_DELETE_PURPOSE;
+  const reauthStartedAt = reauth && rest.length === 2 ? Number(rest[0]) : Number.NaN;
   const fail = (code: string, message: string, extra: Record<string, unknown> = {}): never => {
     logEvent({ level: "warn", category: "auth", action: reauth ? "auth.googleReauthFailed" : "auth.googleLoginFailed", message: `${reauth ? "Confirmación con Google para borrar la cuenta" : "Acceso con Google"} no completado: ${message}`, path: "/api/auth/google/callback", ip, details: { reason: code, ...extra } });
     redirect(reauth ? `${appUrl()}${accountDeleteReturn("google_failed")}` : `${appUrl()}/login?error=${code}`);
@@ -68,6 +70,17 @@ export async function GET(req: Request) {
     if (!row?.googleSub || row.googleSub !== result.identity.sub) {
       logEvent({ level: "warn", category: "auth", action: "auth.googleReauthFailed", message: `${me.name}: para borrar su cuenta ha vuelto a entrar con otra cuenta de Google`, userId: me.id, userName: me.name, path: "/api/auth/google/callback", ip });
       redirect(`${appUrl()}${accountDeleteReturn("google_mismatch")}`);
+    }
+    // Tiene que haber escrito la contraseña de Google ahora: elegir la cuenta con la sesión de Google abierta no basta.
+    const fresh = reauthFreshness(result.identity.authTime, reauthStartedAt, Math.floor(Date.now() / 1000));
+    if (fresh !== "ok") {
+      logEvent({
+        level: "warn", category: "auth", action: "auth.googleReauthFailed",
+        message: `${me.name}: para borrar su cuenta ha vuelto a entrar con Google sin escribir la contraseña (${fresh === "missing" ? "Google no dice cuándo se autenticó" : "autenticación antigua"})`,
+        userId: me.id, userName: me.name, path: "/api/auth/google/callback", ip,
+        details: { reason: fresh, authTime: result.identity.authTime ?? null, startedAt: Number.isFinite(reauthStartedAt) ? reauthStartedAt : null },
+      });
+      redirect(`${appUrl()}${accountDeleteReturn("google_stale")}`);
     }
     await confirmAccountDeleteWithGoogle(me.id, sessionId);
     logEvent({ category: "auth", action: "auth.googleReauth", message: `${me.name} ha vuelto a entrar con Google para borrar su cuenta`, userId: me.id, userName: me.name, path: "/api/auth/google/callback", ip });

@@ -2,11 +2,18 @@
 import type { T } from "../i18n/core";
 import { formatDay } from "./dates";
 
-export type NotificationKind = "MENTION" | "ASSIGNED" | "DUE_CHANGED" | "COMMENT" | "REPLY" | "WAITING";
+export type NotificationKind = "MENTION" | "ASSIGNED" | "DUE_CHANGED" | "COMMENT" | "REPLY" | "WAITING" | "PROJECT_TO_TEAM";
 
-/** Frase de cabecera del aviso, con `{actor}` y `{task}` ya sustituidos por los textos recibidos. */
+/** Avisos de un proyecto, no de una tarea: llevan al proyecto y en `task` va el nombre del proyecto. */
+export const isProjectNotice = (kind: NotificationKind): boolean => kind === "PROJECT_TO_TEAM";
+
+/**
+ * Frase de cabecera del aviso, con `{actor}` y `{task}` ya sustituidos por los textos recibidos. En un aviso de proyecto
+ * (PROJECT_TO_TEAM) `task` es el nombre del proyecto entre comillas y `actor`, el de la cuenta borrada.
+ */
 export function notificationHeadline(kind: NotificationKind, t: T, vars: { actor: string; task: string }): string {
   switch (kind) {
+    case "PROJECT_TO_TEAM": return t("El proyecto {task} de {actor} ha pasado a ser de equipo al borrarse su cuenta", vars);
     case "ASSIGNED": return t("{actor} te ha asignado {task}", vars);
     case "DUE_CHANGED": return t("{actor} ha cambiado la fecha límite de {task}", vars);
     case "COMMENT": return t("{actor} ha comentado en {task}", vars);
@@ -56,6 +63,8 @@ function parseAssignedBatch(excerpt: string): number | null {
 /** Texto bajo la cabecera del aviso, en el idioma de `t` (fechas con `locale`). */
 export function notificationBody(kind: NotificationKind, excerpt: string, t: T, locale: string): string {
   switch (kind) {
+    // El extracto guarda el nombre de la cuenta borrada (ya va en la cabecera).
+    case "PROJECT_TO_TEAM": return t("Ahora lo ven los administradores. Ábrelo para darle miembros, añadirlo a tus proyectos o borrarlo.");
     case "DUE_CHANGED": return dueChangeText(excerpt, t, locale);
     case "WAITING": return waitingText(excerpt, t);
     case "ASSIGNED": {

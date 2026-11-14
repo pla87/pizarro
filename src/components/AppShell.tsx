@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { logout } from "@/actions/auth";
 import { useT } from "@/i18n/client";
 import { createProject, listProjectExamples } from "@/actions/projects";
+import { projectOutsideList } from "@/actions/project-visit";
 import { listTemplates } from "@/actions/templates";
 import type { CurrentUser } from "@/lib/session";
 import { AppBadge } from "./AppBadge";
@@ -22,7 +23,7 @@ import { filesFrom, hasFiles } from "./board/upload";
 import { documentFailuresMessage, documentUploadName, uploadDocument } from "./docs/uploadDocuments";
 import { installDragMove } from "./ui/dragMove";
 import { Presence } from "./board/Presence";
-import { PrivateIcon, ProjectMenu, ProjectsContext, useProjectSwitchHref } from "./ProjectMenu";
+import { OutsideListNotice, PrivateIcon, ProjectMenu, ProjectsContext, useProjectSwitchHref } from "./ProjectMenu";
 import { UndoButton } from "./UndoButton";
 import { Avatar } from "./ui/Avatar";
 import { ReportButton } from "./ReportButton";
@@ -45,11 +46,14 @@ import { useActionTransition } from "@/components/useActionTransition";
 
 interface Props {
   user: CurrentUser;
-  projects: { id: string; name: string; isPrivate?: boolean }[];
+  /** `outside`: abierto ahora pero fuera de «Proyectos en los que trabajo» (solo administradores, ver useOutsideListProject). */
+  projects: { id: string; name: string; isPrivate?: boolean; outside?: boolean }[];
   version: string;
   unread: number;
   /** Último proyecto visitado (cookie ya validada contra los visibles): se mantiene seleccionado fuera de /p/…. */
   lastProjectId?: string | null;
+  /** Administrador en un proyecto de equipo que no está en su lista (al cargar la página en /p/…): se muestra igualmente. */
+  outsideProject?: { id: string; name: string } | null;
   /** Copia de seguridad atrasada ("shrunk": mucho menor que la última buena): punto de aviso junto a «Administración» (solo admins). */
   backupAlert?: boolean | "shrunk";
   /** Versión nueva de Pizarro sin descartar: punto de aviso junto a «Administración» (solo admins). */
@@ -73,7 +77,7 @@ export function AppShell(props: Props) {
   );
 }
 
-function Shell({ user, projects, version, unread, lastProjectId = null, backupAlert = false, updateAvailable = false, licenseNudge = null, children }: Props) {
+function Shell({ user, projects: listed, version, unread, lastProjectId = null, outsideProject = null, backupAlert = false, updateAvailable = false, licenseNudge = null, children }: Props) {
   useFocusRingScroll();
   const t = useT();
   const pathname = usePathname();
@@ -91,7 +95,8 @@ function Shell({ user, projects, version, unread, lastProjectId = null, backupAl
   // En páginas que no son de un proyecto (calendario, avisos, perfil…) sigue seleccionado el último visitado,
   // para volver a su tablero sin elegirlo de nuevo.
   const [lastId, setLastId] = useState(lastProjectId);
-  if (projectId && projectId !== lastId && projects.some((p) => p.id === projectId)) setLastId(projectId);
+  if (projectId && projectId !== lastId && listed.some((p) => p.id === projectId)) setLastId(projectId);
+  const projects = useOutsideListProject(user, listed, projectId, outsideProject);
   const current = projects.find((p) => p.id === (projectId ?? lastId)) ?? null;
   // Deshacer y presencia son del proyecto que se está viendo, no del recordado.
   const inProject = Boolean(projectId && current?.id === projectId);
@@ -159,6 +164,35 @@ function Shell({ user, projects, version, unread, lastProjectId = null, backupAl
     </div>
     </ProjectsContext.Provider>
   );
+}
+
+type ShellProject = Props["projects"][number];
+
+/**
+ * Lista de proyectos del selector y de la navegación: la del administrador («Proyectos en los que trabajo») y, mientras
+ * está dentro de un proyecto de equipo que no tiene en ella, también ese, marcado `outside` («No está en tus
+ * proyectos», con el botón para añadirlo). No se añade solo a la lista: abrir un proyecto no es elegirlo. Al cargar la
+ * página lo trae el layout (`initial`); al llegar con la navegación de la app se pide al servidor. Quien no es
+ * administrador tiene en su lista todos los proyectos a los que puede entrar: nunca hay uno fuera.
+ */
+function useOutsideListProject(user: CurrentUser, listed: ShellProject[], projectId: string | null, initial: { id: string; name: string } | null): ShellProject[] {
+  const isAdmin = user.role === "ADMIN";
+  const [outside, setOutside] = useState(initial);
+  const [seen, setSeen] = useState(initial);
+  if ((initial?.id ?? "") + (initial?.name ?? "") !== (seen?.id ?? "") + (seen?.name ?? "")) {
+    setSeen(initial);
+    if (initial) setOutside(initial);
+  }
+  const inList = !!projectId && listed.some((p) => p.id === projectId);
+  const wanted = isAdmin && projectId && !inList && outside?.id !== projectId ? projectId : null;
+  useEffect(() => {
+    if (!wanted) return;
+    let live = true;
+    projectOutsideList(wanted).then((res) => { if (live && res.ok && res.data) setOutside(res.data); }, () => {});
+    return () => { live = false; };
+  }, [wanted]);
+  if (!isAdmin || !projectId || inList || outside?.id !== projectId) return listed;
+  return [...listed, { id: outside.id, name: outside.name, isPrivate: false, outside: true }];
 }
 
 function NavLink({ href, icon: Icon, children, active, extra, highlight = false }: { href: string; icon: typeof Menu; children: React.ReactNode; active: boolean; extra?: Record<string, unknown>; highlight?: boolean }) {
@@ -246,8 +280,8 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
   backupAlert: boolean | "shrunk";
   updateAvailable: boolean;
   user: CurrentUser;
-  projects: { id: string; name: string; isPrivate?: boolean }[];
-  current: { id: string; name: string; isPrivate?: boolean } | null;
+  projects: ShellProject[];
+  current: ShellProject | null;
   version: string;
   pathname: string;
 }) {
@@ -318,7 +352,7 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
   );
 }
 
-function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: string; name: string; isPrivate?: boolean }[]; current: { id: string; name: string; isPrivate?: boolean } | null; isAdmin: boolean }) {
+function ProjectSwitcher({ projects, current, isAdmin }: { projects: ShellProject[]; current: ShellProject | null; isAdmin: boolean }) {
   const t = useT();
   const switchHref = useProjectSwitchHref();
   const [creating, setCreating] = useState(false);
@@ -358,6 +392,7 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: strin
               <span className="min-w-0 truncate">{p.name}</span>
               {p.isPrivate && <PrivateIcon />}
             </span>
+            {p.outside && <span className="block text-xs font-normal text-slate-500">{t("No está en tus proyectos")}</span>}
           </Link>
         ))}
         {isAdmin && (
@@ -376,6 +411,7 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: { id: strin
         </MenuItem>
       </DropdownMenu>
       {creating && <NewProjectModal isAdmin={isAdmin} onClose={() => setCreating(false)} />}
+      {current?.outside && <OutsideListNotice projectId={current.id} />}
     </div>
   );
 }

@@ -154,6 +154,17 @@ test("URL de acceso con Google: solo openid email profile, PKCE S256, state y no
   assert.equal(q.get("hd"), "empresa.test");
   assert.equal(q.get("access_type"), null, "sin refresh token: Drive es una conexión aparte");
   assert.equal(new URL(idt.buildLoginAuthUrl({ clientId: "c", redirectUri: "r", state: "s", nonce: "n", challenge: "c" })).searchParams.get("hd"), null);
+  // Iniciar sesión: basta con elegir la cuenta (sin max_age).
+  assert.equal(q.get("prompt"), "select_account");
+  assert.equal(q.get("max_age"), null);
+});
+
+test("Google: confirmar la baja exige volver a escribir la contraseña (prompt=login y max_age=0)", () => {
+  const q = new URL(idt.buildLoginAuthUrl({ clientId: "cid", redirectUri: "r", state: "st", nonce: "no", challenge: "ch", reauth: true })).searchParams;
+  assert.equal(q.get("prompt"), "login");
+  assert.equal(q.get("max_age"), "0");
+  assert.equal(q.get("nonce"), "no");
+  assert.equal(q.get("code_challenge"), "ch");
 });
 
 // --- Google: firma del id_token ---
@@ -201,9 +212,15 @@ const check = (patch: Record<string, unknown>, opts: { domain?: string | null; n
   idt.validateIdTokenClaims({ ...base, ...patch }, { clientId: "cid", nonce: opts.nonce ?? "n1", domain: opts.domain, now: NOW });
 
 test("claims: token correcto; el email se devuelve en minúsculas", () => {
-  assert.deepEqual(check({}), { ok: true, sub: "1234567890", email: "ana@empresa.test", name: "Ana" });
+  assert.deepEqual(check({}), { ok: true, sub: "1234567890", email: "ana@empresa.test", name: "Ana", authTime: null });
   assert.equal(check({ iss: "accounts.google.com" }).ok, true);
   assert.equal(check({ email_verified: "true" }).ok, true);
+});
+
+test("claims: auth_time (cuándo escribió la contraseña en Google) solo si es un número", () => {
+  assert.equal((check({ auth_time: sec - 5 }) as { authTime: number | null }).authTime, sec - 5);
+  assert.equal((check({ auth_time: String(sec) }) as { authTime: number | null }).authTime, null);
+  assert.equal((check({ auth_time: Number.NaN }) as { authTime: number | null }).authTime, null);
 });
 
 test("claims: rechaza emisor, audiencia, caducidad, nonce y email sin verificar", () => {

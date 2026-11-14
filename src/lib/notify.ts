@@ -1,7 +1,7 @@
 import "server-only";
 import { after } from "next/server";
 import type { Prisma } from "@/generated/prisma/client";
-import { intlLocale, makeT, toLocale, type T } from "../i18n/core";
+import { intlLocale, makeT, toLocale, type Locale, type T } from "../i18n/core";
 import { projectUsersWhere } from "./access";
 import { db } from "./db";
 import { appUrl, emailEnabled, escapeHtml, sendMail } from "./mail";
@@ -11,7 +11,7 @@ import { excerpt as makeExcerpt, mentionsToPlain } from "./mentions";
 import { notificationHeadline, type NotificationKind } from "./notification-text";
 import { loadMessagingConfig, type MessagingConfig } from "./messaging-config";
 import {
-  CHANNEL_LIMIT_PER_HOUR, channelUsable, channelWants, classifyFailure, maskPhone, noticeBody, scrubSecrets, telegramNoticeText, type ChannelPrefs, type NoticeMessage,
+  CHANNEL_LIMIT_PER_HOUR, channelUsable, channelWants, classifyFailure, maskPhone, noticeBody, noticeLinkLabel, scrubSecrets, telegramNoticeText, type ChannelPrefs, type NoticeMessage,
 } from "./messaging-core";
 import { disconnectTelegramChat, sendTelegramMessage } from "./telegram";
 import { sendWhatsappNotice, whatsappLocale } from "./whatsapp";
@@ -36,14 +36,28 @@ export function mentionEmail(m: MentionMessage, t: T = makeT("es")) {
   // Las comillas del título van en la plantilla traducida: «…» en español, “…” en inglés.
   const task = t("«{title}»", { title: m.taskTitle });
   const subject = notificationHeadline(type, t, { actor: m.actorName, task });
-  const text = `${subject} (${m.projectName})${body ? `:\n\n${body}` : ""}\n\n${t("Abrir la tarea")}: ${m.url}\n`;
+  const open = noticeLinkLabel(m, t);
+  const text = `${subject} (${m.projectName})${body ? `:\n\n${body}` : ""}\n\n${open}: ${m.url}\n`;
   const headline = notificationHeadline(type, t, { actor: `<strong>${escapeHtml(m.actorName)}</strong>`, task: `<strong>${escapeHtml(task)}</strong>` });
   const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
 <p>${headline} · ${escapeHtml(m.projectName)}</p>
 ${body ? `<blockquote style="margin:12px 0;padding:8px 12px;border-left:4px solid #6366f1;background:#f8fafc;color:#334155">${escapeHtml(body)}</blockquote>` : ""}
-<p><a href="${escapeHtml(m.url)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">${escapeHtml(t("Abrir la tarea"))}</a></p>
+<p><a href="${escapeHtml(m.url)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">${escapeHtml(open)}</a></p>
 <p style="color:#94a3b8;font-size:12px">${escapeHtml(t("Puedes desactivar estos avisos en «Mi perfil» de Pizarro."))}</p></div>`;
   return { subject, text, html };
+}
+
+/** Datos de un aviso de proyecto (PROJECT_TO_TEAM) para el email y los mensajes: el proyecto ocupa el lugar de la tarea. */
+function projectNoticeMessage(n: { type: NotificationKind; excerpt: string; project: { id: string; name: string } }, locale: Locale, t: T): MentionMessage {
+  return {
+    type: n.type,
+    locale: intlLocale(locale),
+    actorName: n.excerpt || t("Usuario eliminado"),
+    taskTitle: n.project.name,
+    projectName: n.project.name,
+    excerpt: n.excerpt,
+    url: `${appUrl()}/p/${n.project.id}`,
+  };
 }
 
 /** ¿Quiere esta persona el email de este tipo de aviso? (en la app se crean siempre) */
@@ -53,6 +67,7 @@ export function emailWanted(type: NotificationKind, u: { notifyEmail: boolean; n
     case "DUE_CHANGED": return u.notifyDueEmail;
     case "COMMENT":
     case "REPLY": return u.notifyCommentEmail;
+    // Menciones y avisos de administración (un proyecto pasa a ser de equipo): «Avisos de menciones» de Mi perfil.
     default: return u.notifyEmail;
   }
 }
@@ -80,57 +95,66 @@ export async function deliver(notificationIds: string[]): Promise<void> {
       user: { select: { id: true, name: true, email: true, locale: true, active: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, channels: { select: CHANNEL_SELECT } } },
       actor: { select: { name: true } },
       task: { select: { id: true, title: true, project: { select: { id: true, name: true, isPrivate: true } } } },
+      project: { select: { id: true, name: true, isPrivate: true } },
     },
   });
+  /** Proyecto del aviso: el de su tarea o, en un aviso de proyecto, el suyo. */
+  const projectOf = (n: (typeof rows)[number]) => n.task?.project ?? n.project;
   // El envío sale después de crear el aviso: se vuelve a comprobar que cada persona sigue pudiendo ver el
   // proyecto (p. ej. la han sacado de un proyecto privado entre medias). Si no, no sale nada por fuera.
   const allowed = new Set<string>();
   const byProject = new Map<string, { isPrivate: boolean; userIds: string[] }>();
   for (const n of rows) {
-    if (!n.task) continue;
-    const entry = byProject.get(n.task.project.id) ?? { isPrivate: n.task.project.isPrivate, userIds: [] };
+    const project = projectOf(n);
+    if (!project) continue;
+    const entry = byProject.get(project.id) ?? { isPrivate: project.isPrivate, userIds: [] };
     entry.userIds.push(n.user.id);
-    byProject.set(n.task.project.id, entry);
+    byProject.set(project.id, entry);
   }
   for (const [projectId, { isPrivate, userIds }] of byProject) {
     const ok = await db.user.findMany({ where: mentionRecipientsWhere({ isPrivate }, userIds, projectId), select: { id: true } });
     for (const u of ok) allowed.add(`${projectId}:${u.id}`);
   }
   for (const n of rows) {
-    if (!n.task || !n.user.active) continue;
-    if (!allowed.has(`${n.task.project.id}:${n.user.id}`)) {
-      logEvent({ category: "notify", action: "notify.skippedNoAccess", message: `Envío externo omitido: ${n.user.name} ya no tiene acceso al proyecto`, userId: n.user.id, userName: n.user.name, projectId: n.task.project.id, details: { notificationId: n.id, taskId: n.task.id } });
+    const project = projectOf(n);
+    if (!project || !n.user.active) continue;
+    const taskId = n.task?.id ?? null;
+    if (!allowed.has(`${project.id}:${n.user.id}`)) {
+      logEvent({ category: "notify", action: "notify.skippedNoAccess", message: `Envío externo omitido: ${n.user.name} ya no tiene acceso al proyecto`, userId: n.user.id, userName: n.user.name, projectId: project.id, details: { notificationId: n.id, taskId } });
       continue;
     }
     const locale = toLocale(n.user.locale);
     const t = makeT(locale);
-    const msg: MentionMessage = {
-      type: n.type,
-      locale: intlLocale(locale),
-      actorName: n.actor?.name ?? t("Alguien"),
-      taskTitle: mentionsToPlain(n.task.title),
-      projectName: n.task.project.name,
-      excerpt: n.excerpt,
-      url: `${appUrl()}/p/${n.task.project.id}?task=${n.task.id}`,
-    };
+    const msg: MentionMessage = n.task
+      ? {
+          type: n.type,
+          locale: intlLocale(locale),
+          actorName: n.actor?.name ?? t("Alguien"),
+          taskTitle: mentionsToPlain(n.task.title),
+          projectName: project.name,
+          excerpt: n.excerpt,
+          url: `${appUrl()}/p/${project.id}?task=${n.task.id}`,
+        }
+      : // Aviso de proyecto: en la cabecera va el proyecto (en lugar de la tarea) y la cuenta borrada (el extracto).
+        projectNoticeMessage({ type: n.type, excerpt: n.excerpt, project }, locale, t);
     const update: { emailSentAt?: Date; whatsappSentAt?: Date; telegramSentAt?: Date; deliveryError?: string } = {};
     const errors: string[] = [];
-    const base = { category: "notify", userId: n.user.id, userName: n.user.name, projectId: n.task.project.id };
+    const base = { category: "notify", userId: n.user.id, userName: n.user.name, projectId: project.id };
     if (emailEnabled() && emailWanted(n.type, n.user)) {
       const t0 = performance.now();
       try {
         await sendMail({ to: n.user.email, ...mentionEmail(msg, t) });
         update.emailSentAt = new Date();
-        logEvent({ ...base, action: "notify.email", message: `Email de aviso (${n.type}) enviado a ${n.user.name}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId: n.task.id, to: maskEmail(n.user.email) } });
+        logEvent({ ...base, action: "notify.email", message: `Email de aviso (${n.type}) enviado a ${n.user.name}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId, to: maskEmail(n.user.email) } });
       } catch (err) {
         errors.push(`email: ${(err as Error).message}`);
-        logEvent({ ...base, level: "error", action: "notify.emailFailed", message: `Fallo al enviar email a ${n.user.name}: ${maskEmailsIn((err as Error).message)}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId: n.task.id, to: maskEmail(n.user.email) } });
+        logEvent({ ...base, level: "error", action: "notify.emailFailed", message: `Fallo al enviar email a ${n.user.name}: ${maskEmailsIn((err as Error).message)}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId, to: maskEmail(n.user.email) } });
       }
     }
     for (const ch of channelsFor(n.type, n.user.channels, messaging)) {
       const name = ch.channel === "TELEGRAM" ? "Telegram" : "WhatsApp";
       const key = ch.channel === "TELEGRAM" ? "telegram" : "whatsapp";
-      const details = { notificationId: n.id, taskId: n.task.id, type: n.type, ...(ch.channel === "WHATSAPP" ? { to: maskPhone(ch.address) } : {}) };
+      const details = { notificationId: n.id, taskId, type: n.type, ...(ch.channel === "WHATSAPP" ? { to: maskPhone(ch.address) } : {}) };
       // Tope por persona y canal: una avalancha de avisos no se convierte en una avalancha de mensajes (ni de gasto).
       if (!rateLimit(`notify:${key}:${n.user.id}`, CHANNEL_LIMIT_PER_HOUR[ch.channel], 60 * 60_000)) {
         if (rateLimit(`notify:${key}:${n.user.id}:warned`, 1, 60 * 60_000)) logEvent({ ...base, level: "warn", action: `notify.${key}RateLimited`, message: `Tope de ${CHANNEL_LIMIT_PER_HOUR[ch.channel]} mensajes por hora de ${name} alcanzado para ${n.user.name}: los siguientes avisos de esta hora solo quedan en la app`, details });
@@ -145,7 +169,7 @@ export async function deliver(notificationIds: string[]): Promise<void> {
           // Sin la plantilla en inglés, el aviso va entero en español (ver whatsappLocale).
           const waLocale = whatsappLocale(messaging.whatsapp, locale);
           const tw = waLocale === locale ? t : makeT(waLocale);
-          const waMsg = waLocale === locale ? msg : { ...msg, locale: intlLocale(waLocale), actorName: n.actor?.name ?? tw("Alguien") };
+          const waMsg = waLocale === locale ? msg : n.task ? { ...msg, locale: intlLocale(waLocale), actorName: n.actor?.name ?? tw("Alguien") } : projectNoticeMessage({ type: n.type, excerpt: n.excerpt, project }, waLocale, tw);
           await sendWhatsappNotice(messaging.whatsapp, ch.address, waMsg, tw, waLocale === "en");
           update.whatsappSentAt = new Date();
         }
@@ -319,4 +343,46 @@ async function externalAllowed(actorId: string | null, type: NotificationKind, t
     allowed.add(id);
   }
   return allowed;
+}
+
+/**
+ * Aviso a cada administrador activo de que un proyecto privado ha pasado a ser de equipo al borrarse la cuenta de su
+ * único miembro (eraseUser): uno por proyecto y administrador, con enlace al proyecto. En la campana siempre; por
+ * email, Telegram y WhatsApp según sus preferencias de «Avisos de menciones» (emailWanted, channelWants). El texto se
+ * escribe al leerlo, en el idioma de cada uno. `deletedName` queda en el extracto (la cuenta ya no existe). `excludeId`:
+ * el administrador que ha borrado la cuenta, que acaba de ver la lista al confirmar.
+ */
+export async function notifyProjectsToTeam(projects: readonly { id: string }[], deletedName: string, excludeId: string | null = null): Promise<string[]> {
+  if (!projects.length) return [];
+  const admins = await db.user.findMany({ where: { role: "ADMIN", active: true, ...(excludeId ? { id: { not: excludeId } } : {}) }, select: { id: true } });
+  // Solo los que siguen siendo de equipo (un administrador podría haberlo cambiado ya).
+  const still = await db.project.findMany({ where: { id: { in: projects.map((p) => p.id) }, isPrivate: false }, select: { id: true } });
+  if (!admins.length || !still.length) return [];
+  const created = await db.notification.createManyAndReturn({
+    data: still.flatMap((p) => admins.map((a) => ({ userId: a.id, actorId: null, projectId: p.id, type: "PROJECT_TO_TEAM" as const, excerpt: deletedName.slice(0, 200) }))),
+    select: { id: true, userId: true, projectId: true },
+  });
+  const [prefs, messaging] = await Promise.all([
+    db.user.findMany({ where: { id: { in: admins.map((a) => a.id) } }, select: { id: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, channels: { select: CHANNEL_SELECT } } }),
+    loadMessagingConfig(),
+  ]);
+  const wanted = new Set(prefs.filter((u) => emailWanted("PROJECT_TO_TEAM", u) || channelsFor("PROJECT_TO_TEAM", u.channels, messaging).length > 0).map((u) => u.id));
+  // Mismo tope por hora que los avisos del sistema, por destinatario.
+  const toDeliver = created.filter((c) => wanted.has(c.userId) && rateLimit(`notify:system:${c.userId}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000)).map((c) => c.id);
+  for (const p of still) {
+    logEvent({
+      category: "notify", action: "notify.project_to_team", message: `${admins.length} aviso(s) a administradores: un proyecto privado ha pasado a ser de equipo`,
+      projectId: p.id, details: { recipients: admins.map((a) => a.id), externalRecipients: created.filter((c) => c.projectId === p.id && toDeliver.includes(c.id)).map((c) => c.userId) },
+    });
+  }
+  if (toDeliver.length) {
+    const send = () => deliver(toDeliver).catch((err) => console.error("[notify] envío", err));
+    // Fuera de una petición no hay `after`: se envía aquí mismo.
+    try {
+      after(send);
+    } catch {
+      await send();
+    }
+  }
+  return created.map((c) => c.id);
 }

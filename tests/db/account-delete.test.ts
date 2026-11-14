@@ -399,13 +399,24 @@ describe("borrar la cuenta sin contraseña conocida (entra con Google)", () => {
     expectOk(await deleteMyAccount({ method: "code", code: "123456" }));
   });
 
-  test("la vuelta de Google: con la misma cuenta enlazada confirma (sin abrir otra sesión); con otra, no", async () => {
+  test("iniciar sesión con Google no cambia: basta con elegir la cuenta", async () => {
+    const target = (fn: () => Promise<unknown>) => fn().then(() => "", (err: { digest?: string }) => String(err.digest ?? err).split(";")[2] ?? "");
+    const to = new URL(await target(() => googleStart(new Request("http://localhost:3000/api/auth/google/start"))));
+    assert.equal(to.searchParams.get("prompt"), "select_account");
+    assert.equal(to.searchParams.get("max_age"), null);
+    const jar = (globalThis as unknown as { __pzTestRequest: { jar: Map<string, string> } }).__pzTestRequest.jar;
+    assert.equal(jar.get("pz_glogin")!.split(".").length, 4, "sin marca ni hora de inicio");
+  });
+
+  test("la vuelta de Google: con la misma cuenta enlazada y la contraseña recién escrita confirma (sin abrir otra sesión); con otra cuenta o sin contraseña, no", async () => {
     const { publicKey, privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const jwk = { ...publicKey.export({ format: "jwk" }), kid: "k-pruebas", alg: "RS256", use: "sig" };
-    const idToken = (sub: string, nonce: string) => {
+    /** id_token simulado; `authAgo`: hace cuántos segundos escribió la contraseña en Google (null: sin auth_time). */
+    const idToken = (sub: string, nonce: string, authAgo: number | null) => {
       const enc = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
       const now = Math.floor(Date.now() / 1000);
-      const body = `${enc({ alg: "RS256", kid: "k-pruebas", typ: "JWT" })}.${enc({ iss: "https://accounts.google.com", aud: CLIENT_ID, sub, email: "persona@example.com", email_verified: true, nonce, iat: now, exp: now + 600 })}`;
+      const auth = authAgo === null ? {} : { auth_time: now - authAgo };
+      const body = `${enc({ alg: "RS256", kid: "k-pruebas", typ: "JWT" })}.${enc({ iss: "https://accounts.google.com", aud: CLIENT_ID, sub, email: "persona@example.com", email_verified: true, nonce, iat: now, exp: now + 600, ...auth })}`;
       return `${body}.${sign("RSA-SHA256", Buffer.from(body), privateKey).toString("base64url")}`;
     };
     const jar = (globalThis as unknown as { __pzTestRequest: { jar: Map<string, string> } }).__pzTestRequest.jar;
@@ -413,12 +424,17 @@ describe("borrar la cuenta sin contraseña conocida (entra con Google)", () => {
     /** Adónde redirige (Next lanza la redirección como error con `digest`). */
     const target = (fn: () => Promise<unknown>) => fn().then(() => "", (err: { digest?: string }) => String(err.digest ?? err).split(";")[2] ?? "");
     /** Inicia «volver a entrar con Google» y vuelve de Google con la cuenta `sub`: adónde lleva la vuelta. */
-    const roundTrip = async (sub: string): Promise<string> => {
-      assert.match(await target(() => googleStart(new Request("http://localhost:3000/api/auth/google/start?purpose=account-delete"))), /^https:\/\/accounts\.google\.com\//);
+    const roundTrip = async (sub: string, authAgo: number | null = 2): Promise<string> => {
+      const to = new URL(await target(() => googleStart(new Request("http://localhost:3000/api/auth/google/start?purpose=account-delete"))));
+      assert.equal(to.origin, "https://accounts.google.com");
+      // Google tiene que volver a pedir la contraseña, aunque haya una sesión abierta.
+      assert.equal(to.searchParams.get("prompt"), "login");
+      assert.equal(to.searchParams.get("max_age"), "0");
       const cookie = jar.get("pz_glogin")!.split(".");
-      assert.equal(cookie[4], "account-delete");
+      assert.equal(cookie[5], "account-delete");
+      assert.ok(Math.abs(Number(cookie[4]) - Date.now() / 1000) < 5, "con la hora de inicio");
       globalThis.fetch = (async (url: string | URL) => {
-        if (String(url).startsWith("https://oauth2.googleapis.com/token")) return Response.json({ id_token: idToken(sub, cookie[1]!) });
+        if (String(url).startsWith("https://oauth2.googleapis.com/token")) return Response.json({ id_token: idToken(sub, cookie[1]!, authAgo) });
         if (String(url).startsWith("https://www.googleapis.com/oauth2/v3/certs")) return Response.json({ keys: [jwk] }, { headers: { "cache-control": "max-age=600" } });
         throw new Error(`fetch inesperado: ${url}`);
       }) as typeof fetch;
@@ -433,6 +449,14 @@ describe("borrar la cuenta sin contraseña conocida (entra con Google)", () => {
     const sessions = await db.session.count({ where: { userId: g.id } });
     assert.equal(await roundTrip("sub-de-otra-persona"), "http://localhost:3000/settings?tab=cuenta&delete=google_mismatch#delete-account");
     expectFail(await deleteMyAccount({ method: "google" }), /Vuelve a entrar con Google/);
+    // Con su cuenta pero sin haber escrito la contraseña ahora: sin auth_time, o de una sesión de Google anterior.
+    const stale = "http://localhost:3000/settings?tab=cuenta&delete=google_stale#delete-account";
+    assert.equal(await roundTrip(`sub-${g.id}`, null), stale);
+    assert.equal(await roundTrip(`sub-${g.id}`, 3600), stale);
+    assert.equal(await roundTrip(`sub-${g.id}`, 60), stale, "de antes de empezar (más que el margen de los relojes)");
+    expectFail(await deleteMyAccount({ method: "google" }), /Vuelve a entrar con Google/);
+    await flushLogs();
+    assert.ok(await db.appLog.findFirst({ where: { action: "auth.googleReauthFailed", userId: g.id, message: { contains: "sin escribir la contraseña" } } }));
     assert.equal(await roundTrip(`sub-${g.id}`), "http://localhost:3000/settings?tab=cuenta&delete=google#delete-account");
     assert.equal(await db.session.count({ where: { userId: g.id } }), sessions, "no abre otra sesión");
     expectOk(await deleteMyAccount({ method: "google" }));

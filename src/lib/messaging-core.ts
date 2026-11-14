@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { T } from "../i18n/shared";
-import { notificationBody, notificationHeadline, type NotificationKind } from "./notification-text";
+import { isProjectNotice, notificationBody, notificationHeadline, type NotificationKind } from "./notification-text";
 import { codeTemplateProblem, type CodeTemplateProblem } from "./whatsapp-code-text";
 
 // Parte pura (sin base de datos ni «server-only») de los avisos por Telegram y WhatsApp: claves de AppState, reglas de
@@ -211,12 +211,15 @@ export function noticeBody(m: NoticeMessage, t: T): string {
   return body;
 }
 
+/** Texto del enlace del aviso: a la tarea o, en un aviso de proyecto, al proyecto. */
+export const noticeLinkLabel = (m: Pick<NoticeMessage, "type">, t: T): string => (m.type && isProjectNotice(m.type) ? t("Abrir el proyecto") : t("Abrir la tarea"));
+
 /** Mensaje de Telegram (HTML de Telegram, todo el contenido escapado): cabecera, proyecto, extracto y enlace. */
 export function telegramNoticeText(m: NoticeMessage, t: T): TelegramHtml {
   const body = oneLine(noticeBody(m, t));
   const lines = [telegramHtml`<b>${noticeHeadline(m, t)}</b>`, telegramPlain(clip(oneLine(m.projectName), 100))];
   if (body) lines.push(telegramHtml`<i>${clip(body, 300)}</i>`);
-  lines.push(telegramPlain(""), telegramHtml`<a href="${m.url}">${t("Abrir la tarea")}</a>`);
+  lines.push(telegramPlain(""), telegramHtml`<a href="${m.url}">${noticeLinkLabel(m, t)}</a>`);
   return joinTelegramHtml(lines);
 }
 
@@ -454,6 +457,8 @@ export function channelWants(type: NotificationKind, p: ChannelPrefs): boolean {
     case "WAITING": return p.notifyDue;
     case "COMMENT":
     case "REPLY": return p.notifyComment;
+    // Los avisos de administración (un proyecto pasa a ser de equipo) van con las menciones: van dirigidos a la persona,
+    // son raros y salen por defecto.
     default: return p.notifyMention;
   }
 }

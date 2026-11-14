@@ -48,6 +48,8 @@ interface Props {
   notifications: {
     notifyEmail: boolean;
     emailAvailable: boolean;
+    /** Administrador: con las menciones salen también los avisos de administración. */
+    adminNotices?: boolean;
   };
   google: { enabled: boolean; email: string | null; message: { ok: boolean; text: string } | null };
   /** Bloque extra bajo «Avisos» (Telegram y WhatsApp, avisos por email de más tipos y resumen diario). */
@@ -323,6 +325,9 @@ function NotificationSection({ prefs }: { prefs: Props["notifications"] }) {
     <section className="card p-5">
       <h2 className="flex items-center gap-2 font-semibold"><Bell size={17} /> {t("Avisos de menciones")}</h2>
       <p className="mt-0.5 text-sm text-slate-500">{t("Siempre salen en la campana de avisos; además, puedes recibirlas por email:")}</p>
+      {prefs.adminNotices && (
+        <p className="mt-1 text-sm text-slate-500">{t("Como administrador, con las menciones te llegan también los avisos de proyectos privados que pasan a ser de equipo al borrarse una cuenta (por email y por Telegram o WhatsApp).")}</p>
+      )}
       <form
         className="mt-4 space-y-3"
         onSubmit={(e) => {
