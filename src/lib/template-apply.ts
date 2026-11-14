@@ -10,6 +10,7 @@ import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { columnsLockName } from "./advisory-locks";
 import { lockProject } from "./caps";
+import { assertProgramColumnsFit } from "./column-capacity";
 import { UNIQUE_COLUMN_ROLES } from "./constants";
 import { db } from "./db";
 import { AppError } from "./errors";
@@ -141,6 +142,8 @@ export async function applyTemplateToProject(opts: {
     const snap = await takeSnapshot(tx, projectId);
     const result = plan.mode === "ADD" ? await executeAdd(tx, projectId, plan, template, snap) : await executeReplace(tx, projectId, plan, template, shape, snap);
     await addCommon(tx, projectId, plan, snap);
+    // Ninguna columna «Programa del curso» por encima del tope de sesiones (por el rol nuevo o por las tareas unidas).
+    await assertProgramColumnsFit(tx, projectId, shape.columns);
     const data = { userId: opts.userId, templateName: opts.templateName.slice(0, 200), mode, snapshot: snap as unknown as Prisma.InputJsonValue, createdAt: new Date() };
     await tx.projectTemplateChange.upsert({ where: { projectId }, create: { projectId, ...data }, update: data });
     return { ...result, addedLabels: plan.addLabels.length };

@@ -322,6 +322,29 @@ describe("exportar e importar: papelera, cuota propia y enlaces de Drive", () =>
     assert.deepEqual([s.counts.documents, s.counts.trashedDocuments], [1, 0]);
   });
 
+  test("programa de un curso: más de 100 sesiones en una columna «Programa» se rechaza; la versión del programa va y vuelve", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const before = await db.project.count();
+    const program = (data: ProjectExportData) => ({ ...data, columns: data.columns.map((c) => ({ ...c, role: "PROGRAM" as const })) });
+    const sessions = (n: number, archived = 0) => [
+      ...Array.from({ length: n }, () => ({})),
+      ...Array.from({ length: archived }, () => ({ archivedAt: "2026-01-03T00:00:00.000Z", archivedFromColumnRef: "c1" })),
+    ];
+    await assert.rejects(
+      importProjectFile(await craft(program(minimal(sessions(101)))), asImporter(admin), { isPrivate: true }),
+      /El archivo tiene 101 tareas en la columna «Por hacer» y una columna «Programa del curso» admite como mucho 100 sesiones/,
+    );
+    assert.equal(await db.project.count(), before);
+    // 100 activas y archivadas de más: se importa, con su versión del programa (el siguiente PDF no repite un _vN).
+    const data = program(minimal(sessions(100, 5)));
+    const s = await importProjectFile(await craft({ ...data, project: { ...data.project, programVersion: 7 } }), asImporter(admin), { isPrivate: true });
+    assert.equal((await db.project.findUniqueOrThrow({ where: { id: s.projectId } })).programVersion, 7);
+    assert.equal(projectJsonOf(await buildProjectExport(s.projectId, { attachments: false, scope: "all" })).project.programVersion, 7);
+    // Sin el dato (archivos anteriores), empieza en 0.
+    const old = await importProjectFile(await craft(minimal()), asImporter(admin), { isPrivate: true });
+    assert.equal((await db.project.findUniqueOrThrow({ where: { id: old.projectId } })).programVersion, 0);
+  });
+
   test("material de un curso: enlaces de Google Slides y documentos HTML van y vuelven con su tipo", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const f = await makeProject({ members: [admin] });

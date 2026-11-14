@@ -36,6 +36,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/r50-plantilla-e2e.mjs` | 39 | ~1 min |
 | Plantilla «Curso o máster» y «Publicar programa (PDF)» | `e2e/r50-curso-e2e.mjs` | 57 | ~40 s |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/r50-seleccion-e2e.mjs` | 76 | ~1 min |
+| «Programa del curso»: versiones del PDF y tope de 100 sesiones (ronda 51) | `e2e/r51-programa-e2e.mjs` | 38 | ~1 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
@@ -219,7 +220,7 @@ Crea un proyecto con la plantilla desde *Nuevo proyecto* (la sesión se abre com
 tablero), comprueba sus columnas (con «Programa», rol *Programa del curso*), tipos y campo *Fecha de inicio*; crea dos
 sesiones con el tipo «Sesión» (título y descripción automáticos, fecha y responsable) y otra de varios días con Markdown;
 publica el programa con el responsable, lo descarga y comprueba su texto con `pdftotext` (orden, fechas, rango, Markdown
-pintado, sin la archivada), la copia «Programa – fecha.pdf» en Documentación y «Abrir Documentación»; la vista previa no
+pintado, sin la archivada), la copia «Programa – fecha_v1.pdf» (versión 1) en Documentación y «Abrir Documentación»; la vista previa no
 guarda; el PDF en inglés sin guardar; con la Documentación llena (200 documentos) se descarga igual y avisa; y el rol en el
 menú de la columna con su icono y su explicación (se puede repetir y quitar). Borra su proyecto al terminar. Necesita
 `pdftotext` (poppler-utils). Genera cuatro PDF con la misma persona: el límite es de cinco por minuto, así que entre dos
@@ -227,6 +228,21 @@ pasadas seguidas espera un minuto. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r50-curso-e2e.mjs   # PART=tpl,pdf,en,full,role
+```
+
+## «Programa del curso»: versiones del PDF y tope de 100 sesiones (ronda 51)
+
+Versiones: cada «Publicar» con la casilla de Documentación marcada guarda «Programa – fecha_vN.pdf» como documento nuevo
+(no sustituye al anterior); el diálogo dice «(versión N del programa)»; borrada para siempre la 2, la siguiente es la 3;
+sin guardar no gasta número. Tope: el contador de la columna dice «99/100»; se crea la 100 con «+», que queda desactivado
+con su motivo; arrastrar una tarjeta de otra columna y «Mover a…» a la columna llena avisan («La columna «Programa» admite
+como mucho 100 sesiones.») y no mueven nada; con 103 por datos antiguos, el diálogo avisa antes y después de publicar y la
+vista previa lleva `X-Pizarro-Program-Omitted: 3`; el rol no se da a una columna con 101 tarjetas; y los textos en inglés a
+390 px. Crea y borra su propio proyecto privado. Genera cuatro PDF con el admin y tres con la segunda persona (límite: cinco
+por minuto y persona): después de `r50-curso-e2e.mjs` (cuatro con el admin), espera un minuto. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r51-programa-e2e.mjs   # PART=version,limite,pdf,rol,en
 ```
 
 ## Comentarios a la vez, red lenta, dos pestañas y release renombrada (caza de bugs 48c)

@@ -252,6 +252,10 @@ model Project {
   storageQuotaMb  Int?
   /// Campos opcionales de las tareas que el proyecto tiene activados (ver lib/task-fields.ts); los datos se conservan al desactivar.
   taskFields  String[] @default([])
+  /// Última versión guardada del programa del curso («Publicar programa» con copia en Documentación): el PDF se guarda como
+  /// «Programa – fecha_vN.pdf» con N = programVersion + 1. Solo sube (no baja al borrar el documento); es del proyecto, no de
+  /// cada columna «Programa», para que dos columnas no den dos documentos con el mismo nombre (ver course-program.ts).
+  programVersion Int   @default(0)
   position    Float    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
