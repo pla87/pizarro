@@ -10,6 +10,7 @@ import type { T } from "@/i18n/core";
 import type { useToast } from "../ui/Toast";
 import { focusCard } from "./shortcuts";
 import { keyboardBlock, selectionGroup, type BlockMove, type BlockPlacement } from "./groupDrag";
+import type { MoveTurns } from "./moveTurns";
 
 type Toast = ReturnType<typeof useToast>;
 
@@ -17,8 +18,13 @@ interface Deps {
   currentUserId: string;
   getTask: (id: string) => BoardTask | undefined;
   sortedColumns: BoardColumn[];
-  /** Ids por columna, sin filtrar y en orden. */
-  baseItems: Record<string, string[]>;
+  /**
+   * Ids por columna, sin filtrar y en orden, de lo último guardado (como getTask): no del último dibujo, que puede no
+   * tener aún el movimiento anterior si se pulsan dos atajos seguidos.
+   */
+  getItems: () => Record<string, string[]>;
+  /** Turnos de los movimientos: la respuesta de uno no pisa lo que ya ha pintado otro posterior (moveTurns.ts). */
+  moveTurns: MoveTurns;
   patchTask: (id: string, patch: Partial<BoardTask>) => void;
   upsertTask: (task: BoardTask) => void;
   track: <R>(p: Promise<R>) => Promise<R>;
@@ -67,7 +73,8 @@ export function useCardActions(deps: Deps) {
      * ha hecho (o no había adónde ir); `false` si la tarjeta no forma parte de una selección de varias.
      */
     const moveGroup = async (id: string, move: BlockMove): Promise<boolean> => {
-      const { getSelected, sortedColumns, baseItems, moveBlock } = ref.current;
+      const { getSelected, sortedColumns, getItems, moveBlock } = ref.current;
+      const baseItems = getItems();
       const columnOrder = sortedColumns.map((c) => c.id);
       const group = selectionGroup(getSelected(), id, columnOrder, baseItems);
       if (!group) return false;
@@ -92,35 +99,39 @@ export function useCardActions(deps: Deps) {
 
       moveToAdjacentColumn: async (id: string, dir: -1 | 1) => {
         if (await moveGroup(id, dir < 0 ? "left" : "right")) return;
-        const { getTask, sortedColumns, baseItems, patchTask, upsertTask, track, toast, t } = ref.current;
+        const { getTask, sortedColumns, getItems, moveTurns, patchTask, upsertTask, track, toast, t } = ref.current;
         const task = getTask(id);
         if (!task) return;
         const target = sortedColumns[sortedColumns.findIndex((c) => c.id === task.columnId) + dir];
         if (!target) return;
         if (!(await ref.current.confirmLeaveReview([id], target.id))) return focusCard(id);
         // Al final de la columna destino.
-        const prevId = baseItems[target.id]?.at(-1) ?? null;
+        const prevId = getItems()[target.id]?.at(-1) ?? null;
         const position = positionBetween(prevId ? getTask(prevId)?.position : null, null);
         patchTask(id, { columnId: target.id, position, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() });
         focusCard(id);
+        const turn = moveTurns.start([id]);
         const res = await track(moveTask(id, target.id, prevId, null));
+        const latest = moveTurns.isLatest(id, turn);
         if (!res.ok) {
-          upsertTask(task);
-          focusCard(id);
+          if (latest) {
+            upsertTask(task);
+            focusCard(id);
+          }
           return toast(res.error, "error");
         }
-        patchTask(id, { position: res.data.position });
+        if (latest) patchTask(id, { position: res.data.position });
         res.data.spawned.forEach(upsertTask);
         toast(t("Movida a «{name}»", { name: target.name }));
       },
 
       moveWithinColumn: async (id: string, dir: -1 | 1) => {
         if (await moveGroup(id, dir < 0 ? "up" : "down")) return;
-        const { getTask, baseItems, patchTask, upsertTask, track, toast } = ref.current;
+        const { getTask, getItems, moveTurns, patchTask, upsertTask, track, toast } = ref.current;
         const task = getTask(id);
         if (!task) return;
         // Lista completa de la columna (sin filtrar): los vecinos enviados al servidor son los reales.
-        const list = baseItems[task.columnId] ?? [];
+        const list = getItems()[task.columnId] ?? [];
         const index = list.indexOf(id);
         const target = index + dir;
         if (index < 0 || target < 0 || target >= list.length) return;
@@ -130,7 +141,9 @@ export function useCardActions(deps: Deps) {
         const position = positionBetween(prevId ? getTask(prevId)?.position : null, nextId ? getTask(nextId)?.position : null);
         patchTask(id, { position });
         focusCard(id);
+        const turn = moveTurns.start([id]);
         const res = await track(moveTask(id, task.columnId, prevId, nextId));
+        if (!moveTurns.isLatest(id, turn)) return res.ok ? undefined : toast(res.error, "error");
         if (!res.ok) {
           upsertTask(task);
           focusCard(id);

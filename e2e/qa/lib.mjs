@@ -72,6 +72,17 @@ export async function eqEventually(name, fn, expected, opts = {}) {
   return check(name, a === e, `esperado ${e}, obtenido ${a}`);
 }
 
+/**
+ * Como check, pero reintenta hasta que `fn` devuelva algo verdadero (lo que llega después de la respuesta: el tablero tras
+ * deshacer, el diálogo que se cierra al responder el servidor, los eventos del historial, que se escriben al final de la
+ * acción). `fn` puede devolver [ok, detalle] para el mensaje del fallo.
+ */
+export async function checkEventually(name, fn, opts = {}) {
+  let ok = false, detail = "";
+  await waitFor(async () => { const r = await fn(); [ok, detail] = Array.isArray(r) ? r : [r, ""]; return !!ok; }, opts);
+  return check(name, ok, typeof detail === "string" ? detail : JSON.stringify(detail));
+}
+
 // ---------- base de datos ----------
 let client = null;
 export async function dbc() {
@@ -190,11 +201,22 @@ export async function session({ email = ADMIN, viewport = { width: 1500, height:
   const ctx = await b.newContext({ viewport, locale: "es-ES", acceptDownloads: true, ...(mobile ? { hasTouch: true, isMobile: true } : {}) });
   if (init) await ctx.addInitScript(init);
   const page = await ctx.newPage();
+  await throttle(page);
   const errors = [];
   page.on("pageerror", (e) => errors.push("pageerror: " + e.message.slice(0, 300)));
   page.on("console", (m) => { if (m.type() === "error" && !IGNORED_CONSOLE.some((r) => r.test(m.text()))) errors.push("console.error: " + m.text().slice(0, 300)); });
   await login(page, email);
   return { ctx, page, errors };
+}
+/**
+ * CPU frenada (QA_CPU_THROTTLE=4: cuatro veces más lenta, con Emulation.setCPUThrottlingRate de CDP) en las páginas de
+ * `session()`: saca a la luz las comprobaciones que no esperan al estado que miran, como con la máquina cargada.
+ */
+const CPU_THROTTLE = Number(process.env.QA_CPU_THROTTLE || 0);
+export async function throttle(page) {
+  if (!(CPU_THROTTLE > 1)) return;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: CPU_THROTTLE });
 }
 export async function login(page, email) {
   await page.goto(BASE + "/login");
@@ -207,7 +229,28 @@ export async function board(page) {
   await page.locator(`[aria-label="${COL.backlog}"]`).first().waitFor({ timeout: 20000 });
   await sleep(500); // hidratación de React (los atajos se registran al montar)
 }
-export async function reload(page) { await page.reload(); await board(page); }
+/**
+ * Navegación de la página que se repite si la cancela la propia app: Next llama a history.replaceState cada vez que aplica
+ * un estado nuevo del router (la respuesta de una acción, un refresco) y, si eso coincide con el arranque de una recarga o
+ * de un goto, Chromium cancela la navegación pendiente y Playwright da «net::ERR_ABORTED; maybe frame was detached?»: la
+ * página sigue donde estaba. Se vuelve a pedir (como haría quien pulsa F5 otra vez); cualquier otro error, o que tampoco
+ * salga a la tercera, falla.
+ */
+async function navigateRetrying(go) {
+  for (let i = 0; ; i++) {
+    try {
+      return await go();
+    } catch (e) {
+      if (i >= 2 || !/ERR_ABORTED/.test(String(e?.message))) throw e;
+      await sleep(300);
+    }
+  }
+}
+export const goto = (page, url, opts) => navigateRetrying(() => page.goto(url, opts));
+export async function reload(page) {
+  await navigateRetrying(() => page.reload());
+  await board(page);
+}
 /** Espera a que el canal en vivo (SSE) del tablero esté abierto: la raíz del tablero lleva data-live="open" (Board.tsx). */
 export async function liveOpen(page, timeout = 10000) {
   await page.locator("[data-live=open]").first().waitFor({ state: "attached", timeout });

@@ -17,7 +17,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 
 | Suite | Script | Comprobaciones | Tiempo |
 |---|---|---|---|
-| QA (9 escenarios) | `e2e/qa/run-all.mjs` | 386 | ~5 min |
+| QA (9 escenarios) | `e2e/qa/run-all.mjs` | 388 | ~5 min |
 | Tablero | `e2e/board-e2e.mjs` | 360 | ~4 min |
 | Pegar | `e2e/paste-e2e.mjs` | 72 | ~1 min |
 | Cabecera y atajos (caza de bugs 48a) | `e2e/bh48a-e2e.mjs` | 42 | ~1 min |
@@ -25,6 +25,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/bh48c-e2e.mjs` | 44 | ~1 min |
 | Copia con imagen en la descripción, sin red en calendario, borradores y releases (caza de bugs 49) | `e2e/bh49-e2e.mjs` | 27 | ~1 min |
 | Índice de un HTML en Documentación y baja con Google sin email (caza de bugs 50b) | `e2e/bh50b-e2e.mjs` | 39 | ~30 s |
+| Mover con el teclado varias veces seguidas (caza de bugs 51b) | `e2e/bh51b-e2e.mjs` | 34 | ~20 s |
 | Aplicar plantilla: paso 2 y archivadas de columnas unidas (caza de bugs 50a) | `e2e/bh50a-e2e.mjs` | 22 | ~20 s |
 | Plan de trabajo para IA: Markdown con descripciones raras, fijas entre paneles, título a 390 px y más de 500 tareas (caza de bugs 51a) | `e2e/bh51a-e2e.mjs` | 27 | ~40 s |
 | Release de más de 500 tareas (o 200 con adjuntos), «+» flotante con el programa lleno y panel de fijas en el móvil (caza de bugs 51c) | `e2e/bh51c-e2e.mjs` | 55 | ~35 s |
@@ -62,6 +63,15 @@ cd e2e/qa && BASE=http://localhost:3231 DATABASE_URL=$DBURL APP_DIR=$PWD/../.. n
 
 `run-all.mjs` crea (o vacía) la base de `DATABASE_URL` (aquí `pz_qa`), aplica migraciones y arranca su propio servidor
 en el puerto de `BASE`, que para al terminar: no debe haber otro servidor escuchando ahí.
+
+Con la máquina cargada: `QA_CPU_THROTTLE=4` (o 6) frena la CPU de las páginas que abren las suites
+(`Emulation.setCPUThrottlingRate` de CDP; vale para todas las que usan `L.session`). Así salen las comprobaciones que no
+esperan al estado que miran. Reglas de las suites: lo que la app pinta al responder el servidor (el tablero tras deshacer,
+el diálogo que se cierra al archivar, la copia de un duplicado) y lo que escribe al final de la acción (el historial de la
+tarea, `TaskEvent`) se comprueban con `L.eqEventually` / `L.checkEventually`, no justo después de ver el cambio en la BD;
+lo optimista (arrastrar, Alt+flechas) puede comprobarse al momento. Recargar y navegar con `L.reload` / `L.goto`: si la
+respuesta de una acción llega justo al empezar la recarga, Chromium la cancela (`net::ERR_ABORTED; maybe frame was
+detached?`) y se repite.
 
 ## Instalación desde cero
 
@@ -131,6 +141,17 @@ y lo abre. Misma base; servidor con Google configurado (valores de prueba, no ll
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh50b-e2e.mjs   # PART=anchor,googleonly
+```
+
+## Mover con el teclado varias veces seguidas (caza de bugs 51b)
+
+En un tablero con 250 tarjetas: dos Alt+↑ seguidos suben la tarjeta dos puestos, y con las acciones del servidor medio
+segundo más lentas (red lenta, `page.route`), Alt+→ y Alt+← seguidos la dejan al final de su columna y ahí sigue cuando
+llega la respuesta del primero (antes esa respuesta le ponía la posición de la otra columna y el Alt+↑ siguiente la subía
+dos puestos o no hacía nada); el foco sigue en la tarjeta. Tres rondas (`ROUNDS`). Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh51b-e2e.mjs   # PART=atajos · QA_CPU_THROTTLE=4
 ```
 
 ## Aplicar plantilla: paso 2 y archivadas de columnas unidas (caza de bugs 50a)

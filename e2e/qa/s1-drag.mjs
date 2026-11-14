@@ -30,12 +30,13 @@ export async function run() {
   await U.undoKey(p, "Control+z");
   await L.eqEventually("deshacer reordenar: orden en BD", () => L.dbOrder(COL.backlog), ["A", "B", "C", "D"]);
   L.eq("deshacer reordenar: posición original exacta", await pos("D"), posD0);
-  L.eq("deshacer reordenar: orden en la UI", await U.uiOrder(p, COL.backlog), ["A", "B", "C", "D"]);
+  // El tablero se actualiza al responder el deshacer (y el refresco que pide): después de la BD, no a la vez.
+  await L.eqEventually("deshacer reordenar: orden en la UI", () => U.uiOrder(p, COL.backlog), ["A", "B", "C", "D"]);
   L.check("deshacer reordenar: hay una entrada REDO", (await L.undoEntries("REDO")).length === 1);
   await U.logHas("deshacer reordenar: AppLog «Deshizo»", t0, "undo.undoLast", /^Deshizo: Reordenó/);
   await U.undoKey(p, "Alt+Shift+z", "REDO");
   await L.eqEventually("rehacer reordenar: orden en BD", () => L.dbOrder(COL.backlog), ["D", "A", "B", "C"]);
-  L.eq("rehacer reordenar: orden en la UI", await U.uiOrder(p, COL.backlog), ["D", "A", "B", "C"]);
+  await L.eqEventually("rehacer reordenar: orden en la UI", () => U.uiOrder(p, COL.backlog), ["D", "A", "B", "C"]);
   await U.logHas("rehacer reordenar: AppLog «Rehízo»", t0, "undo.redoLast", /^Rehízo: Reordenó/);
   // Alt+Z también deshace
   await U.undoKey(p, "Alt+z");
@@ -61,8 +62,8 @@ export async function run() {
   L.eq("cruzar columnas: UI origen", await U.uiOrder(p, COL.backlog), ["A", "C", "D"]);
   await L.reload(p);
   L.eq("cruzar columnas: UI destino tras recargar", await U.uiOrder(p, COL.doing), ["X", "B", "Y"]);
-  const ev = await L.events("B");
-  L.check("cruzar columnas: evento «move» con el texto del historial", ev.length === 1 && ev[0].code === "move" && JSON.parse(ev[0].label).p.from === "Backlog" && JSON.parse(ev[0].label).p.to === "En progreso" && JSON.parse(ev[0].label).k === "Movió la tarea de «{from}» a «{to}»", JSON.stringify(ev));
+  // El historial se escribe al final de la acción, después del cambio en la BD.
+  await L.checkEventually("cruzar columnas: evento «move» con el texto del historial", async () => { const ev = await L.events("B"); return [ev.length === 1 && ev[0].code === "move" && JSON.parse(ev[0].label).p.from === "Backlog" && JSON.parse(ev[0].label).p.to === "En progreso" && JSON.parse(ev[0].label).k === "Movió la tarea de «{from}» a «{to}»", ev]; });
   await U.logHas("cruzar columnas: AppLog «Movió «B» de «Backlog» a «En progreso»»", t0, "tasks.moveTask", "Movió «B» de «Backlog» a «En progreso»");
   await U.openTask(p, "B");
   L.check("cruzar columnas: el historial del diálogo muestra «Movió la tarea de «Backlog» a «En progreso»»", /Movió la tarea de «Backlog» a «En progreso»/.test(await U.historyText(p)));
@@ -77,7 +78,7 @@ export async function run() {
   await L.eqEventually("deshacer cruce: B vuelve a Backlog en su sitio", () => L.dbOrder(COL.backlog), ["A", "B", "C", "D"]);
   L.eq("deshacer cruce: En progreso", await L.dbOrder(COL.doing), ["X", "Y"]);
   L.eq("deshacer cruce: posición original de B", await pos("B"), 2048);
-  L.eq("deshacer cruce: UI", [await U.uiOrder(p, COL.backlog), await U.uiOrder(p, COL.doing)], [["A", "B", "C", "D"], ["X", "Y"]]);
+  await L.eqEventually("deshacer cruce: UI", async () => [await U.uiOrder(p, COL.backlog), await U.uiOrder(p, COL.doing)], [["A", "B", "C", "D"], ["X", "Y"]]);
   await U.undoKey(p, "Alt+Shift+z", "REDO"); // rehace A
   await U.undoKey(p, "Alt+Shift+z", "REDO"); // rehace B
   await L.eqEventually("rehacer cruce: B otra vez entre X e Y", () => L.dbOrder(COL.doing), ["X", "B", "Y"]);
@@ -88,8 +89,7 @@ export async function run() {
   await U.drag(p, "C", { column: COL.closed });
   await L.eqEventually("a columna vacía: BD", () => L.dbOrder(COL.closed), ["C"]);
   L.eq("a columna vacía: UI", await U.uiOrder(p, COL.closed), ["C"]);
-  const evC = await L.events("C");
-  L.check("a columna terminada: evento «done»", evC.length === 1 && evC[0].code === "done" && JSON.parse(evC[0].label).p.to === "Cerrado", JSON.stringify(evC));
+  await L.checkEventually("a columna terminada: evento «done»", async () => { const evC = await L.events("C"); return [evC.length === 1 && evC[0].code === "done" && JSON.parse(evC[0].label).p.to === "Cerrado", evC]; });
   await U.undoKey(p, "Control+z");
   await L.eqEventually("deshacer: C vuelve a Backlog", () => L.dbOrder(COL.closed), []);
   L.eq("deshacer: orden de Backlog", await L.dbOrder(COL.backlog), ["C", "D", "A"]);
