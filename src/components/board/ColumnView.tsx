@@ -95,6 +95,10 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
         // Con 1-3 miden lo mismo que con 4: (ancho útil - barra «+» de 2.5 rem - 4 huecos de 0.75 rem) / 4. Es CSS puro, sin estado.
         total >= 4 ? "md:min-w-72 md:flex-1" : "md:w-[calc((100%-5.5rem)/4)] md:min-w-72",
         mobileHidden && "max-md:hidden",
+        // Móvil: el panel de fijas del pie («Siempre en la release» / «… en el plan») acaba por encima del «+» flotante
+        // (que mide 3,5 rem a 1,25 rem del borde: 4,75 rem más el hueco de la zona segura); antes lo tapaba. Las demás
+        // columnas siguen hasta abajo: su lista ya deja sitio a los botones flotantes con el relleno del final.
+        withFixed && "max-md:mb-[calc(env(safe-area-inset-bottom)+4.75rem)]",
         // Columnas especiales (con botón de acción): el mismo borde suave del color de la app.
         action != null && !wipOver && "ring-1 ring-brand-500/30",
       )}

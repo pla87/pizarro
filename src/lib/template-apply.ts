@@ -288,7 +288,8 @@ async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, temp
     if (await tx.task.count({ where: { columnId: { in: remove } } })) throw new AppError("Los datos han cambiado mientras tanto. Recarga e inténtalo de nuevo.");
     await tx.column.deleteMany({ where: { id: { in: remove }, projectId } });
   }
-  // Las tareas fijas solo existen en la columna de release: las que se quedan fuera pasan a normales.
+  // Las tareas fijas solo existen en la columna de release y en las de plan de trabajo para IA (EVERGREEN_COLUMN_ROLES):
+  // las que se quedan en otra columna pasan a normales.
   const stray = await tx.task.findMany({ where: { projectId, evergreen: true, column: { role: { notIn: [...EVERGREEN_COLUMN_ROLES] } } }, select: taskSelect });
   if (stray.length) {
     note(stray);
@@ -488,7 +489,7 @@ export async function undoTemplateChange(projectId: string, now = new Date()): P
     await ensureUsableKind(tx, projectId);
     const budget = await tx.column.count({ where: { projectId, role: "BUDGET" } });
     await tx.project.update({ where: { id: projectId }, data: { taskFields: normalizeTaskFields([...snap.taskFields, ...(budget ? ["cost"] : [])]) } });
-    // Las tareas fijas fuera de la columna de release pasan a normales (la marca devuelta solo vale allí).
+    // Las tareas fijas fuera de la columna de release o de las de plan para IA pasan a normales (la marca devuelta solo vale allí).
     await tx.task.updateMany({ where: { projectId, evergreen: true, column: { role: { notIn: [...EVERGREEN_COLUMN_ROLES] } } }, data: { evergreen: false, evergreenEvery: 1 } });
 
     await tx.projectTemplateChange.delete({ where: { id: row.id } });

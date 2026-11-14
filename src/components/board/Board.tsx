@@ -34,6 +34,7 @@ import { BoardContext, useSelectionSize, type BoardApi } from "./context";
 import { createBoardStores, createStore, mergeTasks, tasksById, useStableValue } from "./stores";
 import { ColumnView } from "./ColumnView";
 import { wipExceeded } from "@/lib/wip";
+import { columnAtSessionLimit, PROGRAM_MAX_SESSIONS } from "@/lib/program-limit";
 import { boardDragA11y } from "./drag-a11y";
 import { EVERGREEN_DROPPABLE_PREFIX } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
@@ -748,7 +749,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const sel = stores.selection.get();
     if (sel.size && [...sel].some((id) => !matchingIds.has(id))) stores.selection.set(new Set([...sel].filter((id) => matchingIds.has(id))));
   }, [matchingIds, stores]);
-  // Tareas evergreen por columna: fuera de la lista ordenable, se muestran en el pie de la columna de la release.
+  // Tareas evergreen por columna: fuera de la lista ordenable, se muestran en el pie de su columna (la de la release o una de plan para IA).
   const evergreenByColumn = useMemo(() => {
     const map: Record<string, string[]> = {};
     for (const t of [...tasks].sort(compareTaskOrder)) if (t.evergreen) (map[t.columnId] ??= []).push(t.id);
@@ -1368,6 +1369,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sortedColumns, baseItems, evergreenByColumn],
   ));
+  // «+» flotante: crea en la columna que se ve en el móvil; si es un «Programa del curso» con el tope de sesiones, no abre
+  // «Nueva tarea» (como el «+» de su cabecera, desactivado) y dice por qué.
+  const mobileTarget = sortedColumns.find((c) => c.id === activeMobileColumn);
+  const mobileColumnFull = mobileTarget && columnAtSessionLimit(mobileTarget.role, cardCounts[mobileTarget.id] ?? 0)
+    ? t("La columna «{name}» admite como mucho {max} sesiones.", { name: mobileTarget.name, max: PROGRAM_MAX_SESSIONS })
+    : null;
   const dndBoard = useMemo(
     () => (
       <DndContext
@@ -1625,7 +1632,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         </div>
         {view === "list" ? <ListView tasks={tasks} matchingIds={matchingIds} filtering={filtering} /> : dndBoard}
 
-        <FloatingCreateButtons onBulk={() => setBulk({ columnId: activeMobileColumn })} onNew={() => setNewTask({ columnId: activeMobileColumn })} />
+        <FloatingCreateButtons
+          onBulk={() => setBulk({ columnId: activeMobileColumn })}
+          onNew={() => setNewTask({ columnId: activeMobileColumn })}
+          fullReason={mobileColumnFull}
+          onFull={(reason) => toast(reason, "error")}
+        />
 
         <SelectionBarHost
           columns={sortedColumns}
@@ -1713,8 +1725,12 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
 /**
  * Botones flotantes de crear (móvil y tableta). Mientras hay selección se retiran: la barra de selección ocupa el pie
  * de la pantalla con sus acciones y así ni la tapan ni quedan tapados (vuelven al limpiar la selección).
+ * `fullReason`: la columna en la que crearía el «+» (la que se ve en el móvil) no admite más tareas («Programa del curso»
+ * con el tope de sesiones). El «+» se ve desactivado, como el de la cabecera de la columna, pero sigue respondiendo al
+ * toque: en vez de abrir «Nueva tarea» (que el servidor rechazaría al crear) dice por qué (`onFull`). «Crear varias
+ * tareas» sigue disponible: su diálogo deja elegir otra columna.
  */
-function FloatingCreateButtons({ onBulk, onNew }: { onBulk: () => void; onNew: () => void }) {
+function FloatingCreateButtons({ onBulk, onNew, fullReason, onFull }: { onBulk: () => void; onNew: () => void; fullReason: string | null; onFull: (reason: string) => void }) {
   const t = useT();
   const selecting = useSelectionSize() > 0;
   if (selecting) return null;
@@ -1728,9 +1744,18 @@ function FloatingCreateButtons({ onBulk, onNew }: { onBulk: () => void; onNew: (
         <PlusStack size={22} />
       </button>
       <button
-        onClick={onNew}
-        className="fixed right-5 bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] z-30 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-on-brand shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95 lg:hidden"
+        onClick={() => (fullReason ? onFull(fullReason) : onNew())}
+        className={cn(
+          "fixed right-5 bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] z-30 flex h-14 w-14 items-center justify-center rounded-full shadow-lg lg:hidden",
+          // Desactivado: gris y opaco (con transparencia se verían las tarjetas a través).
+          fullReason
+            ? "cursor-not-allowed bg-slate-300 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
+            : "bg-brand-600 text-on-brand shadow-brand-600/30 hover:bg-brand-700 active:scale-95",
+        )}
         aria-label={t("Nueva tarea o captura")}
+        aria-disabled={fullReason ? true : undefined}
+        title={fullReason ?? undefined}
+        data-column-full={fullReason ? true : undefined}
       >
         <Plus size={26} />
       </button>

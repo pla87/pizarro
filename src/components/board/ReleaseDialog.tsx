@@ -4,7 +4,7 @@ import { appTimeZone } from "@/lib/format";
 import { ArrowLeft, Check, ClipboardCopy, Download, FileArchive, FileText, Loader2, Rocket } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { countReleasesOn, deployRelease, getReleaseTaskDetails } from "@/actions/releases";
-import { buildReleaseMarkdown, computeReleaseCodes, defaultReleaseTitle, evergreenDue, isoDate, releaseFileName, releasesUntilDue, releaseZipName, swapTemplateBlock } from "@/lib/release";
+import { buildReleaseMarkdown, computeReleaseCodes, defaultReleaseTitle, evergreenDue, isoDate, RELEASE_MAX_ATTACHMENT_TASKS, RELEASE_MAX_TASKS, releaseFileName, releasesUntilDue, releaseZipName, swapTemplateBlock } from "@/lib/release";
 import type { BoardTask, TemplateOption } from "@/lib/types";
 import { useLocale, useT } from "@/i18n/client";
 import { copyText, downloadText } from "../ui/clipboard";
@@ -76,6 +76,9 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
    */
   const [generatedTasks, setGeneratedTasks] = useState<{ taskId: string; columnId: string; title: string }[]>([]);
   const selectedTasks = useMemo(() => tasks.filter((t) => chosen.has(t.id)), [tasks, chosen]);
+  // Topes de la release (los mismos que el servidor): con más, «Generar» o «Marcar como desplegado» se desactivan con su
+  // motivo (antes llegaba el error de zod en inglés).
+  const tooMany = selectedTasks.length > RELEASE_MAX_TASKS;
   const [headerId, setHeaderId] = useState(templates.headers[0]?.id ?? "");
   const [footerId, setFooterId] = useState(templates.footers[0]?.id ?? "");
   /** Del usuario primero y luego los del proyecto: así se buscan por id. */
@@ -194,6 +197,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   };
 
   const attachmentTotal = zipItems.reduce((n, i) => n + i.count, 0);
+  const tooManyAttachments = zipItems.length > RELEASE_MAX_ATTACHMENT_TASKS;
 
   const downloadAttachments = async () => {
     let changed: string | null = null;
@@ -278,9 +282,13 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
       footer={
         step === "select" ? (
           <>
-            <TemplateSourceNote projectId={board.project.id} projectTab="releases" withProject={projectTemplates.headers.length + projectTemplates.footers.length > 0} />
+            {tooMany ? (
+              <span className="mr-auto text-xs text-red-600 dark:text-red-400" role="alert">{t("Una release admite como mucho 500 tareas: quita alguna de la selección.")}</span>
+            ) : (
+              <TemplateSourceNote projectId={board.project.id} projectTab="releases" withProject={projectTemplates.headers.length + projectTemplates.footers.length > 0} />
+            )}
             <button className="btn-secondary" onClick={() => void requestClose()}>{t("Cancelar")}</button>
-            <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || loadingDetails}>
+            <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || tooMany || loadingDetails}>
               {loadingDetails && <Loader2 size={15} className="animate-spin" />} {t("Generar con {n} tarea(s)", { n: selectedTasks.length })}
             </button>
           </>
@@ -297,11 +305,11 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
               <FileText size={15} /> .txt
             </button>
             {attachmentTotal > 0 && (
-              <button className="btn-secondary" onClick={downloadAttachments} disabled={zipping}>
+              <button className="btn-secondary" onClick={downloadAttachments} disabled={zipping || tooManyAttachments}>
                 {zipping ? <Loader2 size={15} className="animate-spin" /> : <FileArchive size={15} />} {t("Descargar adjuntos ({n})", { n: attachmentTotal })}
               </button>
             )}
-            <button className="btn-primary" onClick={deploy} disabled={busy || draft.empty() || (destination === "IN_PRODUCTION" && !inProduction)}>
+            <button className="btn-primary" onClick={deploy} disabled={busy || draft.empty() || tooManyAttachments || (destination === "IN_PRODUCTION" && !inProduction)}>
               {busy ? <Loader2 size={15} className="animate-spin" /> : <Rocket size={15} />} {t("Marcar como desplegado")}
             </button>
           </>
@@ -345,6 +353,9 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
               {t("Archivar tarjetas")}
             </label>
           </fieldset>
+          {tooManyAttachments && (
+            <p className="text-xs text-red-600 dark:text-red-400" role="alert">{t("Una release admite como mucho 200 tareas con adjuntos: quita alguna de la selección.")}</p>
+          )}
         </div>
       )}
     </Modal>

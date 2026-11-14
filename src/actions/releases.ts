@@ -14,7 +14,7 @@ import { AppError } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
 import { spawnRecurrences } from "@/lib/recurrence";
 import { lastPositionIn, lockColumns, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
-import { computeReleaseCodes, titleWithReleaseCode, zonedDayRange } from "@/lib/release";
+import { computeReleaseCodes, RELEASE_MAX_ATTACHMENT_TASKS, RELEASE_MAX_TASKS, titleWithReleaseCode, zonedDayRange } from "@/lib/release";
 import { runReleaseAttachmentsJob, type PendingJob } from "@/lib/release-attachments";
 import { requireUser } from "@/lib/session";
 import { roundMb } from "@/lib/attachment-limit";
@@ -28,26 +28,31 @@ import * as v from "@/lib/validation";
 import { getT } from "@/i18n/server";
 import { mentionsToPlain } from "@/lib/mentions";
 
+// Mensajes propios en los topes de las listas: sin ellos, con más tareas el diálogo mostraba el error de zod en inglés
+// («Too big: expected array…»). El diálogo ya no deja pasar de RELEASE_MAX_TASKS (ni desplegar con más de
+// RELEASE_MAX_ATTACHMENT_TASKS con adjuntos); esto es para quien llame a la acción con más.
+const releaseTaskIds = z.array(v.id).max(RELEASE_MAX_TASKS, "Una release admite como mucho 500 tareas: quita alguna de la selección.");
+
 const deploySchema = z.object({
   projectId: v.id,
   title: v.title,
   content: z.string().min(1, "El contenido está vacío.").max(MAX_RELEASE_CONTENT, "El contenido es demasiado largo."),
-  taskIds: z.array(v.id).max(500),
+  taskIds: releaseTaskIds,
   destination: z.enum(["IN_PRODUCTION", "ARCHIVE"]),
   /** Tareas con adjuntos y su código en el texto (F1, C2…), en el orden del diálogo. */
-  attachments: z.array(z.object({ taskId: v.id, code: z.string().regex(/^(R\d{1,5})?[A-Z]{1,4}\d{1,4}$/) })).max(200).optional(),
+  attachments: z.array(z.object({ taskId: v.id, code: z.string().regex(/^(R\d{1,5})?[A-Z]{1,4}\d{1,4}$/) })).max(RELEASE_MAX_ATTACHMENT_TASKS, "Una release admite como mucho 200 tareas con adjuntos: quita alguna de la selección.").optional(),
   /** Número con el que se generaron los códigos (R32…): si otra persona desplegó antes, no coincide. */
   number: z.number().int().positive().optional(),
   /**
    * Columna en la que estaba cada tarea al generar el texto (lo que vio quien despliega). Si otra persona ha movido
    * alguna entretanto (p. ej. de vuelta a «En progreso»), no se despliega: la sacaría a producción.
    */
-  columns: z.array(z.object({ taskId: v.id, columnId: v.id })).max(500).optional(),
+  columns: z.array(z.object({ taskId: v.id, columnId: v.id })).max(RELEASE_MAX_TASKS, "Una release admite como mucho 500 tareas: quita alguna de la selección.").optional(),
   /**
    * Título de cada tarea con el que se generó el texto. Si otra persona ha renombrado alguna entretanto, no se despliega:
    * las notas llevarían el título viejo y el histórico de la release, el nuevo.
    */
-  titles: z.array(z.object({ taskId: v.id, title: z.string().max(5000) })).max(500).optional(),
+  titles: z.array(z.object({ taskId: v.id, title: z.string().max(5000) })).max(RELEASE_MAX_TASKS, "Una release admite como mucho 500 tareas: quita alguna de la selección.").optional(),
 });
 
 /**
@@ -252,7 +257,7 @@ export async function countReleasesOn(input: z.input<typeof countSchema>) {
   });
 }
 
-const detailsSchema = z.object({ projectId: v.id, taskIds: z.array(v.id).max(500) });
+const detailsSchema = z.object({ projectId: v.id, taskIds: releaseTaskIds });
 
 interface ReleaseTaskDetails {
   id: string;

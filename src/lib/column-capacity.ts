@@ -10,8 +10,9 @@ import "server-only";
 //
 // El deshacer y el rehacer (lib/undo.ts), «Cancelar» del detalle (restoreTaskSnapshot) y deshacer el cambio de plantilla
 // NO comprueban el tope: devuelven las tareas a donde estaban y fallar ahí dejaría sin recuperar una tarea borrada o
-// movida. Si así una columna queda por encima, el tablero lo muestra («103 / 100», en rojo), el «+» sigue desactivado,
-// no entra nada más hasta bajar del tope y el PDF solo incluye las primeras PROGRAM_MAX_SESSIONS (con aviso).
+// movida. Si así una columna queda por encima, el tablero lo muestra (el contador de la cabecera, «103/100», en ámbar
+// como al llegar al tope), los «+» siguen desactivados (el de la cabecera y el flotante del móvil), no entra nada más
+// hasta bajar del tope y el PDF solo incluye las primeras PROGRAM_MAX_SESSIONS (con aviso).
 import type { Prisma } from "@/generated/prisma/client";
 import { AppError } from "./errors";
 import { PROGRAM_MAX_SESSIONS } from "./program-limit";

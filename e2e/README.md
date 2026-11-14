@@ -27,6 +27,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Índice de un HTML en Documentación y baja con Google sin email (caza de bugs 50b) | `e2e/bh50b-e2e.mjs` | 39 | ~30 s |
 | Aplicar plantilla: paso 2 y archivadas de columnas unidas (caza de bugs 50a) | `e2e/bh50a-e2e.mjs` | 22 | ~20 s |
 | Plan de trabajo para IA: Markdown con descripciones raras, fijas entre paneles, título a 390 px y más de 500 tareas (caza de bugs 51a) | `e2e/bh51a-e2e.mjs` | 27 | ~40 s |
+| Release de más de 500 tareas (o 200 con adjuntos), «+» flotante con el programa lleno y panel de fijas en el móvil (caza de bugs 51c) | `e2e/bh51c-e2e.mjs` | 55 | ~35 s |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/r49-account-e2e.mjs` | 61 | ~1 min |
 | Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51) | `e2e/r51-cuenta-e2e.mjs` | 71 | ~45 s |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
@@ -154,6 +155,20 @@ más de 500 tareas marcadas «Generar» se desactiva con su motivo. Misma base y
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh51a-e2e.mjs   # PART=markdown,fijas,titulo,limite
+```
+
+## Release grande, «+» flotante con el programa lleno y panel de fijas en el móvil (caza de bugs 51c)
+
+Con más de 500 tareas marcadas, «Generar release» se desactiva con su motivo, también en inglés (antes salía el error de
+zod en inglés, «Too big: expected array…»); con más de 200 tareas con adjuntos lo hacen «Marcar como desplegado» y
+«Descargar adjuntos», y al quitar una se puede seguir. En el móvil, con la columna «Programa del curso» a 100 sesiones el
+«+» flotante se ve desactivado, como el de la cabecera, y al tocarlo dice por qué sin abrir «Nueva tarea»; en otra columna
+o al bajar de 100 vuelve a abrirla. Y el «+» flotante y «Crear varias tareas» ya no tapan la barra «Siempre en la release»
+/ «Siempre en el plan» ni las filas del panel abierto (a 390 y 360 px), mientras que una columna sin panel sigue llegando
+hasta abajo y en tableta las columnas miden lo mismo. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh51c-e2e.mjs   # PART=release,adjuntos,flotante,panel
 ```
 
 ## Arrastrar una selección

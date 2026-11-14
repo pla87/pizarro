@@ -36,7 +36,7 @@ export interface BoardApi {
   removeTask: (id: string) => void;
   setColumns: React.Dispatch<React.SetStateAction<BoardColumn[]>>;
   openTask: (id: string) => void;
-  /** `evergreen`: crear la tarea como fija en la columna de la release. */
+  /** `evergreen`: crear la tarea como fija en la columna (la de la release o una de plan para IA). */
   openNewTask: (columnId?: string, evergreen?: boolean, files?: File[]) => void;
   /** Tras crear una tarea en móvil: muestra su columna y la lleva a la vista con un destello breve (en escritorio, nada). */
   revealTask: (id: string) => void;

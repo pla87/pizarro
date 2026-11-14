@@ -40,7 +40,7 @@ export interface BoardTask extends TaskFieldValues {
   deliverableId: string | null;
   commentCount: number;
   linkCount: number;
-  /** Tarea fija en la columna de la release (no se mueve ni se archiva al desplegar). */
+  /** Tarea fija en la columna de la release (no se mueve ni se archiva al desplegar) o en una de plan para IA. */
   evergreen: boolean;
   /** Cadencia de una tarea fija: 1 = todas las releases, 2 = las pares, 3 = múltiplos de 3. */
   evergreenEvery: number;

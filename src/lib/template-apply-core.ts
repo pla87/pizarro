@@ -44,7 +44,7 @@ export interface ProjectShape {
   labels: { id: string; name: string; tasks: number }[];
   releaseTemplates: { kind: "HEADER" | "FOOTER"; name: string }[];
   taskFields: string[];
-  /** Tareas fijas («Siempre en la release»), archivadas incluidas: solo existen en la columna de release. */
+  /** Tareas fijas («Siempre en la release» / «Siempre en el plan»), archivadas incluidas: solo existen en la columna de release y en las de plan para IA. */
   evergreen?: { id: string; title: string; columnId: string }[];
 }
 
@@ -203,7 +203,7 @@ export interface ReplacePlan extends CommonPlan {
   showGenerals: string[];
   /** Etiquetas sin uso que no están en la plantilla. */
   removeLabels: string[];
-  /** Tareas fijas cuya columna final no es la de release: pasan a ser normales. */
+  /** Tareas fijas cuya columna final no admite fijas (ni la de release ni una de plan para IA): pasan a ser normales. */
   unpinTasks: string[];
 }
 
@@ -308,7 +308,7 @@ export function planReplace(project: ProjectShape, template: ApplyTemplateShape,
     }
   }
 
-  // Tareas fijas: siguen siéndolo solo si su columna acaba con el rol de release.
+  // Tareas fijas: siguen siéndolo solo si su columna acaba con un rol que las admite (release o plan para IA).
   const finalRole = new Map<string, string>();
   for (const [to, list] of sources) for (const c of list) finalRole.set(c.id, columns[to]!.role);
   for (const k of kept) finalRole.set(k.id, k.role);
